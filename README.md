@@ -1,2 +1,2 @@
-# agent-kit-services
-Supporting services for Arbitrum AgentKit
+# arbitrum-agentkit
+Arbitrum AgentKit
