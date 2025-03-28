@@ -1,0 +1,56 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@emberai/sdk-typescript':
+        specifier: 0.3.0-beta.6
+        version: 0.3.0-beta.6
+    devDependencies:
+      '@types/node':
+        specifier: ^22.13.14
+        version: 22.13.14
+      typescript:
+        specifier: ^5.8.2
+        version: 5.8.2
+
+packages:
+
+  '@bufbuild/protobuf@2.2.5':
+    resolution: {integrity: sha512-/g5EzJifw5GF8aren8wZ/G5oMuPoGeS6MQD3ca8ddcvdXR5UELUfdTZITCGNhNXynY/AYl3Z4plmxdj/tRl/hQ==}
+
+  '@emberai/sdk-typescript@0.3.0-beta.6':
+    resolution: {integrity: sha512-6rWgTgBx/4COb3uAvI9bh4zpT8aQVreMqZoL95HZZ32Zu1x8M5pyO1isR3uFRBUV0LB4S/VRXUr9rnAQWS/8MA==}
+    engines: {node: '>=18.0.0'}
+
+  '@types/node@22.13.14':
+    resolution: {integrity: sha512-Zs/Ollc1SJ8nKUAgc7ivOEdIBM8JAKgrqqUYi2J997JuKO7/tpQC+WCetQ1sypiKCQWHdvdg9wBNpUPEWZae7w==}
+
+  typescript@5.8.2:
+    resolution: {integrity: sha512-aJn6wq13/afZp/jT9QZmwEjDqqvSGp1VT5GVg+f/t6/oVyrgXM6BY1h9BRh/O5p3PlUPAe+WuiEZOmb/49RqoQ==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+  undici-types@6.20.0:
+    resolution: {integrity: sha512-Ny6QZ2Nju20vw1SRHe3d9jVu6gJ+4e3+MMpqu7pqE5HT6WsTSlce++GQmK5UXS8mzV8DSYHrQH+Xrf2jVcuKNg==}
+
+snapshots:
+
+  '@bufbuild/protobuf@2.2.5': {}
+
+  '@emberai/sdk-typescript@0.3.0-beta.6':
+    dependencies:
+      '@bufbuild/protobuf': 2.2.5
+
+  '@types/node@22.13.14':
+    dependencies:
+      undici-types: 6.20.0
+
+  typescript@5.8.2: {}
+
+  undici-types@6.20.0: {}

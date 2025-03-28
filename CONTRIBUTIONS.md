@@ -14,10 +14,10 @@ Here's a simplified overview of our repository structure:
 agentkit/
 ├── typescript/
 │   └── examples/
-│       └── aave-chatbot
+│       └── lending-chatbot
 ├── rust/
 │   └── examples/
-│       └── aave-chatbot
+│       └── lending-chatbot
 ```
 
 ## Contributing Workflow
