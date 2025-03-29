@@ -10,7 +10,7 @@ import {
   WalletPosition,
   TransactionPlan,
   GetWalletPositionsResponse,
-} from "../../../mcp-tools/typescript/emberai-mcp/index.js";
+} from "../../../../mcp-tools/typescript/emberai-mcp/index.js";
 import {
   agentTools,
   HandlerContext,
@@ -136,11 +136,13 @@ export class Agent {
     userInput: string,
   ): Promise<OpenAI.Chat.Completions.ChatCompletionMessage | null> {
     this.conversationHistory.push({ role: "user", content: userInput });
-    const response = await this.callChatCompletion();
-    if (response) {
-      await this.handleResponse(response);
+    const initialResponse = await this.callChatCompletion();
+    if (initialResponse) {
+      const finalResponse = await this.handleResponse(initialResponse);
+      return finalResponse;
+    } else {
+      return null;
     }
-    return response;
   }
 
   async callChatCompletion(): Promise<OpenAI.Chat.Completions.ChatCompletionMessage | null> {
@@ -159,7 +161,7 @@ export class Agent {
     }
   }
 
-  async handleResponse(message: OpenAI.Chat.Completions.ChatCompletionMessage) {
+  async handleResponse(message: OpenAI.Chat.Completions.ChatCompletionMessage): Promise<OpenAI.Chat.Completions.ChatCompletionMessage | null> {
     const messageToPush: OpenAI.Chat.Completions.ChatCompletionMessageParam = {
       role: message.role,
       content: message.content ?? null,
@@ -179,7 +181,8 @@ export class Agent {
         const errorContent = `Error: Could not parse arguments for function ${functionName}. Invalid JSON received.`;
         this.conversationHistory.push({ role: "function", name: functionName, content: errorContent });
         this.log("[assistant]:", errorContent);
-        return;
+        // Return an assistant message indicating the error
+        return { role: "assistant", content: errorContent, refusal: null };
       }
 
       try {
@@ -192,10 +195,18 @@ export class Agent {
           this.log("Tool execution requires follow-up from LLM.");
           const followUpCompletion = await this.callChatCompletion();
           if (followUpCompletion) {
-            await this.handleResponse(followUpCompletion);
+            // Recursively call handleResponse and return its result
+            return await this.handleResponse(followUpCompletion);
+          } else {
+            // Handle case where follow-up call fails
+            const errorContent = "Error: Follow-up LLM call failed.";
+            this.log("[assistant]:", errorContent);
+            return { role: "assistant", content: errorContent, refusal: null };
           }
         } else {
           this.log("[assistant]: Action completed.", result);
+          // Return an assistant message with the tool result
+          return { role: "assistant", content: result, refusal: null };
         }
       } catch (e) {
         const err = e as Error;
@@ -203,10 +214,18 @@ export class Agent {
         const errorContent = `Error executing function ${functionName}: ${err.message}`;
         this.conversationHistory.push({ role: "function", name: functionName, content: errorContent });
         this.log("[assistant]:", errorContent);
+        // Return an assistant message indicating the execution error
+        return { role: "assistant", content: errorContent, refusal: null };
       }
     } else if (message.content) {
       this.log("[assistant]:", message.content);
+      // Return the original message if it's just content
+      return message;
     }
+
+    // Fallback case (should ideally not be reached if message has content or function_call)
+    this.log("Warning: handleResponse reached end without returning a message.")
+    return null;
   }
 
   async dispatchToolCall(

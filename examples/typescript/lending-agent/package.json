@@ -1,13 +1,19 @@
 {
-  "name": "lending-agent-example",
+  "name": "aave-agent-example",
   "version": "1.0.0",
-  "description": "Ember SDK Lending Agent Example",
+  "description": "Ember SDK AAVE Agent Example",
   "type": "module",
-  "main": "index.ts",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "npx tsx index.ts"
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "docker:build": "docker build -t aave-agent .",
+    "docker:run": "docker run --env-file .env -p 3001:3001 aave-agent"
   },
   "dependencies": {
+    "@emberai/sdk-typescript": "0.3.0-beta.6",
+    "@grpc/grpc-js": "^1.12.5",
     "@modelcontextprotocol/sdk": "^1.5.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",

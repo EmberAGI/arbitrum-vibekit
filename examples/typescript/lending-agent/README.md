@@ -1,4 +1,4 @@
-A small demo for interacting with an lending chatbot using Ember SDK.
+A small demo for interacting with an AAVE chatbot using Ember SDK.
 
 # Setup
 
