@@ -17,7 +17,6 @@ const server = new McpServer({
 
 // RPC and EMBER endpoint setup
 const rpc = process.env.RPC_URL || "https://arbitrum.llamarpc.com";
-const endpoint = process.env.EMBER_ENDPOINT || "grpc.api.emberai.xyz:50051";
 
 // Create an instance of the Agent class
 let agent: Agent;
@@ -39,6 +38,9 @@ const initializeAgent = async (): Promise<void> => {
   agent = new Agent(signer, wallet.address);
   await agent.init();
 };
+
+
+// TODO: Use random text appended to tool names to avoid collisions
 
 
 /**
