@@ -46,16 +46,20 @@ const initializeAgent = async (): Promise<void> => {
  */
 server.tool(
   "chat",
+  "execute lending and borrowing tools using Ember SDK",
   {
     userInput: z.string(),
   },
-  async ({ userInput }: { userInput: string }) => {
+  async (args: { userInput: string }, /* extra: RequestHandlerExtra - Assuming RequestHandlerExtra type exists or adjust as needed */) => {
     try {
-      const result = await agent.processUserInput(userInput);
+      const result = await agent.processUserInput(args.userInput);
 
       console.log("[server.tool] result", result);
 
-      const responseText = result?.content ?? "Error: Could not get a response from the agent.";
+      const responseText = typeof result?.content === 'string' 
+        ? result.content 
+        : JSON.stringify(result?.content) ?? "Error: Could not get a response from the agent.";
+        
       return {
         content: [{ type: "text", text: responseText }],
       };
