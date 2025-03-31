@@ -1,0 +1,11 @@
+version: '3.8' # Specifies the Docker Compose file version
+
+services:
+  aave-agent:
+    build: . # Build the image using the Dockerfile in the current directory
+    container_name: aave-agent # Optional: Give the container a specific name
+    ports:
+      - "${PORT:-3001}:${PORT:-3001}" # Map host port and container port using PORT env var (default 3001)
+    volumes:
+      - ./.env:/app/.env # Mount the .env file from the host to /app/.env in the container
+    restart: unless-stopped # Optional: Policy for restarting the container 
