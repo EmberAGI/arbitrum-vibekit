@@ -1,57 +1,58 @@
-# AgentKit Contributing Guide
+# Contributing to Agentkit
 
-We appreciate your interest in contributing to AgentKit! All contributions are valuable, regardless of their size.
+Thank you for your interest in contributing to Agentkit! This guide outlines how you can make meaningful contributions to our project.
 
-## Repository Structure
+## Repository Organization
 
-The AgentKit repository follows a [monorepo](https://vercel.com/docs/vercel-platform/glossary#monorepo) organization. Each [package](https://vercel.com/docs/vercel-platform/glossary#package) exists as a subfolder with either a `package.json` (for TypeScript) or a `toml` file (for Rust crates), along with its associated code published to NPM or Cargo. For instance, `typescript/arbitrum-agentkit` represents one package, while `rust/arbitrum-agentkit` represents another.
+Agentkit uses a monorepo structure primarily focused on TypeScript packages, with a Rust implementation planned for release in the coming weeks.
 
-It's worth noting that not every package has implementations in both languages. This divergence is expected and acceptable. If you're interested in developing a TypeScript version of a Rust-only package (or vice versa), such contributions would be greatly appreciated!
-
-Here's a simplified overview of our repository structure:
-
+The repository is organized as follows:
 ```
 agentkit/
-├── typescript/
-│   └── examples/
-│       └── lending-chatbot
-├── rust/
-│   └── examples/
-│       └── lending-chatbot
+├── examples/
+│   └── typescript/
+│       └── lending-agent/
+│----── mcp-tools/
+│       └── typescript/
+|           └── emberal-mcp/
+├── CHANGELOG.md
+├── CONTRIBUTIONS.md
+├── LICENSE
+├── README.md
 ```
 
-## Contributing Workflow
+## How to Contribute
 
-1. **Optional: Start with an Issue**
+### 1. Preliminary Steps
 
-Before reporting bugs or requesting features, please check if someone has already created an issue for it. For minor bugs or features that you'd like to address yourself, feel free to skip this initial step.
+While not mandatory for minor changes, consider creating an issue first for significant bugs or feature requests. Check existing issues to avoid duplication.
 
-2. **Development Process**
+### 2. Development Guidelines
 
-Follow these general steps to contribute changes:
-
+To contribute effectively:
 - Fork the repository
-- Create a feature or bugfix branch
-- Write tests
-- Update CHANGELOG.md
+- Check the README.md file on the mcp-tools for additional information on developing MCP tools
+- Develop your new tools or add functionality
+- Consider creating example agents that demonstrate your tools
+- Document your changes in CHANGELOG.md
 
-3. **Pull Request Process**
+### 3. Submitting Your Work
 
-When your changes are ready for submission, complete these additional steps:
+When preparing your pull request:
+- Link to any related issues
+- Ensure all continuous integration checks pass
+- Provide clear documentation of your changes
 
-- Fill out the PR template thoroughly with comprehensive details
-    - Include screenshots or videos demonstrating your changes when possible
-- Reference any related issues
-- Verify that all CI checks pass
+### 4. Review Process
 
-4. **PR Review Expectations**
+After submission, you can expect:
+- An acknowledgment within 2-3 days
+- Initial review by a maintainer within 5 days
+- Merging after all feedback is addressed and approval is granted
 
-After submitting your PR, you can expect an acknowledgment within 1 day and an initial review by an assigned maintainer within 1 day. Once all feedback is addressed and approval is granted, the maintainer will merge your PR for inclusion in the next release.
+## Getting Support
 
-## Getting Help
-
-If you encounter difficulties, consider these options:
-
-- Search through existing issues
-- Contact the Arbitrum Agentkit team
-- Open a new issue
+If you need assistance:
+- Review existing issues for similar problems
+- Reach out to the Arbitrum Agentkit team
+- Open a new issue with a detailed description
