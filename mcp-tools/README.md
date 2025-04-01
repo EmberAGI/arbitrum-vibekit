@@ -1,25 +1,29 @@
-# Contributing new tools to the Agentkit
+# Contributing New Tools to Agentkit
 
-In order to submit a new contribution, you must first create an MCP server for the functionality you want to add.
-If you have already done so, please ensure it matches the example structure, and submit a PR.
+Before submitting a pull request for your work, please review the guidelines in CONTRIBUTIONS.md to ensure best practices are followed.
 
-If you have not, read on.
+## Creating an MCP Server for Your Functionality
 
-
-## Creating an MCP server for your functionality
-
-You may want to leverage tools that automatically do this, such as [FastMCP](https://github.com/punkpeye/fastmcp/).
-
-Alternatively, you may want to follow along this process, adapted to your specific needs.
+If you prefer an automated approach, consider using [FastMCP](https://github.com/punkpeye/fastmcp/). Otherwise, the steps below outline how to create custom MCP tools manually, adapting the process to your specific requirements.
 
 ### Step 1: Set Up Your Project
+
+1. Inside the `mcp-tools` directory, create a new folder for your tool.
+
+2. Within this folder, add a `src` directory and create an `index.ts` file for your tool definitions. For reference, `emberai-mcp/src/index.ts` is a template file that demonstrates the folder structure.
+
+3. Initialize Your Node.js Project:
+
 ```bash
 npm init -y
 npm install @modelcontextprotocol/sdk zod
 # Install your specific SDK
 ```
 
-### Step 2: Define Your Schemas
+### Step 2: Define Zod Schemas
+
+Zod schemas are used to validate the input parameters for each tool. The schemas define the types, descriptions, and required properties of the parameters.
+
 ```typescript
 // Define schema objects
 const myOperationSchema = {
@@ -33,6 +37,7 @@ type MyOperationParams = z.infer<typeof myOperationParams>;
 ```
 
 ### Step 3: Initialize the MCP Server
+
 ```typescript
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -47,25 +52,31 @@ const myClient = new MySdkClient(process.env.MY_ENDPOINT || "default-endpoint");
 ```
 
 ### Step 4: Register Your Tools
+
+Tools are registered with the `McpServer` using the `server.tool()` method. Each tool is registered with:
+
+- A name, description, and parameter schema.
+- A callback function that defines the logic for handling the tool's operation.
+
 ```typescript
 server.tool(
-  "myOperation", 
-  "Description of the operation", 
-  myOperationSchema, 
+  "myOperation",
+  "Description of the operation",
+  myOperationSchema,
   async (params: MyOperationParams, extra: any) => {
     try {
       const response = await myClient.performOperation({
         param1: params.paramOne,
         param2: params.paramTwo,
       });
-      
+
       return {
-        content: [{ type: "text", text: JSON.stringify(response, null, 2) }]
+        content: [{ type: "text", text: JSON.stringify(response, null, 2) }],
       };
     } catch (error) {
       return {
         isError: true,
-        content: [{ type: "text", text: `Error: ${(error as Error).message}` }]
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
       };
     }
   }
@@ -73,6 +84,9 @@ server.tool(
 ```
 
 ### Step 5: Connect Transport and Start Server
+
+The tool implementation process is now complete and you can start your MCP server.
+
 ```typescript
 async function main() {
   const transport = new StdioServerTransport();
@@ -88,14 +102,6 @@ async function main() {
 main();
 ```
 
-### Step 6: Submit a PR
-1. Fork the Agentkit repository
-2. Add your MCP server implementation
-3. Update necessary documentation
-4. Submit a pull request describing your new tool's functionality
+## Conclusion
 
-## Best Practices
-- Use descriptive names for tools and parameters
-- Provide thorough error handling
-- Use console.error for logging
-- Document required environment variables
+You have now created a custom MCP server tailored to your project’s requirements. Your new tools can now perform on-chain operations, integrate external SDKs, or perform specialized functions within AgentKit.

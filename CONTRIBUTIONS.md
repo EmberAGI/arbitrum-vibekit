@@ -16,6 +16,8 @@ To contribute effectively:
 3. **Implement Changes:** Add new tools or enhance existing ones.
 4. **Create Example Agents:** Consider contributing example agents that demonstrate your new functionality.
 5. **Update Documentation:** Document your modifications in the `CHANGELOG.md` to keep the project’s history transparent.
+6. **Document Required Environment Variables:** If your changes require new or updated environment variables, add clear setup instructions so others can replicate your environment.
+7. **Provide Thorough Error Handling:** Include clear mechanisms for detecting and reporting errors in any newly introduced features or tools.
 
 ## 3. Submitting Your Work
 
