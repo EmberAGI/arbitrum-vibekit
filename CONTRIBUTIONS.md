@@ -1,63 +1,42 @@
 # Contributing to Agentkit
 
-Thank you for your interest in contributing to Agentkit! This guide outlines how you can make meaningful contributions to our project.
+Thank you for your interest in contributing to Agentkit! This guide explains how you can make valuable contributions to the project.
 
-## Repository Organization
+## 1. Preliminary Steps
 
-Agentkit uses a monorepo structure primarily focused on TypeScript packages, with a Rust implementation planned for release in the coming weeks.
+- **Open an Issue (Optional):** For major changes or feature requests, consider creating an issue first. This step is not required for minor updates but helps avoid duplicate efforts.
+- **Check Existing Issues:** Before starting your work, review open issues to see if the topic has already been addressed.
 
-The repository is organized as follows:
-
-```
-agentkit/
-├── typescript/
-│   └── examplest/
-│       └── lending-agent/
-│----── mcp-tools/
-│       └── emberal-mcp/
-|           └── src/
-├── CHANGELOG.md
-├── CONTRIBUTIONS.md
-├── LICENSE
-├── README.md
-```
-
-## How to Contribute
-
-### 1. Preliminary Steps
-
-While not mandatory for minor changes, consider creating an issue first for significant bugs or feature requests. Check existing issues to avoid duplication.
-
-### 2. Development Guidelines
+## 2. Development Guidelines
 
 To contribute effectively:
 
-- Fork the repository
-- Check the README.md file on the mcp-tools for additional information on developing MCP tools
-- Develop your new tools or add functionality
-- Consider creating example agents that demonstrate your tools
-- Document your changes in CHANGELOG.md
+1. **Fork the Repository:** Begin by creating your own copy of the repository.
+2. **Review mcp-tools README:** Consult the `README.md` in `mcp-tools` for guidance on developing MCP tools.
+3. **Implement Changes:** Add new tools or enhance existing ones.
+4. **Create Example Agents:** Consider contributing example agents that demonstrate your new functionality.
+5. **Update Documentation:** Document your modifications in the `CHANGELOG.md` to keep the project’s history transparent.
 
-### 3. Submitting Your Work
+## 3. Submitting Your Work
 
-When preparing your pull request:
+When preparing your pull request (PR):
 
-- Link to any related issues
-- Ensure all continuous integration checks pass
-- Provide clear documentation of your changes
+- **Reference Related Issues:** Link any relevant issues to provide context.
+- **Pass Continuous Integration Checks:** Make sure your code meets all testing and linting requirements.
+- **Provide Clear Documentation:** Include concise explanations of your changes and any necessary usage details.
 
-### 4. Review Process
+## 4. Review Process
 
-After submission, you can expect:
+After submitting your PR:
 
-- An acknowledgment within 2-3 days
-- Initial review by a maintainer within 5 days
-- Merging after all feedback is addressed and approval is granted
+- **Acknowledgment Within 2–3 Days:** We’ll let you know we’re reviewing your work.
+- **Initial Review Within 5 Days:** A maintainer will provide feedback or request changes.
+- **Merging:** Once all feedback is addressed and the PR is approved, your contribution will be merged.
 
 ## Getting Support
 
 If you need assistance:
 
-- Review existing issues for similar problems
-- Reach out to the Arbitrum Agentkit team
-- Open a new issue with a detailed description
+- **Search Existing Issues:** Check for similar questions or problems.
+- **Contact the Arbitrum Agentkit Team:** Reach out for guidance if needed.
+- **Open a New Issue:** If your concern isn’t already covered, create a new issue with detailed information.
