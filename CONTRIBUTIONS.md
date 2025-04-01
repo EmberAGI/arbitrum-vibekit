@@ -7,14 +7,15 @@ Thank you for your interest in contributing to Agentkit! This guide outlines how
 Agentkit uses a monorepo structure primarily focused on TypeScript packages, with a Rust implementation planned for release in the coming weeks.
 
 The repository is organized as follows:
+
 ```
 agentkit/
-├── examples/
-│   └── typescript/
+├── typescript/
+│   └── examplest/
 │       └── lending-agent/
 │----── mcp-tools/
-│       └── typescript/
-|           └── emberal-mcp/
+│       └── emberal-mcp/
+|           └── src/
 ├── CHANGELOG.md
 ├── CONTRIBUTIONS.md
 ├── LICENSE
@@ -30,6 +31,7 @@ While not mandatory for minor changes, consider creating an issue first for sign
 ### 2. Development Guidelines
 
 To contribute effectively:
+
 - Fork the repository
 - Check the README.md file on the mcp-tools for additional information on developing MCP tools
 - Develop your new tools or add functionality
@@ -39,6 +41,7 @@ To contribute effectively:
 ### 3. Submitting Your Work
 
 When preparing your pull request:
+
 - Link to any related issues
 - Ensure all continuous integration checks pass
 - Provide clear documentation of your changes
@@ -46,6 +49,7 @@ When preparing your pull request:
 ### 4. Review Process
 
 After submission, you can expect:
+
 - An acknowledgment within 2-3 days
 - Initial review by a maintainer within 5 days
 - Merging after all feedback is addressed and approval is granted
@@ -53,6 +57,7 @@ After submission, you can expect:
 ## Getting Support
 
 If you need assistance:
+
 - Review existing issues for similar problems
 - Reach out to the Arbitrum Agentkit team
 - Open a new issue with a detailed description
