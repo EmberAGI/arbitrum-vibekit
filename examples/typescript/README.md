@@ -41,9 +41,6 @@ Build the MCP-enabled Docker image in the agent's directory and run the containe
 
 Although these examples primarily demonstrate command-line or programmatic interactions, you can integrate a graphical interface:
 
-1. **Curser**
+1. **Curser**: You can incorporate the agent into Curser by adding a “rules” file that defines how Curser should display and handle interactions.
 
-   - You can incorporate the agent into Curser by adding a “rules” file that defines how Curser should display and handle interactions.
-
-2. **Claude Desktop**
-   - By using the Dockerized version alongside Claude Desktop, developers can run reference servers locally (e.g., Docker Desktop) and point Claude Desktop’s `claude_desktop_config.json` to those servers as an MCP client.
+2. **Claude Desktop**: By using the Dockerized version alongside Claude Desktop, developers can run reference servers locally (e.g., Docker Desktop) and point Claude Desktop’s `claude_desktop_config.json` to those servers as an MCP client.

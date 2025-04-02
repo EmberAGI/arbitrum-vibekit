@@ -24,7 +24,31 @@ This directory provides a reference implementation of a lending agent using Arbi
 
 3. **`agentToolHandlers.ts`**
 
-   Contains handler functions for MCP tools (borrow, repay, supply, withdraw, and getUserPositions) and Validates tool output before passing it to the `Agent` for on-chain execution.
+   Contains handler functions for MCP tools (borrow, repay, supply, withdraw, and getUserPositions) and Validates tool output before passing it to the agent for on-chain execution.
+
+## Example Capabilities
+
+Below are some example user inputs that showcase the lending agent's capabilities:
+
+1. Request a token loan:
+
+   "Borrow 100 USDC"
+
+2. Pay back a portion (or all) of an existing loan:
+
+   "Repay 50 USDC"
+
+3. Deposit a certain token into the lending platform:
+
+   "Supply 250 WETH"
+
+4. Retrieve a previously deposited tokens from the protocol:
+
+   "Withdraw 50 WETH"
+
+5. Pull real-time lending and borrowing data such as health factor, total borrows, and supplied assets:
+
+   "Show my current positions"
 
 ## Run Agent
 
