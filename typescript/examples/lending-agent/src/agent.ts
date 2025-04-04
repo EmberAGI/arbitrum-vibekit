@@ -175,7 +175,7 @@ export class Agent {
       // Create StdioClientTransport
       const transport = new StdioClientTransport({
         command: 'node',
-        args: ['../../../mcp-tools/typescript/emberai-mcp/dist/index.js'],
+        args: ['../../../typescript/mcp-tools/emberai-mcp/dist/index.js'],
       });
       
       // Connect to the server

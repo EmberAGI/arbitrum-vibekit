@@ -1,16 +1,74 @@
-Get started building Arbitrum Agents in Typescript.
+Unlock Intelligent On-Chain Workflows in TypeScript for the Arbitrum Ecosystem.
+
+## Table of Contents
+
+1.  [Introduction](#introduction)
+2.  [Repository Organization](#repository-organization)
+3.  [Quick Start](#quick-start)
+4.  [Documentation](#documentation)
+5.  [MCP Tools Integration](#mcp-tools-integration)
+6.  [Contribution](#contribution)
 
 ## Introduction
 
-AgentKit is a toolkit to enable agent developers to build onchain agents in minutes. 
+AgentKit is a versatile toolkit for rapidly developing on-chain agents within the Arbitrum ecosystem. It enables autonomous on-chain operations—such as token transfers, swaps, and advanced DeFi interactions—while integrating on-chain and off-chain data sources to power robust workflows. AgentKit offers ready-to-use implementations and templates across various sectors, helping you build production-ready agents in minutes.
 
-Powered by the Arbitrum ecosystem, it allows agents to autonomously perform any on-chain interaction, including transfers, swaps, and advanced DeFi interactions, leveraged alongside on-chain and off-chain data for powerful workflows. 
+## Repository Organization
 
-It is a collection of implementations across different sectors and providers, with a growing list of examples and templates for your benefit.
+AgentKit follows a monorepo structure, primarily focused on TypeScript packages. A Rust implementation is planned for release in the near future. The repository layout is as follows:
 
-## Getting Started
+```
+agentkit/
+├── typescript/
+│   └── examples/
+│       └── lending-agent/
+│----── mcp-tools/
+│       └── emberai-mcp/
+├── CHANGELOG.md
+├── CONTRIBUTIONS.md
+├── LICENSE
+├── README.md
+```
 
-Visit https://arbitrum-agentkit.gitbook.io/arbitrum-agentkit for detailed quickstart guides.
+## Quick Start
+
+You can quickly get started and build a DeFi agent by following this guide and cloning the Github Repository.
+
+### Set Up Your Local Environment
+
+Ensure that you have Node.js 18+ installed:
+
+```bash
+node --version # Should be 18+
+npm --version # Should be 9.7.2+
+```
+
+Then, clone the repository and navigate to its directory:
+
+```bash
+git clone https://github.com/arbitrum-agentkit/arbitrum-agentkit.git
+cd arbitrum-agentkit
+```
+
+### Configure Environment Variables
+
+Copy the example environment file and update it with your keys:
+
+```bash
+cp .env.local .env
+
+# Edit the .env file to include your credentials
+```
+
+You are now prepared to leverage the sample implementations within our examples subdirectory to extend your agent’s capabilities.
+
+## Documentation
+
+For detailed information on AgentKit’s features and usage, visit https://arbitrum-agentkit.gitbook.io/arbitrum-agentkit .
+
+## MCP Tools Integration
+
+MCP Tools enable seamless data integration between external providers and on-chain agents. By adapting existing APIs and SDKs into an MCP-compatible server, integrators can immediately take advantage of standardized functionality for tasks such as data retrieval and advanced blockchain interactions. The `mcp-tools` directory contains templates (`emberai-mcp/src/index.ts`) and guidelines for building these tools with minimal configuration, ensuring rapid implementation and a consistent development experience across different systems.
 
 ## Contribution
 
