@@ -15,8 +15,8 @@ If you prefer an automated approach, consider using [FastMCP](https://github.com
 3. Initialize Your Node.js Project:
 
 ```bash
-npm init -y
-npm install @modelcontextprotocol/sdk zod
+pnpm init -y
+pnpm install @modelcontextprotocol/sdk zod
 # Install your specific SDK
 ```
 

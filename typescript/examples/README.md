@@ -1,6 +1,6 @@
 ## Introduction
 
-This section contains example agent implementations built with the Arbitrum Agentkit that demonstrate interacting with AAVE chatbots using the Ember SDK. These agents can also act as MCP tools for use with other systems, a common approach in widely used technical references. In the coming months, they will be eligible for listing in MCP registries as part of the Agentkit-agent creation process.
+This section contains example implementations of on-chain AI agents that demonstrate how they are easily built and deployed using the Arbitrum Agentkit. These agents act as MCP tools for compatibility with any system, a common approach in widely used technical references. In the coming months, they will be eligible for listing in MCP registries as part of the Agentkit-agent creation process.
 
 ## Running an Agent
 
