@@ -1,17 +1,66 @@
-# Node / TypeScript
+# Node.js / TypeScript
 node_modules/
 dist/
 build/
 coverage/
+.pnpm-store/
+.npm/
+.pnpm-debug.log
 npm-debug.log*
+yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment variables
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+
+# TypeScript cache
+*.tsbuildinfo
+.eslintcache
 
 # Rust
 target/
-**/*.rs.bk 
+Cargo.lock
+**/*.rs.bk
+**/*.pdb
 
-# macOS
+# Testing
+.coverage/
+.nyc_output/
+
+# IDE / Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
 .DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.history/
+*~
+.*.swp
+
+# Logs
+logs/
+*.log
+
+# Build artifacts
+.turbo
+.cache/
+.vercel
+
+# Package managers
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
