@@ -36,11 +36,11 @@ You can quickly get started and build a DeFi agent by following this guide and c
 
 ### Set Up Your Local Environment
 
-Ensure that you have Node.js 18+ installed:
+Ensure that you have Node.js 22+ installed and pnpm installed:
 
 ```bash
-node --version # Should be 18+
-npm --version # Should be 9.7.2+
+node -v # Should be 22+
+pnpm -v # Check that pnpm is installed
 ```
 
 Then, clone the repository and navigate to its directory:
@@ -60,7 +60,7 @@ cp .env.local .env
 # Edit the .env file to include your credentials
 ```
 
-You are now prepared to leverage the sample implementations within our examples subdirectory to extend your agent’s capabilities.
+You are now prepared to leverage the sample implementations within our examples subdirectory to extend your agent's capabilities.
 
 ## MCP Tools Integration
 
