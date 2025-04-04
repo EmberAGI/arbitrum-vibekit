@@ -68,4 +68,4 @@ MCP Tools enable seamless data integration between external providers and on-cha
 
 ## Contribution
 
-If you wish to contribute to the project, please follow the CONTRIBUTION.md guidelines.
+If you wish to contribute to the project, please follow the CONTRIBUTIONS.md guidelines.

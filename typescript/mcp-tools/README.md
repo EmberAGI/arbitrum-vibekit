@@ -4,7 +4,7 @@ Before submitting a pull request for your work, please review the guidelines in 
 
 ## Creating an MCP Server for Your Functionality
 
-If you prefer an automated approach, consider using [FastMCP](https://github.com/punkpeye/fastmcp/). Otherwise, the steps below outline how to create custom MCP tools manually, adapting the process to your specific requirements.
+If you prefer an automated approach, consider using [FastMCP](https://github.com/punkpeye/fastmcp/) or [AI Tool Maker](https://github.com/nihaocami/ai-tool-maker). Otherwise, the steps below outline how to create custom MCP tools manually, adapting the process to your specific requirements.
 
 ### Step 1: Set Up Your Project
 
