@@ -62,10 +62,6 @@ cp .env.local .env
 
 You are now prepared to leverage the sample implementations within our examples subdirectory to extend your agent’s capabilities.
 
-## Documentation
-
-For detailed information on AgentKit’s features and usage, visit https://arbitrum-agentkit.gitbook.io/arbitrum-agentkit .
-
 ## MCP Tools Integration
 
 MCP Tools enable seamless data integration between external providers and on-chain agents. By adapting existing APIs and SDKs into an MCP-compatible server, integrators can immediately take advantage of standardized functionality for tasks such as data retrieval and advanced blockchain interactions. The `mcp-tools` directory contains templates (`emberai-mcp/src/index.ts`) and guidelines for building these tools with minimal configuration, ensuring rapid implementation and a consistent development experience across different systems.
