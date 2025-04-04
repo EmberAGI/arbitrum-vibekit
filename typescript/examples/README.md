@@ -4,43 +4,63 @@ This section contains example implementations of on-chain AI agents that demonst
 
 ## Running an Agent
 
+**Optional**: If you need an on-chain actions server for local testing or more control, clone and run the [`onchain-actions repo`](https://github.com/EmberAGI/onchain-actions) repo locally. If you do not run it locally, the official deployment will be used instead.
+
 There are two main ways to start an agent:
 
 ### 1. Using Docker
 
 Build the MCP-enabled Docker image in the agent's directory and run the container to start your agent.
 
-### 2. Using NPM (Local Development)
+### 2. Local Development
 
-**Optional**: If you need an on-chain actions server, clone and run the [`onchain-actions repo`](https://github.com/EmberAGI/onchain-actions) locally. If you do not run it locally, the official deployment will be used instead.
-
-1. **Environment Setup**:
-
-   Copy the `.env.example` file to `.env` in your agent't directory and fill in any required secrets or configuration variables.
-
-2. **Install and Build**:
-
-   At the root of this repository, run the following commands:
+1. **Using the Inspector via npx**:
+   If you prefer not to install anything locally for debugging, you can run the Inspector via npx:
 
    ```bash
-   pnpm install
-   pnpm run build
+   pnpm run inspect:npx
    ```
 
-3. **Start the Agent**:
+   This command uses `npx -y @modelcontextprotocol/inspector` to launch the Inspector, pointing it at your agent’s compiled code (`./dist/index.js`). It’s a convenient way to inspect or interact with your production agent without modifying your local environment.
 
-   Run the following command in your agents' directory:
+2. **Using the Local Inspector**:
+   To use the local inspector for debugging or exploring agent functionality, run:
 
    ```bash
-   pnpm run start
+   pnpm run inspect:local
    ```
 
-   The agent should now be running and ready to receive requests or user input.
+   This command builds your agent, copies the `dist` folder into the Inspector’s client, and starts the Inspector in development mode.
 
-## Graphical Interfaces (GUI)
+3. **Using npm**
 
-Although these examples primarily demonstrate command-line or programmatic interactions, you can integrate a graphical interface:
+- **Environment Setup**:
 
-1. **Curser**: You can incorporate the agent into Curser by adding a “rules” file that defines how Curser should display and handle interactions.
+  Copy the `.env.example` file to `.env` in your agent's directory and fill in any required secrets or configuration variables.
+
+- **Install and Build**:
+
+  At the root of this repository, run the following commands:
+
+  ```bash
+  pnpm install
+  pnpm run build
+  ```
+
+- **Start the Agent**:
+
+  Run the following command in your agents' directory:
+
+  ```bash
+  pnpm run start
+  ```
+
+  The agent should now be running and ready to receive requests or user input.
+
+## Graphical MCP Clients
+
+Although these examples primarily demonstrate command-line interactions, you can integrate a graphical MCP client:
+
+1. **Cursor**: You can incorporate the agent into Cursor by adding a “rules” file that defines how Cursor should display and handle interactions.
 
 2. **Claude Desktop**: By using the Dockerized version alongside Claude Desktop, developers can run reference servers locally (e.g., Docker Desktop) and point Claude Desktop’s `claude_desktop_config.json` to those servers as an MCP client.
