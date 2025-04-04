@@ -59,5 +59,5 @@ EXPOSE 3001
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the Aave agent
+# Start the Lending agent
 CMD ["node", "dist/index.js"]

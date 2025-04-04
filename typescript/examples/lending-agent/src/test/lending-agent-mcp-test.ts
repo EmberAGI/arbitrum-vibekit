@@ -54,7 +54,7 @@ async function testLendingAgentMcp() {
 
         // Define the input schema based on the server's definition in index.ts
         const ChatInputSchema = z.object({ userInput: z.string() });
-        const testInput = { userInput: "What is my current Aave balance?" }; // Example query
+        const testInput = { userInput: "What is my current lending balance?" }; // Example query
 
         // Validate input (optional but good practice)
         ChatInputSchema.parse(testInput);
@@ -82,7 +82,7 @@ async function testLendingAgentMcp() {
      // Provide helpful error messages for common failure scenarios
      if (error instanceof Error && error.message.includes('ECONNREFUSED')) {
         console.error(`Error: Connection refused. Is the lending agent server running at ${serverUrl}?`);
-        console.error("Please start the server using 'npm run start' or 'node examples/typescript/lending-agent/dist/index.js' before running this test.");
+        console.error("Please start the server using 'npm run start' or 'node typescript/examples/lending-agent/dist/index.js' before running this test.");
      } else if (error instanceof Error && error.message.includes('fetch failed')) {
         console.error(`Error: Fetch failed. Could not connect to the server at ${serverUrl}. Please ensure it's running and accessible.`);
      } else {

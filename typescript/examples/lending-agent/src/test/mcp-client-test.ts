@@ -20,7 +20,7 @@ async function testMcpClient() {
     // Create StdioClientTransport
     const transport = new StdioClientTransport({
       command: 'node',
-      args: ['/Users/tomdaniel/Documents/Ember_Cognition_Inc/Software/arbitrum-agentkit/mcp-tools/typescript/emberai-mcp/dist/index.js'],
+      args: ['/Users/tomdaniel/Documents/Ember_Cognition_Inc/Software/arbitrum-agentkit/typescript/mcp-tools/emberai-mcp/dist/index.js'],
     });
     
     // Connect to the server

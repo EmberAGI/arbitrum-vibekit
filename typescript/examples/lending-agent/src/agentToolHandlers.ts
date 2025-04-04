@@ -5,7 +5,7 @@
 //   // TransactionPlan,
 //   // GetWalletPositionsResponse,
 //   // CapabilityType,
-// } from "../../../mcp-tools/typescript/emberai-mcp/index.js";
+// } from "../../../typescript/mcp-tools/emberai-mcp/index.js";
 
 import { z } from 'zod';
 
