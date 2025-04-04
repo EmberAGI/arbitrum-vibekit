@@ -23,16 +23,7 @@ Build the MCP-enabled Docker image in the agent's directory and run the containe
 
    This command uses `npx -y @modelcontextprotocol/inspector` to launch the Inspector, pointing it at your agent’s compiled code (`./dist/index.js`). It’s a convenient way to inspect or interact with your production agent without modifying your local environment.
 
-2. **Using the Local Inspector**:
-   To use the local inspector for debugging or exploring agent functionality, run:
-
-   ```bash
-   pnpm run inspect:local
-   ```
-
-   This command builds your agent, copies the `dist` folder into the Inspector’s client, and starts the Inspector in development mode.
-
-3. **Using npm**
+2. **Using npm**
 
 - **Environment Setup**:
 
