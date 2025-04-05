@@ -2,47 +2,42 @@
 
 This section contains example implementations of on-chain AI agents that demonstrate how they are easily built and deployed using the Arbitrum Agentkit. These agents act as MCP tools for compatibility with any system, a common approach in widely used technical references. In the coming months, they will be eligible for listing in MCP registries as part of the Agentkit-agent creation process.
 
-## Running an Agent
+## Set Up Your Project
 
 **Optional**: If you need an on-chain actions server for local testing or more control, clone and run the [`onchain-actions repo`](https://github.com/EmberAGI/onchain-actions) repo locally. If you do not run it locally, the official deployment will be used instead.
 
+### 1. Environment Setup:
+
+Copy the `.env.example` file to `.env` in your agent's directory and fill in any required secrets or configuration variables.
+
+### 2. Install Packages:
+
+```bash
+pnpm install
+```
+
+## Running an Agent
+
 There are two main ways to start an agent:
 
-### 1. Using Docker
+### 1. Using Docker Compose
 
 Build the MCP-enabled Docker image in the agent's directory and run the container to start your agent.
 
 ### 2. Local Development
 
-1. **Using the Inspector via npx**:
-   If you prefer not to install anything locally for debugging, you can run the Inspector via npx:
-
-   ```bash
-   pnpm run inspect:npx
-   ```
-
-   This command uses `npx -y @modelcontextprotocol/inspector` to launch the Inspector, pointing it at your agent’s compiled code (`./dist/index.js`). It’s a convenient way to inspect or interact with your production agent without modifying your local environment.
-
-2. **Using npm**
-
-- **Environment Setup**:
-
-  Copy the `.env.example` file to `.env` in your agent's directory and fill in any required secrets or configuration variables.
-
-- **Install and Build**:
-
-  At the root of this repository, run the following commands:
+- **Using the Inspector via npx**:
 
   ```bash
-  pnpm install
-  pnpm run build
+  pnpm run inspect:npx
   ```
 
-- **Start the Agent**:
+  This command uses `npx -y @modelcontextprotocol/inspector` to launch the Inspector, pointing it at your agent’s compiled code (`./dist/index.js`). It’s a convenient way to inspect or interact with your production agent without modifying your local environment.
 
-  Run the following command in your agents' directory:
+- **Using npm**:
 
   ```bash
+  pnpm run build
   pnpm run start
   ```
 

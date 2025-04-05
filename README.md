@@ -50,16 +50,6 @@ git clone https://github.com/arbitrum-agentkit/arbitrum-agentkit.git
 cd arbitrum-agentkit
 ```
 
-### Configure Environment Variables
-
-Copy the example environment file and update it with your keys:
-
-```bash
-cp .env.local .env
-
-# Edit the .env file to include your credentials
-```
-
 You are now prepared to leverage the sample implementations within our examples subdirectory to extend your agent's capabilities.
 
 ## MCP Tools Integration
