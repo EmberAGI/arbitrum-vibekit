@@ -6,13 +6,13 @@ Before submitting a pull request for your work, please review the guidelines in 
 
 If you prefer an automated approach, consider using [FastMCP](https://github.com/punkpeye/fastmcp/) or [AI Tool Maker](https://github.com/nihaocami/ai-tool-maker). Otherwise, the steps below outline how to create custom MCP tools manually, adapting the process to your specific requirements.
 
-### 1. Set Up Your Project
+### 1. Set Up Your Project:
 
 1. Inside the `mcp-tools` directory, create a new folder for your tool.
 
 2. Within this folder, add a `src` directory and create an `index.ts` file for your tool definitions. For reference, `emberai-mcp/src/index.ts` is a template file that demonstrates the folder structure.
 
-3. Copy the `.env.example` file to `.env` in your agent's directory and fill in any required secrets or configuration variables.
+3. Copy the `.env.example` file to `.env` and fill in any required configuration variables.
 
 4. Install the necessarry packages:
 
@@ -21,7 +21,7 @@ pnpm install
 # Install your specific SDK
 ```
 
-### 2. Define Zod Schemas
+### 2. Define Zod Schemas:
 
 Zod schemas are used to validate the input parameters for each tool. The schemas define the types, descriptions, and required properties of the parameters.
 
@@ -37,7 +37,7 @@ const myOperationParams = z.object(myOperationSchema);
 type MyOperationParams = z.infer<typeof myOperationParams>;
 ```
 
-### 3. Initialize the MCP Server
+### 3. Initialize the MCP Server:
 
 ```typescript
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -52,7 +52,7 @@ const server = new McpServer({
 const myClient = new MySdkClient(process.env.MY_ENDPOINT || "default-endpoint");
 ```
 
-### 4. Register Your Tools
+### 4. Register Your Tools:
 
 Tools are registered with the `McpServer` using the `server.tool()` method. Each tool is registered with:
 
@@ -84,7 +84,7 @@ server.tool(
 );
 ```
 
-### 5. Connect Transport and Start Server
+### 5. Connect Transport and Start Server:
 
 The tool implementation process is now complete and you can start your MCP server.
 
