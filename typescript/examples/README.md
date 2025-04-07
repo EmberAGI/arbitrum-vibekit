@@ -4,8 +4,6 @@ This section contains example implementations of on-chain AI agents that demonst
 
 ## Set Up Your Project
 
-**Optional**: If you need an on-chain actions server for local testing or more control, clone and run the [`onchain-actions repo`](https://github.com/EmberAGI/onchain-actions) repo locally. If you do not run it locally, the official deployment will be used instead.
-
 ### 1. Environment Setup:
 
 Copy the `.env.example` file to `.env` in your agent's directory and fill in any required secrets or configuration variables.
@@ -45,8 +43,67 @@ Build the MCP-enabled Docker image in the agent's directory and run the containe
 
 ## Graphical MCP Clients
 
-Although these examples primarily demonstrate command-line interactions, you can integrate a graphical MCP client:
+Although the above examples primarily demonstrate command-line interactions, you can integrate a graphical MCP client as well:
 
-1. **Cursor**: You can incorporate the agent into Cursor by adding a “rules” file that defines how Cursor should display and handle interactions.
+1. **Cursor**: To incorporate an agent into Cursor, update the configuration by editing the `mcp.json` file. Within this file, add an entry under the `mcpServers` key that defines the agent’s settings depending on whether you are setting up a local or remote agent. Cursor can point to the SSE MCP server running on Docker, or directly to the build file for npx. The contents of the `mcp.json` file follow this structure:
 
-2. **Claude Desktop**: By using the Dockerized version alongside Claude Desktop, developers can run reference servers locally (e.g., Docker Desktop) and point Claude Desktop’s `claude_desktop_config.json` to those servers as an MCP client.
+```json
+{
+  "mcpServers": {
+    "local-npx-agent": {
+      "command": "npx",
+      "args": ["/path/to/agent/build/dist/index.js"],
+      "env": {
+        "VAR": "value"
+      }
+    },
+    "local-sse-agent": {
+      "url": "http://localhost:3010/sse",
+      "env": {
+        "VAR": "value"
+      }
+    },
+    "remote-sse-agent": {
+      "url": "http://173.230.139.151:3010/sse"
+    }
+  }
+}
+```
+
+2. **Claude Desktop**: To incorporate an agent into Claude Desktop, update the configuration by editing the `claude_desktop_config.json` file. Within this file, add an entry under the `mcpServers` key that defines the agent’s settings depending on whether you are setting up a local or remote agent. Claude Desktop can point to the SSE MCP server running on Docker, or directly to the build file for npx. The contents of the `claude_desktop_config.json` file follow this structure:
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/username/Desktop",
+        "/path/to/other/allowed/dir"
+      ]
+    },
+    "MCP_DOCKER": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "alpine/socat",
+        "STDIO",
+        "TCP:host.docker.internal:8811"
+      ],
+      "local-sse-agent": {
+        "url": "http://localhost:3010/sse",
+        "env": {
+          "VAR": "value"
+        }
+      },
+      "remote-sse-agent": {
+        "url": "http://173.230.139.151:3010/sse"
+      }
+    }
+  }
+}
+```

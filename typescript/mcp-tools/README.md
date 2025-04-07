@@ -12,7 +12,7 @@ If you prefer an automated approach, consider using [FastMCP](https://github.com
 
 2. Within this folder, add a `src` directory and create an `index.ts` file for your tool definitions. For reference, `emberai-mcp/src/index.ts` is a template file that demonstrates the folder structure.
 
-3. Copy the `.env.example` file to `.env` and fill in any required configuration variables.
+3. Ceate the `.env.example` and `.env` files containing the necessary configuration variables needed for your SDK or API that you are converting to MCP tools.
 
 4. Install the necessarry packages:
 
