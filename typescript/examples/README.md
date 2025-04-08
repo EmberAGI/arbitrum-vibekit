@@ -8,9 +8,11 @@ To run an agent, you need to first set up your project by following these steps:
 
 ### 1. Setup Environment :
 
-Copy the `.env.example` file to `.env` in your agent's directory and fill in any required secrets or configuration variables.
+Copy the contents of `.env.example` into the `.env` file in your agent's directory and fill in any required secrets or configuration variables.
 
 ### 2. Install Packages:
+
+Install the necessary packages by running the following command:
 
 ```bash
 pnpm install
@@ -74,7 +76,7 @@ Cursor is designed for lightweight command-line interactions. To integrate an ag
 }
 ```
 
-For detailed guidance on configuring MCP for Cursor, refer to `https://docs.cursor.com/context/model-context-protocol`.
+For detailed guidance on configuring MCP for Cursor, refer to https://docs.cursor.com/context/model-context-protocol.
 
 ### 2. Claude Desktop
 
@@ -116,7 +118,7 @@ Claude Desktop supports similar agent configurations as Cursor but also includes
 }
 ```
 
-For detailed guidance on configuring MCP for Claude Desktop, refer to `https://modelcontextprotocol.io/quickstart/user`.
+For detailed guidance on configuring MCP for Claude Desktop, refer to https://modelcontextprotocol.io/quickstart/user.
 
 ### 3. Windsurf
 
@@ -145,4 +147,4 @@ Windsurf offers a rich graphical interface and integrates its MCP configurations
 }
 ```
 
-For detailed guidance on configuring MCP for Windsurf, refer to `https://docs.windsurf.com/windsurf/mcp`.
+For detailed guidance on configuring MCP for Windsurf, refer to https://docs.windsurf.com/windsurf/mcp.
