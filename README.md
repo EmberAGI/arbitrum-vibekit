@@ -46,7 +46,7 @@ pnpm -v # Check that pnpm is installed
 Then, clone the repository and navigate to its directory:
 
 ```bash
-git clone https://github.com/arbitrum-agentkit/arbitrum-agentkit.git
+git clone https://github.com/EmberAGI/arbitrum-agentkit.git
 cd arbitrum-agentkit
 ```
 
