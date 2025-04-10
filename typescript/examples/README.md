@@ -2,45 +2,108 @@
 
 This section contains example implementations of on-chain AI agents that demonstrate how they are easily built and deployed using the Arbitrum Agentkit. These agents act as MCP tools for compatibility with any system, a common approach in widely used technical references. In the coming months, they will be eligible for listing in MCP registries as part of the Agentkit-agent creation process.
 
+## Set Up Your Project
+
+### 1. Environment Setup:
+
+Copy the `.env.example` file to `.env` in your agent's directory and fill in any required secrets or configuration variables.
+
+### 2. Install Packages:
+
+```bash
+pnpm install
+```
+
 ## Running an Agent
 
 There are two main ways to start an agent:
 
-### 1. Using Docker
+### 1. Using Docker Compose
 
 Build the MCP-enabled Docker image in the agent's directory and run the container to start your agent.
 
-### 2. Using NPM (Local Development)
+### 2. Local Development
 
-**Optional**: If you need an on-chain actions server, clone and run the [`onchain-actions repo`](https://github.com/EmberAGI/onchain-actions) locally. If you do not run it locally, the official deployment will be used instead.
+- **Using the Inspector via npx**:
 
-1. **Environment Setup**:
+  ```bash
+  pnpm run inspect:npx
+  ```
 
-   Copy the `.env.example` file to `.env` in your agent't directory and fill in any required secrets or configuration variables.
+  This command uses `npx -y @modelcontextprotocol/inspector` to launch the Inspector, pointing it at your agent’s compiled code (`./dist/index.js`). It’s a convenient way to inspect or interact with your production agent without modifying your local environment.
 
-2. **Install and Build**:
+- **Using npm**:
 
-   At the root of this repository, run the following commands:
+  ```bash
+  pnpm run build
+  pnpm run start
+  ```
 
-   ```bash
-   pnpm install
-   pnpm run build
-   ```
+  The agent should now be running and ready to receive requests or user input.
 
-3. **Start the Agent**:
+## Graphical MCP Clients
 
-   Run the following command in your agents' directory:
+Although the above examples primarily demonstrate command-line interactions, you can integrate a graphical MCP client as well:
 
-   ```bash
-   pnpm run start
-   ```
+1. **Cursor**: To incorporate an agent into Cursor, update the configuration by editing the `mcp.json` file. Within this file, add an entry under the `mcpServers` key that defines the agent’s settings depending on whether you are setting up a local or remote agent. Cursor can point to the SSE MCP server running on Docker, or directly to the build file for npx. The contents of the `mcp.json` file follow this structure:
 
-   The agent should now be running and ready to receive requests or user input.
+```json
+{
+  "mcpServers": {
+    "local-npx-agent": {
+      "command": "npx",
+      "args": ["/path/to/agent/build/dist/index.js"],
+      "env": {
+        "VAR": "value"
+      }
+    },
+    "local-sse-agent": {
+      "url": "http://localhost:3010/sse",
+      "env": {
+        "VAR": "value"
+      }
+    },
+    "remote-sse-agent": {
+      "url": "http://173.230.139.151:3010/sse"
+    }
+  }
+}
+```
 
-## Graphical Interfaces (GUI)
+2. **Claude Desktop**: To incorporate an agent into Claude Desktop, update the configuration by editing the `claude_desktop_config.json` file. Within this file, add an entry under the `mcpServers` key that defines the agent’s settings depending on whether you are setting up a local or remote agent. Claude Desktop can point to the SSE MCP server running on Docker, or directly to the build file for npx. The contents of the `claude_desktop_config.json` file follow this structure:
 
-Although these examples primarily demonstrate command-line or programmatic interactions, you can integrate a graphical interface:
-
-1. **Curser**: You can incorporate the agent into Curser by adding a “rules” file that defines how Curser should display and handle interactions.
-
-2. **Claude Desktop**: By using the Dockerized version alongside Claude Desktop, developers can run reference servers locally (e.g., Docker Desktop) and point Claude Desktop’s `claude_desktop_config.json` to those servers as an MCP client.
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/username/Desktop",
+        "/path/to/other/allowed/dir"
+      ]
+    },
+    "MCP_DOCKER": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "alpine/socat",
+        "STDIO",
+        "TCP:host.docker.internal:8811"
+      ],
+      "local-sse-agent": {
+        "url": "http://localhost:3010/sse",
+        "env": {
+          "VAR": "value"
+        }
+      },
+      "remote-sse-agent": {
+        "url": "http://173.230.139.151:3010/sse"
+      }
+    }
+  }
+}
+```

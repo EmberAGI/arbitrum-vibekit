@@ -5,6 +5,9 @@ import EmberGrpcClient, {
   CapabilityType,
   GetWalletPositionsResponse,
   WalletPosition,
+  Token,
+  GetTokensResponse,
+  OrderType,
 } from "@emberai/sdk-typescript";
 // Use the high-level McpServer API
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -18,10 +21,21 @@ export {
   GetWalletPositionsResponse,
   WalletPosition,
   TransactionPlan,
+  GetTokensResponse,
+  Token,
 };
 
 // --- Define Zod Schemas ---
 // Convert our Zod objects to schema objects for MCP
+
+const swapTokensSchema = {
+  fromTokenAddress: z.string().describe("The contract address of the token to swap from."),
+  fromTokenChainId: z.string().describe("The chain ID where the fromToken contract resides."),
+  toTokenAddress: z.string().describe("The contract address of the token to swap to."),
+  toTokenChainId: z.string().describe("The chain ID where the toToken contract resides."),
+  amount: z.string().describe("The amount of the fromToken to swap (precise, non-human readable format)."),
+  userAddress: z.string().describe("The wallet address initiating the swap."),
+};
 
 const borrowSchema = {
   tokenAddress: z.string().describe("The contract address of the token to borrow."),
@@ -59,22 +73,30 @@ const getUserPositionsSchema = {
   userAddress: z.string().describe("The wallet address to fetch positions for."),
 };
 
+const getTokensSchema = {
+  chainId: z.string().describe("The chain ID to get tokens for.").optional(),
+  filter: z.string().describe("A filter to apply to the tokens.").optional(),
+};
+
 // Define types from schemas
+type SwapTokensParams = z.infer<typeof swapTokensParams>;
 type BorrowParams = z.infer<typeof borrowParams>;
 type RepayParams = z.infer<typeof repayParams>;
 type SupplyParams = z.infer<typeof supplyParams>;
 type WithdrawParams = z.infer<typeof withdrawParams>;
 type GetCapabilitiesParams = z.infer<typeof getCapabilitiesParams>;
 type GetUserPositionsParams = z.infer<typeof getUserPositionsParams>;
+type GetTokensParams = z.infer<typeof getTokensParams>;
 
 // Create Zod objects for inference
+const swapTokensParams = z.object(swapTokensSchema);
 const borrowParams = z.object(borrowSchema);
 const repayParams = z.object(repaySchema);
 const supplyParams = z.object(supplySchema);
 const withdrawParams = z.object(withdrawSchema);
 const getCapabilitiesParams = z.object(getCapabilitiesSchema);
 const getUserPositionsParams = z.object(getUserPositionsSchema);
-
+const getTokensParams = z.object(getTokensSchema);
 // --- Tool Definitions for tools/list ---
 // Helper to convert Zod schema to MCP argument definition
 const zodSchemaToMcpArgs = (schema: Record<string, z.ZodTypeAny>) => {
@@ -89,6 +111,11 @@ const zodSchemaToMcpArgs = (schema: Record<string, z.ZodTypeAny>) => {
 };
 
 const toolDefinitions = [
+  {
+    name: "swapTokens",
+    description: "Swap or convert tokens using Ember SDK",
+    arguments: zodSchemaToMcpArgs(swapTokensSchema),
+  },
   {
     name: "borrow",
     description: "Borrow tokens using Ember SDK",
@@ -119,6 +146,11 @@ const toolDefinitions = [
     description: "Get user wallet positions using Ember SDK",
     arguments: zodSchemaToMcpArgs(getUserPositionsSchema),
   },
+  {
+    name: "getTokens",
+    description: "Get a list of supported tokens using Ember SDK",
+    arguments: zodSchemaToMcpArgs(getTokensSchema),
+  },
 ];
 
 // --- Initialize the MCP server using the high-level McpServer API
@@ -140,6 +172,49 @@ if (emberEndpoint === defaultEndpoint) {
 const emberClient = new EmberGrpcClient(emberEndpoint);
 
 // --- Register Tools ---
+server.tool("swapTokens", "Swap or convert tokens using Ember SDK", swapTokensSchema, async (params: SwapTokensParams, extra: any) => {
+  console.error(`Executing swapTokens tool with params:`, params);
+  console.error(`Extra object for swapTokens:`, extra);
+  
+  try {
+    const fromToken = {
+      chainId: params.fromTokenChainId,
+      address: params.fromTokenAddress,
+    };
+    const toToken = {
+      chainId: params.toTokenChainId,
+      address: params.toTokenAddress,
+    };
+    const response = await emberClient.swapTokens({
+      orderType: OrderType.MARKET_SELL,
+      baseToken: fromToken,
+      quoteToken: toToken,
+      amount: params.amount,
+      recipient: params.userAddress,
+    });
+
+    if (response.error || !response.transactions) {
+      throw new Error(response.error?.message || "No transaction plan returned for swap");
+    }
+    
+    console.error(`SwapTokens tool success. Transactions:`, response.transactions);
+    
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(response.transactions, null, 2)
+        }
+      ]
+    };
+  } catch (error) {
+    console.error(`SwapTokens tool error:`, error);
+    return {
+      isError: true,
+      content: [{ type: "text", text: `Error: ${(error as Error).message}` }]
+    };
+  }
+});
 server.tool("borrow", "Borrow tokens using Ember SDK", borrowSchema, async (params: BorrowParams, extra: any) => {
   console.error(`Executing borrow tool with params:`, params);
   console.error(`Extra object for borrow:`, extra);
@@ -363,6 +438,25 @@ server.tool("getUserPositions", "Get user wallet positions using Ember SDK", get
     };
   }
 });
+
+server.tool("getTokens", "Get a list of supported tokens using Ember SDK", getTokensSchema, async (params: GetTokensParams, extra: any) => {
+  console.error(`Executing getTokens tool with params:`, params);
+  console.error(`Extra object for getTokens:`, extra);
+  
+  try {
+    const response = await emberClient.getTokens({ chainId: params.chainId ?? "", filter: params.filter ?? "" });
+    console.error(`GetTokens tool success.`);
+    return { content: [{ type: "text", text: JSON.stringify(response, null, 2) }] };
+  } catch (error) {
+    console.error(`GetTokens tool error:`, error);
+    return {
+      isError: true,
+      content: [{ type: "text", text: `Error: ${(error as Error).message}` }]
+    };
+  }
+});
+
+
 
 // --- Connect Transport and Start Server ---
 async function main() {
