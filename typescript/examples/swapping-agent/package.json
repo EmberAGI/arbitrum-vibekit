@@ -1,7 +1,7 @@
 {
-  "name": "swaping-agent-example",
+  "name": "swapping-agent-example",
   "version": "1.0.0",
-  "description": "Ember SDK Swaping Agent Example",
+  "description": "Ember SDK swapping Agent Example",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -9,8 +9,10 @@
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
-    "docker:build": "docker build -t swaping-agent .",
-    "docker:run": "docker run --env-file .env -p 3001:3001 swaping-agent"
+    "docker:build": "docker build -t swapping-agent .",
+    "docker:run": "docker run --env-file .env -p 3001:3001 swapping-agent",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
   },
   "dependencies": {
     "@emberai/sdk-typescript": "0.3.0-beta.6",
@@ -29,6 +31,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "prettier": "^3.5.3",
     "typescript": "^5.3.2"
   }
 }
