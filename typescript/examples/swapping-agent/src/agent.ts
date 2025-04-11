@@ -1,5 +1,20 @@
-import { ethers } from 'ethers';
 import { z } from 'zod';
+import {
+  type WalletClient,
+  type PublicClient,
+  type SendTransactionParameters,
+  type Address,
+  type Hex,
+  type TransactionReceipt,
+  BaseError,
+  ContractFunctionRevertedError,
+  hexToString,
+  isHex,
+  createWalletClient,
+  createPublicClient,
+  http,
+  type LocalAccount,
+} from 'viem';
 import {
   HandlerContext,
   TransactionPlan,
@@ -22,6 +37,7 @@ import {
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { mainnet, arbitrum, optimism, polygon, base, Chain } from 'viem/chains';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -102,9 +118,41 @@ type swappingToolSet = {
   swapTokens: Tool<typeof SwapTokensSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
 };
 
+// --- Helper: Map chain IDs (string) to viem Chain objects AND QuickNode segments ---
+interface ChainConfig {
+  viemChain: Chain;
+  quicknodeSegment: string;
+}
+
+// Add more chains and their corresponding QuickNode network segments
+const chainIdMap: Record<string, ChainConfig> = {
+  '1': { viemChain: mainnet, quicknodeSegment: '' }, // Mainnet uses base subdomain
+  '42161': { viemChain: arbitrum, quicknodeSegment: 'arbitrum-mainnet' }, // Verify segment
+  '10': { viemChain: optimism, quicknodeSegment: 'optimism' }, // Verify segment
+  '137': { viemChain: polygon, quicknodeSegment: 'matic' }, // Verify segment
+  '8453': { viemChain: base, quicknodeSegment: 'base-mainnet' }, // Verify segment
+  // Add other chain IDs and their corresponding viem objects/QuickNode segments
+};
+
+// Helper function to get the viem Chain config
+export function getChainConfigById(chainId: string): ChainConfig {
+  const config = chainIdMap[chainId];
+  if (!config) {
+    throw new Error(`Unsupported chainId: ${chainId}. Please update chainIdMap.`);
+  }
+  return config;
+}
+
 export class Agent {
-  private signer: ethers.Signer;
-  private userAddress: string;
+  // Store account, address, and RPC details instead of clients
+  private account: LocalAccount<string>;
+  private userAddress: Address;
+  // Store subdomain instead of template
+  private quicknodeSubdomain: string;
+  private apiKey: string;
+  // Remove unused client properties
+  // private walletClient: WalletClient;
+  // private publicClient: PublicClient;
   private tokenMap: Record<
     string,
     {
@@ -116,34 +164,58 @@ export class Agent {
   private availableTokens: string[] = [];
   public conversationHistory: CoreMessage[] = [];
   private mcpClient: Client | null = null;
-  // Use the specific swappingToolSet type again
   private toolSet: swappingToolSet | null = null;
 
-  constructor(signer: ethers.Signer, userAddress: string) {
-    this.signer = signer;
+  constructor(
+    account: LocalAccount<string>,
+    userAddress: Address,
+    // Accept subdomain instead of template
+    quicknodeSubdomain: string,
+    apiKey: string
+  ) {
+    if (!account) {
+      throw new Error('Viem Account is required for Agent initialization.');
+    }
+    if (!userAddress || !/^0x[a-fA-F0-9]{40}$/.test(userAddress)) {
+      throw new Error('Valid userAddress (0x...) is required.');
+    }
+    // Check for subdomain and API key
+    if (!quicknodeSubdomain || !apiKey) {
+      throw new Error('QuickNode Subdomain and API Key are required.');
+    }
+
+    this.account = account;
     this.userAddress = userAddress;
+    // Store subdomain
+    this.quicknodeSubdomain = quicknodeSubdomain;
+    this.apiKey = apiKey;
+
     if (!process.env.OPENROUTER_API_KEY) {
       throw new Error('OPENROUTER_API_KEY not set!');
     }
   }
 
-  // Use console.error for all internal logging
   async log(...args: unknown[]) {
-    console.error(...args); // Changed from console.log to console.error
+    console.error(...args);
   }
 
-  // Helper to create context for handlers/execute methods
   private getHandlerContext(): HandlerContext {
     if (!this.mcpClient) {
       throw new Error('MCP Client not initialized!');
     }
-    return {
+    if (!this.quicknodeSubdomain || !this.apiKey) {
+      throw new Error('QuickNode details missing in agent context!');
+    }
+    const context: HandlerContext = {
       mcpClient: this.mcpClient,
       tokenMap: this.tokenMap,
       userAddress: this.userAddress,
       executeAction: this.executeAction.bind(this),
       log: this.log.bind(this),
+      quicknodeSubdomain: this.quicknodeSubdomain,
+      quicknodeApiKey: this.apiKey,
     };
+    return context;
   }
 
   async init() {
@@ -159,60 +231,48 @@ export class Agent {
 
     this.log('Initializing MCP client via stdio...');
     try {
-      // Initialize MCP Client
       this.mcpClient = new Client(
         { name: 'SwappingAgent', version: '1.0.0' },
-        // Provide empty capabilities initially, they might be discovered later
         { capabilities: { tools: {}, resources: {}, prompts: {} } }
       );
 
       const transport = new StdioClientTransport({
         command: 'node',
-        // Adjust path as necessary
         args: ['../../../typescript/mcp-tools/emberai-mcp/dist/index.js'],
       });
 
       await this.mcpClient.connect(transport);
       this.log('MCP client initialized successfully.');
 
-      // Check for cached capabilities
       if (useCache) {
         try {
           await fs.access(CACHE_FILE_PATH);
           this.log('Loading swap capabilities from cache...');
           const cachedData = await fs.readFile(CACHE_FILE_PATH, 'utf-8');
           const parsedJson = JSON.parse(cachedData);
-          // --- Reverted: Validate directly ---
           const validationResult = McpGetCapabilitiesResponseSchema.safeParse(parsedJson);
           if (validationResult.success) {
-            swapCapabilities = validationResult.data; // Assign the validated data
+            swapCapabilities = validationResult.data;
             this.log('Cached capabilities loaded and validated successfully.');
           } else {
             logError('Cached capabilities validation failed:', validationResult.error);
-            // Log what failed validation
             logError('Data that failed validation:', JSON.stringify(parsedJson));
             this.log('Proceeding to fetch fresh capabilities...');
-            // Fall through to fetch fresh capabilities
           }
         } catch (error) {
-          // Log specific cache access/parsing errors vs validation errors
           if (error instanceof Error && error.message.includes('invalid JSON')) {
             logError('Error reading or parsing cache file:', error);
           } else {
             this.log('Cache not found or invalid, fetching capabilities via MCP...');
           }
-          // Fall through to fetch fresh capabilities
         }
       }
 
-      // Fetch if cache was not used, invalid, or validation failed
       if (!swapCapabilities) {
         this.log('Fetching swap capabilities via MCP...');
-        swapCapabilities = await this.fetchAndCacheCapabilities(); // This should return the inner structure now
+        swapCapabilities = await this.fetchAndCacheCapabilities();
       }
 
-      // Process the capabilities array - swapCapabilities should now always have the inner structure
-      // Keep the log statement here for verification
       this.log(
         'swapCapabilities before processing (first 10 lines):',
         swapCapabilities
@@ -222,20 +282,15 @@ export class Agent {
       if (swapCapabilities?.capabilities) {
         this.tokenMap = {};
         this.availableTokens = [];
-        // Iterate through the array of capability entries
         swapCapabilities.capabilities.forEach(capabilityEntry => {
-          // Check if this entry is a swap capability
           if (capabilityEntry.swapCapability) {
-            const swapCap = capabilityEntry.swapCapability; // Use the nested swapCapability
-            // Iterate through supportedTokens
+            const swapCap = capabilityEntry.swapCapability;
             swapCap.supportedTokens?.forEach(token => {
-              // Access nested properties via tokenUid
               if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
                 if (!this.tokenMap[token.symbol]) {
-                  // Avoid duplicates if multiple protocols offer the same token
                   this.tokenMap[token.symbol] = {
-                    chainId: token.tokenUid.chainId, // Use nested chainId
-                    address: token.tokenUid.address, // Use nested address
+                    chainId: token.tokenUid.chainId,
+                    address: token.tokenUid.address,
                     decimals: token.decimals ?? 18,
                   };
                   this.availableTokens.push(token.symbol);
@@ -243,7 +298,6 @@ export class Agent {
               }
             });
           }
-          // Add checks for other capability types (e.g., capabilityEntry.bridgeCapability) if needed
         });
         this.log('Available Tokens Loaded Internally:', this.availableTokens);
       } else {
@@ -294,7 +348,6 @@ export class Agent {
     }
   }
 
-  // --- Helper for validation and execution, used by execute... methods
   private async validateAndExecuteAction(
     actionName: string,
     rawTransactions: unknown,
@@ -313,8 +366,6 @@ export class Agent {
     return await context.executeAction(actionName, validationResult.data);
   }
 
-  // --- Main Processing Logic ---
-
   async processUserInput(userInput: string): Promise<CoreMessage> {
     if (!this.toolSet) {
       throw new Error('Agent not initialized. Call start() first.');
@@ -331,31 +382,24 @@ export class Agent {
         messages: this.conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,
-        // FIX: Correctly type the callback parameter using the inferred toolset type
         onStepFinish: async (stepResult: StepResult<typeof this.toolSet>) => {
           this.log(`Step finished. Reason: ${stepResult.finishReason}`);
-          // Now you can safely access stepResult properties
-          // e.g., stepResult.toolCalls, stepResult.toolResults
         },
       });
       this.log(`generateText finished. Reason: ${finishReason}`);
 
       assistantResponseContent = text ?? 'Processing complete.';
 
-      // FIX: Correct logging for tool calls and results
       response.messages.forEach((msg, index) => {
         if (msg.role === 'assistant' && Array.isArray(msg.content)) {
           msg.content.forEach(part => {
-            // Check using 'tool-call' (hyphenated)
             if (part.type === 'tool-call') {
               this.log(`[LLM Request ${index}]: Tool Call - ${part.toolName}`);
             }
           });
         } else if (msg.role === 'tool') {
-          // Content of a tool message is an array of ToolResultPart
           if (Array.isArray(msg.content)) {
             msg.content.forEach((toolResult: ToolResultPart) => {
-              // Log the actual result content
               this.log(
                 `[Tool Result ${index} for ${toolResult.toolName}]: ${JSON.stringify(toolResult.result)}`
               );
@@ -374,28 +418,22 @@ export class Agent {
       this.conversationHistory.push(errorAssistantMessage);
     }
 
-    // FIX: Correctly find and type the final assistant message
     const finalAssistantMessage = this.conversationHistory
       .slice()
       .reverse()
       .find(
-        (
-          msg
-        ): msg is CoreAssistantMessage & { content: string } => // Type predicate
+        (msg): msg is CoreAssistantMessage & { content: string } =>
           msg.role === 'assistant' && typeof msg.content === 'string'
       );
 
     const responseMessage: CoreAssistantMessage = {
       role: 'assistant',
-      // No assertion needed due to the type predicate in find()
       content: finalAssistantMessage?.content ?? assistantResponseContent,
     };
 
     this.log('[assistant]:', responseMessage.content);
     return responseMessage;
   }
-
-  // --- Action Execution and Signing --- (Keep these as they are)
 
   async executeAction(actionName: string, transactions: TransactionPlan[]): Promise<string> {
     if (!transactions || transactions.length === 0) {
@@ -406,9 +444,6 @@ export class Agent {
       this.log(`Executing ${transactions.length} transaction(s) for ${actionName}...`);
       const txHashes: string[] = [];
       for (const transaction of transactions) {
-        if (!transaction.to || !transaction.data) {
-          throw new Error(`Invalid transaction object for ${actionName}: missing 'to' or 'data'.`);
-        }
         const txHash = await this.signAndSendTransaction(transaction);
         this.log(`${actionName} transaction sent: ${txHash}`);
         txHashes.push(txHash);
@@ -417,72 +452,203 @@ export class Agent {
     } catch (error: unknown) {
       const err = error as Error;
       logError(`Error executing ${actionName} action:`, err.message);
-      return `Error executing ${actionName}: ${err.message}`;
+      throw new Error(`Error executing ${actionName}: ${err.message}`);
     }
   }
 
   async signAndSendTransaction(tx: TransactionPlan): Promise<string> {
-    const provider = this.signer.provider;
-    if (!provider) throw new Error('Signer is not connected to a provider.');
-
-    if (!tx.to || !tx.data) {
-      logError("Transaction object missing 'to' or 'data' field:", tx);
-      throw new Error("Transaction object is missing required fields ('to', 'data').");
+    // Validate tx.chainId
+    if (!tx.chainId) {
+      const errorMsg = `Transaction object missing required 'chainId' field`;
+      logError(errorMsg, tx);
+      throw new Error(errorMsg);
     }
 
-    const ethersTx: ethers.providers.TransactionRequest = {
-      to: tx.to,
-      value: ethers.BigNumber.from(tx.value || '0'),
-      data: tx.data,
-      from: this.userAddress,
+    // Get the viem Chain config for this transaction
+    let chainConfig: ChainConfig;
+    try {
+      chainConfig = getChainConfigById(tx.chainId);
+    } catch (chainError) {
+      logError((chainError as Error).message, tx);
+      throw chainError; // Re-throw the specific chain error
+    }
+    const targetChain = chainConfig.viemChain;
+    const networkSegment = chainConfig.quicknodeSegment;
+
+    // --- Dynamic Client Creation ---
+    // Construct the specific RPC URL for this chain based on segment
+    let dynamicRpcUrl: string;
+    if (networkSegment === '') {
+      // Mainnet case: subdomain.quiknode.pro/api_key
+      // Use this.quicknodeSubdomain
+      dynamicRpcUrl = `https://${this.quicknodeSubdomain}.quiknode.pro/${this.apiKey}`;
+    } else {
+      // Other networks: subdomain.network_segment.quiknode.pro/api_key
+      // Use this.quicknodeSubdomain
+      dynamicRpcUrl = `https://${this.quicknodeSubdomain}.${networkSegment}.quiknode.pro/${this.apiKey}`;
+    }
+
+    // Create temporary clients for this transaction
+    const tempPublicClient = createPublicClient({
+      chain: targetChain,
+      transport: http(dynamicRpcUrl),
+    });
+    // No longer need a temporary wallet client here if signing locally
+    // const tempWalletClient = createWalletClient({ ... });
+    // --- End Dynamic Client Creation ---
+
+    // Validate tx.to and tx.data format
+    if (!tx.to || !/^0x[a-fA-F0-9]{40}$/.test(tx.to)) {
+      const errorMsg = `Transaction object invalid 'to' field: ${tx.to}`;
+      logError(errorMsg, tx);
+      throw new Error(errorMsg);
+    }
+    if (!tx.data || !isHex(tx.data)) {
+      const errorMsg = `Transaction object invalid 'data' field (not hex): ${tx.data}`;
+      logError(errorMsg, tx);
+      throw new Error(errorMsg);
+    }
+
+    const toAddress = tx.to as Address;
+    const txData = tx.data as Hex;
+    const txValue = tx.value ? BigInt(tx.value) : 0n;
+
+    // Construct viem transaction parameters using the target chain
+    // Prepare transaction for signing (matching parameters needed for estimateGas/sign)
+    const baseTx = {
+      account: this.userAddress, // Explicitly set account for Wallet Client
+      to: toAddress,
+      value: txValue,
+      data: txData,
+      chain: targetChain, // Pass the specific chain object
+      // Gas price related fields might be needed depending on chain & viem version
+      // Add nonce if needed, though estimateGas often handles it
     };
 
     try {
-      const dataPrefix = tx.data ? ethers.utils.hexlify(tx.data).substring(0, 10) : '0x';
+      const dataPrefix = txData.substring(0, 10);
       this.log(
-        `Sending transaction to ${ethersTx.to} from ${ethersTx.from} with data ${dataPrefix}...`
+        `Preparing transaction to ${baseTx.to} on chain ${targetChain.id} (${networkSegment}) via ${dynamicRpcUrl.split('/')[2]} from ${this.userAddress} with data ${dataPrefix}...`
       );
 
-      const txResponse = await this.signer.sendTransaction(ethersTx);
-      this.log(`Transaction submitted: ${txResponse.hash}. Waiting for confirmation...`);
-      const receipt = await txResponse.wait(1);
+      // 1. Estimate Gas using the TEMPORARY PublicClient
+      this.log(`Estimating gas...`);
+      const estimatedGas = await tempPublicClient.estimateGas(baseTx);
+      this.log(`Gas estimated: ${estimatedGas}`);
+
+      // Fetch current nonce
+      const nonce = await tempPublicClient.getTransactionCount({
+        address: this.userAddress,
+        blockTag: 'latest',
+      });
+      this.log(`Nonce fetched: ${nonce}`);
+
+      // Fetch EIP-1559 fee estimates
+      this.log(`Fetching fee estimates...`);
+      let { maxFeePerGas, maxPriorityFeePerGas } = await tempPublicClient.estimateFeesPerGas();
       this.log(
-        `Transaction confirmed in block ${receipt.blockNumber} (Status: ${receipt.status === 1 ? 'Success' : 'Failed'}): ${txResponse.hash}`
+        `Fees estimated: maxFeePerGas=${maxFeePerGas}, maxPriorityFeePerGas=${maxPriorityFeePerGas}`
       );
-      if (receipt.status === 0) {
-        throw new Error(
-          `Transaction ${txResponse.hash} failed (reverted). Check blockchain explorer for details.`
+
+      // Proper null/undefined check - don't rely on falsy for bigint (0n is falsy but valid)
+      if (maxFeePerGas === undefined || maxPriorityFeePerGas === undefined) {
+        this.log(
+          'WARNING: One or both fee estimates are undefined. Will use fallbacks if possible.'
         );
-      }
-      return txResponse.hash;
-    } catch (error) {
-      const errMsg = (error as any)?.reason || (error as Error).message;
-      const errCode = (error as any)?.code;
-      // Attempt to extract revert reason if available (ethers v5 specific)
-      let revertReason = errMsg;
-      if ((error as any).error?.message?.includes('reverted with reason string')) {
-        try {
-          const reasonHex = (error as any).error.message
-            .split("reverted with reason string '")[1]
-            .split("'")[0];
-          if (ethers.utils.isHexString(reasonHex)) {
-            revertReason = ethers.utils.toUtf8String(reasonHex);
-          }
-        } catch (decodeError) {
-          // Ignore decode error, stick with original message
+
+        // For chains like Arbitrum where maxPriorityFeePerGas is sometimes 0
+        if (maxFeePerGas !== undefined && maxPriorityFeePerGas === undefined) {
+          this.log(`Setting maxPriorityFeePerGas=0n for chain ${targetChain.id} as a fallback`);
+          maxPriorityFeePerGas = 0n;
+        } else {
+          throw new Error('Failed to estimate gas fees and no fallback is applicable.');
         }
       }
 
-      logError(
-        `Send transaction failed: ${errCode ? `Code: ${errCode}, ` : ''}Reason: ${revertReason}`,
-        error
+      // 2. Sign the transaction locally using the agent's account
+      this.log(`Signing transaction locally...`);
+      const signedTx = await this.account.signTransaction({
+        ...baseTx,
+        gas: estimatedGas,
+        nonce: nonce,
+        maxFeePerGas: maxFeePerGas,
+        maxPriorityFeePerGas: maxPriorityFeePerGas,
+        type: 'eip1559', // Explicitly set type
+        chainId: targetChain.id, // Explicitly add chainId
+      });
+      this.log(`Transaction signed.`);
+
+      // 3. Send the RAW signed transaction using the TEMPORARY PublicClient
+      this.log(`Sending raw transaction...`);
+      const txHash = await tempPublicClient.sendRawTransaction({
+        serializedTransaction: signedTx,
+      });
+
+      this.log(
+        `Transaction submitted to chain ${targetChain.id}: ${txHash}. Waiting for confirmation...`
       );
-      // Provide a clearer error message
-      throw new Error(`Transaction failed: ${revertReason}`);
+
+      // Wait for confirmation using the TEMPORARY PublicClient
+      const receipt: TransactionReceipt = await tempPublicClient.waitForTransactionReceipt({
+        hash: txHash,
+        // confirmations: 1, // Optional: specify confirmations
+      });
+
+      this.log(
+        `Transaction confirmed on chain ${targetChain.id} in block ${receipt.blockNumber} (Status: ${receipt.status}): ${txHash}`
+      );
+
+      if (receipt.status === 'reverted') {
+        throw new Error(
+          `Transaction ${txHash} failed (reverted). Check blockchain explorer for details.`
+        );
+      }
+      return txHash;
+    } catch (error: unknown) {
+      let revertReason =
+        error instanceof Error
+          ? `Transaction failed: ${error.message}`
+          : 'Transaction failed: Unknown error';
+
+      // Handle viem specific errors
+      if (error instanceof BaseError) {
+        // Change callback parameter type from Error to unknown
+        const cause = error.walk((e: unknown) => e instanceof ContractFunctionRevertedError);
+        if (cause instanceof ContractFunctionRevertedError) {
+          const errorName = cause.reason ?? cause.shortMessage;
+          revertReason = `Transaction reverted: ${errorName}`;
+          // Attempt to decode revert data if it exists
+          if (cause.data?.errorName === '_decodeRevertReason') {
+            const hexReason = cause.data.args?.[0];
+            if (hexReason && typeof hexReason === 'string' && isHex(hexReason as Hex)) {
+              try {
+                revertReason = `Transaction reverted: ${hexToString(hexReason as Hex)}`;
+              } catch (decodeError) {
+                logError('Failed to decode revert reason hex:', hexReason, decodeError);
+                // Stick with the error name or short message if decoding fails
+              }
+            }
+          }
+        } else {
+          // Use the short message from the original BaseError
+          revertReason = `Transaction failed: ${error.shortMessage}`;
+        }
+        logError(
+          `Send transaction failed: ${revertReason}`,
+          error.details // Log detailed error info from BaseError
+        );
+      } else if (error instanceof Error) {
+        // Handle standard JS Errors
+        logError(`Send transaction failed: ${revertReason}`, error); // Pass the Error object
+      } else {
+        // Handle non-Error types (log the raw value)
+        logError(`Send transaction failed with unknown error type: ${revertReason}`, error);
+      }
+
+      throw new Error(revertReason);
     }
   }
 
-  // Add fetchAndCacheCapabilities method
   private async fetchAndCacheCapabilities(): Promise<McpGetCapabilitiesResponse> {
     this.log('Fetching swap capabilities via MCP...');
     if (!this.mcpClient) {
@@ -495,9 +661,8 @@ export class Agent {
         arguments: { type: 'SWAP' },
       });
 
-      // ---> Log the raw result intelligently and prepare data for validation
       this.log('Raw capabilitiesResult check:');
-      let dataToValidate: any = capabilitiesResult; // Default to using the raw result
+      let dataToValidate: any = capabilitiesResult;
       let parsedInnerData = false;
 
       if (
@@ -512,10 +677,9 @@ export class Agent {
         try {
           const innerData = JSON.parse(capabilitiesResult.content[0].text);
           this.log('Successfully parsed inner text content. Using this for validation.');
-          dataToValidate = innerData; // Use the parsed inner data for validation
+          dataToValidate = innerData;
           parsedInnerData = true;
 
-          // Log snippet of parsed inner data
           const innerDataString = JSON.stringify(innerData, null, 2);
           this.log(
             'Parsed inner text content (first 10 lines):\n',
@@ -532,24 +696,13 @@ export class Agent {
             'Raw inner text content snippet (first 100 chars): ',
             rawText.substring(0, 100) + (rawText.length > 100 ? '...' : '')
           );
-          // dataToValidate remains capabilitiesResult
         }
       } else {
         this.log('Raw result does NOT match the nested structure. Validating as is.');
-        // dataToValidate remains capabilitiesResult
-        // Log snippet of raw result
-        const rawResultString = JSON.stringify(capabilitiesResult, null, 2);
-        this.log(
-          'Raw result (first 10 lines):\n',
-          rawResultString.split('\n').slice(0, 10).join('\n') +
-            (rawResultString.includes('\n') ? '\n... (truncated)' : '')
-        );
       }
 
-      // Validate the data (either raw or parsed inner data)
       const validationResult = McpGetCapabilitiesResponseSchema.safeParse(dataToValidate);
 
-      // ---> Log the validation result (first 10 lines)
       this.log(
         'Validation performed on:',
         parsedInnerData ? 'Parsed Inner Data' : 'Original Raw Result'
@@ -563,27 +716,23 @@ export class Agent {
 
       if (!validationResult.success) {
         logError('Fetched capabilities validation failed:', validationResult.error);
-        // Log what failed validation for clarity
         logError('Data that failed validation:', JSON.stringify(dataToValidate));
         throw new Error(
           `Fetched capabilities failed validation: ${validationResult.error.message}`
         );
       }
 
-      // If validation succeeded, validationResult.data holds the correctly structured capabilities
       const capabilities = validationResult.data;
 
-      // Cache the validated data (which now MUST have the correct structure)
       try {
         await fs.mkdir(path.dirname(CACHE_FILE_PATH), { recursive: true });
-        // ---> Write the validated, correctly structured data (capabilities) instead of the potentially nested dataToValidate
         await fs.writeFile(CACHE_FILE_PATH, JSON.stringify(capabilities, null, 2), 'utf-8');
         this.log('Swap capabilities cached successfully.');
       } catch (cacheError) {
         logError('Failed to cache capabilities:', cacheError);
       }
 
-      return capabilities; // Return the validated inner data
+      return capabilities;
     } catch (error) {
       logError('Error fetching or validating capabilities via MCP:', error);
       throw new Error(
@@ -592,11 +741,3 @@ export class Agent {
     }
   }
 }
-
-// --- TODOs / Notes ---
-// - Ensure agentToolHandlers.ts is updated or its logic is fully moved here.
-// - Define/Import TransactionPlanSchema and TransactionPlan type.
-// - Implement robust error handling within execute...Tool methods to return meaningful errors to the LLM.
-// - Verify the actual structure of your MCP server's getCapabilities response and adjust parsing.
-// - Consider adding more specific error handling for transaction reverts (e.g., parsing revert reasons).
-// - Make sure the path to the MCP server executable is correct.

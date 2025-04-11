@@ -1,5 +1,6 @@
 import { Agent } from './agent.js';
-import { ethers } from 'ethers';
+import { createWalletClient, createPublicClient, http, type Address } from 'viem';
+import { mnemonicToAccount } from 'viem/accounts';
 import * as dotenv from 'dotenv';
 import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -25,17 +26,31 @@ let agent: Agent;
  * Initializes the Agent instance.
  */
 const initializeAgent = async (): Promise<void> => {
+  // Check for MNEMONIC again
   const mnemonic = process.env.MNEMONIC;
   if (!mnemonic) {
-    throw new Error('Mnemonic not found in the .env file.');
+    throw new Error('MNEMONIC not found in the .env file.');
   }
 
-  const wallet = ethers.Wallet.fromMnemonic(mnemonic);
-  console.error(`Using wallet ${wallet.address}`);
+  // Check for QuickNode variables
+  const quicknodeSubdomain = process.env.QUICKNODE_SUBDOMAIN;
+  const apiKey = process.env.QUICKNODE_API_KEY;
+  if (!quicknodeSubdomain || !apiKey) {
+    throw new Error('QUICKNODE_SUBDOMAIN and QUICKNODE_API_KEY must be set in the .env file.');
+  }
 
-  const provider = new ethers.providers.JsonRpcProvider(rpc);
-  const signer = wallet.connect(provider);
-  agent = new Agent(signer, wallet.address);
+  // 1. Create Account from Mnemonic
+  const account = mnemonicToAccount(mnemonic);
+  const userAddress: Address = account.address;
+  console.error(`Using wallet ${userAddress}`);
+
+  // 2. Remove client creation from here
+  // const publicClient = createPublicClient({ ... });
+  // const walletClient = createWalletClient({ ... });
+
+  // 3. Instantiate Agent with account, address, and RPC details
+  // Agent constructor will need to be updated
+  agent = new Agent(account, userAddress, quicknodeSubdomain, apiKey);
   await agent.init();
 };
 
