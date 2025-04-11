@@ -49,9 +49,23 @@ const CACHE_FILE_PATH = path.join(__dirname, '.cache', 'swap_capabilities.json')
 
 // --- Zod Schemas for Vercel AI SDK Tools ---
 const SwapTokensSchema = z.object({
-  fromToken: z.string().describe('The symbol of the token to swap from.'),
-  toToken: z.string().describe('The symbol of the token to swap to.'),
-  amount: z.string().describe('The amount of the token to swap.'),
+  fromToken: z
+    .string()
+    .describe(
+      'The symbol of the token to swap from (source token). It may be lowercase or uppercase.'
+    ),
+  toToken: z
+    .string()
+    .describe(
+      'The symbol of the token to swap to (destination token). It may be lowercase or uppercase.'
+    ),
+  amount: z
+    .string()
+    .describe(
+      'The amount of the token to swap from. It will be in a human readable format, e.g. The amount \"1.02 ETH\" will be 1.02.'
+    ),
+  fromChain: z.string().optional().describe('Optional chain name for the source token.'),
+  toChain: z.string().optional().describe('Optional chain name for the destination token.'),
 });
 type SwapTokensArgs = z.infer<typeof SwapTokensSchema>;
 
@@ -155,11 +169,11 @@ export class Agent {
   // private publicClient: PublicClient;
   private tokenMap: Record<
     string,
-    {
+    Array<{
       chainId: string;
       address: string;
       decimals: number;
-    }
+    }>
   > = {};
   private availableTokens: string[] = [];
   public conversationHistory: CoreMessage[] = [];
@@ -222,7 +236,49 @@ export class Agent {
     this.conversationHistory = [
       {
         role: 'system',
-        content: `You are an assistant that provides access to blockchain swapping functionalities via Ember SDK. Never respond in markdown, always use plain text. Never add links to your response. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.`,
+        content: `You are an assistant that provides access to blockchain swapping functionalities via EmberAI Onchain Actions.
+
+<examples>
+<example>
+<user>swap 1 ETH to USDC on Ethereum</user>
+<parameters>
+<amount>1</amount>
+<fromToken>ETH</fromToken>
+<toToken>USDC</toToken>
+<toChain>Ethereum</toChain>
+</parameters>
+</example>
+
+<example>
+<user>sell 89 fartcoin</user>
+<parameters>
+<amount>89</amount>
+<fromToken>fartcoin</fromToken>
+</parameters>
+</example>
+
+<example>
+<user>Convert 10.5 USDC to ETH</user>
+<parameters>
+<amount>10.5</amount>
+<fromToken>USDC</fromToken>
+<toToken>ETH</toToken>
+</parameters>
+</example>
+
+<example>
+<user>Swap 100.076 arb on arbitrum for dog on base</user>
+<parameters>
+<amount>100.076</amount>
+<fromToken>arb</fromToken>
+<toToken>dog</toToken>
+<fromChain>arbitrum</fromChain>
+<toChain>base</toChain>
+</parameters>
+</example>
+</examples>
+
+Present the user with a list of tokens and chains they can swap from and to if provided by the tool response. Never respond in markdown, always use plain text. Never add links to your response. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.`,
       },
     ];
 
@@ -288,13 +344,14 @@ export class Agent {
             swapCap.supportedTokens?.forEach(token => {
               if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
                 if (!this.tokenMap[token.symbol]) {
-                  this.tokenMap[token.symbol] = {
-                    chainId: token.tokenUid.chainId,
-                    address: token.tokenUid.address,
-                    decimals: token.decimals ?? 18,
-                  };
+                  this.tokenMap[token.symbol] = [];
                   this.availableTokens.push(token.symbol);
                 }
+                this.tokenMap[token.symbol].push({
+                  chainId: token.tokenUid.chainId,
+                  address: token.tokenUid.address,
+                  decimals: token.decimals ?? 18,
+                });
               }
             });
           }

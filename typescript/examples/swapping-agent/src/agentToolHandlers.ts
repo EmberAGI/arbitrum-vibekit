@@ -19,6 +19,13 @@ import {
 } from 'viem';
 import { getChainConfigById } from './agent.js'; // Assuming chainIdMap is accessible via agent export
 
+// Add a type alias for token information
+export type TokenInfo = {
+  chainId: string;
+  address: string;
+  decimals: number;
+};
+
 // Define a minimal MCPClient interface to match @modelcontextprotocol/sdk Client
 interface MCPClient {
   callTool: (params: {
@@ -46,9 +53,8 @@ export type TransactionPlan = z.infer<typeof TransactionPlanSchema>;
 
 // Defines the state/methods handlers receive from the Agent
 export interface HandlerContext {
-  // Replace toolExecutor with mcpClient
   mcpClient: MCPClient;
-  tokenMap: Record<string, { chainId: string; address: string; decimals: number }>;
+  tokenMap: Record<string, TokenInfo[]>;
   userAddress: string;
   executeAction: (actionName: string, transactions: TransactionPlan[]) => Promise<string>;
   log: (...args: unknown[]) => void;
@@ -57,18 +63,46 @@ export interface HandlerContext {
 }
 
 // Helper function for case-insensitive token lookup
-function findTokenCaseInsensitive(
-  tokenMap: Record<string, { chainId: string; address: string; decimals: number }>,
+function findTokensCaseInsensitive(
+  tokenMap: Record<string, TokenInfo[]>,
   tokenName: string
-): { chainId: string; address: string; decimals: number } | undefined {
+): TokenInfo[] {
   const lowerCaseTokenName = tokenName.toLowerCase();
   for (const key in tokenMap) {
     if (key.toLowerCase() === lowerCaseTokenName) {
-      return tokenMap[key]; // Return the value associated with the original key
+      return tokenMap[key];
     }
   }
-  return undefined; // Not found
+  return [];
 }
+
+// Define the single source of truth for chain mappings
+// Insert this near the top of the file, replacing the two old map functions
+
+// CHAIN MAPPING START
+const chainMappings = [
+  { id: '1', name: 'Ethereum', aliases: ['mainnet'] },
+  { id: '42161', name: 'Arbitrum', aliases: [] },
+  { id: '10', name: 'Optimism', aliases: [] },
+  { id: '137', name: 'Polygon', aliases: ['matic'] },
+  { id: '8453', name: 'Base', aliases: [] },
+  // Add more chains here
+];
+
+function mapChainNameToId(chainName: string): string | undefined {
+  const normalized = chainName.toLowerCase();
+  const found = chainMappings.find(
+    mapping => mapping.name.toLowerCase() === normalized || mapping.aliases.includes(normalized)
+  );
+  return found?.id;
+}
+
+function mapChainIdToName(chainId: string): string {
+  const found = chainMappings.find(mapping => mapping.id === chainId);
+  // Return the canonical name, or the ID itself if not found
+  return found?.name || chainId;
+}
+// CHAIN MAPPING END
 
 // --- Stateless Handler Functions ---
 
@@ -117,20 +151,70 @@ const minimalErc20Abi = [
 ] as const; // Use 'as const' for stricter typing with viem
 
 export async function handleSwapTokens(
-  params: { fromToken: string; toToken: string; amount: string },
+  params: {
+    fromToken: string;
+    toToken: string;
+    amount: string;
+    fromChain?: string;
+    toChain?: string;
+  },
   context: HandlerContext
 ): Promise<string> {
-  const { fromToken, toToken, amount } = params;
-  const fromTokenDetail = findTokenCaseInsensitive(context.tokenMap, fromToken);
-  const toTokenDetail = findTokenCaseInsensitive(context.tokenMap, toToken);
-  if (!fromTokenDetail) {
-    throw new Error(`Token ${fromToken} not found.`);
+  const { fromToken, toToken, amount, fromChain, toChain } = params;
+
+  const fromTokens = findTokensCaseInsensitive(context.tokenMap, fromToken);
+  if (fromTokens.length === 0) {
+    throw new Error(`Token ${fromToken} not supported.`);
   }
-  if (!toTokenDetail) {
-    throw new Error(`Token ${toToken} not found.`);
+  let fromTokenDetail;
+  if (fromChain) {
+    const fromChainId = mapChainNameToId(fromChain);
+    if (!fromChainId) {
+      throw new Error(`Chain name ${fromChain} is not recognized.`);
+    }
+    fromTokenDetail = fromTokens.find(token => token.chainId === fromChainId);
+    if (!fromTokenDetail) {
+      throw new Error(
+        `Token ${fromToken} not supported on chain ${fromChain}. Available chains: ${fromTokens.map(t => t.chainId).join(', ')}`
+      );
+    }
+  } else {
+    if (fromTokens.length > 1) {
+      const chainList = fromTokens
+        .map((t, idx) => `${idx + 1}. ${mapChainIdToName(t.chainId)}`)
+        .join('\n');
+      return `Multiple tokens supported for ${fromToken} on chains:\n${chainList}\nPlease specify 'fromChain'.`;
+    }
+    fromTokenDetail = fromTokens[0];
   }
 
-  // Convert amount to atomic units
+  const toTokens = findTokensCaseInsensitive(context.tokenMap, toToken);
+  if (toTokens.length === 0) {
+    throw new Error(`Token ${toToken} not supported.`);
+  }
+  let toTokenDetail;
+  if (toChain) {
+    const toChainId = mapChainNameToId(toChain);
+    if (!toChainId) {
+      throw new Error(`Chain name ${toChain} is not recognized.`);
+    }
+    toTokenDetail = toTokens.find(token => token.chainId === toChainId);
+    if (!toTokenDetail) {
+      throw new Error(
+        `Token ${toToken} not supported on chain ${toChain}. Available chains: ${toTokens.map(t => t.chainId).join(', ')}`
+      );
+    }
+  } else {
+    if (toTokens.length > 1) {
+      const chainList = toTokens
+        .map((t, idx) => `${idx + 1}. ${mapChainIdToName(t.chainId)}`)
+        .join('\n');
+      return `Multiple tokens supported for ${toToken} on chains:\n${chainList}\nPlease specify 'toChain'.`;
+    }
+    toTokenDetail = toTokens[0];
+  }
+
+  // Convert amount to atomic units using fromTokenDetail.decimals
   const atomicAmount = parseUnits(amount, fromTokenDetail.decimals);
 
   context.log(
