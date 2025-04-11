@@ -54,7 +54,7 @@ You are now prepared to leverage the sample implementations within our examples 
 
 ## MCP Tools Integration
 
-MCP Tools enable seamless data integration between external providers and on-chain agents. By adapting existing APIs and SDKs into an MCP-compatible server, integrators can immediately take advantage of standardized functionality for tasks such as data retrieval and advanced blockchain interactions. The `mcp-tools` directory contains templates (`emberai-mcp/src/index.ts`) and guidelines for building these tools with minimal configuration, ensuring rapid implementation and a consistent development experience across different systems.
+MCP tools enable seamless data integration between external providers and on-chain agents. By adapting existing APIs and SDKs into an MCP-compatible server, integrators can immediately take advantage of standardized functionality for tasks such as data retrieval and advanced blockchain interactions. The `mcp-tools` directory contains templates (`emberai-mcp/src/index.ts`) and guidelines for building these tools with minimal configuration, ensuring rapid implementation and a consistent development experience across different systems.
 
 ## Contribution
 
