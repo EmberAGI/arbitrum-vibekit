@@ -493,8 +493,12 @@ export class Agent {
       chain: targetChain,
       transport: http(dynamicRpcUrl),
     });
-    // No longer need a temporary wallet client here if signing locally
-    // const tempWalletClient = createWalletClient({ ... });
+    // Create a temporary wallet client to use sendTransaction
+    const tempWalletClient = createWalletClient({
+      account: this.account,
+      chain: targetChain,
+      transport: http(dynamicRpcUrl),
+    });
     // --- End Dynamic Client Creation ---
 
     // Validate tx.to and tx.data format
@@ -531,57 +535,13 @@ export class Agent {
         `Preparing transaction to ${baseTx.to} on chain ${targetChain.id} (${networkSegment}) via ${dynamicRpcUrl.split('/')[2]} from ${this.userAddress} with data ${dataPrefix}...`
       );
 
-      // 1. Estimate Gas using the TEMPORARY PublicClient
-      this.log(`Estimating gas...`);
-      const estimatedGas = await tempPublicClient.estimateGas(baseTx);
-      this.log(`Gas estimated: ${estimatedGas}`);
-
-      // Fetch current nonce
-      const nonce = await tempPublicClient.getTransactionCount({
-        address: this.userAddress,
-        blockTag: 'latest',
-      });
-      this.log(`Nonce fetched: ${nonce}`);
-
-      // Fetch EIP-1559 fee estimates
-      this.log(`Fetching fee estimates...`);
-      let { maxFeePerGas, maxPriorityFeePerGas } = await tempPublicClient.estimateFeesPerGas();
-      this.log(
-        `Fees estimated: maxFeePerGas=${maxFeePerGas}, maxPriorityFeePerGas=${maxPriorityFeePerGas}`
-      );
-
-      // Proper null/undefined check - don't rely on falsy for bigint (0n is falsy but valid)
-      if (maxFeePerGas === undefined || maxPriorityFeePerGas === undefined) {
-        this.log(
-          'WARNING: One or both fee estimates are undefined. Will use fallbacks if possible.'
-        );
-
-        // For chains like Arbitrum where maxPriorityFeePerGas is sometimes 0
-        if (maxFeePerGas !== undefined && maxPriorityFeePerGas === undefined) {
-          this.log(`Setting maxPriorityFeePerGas=0n for chain ${targetChain.id} as a fallback`);
-          maxPriorityFeePerGas = 0n;
-        } else {
-          throw new Error('Failed to estimate gas fees and no fallback is applicable.');
-        }
-      }
-
-      // 2. Sign the transaction locally using the agent's account
-      this.log(`Signing transaction locally...`);
-      const signedTx = await this.account.signTransaction({
-        ...baseTx,
-        gas: estimatedGas,
-        nonce: nonce,
-        maxFeePerGas: maxFeePerGas,
-        maxPriorityFeePerGas: maxPriorityFeePerGas,
-        type: 'eip1559', // Explicitly set type
-        chainId: targetChain.id, // Explicitly add chainId
-      });
-      this.log(`Transaction signed.`);
-
-      // 3. Send the RAW signed transaction using the TEMPORARY PublicClient
-      this.log(`Sending raw transaction...`);
-      const txHash = await tempPublicClient.sendRawTransaction({
-        serializedTransaction: signedTx,
+      // Send transaction directly without manual gas estimation
+      this.log(`Sending transaction...`);
+      const txHash = await tempWalletClient.sendTransaction({
+        to: toAddress,
+        value: txValue,
+        data: txData,
+        // Let the wallet client handle gas estimation automatically
       });
 
       this.log(
