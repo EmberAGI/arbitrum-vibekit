@@ -213,7 +213,7 @@ const server = new McpServer({
 });
 
 // Read endpoint from environment variable or use default
-const defaultEndpoint = "localhost:50051"; //"grpc.api.emberai.xyz:50051";
+const defaultEndpoint = "grpc.api.emberai.xyz:50051";
 const emberEndpoint = process.env.EMBER_ENDPOINT || defaultEndpoint;
 
 if (emberEndpoint === defaultEndpoint) {

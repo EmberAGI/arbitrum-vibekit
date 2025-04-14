@@ -245,7 +245,11 @@ Present the user with a list of tokens and chains they can swap from and to if p
 
       const transport = new StdioClientTransport({
         command: 'node',
-        args: ['../../../typescript/mcp-tools/emberai-mcp/dist/index.js'],
+        args: ['/app/mcp-tools/emberai-mcp/dist/index.js'],
+        env: {
+          ...process.env, // Inherit existing environment variables
+          EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'grpc.api.emberai.xyz:50051',
+        },
       });
 
       await this.mcpClient.connect(transport);
@@ -576,10 +580,18 @@ Present the user with a list of tokens and chains they can swap from and to if p
     }
 
     try {
-      const capabilitiesResult = await this.mcpClient.callTool({
-        name: 'getCapabilities',
-        arguments: { type: 'SWAP' },
-      });
+      // Read timeout from env var, default to 90 seconds
+      const mcpTimeoutMs = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '30000', 10);
+      this.log(`Using MCP tool timeout: ${mcpTimeoutMs}ms`);
+
+      const capabilitiesResult = await this.mcpClient.callTool(
+        {
+          name: 'getCapabilities',
+          arguments: { type: 'SWAP' },
+        },
+        undefined,
+        { timeout: mcpTimeoutMs } // Use configured timeout
+      );
 
       this.log('Raw capabilitiesResult received from MCP.');
 
