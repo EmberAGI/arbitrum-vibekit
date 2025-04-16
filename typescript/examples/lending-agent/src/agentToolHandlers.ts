@@ -7,25 +7,27 @@
 //   // CapabilityType,
 // } from "../../../typescript/mcp-tools/emberai-mcp/index.js";
 
-import { z } from 'zod';
+import { z } from "zod";
 
 // Define a minimal MCPClient interface to match @modelcontextprotocol/sdk Client
 interface MCPClient {
-  callTool: (params: { 
-    name: string; 
-    arguments: Record<string, any>; 
-    _meta?: Record<string, unknown> 
+  callTool: (params: {
+    name: string;
+    arguments: Record<string, any>;
+    _meta?: Record<string, unknown>;
   }) => Promise<any>;
   close: () => Promise<void>;
 }
 
 // Define Zod schema for TransactionPlan
-const TransactionPlanSchema = z.object({
-  to: z.string(),
-  data: z.string(),
-  value: z.string().optional(),
-  // Add other fields if needed based on actual server response
-}).passthrough(); // Allow unknown fields
+const TransactionPlanSchema = z
+  .object({
+    to: z.string(),
+    data: z.string(),
+    value: z.string().optional(),
+    // Add other fields if needed based on actual server response
+  })
+  .passthrough(); // Allow unknown fields
 // Infer type for use in handlers
 export type TransactionPlan = z.infer<typeof TransactionPlanSchema>;
 
@@ -46,7 +48,8 @@ export const agentTools = [
         },
         amount: {
           type: "string",
-          description: "The amount to borrow (human readable, e.g., '100', '0.5').",
+          description:
+            "The amount to borrow (human readable, e.g., '100', '0.5').",
         },
       },
       required: ["tokenName", "amount"],
@@ -144,12 +147,12 @@ export interface HandlerContext {
   userAddress: string;
   executeAction: (
     actionName: string,
-    transactions: TransactionPlan[],
+    transactions: TransactionPlan[]
   ) => Promise<string>;
   log: (...args: unknown[]) => void;
   // Use a generic type parameter since we don't have GetWalletPositionsResponse
   describeWalletPositionsResponse: (
-    response: any, // Generic response type from MCP server
+    response: any // Generic response type from MCP server
   ) => string;
 }
 
@@ -161,7 +164,9 @@ async function validateAndExecuteAction(
   rawTransactions: unknown, // Result from mcpClient.callTool
   context: HandlerContext
 ): Promise<string> {
-  const validationResult = z.array(TransactionPlanSchema).safeParse(rawTransactions);
+  const validationResult = z
+    .array(TransactionPlanSchema)
+    .safeParse(rawTransactions);
   if (!validationResult.success) {
     const errorMsg = `MCP tool '${actionName}' returned invalid transaction data.`;
     context.log("Validation Error:", errorMsg, validationResult.error);
@@ -173,7 +178,7 @@ async function validateAndExecuteAction(
 
 export async function handleBorrow(
   params: { tokenName: string; amount: string },
-  context: HandlerContext,
+  context: HandlerContext
 ): Promise<string> {
   const { tokenName, amount } = params;
   const tokenDetail = context.tokenMap[tokenName];
@@ -181,9 +186,9 @@ export async function handleBorrow(
     throw new Error(`Token ${tokenName} not available for borrowing.`);
 
   context.log(
-    `Executing borrow via MCP: ${tokenName} (address: ${tokenDetail.address}, chain: ${tokenDetail.chainId}), amount: ${amount}`,
+    `Executing borrow via MCP: ${tokenName} (address: ${tokenDetail.address}, chain: ${tokenDetail.chainId}), amount: ${amount}`
   );
-  
+
   const rawTransactions = await context.mcpClient.callTool({
     name: "borrow",
     arguments: {
@@ -191,25 +196,25 @@ export async function handleBorrow(
       tokenChainId: tokenDetail.chainId,
       amount,
       userAddress: context.userAddress,
-    }
+    },
   });
-  
+
   // Validate and execute
   return await validateAndExecuteAction("borrow", rawTransactions, context);
 }
 
 export async function handleRepay(
   params: { tokenName: string; amount: string },
-  context: HandlerContext,
+  context: HandlerContext
 ): Promise<string> {
   const { tokenName, amount } = params;
   const tokenDetail = context.tokenMap[tokenName];
   if (!tokenDetail) throw new Error(`Token ${tokenName} not found.`);
-  
+
   context.log(
-    `Executing repay via MCP: ${tokenName} (address: ${tokenDetail.address}, chain: ${tokenDetail.chainId}), amount: ${amount}`,
+    `Executing repay via MCP: ${tokenName} (address: ${tokenDetail.address}, chain: ${tokenDetail.chainId}), amount: ${amount}`
   );
-  
+
   const rawTransactions = await context.mcpClient.callTool({
     name: "repay",
     arguments: {
@@ -217,25 +222,26 @@ export async function handleRepay(
       tokenChainId: tokenDetail.chainId,
       amount,
       userAddress: context.userAddress,
-    }
+    },
   });
-  
+
   return await validateAndExecuteAction("repay", rawTransactions, context);
 }
 
 export async function handleSupply(
   params: { tokenName: string; amount: string },
-  context: HandlerContext,
+  context: HandlerContext
 ): Promise<string> {
   const { tokenName, amount } = params;
+  console.log("[handleSupply] tokenMap:", context.tokenMap);
   const tokenDetail = context.tokenMap[tokenName];
   if (!tokenDetail)
     throw new Error(`Token ${tokenName} not available for supplying.`);
-  
+
   context.log(
-    `Executing supply via MCP: ${tokenName} (address: ${tokenDetail.address}, chain: ${tokenDetail.chainId}), amount: ${amount}`,
+    `Executing supply via MCP: ${tokenName} (address: ${tokenDetail.address}, chain: ${tokenDetail.chainId}), amount: ${amount}`
   );
-  
+
   const rawTransactions = await context.mcpClient.callTool({
     name: "supply",
     arguments: {
@@ -243,25 +249,25 @@ export async function handleSupply(
       tokenChainId: tokenDetail.chainId,
       amount,
       userAddress: context.userAddress,
-    }
+    },
   });
-  
+
   return await validateAndExecuteAction("supply", rawTransactions, context);
 }
 
 export async function handleWithdraw(
   params: { tokenName: string; amount: string },
-  context: HandlerContext,
+  context: HandlerContext
 ): Promise<string> {
   const { tokenName, amount } = params;
   const tokenDetail = context.tokenMap[tokenName];
   if (!tokenDetail)
     throw new Error(`Token ${tokenName} not available for withdrawing.`);
-  
+
   context.log(
-    `Executing withdraw via MCP: ${tokenName} (address: ${tokenDetail.address}, chain: ${tokenDetail.chainId}), amount: ${amount}`,
+    `Executing withdraw via MCP: ${tokenName} (address: ${tokenDetail.address}, chain: ${tokenDetail.chainId}), amount: ${amount}`
   );
-  
+
   const rawTransactions = await context.mcpClient.callTool({
     name: "withdraw",
     arguments: {
@@ -269,7 +275,7 @@ export async function handleWithdraw(
       tokenChainId: tokenDetail.chainId,
       amount,
       userAddress: context.userAddress,
-    }
+    },
   });
 
   return await validateAndExecuteAction("withdraw", rawTransactions, context);
@@ -277,14 +283,14 @@ export async function handleWithdraw(
 
 export async function handleGetUserPositions(
   params: Record<string, unknown>, // No specific params from LLM needed
-  context: HandlerContext,
+  context: HandlerContext
 ): Promise<string> {
   // Use mcpClient.callTool instead of toolExecutor.getUserPositions
   const positionsResponse = await context.mcpClient.callTool({
     name: "getUserPositions",
-    arguments: { userAddress: context.userAddress }
+    arguments: { userAddress: context.userAddress },
   });
-  
+
   return context.describeWalletPositionsResponse(positionsResponse);
 }
 
@@ -298,4 +304,4 @@ export async function handleGetUserPositions(
 //     arguments: { type: params.type }
 //   });
 //   return `Capabilities loaded. Available token types: ...`; // Format response
-// } 
+// }
