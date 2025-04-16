@@ -10,7 +10,8 @@
     "start": "node dist/index.js",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
     "docker:build": "docker build -t lending-agent .",
-    "docker:run": "docker run --env-file .env -p 3001:3001 lending-agent"
+    "docker:run": "docker run --env-file .env -p 3001:3001 lending-agent",
+    "docker:compose:up": "chmod +x build.sh && ./build.sh"
   },
   "dependencies": {
     "@emberai/sdk-typescript": "0.3.0-beta.6",

@@ -1,4 +1,4 @@
-version: '3.8' # Specifies the Docker Compose file version
+version: "3.8" # Specifies the Docker Compose file version
 
 services:
   lending-agent:
@@ -6,6 +6,10 @@ services:
     container_name: lending-agent # Optional: Give the container a specific name
     ports:
       - "${PORT:-3001}:${PORT:-3001}" # Map host port and container port using PORT env var (default 3001)
+    environment:
+      - EMBER_ENDPOINT=${EMBER_ENDPOINT:-host.docker.internal:50051} # Use .env value or fallback
+      - RPC_URL=${RPC_URL} # Pass RPC_URL from host environment or .env
+      - AGENT_DEBUG=${AGENT_DEBUG:-false} # Pass AGENT_DEBUG from host environment or .env
     volumes:
       - ./.env:/app/.env # Mount the .env file from the host to /app/.env in the container
-    restart: unless-stopped # Optional: Policy for restarting the container 
+    restart: unless-stopped # Optional: Policy for restarting the container
