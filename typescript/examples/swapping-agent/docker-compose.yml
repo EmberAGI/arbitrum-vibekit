@@ -1,11 +1,13 @@
 version: '3.8' # Specifies the Docker Compose file version
 
 services:
-  lending-agent:
+  swapping-agent:
     build: . # Build the image using the Dockerfile in the current directory
-    container_name: lending-agent # Optional: Give the container a specific name
+    container_name: swapping-agent # Optional: Give the container a specific name
     ports:
-      - "${PORT:-3001}:${PORT:-3001}" # Map host port and container port using PORT env var (default 3001)
+      - '${PORT:-3001}:${PORT:-3001}' # Map host port and container port using PORT env var (default 3001)
+    environment:
+      - EMBER_ENDPOINT=${EMBER_ENDPOINT:-host.docker.internal:50051} # Use .env value or fallback
     volumes:
       - ./.env:/app/.env # Mount the .env file from the host to /app/.env in the container
-    restart: unless-stopped # Optional: Policy for restarting the container 
+    restart: unless-stopped # Optional: Policy for restarting the container
