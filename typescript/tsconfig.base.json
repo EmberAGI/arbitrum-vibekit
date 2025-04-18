@@ -24,6 +24,8 @@
     "module": "NodeNext",
     "outDir": "dist",
     "sourceMap": true,
+    /* Path resolution */
+    "baseUrl": "./",
 
     /* Lib */
     "lib": [

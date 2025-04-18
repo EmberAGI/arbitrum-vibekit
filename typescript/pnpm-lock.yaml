@@ -145,7 +145,7 @@ importers:
         version: 5.0.1
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(zod@3.24.3)
+        version: link:../../lib/a2a
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
@@ -983,9 +983,6 @@ packages:
 
   '@types/tough-cookie@4.0.5':
     resolution: {integrity: sha512-/Ad8+nIOV7Rl++6f1BdKxFSMgmoqEoYbHRpPcx3JEfv8VRsQe9Z4mCXeJBzxs7mbHY/XOZZuXlRNfhpVPbs6ZA==}
-
-  a2a-samples-js@file:lib/a2a:
-    resolution: {directory: lib/a2a, type: directory}
 
   abitype@1.0.8:
     resolution: {integrity: sha512-ZeiI6h3GnW06uYDLx0etQtX/p8E24UaHHBj57RSjK7YBFe7iuVn07EDpOeP451D06sF27VOz9JJPlIKJmXgkEg==}
@@ -3484,22 +3481,6 @@ snapshots:
   '@types/shimmer@1.2.0': {}
 
   '@types/tough-cookie@4.0.5': {}
-
-  a2a-samples-js@file:lib/a2a(zod@3.24.3):
-    dependencies:
-      '@genkit-ai/googleai': 1.6.0(genkit@1.6.0)
-      '@genkit-ai/vertexai': 1.6.0(genkit@1.6.0)(ws@8.18.1)(zod@3.24.3)
-      '@types/cors': 2.8.17
-      '@types/express': 5.0.1
-      body-parser: 2.2.0
-      cors: 2.8.5
-      express: 4.21.2
-      genkit: 1.6.0
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-      - ws
-      - zod
 
   abitype@1.0.8(typescript@5.8.3)(zod@3.24.3):
     optionalDependencies:
