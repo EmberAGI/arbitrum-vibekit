@@ -4,10 +4,14 @@ FROM node:20-slim AS builder
 WORKDIR /app
 
 # Install pnpm globally
-RUN npm install -g pnpm
+RUN npm install -g pnpm typescript@5.8.3
 
 # Copy workspace definition, lockfile and pnpm config
 COPY pnpm-lock.yaml* pnpm-workspace.yaml .npmrc ./
+# Copy root package.json for pnpm workspace
+COPY package.json ./
+# Copy base TS configuration so that tsconfig.base.json can be resolved
+COPY tsconfig.base.json ./
 
 # Copy package.json files for necessary workspace packages
 # (Adjust paths if your mcp-tool location is different)
@@ -25,10 +29,10 @@ COPY lib/mcp-tools/emberai-mcp/ ./lib/mcp-tools/emberai-mcp/
 COPY examples/swapping-agent-no-wallet/src/ ./examples/swapping-agent-no-wallet/src/
 COPY examples/swapping-agent-no-wallet/tsconfig.json ./examples/swapping-agent-no-wallet/
 COPY lib/mcp-tools/emberai-mcp/tsconfig.json ./lib/mcp-tools/emberai-mcp/
+COPY lib/a2a/tsconfig.json ./lib/a2a/
 
-# Build the target package and its dependencies
-RUN pnpm --filter swapping-agent-no-wallet run build
-
+# Build all dependencies in topological order (dependencies first, then dependents)
+RUN pnpm --filter "...swapping-agent-no-wallet" build
 
 # Production stage
 FROM node:20-slim AS production
