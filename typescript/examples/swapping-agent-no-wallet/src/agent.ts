@@ -12,12 +12,8 @@ import {
   http,
   type LocalAccount,
 } from 'viem';
-import {
-  HandlerContext,
-  TransactionPlan,
-  handleSwapTokens,
-  parseMcpToolResponse,
-} from './agentToolHandlers.js';
+import type { HandlerContext, TransactionRequest } from './agentToolHandlers.js';
+import { handleSwapTokens, parseMcpToolResponse } from './agentToolHandlers.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -34,7 +30,10 @@ import {
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { mainnet, arbitrum, optimism, polygon, base, Chain } from 'viem/chains';
+import { mainnet, arbitrum, optimism, polygon, base } from 'viem/chains';
+import type { Chain } from 'viem/chains';
+import type { Task } from 'a2a-samples-js/schema';
+import { createRequire } from 'module';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -103,7 +102,7 @@ function logError(...args: unknown[]) {
   console.error(...args);
 }
 
-type swappingToolSet = {
+type SwappingToolSet = {
   swapTokens: Tool<typeof SwapTokensSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
 };
 
@@ -129,8 +128,7 @@ export function getChainConfigById(chainId: string): ChainConfig {
 }
 
 export class Agent {
-  private account: LocalAccount<string>;
-  private userAddress: Address;
+  private userAddress: Address | undefined;
   private quicknodeSubdomain: string;
   private quicknodeApiKey: string;
   private tokenMap: Record<
@@ -144,16 +142,9 @@ export class Agent {
   private availableTokens: string[] = [];
   public conversationHistory: CoreMessage[] = [];
   private mcpClient: Client | null = null;
-  private toolSet: swappingToolSet | null = null;
+  private toolSet: SwappingToolSet | null = null;
 
-  constructor(
-    account: LocalAccount<string>,
-    userAddress: Address,
-    quicknodeSubdomain: string,
-    quicknodeApiKey: string
-  ) {
-    this.account = account;
-    this.userAddress = userAddress;
+  constructor(quicknodeSubdomain: string, quicknodeApiKey: string) {
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
 
@@ -169,6 +160,9 @@ export class Agent {
   private getHandlerContext(): HandlerContext {
     if (!this.mcpClient) {
       throw new Error('MCP Client not initialized!');
+    }
+    if (!this.userAddress) {
+      throw new Error('User address not set!');
     }
 
     const context: HandlerContext = {
@@ -187,7 +181,7 @@ export class Agent {
     this.conversationHistory = [
       {
         role: 'system',
-        content: `You are an assistant that provides access to blockchain swapping functionalities via EmberAI Onchain Actions.
+        content: `You are an assistant that provides access to blockchain swapping functionalities via Ember AI Onchain Actions.
 
 <examples>
 <example>
@@ -206,6 +200,7 @@ export class Agent {
 <amount>89</amount>
 <fromToken>fartcoin</fromToken>
 </parameters>
+*Note: Required "toToken" parameter is not provided. If it is not provided in the conversation history, you will need to ask the user for it.*
 </example>
 
 <example>
@@ -229,7 +224,7 @@ export class Agent {
 </example>
 </examples>
 
-Present the user with a list of tokens and chains they can swap from and to if provided by the tool response. Never respond in markdown, always use plain text. Never add links to your response. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.`,
+Use relavant conversation history to obtain required tool parameters. Present the user with a list of tokens and chains they can swap from and to if provided by the tool response. Never respond in markdown, always use plain text. Never add links to your response. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.`,
       },
     ];
 
@@ -243,9 +238,12 @@ Present the user with a list of tokens and chains they can swap from and to if p
         { capabilities: { tools: {}, resources: {}, prompts: {} } }
       );
 
+      const require = createRequire(import.meta.url);
+      const mcpToolPath = require.resolve('ember-mcp-tool-server');
+
       const transport = new StdioClientTransport({
         command: 'node',
-        args: ['/app/mcp-tools/emberai-mcp/dist/index.js'],
+        args: [mcpToolPath],
         env: {
           ...process.env, // Inherit existing environment variables
           EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'grpc.api.emberai.xyz:50051',
@@ -298,11 +296,20 @@ Present the user with a list of tokens and chains they can swap from and to if p
             const swapCap = capabilityEntry.swapCapability;
             swapCap.supportedTokens?.forEach(token => {
               if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
-                if (!this.tokenMap[token.symbol]) {
-                  this.tokenMap[token.symbol] = [];
-                  this.availableTokens.push(token.symbol);
+                const symbol = token.symbol;
+
+                // Get the current token list or undefined
+                let tokenList = this.tokenMap[symbol];
+
+                // Initialize if it doesn't exist yet
+                if (!tokenList) {
+                  tokenList = [];
+                  this.tokenMap[symbol] = tokenList;
+                  this.availableTokens.push(symbol);
                 }
-                this.tokenMap[token.symbol].push({
+
+                // Now tokenList is guaranteed to be an array
+                tokenList.push({
                   chainId: token.tokenUid.chainId,
                   address: token.tokenUid.address,
                   decimals: token.decimals ?? 18,
@@ -330,7 +337,7 @@ Present the user with a list of tokens and chains they can swap from and to if p
               return await handleSwapTokens(args, this.getHandlerContext());
             } catch (error: any) {
               logError(`Error during swapTokens via toolSet: ${error.message}`);
-              return `Error during swapTokens: ${error.message}`;
+              throw error;
             }
           },
         }),
@@ -360,14 +367,13 @@ Present the user with a list of tokens and chains they can swap from and to if p
     }
   }
 
-  async processUserInput(userInput: string): Promise<CoreMessage> {
+  async processUserInput(userInput: string, userAddress: Address): Promise<Task> {
     if (!this.toolSet) {
       throw new Error('Agent not initialized. Call start() first.');
     }
+    this.userAddress = userAddress;
     const userMessage: CoreUserMessage = { role: 'user', content: userInput };
     this.conversationHistory.push(userMessage);
-
-    let assistantResponseContent = 'Sorry, an error occurred.';
 
     try {
       this.log('Calling generateText with Vercel AI SDK...');
@@ -382,7 +388,14 @@ Present the user with a list of tokens and chains they can swap from and to if p
       });
       this.log(`generateText finished. Reason: ${finishReason}`);
 
-      assistantResponseContent = text ?? 'Processing complete.';
+      // Log the destructured variables
+      // this.log('--- generateText Response ---');
+      // this.log('Response:', JSON.stringify(response, null, 2));
+      // this.log('Text:', JSON.stringify(text, null, 2));
+      // this.log('Tool Calls:', JSON.stringify(toolCalls, null, 2));
+      // this.log('Tool Results:', JSON.stringify(toolResults, null, 2));
+      // this.log('Finish Reason:', JSON.stringify(finishReason, null, 2));
+      // this.log('--- End generateText Response ---');
 
       response.messages.forEach((msg, index) => {
         if (msg.role === 'assistant' && Array.isArray(msg.content)) {
@@ -403,33 +416,63 @@ Present the user with a list of tokens and chains they can swap from and to if p
       });
 
       this.conversationHistory.push(...response.messages);
+
+      // --- Process Tool Results from response.messages ---
+      let processedToolResult: Task | null = null;
+      for (const message of response.messages) {
+        if (message.role === 'tool' && Array.isArray(message.content)) {
+          for (const part of message.content) {
+            if (part.type === 'tool-result' && part.toolName === 'swapTokens') {
+              this.log(`Processing tool result for ${part.toolName} from response.messages`);
+              // Log the raw result for debugging
+              this.log(`Raw toolResult.result: ${JSON.stringify(part.result)}`);
+              // Assert the type
+              processedToolResult = part.result as Task;
+              // Now you can safely access properties based on the asserted type
+              this.log(`SwapTokens Result State: ${processedToolResult?.status?.state ?? 'N/A'}`);
+              // Check if the first part is a text part before accessing .text
+              const firstPart = processedToolResult?.status?.message?.parts[0];
+              const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';
+              this.log(`SwapTokens Result Message: ${messageText}`);
+              // Break if you only expect one result or handle multiple if needed
+              break;
+            }
+          }
+        }
+        if (processedToolResult) break; // Exit outer loop once result is found
+      }
+      // --- End Process Tool Results ---
+
+      if (!processedToolResult) {
+        throw new Error('No specific action result found.');
+      }
+
+      switch (processedToolResult.status.state) {
+        case 'completed':
+        case 'failed':
+        case 'canceled':
+          // Important to clear the conversation history after a Task has finished
+          this.conversationHistory = [];
+          return processedToolResult;
+        case 'input-required':
+        case 'submitted':
+        case 'working':
+        case 'unknown':
+          return processedToolResult;
+      }
     } catch (error) {
-      logError('Error calling Vercel AI SDK generateText:', error);
+      const errorResponse = `Error calling Vercel AI SDK generateText: ${error}`;
+      logError(errorResponse);
       const errorAssistantMessage: CoreAssistantMessage = {
         role: 'assistant',
-        content: assistantResponseContent,
+        content: errorResponse,
       };
       this.conversationHistory.push(errorAssistantMessage);
+      throw new Error(errorResponse);
     }
-
-    const finalAssistantMessage = this.conversationHistory
-      .slice()
-      .reverse()
-      .find(
-        (msg): msg is CoreAssistantMessage & { content: string } =>
-          msg.role === 'assistant' && typeof msg.content === 'string'
-      );
-
-    const responseMessage: CoreAssistantMessage = {
-      role: 'assistant',
-      content: finalAssistantMessage?.content ?? assistantResponseContent,
-    };
-
-    this.log('[assistant]:', responseMessage.content);
-    return responseMessage;
   }
 
-  async executeAction(actionName: string, transactions: TransactionPlan[]): Promise<string> {
+  async executeAction(actionName: string, transactions: TransactionRequest[]): Promise<string> {
     if (!transactions || transactions.length === 0) {
       this.log(`${actionName}: No transactions required.`);
       return `${actionName.charAt(0).toUpperCase() + actionName.slice(1)}: No on-chain transactions required.`;
@@ -450,7 +493,7 @@ Present the user with a list of tokens and chains they can swap from and to if p
     }
   }
 
-  async signAndSendTransaction(tx: TransactionPlan): Promise<string> {
+  async signAndSendTransaction(tx: TransactionRequest): Promise<string> {
     if (!tx.chainId) {
       const errorMsg = `Transaction object missing required 'chainId' field`;
       logError(errorMsg, tx);
@@ -479,10 +522,14 @@ Present the user with a list of tokens and chains they can swap from and to if p
       transport: http(dynamicRpcUrl),
     });
     const tempWalletClient = createWalletClient({
-      account: this.account,
+      account: this.userAddress,
       chain: targetChain,
       transport: http(dynamicRpcUrl),
     });
+
+    if (!this.userAddress) {
+      throw new Error('User address is not set for signing.');
+    }
 
     if (!tx.to || !/^0x[a-fA-F0-9]{40}$/.test(tx.to)) {
       const errorMsg = `Transaction object invalid 'to' field: ${tx.to}`;
@@ -515,6 +562,7 @@ Present the user with a list of tokens and chains they can swap from and to if p
 
       this.log(`Sending transaction...`);
       const txHash = await tempWalletClient.sendTransaction({
+        account: this.userAddress,
         to: toAddress,
         value: txValue,
         data: txData,

@@ -1,0 +1,15 @@
+{
+  "name": "arbitrum-vibekit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Root for the TypeScript pnpm workspace",
+  "scripts": {
+    "clean": "rm -rf node_modules **/node_modules pnpm-lock.yaml **/pnpm-lock.yaml **/dist dist .pnpm && echo \"Workspace cleaned.\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

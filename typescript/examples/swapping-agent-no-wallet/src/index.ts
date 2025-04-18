@@ -1,5 +1,5 @@
 import { Agent } from './agent.js';
-import { type Address } from 'viem';
+import { type Address, isAddress } from 'viem';
 import { mnemonicToAccount } from 'viem/accounts';
 import * as dotenv from 'dotenv';
 import express from 'express';
@@ -7,6 +7,17 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import cors from 'cors';
 import { z } from 'zod';
+import type { Task } from 'a2a-samples-js/schema';
+
+const SwapAgentSchema = z.object({
+  instruction: z
+    .string()
+    .describe("A natural‑language swap directive, e.g. 'Swap 50 DAI into USDT'."),
+  userAddress: z
+    .string()
+    .describe('The user wallet address which is used to sign transactions and to pay for gas.'),
+});
+type SwapAgentArgs = z.infer<typeof SwapAgentSchema>;
 
 dotenv.config();
 
@@ -35,34 +46,47 @@ const initializeAgent = async (): Promise<void> => {
   const userAddress: Address = account.address;
   console.error(`Using wallet ${userAddress}`);
 
-  agent = new Agent(account, userAddress, quicknodeSubdomain, apiKey);
+  agent = new Agent(quicknodeSubdomain, apiKey);
   await agent.init();
 };
 
+const agentToolName = 'askSwapAgent';
+const agentToolDescription =
+  'Sends a free‑form, natural‑language swap instruction to your token‑swap AI agent and returns a structured quote (route, estimate, fees, calldata).';
+
 server.tool(
-  'chat',
-  'execute swapping tools using Ember SDK',
-  {
-    userInput: z.string(),
-  },
-  async (args: { userInput: string }) => {
+  agentToolName,
+  agentToolDescription,
+  SwapAgentSchema.shape,
+  async (args: SwapAgentArgs) => {
+    const { instruction, userAddress } = args;
+    if (!isAddress(userAddress)) {
+      throw new Error('Invalid user address provided.');
+    }
     try {
-      const result = await agent.processUserInput(args.userInput);
+      const taskResponse = await agent.processUserInput(instruction, userAddress);
 
-      console.error('[server.tool] result', result);
-
-      const responseText =
-        typeof result?.content === 'string'
-          ? result.content
-          : (JSON.stringify(result?.content) ?? 'Error: Could not get a response from the agent.');
+      console.error('[server.tool] result', taskResponse);
 
       return {
-        content: [{ type: 'text', text: responseText }],
+        content: [{ type: 'text', text: JSON.stringify(taskResponse) }],
       };
     } catch (error: unknown) {
       const err = error as Error;
+      const errorTask: Task = {
+        id: userAddress,
+        //sessionId: 'c295ea44-7543-4f78-b524-7a38915ad6e4',
+        status: {
+          state: 'failed',
+          message: {
+            role: 'agent',
+            parts: [{ type: 'text', text: `Error: ${err.message}` }],
+          },
+        },
+      };
       return {
-        content: [{ type: 'text', text: `Error: ${err.message}` }],
+        isError: true,
+        content: [{ type: 'text', text: JSON.stringify(errorTask) }],
       };
     }
   }
@@ -82,7 +106,7 @@ app.get('/', (_req, res) => {
       '/sse': 'Server-Sent Events endpoint for MCP connection',
       '/messages': 'POST endpoint for MCP messages',
     },
-    tools: [{ name: 'chat', description: 'execute swapping tools using Ember SDK' }],
+    tools: [{ name: agentToolName, description: agentToolDescription }],
   });
 });
 

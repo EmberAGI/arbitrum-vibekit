@@ -9,6 +9,7 @@ import {
 } from 'viem';
 import { getChainConfigById } from './agent.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { Task } from 'a2a-samples-js/schema';
 
 export type TokenInfo = {
   chainId: string;
@@ -16,7 +17,19 @@ export type TokenInfo = {
   decimals: number;
 };
 
-export const TransactionPlanSchema = z
+export const SwapPreviewSchema = z
+  .object({
+    fromToken: z.string(),
+    toToken: z.string(),
+    amount: z.string(),
+    fromChain: z.string(),
+    toChain: z.string(),
+  })
+  .passthrough();
+
+export type SwapPreview = z.infer<typeof SwapPreviewSchema>;
+
+export const TransactionRequestSchema = z
   .object({
     to: z.string(),
     data: z.string(),
@@ -25,13 +38,20 @@ export const TransactionPlanSchema = z
   })
   .passthrough();
 
-export type TransactionPlan = z.infer<typeof TransactionPlanSchema>;
+export type TransactionRequest = z.infer<typeof TransactionRequestSchema>;
+
+export const TransactionArtifactSchema = z.object({
+  txPreview: SwapPreviewSchema,
+  txPlan: z.array(TransactionRequestSchema),
+});
+
+export type TransactionArtifact = z.infer<typeof TransactionArtifactSchema>;
 
 export interface HandlerContext {
   mcpClient: Client;
   tokenMap: Record<string, TokenInfo[]>;
   userAddress: string;
-  executeAction: (actionName: string, transactions: TransactionPlan[]) => Promise<string>;
+  executeAction: (actionName: string, transactions: TransactionRequest[]) => Promise<string>;
   log: (...args: unknown[]) => void;
   quicknodeSubdomain: string;
   quicknodeApiKey: string;
@@ -40,14 +60,14 @@ export interface HandlerContext {
 function findTokensCaseInsensitive(
   tokenMap: Record<string, TokenInfo[]>,
   tokenName: string
-): TokenInfo[] {
+): TokenInfo[] | undefined {
   const lowerCaseTokenName = tokenName.toLowerCase();
   for (const key in tokenMap) {
     if (key.toLowerCase() === lowerCaseTokenName) {
       return tokenMap[key];
     }
   }
-  return [];
+  return undefined;
 }
 
 const chainMappings = [
@@ -78,7 +98,7 @@ function findTokenDetail(
   direction: 'from' | 'to'
 ): TokenInfo | string {
   const tokens = findTokensCaseInsensitive(tokenMap, tokenName);
-  if (tokens.length === 0) {
+  if (tokens === undefined) {
     throw new Error(`Token ${tokenName} not supported.`);
   }
 
@@ -89,13 +109,16 @@ function findTokenDetail(
     if (!chainId) {
       throw new Error(`Chain name ${optionalChainName} is not recognized.`);
     }
-    tokenDetail = tokens.find(token => token.chainId === chainId);
+    tokenDetail = tokens?.find(token => token.chainId === chainId);
     if (!tokenDetail) {
       throw new Error(
-        `Token ${tokenName} not supported on chain ${optionalChainName}. Available chains: ${tokens.map(t => mapChainIdToName(t.chainId)).join(', ')}`
+        `Token ${tokenName} not supported on chain ${optionalChainName}. Available chains: ${tokens?.map(t => mapChainIdToName(t.chainId)).join(', ')}`
       );
     }
   } else {
+    if (!tokens || tokens.length === 0) {
+      throw new Error(`Token ${tokenName} not supported.`);
+    }
     if (tokens.length > 1) {
       const chainList = tokens
         .map((t, idx) => `${idx + 1}. ${mapChainIdToName(t.chainId)}`)
@@ -107,7 +130,7 @@ function findTokenDetail(
 
   if (!tokenDetail) {
     throw new Error(
-      `Could not resolve token details for ${tokenName} ${optionalChainName ? 'on chain ' + optionalChainName : ''}.`
+      `Could not resolve token details for ${tokenName}${optionalChainName ? ' on chain ' + optionalChainName : ''}.`
     );
   }
 
@@ -151,18 +174,18 @@ export function parseMcpToolResponse(
   return dataToValidate;
 }
 
-async function validateAndExecuteAction(
+function validateAction(
   actionName: string,
   rawTransactions: unknown,
   context: HandlerContext
-): Promise<string> {
-  const validationResult = z.array(TransactionPlanSchema).safeParse(rawTransactions);
+): Array<TransactionRequest> {
+  const validationResult = z.array(TransactionRequestSchema).safeParse(rawTransactions);
   if (!validationResult.success) {
     const errorMsg = `MCP tool '${actionName}' returned invalid transaction data.`;
     context.log('Validation Error:', errorMsg, validationResult.error);
     throw new Error(errorMsg);
   }
-  return await context.executeAction(actionName, validationResult.data);
+  return validationResult.data;
 }
 
 const minimalErc20Abi = [
@@ -201,18 +224,30 @@ export async function handleSwapTokens(
     toChain?: string;
   },
   context: HandlerContext
-): Promise<string> {
+): Promise<Task> {
   const { fromToken, toToken, amount, fromChain, toChain } = params;
 
   const fromTokenResult = findTokenDetail(fromToken, fromChain, context.tokenMap, 'from');
   if (typeof fromTokenResult === 'string') {
-    return fromTokenResult;
+    return {
+      id: context.userAddress,
+      status: {
+        state: 'input-required',
+        message: { role: 'agent', parts: [{ type: 'text', text: fromTokenResult }] },
+      },
+    };
   }
   const fromTokenDetail = fromTokenResult;
 
   const toTokenResult = findTokenDetail(toToken, toChain, context.tokenMap, 'to');
   if (typeof toTokenResult === 'string') {
-    return toTokenResult;
+    return {
+      id: context.userAddress,
+      status: {
+        state: 'input-required',
+        message: { role: 'agent', parts: [{ type: 'text', text: toTokenResult }] },
+      },
+    };
   }
   const toTokenDetail = toTokenResult;
 
@@ -248,7 +283,7 @@ export async function handleSwapTokens(
     throw new Error('Expected a transaction plan array from MCP tool, but received invalid data.');
   }
 
-  const swapTx = dataToValidate[0] as TransactionPlan;
+  const swapTx = dataToValidate[0] as TransactionRequest;
   if (!swapTx || typeof swapTx !== 'object' || !swapTx.to) {
     context.log('Invalid swap transaction object received from MCP:', swapTx);
     throw new Error('Invalid swap transaction structure in plan.');
@@ -300,11 +335,12 @@ export async function handleSwapTokens(
     context.log('Assuming allowance is insufficient due to check failure.');
   }
 
+  let approveTx: TransactionRequest | undefined;
   if (currentAllowance < atomicAmount) {
     context.log(
       `Insufficient allowance or check failed. Need ${atomicAmount}, have ${currentAllowance}. Creating approval transaction...`
     );
-    const approveTx: TransactionPlan = {
+    approveTx = {
       to: fromTokenAddress,
       data: encodeFunctionData({
         abi: minimalErc20Abi,
@@ -314,34 +350,53 @@ export async function handleSwapTokens(
       value: '0',
       chainId: txChainId,
     };
-
-    try {
-      context.log(
-        `Executing approval transaction for ${params.fromToken} to spender ${spenderAddress}...`
-      );
-      const approvalResult = await context.executeAction('approve', [approveTx]);
-      context.log(
-        `Approval transaction sent: ${approvalResult}. Note: Ensure confirmation before proceeding if needed.`
-      );
-    } catch (approvalError) {
-      context.log(`Approval transaction failed:`, approvalError);
-      throw new Error(
-        `Failed to approve token ${params.fromToken}: ${(approvalError as Error).message}`
-      );
-    }
   } else {
     context.log('Sufficient allowance already exists.');
   }
 
-  context.log('Proceeding to execute the swap transaction received from MCP tool...');
+  context.log('Proceeding to validate the swap transaction received from MCP tool...');
 
   if (Array.isArray(dataToValidate) && dataToValidate.length > 0) {
-    const swapTxPlan = dataToValidate[0] as Partial<TransactionPlan>;
+    const swapTxPlan = dataToValidate[0] as Partial<TransactionRequest>;
     if (swapTxPlan && typeof swapTxPlan === 'object' && !swapTxPlan.chainId) {
       context.log(`Adding missing chainId (${txChainId}) to swap transaction plan.`);
       swapTxPlan.chainId = txChainId;
     }
   }
 
-  return await validateAndExecuteAction('swapTokens', dataToValidate, context);
+  const swapTxPlan = validateAction('swapTokens', dataToValidate, context);
+  const txPlan = [...(approveTx ? [approveTx] : []), ...swapTxPlan];
+
+  const txArtifact: TransactionArtifact = {
+    txPreview: {
+      fromToken: fromToken,
+      toToken: toToken,
+      amount: amount,
+      fromChain: mapChainIdToName(fromTokenDetail.chainId),
+      toChain: mapChainIdToName(toTokenDetail.chainId),
+    },
+    txPlan: txPlan,
+  };
+
+  return {
+    id: context.userAddress,
+    status: {
+      state: 'completed',
+      message: {
+        role: 'agent',
+        parts: [{ type: 'text', text: 'Transaction plan successfully created. Ready to sign.' }],
+      },
+    },
+    artifacts: [
+      {
+        name: 'transaction-plan',
+        parts: [
+          {
+            type: 'data',
+            data: txArtifact,
+          },
+        ],
+      },
+    ],
+  };
 }
