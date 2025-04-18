@@ -51,22 +51,24 @@ WORKDIR /app
 # Install pnpm globally
 RUN npm install -g pnpm
 
-# Copy necessary files from the build stage using pnpm deploy
-# This copies only prod dependencies and built artifacts for the target package
-COPY --from=builder /app ./
-# Ensure deploy target is empty so pnpm deploy (v10) will succeed
-RUN rm -rf examples/swapping-agent-no-wallet/dist
-RUN pnpm deploy --filter swapping-agent-no-wallet --prod examples/swapping-agent-no-wallet/dist
+# Copy only what we need from the builder stage
+COPY --from=builder /app/examples/swapping-agent-no-wallet/dist /app/examples/swapping-agent-no-wallet/dist
+COPY --from=builder /app/examples/swapping-agent-no-wallet/package.json /app/examples/swapping-agent-no-wallet/
+COPY --from=builder /app/lib/a2a/dist /app/lib/a2a/dist
+COPY --from=builder /app/lib/a2a/package.json /app/lib/a2a/
+COPY --from=builder /app/lib/mcp-tools/emberai-mcp/dist /app/lib/mcp-tools/emberai-mcp/dist
+COPY --from=builder /app/lib/mcp-tools/emberai-mcp/package.json /app/lib/mcp-tools/emberai-mcp/
+COPY --from=builder /app/node_modules /app/node_modules
+COPY --from=builder /app/node_modules/.pnpm /app/node_modules/.pnpm
+# Also copy the example package's direct node_modules folder to preserve local symlinks
+COPY --from=builder /app/examples/swapping-agent-no-wallet/node_modules /app/examples/swapping-agent-no-wallet/node_modules
+# Also copy the mcp-tool package's node_modules folder
+COPY --from=builder /app/lib/mcp-tools/emberai-mcp/node_modules /app/lib/mcp-tools/emberai-mcp/node_modules
 
 # Set the working directory for the final image
 WORKDIR /app/examples/swapping-agent-no-wallet/dist
 
-# Copy .env file relative to the example directory (if needed at runtime)
-# Note: It's generally better to pass secrets via environment variables
-# COPY examples/swapping-agent-no-wallet/.env* ./
-
 # Change ownership to non-root user
-# Need to adjust the path for chown after deploy
 RUN chown -R ember:ember /app
 
 # Switch to non-root user
