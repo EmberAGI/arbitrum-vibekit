@@ -50,7 +50,7 @@ export type TransactionArtifact = z.infer<typeof TransactionArtifactSchema>;
 export interface HandlerContext {
   mcpClient: Client;
   tokenMap: Record<string, TokenInfo[]>;
-  userAddress: string;
+  userAddress: string | undefined;
   executeAction: (actionName: string, transactions: TransactionRequest[]) => Promise<string>;
   log: (...args: unknown[]) => void;
   quicknodeSubdomain: string;
@@ -225,6 +225,9 @@ export async function handleSwapTokens(
   },
   context: HandlerContext
 ): Promise<Task> {
+  if (!context.userAddress) {
+    throw new Error('User address not set!');
+  }
   const { fromToken, toToken, amount, fromChain, toChain } = params;
 
   const fromTokenResult = findTokenDetail(fromToken, fromChain, context.tokenMap, 'from');

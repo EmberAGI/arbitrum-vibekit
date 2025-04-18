@@ -161,9 +161,6 @@ export class Agent {
     if (!this.mcpClient) {
       throw new Error('MCP Client not initialized!');
     }
-    if (!this.userAddress) {
-      throw new Error('User address not set!');
-    }
 
     const context: HandlerContext = {
       mcpClient: this.mcpClient,
