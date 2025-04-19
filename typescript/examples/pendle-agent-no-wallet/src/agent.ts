@@ -242,6 +242,8 @@ You are an expert in Pendle Finance, which is a DeFi protocol for tokenizing yie
 
 For any user query, determine what Pendle operation they want to perform (stake, unstake, claim, swap) 
 and extract the relevant parameters. If critical information is missing, ask follow-up questions.
+
+IMPORTANT: This is a no-wallet implementation. You will only prepare transactions that will be signed by the frontend connected wallet. Do not attempt to execute transactions yourself.
 `,
       },
     ];
@@ -256,7 +258,7 @@ and extract the relevant parameters. If critical information is missing, ask fol
     this.log('Initializing MCP client via stdio...');
     try {
       this.mcpClient = new Client(
-        { name: 'PendleAgent', version: '1.0.0' },
+        { name: 'PendleAgentNoWallet', version: '1.0.0' },
         { capabilities: { tools: {}, resources: {}, prompts: {} } }
       );
 
@@ -423,27 +425,10 @@ and extract the relevant parameters. If critical information is missing, ask fol
       return `${actionName.charAt(0).toUpperCase() + actionName.slice(1)}: No on-chain transactions required.`;
     }
 
-    try {
-      this.log(`Executing ${transactions.length} transaction(s) for ${actionName}...`);
-      const txHashes: string[] = [];
-      for (const transaction of transactions) {
-        const txHash = await this.signAndSendTransaction(transaction);
-        this.log(`${actionName} transaction sent: ${txHash}`);
-        txHashes.push(txHash);
-      }
-      return `${actionName.charAt(0).toUpperCase() + actionName.slice(1)} successful! Transaction hash(es): ${txHashes.join(', ')}`;
-    } catch (error: unknown) {
-      const err = error as Error;
-      logError(`Error executing ${actionName} action:`, err.message);
-      throw new Error(`Error executing ${actionName}: ${err.message}`);
-    }
-  }
-
-  async signAndSendTransaction(tx: TransactionRequest): Promise<string> {
-    // This is a placeholder for actual transaction signing and sending
-    // In a real implementation, this would connect to a blockchain and execute the transaction
-    console.log('Would send transaction:', tx);
-    return 'transaction-hash-placeholder';
+    // This is a read-only agent, the frontend is responsible for signing and sending transactions
+    // Just return the transaction information for the frontend
+    this.log(`Preparing ${transactions.length} transaction(s) for ${actionName} to be signed by frontend`);
+    return `${actionName.charAt(0).toUpperCase() + actionName.slice(1)} prepared with ${transactions.length} transaction(s) for frontend signing`;
   }
 
   private async fetchAndCacheCapabilities(): Promise<McpGetPendleCapabilitiesResponse> {

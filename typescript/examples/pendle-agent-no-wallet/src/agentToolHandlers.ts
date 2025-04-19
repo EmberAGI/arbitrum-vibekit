@@ -151,10 +151,16 @@ function simulateStakeResponse(userAddress: Address, marketType: 'PT' | 'YT' | '
       marketType,
       token,
       amount,
-      transactionHash: 'simulated-tx-hash-stake',
+      // Returning sample transaction data for frontend to sign
+      transaction: {
+        to: '0xF1a26cA8245C138Cf88EB09b5F2Ab2c84DCA685B',
+        data: '0x1234567890abcdef', // Sample transaction data
+        value: '0',
+        chainId: '1' // Ethereum Mainnet
+      },
       estimatedGas: '150000',
     },
-    message: `Successfully prepared staking ${amount} ${token} in Pendle ${marketType} market`,
+    message: `Prepared staking ${amount} ${token} in Pendle ${marketType} market - will be signed by frontend wallet`,
   };
 }
 
@@ -167,10 +173,16 @@ function simulateUnstakeResponse(userAddress: Address, marketType: 'PT' | 'YT' |
       marketType,
       token,
       amount,
-      transactionHash: 'simulated-tx-hash-unstake',
+      // Returning sample transaction data for frontend to sign
+      transaction: {
+        to: '0x5B9aF4A97D1a8Ac2387E4c6f3C2C4B5969Dc522d',
+        data: '0xabcdef1234567890', // Sample transaction data
+        value: '0',
+        chainId: '1' // Ethereum Mainnet
+      },
       estimatedGas: '180000',
     },
-    message: `Successfully prepared unstaking ${amount} ${token} from Pendle ${marketType} market`,
+    message: `Prepared unstaking ${amount} ${token} from Pendle ${marketType} market - will be signed by frontend wallet`,
   };
 }
 
@@ -181,14 +193,20 @@ function simulateClaimResponse(userAddress: Address, marketType: 'PT' | 'YT' | '
     details: {
       userAddress,
       marketType,
-      transactionHash: 'simulated-tx-hash-claim',
+      // Returning sample transaction data for frontend to sign
+      transaction: {
+        to: '0xB5C3f2F9Ab114A5E12CC07dC725759C0Ac5e2570',
+        data: '0x9876543210abcdef', // Sample transaction data
+        value: '0',
+        chainId: '1' // Ethereum Mainnet
+      },
       estimatedGas: '120000',
       estimatedRewards: {
         'ETH': '0.05',
         'PENDLE': '25.0'
       }
     },
-    message: `Successfully prepared claiming rewards from Pendle ${marketType} market`,
+    message: `Prepared claiming rewards from Pendle ${marketType} market - will be signed by frontend wallet`,
   };
 }
 
@@ -202,7 +220,13 @@ function simulateSwapResponse(userAddress: Address, marketType: 'PT' | 'YT' | 'S
       fromToken,
       toToken,
       amount,
-      transactionHash: 'simulated-tx-hash-swap',
+      // Returning sample transaction data for frontend to sign
+      transaction: {
+        to: '0xF1a26cA8245C138Cf88EB09b5F2Ab2c84DCA685B',
+        data: '0xfedcba0987654321', // Sample transaction data
+        value: '0',
+        chainId: '1' // Ethereum Mainnet
+      },
       estimatedGas: '200000',
       slippage: '0.5%',
       estimatedOutput: {
@@ -210,6 +234,6 @@ function simulateSwapResponse(userAddress: Address, marketType: 'PT' | 'YT' | 'S
         amount: (parseFloat(amount) * 0.99).toString() // Simulating 1% fee
       }
     },
-    message: `Successfully prepared swapping ${amount} ${fromToken} to ${toToken} in Pendle ${marketType} market`,
+    message: `Prepared swapping ${amount} ${fromToken} to ${toToken} in Pendle ${marketType} market - will be signed by frontend wallet`,
   };
 } 
