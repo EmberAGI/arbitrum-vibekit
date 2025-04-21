@@ -178,10 +178,10 @@ export class Agent {
     this.conversationHistory = [
       {
         role: 'system',
-        content: `You are an assistant that provides access to blockchain swapping functionalities via Ember AI Onchain Actions.
+        content: `You are an AI agent that provides access to blockchain swapping functionalities via Ember AI Onchain Actions. You use the tool "swapTokens" to swap or convert tokens. Only use this tool if the user has provided the required parameters. Otherwise, explain to the user that required parameter(s) are missing and ask the user to provide them.
 
 <examples>
-<example>
+<example1>
 <user>swap 1 ETH to USDC on Ethereum</user>
 <parameters>
 <amount>1</amount>
@@ -189,27 +189,27 @@ export class Agent {
 <toToken>USDC</toToken>
 <toChain>Ethereum</toChain>
 </parameters>
-</example>
+</example1>
 
-<example>
+<example2>
 <user>sell 89 fartcoin</user>
 <parameters>
 <amount>89</amount>
 <fromToken>fartcoin</fromToken>
 </parameters>
 *Note: Required "toToken" parameter is not provided. If it is not provided in the conversation history, you will need to ask the user for it.*
-</example>
+</example2>
 
-<example>
+<example3>
 <user>Convert 10.5 USDC to ETH</user>
 <parameters>
 <amount>10.5</amount>
 <fromToken>USDC</fromToken>
 <toToken>ETH</toToken>
 </parameters>
-</example>
+</example3>
 
-<example>
+<example4>
 <user>Swap 100.076 arb on arbitrum for dog on base</user>
 <parameters>
 <amount>100.076</amount>
@@ -218,7 +218,7 @@ export class Agent {
 <fromChain>arbitrum</fromChain>
 <toChain>base</toChain>
 </parameters>
-</example>
+</example4>
 </examples>
 
 Use relavant conversation history to obtain required tool parameters. Present the user with a list of tokens and chains they can swap from and to if provided by the tool response. Never respond in markdown, always use plain text. Never add links to your response. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.`,
@@ -374,8 +374,8 @@ Use relavant conversation history to obtain required tool parameters. Present th
 
     try {
       this.log('Calling generateText with Vercel AI SDK...');
-      const { response, text, toolCalls, toolResults, finishReason } = await generateText({
-        model: openrouter('google/gemini-2.0-flash-001'),
+      const { response, text, finishReason } = await generateText({
+        model: openrouter('google/gemini-2.5-flash-preview'),
         messages: this.conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,
@@ -384,15 +384,6 @@ Use relavant conversation history to obtain required tool parameters. Present th
         },
       });
       this.log(`generateText finished. Reason: ${finishReason}`);
-
-      // Log the destructured variables
-      // this.log('--- generateText Response ---');
-      // this.log('Response:', JSON.stringify(response, null, 2));
-      // this.log('Text:', JSON.stringify(text, null, 2));
-      // this.log('Tool Calls:', JSON.stringify(toolCalls, null, 2));
-      // this.log('Tool Results:', JSON.stringify(toolResults, null, 2));
-      // this.log('Finish Reason:', JSON.stringify(finishReason, null, 2));
-      // this.log('--- End generateText Response ---');
 
       response.messages.forEach((msg, index) => {
         if (msg.role === 'assistant' && Array.isArray(msg.content)) {
@@ -441,7 +432,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
       // --- End Process Tool Results ---
 
       if (!processedToolResult) {
-        throw new Error('No specific action result found.');
+        throw new Error(text);
       }
 
       switch (processedToolResult.status.state) {
@@ -458,14 +449,14 @@ Use relavant conversation history to obtain required tool parameters. Present th
           return processedToolResult;
       }
     } catch (error) {
-      const errorResponse = `Error calling Vercel AI SDK generateText: ${error}`;
-      logError(errorResponse);
+      const errorLog = `Error calling Vercel AI SDK generateText: ${error}`;
+      logError(errorLog);
       const errorAssistantMessage: CoreAssistantMessage = {
         role: 'assistant',
-        content: errorResponse,
+        content: String(error),
       };
       this.conversationHistory.push(errorAssistantMessage);
-      throw new Error(errorResponse);
+      throw error;
     }
   }
 
