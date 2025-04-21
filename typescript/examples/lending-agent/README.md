@@ -1,6 +1,6 @@
 ## Introduction
 
-This directory provides a reference implementation of a lending agent using Arbitrum AgentKit, Ember SDK, and MCP. It demonstrates how to set up a server, define agent functionalities, and process lending operations (borrow, repay, supply, withdraw) via MCP tools. You can expand or modify this template by adding new tools or incorporating additional MCP-compatible functionalities to suit your project’s requirements.
+This directory provides a reference implementation of a lending agent using Arbitrum Vibekit and EmberAI's MCP server. It demonstrates how to set up a server, define agent functionalities, and process lending operations (borrow, repay, supply, withdraw) via MCP tools. You can expand or modify this template by adding new tools or incorporating additional MCP-compatible functionalities to suit your project’s requirements.
 
 ## File Overview
 
@@ -52,4 +52,4 @@ Below are some example user inputs that showcase the lending agent's capabilitie
 
 ## Run Agent
 
-To run and interact with the agent, folllow the instructions in the `examples/README.md` file.
+To run and interact with the agent, follow the instructions in the [`examples/README.md`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/examples/README.md) file.
