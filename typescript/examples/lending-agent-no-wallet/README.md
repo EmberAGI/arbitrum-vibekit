@@ -11,6 +11,9 @@ This is a Model Context Protocol (MCP) agent example that demonstrates how to us
 - Support for supplying and borrowing various tokens on Arbitrum
 - Retrieval of user positions
 - Natural language interface for all operations
+- Token caching for better performance
+- Enhanced intent detection for various lending operations
+- Comprehensive test suite for validating transaction data
 
 ## Getting Started
 
@@ -48,6 +51,7 @@ cp .env.example .env
 OPENAI_API_KEY=your_openai_key
 QUICKNODE_SUBDOMAIN=your_quicknode_subdomain
 QUICKNODE_API_KEY=your_quicknode_api_key
+AGENT_CACHE_TOKENS=true  # Enable token caching
 ```
 
 ### Development
@@ -58,15 +62,20 @@ pnpm dev
 
 This will build and start the agent in development mode.
 
-### Testing with MCP Inspector
+### Testing
 
-You can test the agent with the MCP Inspector tool:
+The agent includes comprehensive test suite:
 
 ```bash
-pnpm inspect:npx
-```
+# Run all tests
+pnpm test
 
-This will start a local inspector that allows you to interact with the agent directly.
+# Run just MCP connection test
+pnpm test:mcp
+
+# Run transaction validation tests
+pnpm test:transactions
+```
 
 ### Production Build
 
@@ -99,6 +108,7 @@ The agent exposes an MCP-compatible interface with the following capabilities:
 - `supply`: Supply a token as collateral (e.g., "Supply 0.5 ETH")
 - `withdraw`: Withdraw a previously supplied token (e.g., "Withdraw 1000 USDC")
 - `getUserPositions`: Get all user positions (e.g., "Show my positions")
+- `listTokens`: List all available tokens (e.g., "What tokens are available?")
 
 ## Integration
 

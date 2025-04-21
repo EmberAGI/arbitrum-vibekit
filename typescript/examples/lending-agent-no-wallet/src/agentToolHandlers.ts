@@ -37,6 +37,86 @@ export const TransactionArtifactSchema = z.object({
 
 export type TransactionArtifact = z.infer<typeof TransactionArtifactSchema>;
 
+export const agentTools = [
+  {
+    name: "borrow",
+    description: "Borrow a token. Provide the token name (e.g., USDC, WETH) and a human-readable amount.",
+    parameters: {
+      type: "object",
+      properties: {
+        tokenName: {
+          type: "string",
+          description: "The name of the token to borrow (e.g., USDC, WETH).",
+        },
+        amount: {
+          type: "string",
+          description: "The amount to borrow (human readable, e.g., '100', '0.5').",
+        },
+      },
+      required: ["tokenName", "amount"],
+    },
+  },
+  {
+    name: "repay",
+    description: "Repay a borrowed token. Provide the token name and a human-readable amount.",
+    parameters: {
+      type: "object",
+      properties: {
+        tokenName: {
+          type: "string",
+          description: "The name of the token to repay.",
+        },
+        amount: {
+          type: "string",
+          description: "The amount to repay.",
+        },
+      },
+      required: ["tokenName", "amount"],
+    },
+  },
+  {
+    name: "supply",
+    description: "Supply (deposit) a token. Provide the token name and a human-readable amount.",
+    parameters: {
+      type: "object",
+      properties: {
+        tokenName: {
+          type: "string",
+          description: "The name of the token to supply.",
+        },
+        amount: {
+          type: "string",
+          description: "The amount to supply.",
+        },
+      },
+      required: ["tokenName", "amount"],
+    },
+  },
+  {
+    name: "withdraw",
+    description: "Withdraw a previously supplied token. Provide the token name and a human-readable amount.",
+    parameters: {
+      type: "object",
+      properties: {
+        tokenName: {
+          type: "string",
+          description: "The name of the token to withdraw.",
+        },
+        amount: {
+          type: "string",
+          description: "The amount to withdraw.",
+        },
+      },
+      required: ["tokenName", "amount"],
+    },
+  },
+  {
+    name: "getUserPositions",
+    description: "Get a summary of your current lending and borrowing positions.",
+    parameters: { type: "object", properties: {} },
+  },
+];
+
 export interface HandlerContext {
   mcpClient: Client;
   tokenMap: Record<string, TokenInfo>;
@@ -44,6 +124,13 @@ export interface HandlerContext {
   log: (...args: unknown[]) => void;
   quicknodeSubdomain: string;
   quicknodeApiKey: string;
+  executeAction?: (
+    actionName: string,
+    transactions: TransactionRequest[]
+  ) => Promise<TransactionRequest[]>;
+  describeWalletPositionsResponse?: (
+    response: any  // Generic response type from MCP server
+  ) => string;
 }
 
 function findTokensCaseInsensitive(
@@ -110,6 +197,24 @@ function validateTransactions(
   return validationResult.data;
 }
 
+// Helper function for validating transaction results and preparing for execution
+async function validateAndExecuteAction(
+  actionName: string,
+  rawTransactions: unknown, // Result from mcpClient.callTool
+  context: HandlerContext
+): Promise<TransactionRequest[]> {
+  // First validate the transactions
+  const validatedTransactions = validateTransactions(actionName, rawTransactions, context);
+  
+  // If executeAction is available in context, use it to prepare/handle the transactions
+  if (context.executeAction) {
+    return await context.executeAction(actionName, validatedTransactions);
+  }
+  
+  // If no executeAction is available, just return the validated transactions
+  return validatedTransactions;
+}
+
 export async function handleBorrow(
   params: { tokenName: string; amount: string },
   context: HandlerContext
@@ -150,7 +255,7 @@ export async function handleBorrow(
     });
 
     const parsedResponse = parseToolResponse(rawResult, context, 'borrow');
-    const transactions = validateTransactions('borrow', parsedResponse, context);
+    const transactions = await validateAndExecuteAction('borrow', parsedResponse, context);
 
     const txArtifact: TransactionArtifact = {
       txPreview: {
@@ -237,7 +342,7 @@ export async function handleRepay(
     });
 
     const parsedResponse = parseToolResponse(rawResult, context, 'repay');
-    const transactions = validateTransactions('repay', parsedResponse, context);
+    const transactions = await validateAndExecuteAction('repay', parsedResponse, context);
 
     const txArtifact: TransactionArtifact = {
       txPreview: {
@@ -324,7 +429,7 @@ export async function handleSupply(
     });
 
     const parsedResponse = parseToolResponse(rawResult, context, 'supply');
-    const transactions = validateTransactions('supply', parsedResponse, context);
+    const transactions = await validateAndExecuteAction('supply', parsedResponse, context);
 
     const txArtifact: TransactionArtifact = {
       txPreview: {
@@ -411,7 +516,7 @@ export async function handleWithdraw(
     });
 
     const parsedResponse = parseToolResponse(rawResult, context, 'withdraw');
-    const transactions = validateTransactions('withdraw', parsedResponse, context);
+    const transactions = await validateAndExecuteAction('withdraw', parsedResponse, context);
 
     const txArtifact: TransactionArtifact = {
       txPreview: {
@@ -478,7 +583,14 @@ export async function handleGetUserPositions(
     const parsedData = parseToolResponse(rawResult, context, 'getUserPositions');
     
     // Format the positions data into a readable string
-    const positionsText = formatPositionsData(parsedData);
+    let positionsText: string;
+    
+    // Use describeWalletPositionsResponse method if available
+    if (context.describeWalletPositionsResponse) {
+      positionsText = context.describeWalletPositionsResponse(parsedData);
+    } else {
+      positionsText = formatPositionsData(parsedData);
+    }
 
     return {
       id: context.userAddress,
@@ -526,7 +638,6 @@ function formatPositionsData(data: unknown): string {
     }
 
     // Format into readable text - implementation depends on actual data structure
-    // This is a placeholder - adjust based on actual data format
     if (
       positionsData && 
       typeof positionsData === 'object' &&
