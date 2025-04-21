@@ -4,57 +4,63 @@ Unlock Intelligent On-Chain Workflows in TypeScript for the Arbitrum Ecosystem.
 
 1.  [Introduction](#introduction)
 2.  [Repository Organization](#repository-organization)
-3.  [Quick Start](#quick-start)
-4.  [Documentation](#documentation)
-5.  [MCP Tools Integration](#mcp-tools-integration)
-6.  [Contribution](#contribution)
+3.  [Quickstart](#quickstart)
+4.  [MCP Tools Integration](#mcp-tools-integration)
+5.  [Contribution](#contribution)
 
 ## Introduction
 
-AgentKit is a versatile toolkit for rapidly developing on-chain agents within the Arbitrum ecosystem. It enables autonomous on-chain operations—such as token transfers, swaps, and advanced DeFi interactions—while integrating on-chain and off-chain data sources to power robust workflows. AgentKit offers ready-to-use implementations and templates across various sectors, helping you build production-ready agents in minutes.
+Vibekit is a versatile toolkit for rapidly developing on-chain agents within the Arbitrum ecosystem. It enables autonomous on-chain operations—such as token transfers, swaps, and advanced DeFi interactions—while integrating on-chain and off-chain data sources for powerful workflows. Vibekit offers ready-to-use implementations and templates across various sectors, helping you build production-ready agents in minutes.
 
 ## Repository Organization
 
-AgentKit follows a monorepo structure, primarily focused on TypeScript packages. A Rust implementation is planned for release in the near future. The repository layout is as follows:
+Vibekit follows a monorepo structure, primarily focused on TypeScript packages. A Rust implementation is planned for release in the near future.
+
+The repository layout is as follows:
 
 ```
-agentkit/
+vibetkit/
 ├── typescript/
 │   └── examples/
 │       └── lending-agent/
-│----── mcp-tools/
-│       └── emberai-mcp/
+│       └── swapping-agent-no-wallet/
+│       └── swapping-agent/
+│----── lib/
+│       └── a2a/
+│       └── mcp-tools/
+│           └── emberai-mcp/
 ├── CHANGELOG.md
 ├── CONTRIBUTIONS.md
 ├── LICENSE
 ├── README.md
 ```
 
-## Quick Start
+## Quickstart
 
-You can quickly get started and build a DeFi agent by following this guide and cloning the Github Repository.
+You can easily create a DeFi agent by following this guide:
 
-### Set Up Your Local Environment
+1. Set up your local environment:
 
-Ensure that you have Node.js 22+ installed and pnpm installed:
+   Ensure that you have Node.js 22+ and pnpm installed.
 
-```bash
-node -v # Should be 22+
-pnpm -v # Check that pnpm is installed
-```
+   ```
+   node -v # Should be 22+
+   pnpm -v # Check that pnpm is installed
+   ```
 
-Then, clone the repository and navigate to its directory:
+2. Clone the repository:
+   ```
+   git clone https://github.com/EmberAGI/arbitrum-vibekit.git
+   cd arbitrum-vibekit
+   ```
 
-```bash
-git clone https://github.com/arbitrum-agentkit/arbitrum-agentkit.git
-cd arbitrum-agentkit
-```
-
-You are now prepared to leverage the sample implementations within our examples subdirectory to extend your agent's capabilities.
+You are now prepared to leverage the sample implementations within our [`examples`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) directory to extend your agent's capabilities.
 
 ## MCP Tools Integration
 
-MCP Tools enable seamless data integration between external providers and on-chain agents. By adapting existing APIs and SDKs into an MCP-compatible server, integrators can immediately take advantage of standardized functionality for tasks such as data retrieval and advanced blockchain interactions. The `mcp-tools` directory contains templates (`emberai-mcp/src/index.ts`) and guidelines for building these tools with minimal configuration, ensuring rapid implementation and a consistent development experience across different systems.
+Model Context Protocol (MCP) integration facilitates data connectivity between external providers and on-chain agents. In a typical MCP‑based system, tools are first registered with the MCP server, and the agents integrate by connecting to the server and discovering the registered tools. The agents then autonomously determine the optimal timing and method for calling each tool to fulfill complex tasks. After each invocation, the agent processes the returned results and incorporates them into its broader workflow, ensuring coherent outcomes. To learn more about the Model Context Protocol, visit the [official documentation](https://modelcontextprotocol.io/introduction) page.
+
+The [`mcp-tools`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools) directory contains templates (`emberai-mcp/src/index.ts`) and guidelines for building these tools with minimal configuration.
 
 ## Contribution
 
