@@ -238,11 +238,13 @@ Use relavant conversation history to obtain required tool parameters. Present th
       const require = createRequire(import.meta.url);
       const mcpToolPath = require.resolve('ember-mcp-tool-server');
 
+      this.log(`Connecting to MCP server at ${process.env.EMBER_ENDPOINT}`);
+
       const transport = new StdioClientTransport({
         command: 'node',
         args: [mcpToolPath],
         env: {
-          ...process.env, // Inherit existing environment variables
+          ...process.env,
           EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'grpc.api.emberai.xyz:50051',
         },
       });
@@ -395,9 +397,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
         } else if (msg.role === 'tool') {
           if (Array.isArray(msg.content)) {
             msg.content.forEach((toolResult: ToolResultPart) => {
-              this.log(
-                `[Tool Result ${index} for ${toolResult.toolName}]: ${JSON.stringify(toolResult.result)}`
-              );
+              this.log(`[Tool Result ${index} for ${toolResult.toolName} received]`);
             });
           }
         }
@@ -413,7 +413,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
             if (part.type === 'tool-result' && part.toolName === 'swapTokens') {
               this.log(`Processing tool result for ${part.toolName} from response.messages`);
               // Log the raw result for debugging
-              this.log(`Raw toolResult.result: ${JSON.stringify(part.result)}`);
+              //this.log(`Raw toolResult.result: ${JSON.stringify(part.result)}`);
               // Assert the type
               processedToolResult = part.result as Task;
               // Now you can safely access properties based on the asserted type

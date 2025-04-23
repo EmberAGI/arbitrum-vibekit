@@ -19,33 +19,67 @@ export type TokenInfo = {
 
 export const SwapPreviewSchema = z
   .object({
-    fromToken: z.string(),
-    toToken: z.string(),
-    amount: z.string(),
+    fromTokenSymbol: z.string(),
+    fromTokenAddress: z.string(),
+    fromTokenAmount: z.string(),
     fromChain: z.string(),
+    toTokenSymbol: z.string(),
+    toTokenAddress: z.string(),
+    toTokenAmount: z.string(),
     toChain: z.string(),
+    exchangeRate: z.string(),
+    executionTime: z.string(),
+    expiration: z.string(),
+    explorerUrl: z.string(),
   })
   .passthrough();
 
-export type SwapPreview = z.infer<typeof SwapPreviewSchema>;
-
-export const TransactionRequestSchema = z
+export const TransactionResponseSchema = z
   .object({
     to: z.string(),
     data: z.string(),
     value: z.string().optional(),
-    chainId: z.string(),
+    chainId: z.string().optional(),
   })
   .passthrough();
 
-export type TransactionRequest = z.infer<typeof TransactionRequestSchema>;
+export type TransactionRequest = z.infer<typeof TransactionResponseSchema>;
 
 export const TransactionArtifactSchema = z.object({
   txPreview: SwapPreviewSchema,
-  txPlan: z.array(TransactionRequestSchema),
+  txPlan: z.array(TransactionResponseSchema),
 });
 
 export type TransactionArtifact = z.infer<typeof TransactionArtifactSchema>;
+
+const TokenDetailSchema = z.object({
+  address: z.string(),
+  chainId: z.string(),
+});
+
+const EstimationSchema = z.object({
+  effectivePrice: z.string(),
+  timeEstimate: z.string(),
+  expiration: z.string(),
+  baseTokenDelta: z.string(),
+  quoteTokenDelta: z.string(),
+});
+
+const ProviderTrackingSchema = z.object({
+  requestId: z.string().optional(),
+  providerName: z.string().optional(),
+  explorerUrl: z.string(),
+});
+
+export const SwapResponseSchema = z.object({
+  baseToken: TokenDetailSchema,
+  quoteToken: TokenDetailSchema,
+  estimation: EstimationSchema,
+  providerTracking: ProviderTrackingSchema,
+  transactions: z.array(TransactionResponseSchema),
+});
+
+export type SwapResponse = z.infer<typeof SwapResponseSchema>;
 
 export interface HandlerContext {
   mcpClient: Client;
@@ -156,7 +190,6 @@ export function parseMcpToolResponse(
     context.log(`Raw ${toolName} result appears nested, parsing inner text...`);
     try {
       const parsedData = JSON.parse((rawResponse as any).content[0].text);
-      context.log('Parsed inner text content for validation:', parsedData);
       dataToValidate = parsedData;
     } catch (e) {
       context.log(`Error parsing inner text content from ${toolName} result:`, e);
@@ -179,7 +212,7 @@ function validateAction(
   rawTransactions: unknown,
   context: HandlerContext
 ): Array<TransactionRequest> {
-  const validationResult = z.array(TransactionRequestSchema).safeParse(rawTransactions);
+  const validationResult = z.array(TransactionResponseSchema).safeParse(rawTransactions);
   if (!validationResult.success) {
     const errorMsg = `MCP tool '${actionName}' returned invalid transaction data.`;
     context.log('Validation Error:', errorMsg, validationResult.error);
@@ -260,7 +293,7 @@ export async function handleSwapTokens(
     `Executing swap via MCP: ${fromToken} (address: ${fromTokenDetail.address}, chain: ${fromTokenDetail.chainId}) to ${toToken} (address: ${toTokenDetail.address}, chain: ${toTokenDetail.chainId}), amount: ${amount}, atomicAmount: ${atomicAmount}, userAddress: ${context.userAddress}`
   );
 
-  const rawTransactions = await context.mcpClient.callTool({
+  const swapResponse = await context.mcpClient.callTool({
     name: 'swapTokens',
     arguments: {
       fromTokenAddress: fromTokenDetail.address,
@@ -272,27 +305,29 @@ export async function handleSwapTokens(
     },
   });
 
-  const dataToValidate = parseMcpToolResponse(rawTransactions, context, 'swapTokens');
+  const dataToValidate = parseMcpToolResponse(swapResponse, context, 'swapTokens');
+  context.log('Parsed swap response data:', dataToValidate);
 
-  if (!Array.isArray(dataToValidate) || dataToValidate.length === 0) {
-    context.log('Invalid or empty transaction plan received from MCP tool:', dataToValidate);
-    if (
-      typeof dataToValidate === 'object' &&
-      dataToValidate !== null &&
-      'error' in dataToValidate
-    ) {
-      throw new Error(`MCP tool returned an error: ${JSON.stringify(dataToValidate)}`);
-    }
+  const validationResult = SwapResponseSchema.safeParse(dataToValidate);
+  if (!validationResult.success) {
+    context.log('MCP tool swapTokens returned invalid data structure:', validationResult.error);
+    throw new Error('MCP tool swapTokens returned invalid data structure.');
+  }
+  const validatedSwapResponse = validationResult.data;
+  const rawTransactions = validatedSwapResponse.transactions;
+
+  if (rawTransactions.length === 0) {
+    context.log('Invalid or empty transaction plan received from MCP tool:', rawTransactions);
     throw new Error('Expected a transaction plan array from MCP tool, but received invalid data.');
   }
 
-  const swapTx = dataToValidate[0] as TransactionRequest;
-  if (!swapTx || typeof swapTx !== 'object' || !swapTx.to) {
-    context.log('Invalid swap transaction object received from MCP:', swapTx);
+  const firstSwapTx = rawTransactions[0];
+  if (!firstSwapTx || typeof firstSwapTx !== 'object' || !firstSwapTx.to) {
+    context.log('Invalid swap transaction object received from MCP:', firstSwapTx);
     throw new Error('Invalid swap transaction structure in plan.');
   }
 
-  const spenderAddress = swapTx.to as Address;
+  const spenderAddress = firstSwapTx.to as Address;
   const txChainId = fromTokenDetail.chainId;
   const fromTokenAddress = fromTokenDetail.address as Address;
   const userAddress = context.userAddress as Address;
@@ -359,24 +394,28 @@ export async function handleSwapTokens(
 
   context.log('Proceeding to validate the swap transaction received from MCP tool...');
 
-  if (Array.isArray(dataToValidate) && dataToValidate.length > 0) {
-    const swapTxPlan = dataToValidate[0] as Partial<TransactionRequest>;
-    if (swapTxPlan && typeof swapTxPlan === 'object' && !swapTxPlan.chainId) {
-      context.log(`Adding missing chainId (${txChainId}) to swap transaction plan.`);
-      swapTxPlan.chainId = txChainId;
-    }
+  if (!firstSwapTx.chainId) {
+    context.log(`Adding missing chainId (${txChainId}) to the first swap transaction.`);
+    firstSwapTx.chainId = txChainId;
   }
 
-  const swapTxPlan = validateAction('swapTokens', dataToValidate, context);
+  const swapTxPlan = validateAction('swapTokens', rawTransactions, context);
   const txPlan = [...(approveTx ? [approveTx] : []), ...swapTxPlan];
 
   const txArtifact: TransactionArtifact = {
     txPreview: {
-      fromToken: fromToken,
-      toToken: toToken,
-      amount: amount,
-      fromChain: mapChainIdToName(fromTokenDetail.chainId),
-      toChain: mapChainIdToName(toTokenDetail.chainId),
+      fromTokenSymbol: fromToken,
+      fromTokenAddress: validatedSwapResponse.baseToken.address,
+      fromTokenAmount: validatedSwapResponse.estimation.baseTokenDelta,
+      fromChain: validatedSwapResponse.baseToken.chainId,
+      toTokenSymbol: toToken,
+      toTokenAddress: validatedSwapResponse.quoteToken.address,
+      toTokenAmount: validatedSwapResponse.estimation.quoteTokenDelta,
+      toChain: validatedSwapResponse.quoteToken.chainId,
+      exchangeRate: validatedSwapResponse.estimation.effectivePrice,
+      executionTime: validatedSwapResponse.estimation.timeEstimate,
+      expiration: validatedSwapResponse.estimation.expiration,
+      explorerUrl: validatedSwapResponse.providerTracking.explorerUrl,
     },
     txPlan: txPlan,
   };
