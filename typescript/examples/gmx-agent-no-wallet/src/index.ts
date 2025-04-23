@@ -1,10 +1,11 @@
-import { Agent } from './agent.js';
 import * as dotenv from 'dotenv';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import express from 'express';
 import cors from 'cors';
+import { Agent } from './agent.js';
 import { z } from 'zod';
+import type { Task } from 'a2a-samples-js/schema';
 
 // Load environment variables
 dotenv.config();
@@ -55,19 +56,31 @@ server.tool(
   async (args: GmxAgentArgs) => {
     const { instruction, userAddress } = args;
     try {
-      const response = await agent.handleChat(instruction);
+      const taskResponse = await agent.processUserInput(instruction, userAddress || '0x0000000000000000000000000000000000000000');
       
-      console.error('[server.tool] result', response);
+      console.error('[server.tool] result', taskResponse);
       
       return {
-        content: [{ type: 'text', text: response }],
+        content: [{ type: 'text', text: JSON.stringify(taskResponse) }],
       };
     } catch (error: unknown) {
       const err = error as Error;
       console.error('[server.tool] error', err.message);
+      
+      const errorTask: Task = {
+        id: `gmx-error-${Date.now()}`,
+        status: {
+          state: 'failed',
+          message: {
+            role: 'agent',
+            parts: [{ type: 'text', text: `Error: ${err.message}` }],
+          },
+        },
+      };
+      
       return {
         isError: true,
-        content: [{ type: 'text', text: `Error: ${err.message}` }],
+        content: [{ type: 'text', text: JSON.stringify(errorTask) }],
       };
     }
   }
