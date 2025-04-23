@@ -1,4 +1,5 @@
-Unlock Intelligent On-Chain Workflows in TypeScript for the Arbitrum Ecosystem.
+[GRAPHIC]
+Vibecode DeFi agents in minutes.
 
 ## Table of Contents
 
@@ -10,7 +11,11 @@ Unlock Intelligent On-Chain Workflows in TypeScript for the Arbitrum Ecosystem.
 
 ## Introduction
 
-Vibekit is a versatile toolkit for rapidly developing on-chain agents within the Arbitrum ecosystem. It enables autonomous on-chain operations—such as token transfers, swaps, and advanced DeFi interactions—while integrating on-chain and off-chain data sources for powerful workflows. Vibekit offers ready-to-use implementations and templates across various sectors, helping you build production-ready agents in minutes.
+Vibekit is a versatile toolkit for rapidly developing DeFi agents. It enables autonomous on-chain operations—such as token transfers, swaps, and advanced DeFi interactions—while integrating on-chain and off-chain data sources for powerful workflows. Vibekit offers ready-to-use implementations and templates across various sectors, helping you build production-ready agents in minutes.
+
+[FLOWCHART]
+~Vibekit is under constant development and is open to comunity contributions~ (link to contributions.md) (link to AI Trailblazer article)
+
 
 ## Repository Organization
 
