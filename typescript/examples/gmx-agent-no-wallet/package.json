@@ -28,7 +28,10 @@
     "express": "^4.21.2",
     "tsx": "^4.6.2",
     "viem": "^2.26.3",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "ember-mcp-tool-server": "workspace:*",
+    "@openrouter/ai-sdk-provider": "^0.4.5",
+    "ai": "^4.3.2"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
