@@ -261,16 +261,11 @@ server.tool(
         );
       }
 
-      console.error(
-        `SwapTokens tool success. Transactions:`,
-        response.transactions
-      );
-
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(response.transactions),
+            text: JSON.stringify(response),
           },
         ],
       };
