@@ -1,0 +1,16 @@
+version: '3'
+
+services:
+  gmx-agent:
+    build:
+      context: ../../
+      dockerfile: ./examples/gmx-agent-no-wallet/Dockerfile
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+    environment:
+      - PORT=3001
+    restart: unless-stopped
+    volumes:
+      - .:/app/examples/gmx-agent-no-wallet 
