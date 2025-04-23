@@ -4,6 +4,9 @@ import { ethers } from 'ethers';
 import type { Task as A2ATask } from 'a2a-samples-js/schema';
 import { GmxSdk } from '@gmx-io/sdk';
 import type { PositionsData } from '@gmx-io/sdk/types/positions.js';
+import { getMarketInfo } from './gmx/markets.js';
+import { getPositionInfo } from './gmx/positions.js';
+
 
 // Re-export Task type
 export type Task = A2ATask;
@@ -113,86 +116,12 @@ export function parseMcpToolResponse(
   return dataToValidate;
 }
 
-/**
- * Handler for GMX agent queries
- */
-export async function handleGmxQuery(
-  params: {
-    instruction: string;
-    userAddress?: string;
-  },
-  context: HandlerContext
-): Promise<Task> {
-  try {
-    context.log(`Processing instruction: ${params.instruction}`);
-    
-    // Process the instruction and return appropriate response
-    const response = await processInstruction(params.instruction, context);
-    
-    // Create a completed task with the response
-    return {
-      id: `gmx-query-${Date.now()}`,
-      status: {
-        state: 'completed',
-        message: {
-          role: 'agent',
-          parts: [{ type: 'text', text: response }]
-        }
-      }
-    };
-  } catch (error) {
-    context.log(`Error handling GMX query:`, error);
-    
-    // Return a failed task with error message
-    return {
-      id: `gmx-query-error-${Date.now()}`,
-      status: {
-        state: 'failed',
-        message: {
-          role: 'agent',
-          parts: [{ 
-            type: 'text', 
-            text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
-          }]
-        }
-      }
-    };
-  }
-}
-
-/**
- * Process instruction and return appropriate response
- */
-async function processInstruction(
-  instruction: string,
-  context: HandlerContext
-): Promise<string> {
-  const lowerInstruction = instruction.toLowerCase();
-  
-  // Basic NLP detection of intent
-  if (lowerInstruction.includes('markets') || lowerInstruction.includes('available') || lowerInstruction.includes('show')) {
-    return await handleMarketsQuery(context);
-  } else if (lowerInstruction.includes('positions') || lowerInstruction.includes('my position')) {
-    return await handlePositionsQuery(instruction, context);
-  } else if ((lowerInstruction.includes('create') || lowerInstruction.includes('open') || 
-              lowerInstruction.includes('long') || lowerInstruction.includes('short')) && 
-              (lowerInstruction.includes('position') || lowerInstruction.includes('trade'))) {
-    return await handleCreatePositionRequest(instruction, context);
-  } else if ((lowerInstruction.includes('close') || lowerInstruction.includes('decrease') || 
-              lowerInstruction.includes('exit')) && lowerInstruction.includes('position')) {
-    return await handleClosePositionRequest(instruction, context);
-  } else {
-    // Default to help message
-    return getHelpMessage();
-  }
-}
 
 /**
  * Handle markets query
  */
-async function handleMarketsQuery(context: HandlerContext): Promise<string> {
+export async function handleMarketsQuery(context: HandlerContext): Promise<string> {
   try {
-    const { getMarketInfo } = await import('./gmx/markets.js');
     const marketInfo = await getMarketInfo(context.gmxClient);
     
     if (!marketInfo.success) {
@@ -227,10 +156,8 @@ async function handleMarketsQuery(context: HandlerContext): Promise<string> {
 /**
  * Handle positions query
  */
-async function handlePositionsQuery(instruction: string, context: HandlerContext): Promise<string> {
+export async function handlePositionsQuery(instruction: string, context: HandlerContext): Promise<string> {
   try {
-    const { getPositionInfo } = await import('./gmx/positions.js');
-    
     // Use a demo account address if one is provided in .env, otherwise use a placeholder
     const demoAccount = process.env.DEMO_ACCOUNT || '0x0000000000000000000000000000000000000000';
     
@@ -358,10 +285,8 @@ function calculatePnlPercentage(pnl: string | number | bigint, collateral: strin
 /**
  * Handle create position request
  */
-async function handleCreatePositionRequest(instruction: string, context: HandlerContext): Promise<string> {
+export async function handleCreatePositionRequest(instruction: string, context: HandlerContext): Promise<string> {
   try {
-    const { getMarketInfo } = await import('./gmx/markets.js');
-    
     // Extract position details from the message
     // In a real implementation, you would use a more sophisticated approach to extract parameters
     
@@ -437,10 +362,8 @@ async function handleCreatePositionRequest(instruction: string, context: Handler
 /**
  * Handle close position request
  */
-async function handleClosePositionRequest(instruction: string, context: HandlerContext): Promise<string> {
-  try {
-    const { getPositionInfo } = await import('./gmx/positions.js');
-    
+export async function handleClosePositionRequest(instruction: string, context: HandlerContext): Promise<string> {
+  try {    
     // Try to extract market (e.g., ETH, BTC)
     const marketMatches = instruction.match(/\b(ETH|BTC|LINK|UNI|ARB|SOL|AVAX)\b/i);
     const market = marketMatches ? marketMatches[0].toUpperCase() : 'ETH';
@@ -509,25 +432,3 @@ async function handleClosePositionRequest(instruction: string, context: HandlerC
     return 'Error processing close position request. Please try a simpler format or check your input.';
   }
 }
-
-/**
- * Get help message
- */
-function getHelpMessage(): string {
-  return `Welcome to the GMX Agent! Here are some things you can do:
-
-1. View available markets:
-   "Show me available markets on GMX"
-
-2. View your positions:
-   "What are my current positions?"
-
-3. Create a position:
-   "Open a long ETH position with 0.1 ETH as collateral and 5x leverage"
-
-4. Close a position:
-   "Close my BTC position"
-
-Please note that this is a no-wallet example that simulates responses. 
-In a real implementation, you would need to connect a wallet to execute transactions.`;
-} 

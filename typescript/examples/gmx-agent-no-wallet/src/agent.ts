@@ -2,9 +2,8 @@ import { ethers } from 'ethers';
 import { setupGmxClient } from './gmx/client.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import type { HandlerContext } from './agentToolHandlers.js';
-import { handleGmxQuery } from './agentToolHandlers.js';
-import type { Task } from 'a2a-samples-js/schema';
+import type { HandlerContext, Task } from './agentToolHandlers.js';
+import { handleMarketsQuery, handlePositionsQuery, handleCreatePositionRequest, handleClosePositionRequest } from './agentToolHandlers.js';
 import {
   generateText,
   tool,
@@ -13,7 +12,6 @@ import {
   type ToolResultPart,
   type CoreUserMessage,
   type CoreAssistantMessage,
-  type StepResult,
 } from 'ai';
 import { createRequire } from 'module';
 import { z } from 'zod';
@@ -30,17 +28,35 @@ function isTextPart(part: any): part is TextPart {
   return part && part.type === 'text' && typeof part.text === 'string';
 }
 
-// Define schema for GMX query
-const GmxQuerySchema = z.object({
-  instruction: z
-    .string()
-    .describe("A natural‑language directive for GMX operations, e.g. 'Show me ETH markets on GMX'."),
-  userAddress: z
-    .string()
-    .optional()
-    .describe('The user wallet address which would be used for positions or transactions.'),
+// Define schema for GMX tools
+const GetMarketInfoSchema = z.object({
+  marketSymbol: z.string().optional().describe('Specific market symbol to query (e.g., "ETH", "BTC"). If not provided, returns all markets.'),
 });
-type GmxQueryArgs = z.infer<typeof GmxQuerySchema>;
+
+const GetPositionInfoSchema = z.object({
+  userAddress: z.string().optional().describe('User wallet address to check positions for. If not provided, uses demo account.'),
+  marketSymbol: z.string().optional().describe('Specific market to filter positions for (e.g., "ETH", "BTC")'),
+});
+
+const CreateIncreasePositionSchema = z.object({
+  marketAddress: z.string().describe('The market address to create a position in'),
+  side: z.enum(['LONG', 'SHORT']).describe('Position side (LONG or SHORT)'),
+  collateralTokenAddress: z.string().describe('The address of the collateral token'),
+  collateralAmount: z.string().describe('The amount of collateral to use'),
+  leverage: z.number().describe('The leverage to use for the position'),
+  slippage: z.number().optional().describe('Allowed slippage in basis points (50 = 0.5%)'),
+});
+
+const CreateDecreasePositionSchema = z.object({
+  marketAddress: z.string().describe('The market address of the position to decrease'),
+  collateralTokenAddress: z.string().describe('The address of the collateral token'),
+  collateralAmount: z.string().describe('The amount of collateral to withdraw'),
+  isClosePosition: z.boolean().describe('Whether to completely close the position'),
+  slippage: z.number().optional().describe('Allowed slippage in basis points (50 = 0.5%)'),
+});
+
+// Define a record type to avoid specific typings
+type GmxToolSet = Record<string, any>;
 
 /**
  * Log error function
@@ -49,9 +65,21 @@ function logError(...args: unknown[]) {
   console.error(...args);
 }
 
-type GmxToolSet = {
-  gmxQuery: Tool<typeof GmxQuerySchema, Awaited<ReturnType<typeof handleGmxQuery>>>;
-};
+/**
+ * Create a task response helper
+ */
+function createTaskResponse(success: boolean, message: string): Task {
+  return {
+    id: `gmx-${success ? 'success' : 'error'}-${Date.now()}`,
+    status: {
+      state: success ? 'completed' : 'failed',
+      message: {
+        role: 'agent',
+        parts: [{ type: 'text', text: message }]
+      }
+    }
+  };
+}
 
 /**
  * GMX Agent class that integrates with MCP and GMX protocol
@@ -85,6 +113,12 @@ You understand and can respond to queries about:
 - Trading strategies on GMX
 - Liquidation risks and margin requirements
 - Fee structures and funding rates
+
+You have access to the following tools:
+- getMarketInfo: Get information about available markets on GMX
+- getPositionInfo: Check position details for a user
+- createIncreasePosition: Create or increase a position (simulated)
+- createDecreasePosition: Decrease or close a position (simulated)
 
 Use plain text in your responses, not markdown. Be concise and accurate with numbers and data. When you encounter an error, clearly explain what went wrong without guessing at the cause.`,
       },
@@ -134,21 +168,80 @@ Use plain text in your responses, not markdown. Be concise and accurate with num
 
       // Set up the Vercel AI SDK toolSet
       this.toolSet = {
-        gmxQuery: tool({
-          description: 'Query the GMX protocol for market information, positions, and other data.',
-          parameters: GmxQuerySchema,
-          execute: async (args: GmxQueryArgs) => {
-            this.log('Vercel AI SDK calling handler: gmxQuery', args);
+        getMarketInfo: tool({
+          description: 'Get information about available markets on GMX',
+          parameters: GetMarketInfoSchema,
+          execute: async (args) => {
+            this.log('Executing getMarketInfo tool', args);
             try {
-              return await handleGmxQuery(
-                args,
-                this.getHandlerContext()
-              );
+              const response = await handleMarketsQuery(this.getHandlerContext());
+              return response;
             } catch (error: any) {
-              logError(`Error during gmxQuery via toolSet: ${error.message}`);
+              logError(`Error executing getMarketInfo:`, error);
               throw error;
             }
-          },
+          }
+        }),
+        
+        getPositionInfo: tool({
+          description: 'Check position details for a user',
+          parameters: GetPositionInfoSchema,
+          execute: async (args) => {
+            this.log('Executing getPositionInfo tool', args);
+            try {
+              // Construct an instruction that includes any filters
+              let instruction = `Show my positions`;
+              if (args.marketSymbol) {
+                instruction += ` for ${args.marketSymbol}`;
+              }
+              if (args.userAddress) {
+                instruction += ` for account ${args.userAddress}`;
+              }
+              
+              const response = await handlePositionsQuery(instruction, this.getHandlerContext());
+              return response;
+            } catch (error: any) {
+              logError(`Error executing getPositionInfo:`, error);
+              throw error;
+            }
+          }
+        }),
+        
+        createIncreasePosition: tool({
+          description: 'Create or increase a position (simulated in this no-wallet example)',
+          parameters: CreateIncreasePositionSchema,
+          execute: async (args) => {
+            this.log('Executing createIncreasePosition tool', args);
+            try {
+              // Construct an instruction from the parameters
+              const instruction = `Create a ${args.leverage}x ${args.side} position for market ${args.marketAddress} with ${args.collateralAmount} collateral`;
+              
+              const response = await handleCreatePositionRequest(instruction, this.getHandlerContext());
+              return response;
+            } catch (error: any) {
+              logError(`Error executing createIncreasePosition:`, error);
+              throw error;
+            }
+          }
+        }),
+        
+        createDecreasePosition: tool({
+          description: 'Decrease or close a position (simulated in this no-wallet example)',
+          parameters: CreateDecreasePositionSchema,
+          execute: async (args) => {
+            this.log('Executing createDecreasePosition tool', args);
+            try {
+              // Construct an instruction from the parameters
+              const action = args.isClosePosition ? 'Close' : 'Decrease';
+              const instruction = `${action} position for market ${args.marketAddress} ${args.isClosePosition ? 'completely' : `by ${args.collateralAmount}`}`;
+              
+              const response = await handleClosePositionRequest(instruction, this.getHandlerContext());
+              return response;
+            } catch (error: any) {
+              logError(`Error executing createDecreasePosition:`, error);
+              throw error;
+            }
+          }
         }),
       };
     } catch (error) {
@@ -211,80 +304,71 @@ Use plain text in your responses, not markdown. Be concise and accurate with num
       const userMessage: CoreUserMessage = { role: 'user', content: userInput };
       this.conversationHistory.push(userMessage);
 
-      // If OpenRouter API key is available, use Vercel AI SDK flow
-      if (process.env.OPENROUTER_API_KEY) {
-        this.log('Calling generateText with Vercel AI SDK...');
-        const { response, text, finishReason } = await generateText({
-          model: openrouter('google/gemini-2.5-flash-preview'),
-          messages: this.conversationHistory,
-          tools: this.toolSet,
-          maxSteps: 10,
-          onStepFinish: async (stepResult: StepResult<typeof this.toolSet>) => {
-            this.log(`Step finished. Reason: ${stepResult.finishReason}`);
-          },
-        });
-        this.log(`generateText finished. Reason: ${finishReason}`);
+      this.log('Calling generateText with Vercel AI SDK...');
+      const { response, text, finishReason } = await generateText({
+        model: openrouter('google/gemini-2.5-flash-preview'),
+        messages: this.conversationHistory,
+        tools: this.toolSet,
+        maxSteps: 10,
+        onStepFinish: async (stepResult) => {
+          this.log(`Step finished. Reason: ${stepResult.finishReason}`);
+        },
+      });
+      this.log(`generateText finished. Reason: ${finishReason}`);
 
-        response.messages.forEach((msg: any, index: number) => {
-          if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-            msg.content.forEach((part: any) => {
-              if (part.type === 'tool-call') {
-                this.log(`[LLM Request ${index}]: Tool Call - ${part.toolName}`);
-              }
+      response.messages.forEach((msg: any, index: number) => {
+        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+          msg.content.forEach((part: any) => {
+            if (part.type === 'tool-call') {
+              this.log(`[LLM Request ${index}]: Tool Call - ${part.toolName}`);
+            }
+          });
+        } else if (msg.role === 'tool') {
+          if (Array.isArray(msg.content)) {
+            msg.content.forEach((toolResult: ToolResultPart) => {
+              this.log(`[Tool Result ${index} for ${toolResult.toolName} received]`);
             });
-          } else if (msg.role === 'tool') {
-            if (Array.isArray(msg.content)) {
-              msg.content.forEach((toolResult: ToolResultPart) => {
-                this.log(`[Tool Result ${index} for ${toolResult.toolName} received]`);
-              });
+          }
+        }
+      });
+
+      this.conversationHistory.push(...response.messages);
+
+      // Process Tool Results from response.messages
+      let processedToolResult: Task | null = null;
+      for (const message of response.messages) {
+        if (message.role === 'tool' && Array.isArray(message.content)) {
+          for (const part of message.content) {
+            if (part.type === 'tool-result') {
+              this.log(`Processing tool result for ${part.toolName} from response.messages`);
+              processedToolResult = part.result as Task;
+              this.log(`Tool Result State: ${processedToolResult?.status?.state ?? 'N/A'}`);
+              break;
             }
           }
-        });
-
-        this.conversationHistory.push(...response.messages);
-
-        // Process Tool Results from response.messages
-        let processedToolResult: Task | null = null;
-        for (const message of response.messages) {
-          if (message.role === 'tool' && Array.isArray(message.content)) {
-            for (const part of message.content) {
-              if (part.type === 'tool-result' && part.toolName === 'gmxQuery') {
-                this.log(`Processing tool result for ${part.toolName} from response.messages`);
-                processedToolResult = part.result as Task;
-                this.log(`GMX Query Result State: ${processedToolResult?.status?.state ?? 'N/A'}`);
-                break;
-              }
-            }
-          }
-          if (processedToolResult) break;
         }
-
-        if (!processedToolResult) {
-          throw new Error(text);
-        }
-
-        switch (processedToolResult.status.state) {
-          case 'completed':
-          case 'failed':
-          case 'canceled':
-            this.conversationHistory = [];
-            return processedToolResult;
-          case 'input-required':
-          case 'submitted':
-          case 'working':
-          case 'unknown':
-            return processedToolResult;
-        }
+        if (processedToolResult) break;
       }
 
-      // Fallback: directly call the handler if OpenRouter is not configured
-      return await handleGmxQuery(
-        { 
-          instruction: userInput,
-          userAddress
-        },
-        this.getHandlerContext()
-      );
+      if (!processedToolResult) {
+        // No tool was called, use the text response as is
+        return createTaskResponse(true, text);
+      }
+
+      switch (processedToolResult.status.state) {
+        case 'completed':
+        case 'failed':
+        case 'canceled':
+          this.conversationHistory = [];
+          return processedToolResult;
+        case 'input-required':
+        case 'submitted':
+        case 'working':
+        case 'unknown':
+          return processedToolResult;
+        default:
+          return createTaskResponse(false, `Unknown tool result state: ${processedToolResult.status.state}`);
+      }
     } catch (error) {
       console.error('Error processing user input:', error);
       
@@ -296,61 +380,7 @@ Use plain text in your responses, not markdown. Be concise and accurate with num
       this.conversationHistory.push(errorAssistantMessage);
       
       // Return a failed task with error message
-      return {
-        id: `gmx-error-${Date.now()}`,
-        status: {
-          state: 'failed',
-          message: {
-            role: 'agent',
-            parts: [{ 
-              type: 'text', 
-              text: `Error: ${errorMessage}`
-            }]
-          }
-        }
-      };
-    }
-  }
-
-  /**
-   * Handle user chat messages (legacy method)
-   */
-  public async handleChat(userMessage: string): Promise<string> {
-    try {
-      console.log(`Processing user message: ${userMessage}`);
-      
-      const task = await handleGmxQuery(
-        { instruction: userMessage },
-        this.getHandlerContext()
-      );
-      
-      // Check the task state and return appropriate response
-      if (task.status.state === 'completed' && task.status.message) {
-        const messageParts = task.status.message.parts;
-        if (messageParts && messageParts.length > 0) {
-          const part = messageParts[0];
-          if (isTextPart(part)) {
-            return part.text;
-          }
-        }
-      }
-      
-      // If we can't extract a valid response, return error
-      if (task.status.state === 'failed' && task.status.message) {
-        const messageParts = task.status.message.parts;
-        if (messageParts && messageParts.length > 0) {
-          const part = messageParts[0];
-          if (isTextPart(part)) {
-            return part.text;
-          }
-        }
-        return `Failed to process your request: ${task.status.state}`;
-      }
-      
-      return `Unknown response state: ${task.status.state}`;
-    } catch (error) {
-      console.error('Error processing chat:', error);
-      return `Sorry, I encountered an error processing your request: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      return createTaskResponse(false, `Error: ${errorMessage}`);
     }
   }
 }
