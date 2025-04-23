@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { ethers } from 'ethers';
 import type { Task as A2ATask } from 'a2a-samples-js/schema';
+import { GmxSdk } from '@gmx-io/sdk';
+import type { PositionsData } from '@gmx-io/sdk/types/positions.js';
 
 // Re-export Task type
 export type Task = A2ATask;
@@ -69,7 +71,7 @@ export const GmxQuerySchema = z.object({
 });
 
 export interface HandlerContext {
-  gmxClient: any;
+  gmxClient: GmxSdk;
   provider: ethers.providers.Provider;
   mcpClient: Client;
   log: (...args: unknown[]) => void;
@@ -197,17 +199,19 @@ async function handleMarketsQuery(context: HandlerContext): Promise<string> {
       return `Failed to fetch market information: ${marketInfo.message}`;
     }
     
+    if (marketInfo.marketsTable) {
+      return `Available GMX Markets (${marketInfo.marketCount}):\n\n${marketInfo.marketsTable}`;
+    }
+    
+    // Fallback if marketsTable is not available
     let response = `Available GMX Markets (${marketInfo.marketCount}):\n\n`;
     
     if (marketInfo.markets && marketInfo.markets.length > 0) {
-      marketInfo.markets.forEach((market: any, index: number) => {
-        const marketName = market.marketInfo?.indexToken?.symbol 
-          ? `${market.marketInfo.indexToken.symbol}/USD` 
-          : 'Unknown Market';
-          
-        response += `${index + 1}. ${marketName}\n`;
-        response += `   Long Token: ${market.marketInfo?.longToken?.symbol || 'Unknown'}\n`;
-        response += `   Short Token: ${market.marketInfo?.shortToken?.symbol || 'Unknown'}\n\n`;
+      marketInfo.markets.forEach((market, index: number) => {
+        response += `${index + 1}. ${market.name}\n`;
+        response += `   Index Token: ${market.indexToken}\n`;
+        response += `   Long Token: ${market.longToken}\n`;
+        response += `   Short Token: ${market.shortToken}\n\n`;
       });
     } else {
       response += "No markets available.";
@@ -236,13 +240,56 @@ async function handlePositionsQuery(instruction: string, context: HandlerContext
       return `Failed to fetch position information: ${positionInfo.message}`;
     }
     
-    if (!positionInfo.positions || positionInfo.positions.length === 0) {
+    // Handle case where positions is not an array but PositionsData type
+    const positions = positionInfo.positions;
+    if (!positions || (typeof positions === 'object' && Object.keys(positions).length === 0)) {
       return `No active positions found for the account.`;
     }
     
-    let response = `Active Positions (${positionInfo.positionCount}):\n\n`;
+    // If positions is an array with length property, we can check it directly
+    if (Array.isArray(positions) && positions.length === 0) {
+      return `No active positions found for the account.`;
+    }
     
-    positionInfo.positions.forEach((position: any, index: number) => {
+    // Process position data for display
+    let processedPositions: any[] = [];
+    
+    // If positions is a PositionsData object, convert to array for display
+    if (typeof positions === 'object' && !Array.isArray(positions)) {
+      const positionEntries = Object.entries(positions);
+      const positionCount = positionEntries.length;
+      
+      if (positionCount === 0) {
+        return `No active positions found for the account.`;
+      }
+      
+      // Format the positions in a readable way
+      processedPositions = positionEntries.map(([key, position]: [string, any]) => {
+        const market = position.marketInfo?.indexToken?.symbol 
+          ? `${position.marketInfo.indexToken.symbol}/USD` 
+          : 'Unknown Market';
+          
+        return {
+          key,
+          market,
+          side: position.isLong ? 'LONG' : 'SHORT',
+          size: formatAmount(position.sizeInUsd, 30),
+          collateral: formatAmount(position.collateralAmount, position.marketInfo?.longToken?.decimals || 18),
+          leverage: calculateLeverage(position.sizeInUsd, position.collateralUsd),
+          entryPrice: formatAmount(position.entryPrice, 30),
+          markPrice: formatAmount(position.markPrice, 30),
+          liquidationPrice: formatAmount(position.liquidationPrice, 30),
+          pnl: formatAmount(position.pnl, 30),
+          pnlPercentage: calculatePnlPercentage(position.pnl, position.collateralUsd),
+        };
+      });
+    } else if (Array.isArray(positions)) {
+      processedPositions = positions;
+    }
+    
+    let response = `Active Positions (${processedPositions.length}):\n\n`;
+    
+    processedPositions.forEach((position, index) => {
       response += `${index + 1}. ${position.market} - ${position.side}\n`;
       response += `   Size: ${position.size} USD\n`;
       response += `   Collateral: ${position.collateral}\n`;
@@ -258,6 +305,54 @@ async function handlePositionsQuery(instruction: string, context: HandlerContext
     context.log('Error handling positions query:', error);
     return 'Error fetching position information. Please try again later.';
   }
+}
+
+/**
+ * Format amount to a readable string
+ */
+function formatAmount(amount: string | number | bigint, decimals: number): string {
+  if (!amount) return '0';
+  
+  if (typeof amount === 'string') {
+    const value = parseFloat(amount) / Math.pow(10, decimals);
+    return value.toFixed(2);
+  } else if (typeof amount === 'bigint') {
+    const value = Number(amount) / Math.pow(10, decimals);
+    return value.toFixed(2);
+  } else {
+    const value = amount / Math.pow(10, decimals);
+    return value.toFixed(2);
+  }
+}
+
+/**
+ * Calculate leverage from size and collateral
+ */
+function calculateLeverage(size: string | number | bigint, collateral: string | number | bigint): string {
+  if (!size || !collateral) return '0x';
+  
+  const sizeNum = typeof size === 'string' ? parseFloat(size) : Number(size);
+  const collateralNum = typeof collateral === 'string' ? parseFloat(collateral) : Number(collateral);
+  
+  if (collateralNum === 0) return '0x';
+  
+  const leverage = sizeNum / collateralNum;
+  return `${leverage.toFixed(2)}x`;
+}
+
+/**
+ * Calculate PnL percentage
+ */
+function calculatePnlPercentage(pnl: string | number | bigint, collateral: string | number | bigint): string {
+  if (!pnl || !collateral) return '0%';
+  
+  const pnlNum = typeof pnl === 'string' ? parseFloat(pnl) : Number(pnl);
+  const collateralNum = typeof collateral === 'string' ? parseFloat(collateral) : Number(collateral);
+  
+  if (collateralNum === 0) return '0%';
+  
+  const pnlPercentage = (pnlNum / collateralNum) * 100;
+  return `${pnlPercentage.toFixed(2)}%`;
 }
 
 /**
@@ -298,19 +393,28 @@ async function handleCreatePositionRequest(instruction: string, context: Handler
     }
     
     // Find the requested market
-    const marketObj = marketInfo.markets.find((m: any) => 
-      m.marketInfo?.indexToken?.symbol?.toUpperCase() === market);
+    const marketObj = marketInfo.markets.find((m) => 
+      m.indexToken?.toUpperCase() === market);
     
     if (!marketObj) {
       return `Market not found for ${market}. Please specify a valid market (e.g., ETH, BTC).`;
     }
     
-    // Determine collateral token address
-    const collateralToken = isLong ? 
-      marketObj.marketInfo.longToken : 
-      marketObj.marketInfo.shortToken;
+    // Determine collateral token address based on long/short
+    let collateralTokenSymbol = isLong ? marketObj.longToken : marketObj.shortToken;
+    let collateralTokenAddress = '';
+    
+    // Find the token in the tokens array
+    if (marketInfo.tokens && marketInfo.tokens.length > 0) {
+      const collateralToken = marketInfo.tokens.find(t => 
+        t.symbol.toUpperCase() === collateralTokenSymbol.toUpperCase());
       
-    if (!collateralToken) {
+      if (collateralToken) {
+        collateralTokenAddress = collateralToken.address;
+      }
+    }
+    
+    if (!collateralTokenAddress) {
       return `Failed to determine collateral token for ${market}.`;
     }
     
@@ -351,17 +455,43 @@ async function handleClosePositionRequest(instruction: string, context: HandlerC
       return `Failed to fetch position information: ${positionInfo.message}`;
     }
     
-    if (!positionInfo.positions || positionInfo.positions.length === 0) {
+    // Process position data for display
+    let processedPositions: any[] = [];
+    const positions = positionInfo.positions;
+    
+    // If positions is a PositionsData object, convert to array for display
+    if (typeof positions === 'object' && !Array.isArray(positions)) {
+      const positionEntries = Object.entries(positions);
+      
+      if (positionEntries.length === 0) {
+        return `No active positions found to close.`;
+      }
+      
+      // Format the positions in a readable way
+      processedPositions = positionEntries.map(([key, position]: [string, any]) => {
+        const marketSymbol = position.marketInfo?.indexToken?.symbol || 'Unknown';
+        return {
+          key,
+          market: `${marketSymbol}/USD`,
+          side: position.isLong ? 'LONG' : 'SHORT',
+          size: formatAmount(position.sizeInUsd, 30),
+          pnl: formatAmount(position.pnl, 30),
+          pnlPercentage: calculatePnlPercentage(position.pnl, position.collateralUsd),
+        };
+      });
+    } else if (Array.isArray(positions) && positions.length > 0) {
+      processedPositions = positions;
+    } else {
       return `No active positions found to close.`;
     }
     
     // Look for a position in the specified market
-    const position = positionInfo.positions.find((p: any) => 
+    const position = processedPositions.find(p => 
       p.market.toUpperCase().includes(market));
     
     if (!position) {
       return `No active position found for ${market}. Available positions:\n` +
-             positionInfo.positions.map((p: any, i: number) => `${i+1}. ${p.market} (${p.side})`).join('\n');
+             processedPositions.map((p, i) => `${i+1}. ${p.market} (${p.side})`).join('\n');
     }
     
     // In a real wallet-connected implementation, this would close the actual position

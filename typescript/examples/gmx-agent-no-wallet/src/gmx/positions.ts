@@ -1,81 +1,93 @@
-import { ethers } from 'ethers';
+import { GmxSdk } from "@gmx-io/sdk";
+import type { MarketInfo, MarketsData } from "@gmx-io/sdk/types/markets.js";
+import type {  TokensData } from "@gmx-io/sdk/types/tokens.js";
+import type { Position, PositionsData } from "@gmx-io/sdk/types/positions.js";
 
 /**
  * Get position information for a specific account
+ * @param gmxClient - The GMX SDK instance
+ * @param account - The account address to get positions for
+ * @returns Position information with analysis
  */
-export async function getPositionInfo(gmxClient: any, account: string) {
+export async function getPositionInfo(gmxClient: GmxSdk, account?: string) {
   try {
-    if (!gmxClient) {
-      return {
-        success: false,
-        message: 'GMX client not initialized',
-      };
+    // Set the account if provided
+    if (account) {
+      gmxClient.setAccount(account as `0x${string}`);
+    } else if (!gmxClient.account) {
+      throw new Error("No account provided and no account set in GMX client");
     }
 
-    if (!account || !ethers.utils.isAddress(account)) {
-      return {
-        success: false,
-        message: 'Invalid account address',
-      };
-    }
-
-    // Fetch positions from GMX
-    const positions = await gmxClient.getAccountPositions({
-      account,
-    });
-
-    if (!positions || !Array.isArray(positions.positions)) {
-      return {
-        success: false,
-        message: 'Failed to fetch positions',
-      };
-    }
-
-    // Fetch markets info to get additional data
-    const marketsInfoData = await gmxClient.getMarketsInfo();
-    
-    if (!marketsInfoData || !marketsInfoData.marketsInfoData) {
-      return {
-        success: false,
-        message: 'Failed to fetch markets info',
-      };
-    }
-
-    // Process positions with market data
-    const processedPositions = positions.positions.map(position => {
-      const marketInfo = marketsInfoData.marketsInfoData[position.marketAddress];
+    try {
+      // Get markets info and tokens data with a timeout
+      const marketsPromise = gmxClient.markets.getMarketsInfo();
       
-      // Format position information
-      return {
-        account: account,
-        market: marketInfo?.indexToken?.symbol ? `${marketInfo.indexToken.symbol}/USD` : 'Unknown Market',
-        marketAddress: position.marketAddress,
-        side: position.isLong ? 'LONG' : 'SHORT',
-        size: ethers.utils.formatUnits(position.sizeInUsd || '0', 30),
-        collateral: ethers.utils.formatUnits(position.collateralAmount || '0', marketInfo?.longToken?.decimals || 18),
-        leverage: (Number(position.sizeInUsd || 0) / Number(position.collateralUsd || 1)).toFixed(2) + 'x',
-        entryPrice: ethers.utils.formatUnits(position.entryPrice || '0', 30),
-        markPrice: ethers.utils.formatUnits(position.markPrice || '0', 30),
-        liquidationPrice: ethers.utils.formatUnits(position.liquidationPrice || '0', 30),
-        pnl: ethers.utils.formatUnits(position.pnl || '0', 30),
-        pnlPercentage: ((Number(position.pnl || 0) / Number(position.collateralUsd || 1)) * 100).toFixed(2) + '%',
-        // Raw data for other functions
-        rawPosition: position,
-        rawMarketInfo: marketInfo,
-      };
-    });
+      // Create a timeout promise
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error("Timeout fetching market data"));
+        }, 15000); // 15 second timeout
+      });
+      
+      // Race the promises
+      const { marketsInfoData, tokensData } = await Promise.race([
+        marketsPromise,
+        timeoutPromise as Promise<any>
+      ]);
+      
+      if (!marketsInfoData || !tokensData) {
+        throw new Error("Failed to fetch markets info or tokens data");
+      }
 
-    return {
-      success: true,
-      account,
-      positionCount: processedPositions.length,
-      positions: processedPositions,
-    };
+      // Get positions for the account
+      const positionsResult = await gmxClient.positions.getPositions({
+        marketsData: marketsInfoData as MarketsData,
+        tokensData,
+        start: 0,
+        end: 1000,
+      });
+
+      if (positionsResult.error){
+        return {
+            success: true,
+            message: "No positions found for this account",
+            error: positionsResult.error,
+        }
+      }
+    
+      // Get positions data from the result
+      const positions:PositionsData = positionsResult.positionsData;
+      console.log(positions);
+      
+      // Check if we have any positions by examining the object
+      const positionKeys = Object.keys(positions);
+      if (positionKeys.length === 0) {
+        return {
+          success: true,
+          message: "No positions found for this account",
+          positions: [],
+        };
+      }
+
+      return {
+        success: true,
+        message: `Found ${positionKeys.length} position(s)`,
+        positions: positions,
+      };
+    } catch (marketError) {
+      console.error("Error fetching market data:", marketError);
+      return {
+        success: false,
+        message: `Error with GMX markets: ${(marketError as Error).message}. Please try again later.`,
+        positions: [],
+      };
+    }
   } catch (error) {
-    console.error('Error getting position info:', error);
+    console.error("Error fetching position info:", error);
     return {
       success: false,
-      message: `Failed to get position info: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      message: `Error fetching position info: ${(error as Error).message}`,
+      positions: [],
     };
   }
 } 

@@ -1,8 +1,5 @@
 import { ethers } from 'ethers';
 import { setupGmxClient } from './gmx/client.js';
-import { getPositionInfo } from './gmx/positions.js';
-import { createDecreasePosition, createIncreasePosition } from './gmx/orders.js';
-import { getMarketInfo } from './gmx/markets.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { HandlerContext } from './agentToolHandlers.js';
@@ -21,6 +18,7 @@ import {
 import { createRequire } from 'module';
 import { z } from 'zod';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { GmxSdk } from '@gmx-io/sdk';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -60,7 +58,7 @@ type GmxToolSet = {
  */
 export class Agent {
   private provider: ethers.providers.Provider;
-  private gmxClient: any; // GMX client type
+  private gmxClient: GmxSdk | null = null;
   private mcpClient: Client | null = null;
   public conversationHistory: CoreMessage[] = [];
   private toolSet: GmxToolSet | null = null;
@@ -178,6 +176,10 @@ Use plain text in your responses, not markdown. Be concise and accurate with num
    * Get handler context
    */
   private getHandlerContext(): HandlerContext {
+    if (!this.gmxClient) {
+      throw new Error('GMX client not initialized');
+    }
+
     return {
       gmxClient: this.gmxClient,
       provider: this.provider,
@@ -209,6 +211,8 @@ Use plain text in your responses, not markdown. Be concise and accurate with num
       const userMessage: CoreUserMessage = { role: 'user', content: userInput };
       this.conversationHistory.push(userMessage);
 
+      // If OpenRouter API key is available, use Vercel AI SDK flow
+      if (process.env.OPENROUTER_API_KEY) {
         this.log('Calling generateText with Vercel AI SDK...');
         const { response, text, finishReason } = await generateText({
           model: openrouter('google/gemini-2.5-flash-preview'),
@@ -271,6 +275,7 @@ Use plain text in your responses, not markdown. Be concise and accurate with num
           case 'unknown':
             return processedToolResult;
         }
+      }
 
       // Fallback: directly call the handler if OpenRouter is not configured
       return await handleGmxQuery(
@@ -347,24 +352,5 @@ Use plain text in your responses, not markdown. Be concise and accurate with num
       console.error('Error processing chat:', error);
       return `Sorry, I encountered an error processing your request: ${error instanceof Error ? error.message : 'Unknown error'}`;
     }
-  }
-
-  /**
-   * Methods for GMX operations that can be used by handlers
-   */
-  public async getPositionInfo(account: string): Promise<any> {
-    return getPositionInfo(this.gmxClient, account);
-  }
-
-  public async createIncreasePosition(params: any): Promise<any> {
-    return createIncreasePosition(this.gmxClient, params);
-  }
-
-  public async createDecreasePosition(params: any): Promise<any> {
-    return createDecreasePosition(this.gmxClient, params);
-  }
-
-  public async getMarketInfo(): Promise<any> {
-    return getMarketInfo(this.gmxClient);
   }
 }
