@@ -66,22 +66,6 @@ function logError(...args: unknown[]) {
 }
 
 /**
- * Create a task response helper
- */
-function createTaskResponse(success: boolean, message: string): Task {
-  return {
-    id: `gmx-${success ? 'success' : 'error'}-${Date.now()}`,
-    status: {
-      state: success ? 'completed' : 'failed',
-      message: {
-        role: 'agent',
-        parts: [{ type: 'text', text: message }]
-      }
-    }
-  };
-}
-
-/**
  * GMX Agent class that integrates with MCP and GMX protocol
  */
 export class Agent {
@@ -90,6 +74,7 @@ export class Agent {
   private mcpClient: Client | null = null;
   public conversationHistory: CoreMessage[] = [];
   private toolSet: GmxToolSet | null = null;
+  private userAddress?: string; // Store user address
 
   constructor() {
     // Initialize blockchain provider
@@ -172,7 +157,7 @@ Use plain text in your responses, not markdown. Be concise and accurate with num
           description: 'Get information about available markets on GMX',
           parameters: GetMarketInfoSchema,
           execute: async (args) => {
-            this.log('Executing getMarketInfo tool', args);
+            console.log('Vercel AI SDK calling handler: getMarketInfo tool', args);
             try {
               const response = await handleMarketsQuery(this.getHandlerContext());
               return response;
@@ -187,18 +172,9 @@ Use plain text in your responses, not markdown. Be concise and accurate with num
           description: 'Check position details for a user',
           parameters: GetPositionInfoSchema,
           execute: async (args) => {
-            this.log('Executing getPositionInfo tool', args);
+            console.log('Vercel AI SDK calling handler: getPositionInfo tool', args);
             try {
-              // Construct an instruction that includes any filters
-              let instruction = `Show my positions`;
-              if (args.marketSymbol) {
-                instruction += ` for ${args.marketSymbol}`;
-              }
-              if (args.userAddress) {
-                instruction += ` for account ${args.userAddress}`;
-              }
-              
-              const response = await handlePositionsQuery(instruction, this.getHandlerContext());
+              const response = await handlePositionsQuery(args, this.getHandlerContext());
               return response;
             } catch (error: any) {
               logError(`Error executing getPositionInfo:`, error);
@@ -211,12 +187,9 @@ Use plain text in your responses, not markdown. Be concise and accurate with num
           description: 'Create or increase a position (simulated in this no-wallet example)',
           parameters: CreateIncreasePositionSchema,
           execute: async (args) => {
-            this.log('Executing createIncreasePosition tool', args);
+            console.log('Vercel AI SDK calling handler: createIncreasePosition tool', args);
             try {
-              // Construct an instruction from the parameters
-              const instruction = `Create a ${args.leverage}x ${args.side} position for market ${args.marketAddress} with ${args.collateralAmount} collateral`;
-              
-              const response = await handleCreatePositionRequest(instruction, this.getHandlerContext());
+              const response = await handleCreatePositionRequest(args, this.getHandlerContext());
               return response;
             } catch (error: any) {
               logError(`Error executing createIncreasePosition:`, error);
@@ -229,13 +202,9 @@ Use plain text in your responses, not markdown. Be concise and accurate with num
           description: 'Decrease or close a position (simulated in this no-wallet example)',
           parameters: CreateDecreasePositionSchema,
           execute: async (args) => {
-            this.log('Executing createDecreasePosition tool', args);
+            console.log('Vercel AI SDK calling handler: createDecreasePosition tool', args);
             try {
-              // Construct an instruction from the parameters
-              const action = args.isClosePosition ? 'Close' : 'Decrease';
-              const instruction = `${action} position for market ${args.marketAddress} ${args.isClosePosition ? 'completely' : `by ${args.collateralAmount}`}`;
-              
-              const response = await handleClosePositionRequest(instruction, this.getHandlerContext());
+              const response = await handleClosePositionRequest(args, this.getHandlerContext());
               return response;
             } catch (error: any) {
               logError(`Error executing createDecreasePosition:`, error);
@@ -297,13 +266,15 @@ Use plain text in your responses, not markdown. Be concise and accurate with num
       throw new Error('Agent not initialized. Call init() first.');
     }
 
-    try {
-      this.log(`Processing user message: ${userInput} for address: ${userAddress}`);
-      
-      // Add user message to conversation history
-      const userMessage: CoreUserMessage = { role: 'user', content: userInput };
-      this.conversationHistory.push(userMessage);
+    this.userAddress = userAddress; // Store user address for context
 
+    this.log(`Processing user message: ${userInput} for address: ${userAddress}`);
+      
+    // Add user message to conversation history
+    const userMessage: CoreUserMessage = { role: 'user', content: userInput };
+    this.conversationHistory.push(userMessage);
+
+    try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
         model: openrouter('google/gemini-2.5-flash-preview'),
@@ -316,71 +287,95 @@ Use plain text in your responses, not markdown. Be concise and accurate with num
       });
       this.log(`generateText finished. Reason: ${finishReason}`);
 
-      response.messages.forEach((msg: any, index: number) => {
+      // Log message flow for debugging
+      response.messages.forEach((msg, index) => {
         if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-          msg.content.forEach((part: any) => {
+          msg.content.forEach(part => {
             if (part.type === 'tool-call') {
-              this.log(`[LLM Request ${index}]: Tool Call - ${part.toolName}`);
+              console.error(
+                `[LLM Request ${index}]: Tool Call - ${part.toolName} with args ${JSON.stringify(part.args)}`
+              );
             }
           });
         } else if (msg.role === 'tool') {
           if (Array.isArray(msg.content)) {
             msg.content.forEach((toolResult: ToolResultPart) => {
-              this.log(`[Tool Result ${index} for ${toolResult.toolName} received]`);
+              console.error(`[Tool Result ${index} for ${toolResult.toolName} received]`);
             });
           }
+        } else if (msg.role === 'assistant') {
+          console.error(`[LLM Response ${index}]: ${msg.content}`);
         }
       });
 
       this.conversationHistory.push(...response.messages);
 
-      // Process Tool Results from response.messages
-      let processedToolResult: Task | null = null;
+      // Find the Task result from the tool messages
+      let finalTask: Task | null = null;
       for (const message of response.messages) {
         if (message.role === 'tool' && Array.isArray(message.content)) {
           for (const part of message.content) {
-            if (part.type === 'tool-result') {
-              this.log(`Processing tool result for ${part.toolName} from response.messages`);
-              processedToolResult = part.result as Task;
-              this.log(`Tool Result State: ${processedToolResult?.status?.state ?? 'N/A'}`);
-              break;
+            if (
+              part.type === 'tool-result' &&
+              part.result &&
+              typeof part.result === 'object' &&
+              'id' in part.result
+            ) {
+              console.error(`Processing tool result for ${part.toolName} from response.messages`);
+              finalTask = part.result as Task; // Assume the result IS the Task
+              console.error(`Task Result State: ${finalTask?.status?.state ?? 'N/A'}`);
+              const firstPart = finalTask?.status?.message?.parts[0];
+              const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';
+              console.error(`Task Result Message: ${messageText}`);
+              break; // Found the task from the most recent tool call
             }
           }
         }
-        if (processedToolResult) break;
+        if (finalTask) break; // Stop searching once a task is found
       }
 
-      if (!processedToolResult) {
-        // No tool was called, use the text response as is
-        return createTaskResponse(true, text);
-      }
-
-      switch (processedToolResult.status.state) {
-        case 'completed':
-        case 'failed':
-        case 'canceled':
+      if (finalTask) {
+        // If a task was completed, failed, or canceled, clear history for next interaction
+        if (['completed', 'failed', 'canceled'].includes(finalTask.status.state)) {
+          console.error(
+            `Task finished with state ${finalTask.status.state}. Clearing conversation history.`
+          );
           this.conversationHistory = [];
-          return processedToolResult;
-        case 'input-required':
-        case 'submitted':
-        case 'working':
-        case 'unknown':
-          return processedToolResult;
-        default:
-          return createTaskResponse(false, `Unknown tool result state: ${processedToolResult.status.state}`);
+        }
+        return finalTask;
       }
+
+      // If no tool was called and no task was returned, return the assistant's text response
+      console.error('No tool called or task found, returning text response.');
+      return {
+        id: this.userAddress,
+        status: {
+          state: 'completed', // Or another appropriate state
+          message: {
+            role: 'agent',
+            parts: [{ type: 'text', text: text || "I'm sorry, I couldn't process that request." }],
+          },
+        },
+      };
     } catch (error) {
-      console.error('Error processing user input:', error);
-      
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorLog = `Error calling Vercel AI SDK generateText: ${error}`;
+      logError(errorLog);
       const errorAssistantMessage: CoreAssistantMessage = {
         role: 'assistant',
-        content: String(errorMessage),
+        content: `An error occurred: ${String(error)}`,
       };
       this.conversationHistory.push(errorAssistantMessage);
-      
-      // Return a failed task with error message
-      return createTaskResponse(false, `Error: ${errorMessage}`);
+      // Return a Task indicating failure
+      return {
+        id: this.userAddress ?? 'unknown',
+        status: {
+          state: 'failed',
+          message: {
+            role: 'agent',
+            parts: [{ type: 'text', text: `An error occurred: ${String(error)}` }],
+          },
+        },
+      };
     }
   }
 }
