@@ -6,7 +6,6 @@ import {
   handleSupply,
   handleWithdraw,
   handleGetUserPositions,
-  agentTools,
   type HandlerContext,
   type TokenInfo,
   type TransactionRequest,
@@ -15,13 +14,93 @@ import type { Task } from 'a2a-samples-js/schema';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  generateText,
+  tool,
+  type Tool,
+  type CoreMessage,
+  type ToolResultPart,
+  type CoreUserMessage,
+  type CoreAssistantMessage,
+  type StepResult,
+} from 'ai';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { createRequire } from 'module';
+
+// Node types might be needed for process.env and __dirname/__filename patterns
+// import type * as NodeTypes from 'node'; // This line can be uncommented if @types/node doesn't resolve 'process'
 
 // Create cache file path for storing tokens
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const CACHE_FILE_PATH = path.join(__dirname, ".cache", "lending_tokens.json");
+// Use a different cache file name to avoid conflicts with potential swap agent cache
+const CACHE_FILE_PATH = path.join(__dirname, '.cache', 'lending_capabilities.json');
 
-// Zod schema for token data validation
+const openrouter = createOpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+// --- Zod Schemas for MCP Capabilities ---
+
+const ZodTokenUidSchema = z.object({
+  chainId: z.string().optional(),
+  address: z.string().optional(),
+});
+
+const ZodTokenSchema = z
+  .object({
+    symbol: z.string().optional(),
+    name: z.string().optional(),
+    decimals: z.number().optional(),
+    tokenUid: ZodTokenUidSchema.optional(),
+  })
+  .passthrough(); // Allow extra fields
+
+const ZodLendingCapabilitySchema = z
+  .object({
+    capabilityId: z.string().optional(),
+    currentSupplyApy: z.string().optional(), // Assuming string representation
+    currentBorrowApy: z.string().optional(), // Assuming string representation
+    underlyingToken: ZodTokenSchema.optional(),
+    maxLtv: z.string().optional(), // Assuming string representation
+    liquidationThreshold: z.string().optional(), // Assuming string representation
+  })
+  .passthrough(); // Allow extra fields
+
+const ZodCapabilitySchema = z
+  .object({
+    lendingCapability: ZodLendingCapabilitySchema.optional(),
+    // Add swapCapability if needed, but focusing on lending for this agent
+    // swapCapability: ZodSwapCapabilitySchema.optional(),
+  })
+  .passthrough(); // Allow other capability types if present
+
+const ZodGetCapabilitiesResponseSchema = z
+  .object({
+    capabilities: z.array(ZodCapabilitySchema),
+    // next_page_token: z.string().optional(), // If pagination is used
+  })
+  .passthrough(); // Allow extra fields
+
+type McpGetCapabilitiesResponse = z.infer<typeof ZodGetCapabilitiesResponseSchema>;
+
+// --- End Zod Schemas ---
+
+// --- Zod Schema for MCP Text Wrapper ---
+const ZodMcpTextWrapperSchema = z.object({
+  content: z
+    .array(
+      z.object({
+        type: z.literal('text'), // Ensure type is exactly 'text'
+        text: z.string(), // Ensure text is a string
+      })
+    )
+    .min(1), // Ensure the content array is not empty
+});
+// --- End MCP Text Wrapper Schema ---
+
+// Define schema for token data validation (used internally in tokenMap)
 const TokenInfoSchema = z.object({
   chainId: z.string(),
   address: z.string(),
@@ -30,44 +109,18 @@ const TokenInfoSchema = z.object({
 
 // Define schema for action inputs
 const BorrowRepaySupplyWithdrawSchema = z.object({
-  tokenName: z.string().describe("The symbol of the token (e.g., 'USDC', 'WETH'). Must be one of the available tokens."),
-  amount: z.string().describe("The amount of the token to use, as a string representation of a number."),
+  tokenName: z
+    .string()
+    .describe(
+      "The symbol of the token (e.g., 'USDC', 'WETH'). Must be one of the available tokens."
+    ),
+  amount: z
+    .string()
+    .describe('The amount of the token to use, as a string representation of a number.'),
 });
 
-// Define schema for positions 
+// Define schema for positions
 const GetUserPositionsSchema = z.object({});
-
-// Message types from wallet implementation
-type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
-
-// Define the different types of message content
-interface TextPart {
-  type: 'text';
-  text: string;
-}
-
-interface ToolCallPart {
-  type: 'tool-call';
-  toolName: string;
-  toolCallId: string;
-  args: Record<string, any>;
-}
-
-interface ToolResultPart {
-  type: 'tool-result';
-  toolCallId: string;
-  toolName: string;
-  result: any;
-  isError: boolean;
-}
-
-type MessagePart = TextPart | ToolCallPart | ToolResultPart;
-type MessageContent = string | MessagePart[];
-
-interface CoreMessage {
-  role: MessageRole;
-  content: MessageContent;
-}
 
 function logError(...args: unknown[]) {
   console.error(...args);
@@ -78,164 +131,432 @@ export interface AgentOptions {
   quicknodeApiKey: string;
 }
 
-// Tool schemas for structured input processing
-type ToolHandler = (params: any, context: HandlerContext) => Promise<Task>;
-
-interface Tool {
-  name: string;
-  description: string;
-  schema: z.ZodType<any>;
-  handler: ToolHandler;
-}
+// Define the structure for the set of lending tools
+type LendingToolSet = {
+  borrow: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
+  repay: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
+  supply: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
+  withdraw: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
+  getUserPositions: Tool<typeof GetUserPositionsSchema, Task>;
+};
 
 export class Agent {
   private mcpClient: Client | null = null;
-  private tokenMap: Record<string, TokenInfo> = {};
+  private tokenMap: Record<string, Array<TokenInfo>> = {};
   private quicknodeSubdomain: string;
   private quicknodeApiKey: string;
   private availableTokens: string[] = [];
-  private tools: Record<string, Tool> = {};
-  private conversationHistory: CoreMessage[] = [];
+  private toolSet: LendingToolSet | null = null; // Changed from 'tools' to 'toolSet'
+  public conversationHistory: CoreMessage[] = []; // Public for potential external access/logging
+  private userAddress?: string; // Store user address
 
   constructor(quicknodeSubdomain: string, quicknodeApiKey: string) {
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
-    this.setupTools();
+    // Removed setupTools() call from here
+    if (!process.env.OPENROUTER_API_KEY) {
+      throw new Error('OPENROUTER_API_KEY not set!');
+    }
   }
 
   /**
-   * Set up the available tools with schemas and handlers
-   */
-  private setupTools(): void {
-    // Register available tools with handlers
-    this.tools = {
-      borrow: {
-        name: 'borrow',
-        description: 'Borrow a token. Provide the token name (e.g., USDC, WETH) and a human-readable amount.',
-        schema: BorrowRepaySupplyWithdrawSchema,
-        handler: handleBorrow,
-      },
-      repay: {
-        name: 'repay',
-        description: 'Repay a borrowed token. Provide the token name and a human-readable amount.',
-        schema: BorrowRepaySupplyWithdrawSchema,
-        handler: handleRepay,
-      },
-      supply: {
-        name: 'supply',
-        description: 'Supply (deposit) a token. Provide the token name and a human-readable amount.',
-        schema: BorrowRepaySupplyWithdrawSchema, 
-        handler: handleSupply,
-      },
-      withdraw: {
-        name: 'withdraw',
-        description: 'Withdraw a previously supplied token. Provide the token name and a human-readable amount.',
-        schema: BorrowRepaySupplyWithdrawSchema,
-        handler: handleWithdraw,
-      },
-      getUserPositions: {
-        name: 'getUserPositions',
-        description: 'Get a summary of your current lending and borrowing positions.',
-        schema: GetUserPositionsSchema,
-        handler: handleGetUserPositions,
-      },
-    };
-  }
-
-  /**
-   * Initialize the agent by setting up the token map and MCP client
+   * Initialize the agent by setting up the token map, MCP client, and tools.
    */
   async init(): Promise<void> {
-    await this.setupTokenMap();
+    // Ensure MCP Client is set up *before* fetching capabilities which might use it
     this.setupMCPClient();
-    this.conversationHistory = [
-      { 
-        role: 'system', 
-        content: 'You are an assistant that provides access to blockchain lending and borrowing functionalities. Always use plain text. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.' 
+
+    // --- Add Transport Connection ---
+    console.error('Initializing MCP client transport...');
+    try {
+      const require = createRequire(import.meta.url);
+      // Assuming ember-mcp-tool-server is a dependency or resolved correctly
+      const mcpToolPath = require.resolve('ember-mcp-tool-server');
+      console.error(`Found MCP tool server path: ${mcpToolPath}`);
+
+      console.error(`Connecting to MCP server at ${process.env.EMBER_ENDPOINT}`);
+      const transport = new StdioClientTransport({
+        command: 'node',
+        args: [mcpToolPath],
+        env: {
+          ...process.env, // Pass existing env vars
+          EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'grpc.api.emberai.xyz:50051',
+        },
+      });
+
+      if (!this.mcpClient) {
+        // Should have been set by setupMCPClient
+        throw new Error('MCP Client was not initialized before attempting connection.');
       }
+      await this.mcpClient.connect(transport);
+      console.error('MCP client connected successfully.');
+    } catch (error) {
+      console.error('Failed to initialize MCP client transport or connect:', error);
+      // Decide how to handle connection failure - maybe throw to prevent agent start?
+      throw new Error(`MCP Client connection failed: ${(error as Error).message}`);
+    }
+    // --- End Transport Connection ---
+
+    // Setup token map by fetching/parsing capabilities
+    await this.setupTokenMap();
+
+    // Set up tools using Vercel AI SDK's `tool` function
+    this.toolSet = {
+      borrow: tool({
+        description:
+          'Borrow a token. Provide the token name (e.g., USDC, WETH) and a human-readable amount.',
+        parameters: BorrowRepaySupplyWithdrawSchema,
+        execute: async args => {
+          console.error('Vercel AI SDK calling handler: borrow', args);
+          try {
+            return await handleBorrow(args, this.getHandlerContext());
+          } catch (error: any) {
+            logError(`Error during borrow via toolSet: ${error.message}`);
+            throw error;
+          }
+        },
+      }),
+      repay: tool({
+        description: 'Repay a borrowed token. Provide the token name and a human-readable amount.',
+        parameters: BorrowRepaySupplyWithdrawSchema,
+        execute: async args => {
+          console.error('Vercel AI SDK calling handler: repay', args);
+          try {
+            return await handleRepay(args, this.getHandlerContext());
+          } catch (error: any) {
+            logError(`Error during repay via toolSet: ${error.message}`);
+            throw error;
+          }
+        },
+      }),
+      supply: tool({
+        description:
+          'Supply (deposit) a token. Provide the token name and a human-readable amount.',
+        parameters: BorrowRepaySupplyWithdrawSchema,
+        execute: async args => {
+          console.error('Vercel AI SDK calling handler: supply', args);
+          try {
+            return await handleSupply(args, this.getHandlerContext());
+          } catch (error: any) {
+            logError(`Error during supply via toolSet: ${error.message}`);
+            throw error;
+          }
+        },
+      }),
+      withdraw: tool({
+        description:
+          'Withdraw a previously supplied token. Provide the token name and a human-readable amount.',
+        parameters: BorrowRepaySupplyWithdrawSchema,
+        execute: async args => {
+          console.error('Vercel AI SDK calling handler: withdraw', args);
+          try {
+            return await handleWithdraw(args, this.getHandlerContext());
+          } catch (error: any) {
+            logError(`Error during withdraw via toolSet: ${error.message}`);
+            throw error;
+          }
+        },
+      }),
+      getUserPositions: tool({
+        description: 'Get a summary of your current lending and borrowing positions.',
+        parameters: GetUserPositionsSchema,
+        execute: async args => {
+          console.error('Vercel AI SDK calling handler: getUserPositions', args);
+          try {
+            return await handleGetUserPositions(args, this.getHandlerContext());
+          } catch (error: any) {
+            logError(`Error during getUserPositions via toolSet: ${error.message}`);
+            throw error;
+          }
+        },
+      }),
+    };
+
+    // Initialize conversation history with a system prompt
+    this.conversationHistory = [
+      {
+        role: 'system',
+        content: `You are an AI agent providing access to blockchain lending functionalities via Ember AI Onchain Actions.
+
+Available actions: borrow, repay, supply, withdraw, getUserPositions.
+
+Only use tools if the user explicitly asks to perform an action and provides the necessary parameters.
+- borrow, repay, supply, withdraw require: tokenName, amount.
+- getUserPositions requires no parameters.
+
+If parameters are missing, ask the user to provide them. Do not assume parameters.
+
+<examples>
+<example1 - Borrow>
+<user>Borrow 100 USDC</user>
+<tool_call> {"toolName": "borrow", "args": { "tokenName": "USDC", "amount": "100" }} </tool_call>
+</example1>
+
+<example2 - Supply>
+<user>I want to supply 0.5 WETH</user>
+<tool_call> {"toolName": "supply", "args": { "tokenName": "WETH", "amount": "0.5" }} </tool_call>
+</example2>
+
+<example3 - Missing Amount>
+<user>Repay my WBTC loan</user>
+<response> How much WBTC would you like to repay? </response>
+</example3>
+
+<example4 - Get Positions>
+<user>What are my current positions?</user>
+<tool_call> {"toolName": "getUserPositions", "args": {}} </tool_call>
+</example4>
+
+<example5 - Clarification Needed (handled by tool)>
+<user>Withdraw 10 USDC</user>
+<tool_call> {"toolName": "withdraw", "args": { "tokenName": "USDC", "amount": "10" }} </tool_call>
+// Tool handler will respond asking for chain if needed.
+</example5>
+</examples>
+
+Always use plain text. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason. Present the user with a list of tokens/chains if clarification is needed (as handled by the tool).`,
+      },
     ];
-    console.error("Agent initialized with", Object.keys(this.tokenMap).length, "tokens");
-    console.error("Available tokens:", Object.keys(this.tokenMap).join(", "));
+    // Log statements updated to reflect dynamic loading
+    console.error('Agent initialized. Token map populated dynamically via MCP capabilities.');
+    console.error('Available tokens:', this.availableTokens.join(', ') || 'None loaded');
+    console.error('Tools initialized for Vercel AI SDK.');
+  }
+
+  // Add start() method for parity
+  async start() {
+    await this.init();
+    console.error('Agent started.'); // Add log for parity
   }
 
   /**
-   * Set up the token map with supported tokens
+   * Fetches capabilities from MCP server and caches the raw response.
+   */
+  private async fetchAndCacheCapabilities(): Promise<McpGetCapabilitiesResponse> {
+    if (!this.mcpClient) {
+      throw new Error('MCP Client not initialized. Cannot fetch capabilities.');
+    }
+
+    console.error('Fetching lending capabilities via MCP tool call...');
+    try {
+      // Read timeout from env var, default to 30 seconds
+      const mcpTimeoutMs = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '30000', 10);
+      console.error(`Using MCP tool timeout: ${mcpTimeoutMs}ms`);
+
+      // Use callTool to invoke the getCapabilities tool on the MCP server
+      const capabilitiesResult = await this.mcpClient.callTool(
+        {
+          name: 'getCapabilities',
+          // Provide the required 'type' argument
+          arguments: { type: 'LENDING' },
+        },
+        undefined, // Context ID, if needed
+        { timeout: mcpTimeoutMs } // Use configured timeout
+      );
+
+      console.error('Raw capabilitiesResult received from MCP tool call.');
+
+      // --- Response Parsing: Use Zod to validate wrapper and parse nested JSON ---
+      // 1. Validate the outer wrapper structure
+      const wrapperValidationResult = ZodMcpTextWrapperSchema.safeParse(capabilitiesResult);
+
+      if (!wrapperValidationResult.success) {
+        logError(
+          'MCP getCapabilities tool returned an unexpected structure. Zod Error:',
+          JSON.stringify(wrapperValidationResult.error.format(), null, 2)
+        );
+        logError('Data that failed wrapper validation:', capabilitiesResult);
+        throw new Error(
+          'MCP getCapabilities tool returned an unexpected structure. Expected { content: [{ type: "text", text: string }] }.'
+        );
+      }
+
+      // 2. Parse the nested JSON string
+      const jsonString = wrapperValidationResult.data.content[0].text;
+      let parsedData: any;
+      try {
+        console.error('Attempting to parse JSON string from content[0].text...');
+        parsedData = JSON.parse(jsonString);
+      } catch (parseError) {
+        logError('Failed to parse JSON string from content[0].text:', parseError);
+        logError('Original text content:', jsonString);
+        throw new Error(
+          `Failed to parse nested JSON response from getCapabilities: ${(parseError as Error).message}`
+        );
+      }
+      // --- End Response Parsing ---
+
+      // --- Add Head/Tail Logging (uses parsedData) ---
+      const dataString = JSON.stringify(parsedData, null, 2);
+      const previewLength = 500; // Log ~500 chars from head and tail
+      if (dataString.length < previewLength * 2) {
+        console.error('Parsed data structure before final validation:', dataString);
+      } else {
+        console.error(
+          'Parsed data structure before final validation (Head):\n',
+          dataString.substring(0, previewLength) + '\n...'
+        );
+        console.error(
+          'Parsed data structure before final validation (Tail):\n...',
+          dataString.substring(dataString.length - previewLength)
+        );
+      }
+      // --- End Head/Tail Logging ---
+
+      // 3. Validate the inner capabilities data structure
+      const capabilitiesValidationResult = ZodGetCapabilitiesResponseSchema.safeParse(parsedData);
+
+      if (!capabilitiesValidationResult.success) {
+        // Log the detailed Zod error
+        logError(
+          'Parsed MCP getCapabilities response validation failed. Zod Error:',
+          JSON.stringify(capabilitiesValidationResult.error.format(), null, 2)
+        );
+        // logError('Data that failed validation:', JSON.stringify(parsedData)); // Keep this commented unless needed
+        throw new Error('Failed to validate the parsed capabilities data from MCP server tool.');
+      }
+
+      const validatedData = capabilitiesValidationResult.data;
+      console.error(`Validated ${validatedData.capabilities.length} capabilities.`);
+
+      // Cache the validated raw response if caching is enabled
+      const useCache = process.env.AGENT_CACHE_TOKENS === 'true';
+      if (useCache) {
+        try {
+          await fs.mkdir(path.dirname(CACHE_FILE_PATH), { recursive: true });
+          // Cache the *validated* data structure
+          await fs.writeFile(CACHE_FILE_PATH, JSON.stringify(validatedData, null, 2));
+          console.error('Cached validated capabilities response to', CACHE_FILE_PATH);
+        } catch (err) {
+          console.error('Failed to cache capabilities response:', err);
+          // Continue without cache, but log the error
+        }
+      }
+
+      return validatedData;
+    } catch (error) {
+      logError('Error calling getCapabilities tool or processing response:', error);
+      throw new Error(
+        `Failed to fetch/validate capabilities via MCP tool: ${(error as Error).message}`
+      );
+    }
+  }
+
+  /**
+   * Set up the token map with supported tokens by fetching capabilities.
    */
   private async setupTokenMap(): Promise<void> {
-    // Try to load cached token data first
+    let capabilitiesResponse: McpGetCapabilitiesResponse | undefined;
     const useCache = process.env.AGENT_CACHE_TOKENS === 'true';
+
     if (useCache) {
       try {
-        const cachedData = await fs.readFile(CACHE_FILE_PATH, "utf-8");
-        const parsedTokens = JSON.parse(cachedData);
-        const validTokenMap: Record<string, TokenInfo> = {};
-        
-        // Validate each token
-        for (const [symbol, tokenData] of Object.entries(parsedTokens)) {
-          try {
-            const validToken = TokenInfoSchema.parse(tokenData);
-            validTokenMap[symbol] = validToken;
-          } catch (err) {
-            console.error(`Invalid token data for ${symbol}:`, err);
-          }
+        await fs.access(CACHE_FILE_PATH); // Check if cache file exists
+        console.error('Loading lending capabilities from cache...');
+        const cachedData = await fs.readFile(CACHE_FILE_PATH, 'utf-8');
+        const parsedJson = JSON.parse(cachedData);
+        // Validate cached data
+        const validationResult = ZodGetCapabilitiesResponseSchema.safeParse(parsedJson);
+        if (validationResult.success) {
+          capabilitiesResponse = validationResult.data;
+          console.error('Cached capabilities loaded and validated successfully.');
+        } else {
+          logError('Cached capabilities validation failed:', validationResult.error);
+          logError('Cached data that failed validation:', JSON.stringify(parsedJson));
+          console.error('Proceeding to fetch fresh capabilities...');
         }
-        
-        if (Object.keys(validTokenMap).length > 0) {
-          this.tokenMap = validTokenMap;
-          this.availableTokens = Object.keys(this.tokenMap);
-          console.error("Loaded tokens from cache:", this.availableTokens.length);
-          return;
+      } catch (error) {
+        // Handle file access error (ENOENT) or JSON parse error
+        if (
+          error instanceof Error &&
+          (error.message.includes('ENOENT') || error instanceof SyntaxError)
+        ) {
+          console.error('Cache not found or invalid, fetching fresh capabilities...');
+        } else {
+          logError('Error reading or parsing cache file:', error);
+          // Decide if we should proceed or throw? For now, proceed to fetch.
+          console.error('Proceeding to fetch fresh capabilities despite cache read error...');
         }
-      } catch (err) {
-        console.error("Failed to load tokens from cache, using default tokens:", err);
       }
     }
-    
-    // Fall back to default hard-coded token definitions
-    this.tokenMap = {
-      DAI: {
-        chainId: '42161', // Arbitrum
-        address: '0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1',
-        decimals: 18,
-      },
-      USDC: {
-        chainId: '42161', // Arbitrum
-        address: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8',
-        decimals: 6,
-      },
-      USDT: {
-        chainId: '42161', // Arbitrum
-        address: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
-        decimals: 6,
-      },
-      ETH: {
-        chainId: '42161', // Arbitrum
-        address: '0x0000000000000000000000000000000000000000',
-        decimals: 18,
-      },
-      WETH: {
-        chainId: '42161', // Arbitrum
-        address: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
-        decimals: 18,
-      },
-      WBTC: {
-        chainId: '42161', // Arbitrum
-        address: '0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f',
-        decimals: 8,
-      },
-    };
-    
-    this.availableTokens = Object.keys(this.tokenMap);
-    
-    // Cache token data for future use
-    if (useCache) {
+
+    // Fetch fresh capabilities if not loaded from cache
+    if (!capabilitiesResponse) {
       try {
-        await fs.mkdir(path.dirname(CACHE_FILE_PATH), { recursive: true });
-        await fs.writeFile(CACHE_FILE_PATH, JSON.stringify(this.tokenMap, null, 2));
-        console.error("Cached token map for future use");
-      } catch (err) {
-        console.error("Failed to cache token map:", err);
+        capabilitiesResponse = await this.fetchAndCacheCapabilities();
+      } catch (fetchError) {
+        logError('Failed to fetch capabilities, token map will be empty:', fetchError);
+        // Initialize empty maps/arrays to prevent errors later
+        this.tokenMap = {};
+        this.availableTokens = [];
+        return; // Exit setup if fetching failed critically
       }
+    }
+
+    // Process the capabilities to populate the token map
+    this.tokenMap = {}; // Reset map
+    this.availableTokens = []; // Reset available token symbols list
+    let loadedTokenCount = 0;
+    let processedCapabilityCount = 0;
+
+    if (capabilitiesResponse?.capabilities) {
+      console.error(
+        `Processing ${capabilitiesResponse.capabilities.length} capabilities entries...`
+      );
+      capabilitiesResponse.capabilities.forEach((capabilityEntry, index) => {
+        if (capabilityEntry.lendingCapability) {
+          processedCapabilityCount++;
+          const lendingCap = capabilityEntry.lendingCapability;
+          const token = lendingCap.underlyingToken;
+
+          // Check if the token details are sufficient
+          if (token && token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
+            const symbol = token.symbol;
+            const tokenInfo: TokenInfo = {
+              chainId: token.tokenUid.chainId,
+              address: token.tokenUid.address,
+              decimals: token.decimals ?? 18, // Default to 18 if missing
+            };
+
+            // Check if the symbol exists in the map
+            if (!this.tokenMap[symbol]) {
+              // If not, initialize the array and add the symbol to availableTokens
+              this.tokenMap[symbol] = [tokenInfo];
+              this.availableTokens.push(symbol);
+              loadedTokenCount++;
+              // console.error(`  - Added first entry for token: ${symbol} (Chain: ${tokenInfo.chainId}, Addr: ${tokenInfo.address})`);
+            } else {
+              // If symbol exists, push the new definition onto the array
+              // Avoid adding exact duplicates (same chain, same address)
+              const exists = this.tokenMap[symbol].some(
+                t =>
+                  t.chainId === tokenInfo.chainId &&
+                  t.address.toLowerCase() === tokenInfo.address.toLowerCase()
+              );
+              if (!exists) {
+                this.tokenMap[symbol].push(tokenInfo);
+                // console.error(`  - Appended entry for token: ${symbol} (Chain: ${tokenInfo.chainId}, Addr: ${tokenInfo.address})`);
+              } else {
+                // console.error(`  - Skipping duplicate entry for token: ${symbol} (Chain: ${tokenInfo.chainId}, Addr: ${tokenInfo.address})`);
+              }
+            }
+          } else {
+            // console.error(`  - Skipping capability index ${index}: Missing token details (symbol, chainId, address)`);
+          }
+        } else {
+          // console.error(`  - Skipping capability index ${index}: Not a lendingCapability`);
+        }
+      });
+      console.error(
+        `Finished processing capabilities. Processed ${processedCapabilityCount} lending capabilities. Found ${loadedTokenCount} unique token symbols.`
+      );
+    } else {
+      logError('No capabilities array found in the response, token map will be empty.');
+    }
+
+    // Final check
+    if (Object.keys(this.tokenMap).length === 0) {
+      console.warn('Warning: Token map is empty after processing capabilities.');
     }
   }
 
@@ -243,64 +564,123 @@ export class Agent {
    * Set up the MCP client
    */
   private setupMCPClient(): void {
-    this.mcpClient = new Client(
-      { name: 'LendingAgent', version: '1.0.0' },
-      { capabilities: { tools: {}, resources: {}, prompts: {} } }
-    );
+    if (!this.mcpClient) {
+      this.mcpClient = new Client({ name: 'LendingAgentNoWallet', version: '1.0.0' });
+      console.error('MCP Client initialized.');
+    }
   }
 
   /**
-   * Process a user input message
+   * Process a user input message using Vercel AI SDK
    */
-  async processUserInput(userMessage: string, userAddress: string): Promise<Task> {
-    if (!this.mcpClient) {
+  async processUserInput(userMessageText: string, userAddress: string): Promise<Task> {
+    if (!this.toolSet) {
       throw new Error('Agent not initialized. Call init() first.');
     }
+    this.userAddress = userAddress; // Store user address for context
 
-    // Add user message to conversation history
-    this.conversationHistory.push({ role: 'user', content: userMessage });
-
-    // Create a context object that will be passed to all handlers
-    const context: HandlerContext = {
-      mcpClient: this.mcpClient,
-      tokenMap: this.tokenMap,
-      userAddress,
-      log: console.error,
-      quicknodeSubdomain: this.quicknodeSubdomain,
-      quicknodeApiKey: this.quicknodeApiKey,
-      executeAction: this.executeAction.bind(this),
-      describeWalletPositionsResponse: this.describeWalletPositionsResponse.bind(this),
-    };
+    const userMessage: CoreUserMessage = { role: 'user', content: userMessageText };
+    this.conversationHistory.push(userMessage);
 
     try {
-      // Process message through our structured AI-like flow
-      const { finalAssistantMessage } = await this.callSimulatedLLMWithTools(context, userAddress);
-      
-      if (finalAssistantMessage && typeof finalAssistantMessage.content === 'string') {
-        // Add assistant's text response to history
-        return this.createTextResponse(userAddress, finalAssistantMessage.content);
-      } else if (finalAssistantMessage) {
-        // Look for a task in the response content
-        const task = this.extractTaskFromMessage(finalAssistantMessage);
-        if (task) {
-          return task;
+      console.error('Calling generateText with Vercel AI SDK...');
+      const { response, text, finishReason } = await generateText({
+        model: openrouter('google/gemini-2.5-flash-preview'), // Or your preferred model
+        messages: this.conversationHistory,
+        tools: this.toolSet,
+        maxSteps: 5, // Limit steps to prevent potential loops
+        onStepFinish: async (stepResult: StepResult<typeof this.toolSet>) => {
+          console.error(`Step finished. Reason: ${stepResult.finishReason}`);
+        },
+      });
+      console.error(`generateText finished. Reason: ${finishReason}`);
+
+      // Log message flow for debugging
+      response.messages.forEach((msg, index) => {
+        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+          msg.content.forEach(part => {
+            if (part.type === 'tool-call') {
+              console.error(
+                `[LLM Request ${index}]: Tool Call - ${part.toolName} with args ${JSON.stringify(part.args)}`
+              );
+            }
+          });
+        } else if (msg.role === 'tool') {
+          if (Array.isArray(msg.content)) {
+            msg.content.forEach((toolResult: ToolResultPart) => {
+              console.error(`[Tool Result ${index} for ${toolResult.toolName} received]`);
+            });
+          }
+        } else if (msg.role === 'assistant') {
+          console.error(`[LLM Response ${index}]: ${msg.content}`);
         }
+      });
+
+      this.conversationHistory.push(...response.messages);
+
+      // Find the Task result from the tool messages
+      let finalTask: Task | null = null;
+      for (const message of response.messages) {
+        if (message.role === 'tool' && Array.isArray(message.content)) {
+          for (const part of message.content) {
+            if (
+              part.type === 'tool-result' &&
+              part.result &&
+              typeof part.result === 'object' &&
+              'id' in part.result
+            ) {
+              console.error(`Processing tool result for ${part.toolName} from response.messages`);
+              finalTask = part.result as Task; // Assume the result IS the Task
+              console.error(`Task Result State: ${finalTask?.status?.state ?? 'N/A'}`);
+              const firstPart = finalTask?.status?.message?.parts[0];
+              const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';
+              console.error(`Task Result Message: ${messageText}`);
+              break; // Found the task from the most recent tool call
+            }
+          }
+        }
+        if (finalTask) break; // Stop searching once a task is found
       }
-      
-      // Fallback if we couldn't determine the intent or no response
-      return this.createHelpResponse(userAddress);
-    } catch (error) {
-      logError('Error processing request:', error);
+
+      if (finalTask) {
+        // If a task was completed, failed, or canceled, clear history for next interaction
+        if (['completed', 'failed', 'canceled'].includes(finalTask.status.state)) {
+          console.error(
+            `Task finished with state ${finalTask.status.state}. Clearing conversation history.`
+          );
+          this.conversationHistory = [];
+        }
+        return finalTask;
+      }
+
+      // If no tool was called and no task was returned, return the assistant's text response
+      console.error('No tool called or task found, returning text response.');
       return {
-        id: userAddress,
+        id: this.userAddress,
+        status: {
+          state: 'completed', // Or another appropriate state
+          message: {
+            role: 'agent',
+            parts: [{ type: 'text', text: text || "I'm sorry, I couldn't process that request." }],
+          },
+        },
+      };
+    } catch (error) {
+      const errorLog = `Error calling Vercel AI SDK generateText: ${error}`;
+      logError(errorLog);
+      const errorAssistantMessage: CoreAssistantMessage = {
+        role: 'assistant',
+        content: `An error occurred: ${String(error)}`,
+      };
+      this.conversationHistory.push(errorAssistantMessage);
+      // Return a Task indicating failure
+      return {
+        id: this.userAddress ?? 'unknown',
         status: {
           state: 'failed',
           message: {
             role: 'agent',
-            parts: [{ 
-              type: 'text', 
-              text: `Error: ${(error as Error).message}` 
-            }],
+            parts: [{ type: 'text', text: `An error occurred: ${String(error)}` }],
           },
         },
       };
@@ -308,497 +688,63 @@ export class Agent {
   }
 
   /**
-   * Create a simple text response Task
+   * Return the context required by handler functions
    */
-  private createTextResponse(userAddress: string, text: string, state: 'completed' | 'failed' | 'input-required' = 'completed'): Task {
+  private getHandlerContext(): HandlerContext {
     return {
-      id: userAddress,
-      status: {
-        state,
-        message: {
-          role: 'agent',
-          parts: [{ type: 'text', text }],
-        },
-      },
+      mcpClient: this.mcpClient!,
+      tokenMap: this.tokenMap,
+      userAddress: this.userAddress,
+      log: console.error,
+      quicknodeSubdomain: this.quicknodeSubdomain,
+      quicknodeApiKey: this.quicknodeApiKey,
+      executeAction: this.executeAction.bind(this),
     };
   }
 
   /**
-   * Extract task from a message if it contains one
-   */
-  private extractTaskFromMessage(message: CoreMessage): Task | null {
-    if (Array.isArray(message.content)) {
-      // Look for a task in the content array
-      for (const part of message.content) {
-        if (part.type === 'tool-result' && part.result && typeof part.result === 'object' && 'id' in part.result) {
-          return part.result as Task;
-        }
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Process the message through our tools in a way that mimics LLM tool calls
-   */
-  private async callSimulatedLLMWithTools(context: HandlerContext, userAddress: string, maxToolRoundtrips = 2): Promise<{ nextMessages: CoreMessage[], finalAssistantMessage: CoreMessage | null }> {
-    let currentMessages = [...this.conversationHistory];
-    let finalAssistantMessage: CoreMessage | null = null;
-
-    for (let i = 0; i < maxToolRoundtrips; i++) {
-      try {
-        // Simulate what an LLM would do by analyzing the last user message
-        const userMessage = this.getLastUserMessage(currentMessages);
-        
-        // First check for simple informational requests
-        const intent = this.detectSimpleIntents(userMessage);
-        
-        if (intent === 'tokens') {
-          // Create a direct text response for token listing
-          const assistantMessage: CoreMessage = { 
-            role: 'assistant', 
-            content: `Available tokens for lending/borrowing: ${this.availableTokens.join(', ')}` 
-          };
-          currentMessages.push(assistantMessage);
-          finalAssistantMessage = assistantMessage;
-          break;
-        }
-
-        // Try to extract a tool call from the message
-        const toolCall = await this.parseToolCall(userMessage);
-        
-        // If we found a potential tool call
-        if (toolCall) {
-          const { toolName, args } = toolCall;
-          
-          // Create a simulated assistant message with tool call
-          const toolCallId = `call-${Date.now()}`;
-          const assistantMessage: CoreMessage = { 
-            role: 'assistant', 
-            content: [
-              { type: 'text', text: '' }, // Empty text as we're doing a tool call
-              { 
-                type: 'tool-call', 
-                toolCallId, 
-                toolName, 
-                args 
-              } as ToolCallPart
-            ]
-          };
-          currentMessages.push(assistantMessage);
-
-          // Find the tool and execute it
-          if (this.tools[toolName]) {
-            const tool = this.tools[toolName];
-            
-            try {
-              // Validate args against the tool's schema
-              const validatedArgs = tool.schema.parse(args);
-              
-              // Execute the tool
-              const toolResult = await tool.handler(validatedArgs, context);
-              
-              // Create a tool response message
-              const toolResultMessage: CoreMessage = {
-                role: 'tool',
-                content: [
-                  { 
-                    type: 'tool-result', 
-                    toolCallId, 
-                    toolName, 
-                    result: toolResult,
-                    isError: false 
-                  } as ToolResultPart
-                ]
-              };
-              currentMessages.push(toolResultMessage);
-              
-              // Create a final assistant message with the result
-              let responseText = "Action completed successfully.";
-              
-              // Extract the text from Task's message parts if available
-              if (toolResult.status?.message?.parts && 
-                  Array.isArray(toolResult.status.message.parts) && 
-                  toolResult.status.message.parts.length > 0 &&
-                  toolResult.status.message.parts[0].type === 'text') {
-                responseText = toolResult.status.message.parts[0].text;
-              }
-              
-              const finalMessage: CoreMessage = { 
-                role: 'assistant', 
-                content: responseText 
-              };
-              currentMessages.push(finalMessage);
-              finalAssistantMessage = finalMessage;
-              
-              // Store the Task as a property on the final message for easy retrieval
-              (finalAssistantMessage as any).task = toolResult;
-              
-              break;
-            } catch (validationError) {
-              // Handle validation errors
-              logError('Tool argument validation error:', validationError);
-              
-              const errorMessage: CoreMessage = {
-                role: 'tool',
-                content: [
-                  { 
-                    type: 'tool-result', 
-                    toolCallId, 
-                    toolName, 
-                    result: `Error: ${(validationError as Error).message}`,
-                    isError: true 
-                  } as ToolResultPart
-                ]
-              };
-              currentMessages.push(errorMessage);
-              
-              // Create a final error response
-              const errorResponse: CoreMessage = { 
-                role: 'assistant', 
-                content: `I couldn't process your request because of an error: ${(validationError as Error).message}. Please check your input and try again.` 
-              };
-              currentMessages.push(errorResponse);
-              finalAssistantMessage = errorResponse;
-              break;
-            }
-          } else {
-            // Tool not found
-            const errorMessage: CoreMessage = {
-              role: 'tool',
-              content: [
-                { 
-                  type: 'tool-result', 
-                  toolCallId, 
-                  toolName: toolName || 'unknown', 
-                  result: `Error: Unknown tool "${toolName}"`,
-                  isError: true 
-                } as ToolResultPart
-              ]
-            };
-            currentMessages.push(errorMessage);
-            
-            const errorResponse: CoreMessage = { 
-              role: 'assistant', 
-              content: `I'm not sure what action you want to perform. Please try rephrasing your request.` 
-            };
-            currentMessages.push(errorResponse);
-            finalAssistantMessage = errorResponse;
-            break;
-          }
-        } else {
-          // No tool call detected, create a help message
-          const helpMessage: CoreMessage = { 
-            role: 'assistant', 
-            content: this.getHelpMessage() 
-          };
-          currentMessages.push(helpMessage);
-          finalAssistantMessage = helpMessage;
-          break;
-        }
-      } catch (error) {
-        logError("Error in tool processing flow:", error);
-        const errorMessage: CoreMessage = { 
-          role: "assistant", 
-          content: `Sorry, an error occurred while processing your request: ${(error as Error).message}` 
-        };
-        currentMessages.push(errorMessage);
-        finalAssistantMessage = errorMessage;
-        break;
-      }
-    }
-
-    return { nextMessages: currentMessages, finalAssistantMessage };
-  }
-
-  /**
-   * Helper to get the last user message from the conversation
-   */
-  private getLastUserMessage(messages: CoreMessage[]): string {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i];
-      if (message.role === 'user') {
-        if (typeof message.content === 'string') {
-          return message.content;
-        } else if (Array.isArray(message.content)) {
-          // Try to extract text from parts if content is an array
-          for (const part of message.content) {
-            if (part.type === 'text' && part.text) {
-              return part.text;
-            }
-          }
-        }
-      }
-    }
-    return '';
-  }
-
-  /**
-   * Detect simple informational intents without regex
-   */
-  private detectSimpleIntents(message: string): 'tokens' | 'positions' | null {
-    const lowercaseMsg = message.toLowerCase();
-    
-    // Check for token listing
-    const tokenKeywords = ['tokens', 'available', 'list', 'what tokens', 'supported'];
-    if (tokenKeywords.some(keyword => lowercaseMsg.includes(keyword))) {
-      return 'tokens';
-    }
-    
-    // Check for positions - handled as a tool call
-    const positionKeywords = ['position', 'balance', 'check', 'show me', 'what do i have'];
-    if (positionKeywords.some(keyword => lowercaseMsg.includes(keyword))) {
-      return 'positions';
-    }
-    
-    return null;
-  }
-
-  /**
-   * Parse the user message into a structured tool call
-   * This is a simpler version of what an LLM would do
-   */
-  private async parseToolCall(message: string): Promise<{ toolName: string; args: any } | null> {
-    const lowercaseMsg = message.toLowerCase();
-
-    // Check for borrow intent
-    if (lowercaseMsg.includes('borrow')) {
-      const args = this.extractTokenAndAmount(lowercaseMsg);
-      if (args) {
-        return { toolName: 'borrow', args };
-      }
-    }
-    
-    // Check for repay intent
-    if (lowercaseMsg.includes('repay')) {
-      const args = this.extractTokenAndAmount(lowercaseMsg);
-      if (args) {
-        return { toolName: 'repay', args };
-      }
-    }
-    
-    // Check for supply/deposit intent
-    if (lowercaseMsg.includes('supply') || lowercaseMsg.includes('deposit')) {
-      const args = this.extractTokenAndAmount(lowercaseMsg);
-      if (args) {
-        return { toolName: 'supply', args };
-      }
-    }
-    
-    // Check for withdraw intent
-    if (lowercaseMsg.includes('withdraw')) {
-      const args = this.extractTokenAndAmount(lowercaseMsg);
-      if (args) {
-        return { toolName: 'withdraw', args };
-      }
-    }
-    
-    // Check for positions intent
-    if (this.detectSimpleIntents(message) === 'positions') {
-      return { toolName: 'getUserPositions', args: {} };
-    }
-    
-    return null;
-  }
-
-  /**
-   * Extract token name and amount from a message using NLP-style parsing
-   * This avoids regex by using tokenization and entity extraction patterns
-   */
-  private extractTokenAndAmount(message: string): { tokenName: string; amount: string } | null {
-    // Tokenize the string by whitespace
-    const tokens = message.split(/\s+/);
-    
-    // Look for potential amounts (numbers) in the tokens
-    let amountIndex = -1;
-    let amount = '';
-    
-    for (let i = 0; i < tokens.length; i++) {
-      // Parse numbers like "100" or "0.5"
-      if (/^\d+(\.\d+)?$/.test(tokens[i])) {
-        amountIndex = i;
-        amount = tokens[i];
-        break;
-      }
-    }
-    
-    // If we found an amount, check the next token as a potential token name
-    if (amountIndex >= 0 && amountIndex + 1 < tokens.length) {
-      const potentialToken = tokens[amountIndex + 1].toUpperCase();
-      
-      // Verify it's a valid token by checking if it exists in availableTokens
-      if (this.availableTokens.includes(potentialToken)) {
-        return { 
-          tokenName: potentialToken, 
-          amount: amount 
-        };
-      }
-      
-      // If not found directly, check case-insensitive
-      const matchedToken = this.availableTokens.find(
-        token => token.toLowerCase() === potentialToken.toLowerCase()
-      );
-      
-      if (matchedToken) {
-        return { 
-          tokenName: matchedToken, 
-          amount: amount 
-        };
-      }
-    }
-    
-    return null;
-  }
-
-  /**
-   * Get standard help message text
-   */
-  private getHelpMessage(): string {
-    return `I'm not sure what you want to do. You can:
-1. Borrow tokens (e.g., "Borrow 100 USDC") 
-2. Repay borrowed tokens (e.g., "Repay 50 DAI")
-3. Supply tokens as collateral (e.g., "Supply 0.5 ETH")
-4. Withdraw supplied tokens (e.g., "Withdraw 1000 USDC")
-5. Check your positions (e.g., "Show my positions")
-6. List available tokens (e.g., "What tokens are available?")`;
-  }
-
-  /**
-   * Create a help response when intent is unclear
-   */
-  private createHelpResponse(userAddress: string): Task {
-    const message = this.getHelpMessage();
-    
-    // Add response to conversation history
-    this.conversationHistory.push({ role: 'assistant', content: message });
-    
-    return {
-      id: userAddress,
-      status: {
-        state: 'input-required',
-        message: {
-          role: 'agent',
-          parts: [
-            {
-              type: 'text',
-              text: message,
-            },
-          ],
-        },
-      },
-    };
-  }
-
-  /**
-   * No-wallet implementation: we prepare the transaction data but don't execute it
+   * Execute an action that involves sending transactions via MCP
+   * (Kept from original, may need adjustment based on how MCP tasks are handled)
    */
   async executeAction(
     actionName: string,
     transactions: TransactionRequest[]
   ): Promise<TransactionRequest[]> {
-    // Just return the transactions for frontend handling
-    return Promise.resolve(transactions);
+    // This method is called by the tool handlers.
+    // It needs to return the transactions for the MCP server to execute.
+    console.error(
+      `Agent preparing ${transactions.length} transaction(s) for action: ${actionName}`
+    );
+    // In this no-wallet agent, we don't sign/send. We just return the prepared transactions.
+    return transactions;
   }
 
   /**
-   * Format user position data into a readable string
+   * Format numeric values consistently
+   * (Kept from original as it's specific business logic)
    */
-  describeWalletPositionsResponse(response: any): string {
-    if (!response || !response.positions || response.positions.length === 0) {
-      return "You currently have no active lending or borrowing positions.";
-    }
-
-    let output = "Your current positions:\n";
-    
-    for (const position of response.positions) {
-      if (position.positionType === 'LENDING' && position.lendingPosition) {
-        output += "--------------------\n";
-        const format = (val: string | undefined) => this.formatNumeric(val ?? '0');
-        
-        if (position.lendingPosition.netWorthUsd) {
-          output += `Net Worth: $${format(position.lendingPosition.netWorthUsd)}\n`;
-        }
-        
-        if (position.lendingPosition.healthFactor) {
-          output += `Health Factor: ${this.formatNumeric(position.lendingPosition.healthFactor, 4)}\n`;
-        }
-        
-        if (position.lendingPosition.totalLiquidityUsd) {
-          output += `Total Supplied: $${format(position.lendingPosition.totalLiquidityUsd)}\n`;
-        }
-        
-        if (position.lendingPosition.totalCollateralUsd) {
-          output += `Total Collateral: $${format(position.lendingPosition.totalCollateralUsd)}\n`;
-        }
-        
-        if (position.lendingPosition.totalBorrowsUsd) {
-          output += `Total Borrows: $${format(position.lendingPosition.totalBorrowsUsd)}\n\n`;
-        }
-
-        // Handle supplied assets
-        const deposits = position.lendingPosition.userReserves?.filter(
-          (entry: any) => parseFloat(entry.underlyingBalance ?? '0') > 1e-6
-        ) || [];
-        
-        if (deposits.length > 0) {
-          output += "Supplied Assets:\n";
-          for (const entry of deposits) {
-            const underlyingUSD = entry.underlyingBalanceUsd 
-              ? `$${this.formatNumeric(entry.underlyingBalanceUsd)}` 
-              : "N/A";
-            output += `- ${entry.token?.symbol || 'Unknown'}: ${this.formatNumeric(entry.underlyingBalance)} (${underlyingUSD})${entry.isCollateral ? ' (Collateral)' : ''}\n`;
-          }
-        }
-
-        // Handle borrowed assets
-        const loans = position.lendingPosition.userReserves?.filter(
-          (entry: any) => parseFloat(entry.totalBorrows ?? "0") > 1e-6
-        ) || [];
-        
-        if (loans.length > 0) {
-          output += "\nBorrowed Assets:\n";
-          for (const entry of loans) {
-            const totalBorrowsUSD = entry.totalBorrowsUsd 
-              ? `$${this.formatNumeric(entry.totalBorrowsUsd)}` 
-              : "N/A";
-            const borrowRate = entry.variableBorrowRate 
-              ? `${this.formatNumeric(parseFloat(entry.variableBorrowRate) * 100)}% APR` 
-              : '';
-            output += `- ${entry.token?.symbol || 'Unknown'}: ${this.formatNumeric(entry.totalBorrows || "0")} (${totalBorrowsUSD}) ${borrowRate}\n`;
-          }
-        }
-      }
-    }
-    
-    return output.trim();
-  }
-
-  /**
-   * Format numeric values with appropriate precision
-   */
-  private formatNumeric(value: string | number | undefined, minDecimals = 2, maxDecimals = 2): string {
-    if (value === undefined || value === null) return "N/A";
-    
-    let num: number;
-    if (typeof value === 'string') {
-      try {
-        num = parseFloat(value);
-      } catch (e) {
-        return "N/A";
-      }
-    } else {
-      num = value;
-    }
-
-    if (isNaN(num)) return "N/A";
-
+  private formatNumeric(
+    value: string | number | undefined,
+    minDecimals = 2,
+    maxDecimals = 2
+  ): string {
+    if (value === undefined) return 'N/A';
     try {
+      const num = typeof value === 'string' ? parseFloat(value) : value;
+      if (isNaN(num)) return 'N/A';
+
+      // Handle very small numbers that might show in scientific notation
+      if (Math.abs(num) < 1e-6 && num !== 0) {
+        return num.toExponential(maxDecimals);
+      }
+
       return num.toLocaleString(undefined, {
         minimumFractionDigits: minDecimals,
         maximumFractionDigits: maxDecimals,
       });
     } catch (e) {
-      return num.toFixed(maxDecimals);
+      console.error(`Error formatting numeric value: ${value}`, e);
+      return 'N/A';
     }
   }
-} 
+}

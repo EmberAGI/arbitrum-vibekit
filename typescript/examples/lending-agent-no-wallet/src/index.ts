@@ -21,7 +21,7 @@ type LendingAgentArgs = z.infer<typeof LendingAgentSchema>;
 dotenv.config();
 
 const server = new McpServer({
-  name: 'lending-agent-no-wallet-server',
+  name: 'lending-agent-server',
   version: '1.0.0',
 });
 
@@ -138,7 +138,7 @@ const main = async () => {
   try {
     await initializeAgent();
     app.listen(PORT, () => {
-      console.error(`Lending Agent No Wallet Server running on port ${PORT}`);
+      console.error(`MCP SSE Agent Server running on port ${PORT}`);
     });
   } catch (error: unknown) {
     const err = error as Error;
@@ -147,4 +147,4 @@ const main = async () => {
   }
 };
 
-main(); 
+main();
