@@ -67,6 +67,10 @@ const DecreasePositionSchema = z.object({
   slippage: z.number().optional().describe('Allowed slippage in basis points (50 = 0.5%)'),
 });
 
+// Define types for the schemas
+export type CreatePositionParams = z.infer<typeof CreatePositionSchema>;
+export type DecreasePositionParams = z.infer<typeof DecreasePositionSchema>;
+
 // Define schemas for GMX agent handlers
 export const GmxQuerySchema = z.object({
   instruction: z.string(),
@@ -156,12 +160,21 @@ export async function handleMarketsQuery(context: HandlerContext): Promise<strin
 /**
  * Handle positions query
  */
-export async function handlePositionsQuery(instruction: string, context: HandlerContext): Promise<string> {
+export async function handlePositionsQuery(
+  args: { marketSymbol?: string, userAddress?: string } | string,
+  context: HandlerContext
+): Promise<string> {
   try {
+    // Process the input based on whether it's a string or an object
+    const instruction = typeof args === 'string' ? args : '';
+    
     // Use a demo account address if one is provided in .env, otherwise use a placeholder
     const demoAccount = process.env.DEMO_ACCOUNT || '0x0000000000000000000000000000000000000000';
     
-    const positionInfo = await getPositionInfo(context.gmxClient, demoAccount);
+    // If userAddress is provided in args (as an object), use that instead
+    const userAddress = typeof args === 'object' && args.userAddress ? args.userAddress : demoAccount;
+    
+    const positionInfo = await getPositionInfo(context.gmxClient, userAddress);
     
     if (!positionInfo.success) {
       return `Failed to fetch position information: ${positionInfo.message}`;
@@ -285,74 +298,96 @@ function calculatePnlPercentage(pnl: string | number | bigint, collateral: strin
 /**
  * Handle create position request
  */
-export async function handleCreatePositionRequest(instruction: string, context: HandlerContext): Promise<string> {
+export async function handleCreatePositionRequest(
+  args: CreatePositionParams | string,
+  context: HandlerContext
+): Promise<string> {
   try {
-    // Extract position details from the message
-    // In a real implementation, you would use a more sophisticated approach to extract parameters
-    
-    // Detect if it's a long or short
-    const isLong = instruction.toLowerCase().includes('long') || !instruction.toLowerCase().includes('short');
-    const side = isLong ? 'LONG' : 'SHORT';
-    
-    // Try to extract market (e.g., ETH, BTC)
-    const marketMatches = instruction.match(/\b(ETH|BTC|LINK|UNI|ARB|SOL|AVAX)\b/i);
-    const market = marketMatches ? marketMatches[0].toUpperCase() : 'ETH';
-    
-    // Try to extract collateral amount
-    const amountMatches = instruction.match(/\b([\d.]+)\s*(ETH|BTC|LINK|UNI|ARB|SOL|AVAX|USD|USDC|USDT)\b/i);
-    const amount = amountMatches ? amountMatches[1] : '0.1';
-    const collateralType = (amountMatches && amountMatches[2]) ? amountMatches[2].toUpperCase() : market;
-    
-    // Try to extract leverage
-    const leverageMatches = instruction.match(/\b(\d+)x\b/i);
-    const leverage = leverageMatches && leverageMatches[1] ? parseInt(leverageMatches[1]) : 2;
-    
-    // Get market information to find the market address
-    const marketInfo = await getMarketInfo(context.gmxClient);
-    if (!marketInfo.success) {
-      return `Failed to fetch market information: ${marketInfo.message}`;
-    }
-    
-    if (!marketInfo.markets || marketInfo.markets.length === 0) {
-      return `No markets available.`;
-    }
-    
-    // Find the requested market
-    const marketObj = marketInfo.markets.find((m) => 
-      m.indexToken?.toUpperCase() === market);
-    
-    if (!marketObj) {
-      return `Market not found for ${market}. Please specify a valid market (e.g., ETH, BTC).`;
-    }
-    
-    // Determine collateral token address based on long/short
-    let collateralTokenSymbol = isLong ? marketObj.longToken : marketObj.shortToken;
-    let collateralTokenAddress = '';
-    
-    // Find the token in the tokens array
-    if (marketInfo.tokens && marketInfo.tokens.length > 0) {
-      const collateralToken = marketInfo.tokens.find(t => 
-        t.symbol.toUpperCase() === collateralTokenSymbol.toUpperCase());
+    // Check if args is an object (for structured API calls) or a string (for natural language processing)
+    if (typeof args === 'object') {
+      // Extract data from the args object
+      const side = args.side;
+      const isLong = side === 'LONG';
+      const marketAddress = args.marketAddress;
+      const amount = args.collateralAmount;
+      const leverage = args.leverage;
       
-      if (collateralToken) {
-        collateralTokenAddress = collateralToken.address;
+      // Return simulated response
+      return `Position Creation Request (Simulated):\n\n` +
+             `Market Address: ${marketAddress}\n` +
+             `Side: ${side}\n` +
+             `Collateral: ${amount}\n` +
+             `Leverage: ${leverage}x\n\n` +
+             `This is a simulated response. In a wallet-connected implementation, ` +
+             `this would create an actual position on GMX.`;
+    } else {
+      // Handle the string-based instruction
+      const instruction = args;
+      
+      // Detect if it's a long or short
+      const isLong = instruction.toLowerCase().includes('long') || !instruction.toLowerCase().includes('short');
+      const side = isLong ? 'LONG' : 'SHORT';
+      
+      // Try to extract market (e.g., ETH, BTC)
+      const marketMatches = instruction.match(/\b(ETH|BTC|LINK|UNI|ARB|SOL|AVAX)\b/i);
+      const market = marketMatches ? marketMatches[0].toUpperCase() : 'ETH';
+      
+      // Try to extract collateral amount
+      const amountMatches = instruction.match(/\b([\d.]+)\s*(ETH|BTC|LINK|UNI|ARB|SOL|AVAX|USD|USDC|USDT)\b/i);
+      const amount = amountMatches ? amountMatches[1] : '0.1';
+      const collateralType = (amountMatches && amountMatches[2]) ? amountMatches[2].toUpperCase() : market;
+      
+      // Try to extract leverage
+      const leverageMatches = instruction.match(/\b(\d+)x\b/i);
+      const leverage = leverageMatches && leverageMatches[1] ? parseInt(leverageMatches[1]) : 2;
+      
+      // Get market information to find the market address
+      const marketInfo = await getMarketInfo(context.gmxClient);
+      if (!marketInfo.success) {
+        return `Failed to fetch market information: ${marketInfo.message}`;
       }
+      
+      if (!marketInfo.markets || marketInfo.markets.length === 0) {
+        return `No markets available.`;
+      }
+      
+      // Find the requested market
+      const marketObj = marketInfo.markets.find((m) => 
+        m.indexToken?.toUpperCase() === market);
+      
+      if (!marketObj) {
+        return `Market not found for ${market}. Please specify a valid market (e.g., ETH, BTC).`;
+      }
+      
+      // Determine collateral token address based on long/short
+      const collateralTokenSymbol = isLong ? marketObj.longToken : marketObj.shortToken;
+      let collateralTokenAddress = '';
+      
+      // Find the token in the tokens array
+      if (marketInfo.tokens && marketInfo.tokens.length > 0) {
+        const collateralToken = marketInfo.tokens.find(t => 
+          t.symbol.toUpperCase() === collateralTokenSymbol.toUpperCase());
+        
+        if (collateralToken) {
+          collateralTokenAddress = collateralToken.address;
+        }
+      }
+      
+      if (!collateralTokenAddress) {
+        return `Failed to determine collateral token for ${market}.`;
+      }
+      
+      // In a real wallet-connected implementation, this would create an actual position
+      // For this example, we'll simulate the response
+      
+      return `Position Creation Request (Simulated):\n\n` +
+             `Market: ${market}/USD\n` +
+             `Side: ${side}\n` +
+             `Collateral: ${amount} ${collateralType}\n` +
+             `Leverage: ${leverage}x\n\n` +
+             `This is a simulated response. In a wallet-connected implementation, ` +
+             `this would create an actual position on GMX.`;
     }
-    
-    if (!collateralTokenAddress) {
-      return `Failed to determine collateral token for ${market}.`;
-    }
-    
-    // In a real wallet-connected implementation, this would create an actual position
-    // For this example, we'll simulate the response
-    
-    return `Position Creation Request (Simulated):\n\n` +
-           `Market: ${market}/USD\n` +
-           `Side: ${side}\n` +
-           `Collateral: ${amount} ${collateralType}\n` +
-           `Leverage: ${leverage}x\n\n` +
-           `This is a simulated response. In a wallet-connected implementation, ` +
-           `this would create an actual position on GMX.`;
   } catch (error) {
     context.log('Error handling create position request:', error);
     return 'Error processing create position request. Please try a simpler format or check your input.';
@@ -362,8 +397,28 @@ export async function handleCreatePositionRequest(instruction: string, context: 
 /**
  * Handle close position request
  */
-export async function handleClosePositionRequest(instruction: string, context: HandlerContext): Promise<string> {
-  try {    
+export async function handleClosePositionRequest(
+  args: DecreasePositionParams | string,
+  context: HandlerContext
+): Promise<string> {
+  try {
+    // Handle object-based input
+    if (typeof args === 'object') {
+      const marketAddress = args.marketAddress;
+      const isClosePosition = args.isClosePosition;
+      const collateralAmount = args.collateralAmount;
+      
+      // Return simulated response for the object-based input
+      return `Position ${isClosePosition ? 'Close' : 'Decrease'} Request (Simulated):\n\n` +
+             `Market Address: ${marketAddress}\n` +
+             `${isClosePosition ? 'Close Position: Yes' : 'Decrease Amount: ' + collateralAmount}\n\n` +
+             `This is a simulated response. In a wallet-connected implementation, ` +
+             `this would ${isClosePosition ? 'close' : 'decrease'} the actual position on GMX.`;
+    }
+    
+    // Handle string-based instruction
+    const instruction = args;
+    
     // Try to extract market (e.g., ETH, BTC)
     const marketMatches = instruction.match(/\b(ETH|BTC|LINK|UNI|ARB|SOL|AVAX)\b/i);
     const market = marketMatches ? marketMatches[0].toUpperCase() : 'ETH';
