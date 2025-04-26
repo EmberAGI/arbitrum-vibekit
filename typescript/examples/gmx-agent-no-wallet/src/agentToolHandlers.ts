@@ -124,7 +124,7 @@ export function parseMcpToolResponse(
 /**
  * Handle markets query
  */
-export async function handleMarketsQuery(context: HandlerContext): Promise<any> {
+export async function handleMarketsQuery(context: HandlerContext): Promise<Task> {
   try {
     console.log("Debug: getting market info");
     const marketInfo = await getMarketInfo(context.gmxClient);
@@ -134,19 +134,65 @@ export async function handleMarketsQuery(context: HandlerContext): Promise<any> 
 
     console.log("Debug: successfully got market info");
     
-    return {
+    const marketData = {
       success: marketInfo.success,
       marketInfoCount: marketInfo.marketInfoCount,
       tokenDataCount: marketInfo.tokenDataCount,
-      // returning modified data to avoid BigInt issues
       marketsInfoData: marketInfo.modifiedMarketsInfoData,
       tokensData: marketInfo.modifiedTokensData,
       errors: marketInfo.errors,
       message: `Found ${marketInfo.marketInfoCount} markets and ${marketInfo.tokenDataCount} tokens.`
     };
+
+    return {
+      id: 'markets-query',
+      status: {
+        state: marketInfo.success ? 'completed' : 'failed',
+        message: {
+          role: 'agent',
+          parts: [{ 
+            type: 'text', 
+            text: marketInfo.success 
+              ? `Found ${marketInfo.marketInfoCount} markets and ${marketInfo.tokenDataCount} tokens.` 
+              : 'Failed to fetch market information.'
+          }],
+        },
+      },
+      artifacts: [
+        {
+          name: 'markets-info',
+          parts: [
+            {
+              type: 'data',
+              data: marketData,
+            },
+          ],
+        },
+      ],
+    };
   } catch (error) {
     context.log('Error handling markets query:', error);
-    return 'Error fetching market information. Please try again later.';
+    return {
+      id: 'markets-query',
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: 'Error fetching market information. Please try again later.' }],
+        },
+      },
+      artifacts: [
+        {
+          name: 'error',
+          parts: [
+            {
+              type: 'data',
+              data: { error: error instanceof Error ? error.message : String(error) },
+            },
+          ],
+        },
+      ],
+    };
   }
 }
 
@@ -156,36 +202,94 @@ export async function handleMarketsQuery(context: HandlerContext): Promise<any> 
 export async function handlePositionsQuery(
   args: { marketSymbol?: string, userAddress: string },
   context: HandlerContext
-): Promise<any> {
+): Promise<Task> {
   try {
-   if(!args.userAddress) {
-    return { success: false, message: 'No user address provided' };
-   }
+    if(!args.userAddress) {
+      return {
+        id: 'positions-query',
+        status: {
+          state: 'failed',
+          message: {
+            role: 'agent',
+            parts: [{ type: 'text', text: 'No user address provided' }],
+          },
+        },
+        artifacts: [],
+      };
+    }
+    
     console.log("Debug: getting position info");
     const positionInfo = await getPositionInfo(context.gmxClient, args.userAddress);
     
     if (!positionInfo.success) {
-      return { success: false, message: `Failed to fetch position information: ${positionInfo.message}` };
+      return {
+        id: 'positions-query',
+        status: {
+          state: 'failed',
+          message: {
+            role: 'agent',
+            parts: [{ type: 'text', text: `Failed to fetch position information: ${positionInfo.message}` }],
+          },
+        },
+        artifacts: [],
+      };
     }
     
     console.log("Debug: successfully got position info");
 
-    // Return a structured object instead of a string
-    let output = {
+    const positionData = {
       success: true,
       positionCount: positionInfo.positionCount,
-      // returning modified data to avoid BigInt issues
       positions: positionInfo.modifiedPositions,
       message: `Found ${positionInfo.positionCount} active positions.`
     };
 
-    return output;
+    return {
+      id: 'positions-query',
+      status: {
+        state: 'completed',
+        message: {
+          role: 'agent',
+          parts: [{ 
+            type: 'text', 
+            text: `Found ${positionInfo.positionCount} active positions.` 
+          }],
+        },
+      },
+      artifacts: [
+        {
+          name: 'positions-info',
+          parts: [
+            {
+              type: 'data',
+              data: positionData,
+            },
+          ],
+        },
+      ],
+    };
   } catch (error) {
     context.log('Error handling positions query:', error);
-    return { 
-      success: false, 
-      message: 'Error fetching position information. Please try again later.',
-      error: error instanceof Error ? error.message : String(error)
+    return {
+      id: 'positions-query',
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: 'Error fetching position information. Please try again later.' }],
+        },
+      },
+      artifacts: [
+        {
+          name: 'error',
+          parts: [
+            {
+              type: 'data',
+              data: { error: error instanceof Error ? error.message : String(error) },
+            },
+          ],
+        },
+      ],
     };
   }
 }
@@ -244,8 +348,11 @@ function calculatePnlPercentage(pnl: string | number | bigint, collateral: strin
 export async function handleCreatePositionRequest(
   args: CreatePositionParams | string,
   context: HandlerContext
-): Promise<string> {
+): Promise<Task> {
   try {
+    let responseText = '';
+    let positionData: any = {};
+    
     // Check if args is an object (for structured API calls) or a string (for natural language processing)
     if (typeof args === 'object') {
       // Extract data from the args object
@@ -255,14 +362,14 @@ export async function handleCreatePositionRequest(
       const amount = args.collateralAmount;
       const leverage = args.leverage;
       
-      // Return simulated response
-      return `Position Creation Request (Simulated):\n\n` +
-             `Market Address: ${marketAddress}\n` +
-             `Side: ${side}\n` +
-             `Collateral: ${amount}\n` +
-             `Leverage: ${leverage}x\n\n` +
-             `This is a simulated response. In a wallet-connected implementation, ` +
-             `this would create an actual position on GMX.`;
+      responseText = `Position creation request prepared for ${side} position with ${amount} collateral at ${leverage}x leverage`;
+      positionData = {
+        marketAddress,
+        side,
+        collateralAmount: amount,
+        leverage,
+        action: 'create_position'
+      };
     } else {
       // Handle the string-based instruction
       const instruction = args;
@@ -287,11 +394,31 @@ export async function handleCreatePositionRequest(
       // Get market information to find the market address
       const marketInfo = await getMarketInfo(context.gmxClient);
       if (!marketInfo.success) {
-        return `Failed to fetch market information: ${marketInfo.message}`;
+        return {
+          id: 'create-position',
+          status: {
+            state: 'failed',
+            message: {
+              role: 'agent',
+              parts: [{ type: 'text', text: `Failed to fetch market information: ${marketInfo.message}` }],
+            },
+          },
+          artifacts: [],
+        };
       }
       
       if (!marketInfo.markets || marketInfo.markets.length === 0) {
-        return `No markets available.`;
+        return {
+          id: 'create-position',
+          status: {
+            state: 'failed',
+            message: {
+              role: 'agent',
+              parts: [{ type: 'text', text: 'No markets available.' }],
+            },
+          },
+          artifacts: [],
+        };
       }
       
       // Find the requested market
@@ -299,7 +426,17 @@ export async function handleCreatePositionRequest(
         m.indexToken?.toUpperCase() === market);
       
       if (!marketObj) {
-        return `Market not found for ${market}. Please specify a valid market (e.g., ETH, BTC).`;
+        return {
+          id: 'create-position',
+          status: {
+            state: 'failed',
+            message: {
+              role: 'agent',
+              parts: [{ type: 'text', text: `Market not found for ${market}. Please specify a valid market (e.g., ETH, BTC).` }],
+            },
+          },
+          artifacts: [],
+        };
       }
       
       // Determine collateral token address based on long/short
@@ -317,23 +454,76 @@ export async function handleCreatePositionRequest(
       }
       
       if (!collateralTokenAddress) {
-        return `Failed to determine collateral token for ${market}.`;
+        return {
+          id: 'create-position',
+          status: {
+            state: 'failed',
+            message: {
+              role: 'agent',
+              parts: [{ type: 'text', text: `Failed to determine collateral token for ${market}.` }],
+            },
+          },
+          artifacts: [],
+        };
       }
       
-      // In a real wallet-connected implementation, this would create an actual position
-      // For this example, we'll simulate the response
-      
-      return `Position Creation Request (Simulated):\n\n` +
-             `Market: ${market}/USD\n` +
-             `Side: ${side}\n` +
-             `Collateral: ${amount} ${collateralType}\n` +
-             `Leverage: ${leverage}x\n\n` +
-             `This is a simulated response. In a wallet-connected implementation, ` +
-             `this would create an actual position on GMX.`;
+      responseText = `Position creation request prepared for ${market}/USD ${side} position with ${amount} ${collateralType} collateral at ${leverage}x leverage`;
+      positionData = {
+        market: `${market}/USD`,
+        marketAddress: marketObj.address,
+        side,
+        collateralToken: collateralType,
+        collateralTokenAddress,
+        collateralAmount: amount,
+        leverage,
+        action: 'create_position'
+      };
     }
+    
+    return {
+      id: 'create-position',
+      status: {
+        state: 'completed',
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: responseText }],
+        },
+      },
+      artifacts: [
+        {
+          name: 'position-plan',
+          parts: [
+            {
+              type: 'data',
+              data: positionData,
+            },
+          ],
+        },
+      ],
+    };
   } catch (error) {
     context.log('Error handling create position request:', error);
-    return 'Error processing create position request. Please try a simpler format or check your input.';
+    return {
+      id: 'create-position',
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: 'Error processing create position request. Please try a simpler format or check your input.' }],
+        },
+      },
+      artifacts: [
+        {
+          name: 'error',
+          parts: [
+            {
+              type: 'data',
+              data: { error: error instanceof Error ? error.message : String(error) },
+            },
+          ],
+        },
+      ],
+    };
   }
 }
 
@@ -343,90 +533,145 @@ export async function handleCreatePositionRequest(
 export async function handleClosePositionRequest(
   args: DecreasePositionParams | string,
   context: HandlerContext
-): Promise<string> {
+): Promise<Task> {
   try {
+    let responseText = '';
+    let positionData: any = {};
+    
     // Handle object-based input
     if (typeof args === 'object') {
       const marketAddress = args.marketAddress;
       const isClosePosition = args.isClosePosition;
       const collateralAmount = args.collateralAmount;
       
-      // Return simulated response for the object-based input
-      return `Position ${isClosePosition ? 'Close' : 'Decrease'} Request (Simulated):\n\n` +
-             `Market Address: ${marketAddress}\n` +
-             `${isClosePosition ? 'Close Position: Yes' : 'Decrease Amount: ' + collateralAmount}\n\n` +
-             `This is a simulated response. In a wallet-connected implementation, ` +
-             `this would ${isClosePosition ? 'close' : 'decrease'} the actual position on GMX.`;
-    }
-    
-    // Handle string-based instruction
-    const instruction = args;
-    
-    // Try to extract market (e.g., ETH, BTC)
-    const marketMatches = instruction.match(/\b(ETH|BTC|LINK|UNI|ARB|SOL|AVAX)\b/i);
-    const market = marketMatches ? marketMatches[0].toUpperCase() : 'ETH';
-    
-    // Use a demo account address if one is provided in .env, otherwise use a placeholder
-    const demoAccount = process.env.DEMO_ACCOUNT || '0x0000000000000000000000000000000000000000';
-    
-    // Get position information to check if the position exists
-    const positionInfo = await getPositionInfo(context.gmxClient, demoAccount);
-    
-    if (!positionInfo.success) {
-      return `Failed to fetch position information: ${positionInfo.message}`;
-    }
-    
-    // Process position data for display
-    let processedPositions: any[] = [];
-    const positions = positionInfo.positions;
-    
-    // If positions is a PositionsData object, convert to array for display
-    if (typeof positions === 'object' && !Array.isArray(positions)) {
-      const positionEntries = Object.entries(positions);
+      responseText = `Position ${isClosePosition ? 'close' : 'decrease'} request prepared for market ${marketAddress}`;
+      positionData = {
+        marketAddress,
+        isClosePosition,
+        collateralAmount,
+        collateralTokenAddress: args.collateralTokenAddress,
+        action: isClosePosition ? 'close_position' : 'decrease_position'
+      };
+    } else {
+      // Handle string-based instruction
+      const instruction = args;
       
-      if (positionEntries.length === 0) {
-        return `No active positions found to close.`;
+      // Try to extract market (e.g., ETH, BTC)
+      const marketMatches = instruction.match(/\b(ETH|BTC|LINK|UNI|ARB|SOL|AVAX)\b/i);
+      const market = marketMatches ? marketMatches[0].toUpperCase() : 'ETH';
+      
+      // Use a demo account address if one is provided in .env, otherwise use a placeholder
+      const demoAccount = process.env.DEMO_ACCOUNT || '0x0000000000000000000000000000000000000000';
+      
+      // Get position information to check if the position exists
+      const positionInfo = await getPositionInfo(context.gmxClient, demoAccount);
+      
+      if (!positionInfo.success) {
+        return {
+          id: 'close-position',
+          status: {
+            state: 'failed',
+            message: {
+              role: 'agent',
+              parts: [{ type: 'text', text: `Failed to fetch position information: ${positionInfo.message}` }],
+            },
+          },
+          artifacts: [],
+        };
       }
       
-      // Format the positions in a readable way
-      processedPositions = positionEntries.map(([key, position]: [string, any]) => {
-        const marketSymbol = position.marketInfo?.indexToken?.symbol || 'Unknown';
+      // Check if there are any positions
+      if (!positionInfo.positions || positionInfo.positionCount === 0) {
         return {
-          key,
-          market: `${marketSymbol}/USD`,
-          side: position.isLong ? 'LONG' : 'SHORT',
-          size: formatAmount(position.sizeInUsd, 30),
-          pnl: formatAmount(position.pnl, 30),
-          pnlPercentage: calculatePnlPercentage(position.pnl, position.collateralUsd),
+          id: 'close-position',
+          status: {
+            state: 'failed',
+            message: {
+              role: 'agent',
+              parts: [{ type: 'text', text: 'No active positions found to close.' }],
+            },
+          },
+          artifacts: [],
         };
-      });
-    } else if (Array.isArray(positions) && positions.length > 0) {
-      processedPositions = positions;
-    } else {
-      return `No active positions found to close.`;
+      }
+      
+      // Find the position for the requested market
+      const position = positionInfo.modifiedPositions.find((p: any) => 
+        p.market && p.market.toUpperCase().includes(market));
+      
+      if (!position) {
+        const availablePositions = positionInfo.modifiedPositions.map((p: any, i: number) => 
+          `${i+1}. ${p.market || 'Unknown'} (${p.side || 'Unknown'})`).join('\n');
+          
+        return {
+          id: 'close-position',
+          status: {
+            state: 'failed',
+            message: {
+              role: 'agent',
+              parts: [{ type: 'text', text: `No active position found for ${market}. Available positions:\n${availablePositions}` }],
+            },
+          },
+          artifacts: [],
+        };
+      }
+      
+      responseText = `Position close request prepared for ${position.market} ${position.side} position`;
+      positionData = {
+        market: position.market,
+        marketAddress: position.marketAddress,
+        side: position.side,
+        size: position.size,
+        pnl: position.pnl,
+        pnlPercentage: position.pnlPercentage,
+        isClosePosition: true,
+        action: 'close_position'
+      };
     }
     
-    // Look for a position in the specified market
-    const position = processedPositions.find(p => 
-      p.market.toUpperCase().includes(market));
-    
-    if (!position) {
-      return `No active position found for ${market}. Available positions:\n` +
-             processedPositions.map((p, i) => `${i+1}. ${p.market} (${p.side})`).join('\n');
-    }
-    
-    // In a real wallet-connected implementation, this would close the actual position
-    // For this example, we'll simulate the response
-    
-    return `Position Close Request (Simulated):\n\n` +
-           `Market: ${position.market}\n` +
-           `Side: ${position.side}\n` +
-           `Size: ${position.size} USD\n` +
-           `Current PnL: ${position.pnl} (${position.pnlPercentage})\n\n` +
-           `This is a simulated response. In a wallet-connected implementation, ` +
-           `this would close the actual position on GMX.`;
+    return {
+      id: 'close-position',
+      status: {
+        state: 'completed',
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: responseText }],
+        },
+      },
+      artifacts: [
+        {
+          name: 'position-plan',
+          parts: [
+            {
+              type: 'data',
+              data: positionData,
+            },
+          ],
+        },
+      ],
+    };
   } catch (error) {
     context.log('Error handling close position request:', error);
-    return 'Error processing close position request. Please try a simpler format or check your input.';
+    return {
+      id: 'close-position',
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: 'Error processing close position request. Please try a simpler format or check your input.' }],
+        },
+      },
+      artifacts: [
+        {
+          name: 'error',
+          parts: [
+            {
+              type: 'data',
+              data: { error: error instanceof Error ? error.message : String(error) },
+            },
+          ],
+        },
+      ],
+    };
   }
 }
