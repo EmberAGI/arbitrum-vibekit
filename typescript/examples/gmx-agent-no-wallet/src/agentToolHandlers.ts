@@ -120,7 +120,7 @@ export function parseMcpToolResponse(
 /**
  * Handle markets query
  */
-export async function handleMarketsQuery(context: HandlerContext): Promise<Task> {
+export async function handleMarketsQuery(args: {marketSymbol?: string},context: HandlerContext): Promise<Task> {
   try {
     console.log("Debug: getting market info");
     const marketInfo = await getMarketInfo(context.gmxClient);
@@ -130,14 +130,49 @@ export async function handleMarketsQuery(context: HandlerContext): Promise<Task>
 
     console.log("Debug: successfully got market info");
     
+    // Filter token data if a symbol is provided
+    let filteredTokensData = marketInfo.modifiedTokensData;
+    let filteredMarketsInfoData = marketInfo.modifiedMarketsInfoData;
+    let message = `Found ${marketInfo.marketInfoCount} markets and ${marketInfo.tokenDataCount} tokens.`;
+    
+    if (args.marketSymbol) {
+      const symbol = args.marketSymbol.toUpperCase();
+      console.log("Debug: get market info for symbol: ", symbol);
+      // Filter tokens by symbol
+      filteredTokensData = Object.fromEntries(
+        Object.entries(marketInfo.modifiedTokensData)
+          .filter(([_, tokenData]) => (tokenData as any).symbol?.toUpperCase() === symbol)
+      );
+      
+      // Filter markets containing the token
+      filteredMarketsInfoData = Object.fromEntries(
+        Object.entries(marketInfo.modifiedMarketsInfoData)
+          .filter(([_, marketData]) => 
+            (marketData as any).indexToken?.symbol?.toUpperCase() === symbol ||
+            (marketData as any).longToken?.symbol?.toUpperCase() === symbol ||
+            (marketData as any).shortToken?.symbol?.toUpperCase() === symbol
+          )
+      );
+      
+      const tokenCount = Object.keys(filteredTokensData).length;
+      const marketCount = Object.keys(filteredMarketsInfoData).length;
+      
+      message = tokenCount > 0 
+        ? `Found ${marketCount} markets and ${tokenCount} tokens for symbol ${symbol}.`
+        : `No tokens found with symbol ${symbol}.`;
+
+      }
+
+    console.log("Debug: get market info message: ", message);
+    
     const marketData = {
       success: marketInfo.success,
-      marketInfoCount: marketInfo.marketInfoCount,
-      tokenDataCount: marketInfo.tokenDataCount,
-      marketsInfoData: marketInfo.modifiedMarketsInfoData,
-      tokensData: marketInfo.modifiedTokensData,
+      totalMarketInfoCount: marketInfo.totalMarketInfoCount,
+      totalTokenDataCount: marketInfo.totalTokenDataCount,
+      marketsInfoData: filteredMarketsInfoData,
+      tokensData: filteredTokensData,
       errors: marketInfo.errors,
-      message: `Found ${marketInfo.marketInfoCount} markets and ${marketInfo.tokenDataCount} tokens.`
+      message: message
     };
 
     return {
@@ -148,9 +183,7 @@ export async function handleMarketsQuery(context: HandlerContext): Promise<Task>
           role: 'agent',
           parts: [{ 
             type: 'text', 
-            text: marketInfo.success 
-              ? `Found ${marketInfo.marketInfoCount} markets and ${marketInfo.tokenDataCount} tokens.` 
-              : 'Failed to fetch market information.'
+            text: marketInfo.success ? message : 'Failed to fetch market information.'
           }],
         },
       },

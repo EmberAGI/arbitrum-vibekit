@@ -72,8 +72,8 @@ export async function getMarketInfo(gmxClient: GmxSdk): Promise<any> {
   // Return processed data along with any errors
   const output =  {
     success: marketInfoCount > 0 || tokenDataCount > 0,
-    marketInfoCount,
-    tokenDataCount,
+    totalMarketInfoCount: marketInfoCount,
+    totalTokenDataCount: tokenDataCount,
     // Convert BigInt values to strings before serialization
     marketsInfoData,
     tokensData,

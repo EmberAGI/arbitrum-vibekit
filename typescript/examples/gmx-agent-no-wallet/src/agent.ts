@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { GmxSdk } from '@gmx-io/sdk';
 import type { Task } from 'a2a-samples-js/schema';
+
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
@@ -214,7 +215,7 @@ export class Agent {
           execute: async (args) => {
             console.log('Vercel AI SDK calling handler: getMarketInfo tool', args);
             try {
-              const response = await handleMarketsQuery(this.getHandlerContext());
+              const response = await handleMarketsQuery(args,this.getHandlerContext());
               return response;
             } catch (error: any) {
               logError(`Error executing getMarketInfo:`, error);
