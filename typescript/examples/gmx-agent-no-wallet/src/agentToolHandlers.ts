@@ -133,7 +133,7 @@ export async function handleMarketsQuery(args: {marketSymbol?: string},context: 
     // Filter token data if a symbol is provided
     let filteredTokensData = marketInfo.modifiedTokensData;
     let filteredMarketsInfoData = marketInfo.modifiedMarketsInfoData;
-    let message = `Found ${marketInfo.marketInfoCount} markets and ${marketInfo.tokenDataCount} tokens.`;
+    let message = `Found ${marketInfo.totalMarketInfoCount} markets and ${marketInfo.totalTokenDataCount} tokens.`;
     
     if (args.marketSymbol) {
       const symbol = args.marketSymbol.toUpperCase();

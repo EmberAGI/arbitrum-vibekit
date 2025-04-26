@@ -376,71 +376,24 @@ export class Agent {
 
       this.conversationHistory.push(...response.messages);
 
-      // // Find the Task result from the tool messages
-      // let finalTask: Task | null = null;
-      // for (const message of response.messages) {
-      //   if (message.role === 'tool' && Array.isArray(message.content)) {
-      //     for (const part of message.content) {
-      //       if (
-      //         part.type === 'tool-result' &&
-      //         part.result &&
-      //         typeof part.result === 'object' &&
-      //         'id' in part.result
-      //       ) {
-      //         console.error(`Processing tool result for ${part.toolName} from response.messages`);
-      //         finalTask = part.result as Task; // Assume the result IS the Task
-      //         console.error(`Task Result State: ${finalTask?.status?.state ?? 'N/A'}`);
-      //         const firstPart = finalTask?.status?.message?.parts[0];
-      //         const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';
-      //         console.error(`Task Result Message: ${messageText}`);
-      //         break; // Found the task from the most recent tool call
-      //       }
-      //     }
-      //   }
-      //   if (finalTask) break; // Stop searching once a task is found
-      // }
-
-      // if (finalTask) {
-      //   // If a task was completed, failed, or canceled, clear history for next interaction
-      //   if (['completed', 'failed', 'canceled'].includes(finalTask.status.state)) {
-      //     console.error(
-      //       `Task finished with state ${finalTask.status.state}. Clearing conversation history.`
-      //     );
-      //     this.conversationHistory = [];
-      //   }
-      //   return finalTask;
-      // }
-
-      // // If no tool was called and no task was returned, return the assistant's text response
-      // console.error('No tool called or task found, returning text response.');
-      // return {
-      //   id: this.userAddress,
-      //   status: {
-      //     state: 'completed', // Or another appropriate state
-      //     message: {
-      //       role: 'agent',
-      //       parts: [{ type: 'text', text: text || "I'm sorry, I couldn't process that request." }],
-      //     },
-      //   },
-      // };
-
       // --- Process Tool Results from response.messages ---
       let processedToolResult: Task | null = null;
       for (const message of response.messages) {
         if (message.role === 'tool' && Array.isArray(message.content)) {
           for (const part of message.content) {
-            if (part.type === 'tool-result' && part.toolName === 'swapTokens') {
+            if (part.type === 'tool-result' && 
+                ['getMarketInfo', 'getPositionInfo', 'createIncreasePosition', 'createDecreasePosition'].includes(part.toolName)) {
               this.log(`Processing tool result for ${part.toolName} from response.messages`);
               // Log the raw result for debugging
               //this.log(`Raw toolResult.result: ${JSON.stringify(part.result)}`);
               // Assert the type
               processedToolResult = part.result as Task;
               // Now you can safely access properties based on the asserted type
-              this.log(`SwapTokens Result State: ${processedToolResult?.status?.state ?? 'N/A'}`);
+              this.log(`${part.toolName} Result State: ${processedToolResult?.status?.state ?? 'N/A'}`);
               // Check if the first part is a text part before accessing .text
               const firstPart = processedToolResult?.status?.message?.parts[0];
               const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';
-              this.log(`SwapTokens Result Message: ${messageText}`);
+              this.log(`${part.toolName} Result Message: ${messageText}`);
               // Break if you only expect one result or handle multiple if needed
               break;
             }
@@ -451,6 +404,7 @@ export class Agent {
       // --- End Process Tool Results ---
 
       if (!processedToolResult) {
+        console.log('No processedToolResult found');
         throw new Error(text);
       }
 
