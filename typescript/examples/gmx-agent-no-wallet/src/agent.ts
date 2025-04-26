@@ -118,17 +118,28 @@ export class Agent {
     - If the user asks about available markets, funding rates, token pairs, or fees, use getMarketInfo.
     
     CREATING OR MODIFYING A POSITION (HIGHLY IMPORTANT):
+
+    When the user requests information about a market, such as:
+    Get me the market info for BTC
+    Get me the market info for ETH
+    Get me the market info for SOL
+    Get me the market info for ARB
+    Get me the market info for LINK
+    Get me the market info for UNI
+
+    You MUST call getMarketInfo with the token symbol (e.g., "BTC", "ETH") extracted from the user's request and ignore the user address.
+    You MUST NOT call getPositionInfo with the user address.
     
     When the user requests creating, opening, closing, increasing, decreasing, buying, selling, longing, or shorting a position:
     
-    1. FIRST call lookupMarket with the token symbol (e.g., "BTC", "ETH") extracted from the user's request.
-    2. WAIT for lookupMarket to successfully return market addresses.
-    3. IMMEDIATELY AFTER lookupMarket, you MUST call one of:
+    1. FIRST call getMarketInfo with the token symbol (e.g., "BTC", "ETH") extracted from the user's request.
+    2. WAIT for getMarketInfo to successfully return market addresses.
+    3. IMMEDIATELY AFTER getMarketInfo, you MUST call one of:
        - createIncreasePosition (for open/create/long/buy/increase types of requests)
        - createDecreasePosition (for close/exit/sell/short/decrease types of requests)
     
-    USE THE EXACT ADDRESSES FROM lookupMarket:
-    - marketAddress → from lookupMarket.marketAddress
+    USE THE EXACT ADDRESSES FROM getMarketInfo:
+    - marketAddress → from getMarketInfo.marketAddress
     - collateralTokenAddress → choose longTokenAddress or shortTokenAddress depending on LONG/SHORT
     
     CLASSIFY THE ACTION BASED ON KEYWORDS:
@@ -136,8 +147,8 @@ export class Agent {
     - "close", "sell", "exit", "short", "decrease" → createDecreasePosition
     
     OUTPUT RULES:
-    - Never stop after just calling lookupMarket — you must proceed to call the position tool.
-    - Never guess token addresses manually. Always use lookupMarket results.
+    - Never stop after just calling getMarketInfo — you must proceed to call the position tool.
+    - Never guess token addresses manually. Always use getMarketInfo results.
     - Never respond with text if a tool action is required.
     
     EXAMPLES:
@@ -145,13 +156,13 @@ export class Agent {
     Example 1:
     User: "Open a 10x long position on BTC using 0.01 ETH"
     Action:
-    - lookupMarket("BTC")
+    - getMarketInfo("BTC")
     - Use returned addresses to call createIncreasePosition
     
     Example 2:
     User: "Close my short position on ETH"
     Action:
-    - lookupMarket("ETH")
+    - getMarketInfo("ETH")
     - Use returned addresses to call createDecreasePosition
     
     ERROR HANDLING:
@@ -160,7 +171,7 @@ export class Agent {
     
     REMEMBER:
     - Prefer tool calls over freeform text responses.
-    - Always maintain the chain: lookupMarket → action (increase/decrease).
+    - Always maintain the chain: getMarketInfo → action (increase/decrease).
         `,
       },
     ];
@@ -347,76 +358,115 @@ export class Agent {
       });
       this.log(`generateText finished. Reason: ${finishReason}`);
 
-      // Log message flow for debugging
       response.messages.forEach((msg, index) => {
         if (msg.role === 'assistant' && Array.isArray(msg.content)) {
           msg.content.forEach(part => {
             if (part.type === 'tool-call') {
-              console.error(
-                `[LLM Request ${index}]: Tool Call - ${part.toolName} with args ${JSON.stringify(part.args)}`
-              );
+              this.log(`[LLM Request ${index}]: Tool Call - ${part.toolName}`);
             }
           });
         } else if (msg.role === 'tool') {
           if (Array.isArray(msg.content)) {
             msg.content.forEach((toolResult: ToolResultPart) => {
-              console.error(`[Tool Result ${index} for ${toolResult.toolName} received]`);
+              this.log(`[Tool Result ${index} for ${toolResult.toolName} received]`);
             });
           }
-        } else if (msg.role === 'assistant') {
-          console.error(`[LLM Response ${index}]: ${msg.content}`);
         }
       });
 
       this.conversationHistory.push(...response.messages);
 
-      // Find the Task result from the tool messages
-      let finalTask: Task | null = null;
+      // // Find the Task result from the tool messages
+      // let finalTask: Task | null = null;
+      // for (const message of response.messages) {
+      //   if (message.role === 'tool' && Array.isArray(message.content)) {
+      //     for (const part of message.content) {
+      //       if (
+      //         part.type === 'tool-result' &&
+      //         part.result &&
+      //         typeof part.result === 'object' &&
+      //         'id' in part.result
+      //       ) {
+      //         console.error(`Processing tool result for ${part.toolName} from response.messages`);
+      //         finalTask = part.result as Task; // Assume the result IS the Task
+      //         console.error(`Task Result State: ${finalTask?.status?.state ?? 'N/A'}`);
+      //         const firstPart = finalTask?.status?.message?.parts[0];
+      //         const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';
+      //         console.error(`Task Result Message: ${messageText}`);
+      //         break; // Found the task from the most recent tool call
+      //       }
+      //     }
+      //   }
+      //   if (finalTask) break; // Stop searching once a task is found
+      // }
+
+      // if (finalTask) {
+      //   // If a task was completed, failed, or canceled, clear history for next interaction
+      //   if (['completed', 'failed', 'canceled'].includes(finalTask.status.state)) {
+      //     console.error(
+      //       `Task finished with state ${finalTask.status.state}. Clearing conversation history.`
+      //     );
+      //     this.conversationHistory = [];
+      //   }
+      //   return finalTask;
+      // }
+
+      // // If no tool was called and no task was returned, return the assistant's text response
+      // console.error('No tool called or task found, returning text response.');
+      // return {
+      //   id: this.userAddress,
+      //   status: {
+      //     state: 'completed', // Or another appropriate state
+      //     message: {
+      //       role: 'agent',
+      //       parts: [{ type: 'text', text: text || "I'm sorry, I couldn't process that request." }],
+      //     },
+      //   },
+      // };
+
+      // --- Process Tool Results from response.messages ---
+      let processedToolResult: Task | null = null;
       for (const message of response.messages) {
         if (message.role === 'tool' && Array.isArray(message.content)) {
           for (const part of message.content) {
-            if (
-              part.type === 'tool-result' &&
-              part.result &&
-              typeof part.result === 'object' &&
-              'id' in part.result
-            ) {
-              console.error(`Processing tool result for ${part.toolName} from response.messages`);
-              finalTask = part.result as Task; // Assume the result IS the Task
-              console.error(`Task Result State: ${finalTask?.status?.state ?? 'N/A'}`);
-              const firstPart = finalTask?.status?.message?.parts[0];
+            if (part.type === 'tool-result' && part.toolName === 'swapTokens') {
+              this.log(`Processing tool result for ${part.toolName} from response.messages`);
+              // Log the raw result for debugging
+              //this.log(`Raw toolResult.result: ${JSON.stringify(part.result)}`);
+              // Assert the type
+              processedToolResult = part.result as Task;
+              // Now you can safely access properties based on the asserted type
+              this.log(`SwapTokens Result State: ${processedToolResult?.status?.state ?? 'N/A'}`);
+              // Check if the first part is a text part before accessing .text
+              const firstPart = processedToolResult?.status?.message?.parts[0];
               const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';
-              console.error(`Task Result Message: ${messageText}`);
-              break; // Found the task from the most recent tool call
+              this.log(`SwapTokens Result Message: ${messageText}`);
+              // Break if you only expect one result or handle multiple if needed
+              break;
             }
           }
         }
-        if (finalTask) break; // Stop searching once a task is found
+        if (processedToolResult) break; // Exit outer loop once result is found
+      }
+      // --- End Process Tool Results ---
+
+      if (!processedToolResult) {
+        throw new Error(text);
       }
 
-      if (finalTask) {
-        // If a task was completed, failed, or canceled, clear history for next interaction
-        if (['completed', 'failed', 'canceled'].includes(finalTask.status.state)) {
-          console.error(
-            `Task finished with state ${finalTask.status.state}. Clearing conversation history.`
-          );
+      switch (processedToolResult.status.state) {
+        case 'completed':
+        case 'failed':
+        case 'canceled':
+          // Important to clear the conversation history after a Task has finished
           this.conversationHistory = [];
-        }
-        return finalTask;
+          return processedToolResult;
+        case 'input-required':
+        case 'submitted':
+        case 'working':
+        case 'unknown':
+          return processedToolResult;
       }
-
-      // If no tool was called and no task was returned, return the assistant's text response
-      console.error('No tool called or task found, returning text response.');
-      return {
-        id: this.userAddress,
-        status: {
-          state: 'completed', // Or another appropriate state
-          message: {
-            role: 'agent',
-            parts: [{ type: 'text', text: text || "I'm sorry, I couldn't process that request." }],
-          },
-        },
-      };
     } catch (error) {
       const errorLog = `Error calling Vercel AI SDK generateText: ${error}`;
       logError(errorLog);
@@ -425,17 +475,7 @@ export class Agent {
         content: `An error occurred: ${String(error)}`,
       };
       this.conversationHistory.push(errorAssistantMessage);
-      // Return a Task indicating failure
-      return {
-        id: this.userAddress ?? 'unknown',
-        status: {
-          state: 'failed',
-          message: {
-            role: 'agent',
-            parts: [{ type: 'text', text: `An error occurred: ${String(error)}` }],
-          },
-        },
-      };
+      throw error;
     }
   }
 }

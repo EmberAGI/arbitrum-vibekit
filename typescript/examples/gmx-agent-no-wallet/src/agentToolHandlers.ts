@@ -160,8 +160,8 @@ export async function handleMarketsQuery(args: {marketSymbol?: string},context: 
       message = tokenCount > 0 
         ? `Found ${marketCount} markets and ${tokenCount} tokens for symbol ${symbol}.`
         : `No tokens found with symbol ${symbol}.`;
-
-      }
+        
+    }
 
     console.log("Debug: get market info message: ", message);
     
@@ -169,7 +169,7 @@ export async function handleMarketsQuery(args: {marketSymbol?: string},context: 
       success: marketInfo.success,
       totalMarketInfoCount: marketInfo.totalMarketInfoCount,
       totalTokenDataCount: marketInfo.totalTokenDataCount,
-      marketsInfoData: filteredMarketsInfoData,
+      // marketsInfoData: filteredMarketsInfoData,
       tokensData: filteredTokensData,
       errors: marketInfo.errors,
       message: message
@@ -178,7 +178,7 @@ export async function handleMarketsQuery(args: {marketSymbol?: string},context: 
     return {
       id: 'markets-query',
       status: {
-        state: marketInfo.success ? 'completed' : 'failed',
+        state: 'completed',
         message: {
           role: 'agent',
           parts: [{ 
