@@ -2,7 +2,7 @@ import { GmxSdk } from "@gmx-io/sdk";
 import type { MarketInfo, MarketsData } from "@gmx-io/sdk/types/markets.js";
 import type {  TokensData } from "@gmx-io/sdk/types/tokens.js";
 import type { Position, PositionsData } from "@gmx-io/sdk/types/positions.js";
-import { convertBigIntToString } from "./markets.js";
+import { convertBigIntToString, getMarketInfo } from "./markets.js";
 
 /**
  * Get position information for a specific account
@@ -22,29 +22,16 @@ export async function getPositionInfo(gmxClient: GmxSdk, account?: string) {
     console.log("Getting position info for account:", gmxClient.account);
     try {
       // Get markets info and tokens data with a timeout
-      const marketsPromise = gmxClient.markets.getMarketsInfo();
-      
-      // Create a timeout promise
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
-          reject(new Error("Timeout fetching market data"));
-        }, 15000); // 15 second timeout
-      });
-      
-      // Race the promises
-      const { marketsInfoData, tokensData } = await Promise.race([
-        marketsPromise,
-        timeoutPromise as Promise<any>
-      ]);
-      
-      if (!marketsInfoData || !tokensData) {
+      const marketInfoResponse= await getMarketInfo(gmxClient);
+
+      if (!marketInfoResponse?.success || !marketInfoResponse?.marketsInfoData || !marketInfoResponse?.tokensData) {
         throw new Error("Failed to fetch markets info or tokens data");
       }
 
       // Get positions for the account
       const positionsResult = await gmxClient.positions.getPositions({
-        marketsData: marketsInfoData as MarketsData,
-        tokensData,
+        marketsData: marketInfoResponse.marketsInfoData as MarketsData,
+        tokensData: marketInfoResponse.tokensData as TokensData,
         start: 0,
         end: 1000,
       });
@@ -60,23 +47,13 @@ export async function getPositionInfo(gmxClient: GmxSdk, account?: string) {
     
       // Get positions data from the result
       const positions:PositionsData = positionsResult.positionsData;
-      
-      // Check if we have any positions by examining the object
-      const positionKeys = Object.keys(positions);
-      if (positionKeys.length === 0) {
-        console.error("No positions found for this account");
-        return {
-          success: true,
-          message: "No positions found for this account",
-          positions: [],
-        };
-      }
+      const positionCount = Object.keys(positions).length;
 
-      console.log("Total positions found:", positions.length);
       return {
         success: true,
-        message: `Found ${positionKeys.length} position(s)`,
-        positions: convertBigIntToString(positions),
+        positionCount,
+        positions: positions,
+        modifiedPositions: convertBigIntToString(positions),
       };
     } catch (marketError) {
       console.error("Error fetching market data:", marketError);

@@ -58,7 +58,8 @@ server.tool(
     try {
       const taskResponse = await agent.processUserInput(instruction, userAddress || '0x0000000000000000000000000000000000000000');
       
-      console.error('[server.tool] result', taskResponse);
+      console.log('[server.tool] result', taskResponse);
+      console.log('[server.tool] result message: ',  JSON.stringify(taskResponse.status.message?.parts));
       
       return {
         content: [{ type: 'text', text: JSON.stringify(taskResponse) }],

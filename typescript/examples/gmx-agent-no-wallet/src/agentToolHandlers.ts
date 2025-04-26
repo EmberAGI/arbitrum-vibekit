@@ -126,14 +126,24 @@ export function parseMcpToolResponse(
  */
 export async function handleMarketsQuery(context: HandlerContext): Promise<any> {
   try {
+    console.log("Debug: getting market info");
     const marketInfo = await getMarketInfo(context.gmxClient);
     if(!marketInfo.success) {
-      console.log(`Failed to fetch market information: ${marketInfo.message}`);
-    }else {
-      console.log(`Successfully fetched market information: ${marketInfo.message}`);
+      console.log(`Failed to fetch market information}`);
     }
+
+    console.log("Debug: successfully got market info");
     
-    return marketInfo;
+    return {
+      success: marketInfo.success,
+      marketInfoCount: marketInfo.marketInfoCount,
+      tokenDataCount: marketInfo.tokenDataCount,
+      // returning modified data to avoid BigInt issues
+      marketsInfoData: marketInfo.modifiedMarketsInfoData,
+      tokensData: marketInfo.modifiedTokensData,
+      errors: marketInfo.errors,
+      message: `Found ${marketInfo.marketInfoCount} markets and ${marketInfo.tokenDataCount} tokens.`
+    };
   } catch (error) {
     context.log('Error handling markets query:', error);
     return 'Error fetching market information. Please try again later.';
@@ -151,31 +161,25 @@ export async function handlePositionsQuery(
    if(!args.userAddress) {
     return { success: false, message: 'No user address provided' };
    }
-    
+    console.log("Debug: getting position info");
     const positionInfo = await getPositionInfo(context.gmxClient, args.userAddress);
     
     if (!positionInfo.success) {
       return { success: false, message: `Failed to fetch position information: ${positionInfo.message}` };
     }
     
-    // Handle case where positions is not an array but PositionsData type
-    const positions = positionInfo.positions;
-    if (!positions || (typeof positions === 'object' && Object.keys(positions).length === 0)) {
-      return { success: true, count: 0, positions: [], message: 'No active positions found for the account.' };
-    }
-    
-    // If positions is an array with length property, we can check it directly
-    if (Array.isArray(positions) && positions.length === 0) {
-      return { success: true, count: 0, positions: [], message: 'No active positions found for the account.' };
-    }
-    
+    console.log("Debug: successfully got position info");
+
     // Return a structured object instead of a string
-    return {
+    let output = {
       success: true,
-      count: positions.length,
-      positions,
-      message: `Found ${positions.length} active positions.`
+      positionCount: positionInfo.positionCount,
+      // returning modified data to avoid BigInt issues
+      positions: positionInfo.modifiedPositions,
+      message: `Found ${positionInfo.positionCount} active positions.`
     };
+
+    return output;
   } catch (error) {
     context.log('Error handling positions query:', error);
     return { 
@@ -291,7 +295,7 @@ export async function handleCreatePositionRequest(
       }
       
       // Find the requested market
-      const marketObj = marketInfo.markets.find((m) => 
+      const marketObj = marketInfo.markets.find((m: any) => 
         m.indexToken?.toUpperCase() === market);
       
       if (!marketObj) {
@@ -304,7 +308,7 @@ export async function handleCreatePositionRequest(
       
       // Find the token in the tokens array
       if (marketInfo.tokens && marketInfo.tokens.length > 0) {
-        const collateralToken = marketInfo.tokens.find(t => 
+        const collateralToken = marketInfo.tokens.find((t: any) => 
           t.symbol.toUpperCase() === collateralTokenSymbol.toUpperCase());
         
         if (collateralToken) {
