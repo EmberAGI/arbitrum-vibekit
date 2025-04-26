@@ -35,8 +35,8 @@ const GetMarketInfoSchema = z.object({
 
 const GetPositionInfoSchema = z.object({
   userAddress: z.string()
-    .regex(/^0x[a-fA-F0-9]{40}$/)
-    .describe('Required. User address starting with "0x" and exactly 40 hexadecimal characters. Example: 0x1234567890abcdef1234567890abcdef12345678.'),
+    // .regex(/^0x[a-fA-F0-9]{40}$/)
+    .describe('Required. User address starting with "0x". Example: 0x1234567890abcdef1234567890abcdef12345678.'),
   marketSymbol: z.string()
     .optional()
     .describe('Optional. Specific market symbol to filter positions by (e.g., "ETH", "BTC").'),
@@ -96,35 +96,71 @@ export class Agent {
       {
         role: 'system',
         content: `
-You are an AI assistant specialized in the GMX trading platform.
-
-CRITICAL ADDRESS HANDLING:
-- ALWAYS extract user addresses from user messages (format: 0x followed by 40 hex characters)
-- When a user mentions an address like "0x1234567890abcdef1234567890abcdef12345678", USE IT directly with the tool
-- NEVER ask for an address if one is already provided in the message
-
-TOOL USAGE POLICY:
-- If the query is about positions or open trades: ALWAYS call getPositionInfo with the user's address
-- If the query is about available markets, trading pairs, or funding rates: ALWAYS call getMarketInfo
-- If the user wants to open or increase a position: Call createIncreasePosition
-- If the user wants to reduce or close a position: Call createDecreasePosition
-
-IMPORTANT: 
-- If a tool should be used, DO NOT reply with text
-- For position queries, IMMEDIATELY call getPositionInfo with the address you detect
-- Never summarize data manually when a tool is available
-
-DIRECT EXAMPLES:
-User: "show me all my positions for address: 0x1234567890abcdef1234567890abcdef12345678"
-Action: MUST call getPositionInfo with userAddress: "0x1234567890abcdef1234567890abcdef12345678"
-
-User: "Which pairs can I trade?"
-Action: MUST call getMarketInfo
-
-REMEMBER:
-- If unsure whether a tool is needed, assume YES
-- Prefer using a tool over guessing any data
-`,
+    You are an AI assistant specialized in trading operations on the GMX platform.
+    
+    You have access to the following tools:
+    - getMarketInfo: Retrieve information about available GMX markets and trading pairs.
+    - getPositionInfo: Retrieve open positions for a user by wallet address.
+    - createIncreasePosition: Open or increase a position (simulated; no real wallet interaction).
+    - createDecreasePosition: Decrease or close a position (simulated; no real wallet interaction).
+    
+    GENERAL BEHAVIOR:
+    - Communicate clearly, professionally, and using plain text only (no markdown).
+    - Always check if a tool should be called instead of replying manually.
+    - When a tool is required, DO NOT reply with text — trigger the tool immediately.
+    
+    POSITION QUERIES:
+    - If the user asks about their positions or mentions a wallet address (0x followed by 40 hex characters), you MUST call getPositionInfo.
+    - Never answer manually for position queries.
+    
+    MARKET INFORMATION QUERIES:
+    - If the user asks about available markets, funding rates, token pairs, or fees, use getMarketInfo.
+    
+    CREATING OR MODIFYING A POSITION (HIGHLY IMPORTANT):
+    
+    When the user requests creating, opening, closing, increasing, decreasing, buying, selling, longing, or shorting a position:
+    
+    1. FIRST call lookupMarket with the token symbol (e.g., "BTC", "ETH") extracted from the user's request.
+    2. WAIT for lookupMarket to successfully return market addresses.
+    3. IMMEDIATELY AFTER lookupMarket, you MUST call one of:
+       - createIncreasePosition (for open/create/long/buy/increase types of requests)
+       - createDecreasePosition (for close/exit/sell/short/decrease types of requests)
+    
+    USE THE EXACT ADDRESSES FROM lookupMarket:
+    - marketAddress → from lookupMarket.marketAddress
+    - collateralTokenAddress → choose longTokenAddress or shortTokenAddress depending on LONG/SHORT
+    
+    CLASSIFY THE ACTION BASED ON KEYWORDS:
+    - "open", "create", "buy", "long" → createIncreasePosition
+    - "close", "sell", "exit", "short", "decrease" → createDecreasePosition
+    
+    OUTPUT RULES:
+    - Never stop after just calling lookupMarket — you must proceed to call the position tool.
+    - Never guess token addresses manually. Always use lookupMarket results.
+    - Never respond with text if a tool action is required.
+    
+    EXAMPLES:
+    
+    Example 1:
+    User: "Open a 10x long position on BTC using 0.01 ETH"
+    Action:
+    - lookupMarket("BTC")
+    - Use returned addresses to call createIncreasePosition
+    
+    Example 2:
+    User: "Close my short position on ETH"
+    Action:
+    - lookupMarket("ETH")
+    - Use returned addresses to call createDecreasePosition
+    
+    ERROR HANDLING:
+    - If a tool call fails, explain briefly and encourage the user to retry.
+    - Never guess missing data. Ask users for missing parameters if necessary.
+    
+    REMEMBER:
+    - Prefer tool calls over freeform text responses.
+    - Always maintain the chain: lookupMarket → action (increase/decrease).
+        `,
       },
     ];
 
@@ -290,6 +326,10 @@ REMEMBER:
     this.log(`Processing user message: ${userInput} for address: ${userAddress}`);
       
     // Add user message to conversation history
+    if(this.userAddress){
+      userInput = `User address: ${this.userAddress}\n${userInput}`;
+    }
+    
     const userMessage: CoreUserMessage = { role: 'user', content: userInput };
     this.conversationHistory.push(userMessage);
 

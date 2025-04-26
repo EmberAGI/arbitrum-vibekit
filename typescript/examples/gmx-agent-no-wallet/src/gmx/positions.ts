@@ -18,6 +18,7 @@ export async function getPositionInfo(gmxClient: GmxSdk, account?: string) {
       throw new Error("No account provided and no account set in GMX client");
     }
 
+    console.log("Getting position info for account:", gmxClient.account);
     try {
       // Get markets info and tokens data with a timeout
       const marketsPromise = gmxClient.markets.getMarketsInfo();
@@ -48,6 +49,7 @@ export async function getPositionInfo(gmxClient: GmxSdk, account?: string) {
       });
 
       if (positionsResult.error){
+        console.error("Error fetching positions:", positionsResult.error);
         return {
             success: true,
             message: "No positions found for this account",
@@ -57,11 +59,11 @@ export async function getPositionInfo(gmxClient: GmxSdk, account?: string) {
     
       // Get positions data from the result
       const positions:PositionsData = positionsResult.positionsData;
-      console.log(positions);
       
       // Check if we have any positions by examining the object
       const positionKeys = Object.keys(positions);
       if (positionKeys.length === 0) {
+        console.error("No positions found for this account");
         return {
           success: true,
           message: "No positions found for this account",
@@ -69,6 +71,7 @@ export async function getPositionInfo(gmxClient: GmxSdk, account?: string) {
         };
       }
 
+      console.log("Total positions found:", positions.length);
       return {
         success: true,
         message: `Found ${positionKeys.length} position(s)`,
