@@ -3,6 +3,35 @@ import type { MarketInfo, MarketsInfoData } from "@gmx-io/sdk/types/markets.js";
 import type { TokenData, TokensData } from "@gmx-io/sdk/types/tokens.js";
 
 /**
+ * Recursively convert BigInt values to strings
+ */
+function convertBigIntToString(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  
+  if (typeof obj === 'bigint') {
+    return obj.toString();
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(convertBigIntToString);
+  }
+  
+  if (typeof obj === 'object') {
+    const newObj: any = {};
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        newObj[key] = convertBigIntToString(obj[key]);
+      }
+    }
+    return newObj;
+  }
+  
+  return obj;
+}
+
+/**
  * Get market information from GMX
  * @param gmxClient The GMX SDK client
  * @returns Market information and token data
@@ -125,7 +154,7 @@ export async function getMarketInfo(gmxClient: GmxSdk) {
   ).join('\n');
   
   // Return processed data along with any errors
-  return {
+  const output =  {
     success: markets.length > 0 || tokens.length > 0,
     message: errors.length > 0 
       ? `Found ${markets.length} markets and ${tokens.length} tokens with ${errors.length} errors`
@@ -140,9 +169,11 @@ export async function getMarketInfo(gmxClient: GmxSdk) {
     note: errors.length > 0 ? 
       `Note: ${errors.length} market(s) could not be loaded due to errors.` : 
       undefined,
-    // Include raw data for advanced use cases if available
-    rawMarketsInfoData: marketsInfoData,
-    rawTokensData: tokensData,
+    // Convert BigInt values to strings before serialization
+    rawMarketsInfoData: convertBigIntToString(marketsInfoData),
+    rawTokensData: convertBigIntToString(tokensData),
     errors: errors.length > 0 ? errors : undefined
   };
+
+  return output;
 } 

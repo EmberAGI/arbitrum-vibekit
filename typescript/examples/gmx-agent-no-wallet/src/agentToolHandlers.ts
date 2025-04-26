@@ -124,33 +124,11 @@ export function parseMcpToolResponse(
 /**
  * Handle markets query
  */
-export async function handleMarketsQuery(context: HandlerContext): Promise<string> {
+export async function handleMarketsQuery(context: HandlerContext): Promise<any> {
   try {
     const marketInfo = await getMarketInfo(context.gmxClient);
     
-    if (!marketInfo.success) {
-      return `Failed to fetch market information: ${marketInfo.message}`;
-    }
-    
-    if (marketInfo.marketsTable) {
-      return `Available GMX Markets (${marketInfo.marketCount}):\n\n${marketInfo.marketsTable}`;
-    }
-    
-    // Fallback if marketsTable is not available
-    let response = `Available GMX Markets (${marketInfo.marketCount}):\n\n`;
-    
-    if (marketInfo.markets && marketInfo.markets.length > 0) {
-      marketInfo.markets.forEach((market, index: number) => {
-        response += `${index + 1}. ${market.name}\n`;
-        response += `   Index Token: ${market.indexToken}\n`;
-        response += `   Long Token: ${market.longToken}\n`;
-        response += `   Short Token: ${market.shortToken}\n\n`;
-      });
-    } else {
-      response += "No markets available.";
-    }
-    
-    return response;
+    return marketInfo;
   } catch (error) {
     context.log('Error handling markets query:', error);
     return 'Error fetching market information. Please try again later.';
