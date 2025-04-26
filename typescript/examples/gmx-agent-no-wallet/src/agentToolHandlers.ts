@@ -1,15 +1,11 @@
 import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { ethers } from 'ethers';
-import type { Task as A2ATask } from 'a2a-samples-js/schema';
+import type { Task } from 'a2a-samples-js/schema';
 import { GmxSdk } from '@gmx-io/sdk';
 import type { PositionsData } from '@gmx-io/sdk/types/positions.js';
 import { getMarketInfo } from './gmx/markets.js';
 import { getPositionInfo } from './gmx/positions.js';
-
-
-// Re-export Task type
-export type Task = A2ATask;
 
 // Schema for GMX market information
 const MarketInfoSchema = z.object({

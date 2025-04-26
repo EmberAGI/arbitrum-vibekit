@@ -2,7 +2,7 @@ import { ethers } from 'ethers';
 import { setupGmxClient } from './gmx/client.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import type { HandlerContext, Task } from './agentToolHandlers.js';
+import type { HandlerContext } from './agentToolHandlers.js';
 import { handleMarketsQuery, handlePositionsQuery, handleCreatePositionRequest, handleClosePositionRequest } from './agentToolHandlers.js';
 import {
   generateText,
@@ -10,14 +10,14 @@ import {
   type Tool,
   type CoreMessage,
   type ToolResultPart,
-  type CoreUserMessage,
+type CoreUserMessage,
   type CoreAssistantMessage,
 } from 'ai';
 import { createRequire } from 'module';
 import { z } from 'zod';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { GmxSdk } from '@gmx-io/sdk';
-
+import type { Task } from 'a2a-samples-js/schema';
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
