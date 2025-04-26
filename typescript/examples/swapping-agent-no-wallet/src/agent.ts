@@ -10,7 +10,6 @@ import {
   createWalletClient,
   createPublicClient,
   http,
-  type LocalAccount,
 } from 'viem';
 import type { HandlerContext, TransactionRequest } from './agentToolHandlers.js';
 import { handleSwapTokens, parseMcpToolResponse } from './agentToolHandlers.js';
@@ -30,7 +29,7 @@ import {
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { mainnet, arbitrum, optimism, polygon, base } from 'viem/chains';
+import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
 import type { Task } from 'a2a-samples-js/schema';
 import { createRequire } from 'module';
@@ -111,20 +110,39 @@ interface ChainConfig {
   quicknodeSegment: string;
 }
 
-const chainIdMap: Record<string, ChainConfig> = {
-  '1': { viemChain: mainnet, quicknodeSegment: '' },
-  '42161': { viemChain: arbitrum, quicknodeSegment: 'arbitrum-mainnet' },
-  '10': { viemChain: optimism, quicknodeSegment: 'optimism' },
-  '137': { viemChain: polygon, quicknodeSegment: 'matic' },
-  '8453': { viemChain: base, quicknodeSegment: 'base-mainnet' },
+const quicknodeSegments: Record<string, string> = {
+  '1': '',
+  '42161': 'arbitrum-mainnet',
+  '10': 'optimism',
+  '137': 'matic',
+  '8453': 'base-mainnet',
 };
 
 export function getChainConfigById(chainId: string): ChainConfig {
-  const config = chainIdMap[chainId];
-  if (!config) {
-    throw new Error(`Unsupported chainId: ${chainId}. Please update chainIdMap.`);
+  const numericChainId = parseInt(chainId, 10);
+  if (isNaN(numericChainId)) {
+    throw new Error(`Invalid chainId format: ${chainId}`);
   }
-  return config;
+
+  const viemChain = Object.values(chains).find(
+    chain => chain && typeof chain === 'object' && 'id' in chain && chain.id === numericChainId
+  );
+
+  if (!viemChain) {
+    throw new Error(
+      `Unsupported chainId: ${chainId}. Viem chain definition not found in imported chains.`
+    );
+  }
+
+  const quicknodeSegment = quicknodeSegments[chainId];
+
+  if (quicknodeSegment === undefined) {
+    throw new Error(
+      `Unsupported chainId: ${chainId}. QuickNode segment not configured in quicknodeSegments map.`
+    );
+  }
+
+  return { viemChain: viemChain as Chain, quicknodeSegment };
 }
 
 export class Agent {
@@ -297,17 +315,14 @@ Use relavant conversation history to obtain required tool parameters. Present th
               if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
                 const symbol = token.symbol;
 
-                // Get the current token list or undefined
                 let tokenList = this.tokenMap[symbol];
 
-                // Initialize if it doesn't exist yet
                 if (!tokenList) {
                   tokenList = [];
                   this.tokenMap[symbol] = tokenList;
                   this.availableTokens.push(symbol);
                 }
 
-                // Now tokenList is guaranteed to be an array
                 tokenList.push({
                   chainId: token.tokenUid.chainId,
                   address: token.tokenUid.address,
@@ -331,7 +346,6 @@ Use relavant conversation history to obtain required tool parameters. Present th
           description: 'Swap or convert tokens. Requires the fromToken, toToken, and amount.',
           parameters: SwapTokensSchema,
           execute: async args => {
-            this.log('Vercel AI SDK calling handler: swapTokens', args);
             try {
               return await handleSwapTokens(args, this.getHandlerContext());
             } catch (error: any) {
@@ -405,31 +419,23 @@ Use relavant conversation history to obtain required tool parameters. Present th
 
       this.conversationHistory.push(...response.messages);
 
-      // --- Process Tool Results from response.messages ---
       let processedToolResult: Task | null = null;
       for (const message of response.messages) {
         if (message.role === 'tool' && Array.isArray(message.content)) {
           for (const part of message.content) {
             if (part.type === 'tool-result' && part.toolName === 'swapTokens') {
               this.log(`Processing tool result for ${part.toolName} from response.messages`);
-              // Log the raw result for debugging
-              //this.log(`Raw toolResult.result: ${JSON.stringify(part.result)}`);
-              // Assert the type
               processedToolResult = part.result as Task;
-              // Now you can safely access properties based on the asserted type
               this.log(`SwapTokens Result State: ${processedToolResult?.status?.state ?? 'N/A'}`);
-              // Check if the first part is a text part before accessing .text
               const firstPart = processedToolResult?.status?.message?.parts[0];
               const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';
               this.log(`SwapTokens Result Message: ${messageText}`);
-              // Break if you only expect one result or handle multiple if needed
               break;
             }
           }
         }
-        if (processedToolResult) break; // Exit outer loop once result is found
+        if (processedToolResult) break;
       }
-      // --- End Process Tool Results ---
 
       if (!processedToolResult) {
         throw new Error(text);
@@ -439,7 +445,6 @@ Use relavant conversation history to obtain required tool parameters. Present th
         case 'completed':
         case 'failed':
         case 'canceled':
-          // Important to clear the conversation history after a Task has finished
           this.conversationHistory = [];
           return processedToolResult;
         case 'input-required':
@@ -616,7 +621,6 @@ Use relavant conversation history to obtain required tool parameters. Present th
     }
 
     try {
-      // Read timeout from env var, default to 90 seconds
       const mcpTimeoutMs = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '30000', 10);
       this.log(`Using MCP tool timeout: ${mcpTimeoutMs}ms`);
 
@@ -626,7 +630,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
           arguments: { type: 'SWAP' },
         },
         undefined,
-        { timeout: mcpTimeoutMs } // Use configured timeout
+        { timeout: mcpTimeoutMs }
       );
 
       this.log('Raw capabilitiesResult received from MCP.');

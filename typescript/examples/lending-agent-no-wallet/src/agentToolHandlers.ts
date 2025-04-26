@@ -1,8 +1,17 @@
 import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Task } from 'a2a-samples-js/schema';
-
-// --- Zod Schemas for GetUserPositions Response ---
+import {
+  createPublicClient,
+  http,
+  encodeFunctionData,
+  parseUnits,
+  formatUnits,
+  type Address,
+  type PublicClient,
+} from 'viem';
+import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
+import { getChainConfigById } from './agent.js';
 
 const ZodTokenUidSchema = z.object({
   chainId: z.string(),
@@ -18,39 +27,36 @@ const ZodTokenSchema = z
     decimals: z.number(),
     isVetted: z.boolean(),
   })
-  .passthrough(); // Allow other potential fields like priceUsd, etc.
+  .passthrough();
 
 const ZodUserReserveSchema = z
   .object({
     token: ZodTokenSchema,
-    underlyingBalance: z.string(), // numeric string
-    underlyingBalanceUsd: z.string(), // numeric string
-    variableBorrows: z.string(), // numeric string
-    variableBorrowsUsd: z.string(), // numeric string
-    totalBorrows: z.string(), // numeric string
-    totalBorrowsUsd: z.string(), // numeric string
-    // Add other fields if necessary, e.g., isCollateral, supplyRate etc.
+    underlyingBalance: z.string(),
+    underlyingBalanceUsd: z.string(),
+    variableBorrows: z.string(),
+    variableBorrowsUsd: z.string(),
+    totalBorrows: z.string(),
+    totalBorrowsUsd: z.string(),
   })
   .passthrough();
 
 const ZodLendingPositionSchema = z
   .object({
     userReserves: z.array(ZodUserReserveSchema),
-    totalLiquidityUsd: z.string(), // numeric string
-    totalCollateralUsd: z.string(), // numeric string
-    totalBorrowsUsd: z.string(), // numeric string
-    netWorthUsd: z.string(), // numeric string
-    availableBorrowsUsd: z.string(), // numeric string
-    currentLoanToValue: z.string(), // numeric string
-    currentLiquidationThreshold: z.string(), // numeric string
-    healthFactor: z.string(), // numeric string
+    totalLiquidityUsd: z.string(),
+    totalCollateralUsd: z.string(),
+    totalBorrowsUsd: z.string(),
+    netWorthUsd: z.string(),
+    availableBorrowsUsd: z.string(),
+    currentLoanToValue: z.string(),
+    currentLiquidationThreshold: z.string(),
+    healthFactor: z.string(),
   })
   .passthrough();
 
 const ZodPositionSchema = z
   .object({
-    // Assuming positionType exists, though not in the example JSON root
-    // positionType: z.string().optional(), // e.g., 'LENDING'
     lendingPosition: ZodLendingPositionSchema,
   })
   .passthrough();
@@ -62,8 +68,6 @@ export const ZodGetWalletPositionsResponseSchema = z
   .passthrough();
 
 type McpGetWalletPositionsResponse = z.infer<typeof ZodGetWalletPositionsResponseSchema>;
-
-// --- End Zod Schemas for GetUserPositions Response ---
 
 export interface TokenInfo {
   chainId: string;
@@ -203,24 +207,18 @@ type FindTokenResult =
 function findTokenInfo(
   tokenMap: Record<string, Array<TokenInfo>>,
   tokenName: string
-  // Add context for logging if needed
-  // context: HandlerContext
 ): FindTokenResult {
   const upperTokenName = tokenName.toUpperCase();
   const possibleTokens = tokenMap[upperTokenName];
 
   if (!possibleTokens || possibleTokens.length === 0) {
-    // context?.log(`Token symbol '${tokenName}' not found in tokenMap.`);
     return { type: 'notFound' };
   }
 
   if (possibleTokens.length === 1) {
-    // context?.log(`Found unique token for symbol '${tokenName}'.`);
     return { type: 'found', token: possibleTokens[0] };
   }
 
-  // Multiple options found
-  // context?.log(`Multiple definitions found for symbol '${tokenName}'. Clarification needed.`);
   return { type: 'clarificationNeeded', options: possibleTokens };
 }
 
@@ -243,7 +241,6 @@ function parseToolResponse(
     context.log(`Raw ${toolName} result appears nested, parsing inner text...`);
     try {
       const textToParse = (rawResponse as any).content[0].text;
-      // Check if the text content itself indicates an error from the tool
       if (textToParse.startsWith('Error:')) {
         context.log(`MCP tool '${toolName}' returned an error: ${textToParse}`);
         throw new Error(`MCP tool '${toolName}' failed: ${textToParse}`);
@@ -301,32 +298,33 @@ export async function handleBorrow(
   params: { tokenName: string; amount: string },
   context: HandlerContext
 ): Promise<Task> {
+  const { tokenName: rawTokenName, amount } = params;
+  const tokenName = rawTokenName.toUpperCase();
+
   if (!context.userAddress) {
     throw new Error('User address not set!');
   }
 
-  const { tokenName, amount } = params;
-  const findResult = findTokenInfo(context.tokenMap, tokenName);
+  const findResult = findTokenInfo(context.tokenMap, rawTokenName);
 
   switch (findResult.type) {
     case 'notFound':
-      context.log(`Borrow failed: Token ${tokenName} not found/supported.`);
+      context.log(`Borrow failed: Token ${rawTokenName} not found/supported.`);
       return {
         id: context.userAddress,
         status: {
           state: 'failed',
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: `Token ${tokenName} not supported for borrowing.` }],
+            parts: [{ type: 'text', text: `Token ${rawTokenName} not supported for borrowing.` }],
           },
         },
       };
 
     case 'clarificationNeeded':
-      context.log(`Borrow requires clarification for token ${tokenName}.`);
-      // Construct message listing options (e.g., by chainId)
+      context.log(`Borrow requires clarification for token ${rawTokenName}.`);
       const optionsText = findResult.options
-        .map(opt => `- ${tokenName} on chain ${opt.chainId}`)
+        .map(opt => `- ${rawTokenName} on chain ${opt.chainId}`)
         .join('\n');
       return {
         id: context.userAddress,
@@ -337,7 +335,7 @@ export async function handleBorrow(
             parts: [
               {
                 type: 'text',
-                text: `Which ${tokenName} do you want to borrow? Please specify the chain:\n${optionsText}`,
+                text: `Which ${rawTokenName} do you want to borrow? Please specify the chain:\n${optionsText}`,
               },
             ],
           },
@@ -347,7 +345,7 @@ export async function handleBorrow(
     case 'found':
       const tokenDetail = findResult.token;
       context.log(
-        `Preparing borrow transaction: ${tokenName} (Chain: ${tokenDetail.chainId}, Addr: ${tokenDetail.address}), amount: ${amount}`
+        `Preparing borrow transaction: ${rawTokenName} (Chain: ${tokenDetail.chainId}, Addr: ${tokenDetail.address}), amount: ${amount}`
       );
 
       try {
@@ -393,7 +391,7 @@ export async function handleBorrow(
           ],
         };
       } catch (error) {
-        context.log(`Error during borrow execution for ${tokenName}:`, error);
+        context.log(`Error during borrow execution for ${rawTokenName}:`, error);
         return {
           id: context.userAddress,
           status: {
@@ -412,31 +410,31 @@ export async function handleRepay(
   params: { tokenName: string; amount: string },
   context: HandlerContext
 ): Promise<Task> {
+  const { tokenName: rawTokenName, amount } = params;
+  const tokenName = rawTokenName.toUpperCase();
+
   if (!context.userAddress) {
     throw new Error('User address not set!');
   }
 
-  const { tokenName, amount } = params;
-  const findResult = findTokenInfo(context.tokenMap, tokenName);
+  const findResult = findTokenInfo(context.tokenMap, rawTokenName);
 
   switch (findResult.type) {
     case 'notFound':
-      context.log(`Repay failed: Token ${tokenName} not found/supported.`);
       return {
         id: context.userAddress,
         status: {
           state: 'failed',
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: `Token ${tokenName} not supported for repaying.` }],
+            parts: [{ type: 'text', text: `Token '${rawTokenName}' not supported.` }],
           },
         },
       };
 
     case 'clarificationNeeded':
-      context.log(`Repay requires clarification for token ${tokenName}.`);
-      const optionsText = findResult.options
-        .map(opt => `- ${tokenName} on chain ${opt.chainId}`)
+      const chainList = findResult.options
+        .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.chainId}`)
         .join('\n');
       return {
         id: context.userAddress,
@@ -447,74 +445,226 @@ export async function handleRepay(
             parts: [
               {
                 type: 'text',
-                text: `Which ${tokenName} do you want to repay? Please specify the chain:\n${optionsText}`,
+                text: `Multiple chains found for ${rawTokenName}:\n${chainList}\nPlease specify the chain.`,
               },
             ],
           },
         },
       };
 
-    case 'found':
-      const tokenDetail = findResult.token;
+    case 'found': {
+      const tokenInfo = findResult.token;
+      const userAddress = context.userAddress as Address;
+      const tokenAddress = tokenInfo.address as Address;
+      const txChainId = tokenInfo.chainId;
+      let atomicAmount: bigint;
+      try {
+        atomicAmount = parseUnits(amount, tokenInfo.decimals);
+      } catch (e) {
+        return {
+          id: userAddress,
+          status: {
+            state: 'failed',
+            message: {
+              role: 'agent',
+              parts: [{ type: 'text', text: `Invalid amount format: ${amount}` }],
+            },
+          },
+        };
+      }
+
       context.log(
-        `Preparing repay transaction: ${tokenName} (Chain: ${tokenDetail.chainId}, Addr: ${tokenDetail.address}), amount: ${amount}`
+        `Preparing repay: ${amount} ${tokenName} (${tokenAddress} on chain ${txChainId}), User: ${userAddress}`
       );
 
+      let publicClient: PublicClient;
       try {
-        const rawResult = await context.mcpClient.callTool({
-          name: 'repay',
-          arguments: {
-            tokenAddress: tokenDetail.address,
-            tokenChainId: tokenDetail.chainId,
-            amount,
-            userAddress: context.userAddress,
-          },
+        const chainConfig = getChainConfigById(txChainId);
+        const networkSegment = chainConfig.quicknodeSegment;
+        const targetChain = chainConfig.viemChain;
+        let dynamicRpcUrl: string;
+        if (networkSegment === '') {
+          dynamicRpcUrl = `https://${context.quicknodeSubdomain}.quiknode.pro/${context.quicknodeApiKey}`;
+        } else {
+          dynamicRpcUrl = `https://${context.quicknodeSubdomain}.${networkSegment}.quiknode.pro/${context.quicknodeApiKey}`;
+        }
+        publicClient = createPublicClient({
+          chain: targetChain,
+          transport: http(dynamicRpcUrl),
         });
-
-        const parsedResponse = parseToolResponse(rawResult, context, 'repay');
-        const transactions = await validateAndExecuteAction('repay', parsedResponse, context);
-
-        const txArtifact: TransactionArtifact = {
-          txPreview: {
-            tokenName,
-            amount,
-            action: 'repay',
-            chainId: tokenDetail.chainId,
+        context.log(`Public client created for chain ${txChainId}`);
+      } catch (chainError) {
+        context.log(`Failed to create public client for chain ${txChainId}:`, chainError);
+        return {
+          id: userAddress,
+          status: {
+            state: 'failed',
+            message: {
+              role: 'agent',
+              parts: [
+                { type: 'text', text: `Network configuration error for chain ${txChainId}.` },
+              ],
+            },
           },
-          txPlan: transactions,
         };
+      }
+
+      try {
+        const currentBalance = (await publicClient.readContract({
+          address: tokenAddress,
+          abi: Erc20Abi.abi,
+          functionName: 'balanceOf',
+          args: [userAddress],
+        })) as bigint;
+        context.log(
+          `User balance check: Has ${currentBalance}, needs ${atomicAmount} of ${tokenName}`
+        );
+
+        if (currentBalance < atomicAmount) {
+          const formattedBalance = formatUnits(currentBalance, tokenInfo.decimals);
+          context.log(`Insufficient balance for repay. Needs ${amount}, has ${formattedBalance}`);
+          return {
+            id: userAddress,
+            status: {
+              state: 'failed',
+              message: {
+                role: 'agent',
+                parts: [
+                  {
+                    type: 'text',
+                    text: `Insufficient ${tokenName} balance. You need ${amount} but only have ${formattedBalance}.`,
+                  },
+                ],
+              },
+            },
+          };
+        }
+        context.log(`Sufficient balance confirmed.`);
+      } catch (readError) {
+        context.log(
+          `Warning: Failed to read token balance. Error: ${(readError as Error).message}`
+        );
+        return {
+          id: userAddress,
+          status: {
+            state: 'failed',
+            message: {
+              role: 'agent',
+              parts: [
+                {
+                  type: 'text',
+                  text: `Could not verify your ${tokenName} balance due to a network error.`,
+                },
+              ],
+            },
+          },
+        };
+      }
+
+      context.log(`Executing repay via MCP for ${amount} ${tokenName}`);
+      const toolResult = await context.mcpClient.callTool({
+        name: 'repay',
+        arguments: {
+          tokenAddress: tokenInfo.address,
+          tokenChainId: tokenInfo.chainId,
+          amount: atomicAmount.toString(),
+          userAddress: context.userAddress,
+        },
+      });
+
+      context.log('MCP repay tool response:', toolResult);
+
+      let validatedTxPlan: TransactionRequest[] = [];
+      try {
+        const parsedData = parseToolResponse(toolResult, context, 'repay');
+        validatedTxPlan = validateTransactions('repay', parsedData, context);
+
+        validatedTxPlan = validatedTxPlan.map(tx => ({ ...tx, chainId: tx.chainId ?? txChainId }));
+        context.log(`Processed ${validatedTxPlan.length} transactions from MCP for repay.`);
+
+        if (validatedTxPlan.length === 0) {
+          throw new Error('MCP tool returned an empty transaction plan.');
+        }
+      } catch (error) {
+        context.log(`Error processing MCP repay response:`, error);
+        return {
+          id: userAddress,
+          status: {
+            state: 'failed',
+            message: {
+              role: 'agent',
+              parts: [
+                {
+                  type: 'text',
+                  text: `Failed to get valid repay plan: ${(error as Error).message}`,
+                },
+              ],
+            },
+          },
+        };
+      }
+
+      const finalTxPlan = validatedTxPlan;
+
+      const txPreview: LendingPreview = {
+        tokenName: tokenName,
+        amount: amount,
+        action: 'repay',
+        chainId: txChainId,
+      };
+
+      try {
+        const executedPlan = await context.executeAction('repay', finalTxPlan);
+        context.log('Repay transaction plan executed (or prepared for signing):', executedPlan);
 
         return {
-          id: context.userAddress,
+          id: userAddress,
           status: {
             state: 'completed',
             message: {
               role: 'agent',
               parts: [
-                { type: 'text', text: 'Transaction plan successfully created. Ready to sign.' },
+                {
+                  type: 'text',
+                  text: `Repay transaction plan created for ${amount} ${tokenName}. Ready to sign.`,
+                },
               ],
             },
           },
           artifacts: [
             {
               name: 'transaction-plan',
-              parts: [{ type: 'data', data: txArtifact }],
+              parts: [
+                {
+                  type: 'data',
+                  data: {
+                    txPreview: txPreview,
+                    txPlan: executedPlan,
+                  } as TransactionArtifact,
+                },
+              ],
             },
           ],
         };
       } catch (error) {
-        context.log(`Error during repay execution for ${tokenName}:`, error);
+        context.log(`Error during repay action execution:`, error);
         return {
-          id: context.userAddress,
+          id: userAddress,
           status: {
             state: 'failed',
             message: {
               role: 'agent',
-              parts: [{ type: 'text', text: `Repay Error: ${(error as Error).message}` }],
+              parts: [
+                {
+                  type: 'text',
+                  text: `Failed to execute repay transaction plan: ${(error as Error).message}`,
+                },
+              ],
             },
           },
         };
       }
+    }
   }
 }
 
@@ -522,31 +672,31 @@ export async function handleSupply(
   params: { tokenName: string; amount: string },
   context: HandlerContext
 ): Promise<Task> {
+  const { tokenName: rawTokenName, amount } = params;
+  const tokenName = rawTokenName.toUpperCase();
+
   if (!context.userAddress) {
     throw new Error('User address not set!');
   }
 
-  const { tokenName, amount } = params;
-  const findResult = findTokenInfo(context.tokenMap, tokenName);
+  const findResult = findTokenInfo(context.tokenMap, rawTokenName);
 
   switch (findResult.type) {
     case 'notFound':
-      context.log(`Supply failed: Token ${tokenName} not found/supported.`);
       return {
         id: context.userAddress,
         status: {
           state: 'failed',
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: `Token ${tokenName} not supported for supplying.` }],
+            parts: [{ type: 'text', text: `Token '${rawTokenName}' not supported.` }],
           },
         },
       };
 
     case 'clarificationNeeded':
-      context.log(`Supply requires clarification for token ${tokenName}.`);
-      const optionsText = findResult.options
-        .map(opt => `- ${tokenName} on chain ${opt.chainId}`)
+      const chainList = findResult.options
+        .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.chainId}`)
         .join('\n');
       return {
         id: context.userAddress,
@@ -557,74 +707,221 @@ export async function handleSupply(
             parts: [
               {
                 type: 'text',
-                text: `Which ${tokenName} do you want to supply? Please specify the chain:\n${optionsText}`,
+                text: `Multiple chains found for ${rawTokenName}:\n${chainList}\nPlease specify the chain.`,
               },
             ],
           },
         },
       };
 
-    case 'found':
-      const tokenDetail = findResult.token;
+    case 'found': {
+      const tokenInfo = findResult.token;
+      const userAddress = context.userAddress as Address;
+      const tokenAddress = tokenInfo.address as Address;
+      const txChainId = tokenInfo.chainId;
+      let atomicAmount: bigint;
+      try {
+        atomicAmount = parseUnits(amount, tokenInfo.decimals);
+      } catch (e) {
+        return {
+          id: userAddress,
+          status: {
+            state: 'failed',
+            message: {
+              role: 'agent',
+              parts: [{ type: 'text', text: `Invalid amount format: ${amount}` }],
+            },
+          },
+        };
+      }
+
       context.log(
-        `Preparing supply transaction: ${tokenName} (Chain: ${tokenDetail.chainId}, Addr: ${tokenDetail.address}), amount: ${amount}`
+        `Preparing supply: ${amount} ${tokenName} (${tokenAddress} on chain ${txChainId}), User: ${userAddress}`
       );
 
+      let publicClient: PublicClient;
       try {
-        const rawResult = await context.mcpClient.callTool({
-          name: 'supply',
-          arguments: {
-            tokenAddress: tokenDetail.address,
-            tokenChainId: tokenDetail.chainId,
-            amount,
-            userAddress: context.userAddress,
-          },
+        const chainConfig = getChainConfigById(txChainId);
+        const networkSegment = chainConfig.quicknodeSegment;
+        const targetChain = chainConfig.viemChain;
+        let dynamicRpcUrl: string;
+        if (networkSegment === '') {
+          dynamicRpcUrl = `https://${context.quicknodeSubdomain}.quiknode.pro/${context.quicknodeApiKey}`;
+        } else {
+          dynamicRpcUrl = `https://${context.quicknodeSubdomain}.${networkSegment}.quiknode.pro/${context.quicknodeApiKey}`;
+        }
+        publicClient = createPublicClient({
+          chain: targetChain,
+          transport: http(dynamicRpcUrl),
         });
-
-        const parsedResponse = parseToolResponse(rawResult, context, 'supply');
-        const transactions = await validateAndExecuteAction('supply', parsedResponse, context);
-
-        const txArtifact: TransactionArtifact = {
-          txPreview: {
-            tokenName,
-            amount,
-            action: 'supply',
-            chainId: tokenDetail.chainId,
+        context.log(`Public client created for chain ${txChainId}`);
+      } catch (chainError) {
+        context.log(`Failed to create public client for chain ${txChainId}:`, chainError);
+        return {
+          id: userAddress,
+          status: {
+            state: 'failed',
+            message: {
+              role: 'agent',
+              parts: [
+                { type: 'text', text: `Network configuration error for chain ${txChainId}.` },
+              ],
+            },
           },
-          txPlan: transactions,
         };
+      }
+
+      try {
+        const currentBalance = (await publicClient.readContract({
+          address: tokenAddress,
+          abi: Erc20Abi.abi,
+          functionName: 'balanceOf',
+          args: [userAddress],
+        })) as bigint;
+        context.log(
+          `User balance check: Has ${currentBalance}, needs ${atomicAmount} of ${tokenName}`
+        );
+        if (currentBalance < atomicAmount) {
+          const formattedBalance = formatUnits(currentBalance, tokenInfo.decimals);
+          context.log(`Insufficient balance for supply. Needs ${amount}, has ${formattedBalance}`);
+          return {
+            id: userAddress,
+            status: {
+              state: 'failed',
+              message: {
+                role: 'agent',
+                parts: [
+                  {
+                    type: 'text',
+                    text: `Insufficient ${tokenName} balance. You need ${amount} but only have ${formattedBalance}.`,
+                  },
+                ],
+              },
+            },
+          };
+        }
+        context.log(`Sufficient balance confirmed.`);
+      } catch (readError) {
+        context.log(
+          `Warning: Failed to read token balance. Error: ${(readError as Error).message}`
+        );
+        return {
+          id: userAddress,
+          status: {
+            state: 'failed',
+            message: {
+              role: 'agent',
+              parts: [
+                {
+                  type: 'text',
+                  text: `Could not verify your ${tokenName} balance due to a network error.`,
+                },
+              ],
+            },
+          },
+        };
+      }
+
+      context.log(`Executing supply via MCP for ${amount} ${tokenName}`);
+      const toolResult = await context.mcpClient.callTool({
+        name: 'supply',
+        arguments: {
+          tokenAddress: tokenInfo.address,
+          tokenChainId: tokenInfo.chainId,
+          amount: atomicAmount.toString(),
+          userAddress: context.userAddress,
+        },
+      });
+
+      context.log('MCP supply tool response:', toolResult);
+
+      let validatedTxPlan: TransactionRequest[] = [];
+      try {
+        const parsedData = parseToolResponse(toolResult, context, 'supply');
+        validatedTxPlan = validateTransactions('supply', parsedData, context);
+
+        validatedTxPlan = validatedTxPlan.map(tx => ({ ...tx, chainId: tx.chainId ?? txChainId }));
+        context.log(`Processed ${validatedTxPlan.length} transactions from MCP for supply.`);
+
+        if (validatedTxPlan.length === 0) {
+          throw new Error('MCP tool returned an empty transaction plan.');
+        }
+      } catch (error) {
+        context.log(`Error processing MCP supply response:`, error);
+        return {
+          id: userAddress,
+          status: {
+            state: 'failed',
+            message: {
+              role: 'agent',
+              parts: [
+                {
+                  type: 'text',
+                  text: `Failed to get valid supply plan: ${(error as Error).message}`,
+                },
+              ],
+            },
+          },
+        };
+      }
+
+      const finalTxPlan = validatedTxPlan;
+      const txPreview: LendingPreview = {
+        tokenName: tokenName,
+        amount: amount,
+        action: 'supply',
+        chainId: txChainId,
+      };
+
+      try {
+        const executedPlan = await context.executeAction('supply', finalTxPlan);
+        context.log('Supply transaction plan executed (or prepared for signing):', executedPlan);
 
         return {
-          id: context.userAddress,
+          id: userAddress,
           status: {
             state: 'completed',
             message: {
               role: 'agent',
               parts: [
-                { type: 'text', text: 'Transaction plan successfully created. Ready to sign.' },
+                {
+                  type: 'text',
+                  text: `Supply transaction plan created for ${amount} ${tokenName}. Ready to sign.`,
+                },
               ],
             },
           },
           artifacts: [
             {
               name: 'transaction-plan',
-              parts: [{ type: 'data', data: txArtifact }],
+              parts: [
+                {
+                  type: 'data',
+                  data: { txPreview: txPreview, txPlan: executedPlan } as TransactionArtifact,
+                },
+              ],
             },
           ],
         };
       } catch (error) {
-        context.log(`Error during supply execution for ${tokenName}:`, error);
+        context.log(`Error during supply action execution:`, error);
         return {
-          id: context.userAddress,
+          id: userAddress,
           status: {
             state: 'failed',
             message: {
               role: 'agent',
-              parts: [{ type: 'text', text: `Supply Error: ${(error as Error).message}` }],
+              parts: [
+                {
+                  type: 'text',
+                  text: `Failed to execute supply transaction plan: ${(error as Error).message}`,
+                },
+              ],
             },
           },
         };
       }
+    }
   }
 }
 
@@ -632,31 +929,33 @@ export async function handleWithdraw(
   params: { tokenName: string; amount: string },
   context: HandlerContext
 ): Promise<Task> {
+  const { tokenName: rawTokenName, amount } = params;
+  const tokenName = rawTokenName.toUpperCase();
+
   if (!context.userAddress) {
     throw new Error('User address not set!');
   }
 
-  const { tokenName, amount } = params;
-  const findResult = findTokenInfo(context.tokenMap, tokenName);
+  const findResult = findTokenInfo(context.tokenMap, rawTokenName);
 
   switch (findResult.type) {
     case 'notFound':
-      context.log(`Withdraw failed: Token ${tokenName} not found/supported.`);
       return {
         id: context.userAddress,
         status: {
           state: 'failed',
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: `Token ${tokenName} not supported for withdrawing.` }],
+            parts: [
+              { type: 'text', text: `Token '${rawTokenName}' not supported for withdrawing.` },
+            ],
           },
         },
       };
 
     case 'clarificationNeeded':
-      context.log(`Withdraw requires clarification for token ${tokenName}.`);
-      const optionsText = findResult.options
-        .map(opt => `- ${tokenName} on chain ${opt.chainId}`)
+      const chainList = findResult.options
+        .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.chainId}`)
         .join('\n');
       return {
         id: context.userAddress,
@@ -667,41 +966,40 @@ export async function handleWithdraw(
             parts: [
               {
                 type: 'text',
-                text: `Which ${tokenName} do you want to withdraw? Please specify the chain:\n${optionsText}`,
+                text: `Multiple chains found for ${rawTokenName}:\n${chainList}\nPlease specify the chain.`,
               },
             ],
           },
         },
       };
 
-    case 'found':
+    case 'found': {
       const tokenDetail = findResult.token;
       context.log(
-        `Preparing withdraw transaction: ${tokenName} (Chain: ${tokenDetail.chainId}, Addr: ${tokenDetail.address}), amount: ${amount}`
+        `Preparing withdraw transaction: ${amount} ${tokenName} (${tokenDetail.address} on chain ${tokenDetail.chainId})`
       );
 
+      const toolResult = await context.mcpClient.callTool({
+        name: 'withdraw',
+        arguments: {
+          tokenAddress: tokenDetail.address,
+          tokenChainId: tokenDetail.chainId,
+          amount: amount,
+          userAddress: context.userAddress,
+        },
+      });
+
+      context.log('MCP withdraw tool response:', toolResult);
+
       try {
-        const rawResult = await context.mcpClient.callTool({
-          name: 'withdraw',
-          arguments: {
-            tokenAddress: tokenDetail.address,
-            tokenChainId: tokenDetail.chainId,
-            amount,
-            userAddress: context.userAddress,
-          },
-        });
+        const validatedTxPlan = await validateAndExecuteAction('withdraw', toolResult, context);
+        context.log('Withdraw transaction plan validated and executed:', validatedTxPlan);
 
-        const parsedResponse = parseToolResponse(rawResult, context, 'withdraw');
-        const transactions = await validateAndExecuteAction('withdraw', parsedResponse, context);
-
-        const txArtifact: TransactionArtifact = {
-          txPreview: {
-            tokenName,
-            amount,
-            action: 'withdraw',
-            chainId: tokenDetail.chainId,
-          },
-          txPlan: transactions,
+        const txPreview: LendingPreview = {
+          tokenName: tokenName,
+          amount: amount,
+          action: 'withdraw',
+          chainId: tokenDetail.chainId,
         };
 
         return {
@@ -711,30 +1009,47 @@ export async function handleWithdraw(
             message: {
               role: 'agent',
               parts: [
-                { type: 'text', text: 'Transaction plan successfully created. Ready to sign.' },
+                {
+                  type: 'text',
+                  text: `Withdraw transaction plan created for ${amount} ${tokenName}. Ready to sign.`,
+                },
               ],
             },
           },
           artifacts: [
             {
               name: 'transaction-plan',
-              parts: [{ type: 'data', data: txArtifact }],
+              parts: [
+                {
+                  type: 'data',
+                  data: {
+                    txPreview: txPreview,
+                    txPlan: validatedTxPlan,
+                  } as TransactionArtifact,
+                },
+              ],
             },
           ],
         };
       } catch (error) {
-        context.log(`Error during withdraw execution for ${tokenName}:`, error);
+        context.log(`Error during withdraw action validation/execution:`, error);
         return {
           id: context.userAddress,
           status: {
             state: 'failed',
             message: {
               role: 'agent',
-              parts: [{ type: 'text', text: `Withdraw Error: ${(error as Error).message}` }],
+              parts: [
+                {
+                  type: 'text',
+                  text: `Failed to create withdraw transaction plan: ${(error as Error).message}`,
+                },
+              ],
             },
           },
         };
       }
+    }
   }
 }
 
@@ -760,9 +1075,6 @@ export async function handleGetUserPositions(
 
     console.log('parsedData', parsedData);
 
-    let positionsText: string;
-
-    // Validate the parsed data using the new Zod schema
     const validationResult = ZodGetWalletPositionsResponseSchema.safeParse(parsedData);
 
     if (!validationResult.success) {
@@ -771,15 +1083,12 @@ export async function handleGetUserPositions(
     }
 
     const validatedPositions = validationResult.data;
-    // Remove the conversion to JSON string for the message
-    // positionsText = JSON.stringify(validatedPositions);
 
     return {
-      id: context.userAddress, // Removed non-null assertion as it's checked earlier
+      id: context.userAddress,
       status: {
         state: 'completed',
       },
-      // Add the artifact containing the validated positions data
       artifacts: [
         {
           name: 'wallet-positions',

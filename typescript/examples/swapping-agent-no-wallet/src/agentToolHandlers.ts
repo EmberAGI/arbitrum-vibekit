@@ -6,10 +6,12 @@ import {
   type Address,
   encodeFunctionData,
   type PublicClient,
+  formatUnits,
 } from 'viem';
 import { getChainConfigById } from './agent.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Task } from 'a2a-samples-js/schema';
+import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
 
 export type TokenInfo = {
   chainId: string;
@@ -221,33 +223,6 @@ function validateAction(
   return validationResult.data;
 }
 
-const minimalErc20Abi = [
-  {
-    constant: true,
-    inputs: [
-      { name: '_owner', type: 'address' },
-      { name: '_spender', type: 'address' },
-    ],
-    name: 'allowance',
-    outputs: [{ name: '', type: 'uint256' }],
-    payable: false,
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    constant: false,
-    inputs: [
-      { name: '_spender', type: 'address' },
-      { name: '_value', type: 'uint256' },
-    ],
-    name: 'approve',
-    outputs: [{ name: '', type: 'bool' }],
-    payable: false,
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-] as const;
-
 export async function handleSwapTokens(
   params: {
     fromToken: string;
@@ -258,12 +233,15 @@ export async function handleSwapTokens(
   },
   context: HandlerContext
 ): Promise<Task> {
+  const { fromToken: rawFromToken, toToken: rawToToken, amount, fromChain, toChain } = params;
+  const fromToken = rawFromToken.toUpperCase();
+  const toToken = rawToToken.toUpperCase();
+
   if (!context.userAddress) {
     throw new Error('User address not set!');
   }
-  const { fromToken, toToken, amount, fromChain, toChain } = params;
 
-  const fromTokenResult = findTokenDetail(fromToken, fromChain, context.tokenMap, 'from');
+  const fromTokenResult = findTokenDetail(rawFromToken, fromChain, context.tokenMap, 'from');
   if (typeof fromTokenResult === 'string') {
     return {
       id: context.userAddress,
@@ -275,7 +253,7 @@ export async function handleSwapTokens(
   }
   const fromTokenDetail = fromTokenResult;
 
-  const toTokenResult = findTokenDetail(toToken, toChain, context.tokenMap, 'to');
+  const toTokenResult = findTokenDetail(rawToToken, toChain, context.tokenMap, 'to');
   if (typeof toTokenResult === 'string') {
     return {
       id: context.userAddress,
@@ -288,6 +266,83 @@ export async function handleSwapTokens(
   const toTokenDetail = toTokenResult;
 
   const atomicAmount = parseUnits(amount, fromTokenDetail.decimals);
+  const txChainId = fromTokenDetail.chainId;
+  const fromTokenAddress = fromTokenDetail.address as Address;
+  const userAddress = context.userAddress as Address;
+
+  context.log(
+    `Preparing swap: ${rawFromToken} (${fromTokenAddress} on chain ${txChainId}) to ${rawToToken} (${toTokenDetail.address} on chain ${toTokenDetail.chainId}), Amount: ${amount} (${atomicAmount}), User: ${userAddress}`
+  );
+
+  let publicClient: PublicClient;
+  try {
+    const chainConfig = getChainConfigById(txChainId);
+    const networkSegment = chainConfig.quicknodeSegment;
+    const targetChain = chainConfig.viemChain;
+    let dynamicRpcUrl: string;
+    if (networkSegment === '') {
+      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.quiknode.pro/${context.quicknodeApiKey}`;
+    } else {
+      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.${networkSegment}.quiknode.pro/${context.quicknodeApiKey}`;
+    }
+    publicClient = createPublicClient({
+      chain: targetChain,
+      transport: http(dynamicRpcUrl),
+    });
+    context.log(`Public client created for chain ${txChainId} via ${dynamicRpcUrl.split('/')[2]}`);
+  } catch (chainError) {
+    context.log(`Failed to create public client for chain ${txChainId}:`, chainError);
+    throw new Error(`Unsupported chain or configuration error for chainId ${txChainId}.`);
+  }
+
+  let currentBalance: bigint;
+  try {
+    currentBalance = (await publicClient.readContract({
+      address: fromTokenAddress,
+      abi: Erc20Abi.abi,
+      functionName: 'balanceOf',
+      args: [userAddress],
+    })) as bigint;
+    context.log(`User balance check: Has ${currentBalance}, needs ${atomicAmount} of ${fromToken}`);
+
+    if (currentBalance < atomicAmount) {
+      const formattedBalance = formatUnits(currentBalance, fromTokenDetail.decimals);
+      context.log(`Insufficient balance for the swap. Needs ${amount}, has ${formattedBalance}`);
+      return {
+        id: userAddress,
+        status: {
+          state: 'failed',
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                type: 'text',
+                text: `Insufficient ${fromToken} balance. You need ${amount} but only have ${formattedBalance}.`,
+              },
+            ],
+          },
+        },
+      };
+    }
+    context.log(`Sufficient balance confirmed.`);
+  } catch (readError) {
+    context.log(`Warning: Failed to read token balance. Error: ${(readError as Error).message}`);
+    return {
+      id: userAddress,
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              type: 'text',
+              text: `Could not verify your ${fromToken} balance due to a network error. Please try again.`,
+            },
+          ],
+        },
+      },
+    };
+  }
 
   context.log(
     `Executing swap via MCP: ${fromToken} (address: ${fromTokenDetail.address}, chain: ${fromTokenDetail.chainId}) to ${toToken} (address: ${toTokenDetail.address}, chain: ${toTokenDetail.chainId}), amount: ${amount}, atomicAmount: ${atomicAmount}, userAddress: ${context.userAddress}`
@@ -328,43 +383,19 @@ export async function handleSwapTokens(
   }
 
   const spenderAddress = firstSwapTx.to as Address;
-  const txChainId = fromTokenDetail.chainId;
-  const fromTokenAddress = fromTokenDetail.address as Address;
-  const userAddress = context.userAddress as Address;
 
   context.log(
     `Checking allowance: User ${userAddress} needs to allow Spender ${spenderAddress} to spend ${atomicAmount} of Token ${fromTokenAddress} on Chain ${txChainId}`
   );
 
-  let tempPublicClient: PublicClient;
-  try {
-    const chainConfig = getChainConfigById(txChainId);
-    const networkSegment = chainConfig.quicknodeSegment;
-    const targetChain = chainConfig.viemChain;
-    let dynamicRpcUrl: string;
-    if (networkSegment === '') {
-      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.quiknode.pro/${context.quicknodeApiKey}`;
-    } else {
-      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.${networkSegment}.quiknode.pro/${context.quicknodeApiKey}`;
-    }
-    tempPublicClient = createPublicClient({
-      chain: targetChain,
-      transport: http(dynamicRpcUrl),
-    });
-    context.log(`Public client created for chain ${txChainId} via ${dynamicRpcUrl.split('/')[2]}`);
-  } catch (chainError) {
-    context.log(`Failed to create public client for chain ${txChainId}:`, chainError);
-    throw new Error(`Unsupported chain or configuration error for chainId ${txChainId}.`);
-  }
-
   let currentAllowance: bigint = 0n;
   try {
-    currentAllowance = await tempPublicClient.readContract({
+    currentAllowance = (await publicClient.readContract({
       address: fromTokenAddress,
-      abi: minimalErc20Abi,
+      abi: Erc20Abi.abi,
       functionName: 'allowance',
       args: [userAddress, spenderAddress],
-    });
+    })) as bigint;
     context.log(`Successfully read allowance: ${currentAllowance}. Required: ${atomicAmount}`);
   } catch (readError) {
     context.log(
@@ -381,7 +412,7 @@ export async function handleSwapTokens(
     approveTx = {
       to: fromTokenAddress,
       data: encodeFunctionData({
-        abi: minimalErc20Abi,
+        abi: Erc20Abi.abi,
         functionName: 'approve',
         args: [spenderAddress, BigInt(2) ** BigInt(256) - BigInt(1)],
       }),
@@ -426,7 +457,12 @@ export async function handleSwapTokens(
       state: 'completed',
       message: {
         role: 'agent',
-        parts: [{ type: 'text', text: 'Transaction plan successfully created. Ready to sign.' }],
+        parts: [
+          {
+            type: 'text',
+            text: `Transaction plan created for ${fromToken} to ${toToken}. Ready to sign.`,
+          },
+        ],
       },
     },
     artifacts: [

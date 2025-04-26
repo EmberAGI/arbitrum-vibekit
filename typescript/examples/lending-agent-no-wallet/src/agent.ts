@@ -27,6 +27,8 @@ import {
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createRequire } from 'module';
+import * as chains from 'viem/chains';
+import type { Chain } from 'viem/chains';
 
 // Node types might be needed for process.env and __dirname/__filename patterns
 // import type * as NodeTypes from 'node'; // This line can be uncommented if @types/node doesn't resolve 'process'
@@ -139,6 +141,52 @@ type LendingToolSet = {
   withdraw: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
   getUserPositions: Tool<typeof GetUserPositionsSchema, Task>;
 };
+
+// Define ChainConfig interface for chain configurations
+interface ChainConfig {
+  viemChain: Chain;
+  quicknodeSegment: string;
+}
+
+// Map ONLY the QuickNode segment, as viemChain is found dynamically
+const quicknodeSegments: Record<string, string> = {
+  '1': '',
+  '42161': 'arbitrum-mainnet',
+  '10': 'optimism',
+  '137': 'matic',
+  '8453': 'base-mainnet',
+};
+
+// Function to find the correct viem chain object and QuickNode segment
+export function getChainConfigById(chainId: string): ChainConfig {
+  const numericChainId = parseInt(chainId, 10);
+  if (isNaN(numericChainId)) {
+    throw new Error(`Invalid chainId format: ${chainId}`);
+  }
+
+  // Find the viem chain object dynamically
+  const viemChain = Object.values(chains).find(
+    chain => chain && typeof chain === 'object' && 'id' in chain && chain.id === numericChainId
+  );
+
+  if (!viemChain) {
+    throw new Error(
+      `Unsupported chainId: ${chainId}. Viem chain definition not found in imported chains.`
+    );
+  }
+
+  // Look up the QuickNode segment from our specific map
+  const quicknodeSegment = quicknodeSegments[chainId];
+
+  if (quicknodeSegment === undefined) {
+    throw new Error(
+      `Unsupported chainId: ${chainId}. QuickNode segment not configured in quicknodeSegments map.`
+    );
+  }
+
+  // Assert the type of viemChain to satisfy the linter
+  return { viemChain: viemChain as Chain, quicknodeSegment };
+}
 
 export class Agent {
   private mcpClient: Client | null = null;
