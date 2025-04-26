@@ -1,17 +1,6 @@
 import { z } from 'zod';
-import {
-  type Address,
-  type Hex,
-  type TransactionReceipt,
-  BaseError,
-  ContractFunctionRevertedError,
-  hexToString,
-  isHex,
-  createWalletClient,
-  createPublicClient,
-  http,
-} from 'viem';
-import type { HandlerContext, TransactionRequest } from './agentToolHandlers.js';
+import { type Address } from 'viem';
+import type { HandlerContext } from './agentToolHandlers.js';
 import { handleSwapTokens, parseMcpToolResponse } from './agentToolHandlers.js';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -184,7 +173,6 @@ export class Agent {
       mcpClient: this.mcpClient,
       tokenMap: this.tokenMap,
       userAddress: this.userAddress,
-      executeAction: this.executeAction.bind(this),
       log: this.log.bind(this),
       quicknodeSubdomain: this.quicknodeSubdomain,
       quicknodeApiKey: this.quicknodeApiKey,
@@ -462,155 +450,6 @@ Use relavant conversation history to obtain required tool parameters. Present th
       };
       this.conversationHistory.push(errorAssistantMessage);
       throw error;
-    }
-  }
-
-  async executeAction(actionName: string, transactions: TransactionRequest[]): Promise<string> {
-    if (!transactions || transactions.length === 0) {
-      this.log(`${actionName}: No transactions required.`);
-      return `${actionName.charAt(0).toUpperCase() + actionName.slice(1)}: No on-chain transactions required.`;
-    }
-    try {
-      this.log(`Executing ${transactions.length} transaction(s) for ${actionName}...`);
-      const txHashes: string[] = [];
-      for (const transaction of transactions) {
-        const txHash = await this.signAndSendTransaction(transaction);
-        this.log(`${actionName} transaction sent: ${txHash}`);
-        txHashes.push(txHash);
-      }
-      return `${actionName.charAt(0).toUpperCase() + actionName.slice(1)} successful! Transaction hash(es): ${txHashes.join(', ')}`;
-    } catch (error: unknown) {
-      const err = error as Error;
-      logError(`Error executing ${actionName} action:`, err.message);
-      throw new Error(`Error executing ${actionName}: ${err.message}`);
-    }
-  }
-
-  async signAndSendTransaction(tx: TransactionRequest): Promise<string> {
-    if (!tx.chainId) {
-      const errorMsg = `Transaction object missing required 'chainId' field`;
-      logError(errorMsg, tx);
-      throw new Error(errorMsg);
-    }
-
-    let chainConfig: ChainConfig;
-    try {
-      chainConfig = getChainConfigById(tx.chainId);
-    } catch (chainError) {
-      logError((chainError as Error).message, tx);
-      throw chainError;
-    }
-    const targetChain = chainConfig.viemChain;
-    const networkSegment = chainConfig.quicknodeSegment;
-
-    let dynamicRpcUrl: string;
-    if (networkSegment === '') {
-      dynamicRpcUrl = `https://${this.quicknodeSubdomain}.quiknode.pro/${this.quicknodeApiKey}`;
-    } else {
-      dynamicRpcUrl = `https://${this.quicknodeSubdomain}.${networkSegment}.quiknode.pro/${this.quicknodeApiKey}`;
-    }
-
-    const tempPublicClient = createPublicClient({
-      chain: targetChain,
-      transport: http(dynamicRpcUrl),
-    });
-    const tempWalletClient = createWalletClient({
-      account: this.userAddress,
-      chain: targetChain,
-      transport: http(dynamicRpcUrl),
-    });
-
-    if (!this.userAddress) {
-      throw new Error('User address is not set for signing.');
-    }
-
-    if (!tx.to || !/^0x[a-fA-F0-9]{40}$/.test(tx.to)) {
-      const errorMsg = `Transaction object invalid 'to' field: ${tx.to}`;
-      logError(errorMsg, tx);
-      throw new Error(errorMsg);
-    }
-    if (!tx.data || !isHex(tx.data)) {
-      const errorMsg = `Transaction object invalid 'data' field (not hex): ${tx.data}`;
-      logError(errorMsg, tx);
-      throw new Error(errorMsg);
-    }
-
-    const toAddress = tx.to as Address;
-    const txData = tx.data as Hex;
-    const txValue = tx.value ? BigInt(tx.value) : 0n;
-
-    const baseTx = {
-      account: this.userAddress,
-      to: toAddress,
-      value: txValue,
-      data: txData,
-      chain: targetChain,
-    };
-
-    try {
-      const dataPrefix = txData.substring(0, 10);
-      this.log(
-        `Preparing transaction to ${baseTx.to} on chain ${targetChain.id} (${networkSegment}) via ${dynamicRpcUrl.split('/')[2]} from ${this.userAddress} with data ${dataPrefix}...`
-      );
-
-      this.log(`Sending transaction...`);
-      const txHash = await tempWalletClient.sendTransaction({
-        account: this.userAddress,
-        to: toAddress,
-        value: txValue,
-        data: txData,
-      });
-
-      this.log(
-        `Transaction submitted to chain ${targetChain.id}: ${txHash}. Waiting for confirmation...`
-      );
-
-      const receipt: TransactionReceipt = await tempPublicClient.waitForTransactionReceipt({
-        hash: txHash,
-      });
-
-      this.log(
-        `Transaction confirmed on chain ${targetChain.id} in block ${receipt.blockNumber} (Status: ${receipt.status}): ${txHash}`
-      );
-
-      if (receipt.status === 'reverted') {
-        throw new Error(
-          `Transaction ${txHash} failed (reverted). Check blockchain explorer for details.`
-        );
-      }
-      return txHash;
-    } catch (error: unknown) {
-      let revertReason =
-        error instanceof Error
-          ? `Transaction failed: ${error.message}`
-          : 'Transaction failed: Unknown error';
-
-      if (error instanceof BaseError) {
-        const cause = error.walk((e: unknown) => e instanceof ContractFunctionRevertedError);
-        if (cause instanceof ContractFunctionRevertedError) {
-          const errorName = cause.reason ?? cause.shortMessage;
-          revertReason = `Transaction reverted: ${errorName}`;
-          if (cause.data?.errorName === '_decodeRevertReason') {
-            const hexReason = cause.data.args?.[0];
-            if (hexReason && typeof hexReason === 'string' && isHex(hexReason as Hex)) {
-              try {
-                revertReason = `Transaction reverted: ${hexToString(hexReason as Hex)}`;
-              } catch (decodeError) {
-                logError('Failed to decode revert reason hex:', hexReason, decodeError);
-              }
-            }
-          }
-        } else {
-          revertReason = `Transaction failed: ${error.shortMessage}`;
-        }
-        logError(`Send transaction failed: ${revertReason}`, error.details);
-      } else if (error instanceof Error) {
-        logError(`Send transaction failed: ${revertReason}`, error);
-      } else {
-        logError(`Send transaction failed with unknown error type: ${revertReason}`, error);
-      }
-
-      throw new Error(revertReason);
     }
   }
 
