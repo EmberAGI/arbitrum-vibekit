@@ -127,6 +127,11 @@ export function parseMcpToolResponse(
 export async function handleMarketsQuery(context: HandlerContext): Promise<any> {
   try {
     const marketInfo = await getMarketInfo(context.gmxClient);
+    if(!marketInfo.success) {
+      console.log(`Failed to fetch market information: ${marketInfo.message}`);
+    }else {
+      console.log(`Successfully fetched market information: ${marketInfo.message}`);
+    }
     
     return marketInfo;
   } catch (error) {
@@ -139,20 +144,15 @@ export async function handleMarketsQuery(context: HandlerContext): Promise<any> 
  * Handle positions query
  */
 export async function handlePositionsQuery(
-  args: { marketSymbol?: string, userAddress?: string } | string,
+  args: { marketSymbol?: string, userAddress: string },
   context: HandlerContext
 ): Promise<string> {
   try {
-    // Process the input based on whether it's a string or an object
-    const instruction = typeof args === 'string' ? args : '';
+   if(!args.userAddress) {
+    return 'No user address provided';
+   }
     
-    // Use a demo account address if one is provided in .env, otherwise use a placeholder
-    const demoAccount = process.env.DEMO_ACCOUNT || '0x0000000000000000000000000000000000000000';
-    
-    // If userAddress is provided in args (as an object), use that instead
-    const userAddress = typeof args === 'object' && args.userAddress ? args.userAddress : demoAccount;
-    
-    const positionInfo = await getPositionInfo(context.gmxClient, userAddress);
+    const positionInfo = await getPositionInfo(context.gmxClient, args.userAddress);
     
     if (!positionInfo.success) {
       return `Failed to fetch position information: ${positionInfo.message}`;

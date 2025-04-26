@@ -34,9 +34,14 @@ const GetMarketInfoSchema = z.object({
 });
 
 const GetPositionInfoSchema = z.object({
-  userAddress: z.string().optional().describe('User wallet address to check positions for. If not provided, uses demo account.'),
-  marketSymbol: z.string().optional().describe('Specific market to filter positions for (e.g., "ETH", "BTC")'),
+  userAddress: z.string()
+    .regex(/^0x[a-fA-F0-9]{40}$/)
+    .describe('Required. User address starting with "0x" and exactly 40 hexadecimal characters. Example: 0x1234567890abcdef1234567890abcdef12345678.'),
+  marketSymbol: z.string()
+    .optional()
+    .describe('Optional. Specific market symbol to filter positions by (e.g., "ETH", "BTC").'),
 });
+
 
 const CreateIncreasePositionSchema = z.object({
   marketAddress: z.string().describe('The market address to create a position in'),
@@ -90,22 +95,36 @@ export class Agent {
     this.conversationHistory = [
       {
         role: 'system',
-        content: `You are an AI agent that provides access to GMX protocol operations. You can help users view market information, check position details, and provide guidance on trading strategies.
+        content: `
+You are an AI assistant specialized in the GMX trading platform.
 
-You understand and can respond to queries about:
-- GMX markets and pairs
-- Current position information
-- Trading strategies on GMX
-- Liquidation risks and margin requirements
-- Fee structures and funding rates
+CRITICAL ADDRESS HANDLING:
+- ALWAYS extract user addresses from user messages (format: 0x followed by 40 hex characters)
+- When a user mentions an address like "0x1234567890abcdef1234567890abcdef12345678", USE IT directly with the tool
+- NEVER ask for an address if one is already provided in the message
 
-You have access to the following tools:
-- getMarketInfo: Get information about available markets on GMX
-- getPositionInfo: Check position details for a user
-- createIncreasePosition: Create or increase a position (simulated)
-- createDecreasePosition: Decrease or close a position (simulated)
+TOOL USAGE POLICY:
+- If the query is about positions or open trades: ALWAYS call getPositionInfo with the user's address
+- If the query is about available markets, trading pairs, or funding rates: ALWAYS call getMarketInfo
+- If the user wants to open or increase a position: Call createIncreasePosition
+- If the user wants to reduce or close a position: Call createDecreasePosition
 
-Use plain text in your responses, not markdown. Be concise and accurate with numbers and data. When you encounter an error, clearly explain what went wrong without guessing at the cause.`,
+IMPORTANT: 
+- If a tool should be used, DO NOT reply with text
+- For position queries, IMMEDIATELY call getPositionInfo with the address you detect
+- Never summarize data manually when a tool is available
+
+DIRECT EXAMPLES:
+User: "show me all my positions for address: 0x1234567890abcdef1234567890abcdef12345678"
+Action: MUST call getPositionInfo with userAddress: "0x1234567890abcdef1234567890abcdef12345678"
+
+User: "Which pairs can I trade?"
+Action: MUST call getMarketInfo
+
+REMEMBER:
+- If unsure whether a tool is needed, assume YES
+- Prefer using a tool over guessing any data
+`,
       },
     ];
 
@@ -277,7 +296,7 @@ Use plain text in your responses, not markdown. Be concise and accurate with num
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
-        model: openrouter('google/gemini-2.5-flash-preview'),
+        model: openrouter('gpt-4o'),
         messages: this.conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,
