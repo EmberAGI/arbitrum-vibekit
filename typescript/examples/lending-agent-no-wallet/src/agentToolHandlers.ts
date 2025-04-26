@@ -86,20 +86,25 @@ export const LendingPreviewSchema = z
 
 export type LendingPreview = z.infer<typeof LendingPreviewSchema>;
 
-export const TransactionRequestSchema = z
+export const TransactionEmberSchema = z
   .object({
-    chainId: z.string().optional(),
-    to: z.string().optional(),
-    data: z.string().optional(),
-    value: z.string().optional(),
+    to: z.string(),
+    data: z.string(),
+    value: z.string(),
   })
   .passthrough();
 
-export type TransactionRequest = z.infer<typeof TransactionRequestSchema>;
+export type TransactionEmber = z.infer<typeof TransactionEmberSchema>;
+
+export const TransactionResponseSchema = TransactionEmberSchema.extend({
+  chainId: z.string(),
+});
+
+export type TransactionResponse = z.infer<typeof TransactionResponseSchema>;
 
 export const TransactionArtifactSchema = z.object({
   txPreview: LendingPreviewSchema,
-  txPlan: z.array(TransactionRequestSchema),
+  txPlan: z.array(TransactionResponseSchema),
 });
 
 export type TransactionArtifact = z.infer<typeof TransactionArtifactSchema>;
@@ -193,10 +198,6 @@ export interface HandlerContext {
   log: (...args: unknown[]) => void;
   quicknodeSubdomain: string;
   quicknodeApiKey: string;
-  executeAction: (
-    actionName: string,
-    transactions: TransactionRequest[]
-  ) => Promise<TransactionRequest[]>;
 }
 
 type FindTokenResult =
@@ -267,31 +268,34 @@ function parseToolResponse(
 function validateTransactions(
   actionName: string,
   rawTransactions: unknown,
+  expectedChainId: string,
   context: HandlerContext
-): TransactionRequest[] {
-  const validationResult = z.array(TransactionRequestSchema).safeParse(rawTransactions);
+): TransactionResponse[] {
+  const validationResult = z.array(TransactionEmberSchema).safeParse(rawTransactions);
   if (!validationResult.success) {
-    const errorMsg = `MCP tool '${actionName}' returned invalid transaction data after parsing.`;
+    const errorMsg = `MCP tool '${actionName}' returned invalid transaction data structure.`;
     context.log(errorMsg, validationResult.error);
     context.log('Raw data that failed validation:', JSON.stringify(rawTransactions));
     throw new Error(errorMsg);
   }
-  context.log(`Validated ${validationResult.data.length} transactions for ${actionName}.`);
-  return validationResult.data;
-}
+  context.log(
+    `Validated structure for ${validationResult.data.length} transactions for ${actionName}. Adding chainId: ${expectedChainId}`
+  );
 
-async function validateAndExecuteAction(
-  actionName: string,
-  rawToolResult: unknown,
-  context: HandlerContext
-): Promise<TransactionRequest[]> {
-  const parsedResult = parseToolResponse(rawToolResult, context, actionName);
-  const validatedTransactions = validateTransactions(actionName, parsedResult, context);
+  const transactionsWithChainId = validationResult.data.map(tx => ({
+    ...tx,
+    chainId: tx.chainId ?? expectedChainId,
+  }));
 
-  if (context.executeAction) {
-    return await context.executeAction(actionName, validatedTransactions);
+  const finalValidation = z.array(TransactionResponseSchema).safeParse(transactionsWithChainId);
+  if (!finalValidation.success) {
+    const errorMsg = `Failed to add required chainId '${expectedChainId}' to transactions for ${actionName}.`;
+    context.log(errorMsg, finalValidation.error);
+    context.log('Data after adding chainId:', JSON.stringify(transactionsWithChainId));
+    throw new Error(errorMsg);
   }
-  return validatedTransactions;
+
+  return finalValidation.data;
 }
 
 export async function handleBorrow(
@@ -360,7 +364,12 @@ export async function handleBorrow(
         });
 
         const parsedResponse = parseToolResponse(rawResult, context, 'borrow');
-        const transactions = await validateAndExecuteAction('borrow', parsedResponse, context);
+        const transactions: TransactionResponse[] = validateTransactions(
+          'borrow',
+          parsedResponse,
+          tokenDetail.chainId,
+          context
+        );
 
         const txArtifact: TransactionArtifact = {
           txPreview: {
@@ -567,20 +576,21 @@ export async function handleRepay(
         arguments: {
           tokenAddress: tokenInfo.address,
           tokenChainId: tokenInfo.chainId,
-          amount: atomicAmount.toString(),
+          amount: amount,
           userAddress: context.userAddress,
         },
       });
 
       context.log('MCP repay tool response:', toolResult);
 
-      let validatedTxPlan: TransactionRequest[] = [];
+      let validatedTxPlan: TransactionResponse[] = [];
       try {
         const parsedData = parseToolResponse(toolResult, context, 'repay');
-        validatedTxPlan = validateTransactions('repay', parsedData, context);
+        validatedTxPlan = validateTransactions('repay', parsedData, txChainId, context);
 
-        validatedTxPlan = validatedTxPlan.map(tx => ({ ...tx, chainId: tx.chainId ?? txChainId }));
-        context.log(`Processed ${validatedTxPlan.length} transactions from MCP for repay.`);
+        context.log(
+          `Processed and validated ${validatedTxPlan.length} transactions from MCP for repay.`
+        );
 
         if (validatedTxPlan.length === 0) {
           throw new Error('MCP tool returned an empty transaction plan.');
@@ -614,8 +624,7 @@ export async function handleRepay(
       };
 
       try {
-        const executedPlan = await context.executeAction('repay', finalTxPlan);
-        context.log('Repay transaction plan executed (or prepared for signing):', executedPlan);
+        context.log('Repay transaction plan prepared:', finalTxPlan);
 
         return {
           id: userAddress,
@@ -639,7 +648,7 @@ export async function handleRepay(
                   type: 'data',
                   data: {
                     txPreview: txPreview,
-                    txPlan: executedPlan,
+                    txPlan: finalTxPlan,
                   } as TransactionArtifact,
                 },
               ],
@@ -828,20 +837,21 @@ export async function handleSupply(
         arguments: {
           tokenAddress: tokenInfo.address,
           tokenChainId: tokenInfo.chainId,
-          amount: atomicAmount.toString(),
+          amount: amount,
           userAddress: context.userAddress,
         },
       });
 
       context.log('MCP supply tool response:', toolResult);
 
-      let validatedTxPlan: TransactionRequest[] = [];
+      let validatedTxPlan: TransactionResponse[] = [];
       try {
         const parsedData = parseToolResponse(toolResult, context, 'supply');
-        validatedTxPlan = validateTransactions('supply', parsedData, context);
+        validatedTxPlan = validateTransactions('supply', parsedData, txChainId, context);
 
-        validatedTxPlan = validatedTxPlan.map(tx => ({ ...tx, chainId: tx.chainId ?? txChainId }));
-        context.log(`Processed ${validatedTxPlan.length} transactions from MCP for supply.`);
+        context.log(
+          `Processed and validated ${validatedTxPlan.length} transactions from MCP for supply.`
+        );
 
         if (validatedTxPlan.length === 0) {
           throw new Error('MCP tool returned an empty transaction plan.');
@@ -874,8 +884,7 @@ export async function handleSupply(
       };
 
       try {
-        const executedPlan = await context.executeAction('supply', finalTxPlan);
-        context.log('Supply transaction plan executed (or prepared for signing):', executedPlan);
+        context.log('Supply transaction plan prepared:', finalTxPlan);
 
         return {
           id: userAddress,
@@ -897,7 +906,7 @@ export async function handleSupply(
               parts: [
                 {
                   type: 'data',
-                  data: { txPreview: txPreview, txPlan: executedPlan } as TransactionArtifact,
+                  data: { txPreview: txPreview, txPlan: finalTxPlan } as TransactionArtifact,
                 },
               ],
             },
@@ -992,8 +1001,14 @@ export async function handleWithdraw(
       context.log('MCP withdraw tool response:', toolResult);
 
       try {
-        const validatedTxPlan = await validateAndExecuteAction('withdraw', toolResult, context);
-        context.log('Withdraw transaction plan validated and executed:', validatedTxPlan);
+        const parsedResult = parseToolResponse(toolResult, context, 'withdraw');
+        const validatedTxPlan: TransactionResponse[] = validateTransactions(
+          'withdraw',
+          parsedResult,
+          tokenDetail.chainId,
+          context
+        );
+        context.log('Withdraw transaction plan validated:', validatedTxPlan);
 
         const txPreview: LendingPreview = {
           tokenName: tokenName,
