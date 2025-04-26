@@ -5,7 +5,7 @@ import type { TokenData, TokensData } from "@gmx-io/sdk/types/tokens.js";
 /**
  * Recursively convert BigInt values to strings
  */
-function convertBigIntToString(obj: any): any {
+export function convertBigIntToString(obj: any): any {
   if (obj === null || obj === undefined) {
     return obj;
   }
@@ -144,15 +144,6 @@ export async function getMarketInfo(gmxClient: GmxSdk) {
       address: token.address
     }));
   
-  // Create a readable list for display
-  const marketsTable = markets.map((m: any) => 
-    `${m.number}. ${m.name}\n   Index Token: ${m.indexToken}\n   Long Token: ${m.longToken}\n   Short Token: ${m.shortToken}\n   Address: ${m.marketAddress}`
-  ).join('\n\n');
-  
-  const tokensTable = tokens.map((t: any) => 
-    `${t.symbol} (${t.name}): ${t.address}`
-  ).join('\n');
-  
   // Return processed data along with any errors
   const output =  {
     success: markets.length > 0 || tokens.length > 0,
@@ -163,8 +154,6 @@ export async function getMarketInfo(gmxClient: GmxSdk) {
     tokens,
     marketCount: markets.length,
     tokenCount: tokens.length,
-    marketsTable,
-    tokensTable,
     summary: `GMX has ${markets.length} available markets and ${tokens.length} tradable tokens.`,
     note: errors.length > 0 ? 
       `Note: ${errors.length} market(s) could not be loaded due to errors.` : 

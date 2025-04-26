@@ -146,82 +146,43 @@ export async function handleMarketsQuery(context: HandlerContext): Promise<any> 
 export async function handlePositionsQuery(
   args: { marketSymbol?: string, userAddress: string },
   context: HandlerContext
-): Promise<string> {
+): Promise<any> {
   try {
    if(!args.userAddress) {
-    return 'No user address provided';
+    return { success: false, message: 'No user address provided' };
    }
     
     const positionInfo = await getPositionInfo(context.gmxClient, args.userAddress);
     
     if (!positionInfo.success) {
-      return `Failed to fetch position information: ${positionInfo.message}`;
+      return { success: false, message: `Failed to fetch position information: ${positionInfo.message}` };
     }
     
     // Handle case where positions is not an array but PositionsData type
     const positions = positionInfo.positions;
     if (!positions || (typeof positions === 'object' && Object.keys(positions).length === 0)) {
-      return `No active positions found for the account.`;
+      return { success: true, count: 0, positions: [], message: 'No active positions found for the account.' };
     }
     
     // If positions is an array with length property, we can check it directly
     if (Array.isArray(positions) && positions.length === 0) {
-      return `No active positions found for the account.`;
+      return { success: true, count: 0, positions: [], message: 'No active positions found for the account.' };
     }
     
-    // Process position data for display
-    let processedPositions: any[] = [];
-    
-    // If positions is a PositionsData object, convert to array for display
-    if (typeof positions === 'object' && !Array.isArray(positions)) {
-      const positionEntries = Object.entries(positions);
-      const positionCount = positionEntries.length;
-      
-      if (positionCount === 0) {
-        return `No active positions found for the account.`;
-      }
-      
-      // Format the positions in a readable way
-      processedPositions = positionEntries.map(([key, position]: [string, any]) => {
-        const market = position.marketInfo?.indexToken?.symbol 
-          ? `${position.marketInfo.indexToken.symbol}/USD` 
-          : 'Unknown Market';
-          
-        return {
-          key,
-          market,
-          side: position.isLong ? 'LONG' : 'SHORT',
-          size: formatAmount(position.sizeInUsd, 30),
-          collateral: formatAmount(position.collateralAmount, position.marketInfo?.longToken?.decimals || 18),
-          leverage: calculateLeverage(position.sizeInUsd, position.collateralUsd),
-          entryPrice: formatAmount(position.entryPrice, 30),
-          markPrice: formatAmount(position.markPrice, 30),
-          liquidationPrice: formatAmount(position.liquidationPrice, 30),
-          pnl: formatAmount(position.pnl, 30),
-          pnlPercentage: calculatePnlPercentage(position.pnl, position.collateralUsd),
-        };
-      });
-    } else if (Array.isArray(positions)) {
-      processedPositions = positions;
-    }
-    
-    let response = `Active Positions (${processedPositions.length}):\n\n`;
-    
-    processedPositions.forEach((position, index) => {
-      response += `${index + 1}. ${position.market} - ${position.side}\n`;
-      response += `   Size: ${position.size} USD\n`;
-      response += `   Collateral: ${position.collateral}\n`;
-      response += `   Leverage: ${position.leverage}\n`;
-      response += `   Entry Price: ${position.entryPrice}\n`;
-      response += `   Current Price: ${position.markPrice}\n`;
-      response += `   Liquidation Price: ${position.liquidationPrice}\n`;
-      response += `   PnL: ${position.pnl} (${position.pnlPercentage})\n\n`;
-    });
-    
-    return response;
+    // Return a structured object instead of a string
+    return {
+      success: true,
+      count: positions.length,
+      positions,
+      message: `Found ${positions.length} active positions.`
+    };
   } catch (error) {
     context.log('Error handling positions query:', error);
-    return 'Error fetching position information. Please try again later.';
+    return { 
+      success: false, 
+      message: 'Error fetching position information. Please try again later.',
+      error: error instanceof Error ? error.message : String(error)
+    };
   }
 }
 

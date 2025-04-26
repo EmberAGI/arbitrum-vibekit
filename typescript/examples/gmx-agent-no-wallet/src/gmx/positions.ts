@@ -2,6 +2,7 @@ import { GmxSdk } from "@gmx-io/sdk";
 import type { MarketInfo, MarketsData } from "@gmx-io/sdk/types/markets.js";
 import type {  TokensData } from "@gmx-io/sdk/types/tokens.js";
 import type { Position, PositionsData } from "@gmx-io/sdk/types/positions.js";
+import { convertBigIntToString } from "./markets.js";
 
 /**
  * Get position information for a specific account
@@ -75,7 +76,7 @@ export async function getPositionInfo(gmxClient: GmxSdk, account?: string) {
       return {
         success: true,
         message: `Found ${positionKeys.length} position(s)`,
-        positions: positions,
+        positions: convertBigIntToString(positions),
       };
     } catch (marketError) {
       console.error("Error fetching market data:", marketError);
