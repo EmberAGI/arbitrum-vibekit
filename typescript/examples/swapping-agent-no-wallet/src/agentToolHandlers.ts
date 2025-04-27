@@ -199,9 +199,7 @@ export function parseMcpToolResponse(
       dataToValidate = parsedData;
     } catch (e) {
       context.log(`Error parsing inner text content from ${toolName} result:`, e);
-      throw new Error(
-        `Failed to parse nested JSON response from ${toolName}: ${(e as Error).message}`
-      );
+      throw new Error(`Failed to parse nested JSON response from ${toolName}: ${rawResponse}}`);
     }
   } else {
     context.log(
