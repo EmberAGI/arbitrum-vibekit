@@ -1,36 +1,7 @@
 import { GmxSdk } from '@gmx-io/sdk';
-import type { MarketInfo, MarketsInfoData } from '@gmx-io/sdk/types/markets.js';
-import type { TokenData, TokensData } from '@gmx-io/sdk/types/tokens.js';
-
-/**
- * Recursively convert BigInt values to strings
- */
-export function convertBigIntToString(obj: any): any {
-  if (obj === null || obj === undefined) {
-    return obj;
-  }
-
-  if (typeof obj === 'bigint') {
-    return obj.toString();
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map(convertBigIntToString);
-  }
-
-  if (typeof obj === 'object') {
-    const newObj: any = {};
-    for (const key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        newObj[key] = convertBigIntToString(obj[key]);
-      }
-    }
-    return newObj;
-  }
-
-  return obj;
-}
-
+import type { MarketsInfoData } from '@gmx-io/sdk/types/markets.js';
+import type { TokensData } from '@gmx-io/sdk/types/tokens.js';
+import { convertBigIntToString } from './util.js';
 /**
  * Get market information from GMX
  * @param gmxClient The GMX SDK client

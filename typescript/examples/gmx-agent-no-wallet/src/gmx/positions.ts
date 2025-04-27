@@ -1,9 +1,9 @@
 import { GmxSdk } from '@gmx-io/sdk';
-import type { MarketInfo, MarketsData } from '@gmx-io/sdk/types/markets.js';
+import type { MarketsData } from '@gmx-io/sdk/types/markets.js';
 import type { TokensData } from '@gmx-io/sdk/types/tokens.js';
-import type { Position, PositionsData } from '@gmx-io/sdk/types/positions.js';
-import { convertBigIntToString, getMarketInfo } from './markets.js';
-
+import type { PositionsData } from '@gmx-io/sdk/types/positions.js';
+import { getMarketInfo } from './markets.js';
+import { convertBigIntToString } from './util.js';
 /**
  * Get position information for a specific account
  * @param gmxClient - The GMX SDK instance

@@ -3,7 +3,6 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { ethers } from 'ethers';
 import type { Task } from 'a2a-samples-js/schema';
 import { GmxSdk } from '@gmx-io/sdk';
-import type { PositionsData } from '@gmx-io/sdk/types/positions.js';
 import { getMarketInfo } from './gmx/markets.js';
 import { getPositionInfo } from './gmx/positions.js';
 import { createSwapOrder } from './gmx/swap.js';
@@ -292,6 +291,7 @@ export async function handlePositionsQuery(
     const positionData = {
       success: true,
       positionCount: positionInfo.positionCount,
+      // sending modifiedPositions to avoid bigInt serialization issues
       positions: positionInfo.modifiedPositions,
       message: `Found ${positionInfo.positionCount} active positions.`,
     };
