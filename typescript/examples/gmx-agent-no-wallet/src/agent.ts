@@ -3,14 +3,20 @@ import { setupGmxClient } from './gmx/client.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { HandlerContext } from './agentToolHandlers.js';
-import { handleMarketsQuery, handlePositionsQuery, handleCreatePositionRequest, handleClosePositionRequest, handleSwapQuery } from './agentToolHandlers.js';
+import {
+  handleMarketsQuery,
+  handlePositionsQuery,
+  handleCreatePositionRequest,
+  handleClosePositionRequest,
+  handleSwapQuery,
+} from './agentToolHandlers.js';
 import {
   generateText,
   tool,
   type Tool,
   type CoreMessage,
   type ToolResultPart,
-type CoreUserMessage,
+  type CoreUserMessage,
   type CoreAssistantMessage,
 } from 'ai';
 import { createRequire } from 'module';
@@ -31,18 +37,26 @@ function isTextPart(part: any): part is TextPart {
 
 // Define schema for GMX tools
 const GetMarketInfoSchema = z.object({
-  marketSymbol: z.string().optional().describe('Specific market symbol to query (e.g., "ETH", "BTC"). If not provided, returns all markets.'),
+  marketSymbol: z
+    .string()
+    .optional()
+    .describe(
+      'Specific market symbol to query (e.g., "ETH", "BTC"). If not provided, returns all markets.',
+    ),
 });
 
 const GetPositionInfoSchema = z.object({
-  userAddress: z.string()
+  userAddress: z
+    .string()
     // .regex(/^0x[a-fA-F0-9]{40}$/)
-    .describe('Required. User address starting with "0x". Example: 0x1234567890abcdef1234567890abcdef12345678.'),
-  marketSymbol: z.string()
+    .describe(
+      'Required. User address starting with "0x". Example: 0x1234567890abcdef1234567890abcdef12345678.',
+    ),
+  marketSymbol: z
+    .string()
     .optional()
     .describe('Optional. Specific market symbol to filter positions by (e.g., "ETH", "BTC").'),
 });
-
 
 const CreateIncreasePositionSchema = z.object({
   marketAddress: z.string().describe('The market address to create a position in'),
@@ -194,13 +208,13 @@ export class Agent {
     try {
       this.mcpClient = new Client(
         { name: 'GmxAgent', version: '1.0.0' },
-        { capabilities: { tools: {}, resources: {}, prompts: {} } }
+        { capabilities: { tools: {}, resources: {}, prompts: {} } },
       );
 
       if (process.env.EMBER_ENDPOINT) {
         const require = createRequire(import.meta.url);
         let mcpToolPath: string;
-        
+
         try {
           mcpToolPath = require.resolve('ember-mcp-tool-server');
           this.log(`Found ember-mcp-tool-server at ${mcpToolPath}`);
@@ -208,10 +222,10 @@ export class Agent {
           this.log('ember-mcp-tool-server not found, skipping MCP client setup');
           mcpToolPath = '';
         }
-        
+
         if (mcpToolPath) {
           this.log(`Connecting to MCP server at ${process.env.EMBER_ENDPOINT}`);
-          
+
           const transport = new StdioClientTransport({
             command: 'node',
             args: [mcpToolPath],
@@ -220,7 +234,7 @@ export class Agent {
               EMBER_ENDPOINT: process.env.EMBER_ENDPOINT,
             },
           });
-          
+
           await this.mcpClient.connect(transport);
           this.log('MCP client initialized successfully.');
         }
@@ -236,15 +250,15 @@ export class Agent {
           execute: async (args) => {
             console.log('Vercel AI SDK calling handler: getMarketInfo tool', args);
             try {
-              const response = await handleMarketsQuery(args,this.getHandlerContext());
+              const response = await handleMarketsQuery(args, this.getHandlerContext());
               return response;
             } catch (error: any) {
               logError(`Error executing getMarketInfo:`, error);
               throw error;
             }
-          }
+          },
         }),
-        
+
         getPositionInfo: tool({
           description: 'Check position details for a user',
           parameters: GetPositionInfoSchema,
@@ -257,7 +271,7 @@ export class Agent {
               logError(`Error executing getPositionInfo:`, error);
               throw error;
             }
-          }
+          },
         }),
 
         createSwapOrder: tool({
@@ -271,9 +285,10 @@ export class Agent {
             } catch (error: any) {
               logError(`Error executing createSwapOrder:`, error);
               throw error;
-            }          }
+            }
+          },
         }),
-        
+
         createIncreasePosition: tool({
           description: 'Create or increase a position (simulated in this no-wallet example)',
           parameters: CreateIncreasePositionSchema,
@@ -286,9 +301,9 @@ export class Agent {
               logError(`Error executing createIncreasePosition:`, error);
               throw error;
             }
-          }
+          },
         }),
-        
+
         createDecreasePosition: tool({
           description: 'Decrease or close a position (simulated in this no-wallet example)',
           parameters: CreateDecreasePositionSchema,
@@ -301,7 +316,7 @@ export class Agent {
               logError(`Error executing createDecreasePosition:`, error);
               throw error;
             }
-          }
+          },
         }),
       };
     } catch (error) {
@@ -360,12 +375,12 @@ export class Agent {
     this.userAddress = userAddress; // Store user address for context
 
     this.log(`Processing user message: ${userInput} for address: ${userAddress}`);
-      
+
     // Add user message to conversation history
-    if(this.userAddress){
+    if (this.userAddress) {
       userInput = `User address: ${this.userAddress}\n${userInput}`;
     }
-    
+
     const userMessage: CoreUserMessage = { role: 'user', content: userInput };
     this.conversationHistory.push(userMessage);
 
@@ -384,7 +399,7 @@ export class Agent {
 
       response.messages.forEach((msg, index) => {
         if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-          msg.content.forEach(part => {
+          msg.content.forEach((part) => {
             if (part.type === 'tool-call') {
               this.log(`[LLM Request ${index}]: Tool Call - ${part.toolName}`);
             }
@@ -405,15 +420,24 @@ export class Agent {
       for (const message of response.messages) {
         if (message.role === 'tool' && Array.isArray(message.content)) {
           for (const part of message.content) {
-            if (part.type === 'tool-result' && 
-                ['getMarketInfo', 'getPositionInfo', 'createIncreasePosition', 'createDecreasePosition'].includes(part.toolName)) {
+            if (
+              part.type === 'tool-result' &&
+              [
+                'getMarketInfo',
+                'getPositionInfo',
+                'createIncreasePosition',
+                'createDecreasePosition',
+              ].includes(part.toolName)
+            ) {
               this.log(`Processing tool result for ${part.toolName} from response.messages`);
               // Log the raw result for debugging
               //this.log(`Raw toolResult.result: ${JSON.stringify(part.result)}`);
               // Assert the type
               processedToolResult = part.result as Task;
               // Now you can safely access properties based on the asserted type
-              this.log(`${part.toolName} Result State: ${processedToolResult?.status?.state ?? 'N/A'}`);
+              this.log(
+                `${part.toolName} Result State: ${processedToolResult?.status?.state ?? 'N/A'}`,
+              );
               // Check if the first part is a text part before accessing .text
               const firstPart = processedToolResult?.status?.message?.parts[0];
               const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';

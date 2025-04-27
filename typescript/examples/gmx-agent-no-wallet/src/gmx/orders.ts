@@ -1,6 +1,6 @@
-import { GmxSdk } from "@gmx-io/sdk";
-import type { MarketInfo } from "@gmx-io/sdk/types/markets.js";
-import type { TokenData } from "@gmx-io/sdk/types/tokens.js";
+import { GmxSdk } from '@gmx-io/sdk';
+import type { MarketInfo } from '@gmx-io/sdk/types/markets.js';
+import type { TokenData } from '@gmx-io/sdk/types/tokens.js';
 
 /**
  * Parameters for creating a increase position
@@ -32,32 +32,42 @@ interface CreateDecreasePositionParams {
  * @param params - Parameters for creating the position
  * @returns Result of position creation
  */
-export async function createIncreasePosition(gmxClient: GmxSdk, params: CreateIncreasePositionParams) {
+export async function createIncreasePosition(
+  gmxClient: GmxSdk,
+  params: CreateIncreasePositionParams,
+) {
   try {
-    console.log("Creating increase position...");
-    const { marketAddress, collateralTokenAddress, collateralAmount, leverage, slippage, isLong = true } = params;
-    
+    console.log('Creating increase position...');
+    const {
+      marketAddress,
+      collateralTokenAddress,
+      collateralAmount,
+      leverage,
+      slippage,
+      isLong = true,
+    } = params;
+
     // Check if wallet is connected
     if (!gmxClient.account) {
-      throw new Error("No wallet connected. Please connect a wallet to create a position.");
+      throw new Error('No wallet connected. Please connect a wallet to create a position.');
     }
 
     // Get markets info and tokens data
     const { marketsInfoData, tokensData } = await gmxClient.markets.getMarketsInfo();
-    
+
     if (!marketsInfoData || !tokensData) {
-      throw new Error("Failed to fetch markets info or tokens data");
+      throw new Error('Failed to fetch markets info or tokens data');
     }
 
     // Find market info for the specified market
-    const marketInfo = Object.values(marketsInfoData).find(
-      (market) => {
-        if (typeof market === 'object' && market !== null && 'marketTokenAddress' in market) {
-          return (market as MarketInfo).marketTokenAddress.toLowerCase() === marketAddress.toLowerCase();
-        }
-        return false;
+    const marketInfo = Object.values(marketsInfoData).find((market) => {
+      if (typeof market === 'object' && market !== null && 'marketTokenAddress' in market) {
+        return (
+          (market as MarketInfo).marketTokenAddress.toLowerCase() === marketAddress.toLowerCase()
+        );
       }
-    ) as MarketInfo | undefined;
+      return false;
+    }) as MarketInfo | undefined;
 
     if (!marketInfo) {
       throw new Error(`Market with address ${marketAddress} not found`);
@@ -81,7 +91,6 @@ export async function createIncreasePosition(gmxClient: GmxSdk, params: CreateIn
 
     console.log(increaseAmounts);
 
-
     // Create the increase order
     const result = await gmxClient.orders.createIncreaseOrder({
       marketsInfoData,
@@ -102,9 +111,9 @@ export async function createIncreasePosition(gmxClient: GmxSdk, params: CreateIn
     console.log(result);
     return {
       success: true,
-      message: "Increase position order created successfully",
-      orderType: "increase",
-      orderDirection: isLong ? "long" : "short",
+      message: 'Increase position order created successfully',
+      orderType: 'increase',
+      orderDirection: isLong ? 'long' : 'short',
       marketName: marketInfo.name,
       indexTokenName: marketInfo.indexToken.symbol,
       collateralTokenName: collateralToken.symbol,
@@ -114,7 +123,7 @@ export async function createIncreasePosition(gmxClient: GmxSdk, params: CreateIn
       result,
     };
   } catch (error) {
-    console.error("Error creating increase position:", error);
+    console.error('Error creating increase position:', error);
     return {
       success: false,
       message: `Error creating increase position: ${(error as Error).message}`,
@@ -128,32 +137,42 @@ export async function createIncreasePosition(gmxClient: GmxSdk, params: CreateIn
  * @param params - Parameters for creating the position
  * @returns Result of position creation
  */
-export async function createDecreasePosition(gmxClient: GmxSdk, params: CreateDecreasePositionParams) {
+export async function createDecreasePosition(
+  gmxClient: GmxSdk,
+  params: CreateDecreasePositionParams,
+) {
   try {
-    console.log("Creating decrease position...");
-    const { marketAddress, collateralTokenAddress, collateralAmount, isClosePosition = false, slippage, isLong = true } = params;
-    
+    console.log('Creating decrease position...');
+    const {
+      marketAddress,
+      collateralTokenAddress,
+      collateralAmount,
+      isClosePosition = false,
+      slippage,
+      isLong = true,
+    } = params;
+
     // Check if wallet is connected
     if (!gmxClient.account) {
-      throw new Error("No wallet connected. Please connect a wallet to create a position.");
+      throw new Error('No wallet connected. Please connect a wallet to create a position.');
     }
 
     // Get markets info and tokens data
     const { marketsInfoData, tokensData } = await gmxClient.markets.getMarketsInfo();
-    
+
     if (!marketsInfoData || !tokensData) {
-      throw new Error("Failed to fetch markets info or tokens data");
+      throw new Error('Failed to fetch markets info or tokens data');
     }
 
     // Find market info for the specified market
-    const marketInfo = Object.values(marketsInfoData).find(
-      (market) => {
-        if (typeof market === 'object' && market !== null && 'marketTokenAddress' in market) {
-          return (market as MarketInfo).marketTokenAddress.toLowerCase() === marketAddress.toLowerCase();
-        }
-        return false;
+    const marketInfo = Object.values(marketsInfoData).find((market) => {
+      if (typeof market === 'object' && market !== null && 'marketTokenAddress' in market) {
+        return (
+          (market as MarketInfo).marketTokenAddress.toLowerCase() === marketAddress.toLowerCase()
+        );
       }
-    ) as MarketInfo | undefined;
+      return false;
+    }) as MarketInfo | undefined;
 
     if (!marketInfo) {
       throw new Error(`Market with address ${marketAddress} not found`);
@@ -177,22 +196,25 @@ export async function createDecreasePosition(gmxClient: GmxSdk, params: CreateDe
       throw new Error(`Error fetching positions: ${positions.error}`);
     }
 
-
     // For simplicity in the no-wallet version, we'll return a simulated response
     return {
       success: true,
-      message: isClosePosition ? "Close position order created successfully" : "Decrease position order created successfully",
-      orderType: "decrease",
-      orderDirection: isLong ? "long" : "short",
+      message: isClosePosition
+        ? 'Close position order created successfully'
+        : 'Decrease position order created successfully',
+      orderType: 'decrease',
+      orderDirection: isLong ? 'long' : 'short',
       marketName: marketInfo.name || `${marketInfo.indexToken.symbol}/USD`,
       indexTokenName: marketInfo.indexToken.symbol,
       collateralTokenName: collateralToken.symbol,
       isClose: isClosePosition,
-      collateralAmount: isClosePosition ? "ALL" : formatTokenAmount(BigInt(collateralAmount), collateralToken.decimals),
+      collateralAmount: isClosePosition
+        ? 'ALL'
+        : formatTokenAmount(BigInt(collateralAmount), collateralToken.decimals),
       slippage: (slippage / 100).toFixed(2) + '%',
     };
   } catch (error) {
-    console.error("Error creating decrease position:", error);
+    console.error('Error creating decrease position:', error);
     return {
       success: false,
       message: `Error creating decrease position: ${(error as Error).message}`,
@@ -220,22 +242,24 @@ async function calculateIncreaseAmounts({
 }) {
   // Convert string amount to BigInt with proper decimals
   const initialCollateralAmount = BigInt(
-    parseFloat(collateralAmount) * 10 ** collateralToken.decimals
+    parseFloat(collateralAmount) * 10 ** collateralToken.decimals,
   );
 
   // Get token price from GMX
   const tokenPrice = await getTokenPrice(gmxClient, collateralToken.address);
-  
+
   // Calculate values in wei format (1e30)
-  const initialCollateralUsd = (initialCollateralAmount * tokenPrice) / BigInt(10 ** collateralToken.decimals);
+  const initialCollateralUsd =
+    (initialCollateralAmount * tokenPrice) / BigInt(10 ** collateralToken.decimals);
   const sizeDeltaUsd = (initialCollateralUsd * BigInt(leverage)) / BigInt(100);
-  
+
   // Get index token price
   const indexPrice = await getTokenPrice(gmxClient, marketInfo.indexToken.address);
-  
+
   // Calculate token amounts
-  const indexTokenAmount = (sizeDeltaUsd * BigInt(10 ** marketInfo.indexToken.decimals)) / indexPrice;
-  
+  const indexTokenAmount =
+    (sizeDeltaUsd * BigInt(10 ** marketInfo.indexToken.decimals)) / indexPrice;
+
   // Simplified calculation - in a real implementation, you would need more detailed calculations
   // including fees, funding rates, etc.
   return {
@@ -280,17 +304,17 @@ async function getTokenPrice(gmxClient: GmxSdk, tokenAddress: string): Promise<b
     // In a real implementation, you would get the actual price from GMX
     // For now, we'll return a mock price based on token address
     // ETH: ~$3000, ARB: ~$1
-    if (tokenAddress.toLowerCase() === "0x82af49447d8a07e3bd95bd0d56f35241523fbab1") {
-      return BigInt("3000000000000000000000000000000"); // ETH price in 1e30
-    } else if (tokenAddress.toLowerCase() === "0x912ce59144191c1204e64559fe8253a0e49e6548") {
-      return BigInt("1000000000000000000000000000000"); // ARB price in 1e30
+    if (tokenAddress.toLowerCase() === '0x82af49447d8a07e3bd95bd0d56f35241523fbab1') {
+      return BigInt('3000000000000000000000000000000'); // ETH price in 1e30
+    } else if (tokenAddress.toLowerCase() === '0x912ce59144191c1204e64559fe8253a0e49e6548') {
+      return BigInt('1000000000000000000000000000000'); // ARB price in 1e30
     } else {
       // Default to $1 for other tokens
-      return BigInt("1000000000000000000000000000000"); // 1 USD in 1e30
+      return BigInt('1000000000000000000000000000000'); // 1 USD in 1e30
     }
   } catch (error) {
-    console.error("Error getting token price:", error);
+    console.error('Error getting token price:', error);
     // Default fallback price of $1
-    return BigInt("1000000000000000000000000000000"); // 1 USD in 1e30
+    return BigInt('1000000000000000000000000000000'); // 1 USD in 1e30
   }
-} 
+}

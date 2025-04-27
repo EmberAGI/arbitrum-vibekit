@@ -1,17 +1,19 @@
-import { GmxSdk } from "@gmx-io/sdk";
-import { createPublicClient, createWalletClient, http } from "viem";
-import { arbitrum } from "viem/chains";
-import { privateKeyToAccount } from "viem/accounts";
+import { GmxSdk } from '@gmx-io/sdk';
+import { createPublicClient, createWalletClient, http } from 'viem';
+import { arbitrum } from 'viem/chains';
+import { privateKeyToAccount } from 'viem/accounts';
 
 // Configure the chains we want to use
 const CHAINS = {
   arbitrum: {
     id: arbitrum.id,
-    name: "Arbitrum",
-    rpcUrl: process.env.RPC_URL || "https://arb1.arbitrum.io/rpc",
-    oracleUrl: process.env.ORACLE_URL || "https://arbitrum-api.gmxinfra.io",
-    subsquidUrl: process.env.SUBSQUID_URL || "https://gmx.squids.live/gmx-synthetics-arbitrum:live/api/graphql",
-    subgraphUrl: "https://subgraph.satsuma-prod.com/3b2ced13c8d9/gmx/synthetics-arbitrum-stats/api",
+    name: 'Arbitrum',
+    rpcUrl: process.env.RPC_URL || 'https://arb1.arbitrum.io/rpc',
+    oracleUrl: process.env.ORACLE_URL || 'https://arbitrum-api.gmxinfra.io',
+    subsquidUrl:
+      process.env.SUBSQUID_URL ||
+      'https://gmx.squids.live/gmx-synthetics-arbitrum:live/api/graphql',
+    subgraphUrl: 'https://subgraph.satsuma-prod.com/3b2ced13c8d9/gmx/synthetics-arbitrum-stats/api',
   },
 };
 
@@ -24,7 +26,7 @@ const defaultChain = CHAINS.arbitrum;
 export async function setupGmxClient(chainId = defaultChain.id) {
   try {
     // Get chain config based on chainId
-    const chainConfig = Object.values(CHAINS).find(chain => chain.id === chainId) || defaultChain;
+    const chainConfig = Object.values(CHAINS).find((chain) => chain.id === chainId) || defaultChain;
 
     console.log(`Initializing GMX client for ${chainConfig.name}...`);
 
@@ -65,4 +67,4 @@ export async function setupGmxClient(chainId = defaultChain.id) {
     console.error(`Error initializing GMX client: ${error}`);
     throw new Error(`Failed to initialize GMX client: ${(error as Error).message}`);
   }
-} 
+}

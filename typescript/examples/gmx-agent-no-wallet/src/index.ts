@@ -14,7 +14,9 @@ dotenv.config();
 const GmxAgentSchema = z.object({
   instruction: z
     .string()
-    .describe("A natural‑language directive for GMX operations, e.g. 'Show me ETH markets on GMX'."),
+    .describe(
+      "A natural‑language directive for GMX operations, e.g. 'Show me ETH markets on GMX'.",
+    ),
   userAddress: z
     .string()
     .optional()
@@ -56,18 +58,24 @@ server.tool(
   async (args: GmxAgentArgs) => {
     const { instruction, userAddress } = args;
     try {
-      const taskResponse = await agent.processUserInput(instruction, userAddress || '0x0000000000000000000000000000000000000000');
-      
+      const taskResponse = await agent.processUserInput(
+        instruction,
+        userAddress || '0x0000000000000000000000000000000000000000',
+      );
+
       console.log('[server.tool] result', taskResponse);
-      console.log('[server.tool] result message: ',  JSON.stringify(taskResponse.status.message?.parts));
-      
+      console.log(
+        '[server.tool] result message: ',
+        JSON.stringify(taskResponse.status.message?.parts),
+      );
+
       return {
         content: [{ type: 'text', text: JSON.stringify(taskResponse) }],
       };
     } catch (error: unknown) {
       const err = error as Error;
       console.error('[server.tool] error', err.message);
-      
+
       const errorTask: Task = {
         id: `gmx-error-${Date.now()}`,
         status: {
@@ -78,13 +86,13 @@ server.tool(
           },
         },
       };
-      
+
       return {
         isError: true,
         content: [{ type: 'text', text: JSON.stringify(errorTask) }],
       };
     }
-  }
+  },
 );
 
 // Setup Express app
@@ -159,4 +167,4 @@ const main = async () => {
   }
 };
 
-main(); 
+main();

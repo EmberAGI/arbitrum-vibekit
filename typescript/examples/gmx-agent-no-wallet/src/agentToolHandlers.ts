@@ -97,7 +97,7 @@ export interface HandlerContext {
 export function parseMcpToolResponse(
   rawResponse: unknown,
   context: HandlerContext,
-  toolName: string
+  toolName: string,
 ): unknown {
   let dataToValidate: unknown;
 
@@ -117,7 +117,7 @@ export function parseMcpToolResponse(
     } catch (e) {
       context.log(`Error parsing inner text content from ${toolName} result:`, e);
       throw new Error(
-        `Failed to parse nested JSON response from ${toolName}: ${(e as Error).message}`
+        `Failed to parse nested JSON response from ${toolName}: ${(e as Error).message}`,
       );
     }
   } else {
@@ -127,55 +127,58 @@ export function parseMcpToolResponse(
   return dataToValidate;
 }
 
-
 /**
  * Handle markets query
  */
-export async function handleMarketsQuery(args: {marketSymbol?: string},context: HandlerContext): Promise<Task> {
+export async function handleMarketsQuery(
+  args: { marketSymbol?: string },
+  context: HandlerContext,
+): Promise<Task> {
   try {
-    console.log("Debug: getting market info");
+    console.log('Debug: getting market info');
     const marketInfo = await getMarketInfo(context.gmxClient);
-    if(!marketInfo.success) {
+    if (!marketInfo.success) {
       console.log(`Failed to fetch market information}`);
     }
 
-    console.log("Debug: successfully got market info");
-    
+    console.log('Debug: successfully got market info');
+
     // Filter token data if a symbol is provided
     let filteredTokensData = marketInfo.modifiedTokensData;
     let filteredMarketsInfoData = marketInfo.modifiedMarketsInfoData;
     let message = `Found ${marketInfo.totalMarketInfoCount} markets and ${marketInfo.totalTokenDataCount} tokens.`;
-    
+
     if (args.marketSymbol) {
       const symbol = args.marketSymbol.toUpperCase();
-      console.log("Debug: get market info for symbol: ", symbol);
+      console.log('Debug: get market info for symbol: ', symbol);
       // Filter tokens by symbol
       filteredTokensData = Object.fromEntries(
-        Object.entries(marketInfo.modifiedTokensData)
-          .filter(([_, tokenData]) => (tokenData as any).symbol?.toUpperCase() === symbol)
+        Object.entries(marketInfo.modifiedTokensData).filter(
+          ([_, tokenData]) => (tokenData as any).symbol?.toUpperCase() === symbol,
+        ),
       );
-      
+
       // Filter markets containing the token
       filteredMarketsInfoData = Object.fromEntries(
-        Object.entries(marketInfo.modifiedMarketsInfoData)
-          .filter(([_, marketData]) => 
+        Object.entries(marketInfo.modifiedMarketsInfoData).filter(
+          ([_, marketData]) =>
             (marketData as any).indexToken?.symbol?.toUpperCase() === symbol ||
             (marketData as any).longToken?.symbol?.toUpperCase() === symbol ||
-            (marketData as any).shortToken?.symbol?.toUpperCase() === symbol
-          )
+            (marketData as any).shortToken?.symbol?.toUpperCase() === symbol,
+        ),
       );
-      
+
       const tokenCount = Object.keys(filteredTokensData).length;
       const marketCount = Object.keys(filteredMarketsInfoData).length;
-      
-      message = tokenCount > 0 
-        ? `Found ${marketCount} markets and ${tokenCount} tokens for symbol ${symbol}.`
-        : `No tokens found with symbol ${symbol}.`;
-        
+
+      message =
+        tokenCount > 0
+          ? `Found ${marketCount} markets and ${tokenCount} tokens for symbol ${symbol}.`
+          : `No tokens found with symbol ${symbol}.`;
     }
 
-    console.log("Debug: get market info message: ", message);
-    
+    console.log('Debug: get market info message: ', message);
+
     const marketData = {
       success: marketInfo.success,
       totalMarketInfoCount: marketInfo.totalMarketInfoCount,
@@ -183,7 +186,7 @@ export async function handleMarketsQuery(args: {marketSymbol?: string},context: 
       // marketsInfoData: filteredMarketsInfoData,
       tokensData: filteredTokensData,
       errors: marketInfo.errors,
-      message: message
+      message: message,
     };
 
     return {
@@ -192,10 +195,12 @@ export async function handleMarketsQuery(args: {marketSymbol?: string},context: 
         state: 'completed',
         message: {
           role: 'agent',
-          parts: [{ 
-            type: 'text', 
-            text: marketInfo.success ? message : 'Failed to fetch market information.'
-          }],
+          parts: [
+            {
+              type: 'text',
+              text: marketInfo.success ? message : 'Failed to fetch market information.',
+            },
+          ],
         },
       },
       artifacts: [
@@ -218,7 +223,9 @@ export async function handleMarketsQuery(args: {marketSymbol?: string},context: 
         state: 'failed',
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: 'Error fetching market information. Please try again later.' }],
+          parts: [
+            { type: 'text', text: 'Error fetching market information. Please try again later.' },
+          ],
         },
       },
       artifacts: [
@@ -240,11 +247,11 @@ export async function handleMarketsQuery(args: {marketSymbol?: string},context: 
  * Handle positions query
  */
 export async function handlePositionsQuery(
-  args: { marketSymbol?: string, userAddress: string },
-  context: HandlerContext
+  args: { marketSymbol?: string; userAddress: string },
+  context: HandlerContext,
 ): Promise<Task> {
   try {
-    if(!args.userAddress) {
+    if (!args.userAddress) {
       return {
         id: 'positions-query',
         status: {
@@ -257,10 +264,10 @@ export async function handlePositionsQuery(
         artifacts: [],
       };
     }
-    
-    console.log("Debug: getting position info");
+
+    console.log('Debug: getting position info');
     const positionInfo = await getPositionInfo(context.gmxClient, args.userAddress);
-    
+
     if (!positionInfo.success) {
       return {
         id: 'positions-query',
@@ -268,20 +275,25 @@ export async function handlePositionsQuery(
           state: 'failed',
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: `Failed to fetch position information: ${positionInfo.message}` }],
+            parts: [
+              {
+                type: 'text',
+                text: `Failed to fetch position information: ${positionInfo.message}`,
+              },
+            ],
           },
         },
         artifacts: [],
       };
     }
-    
-    console.log("Debug: successfully got position info");
+
+    console.log('Debug: successfully got position info');
 
     const positionData = {
       success: true,
       positionCount: positionInfo.positionCount,
       positions: positionInfo.modifiedPositions,
-      message: `Found ${positionInfo.positionCount} active positions.`
+      message: `Found ${positionInfo.positionCount} active positions.`,
     };
 
     return {
@@ -290,10 +302,12 @@ export async function handlePositionsQuery(
         state: 'completed',
         message: {
           role: 'agent',
-          parts: [{ 
-            type: 'text', 
-            text: `Found ${positionInfo.positionCount} active positions.` 
-          }],
+          parts: [
+            {
+              type: 'text',
+              text: `Found ${positionInfo.positionCount} active positions.`,
+            },
+          ],
         },
       },
       artifacts: [
@@ -316,7 +330,9 @@ export async function handlePositionsQuery(
         state: 'failed',
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: 'Error fetching position information. Please try again later.' }],
+          parts: [
+            { type: 'text', text: 'Error fetching position information. Please try again later.' },
+          ],
         },
       },
       artifacts: [
@@ -337,16 +353,18 @@ export async function handlePositionsQuery(
 /**
  * Handle swap query
  */
-export async function handleSwapQuery(args: CreateSwapOrderParams, context: HandlerContext): Promise<Task> {
+export async function handleSwapQuery(
+  args: CreateSwapOrderParams,
+  context: HandlerContext,
+): Promise<Task> {
   try {
-
-    console.log("Debug: creating swap order");
-    console.log("Debug: args", args);
+    console.log('Debug: creating swap order');
+    console.log('Debug: args', args);
 
     const swapOrder = await createSwapOrder(context.gmxClient, args);
-    console.log("Debug: swap order created", swapOrder);
+    console.log('Debug: swap order created', swapOrder);
 
-    if(!swapOrder.success) {
+    if (!swapOrder.success) {
       return {
         id: 'swap-query',
         status: {
@@ -365,7 +383,7 @@ export async function handleSwapQuery(args: CreateSwapOrderParams, context: Hand
       toToken: args.toToken,
       amount: args.amount,
       isLimit: args.isLimit,
-      slippage: args.slippage || 50 // Default 0.5% slippage if not specified
+      slippage: args.slippage || 50, // Default 0.5% slippage if not specified
     };
 
     return {
@@ -374,10 +392,12 @@ export async function handleSwapQuery(args: CreateSwapOrderParams, context: Hand
         state: 'completed',
         message: {
           role: 'agent',
-          parts: [{ 
-            type: 'text', 
-            text: `Swap order created successfully.` 
-          }],
+          parts: [
+            {
+              type: 'text',
+              text: `Swap order created successfully.`,
+            },
+          ],
         },
       },
       artifacts: [
@@ -395,7 +415,7 @@ export async function handleSwapQuery(args: CreateSwapOrderParams, context: Hand
   } catch (error) {
     context.log('Error handling swap query:', error);
     return {
-      id: 'swap-query', 
+      id: 'swap-query',
       status: {
         state: 'failed',
         message: {
@@ -418,13 +438,12 @@ export async function handleSwapQuery(args: CreateSwapOrderParams, context: Hand
   }
 }
 
-
 /**
  * Format amount to a readable string
  */
 function formatAmount(amount: string | number | bigint, decimals: number): string {
   if (!amount) return '0';
-  
+
   if (typeof amount === 'string') {
     const value = parseFloat(amount) / Math.pow(10, decimals);
     return value.toFixed(2);
@@ -440,14 +459,18 @@ function formatAmount(amount: string | number | bigint, decimals: number): strin
 /**
  * Calculate leverage from size and collateral
  */
-function calculateLeverage(size: string | number | bigint, collateral: string | number | bigint): string {
+function calculateLeverage(
+  size: string | number | bigint,
+  collateral: string | number | bigint,
+): string {
   if (!size || !collateral) return '0x';
-  
+
   const sizeNum = typeof size === 'string' ? parseFloat(size) : Number(size);
-  const collateralNum = typeof collateral === 'string' ? parseFloat(collateral) : Number(collateral);
-  
+  const collateralNum =
+    typeof collateral === 'string' ? parseFloat(collateral) : Number(collateral);
+
   if (collateralNum === 0) return '0x';
-  
+
   const leverage = sizeNum / collateralNum;
   return `${leverage.toFixed(2)}x`;
 }
@@ -455,14 +478,18 @@ function calculateLeverage(size: string | number | bigint, collateral: string | 
 /**
  * Calculate PnL percentage
  */
-function calculatePnlPercentage(pnl: string | number | bigint, collateral: string | number | bigint): string {
+function calculatePnlPercentage(
+  pnl: string | number | bigint,
+  collateral: string | number | bigint,
+): string {
   if (!pnl || !collateral) return '0%';
-  
+
   const pnlNum = typeof pnl === 'string' ? parseFloat(pnl) : Number(pnl);
-  const collateralNum = typeof collateral === 'string' ? parseFloat(collateral) : Number(collateral);
-  
+  const collateralNum =
+    typeof collateral === 'string' ? parseFloat(collateral) : Number(collateral);
+
   if (collateralNum === 0) return '0%';
-  
+
   const pnlPercentage = (pnlNum / collateralNum) * 100;
   return `${pnlPercentage.toFixed(2)}%`;
 }
@@ -472,12 +499,12 @@ function calculatePnlPercentage(pnl: string | number | bigint, collateral: strin
  */
 export async function handleCreatePositionRequest(
   args: CreatePositionParams | string,
-  context: HandlerContext
+  context: HandlerContext,
 ): Promise<Task> {
   try {
     let responseText = '';
     let positionData: any = {};
-    
+
     // Check if args is an object (for structured API calls) or a string (for natural language processing)
     if (typeof args === 'object') {
       // Extract data from the args object
@@ -486,36 +513,40 @@ export async function handleCreatePositionRequest(
       const marketAddress = args.marketAddress;
       const amount = args.collateralAmount;
       const leverage = args.leverage;
-      
+
       responseText = `Position creation request prepared for ${side} position with ${amount} collateral at ${leverage}x leverage`;
       positionData = {
         marketAddress,
         side,
         collateralAmount: amount,
         leverage,
-        action: 'create_position'
+        action: 'create_position',
       };
     } else {
       // Handle the string-based instruction
       const instruction = args;
-      
+
       // Detect if it's a long or short
-      const isLong = instruction.toLowerCase().includes('long') || !instruction.toLowerCase().includes('short');
+      const isLong =
+        instruction.toLowerCase().includes('long') || !instruction.toLowerCase().includes('short');
       const side = isLong ? 'LONG' : 'SHORT';
-      
+
       // Try to extract market (e.g., ETH, BTC)
       const marketMatches = instruction.match(/\b(ETH|BTC|LINK|UNI|ARB|SOL|AVAX)\b/i);
       const market = marketMatches ? marketMatches[0].toUpperCase() : 'ETH';
-      
+
       // Try to extract collateral amount
-      const amountMatches = instruction.match(/\b([\d.]+)\s*(ETH|BTC|LINK|UNI|ARB|SOL|AVAX|USD|USDC|USDT)\b/i);
+      const amountMatches = instruction.match(
+        /\b([\d.]+)\s*(ETH|BTC|LINK|UNI|ARB|SOL|AVAX|USD|USDC|USDT)\b/i,
+      );
       const amount = amountMatches ? amountMatches[1] : '0.1';
-      const collateralType = (amountMatches && amountMatches[2]) ? amountMatches[2].toUpperCase() : market;
-      
+      const collateralType =
+        amountMatches && amountMatches[2] ? amountMatches[2].toUpperCase() : market;
+
       // Try to extract leverage
       const leverageMatches = instruction.match(/\b(\d+)x\b/i);
       const leverage = leverageMatches && leverageMatches[1] ? parseInt(leverageMatches[1]) : 2;
-      
+
       // Get market information to find the market address
       const marketInfo = await getMarketInfo(context.gmxClient);
       if (!marketInfo.success) {
@@ -525,13 +556,15 @@ export async function handleCreatePositionRequest(
             state: 'failed',
             message: {
               role: 'agent',
-              parts: [{ type: 'text', text: `Failed to fetch market information: ${marketInfo.message}` }],
+              parts: [
+                { type: 'text', text: `Failed to fetch market information: ${marketInfo.message}` },
+              ],
             },
           },
           artifacts: [],
         };
       }
-      
+
       if (!marketInfo.markets || marketInfo.markets.length === 0) {
         return {
           id: 'create-position',
@@ -545,11 +578,10 @@ export async function handleCreatePositionRequest(
           artifacts: [],
         };
       }
-      
+
       // Find the requested market
-      const marketObj = marketInfo.markets.find((m: any) => 
-        m.indexToken?.toUpperCase() === market);
-      
+      const marketObj = marketInfo.markets.find((m: any) => m.indexToken?.toUpperCase() === market);
+
       if (!marketObj) {
         return {
           id: 'create-position',
@@ -557,27 +589,33 @@ export async function handleCreatePositionRequest(
             state: 'failed',
             message: {
               role: 'agent',
-              parts: [{ type: 'text', text: `Market not found for ${market}. Please specify a valid market (e.g., ETH, BTC).` }],
+              parts: [
+                {
+                  type: 'text',
+                  text: `Market not found for ${market}. Please specify a valid market (e.g., ETH, BTC).`,
+                },
+              ],
             },
           },
           artifacts: [],
         };
       }
-      
+
       // Determine collateral token address based on long/short
       const collateralTokenSymbol = isLong ? marketObj.longToken : marketObj.shortToken;
       let collateralTokenAddress = '';
-      
+
       // Find the token in the tokens array
       if (marketInfo.tokens && marketInfo.tokens.length > 0) {
-        const collateralToken = marketInfo.tokens.find((t: any) => 
-          t.symbol.toUpperCase() === collateralTokenSymbol.toUpperCase());
-        
+        const collateralToken = marketInfo.tokens.find(
+          (t: any) => t.symbol.toUpperCase() === collateralTokenSymbol.toUpperCase(),
+        );
+
         if (collateralToken) {
           collateralTokenAddress = collateralToken.address;
         }
       }
-      
+
       if (!collateralTokenAddress) {
         return {
           id: 'create-position',
@@ -585,13 +623,15 @@ export async function handleCreatePositionRequest(
             state: 'failed',
             message: {
               role: 'agent',
-              parts: [{ type: 'text', text: `Failed to determine collateral token for ${market}.` }],
+              parts: [
+                { type: 'text', text: `Failed to determine collateral token for ${market}.` },
+              ],
             },
           },
           artifacts: [],
         };
       }
-      
+
       responseText = `Position creation request prepared for ${market}/USD ${side} position with ${amount} ${collateralType} collateral at ${leverage}x leverage`;
       positionData = {
         market: `${market}/USD`,
@@ -601,10 +641,10 @@ export async function handleCreatePositionRequest(
         collateralTokenAddress,
         collateralAmount: amount,
         leverage,
-        action: 'create_position'
+        action: 'create_position',
       };
     }
-    
+
     return {
       id: 'create-position',
       status: {
@@ -634,7 +674,12 @@ export async function handleCreatePositionRequest(
         state: 'failed',
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: 'Error processing create position request. Please try a simpler format or check your input.' }],
+          parts: [
+            {
+              type: 'text',
+              text: 'Error processing create position request. Please try a simpler format or check your input.',
+            },
+          ],
         },
       },
       artifacts: [
@@ -657,40 +702,40 @@ export async function handleCreatePositionRequest(
  */
 export async function handleClosePositionRequest(
   args: DecreasePositionParams | string,
-  context: HandlerContext
+  context: HandlerContext,
 ): Promise<Task> {
   try {
     let responseText = '';
     let positionData: any = {};
-    
+
     // Handle object-based input
     if (typeof args === 'object') {
       const marketAddress = args.marketAddress;
       const isClosePosition = args.isClosePosition;
       const collateralAmount = args.collateralAmount;
-      
+
       responseText = `Position ${isClosePosition ? 'close' : 'decrease'} request prepared for market ${marketAddress}`;
       positionData = {
         marketAddress,
         isClosePosition,
         collateralAmount,
         collateralTokenAddress: args.collateralTokenAddress,
-        action: isClosePosition ? 'close_position' : 'decrease_position'
+        action: isClosePosition ? 'close_position' : 'decrease_position',
       };
     } else {
       // Handle string-based instruction
       const instruction = args;
-      
+
       // Try to extract market (e.g., ETH, BTC)
       const marketMatches = instruction.match(/\b(ETH|BTC|LINK|UNI|ARB|SOL|AVAX)\b/i);
       const market = marketMatches ? marketMatches[0].toUpperCase() : 'ETH';
-      
+
       // Use a demo account address if one is provided in .env, otherwise use a placeholder
       const demoAccount = process.env.DEMO_ACCOUNT || '0x0000000000000000000000000000000000000000';
-      
+
       // Get position information to check if the position exists
       const positionInfo = await getPositionInfo(context.gmxClient, demoAccount);
-      
+
       if (!positionInfo.success) {
         return {
           id: 'close-position',
@@ -698,13 +743,18 @@ export async function handleClosePositionRequest(
             state: 'failed',
             message: {
               role: 'agent',
-              parts: [{ type: 'text', text: `Failed to fetch position information: ${positionInfo.message}` }],
+              parts: [
+                {
+                  type: 'text',
+                  text: `Failed to fetch position information: ${positionInfo.message}`,
+                },
+              ],
             },
           },
           artifacts: [],
         };
       }
-      
+
       // Check if there are any positions
       if (!positionInfo.positions || positionInfo.positionCount === 0) {
         return {
@@ -719,28 +769,35 @@ export async function handleClosePositionRequest(
           artifacts: [],
         };
       }
-      
+
       // Find the position for the requested market
-      const position = positionInfo.modifiedPositions.find((p: any) => 
-        p.market && p.market.toUpperCase().includes(market));
-      
+      const position = positionInfo.modifiedPositions.find(
+        (p: any) => p.market && p.market.toUpperCase().includes(market),
+      );
+
       if (!position) {
-        const availablePositions = positionInfo.modifiedPositions.map((p: any, i: number) => 
-          `${i+1}. ${p.market || 'Unknown'} (${p.side || 'Unknown'})`).join('\n');
-          
+        const availablePositions = positionInfo.modifiedPositions
+          .map((p: any, i: number) => `${i + 1}. ${p.market || 'Unknown'} (${p.side || 'Unknown'})`)
+          .join('\n');
+
         return {
           id: 'close-position',
           status: {
             state: 'failed',
             message: {
               role: 'agent',
-              parts: [{ type: 'text', text: `No active position found for ${market}. Available positions:\n${availablePositions}` }],
+              parts: [
+                {
+                  type: 'text',
+                  text: `No active position found for ${market}. Available positions:\n${availablePositions}`,
+                },
+              ],
             },
           },
           artifacts: [],
         };
       }
-      
+
       responseText = `Position close request prepared for ${position.market} ${position.side} position`;
       positionData = {
         market: position.market,
@@ -750,10 +807,10 @@ export async function handleClosePositionRequest(
         pnl: position.pnl,
         pnlPercentage: position.pnlPercentage,
         isClosePosition: true,
-        action: 'close_position'
+        action: 'close_position',
       };
     }
-    
+
     return {
       id: 'close-position',
       status: {
@@ -783,7 +840,12 @@ export async function handleClosePositionRequest(
         state: 'failed',
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: 'Error processing close position request. Please try a simpler format or check your input.' }],
+          parts: [
+            {
+              type: 'text',
+              text: 'Error processing close position request. Please try a simpler format or check your input.',
+            },
+          ],
         },
       },
       artifacts: [
