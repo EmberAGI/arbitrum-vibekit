@@ -1,7 +1,11 @@
 import { z } from 'zod';
 import { type Address } from 'viem';
 import type { HandlerContext } from './agentToolHandlers.js';
-import { handleSwapTokens, parseMcpToolResponse } from './agentToolHandlers.js';
+import {
+  handleSwapTokens,
+  parseMcpToolResponse,
+  handleAskEncyclopedia,
+} from './agentToolHandlers.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -52,6 +56,10 @@ const SwapTokensSchema = z.object({
 });
 type SwapTokensArgs = z.infer<typeof SwapTokensSchema>;
 
+const AskEncyclopediaSchema = z.object({
+  question: z.string().describe('The question to ask the Camelot DEX expert.'),
+});
+
 const McpCapabilityTokenSchema = z
   .object({
     symbol: z.string().optional(),
@@ -92,6 +100,10 @@ function logError(...args: unknown[]) {
 
 type SwappingToolSet = {
   swapTokens: Tool<typeof SwapTokensSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
+  askEncyclopedia: Tool<
+    typeof AskEncyclopediaSchema,
+    Awaited<ReturnType<typeof handleAskEncyclopedia>>
+  >;
 };
 
 interface ChainConfig {
@@ -150,6 +162,7 @@ export class Agent {
   public conversationHistory: CoreMessage[] = [];
   private mcpClient: Client | null = null;
   private toolSet: SwappingToolSet | null = null;
+  private camelotContextContent: string = '';
 
   constructor(quicknodeSubdomain: string, quicknodeApiKey: string) {
     this.quicknodeSubdomain = quicknodeSubdomain;
@@ -176,6 +189,8 @@ export class Agent {
       log: this.log.bind(this),
       quicknodeSubdomain: this.quicknodeSubdomain,
       quicknodeApiKey: this.quicknodeApiKey,
+      openRouterApiKey: process.env.OPENROUTER_API_KEY,
+      camelotContextContent: this.camelotContextContent,
     };
     return context;
   }
@@ -184,7 +199,11 @@ export class Agent {
     this.conversationHistory = [
       {
         role: 'system',
-        content: `You are an AI agent that provides access to blockchain swapping functionalities via Ember AI Onchain Actions. You use the tool "swapTokens" to swap or convert tokens. Only use this tool if the user has provided the required parameters. Otherwise, explain to the user that required parameter(s) are missing and ask the user to provide them.
+        content: `You are an AI agent that provides access to blockchain swapping functionalities via Ember AI Onchain Actions. You use the tool "swapTokens" to swap or convert tokens. You can also answer questions about Camelot DEX using the "askEncyclopedia" tool.
+
+Available actions: 
+- swapTokens: Only use if the user has provided the required parameters. 
+- askEncyclopedia: Use when the user asks questions about Camelot DEX.
 
 <examples>
 <example1>
@@ -225,6 +244,11 @@ export class Agent {
 <toChain>base</toChain>
 </parameters>
 </example4>
+
+<example5>
+<user>What is Camelot's liquidity mining program?</user>
+<tool_call> {"toolName": "askEncyclopedia", "args": { "question": "What is Camelot's liquidity mining program?" }} </tool_call>
+</example5>
 </examples>
 
 Use relavant conversation history to obtain required tool parameters. Present the user with a list of tokens and chains they can swap from and to if provided by the tool response. Never respond in markdown, always use plain text. Never add links to your response. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.`,
@@ -329,6 +353,8 @@ Use relavant conversation history to obtain required tool parameters. Present th
         this.log('Warning: Could not load available tokens from MCP server.');
       }
 
+      await this._loadCamelotDocumentation();
+
       this.toolSet = {
         swapTokens: tool({
           description: 'Swap or convert tokens. Requires the fromToken, toToken, and amount.',
@@ -338,6 +364,19 @@ Use relavant conversation history to obtain required tool parameters. Present th
               return await handleSwapTokens(args, this.getHandlerContext());
             } catch (error: any) {
               logError(`Error during swapTokens via toolSet: ${error.message}`);
+              throw error;
+            }
+          },
+        }),
+        askEncyclopedia: tool({
+          description:
+            'Ask questions about Camelot DEX to get expert information about the protocol.',
+          parameters: AskEncyclopediaSchema,
+          execute: async args => {
+            try {
+              return await handleAskEncyclopedia(args, this.getHandlerContext());
+            } catch (error: any) {
+              logError(`Error during askEncyclopedia via toolSet: ${error.message}`);
               throw error;
             }
           },
@@ -407,40 +446,91 @@ Use relavant conversation history to obtain required tool parameters. Present th
 
       this.conversationHistory.push(...response.messages);
 
+      const lastToolResultMessage = response.messages
+        .slice()
+        .reverse()
+        .find(msg => msg.role === 'tool' && Array.isArray(msg.content));
+
       let processedToolResult: Task | null = null;
-      for (const message of response.messages) {
-        if (message.role === 'tool' && Array.isArray(message.content)) {
-          for (const part of message.content) {
-            if (part.type === 'tool-result' && part.toolName === 'swapTokens') {
-              this.log(`Processing tool result for ${part.toolName} from response.messages`);
-              processedToolResult = part.result as Task;
-              this.log(`SwapTokens Result State: ${processedToolResult?.status?.state ?? 'N/A'}`);
-              const firstPart = processedToolResult?.status?.message?.parts[0];
-              const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';
-              this.log(`SwapTokens Result Message: ${messageText}`);
-              break;
-            }
+
+      if (
+        lastToolResultMessage &&
+        lastToolResultMessage.role === 'tool' &&
+        Array.isArray(lastToolResultMessage.content)
+      ) {
+        const toolResultPart = lastToolResultMessage.content.find(
+          part => part.type === 'tool-result'
+        ) as ToolResultPart | undefined;
+
+        if (toolResultPart) {
+          this.log(`Processing tool result for ${toolResultPart.toolName} from response.messages`);
+          if (toolResultPart.result != null) {
+            processedToolResult = toolResultPart.result as Task;
+            this.log(`Tool Result State: ${processedToolResult?.status?.state ?? 'N/A'}`);
+            const firstPart = processedToolResult?.status?.message?.parts[0];
+            const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';
+            this.log(`Tool Result Message: ${messageText}`);
+          } else {
+            this.log('Tool result part content is null or undefined.');
           }
+        } else {
+          this.log('No tool-result part found in the last tool message.');
         }
-        if (processedToolResult) break;
+      } else {
+        this.log('No tool message found in the response.');
       }
 
-      if (!processedToolResult) {
-        throw new Error(text);
+      if (processedToolResult) {
+        switch (processedToolResult.status.state) {
+          case 'completed':
+          case 'failed':
+          case 'canceled':
+            this.log(
+              `Task finished with state ${processedToolResult.status.state}. Clearing conversation history.`
+            );
+            this.conversationHistory = [];
+            return processedToolResult;
+          case 'input-required':
+          case 'submitted':
+          case 'working':
+          case 'unknown':
+            return processedToolResult;
+          default:
+            this.log(`Unexpected task state: ${processedToolResult.status.state}`);
+            return {
+              id: this.userAddress || 'unknown-user',
+              status: {
+                state: 'failed',
+                message: {
+                  role: 'agent',
+                  parts: [
+                    {
+                      type: 'text',
+                      text: `Agent encountered unexpected task state: ${processedToolResult.status.state}`,
+                    },
+                  ],
+                },
+              },
+            };
+        }
       }
 
-      switch (processedToolResult.status.state) {
-        case 'completed':
-        case 'failed':
-        case 'canceled':
-          this.conversationHistory = [];
-          return processedToolResult;
-        case 'input-required':
-        case 'submitted':
-        case 'working':
-        case 'unknown':
-          return processedToolResult;
+      if (text) {
+        this.log(
+          'No specific tool task processed or returned. Returning final text response as completed task.'
+        );
+        return {
+          id: this.userAddress,
+          status: {
+            state: 'completed',
+            message: { role: 'agent', parts: [{ type: 'text', text: text }] },
+          },
+        };
       }
+
+      throw new Error(
+        'Agent processing failed: No tool result task processed and no final text response available.'
+      );
     } catch (error) {
       const errorLog = `Error calling Vercel AI SDK generateText: ${error}`;
       logError(errorLog);
@@ -514,6 +604,30 @@ Use relavant conversation history to obtain required tool parameters. Present th
       throw new Error(
         `Failed to fetch/validate capabilities from MCP server: ${(error as Error).message}`
       );
+    }
+  }
+
+  private async _loadCamelotDocumentation(): Promise<void> {
+    const defaultDocsPath = path.resolve(__dirname, '../encyclopedia');
+    const docsPath = defaultDocsPath;
+    const filePaths = [path.join(docsPath, 'camelot-01.md'), path.join(docsPath, 'camelot-02.md')];
+    let combinedContent = '';
+
+    this.log(`Loading Camelot documentation from: ${docsPath}`);
+
+    for (const filePath of filePaths) {
+      try {
+        const content = await fs.readFile(filePath, 'utf-8');
+        combinedContent += `\n\n--- Content from ${path.basename(filePath)} ---\n\n${content}`;
+        this.log(`Successfully loaded ${path.basename(filePath)}`);
+      } catch (error) {
+        logError(`Warning: Could not load or read Camelot documentation file ${filePath}:`, error);
+        combinedContent += `\n\n--- Failed to load ${path.basename(filePath)} ---`;
+      }
+    }
+    this.camelotContextContent = combinedContent;
+    if (!this.camelotContextContent.trim()) {
+      logError('Warning: Camelot documentation context is empty after loading attempts.');
     }
   }
 }

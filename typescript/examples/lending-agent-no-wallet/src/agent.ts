@@ -6,6 +6,7 @@ import {
   handleSupply,
   handleWithdraw,
   handleGetUserPositions,
+  handleAskEncyclopedia,
   type HandlerContext,
   type TokenInfo,
 } from './agentToolHandlers.js';
@@ -106,6 +107,10 @@ const BorrowRepaySupplyWithdrawSchema = z.object({
 
 const GetUserPositionsSchema = z.object({});
 
+const AskEncyclopediaSchema = z.object({
+  question: z.string().describe('The question to ask the Aave encyclopedia.'),
+});
+
 function logError(...args: unknown[]) {
   console.error(...args);
 }
@@ -121,6 +126,7 @@ type LendingToolSet = {
   supply: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
   withdraw: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
   getUserPositions: Tool<typeof GetUserPositionsSchema, Task>;
+  askEncyclopedia: Tool<typeof AskEncyclopediaSchema, Task>;
 };
 
 interface ChainConfig {
@@ -172,6 +178,7 @@ export class Agent {
   private toolSet: LendingToolSet | null = null;
   public conversationHistory: CoreMessage[] = [];
   private userAddress?: string;
+  private aaveContextContent: string = '';
 
   constructor(quicknodeSubdomain: string, quicknodeApiKey: string) {
     this.quicknodeSubdomain = quicknodeSubdomain;
@@ -212,6 +219,7 @@ export class Agent {
     }
 
     await this.setupTokenMap();
+    await this._loadAaveDocumentation();
 
     this.toolSet = {
       borrow: tool({
@@ -282,18 +290,33 @@ export class Agent {
           }
         },
       }),
+      askEncyclopedia: tool({
+        description:
+          'Ask a question about Aave to retrieve specific information about the protocol using embedded documentation.',
+        parameters: AskEncyclopediaSchema,
+        execute: async args => {
+          console.error('Vercel AI SDK calling handler: askEncyclopedia', args);
+          try {
+            return await handleAskEncyclopedia(args, this.getHandlerContext());
+          } catch (error: any) {
+            logError(`Error during askEncyclopedia via toolSet: ${error.message}`);
+            throw error;
+          }
+        },
+      }),
     };
 
     this.conversationHistory = [
       {
         role: 'system',
-        content: `You are an AI agent providing access to blockchain lending functionalities via Ember AI Onchain Actions.
+        content: `You are an AI agent providing access to blockchain lending capabilities via Ember AI Onchain Actions, using Aave and other lending protocols.
 
-Available actions: borrow, repay, supply, withdraw, getUserPositions.
+Available actions: borrow, repay, supply, withdraw, getUserPositions, askEncyclopedia.
 
 Only use tools if the user explicitly asks to perform an action and provides the necessary parameters.
 - borrow, repay, supply, withdraw require: tokenName, amount.
 - getUserPositions requires no parameters.
+- askEncyclopedia requires a question about Aave.
 
 If parameters are missing, ask the user to provide them. Do not assume parameters.
 
@@ -322,6 +345,11 @@ If parameters are missing, ask the user to provide them. Do not assume parameter
 <user>Withdraw 10 USDC</user>
 <tool_call> {"toolName": "withdraw", "args": { "tokenName": "USDC", "amount": "10" }} </tool_call>
 </example5>
+
+<example6 - Ask Encyclopedia>
+<user>What is the liquidation threshold for WETH on Aave Arbitrum?</user>
+<tool_call> {"toolName": "askEncyclopedia", "args": { "question": "What is the liquidation threshold for WETH on Aave Arbitrum?" }} </tool_call>
+</example6>
 </examples>
 
 Always use plain text. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason. Present the user with a list of tokens/chains if clarification is needed (as handled by the tool).`,
@@ -555,6 +583,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
         },
       });
       console.error(`generateText finished. Reason: ${finishReason}`);
+      console.error(`LLM response text: ${text}`);
 
       response.messages.forEach((msg, index) => {
         if (msg.role === 'assistant' && Array.isArray(msg.content)) {
@@ -651,6 +680,8 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       log: console.error,
       quicknodeSubdomain: this.quicknodeSubdomain,
       quicknodeApiKey: this.quicknodeApiKey,
+      openRouterApiKey: process.env.OPENROUTER_API_KEY!,
+      aaveContextContent: this.aaveContextContent,
     };
   }
 
@@ -675,6 +706,30 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
     } catch (e) {
       console.error(`Error formatting numeric value: ${value}`, e);
       return 'N/A';
+    }
+  }
+
+  private async _loadAaveDocumentation(): Promise<void> {
+    const defaultDocsPath = path.resolve(__dirname, '../encyclopedia');
+    const docsPath = defaultDocsPath;
+    const filePaths = [path.join(docsPath, 'aave-01.md'), path.join(docsPath, 'aave-02.md')];
+    let combinedContent = '';
+
+    console.error(`Loading Aave documentation from: ${docsPath}`);
+
+    for (const filePath of filePaths) {
+      try {
+        const content = await fs.readFile(filePath, 'utf-8');
+        combinedContent += `\n\n--- Content from ${path.basename(filePath)} ---\n\n${content}`;
+        console.error(`Successfully loaded ${path.basename(filePath)}`);
+      } catch (error) {
+        logError(`Warning: Could not load or read Aave documentation file ${filePath}:`, error);
+        combinedContent += `\n\n--- Failed to load ${path.basename(filePath)} ---`;
+      }
+    }
+    this.aaveContextContent = combinedContent;
+    if (!this.aaveContextContent.trim()) {
+      logError('Warning: Aave documentation context is empty after loading attempts.');
     }
   }
 }

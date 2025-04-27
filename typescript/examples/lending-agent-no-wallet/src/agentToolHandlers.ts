@@ -4,7 +4,6 @@ import type { Task } from 'a2a-samples-js/schema';
 import {
   createPublicClient,
   http,
-  encodeFunctionData,
   parseUnits,
   formatUnits,
   type Address,
@@ -12,6 +11,8 @@ import {
 } from 'viem';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
 import { getChainConfigById } from './agent.js';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { streamText } from 'ai';
 
 const ZodTokenUidSchema = z.object({
   chainId: z.string(),
@@ -109,88 +110,6 @@ export const TransactionArtifactSchema = z.object({
 
 export type TransactionArtifact = z.infer<typeof TransactionArtifactSchema>;
 
-export const agentTools = [
-  {
-    name: 'borrow',
-    description:
-      'Borrow a token. Provide the token name (e.g., USDC, WETH) and a human-readable amount.',
-    parameters: {
-      type: 'object',
-      properties: {
-        tokenName: {
-          type: 'string',
-          description: 'The name of the token to borrow (e.g., USDC, WETH).',
-        },
-        amount: {
-          type: 'string',
-          description: "The amount to borrow (human readable, e.g., '100', '0.5').",
-        },
-      },
-      required: ['tokenName', 'amount'],
-    },
-  },
-  {
-    name: 'repay',
-    description: 'Repay a borrowed token. Provide the token name and a human-readable amount.',
-    parameters: {
-      type: 'object',
-      properties: {
-        tokenName: {
-          type: 'string',
-          description: 'The name of the token to repay.',
-        },
-        amount: {
-          type: 'string',
-          description: 'The amount to repay.',
-        },
-      },
-      required: ['tokenName', 'amount'],
-    },
-  },
-  {
-    name: 'supply',
-    description: 'Supply (deposit) a token. Provide the token name and a human-readable amount.',
-    parameters: {
-      type: 'object',
-      properties: {
-        tokenName: {
-          type: 'string',
-          description: 'The name of the token to supply.',
-        },
-        amount: {
-          type: 'string',
-          description: 'The amount to supply.',
-        },
-      },
-      required: ['tokenName', 'amount'],
-    },
-  },
-  {
-    name: 'withdraw',
-    description:
-      'Withdraw a previously supplied token. Provide the token name and a human-readable amount.',
-    parameters: {
-      type: 'object',
-      properties: {
-        tokenName: {
-          type: 'string',
-          description: 'The name of the token to withdraw.',
-        },
-        amount: {
-          type: 'string',
-          description: 'The amount to withdraw.',
-        },
-      },
-      required: ['tokenName', 'amount'],
-    },
-  },
-  {
-    name: 'getUserPositions',
-    description: 'Get a summary of your current lending and borrowing positions.',
-    parameters: { type: 'object', properties: {} },
-  },
-];
-
 export interface HandlerContext {
   mcpClient: Client;
   tokenMap: Record<string, Array<TokenInfo>>;
@@ -198,6 +117,8 @@ export interface HandlerContext {
   log: (...args: unknown[]) => void;
   quicknodeSubdomain: string;
   quicknodeApiKey: string;
+  openRouterApiKey: string;
+  aaveContextContent: string;
 }
 
 type FindTokenResult =
@@ -1117,6 +1038,109 @@ export async function handleGetUserPositions(
         message: {
           role: 'agent',
           parts: [{ type: 'text', text: `Error fetching positions: ${(error as Error).message}` }],
+        },
+      },
+    };
+  }
+}
+
+export async function handleAskEncyclopedia(
+  params: { question: string },
+  context: HandlerContext
+): Promise<Task> {
+  const { question } = params;
+  const { userAddress, openRouterApiKey, log, aaveContextContent } = context;
+
+  if (!userAddress) {
+    throw new Error('User address not set!');
+  }
+  if (!openRouterApiKey) {
+    log('Error: OpenRouter API key is not configured in HandlerContext.');
+    return {
+      id: userAddress,
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              type: 'text',
+              text: 'The Aave expert tool is not configured correctly (Missing API Key). Please contact support.',
+            },
+          ],
+        },
+      },
+    };
+  }
+
+  log(`Handling askEncyclopedia for user ${userAddress} with question: "${question}"`);
+
+  try {
+    if (!aaveContextContent.trim()) {
+      log('Error: Aave context documentation provided by the agent is empty.');
+      return {
+        id: userAddress,
+        status: {
+          state: 'failed',
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                type: 'text',
+                text: 'Could not load the necessary Aave documentation to answer your question.',
+              },
+            ],
+          },
+        },
+      };
+    }
+
+    const openrouter = createOpenRouter({
+      apiKey: openRouterApiKey,
+    });
+
+    const systemPrompt = `You are an Aave protocol expert. The following information is your own knowledge and expertise - do not refer to it as provided, given, or external information. Speak confidently in the first person as the expert you are.
+
+Do not say phrases like "Based on my knowledge" or "According to the information". Instead, simply state the facts directly as an expert would.
+
+If you don't know something, simply say "I don't know" or "I don't have information about that" without apologizing or referring to limited information.
+
+${aaveContextContent}`;
+
+    log('Calling OpenRouter model...');
+    const { textStream } = await streamText({
+      model: openrouter('google/gemini-2.5-flash-preview'),
+      system: systemPrompt,
+      prompt: question,
+    });
+
+    let responseText = '';
+    for await (const textPart of textStream) {
+      responseText += textPart;
+    }
+
+    log(`Received response from OpenRouter: ${responseText}`);
+
+    return {
+      id: userAddress,
+      status: {
+        state: 'completed',
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: responseText }],
+        },
+      },
+    };
+  } catch (error: any) {
+    log(`Error during askEncyclopedia execution:`, error);
+    const errorMessage = error?.message || 'An unexpected error occurred.';
+    return {
+      id: userAddress,
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: `Error asking Aave expert: ${errorMessage}` }],
         },
       },
     };

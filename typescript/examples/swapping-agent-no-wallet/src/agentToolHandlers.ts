@@ -12,6 +12,8 @@ import { getChainConfigById } from './agent.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Task } from 'a2a-samples-js/schema';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { streamText } from 'ai';
 
 export type TokenInfo = {
   chainId: string;
@@ -95,6 +97,8 @@ export interface HandlerContext {
   log: (...args: unknown[]) => void;
   quicknodeSubdomain: string;
   quicknodeApiKey: string;
+  openRouterApiKey?: string;
+  camelotContextContent: string;
 }
 
 function findTokensCaseInsensitive(
@@ -546,4 +550,107 @@ export async function handleSwapTokens(
       },
     ],
   };
+}
+
+export async function handleAskEncyclopedia(
+  params: { question: string },
+  context: HandlerContext
+): Promise<Task> {
+  const { question } = params;
+  const { userAddress, openRouterApiKey, log, camelotContextContent } = context;
+
+  if (!userAddress) {
+    throw new Error('User address not set!');
+  }
+  if (!openRouterApiKey) {
+    log('Error: OpenRouter API key is not configured in HandlerContext.');
+    return {
+      id: userAddress,
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              type: 'text',
+              text: 'The Camelot expert tool is not configured correctly (Missing API Key). Please contact support.',
+            },
+          ],
+        },
+      },
+    };
+  }
+
+  log(`Handling askEncyclopedia for user ${userAddress} with question: "${question}"`);
+
+  try {
+    if (!camelotContextContent.trim()) {
+      log('Error: Camelot context documentation provided by the agent is empty.');
+      return {
+        id: userAddress,
+        status: {
+          state: 'failed',
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                type: 'text',
+                text: 'Could not load the necessary Camelot documentation to answer your question.',
+              },
+            ],
+          },
+        },
+      };
+    }
+
+    const openrouter = createOpenRouter({
+      apiKey: openRouterApiKey,
+    });
+
+    const systemPrompt = `You are a Camelot DEX expert. The following information is your own knowledge and expertise - do not refer to it as provided, given, or external information. Speak confidently in the first person as the expert you are.
+
+Do not say phrases like "Based on my knowledge" or "According to the information". Instead, simply state the facts directly as an expert would.
+
+If you don't know something, simply say "I don't know" or "I don't have information about that" without apologizing or referring to limited information.
+
+${camelotContextContent}`;
+
+    log('Calling OpenRouter model...');
+    const { textStream } = await streamText({
+      model: openrouter('google/gemini-2.5-flash-preview'),
+      system: systemPrompt,
+      prompt: question,
+    });
+
+    let responseText = '';
+    for await (const textPart of textStream) {
+      responseText += textPart;
+    }
+
+    log(`Received response from OpenRouter: ${responseText}`);
+
+    return {
+      id: userAddress,
+      status: {
+        state: 'completed',
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: responseText }],
+        },
+      },
+    };
+  } catch (error: any) {
+    log(`Error during askEncyclopedia execution:`, error);
+    const errorMessage = error?.message || 'An unexpected error occurred.';
+    return {
+      id: userAddress,
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: `Error asking Camelot expert: ${errorMessage}` }],
+        },
+      },
+    };
+  }
 }
