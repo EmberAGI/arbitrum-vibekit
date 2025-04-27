@@ -5,7 +5,11 @@
       "outDir": "dist",
       "composite": true,
       "moduleResolution": "NodeNext",
-      "types": ["node"]
+      "types": ["node"],
+      "paths": {
+        "@gmx-io/sdk/types/*": ["./node_modules/@gmx-io/sdk/build/src/types/*"],
+        "@gmx-io/sdk/modules/*": ["./node_modules/@gmx-io/sdk/build/src/modules/*"],
+      }
     },
     "include": ["src/**/*"],
     "exclude": ["node_modules", "dist"],

@@ -6,6 +6,7 @@ import { GmxSdk } from '@gmx-io/sdk';
 import type { PositionsData } from '@gmx-io/sdk/types/positions.js';
 import { getMarketInfo } from './gmx/markets.js';
 import { getPositionInfo } from './gmx/positions.js';
+import { createSwapOrder } from './gmx/swap.js';
 
 // Schema for GMX market information
 const MarketInfoSchema = z.object({
@@ -63,10 +64,20 @@ const DecreasePositionSchema = z.object({
   slippage: z.number().optional().describe('Allowed slippage in basis points (50 = 0.5%)'),
 });
 
+// Schema for creating a swap order
+const CreateSwapOrderSchema = z.object({
+  userAddress: z.string().describe('The user address to swap for'),
+  fromToken: z.string().describe('The token to swap from'),
+  toToken: z.string().describe('The token to swap to'),
+  amount: z.string().describe('The amount of tokens to swap'),
+  isLimit: z.boolean().optional().describe('Whether to use a limit order'),
+  slippage: z.number().optional().describe('Allowed slippage in basis points (50 = 0.5%)'),
+});
+
 // Define types for the schemas
 export type CreatePositionParams = z.infer<typeof CreatePositionSchema>;
 export type DecreasePositionParams = z.infer<typeof DecreasePositionSchema>;
-
+export type CreateSwapOrderParams = z.infer<typeof CreateSwapOrderSchema>;
 // Define schemas for GMX agent handlers
 export const GmxQuerySchema = z.object({
   instruction: z.string(),
@@ -322,6 +333,91 @@ export async function handlePositionsQuery(
     };
   }
 }
+
+/**
+ * Handle swap query
+ */
+export async function handleSwapQuery(args: CreateSwapOrderParams, context: HandlerContext): Promise<Task> {
+  try {
+
+    console.log("Debug: creating swap order");
+    console.log("Debug: args", args);
+
+    const swapOrder = await createSwapOrder(context.gmxClient, args);
+    console.log("Debug: swap order created", swapOrder);
+
+    if(!swapOrder.success) {
+      return {
+        id: 'swap-query',
+        status: {
+          state: 'failed',
+          message: {
+            role: 'agent',
+            parts: [{ type: 'text', text: `Failed to create swap order: ${swapOrder.message}` }],
+          },
+        },
+        artifacts: [],
+      };
+    }
+
+    const swapData = {
+      fromToken: args.fromToken,
+      toToken: args.toToken,
+      amount: args.amount,
+      isLimit: args.isLimit,
+      slippage: args.slippage || 50 // Default 0.5% slippage if not specified
+    };
+
+    return {
+      id: 'swap-query',
+      status: {
+        state: 'completed',
+        message: {
+          role: 'agent',
+          parts: [{ 
+            type: 'text', 
+            text: `Swap order created successfully.` 
+          }],
+        },
+      },
+      artifacts: [
+        {
+          name: 'swap-info',
+          parts: [
+            {
+              type: 'data',
+              data: swapData,
+            },
+          ],
+        },
+      ],
+    };
+  } catch (error) {
+    context.log('Error handling swap query:', error);
+    return {
+      id: 'swap-query', 
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: 'Error creating swap order. Please try again later.' }],
+        },
+      },
+      artifacts: [
+        {
+          name: 'error',
+          parts: [
+            {
+              type: 'data',
+              data: { error: error instanceof Error ? error.message : String(error) },
+            },
+          ],
+        },
+      ],
+    };
+  }
+}
+
 
 /**
  * Format amount to a readable string

@@ -44,7 +44,7 @@ const initializeAgent = async (): Promise<void> => {
 };
 
 // Define agent tool name and description
-const agentToolName = 'agent';
+const agentToolName = 'GMX Agent';
 const agentToolDescription =
   'Sends a natural-language instruction to your GMX agent to manage positions, view markets, and more.';
 

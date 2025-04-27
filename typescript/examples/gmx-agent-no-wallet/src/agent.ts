@@ -3,7 +3,7 @@ import { setupGmxClient } from './gmx/client.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { HandlerContext } from './agentToolHandlers.js';
-import { handleMarketsQuery, handlePositionsQuery, handleCreatePositionRequest, handleClosePositionRequest } from './agentToolHandlers.js';
+import { handleMarketsQuery, handlePositionsQuery, handleCreatePositionRequest, handleClosePositionRequest, handleSwapQuery } from './agentToolHandlers.js';
 import {
   generateText,
   tool,
@@ -61,6 +61,15 @@ const CreateDecreasePositionSchema = z.object({
   slippage: z.number().optional().describe('Allowed slippage in basis points (50 = 0.5%)'),
 });
 
+const CreateSwapOrderSchema = z.object({
+  userAddress: z.string().describe('The user address to swap for'),
+  fromToken: z.string().describe('The token to swap from'),
+  toToken: z.string().describe('The token to swap to'),
+  amount: z.string().describe('The amount of tokens to swap'),
+  slippage: z.number().optional().describe('Allowed slippage in basis points (50 = 0.5%)'),
+  isLimit: z.boolean().optional().describe('Whether to use a limit order'),
+});
+
 // Define a record type to avoid specific typings
 type GmxToolSet = Record<string, any>;
 
@@ -104,6 +113,7 @@ export class Agent {
     - getPositionInfo: Retrieve open positions for a user by wallet address.
     - createIncreasePosition: Open or increase a position (simulated; no real wallet interaction).
     - createDecreasePosition: Decrease or close a position (simulated; no real wallet interaction).
+    - createSwapOrder: Create a swap order.
     
     GENERAL BEHAVIOR:
     - Communicate clearly, professionally, and using plain text only (no markdown).
@@ -248,6 +258,20 @@ export class Agent {
               throw error;
             }
           }
+        }),
+
+        createSwapOrder: tool({
+          description: 'Create a swap order',
+          parameters: CreateSwapOrderSchema,
+          execute: async (args) => {
+            console.log('Vercel AI SDK calling handler: createSwapOrder tool', args);
+            try {
+              const response = await handleSwapQuery(args, this.getHandlerContext());
+              return response;
+            } catch (error: any) {
+              logError(`Error executing createSwapOrder:`, error);
+              throw error;
+            }          }
         }),
         
         createIncreasePosition: tool({
