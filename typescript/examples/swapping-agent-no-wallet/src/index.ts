@@ -12,7 +12,9 @@ import type { Task } from 'a2a-samples-js/schema';
 const SwapAgentSchema = z.object({
   instruction: z
     .string()
-    .describe("A natural‑language swap directive, e.g. 'Swap 50 DAI into USDT'."),
+    .describe(
+      "A natural‑language swap directive, e.g. 'Swap 50 DAI into USDT' or question to ask the agent."
+    ),
   userAddress: z
     .string()
     .describe('The user wallet address which is used to sign transactions and to pay for gas.'),
@@ -52,7 +54,7 @@ const initializeAgent = async (): Promise<void> => {
 
 const agentToolName = 'askSwapAgent';
 const agentToolDescription =
-  'Sends a free‑form, natural‑language swap instruction to your token‑swap AI agent and returns a structured quote (route, estimate, fees, calldata).';
+  'Sends a free‑form, natural‑language swap instruction to your token‑swap AI agent and returns a structured quote (route, estimate, fees, calldata). You can also ask questions to the agent about the swap protocols.';
 
 server.tool(
   agentToolName,
