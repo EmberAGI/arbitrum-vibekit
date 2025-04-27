@@ -11,7 +11,9 @@ import type { Task } from 'a2a-samples-js/schema';
 const LendingAgentSchema = z.object({
   instruction: z
     .string()
-    .describe("A natural‑language lending directive, e.g. 'Borrow 50 USDC' or 'Supply 10 ETH'."),
+    .describe(
+      "A natural‑language lending directive, e.g. 'Borrow 50 USDC' or 'Supply 10 ETH' or question to ask the agent."
+    ),
   userAddress: z
     .string()
     .describe('The user wallet address which is used to sign transactions and to pay for gas.'),
@@ -40,7 +42,7 @@ const initializeAgent = async (): Promise<void> => {
 
 const agentToolName = 'askLendingAgent';
 const agentToolDescription =
-  'Sends a free‑form, natural‑language lending instruction to your lending AI agent and returns a structured quote including transaction data.';
+  'Sends a free‑form, natural‑language lending instruction to your lending AI agent and returns a structured quote including transaction data. You can also ask questions to the agent about the lending protocols.';
 
 server.tool(
   agentToolName,
