@@ -1,7 +1,7 @@
 {
   "name": "ember-mcp-tool-server",
   "version": "1.0.0",
-  "description": "MCP stdio server for Ember AI SDK tools",
+  "description": "MCP stdio server for Ember AI On-chain Actions tools for LLMs",
   "type": "module",
   "main": "./dist/index.js",
   "bin": {

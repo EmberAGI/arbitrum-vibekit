@@ -309,7 +309,7 @@ export class Agent {
     this.conversationHistory = [
       {
         role: 'system',
-        content: `You are an AI agent providing access to blockchain lending capabilities via Ember AI Onchain Actions, using Aave and other lending protocols.
+        content: `You are an AI agent providing access to blockchain lending capabilities via Ember AI On-chain Actions, using Aave and other lending protocols.
 
 Available actions: borrow, repay, supply, withdraw, getUserPositions, askEncyclopedia.
 

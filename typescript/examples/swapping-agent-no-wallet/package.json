@@ -1,7 +1,7 @@
 {
   "name": "swapping-agent-no-wallet",
   "version": "1.0.0",
-  "description": "Ember SDK swapping Agent Example",
+  "description": "Ember On-chain Actions swapping Agent Example without integrated wallet",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

@@ -1,6 +1,6 @@
 ## Introduction
 
-This directory provides a reference implementation of a swapping agent using Arbitrum Vibekit and EmberAI's MCP server. It demonstrates how to set up a server, define agent functionalities, and process swapping operations via MCP tools. You can expand or modify this template by adding new tools or incorporating additional MCP-compatible functionalities to suit your project’s requirements.
+This directory provides a reference implementation of a swapping agent using Arbitrum Vibekit and Ember AI's MCP server. It demonstrates how to set up a server, define agent functionalities, and process swapping operations via MCP tools. You can expand or modify this template by adding new tools or incorporating additional MCP-compatible functionalities to suit your project’s requirements.
 
 ## File Overview
 
@@ -18,7 +18,7 @@ This directory provides a reference implementation of a swapping agent using Arb
 
    Defines and manages an AI-powered, on-chain swapping agent. Key Components are:
 
-- Agent that interacts with blockchain swapping protocols (Ember SDK) to handle user inputs and execute on-chain operations.
+- Agent that interacts with blockchain swapping protocols (Ember On-chain Actions) to handle user inputs and execute on-chain operations.
 
 - MCP client that queries capabilities and generates transaction sets.
 
