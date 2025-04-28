@@ -1,6 +1,5 @@
 import { Agent } from './agent.js';
-import { type Address, isAddress } from 'viem';
-import { mnemonicToAccount } from 'viem/accounts';
+import { isAddress } from 'viem';
 import * as dotenv from 'dotenv';
 import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -9,58 +8,47 @@ import cors from 'cors';
 import { z } from 'zod';
 import type { Task } from 'a2a-samples-js/schema';
 
-const SwapAgentSchema = z.object({
+const LendingAgentSchema = z.object({
   instruction: z
     .string()
     .describe(
-      "A natural‑language swap directive, e.g. 'Swap 50 DAI into USDT' or question to ask the agent."
+      "A natural‑language lending directive, e.g. 'Borrow 50 USDC' or 'Supply 10 ETH' or question to ask the agent."
     ),
   userAddress: z
     .string()
     .describe('The user wallet address which is used to sign transactions and to pay for gas.'),
 });
-type SwapAgentArgs = z.infer<typeof SwapAgentSchema>;
+type LendingAgentArgs = z.infer<typeof LendingAgentSchema>;
 
 dotenv.config();
 
 const server = new McpServer({
-  name: 'mcp-sse-agent-server',
+  name: 'lending-agent-server',
   version: '1.0.0',
 });
-
-const rpc = process.env.RPC_URL || 'https://arbitrum.llamarpc.com';
 
 let agent: Agent;
 
 const initializeAgent = async (): Promise<void> => {
-  const mnemonic = process.env.MNEMONIC;
-  if (!mnemonic) {
-    throw new Error('MNEMONIC not found in the .env file.');
-  }
-
   const quicknodeSubdomain = process.env.QUICKNODE_SUBDOMAIN;
   const apiKey = process.env.QUICKNODE_API_KEY;
   if (!quicknodeSubdomain || !apiKey) {
     throw new Error('QUICKNODE_SUBDOMAIN and QUICKNODE_API_KEY must be set in the .env file.');
   }
 
-  const account = mnemonicToAccount(mnemonic);
-  const userAddress: Address = account.address;
-  console.error(`Using wallet ${userAddress}`);
-
   agent = new Agent(quicknodeSubdomain, apiKey);
   await agent.init();
 };
 
-const agentToolName = 'askSwapAgent';
+const agentToolName = 'askLendingAgent';
 const agentToolDescription =
-  'Sends a free‑form, natural‑language swap instruction to your token‑swap AI agent and returns a structured quote (route, estimate, fees, calldata). You can also ask questions to the agent about the swap protocols.';
+  'Sends a free‑form, natural‑language lending instruction to your lending AI agent and returns a structured quote including transaction data. You can also ask questions to the agent about the lending protocols.';
 
 server.tool(
   agentToolName,
   agentToolDescription,
-  SwapAgentSchema.shape,
-  async (args: SwapAgentArgs) => {
+  LendingAgentSchema.shape,
+  async (args: LendingAgentArgs) => {
     const { instruction, userAddress } = args;
     if (!isAddress(userAddress)) {
       throw new Error('Invalid user address provided.');
@@ -77,7 +65,6 @@ server.tool(
       const err = error as Error;
       const errorTask: Task = {
         id: userAddress,
-        //sessionId: 'c295ea44-7543-4f78-b524-7a38915ad6e4',
         status: {
           state: 'failed',
           message: {
@@ -100,7 +87,7 @@ app.use(cors());
 
 app.get('/', (_req, res) => {
   res.json({
-    name: 'MCP SSE Agent Server',
+    name: 'Lending Agent No Wallet Server',
     version: '1.0.0',
     status: 'running',
     endpoints: {

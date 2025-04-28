@@ -6,10 +6,14 @@ import {
   type Address,
   encodeFunctionData,
   type PublicClient,
+  formatUnits,
 } from 'viem';
 import { getChainConfigById } from './agent.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Task } from 'a2a-samples-js/schema';
+import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { streamText } from 'ai';
 
 export type TokenInfo = {
   chainId: string;
@@ -19,42 +23,82 @@ export type TokenInfo = {
 
 export const SwapPreviewSchema = z
   .object({
-    fromToken: z.string(),
-    toToken: z.string(),
-    amount: z.string(),
+    fromTokenSymbol: z.string(),
+    fromTokenAddress: z.string(),
+    fromTokenAmount: z.string(),
     fromChain: z.string(),
+    toTokenSymbol: z.string(),
+    toTokenAddress: z.string(),
+    toTokenAmount: z.string(),
     toChain: z.string(),
+    exchangeRate: z.string(),
+    executionTime: z.string(),
+    expiration: z.string(),
+    explorerUrl: z.string(),
   })
   .passthrough();
 
-export type SwapPreview = z.infer<typeof SwapPreviewSchema>;
-
-export const TransactionRequestSchema = z
+export const TransactionEmberSchema = z
   .object({
     to: z.string(),
     data: z.string(),
-    value: z.string().optional(),
-    chainId: z.string(),
+    value: z.string(),
   })
   .passthrough();
 
-export type TransactionRequest = z.infer<typeof TransactionRequestSchema>;
+export type TransactionEmber = z.infer<typeof TransactionEmberSchema>;
+
+export const TransactionResponseSchema = TransactionEmberSchema.extend({
+  chainId: z.string(),
+});
+
+export type TransactionResponse = z.infer<typeof TransactionResponseSchema>;
 
 export const TransactionArtifactSchema = z.object({
   txPreview: SwapPreviewSchema,
-  txPlan: z.array(TransactionRequestSchema),
+  txPlan: z.array(TransactionResponseSchema),
 });
 
 export type TransactionArtifact = z.infer<typeof TransactionArtifactSchema>;
+
+const TokenDetailSchema = z.object({
+  address: z.string(),
+  chainId: z.string(),
+});
+
+const EstimationSchema = z.object({
+  effectivePrice: z.string(),
+  timeEstimate: z.string(),
+  expiration: z.string(),
+  baseTokenDelta: z.string(),
+  quoteTokenDelta: z.string(),
+});
+
+const ProviderTrackingSchema = z.object({
+  requestId: z.string().optional(),
+  providerName: z.string().optional(),
+  explorerUrl: z.string(),
+});
+
+export const SwapResponseSchema = z.object({
+  baseToken: TokenDetailSchema,
+  quoteToken: TokenDetailSchema,
+  estimation: EstimationSchema,
+  providerTracking: ProviderTrackingSchema,
+  transactions: z.array(TransactionEmberSchema),
+});
+
+export type SwapResponse = z.infer<typeof SwapResponseSchema>;
 
 export interface HandlerContext {
   mcpClient: Client;
   tokenMap: Record<string, TokenInfo[]>;
   userAddress: string | undefined;
-  executeAction: (actionName: string, transactions: TransactionRequest[]) => Promise<string>;
   log: (...args: unknown[]) => void;
   quicknodeSubdomain: string;
   quicknodeApiKey: string;
+  openRouterApiKey?: string;
+  camelotContextContent: string;
 }
 
 function findTokensCaseInsensitive(
@@ -156,13 +200,10 @@ export function parseMcpToolResponse(
     context.log(`Raw ${toolName} result appears nested, parsing inner text...`);
     try {
       const parsedData = JSON.parse((rawResponse as any).content[0].text);
-      context.log('Parsed inner text content for validation:', parsedData);
       dataToValidate = parsedData;
     } catch (e) {
       context.log(`Error parsing inner text content from ${toolName} result:`, e);
-      throw new Error(
-        `Failed to parse nested JSON response from ${toolName}: ${(e as Error).message}`
-      );
+      throw new Error(`Failed to parse nested JSON response from ${toolName}: ${rawResponse}}`);
     }
   } else {
     context.log(
@@ -174,46 +215,38 @@ export function parseMcpToolResponse(
   return dataToValidate;
 }
 
-function validateAction(
+function validateTransactions(
   actionName: string,
   rawTransactions: unknown,
+  expectedChainId: string,
   context: HandlerContext
-): Array<TransactionRequest> {
-  const validationResult = z.array(TransactionRequestSchema).safeParse(rawTransactions);
+): TransactionResponse[] {
+  const validationResult = z.array(TransactionEmberSchema).safeParse(rawTransactions);
   if (!validationResult.success) {
-    const errorMsg = `MCP tool '${actionName}' returned invalid transaction data.`;
-    context.log('Validation Error:', errorMsg, validationResult.error);
+    const errorMsg = `MCP tool '${actionName}' returned invalid transaction data structure.`;
+    context.log(errorMsg, validationResult.error);
+    context.log('Raw data that failed validation:', JSON.stringify(rawTransactions));
     throw new Error(errorMsg);
   }
-  return validationResult.data;
-}
+  context.log(
+    `Validated structure for ${validationResult.data.length} transactions for ${actionName}. Adding chainId: ${expectedChainId}`
+  );
 
-const minimalErc20Abi = [
-  {
-    constant: true,
-    inputs: [
-      { name: '_owner', type: 'address' },
-      { name: '_spender', type: 'address' },
-    ],
-    name: 'allowance',
-    outputs: [{ name: '', type: 'uint256' }],
-    payable: false,
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    constant: false,
-    inputs: [
-      { name: '_spender', type: 'address' },
-      { name: '_value', type: 'uint256' },
-    ],
-    name: 'approve',
-    outputs: [{ name: '', type: 'bool' }],
-    payable: false,
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-] as const;
+  const transactionsWithChainId = validationResult.data.map(tx => ({
+    ...tx,
+    chainId: expectedChainId,
+  }));
+
+  const finalValidation = z.array(TransactionResponseSchema).safeParse(transactionsWithChainId);
+  if (!finalValidation.success) {
+    const errorMsg = `Failed to add required chainId '${expectedChainId}' to transactions for ${actionName}.`;
+    context.log(errorMsg, finalValidation.error);
+    context.log('Data after adding chainId:', JSON.stringify(transactionsWithChainId));
+    throw new Error(errorMsg);
+  }
+
+  return finalValidation.data;
+}
 
 export async function handleSwapTokens(
   params: {
@@ -225,12 +258,15 @@ export async function handleSwapTokens(
   },
   context: HandlerContext
 ): Promise<Task> {
+  const { fromToken: rawFromToken, toToken: rawToToken, amount, fromChain, toChain } = params;
+  const fromToken = rawFromToken.toUpperCase();
+  const toToken = rawToToken.toUpperCase();
+
   if (!context.userAddress) {
     throw new Error('User address not set!');
   }
-  const { fromToken, toToken, amount, fromChain, toChain } = params;
 
-  const fromTokenResult = findTokenDetail(fromToken, fromChain, context.tokenMap, 'from');
+  const fromTokenResult = findTokenDetail(rawFromToken, fromChain, context.tokenMap, 'from');
   if (typeof fromTokenResult === 'string') {
     return {
       id: context.userAddress,
@@ -242,7 +278,7 @@ export async function handleSwapTokens(
   }
   const fromTokenDetail = fromTokenResult;
 
-  const toTokenResult = findTokenDetail(toToken, toChain, context.tokenMap, 'to');
+  const toTokenResult = findTokenDetail(rawToToken, toChain, context.tokenMap, 'to');
   if (typeof toTokenResult === 'string') {
     return {
       id: context.userAddress,
@@ -255,12 +291,98 @@ export async function handleSwapTokens(
   const toTokenDetail = toTokenResult;
 
   const atomicAmount = parseUnits(amount, fromTokenDetail.decimals);
+  const txChainId = fromTokenDetail.chainId;
+  const fromTokenAddress = fromTokenDetail.address as Address;
+  const userAddress = context.userAddress as Address;
+
+  context.log(
+    `Preparing swap: ${rawFromToken} (${fromTokenAddress} on chain ${txChainId}) to ${rawToToken} (${toTokenDetail.address} on chain ${toTokenDetail.chainId}), Amount: ${amount} (${atomicAmount}), User: ${userAddress}`
+  );
+
+  let publicClient: PublicClient;
+  try {
+    const chainConfig = getChainConfigById(txChainId);
+    const networkSegment = chainConfig.quicknodeSegment;
+    const targetChain = chainConfig.viemChain;
+    let dynamicRpcUrl: string;
+    if (networkSegment === '') {
+      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.quiknode.pro/${context.quicknodeApiKey}`;
+    } else {
+      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.${networkSegment}.quiknode.pro/${context.quicknodeApiKey}`;
+    }
+    publicClient = createPublicClient({
+      chain: targetChain,
+      transport: http(dynamicRpcUrl),
+    });
+    context.log(`Public client created for chain ${txChainId} via ${dynamicRpcUrl.split('/')[2]}`);
+  } catch (chainError) {
+    context.log(`Failed to create public client for chain ${txChainId}:`, chainError);
+    return {
+      id: userAddress,
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: `Network configuration error for chain ${txChainId}.` }],
+        },
+      },
+    };
+  }
+
+  let currentBalance: bigint;
+  try {
+    currentBalance = (await publicClient.readContract({
+      address: fromTokenAddress,
+      abi: Erc20Abi.abi,
+      functionName: 'balanceOf',
+      args: [userAddress],
+    })) as bigint;
+    context.log(`User balance check: Has ${currentBalance}, needs ${atomicAmount} of ${fromToken}`);
+
+    if (currentBalance < atomicAmount) {
+      const formattedBalance = formatUnits(currentBalance, fromTokenDetail.decimals);
+      context.log(`Insufficient balance for the swap. Needs ${amount}, has ${formattedBalance}`);
+      return {
+        id: userAddress,
+        status: {
+          state: 'failed',
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                type: 'text',
+                text: `Insufficient ${fromToken} balance. You need ${amount} but only have ${formattedBalance}.`,
+              },
+            ],
+          },
+        },
+      };
+    }
+    context.log(`Sufficient balance confirmed.`);
+  } catch (readError) {
+    context.log(`Warning: Failed to read token balance. Error: ${(readError as Error).message}`);
+    return {
+      id: userAddress,
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              type: 'text',
+              text: `Could not verify your ${fromToken} balance due to a network error. Please try again.`,
+            },
+          ],
+        },
+      },
+    };
+  }
 
   context.log(
     `Executing swap via MCP: ${fromToken} (address: ${fromTokenDetail.address}, chain: ${fromTokenDetail.chainId}) to ${toToken} (address: ${toTokenDetail.address}, chain: ${toTokenDetail.chainId}), amount: ${amount}, atomicAmount: ${atomicAmount}, userAddress: ${context.userAddress}`
   );
 
-  const rawTransactions = await context.mcpClient.callTool({
+  const swapResponseRaw = await context.mcpClient.callTool({
     name: 'swapTokens',
     arguments: {
       fromTokenAddress: fromTokenDetail.address,
@@ -272,81 +394,95 @@ export async function handleSwapTokens(
     },
   });
 
-  const dataToValidate = parseMcpToolResponse(rawTransactions, context, 'swapTokens');
+  const dataToValidate = parseMcpToolResponse(swapResponseRaw, context, 'swapTokens');
+  context.log('Parsed swap response data:', dataToValidate);
 
-  if (!Array.isArray(dataToValidate) || dataToValidate.length === 0) {
-    context.log('Invalid or empty transaction plan received from MCP tool:', dataToValidate);
-    if (
-      typeof dataToValidate === 'object' &&
-      dataToValidate !== null &&
-      'error' in dataToValidate
-    ) {
-      throw new Error(`MCP tool returned an error: ${JSON.stringify(dataToValidate)}`);
-    }
-    throw new Error('Expected a transaction plan array from MCP tool, but received invalid data.');
+  const validationResult = SwapResponseSchema.safeParse(dataToValidate);
+  if (!validationResult.success) {
+    context.log('MCP tool swapTokens returned invalid data structure:', validationResult.error);
+    return {
+      id: userAddress,
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              type: 'text',
+              text: `Received invalid response from swap service: ${validationResult.error.message}`,
+            },
+          ],
+        },
+      },
+    };
+  }
+  const validatedSwapResponse = validationResult.data;
+  const rawSwapTransactions = validatedSwapResponse.transactions;
+
+  if (rawSwapTransactions.length === 0) {
+    context.log('Invalid or empty transaction plan received from MCP tool:', rawSwapTransactions);
+    return {
+      id: userAddress,
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: 'Swap service returned an empty transaction plan.' }],
+        },
+      },
+    };
   }
 
-  const swapTx = dataToValidate[0] as TransactionRequest;
-  if (!swapTx || typeof swapTx !== 'object' || !swapTx.to) {
-    context.log('Invalid swap transaction object received from MCP:', swapTx);
-    throw new Error('Invalid swap transaction structure in plan.');
+  const firstSwapTx = rawSwapTransactions[0];
+  if (!firstSwapTx || typeof firstSwapTx !== 'object' || !firstSwapTx.to) {
+    context.log('Invalid swap transaction object received from MCP:', firstSwapTx);
+    return {
+      id: userAddress,
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              type: 'text',
+              text: 'Swap service returned an invalid transaction structure.',
+            },
+          ],
+        },
+      },
+    };
   }
-
-  const spenderAddress = swapTx.to as Address;
-  const txChainId = fromTokenDetail.chainId;
-  const fromTokenAddress = fromTokenDetail.address as Address;
-  const userAddress = context.userAddress as Address;
+  const spenderAddress = firstSwapTx.to as Address;
 
   context.log(
     `Checking allowance: User ${userAddress} needs to allow Spender ${spenderAddress} to spend ${atomicAmount} of Token ${fromTokenAddress} on Chain ${txChainId}`
   );
 
-  let tempPublicClient: PublicClient;
-  try {
-    const chainConfig = getChainConfigById(txChainId);
-    const networkSegment = chainConfig.quicknodeSegment;
-    const targetChain = chainConfig.viemChain;
-    let dynamicRpcUrl: string;
-    if (networkSegment === '') {
-      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.quiknode.pro/${context.quicknodeApiKey}`;
-    } else {
-      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.${networkSegment}.quiknode.pro/${context.quicknodeApiKey}`;
-    }
-    tempPublicClient = createPublicClient({
-      chain: targetChain,
-      transport: http(dynamicRpcUrl),
-    });
-    context.log(`Public client created for chain ${txChainId} via ${dynamicRpcUrl.split('/')[2]}`);
-  } catch (chainError) {
-    context.log(`Failed to create public client for chain ${txChainId}:`, chainError);
-    throw new Error(`Unsupported chain or configuration error for chainId ${txChainId}.`);
-  }
-
   let currentAllowance: bigint = 0n;
   try {
-    currentAllowance = await tempPublicClient.readContract({
+    currentAllowance = (await publicClient.readContract({
       address: fromTokenAddress,
-      abi: minimalErc20Abi,
+      abi: Erc20Abi.abi,
       functionName: 'allowance',
       args: [userAddress, spenderAddress],
-    });
+    })) as bigint;
     context.log(`Successfully read allowance: ${currentAllowance}. Required: ${atomicAmount}`);
   } catch (readError) {
     context.log(
-      `Warning: Failed to read allowance via readContract (eth_call may be unsupported). Error: ${(readError as Error).message}`
+      `Warning: Failed to read allowance via readContract. Error: ${(readError as Error).message}`
     );
     context.log('Assuming allowance is insufficient due to check failure.');
   }
 
-  let approveTx: TransactionRequest | undefined;
+  let approveTxResponse: TransactionResponse | undefined;
   if (currentAllowance < atomicAmount) {
     context.log(
-      `Insufficient allowance or check failed. Need ${atomicAmount}, have ${currentAllowance}. Creating approval transaction...`
+      `Insufficient allowance or check failed. Need ${atomicAmount}, have ${currentAllowance}. Preparing approval transaction...`
     );
-    approveTx = {
+    approveTxResponse = {
       to: fromTokenAddress,
       data: encodeFunctionData({
-        abi: minimalErc20Abi,
+        abi: Erc20Abi.abi,
         functionName: 'approve',
         args: [spenderAddress, BigInt(2) ** BigInt(256) - BigInt(1)],
       }),
@@ -357,28 +493,35 @@ export async function handleSwapTokens(
     context.log('Sufficient allowance already exists.');
   }
 
-  context.log('Proceeding to validate the swap transaction received from MCP tool...');
+  context.log('Validating the swap transactions received from MCP tool...');
+  const validatedSwapTxPlan: TransactionResponse[] = validateTransactions(
+    'swapTokens',
+    rawSwapTransactions,
+    txChainId,
+    context
+  );
 
-  if (Array.isArray(dataToValidate) && dataToValidate.length > 0) {
-    const swapTxPlan = dataToValidate[0] as Partial<TransactionRequest>;
-    if (swapTxPlan && typeof swapTxPlan === 'object' && !swapTxPlan.chainId) {
-      context.log(`Adding missing chainId (${txChainId}) to swap transaction plan.`);
-      swapTxPlan.chainId = txChainId;
-    }
-  }
-
-  const swapTxPlan = validateAction('swapTokens', dataToValidate, context);
-  const txPlan = [...(approveTx ? [approveTx] : []), ...swapTxPlan];
+  const finalTxPlan: TransactionResponse[] = [
+    ...(approveTxResponse ? [approveTxResponse] : []),
+    ...validatedSwapTxPlan,
+  ];
 
   const txArtifact: TransactionArtifact = {
     txPreview: {
-      fromToken: fromToken,
-      toToken: toToken,
-      amount: amount,
-      fromChain: mapChainIdToName(fromTokenDetail.chainId),
-      toChain: mapChainIdToName(toTokenDetail.chainId),
+      fromTokenSymbol: fromToken,
+      fromTokenAddress: validatedSwapResponse.baseToken.address,
+      fromTokenAmount: validatedSwapResponse.estimation.baseTokenDelta,
+      fromChain: validatedSwapResponse.baseToken.chainId,
+      toTokenSymbol: toToken,
+      toTokenAddress: validatedSwapResponse.quoteToken.address,
+      toTokenAmount: validatedSwapResponse.estimation.quoteTokenDelta,
+      toChain: validatedSwapResponse.quoteToken.chainId,
+      exchangeRate: validatedSwapResponse.estimation.effectivePrice,
+      executionTime: validatedSwapResponse.estimation.timeEstimate,
+      expiration: validatedSwapResponse.estimation.expiration,
+      explorerUrl: validatedSwapResponse.providerTracking.explorerUrl,
     },
-    txPlan: txPlan,
+    txPlan: finalTxPlan,
   };
 
   return {
@@ -387,7 +530,12 @@ export async function handleSwapTokens(
       state: 'completed',
       message: {
         role: 'agent',
-        parts: [{ type: 'text', text: 'Transaction plan successfully created. Ready to sign.' }],
+        parts: [
+          {
+            type: 'text',
+            text: `Transaction plan created for swapping ${amount} ${fromToken} to ${toToken}. Ready to sign.`,
+          },
+        ],
       },
     },
     artifacts: [
@@ -402,4 +550,107 @@ export async function handleSwapTokens(
       },
     ],
   };
+}
+
+export async function handleAskEncyclopedia(
+  params: { question: string },
+  context: HandlerContext
+): Promise<Task> {
+  const { question } = params;
+  const { userAddress, openRouterApiKey, log, camelotContextContent } = context;
+
+  if (!userAddress) {
+    throw new Error('User address not set!');
+  }
+  if (!openRouterApiKey) {
+    log('Error: OpenRouter API key is not configured in HandlerContext.');
+    return {
+      id: userAddress,
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              type: 'text',
+              text: 'The Camelot expert tool is not configured correctly (Missing API Key). Please contact support.',
+            },
+          ],
+        },
+      },
+    };
+  }
+
+  log(`Handling askEncyclopedia for user ${userAddress} with question: "${question}"`);
+
+  try {
+    if (!camelotContextContent.trim()) {
+      log('Error: Camelot context documentation provided by the agent is empty.');
+      return {
+        id: userAddress,
+        status: {
+          state: 'failed',
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                type: 'text',
+                text: 'Could not load the necessary Camelot documentation to answer your question.',
+              },
+            ],
+          },
+        },
+      };
+    }
+
+    const openrouter = createOpenRouter({
+      apiKey: openRouterApiKey,
+    });
+
+    const systemPrompt = `You are a Camelot DEX expert. The following information is your own knowledge and expertise - do not refer to it as provided, given, or external information. Speak confidently in the first person as the expert you are.
+
+Do not say phrases like "Based on my knowledge" or "According to the information". Instead, simply state the facts directly as an expert would.
+
+If you don't know something, simply say "I don't know" or "I don't have information about that" without apologizing or referring to limited information.
+
+${camelotContextContent}`;
+
+    log('Calling OpenRouter model...');
+    const { textStream } = await streamText({
+      model: openrouter('google/gemini-2.5-flash-preview'),
+      system: systemPrompt,
+      prompt: question,
+    });
+
+    let responseText = '';
+    for await (const textPart of textStream) {
+      responseText += textPart;
+    }
+
+    log(`Received response from OpenRouter: ${responseText}`);
+
+    return {
+      id: userAddress,
+      status: {
+        state: 'completed',
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: responseText }],
+        },
+      },
+    };
+  } catch (error: any) {
+    log(`Error during askEncyclopedia execution:`, error);
+    const errorMessage = error?.message || 'An unexpected error occurred.';
+    return {
+      id: userAddress,
+      status: {
+        state: 'failed',
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: `Error asking Camelot expert: ${errorMessage}` }],
+        },
+      },
+    };
+  }
 }

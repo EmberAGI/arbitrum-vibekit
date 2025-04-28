@@ -44,7 +44,7 @@ const swapTokensSchema = {
   amount: z
     .string()
     .describe(
-      "The amount of the fromToken to swap (precise, non-human readable format)."
+      "The amount of the fromToken to swap (atomic, non-human readable format)."
     ),
   userAddress: z.string().describe("The wallet address initiating the swap."),
 };
@@ -58,9 +58,7 @@ const borrowSchema = {
     .describe("The chain ID where the token contract resides."),
   amount: z
     .string()
-    .describe(
-      "The amount to borrow (precise, non-human readable format expected by SDK)."
-    ),
+    .describe("The amount to borrow (human readable format expected by SDK)."),
   userAddress: z.string().describe("The wallet address initiating the borrow."),
 };
 
@@ -71,9 +69,7 @@ const repaySchema = {
   tokenChainId: z
     .string()
     .describe("The chain ID where the token contract resides."),
-  amount: z
-    .string()
-    .describe("The amount to repay (precise, non-human readable format)."),
+  amount: z.string().describe("The amount to repay (-human readable format)."),
   userAddress: z
     .string()
     .describe("The wallet address initiating the repayment."),
@@ -86,9 +82,7 @@ const supplySchema = {
   tokenChainId: z
     .string()
     .describe("The chain ID where the token contract resides."),
-  amount: z
-    .string()
-    .describe("The amount to supply (precise, non-human readable format)."),
+  amount: z.string().describe("The amount to supply (human readable format)."),
   userAddress: z.string().describe("The supplier's wallet address."),
 };
 
@@ -101,7 +95,7 @@ const withdrawSchema = {
     .describe("The chain ID where the token contract resides."),
   amount: z
     .string()
-    .describe("The amount to withdraw (precise, non-human readable format)."),
+    .describe("The amount to withdraw (human readable format)."),
   userAddress: z.string().describe("The lender's wallet address."),
 };
 
@@ -261,16 +255,11 @@ server.tool(
         );
       }
 
-      console.error(
-        `SwapTokens tool success. Transactions:`,
-        response.transactions
-      );
-
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(response.transactions),
+            text: JSON.stringify(response),
           },
         ],
       };
