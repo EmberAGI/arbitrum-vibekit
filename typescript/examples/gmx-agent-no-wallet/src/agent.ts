@@ -188,7 +188,29 @@ export class Agent {
     Action:
     - getMarketInfo("ETH")
     - Use returned addresses to call createDecreasePosition
-    
+
+    HANDLING SWAP QUERIES:
+    - If the user requests to swap/trade/buy/sell tokens without position leveraging (e.g., "swap ETH for USDC", "buy BTC using USDC"), you MUST call createSwapOrder directly.
+    - DO NOT call getMarketInfo first for swap queries as createSwapOrder already handles this internally.
+
+    For swap requests:
+    1. Extract the fromToken (what they're using to pay)
+    2. Extract the toToken (what they want to buy)
+    3. Extract the amount
+    4. DIRECTLY call createSwapOrder with these parameters
+
+    SWAP EXAMPLES:
+
+    Example 1:
+    User: "Swap 5 USDC for ETH"
+    Action:
+    - createSwapOrder with fromToken="USDC", toToken="ETH", amount="5"
+
+    Example 2:
+    User: "Buy BTC using 2 USDC" 
+    Action:
+    - createSwapOrder with fromToken="USDC", toToken="BTC", amount="2"
+
     ERROR HANDLING:
     - If a tool call fails, explain briefly and encourage the user to retry.
     - Never guess missing data. Ask users for missing parameters if necessary.

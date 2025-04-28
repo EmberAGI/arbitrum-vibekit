@@ -3,6 +3,7 @@ import { getMarketInfo } from './markets.js';
 import type { CreateSwapOrderParams } from '../agentToolHandlers.js';
 import type { SwapAmounts } from '@gmx-io/sdk/types/trade.js';
 import { getTokenData } from './util.js';
+import { convertToUsd } from '@gmx-io/sdk/utils/tokens.js';
 
 /**
  * Create a swap order on GMX
@@ -42,16 +43,29 @@ export async function createSwapOrder(
     let fromTokenData = getTokenData(fromToken, tokensData);
     let toTokenData = getTokenData(toToken, tokensData);
 
+    if (fromTokenData.address) {
+      console.log('[Debug]: fromToken data ', fromTokenData.address);
+    }
+
+    if (toTokenData.address) {
+      console.log('[Debug]: toToken data ', toTokenData.address);
+    }
+
+    const tokenAmount = BigInt(amount);
+    const fromTokenPrice = fromTokenData.prices.minPrice;
+    const usdAmount = convertToUsd(tokenAmount, fromTokenData.decimals, fromTokenPrice)!;
+    const price = fromTokenPrice;
+
     // TODO
     let swapAmounts: SwapAmounts = {
-      amountIn: BigInt(amount),
-      usdIn: BigInt(0),
-      amountOut: BigInt(0),
-      usdOut: BigInt(0),
-      priceIn: BigInt(0),
-      priceOut: BigInt(0),
+      amountIn: tokenAmount,
+      usdIn: usdAmount!,
+      amountOut: tokenAmount,
+      usdOut: usdAmount!,
       swapPathStats: undefined,
-      minOutputAmount: BigInt(0),
+      priceIn: price,
+      priceOut: price,
+      minOutputAmount: tokenAmount,
     };
 
     // Create swap parameters
