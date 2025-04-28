@@ -1,7 +1,7 @@
 {
   "name": "lending-agent-no-wallet",
   "version": "1.0.0",
-  "description": "Ember SDK lending Agent Example without integrated wallet",
+  "description": "Ember On-chain Actionslending Agent Example without integrated wallet",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

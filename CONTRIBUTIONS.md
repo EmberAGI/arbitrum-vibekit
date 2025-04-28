@@ -1,6 +1,6 @@
-# Contributing to Agentkit
+# Contributing to Vibekit
 
-Thank you for your interest in contributing to Agentkit! This guide explains how you can make valuable contributions to the project.
+Thank you for your interest in contributing to Vibetkit! This guide explains how you can make valuable contributions to the project.
 
 ## 1. Preliminary Steps
 
@@ -40,5 +40,5 @@ After submitting your PR:
 If you need assistance:
 
 - **Search Existing Issues:** Check for similar questions or problems.
-- **Contact the Arbitrum Agentkit Team:** Reach out for guidance if needed.
+- **Contact the Arbitrum Vibekit Team:** Reach out for guidance if needed.
 - **Open a New Issue:** If your concern isn’t already covered, create a new issue with detailed information.

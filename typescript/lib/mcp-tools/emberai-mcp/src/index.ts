@@ -160,42 +160,42 @@ const zodSchemaToMcpArgs = (schema: Record<string, z.ZodTypeAny>) => {
 const toolDefinitions = [
   {
     name: "swapTokens",
-    description: "Swap or convert tokens using Ember SDK",
+    description: "Swap or convert tokens using Ember On-chain Actions",
     arguments: zodSchemaToMcpArgs(swapTokensSchema),
   },
   {
     name: "borrow",
-    description: "Borrow tokens using Ember SDK",
+    description: "Borrow tokens using Ember On-chain Actions",
     arguments: zodSchemaToMcpArgs(borrowSchema),
   },
   {
     name: "repay",
-    description: "Repay borrowed tokens using Ember SDK",
+    description: "Repay borrowed tokens using Ember On-chain Actions",
     arguments: zodSchemaToMcpArgs(repaySchema),
   },
   {
     name: "supply",
-    description: "Supply tokens using Ember SDK",
+    description: "Supply tokens using Ember On-chain Actions",
     arguments: zodSchemaToMcpArgs(supplySchema),
   },
   {
     name: "withdraw",
-    description: "Withdraw tokens using Ember SDK",
+    description: "Withdraw tokens using Ember On-chain Actions",
     arguments: zodSchemaToMcpArgs(withdrawSchema),
   },
   {
     name: "getCapabilities",
-    description: "Get Ember SDK capabilities",
+    description: "Get Ember On-chain Actions capabilities",
     arguments: zodSchemaToMcpArgs(getCapabilitiesSchema),
   },
   {
     name: "getUserPositions",
-    description: "Get user wallet positions using Ember SDK",
+    description: "Get user wallet positions using Ember On-chain Actions",
     arguments: zodSchemaToMcpArgs(getUserPositionsSchema),
   },
   {
     name: "getTokens",
-    description: "Get a list of supported tokens using Ember SDK",
+    description: "Get a list of supported tokens using Ember On-chain Actions",
     arguments: zodSchemaToMcpArgs(getTokensSchema),
   },
 ];
@@ -226,7 +226,7 @@ const emberClient = new EmberGrpcClient(emberEndpoint);
 // Pass the raw schema (e.g., swapTokensSchema) instead of the validator instance
 server.tool(
   "swapTokens",
-  "Swap or convert tokens using Ember SDK",
+  "Swap or convert tokens using Ember On-chain Actions",
   swapTokensSchema,
   async (params: SwapTokensParams, extra: any) => {
     console.error(`Executing swapTokens tool with params:`, params);
@@ -274,7 +274,7 @@ server.tool(
 );
 server.tool(
   "borrow",
-  "Borrow tokens using Ember SDK",
+  "Borrow tokens using Ember On-chain Actions",
   borrowSchema,
   async (params: BorrowParams, extra: any) => {
     console.error(`Executing borrow tool with params:`, params);
@@ -321,7 +321,7 @@ server.tool(
 
 server.tool(
   "repay",
-  "Repay borrowed tokens using Ember SDK",
+  "Repay borrowed tokens using Ember On-chain Actions",
   repaySchema,
   async (params: RepayParams, extra: any) => {
     console.error(`Executing repay tool with params:`, params);
@@ -365,7 +365,7 @@ server.tool(
 
 server.tool(
   "supply",
-  "Supply tokens using Ember SDK",
+  "Supply tokens using Ember On-chain Actions",
   supplySchema,
   async (params: SupplyParams, extra: any) => {
     console.error(`Executing supply tool with params:`, params);
@@ -412,7 +412,7 @@ server.tool(
 
 server.tool(
   "withdraw",
-  "Withdraw tokens using Ember SDK",
+  "Withdraw tokens using Ember On-chain Actions",
   withdrawSchema,
   async (params: WithdrawParams, extra: any) => {
     console.error(`Executing withdraw tool with params:`, params);
@@ -459,7 +459,7 @@ server.tool(
 
 server.tool(
   "getCapabilities",
-  "Get Ember SDK capabilities",
+  "Get Ember On-chain Actions capabilities",
   getCapabilitiesSchema,
   async (params: GetCapabilitiesParams, extra: any) => {
     console.error(`Executing getCapabilities tool with params:`, params);
@@ -495,7 +495,7 @@ server.tool(
 
 server.tool(
   "getUserPositions",
-  "Get user wallet positions using Ember SDK",
+  "Get user wallet positions using Ember On-chain Actions",
   getUserPositionsSchema,
   async (params: GetUserPositionsParams, extra: any) => {
     console.error(`Executing getUserPositions tool with params:`, params);
@@ -533,7 +533,7 @@ server.tool(
 
 server.tool(
   "getTokens",
-  "Get a list of supported tokens using Ember SDK",
+  "Get a list of supported tokens using Ember On-chain Actions",
   getTokensSchema,
   async (params: GetTokensParams, extra: any) => {
     console.error(`Executing getTokens tool with params:`, params);

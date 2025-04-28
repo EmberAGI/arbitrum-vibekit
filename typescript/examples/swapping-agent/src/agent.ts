@@ -187,7 +187,7 @@ export class Agent {
     this.conversationHistory = [
       {
         role: 'system',
-        content: `You are an assistant that provides access to blockchain swapping functionalities via EmberAI Onchain Actions.
+        content: `You are an assistant that provides access to blockchain swapping functionalities via Ember AI On-chain Actions.
 
 <examples>
 <example>

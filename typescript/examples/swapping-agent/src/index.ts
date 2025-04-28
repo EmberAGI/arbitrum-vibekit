@@ -41,7 +41,7 @@ const initializeAgent = async (): Promise<void> => {
 
 server.tool(
   'chat',
-  'execute swapping tools using Ember SDK',
+  'execute swapping tools using Ember On-chain Actions',
   {
     userInput: z.string(),
   },
@@ -82,7 +82,7 @@ app.get('/', (_req, res) => {
       '/sse': 'Server-Sent Events endpoint for MCP connection',
       '/messages': 'POST endpoint for MCP messages',
     },
-    tools: [{ name: 'chat', description: 'execute swapping tools using Ember SDK' }],
+    tools: [{ name: 'chat', description: 'execute swapping tools using Ember On-chain Actions' }],
   });
 });
 
