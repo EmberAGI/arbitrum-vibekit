@@ -1,0 +1,37 @@
+{
+  "name": "@alloralabs/mcp-server",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "bin": {
+    "@alloralabs/mcp-server": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "watch": "nodemon --watch 'src/**/*.ts' --exec 'ts-node --esm' src/index.ts"
+  },
+  "keywords": [
+    "mcp",
+    "allora"
+  ],
+  "author": "",
+  "license": "ISC",
+  "description": "Allora MCP Server",
+  "dependencies": {
+    "@alloralabs/allora-sdk": "^0.1.1",
+    "@modelcontextprotocol/sdk": "^1.8.0",
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.13.17",
+    "dotenv": "^16.3.1",
+    "express": "^5.1.0",
+    "nodemon": "^3.1.9",
+    "tee": "^0.2.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2",
+    "zod": "^3.24.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
