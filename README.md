@@ -24,10 +24,10 @@ Vibekit follows a monorepo structure, primarily focused on TypeScript packages. 
 The repository layout is as follows:
 
 ```
-vibetkit/
+vibekit/
 ├── typescript/
 │   └── examples/
-│       └── lending-agent/
+│       └── lending-agent-no-wallet/
 │       └── swapping-agent-no-wallet/
 │       └── swapping-agent/
 │----── lib/

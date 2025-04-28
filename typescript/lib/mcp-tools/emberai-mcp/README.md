@@ -1,6 +1,6 @@
 ## **Introduction**
 
-Ember is a powerful MCP server that enables AI agents to interact with any LLM, framework, provider or protocol without custom implementations. It can act as a one-stop solution for managing and executing complex DeFi operations on various chains. Developers can harness Ember’s rich market data, social signals, and event infrastructure to create custom DeFi strategies.
+Ember Onchain Actions is a powerful MCP server that enables AI agents to interact with any DeFi protocol or crypto provider without custom implementations. It can act as a one-stop solution for managing and executing complex DeFi operations on various chains. Developers can harness Ember’s rich intent-based action infrastructure in combination with Vibekit's market data, social signals, and event infrastructure to create custom DeFi strategies.
 
 - **Built for LLMs:** Simple, well-documented interfaces that let agents dynamically select and compose tools.
 
