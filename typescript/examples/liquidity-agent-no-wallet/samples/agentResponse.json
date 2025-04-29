@@ -1,0 +1,43 @@
+{
+  "id": "0x2D2c313EC7650995B193a34E16bE5B86eEdE872d",
+  "status": {
+    "state": "completed",
+    "message": {
+      "role": "agent",
+      "parts": [
+        {
+          "type": "text",
+          "text": "Transaction plan successfully created. Ready to sign."
+        }
+      ]
+    }
+  },
+  "artifacts": [
+    {
+      "name": "transaction-plan",
+      "parts": [
+        {
+          "type": "data",
+          "data": {
+            "txPreview": {
+              "fromToken": "usdc",
+              "toToken": "arb",
+              "amount": "0.0325",
+              "fromChain": "Arbitrum",
+              "toChain": "Arbitrum"
+            },
+            "txPlan": [
+              {
+                "to": "0xce16F69375520ab01377ce7B88f5BA8C48F8D666",
+                "data": "<tx call data>",
+                "value": "0",
+                "chainId": "42161",
+                "type": "EVM_TX"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
