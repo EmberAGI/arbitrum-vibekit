@@ -1,0 +1,26 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Architecture
+
+- An agent must always use MCP tools to interact with external services or perform actions.
+- MCP servers may be connected to remotely via SSE/Websocket pointing to a URL, or locally via STDIO pointing to a file within `typescript/lib/mcp-tools/`.
+- New MCP tools must be added to or created as an MCP server within `typescript/lib/mcp-tools/`
+- An agent is always served as an MCP server itself.
+
+# Packages
+
+- Always use default packages unless directed otherwise.
+
+## Default Packages
+
+- pnpm
+- Vercel AI SDK (ai)
+  - OpenRouter @openrouter/ai-sdk-provider
+- Model Context Protocol (MCP) (@modelcontextprotocol/sdk)
+- Agent2Agent (A2A) (a2a-samples-js workspace)
+- Ember On-chain Actions (ember-mcp-tool-server workspace)
+- Viem (viem)
+- OpenZeppelin (@openzeppelin/contracts)
