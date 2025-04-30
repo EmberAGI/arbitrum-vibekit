@@ -1,24 +1,24 @@
 ## Introduction
 
-This directory provides a reference implementation of a swapping agent using Arbitrum Vibekit and Ember AI's MCP server. It demonstrates how to set up a server, define agent functionalities, and process swapping operations via MCP tools. You can expand or modify this template by adding new tools or incorporating additional MCP-compatible functionalities to suit your project’s requirements.
+This directory provides a reference implementation of a liquidity management agent using Arbitrum Vibekit and Ember AI's MCP server. It demonstrates how to set up a server, define agent functionalities, and process liquidity operations via MCP tools. You can expand or modify this template by adding new tools or incorporating additional MCP-compatible functionalities to suit your project's requirements.
 
 ## File Overview
 
 1. **`index.ts`**
 
-   Creates a Node.js server that provides real-time (SSE-based) interactions with an on-chain swapping agent. Key Components are:
+   Creates a Node.js server that provides real-time (SSE-based) interactions with an on-chain liquidity agent. Key Components are:
 
 - Agent Initialization with ethers (for blockchain) and environment variables.
 
-- MCP Server with a “chat” tool for handling user inputs.
+- MCP Server with a "chat" tool for handling user inputs.
 
 - Express App for HTTP routes and SSE streaming.
 
 2. **`agent.ts`**
 
-   Defines and manages an AI-powered, on-chain swapping agent. Key Components are:
+   Defines and manages an AI-powered, on-chain liquidity agent. Key Components are:
 
-- Agent that interacts with blockchain swapping protocols (Ember On-chain Actions) to handle user inputs and execute on-chain operations.
+- Agent that interacts with blockchain liquidity protocols (Ember On-chain Actions) to handle user inputs and execute on-chain operations.
 
 - MCP client that queries capabilities and generates transaction sets.
 
@@ -28,13 +28,13 @@ This directory provides a reference implementation of a swapping agent using Arb
 
 ## Example Capabilities
 
-Below are some example user inputs that showcase the swapping agent's capabilities:
+Below are some example user inputs that showcase the liquidity agent's capabilities:
 
-"Swap 1 ETH for USDC"
+"Supply 1 ETH to the ETH/USDC pool on Camelot"
 
-"Convert 100 USDT to ARB"
+"Withdraw 100 USDT worth of liquidity from the ARB/USDC pool"
 
-"Trade OP on Optimism for ARB on Arbitrum"
+"Show my liquidity positions on Camelot"
 
 ## Run Agent
 
