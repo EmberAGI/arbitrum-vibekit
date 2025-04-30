@@ -78,16 +78,13 @@ const LiquidityPairArtifactSchema = z.object({
     // Use a simplified object for the artifact
     chainId: z.string(),
     address: z.string(),
-    symbol: z.string().optional(),
-    decimals: z.number().optional(),
   }),
   token1: z.object({
     // Use a simplified object for the artifact
     chainId: z.string(),
     address: z.string(),
-    symbol: z.string().optional(),
-    decimals: z.number().optional(),
   }),
+  price: z.string(),
 });
 
 export const LiquidityPoolsArtifactSchema = z.object({
@@ -362,20 +359,12 @@ export async function handleSupplyLiquidity(
       );
     }
 
-    // --- Balance Check Start ---
-    context.log(`Checking balances for user ${userAddress} for pair ${selectedPair.handle}`);
+    // --- Fetch Decimals & Balance/Allowance Check Start ---
+    context.log(
+      `Fetching info and checking balances/allowances for user ${userAddress} for pair ${selectedPair.handle}`
+    );
     const { token0, token1 } = selectedPair;
     const { quicknodeSubdomain, quicknodeApiKey } = context;
-
-    // Validate decimals exist
-    if (token0.decimals === undefined || token1.decimals === undefined) {
-      const missing = [];
-      if (token0.decimals === undefined) missing.push(token0.symbol || token0.address);
-      if (token1.decimals === undefined) missing.push(token1.symbol || token1.address);
-      const errorMsg = `Cannot check balance: Missing decimal information for token(s): ${missing.join(', ')}`;
-      context.log('Error:', errorMsg);
-      return createTaskResult(userAddress, 'failed', errorMsg);
-    }
 
     // Function to create client (avoids duplicated code)
     const createClient = (chainId: string): PublicClient => {
@@ -407,19 +396,55 @@ export async function handleSupplyLiquidity(
       return createTaskResult(userAddress, 'failed', errorMsg);
     }
 
-    // Prepare amounts
+    // Fetch Decimals
+    let decimals0: number;
+    let decimals1: number;
+    try {
+      context.log(`Fetching decimals for ${token0.symbol || token0.address}...`);
+      decimals0 = (await client0.readContract({
+        address: token0.address as Address,
+        abi: Erc20Abi.abi,
+        functionName: 'decimals',
+        args: [],
+      })) as number;
+      context.log(`Decimals for ${token0.symbol || token0.address}: ${decimals0}`);
+
+      context.log(`Fetching decimals for ${token1.symbol || token1.address}...`);
+      decimals1 =
+        token0.address === token1.address && token0.chainId === token1.chainId
+          ? decimals0 // Avoid refetching if same token/chain
+          : ((await client1.readContract({
+              address: token1.address as Address,
+              abi: Erc20Abi.abi,
+              functionName: 'decimals',
+              args: [],
+            })) as number);
+      context.log(`Decimals for ${token1.symbol || token1.address}: ${decimals1}`);
+
+      // Basic validation
+      if (typeof decimals0 !== 'number' || typeof decimals1 !== 'number') {
+        throw new Error('Failed to retrieve valid decimal numbers for tokens.');
+      }
+    } catch (fetchError) {
+      const errorMsg = `Could not fetch token decimals: ${(fetchError as Error).message}`;
+      context.log('Error:', errorMsg);
+      // Add which token failed if possible
+      return createTaskResult(userAddress, 'failed', errorMsg);
+    }
+
+    // Prepare amounts using fetched decimals
     let amount0Atomic: bigint;
     let amount1Atomic: bigint;
     try {
-      amount0Atomic = parseUnits(params.amount0, token0.decimals);
-      amount1Atomic = parseUnits(params.amount1, token1.decimals);
+      amount0Atomic = parseUnits(params.amount0, decimals0);
+      amount1Atomic = parseUnits(params.amount1, decimals1);
     } catch (parseError) {
       const errorMsg = `Invalid amount format: ${(parseError as Error).message}`;
       context.log(errorMsg);
       return createTaskResult(userAddress, 'failed', errorMsg);
     }
 
-    // Check balances
+    // Check balances using fetched decimals
     try {
       const balance0 = (await client0.readContract({
         address: token0.address as Address,
@@ -430,8 +455,8 @@ export async function handleSupplyLiquidity(
       context.log(`Balance check ${token0.symbol}: Has ${balance0}, needs ${amount0Atomic}`);
 
       if (balance0 < amount0Atomic) {
-        const formattedBalance = formatUnits(balance0, token0.decimals);
-        const errorMsg = `Insufficient ${token0.symbol} balance. You need ${params.amount0} but only have ${formattedBalance}.`;
+        const formattedBalance = formatUnits(balance0, decimals0);
+        const errorMsg = `Insufficient ${token0.symbol || 'Token0'} balance. You need ${params.amount0} but only have ${formattedBalance}.`;
         context.log(errorMsg);
         return createTaskResult(userAddress, 'failed', errorMsg);
       }
@@ -445,8 +470,8 @@ export async function handleSupplyLiquidity(
       context.log(`Balance check ${token1.symbol}: Has ${balance1}, needs ${amount1Atomic}`);
 
       if (balance1 < amount1Atomic) {
-        const formattedBalance = formatUnits(balance1, token1.decimals);
-        const errorMsg = `Insufficient ${token1.symbol} balance. You need ${params.amount1} but only have ${formattedBalance}.`;
+        const formattedBalance = formatUnits(balance1, decimals1);
+        const errorMsg = `Insufficient ${token1.symbol || 'Token1'} balance. You need ${params.amount1} but only have ${formattedBalance}.`;
         context.log(errorMsg);
         return createTaskResult(userAddress, 'failed', errorMsg);
       }
@@ -457,7 +482,7 @@ export async function handleSupplyLiquidity(
       context.log(`Warning: Failed to read token balance.`, readError);
       return createTaskResult(userAddress, 'failed', errorMsg);
     }
-    // --- Balance Check End ---
+    // --- Balance Check End is implicitly here ---
 
     const mcpArgs = {
       token0Address: selectedPair.token0.address,
@@ -494,7 +519,7 @@ export async function handleSupplyLiquidity(
       chainId: token0.chainId,
     }));
 
-    // --- Allowance Check & Approval Tx Start ---
+    // --- Allowance Check & Approval Tx Start (using fetched decimals) ---
     const approveTxs: TransactionResponse[] = [];
 
     if (!txPlan || txPlan.length === 0 || !txPlan[0]?.to) {
@@ -510,7 +535,7 @@ export async function handleSupplyLiquidity(
     // Check allowance for token0
     try {
       context.log(
-        `Checking allowance for ${token0.symbol} (${token0.address}) to spender ${spenderAddress}`
+        `Checking allowance for ${token0.symbol || token0.address} to spender ${spenderAddress}`
       );
       const allowance0 = (await client0.readContract({
         address: token0.address as Address,
@@ -518,10 +543,14 @@ export async function handleSupplyLiquidity(
         functionName: 'allowance',
         args: [userAddress, spenderAddress],
       })) as bigint;
-      context.log(`Allowance check ${token0.symbol}: Has ${allowance0}, needs ${amount0Atomic}`);
+      context.log(
+        `Allowance check ${token0.symbol || token0.address}: Has ${allowance0}, needs ${amount0Atomic}`
+      );
 
       if (allowance0 < amount0Atomic) {
-        context.log(`Insufficient allowance for ${token0.symbol}. Adding approval transaction.`);
+        context.log(
+          `Insufficient allowance for ${token0.symbol || token0.address}. Adding approval transaction.`
+        );
         approveTxs.push({
           to: token0.address as Address,
           data: encodeFunctionData({
@@ -537,11 +566,14 @@ export async function handleSupplyLiquidity(
           chainId: token0.chainId,
         });
       } else {
-        context.log(`Sufficient allowance for ${token0.symbol}.`);
+        context.log(`Sufficient allowance for ${token0.symbol || token0.address}.`);
       }
     } catch (readError) {
-      const errorMsg = `Could not verify ${token0.symbol} allowance due to a network error: ${(readError as Error).message}`;
-      context.log(`Warning: Failed to read ${token0.symbol} allowance.`, readError);
+      const errorMsg = `Could not verify ${token0.symbol || token0.address} allowance due to a network error: ${(readError as Error).message}`;
+      context.log(
+        `Warning: Failed to read ${token0.symbol || token0.address} allowance.`,
+        readError
+      );
       // Decide if we should fail or proceed assuming approval is needed
       // For now, let's fail to be safe.
       return createTaskResult(userAddress, 'failed', errorMsg);
@@ -550,7 +582,7 @@ export async function handleSupplyLiquidity(
     // Check allowance for token1
     try {
       context.log(
-        `Checking allowance for ${token1.symbol} (${token1.address}) to spender ${spenderAddress}`
+        `Checking allowance for ${token1.symbol || token1.address} to spender ${spenderAddress}`
       );
       const allowance1 = (await client1.readContract({
         address: token1.address as Address,
@@ -558,10 +590,14 @@ export async function handleSupplyLiquidity(
         functionName: 'allowance',
         args: [userAddress, spenderAddress],
       })) as bigint;
-      context.log(`Allowance check ${token1.symbol}: Has ${allowance1}, needs ${amount1Atomic}`);
+      context.log(
+        `Allowance check ${token1.symbol || token1.address}: Has ${allowance1}, needs ${amount1Atomic}`
+      );
 
       if (allowance1 < amount1Atomic) {
-        context.log(`Insufficient allowance for ${token1.symbol}. Adding approval transaction.`);
+        context.log(
+          `Insufficient allowance for ${token1.symbol || token1.address}. Adding approval transaction.`
+        );
         // Check if we already added an approval for this token (unlikely but possible if spender is the same)
         // This check is simple; more robust checks might compare chainId and address.
         if (!approveTxs.some(tx => tx.to.toLowerCase() === token1.address.toLowerCase())) {
@@ -580,14 +616,17 @@ export async function handleSupplyLiquidity(
             chainId: token1.chainId,
           });
         } else {
-          context.log(`Approval for ${token1.symbol} already added.`);
+          context.log(`Approval for ${token1.symbol || token1.address} already added.`);
         }
       } else {
-        context.log(`Sufficient allowance for ${token1.symbol}.`);
+        context.log(`Sufficient allowance for ${token1.symbol || token1.address}.`);
       }
     } catch (readError) {
-      const errorMsg = `Could not verify ${token1.symbol} allowance due to a network error: ${(readError as Error).message}`;
-      context.log(`Warning: Failed to read ${token1.symbol} allowance.`, readError);
+      const errorMsg = `Could not verify ${token1.symbol || token1.address} allowance due to a network error: ${(readError as Error).message}`;
+      context.log(
+        `Warning: Failed to read ${token1.symbol || token1.address} allowance.`,
+        readError
+      );
       // Decide if we should fail or proceed assuming approval is needed
       // For now, let's fail to be safe.
       return createTaskResult(userAddress, 'failed', errorMsg);
