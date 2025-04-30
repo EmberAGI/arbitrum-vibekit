@@ -38,7 +38,7 @@ importers:
         version: 5.0.1
       a2a-samples-js:
         specifier: workspace:*
-        version: link:../../lib/a2a
+        version: file:lib/a2a(zod@3.24.3)
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
@@ -54,6 +54,64 @@ importers:
       ethers:
         specifier: ^5.7.2
         version: 5.8.0
+      express:
+        specifier: ^4.21.2
+        version: 4.21.2
+      tsx:
+        specifier: ^4.6.2
+        version: 4.19.3
+      viem:
+        specifier: ^2.26.3
+        version: 2.27.2(typescript@5.8.3)(zod@3.24.3)
+      zod:
+        specifier: ^3.22.4
+        version: 3.24.3
+    devDependencies:
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.17.30
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+
+  examples/liquidity-agent-no-wallet:
+    dependencies:
+      '@emberai/sdk-typescript':
+        specifier: 0.3.0-beta.6
+        version: 0.3.0-beta.6
+      '@grpc/grpc-js':
+        specifier: ^1.12.5
+        version: 1.13.3
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.5.0
+        version: 1.10.0
+      '@openrouter/ai-sdk-provider':
+        specifier: ^0.4.5
+        version: 0.4.5(zod@3.24.3)
+      '@openzeppelin/contracts':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@types/cors':
+        specifier: ^2.8.17
+        version: 2.8.17
+      '@types/express':
+        specifier: ^5.0.0
+        version: 5.0.1
+      a2a-samples-js:
+        specifier: workspace:*
+        version: file:lib/a2a(zod@3.24.3)
+      ai:
+        specifier: ^4.3.2
+        version: 4.3.9(react@19.1.0)(zod@3.24.3)
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.5
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
+      ember-mcp-tool-server:
+        specifier: workspace:*
+        version: link:../../lib/mcp-tools/emberai-mcp
       express:
         specifier: ^4.21.2
         version: 4.21.2
@@ -154,7 +212,7 @@ importers:
         version: 5.0.1
       a2a-samples-js:
         specifier: workspace:*
-        version: link:../../lib/a2a
+        version: file:lib/a2a(zod@3.24.3)
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
@@ -989,6 +1047,9 @@ packages:
 
   '@types/tough-cookie@4.0.5':
     resolution: {integrity: sha512-/Ad8+nIOV7Rl++6f1BdKxFSMgmoqEoYbHRpPcx3JEfv8VRsQe9Z4mCXeJBzxs7mbHY/XOZZuXlRNfhpVPbs6ZA==}
+
+  a2a-samples-js@file:lib/a2a:
+    resolution: {directory: lib/a2a, type: directory}
 
   abitype@1.0.8:
     resolution: {integrity: sha512-ZeiI6h3GnW06uYDLx0etQtX/p8E24UaHHBj57RSjK7YBFe7iuVn07EDpOeP451D06sF27VOz9JJPlIKJmXgkEg==}
@@ -3480,6 +3541,22 @@ snapshots:
   '@types/shimmer@1.2.0': {}
 
   '@types/tough-cookie@4.0.5': {}
+
+  a2a-samples-js@file:lib/a2a(zod@3.24.3):
+    dependencies:
+      '@genkit-ai/googleai': 1.6.0(genkit@1.6.0)
+      '@genkit-ai/vertexai': 1.6.0(genkit@1.6.0)(ws@8.18.1)(zod@3.24.3)
+      '@types/cors': 2.8.17
+      '@types/express': 5.0.1
+      body-parser: 2.2.0
+      cors: 2.8.5
+      express: 4.21.2
+      genkit: 1.6.0
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+      - ws
+      - zod
 
   abitype@1.0.8(typescript@5.8.3)(zod@3.24.3):
     optionalDependencies:

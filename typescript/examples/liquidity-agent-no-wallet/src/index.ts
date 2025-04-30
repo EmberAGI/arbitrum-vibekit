@@ -1,5 +1,6 @@
 import { Agent } from './agent.js';
-import { isAddress } from 'viem';
+import { type Address, isAddress } from 'viem';
+import { mnemonicToAccount } from 'viem/accounts';
 import * as dotenv from 'dotenv';
 import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -8,47 +9,58 @@ import cors from 'cors';
 import { z } from 'zod';
 import type { Task } from 'a2a-samples-js/schema';
 
-const LendingAgentSchema = z.object({
+const LiquidityAgentSchema = z.object({
   instruction: z
     .string()
     .describe(
-      "A natural‑language lending directive, e.g. 'Borrow 50 USDC' or 'Supply 10 ETH' or question to ask the agent, e.g. 'What is my debt?' or 'What's the history of Aave?'."
+      "A natural‑language liquidity management directive, e.g. 'Supply 1 WETH and 1500 USDC to WETH/USDC pool' or question to ask the agent, e.g. 'What are my liquidity positions?'."
     ),
   userAddress: z
     .string()
     .describe('The user wallet address which is used to sign transactions and to pay for gas.'),
 });
-type LendingAgentArgs = z.infer<typeof LendingAgentSchema>;
+type LiquidityAgentArgs = z.infer<typeof LiquidityAgentSchema>;
 
 dotenv.config();
 
 const server = new McpServer({
-  name: 'lending-agent-server',
+  name: 'mcp-sse-liquidity-agent-server',
   version: '1.0.0',
 });
+
+const rpc = process.env.RPC_URL || 'https://arbitrum.llamarpc.com';
 
 let agent: Agent;
 
 const initializeAgent = async (): Promise<void> => {
+  const mnemonic = process.env.MNEMONIC;
+  if (!mnemonic) {
+    throw new Error('MNEMONIC not found in the .env file.');
+  }
+
   const quicknodeSubdomain = process.env.QUICKNODE_SUBDOMAIN;
   const apiKey = process.env.QUICKNODE_API_KEY;
   if (!quicknodeSubdomain || !apiKey) {
     throw new Error('QUICKNODE_SUBDOMAIN and QUICKNODE_API_KEY must be set in the .env file.');
   }
 
+  const account = mnemonicToAccount(mnemonic);
+  const userAddress: Address = account.address;
+  console.error(`Using wallet ${userAddress}`);
+
   agent = new Agent(quicknodeSubdomain, apiKey);
   await agent.init();
 };
 
-const agentToolName = 'askLendingAgent';
+const agentToolName = 'askLiquidityAgent';
 const agentToolDescription =
-  'Sends a free‑form, natural‑language lending instruction to this Aave lending AI agent and returns a structured quote including transaction data. You can also ask questions to the agent about the Aave protocol.';
+  'Sends a free‑form, natural‑language liquidity instruction to this Camelot liquidity AI agent and returns a structured response (info or transaction plan). This agent can manage your liquidity positions on Camelot.';
 
 server.tool(
   agentToolName,
   agentToolDescription,
-  LendingAgentSchema.shape,
-  async (args: LendingAgentArgs) => {
+  LiquidityAgentSchema.shape,
+  async (args: LiquidityAgentArgs) => {
     const { instruction, userAddress } = args;
     if (!isAddress(userAddress)) {
       throw new Error('Invalid user address provided.');
@@ -65,6 +77,7 @@ server.tool(
       const err = error as Error;
       const errorTask: Task = {
         id: userAddress,
+        //sessionId: 'c295ea44-7543-4f78-b524-7a38915ad6e4',
         status: {
           state: 'failed',
           message: {
@@ -87,7 +100,7 @@ app.use(cors());
 
 app.get('/', (_req, res) => {
   res.json({
-    name: 'Lending Agent No Wallet Server',
+    name: 'MCP SSE Liquidity Agent Server',
     version: '1.0.0',
     status: 'running',
     endpoints: {
@@ -140,7 +153,7 @@ const main = async () => {
   try {
     await initializeAgent();
     app.listen(PORT, () => {
-      console.error(`MCP SSE Agent Server running on port ${PORT}`);
+      console.error(`MCP SSE Liquidity Agent Server running on port ${PORT}`);
     });
   } catch (error: unknown) {
     const err = error as Error;
