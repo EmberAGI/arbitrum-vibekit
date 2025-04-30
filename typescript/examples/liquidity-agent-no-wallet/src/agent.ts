@@ -36,8 +36,6 @@ const openrouter = createOpenRouter({
 const EmberTokenIdentifierSchema = z.object({
   chainId: z.string(),
   address: z.string(),
-  symbol: z.string().optional(),
-  decimals: z.number().optional(),
 });
 
 const EmberLiquidityPoolSchema = z
@@ -46,7 +44,8 @@ const EmberLiquidityPoolSchema = z
     symbol1: z.string(),
     token0: EmberTokenIdentifierSchema,
     token1: EmberTokenIdentifierSchema,
-    price: z.string().optional(), // And potentially other fields
+    price: z.string(),
+    providerId: z.string().optional(),
   })
   .passthrough(); // Allow other fields not explicitly defined
 
@@ -144,7 +143,6 @@ type TokenIdentifier = {
   chainId: string;
   address: string;
   symbol?: string;
-  decimals?: number;
 };
 
 export type LiquidityPair = {
@@ -153,6 +151,7 @@ export type LiquidityPair = {
   symbol1: string;
   token0: TokenIdentifier;
   token1: TokenIdentifier;
+  price: string;
 };
 
 export type LiquidityPosition = {
@@ -331,7 +330,7 @@ Rules:
       }
 
       const poolsJson = getPoolsResponse.content[0].text;
-      this.log('Received pools JSON string:', poolsJson.substring(0, 300) + '...');
+      this.log('Received pools JSON string:', poolsJson.substring(0, 500) + '...');
 
       try {
         // Parse and validate the JSON using the Zod schema
@@ -350,13 +349,12 @@ Rules:
             token0: {
               chainId: pool.token0.chainId,
               address: pool.token0.address,
-              decimals: pool.token0.decimals,
             },
             token1: {
               chainId: pool.token1.chainId,
               address: pool.token1.address,
-              decimals: pool.token1.decimals,
             },
+            price: pool.price,
           })
         );
 
