@@ -16,10 +16,9 @@ COPY package.json ./
 COPY tsconfig.base.json ./
 
 # ------------------------------
-# 2. Copy only package.json files for each workspace package (to maximise Docker cache)
+# 2. Copy all workspace package.json files (to maximise Docker cache)
 # ------------------------------
-COPY lib/a2a/package.json ./lib/a2a/
-COPY lib/mcp-tools/emberai-mcp/package.json ./lib/mcp-tools/emberai-mcp/
+COPY lib/**/package.json ./lib/
 COPY examples/swapping-agent-no-wallet/package.json ./examples/swapping-agent-no-wallet/
 
 # ------------------------------
