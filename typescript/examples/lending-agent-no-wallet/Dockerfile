@@ -4,7 +4,7 @@ FROM node:20-slim AS builder
 WORKDIR /app
 
 # Install pnpm globally
-RUN npm install -g pnpm typescript@5.8.3
+RUN npm install -g pnpm@10.7.0 typescript@5.8.3
 
 # Copy workspace definition, lockfile and pnpm config
 COPY pnpm-lock.yaml* pnpm-workspace.yaml .npmrc ./
@@ -49,7 +49,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
 WORKDIR /app
 
 # Install pnpm globally
-RUN npm install -g pnpm
+RUN npm install -g pnpm@10.7.0
 
 # Copy only what we need from the builder stage
 COPY --from=builder /app/examples/lending-agent-no-wallet/dist /app/examples/lending-agent-no-wallet/dist
