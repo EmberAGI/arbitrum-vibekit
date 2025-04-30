@@ -13,7 +13,7 @@ const LiquidityAgentSchema = z.object({
   instruction: z
     .string()
     .describe(
-      "A natural‑language liquidity management directive, e.g. 'Supply 1 WETH and 1500 USDC to WETH/USDC pool' or question to ask the agent."
+      "A natural‑language liquidity management directive, e.g. 'Supply 1 WETH and 1500 USDC to WETH/USDC pool' or question to ask the agent, e.g. 'What are my liquidity positions?'."
     ),
   userAddress: z
     .string()
@@ -54,7 +54,7 @@ const initializeAgent = async (): Promise<void> => {
 
 const agentToolName = 'askLiquidityAgent';
 const agentToolDescription =
-  'Sends a free‑form, natural‑language liquidity instruction to your liquidity AI agent and returns a structured response (info or transaction plan).';
+  'Sends a free‑form, natural‑language liquidity instruction to this Camelot liquidity AI agent and returns a structured response (info or transaction plan). This agent can manage your liquidity positions on Camelot.';
 
 server.tool(
   agentToolName,

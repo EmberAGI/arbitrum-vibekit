@@ -12,7 +12,7 @@ const LendingAgentSchema = z.object({
   instruction: z
     .string()
     .describe(
-      "A natural‑language lending directive, e.g. 'Borrow 50 USDC' or 'Supply 10 ETH' or question to ask the agent."
+      "A natural‑language lending directive, e.g. 'Borrow 50 USDC' or 'Supply 10 ETH' or question to ask the agent, e.g. 'What is my debt?' or 'What's the history of Aave?'."
     ),
   userAddress: z
     .string()
@@ -42,7 +42,7 @@ const initializeAgent = async (): Promise<void> => {
 
 const agentToolName = 'askLendingAgent';
 const agentToolDescription =
-  'Sends a free‑form, natural‑language lending instruction to your lending AI agent and returns a structured quote including transaction data. You can also ask questions to the agent about the lending protocols.';
+  'Sends a free‑form, natural‑language lending instruction to this Aave lending AI agent and returns a structured quote including transaction data. You can also ask questions to the agent about the Aave protocol.';
 
 server.tool(
   agentToolName,

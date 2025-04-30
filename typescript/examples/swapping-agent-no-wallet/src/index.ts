@@ -13,7 +13,7 @@ const SwapAgentSchema = z.object({
   instruction: z
     .string()
     .describe(
-      "A natural‑language swap directive, e.g. 'Swap 50 DAI into USDT' or question to ask the agent."
+      "A natural‑language swap directive, e.g. 'Swap 50 DAI into USDT' or question to ask the agent, e.g. 'How does Camelot work?'."
     ),
   userAddress: z
     .string()
@@ -54,7 +54,7 @@ const initializeAgent = async (): Promise<void> => {
 
 const agentToolName = 'askSwapAgent';
 const agentToolDescription =
-  'Sends a free‑form, natural‑language swap instruction to your token‑swap AI agent and returns a structured quote (route, estimate, fees, calldata). You can also ask questions to the agent about the swap protocols.';
+  'Sends a free‑form, natural‑language swap instruction to this token‑swap AI agent and returns a structured quote (route, estimate, fees, calldata). You can also ask questions to the agent about the Camelot protocol. This agent can help you swap tokens on Camelot and other protocols. It supports both same-chain and cross-chain swaps.';
 
 server.tool(
   agentToolName,
