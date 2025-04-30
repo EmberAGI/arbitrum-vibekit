@@ -18,13 +18,15 @@ COPY tsconfig.base.json ./
 # ------------------------------
 # 2. Copy all workspace package.json files (to maximise Docker cache)
 # ------------------------------
-COPY lib/**/package.json ./lib/
+COPY lib/a2a/package.json ./lib/a2a/
+COPY lib/mcp-tools/emberai-mcp/package.json ./lib/mcp-tools/emberai-mcp/
+COPY lib/mcp-tools/allora-mcp-server/package.json ./lib/mcp-tools/allora-mcp-server/
 COPY examples/liquidity-agent-no-wallet/package.json ./examples/liquidity-agent-no-wallet/
 
 # ------------------------------
 # 3. Install deps based on the copied package.json set. This is cache-friendly and establishes workspace links.
 # ------------------------------
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --prefer-frozen-lockfile
 
 # ------------------------------
 # 4. Now copy the rest of the source code
