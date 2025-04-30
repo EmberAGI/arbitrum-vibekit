@@ -5,7 +5,7 @@ FROM node:20-slim AS builder
 WORKDIR /app
 
 # Install pnpm globally
-RUN npm install -g pnpm
+RUN npm install -g pnpm@10.7.0
 
 # Copy package files for swapping-agent
 COPY package.json pnpm-lock.yaml* ./
@@ -53,7 +53,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
 WORKDIR /app
 
 # Install pnpm globally
-RUN npm install -g pnpm
+RUN npm install -g pnpm@10.7.0
 
 # Copy package files for swapping-agent
 COPY package.json pnpm-lock.yaml* ./

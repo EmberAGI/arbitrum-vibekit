@@ -4,35 +4,38 @@ FROM node:20-slim AS builder
 WORKDIR /app
 
 # Install pnpm globally
-RUN npm install -g pnpm typescript@5.8.3
+RUN npm install -g pnpm@10.7.0 typescript@5.8.3
 
-# Copy workspace definition, lockfile and pnpm config
+# ------------------------------
+# 1. Copy lockfile & workspace config that affect dependency graph cache
+# ------------------------------
 COPY pnpm-lock.yaml* pnpm-workspace.yaml .npmrc ./
 # Copy root package.json for pnpm workspace
 COPY package.json ./
 # Copy base TS configuration so that tsconfig.base.json can be resolved
 COPY tsconfig.base.json ./
 
-# Copy package.json files for necessary workspace packages
-# (Adjust paths if your mcp-tool location is different)
+# ------------------------------
+# 2. Copy only package.json files for each workspace package (to maximise Docker cache)
+# ------------------------------
 COPY lib/a2a/package.json ./lib/a2a/
 COPY lib/mcp-tools/emberai-mcp/package.json ./lib/mcp-tools/emberai-mcp/
 COPY examples/liquidity-agent-no-wallet/package.json ./examples/liquidity-agent-no-wallet/
 
-# Install all dependencies for the workspace subset we need
-# pnpm will figure out the necessary links based on workspace:* deps
+# ------------------------------
+# 3. Install deps based on the copied package.json set. This is cache-friendly and establishes workspace links.
+# ------------------------------
 RUN pnpm install --frozen-lockfile
 
-# Copy source code for necessary workspace packages
-COPY lib/a2a/ ./lib/a2a/
-COPY lib/mcp-tools/emberai-mcp/ ./lib/mcp-tools/emberai-mcp/
-COPY examples/liquidity-agent-no-wallet/src/ ./examples/liquidity-agent-no-wallet/src/
-COPY examples/liquidity-agent-no-wallet/tsconfig.json ./examples/liquidity-agent-no-wallet/
-COPY lib/mcp-tools/emberai-mcp/tsconfig.json ./lib/mcp-tools/emberai-mcp/
-COPY lib/a2a/tsconfig.json ./lib/a2a/
+# ------------------------------
+# 4. Now copy the rest of the source code
+# ------------------------------
+COPY . .
 
-# Build all dependencies in topological order (dependencies first, then dependents)
-RUN pnpm --filter "...liquidity-agent-no-wallet" build
+# ------------------------------
+# 5. Build every workspace package that provides a build script (recursive build)
+# ------------------------------
+RUN pnpm -r --if-present build
 
 # Production stage
 FROM node:20-slim AS production
@@ -49,7 +52,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
 WORKDIR /app
 
 # Install pnpm globally
-RUN npm install -g pnpm
+RUN npm install -g pnpm@10.7.0
 
 # Copy only what we need from the builder stage
 COPY --from=builder /app/examples/liquidity-agent-no-wallet/dist /app/examples/liquidity-agent-no-wallet/dist
