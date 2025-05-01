@@ -42,8 +42,6 @@ const openrouter = createOpenRouter({
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const CACHE_FILE_PATH = path.join(__dirname, '.cache', 'swap_capabilities.json');
-
 
 export const TokenIdentifierSchema = z.object({
   chainId: z
@@ -231,7 +229,6 @@ Never respond in markdown, always use plain text. Never add links to your respon
     ];
 
     let swapCapabilities: McpGetCapabilitiesResponse | undefined;
-    const useCache = process.env.AGENT_DEBUG === 'true';
 
     this.log('Initializing MCP client via stdio...');
     try {
@@ -252,34 +249,8 @@ Never respond in markdown, always use plain text. Never add links to your respon
       await this.mcpClient.connect(transport);
       this.log('MCP client initialized successfully.');
 
-      if (useCache) {
-        try {
-          await fs.access(CACHE_FILE_PATH);
-          this.log('Loading swap capabilities from cache...');
-          const cachedData = await fs.readFile(CACHE_FILE_PATH, 'utf-8');
-          const parsedJson = JSON.parse(cachedData);
-          const validationResult = McpGetCapabilitiesResponseSchema.safeParse(parsedJson);
-          if (validationResult.success) {
-            swapCapabilities = validationResult.data;
-            this.log('Cached capabilities loaded and validated successfully.');
-          } else {
-            logError('Cached capabilities validation failed:', validationResult.error);
-            logError('Data that failed validation:', JSON.stringify(parsedJson));
-            this.log('Proceeding to fetch fresh capabilities...');
-          }
-        } catch (error) {
-          if (error instanceof Error && error.message.includes('invalid JSON')) {
-            logError('Error reading or parsing cache file:', error);
-          } else {
-            this.log('Cache not found or invalid, fetching capabilities via MCP...');
-          }
-        }
-      }
-
-      if (!swapCapabilities) {
-        this.log('Fetching swap capabilities via MCP...');
-        swapCapabilities = await this.fetchAndCacheCapabilities();
-      }
+      this.log('Fetching swap capabilities via MCP...');
+      swapCapabilities = await this.fetchAndCacheCapabilities();
 
       this.log(
         'swapCapabilities before processing (first 10 lines):',
@@ -616,17 +587,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
         );
       }
 
-      const capabilities = validationResult.data;
-
-      try {
-        await fs.mkdir(path.dirname(CACHE_FILE_PATH), { recursive: true });
-        await fs.writeFile(CACHE_FILE_PATH, JSON.stringify(capabilities, null, 2), 'utf-8');
-        this.log('Swap capabilities cached successfully.');
-      } catch (cacheError) {
-        logError('Failed to cache capabilities:', cacheError);
-      }
-
-      return capabilities;
+      return validationResult.data;
     } catch (error) {
       logError('Error fetching or validating capabilities via MCP:', error);
       throw new Error(
