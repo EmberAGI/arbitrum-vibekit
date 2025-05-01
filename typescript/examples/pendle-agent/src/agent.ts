@@ -46,7 +46,7 @@ const CACHE_FILE_PATH = path.join(__dirname, '.cache', 'swap_capabilities.json')
 
 
 export const TokenIdentifierSchema = z.object({
-  chain_id: z
+  chainId: z
     .string()
     .describe('The chain ID of the token identifier.'),
   address: z
@@ -65,31 +65,31 @@ export const TokenSchema = z.object({
   symbol: z
     .string()
     .describe('The ticker symbol of the token.'),
-  is_native: z
+  isNative: z
     .boolean()
     .describe('Whether this token is native to its chain.'),
   decimals: z
     .number()
     .int()
     .describe('The number of decimal places the token uses.'),
-  icon_uri: z
+  iconUri: z
     .string()
     .optional()
     .describe('Optional URI for the token icon.'),
-  usd_price: z
+  usdPrice: z
     .string()
     .optional()
     .describe(
       'Optional USD price as a string to avoid floating-point precision issues, e.g., "123.456789".'
     ),
-  is_vetted: z
+  isVetted: z
     .boolean()
     .describe('Whether the token has been vetted.'),
 })
 export type Token = z.infer<typeof TokenSchema>
 
 export const GetPendleMarketsRequestSchema = z.object({
-  chain_ids: z
+  chainIds: z
     .array(z.string())
     .describe(
       'List of chain IDs to filter markets by. If empty, returns markets from all supported chains.'
@@ -118,10 +118,10 @@ export const PendleMarketSchema = z.object({
   sy: z
     .string()
     .describe('The address of the SY (standardized yield token).'),
-  underlying_asset: TokenSchema.describe(
+  underlyingAsset: TokenSchema.describe(
     'The underlying asset of the Pendle market.'
   ),
-  chain_id: z
+  chainId: z
     .string()
     .describe('The chain ID on which this Pendle market exists.'),
 })
@@ -136,46 +136,12 @@ export type GetPendleMarketsResponse = z.infer<
   typeof GetPendleMarketsResponseSchema
 >
 
-const McpCapabilityTokenSchema = z
-  .object({
-    symbol: z.string().optional(),
-    name: z.string().optional(),
-    decimals: z.number().optional(),
-    tokenUid: z
-      .object({
-        chainId: z.string().optional(),
-        address: z.string().optional(),
-      })
-      .optional(),
-  })
-  .passthrough();
-
-const McpCapabilitySchema = z
-  .object({
-    protocol: z.string().optional(),
-    capabilityId: z.string().optional(),
-    supportedTokens: z.array(McpCapabilityTokenSchema).optional(),
-  })
-  .passthrough();
-
-const McpSingleCapabilityEntrySchema = z
-  .object({
-    swapCapability: McpCapabilitySchema.optional(),
-  })
-  .passthrough();
-
-const McpGetCapabilitiesResponseSchema = z.object({
-  capabilities: z.array(McpSingleCapabilityEntrySchema),
-});
-
-type McpGetCapabilitiesResponse = z.infer<typeof McpGetCapabilitiesResponseSchema>;
-
 function logError(...args: unknown[]) {
   console.error(...args);
 }
 
-type swappingToolSet = {
-  swapTokens: Tool<typeof SwapTokensSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
+type PendleToolSet = {
+  getPendleMarkets: Tool<typeof GetPendleMarketsRequestSchema, Awaited<string>>;
 };
 
 interface ChainConfig {
@@ -215,7 +181,7 @@ export class Agent {
   private availableTokens: string[] = [];
   public conversationHistory: CoreMessage[] = [];
   private mcpClient: Client | null = null;
-  private toolSet: swappingToolSet | null = null;
+  private toolSet: PendleToolSet | null = null;
 
   constructor(
     account: LocalAccount<string>,
