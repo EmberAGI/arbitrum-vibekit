@@ -1,4 +1,4 @@
-Vibecode DeFi agents in minutes.
+![Graphic](img/Graphic.png)
 
 ## Table of Contents
 
@@ -15,7 +15,7 @@ Vibekit is a versatile toolkit for rapidly developing DeFi agents. It enables au
 
 At the core of Vibekit is support for the Model Context Protocol (MCP), which standardizes how agent capabilities are defined and invoked. Vibekit can also be used alongside existing agent frameworks to extend their capabilities while building on top of their core functionalities.
 
-We welcome contributions from the community! If you’d like to help improve Vibekit —whether by adding new agent templates, adding new MCP tools, or fixing bugs— please check out our [Contributing Guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md). To show our appreciation, we’re launching an incentive program that will reward valuable contributions. Join us in shaping the future of autonomous DeFi tooling!
+We welcome contributions from the community! If you’d like to help improve Vibekit —whether by adding new agent templates, adding new MCP tools, or fixing bugs— please check out our [Contributing Guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md). To show our appreciation, we’re launching an incentive program that will reward valuable contributions. Join us in pushing the boundaries of DeFi innovation!
 
 ## Repository Organization
 
