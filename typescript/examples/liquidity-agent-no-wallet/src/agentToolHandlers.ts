@@ -519,126 +519,6 @@ export async function handleSupplyLiquidity(
       chainId: token0.chainId,
     }));
 
-    // --- Allowance Check & Approval Tx Start (using fetched decimals) ---
-    const approveTxs: TransactionResponse[] = [];
-
-    if (!txPlan || txPlan.length === 0 || !txPlan[0]?.to) {
-      const errorMsg =
-        'Invalid transaction plan received from supplyLiquidity tool (missing first transaction or spender address).';
-      context.log(errorMsg, txPlanRaw);
-      return createTaskResult(userAddress, 'failed', errorMsg);
-    }
-
-    const spenderAddress = txPlan[0].to as Address;
-    context.log(`Identified spender address: ${spenderAddress} from txPlan[0].to`);
-
-    // Check allowance for token0
-    try {
-      context.log(
-        `Checking allowance for ${token0.symbol || token0.address} to spender ${spenderAddress}`
-      );
-      const allowance0 = (await client0.readContract({
-        address: token0.address as Address,
-        abi: Erc20Abi.abi,
-        functionName: 'allowance',
-        args: [userAddress, spenderAddress],
-      })) as bigint;
-      context.log(
-        `Allowance check ${token0.symbol || token0.address}: Has ${allowance0}, needs ${amount0Atomic}`
-      );
-
-      if (allowance0 < amount0Atomic) {
-        context.log(
-          `Insufficient allowance for ${token0.symbol || token0.address}. Adding approval transaction.`
-        );
-        approveTxs.push({
-          to: token0.address as Address,
-          data: encodeFunctionData({
-            abi: Erc20Abi.abi,
-            functionName: 'approve',
-            // Approve max uint256
-            args: [
-              spenderAddress,
-              0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffn,
-            ],
-          }),
-          value: '0',
-          chainId: token0.chainId,
-        });
-      } else {
-        context.log(`Sufficient allowance for ${token0.symbol || token0.address}.`);
-      }
-    } catch (readError) {
-      const errorMsg = `Could not verify ${token0.symbol || token0.address} allowance due to a network error: ${(readError as Error).message}`;
-      context.log(
-        `Warning: Failed to read ${token0.symbol || token0.address} allowance.`,
-        readError
-      );
-      // Decide if we should fail or proceed assuming approval is needed
-      // For now, let's fail to be safe.
-      return createTaskResult(userAddress, 'failed', errorMsg);
-    }
-
-    // Check allowance for token1
-    try {
-      context.log(
-        `Checking allowance for ${token1.symbol || token1.address} to spender ${spenderAddress}`
-      );
-      const allowance1 = (await client1.readContract({
-        address: token1.address as Address,
-        abi: Erc20Abi.abi,
-        functionName: 'allowance',
-        args: [userAddress, spenderAddress],
-      })) as bigint;
-      context.log(
-        `Allowance check ${token1.symbol || token1.address}: Has ${allowance1}, needs ${amount1Atomic}`
-      );
-
-      if (allowance1 < amount1Atomic) {
-        context.log(
-          `Insufficient allowance for ${token1.symbol || token1.address}. Adding approval transaction.`
-        );
-        // Check if we already added an approval for this token (unlikely but possible if spender is the same)
-        // This check is simple; more robust checks might compare chainId and address.
-        if (!approveTxs.some(tx => tx.to.toLowerCase() === token1.address.toLowerCase())) {
-          approveTxs.push({
-            to: token1.address as Address,
-            data: encodeFunctionData({
-              abi: Erc20Abi.abi,
-              functionName: 'approve',
-              // Approve max uint256
-              args: [
-                spenderAddress,
-                0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffn,
-              ],
-            }),
-            value: '0',
-            chainId: token1.chainId,
-          });
-        } else {
-          context.log(`Approval for ${token1.symbol || token1.address} already added.`);
-        }
-      } else {
-        context.log(`Sufficient allowance for ${token1.symbol || token1.address}.`);
-      }
-    } catch (readError) {
-      const errorMsg = `Could not verify ${token1.symbol || token1.address} allowance due to a network error: ${(readError as Error).message}`;
-      context.log(
-        `Warning: Failed to read ${token1.symbol || token1.address} allowance.`,
-        readError
-      );
-      // Decide if we should fail or proceed assuming approval is needed
-      // For now, let's fail to be safe.
-      return createTaskResult(userAddress, 'failed', errorMsg);
-    }
-
-    const finalTxPlan: TransactionResponse[] = [...approveTxs, ...txPlan];
-    context.log(
-      `Final transaction plan (${finalTxPlan.length} txs, including ${approveTxs.length} approvals):`,
-      finalTxPlan
-    );
-    // --- Allowance Check & Approval Tx End ---
-
     // --- Construct Artifact Start ---
     const artifact: LiquidityTransactionArtifact = {
       txPreview: {
@@ -651,7 +531,7 @@ export async function handleSupplyLiquidity(
         priceFrom: params.priceFrom,
         priceTo: params.priceTo,
       },
-      txPlan: finalTxPlan,
+      txPlan: txPlan, // Use the original plan without approvals
     };
     // --- Construct Artifact End ---
 
@@ -664,7 +544,7 @@ export async function handleSupplyLiquidity(
           parts: [
             {
               type: 'text',
-              text: `Supply liquidity transaction plan prepared (${finalTxPlan.length} txs). Please review and execute.`,
+              text: `Supply liquidity transaction plan prepared (${txPlan.length} txs). Please review and execute.`,
             },
           ],
         },
