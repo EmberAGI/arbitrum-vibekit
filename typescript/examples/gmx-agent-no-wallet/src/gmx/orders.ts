@@ -1,6 +1,6 @@
 import { GmxSdk } from '@gmx-io/sdk';
-import type { MarketInfo } from '@gmx-io/sdk/types/markets.js';
-import type { TokenData } from '@gmx-io/sdk/types/tokens.js';
+import type { MarketInfo } from '@gmx-io/sdk/types/markets';
+import type { TokenData } from '@gmx-io/sdk/types/tokens';
 
 /**
  * Parameters for creating a increase position

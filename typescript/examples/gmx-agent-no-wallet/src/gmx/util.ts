@@ -1,4 +1,4 @@
-import type { TokenData, TokensData } from '@gmx-io/sdk/types/tokens.js';
+import type { TokenData, TokensData } from '@gmx-io/sdk/types/tokens';
 
 /**
  * Get token address by symbol

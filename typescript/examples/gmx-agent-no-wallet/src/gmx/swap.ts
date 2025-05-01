@@ -1,9 +1,8 @@
 import { GmxSdk } from '@gmx-io/sdk';
 import { getMarketInfo } from './markets.js';
 import type { CreateSwapOrderParams } from '../agentToolHandlers.js';
-import type { SwapAmounts } from '@gmx-io/sdk/types/trade.js';
 import { getTokenData } from './util.js';
-import { convertToUsd } from '@gmx-io/sdk/utils/tokens.js';
+import { ethers } from 'ethers';
 
 /**
  * Create a swap order on GMX
@@ -22,6 +21,11 @@ export async function createSwapOrder(
       gmxClient.setAccount(args.userAddress as `0x${string}`);
     } else if (!gmxClient.account) {
       throw new Error('No account provided and no account set in GMX client');
+    }
+
+    // Ensure we have a wallet client with an account
+    if (!gmxClient.walletClient?.account) {
+      throw new Error('No wallet client or account available for transaction');
     }
 
     const { isLimit, fromToken, toToken, amount, slippage } = args;
@@ -51,37 +55,21 @@ export async function createSwapOrder(
       console.log('[Debug]: toToken data ', toTokenData.address);
     }
 
-    const tokenAmount = BigInt(amount);
-    const fromTokenPrice = fromTokenData.prices.minPrice;
-    const usdAmount = convertToUsd(tokenAmount, fromTokenData.decimals, fromTokenPrice)!;
-    const price = fromTokenPrice;
+    const amountIn = ethers.utils.parseUnits(amount, fromTokenData.decimals).toString();
 
-    // TODO
-    let swapAmounts: SwapAmounts = {
-      amountIn: tokenAmount,
-      usdIn: usdAmount!,
-      amountOut: tokenAmount,
-      usdOut: usdAmount!,
-      swapPathStats: undefined,
-      priceIn: price,
-      priceOut: price,
-      minOutputAmount: tokenAmount,
+    let swapParams = {
+        fromTokenAddress: fromTokenData.address,
+        toTokenAddress: toTokenData.address,
+        allowedSlippageBps: 125,
+        fromAmount: BigInt(amountIn),
     };
 
-    // Create swap parameters
-    const swapOrderParams = {
-      isLimit: isLimit ?? false,
-      allowedSlippage: slippage ?? 50,
-      swapAmounts: swapAmounts,
-      fromToken: fromTokenData,
-      toToken: toTokenData,
-      tokensData: tokensData,
-    };
-
+    console.log('swap params ', swapParams);
     // Create the swap order
     try {
       console.log('Debug: creating swap order via GMX SDK');
-      const result = await gmxClient.orders.createSwapOrder(swapOrderParams);
+      console.log('Debug: account ', await gmxClient.account);
+      const result = await gmxClient.orders.swap(swapParams);
       console.log('Debug: swap order result', result);
       if (result.error) {
         throw new Error(`Failed to create swap order: ${result.error}`);

@@ -1,6 +1,6 @@
 import { GmxSdk } from '@gmx-io/sdk';
-import type { MarketsInfoData } from '@gmx-io/sdk/types/markets.js';
-import type { TokensData } from '@gmx-io/sdk/types/tokens.js';
+import type { MarketsInfoData } from '@gmx-io/sdk/types/markets';
+import type { TokensData } from '@gmx-io/sdk/types/tokens';
 import { convertBigIntToString } from './util.js';
 /**
  * Get market information from GMX

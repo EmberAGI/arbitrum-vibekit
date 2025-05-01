@@ -18,7 +18,7 @@
   "dependencies": {
     "a2a-samples-js": "workspace:*",
     "@emberai/sdk-typescript": "0.3.0-beta.6",
-    "@gmx-io/sdk": "^0.2.0",
+    "@gmx-io/sdk": "^1.0.1",
     "@modelcontextprotocol/sdk": "^1.5.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
