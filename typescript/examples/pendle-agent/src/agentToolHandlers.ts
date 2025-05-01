@@ -7,7 +7,7 @@ import {
   encodeFunctionData,
   type PublicClient,
 } from 'viem';
-import { getChainConfigById } from './agent.js';
+import { getChainConfigById } from './utils.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
 export type TokenInfo = {

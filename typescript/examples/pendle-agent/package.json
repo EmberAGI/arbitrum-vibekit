@@ -9,9 +9,6 @@
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
-    "docker:build": "docker build -t swapping-agent .",
-    "docker:run": "docker run --env-file .env -p 3001:3001 swapping-agent",
-    "docker:compose:up": "chmod +x build.sh && ./build.sh",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
   },

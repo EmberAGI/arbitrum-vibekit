@@ -18,9 +18,6 @@ import {
   handleSwapTokens,
   parseMcpToolResponse,
 } from './agentToolHandlers.js';
-import { promises as fs } from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import {
   generateText,
   tool,
@@ -34,14 +31,11 @@ import {
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { mainnet, arbitrum, optimism, polygon, base, Chain } from 'viem/chains';
+import { logError, getChainConfigById, type ChainConfig } from './utils.js';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export const TokenIdentifierSchema = z.object({
   chainId: z
@@ -134,34 +128,30 @@ export type GetPendleMarketsResponse = z.infer<
   typeof GetPendleMarketsResponseSchema
 >
 
-function logError(...args: unknown[]) {
-  console.error(...args);
-}
+export const SwapTokensSchema = z.object({
+  fromToken: z
+    .string()
+    .describe('The token to swap from.'),
+  toToken: z
+    .string()
+    .describe('The token to swap to.'),
+  amount: z
+    .string()
+    .describe('The amount to swap.'),
+  fromChain: z
+    .string()
+    .optional()
+    .describe('The chain of the from token. Required if token exists on multiple chains.'),
+  toChain: z
+    .string()
+    .optional()
+    .describe('The chain of the to token. Required if token exists on multiple chains.'),
+})
+export type SwapTokensArgs = z.infer<typeof SwapTokensSchema>;
 
 type PendleToolSet = {
   getPendleMarkets: Tool<typeof GetPendleMarketsRequestSchema, Awaited<string>>;
 };
-
-interface ChainConfig {
-  viemChain: Chain;
-  quicknodeSegment: string;
-}
-
-const chainIdMap: Record<string, ChainConfig> = {
-  '1': { viemChain: mainnet, quicknodeSegment: '' },
-  '42161': { viemChain: arbitrum, quicknodeSegment: 'arbitrum-mainnet' },
-  '10': { viemChain: optimism, quicknodeSegment: 'optimism' },
-  '137': { viemChain: polygon, quicknodeSegment: 'matic' },
-  '8453': { viemChain: base, quicknodeSegment: 'base-mainnet' },
-};
-
-export function getChainConfigById(chainId: string): ChainConfig {
-  const config = chainIdMap[chainId];
-  if (!config) {
-    throw new Error(`Unsupported chainId: ${chainId}. Please update chainIdMap.`);
-  }
-  return config;
-}
 
 export class Agent {
   private account: LocalAccount<string>;
@@ -178,7 +168,7 @@ export class Agent {
   > = {};
   private availableTokens: string[] = [];
   public conversationHistory: CoreMessage[] = [];
-  private mcpClient: Client | null = null;
+  private mcpClient: Client;
   private toolSet: PendleToolSet | null = null;
 
   constructor(
@@ -191,6 +181,10 @@ export class Agent {
     this.userAddress = userAddress;
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
+    this.mcpClient = new Client(
+      { name: 'PendleAgent', version: '1.0.0' },
+      { capabilities: { tools: {}, resources: {}, prompts: {} } }
+    );
 
     if (!process.env.OPENROUTER_API_KEY) {
       throw new Error('OPENROUTER_API_KEY not set!');
@@ -202,10 +196,6 @@ export class Agent {
   }
 
   private getHandlerContext(): HandlerContext {
-    if (!this.mcpClient) {
-      throw new Error('MCP Client not initialized!');
-    }
-
     const context: HandlerContext = {
       mcpClient: this.mcpClient,
       tokenMap: this.tokenMap,
@@ -228,85 +218,34 @@ Never respond in markdown, always use plain text. Never add links to your respon
       },
     ];
 
-    let swapCapabilities: McpGetCapabilitiesResponse | undefined;
+    const transport = new StdioClientTransport({
+      command: 'node',
+      args: ['../../lib/mcp-tools/emberai-mcp/dist/index.js'],
+      env: {
+        ...process.env, // Inherit existing environment variables
+        EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'grpc.api.emberai.xyz:50051',
+      },
+    });
 
-    this.log('Initializing MCP client via stdio...');
-    try {
-      this.mcpClient = new Client(
-        { name: 'SwappingAgent', version: '1.0.0' },
-        { capabilities: { tools: {}, resources: {}, prompts: {} } }
-      );
+    await this.mcpClient.connect(transport);
+    this.log('MCP client initialized successfully.');
 
-      const transport = new StdioClientTransport({
-        command: 'node',
-        args: ['/app/mcp-tools/emberai-mcp/dist/index.js'],
-        env: {
-          ...process.env, // Inherit existing environment variables
-          EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'grpc.api.emberai.xyz:50051',
-        },
-      });
-
-      await this.mcpClient.connect(transport);
-      this.log('MCP client initialized successfully.');
-
-      this.log('Fetching swap capabilities via MCP...');
-      swapCapabilities = await this.fetchAndCacheCapabilities();
-
-      this.log(
-        'swapCapabilities before processing (first 10 lines):',
-        swapCapabilities
-          ? JSON.stringify(swapCapabilities, null, 2).split('\n').slice(0, 10).join('\n')
-          : 'undefined'
-      );
-      if (swapCapabilities?.capabilities) {
-        this.tokenMap = {};
-        this.availableTokens = [];
-        swapCapabilities.capabilities.forEach(capabilityEntry => {
-          if (capabilityEntry.swapCapability) {
-            const swapCap = capabilityEntry.swapCapability;
-            swapCap.supportedTokens?.forEach(token => {
-              if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
-                if (!this.tokenMap[token.symbol]) {
-                  this.tokenMap[token.symbol] = [];
-                  this.availableTokens.push(token.symbol);
-                }
-                this.tokenMap[token.symbol].push({
-                  chainId: token.tokenUid.chainId,
-                  address: token.tokenUid.address,
-                  decimals: token.decimals ?? 18,
-                });
-              }
-            });
+    this.toolSet = {
+      getPendleMarkets: tool({
+        description: 'Get Pendle markets available across different chains.',
+        parameters: GetPendleMarketsRequestSchema,
+        execute: async args => {
+          this.log('Vercel AI SDK calling handler: getPendleMarkets', args);
+          try {
+            const response = await this.fetchMarkets();
+            return JSON.stringify(response);
+          } catch (error: any) {
+            logError(`Error during getPendleMarkets via toolSet: ${error.message}`);
+            return `Error fetching Pendle markets: ${error.message}`;
           }
-        });
-        this.log('Available Tokens Loaded Internally:', this.availableTokens);
-      } else {
-        logError(
-          'Failed to parse capabilities or no capabilities array found:',
-          swapCapabilities ? 'No capabilities array' : 'Invalid capabilities data'
-        );
-        this.log('Warning: Could not load available tokens from MCP server.');
-      }
-
-      this.toolSet = {
-        swapTokens: tool({
-          description: 'Swap or convert tokens. Requires the fromToken, toToken, and amount.',
-          parameters: SwapTokensSchema,
-          execute: async args => {
-            this.log('Vercel AI SDK calling handler: swapTokens', args);
-            try {
-              return await handleSwapTokens(args, this.getHandlerContext());
-            } catch (error: any) {
-              logError(`Error during swapTokens via toolSet: ${error.message}`);
-              return `Error during swapTokens: ${error.message}`;
-            }
-          },
-        }),
-      };
-    } catch (error) {
-      logError('Failed during agent initialization:', error);
-      throw new Error('Agent initialization failed. Cannot proceed.');
-    }
+        },
+      }),
+    };
 
     this.log('Agent initialized. Available tokens loaded internally.');
   }
@@ -317,14 +256,12 @@ Never respond in markdown, always use plain text. Never add links to your respon
   }
 
   async stop() {
-    if (this.mcpClient) {
-      this.log('Closing MCP client...');
-      try {
-        await this.mcpClient.close();
-        this.log('MCP client closed.');
-      } catch (error) {
-        logError('Error closing MCP client:', error);
-      }
+    this.log('Closing MCP client...');
+    try {
+      await this.mcpClient.close();
+      this.log('MCP client closed.');
+    } catch (error) {
+      logError('Error closing MCP client:', error);
     }
   }
 
@@ -541,58 +478,22 @@ Never respond in markdown, always use plain text. Never add links to your respon
     }
   }
 
-  private async fetchAndCacheCapabilities(): Promise<McpGetCapabilitiesResponse> {
-    this.log('Fetching swap capabilities via MCP...');
-    if (!this.mcpClient) {
-      throw new Error('MCP Client not initialized. Cannot fetch capabilities.');
+  private async fetchMarkets(): Promise<GetPendleMarketsResponse> {
+    this.log('Fetching pendle markets via MCP...');
+    const result = await this.mcpClient.callTool({
+      name: 'getPendleMarkets',
+      arguments: {},
+    });
+    
+    const parsedResult = parseMcpToolResponse(result, this.getHandlerContext(), 'getPendleMarkets');
+    const validationResult = GetPendleMarketsResponseSchema.safeParse(parsedResult);
+    
+    if (!validationResult.success) {
+      this.log('Invalid response format from MCP tool:', validationResult.error);
+      throw new Error('Failed to parse Pendle markets data');
     }
+    
+    return validationResult.data;
 
-    try {
-      // Read timeout from env var, default to 90 seconds
-      const mcpTimeoutMs = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '30000', 10);
-      this.log(`Using MCP tool timeout: ${mcpTimeoutMs}ms`);
-
-      const capabilitiesResult = await this.mcpClient.callTool(
-        {
-          name: 'getCapabilities',
-          arguments: { type: 'SWAP' },
-        },
-        undefined,
-        { timeout: mcpTimeoutMs } // Use configured timeout
-      );
-
-      this.log('Raw capabilitiesResult received from MCP.');
-
-      const dataToValidate = parseMcpToolResponse(
-        capabilitiesResult,
-        this.getHandlerContext(),
-        'getCapabilities'
-      );
-
-      const validationResult = McpGetCapabilitiesResponseSchema.safeParse(dataToValidate);
-
-      this.log('Validation performed on potentially parsed data.');
-      const validationResultString = JSON.stringify(validationResult, null, 2);
-      this.log(
-        'Validation result (first 10 lines):\n',
-        validationResultString.split('\n').slice(0, 10).join('\n') +
-          (validationResultString.includes('\n') ? '\n... (truncated)' : '')
-      );
-
-      if (!validationResult.success) {
-        logError('Fetched capabilities validation failed:', validationResult.error);
-        logError('Data that failed validation:', JSON.stringify(dataToValidate));
-        throw new Error(
-          `Fetched capabilities failed validation: ${validationResult.error.message}`
-        );
-      }
-
-      return validationResult.data;
-    } catch (error) {
-      logError('Error fetching or validating capabilities via MCP:', error);
-      throw new Error(
-        `Failed to fetch/validate capabilities from MCP server: ${(error as Error).message}`
-      );
-    }
   }
 }
