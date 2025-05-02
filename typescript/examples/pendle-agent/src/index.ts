@@ -66,6 +66,28 @@ server.tool(
   }
 );
 
+server.tool(
+  'getPendleMarkets',
+  'Get Pendle markets available across different chains',
+  {},
+  async () => {
+    try {
+      console.error('[server.tool] Fetching Pendle markets...');
+      // Always use empty array for chainIds to get all chains
+      const response = await agent.fetchMarkets();
+      return {
+        content: [{ type: 'text', text: JSON.stringify(response) }],
+      };
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error('Error fetching Pendle markets:', err);
+      return {
+        content: [{ type: 'text', text: `Error: ${err.message}` }],
+      };
+    }
+  }
+);
+
 const app = express();
 
 app.use(cors());
@@ -80,7 +102,10 @@ app.get('/', (_req, res) => {
       '/sse': 'Server-Sent Events endpoint for MCP connection',
       '/messages': 'POST endpoint for MCP messages',
     },
-    tools: [{ name: 'chat', description: 'execute swapping tools using Ember On-chain Actions' }],
+    tools: [
+      { name: 'chat', description: 'execute swapping tools using Ember On-chain Actions' },
+      { name: 'getPendleMarkets', description: 'Get Pendle markets available across different chains' }
+    ],
   });
 });
 

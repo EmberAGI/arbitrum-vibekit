@@ -478,7 +478,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
     }
   }
 
-  private async fetchMarkets(): Promise<GetPendleMarketsResponse> {
+  public async fetchMarkets(): Promise<GetPendleMarketsResponse> {
     this.log('Fetching pendle markets via MCP...');
     const result = await this.mcpClient.callTool({
       name: 'getPendleMarkets',
@@ -494,6 +494,5 @@ Never respond in markdown, always use plain text. Never add links to your respon
     }
     
     return validationResult.data;
-
   }
 }

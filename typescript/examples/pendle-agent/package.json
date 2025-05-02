@@ -7,7 +7,8 @@
   "scripts": {
     "build": "tsc && node -e \"require('fs').chmodSync('dist/index.js', '755')\"",
     "dev": "tsx src/index.ts",
-    "start": "node dist/index.js",
+    "start": "pnpm run build && node dist/index.js",
+    "client": "tsx src/mcp-client.ts",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
@@ -15,7 +16,7 @@
   "dependencies": {
     "@emberai/sdk-typescript": "file:../../../../ember-sdk-typescript",
     "@grpc/grpc-js": "^1.12.5",
-    "@modelcontextprotocol/sdk": "^1.5.0",
+    "@modelcontextprotocol/sdk": "^1.10.0",
     "@openrouter/ai-sdk-provider": "^0.4.5",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",

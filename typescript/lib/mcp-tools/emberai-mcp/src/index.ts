@@ -229,10 +229,8 @@ server.tool(
   "swapTokens",
   "Swap or convert tokens using Ember On-chain Actions",
   swapTokensSchema,
-  async (params: SwapTokensParams, extra: any) => {
+  async (params: SwapTokensParams) => {
     console.error(`Executing swapTokens tool with params:`, params);
-    console.error(`Extra object for swapTokens:`, extra);
-
     try {
       const fromToken = {
         chainId: params.fromTokenChainId,
