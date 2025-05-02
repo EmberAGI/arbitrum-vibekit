@@ -2,12 +2,12 @@
 
 ## Table of Contents
 
-1.  [Introduction](#introduction)
-2.  [Repository Organization](#repository-organization)
-3.  [Quickstart](#quickstart)
-4.  [IDE Setup](#ide-setup)
-5.  [MCP Tools Integration](#mcp-tools-integration)
-6.  [Contribution](#contribution)
+- [Introduction](#introduction)
+- [Repository Organization](#repository-organization)
+- [Quickstart](#quickstart)
+- [IDE Setup](#ide-setup)
+- [MCP Tools Integration](#mcp-tools-integration)
+- [Contribution](#contribution)
 
 ## Introduction
 
