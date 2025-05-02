@@ -117,6 +117,10 @@ const getTokensSchema = {
   filter: z.string().describe("A filter to apply to the tokens.").optional(),
 };
 
+// Add schema definition for getPendleMarkets after the existing schema definitions
+const getPendleMarketsSchema = {
+};
+
 // Define types from schemas using z.object() on the raw schema definitions
 const swapTokensParamsValidator = z.object(swapTokensSchema);
 const borrowParamsValidator = z.object(borrowSchema);
@@ -126,6 +130,7 @@ const withdrawParamsValidator = z.object(withdrawSchema);
 const getCapabilitiesParamsValidator = z.object(getCapabilitiesSchema);
 const getUserPositionsParamsValidator = z.object(getUserPositionsSchema);
 const getTokensParamsValidator = z.object(getTokensSchema);
+const getPendleMarketsParamsValidator = z.object(getPendleMarketsSchema);
 
 type SwapTokensParams = z.infer<typeof swapTokensParamsValidator>;
 type BorrowParams = z.infer<typeof borrowParamsValidator>;
@@ -135,6 +140,7 @@ type WithdrawParams = z.infer<typeof withdrawParamsValidator>;
 type GetCapabilitiesParams = z.infer<typeof getCapabilitiesParamsValidator>;
 type GetUserPositionsParams = z.infer<typeof getUserPositionsParamsValidator>;
 type GetTokensParams = z.infer<typeof getTokensParamsValidator>;
+type GetPendleMarketsParams = z.infer<typeof getPendleMarketsParamsValidator>;
 
 // Create Zod objects for inference - REMOVED as we use raw schemas now
 // const swapTokensParams = z.object(swapTokensSchema);
@@ -199,6 +205,11 @@ const toolDefinitions = [
     description: "Get a list of supported tokens using Ember On-chain Actions",
     arguments: zodSchemaToMcpArgs(getTokensSchema),
   },
+  {
+    name: "getPendleMarkets",
+    description: "Get Pendle markets available across different chains",
+    arguments: zodSchemaToMcpArgs(getPendleMarketsSchema),
+  },
 ];
 
 // --- Initialize the MCP server using the high-level McpServer API
@@ -248,7 +259,7 @@ server.tool(
         recipient: params.userAddress,
       });
 
-      if (response.error || !response.transactions) {
+      if (response.error || !response.transactionPlan) {
         throw new Error(
           response.error?.message || "No transaction plan returned for swap"
         );
@@ -547,6 +558,36 @@ server.tool(
       return { content: [{ type: "text", text: JSON.stringify(response) }] };
     } catch (error) {
       console.error(`GetTokens tool error:`, error);
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+      };
+    }
+  }
+);
+
+// Add getPendleMarkets tool implementation after the getTokens implementation
+server.tool(
+  "getPendleMarkets",
+  "Get Pendle markets",
+  getPendleMarketsSchema,
+  async (params: GetPendleMarketsParams, extra: any) => {
+    console.error(`Executing getPendleMarkets tool with params:`, params);
+    console.error(`Extra object for getPendleMarkets:`, extra);
+
+    try {
+      const response = await emberClient.getPendleMarkets({
+        chainIds: [],
+      });
+      console.error(`GetPendleMarkets tool success.`);
+      return { 
+        content: [{ 
+          type: "text", 
+          text: JSON.stringify(response, null, 2) 
+        }] 
+      };
+    } catch (error) {
+      console.error(`GetPendleMarkets tool error:`, error);
       return {
         isError: true,
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],

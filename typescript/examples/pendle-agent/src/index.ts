@@ -70,19 +70,27 @@ server.tool(
   'getPendleMarkets',
   'Get Pendle markets available across different chains',
   {},
-  async () => {
+  async (_args, extra) => {
     try {
       console.error('[server.tool] Fetching Pendle markets...');
       // Always use empty array for chainIds to get all chains
       const response = await agent.fetchMarkets();
+      console.error('[server.tool] Successfully fetched markets, returning response');
+      console.error('[server.tool] Markets count:', response.markets.length);
+      
+      // Format response with proper content structure
       return {
-        content: [{ type: 'text', text: JSON.stringify(response) }],
+        content: [{ 
+          type: "text" as const, 
+          text: JSON.stringify(response) 
+        }]
       };
     } catch (error: unknown) {
       const err = error as Error;
-      console.error('Error fetching Pendle markets:', err);
+      console.error('[server.tool] Error fetching Pendle markets:', err);
+      console.error('[server.tool] Error stack:', err.stack);
       return {
-        content: [{ type: 'text', text: `Error: ${err.message}` }],
+        content: [{ type: "text" as const, text: `Error: ${err.message}` }],
       };
     }
   }

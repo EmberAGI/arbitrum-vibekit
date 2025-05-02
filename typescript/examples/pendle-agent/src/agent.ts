@@ -48,9 +48,9 @@ export const TokenIdentifierSchema = z.object({
 export type TokenIdentifier = z.infer<typeof TokenIdentifierSchema>
 
 export const TokenSchema = z.object({
-  token_uid: TokenIdentifierSchema.describe(
+  tokenUid: TokenIdentifierSchema.describe(
     'For native tokens, this may be empty.'
-  ),
+  ).optional(),
   name: z
     .string()
     .describe('The human-readable name of the token.'),
@@ -80,13 +80,7 @@ export const TokenSchema = z.object({
 })
 export type Token = z.infer<typeof TokenSchema>
 
-export const GetPendleMarketsRequestSchema = z.object({
-  chainIds: z
-    .array(z.string())
-    .describe(
-      'List of chain IDs to filter markets by. If empty, returns markets from all supported chains.'
-    ),
-})
+export const GetPendleMarketsRequestSchema = z.object({})
 export type GetPendleMarketsRequestArgs = z.infer<
   typeof GetPendleMarketsRequestSchema
 >
@@ -480,17 +474,30 @@ Never respond in markdown, always use plain text. Never add links to your respon
 
   public async fetchMarkets(): Promise<GetPendleMarketsResponse> {
     this.log('Fetching pendle markets via MCP...');
+    
     const result = await this.mcpClient.callTool({
       name: 'getPendleMarkets',
-      arguments: {},
+      arguments: {}
     });
     
-    const parsedResult = parseMcpToolResponse(result, this.getHandlerContext(), 'getPendleMarkets');
-    const validationResult = GetPendleMarketsResponseSchema.safeParse(parsedResult);
+    // Check if the response has the expected structure
+    if (!result.content || !Array.isArray(result.content) || result.content.length === 0) {
+      throw new Error('Invalid response format from getPendleMarkets tool');
+    }
+    
+    const contentItem = result.content[0];
+    if (contentItem.type !== 'text' || typeof contentItem.text !== 'string') {
+      throw new Error('Invalid content format from getPendleMarkets tool');
+    }
+    
+    // Parse the JSON string from the text field
+    const parsedData = JSON.parse(contentItem.text);
+    
+    // Validate the parsed data with our schema
+    const validationResult = GetPendleMarketsResponseSchema.safeParse(parsedData);
     
     if (!validationResult.success) {
-      this.log('Invalid response format from MCP tool:', validationResult.error);
-      throw new Error('Failed to parse Pendle markets data');
+      throw new Error('Failed to validate Pendle markets data structure');
     }
     
     return validationResult.data;

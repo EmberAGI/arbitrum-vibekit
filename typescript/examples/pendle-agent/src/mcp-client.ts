@@ -102,6 +102,7 @@ async function runClient() {
 async function getMarkets(client: Client) {
   console.log('Calling getPendleMarkets...');
   try {
+    console.log('Sending MCP request for getPendleMarkets');
     const result = await client.callTool({
       name: 'getPendleMarkets',
       arguments: {
@@ -109,51 +110,72 @@ async function getMarkets(client: Client) {
       }
     });
     
-    console.log('Raw result:', JSON.stringify(result, null, 2));
+    console.log('Received raw response from MCP server');
+    // Log brief summary of raw result
+    const contentSummary = result.content && Array.isArray(result.content) ? 
+      `content array with ${result.content.length} items` : 
+      'no content array or not an array';
+    console.log(`Response structure: ${contentSummary}`);
     
     // Parse the result
-    const content = result.content;
-    if (Array.isArray(content) && content.length > 0 && content[0].type === 'text') {
-      try {
-        const marketsData = JSON.parse(content[0].text);
-        console.log('\n=== Pendle Markets ===');
-        if (marketsData.markets && Array.isArray(marketsData.markets)) {
-          // Group markets by chain for better readability
-          const marketsByChain: Record<string, any[]> = {};
-          
-          marketsData.markets.forEach((market: any) => {
-            if (!marketsByChain[market.chainId]) {
-              marketsByChain[market.chainId] = [];
-            }
-            marketsByChain[market.chainId].push(market);
-          });
-          
-          // Display markets organized by chain
-          for (const [chainId, markets] of Object.entries(marketsByChain)) {
-            console.log(`\n== Chain ${chainId} (${markets.length} markets) ==`);
-            
-            markets.forEach((market: any, i: number) => {
-              console.log(`\n${i+1}. ${market.name}`);
-              console.log(`   Expiry: ${market.expiry}`);
-              console.log(`   Underlying Asset: ${market.underlyingAsset?.symbol || 'Unknown'}`);
-              console.log(`   PT Address: ${market.pt}`);
-              console.log(`   YT Address: ${market.yt}`);
-            });
+    if (!result.content || !Array.isArray(result.content) || result.content.length === 0) {
+      console.log('Error: Response missing content array or array is empty');
+      console.log('Full raw response:', JSON.stringify(result, null, 2));
+      return;
+    }
+    
+    const contentItem = result.content[0];
+    console.log(`First content item type: ${contentItem.type}`);
+    
+    if (contentItem.type !== 'text' || typeof contentItem.text !== 'string') {
+      console.log('Error: First content item is not of type text or missing text field');
+      console.log('Content item:', contentItem);
+      return;
+    }
+    
+    console.log('Parsing JSON from text field...');
+    try {
+      const marketsData = JSON.parse(contentItem.text);
+      console.log('\n=== Pendle Markets ===');
+      if (marketsData.markets && Array.isArray(marketsData.markets)) {
+        // Group markets by chain for better readability
+        const marketsByChain: Record<string, any[]> = {};
+        
+        marketsData.markets.forEach((market: any) => {
+          if (!marketsByChain[market.chainId]) {
+            marketsByChain[market.chainId] = [];
           }
+          marketsByChain[market.chainId].push(market);
+        });
+        
+        // Display markets organized by chain
+        for (const [chainId, markets] of Object.entries(marketsByChain)) {
+          console.log(`\n== Chain ${chainId} (${markets.length} markets) ==`);
           
-          console.log(`\nTotal markets found: ${marketsData.markets.length}`);
-        } else {
-          console.log('No markets found or invalid format');
+          markets.forEach((market: any, i: number) => {
+            console.log(`\n${i+1}. ${market.name}`);
+            console.log(`   Expiry: ${market.expiry}`);
+            console.log(`   Underlying Asset: ${market.underlyingAsset?.symbol || 'Unknown'}`);
+            console.log(`   PT Address: ${market.pt}`);
+            console.log(`   YT Address: ${market.yt}`);
+          });
         }
-      } catch (e) {
-        console.error('Error parsing markets data:', e);
-        console.log('Raw response text:', content[0].text);
+        
+        console.log(`\nTotal markets found: ${marketsData.markets.length}`);
+      } else {
+        console.log('No markets found or invalid format');
+        console.log('Raw response structure:', JSON.stringify(Object.keys(marketsData), null, 2));
       }
-    } else {
-      console.log('Unexpected response format:', content);
+    } catch (e) {
+      console.error('Error parsing markets data:', e);
+      console.log('Raw response text:', contentItem.text.substring(0, 500) + '...');
     }
   } catch (error) {
     console.error('Error calling getPendleMarkets:', error);
+    if (error instanceof Error) {
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
   }
 }
 
