@@ -144,7 +144,7 @@ export const SwapTokensSchema = z.object({
 export type SwapTokensArgs = z.infer<typeof SwapTokensSchema>;
 
 type PendleToolSet = {
-  getPendleMarkets: Tool<typeof GetPendleMarketsRequestSchema, Awaited<string>>;
+  listMarkets: Tool<z.ZodObject<{}>, Awaited<string>>;
 };
 
 export class Agent {
@@ -208,13 +208,18 @@ export class Agent {
         role: 'system',
         content: `You are an assistant that provides access to Pendle Protocol functionality via Ember AI On-chain Actions.
 
+You can help users interact with Pendle markets, which separate yield-bearing tokens into Principal Tokens (PT) and Yield Tokens (YT).
+
+Use the listMarkets tool when a user asks about available Pendle markets.
+
 Never respond in markdown, always use plain text. Never add links to your response. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.`,
       },
     ];
 
+    const mcpToolPath = '../../lib/mcp-tools/emberai-mcp/dist/index.js';
     const transport = new StdioClientTransport({
       command: 'node',
-      args: ['../../lib/mcp-tools/emberai-mcp/dist/index.js'],
+      args: [mcpToolPath],
       env: {
         ...process.env, // Inherit existing environment variables
         EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'grpc.api.emberai.xyz:50051',
@@ -225,16 +230,48 @@ Never respond in markdown, always use plain text. Never add links to your respon
     this.log('MCP client initialized successfully.');
 
     this.toolSet = {
-      getPendleMarkets: tool({
-        description: 'Get Pendle markets available across different chains.',
-        parameters: GetPendleMarketsRequestSchema,
-        execute: async args => {
-          this.log('Vercel AI SDK calling handler: getPendleMarkets', args);
+      listMarkets: tool({
+        description: 'List all available Pendle markets with their details.',
+        parameters: z.object({}),
+        execute: async () => {
           try {
             const response = await this.fetchMarkets();
-            return JSON.stringify(response);
+            
+            let marketInfo = '';
+            if (response.markets && response.markets.length > 0) {
+              // Group markets by chain
+              const marketsByChain: Record<string, typeof response.markets> = {};
+              
+              response.markets.forEach(market => {
+                if (!marketsByChain[market.chainId]) {
+                  marketsByChain[market.chainId] = [];
+                }
+                marketsByChain[market.chainId].push(market);
+              });
+              
+              // Format the market information in a readable text format
+              marketInfo = 'Available Pendle markets:\n\n';
+              
+              for (const [chainId, markets] of Object.entries(marketsByChain)) {
+                marketInfo += `Chain ID ${chainId} (${markets.length} markets):\n`;
+                
+                markets.forEach((market, i) => {
+                  marketInfo += `${i+1}. ${market.name}\n`;
+                  marketInfo += `   Expiry: ${market.expiry}\n`;
+                  marketInfo += `   Underlying Asset: ${market.underlyingAsset?.symbol || 'Unknown'}\n`;
+                  marketInfo += `   PT Address: ${market.pt}\n`;
+                  marketInfo += `   YT Address: ${market.yt}\n\n`;
+                });
+              }
+              
+              marketInfo += `Total markets: ${response.markets.length}`;
+            } else {
+              marketInfo = 'No Pendle markets available.';
+            }
+            
+            return marketInfo;
           } catch (error: any) {
-            logError(`Error during getPendleMarkets via toolSet: ${error.message}`);
+            logError(`Error listing Pendle markets: ${error.message}`);
             return `Error fetching Pendle markets: ${error.message}`;
           }
         },
