@@ -81,8 +81,12 @@ app.get('/', (_req, res) => {
       '/messages': 'POST endpoint for MCP messages',
     },
     tools: [
-      { name: 'chat', description: 'execute swapping tools using Ember On-chain Actions' }
+      { name: 'chat', description: 'Chat with Pendle agent to perform swaps, list markets, and more' }
     ],
+    capabilities: {
+      markets: 'List Pendle markets',
+      swap: 'Swap between Pendle PT/YT tokens and underlying assets',
+    }
   });
 });
 

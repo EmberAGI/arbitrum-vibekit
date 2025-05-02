@@ -131,20 +131,16 @@ export const SwapTokensSchema = z.object({
     .describe('The token to swap to.'),
   amount: z
     .string()
-    .describe('The amount to swap.'),
-  fromChain: z
-    .string()
-    .optional()
-    .describe('The chain of the from token. Required if token exists on multiple chains.'),
-  toChain: z
-    .string()
-    .optional()
-    .describe('The chain of the to token. Required if token exists on multiple chains.'),
-})
+    .describe(
+      'The amount of the token to swap from. It will be in a human readable format, e.g. The amount \"1.02 ETH\" will be 1.02.'
+    ),
+  chain: z.string().optional().describe('Optional chain name for the swap. Pendle swaps are always single-chain.'),
+});
 export type SwapTokensArgs = z.infer<typeof SwapTokensSchema>;
 
 type PendleToolSet = {
   listMarkets: Tool<z.ZodObject<{}>, Awaited<string>>;
+  swapTokens: Tool<typeof SwapTokensSchema, Awaited<string>>;
 };
 
 export class Agent {
@@ -210,7 +206,30 @@ export class Agent {
 
 You can help users interact with Pendle markets, which separate yield-bearing tokens into Principal Tokens (PT) and Yield Tokens (YT).
 
+You can:
+- List available Pendle markets using the listMarkets tool
+- Swap tokens to acquire PT or YT tokens using the swapTokens tool
+
+<examples>
+<example>
+<user>What Pendle markets are available?</user>
+<tool>listMarkets</tool>
+</example>
+
+<example>
+<user>I want 2 wstETH YT tokens</user>
+<parameters>
+<fromToken>wstETH</fromToken>
+<toToken>wstETH-YT</toToken>
+<amount>2</amount>
+<chain>Arbitrum One</chain>
+</parameters>
+</example>
+
+</examples>
+
 Use the listMarkets tool when a user asks about available Pendle markets.
+Use the swapTokens tool when a user wants to acquire/sell PT/YT tokens.
 
 Never respond in markdown, always use plain text. Never add links to your response. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.`,
       },
@@ -273,6 +292,23 @@ Never respond in markdown, always use plain text. Never add links to your respon
           } catch (error: any) {
             logError(`Error listing Pendle markets: ${error.message}`);
             return `Error fetching Pendle markets: ${error.message}`;
+          }
+        },
+      }),
+      swapTokens: tool({
+        description: 'Swap tokens or acquire Pendle PT/YT tokens. Requires fromToken, toToken, and amount.',
+        parameters: SwapTokensSchema,
+        execute: async args => {
+          this.log('Executing swap tokens tool with args:', args);
+          try {
+            const { fromToken, toToken, amount, chain } = args;
+            
+            // handleSwapTokens is imported from agentToolHandlers.js
+            const result = await handleSwapTokens(args, this.getHandlerContext());
+            return result;
+          } catch (error: any) {
+            logError(`Error during swapTokens: ${error.message}`);
+            return `Error swapping tokens: ${error.message}`;
           }
         },
       }),
