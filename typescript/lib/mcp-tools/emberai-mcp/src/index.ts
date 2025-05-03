@@ -8,6 +8,7 @@ import EmberGrpcClient, {
   Token,
   GetTokensResponse,
   OrderType,
+  SwapTokensRequest,
 } from "@emberai/sdk-typescript";
 // Use the high-level McpServer API
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -142,15 +143,6 @@ type GetUserPositionsParams = z.infer<typeof getUserPositionsParamsValidator>;
 type GetTokensParams = z.infer<typeof getTokensParamsValidator>;
 type GetPendleMarketsParams = z.infer<typeof getPendleMarketsParamsValidator>;
 
-// Create Zod objects for inference - REMOVED as we use raw schemas now
-// const swapTokensParams = z.object(swapTokensSchema);
-// const borrowParams = z.object(borrowSchema);
-// const repayParams = z.object(repaySchema);
-// const supplyParams = z.object(supplySchema);
-// const withdrawParams = z.object(withdrawSchema);
-// const getCapabilitiesParams = z.object(getCapabilitiesSchema);
-// const getUserPositionsParams = z.object(getUserPositionsSchema);
-// const getTokensParams = z.object(getTokensSchema);
 // --- Tool Definitions for tools/list ---
 // Helper to convert Zod schema to MCP argument definition
 const zodSchemaToMcpArgs = (schema: Record<string, z.ZodTypeAny>) => {
@@ -163,54 +155,6 @@ const zodSchemaToMcpArgs = (schema: Record<string, z.ZodTypeAny>) => {
     typeSchema: { type: "any" },
   }));
 };
-
-const toolDefinitions = [
-  {
-    name: "swapTokens",
-    description: "Swap or convert tokens using Ember On-chain Actions",
-    arguments: zodSchemaToMcpArgs(swapTokensSchema),
-  },
-  {
-    name: "borrow",
-    description: "Borrow tokens using Ember On-chain Actions",
-    arguments: zodSchemaToMcpArgs(borrowSchema),
-  },
-  {
-    name: "repay",
-    description: "Repay borrowed tokens using Ember On-chain Actions",
-    arguments: zodSchemaToMcpArgs(repaySchema),
-  },
-  {
-    name: "supply",
-    description: "Supply tokens using Ember On-chain Actions",
-    arguments: zodSchemaToMcpArgs(supplySchema),
-  },
-  {
-    name: "withdraw",
-    description: "Withdraw tokens using Ember On-chain Actions",
-    arguments: zodSchemaToMcpArgs(withdrawSchema),
-  },
-  {
-    name: "getCapabilities",
-    description: "Get Ember On-chain Actions capabilities",
-    arguments: zodSchemaToMcpArgs(getCapabilitiesSchema),
-  },
-  {
-    name: "getUserPositions",
-    description: "Get user wallet positions using Ember On-chain Actions",
-    arguments: zodSchemaToMcpArgs(getUserPositionsSchema),
-  },
-  {
-    name: "getTokens",
-    description: "Get a list of supported tokens using Ember On-chain Actions",
-    arguments: zodSchemaToMcpArgs(getTokensSchema),
-  },
-  {
-    name: "getPendleMarkets",
-    description: "Get Pendle markets available across different chains",
-    arguments: zodSchemaToMcpArgs(getPendleMarketsSchema),
-  },
-];
 
 // --- Initialize the MCP server using the high-level McpServer API
 const server = new McpServer({
@@ -233,55 +177,55 @@ if (emberEndpoint === defaultEndpoint) {
 }
 
 const emberClient = new EmberGrpcClient(emberEndpoint);
-
 // --- Register Tools ---
 // Pass the raw schema (e.g., swapTokensSchema) instead of the validator instance
 server.tool(
   "swapTokens",
   "Swap or convert tokens using Ember On-chain Actions",
   swapTokensSchema,
-  async (params: SwapTokensParams) => {
-    console.error(`Executing swapTokens tool with params:`, params);
-    try {
-      const fromToken = {
+  async (params: SwapTokensParams) => {    
+    const swapRequest: SwapTokensRequest = {
+      orderType: OrderType.MARKET_SELL,
+      baseToken: {
         chainId: params.fromTokenChainId,
         address: params.fromTokenAddress,
-      };
-      const toToken = {
+      },
+      quoteToken: {
         chainId: params.toTokenChainId,
         address: params.toTokenAddress,
-      };
-      const response = await emberClient.swapTokens({
-        orderType: OrderType.MARKET_SELL,
-        baseToken: fromToken,
-        quoteToken: toToken,
-        amount: params.amount,
-        recipient: params.userAddress,
-      });
+      },
+      amount: params.amount,
+      recipient: params.userAddress,
+      slippageTolerance: "0.05",
+    };
 
-      if (response.error || !response.transactionPlan) {
+    try {
+      const response = await emberClient.swapTokens(swapRequest);
+      if (response.error || !response.transactions) {
         throw new Error(
           response.error?.message || "No transaction plan returned for swap"
         );
       }
-
+  
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(response),
+            text: JSON.stringify(response, null, 2),
           },
         ],
       };
     } catch (error) {
-      console.error(`SwapTokens tool error:`, error);
+      console.error(`Swap tool error:`, error);
       return {
         isError: true,
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
       };
     }
+
   }
 );
+
 server.tool(
   "borrow",
   "Borrow tokens using Ember On-chain Actions",

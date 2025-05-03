@@ -123,18 +123,18 @@ export type GetPendleMarketsResponse = z.infer<
 >
 
 export const SwapTokensSchema = z.object({
-  fromToken: z
+  fromTokenName: z
     .string()
     .describe('The token to swap from.'),
-  toToken: z
+  toTokenName: z
     .string()
     .describe('The token to swap to.'),
-  amount: z
+  humanReadableAmount: z
     .string()
     .describe(
-      'The amount of the token to swap from. It will be in a human readable format, e.g. The amount \"1.02 ETH\" will be 1.02.'
+      'The amount of the token to swap from. It will be in a human readable format, e.g. The amount "1.02 ETH" will be 1.02.'
     ),
-  chain: z.string().optional().describe('Optional chain name for the swap. Pendle swaps are always single-chain.'),
+  chainName: z.string().optional().describe('Optional chain name for the swap. Both tokens must be on the same chain.'),
 });
 export type SwapTokensArgs = z.infer<typeof SwapTokensSchema>;
 
@@ -153,13 +153,13 @@ export class Agent {
     Array<{
       chainId: string;
       address: string;
-      decimals: number;
     }>
   > = {};
   private availableTokens: string[] = [];
   public conversationHistory: CoreMessage[] = [];
   private mcpClient: Client;
   private toolSet: PendleToolSet | null = null;
+  private pendleMarkets: PendleMarket[] = [];
 
   constructor(
     account: LocalAccount<string>,
@@ -198,6 +198,63 @@ export class Agent {
     return context;
   }
 
+  private populatePendleTokens(markets: PendleMarket[]) {
+    if (!markets || markets.length === 0) {
+      this.log('No Pendle markets to process for token population');
+      return;
+    }
+    
+    this.log(`Processing ${markets.length} Pendle markets to extract PT and YT tokens...`);
+    let ptTokensAdded = 0;
+    let ytTokensAdded = 0;
+    
+    markets.forEach(market => {
+      const chainId = market.chainId;
+      const baseSymbol = market.underlyingAsset?.symbol || market.name;
+      const baseName = market.underlyingAsset?.name || market.name;
+      
+      // Add PT token
+      const ptSymbol = `${baseSymbol}_PT`;
+      const ptName = `${baseName} PT`;
+      
+      if (!this.tokenMap[ptSymbol]) {
+        this.tokenMap[ptSymbol] = [];
+        this.availableTokens.push(ptSymbol);
+      }
+      
+      // Check if this PT token for this chain is already added
+      const existingPtForChain = this.tokenMap[ptSymbol].find(token => token.chainId === chainId);
+      if (!existingPtForChain) {
+        this.tokenMap[ptSymbol].push({
+          chainId,
+          address: market.pt,
+        });
+        ptTokensAdded++;
+      }
+      
+      // Add YT token
+      const ytSymbol = `${baseSymbol}_YT`;
+      const ytName = `${baseName} YT`;
+      
+      if (!this.tokenMap[ytSymbol]) {
+        this.tokenMap[ytSymbol] = [];
+        this.availableTokens.push(ytSymbol);
+      }
+      
+      // Check if this YT token for this chain is already added
+      const existingYtForChain = this.tokenMap[ytSymbol].find(token => token.chainId === chainId);
+      if (!existingYtForChain) {
+        this.tokenMap[ytSymbol].push({
+          chainId,
+          address: market.yt,
+        });
+        ytTokensAdded++;
+      }
+    });
+    
+    this.log(`Added ${ptTokensAdded} PT tokens and ${ytTokensAdded} YT tokens to the token map. Total tokens: ${this.availableTokens.length}`);
+  }
+
   async init() {
     this.conversationHistory = [
       {
@@ -206,30 +263,24 @@ export class Agent {
 
 You can help users interact with Pendle markets, which separate yield-bearing tokens into Principal Tokens (PT) and Yield Tokens (YT).
 
+About Pendle Protocol:
+- Pendle is a yield trading protocol that tokenizes future yield
+- Principal Tokens (PT) represent the principal portion of a yield-bearing asset
+- Yield Tokens (YT) represent the yield/interest portion of a yield-bearing asset
+- Users can buy/sell/trade these tokens separately to express different yield strategies
+- Both tokens in a swap must be on the same blockchain network/chain
+
 You can:
 - List available Pendle markets using the listMarkets tool
 - Swap tokens to acquire PT or YT tokens using the swapTokens tool
 
-<examples>
-<example>
-<user>What Pendle markets are available?</user>
-<tool>listMarkets</tool>
-</example>
+PT/YT Token Naming Convention:
+- PT tokens have a symbol suffix of _PT (e.g., wstETH_PT, USDC_PT)
+- YT tokens have a symbol suffix of _YT (e.g., wstETH_YT, USDC_YT)
+- These tokens are derived from their underlying tokens (e.g., wstETH, USDC)
 
-<example>
-<user>I want 2 wstETH YT tokens</user>
-<parameters>
-<fromToken>wstETH</fromToken>
-<toToken>wstETH-YT</toToken>
-<amount>2</amount>
-<chain>Arbitrum One</chain>
-</parameters>
-</example>
-
-</examples>
-
-Use the listMarkets tool when a user asks about available Pendle markets.
-Use the swapTokens tool when a user wants to acquire/sell PT/YT tokens.
+Note that PT (Principal Tokens) are suffixed with _PT in their symbol and YT (Yield Tokens) are suffixed with _YT.
+For example, wstETH_PT is the Principal Token for wstETH, and USDC_YT is the Yield Token for USDC.
 
 Never respond in markdown, always use plain text. Never add links to your response. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.`,
       },
@@ -248,20 +299,72 @@ Never respond in markdown, always use plain text. Never add links to your respon
     await this.mcpClient.connect(transport);
     this.log('MCP client initialized successfully.');
 
+    // Initialize available tokens from MCP capabilities
+    try {
+      this.log('Fetching available tokens...');
+      const result = await this.mcpClient.callTool({
+        name: 'getTokens',
+        arguments: {
+          chainId: '',
+          filter: '',
+        },
+      });
+      
+      const parsedResult = parseMcpToolResponse(result, this.getHandlerContext(), 'getTokens');
+      
+      if (parsedResult && typeof parsedResult === 'object' && 'tokens' in parsedResult) {
+        const tokens = (parsedResult as any).tokens;
+        if (Array.isArray(tokens)) {
+          this.tokenMap = {};
+          this.availableTokens = [];
+          
+          tokens.forEach(token => {
+            if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
+              if (!this.tokenMap[token.symbol]) {
+                this.tokenMap[token.symbol] = [];
+                this.availableTokens.push(token.symbol);
+              }
+              this.tokenMap[token.symbol].push({
+                chainId: token.tokenUid.chainId,
+                address: token.tokenUid.address,
+              });
+            }
+          });
+          
+          this.log(`Loaded ${this.availableTokens.length} available tokens`);
+        }
+      } else {
+        this.log('Failed to parse tokens data from MCP');
+      }
+    } catch (error) {
+      this.log('Error fetching tokens:', error);
+    }
+
+    // Fetch Pendle markets during initialization
+    try {
+      this.log('Fetching Pendle markets during initialization...');
+      const marketsResponse = await this.fetchMarkets();
+      this.pendleMarkets = marketsResponse.markets;
+      this.log(`Successfully loaded ${this.pendleMarkets.length} Pendle markets`);
+      
+      // Populate PT and YT tokens in the token map
+      this.populatePendleTokens(this.pendleMarkets);
+    } catch (error) {
+      this.log('Error fetching Pendle markets during initialization:', error);
+    }
+
     this.toolSet = {
       listMarkets: tool({
         description: 'List all available Pendle markets with their details.',
         parameters: z.object({}),
         execute: async () => {
           try {
-            const response = await this.fetchMarkets();
-            
             let marketInfo = '';
-            if (response.markets && response.markets.length > 0) {
+            if (this.pendleMarkets.length > 0) {
               // Group markets by chain
-              const marketsByChain: Record<string, typeof response.markets> = {};
+              const marketsByChain: Record<string, PendleMarket[]> = {};
               
-              response.markets.forEach(market => {
+              this.pendleMarkets.forEach(market => {
                 if (!marketsByChain[market.chainId]) {
                   marketsByChain[market.chainId] = [];
                 }
@@ -275,17 +378,66 @@ Never respond in markdown, always use plain text. Never add links to your respon
                 marketInfo += `Chain ID ${chainId} (${markets.length} markets):\n`;
                 
                 markets.forEach((market, i) => {
+                  const baseSymbol = market.underlyingAsset?.symbol || market.name;
+                  const ptSymbol = `${baseSymbol}_PT`;
+                  const ytSymbol = `${baseSymbol}_YT`;
+                  
                   marketInfo += `${i+1}. ${market.name}\n`;
                   marketInfo += `   Expiry: ${market.expiry}\n`;
-                  marketInfo += `   Underlying Asset: ${market.underlyingAsset?.symbol || 'Unknown'}\n`;
-                  marketInfo += `   PT Address: ${market.pt}\n`;
-                  marketInfo += `   YT Address: ${market.yt}\n\n`;
+                  marketInfo += `   Underlying Asset: ${market.underlyingAsset?.symbol || 'Unknown'} (${market.underlyingAsset?.name || 'Unknown'})\n`;
+                  marketInfo += `   Market Address: ${market.address}\n`;
+                  marketInfo += `   PT Symbol: ${ptSymbol} - Address: ${market.pt}\n`;
+                  marketInfo += `   YT Symbol: ${ytSymbol} - Address: ${market.yt}\n`;
+                  marketInfo += `   SY Address: ${market.sy}\n\n`;
                 });
               }
               
-              marketInfo += `Total markets: ${response.markets.length}`;
+              marketInfo += `Total markets: ${this.pendleMarkets.length}`;
             } else {
-              marketInfo = 'No Pendle markets available.';
+              try {
+                // If we don't have markets cached, fetch them now
+                const response = await this.fetchMarkets();
+                this.pendleMarkets = response.markets;
+                
+                if (this.pendleMarkets.length > 0) {
+                  // Create a new formatted market list instead of recursively calling
+                  // Return to the start of this function's logic with the updated markets
+                  const marketsByChain: Record<string, PendleMarket[]> = {};
+                  this.pendleMarkets.forEach(market => {
+                    if (!marketsByChain[market.chainId]) {
+                      marketsByChain[market.chainId] = [];
+                    }
+                    marketsByChain[market.chainId].push(market);
+                  });
+                  
+                  marketInfo = 'Available Pendle markets:\n\n';
+                  
+                  for (const [chainId, markets] of Object.entries(marketsByChain)) {
+                    marketInfo += `Chain ID ${chainId} (${markets.length} markets):\n`;
+                    
+                    markets.forEach((market, i) => {
+                      const baseSymbol = market.underlyingAsset?.symbol || market.name;
+                      const ptSymbol = `${baseSymbol}_PT`;
+                      const ytSymbol = `${baseSymbol}_YT`;
+                      
+                      marketInfo += `${i+1}. ${market.name}\n`;
+                      marketInfo += `   Expiry: ${market.expiry}\n`;
+                      marketInfo += `   Underlying Asset: ${market.underlyingAsset?.symbol || 'Unknown'} (${market.underlyingAsset?.name || 'Unknown'})\n`;
+                      marketInfo += `   Market Address: ${market.address}\n`;
+                      marketInfo += `   PT Symbol: ${ptSymbol} - Address: ${market.pt}\n`;
+                      marketInfo += `   YT Symbol: ${ytSymbol} - Address: ${market.yt}\n`;
+                      marketInfo += `   SY Address: ${market.sy}\n\n`;
+                    });
+                  }
+                  
+                  marketInfo += `Total markets: ${this.pendleMarkets.length}`;
+                } else {
+                  marketInfo = 'No Pendle markets available.';
+                }
+              } catch (error: any) {
+                logError(`Error fetching Pendle markets: ${error.message}`);
+                return `Error fetching Pendle markets: ${error.message}`;
+              }
             }
             
             return marketInfo;
@@ -301,9 +453,6 @@ Never respond in markdown, always use plain text. Never add links to your respon
         execute: async args => {
           this.log('Executing swap tokens tool with args:', args);
           try {
-            const { fromToken, toToken, amount, chain } = args;
-            
-            // handleSwapTokens is imported from agentToolHandlers.js
             const result = await handleSwapTokens(args, this.getHandlerContext());
             return result;
           } catch (error: any) {
@@ -314,7 +463,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
       }),
     };
 
-    this.log('Agent initialized. Available tokens loaded internally.');
+    this.log('Agent initialized. Available tokens and Pendle markets loaded internally.');
   }
 
   async start() {

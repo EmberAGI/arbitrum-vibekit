@@ -1,20 +1,24 @@
 import { z } from 'zod';
-import {
-  parseUnits,
-  createPublicClient,
-  http,
-  type Address,
-  encodeFunctionData,
-  type PublicClient,
-} from 'viem';
-import { getChainConfigById } from './utils.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { SwapTokensResponse } from '@emberai/sdk-typescript';
+import { SwapTokensArgs } from './agent.js';
 
 export type TokenInfo = {
   chainId: string;
   address: string;
-  decimals: number;
 };
+
+// Define swap schema to match the MCP tool server
+export const SwapTokensParamsSchema = z.object({
+  fromTokenAddress: z.string().describe("The contract address of the token to swap from."),
+  fromTokenChainId: z.string().describe("The chain ID where the fromToken contract resides."),
+  toTokenAddress: z.string().describe("The contract address of the token to swap to."),
+  toTokenChainId: z.string().describe("The chain ID where the toToken contract resides."),
+  amount: z.string().describe("The amount of the fromToken to swap (atomic, non-human readable format)."),
+  userAddress: z.string().describe("The wallet address initiating the swap."),
+});
+
+export type SwapTokensParams = z.infer<typeof SwapTokensParamsSchema>;
 
 export const TransactionPlanSchema = z
   .object({
@@ -52,7 +56,7 @@ function findTokensCaseInsensitive(
 
 const chainMappings = [
   { id: '1', name: 'Ethereum', aliases: ['mainnet'] },
-  { id: '42161', name: 'Arbitrum', aliases: [] },
+  { id: '42161', name: 'Arbitrum One', aliases: [] },
   { id: '10', name: 'Optimism', aliases: [] },
   { id: '137', name: 'Polygon', aliases: ['matic'] },
   { id: '8453', name: 'Base', aliases: [] },
@@ -75,7 +79,6 @@ function findTokenDetail(
   tokenName: string,
   optionalChainName: string | undefined,
   tokenMap: Record<string, TokenInfo[]>,
-  direction: 'from' | 'to'
 ): TokenInfo | string {
   const tokens = findTokensCaseInsensitive(tokenMap, tokenName);
   if (tokens.length === 0) {
@@ -100,7 +103,7 @@ function findTokenDetail(
       const chainList = tokens
         .map((t, idx) => `${idx + 1}. ${mapChainIdToName(t.chainId)}`)
         .join('\n');
-      return `Multiple chains supported for ${tokenName}:\n${chainList}\nPlease specify the '${direction}Chain'.`;
+      return `Multiple chains supported for ${tokenName}:\n${chainList}\nPlease specify the 'chain' parameter.`;
     }
     tokenDetail = tokens[0];
   }
@@ -114,11 +117,11 @@ function findTokenDetail(
   return tokenDetail;
 }
 
-export function parseMcpToolResponse(
+export function parseMcpToolResponse<T>(
   rawResponse: unknown,
   context: HandlerContext,
   toolName: string
-): unknown {
+): T {
   let dataToValidate: unknown;
 
   if (
@@ -148,200 +151,103 @@ export function parseMcpToolResponse(
     dataToValidate = rawResponse;
   }
 
-  return dataToValidate;
+  return dataToValidate as T;
+}
+
+// Add a specialized version for SwapTokensResponse that validates the structure
+export function parseSwapTokensResponse(
+  rawResponse: unknown,
+  context: HandlerContext
+): SwapTokensResponse {
+  const data = parseMcpToolResponse<unknown>(rawResponse, context, 'swapTokens');
+  
+  // Validate that the response has the expected structure
+  if (!data || typeof data !== 'object') {
+    throw new Error('Invalid response format: expected an object');
+  }
+  
+  const response = data as any;
+  
+  // Check for required fields
+  if (!response.transactions || !Array.isArray(response.transactions)) {
+    throw new Error('Invalid response format: missing or invalid transactions array');
+  }
+  
+  if (!response.chainId || typeof response.chainId !== 'string') {
+    throw new Error('Invalid response format: missing or invalid chainId');
+  }
+  
+  // Validate each transaction in the array
+  response.transactions.forEach((tx: any, index: number) => {
+    if (!tx || typeof tx !== 'object') {
+      throw new Error(`Invalid transaction at index ${index}: not an object`);
+    }
+    
+    if (!tx.to || typeof tx.to !== 'string') {
+      throw new Error(`Invalid transaction at index ${index}: missing or invalid 'to' field`);
+    }
+    
+    if (!tx.data || typeof tx.data !== 'string') {
+      throw new Error(`Invalid transaction at index ${index}: missing or invalid 'data' field`);
+    }
+  });
+  
+  return response as SwapTokensResponse;
 }
 
 async function validateAndExecuteAction(
   actionName: string,
-  rawTransactions: unknown,
+  transactions: TransactionPlan[],
   context: HandlerContext
 ): Promise<string> {
-  const validationResult = z.array(TransactionPlanSchema).safeParse(rawTransactions);
-  if (!validationResult.success) {
-    const errorMsg = `MCP tool '${actionName}' returned invalid transaction data.`;
-    context.log('Validation Error:', errorMsg, validationResult.error);
-    throw new Error(errorMsg);
-  }
-  return await context.executeAction(actionName, validationResult.data);
+  return await context.executeAction(actionName, transactions);
 }
 
-const minimalErc20Abi = [
-  {
-    constant: true,
-    inputs: [
-      { name: '_owner', type: 'address' },
-      { name: '_spender', type: 'address' },
-    ],
-    name: 'allowance',
-    outputs: [{ name: '', type: 'uint256' }],
-    payable: false,
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    constant: false,
-    inputs: [
-      { name: '_spender', type: 'address' },
-      { name: '_value', type: 'uint256' },
-    ],
-    name: 'approve',
-    outputs: [{ name: '', type: 'bool' }],
-    payable: false,
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-] as const;
-
 export async function handleSwapTokens(
-  params: {
-    fromToken: string;
-    toToken: string;
-    amount: string;
-    fromChain?: string;
-    toChain?: string;
-  },
+  params: SwapTokensArgs,
   context: HandlerContext
 ): Promise<string> {
-  const { fromToken, toToken, amount, fromChain, toChain } = params;
-
-  const fromTokenResult = findTokenDetail(fromToken, fromChain, context.tokenMap, 'from');
+  const { fromTokenName, toTokenName, humanReadableAmount, chainName } = params;
+  
+  // Get from token details and handle possible string response
+  const fromTokenResult = findTokenDetail(fromTokenName, chainName, context.tokenMap);
   if (typeof fromTokenResult === 'string') {
     return fromTokenResult;
   }
-  const fromTokenDetail = fromTokenResult;
-
-  const toTokenResult = findTokenDetail(toToken, toChain, context.tokenMap, 'to');
+  
+  // Determine effective chain for to token lookup
+  const effectiveChain = chainName || mapChainIdToName(fromTokenResult.chainId);
+  
+  // Get to token details and handle possible string response
+  const toTokenResult = findTokenDetail(toTokenName, effectiveChain, context.tokenMap);
   if (typeof toTokenResult === 'string') {
     return toTokenResult;
   }
-  const toTokenDetail = toTokenResult;
-
-  const atomicAmount = parseUnits(amount, fromTokenDetail.decimals);
-
-  context.log(
-    `Executing swap via MCP: ${fromToken} (address: ${fromTokenDetail.address}, chain: ${fromTokenDetail.chainId}) to ${toToken} (address: ${toTokenDetail.address}, chain: ${toTokenDetail.chainId}), amount: ${amount}, atomicAmount: ${atomicAmount}, userAddress: ${context.userAddress}`
-  );
-
-  const rawTransactions = await context.mcpClient.callTool({
+  
+  // Assert that tokens are on the same chain
+  if (fromTokenResult.chainId !== toTokenResult.chainId) {
+    throw new Error(`Cannot swap tokens across different chains. From chain: ${fromTokenResult.chainId}, To chain: ${toTokenResult.chainId}`);
+  }
+  
+  // Create properly typed swap params directly
+  const swapParams: SwapTokensParams = {
+    fromTokenAddress: fromTokenResult.address,
+    fromTokenChainId: fromTokenResult.chainId,
+    toTokenAddress: toTokenResult.address,
+    toTokenChainId: toTokenResult.chainId,
+    amount: humanReadableAmount,
+    userAddress: context.userAddress,
+  };
+  
+  const swapTokensResponse = await context.mcpClient.callTool({
     name: 'swapTokens',
-    arguments: {
-      fromTokenAddress: fromTokenDetail.address,
-      fromTokenChainId: fromTokenDetail.chainId,
-      toTokenAddress: toTokenDetail.address,
-      toTokenChainId: toTokenDetail.chainId,
-      amount: atomicAmount.toString(),
-      userAddress: context.userAddress,
-    },
+    arguments: swapParams,
   });
 
-  const dataToValidate = parseMcpToolResponse(rawTransactions, context, 'swapTokens');
-
-  if (!Array.isArray(dataToValidate) || dataToValidate.length === 0) {
-    context.log('Invalid or empty transaction plan received from MCP tool:', dataToValidate);
-    if (
-      typeof dataToValidate === 'object' &&
-      dataToValidate !== null &&
-      'error' in dataToValidate
-    ) {
-      throw new Error(`MCP tool returned an error: ${JSON.stringify(dataToValidate)}`);
-    }
-    throw new Error('Expected a transaction plan array from MCP tool, but received invalid data.');
-  }
-
-  const swapTx = dataToValidate[0] as TransactionPlan;
-  if (!swapTx || typeof swapTx !== 'object' || !swapTx.to) {
-    context.log('Invalid swap transaction object received from MCP:', swapTx);
-    throw new Error('Invalid swap transaction structure in plan.');
-  }
-
-  const spenderAddress = swapTx.to as Address;
-  const txChainId = fromTokenDetail.chainId;
-  const fromTokenAddress = fromTokenDetail.address as Address;
-  const userAddress = context.userAddress as Address;
-
-  context.log(
-    `Checking allowance: User ${userAddress} needs to allow Spender ${spenderAddress} to spend ${atomicAmount} of Token ${fromTokenAddress} on Chain ${txChainId}`
-  );
-
-  let tempPublicClient: PublicClient;
-  try {
-    const chainConfig = getChainConfigById(txChainId);
-    const networkSegment = chainConfig.quicknodeSegment;
-    const targetChain = chainConfig.viemChain;
-    let dynamicRpcUrl: string;
-    if (networkSegment === '') {
-      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.quiknode.pro/${context.quicknodeApiKey}`;
-    } else {
-      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.${networkSegment}.quiknode.pro/${context.quicknodeApiKey}`;
-    }
-    tempPublicClient = createPublicClient({
-      chain: targetChain,
-      transport: http(dynamicRpcUrl),
-    });
-    context.log(`Public client created for chain ${txChainId} via ${dynamicRpcUrl.split('/')[2]}`);
-  } catch (chainError) {
-    context.log(`Failed to create public client for chain ${txChainId}:`, chainError);
-    throw new Error(`Unsupported chain or configuration error for chainId ${txChainId}.`);
-  }
-
-  let currentAllowance: bigint = 0n;
-  try {
-    currentAllowance = await tempPublicClient.readContract({
-      address: fromTokenAddress,
-      abi: minimalErc20Abi,
-      functionName: 'allowance',
-      args: [userAddress, spenderAddress],
-    });
-    context.log(`Successfully read allowance: ${currentAllowance}. Required: ${atomicAmount}`);
-  } catch (readError) {
-    context.log(
-      `Warning: Failed to read allowance via readContract (eth_call may be unsupported). Error: ${(readError as Error).message}`
-    );
-    context.log('Assuming allowance is insufficient due to check failure.');
-  }
-
-  if (currentAllowance < atomicAmount) {
-    context.log(
-      `Insufficient allowance or check failed. Need ${atomicAmount}, have ${currentAllowance}. Creating approval transaction...`
-    );
-    const approveTx: TransactionPlan = {
-      to: fromTokenAddress,
-      data: encodeFunctionData({
-        abi: minimalErc20Abi,
-        functionName: 'approve',
-        args: [spenderAddress, BigInt(2) ** BigInt(256) - BigInt(1)],
-      }),
-      value: '0',
-      chainId: txChainId,
-    };
-
-    try {
-      context.log(
-        `Executing approval transaction for ${params.fromToken} to spender ${spenderAddress}...`
-      );
-      const approvalResult = await context.executeAction('approve', [approveTx]);
-      context.log(
-        `Approval transaction sent: ${approvalResult}. Note: Ensure confirmation before proceeding if needed.`
-      );
-    } catch (approvalError) {
-      context.log(`Approval transaction failed:`, approvalError);
-      throw new Error(
-        `Failed to approve token ${params.fromToken}: ${(approvalError as Error).message}`
-      );
-    }
-  } else {
-    context.log('Sufficient allowance already exists.');
-  }
-
-  context.log('Proceeding to execute the swap transaction received from MCP tool...');
-
-  if (Array.isArray(dataToValidate) && dataToValidate.length > 0) {
-    const swapTxPlan = dataToValidate[0] as Partial<TransactionPlan>;
-    if (swapTxPlan && typeof swapTxPlan === 'object' && !swapTxPlan.chainId) {
-      context.log(`Adding missing chainId (${txChainId}) to swap transaction plan.`);
-      swapTxPlan.chainId = txChainId;
-    }
-  }
-
-  return await validateAndExecuteAction('swapTokens', dataToValidate, context);
+  // Use the specialized parsing function for enhanced validation
+  const response = parseSwapTokensResponse(swapTokensResponse, context);
+  
+  // Execute the swap and return the result
+  const swapResult = await validateAndExecuteAction('swapTokens', response.transactions.map(t => ({...t, chainId: response.chainId})), context);
+  return `Successfully executed swap of ${humanReadableAmount} ${fromTokenName} to ${toTokenName}. ${swapResult}`;
 }
