@@ -353,7 +353,16 @@ export async function handleSwapQuery(
     console.log('Debug: creating swap order');
     console.log('Debug: args', args);
 
-    const swapOrder = await createSwapOrder(context.gmxClient, args);
+    // Make sure we're not passing any user address to the swap function
+    const swapParams = {
+      fromToken: args.fromToken,
+      toToken: args.toToken,
+      amount: args.amount,
+      isLimit: args.isLimit,
+      slippage: args.slippage
+    };
+
+    const swapOrder = await createSwapOrder(context.gmxClient, swapParams);
     console.log('Debug: swap order created', swapOrder);
 
     if (!swapOrder.success) {
@@ -369,14 +378,6 @@ export async function handleSwapQuery(
         artifacts: [],
       };
     }
-
-    const swapData = {
-      fromToken: args.fromToken,
-      toToken: args.toToken,
-      amount: args.amount,
-      isLimit: args.isLimit,
-      slippage: args.slippage || 50, // Default 0.5% slippage if not specified
-    };
 
     return {
       id: 'swap-query',
@@ -398,7 +399,7 @@ export async function handleSwapQuery(
           parts: [
             {
               type: 'data',
-              data: swapData,
+              data: swapParams,
             },
           ],
         },

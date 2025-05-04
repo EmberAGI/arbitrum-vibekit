@@ -7,12 +7,18 @@ import { ethers } from 'ethers';
 /**
  * Create a swap order on GMX
  * @param gmxClient - The GMX SDK instance
- * @param params - Swap order parameters
+ * @param params - Swap order parameters (fromToken, toToken, amount, slippage, isLimit)
  * @returns Result of swap order creation
  */
 export async function createSwapOrder(
   gmxClient: GmxSdk,
-  args: CreateSwapOrderParams,
+  params: {
+    fromToken: string; 
+    toToken: string; 
+    amount: string;
+    slippage?: number;
+    isLimit?: boolean;
+  }
 ): Promise<any> {
   try {
     // Ensure we have a wallet client with an account
@@ -20,7 +26,7 @@ export async function createSwapOrder(
       throw new Error('No account available in GMX client');
     }
 
-    const { isLimit, fromToken, toToken, amount, slippage } = args;
+    const { isLimit, fromToken, toToken, amount, slippage } = params;
 
     if (!fromToken || !toToken) {
       throw new Error('From token or to token not provided');
@@ -52,7 +58,7 @@ export async function createSwapOrder(
     let swapParams = {
         fromTokenAddress: fromTokenData.address,
         toTokenAddress: toTokenData.address,
-        allowedSlippageBps: 125,
+        allowedSlippageBps: slippage || 125, // Default to 1.25% if not specified
         fromAmount: BigInt(amountIn),
     };
 

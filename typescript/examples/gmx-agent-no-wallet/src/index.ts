@@ -157,15 +157,15 @@ const main = async () => {
   try {
     const mnemonic = process.env.MNEMONIC;
     const walletPrivateKey = process.env.WALLET_PRIVATE_KEY;
-    if (!mnemonic || !walletPrivateKey) {
-      throw new Error('MNEMONIC or WALLET_PRIVATE_KEY not found in the .env file.');
+    if (!mnemonic && !walletPrivateKey) {
+      throw new Error('MNEMONIC and WALLET_PRIVATE_KEY not found in the .env file.');
     }
     let userAddress: Address;
     if (mnemonic) {
       const account = mnemonicToAccount(mnemonic);
       userAddress = account.address;
     } else {
-      const account = privateKeyToAccount(walletPrivateKey as `0x${string}`);
+      const account = privateKeyToAccount(`0x${walletPrivateKey}`);
       userAddress = account.address;
     }
 

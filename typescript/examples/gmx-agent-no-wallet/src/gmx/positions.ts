@@ -18,7 +18,7 @@ export async function getPositionInfo(gmxClient: GmxSdk) {
 
     console.log('Getting position info for account:', gmxClient.account);
     try {
-      // Get markets info and tokens data with a timeout
+      // Get markets info and tokens data
       const marketInfoResponse = await getMarketInfo(gmxClient);
 
       if (

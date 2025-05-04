@@ -47,12 +47,6 @@ const GetMarketInfoSchema = z.object({
 });
 
 const GetPositionInfoSchema = z.object({
-  // userAddress: z
-  //   .string()
-  //   // .regex(/^0x[a-fA-F0-9]{40}$/)
-  //   .describe(
-  //     'Required. User address starting with "0x". Example: 0x1234567890abcdef1234567890abcdef12345678.',
-  //   ),
   marketSymbol: z
     .string()
     .optional()
@@ -77,12 +71,11 @@ const CreateDecreasePositionSchema = z.object({
 });
 
 const CreateSwapOrderSchema = z.object({
-  userAddress: z.string().describe('The user address to swap for'),
   fromToken: z.string().describe('The token to swap from'),
   toToken: z.string().describe('The token to swap to'),
   amount: z.string().describe('The amount of tokens to swap'),
-  slippage: z.number().optional().describe('Allowed slippage in basis points (50 = 0.5%)'),
   isLimit: z.boolean().optional().describe('Whether to use a limit order'),
+  slippage: z.number().optional().describe('Allowed slippage in basis points (50 = 0.5%)'),
 });
 
 // Define a record type to avoid specific typings
@@ -124,22 +117,25 @@ export class Agent {
         content: `
     You are an AI assistant specialized in trading operations on the GMX platform.
     
+    IMPORTANT: The wallet address is ALREADY available and pre-configured in the system. NEVER ask the user for their wallet address under any circumstances.
+    
     You have access to the following tools:
     - getMarketInfo: Retrieve information about available GMX markets and trading pairs.
-    - getPositionInfo: Retrieve open positions for the connected wallet.
-    - createIncreasePosition: Open or increase a position (simulated; no real wallet interaction).
-    - createDecreasePosition: Decrease or close a position (simulated; no real wallet interaction).
-    - createSwapOrder: Create a swap order.
+    - getPositionInfo: Retrieve open positions for the pre-configured wallet. The wallet address is already set - never ask for it.
+    - createIncreasePosition: Open or increase a position. The wallet address is already configured.
+    - createDecreasePosition: Decrease or close a position. The wallet address is already configured.
+    - createSwapOrder: Create a swap order. The wallet address is already configured.
     
     GENERAL BEHAVIOR:
     - Communicate clearly, professionally, and using plain text only (no markdown).
     - Always check if a tool should be called instead of replying manually.
     - When a tool is required, DO NOT reply with text — trigger the tool immediately.
+    - NEVER ask the user for their wallet address - it is already available to all tools.
     
     POSITION QUERIES:
-    - If the user asks about their positions, you MUST call getPositionInfo.
+    - If the user asks about their positions, you MUST call getPositionInfo without asking for any address.
     - Never answer manually for position queries.
-    - The wallet address is already set in the GMX client, so you don't need to ask for it.
+    - The wallet address is already set in the GMX client - NEVER ask for it.
     
     MARKET INFORMATION QUERIES:
     - If the user asks about available markets, funding rates, token pairs, or fees, use getMarketInfo.
@@ -172,55 +168,34 @@ export class Agent {
     - "open", "create", "buy", "long" → createIncreasePosition
     - "close", "sell", "exit", "short", "decrease" → createDecreasePosition
     
-    OUTPUT RULES:
-    - Never stop after just calling getMarketInfo — you must proceed to call the position tool.
-    - Never guess token addresses manually. Always use getMarketInfo results.
-    - Never respond with text if a tool action is required.
-    
-    EXAMPLES:
-    
-    Example 1:
-    User: "Open a 10x long position on BTC using 0.01 ETH"
-    Action:
-    - getMarketInfo("BTC")
-    - Use returned addresses to call createIncreasePosition
-    
-    Example 2:
-    User: "Close my short position on ETH"
-    Action:
-    - getMarketInfo("ETH")
-    - Use returned addresses to call createDecreasePosition
-
     HANDLING SWAP QUERIES:
     - If the user requests to swap/trade/buy/sell tokens without position leveraging (e.g., "swap ETH for USDC", "buy BTC using USDC"), you MUST call createSwapOrder directly.
     - DO NOT call getMarketInfo first for swap queries as createSwapOrder already handles this internally.
+    - NEVER ask for wallet address - it is pre-configured.
 
     For swap requests:
     1. Extract the fromToken (what they're using to pay)
     2. Extract the toToken (what they want to buy)
     3. Extract the amount
-    4. DIRECTLY call createSwapOrder with these parameters
+    4. DIRECTLY call createSwapOrder with these parameters and nothing else
 
     SWAP EXAMPLES:
-
-    Example 1:
     User: "Swap 5 USDC for ETH"
-    Action:
-    - createSwapOrder with fromToken="USDC", toToken="ETH", amount="5"
-
-    Example 2:
+    Action: Call createSwapOrder with fromToken="USDC", toToken="ETH", amount="5" ONLY
+    
     User: "Buy BTC using 2 USDC" 
-    Action:
-    - createSwapOrder with fromToken="USDC", toToken="BTC", amount="2"
+    Action: Call createSwapOrder with fromToken="USDC", toToken="BTC", amount="2" ONLY
 
-    ERROR HANDLING:
-    - If a tool call fails, explain briefly and encourage the user to retry.
-    - Never guess missing data. Ask users for missing parameters if necessary.
+    CRITICAL REMINDERS:
+    - NEVER ask for the user's wallet address or any account information - it is already configured.
+    - All tools automatically use the pre-configured wallet address.
+    - ERROR HANDLING: If a tool call fails, explain briefly and encourage the user to retry.
+    - NEVER guess missing data except for defaults like slippage.
     
     REMEMBER:
     - Prefer tool calls over freeform text responses.
     - Always maintain the chain: getMarketInfo → action (increase/decrease).
-    - The wallet address is already set in the GMX client, so you don't need to ask for it.
+    - NEVER ask for user wallet address under any circumstances.
         `,
       },
     ];
@@ -285,7 +260,7 @@ export class Agent {
         }),
 
         getPositionInfo: tool({
-          description: 'Check position details for a user',
+          description: 'Check position details for the pre-configured wallet. The wallet address is already set - never ask for it.',
           parameters: GetPositionInfoSchema,
           execute: async (args) => {
             console.log('Vercel AI SDK calling handler: getPositionInfo tool', args);
@@ -300,7 +275,7 @@ export class Agent {
         }),
 
         createSwapOrder: tool({
-          description: 'Create a swap order',
+          description: 'Create a swap order using the pre-configured wallet. The wallet address is already set - never ask for it.',
           parameters: CreateSwapOrderSchema,
           execute: async (args) => {
             console.log('Vercel AI SDK calling handler: createSwapOrder tool', args);
@@ -315,7 +290,7 @@ export class Agent {
         }),
 
         createIncreasePosition: tool({
-          description: 'Create or increase a position (simulated in this no-wallet example)',
+          description: 'Create or increase a position using the pre-configured wallet. The wallet address is already set - never ask for it.',
           parameters: CreateIncreasePositionSchema,
           execute: async (args) => {
             console.log('Vercel AI SDK calling handler: createIncreasePosition tool', args);
@@ -330,7 +305,7 @@ export class Agent {
         }),
 
         createDecreasePosition: tool({
-          description: 'Decrease or close a position (simulated in this no-wallet example)',
+          description: 'Decrease or close a position using the pre-configured wallet. The wallet address is already set - never ask for it.',
           parameters: CreateDecreasePositionSchema,
           execute: async (args) => {
             console.log('Vercel AI SDK calling handler: createDecreasePosition tool', args);
