@@ -1,4 +1,4 @@
-# GMX Agent (No Wallet) Example
+# GMX Agent Example
 
 This directory provides a reference implementation of a GMX agent using Arbitrum AgentKit, Ember SDK, and MCP. It demonstrates how to set up a server, define agent functionalities, and process GMX operations via MCP tools. You can expand or modify this template by adding new tools or incorporating additional MCP-compatible functionalities to suit your project's requirements.
 
@@ -85,6 +85,5 @@ To run and interact with the agent, follow the instructions in the `examples/REA
 
 ## Security Considerations
 
-- This example doesn't include a wallet, so it simulates transactions rather than submitting them
-- In a production environment, you would need to implement proper wallet integration and security measures
+- In a production environment, you would need to implement proper authentication and security measures
 - Always validate user inputs and implement rate limiting for API requests 

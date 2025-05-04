@@ -1,5 +1,5 @@
 {
-  "name": "gmx-agent-no-wallet",
+  "name": "gmx-agent",
   "version": "1.0.0",
   "description": "Ember SDK GMX Agent Example",
   "type": "module",

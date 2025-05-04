@@ -42,15 +42,18 @@ export async function createSwapOrder(
       throw new Error('Failed to fetch markets info data');
     }
 
+    console.log('Debug: fromToken ', fromToken);
+    console.log('Debug: toToken ', toToken);
+
     let fromTokenData = getTokenData(fromToken, tokensData);
     let toTokenData = getTokenData(toToken, tokensData);
 
     if (fromTokenData.address) {
-      console.log('[Debug]: fromToken data ', fromTokenData.address);
+      console.log('[Debug]: fromToken address ', fromTokenData.address);
     }
 
     if (toTokenData.address) {
-      console.log('[Debug]: toToken data ', toTokenData.address);
+      console.log('[Debug]: toToken address ', toTokenData.address);
     }
 
     const amountIn = ethers.utils.parseUnits(amount, fromTokenData.decimals).toString();

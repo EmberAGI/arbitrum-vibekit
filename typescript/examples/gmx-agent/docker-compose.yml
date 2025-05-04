@@ -4,7 +4,7 @@ services:
   gmx-agent:
     build:
       context: ../../
-      dockerfile: ./examples/gmx-agent-no-wallet/Dockerfile
+      dockerfile: ./examples/gmx-agent/Dockerfile
     ports:
       - "3001:3001"
     env_file:
@@ -13,4 +13,4 @@ services:
       - PORT=3001
     restart: unless-stopped
     volumes:
-      - .:/app/examples/gmx-agent-no-wallet 
+      - .:/app/examples/gmx-agent 

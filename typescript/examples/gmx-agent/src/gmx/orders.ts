@@ -47,9 +47,9 @@ export async function createIncreasePosition(
       isLong = true,
     } = params;
 
-    // Check if wallet is connected
+    // Check if account is available
     if (!gmxClient.account) {
-      throw new Error('No wallet connected. Please connect a wallet to create a position.');
+      throw new Error('Account not available. Please ensure you have proper authentication to create a position.');
     }
 
     // Get markets info and tokens data
@@ -152,9 +152,9 @@ export async function createDecreasePosition(
       isLong = true,
     } = params;
 
-    // Check if wallet is connected
+    // Check if account is available
     if (!gmxClient.account) {
-      throw new Error('No wallet connected. Please connect a wallet to create a position.');
+      throw new Error('Account not available. Please ensure you have proper authentication to create a position.');
     }
 
     // Get markets info and tokens data
@@ -196,7 +196,7 @@ export async function createDecreasePosition(
       throw new Error(`Error fetching positions: ${positions.error}`);
     }
 
-    // For simplicity in the no-wallet version, we'll return a simulated response
+    // For simplicity, we'll return a simulated response
     return {
       success: true,
       message: isClosePosition
