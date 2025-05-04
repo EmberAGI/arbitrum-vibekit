@@ -24,7 +24,7 @@ import { z } from 'zod';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { GmxSdk } from '@gmx-io/sdk';
 import type { Task } from 'a2a-samples-js/schema';
-import type { Address } from 'viem/accounts';
+import type { Account, Address } from 'viem/accounts';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -98,12 +98,14 @@ export class Agent {
   public conversationHistory: CoreMessage[] = [];
   private toolSet: GmxToolSet | null = null;
   private userAddress: Address;
+  private account: Account;
 
-  constructor(userAddress: Address) {
+  constructor(account: Account) {
     // Initialize blockchain provider
     const rpcUrl = process.env.RPC_URL || 'https://arb1.arbitrum.io/rpc';
     this.provider = new ethers.providers.JsonRpcProvider(rpcUrl);
-    this.userAddress = userAddress;
+    this.userAddress = account.address;
+    this.account = account;
   }
 
   /**
@@ -201,7 +203,7 @@ export class Agent {
     ];
 
     // Initialize GMX client
-    await this.initializeGmxClient(this.userAddress);
+    await this.initializeGmxClient(this.account);
 
     // Initialize MCP client via stdio
     this.log('Initializing MCP client via stdio...');
@@ -330,9 +332,9 @@ export class Agent {
   /**
    * Initialize the GMX client
    */
-  private async initializeGmxClient(userAddress: Address) {
+  private async initializeGmxClient(account: Account) {
     try {
-      this.gmxClient = await setupGmxClient(userAddress);
+      this.gmxClient = await setupGmxClient(account);
       console.log('GMX client initialized successfully');
     } catch (error) {
       console.error('Error initializing GMX client:', error);

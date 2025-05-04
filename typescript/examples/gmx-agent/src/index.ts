@@ -6,7 +6,7 @@ import cors from 'cors';
 import { Agent } from './agent.js';
 import { z } from 'zod';
 import type { Task } from 'a2a-samples-js/schema';
-import { mnemonicToAccount, privateKeyToAccount, type Address } from 'viem/accounts';
+import { mnemonicToAccount, privateKeyToAccount, type Account, type Address } from 'viem/accounts';
 
 // Load environment variables
 dotenv.config();
@@ -34,9 +34,9 @@ const server = new McpServer({
 // Initialize agent
 let agent: Agent;
 
-const initializeAgent = async (userAddress: Address): Promise<void> => {
+const initializeAgent = async (account: Account): Promise<void> => {
   try {
-    agent = new Agent(userAddress);
+    agent = new Agent(account);
     await agent.init();
     console.error('Agent initialized successfully');
   } catch (error: unknown) {
@@ -160,17 +160,18 @@ const main = async () => {
     if (!mnemonic && !walletPrivateKey) {
       throw new Error('MNEMONIC and WALLET_PRIVATE_KEY not found in the .env file.');
     }
+
+    let account: Account;
     let userAddress: Address;
     if (mnemonic) {
-      const account = mnemonicToAccount(mnemonic);
-      userAddress = account.address;
+      account = mnemonicToAccount(mnemonic);
     } else {
-      const account = privateKeyToAccount(`0x${walletPrivateKey}`);
-      userAddress = account.address;
+      account = privateKeyToAccount(`0x${walletPrivateKey}`);
     }
 
+    userAddress = account.address;
     console.log('Using user address:', userAddress);
-    await initializeAgent(userAddress);
+    await initializeAgent(account);
     app.listen(PORT, () => {
       console.error(`GMX Agent server running on port ${PORT}`);
     });

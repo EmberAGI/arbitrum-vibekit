@@ -42,8 +42,8 @@ export async function createSwapOrder(
       throw new Error('Failed to fetch markets info data');
     }
 
-    console.log('Debug: fromToken ', fromToken);
-    console.log('Debug: toToken ', toToken);
+    console.log('[Debug]: fromToken ', fromToken);
+    console.log('[Debug]: toToken ', toToken);
 
     let fromTokenData = getTokenData(fromToken, tokensData);
     let toTokenData = getTokenData(toToken, tokensData);
@@ -70,11 +70,8 @@ export async function createSwapOrder(
     try {
       console.log('Debug: creating swap order via GMX SDK');
       console.log('Debug: account ', await gmxClient.account);
-      const result = await gmxClient.orders.swap(swapParams);
-      console.log('Debug: swap order result', result);
-      if (result.error) {
-        throw new Error(`Failed to create swap order: ${result.error}`);
-      }
+      await gmxClient.orders.swap(swapParams);
+      
     } catch (error) {
       console.error('Error while creating swap order via GMX SDK', error);
       throw error;

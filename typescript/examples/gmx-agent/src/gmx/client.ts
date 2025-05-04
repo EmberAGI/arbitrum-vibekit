@@ -1,5 +1,5 @@
 import { GmxSdk } from '@gmx-io/sdk';
-import { createPublicClient, createWalletClient, http, type Address } from 'viem';
+import { createPublicClient, createWalletClient, http, type Account, type Address } from 'viem';
 import { arbitrum } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 
@@ -23,7 +23,7 @@ const defaultChain = CHAINS.arbitrum;
 /**
  * Setup the GMX SDK client with required configuration
  */
-export async function setupGmxClient(userAddress: Address, chainId = defaultChain.id) {
+export async function setupGmxClient(account: Account, chainId = defaultChain.id) {
   try {
     // Get chain config based on chainId
     const chainConfig = Object.values(CHAINS).find((chain) => chain.id === chainId) || defaultChain;
@@ -32,7 +32,7 @@ export async function setupGmxClient(userAddress: Address, chainId = defaultChai
 
     // Create wallet client if a private key is provided
     let walletClient = createWalletClient({
-      account: userAddress,
+      account,
       chain: arbitrum,
       transport: http(chainConfig.rpcUrl),
     });
