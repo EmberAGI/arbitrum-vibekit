@@ -1,6 +1,5 @@
-version: '3.8'
 services:
-  lending-agent:
+  lending-agent-no-wallet:
     build:
       context: ../../
       dockerfile: examples/lending-agent-no-wallet/Dockerfile
