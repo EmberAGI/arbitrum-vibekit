@@ -388,7 +388,7 @@ export async function handleSwapQuery(
           parts: [
             {
               type: 'text',
-              text: `Swap order created successfully.`,
+              text: `Swap order created successfully for ${swapParams.fromToken} to ${swapParams.toToken} with amount ${swapParams.amount}.`,
             },
           ],
         },

@@ -170,23 +170,25 @@ export class Agent {
     - "open", "create", "buy", "long" → createIncreasePosition
     - "close", "sell", "exit", "short", "decrease" → createDecreasePosition
     
-    HANDLING SWAP QUERIES:
-    - If the user requests to swap/trade/buy/sell tokens without position leveraging (e.g., "swap ETH for USDC", "buy BTC using USDC"), you MUST call createSwapOrder directly.
-    - DO NOT call getMarketInfo first for swap queries as createSwapOrder already handles this internally.
+    HANDLING SWAP QUERIES (CRITICAL):
+    - NEVER CALL getMarketInfo BEFORE SWAP OPERATIONS - THIS IS CRITICAL
+    - For ANY request that involves swapping/trading tokens without leveraging (e.g. "swap ETH for USDC"), you MUST ONLY call createSwapOrder DIRECTLY.
+    - createSwapOrder handles market info internally - DO NOT call getMarketInfo first.
+    - SKIP getMarketInfo completely for any swap operation.
     - NEVER ask for wallet address - it is pre-configured.
 
     For swap requests:
     1. Extract the fromToken (what they're using to pay)
     2. Extract the toToken (what they want to buy)
     3. Extract the amount
-    4. DIRECTLY call createSwapOrder with these parameters and nothing else
+    4. DIRECTLY call createSwapOrder with these parameters - DO NOT call getMarketInfo first
 
     SWAP EXAMPLES:
     User: "Swap 5 USDC for ETH"
-    Action: Call createSwapOrder with fromToken="USDC", toToken="ETH", amount="5" ONLY
+    Action: ONLY call createSwapOrder with fromToken="USDC", toToken="ETH", amount="5" - DO NOT call getMarketInfo
     
     User: "Buy BTC using 2 USDC" 
-    Action: Call createSwapOrder with fromToken="USDC", toToken="BTC", amount="2" ONLY
+    Action: ONLY call createSwapOrder with fromToken="USDC", toToken="BTC", amount="2" - DO NOT call getMarketInfo
 
     CRITICAL REMINDERS:
     - NEVER ask for the user's wallet address or any account information - it is already configured.
@@ -196,7 +198,8 @@ export class Agent {
     
     REMEMBER:
     - Prefer tool calls over freeform text responses.
-    - Always maintain the chain: getMarketInfo → action (increase/decrease).
+    - For positions: Always maintain the chain: getMarketInfo → action (increase/decrease).
+    - For swaps: ALWAYS SKIP getMarketInfo and DIRECTLY call createSwapOrder.
     - NEVER ask for user wallet address under any circumstances.
         `,
       },
@@ -417,38 +420,52 @@ export class Agent {
 
       // --- Process Tool Results from response.messages ---
       let processedToolResult: Task | null = null;
+      // First pass: look for transaction tools (higher priority)
       for (const message of response.messages) {
         if (message.role === 'tool' && Array.isArray(message.content)) {
           for (const part of message.content) {
             if (
-              part.type === 'tool-result' &&
-              [
-                'getMarketInfo',
-                'getPositionInfo',
-                'createIncreasePosition',
-                'createDecreasePosition',
-                'createSwapOrder',
-              ].includes(part.toolName)
+              part.type === 'tool-result' && 
+              ['createSwapOrder', 'createIncreasePosition', 'createDecreasePosition'].includes(part.toolName)
             ) {
               this.log(`Processing tool result for ${part.toolName} from response.messages`);
-              // Log the raw result for debugging
-              //this.log(`Raw toolResult.result: ${JSON.stringify(part.result)}`);
-              // Assert the type
               processedToolResult = part.result as Task;
-              // Now you can safely access properties based on the asserted type
               this.log(
                 `${part.toolName} Result State: ${processedToolResult?.status?.state ?? 'N/A'}`,
               );
-              // Check if the first part is a text part before accessing .text
               const firstPart = processedToolResult?.status?.message?.parts[0];
-              const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';
+              const messageText = firstPart && isTextPart(firstPart) ? firstPart.text : 'N/A';
               this.log(`${part.toolName} Result Message: ${messageText}`);
-              // Break if you only expect one result or handle multiple if needed
               break;
             }
           }
         }
-        if (processedToolResult) break; // Exit outer loop once result is found
+        if (processedToolResult) break;
+      }
+      
+      // Second pass: look for info tools (lower priority) if no transaction tool was found
+      if (!processedToolResult) {
+        for (const message of response.messages) {
+          if (message.role === 'tool' && Array.isArray(message.content)) {
+            for (const part of message.content) {
+              if (
+                part.type === 'tool-result' &&
+                ['getMarketInfo', 'getPositionInfo'].includes(part.toolName)
+              ) {
+                this.log(`Processing tool result for ${part.toolName} from response.messages`);
+                processedToolResult = part.result as Task;
+                this.log(
+                  `${part.toolName} Result State: ${processedToolResult?.status?.state ?? 'N/A'}`,
+                );
+                const firstPart = processedToolResult?.status?.message?.parts[0];
+                const messageText = firstPart && isTextPart(firstPart) ? firstPart.text : 'N/A';
+                this.log(`${part.toolName} Result Message: ${messageText}`);
+                break;
+              }
+            }
+          }
+          if (processedToolResult) break;
+        }
       }
       // --- End Process Tool Results ---
 
