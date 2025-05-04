@@ -1,5 +1,5 @@
 import { GmxSdk } from '@gmx-io/sdk';
-import { createPublicClient, createWalletClient, http } from 'viem';
+import { createPublicClient, createWalletClient, http, type Address } from 'viem';
 import { arbitrum } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 
@@ -23,7 +23,7 @@ const defaultChain = CHAINS.arbitrum;
 /**
  * Setup the GMX SDK client with required configuration
  */
-export async function setupGmxClient(chainId = defaultChain.id) {
+export async function setupGmxClient(userAddress: Address, chainId = defaultChain.id) {
   try {
     // Get chain config based on chainId
     const chainConfig = Object.values(CHAINS).find((chain) => chain.id === chainId) || defaultChain;
@@ -31,22 +31,12 @@ export async function setupGmxClient(chainId = defaultChain.id) {
     console.log(`Initializing GMX client for ${chainConfig.name}...`);
 
     // Create wallet client if a private key is provided
-    let walletClient = undefined;
-    if (process.env.WALLET_PRIVATE_KEY) {
-      try {
-        const account = privateKeyToAccount(process.env.WALLET_PRIVATE_KEY as `0x${string}`);
-        walletClient = createWalletClient({
-          account,
-          chain: arbitrum,
-          transport: http(chainConfig.rpcUrl),
-        });
-        console.log(`Wallet connected: ${account.address.substring(0, 8)}...`);
-      } catch (walletError) {
-        console.error(`Error initializing wallet: ${walletError}`);
-      }
-    }
+    let walletClient = createWalletClient({
+      account: userAddress,
+      chain: arbitrum,
+      transport: http(chainConfig.rpcUrl),
+    });
 
-    // Simple SDK setup - this approach works based on user feedback
     const sdk = new GmxSdk({
       chainId,
       rpcUrl: chainConfig.rpcUrl,

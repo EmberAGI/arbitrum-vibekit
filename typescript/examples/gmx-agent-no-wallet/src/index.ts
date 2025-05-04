@@ -6,6 +6,7 @@ import cors from 'cors';
 import { Agent } from './agent.js';
 import { z } from 'zod';
 import type { Task } from 'a2a-samples-js/schema';
+import { mnemonicToAccount, privateKeyToAccount, type Address } from 'viem/accounts';
 
 // Load environment variables
 dotenv.config();
@@ -17,10 +18,10 @@ const GmxAgentSchema = z.object({
     .describe(
       "A natural‑language directive for GMX operations, e.g. 'Show me ETH markets on GMX'.",
     ),
-  userAddress: z
-    .string()
-    .optional()
-    .describe('The user wallet address which would be used for positions or transactions.'),
+  // userAddress: z
+  //   .string()
+  //   .optional()
+  //   .describe('The user wallet address which would be used for positions or transactions.'),
 });
 type GmxAgentArgs = z.infer<typeof GmxAgentSchema>;
 
@@ -33,9 +34,9 @@ const server = new McpServer({
 // Initialize agent
 let agent: Agent;
 
-const initializeAgent = async (): Promise<void> => {
+const initializeAgent = async (userAddress: Address): Promise<void> => {
   try {
-    agent = new Agent();
+    agent = new Agent(userAddress);
     await agent.init();
     console.error('Agent initialized successfully');
   } catch (error: unknown) {
@@ -56,12 +57,9 @@ server.tool(
   agentToolDescription,
   GmxAgentSchema.shape,
   async (args: GmxAgentArgs) => {
-    const { instruction, userAddress } = args;
+    const { instruction } = args;
     try {
-      const taskResponse = await agent.processUserInput(
-        instruction,
-        userAddress || '0x0000000000000000000000000000000000000000',
-      );
+      const taskResponse = await agent.processUserInput(instruction);
 
       console.log('[server.tool] result', taskResponse);
       console.log(
@@ -154,9 +152,25 @@ app.post('/messages', async (req, res) => {
 
 // Start the server
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
+
 const main = async () => {
   try {
-    await initializeAgent();
+    const mnemonic = process.env.MNEMONIC;
+    const walletPrivateKey = process.env.WALLET_PRIVATE_KEY;
+    if (!mnemonic || !walletPrivateKey) {
+      throw new Error('MNEMONIC or WALLET_PRIVATE_KEY not found in the .env file.');
+    }
+    let userAddress: Address;
+    if (mnemonic) {
+      const account = mnemonicToAccount(mnemonic);
+      userAddress = account.address;
+    } else {
+      const account = privateKeyToAccount(walletPrivateKey as `0x${string}`);
+      userAddress = account.address;
+    }
+
+    console.log('Using user address:', userAddress);
+    await initializeAgent(userAddress);
     app.listen(PORT, () => {
       console.error(`GMX Agent server running on port ${PORT}`);
     });

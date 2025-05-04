@@ -24,6 +24,7 @@ import { z } from 'zod';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { GmxSdk } from '@gmx-io/sdk';
 import type { Task } from 'a2a-samples-js/schema';
+import type { Address } from 'viem/accounts';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -103,12 +104,13 @@ export class Agent {
   private mcpClient: Client | null = null;
   public conversationHistory: CoreMessage[] = [];
   private toolSet: GmxToolSet | null = null;
-  private userAddress?: string; // Store user address
+  private userAddress: Address;
 
-  constructor() {
+  constructor(userAddress: Address) {
     // Initialize blockchain provider
     const rpcUrl = process.env.RPC_URL || 'https://arb1.arbitrum.io/rpc';
     this.provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+    this.userAddress = userAddress;
   }
 
   /**
@@ -223,7 +225,7 @@ export class Agent {
     ];
 
     // Initialize GMX client
-    await this.initializeGmxClient();
+    await this.initializeGmxClient(this.userAddress);
 
     // Initialize MCP client via stdio
     this.log('Initializing MCP client via stdio...');
@@ -352,9 +354,9 @@ export class Agent {
   /**
    * Initialize the GMX client
    */
-  private async initializeGmxClient() {
+  private async initializeGmxClient(userAddress: Address) {
     try {
-      this.gmxClient = await setupGmxClient();
+      this.gmxClient = await setupGmxClient(userAddress);
       console.log('GMX client initialized successfully');
     } catch (error) {
       console.error('Error initializing GMX client:', error);
@@ -389,19 +391,17 @@ export class Agent {
    * Process user input and return a Task
    * This matches the pattern from swapping-agent-no-wallet
    */
-  public async processUserInput(userInput: string, userAddress: string): Promise<Task> {
+  public async processUserInput(userInput: string): Promise<Task> {
     if (!this.toolSet) {
       throw new Error('Agent not initialized. Call init() first.');
     }
 
-    this.userAddress = userAddress; // Store user address for context
-
-    this.log(`Processing user message: ${userInput} for address: ${userAddress}`);
+    this.log(`Processing user message: ${userInput}`);
 
     // Add user message to conversation history
-    if (this.userAddress) {
-      userInput = `User address: ${this.userAddress}\n${userInput}`;
-    }
+    // if (this.userAddress) {
+    //   userInput = `User address: ${this.userAddress}\n${userInput}`;
+    // }
 
     const userMessage: CoreUserMessage = { role: 'user', content: userInput };
     this.conversationHistory.push(userMessage);
