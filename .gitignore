@@ -37,6 +37,7 @@ Cargo.lock
 !.vscode/extensions.json
 !.vscode/launch.json
 !.vscode/settings.json
+!.vscode/tasks.json
 .DS_Store
 *.suo
 *.ntvs*
