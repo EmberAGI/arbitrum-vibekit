@@ -427,6 +427,7 @@ export class Agent {
                 'getPositionInfo',
                 'createIncreasePosition',
                 'createDecreasePosition',
+                'createSwapOrder',
               ].includes(part.toolName)
             ) {
               this.log(`Processing tool result for ${part.toolName} from response.messages`);
