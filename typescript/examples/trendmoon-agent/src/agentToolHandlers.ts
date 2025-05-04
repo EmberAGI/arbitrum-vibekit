@@ -1,4 +1,4 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 
 interface ContentPart {
   type: string;
@@ -23,13 +23,17 @@ export function parseMcpToolResponse(
   if (response.isError) {
     throw new Error(
       `MCP tool ${toolName} failed: ${
-        response.content?.[0]?.type === 'text' ? response.content[0].text : 'Unknown error'
+        response.content?.[0]?.type === "text"
+          ? response.content[0].text
+          : "Unknown error"
       }`
     );
   }
 
-  const textContent = response.content?.find((part: ContentPart) => part.type === 'text');
-  if (!textContent || textContent.type !== 'text' || !textContent.text) {
+  const textContent = response.content?.find(
+    (part: ContentPart) => part.type === "text"
+  );
+  if (!textContent || textContent.type !== "text" || !textContent.text) {
     throw new Error(`MCP tool ${toolName} response missing text content`);
   }
 
@@ -37,7 +41,9 @@ export function parseMcpToolResponse(
     return JSON.parse(textContent.text);
   } catch (error) {
     throw new Error(
-      `Failed to parse JSON from MCP tool ${toolName} response: ${(error as Error).message}`
+      `Failed to parse JSON from MCP tool ${toolName} response: ${
+        (error as Error).message
+      }`
     );
   }
 }
