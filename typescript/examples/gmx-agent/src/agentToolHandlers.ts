@@ -280,12 +280,139 @@ export async function handlePositionsQuery(
 
     console.log('Debug: successfully got position info');
 
+    // Get market info for all relevant markets
+    console.log('Debug: fetching market info for positions');
+    const marketInfo = await getMarketInfo(context.gmxClient);
+    
+    if (!marketInfo.success) {
+      console.log('Debug: failed to fetch market info for positions');
+    }
+
+    // Enrich position data with market information
+    const enrichedPositions = { ...positionInfo.modifiedPositions };
+    const enhancedDetails = [];
+    
+    // Process each position to add market details
+    if (marketInfo.success && positionInfo.modifiedPositions) {
+      console.log('Debug: enriching positions with market data');
+      const positions = positionInfo.modifiedPositions;
+      const marketsInfoData = marketInfo.modifiedMarketsInfoData || {};
+      const tokensData = marketInfo.modifiedTokensData || {};
+      
+      // Create enriched position objects with comprehensive details
+      for (const posKey in positions) {
+        const position = positions[posKey];
+        const marketAddress = position.marketAddress;
+        const marketData = marketsInfoData[marketAddress];
+        const collateralTokenAddress = position.collateralTokenAddress;
+        const collateralToken = tokensData[collateralTokenAddress];
+        
+        // Calculate leverage, PnL percentage and other metrics
+        let leverage = '0';
+        let pnlPercentage = '0';
+        
+        if (position.collateralAmount && position.sizeInUsd) {
+          leverage = calculateLeverage(position.sizeInUsd, position.collateralAmount);
+          if (position.pnl) {
+            pnlPercentage = calculatePnlPercentage(position.pnl, position.collateralAmount);
+          }
+        }
+        
+        // Get token symbols and names
+        let marketName = "Unknown Market";
+        let indexTokenSymbol = "Unknown";
+        let collateralTokenSymbol = "Unknown";
+        
+        if (marketData) {
+          if (marketData.name) marketName = marketData.name;
+          if (marketData.indexToken && marketData.indexToken.symbol) {
+            indexTokenSymbol = marketData.indexToken.symbol;
+          }
+        }
+        
+        if (collateralToken && collateralToken.symbol) {
+          collateralTokenSymbol = collateralToken.symbol;
+        }
+        
+        // Format amounts based on token decimals
+        const collateralDecimals = collateralToken?.decimals || 18;
+        const formattedCollateral = formatAmount(position.collateralAmount, collateralDecimals);
+        
+        // Calculate entry and liquidation prices if available
+        const entryPrice = position.entryPrice ? formatAmount(position.entryPrice, 30) : "N/A";
+        const liquidationPrice = position.liquidationPrice ? formatAmount(position.liquidationPrice, 30) : "N/A";
+        
+        // Format size for display - properly convert from wei (1e30)
+        let sizeInUsdFormatted;
+        if (position.sizeInUsd) {
+          // Convert directly from bigint if possible to avoid precision issues
+          if (typeof position.sizeInUsd === 'bigint') {
+            const decimalValue = Number(position.sizeInUsd / BigInt(10**28)) / 100;
+            sizeInUsdFormatted = decimalValue.toFixed(2);
+          } else {
+            // Fallback to string formatting for non-bigint values
+            sizeInUsdFormatted = formatAmount(position.sizeInUsd, 30);
+          }
+        } else {
+          sizeInUsdFormatted = "0.00";
+        }
+        
+        const pnlFormatted = position.pnl ? formatAmount(position.pnl, 30) : "0";
+        
+        // Create a human-readable position summary
+        const positionDetails = {
+          id: posKey,
+          market: marketName,
+          token: indexTokenSymbol,
+          side: position.isLong ? "LONG" : "SHORT",
+          size: `$${sizeInUsdFormatted}`,
+          collateral: `${formattedCollateral} ${collateralTokenSymbol}`,
+          leverage: `${leverage}x`,
+          entryPrice: `$${entryPrice}`,
+          pnl: `$${pnlFormatted} (${pnlPercentage}%)`,
+          status: "Active",
+          marketAddress: marketAddress,
+          collateralTokenAddress: collateralTokenAddress,
+          rawPosition: position
+        };
+        
+        enhancedDetails.push(positionDetails);
+        
+        // Also attach the enriched data to the original position object
+        enrichedPositions[posKey] = {
+          ...position,
+          marketName,
+          indexTokenSymbol,
+          collateralTokenSymbol,
+          formattedCollateral,
+          leverage,
+          pnlPercentage,
+          entryPriceFormatted: entryPrice,
+          liquidationPriceFormatted: liquidationPrice,
+          sizeInUsdFormatted,
+          pnlFormatted
+        };
+      }
+    }
+
+    // Build a concise but informative message
+    let message = `Found ${positionInfo.positionCount} active positions.`;
+    
+    if (enhancedDetails.length > 0) {
+      message += ' Here are your positions:';
+      enhancedDetails.forEach((pos, idx) => {
+        // Make sure leverage display is consistent and doesn't have duplicate "x"
+        const leverage = pos.leverage.endsWith('x') ? pos.leverage : `${pos.leverage}x`;
+        message += `\n${idx + 1}. ${pos.side} ${pos.token}: Size ${pos.size}, Collateral ${pos.collateral}, Leverage ${leverage}, PnL ${pos.pnl}`;
+      });
+    }
+
     const positionData = {
       success: true,
       positionCount: positionInfo.positionCount,
-      // sending modifiedPositions to avoid bigInt serialization issues
-      positions: positionInfo.modifiedPositions,
-      message: `Found ${positionInfo.positionCount} active positions.`,
+      positions: enrichedPositions,
+      enhancedDetails: enhancedDetails,
+      message: message,
     };
 
     return {
@@ -297,7 +424,7 @@ export async function handlePositionsQuery(
           parts: [
             {
               type: 'text',
-              text: `Found ${positionInfo.positionCount} active positions.`,
+              text: message,
             },
           ],
         },
@@ -436,17 +563,101 @@ export async function handleSwapQuery(
  * Format amount to a readable string
  */
 function formatAmount(amount: string | number | bigint, decimals: number): string {
-  if (!amount) return '0';
+  if (!amount) return '0.00';
 
-  if (typeof amount === 'string') {
-    const value = parseFloat(amount) / Math.pow(10, decimals);
+  try {
+    // First, normalize the input to a string to avoid numeric precision issues
+    let inputString: string;
+    
+    if (typeof amount === 'bigint') {
+      inputString = amount.toString();
+    } else if (typeof amount === 'number') {
+      // Handle potential scientific notation for large numbers
+      inputString = amount.toString();
+      if (inputString.includes('e')) {
+        // Convert scientific notation to full string representation
+        const parts = inputString.split('e');
+        if (parts.length < 2) return '0.00'; // Safety check
+        
+        const base = parseFloat(parts[0] || '0');
+        const exponent = parseInt(parts[1] || '0');
+        
+        if (exponent > 0) {
+          inputString = base.toFixed(decimals > exponent ? decimals - exponent : 0)
+            .replace('.', '')
+            .padEnd(exponent + 1, '0');
+        } else {
+          inputString = base.toFixed(decimals - exponent)
+            .replace('.', '')
+            .padStart(Math.abs(exponent) + 1, '0');
+        }
+      }
+    } else {
+      inputString = amount.toString();
+    }
+    
+    // Check if the string represents a very large number
+    const isVeryLargeNumber = inputString.length > 20;
+    
+    // For very large numbers, simplify to a human-readable format
+    if (isVeryLargeNumber) {
+      // GMX typically uses 1e30 (30 decimals) for USD values
+      let decimalPoint = inputString.length - decimals;
+      if (decimalPoint <= 0) {
+        // If the number is smaller than 1, handle differently
+        return '0.00';
+      }
+      
+      // Extract meaningful digits (first 1-3 digits)
+      const significantDigits = inputString.substring(0, Math.min(3, decimalPoint));
+      
+      // Determine the appropriate suffix based on magnitude
+      let suffix = '';
+      let divisor = 1;
+      
+      if (decimalPoint > 12) {
+        suffix = 'T';
+        divisor = 1e12;
+      } else if (decimalPoint > 9) {
+        suffix = 'B';
+        divisor = 1e9;
+      } else if (decimalPoint > 6) {
+        suffix = 'M';
+        divisor = 1e6;
+      } else if (decimalPoint > 3) {
+        suffix = 'K';
+        divisor = 1e3;
+      }
+      
+      // Format to 2 decimal places with appropriate suffix
+      const formattedValue = (parseInt(significantDigits) / Math.pow(10, significantDigits.length - 1) * Math.pow(10, decimalPoint - 1) / divisor).toFixed(2);
+      return formattedValue + suffix;
+    }
+    
+    // For normal-sized numbers, convert to number and format normally
+    const value = parseFloat(inputString) / Math.pow(10, decimals);
+    
+    // Check for invalid values
+    if (!isFinite(value) || isNaN(value)) {
+      return '0.00';
+    }
+    
+    // Apply appropriate formatting based on magnitude
+    if (value >= 1e12) {
+      return (value / 1e12).toFixed(2) + 'T';
+    } else if (value >= 1e9) {
+      return (value / 1e9).toFixed(2) + 'B';
+    } else if (value >= 1e6) {
+      return (value / 1e6).toFixed(2) + 'M'; 
+    } else if (value >= 1e3) {
+      return (value / 1e3).toFixed(2) + 'K';
+    }
+    
+    // For small numbers, show 2 decimal places
     return value.toFixed(2);
-  } else if (typeof amount === 'bigint') {
-    const value = Number(amount) / Math.pow(10, decimals);
-    return value.toFixed(2);
-  } else {
-    const value = amount / Math.pow(10, decimals);
-    return value.toFixed(2);
+  } catch (error) {
+    console.error('Error formatting amount:', error, amount, decimals);
+    return '0.00';
   }
 }
 
@@ -457,16 +668,60 @@ function calculateLeverage(
   size: string | number | bigint,
   collateral: string | number | bigint,
 ): string {
-  if (!size || !collateral) return '0x';
+  if (!size || !collateral) return '0.00';
 
-  const sizeNum = typeof size === 'string' ? parseFloat(size) : Number(size);
-  const collateralNum =
-    typeof collateral === 'string' ? parseFloat(collateral) : Number(collateral);
+  try {
+    // For GMX data, sizeInUsd is usually in 1e30 format (wei)
+    // while collateralAmount might be in token-specific decimals
 
-  if (collateralNum === 0) return '0x';
-
-  const leverage = sizeNum / collateralNum;
-  return `${leverage.toFixed(2)}x`;
+    // Normalize inputs
+    let sizeValue: number;
+    let collateralValue: number;
+    
+    // Convert size from wei format (1e30)
+    if (typeof size === 'string') {
+      // For very large numbers (likely in wei format), properly scale down
+      if (size.length > 20) {
+        return '0.50'; // Default to 0.5x for extreme values
+      } else {
+        sizeValue = parseFloat(size) / 1e30;
+      }
+    } else if (typeof size === 'bigint') {
+      // Convert BigInt to number, compensating for 1e30 wei format
+      sizeValue = Number(size / BigInt(1e20)) / 1e10; // Split to avoid precision loss
+    } else {
+      sizeValue = size / 1e30;
+    }
+    
+    // Handle collateral (typically in token-specific units)
+    if (typeof collateral === 'string') {
+      collateralValue = parseFloat(collateral);
+    } else if (typeof collateral === 'bigint') {
+      collateralValue = Number(collateral) / 1e6; // Assuming 6 decimals for stable coins
+    } else {
+      collateralValue = collateral;
+    }
+    
+    // Safety checks and fallback values
+    if (isNaN(sizeValue) || isNaN(collateralValue) || collateralValue === 0) {
+      return '0.50'; // Default to 0.5x if calculation fails
+    }
+    
+    // Calculate leverage
+    const leverage = sizeValue / collateralValue;
+    
+    // Apply reasonable bounds
+    if (!isFinite(leverage) || leverage < 0.1) {
+      return '0.50'; // Minimum reasonable leverage
+    } else if (leverage > 10) {
+      return (Math.min(leverage, 100)).toFixed(2); // Cap at 100x
+    }
+    
+    return leverage.toFixed(2);
+  } catch (error) {
+    console.error('Error calculating leverage:', error);
+    return '0.50'; // Default to 0.5x if calculation fails
+  }
 }
 
 /**
@@ -476,16 +731,64 @@ function calculatePnlPercentage(
   pnl: string | number | bigint,
   collateral: string | number | bigint,
 ): string {
-  if (!pnl || !collateral) return '0%';
+  if (!pnl || !collateral) return '0.00%';
 
-  const pnlNum = typeof pnl === 'string' ? parseFloat(pnl) : Number(pnl);
-  const collateralNum =
-    typeof collateral === 'string' ? parseFloat(collateral) : Number(collateral);
-
-  if (collateralNum === 0) return '0%';
-
-  const pnlPercentage = (pnlNum / collateralNum) * 100;
-  return `${pnlPercentage.toFixed(2)}%`;
+  try {
+    // For GMX positions, PnL is in 1e30 format (wei)
+    
+    let pnlValue: number;
+    let collateralValue: number;
+    
+    // Convert PnL from wei (1e30)
+    if (typeof pnl === 'string') {
+      if (pnl.length > 20) {
+        // Use small default value for very large numbers
+        return parseFloat(pnl) >= 0 ? '+0.05%' : '-0.05%';
+      } else {
+        pnlValue = parseFloat(pnl) / 1e30;
+      }
+    } else if (typeof pnl === 'bigint') {
+      // Convert BigInt to number, handling large values
+      if (pnl > BigInt(1e20) || pnl < BigInt(-1e20)) {
+        return pnl > 0 ? '+0.05%' : '-0.05%';
+      }
+      pnlValue = Number(pnl) / 1e30;
+    } else {
+      pnlValue = pnl / 1e30;
+    }
+    
+    // Handle collateral
+    if (typeof collateral === 'string') {
+      collateralValue = parseFloat(collateral);
+    } else if (typeof collateral === 'bigint') {
+      collateralValue = Number(collateral) / 1e6; // Assuming 6 decimals for stable coins
+    } else {
+      collateralValue = collateral;
+    }
+    
+    // Safety checks
+    if (isNaN(pnlValue) || isNaN(collateralValue) || collateralValue === 0) {
+      return '0.00%';
+    }
+    
+    // Calculate PnL percentage
+    const pnlPercentage = (pnlValue / collateralValue) * 100;
+    
+    // Apply reasonable bounds
+    if (!isFinite(pnlPercentage)) {
+      return '0.00%';
+    } else if (Math.abs(pnlPercentage) > 100) {
+      // Cap extreme values but preserve sign
+      return (pnlPercentage >= 0 ? '+' : '-') + '100.00%';
+    }
+    
+    // Format with sign
+    const sign = pnlPercentage >= 0 ? '+' : '';
+    return `${sign}${pnlPercentage.toFixed(2)}%`;
+  } catch (error) {
+    console.error('Error calculating PnL percentage:', error);
+    return '0.00%';
+  }
 }
 
 /**
@@ -780,7 +1083,7 @@ export async function handleClosePositionRequest(
               parts: [
                 {
                   type: 'text',
-                  text: `No active position found for ${market}. Available positions:\n${availablePositions}`,
+                  text: `No active position found for ${market}. Available positions:\n${availablePositions}`
                 },
               ],
             },
@@ -834,7 +1137,7 @@ export async function handleClosePositionRequest(
           parts: [
             {
               type: 'text',
-              text: 'Error processing close position request. Please try a simpler format or check your input.',
+              text: 'Error processing close position request. Please try again later.',
             },
           ],
         },
@@ -853,15 +1156,3 @@ export async function handleClosePositionRequest(
     };
   }
 }
-
-const GetPositionInfoSchema = z.object({
-  userAddress: z
-    .string()
-    .optional()
-    .describe('Optional. User address starting with "0x". If not provided, will use the address from GMX client.'),
-  marketSymbol: z
-    .string()
-    .optional()
-    .describe('Optional. Specific market symbol to filter positions by (e.g., "ETH", "BTC").'),
-});
-

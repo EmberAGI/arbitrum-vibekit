@@ -368,6 +368,97 @@ export class Agent {
     console.error(...args);
   }
 
+  private async processToolResults(
+    responseMessages: any[]
+  ): Promise<Task | null> {
+    let processedToolResult: Task | null = null;
+    
+    // First pass: look for transaction tools (higher priority)
+    for (const message of responseMessages) {
+      if (message.role === 'tool' && Array.isArray(message.content)) {
+        for (const part of message.content) {
+          if (
+            part.type === 'tool-result' && 
+            ['createSwapOrder', 'createIncreasePosition', 'createDecreasePosition'].includes(part.toolName)
+          ) {
+            this.log(`Processing tool result for ${part.toolName} from response.messages`);
+            processedToolResult = part.result as Task;
+            this.log(
+              `${part.toolName} Result State: ${processedToolResult?.status?.state ?? 'N/A'}`,
+            );
+            const firstPart = processedToolResult?.status?.message?.parts[0];
+            const messageText = firstPart && isTextPart(firstPart) ? firstPart.text : 'N/A';
+            this.log(`${part.toolName} Result Message: ${messageText}`);
+            break;
+          }
+        }
+      }
+      if (processedToolResult) break;
+    }
+    
+    // Second pass: look for position info tool specifically to ensure we get the enriched data
+    if (!processedToolResult) {
+      for (const message of responseMessages) {
+        if (message.role === 'tool' && Array.isArray(message.content)) {
+          for (const part of message.content) {
+            if (
+              part.type === 'tool-result' &&
+              part.toolName === 'getPositionInfo'
+            ) {
+              this.log(`Processing getPositionInfo result with enriched data`);
+              processedToolResult = part.result as Task;
+              
+              // Log extra information about the enriched position data
+              if (processedToolResult?.artifacts && Array.isArray(processedToolResult.artifacts) && processedToolResult.artifacts.length > 0) {
+                const posInfoArtifact = processedToolResult.artifacts.find(a => a.name === 'positions-info');
+                if (posInfoArtifact && posInfoArtifact.parts && Array.isArray(posInfoArtifact.parts) && posInfoArtifact.parts.length > 0) {
+                  const partData = posInfoArtifact.parts[0];
+                  if (partData && typeof partData === 'object' && 'data' in partData) {
+                    const data = partData.data as any;
+                    this.log(`Position data contains ${data.positionCount || 0} positions`);
+                    if (data.enhancedDetails && Array.isArray(data.enhancedDetails) && data.enhancedDetails.length > 0) {
+                      this.log(`Enhanced position details available`);
+                    }
+                  }
+                }
+              }
+              
+              break;
+            }
+          }
+        }
+        if (processedToolResult) break;
+      }
+    }
+    
+    // Third pass: look for other info tools (lower priority) if no position tool was found
+    if (!processedToolResult) {
+      for (const message of responseMessages) {
+        if (message.role === 'tool' && Array.isArray(message.content)) {
+          for (const part of message.content) {
+            if (
+              part.type === 'tool-result' &&
+              ['getMarketInfo'].includes(part.toolName)
+            ) {
+              this.log(`Processing tool result for ${part.toolName} from response.messages`);
+              processedToolResult = part.result as Task;
+              this.log(
+                `${part.toolName} Result State: ${processedToolResult?.status?.state ?? 'N/A'}`,
+              );
+              const firstPart = processedToolResult?.status?.message?.parts[0];
+              const messageText = firstPart && isTextPart(firstPart) ? firstPart.text : 'N/A';
+              this.log(`${part.toolName} Result Message: ${messageText}`);
+              break;
+            }
+          }
+        }
+        if (processedToolResult) break;
+      }
+    }
+    
+    return processedToolResult;
+  }
+
   /**
    * Process user input and return a Task
    * This matches the pattern from swapping-agent-no-wallet
@@ -380,10 +471,6 @@ export class Agent {
     this.log(`Processing user message: ${userInput}`);
 
     // Add user message to conversation history
-    // if (this.userAddress) {
-    //   userInput = `User address: ${this.userAddress}\n${userInput}`;
-    // }
-
     const userMessage: CoreUserMessage = { role: 'user', content: userInput };
     this.conversationHistory.push(userMessage);
 
@@ -418,56 +505,8 @@ export class Agent {
 
       this.conversationHistory.push(...response.messages);
 
-      // --- Process Tool Results from response.messages ---
-      let processedToolResult: Task | null = null;
-      // First pass: look for transaction tools (higher priority)
-      for (const message of response.messages) {
-        if (message.role === 'tool' && Array.isArray(message.content)) {
-          for (const part of message.content) {
-            if (
-              part.type === 'tool-result' && 
-              ['createSwapOrder', 'createIncreasePosition', 'createDecreasePosition'].includes(part.toolName)
-            ) {
-              this.log(`Processing tool result for ${part.toolName} from response.messages`);
-              processedToolResult = part.result as Task;
-              this.log(
-                `${part.toolName} Result State: ${processedToolResult?.status?.state ?? 'N/A'}`,
-              );
-              const firstPart = processedToolResult?.status?.message?.parts[0];
-              const messageText = firstPart && isTextPart(firstPart) ? firstPart.text : 'N/A';
-              this.log(`${part.toolName} Result Message: ${messageText}`);
-              break;
-            }
-          }
-        }
-        if (processedToolResult) break;
-      }
-      
-      // Second pass: look for info tools (lower priority) if no transaction tool was found
-      if (!processedToolResult) {
-        for (const message of response.messages) {
-          if (message.role === 'tool' && Array.isArray(message.content)) {
-            for (const part of message.content) {
-              if (
-                part.type === 'tool-result' &&
-                ['getMarketInfo', 'getPositionInfo'].includes(part.toolName)
-              ) {
-                this.log(`Processing tool result for ${part.toolName} from response.messages`);
-                processedToolResult = part.result as Task;
-                this.log(
-                  `${part.toolName} Result State: ${processedToolResult?.status?.state ?? 'N/A'}`,
-                );
-                const firstPart = processedToolResult?.status?.message?.parts[0];
-                const messageText = firstPart && isTextPart(firstPart) ? firstPart.text : 'N/A';
-                this.log(`${part.toolName} Result Message: ${messageText}`);
-                break;
-              }
-            }
-          }
-          if (processedToolResult) break;
-        }
-      }
-      // --- End Process Tool Results ---
+      // Process tool results to find the most appropriate one to return
+      const processedToolResult = await this.processToolResults(response.messages);
 
       if (!processedToolResult) {
         console.log('No processedToolResult found');
