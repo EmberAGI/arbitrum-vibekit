@@ -374,6 +374,7 @@ export async function handleSwapQuery(
             role: 'agent',
             parts: [{ type: 'text', text: `Failed to create swap order: ${swapOrder.message}` }],
           },
+
         },
         artifacts: [],
       };
@@ -863,3 +864,4 @@ const GetPositionInfoSchema = z.object({
     .optional()
     .describe('Optional. Specific market symbol to filter positions by (e.g., "ETH", "BTC").'),
 });
+
