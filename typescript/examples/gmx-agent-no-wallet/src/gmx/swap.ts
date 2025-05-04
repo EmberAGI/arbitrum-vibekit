@@ -15,17 +15,9 @@ export async function createSwapOrder(
   args: CreateSwapOrderParams,
 ): Promise<any> {
   try {
-    // Check if wallet is connected
-    // Set the account if provided
-    if (args.userAddress) {
-      gmxClient.setAccount(args.userAddress as `0x${string}`);
-    } else if (!gmxClient.account) {
-      throw new Error('No account provided and no account set in GMX client');
-    }
-
     // Ensure we have a wallet client with an account
-    if (!gmxClient.walletClient?.account) {
-      throw new Error('No wallet client or account available for transaction');
+    if (!gmxClient.account) {
+      throw new Error('No account available in GMX client');
     }
 
     const { isLimit, fromToken, toToken, amount, slippage } = args;

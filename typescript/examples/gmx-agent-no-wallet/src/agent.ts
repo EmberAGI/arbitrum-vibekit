@@ -47,12 +47,12 @@ const GetMarketInfoSchema = z.object({
 });
 
 const GetPositionInfoSchema = z.object({
-  userAddress: z
-    .string()
-    // .regex(/^0x[a-fA-F0-9]{40}$/)
-    .describe(
-      'Required. User address starting with "0x". Example: 0x1234567890abcdef1234567890abcdef12345678.',
-    ),
+  // userAddress: z
+  //   .string()
+  //   // .regex(/^0x[a-fA-F0-9]{40}$/)
+  //   .describe(
+  //     'Required. User address starting with "0x". Example: 0x1234567890abcdef1234567890abcdef12345678.',
+  //   ),
   marketSymbol: z
     .string()
     .optional()
@@ -126,7 +126,7 @@ export class Agent {
     
     You have access to the following tools:
     - getMarketInfo: Retrieve information about available GMX markets and trading pairs.
-    - getPositionInfo: Retrieve open positions for a user by wallet address.
+    - getPositionInfo: Retrieve open positions for the connected wallet.
     - createIncreasePosition: Open or increase a position (simulated; no real wallet interaction).
     - createDecreasePosition: Decrease or close a position (simulated; no real wallet interaction).
     - createSwapOrder: Create a swap order.
@@ -137,8 +137,9 @@ export class Agent {
     - When a tool is required, DO NOT reply with text — trigger the tool immediately.
     
     POSITION QUERIES:
-    - If the user asks about their positions or mentions a wallet address (0x followed by 40 hex characters), you MUST call getPositionInfo.
+    - If the user asks about their positions, you MUST call getPositionInfo.
     - Never answer manually for position queries.
+    - The wallet address is already set in the GMX client, so you don't need to ask for it.
     
     MARKET INFORMATION QUERIES:
     - If the user asks about available markets, funding rates, token pairs, or fees, use getMarketInfo.
@@ -153,8 +154,7 @@ export class Agent {
     Get me the market info for LINK
     Get me the market info for UNI
 
-    You MUST call getMarketInfo with the token symbol (e.g., "BTC", "ETH") extracted from the user's request and ignore the user address.
-    You MUST NOT call getPositionInfo with the user address.
+    You MUST call getMarketInfo with the token symbol (e.g., "BTC", "ETH") extracted from the user's request.
     
     When the user requests creating, opening, closing, increasing, decreasing, buying, selling, longing, or shorting a position:
     
@@ -220,6 +220,7 @@ export class Agent {
     REMEMBER:
     - Prefer tool calls over freeform text responses.
     - Always maintain the chain: getMarketInfo → action (increase/decrease).
+    - The wallet address is already set in the GMX client, so you don't need to ask for it.
         `,
       },
     ];

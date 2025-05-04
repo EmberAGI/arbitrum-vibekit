@@ -10,13 +10,10 @@ import { convertBigIntToString } from './util.js';
  * @param account - The account address to get positions for
  * @returns Position information with analysis
  */
-export async function getPositionInfo(gmxClient: GmxSdk, account?: string) {
+export async function getPositionInfo(gmxClient: GmxSdk) {
   try {
-    // Set the account if provided
-    if (account) {
-      gmxClient.setAccount(account as `0x${string}`);
-    } else if (!gmxClient.account) {
-      throw new Error('No account provided and no account set in GMX client');
+    if (!gmxClient.account) {
+      throw new Error('No account available in GMX client');
     }
 
     console.log('Getting position info for account:', gmxClient.account);

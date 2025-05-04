@@ -65,7 +65,10 @@ const DecreasePositionSchema = z.object({
 
 // Schema for creating a swap order
 const CreateSwapOrderSchema = z.object({
-  userAddress: z.string().describe('The user address to swap for'),
+  // userAddress: z
+  //   .string()
+  //   .optional()
+  //   .describe('Optional. User address starting with "0x". If not provided, will use the address from GMX client.'),
   fromToken: z.string().describe('The token to swap from'),
   toToken: z.string().describe('The token to swap to'),
   amount: z.string().describe('The amount of tokens to swap'),
@@ -80,7 +83,10 @@ export type CreateSwapOrderParams = z.infer<typeof CreateSwapOrderSchema>;
 // Define schemas for GMX agent handlers
 export const GmxQuerySchema = z.object({
   instruction: z.string(),
-  userAddress: z.string().optional(),
+  // userAddress: z
+  //   .string()
+  //   .optional()
+  //   .describe('Optional. User address starting with "0x". If not provided, will use the address from GMX client.'),
 });
 
 export interface HandlerContext {
@@ -246,26 +252,12 @@ export async function handleMarketsQuery(
  * Handle positions query
  */
 export async function handlePositionsQuery(
-  args: { marketSymbol?: string; userAddress: string },
+  args: { marketSymbol?: string },
   context: HandlerContext,
 ): Promise<Task> {
   try {
-    if (!args.userAddress) {
-      return {
-        id: 'positions-query',
-        status: {
-          state: 'failed',
-          message: {
-            role: 'agent',
-            parts: [{ type: 'text', text: 'No user address provided' }],
-          },
-        },
-        artifacts: [],
-      };
-    }
-
     console.log('Debug: getting position info');
-    const positionInfo = await getPositionInfo(context.gmxClient, args.userAddress);
+    const positionInfo = await getPositionInfo(context.gmxClient);
 
     if (!positionInfo.success) {
       return {
@@ -730,11 +722,8 @@ export async function handleClosePositionRequest(
       const marketMatches = instruction.match(/\b(ETH|BTC|LINK|UNI|ARB|SOL|AVAX)\b/i);
       const market = marketMatches ? marketMatches[0].toUpperCase() : 'ETH';
 
-      // Use a demo account address if one is provided in .env, otherwise use a placeholder
-      const demoAccount = process.env.DEMO_ACCOUNT || '0x0000000000000000000000000000000000000000';
-
       // Get position information to check if the position exists
-      const positionInfo = await getPositionInfo(context.gmxClient, demoAccount);
+      const positionInfo = await getPositionInfo(context.gmxClient);
 
       if (!positionInfo.success) {
         return {
@@ -862,3 +851,14 @@ export async function handleClosePositionRequest(
     };
   }
 }
+
+const GetPositionInfoSchema = z.object({
+  userAddress: z
+    .string()
+    .optional()
+    .describe('Optional. User address starting with "0x". If not provided, will use the address from GMX client.'),
+  marketSymbol: z
+    .string()
+    .optional()
+    .describe('Optional. Specific market symbol to filter positions by (e.g., "ETH", "BTC").'),
+});
