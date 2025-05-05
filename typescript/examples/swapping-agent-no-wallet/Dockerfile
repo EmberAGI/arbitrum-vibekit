@@ -55,6 +55,9 @@ WORKDIR /app
 # Install pnpm globally
 RUN npm install -g pnpm@10.7.0
 
+# Copy enclyclopedia files for agent reading
+COPY ./examples/swapping-agent-no-wallet/encyclopedia ./examples/swapping-agent-no-wallet/encyclopedia
+
 # Copy only what we need from the builder stage
 COPY --from=builder /app/examples/swapping-agent-no-wallet/dist /app/examples/swapping-agent-no-wallet/dist
 COPY --from=builder /app/examples/swapping-agent-no-wallet/package.json /app/examples/swapping-agent-no-wallet/

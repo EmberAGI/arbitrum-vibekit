@@ -19,7 +19,6 @@ There are two main ways to start an agent:
   ```
   cd typescript
   pnpm install
-  pnpm build
   ```
 
   Next, run the MCP-enabled Docker container to start your agent. Replace the `"agent-name"` with the name of your desired agent, for example: `"swapping-agent-no-wallet"`.
@@ -34,7 +33,19 @@ There are two main ways to start an agent:
   sudo pnpm --filter "agent-name" docker:compose:up
   ```
 
-- **Local Development**:
+  **Running on background**: If you want to run the agent in the background so you can keep using your terminal, you can use the `-d` flag:
+
+  ```
+  pnpm --filter "agent-name" docker:compose:up -d
+  ```
+
+  If you want to stop the agent afterwards, you can use the following command:
+
+  ```
+  pnpm --filter "agent-name" docker:compose:down
+  ```
+
+- **Running locally**:
 
   Navigate to the `typescript` directory and run the following `pnpm` commands to build
   your agent. Replace the `"agent-name"` with the name of your desired agent, for example: `"swapping-agent-no-wallet"`.
@@ -43,6 +54,7 @@ There are two main ways to start an agent:
   cd typescript
   pnpm --filter "agent-name" install
   pnpm --filter "agent-name" build
+  pnpm --filter "agent-name" dev
   ```
 
 ### 3. Interact with the Agent

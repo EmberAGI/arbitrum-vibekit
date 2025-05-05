@@ -201,8 +201,8 @@ export class Agent {
         role: 'system',
         content: `You are an AI agent that provides access to blockchain swapping functionalities via Ember AI On-chain Actions. You use the tool "swapTokens" to swap or convert tokens. You can also answer questions about Camelot DEX using the "askEncyclopedia" tool.
 
-Available actions: 
-- swapTokens: Only use if the user has provided the required parameters. 
+Available actions:
+- swapTokens: Only use if the user has provided the required parameters.
 - askEncyclopedia: Use when the user asks questions about Camelot DEX.
 
 <examples>
@@ -610,7 +610,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
   private async _loadCamelotDocumentation(): Promise<void> {
     const defaultDocsPath = path.resolve(__dirname, '../encyclopedia');
     const docsPath = defaultDocsPath;
-    const filePaths = [path.join(docsPath, 'camelot-01.md'), path.join(docsPath, 'camelot-02.md')];
+    const filePaths = [path.join(docsPath, 'camelot-01.md')];
     let combinedContent = '';
 
     this.log(`Loading Camelot documentation from: ${docsPath}`);
