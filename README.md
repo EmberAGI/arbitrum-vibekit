@@ -1,6 +1,10 @@
 ![Graphic](img/Graphic.png)
 
-## Table of Contents
+<p align="center"> 
+   📃 <a href="">Documentation </a> &nbsp&nbsp | &nbsp&nbsp 🎨  <a href=""> GUI </a> &nbsp&nbsp | &nbsp&nbsp 💬  <a href=""> Discord </a>
+</p>
+
+## 🧭 Table of Contents
 
 - [Introduction](#introduction)
 - [Repository Organization](#repository-organization)
@@ -9,7 +13,7 @@
 - [MCP Tools Integration](#mcp-tools-integration)
 - [Contribution](#contribution)
 
-## Introduction
+## 📙 Introduction
 
 Vibekit is a versatile toolkit for rapidly developing DeFi agents. It enables autonomous on-chain operations and advanced DeFi interactions while integrating on-chain and off-chain data sources for powerful workflows. Vibekit offers ready-to-use implementations and templates across various sectors, helping you build production-ready agents in minutes.
 
@@ -17,7 +21,7 @@ At the core of Vibekit is support for the Model Context Protocol (MCP), which st
 
 We welcome contributions from the community! If you’d like to help improve Vibekit —whether by adding new agent templates, adding new MCP tools, or fixing bugs— please check out our [Contributing Guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md). To show our appreciation, we’re launching an incentive program that will reward valuable contributions. Join us in pushing the boundaries of DeFi innovation!
 
-## Repository Organization
+## 🧬 Repository Organization
 
 Vibekit follows a monorepo structure, primarily focused on TypeScript packages. A Rust implementation is planned for release in the near future.
 
@@ -40,7 +44,7 @@ vibekit/
 ├── README.md
 ```
 
-## Quickstart
+## ⚡ Quickstart
 
 You can easily create a DeFi agent by following this guide:
 
@@ -61,17 +65,15 @@ You can easily create a DeFi agent by following this guide:
 
 You are now prepared to leverage the sample implementations within our [`examples`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) directory to extend your agent's capabilities.
 
-## IDE Setup
+## 🛠️ IDE Setup
 
 To get the most out of Vibekit, we recommend using a vibe coding workflow: an approach that pairs AI copilots with structured tool contexts for a more fluid, conversational, and iterative development process. Below, you’ll find instructions on configuring your environment to set up a vibe coding workflow.
 
-### What is Vibe Coding?
+### 🎧 What is Vibe Coding?
 
 Vibe coding is a method of working side-by-side with an AI assistant in a shared environment that includes your project’s folder structure, tool capabilities, and any relevant data or schema, making its suggestions more targeted and accurate. Instead of issuing isolated prompts, you continuously refine your code within this context. This is particularly helpful when building agents, as you can dynamically piece together different tools and execution logic, while the AI remains aware of the larger project structure and goals.
 
-### Cursor
-
-We recommend using the Cursor IDE, which is built specifically for vibe coding with LLMs. Cursor allows you to:
+We recommend using the [Cursor IDE](https://www.cursor.com/), which is built specifically for vibe coding with LLMs. Cursor allows you to:
 
 - Define project context via simple rule files defined in Cursor's dedicated [.cursor/rules](https://docs.cursor.com/context/rules) folder.
 
@@ -79,7 +81,7 @@ We recommend using the Cursor IDE, which is built specifically for vibe coding w
 
 - Integrate with [MCP-powered](https://docs.cursor.com/context/model-context-protocol) tools and workflows.
 
-### Agent Context
+### 🤖 Agent Context
 
 You can provide the following structured context in the `.cursor/rules` folder (or for any other AI agent) to work effectively with Arbitrum Vibekit:
 
@@ -112,12 +114,12 @@ Rely on environment variables to transition between local and mainnet configurat
 Never hard‑code sensitive data; always source credentials and user inputs from environment variables or secure store.
 ```
 
-## MCP Tools Integration
+## 🔌 MCP Tools Integration
 
 Model Context Protocol (MCP) integration facilitates data connectivity between external providers and on-chain agents. In a typical MCP‑based system, tools are first registered with the MCP server, and the agents integrate by connecting to the server and discovering the registered tools. The agents then autonomously determine the optimal timing and method for calling each tool to fulfill complex tasks. After each invocation, the agent processes the returned results and incorporates them into its broader workflow, ensuring coherent outcomes. To learn more about the Model Context Protocol, visit the [official documentation](https://modelcontextprotocol.io/introduction) page.
 
 The [`mcp-tools`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools) directory contains templates (`emberai-mcp/src/index.ts`) and guidelines for building these tools with minimal configuration.
 
-## Contribution
+## 🙌 Contribution
 
 If you wish to contribute to the project, please follow the CONTRIBUTIONS.md guidelines.
