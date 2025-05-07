@@ -1,7 +1,7 @@
 ![Graphic](img/Graphic.png)
 
 <p align="center"> 
-   📃 <a href="https://ember-ai.gitbook.io/arbitrum-vibekit">Documentation </a> &nbsp&nbsp | &nbsp&nbsp 🤖  <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/simplify-docs/typescript/examples"> Agent Templates</a>  &nbsp&nbsp | &nbsp&nbsp 🎨  <a href="https://questbook.emberai.xyz/"> GUI </a> &nbsp&nbsp | &nbsp&nbsp  💬  <a href=""> Discord </a>  &nbsp&nbsp |  &nbsp&nbsp  <a href=""> 𝕏 </a>   &nbsp&nbsp
+   📃 <a href="https://ember-ai.gitbook.io/arbitrum-vibekit">Documentation </a> &nbsp&nbsp | &nbsp&nbsp 🤖  <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples"> Agent Templates</a>  &nbsp&nbsp | &nbsp&nbsp 🎨  <a href="https://questbook.emberai.xyz/"> GUI </a> &nbsp&nbsp | &nbsp&nbsp  💬  <a > Discord </a>  &nbsp&nbsp |  &nbsp&nbsp  <a > 𝕏 </a>   &nbsp&nbsp
 </p>
 
 ## 🧭 Table of Contents
@@ -169,7 +169,7 @@ Vibe coding is all about teaming up with AI to streamline your development proce
 
 Vibekit enables you to build and customize DeFi agents using vibe coding. Whether you're creating a swapping agent, a lending agent, or a liquidity provider, you can describe your agent's behavior in natural language and let the AI help you implement it. The framework provides pre-built tools for common DeFi operations, MCP integration for external data, and a structured way to define your agent's capabilities through rules files.
 
-#### 🛠️ Setting Up Your IDE
+### 🛠️ Setting Up Your IDE
 
 To get started, we recommend using the [Cursor IDE](https://www.cursor.com/), an AI-powered development environment designed for smooth collaboration between you and your AI assistant. With Cursor, you can:
 
@@ -186,11 +186,11 @@ To clone Vibekit in Cursor:
 3. Choose your local directory and click "Clone".
 4. Once cloned, Cursor will automatically detect the `.cursor/rules` folder and set up the AI context.
 
-#### 🧠 Crafting Effective AI Prompts
+### 🧠 Crafting Effective AI Prompts
 
 To make the most of vibe coding, it's important to provide your AI assistant with clear and structured context. In the `.cursor/rules` folder, you can define the scope of your project, including its purpose, key components, and any relevant data schemas.
 
-##### 📝 Vibekit's Cursor Rules Files Structure
+#### 📝 Vibekit's Cursor Rules Files Structure
 
 Vibekit's rules files are located in the project's [.cursor/rules](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/.cursor/rules) directory and include:
 
@@ -214,18 +214,18 @@ Vibekit's rules files are located in the project's [.cursor/rules](https://githu
    - Best practices
    - Troubleshooting guides
 
-##### 🔄 Extending and Maintaining Rules
+#### 🔄 Extending and Maintaining Rules
 
 To add new rules or modify existing ones:
 
 1. **Create New Rules**
 
-   - You can create a new `.mdc` file in `.cursor/rules` when:
-     - Adding a new agent type (e.g., `lending-agent.mdc` for lending operations)
-     - Creating a new tool category (e.g., `price-feeds.mdc` for price oracle tools)
-     - Defining a new workflow (e.g., `cross-chain-swaps.mdc` for cross-chain operations)
-   - Follow the structure in `createAgent.mdc` for agent rules
-   - Include clear documentation and examples
+- You can create a new `.mdc` file in `.cursor/rules` when:
+  - Adding a new agent type (e.g., `lending-agent.mdc` for lending operations)
+  - Creating a new tool category (e.g., `price-feeds.mdc` for price oracle tools)
+  - Defining a new workflow (e.g., `cross-chain-swaps.mdc` for cross-chain operations)
+- Follow the structure in `createAgent.mdc` for agent rules
+- Include clear documentation and examples
 
 2. **Update Existing Rules**
 
