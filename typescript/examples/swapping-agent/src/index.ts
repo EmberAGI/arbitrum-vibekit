@@ -102,7 +102,7 @@ app.get('/sse', async (_req, res) => {
       return;
     }
     res.write(':keepalive\n\n');
-  }, 30000);
+  }, 90000);
 
   _req.on('close', () => {
     clearInterval(keepaliveInterval);
