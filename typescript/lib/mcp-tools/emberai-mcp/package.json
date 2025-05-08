@@ -28,7 +28,7 @@
   "license": "ISC",
   "packageManager": "pnpm@10.7.0",
   "dependencies": {
-    "@emberai/sdk-typescript": "file:../../../../../ember-sdk-typescript",
+    "@emberai/sdk-typescript": "0.3.0-beta.7",
     "@grpc/grpc-js": "^1.13.2",
     "@modelcontextprotocol/sdk": "^1.9.0",
     "zod": "^3.24.2"

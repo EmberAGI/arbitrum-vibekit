@@ -1,6 +1,5 @@
 import { Agent } from './agent.js';
-import { type Address } from 'viem';
-import { mnemonicToAccount } from 'viem/accounts';
+import { type Address, isAddress } from 'viem';
 import * as dotenv from 'dotenv';
 import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -18,50 +17,42 @@ const server = new McpServer({
 let agent: Agent;
 
 const initializeAgent = async (): Promise<void> => {
-  const mnemonic = process.env.MNEMONIC;
-  if (!mnemonic) {
-    throw new Error('MNEMONIC not found in the .env file.');
-  }
-
   const quicknodeSubdomain = process.env.QUICKNODE_SUBDOMAIN;
   const apiKey = process.env.QUICKNODE_API_KEY;
   if (!quicknodeSubdomain || !apiKey) {
     throw new Error('QUICKNODE_SUBDOMAIN and QUICKNODE_API_KEY must be set in the .env file.');
   }
 
-  const account = mnemonicToAccount(mnemonic);
-  const userAddress: Address = account.address;
-  console.error(`Using wallet ${userAddress}`);
-
-  agent = new Agent(account, userAddress, quicknodeSubdomain, apiKey);
+  agent = new Agent(quicknodeSubdomain, apiKey);
   await agent.init();
 };
 
+// Define tool name and description for clarity
+const agentToolName = 'askYieldTokenizationAgent';
+const agentToolDescription =
+  'Sends a free-form, natural-language instruction to the Pendle yield tokenization agent via Ember AI On-chain Actions, returning market information or a structured swap transaction plan. Example: "Swap 0.00001 wstETH to wstETH_YT via wstETH market on arbitrum one".';
 server.tool(
-  'chat',
-  'execute swapping tools using Ember On-chain Actions',
+  agentToolName,
+  agentToolDescription,
   {
-    userInput: z.string(),
+    instruction: z.string().describe('A natural-language directive for the Pendle agent.'),
+    userAddress: z.string().describe('The user wallet address for external signing.'),
   },
-  async (args: { userInput: string }) => {
+  async (args: { instruction: string; userAddress: string }) => {
+    if (!isAddress(args.userAddress)) {
+      throw new Error('Invalid userAddress provided.');
+    }
     try {
-      const result = await agent.processUserInput(args.userInput);
+      const taskResponse = await agent.processUserInput(args.instruction, args.userAddress);
 
-      console.error('[server.tool] result', result);
+      console.error('[server.tool] result', taskResponse);
 
-      const responseText =
-        typeof result?.content === 'string'
-          ? result.content
-          : (JSON.stringify(result?.content) ?? 'Error: Could not get a response from the agent.');
+      const responseText = JSON.stringify(taskResponse);
 
-      return {
-        content: [{ type: 'text', text: responseText }],
-      };
+      return { content: [{ type: 'text', text: responseText }] };
     } catch (error: unknown) {
       const err = error as Error;
-      return {
-        content: [{ type: 'text', text: `Error: ${err.message}` }],
-      };
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }] };
     }
   }
 );
@@ -72,7 +63,7 @@ app.use(cors());
 
 app.get('/', (_req, res) => {
   res.json({
-    name: 'MCP SSE Agent Server',
+    name: 'MCP SSE Pendle Agent Server',
     version: '1.0.0',
     status: 'running',
     endpoints: {
@@ -80,13 +71,11 @@ app.get('/', (_req, res) => {
       '/sse': 'Server-Sent Events endpoint for MCP connection',
       '/messages': 'POST endpoint for MCP messages',
     },
-    tools: [
-      { name: 'chat', description: 'Chat with Pendle agent to perform swaps, list markets, and more' }
-    ],
+    tools: [{ name: agentToolName, description: agentToolDescription }],
     capabilities: {
-      markets: 'List Pendle markets',
-      swap: 'Swap between Pendle PT/YT tokens and underlying assets',
-    }
+      markets: 'List available Pendle yield markets',
+      swap: 'Generate swap transaction plans for Pendle tokens',
+    },
   });
 });
 

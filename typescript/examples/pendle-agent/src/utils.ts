@@ -24,4 +24,4 @@ export function getChainConfigById(chainId: string): ChainConfig {
     throw new Error(`Unsupported chainId: ${chainId}. Please update chainIdMap.`);
   }
   return config;
-} 
+}
