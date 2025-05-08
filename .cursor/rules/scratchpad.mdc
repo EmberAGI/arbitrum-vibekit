@@ -63,7 +63,13 @@ We want to **refactor the Pendle agent to adopt the same no-wallet pattern** so 
 - [x] **T6** – Clean up imports, env docs & README.  
   Success: `pnpm lint` passes.
 
-- [ ] **T7** – Manual integration test: call `chat` tool with swap instruction and confirm JSON artifact output (no on-chain submission).
+- [x] **T7** – Manual integration test: call `chat` tool with swap instruction and confirm JSON artifact output (no on-chain submission).
+
+- [x] **T8** – Add Docker support for Pendle agent:
+   • Create `Dockerfile` based on `liquidity-agent-no-wallet` with updated paths for `pendle-agent`.
+   • Create `docker-compose.yml` referencing the new Dockerfile and `.env` file.
+   • Update `package.json` scripts (`docker:build`, `docker:run`) to use `pendle-agent` image.
+   Success: Able to build and run via Docker Compose; instruction tool responds over SSE.
 
 ---
 
@@ -74,7 +80,8 @@ We want to **refactor the Pendle agent to adopt the same no-wallet pattern** so 
 - [x] T4 – Refactor handlers
 - [x] T5 – Update server bootstrap
 - [x] T6 – Cleanup & lint
-- [ ] T7 – Manual test & verification
+- [x] T7 – Manual test & verification
+- [x] T8 – Add Docker support
 
 ---
 
@@ -85,6 +92,8 @@ We want to **refactor the Pendle agent to adopt the same no-wallet pattern** so 
 - Completed T4: Refactored `agentToolHandlers.ts` to remove execute calls and return a `Task` with a `swap-transaction` artifact containing the transaction plan. Ready for T5.
 - Completed T5: Updated `index.ts` to remove mnemonic logic, accept QuickNode credentials only, renamed tool to `instruction` with `instruction` and `userAddress` params, and updated the root endpoint listing. Ready for cleanup, lint, and documentation updates (T6).
 - Completed T6: Ran Prettier to fix formatting issues and compiled the project to ensure no type errors. Ready for manual integration test (T7).
+- Completed T7: Manual integration test passed.
+- Completed T8: Docker support added and verified.
 
 ---
 
