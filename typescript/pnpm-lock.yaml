@@ -38,7 +38,7 @@ importers:
         version: 5.0.1
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(zod@3.24.3)
+        version: link:../../lib/a2a
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
@@ -209,7 +209,7 @@ importers:
         version: 5.0.1
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(zod@3.24.3)
+        version: file:lib/a2a(ws@8.18.1)(zod@3.24.3)
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
@@ -2763,6 +2763,7 @@ snapshots:
   '@emberai/sdk-typescript@file:../../ember-sdk-typescript':
     dependencies:
       '@bufbuild/protobuf': 2.2.5
+      '@openzeppelin/contracts': 5.3.0
       p-retry: 6.2.1
       ts-pattern: 5.7.0
 
@@ -3743,7 +3744,7 @@ snapshots:
 
   '@types/tough-cookie@4.0.5': {}
 
-  a2a-samples-js@file:lib/a2a(zod@3.24.3):
+  a2a-samples-js@file:lib/a2a(ws@8.18.1)(zod@3.24.3):
     dependencies:
       '@genkit-ai/googleai': 1.6.0(genkit@1.6.0)
       '@genkit-ai/vertexai': 1.6.0(genkit@1.6.0)(ws@8.18.1)(zod@3.24.3)

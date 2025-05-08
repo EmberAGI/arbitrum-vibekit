@@ -85,16 +85,16 @@ export type GetPendleMarketsRequestArgs = z.infer<
   typeof GetPendleMarketsRequestSchema
 >
 
-export const PendleMarketSchema = z.object({
+export const YieldMarketSchema = z.object({
   name: z
     .string()
-    .describe('The name of the Pendle market.'),
+    .describe('The name of the yield market.'),
   address: z
     .string()
-    .describe('The address of the Pendle market.'),
+    .describe('The address of the yield market.'),
   expiry: z
     .string()
-    .describe('The expiry identifier of the Pendle market.'),
+    .describe('The expiry identifier of the yield market.'),
   pt: z
     .string()
     .describe('The address of the PT (principal token).'),
@@ -109,17 +109,17 @@ export const PendleMarketSchema = z.object({
   ),
   chainId: z
     .string()
-    .describe('The chain ID on which this Pendle market exists.'),
+    .describe('The chain ID on which this yield market exists.'),
 })
-export type PendleMarket = z.infer<typeof PendleMarketSchema>
+export type YieldMarket = z.infer<typeof YieldMarketSchema>
 
-export const GetPendleMarketsResponseSchema = z.object({
+export const GetYieldMarketsResponseSchema = z.object({
   markets: z
-    .array(PendleMarketSchema)
-    .describe('List of Pendle markets matching the request criteria.'),
+    .array(YieldMarketSchema)
+    .describe('List of yield markets matching the request criteria.'),
 })
-export type GetPendleMarketsResponse = z.infer<
-  typeof GetPendleMarketsResponseSchema
+export type GetYieldMarketsResponse = z.infer<
+  typeof GetYieldMarketsResponseSchema
 >
 
 export const SwapTokensSchema = z.object({
@@ -138,7 +138,7 @@ export const SwapTokensSchema = z.object({
 });
 export type SwapTokensArgs = z.infer<typeof SwapTokensSchema>;
 
-type PendleToolSet = {
+type YieldToolSet = {
   listMarkets: Tool<z.ZodObject<{}>, Awaited<string>>;
   swapTokens: Tool<typeof SwapTokensSchema, Awaited<string>>;
 };
@@ -158,8 +158,8 @@ export class Agent {
   private availableTokens: string[] = [];
   public conversationHistory: CoreMessage[] = [];
   private mcpClient: Client;
-  private toolSet: PendleToolSet | null = null;
-  private pendleMarkets: PendleMarket[] = [];
+  private toolSet: YieldToolSet | null = null;
+  private yieldMarkets: YieldMarket[] = [];
 
   constructor(
     account: LocalAccount<string>,
@@ -198,30 +198,29 @@ export class Agent {
     return context;
   }
 
-  private populatePendleTokens(markets: PendleMarket[]) {
+  private populatePendleTokens(markets: YieldMarket[]) {
     if (!markets || markets.length === 0) {
-      this.log('No Pendle markets to process for token population');
+      this.log('No yield markets to process for token population');
       return;
     }
-    
-    this.log(`Processing ${markets.length} Pendle markets to extract PT and YT tokens...`);
+
+    this.log(`Processing ${markets.length} yield markets to extract PT and YT tokens...`);
     let ptTokensAdded = 0;
     let ytTokensAdded = 0;
-    
+
     markets.forEach(market => {
       const chainId = market.chainId;
       const baseSymbol = market.underlyingAsset?.symbol || market.name;
       const baseName = market.underlyingAsset?.name || market.name;
-      
+
       // Add PT token
       const ptSymbol = `${baseSymbol}_PT`;
-      const ptName = `${baseName} PT`;
-      
+
       if (!this.tokenMap[ptSymbol]) {
         this.tokenMap[ptSymbol] = [];
         this.availableTokens.push(ptSymbol);
       }
-      
+
       // Check if this PT token for this chain is already added
       const existingPtForChain = this.tokenMap[ptSymbol].find(token => token.chainId === chainId);
       if (!existingPtForChain) {
@@ -231,16 +230,15 @@ export class Agent {
         });
         ptTokensAdded++;
       }
-      
+
       // Add YT token
       const ytSymbol = `${baseSymbol}_YT`;
-      const ytName = `${baseName} YT`;
-      
+
       if (!this.tokenMap[ytSymbol]) {
         this.tokenMap[ytSymbol] = [];
         this.availableTokens.push(ytSymbol);
       }
-      
+
       // Check if this YT token for this chain is already added
       const existingYtForChain = this.tokenMap[ytSymbol].find(token => token.chainId === chainId);
       if (!existingYtForChain) {
@@ -251,7 +249,7 @@ export class Agent {
         ytTokensAdded++;
       }
     });
-    
+
     this.log(`Added ${ptTokensAdded} PT tokens and ${ytTokensAdded} YT tokens to the token map. Total tokens: ${this.availableTokens.length}`);
   }
 
@@ -261,7 +259,7 @@ export class Agent {
         role: 'system',
         content: `You are an assistant that provides access to Pendle Protocol functionality via Ember AI On-chain Actions.
 
-You can help users interact with Pendle markets, which separate yield-bearing tokens into Principal Tokens (PT) and Yield Tokens (YT).
+You can help users interact with Pendle yield markets, which separate yield-bearing tokens into Principal Tokens (PT) and Yield Tokens (YT).
 
 About Pendle Protocol:
 - Pendle is a yield trading protocol that tokenizes future yield
@@ -309,15 +307,15 @@ Never respond in markdown, always use plain text. Never add links to your respon
           filter: '',
         },
       });
-      
+
       const parsedResult = parseMcpToolResponse(result, this.getHandlerContext(), 'getTokens');
-      
+
       if (parsedResult && typeof parsedResult === 'object' && 'tokens' in parsedResult) {
         const tokens = (parsedResult as any).tokens;
         if (Array.isArray(tokens)) {
           this.tokenMap = {};
           this.availableTokens = [];
-          
+
           tokens.forEach(token => {
             if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
               if (!this.tokenMap[token.symbol]) {
@@ -330,7 +328,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
               });
             }
           });
-          
+
           this.log(`Loaded ${this.availableTokens.length} available tokens`);
         }
       } else {
@@ -340,15 +338,15 @@ Never respond in markdown, always use plain text. Never add links to your respon
       this.log('Error fetching tokens:', error);
     }
 
-    // Fetch Pendle markets during initialization
+    // Fetch yield markets during initialization
     try {
-      this.log('Fetching Pendle markets during initialization...');
+      this.log('Fetching yield markets during initialization...');
       const marketsResponse = await this.fetchMarkets();
-      this.pendleMarkets = marketsResponse.markets;
-      this.log(`Successfully loaded ${this.pendleMarkets.length} Pendle markets`);
-      
+      this.yieldMarkets = marketsResponse.markets;
+      this.log(`Successfully loaded ${this.yieldMarkets.length} Pendle markets`);
+
       // Populate PT and YT tokens in the token map
-      this.populatePendleTokens(this.pendleMarkets);
+      this.populatePendleTokens(this.yieldMarkets);
     } catch (error) {
       this.log('Error fetching Pendle markets during initialization:', error);
     }
@@ -360,28 +358,28 @@ Never respond in markdown, always use plain text. Never add links to your respon
         execute: async () => {
           try {
             let marketInfo = '';
-            if (this.pendleMarkets.length > 0) {
+            if (this.yieldMarkets.length > 0) {
               // Group markets by chain
-              const marketsByChain: Record<string, PendleMarket[]> = {};
-              
-              this.pendleMarkets.forEach(market => {
+              const marketsByChain: Record<string, YieldMarket[]> = {};
+
+              this.yieldMarkets.forEach(market => {
                 if (!marketsByChain[market.chainId]) {
                   marketsByChain[market.chainId] = [];
                 }
                 marketsByChain[market.chainId].push(market);
               });
-              
+
               // Format the market information in a readable text format
               marketInfo = 'Available Pendle markets:\n\n';
-              
+
               for (const [chainId, markets] of Object.entries(marketsByChain)) {
                 marketInfo += `Chain ID ${chainId} (${markets.length} markets):\n`;
-                
+
                 markets.forEach((market, i) => {
                   const baseSymbol = market.underlyingAsset?.symbol || market.name;
                   const ptSymbol = `${baseSymbol}_PT`;
                   const ytSymbol = `${baseSymbol}_YT`;
-                  
+
                   marketInfo += `${i+1}. ${market.name}\n`;
                   marketInfo += `   Expiry: ${market.expiry}\n`;
                   marketInfo += `   Underlying Asset: ${market.underlyingAsset?.symbol || 'Unknown'} (${market.underlyingAsset?.name || 'Unknown'})\n`;
@@ -391,35 +389,35 @@ Never respond in markdown, always use plain text. Never add links to your respon
                   marketInfo += `   SY Address: ${market.sy}\n\n`;
                 });
               }
-              
-              marketInfo += `Total markets: ${this.pendleMarkets.length}`;
+
+              marketInfo += `Total markets: ${this.yieldMarkets.length}`;
             } else {
               try {
                 // If we don't have markets cached, fetch them now
                 const response = await this.fetchMarkets();
-                this.pendleMarkets = response.markets;
-                
-                if (this.pendleMarkets.length > 0) {
+                this.yieldMarkets = response.markets;
+
+                if (this.yieldMarkets.length > 0) {
                   // Create a new formatted market list instead of recursively calling
                   // Return to the start of this function's logic with the updated markets
-                  const marketsByChain: Record<string, PendleMarket[]> = {};
-                  this.pendleMarkets.forEach(market => {
+                  const marketsByChain: Record<string, YieldMarket[]> = {};
+                  this.yieldMarkets.forEach(market => {
                     if (!marketsByChain[market.chainId]) {
                       marketsByChain[market.chainId] = [];
                     }
                     marketsByChain[market.chainId].push(market);
                   });
-                  
+
                   marketInfo = 'Available Pendle markets:\n\n';
-                  
+
                   for (const [chainId, markets] of Object.entries(marketsByChain)) {
                     marketInfo += `Chain ID ${chainId} (${markets.length} markets):\n`;
-                    
+
                     markets.forEach((market, i) => {
                       const baseSymbol = market.underlyingAsset?.symbol || market.name;
                       const ptSymbol = `${baseSymbol}_PT`;
                       const ytSymbol = `${baseSymbol}_YT`;
-                      
+
                       marketInfo += `${i+1}. ${market.name}\n`;
                       marketInfo += `   Expiry: ${market.expiry}\n`;
                       marketInfo += `   Underlying Asset: ${market.underlyingAsset?.symbol || 'Unknown'} (${market.underlyingAsset?.name || 'Unknown'})\n`;
@@ -429,8 +427,8 @@ Never respond in markdown, always use plain text. Never add links to your respon
                       marketInfo += `   SY Address: ${market.sy}\n\n`;
                     });
                   }
-                  
-                  marketInfo += `Total markets: ${this.pendleMarkets.length}`;
+
+                  marketInfo += `Total markets: ${this.yieldMarkets.length}`;
                 } else {
                   marketInfo = 'No Pendle markets available.';
                 }
@@ -439,7 +437,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
                 return `Error fetching Pendle markets: ${error.message}`;
               }
             }
-            
+
             return marketInfo;
           } catch (error: any) {
             logError(`Error listing Pendle markets: ${error.message}`);
@@ -492,7 +490,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
 
     try {
       this.log('Calling generateText with Vercel AI SDK...');
-      const { response, text, toolCalls, toolResults, finishReason } = await generateText({
+      const { response, text, finishReason } = await generateText({
         model: openrouter('google/gemini-2.0-flash-001'),
         messages: this.conversationHistory,
         tools: this.toolSet,
@@ -694,34 +692,34 @@ Never respond in markdown, always use plain text. Never add links to your respon
     }
   }
 
-  public async fetchMarkets(): Promise<GetPendleMarketsResponse> {
+  public async fetchMarkets(): Promise<GetYieldMarketsResponse> {
     this.log('Fetching pendle markets via MCP...');
-    
+
     const result = await this.mcpClient.callTool({
-      name: 'getPendleMarkets',
+      name: 'getYieldMarkets',
       arguments: {}
     });
-    
+
     // Check if the response has the expected structure
     if (!result.content || !Array.isArray(result.content) || result.content.length === 0) {
-      throw new Error('Invalid response format from getPendleMarkets tool');
+      throw new Error('Invalid response format from getYieldMarkets tool');
     }
-    
+
     const contentItem = result.content[0];
     if (contentItem.type !== 'text' || typeof contentItem.text !== 'string') {
-      throw new Error('Invalid content format from getPendleMarkets tool');
+      throw new Error('Invalid content format from getYieldMarkets tool');
     }
-    
+
     // Parse the JSON string from the text field
     const parsedData = JSON.parse(contentItem.text);
-    
+
     // Validate the parsed data with our schema
-    const validationResult = GetPendleMarketsResponseSchema.safeParse(parsedData);
-    
+    const validationResult = GetYieldMarketsResponseSchema.safeParse(parsedData);
+
     if (!validationResult.success) {
       throw new Error('Failed to validate Pendle markets data structure');
     }
-    
+
     return validationResult.data;
   }
 }

@@ -118,8 +118,8 @@ const getTokensSchema = {
   filter: z.string().describe("A filter to apply to the tokens.").optional(),
 };
 
-// Add schema definition for getPendleMarkets after the existing schema definitions
-const getPendleMarketsSchema = {
+// Add schema definition for getYieldMarkets after the existing schema definitions
+const getYieldMarketsSchema = {
 };
 
 // Define types from schemas using z.object() on the raw schema definitions
@@ -131,7 +131,7 @@ const withdrawParamsValidator = z.object(withdrawSchema);
 const getCapabilitiesParamsValidator = z.object(getCapabilitiesSchema);
 const getUserPositionsParamsValidator = z.object(getUserPositionsSchema);
 const getTokensParamsValidator = z.object(getTokensSchema);
-const getPendleMarketsParamsValidator = z.object(getPendleMarketsSchema);
+const getYieldMarketsParamsValidator = z.object(getYieldMarketsSchema);
 
 type SwapTokensParams = z.infer<typeof swapTokensParamsValidator>;
 type BorrowParams = z.infer<typeof borrowParamsValidator>;
@@ -141,7 +141,7 @@ type WithdrawParams = z.infer<typeof withdrawParamsValidator>;
 type GetCapabilitiesParams = z.infer<typeof getCapabilitiesParamsValidator>;
 type GetUserPositionsParams = z.infer<typeof getUserPositionsParamsValidator>;
 type GetTokensParams = z.infer<typeof getTokensParamsValidator>;
-type GetPendleMarketsParams = z.infer<typeof getPendleMarketsParamsValidator>;
+type GetYieldMarketsParams = z.infer<typeof getYieldMarketsParamsValidator>;
 
 // --- Tool Definitions for tools/list ---
 // Helper to convert Zod schema to MCP argument definition
@@ -183,7 +183,7 @@ server.tool(
   "swapTokens",
   "Swap or convert tokens using Ember On-chain Actions",
   swapTokensSchema,
-  async (params: SwapTokensParams) => {    
+  async (params: SwapTokensParams) => {
     const swapRequest: SwapTokensRequest = {
       orderType: OrderType.MARKET_SELL,
       baseToken: {
@@ -201,12 +201,12 @@ server.tool(
 
     try {
       const response = await emberClient.swapTokens(swapRequest);
-      if (response.error || !response.transactions) {
+      if (response.error || !response.transactions || !response.transactions.length) {
         throw new Error(
           response.error?.message || "No transaction plan returned for swap"
         );
       }
-  
+
       return {
         content: [
           {
@@ -510,28 +510,28 @@ server.tool(
   }
 );
 
-// Add getPendleMarkets tool implementation after the getTokens implementation
+// Add getYieldMarkets tool implementation after the getTokens implementation
 server.tool(
-  "getPendleMarkets",
-  "Get Pendle markets",
-  getPendleMarketsSchema,
-  async (params: GetPendleMarketsParams, extra: any) => {
-    console.error(`Executing getPendleMarkets tool with params:`, params);
-    console.error(`Extra object for getPendleMarkets:`, extra);
+  "getYieldMarkets",
+  "Get Yield markets",
+  getYieldMarketsSchema,
+  async (params: GetYieldMarketsParams, extra: any) => {
+    console.error(`Executing getYieldMarkets tool with params:`, params);
+    console.error(`Extra object for getYieldMarkets:`, extra);
 
     try {
-      const response = await emberClient.getPendleMarkets({
+      const response = await emberClient.getYieldMarkets({
         chainIds: [],
       });
-      console.error(`GetPendleMarkets tool success.`);
-      return { 
-        content: [{ 
-          type: "text", 
-          text: JSON.stringify(response, null, 2) 
-        }] 
+      console.error(`GetYieldMarkets tool success.`);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify(response, null, 2)
+        }]
       };
     } catch (error) {
-      console.error(`GetPendleMarkets tool error:`, error);
+      console.error(`GetYieldMarkets tool error:`, error);
       return {
         isError: true,
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
