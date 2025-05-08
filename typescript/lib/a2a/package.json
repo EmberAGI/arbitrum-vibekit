@@ -1,7 +1,6 @@
 {
   "name": "a2a-samples-js",
   "version": "0.1.0",
-  "main": "dist/index.js",
   "type": "module",
   "devDependencies": {
     "@types/node": "^22.13.14",

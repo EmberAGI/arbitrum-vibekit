@@ -35,6 +35,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { mainnet, arbitrum, optimism, polygon, base, Chain } from 'viem/chains';
+import { createRequire } from 'module';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -243,9 +244,12 @@ Present the user with a list of tokens and chains they can swap from and to if p
         { capabilities: { tools: {}, resources: {}, prompts: {} } }
       );
 
+      const require = createRequire(import.meta.url);
+      const mcpToolPath = require.resolve('ember-mcp-tool-server');
+
       const transport = new StdioClientTransport({
         command: 'node',
-        args: ['/app/mcp-tools/emberai-mcp/dist/index.js'],
+        args: [mcpToolPath],
         env: {
           ...process.env, // Inherit existing environment variables
           EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'grpc.api.emberai.xyz:50051',

@@ -21,7 +21,7 @@ COPY tsconfig.base.json ./
 COPY lib/a2a/package.json ./lib/a2a/
 COPY lib/mcp-tools/emberai-mcp/package.json ./lib/mcp-tools/emberai-mcp/
 COPY lib/mcp-tools/allora-mcp-server/package.json ./lib/mcp-tools/allora-mcp-server/
-COPY examples/swapping-agent-no-wallet/package.json ./examples/swapping-agent-no-wallet/
+COPY examples/liquidity-agent-no-wallet/package.json ./examples/liquidity-agent-no-wallet/
 
 # ------------------------------
 # 3. Install deps based on the copied package.json set. This is cache-friendly and establishes workspace links.
@@ -55,12 +55,9 @@ WORKDIR /app
 # Install pnpm globally
 RUN npm install -g pnpm@10.7.0
 
-# Copy enclyclopedia files for agent reading
-COPY ./examples/swapping-agent-no-wallet/encyclopedia ./examples/swapping-agent-no-wallet/encyclopedia
-
 # Copy only what we need from the builder stage
-COPY --from=builder /app/examples/swapping-agent-no-wallet/dist /app/examples/swapping-agent-no-wallet/dist
-COPY --from=builder /app/examples/swapping-agent-no-wallet/package.json /app/examples/swapping-agent-no-wallet/
+COPY --from=builder /app/examples/liquidity-agent-no-wallet/dist /app/examples/liquidity-agent-no-wallet/dist
+COPY --from=builder /app/examples/liquidity-agent-no-wallet/package.json /app/examples/liquidity-agent-no-wallet/
 COPY --from=builder /app/lib/a2a/dist /app/lib/a2a/dist
 COPY --from=builder /app/lib/a2a/package.json /app/lib/a2a/
 COPY --from=builder /app/lib/mcp-tools/emberai-mcp/dist /app/lib/mcp-tools/emberai-mcp/dist
@@ -68,12 +65,12 @@ COPY --from=builder /app/lib/mcp-tools/emberai-mcp/package.json /app/lib/mcp-too
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/node_modules/.pnpm /app/node_modules/.pnpm
 # Also copy the example package's direct node_modules folder to preserve local symlinks
-COPY --from=builder /app/examples/swapping-agent-no-wallet/node_modules /app/examples/swapping-agent-no-wallet/node_modules
+COPY --from=builder /app/examples/liquidity-agent-no-wallet/node_modules /app/examples/liquidity-agent-no-wallet/node_modules
 # Also copy the mcp-tool package's node_modules folder
 COPY --from=builder /app/lib/mcp-tools/emberai-mcp/node_modules /app/lib/mcp-tools/emberai-mcp/node_modules
 
 # Set the working directory for the final image
-WORKDIR /app/examples/swapping-agent-no-wallet/dist
+WORKDIR /app/examples/liquidity-agent-no-wallet/dist
 
 # Change ownership to non-root user
 RUN chown -R ember:ember /app
@@ -87,5 +84,5 @@ EXPOSE 3001
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the Swapping agent (path is relative to the WORKDIR set above)
+# Start the Liquidity agent (path is relative to the WORKDIR set above)
 CMD ["node", "index.js"]

@@ -1,7 +1,7 @@
 {
-  "name": "lending-agent-no-wallet",
+  "name": "liquidity-agent-no-wallet",
   "version": "1.0.0",
-  "description": "Ember On-chain Actionslending Agent Example without integrated wallet",
+  "description": "Ember On-chain Actions liquidity management Agent Example without integrated wallet",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -9,8 +9,8 @@
     "dev": "pnpm build && tsx src/index.ts",
     "start": "node dist/index.js",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
-    "docker:build": "docker build -t lending-agent-no-wallet ../../",
-    "docker:run": "docker run --env-file .env -p 3001:3001 lending-agent-no-wallet",
+    "docker:build": "docker build -t liquidity-agent ../../",
+    "docker:run": "docker run --env-file .env -p 3001:3001 liquidity-agent",
     "docker:compose:up": "docker compose up --build",
     "docker:compose:build": "docker compose build --no-cache",
     "docker:compose:down": "docker compose down",
@@ -30,7 +30,6 @@
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "ember-mcp-tool-server": "workspace:*",
-    "ethers": "^5.7.2",
     "express": "^4.21.2",
     "tsx": "^4.6.2",
     "viem": "^2.26.3",

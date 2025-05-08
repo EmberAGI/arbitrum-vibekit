@@ -8,6 +8,9 @@ import EmberGrpcClient, {
   Token,
   GetTokensResponse,
   OrderType,
+  TokenIdentifier,
+  GetLiquidityPoolsResponse,
+  GetUserLiquidityPositionsResponse,
   SwapTokensRequest,
 } from "@emberai/sdk-typescript";
 // Use the high-level McpServer API
@@ -118,9 +121,68 @@ const getTokensSchema = {
   filter: z.string().describe("A filter to apply to the tokens.").optional(),
 };
 
-// Add schema definition for getYieldMarkets after the existing schema definitions
-const getYieldMarketsSchema = {
+const supplyLiquiditySchema = {
+  token0Address: z
+    .string()
+    .describe("The contract address of the first token in the pair (token0)."),
+  token0ChainId: z
+    .string()
+    .describe("The chain ID where the token0 contract resides."),
+  token1Address: z
+    .string()
+    .describe("The contract address of the second token in the pair (token1)."),
+  token1ChainId: z
+    .string()
+    .describe("The chain ID where the token1 contract resides."),
+  amount0: z
+    .string()
+    .describe("The amount of token0 to supply (human-readable format)."),
+  amount1: z
+    .string()
+    .describe("The amount of token1 to supply (human-readable format)."),
+  priceFrom: z
+    .string()
+    .describe(
+      "The lower bound price for the liquidity range (human-readable format)."
+    ),
+  priceTo: z
+    .string()
+    .describe(
+      "The upper bound price for the liquidity range (human-readable format)."
+    ),
+  userAddress: z
+    .string()
+    .describe("The wallet address supplying the liquidity."),
 };
+
+const withdrawLiquiditySchema = {
+  tokenId: z
+    .string()
+    .describe(
+      "The NFT token ID representing the liquidity position to withdraw."
+    ),
+  providerId: z
+    .string()
+    .describe(
+      "The ID of the liquidity provider protocol (e.g., 'uniswap_v3'). Usually obtained from the getUserLiquidityPositions tool."
+    ),
+  userAddress: z
+    .string()
+    .describe("The wallet address withdrawing the liquidity."),
+};
+
+const getLiquidityPoolsSchema = {
+  // No parameters currently needed, but could add filters later (e.g., chainId)
+};
+
+const getUserLiquidityPositionsSchema = {
+  userAddress: z
+    .string()
+    .describe("The wallet address to fetch liquidity positions for."),
+};
+
+// Add schema definition for getYieldMarkets after the existing schema definitions
+const getYieldMarketsSchema = {};
 
 // Define types from schemas using z.object() on the raw schema definitions
 const swapTokensParamsValidator = z.object(swapTokensSchema);
@@ -131,6 +193,12 @@ const withdrawParamsValidator = z.object(withdrawSchema);
 const getCapabilitiesParamsValidator = z.object(getCapabilitiesSchema);
 const getUserPositionsParamsValidator = z.object(getUserPositionsSchema);
 const getTokensParamsValidator = z.object(getTokensSchema);
+const supplyLiquidityParamsValidator = z.object(supplyLiquiditySchema);
+const withdrawLiquidityParamsValidator = z.object(withdrawLiquiditySchema);
+const getLiquidityPoolsParamsValidator = z.object(getLiquidityPoolsSchema);
+const getUserLiquidityPositionsParamsValidator = z.object(
+  getUserLiquidityPositionsSchema
+);
 const getYieldMarketsParamsValidator = z.object(getYieldMarketsSchema);
 
 type SwapTokensParams = z.infer<typeof swapTokensParamsValidator>;
@@ -141,9 +209,14 @@ type WithdrawParams = z.infer<typeof withdrawParamsValidator>;
 type GetCapabilitiesParams = z.infer<typeof getCapabilitiesParamsValidator>;
 type GetUserPositionsParams = z.infer<typeof getUserPositionsParamsValidator>;
 type GetTokensParams = z.infer<typeof getTokensParamsValidator>;
+type SupplyLiquidityParams = z.infer<typeof supplyLiquidityParamsValidator>;
+type WithdrawLiquidityParams = z.infer<typeof withdrawLiquidityParamsValidator>;
+type GetLiquidityPoolsParams = z.infer<typeof getLiquidityPoolsParamsValidator>;
+type GetUserLiquidityPositionsParams = z.infer<
+  typeof getUserLiquidityPositionsParamsValidator
+>;
 type GetYieldMarketsParams = z.infer<typeof getYieldMarketsParamsValidator>;
 
-// --- Tool Definitions for tools/list ---
 // Helper to convert Zod schema to MCP argument definition
 const zodSchemaToMcpArgs = (schema: Record<string, z.ZodTypeAny>) => {
   return Object.entries(schema).map(([name, zodType]) => ({
@@ -201,7 +274,11 @@ server.tool(
 
     try {
       const response = await emberClient.swapTokens(swapRequest);
-      if (response.error || !response.transactions || !response.transactions.length) {
+      if (
+        response.error ||
+        !response.transactions ||
+        !response.transactions.length
+      ) {
         throw new Error(
           response.error?.message || "No transaction plan returned for swap"
         );
@@ -222,7 +299,6 @@ server.tool(
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
       };
     }
-
   }
 );
 
@@ -510,6 +586,200 @@ server.tool(
   }
 );
 
+server.tool(
+  "supplyLiquidity",
+  "Supply liquidity to a token pair using Ember On-chain Actions.",
+  supplyLiquiditySchema,
+  async (params: SupplyLiquidityParams, extra: any) => {
+    console.error(`Executing supplyLiquidity tool with params:`, params);
+    console.error(`Extra object for supplyLiquidity:`, extra);
+
+    try {
+      const token0: TokenIdentifier = {
+        chainId: params.token0ChainId,
+        address: params.token0Address,
+      };
+      const token1: TokenIdentifier = {
+        chainId: params.token1ChainId,
+        address: params.token1Address,
+      };
+
+      const response = await emberClient.supplyLiquidity({
+        token0: token0,
+        token1: token1,
+        amount0: params.amount0,
+        amount1: params.amount1,
+        // Assuming limited range supply as per agent example
+        // TODO: Consider adding a 'fullRange' boolean parameter to the schema?
+        fullRange: false,
+        limitedRange: {
+          minPrice: params.priceFrom,
+          maxPrice: params.priceTo,
+        },
+        supplierAddress: params.userAddress,
+      });
+
+      // Adjusted error check: Rely on try/catch for gRPC errors,
+      // check for presence of expected data (transactions)
+      if (!response.transactions || response.transactions.length === 0) {
+        throw new Error(
+          // response.error?.message || // Removed direct error check
+          "No transaction plan returned for supplyLiquidity"
+        );
+      }
+
+      console.error(
+        `SupplyLiquidity tool success. Transactions:`,
+        response.transactions
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            // Return the transaction plan for the client to execute
+            text: JSON.stringify(response.transactions),
+          },
+        ],
+      };
+    } catch (error) {
+      console.error(`SupplyLiquidity tool error:`, error);
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+      };
+    }
+  }
+);
+
+server.tool(
+  "withdrawLiquidity",
+  "Withdraw liquidity from a position using Ember On-chain Actions.",
+  withdrawLiquiditySchema,
+  async (params: WithdrawLiquidityParams, extra: any) => {
+    console.error(`Executing withdrawLiquidity tool with params:`, params);
+    console.error(`Extra object for withdrawLiquidity:`, extra);
+
+    try {
+      const response = await emberClient.withdrawLiquidity({
+        tokenId: params.tokenId,
+        providerId: params.providerId,
+        supplierAddress: params.userAddress,
+      });
+
+      // Adjusted error check: Rely on try/catch for gRPC errors,
+      // check for presence of expected data (transactions)
+      if (!response.transactions || response.transactions.length === 0) {
+        throw new Error(
+          // response.error?.message || // Removed direct error check
+          "No transaction plan returned for withdrawLiquidity"
+        );
+      }
+
+      console.error(
+        `WithdrawLiquidity tool success. Transactions:`,
+        response.transactions
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            // Return the transaction plan for the client to execute
+            text: JSON.stringify(response.transactions),
+          },
+        ],
+      };
+    } catch (error) {
+      console.error(`WithdrawLiquidity tool error:`, error);
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+      };
+    }
+  }
+);
+
+server.tool(
+  "getLiquidityPools",
+  "Get a list of available liquidity pools using Ember On-chain Actions.",
+  getLiquidityPoolsSchema,
+  async (params: GetLiquidityPoolsParams, extra: any) => {
+    console.error(`Executing getLiquidityPools tool with params:`, params);
+    console.error(`Extra object for getLiquidityPools:`, extra);
+    try {
+      // Pass undefined if no args/metadata needed
+      const response: GetLiquidityPoolsResponse =
+        await emberClient.getLiquidityPools(undefined);
+
+      // Check for expected data instead of response.error
+      if (!response.liquidityPools) {
+        throw new Error("No liquidity pools data returned.");
+      }
+
+      console.error(`getLiquidityPools tool success.`);
+      return {
+        content: [
+          {
+            type: "text",
+            // Pass the whole response object as JSON
+            text: JSON.stringify(response),
+          },
+        ],
+      };
+    } catch (error) {
+      console.error(`getLiquidityPools tool error:`, error);
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+      };
+    }
+  }
+);
+
+server.tool(
+  "getUserLiquidityPositions",
+  "Get user's liquidity positions using Ember On-chain Actions.",
+  getUserLiquidityPositionsSchema,
+  async (params: GetUserLiquidityPositionsParams, extra: any) => {
+    console.error(
+      `Executing getUserLiquidityPositions tool with params:`,
+      params
+    );
+    console.error(`Extra object for getUserLiquidityPositions:`, extra);
+
+    try {
+      // Use correct argument name: supplierAddress
+      const response: GetUserLiquidityPositionsResponse =
+        await emberClient.getUserLiquidityPositions({
+          supplierAddress: params.userAddress,
+        });
+
+      // Check for expected data instead of response.error
+      if (!response.positions) {
+        throw new Error("No user liquidity positions data returned.");
+      }
+
+      console.error(`getUserLiquidityPositions tool success.`);
+      return {
+        content: [
+          {
+            type: "text",
+            // Pass the whole response object as JSON
+            text: JSON.stringify(response),
+          },
+        ],
+      };
+    } catch (error) {
+      console.error(`getUserLiquidityPositions tool error:`, error);
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+      };
+    }
+  }
+);
+
 // Add getYieldMarkets tool implementation after the getTokens implementation
 server.tool(
   "getYieldMarkets",
@@ -525,10 +795,12 @@ server.tool(
       });
       console.error(`GetYieldMarkets tool success.`);
       return {
-        content: [{
-          type: "text",
-          text: JSON.stringify(response, null, 2)
-        }]
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(response, null, 2),
+          },
+        ],
       };
     } catch (error) {
       console.error(`GetYieldMarkets tool error:`, error);

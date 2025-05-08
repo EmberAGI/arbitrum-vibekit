@@ -1,8 +1,8 @@
 services:
-  swapping-agent-no-wallet:
+  liquidity-agent-no-wallet:
     build:
       context: ../../ # Set context to the workspace root (typescript/)
-      dockerfile: examples/swapping-agent-no-wallet/Dockerfile # Specify Dockerfile location relative to context
+      dockerfile: examples/liquidity-agent-no-wallet/Dockerfile # Specify Dockerfile location relative to context
     ports:
       - '${PORT:-3001}:${PORT:-3001}' # Map host port and container port using PORT env var (default 3001)
     env_file:

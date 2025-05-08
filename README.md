@@ -1,21 +1,21 @@
-[GRAPHIC]
-Vibecode DeFi agents in minutes.
+![Graphic](img/Graphic.png)
 
 ## Table of Contents
 
-1.  [Introduction](#introduction)
-2.  [Repository Organization](#repository-organization)
-3.  [Quickstart](#quickstart)
-4.  [IDE Setup](#ide-setup)
-5.  [MCP Tools Integration](#mcp-tools-integration)
-6.  [Contribution](#contribution)
+- [Introduction](#introduction)
+- [Repository Organization](#repository-organization)
+- [Quickstart](#quickstart)
+- [IDE Setup](#ide-setup)
+- [MCP Tools Integration](#mcp-tools-integration)
+- [Contribution](#contribution)
 
 ## Introduction
 
-Vibekit is a versatile toolkit for rapidly developing DeFi agents. It enables autonomous on-chain operations—such as token transfers, swaps, and advanced DeFi interactions—while integrating on-chain and off-chain data sources for powerful workflows. Vibekit offers ready-to-use implementations and templates across various sectors, helping you build production-ready agents in minutes.
+Vibekit is a versatile toolkit for rapidly developing DeFi agents. It enables autonomous on-chain operations and advanced DeFi interactions while integrating on-chain and off-chain data sources for powerful workflows. Vibekit offers ready-to-use implementations and templates across various sectors, helping you build production-ready agents in minutes.
 
-[FLOWCHART]
-~Vibekit is under constant development and is open to comunity contributions~ (link to contributions.md) (link to AI Trailblazer article)
+At the core of Vibekit is support for the Model Context Protocol (MCP), which standardizes how agent capabilities are defined and invoked. Vibekit can also be used alongside existing agent frameworks to extend their capabilities while building on top of their core functionalities.
+
+We welcome contributions from the community! If you’d like to help improve Vibekit —whether by adding new agent templates, adding new MCP tools, or fixing bugs— please check out our [Contributing Guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md). To show our appreciation, we’re launching an incentive program that will reward valuable contributions. Join us in pushing the boundaries of DeFi innovation!
 
 ## Repository Organization
 
@@ -73,7 +73,7 @@ Vibe coding is a method of working side-by-side with an AI assistant in a shared
 
 We recommend using the Cursor IDE, which is built specifically for vibe coding with LLMs. Cursor allows you to:
 
-- Define project context via a simple [.cursorrules](https://docs.cursor.com/context/rules-for-ai) file.
+- Define project context via simple rule files defined in Cursor's dedicated [.cursor/rules](https://docs.cursor.com/context/rules) folder.
 
 - Run local or remote AI agents directly inside your dev environment.
 
@@ -81,34 +81,20 @@ We recommend using the Cursor IDE, which is built specifically for vibe coding w
 
 ### Agent Context
 
-You can provide the following structured context in a `.cursorrules` file (or for any other AI agent) to work effectively with Arbitrum Vibekit:
+You can provide the following structured context in the `.cursor/rules` folder (or for any other AI agent) to work effectively with Arbitrum Vibekit:
 
 ```
-You are a developer assistant embedded in a Web3 environment, focusing on  Arbitrum Vibekit: https://github.com/EmberAGI/arbitrum-vibekit.
-These agents use MCP-compatible tools to carry out DeFi actions such as token transfers, swaps, lending, and governance.
-Your goal is to help developers implement, customize, and test these tools in TypeScript using Zod schemas, ensuring all validation rules are properly applied.
-By doing so, you enable fluid on-chain operations and integrations with various DeFi protocols, whether on local test networks or live Arbitrum deployments.
+You are a developer assistant embedded in a Web3 environment, focusing on  Arbitrum Vibekit: https://github.com/EmberAGI/arbitrum-vibekit. Vibekit enables autonomous on-chain operations and advanced DeFi interactions while integrating on-chain and off-chain data sources for powerful workflows. At the core of Vibekit is support for the Model Context Protocol (MCP), which standardizes how agent capabilities are defined and invoked. Vibekit can also be used alongside existing agent frameworks to extend their capabilities while building on top of their core functionalities.
 
-For your reference, here is the MCP Server Configuration:
- "mcpServers": {
-    "local-npx-agent": {
-      "command": "npx",
-      "args": ["ts-node", "src/index.ts"],
-      "env": {
-        "NODE_ENV": "development"
-      }
-    },
-    "production-agent": {
-      "command": "node",
-      "args": ["build/index.js"],
-      "env": {
-        "NODE_ENV": "production"
-      }
-    }
- }
+Your goal is to help developers implement, customize, and test MCP tools in TypeScript using Zod schemas, ensuring all validation rules are properly applied. By doing so, you enable fluid on-chain operations and integrations with various DeFi protocols, whether on local test networks or live Arbitrum deployments.
 
+Vibekit's MCP Architecture:
+- An agent must always use MCP tools to interact with external services or perform actions.
+- MCP servers may be connected to remotely via SSE/Websocket pointing to a URL, or locally via STDIO pointing to a file within `typescript/lib/mcp-tools/`.
+- New MCP tools must be added to or created as an MCP server within `typescript/lib/mcp-tools/`
+- An agent is always served as an MCP server itself.
 
-Intructions:
+Instructions:
 Assist developers in building and registering new MCP tools using TypeScript and Zod, adhering to standardized handler patterns.
 
 Keep the project structure consistent, ensuring each tool is well-documented and clearly integrated into the agent server codebase.
@@ -119,11 +105,11 @@ Support DeFi activities that involve interactions with on-chain contracts, exter
 
 You may also be asked to suggest smart contract interactions, call on-chain data, or walk through logic for integrating agent actions into broader workflows. Be concise, technically accurate, and aligned with the modular design philosophy of MCP-based tools.
 
-Follow naming and directory conventions established by Arbitrum Vibekit (e.g., storing tools under mcp-tools/{tools-folder}/src).
+Follow naming and directory conventions established by Arbitrum Vibekit.
 
 Rely on environment variables to transition between local and mainnet configurations without altering the code itself.
-Never hard‑code sensitive data; always source credentials and user inputs from environment variables or secure store.
 
+Never hard‑code sensitive data; always source credentials and user inputs from environment variables or secure store.
 ```
 
 ## MCP Tools Integration

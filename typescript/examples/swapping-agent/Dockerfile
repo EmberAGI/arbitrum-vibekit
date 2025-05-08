@@ -1,47 +1,46 @@
-# Build stage
+# Build stage - Context should be the typescript/ directory
 FROM node:20-slim AS builder
 
-# Set working directory
 WORKDIR /app
 
 # Install pnpm globally
-RUN npm install -g pnpm
+RUN npm install -g pnpm@10.7.0 typescript@5.8.3
 
-# Copy package files for swapping-agent
-COPY package.json pnpm-lock.yaml* ./
+# ------------------------------
+# 1. Copy lockfile & workspace config that affect dependency graph cache
+# ------------------------------
+COPY pnpm-lock.yaml* pnpm-workspace.yaml .npmrc ./
+# Copy root package.json for pnpm workspace
+COPY package.json ./
+# Copy base TS configuration so that tsconfig.base.json can be resolved
+COPY tsconfig.base.json ./
 
-# Install all dependencies for swapping-agent (including dev dependencies)
-RUN pnpm install
+# ------------------------------
+# 2. Copy all workspace package.json files (to maximise Docker cache)
+# ------------------------------
+COPY lib/mcp-tools/emberai-mcp/package.json ./lib/mcp-tools/emberai-mcp/
+COPY examples/swapping-agent/package.json ./examples/swapping-agent/
 
-# Copy source code for swapping-agent
-COPY src/ ./src/
-COPY tsconfig.json ./
+# ------------------------------
+# 3. Install deps based on the copied package.json set. This is cache-friendly and establishes workspace links.
+# ------------------------------
+RUN pnpm install --prefer-frozen-lockfile
 
-# Build TypeScript code for swapping-agent
-RUN pnpm exec tsc
+# ------------------------------
+# 4. Now copy the rest of the source code
+# ------------------------------
+COPY . .
 
-# --- Add steps for emberai-mcp ---
-# Create the mcp-tools directory
-RUN mkdir -p /app/mcp-tools/emberai-mcp
-
-# Copy emberai-mcp from the host into the builder stage
-# Note: This requires copying emberai-mcp into the swapping-agent directory before building
-COPY ./mcp-tools/emberai-mcp /app/mcp-tools/emberai-mcp
-
-# Install dependencies for emberai-mcp
-WORKDIR /app/mcp-tools/emberai-mcp
-RUN pnpm install
-
-# Build emberai-mcp
-RUN pnpm exec tsc
-
-# Return to the main app directory
-WORKDIR /app
-# --- End steps for emberai-mcp ---
-
+# ------------------------------
+# 5. Build every workspace package that provides a build script (recursive build)
+# ------------------------------
+RUN pnpm -r --if-present build
 
 # Production stage
 FROM node:20-slim AS production
+
+# Copy pnpm config
+COPY --from=builder /app/.npmrc ./
 
 # Create a non-root user
 RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
@@ -49,40 +48,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd -r ember && useradd -r -g ember ember
 
-# Set working directory
 WORKDIR /app
 
 # Install pnpm globally
-RUN npm install -g pnpm
+RUN npm install -g pnpm@10.7.0
 
-# Copy package files for swapping-agent
-COPY package.json pnpm-lock.yaml* ./
+# Copy only what we need from the builder stage
+COPY --from=builder /app/examples/swapping-agent/dist /app/examples/swapping-agent/dist
+COPY --from=builder /app/examples/swapping-agent/package.json /app/examples/swapping-agent/
+COPY --from=builder /app/lib/mcp-tools/emberai-mcp/dist /app/lib/mcp-tools/emberai-mcp/dist
+COPY --from=builder /app/lib/mcp-tools/emberai-mcp/package.json /app/lib/mcp-tools/emberai-mcp/
+COPY --from=builder /app/node_modules /app/node_modules
+COPY --from=builder /app/node_modules/.pnpm /app/node_modules/.pnpm
+# Also copy the example package's direct node_modules folder to preserve local symlinks
+COPY --from=builder /app/examples/swapping-agent/node_modules /app/examples/swapping-agent/node_modules
+# Also copy the mcp-tool package's node_modules folder
+COPY --from=builder /app/lib/mcp-tools/emberai-mcp/node_modules /app/lib/mcp-tools/emberai-mcp/node_modules
 
-# Install only production dependencies for swapping-agent
-RUN pnpm install --prod --frozen-lockfile
-
-# Copy built files for swapping-agent from builder stage
-COPY --from=builder /app/dist ./dist
-
-# --- Install and setup emberai-mcp in production stage ---
-# Create the directory structure first
-RUN mkdir -p ./mcp-tools/emberai-mcp
-
-# Copy package files and built code for emberai-mcp
-COPY --from=builder /app/mcp-tools/emberai-mcp/dist ./mcp-tools/emberai-mcp/dist
-COPY --from=builder /app/mcp-tools/emberai-mcp/package.json ./mcp-tools/emberai-mcp/package.json
-# If pnpm-lock exists, copy it too for deterministic installs
-COPY --from=builder /app/mcp-tools/emberai-mcp/pnpm-lock.yaml* ./mcp-tools/emberai-mcp/
-
-# Install dependencies for emberai-mcp within the production stage
-WORKDIR /app/mcp-tools/emberai-mcp
-# Install *all* dependencies needed by emberai-mcp at runtime
-RUN pnpm install --frozen-lockfile
-WORKDIR /app
-# --- End install steps for emberai-mcp ---
-
-# Copy .env file if it exists (for local development)
-COPY .env* ./
+# Set the working directory for the final image
+WORKDIR /app/examples/swapping-agent/dist
 
 # Change ownership to non-root user
 RUN chown -R ember:ember /app
@@ -96,5 +80,5 @@ EXPOSE 3001
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the Swapping agent
-CMD ["node", "dist/index.js"]
+# Start the Swapping agent (path is relative to the WORKDIR set above)
+CMD ["node", "index.js"]
