@@ -11,11 +11,13 @@ import EmberGrpcClient, {
   TokenIdentifier,
   GetLiquidityPoolsResponse,
   GetUserLiquidityPositionsResponse,
+  SwapTokensRequest,
 } from "@emberai/sdk-typescript";
 // Use the high-level McpServer API
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import "dotenv/config";
 
 export {
   GetCapabilitiesResponse,
@@ -179,6 +181,9 @@ const getUserLiquidityPositionsSchema = {
     .describe("The wallet address to fetch liquidity positions for."),
 };
 
+// Add schema definition for getYieldMarkets after the existing schema definitions
+const getYieldMarketsSchema = {};
+
 // Define types from schemas using z.object() on the raw schema definitions
 const swapTokensParamsValidator = z.object(swapTokensSchema);
 const borrowParamsValidator = z.object(borrowSchema);
@@ -194,6 +199,7 @@ const getLiquidityPoolsParamsValidator = z.object(getLiquidityPoolsSchema);
 const getUserLiquidityPositionsParamsValidator = z.object(
   getUserLiquidityPositionsSchema
 );
+const getYieldMarketsParamsValidator = z.object(getYieldMarketsSchema);
 
 type SwapTokensParams = z.infer<typeof swapTokensParamsValidator>;
 type BorrowParams = z.infer<typeof borrowParamsValidator>;
@@ -209,6 +215,7 @@ type GetLiquidityPoolsParams = z.infer<typeof getLiquidityPoolsParamsValidator>;
 type GetUserLiquidityPositionsParams = z.infer<
   typeof getUserLiquidityPositionsParamsValidator
 >;
+type GetYieldMarketsParams = z.infer<typeof getYieldMarketsParamsValidator>;
 
 // Helper to convert Zod schema to MCP argument definition
 const zodSchemaToMcpArgs = (schema: Record<string, z.ZodTypeAny>) => {
@@ -221,72 +228,6 @@ const zodSchemaToMcpArgs = (schema: Record<string, z.ZodTypeAny>) => {
     typeSchema: { type: "any" },
   }));
 };
-
-const toolDefinitions = [
-  {
-    name: "swapTokens",
-    description: "Swap or convert tokens using Ember On-chain Actions",
-    arguments: zodSchemaToMcpArgs(swapTokensSchema),
-  },
-  {
-    name: "borrow",
-    description: "Borrow tokens using Ember On-chain Actions",
-    arguments: zodSchemaToMcpArgs(borrowSchema),
-  },
-  {
-    name: "repay",
-    description: "Repay borrowed tokens using Ember On-chain Actions",
-    arguments: zodSchemaToMcpArgs(repaySchema),
-  },
-  {
-    name: "supply",
-    description: "Supply tokens using Ember On-chain Actions",
-    arguments: zodSchemaToMcpArgs(supplySchema),
-  },
-  {
-    name: "withdraw",
-    description: "Withdraw tokens using Ember On-chain Actions",
-    arguments: zodSchemaToMcpArgs(withdrawSchema),
-  },
-  {
-    name: "getCapabilities",
-    description: "Get Ember On-chain Actions capabilities",
-    arguments: zodSchemaToMcpArgs(getCapabilitiesSchema),
-  },
-  {
-    name: "getUserPositions",
-    description: "Get user wallet positions using Ember On-chain Actions",
-    arguments: zodSchemaToMcpArgs(getUserPositionsSchema),
-  },
-  {
-    name: "getTokens",
-    description: "Get a list of supported tokens using Ember On-chain Actions",
-    arguments: zodSchemaToMcpArgs(getTokensSchema),
-  },
-  {
-    name: "supplyLiquidity",
-    description:
-      "Supply liquidity to a token pair using Ember On-chain Actions.",
-    arguments: zodSchemaToMcpArgs(supplyLiquiditySchema),
-  },
-  {
-    name: "withdrawLiquidity",
-    description:
-      "Withdraw liquidity from a position using Ember On-chain Actions.",
-    arguments: zodSchemaToMcpArgs(withdrawLiquiditySchema),
-  },
-  {
-    name: "getLiquidityPools",
-    description:
-      "Get a list of available liquidity pools using Ember On-chain Actions.",
-    arguments: zodSchemaToMcpArgs(getLiquidityPoolsSchema),
-  },
-  {
-    name: "getUserLiquidityPositions",
-    description: "Get user's liquidity positions using Ember On-chain Actions.",
-    arguments: zodSchemaToMcpArgs(getUserLiquidityPositionsSchema),
-  },
-];
 
 // --- Initialize the MCP server using the high-level McpServer API
 const server = new McpServer({
@@ -309,35 +250,35 @@ if (emberEndpoint === defaultEndpoint) {
 }
 
 const emberClient = new EmberGrpcClient(emberEndpoint);
-
 // --- Register Tools ---
 // Pass the raw schema (e.g., swapTokensSchema) instead of the validator instance
 server.tool(
   "swapTokens",
   "Swap or convert tokens using Ember On-chain Actions",
   swapTokensSchema,
-  async (params: SwapTokensParams, extra: any) => {
-    console.error(`Executing swapTokens tool with params:`, params);
-    console.error(`Extra object for swapTokens:`, extra);
-
-    try {
-      const fromToken = {
+  async (params: SwapTokensParams) => {
+    const swapRequest: SwapTokensRequest = {
+      orderType: OrderType.MARKET_SELL,
+      baseToken: {
         chainId: params.fromTokenChainId,
         address: params.fromTokenAddress,
-      };
-      const toToken = {
+      },
+      quoteToken: {
         chainId: params.toTokenChainId,
         address: params.toTokenAddress,
-      };
-      const response = await emberClient.swapTokens({
-        orderType: OrderType.MARKET_SELL,
-        baseToken: fromToken,
-        quoteToken: toToken,
-        amount: params.amount,
-        recipient: params.userAddress,
-      });
+      },
+      amount: params.amount,
+      recipient: params.userAddress,
+      slippageTolerance: "0.05",
+    };
 
-      if (response.error || !response.transactions) {
+    try {
+      const response = await emberClient.swapTokens(swapRequest);
+      if (
+        response.error ||
+        !response.transactions ||
+        !response.transactions.length
+      ) {
         throw new Error(
           response.error?.message || "No transaction plan returned for swap"
         );
@@ -347,12 +288,12 @@ server.tool(
         content: [
           {
             type: "text",
-            text: JSON.stringify(response),
+            text: JSON.stringify(response, null, 2),
           },
         ],
       };
     } catch (error) {
-      console.error(`SwapTokens tool error:`, error);
+      console.error(`Swap tool error:`, error);
       return {
         isError: true,
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
@@ -360,6 +301,7 @@ server.tool(
     }
   }
 );
+
 server.tool(
   "borrow",
   "Borrow tokens using Ember On-chain Actions",
@@ -830,6 +772,38 @@ server.tool(
       };
     } catch (error) {
       console.error(`getUserLiquidityPositions tool error:`, error);
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+      };
+    }
+  }
+);
+
+// Add getYieldMarkets tool implementation after the getTokens implementation
+server.tool(
+  "getYieldMarkets",
+  "Get Yield markets",
+  getYieldMarketsSchema,
+  async (params: GetYieldMarketsParams, extra: any) => {
+    console.error(`Executing getYieldMarkets tool with params:`, params);
+    console.error(`Extra object for getYieldMarkets:`, extra);
+
+    try {
+      const response = await emberClient.getYieldMarkets({
+        chainIds: [],
+      });
+      console.error(`GetYieldMarkets tool success.`);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(response, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      console.error(`GetYieldMarkets tool error:`, error);
       return {
         isError: true,
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
