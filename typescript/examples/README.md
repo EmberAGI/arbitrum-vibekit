@@ -1,86 +1,114 @@
-## Introduction
+## 🎛️ Agent Playground
 
-The `examples` directory contains some implementations of on-chain AI agents, illustrating how they are easily built and deployed using the Arbitrum Vibetkit. These agents can act as MCP tools for compatibility with any system.
+The `examples` directory contains ready-to-roll DeFi agents built with the Vibekit. These agents showcase how to deploy smart, autonomous on-chain agents in a few steps. Each agent doubles as an MCP tool, enabling agent-to-agent integration for powerful workflows.
 
-## Running an Existing Agent
+Want to vibe code your own custom agent? Jump to [Building Your Own Agent](#-building-your-own-agent) to get started.
 
-### 1. Setup Environment
+### 🚀 Running an Existing Agent
+
+#### 1. Setup Environment
 
 Navigate to the desired agent's directory and create an `.env` file. Copy the contents of `.env.example` into the `.env` file and fill in any required secrets or configuration variables.
 
-### 2. Start the Agent
+#### 2. Start the Agent
 
-There are two main ways to start an agent:
+There are three main ways to start an agent:
 
-- **Using Docker Compose**:
+**1. Cursor's AI Assistant (Vibe Coding)**:
+Ask Cursor's integrated AI assistant to run your desired agent.
 
-  Navigate to the `typescript` directory and install the necessary packages.
+**2. Docker Compose**:
 
-  ```
-  cd typescript
-  pnpm install
-  ```
+Navigate to the `typescript` directory and install the necessary packages.
 
-  Next, run the MCP-enabled Docker container to start your agent. Replace the `"agent-name"` with the name of your desired agent, for example: `"swapping-agent-no-wallet"`.
+```
+cd typescript
+pnpm install
+```
 
-  ```
-  pnpm --filter "agent-name" docker:compose:up
-  ```
+Next, run the MCP-enabled Docker container to start your agent. Replace the `"agent-name"` with the name of your desired agent, for example: `"swapping-agent-no-wallet"`.
 
-  **Note**: If you get a `permission denied error`, try running the above command with `sudo`:
+```
+pnpm --filter "agent-name" docker:compose:up
+```
 
-  ```
-  sudo pnpm --filter "agent-name" docker:compose:up
-  ```
+**Note**: If you get a `permission denied error`, try running the above command with `sudo`:
 
-  **Running on background**: If you want to run the agent in the background so you can keep using your terminal, you can use the `-d` flag:
+```
+sudo pnpm --filter "agent-name" docker:compose:up
+```
 
-  ```
-  pnpm --filter "agent-name" docker:compose:up -d
-  ```
+**Running on background**: To run the agent in the background so you can keep using your terminal, use the `-d` flag:
 
-  If you want to stop the agent afterwards, you can use the following command:
+```
+pnpm --filter "agent-name" docker:compose:up -d
+```
 
-  ```
-  pnpm --filter "agent-name" docker:compose:down
-  ```
+To stop the agent afterwards, use the following command:
 
-- **Running locally**:
+```
+pnpm --filter "agent-name" docker:compose:down
+```
 
-  Navigate to the `typescript` directory and run the following `pnpm` commands to build
-  your agent. Replace the `"agent-name"` with the name of your desired agent, for example: `"swapping-agent-no-wallet"`.
+**3. Local Development**:
 
-  ```
-  cd typescript
-  pnpm --filter "agent-name" install
-  pnpm --filter "agent-name" build
-  pnpm --filter "agent-name" dev
-  ```
+Navigate to the `typescript` directory and run the following `pnpm` commands to build
+your agent. Replace the `"agent-name"` with the name of your desired agent, for example: `"swapping-agent-no-wallet"`.
 
-### 3. Interact with the Agent
+```
+cd typescript
+pnpm install
 
-- **Using the Inspector via npx**:
+pnpm --filter "agent-name" install
+pnpm --filter "agent-name" build
+pnpm --filter "agent-name" dev
+```
 
-  You can run the following `npx` command in another terminal to launch the Inspector.
+#### 3. Interact with the Agent
 
-  ```bash
-  npx -y @modelcontextprotocol/inspector
-  ```
+Once the agent is up and running on port 3001, you have two ways to engage with it:
 
-  It’s a convenient way to inspect or interact with your production agent without modifying your local environment.
+- **Launch the Inspector interface:**
 
-  **Note**: It might take a couple minutes for the agent to finish setting up. If you get errors of `Connection Error, is your MCP server running?`, try connecting to it in a couple of minutes.
+Open a new terminal window and run the following to start the inspector:
 
-- **Graphical MCP Clients**:
+```bash
+npx -y @modelcontextprotocol/inspector
+```
 
-1. Cursor:
+Navigate to http://127.0.0.1:6274 in your browser to access the interface and click on "Connect" to establish a connection with your local server:
 
-   Cursor is designed for lightweight command-line interactions. To integrate an agent into Cursor, update the configuration by editing the `mcp.json` file. Add an entry under the `mcpServers` key to define the agent’s settings. Cursor can run an agent via a local command (using npx) or point directly to an SSE (Server-Sent Events) endpoint. For detailed guidance on configuring MCP for Cursor, refer to https://docs.cursor.com/context/model-context-protocol.
+<p align="left">
+  <img src="../../img/inspector_1.png" width="700px" alt="Inspector1"/>
+</p>
 
-2. Claude Desktop:
+Next, click on "List Tools" to view and run the tools your agent offers:
 
-   Claude Desktop supports similar agent configurations as Cursor but also includes additional settings such as filesystem access, which enhances its capability to work with local directories. To integrate an agent into Claude Desktop, update the configuration by editing the `claude_desktop_config.json` file. Add an entry under the `mcpServers` key to define the agent’s settings. Claude Desktop can run an agent via a local command (using npx) or point directly to an SSE (Server-Sent Events) endpoint.For detailed guidance on configuring MCP for Claude Desktop, refer to https://modelcontextprotocol.io/quickstart/user.
+<p align="left">
+  <img src="../../img/inspector_2.png" width="700px" alt="Inspector2"/>
+</p>
 
-3. Windsurf:
+The Inspector interface provides a straightforward way to interact with your agent. For a more integrated development experience, you can use the Cursor IDE.
 
-   Windsurf offers a rich graphical interface and integrates its MCP configurations either through a configuration file named `windsurf_config.json` or via its built-in Settings panel. Windsurf’s configuration process often involves UI-based adjustments. For detailed guidance on configuring MCP for Windsurf, refer to https://docs.windsurf.com/windsurf/mcp.
+- **Integrate with Cursor IDE**
+
+To interact with the agent though Cursor, [create or update](https://docs.cursor.com/context/model-context-protocol) your `mcp.json` file through Cursor settings with the following content:
+
+```
+{
+ "mcpServers": {
+   "local-sse-agent": {
+     "url": "http://localhost:3001/sse"
+   }
+ }
+}
+
+```
+
+Restart Cursor to apply the new configuration. Upon successful integration, Cursor will automatically detect the Agent MCP tool and you can interact with it directly through prompts.
+
+**Note:** This configuration approach is also compatible with other graphical MCP clients like [Claude Desktop](https://modelcontextprotocol.io/quickstart/user) and [Windsurf](https://docs.windsurf.com/windsurf/mcp). Simply adjust the settings accordingly in their respective configuration files.
+
+### 🛠️ Building Your Own Agent
+
+coming soon!

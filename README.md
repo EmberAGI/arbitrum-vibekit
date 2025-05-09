@@ -1,16 +1,16 @@
 ![Graphic](img/Graphic.png)
 
 <p align="center"> 
-   &nbsp&nbsp 📃 <a href="https://ember-ai.gitbook.io/arbitrum-vibekit">Documentation </a> &nbsp&nbsp | &nbsp&nbsp 🤖  <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples"> Agent Templates</a>  &nbsp&nbsp | &nbsp&nbsp 🎨  <a href="https://questbook.emberai.xyz/"> GUI </a> &nbsp&nbsp | &nbsp&nbsp  💬  <a > Support Discord </a>  &nbsp&nbsp | &nbsp&nbsp  📩  <a href="https://t.me/EmberChat"> Ember Telegram</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://x.com/EmberAGI"> 𝕏 </a> &nbsp&nbsp
+   &nbsp&nbsp 📃 <a href="https://ember-ai.gitbook.io/arbitrum-vibekit">Documentation </a> &nbsp&nbsp | &nbsp&nbsp 🤖  <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples"> Agent Templates</a>  &nbsp&nbsp | &nbsp&nbsp 🎨  <a href="https://questbook.emberai.xyz/"> Web Interface </a> &nbsp&nbsp | &nbsp&nbsp  💬  <a > Support Discord </a>  &nbsp&nbsp | &nbsp&nbsp  📩  <a href="https://t.me/EmberChat"> Ember Telegram</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://x.com/EmberAGI"> 𝕏 </a> &nbsp&nbsp
 </p>
 
 ## 🧭 Table of Contents
 
 - [📙 Introduction](#-introduction)
 - [🧬 Repository Organization](#-repository-organization)
-- [⚡ Quickstart](#-quickstart)
-- [🎨 GUI Interaction](#-gui-interaction)
+- [⚡ Developer Quickstart](#-developer-quickstart)
 - [🎧 Vibe Coding](#-vibe-coding)
+- [🎨 Web Interface](#-web-interface)
 - [🔌 MCP Integration](#-mcp-integration)
 - [🙌 Contribution](#-contribution)
 
@@ -19,6 +19,8 @@
 Welcome to Vibekit – your polyglot toolkit for vibe coding smart, autonomous DeFi agents that vibe with the blockchain. Whether you're automating trades, managing liquidity, or integrating with on-chain and off-chain data, Vibekit makes it effortless and fun.
 
 At its core, Vibekit leverages the Model Context Protocol (MCP), a framework that standardizes how agents interact with tools and data. Vibekit also integrates smoothly with your current agent frameworks such as Eliza and LangGraph. Just plug in our MCP tools into your existing agents and watch them level up with DeFi superpowers!
+
+![FlowChart](img/)
 
 ## 🧬 Repository Organization
 
@@ -50,7 +52,7 @@ Vibekit/
 
 - `mcp-tools/`: Implementations of MCP tools.
 
-## ⚡ Quickstart
+## ⚡ Developer Quickstart
 
 Ready to launch your DeFi agent?
 
@@ -156,7 +158,7 @@ To interact with the Lending agent though Curosr, [create or update](https://doc
 
 Restart Cursor to apply the new configuration. Upon successful integration, the MCP settings should look like this:
 
-<p align="left">
+<p align="center">
   <img src="img/mcp.png" width="700px" alt="MCP"/>
 </p>
 
@@ -164,22 +166,6 @@ Cursor will now automatically detect the Lending Agent MCP tool and you can inte
 
 **5. Build your own DeFi agent:**
 Dive into the [examples/](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) directory to explore other agent templates and start building your own!
-
-## 🎨 GUI Interaction
-
-You can also access the example agents through our [web-based GUI](https://questbook.emberai.xyz/) that provides a user-friendly interface for:
-
-- Interacting with agents without local setup
-- Visualizing agent responses and transactions
-- Managing multiple agent interactions
-
-To use the GUI:
-
-1. Head over to our [web interface](https://questbook.emberai.xyz/)
-2. Connect your wallet (if required for the agent)
-3. Select the agent you want to interact with
-4. Use the chat interface to send commands
-5. View transaction details and agent responses in real-time
 
 ## 🎧 Vibe Coding
 
@@ -263,6 +249,22 @@ To add new rules or modify existing ones:
   - New development patterns
   - Updated best practices
   - Common troubleshooting solutions
+
+## 🎨 Web Interface
+
+You can also access the example agents through our [web-based GUI](https://questbook.emberai.xyz/) that provides a user-friendly interface for:
+
+- Interacting with agents without local setup
+- Visualizing agent responses and transactions
+- Managing multiple agent interactions
+
+To use the web-based GUI:
+
+1. Head over to our [web interface](https://questbook.emberai.xyz/)
+2. Connect your wallet (if required for the agent)
+3. Select the agent you want to interact with
+4. Use the chat interface to send commands
+5. View transaction details and agent responses in real-time
 
 ## 🔌 MCP Integration
 
