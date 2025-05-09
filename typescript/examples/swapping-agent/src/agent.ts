@@ -585,7 +585,7 @@ Present the user with a list of tokens and chains they can swap from and to if p
 
     try {
       // Read timeout from env var, default to 90 seconds
-      const mcpTimeoutMs = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '30000', 10);
+      const mcpTimeoutMs = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '90000', 10);
       this.log(`Using MCP tool timeout: ${mcpTimeoutMs}ms`);
 
       const capabilitiesResult = await this.mcpClient.callTool(

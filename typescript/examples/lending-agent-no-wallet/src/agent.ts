@@ -372,7 +372,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
     console.error('Fetching lending capabilities via MCP tool call...');
     try {
-      const mcpTimeoutMs = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '30000', 10);
+      const mcpTimeoutMs = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '90000', 10);
       console.error(`Using MCP tool timeout: ${mcpTimeoutMs}ms`);
 
       const capabilitiesResult = await this.mcpClient.callTool(

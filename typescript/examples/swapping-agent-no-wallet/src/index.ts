@@ -116,6 +116,8 @@ const sseConnections = new Set();
 
 let transport: SSEServerTransport;
 
+const MCP_TOOL_TIMEOUT_MS = process.env.MCP_TOOL_TIMEOUT_MS ? parseInt(process.env.MCP_TOOL_TIMEOUT_MS, 10) : 90000;
+
 app.get('/sse', async (_req, res) => {
   transport = new SSEServerTransport('/messages', res);
   await server.connect(transport);
@@ -128,7 +130,7 @@ app.get('/sse', async (_req, res) => {
       return;
     }
     res.write(':keepalive\n\n');
-  }, 30000);
+  }, MCP_TOOL_TIMEOUT_MS);
 
   _req.on('close', () => {
     clearInterval(keepaliveInterval);

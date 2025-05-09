@@ -550,7 +550,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
     }
 
     try {
-      const mcpTimeoutMs = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '30000', 10);
+      const mcpTimeoutMs = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '90000', 10);
       this.log(`Using MCP tool timeout: ${mcpTimeoutMs}ms`);
 
       const capabilitiesResult = await this.mcpClient.callTool(
