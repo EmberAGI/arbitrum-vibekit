@@ -119,6 +119,12 @@ const EmberPositionSchema = z
     amount0: z.string(),
     amount1: z.string(),
     price: z.string(),
+    positionRange: z
+      .object({
+        fromPrice: z.string(),
+        toPrice: z.string(),
+      })
+      .optional(),
   })
   .passthrough();
 
@@ -298,6 +304,7 @@ export async function handleGetUserLiquidityPositions(
       amount0: pos.amount0,
       amount1: pos.amount1,
       price: pos.price,
+      positionRange: pos.positionRange,
     }));
     context.updatePositions(positions);
     context.log(`Updated internal state with ${positions.length} positions.`);
@@ -312,6 +319,11 @@ export async function handleGetUserLiquidityPositions(
       responseText += `  Amount0: ${pos.amount0} ${pos.symbol0}\n`;
       responseText += `  Amount1: ${pos.amount1} ${pos.symbol1}\n`;
       responseText += `  Price: ${pos.price}\n`;
+      responseText += `  Price Range: ${
+        pos.positionRange
+          ? pos.positionRange.fromPrice + ' to ' + pos.positionRange.toPrice
+          : '0 to ∞'
+      }\n`;
     });
 
     // Construct artifact
