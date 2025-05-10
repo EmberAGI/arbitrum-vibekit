@@ -5,7 +5,7 @@
     "outDir": "dist",
     "baseUrl": ".",
     "paths": {
-      "@modelcontextprotocol/sdk/types": [
+      "@modelcontextprotocol/sdk/types.js": [
         "./node_modules/@modelcontextprotocol/sdk/dist/esm/types.d.ts"
       ]
     }

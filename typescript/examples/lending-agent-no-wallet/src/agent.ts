@@ -14,6 +14,7 @@ import type { Task } from 'a2a-samples-js/schema';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import {
   generateText,
   tool,
@@ -378,7 +379,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       const capabilitiesResult = await this.mcpClient.callTool(
         {
           name: 'getCapabilities',
-          arguments: { type: 'LENDING' },
+          arguments: { type: 'LENDING_MARKET' },
         },
         undefined,
         { timeout: mcpTimeoutMs }
@@ -710,9 +711,10 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
   }
 
   private async _loadAaveDocumentation(): Promise<void> {
-    const defaultDocsPath = path.resolve(__dirname, '../encyclopedia');
-    const docsPath = defaultDocsPath;
-    const filePaths = [path.join(docsPath, 'aave-01.md'), path.join(docsPath, 'aave-02.md')];
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const docsPath = join(__dirname, '../encyclopedia');
+    const filePaths = [join(docsPath, 'aave-01.md'), join(docsPath, 'aave-02.md')];
     let combinedContent = '';
 
     console.error(`Loading Aave documentation from: ${docsPath}`);

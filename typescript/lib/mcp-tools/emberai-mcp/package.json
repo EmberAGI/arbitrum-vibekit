@@ -9,12 +9,12 @@
     "ember-mcp-tool-server": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc && node -e \"require('fs').chmodSync('dist/index.js', '755')\"",
+    "build": "tsc && node -e \"const { join } = require('path'); const fs=require('fs'); const p=join(process.cwd(),'dist/index.js'); if(fs.existsSync(p)){ fs.chmodSync(p,'755'); }\"",
     "start": "tsx src/index.ts",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
     "test": "tsx test test/**/*.test.ts",
     "dev": "tsx watch src/index.ts",
-    "prepare": "tsc && node -e \"require('fs').chmodSync('dist/index.js', '755')\""
+    "prepare": "tsc && node -e \"const { join } = require('path'); const fs=require('fs'); const p=join(process.cwd(),'dist/index.js'); if(fs.existsSync(p)){ fs.chmodSync(p,'755'); }\""
   },
   "files": [
     "dist"
