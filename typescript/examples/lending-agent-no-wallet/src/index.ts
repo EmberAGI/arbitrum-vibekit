@@ -103,6 +103,7 @@ const sseConnections = new Set();
 
 let transport: SSEServerTransport;
 
+
 app.get('/sse', async (_req, res) => {
   transport = new SSEServerTransport('/messages', res);
   await server.connect(transport);
