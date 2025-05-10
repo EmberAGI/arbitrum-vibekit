@@ -20,6 +20,7 @@
     "@emberai/sdk-typescript": "0.3.0-beta.6",
     "@grpc/grpc-js": "^1.12.5",
     "@modelcontextprotocol/sdk": "^1.5.0",
+    "arbitrum-vibekit": "workspace:*",
     "@openrouter/ai-sdk-provider": "^0.4.5",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",

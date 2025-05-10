@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Task } from 'a2a-samples-js/schema';
+import type { Task, DataPart } from 'a2a-samples-js/schema';
 import {
   createPublicClient,
   http,
@@ -13,6 +13,16 @@ import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with {
 import { getChainConfigById } from './agent.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { streamText } from 'ai';
+import {
+  parseMcpToolResponse as sharedParseMcpToolResponse,
+  createTransactionArtifactSchema,
+  type TransactionArtifact,
+} from 'arbitrum-vibekit';
+import {
+  validateTransactionPlans,
+  TransactionPlanSchema,
+  type TransactionPlan,
+} from 'ember-mcp-tool-server';
 
 const ZodTokenUidSchema = z.object({
   chainId: z.string(),
@@ -87,28 +97,9 @@ export const LendingPreviewSchema = z
 
 export type LendingPreview = z.infer<typeof LendingPreviewSchema>;
 
-export const TransactionEmberSchema = z
-  .object({
-    to: z.string(),
-    data: z.string(),
-    value: z.string(),
-  })
-  .passthrough();
-
-export type TransactionEmber = z.infer<typeof TransactionEmberSchema>;
-
-export const TransactionResponseSchema = TransactionEmberSchema.extend({
-  chainId: z.string(),
-});
-
-export type TransactionResponse = z.infer<typeof TransactionResponseSchema>;
-
-export const TransactionArtifactSchema = z.object({
-  txPreview: LendingPreviewSchema,
-  txPlan: z.array(TransactionResponseSchema),
-});
-
-export type TransactionArtifact = z.infer<typeof TransactionArtifactSchema>;
+// Define shared artifact schema for lending transactions
+const LendingTransactionArtifactSchema = createTransactionArtifactSchema(LendingPreviewSchema);
+export type LendingTransactionArtifact = TransactionArtifact<LendingPreview>;
 
 export interface HandlerContext {
   mcpClient: Client;
@@ -138,7 +129,7 @@ function findTokenInfo(
   }
 
   if (possibleTokens.length === 1) {
-    return { type: 'found', token: possibleTokens[0] };
+    return { type: 'found', token: possibleTokens[0]! };
   }
 
   return { type: 'clarificationNeeded', options: possibleTokens };
@@ -149,72 +140,14 @@ function parseToolResponse(
   context: HandlerContext,
   toolName: string
 ): unknown {
-  let dataToValidate: unknown;
-
-  if (
-    rawResponse &&
-    typeof rawResponse === 'object' &&
-    'content' in rawResponse &&
-    Array.isArray((rawResponse as any).content) &&
-    (rawResponse as any).content.length > 0 &&
-    (rawResponse as any).content[0]?.type === 'text' &&
-    typeof (rawResponse as any).content[0]?.text === 'string'
-  ) {
-    context.log(`Raw ${toolName} result appears nested, parsing inner text...`);
-    try {
-      const textToParse = (rawResponse as any).content[0].text;
-      if (textToParse.startsWith('Error:')) {
-        context.log(`MCP tool '${toolName}' returned an error: ${textToParse}`);
-        throw new Error(`MCP tool '${toolName}' failed: ${textToParse}`);
-      }
-      const parsedData = JSON.parse(textToParse);
-      context.log('Parsed inner text content for validation:', parsedData);
-      dataToValidate = parsedData;
-    } catch (e) {
-      context.log(`Error parsing inner text content from ${toolName} result:`, e);
-      throw new Error(`Failed to parse nested JSON response from ${toolName}: ${rawResponse}`);
-    }
-  } else {
-    context.log(
-      `Raw ${toolName} result does not have expected nested structure, validating as is.`
-    );
-    dataToValidate = rawResponse;
+  context.log(`Invoking shared parser for ${toolName}`);
+  const text = sharedParseMcpToolResponse(rawResponse);
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    context.log(`Error parsing JSON from ${toolName}:`, e);
+    throw e;
   }
-
-  return dataToValidate;
-}
-
-function validateTransactions(
-  actionName: string,
-  rawTransactions: unknown,
-  expectedChainId: string,
-  context: HandlerContext
-): TransactionResponse[] {
-  const validationResult = z.array(TransactionEmberSchema).safeParse(rawTransactions);
-  if (!validationResult.success) {
-    const errorMsg = `MCP tool '${actionName}' returned invalid transaction data structure.`;
-    context.log(errorMsg, validationResult.error);
-    context.log('Raw data that failed validation:', JSON.stringify(rawTransactions));
-    throw new Error(errorMsg);
-  }
-  context.log(
-    `Validated structure for ${validationResult.data.length} transactions for ${actionName}. Adding chainId: ${expectedChainId}`
-  );
-
-  const transactionsWithChainId = validationResult.data.map(tx => ({
-    ...tx,
-    chainId: tx.chainId ?? expectedChainId,
-  }));
-
-  const finalValidation = z.array(TransactionResponseSchema).safeParse(transactionsWithChainId);
-  if (!finalValidation.success) {
-    const errorMsg = `Failed to add required chainId '${expectedChainId}' to transactions for ${actionName}.`;
-    context.log(errorMsg, finalValidation.error);
-    context.log('Data after adding chainId:', JSON.stringify(transactionsWithChainId));
-    throw new Error(errorMsg);
-  }
-
-  return finalValidation.data;
 }
 
 export async function handleBorrow(
@@ -283,14 +216,13 @@ export async function handleBorrow(
         });
 
         const parsedResponse = parseToolResponse(rawResult, context, 'borrow');
-        const transactions: TransactionResponse[] = validateTransactions(
-          'borrow',
-          parsedResponse,
-          tokenDetail.chainId,
-          context
-        );
+        // Validate transactions using shared type
+        const transactions = validateTransactionPlans(
+          parsedResponse as unknown[]
+        ) as TransactionPlan[];
 
-        const txArtifact: TransactionArtifact = {
+        // Build artifact using shared generic schema
+        const txArtifact: LendingTransactionArtifact = {
           txPreview: {
             tokenName,
             amount,
@@ -299,6 +231,7 @@ export async function handleBorrow(
           },
           txPlan: transactions,
         };
+        const dataPart: DataPart = { type: 'data', data: txArtifact as any };
 
         return {
           id: context.userAddress,
@@ -314,7 +247,7 @@ export async function handleBorrow(
           artifacts: [
             {
               name: 'transaction-plan',
-              parts: [{ type: 'data', data: txArtifact }],
+              parts: [dataPart],
             },
           ],
         };
@@ -495,103 +428,43 @@ export async function handleRepay(
         arguments: {
           tokenAddress: tokenInfo.address,
           tokenChainId: tokenInfo.chainId,
-          amount: amount,
-          userAddress: context.userAddress,
+          amount,
+          userAddress: context.userAddress!,
         },
       });
 
       context.log('MCP repay tool response:', toolResult);
 
-      let validatedTxPlan: TransactionResponse[] = [];
-      try {
-        const parsedData = parseToolResponse(toolResult, context, 'repay');
-        validatedTxPlan = validateTransactions('repay', parsedData, txChainId, context);
+      // Parse and validate the transaction plan
+      const parsedData = parseToolResponse(toolResult, context, 'repay');
+      const transactions = validateTransactionPlans(parsedData as unknown[]) as TransactionPlan[];
 
-        context.log(
-          `Processed and validated ${validatedTxPlan.length} transactions from MCP for repay.`
-        );
+      context.log(`Processed and validated ${transactions.length} transactions for repay.`);
 
-        if (validatedTxPlan.length === 0) {
-          throw new Error('MCP tool returned an empty transaction plan.');
-        }
-      } catch (error) {
-        context.log(`Error processing MCP repay response:`, error);
-        return {
-          id: userAddress,
-          status: {
-            state: 'failed',
-            message: {
-              role: 'agent',
-              parts: [
-                {
-                  type: 'text',
-                  text: `Failed to get valid repay plan: ${(error as Error).message}`,
-                },
-              ],
-            },
-          },
-        };
-      }
-
-      const finalTxPlan = validatedTxPlan;
-
+      // Build preview and artifact
       const txPreview: LendingPreview = {
-        tokenName: tokenName,
-        amount: amount,
+        tokenName,
+        amount,
         action: 'repay',
-        chainId: txChainId,
+        chainId: tokenInfo.chainId,
       };
+      const artifactContent: LendingTransactionArtifact = { txPreview, txPlan: transactions };
+      const dataPart: DataPart = { type: 'data', data: artifactContent as any };
 
-      try {
-        context.log('Repay transaction plan prepared:', finalTxPlan);
-
-        return {
-          id: userAddress,
-          status: {
-            state: 'completed',
-            message: {
-              role: 'agent',
-              parts: [
-                {
-                  type: 'text',
-                  text: `Repay transaction plan created for ${amount} ${tokenName}. Ready to sign.`,
-                },
-              ],
-            },
+      // Return Task with standard artifact
+      return {
+        id: userAddress,
+        status: {
+          state: 'completed',
+          message: {
+            role: 'agent',
+            parts: [
+              { type: 'text', text: `Repay transaction plan ready (${transactions.length} txs).` },
+            ],
           },
-          artifacts: [
-            {
-              name: 'transaction-plan',
-              parts: [
-                {
-                  type: 'data',
-                  data: {
-                    txPreview: txPreview,
-                    txPlan: finalTxPlan,
-                  } as TransactionArtifact,
-                },
-              ],
-            },
-          ],
-        };
-      } catch (error) {
-        context.log(`Error during repay action execution:`, error);
-        return {
-          id: userAddress,
-          status: {
-            state: 'failed',
-            message: {
-              role: 'agent',
-              parts: [
-                {
-                  type: 'text',
-                  text: `Failed to execute repay transaction plan: ${(error as Error).message}`,
-                },
-              ],
-            },
-          },
-        };
-      }
+        },
+        artifacts: [{ name: 'transaction-plan', parts: [dataPart] }],
+      };
     }
   }
 }
@@ -763,10 +636,10 @@ export async function handleSupply(
 
       context.log('MCP supply tool response:', toolResult);
 
-      let validatedTxPlan: TransactionResponse[] = [];
+      let validatedTxPlan: TransactionPlan[] = [];
       try {
         const parsedData = parseToolResponse(toolResult, context, 'supply');
-        validatedTxPlan = validateTransactions('supply', parsedData, txChainId, context);
+        validatedTxPlan = validateTransactionPlans(parsedData as unknown[]);
 
         context.log(
           `Processed and validated ${validatedTxPlan.length} transactions from MCP for supply.`
@@ -825,7 +698,7 @@ export async function handleSupply(
               parts: [
                 {
                   type: 'data',
-                  data: { txPreview: txPreview, txPlan: finalTxPlan } as TransactionArtifact,
+                  data: { txPreview, txPlan: finalTxPlan } as Record<string, unknown>,
                 },
               ],
             },
@@ -921,11 +794,8 @@ export async function handleWithdraw(
 
       try {
         const parsedResult = parseToolResponse(toolResult, context, 'withdraw');
-        const validatedTxPlan: TransactionResponse[] = validateTransactions(
-          'withdraw',
-          parsedResult,
-          tokenDetail.chainId,
-          context
+        const validatedTxPlan: TransactionPlan[] = validateTransactionPlans(
+          parsedResult as unknown[]
         );
         context.log('Withdraw transaction plan validated:', validatedTxPlan);
 
@@ -956,10 +826,7 @@ export async function handleWithdraw(
               parts: [
                 {
                   type: 'data',
-                  data: {
-                    txPreview: txPreview,
-                    txPlan: validatedTxPlan,
-                  } as TransactionArtifact,
+                  data: { txPreview, txPlan: validatedTxPlan } as Record<string, unknown>,
                 },
               ],
             },

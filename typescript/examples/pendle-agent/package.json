@@ -22,6 +22,7 @@
     "@grpc/grpc-js": "^1.12.5",
     "@modelcontextprotocol/sdk": "^1.10.0",
     "ember-mcp-tool-server": "workspace:*",
+    "arbitrum-vibekit": "workspace:*",
     "@openrouter/ai-sdk-provider": "^0.4.5",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",

@@ -4,6 +4,7 @@
   "description": "MCP stdio server for Ember AI On-chain Actions tools for LLMs",
   "type": "module",
   "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "bin": {
     "ember-mcp-tool-server": "./dist/index.js"
   },
@@ -12,7 +13,8 @@
     "start": "tsx src/index.ts",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
     "test": "tsx test test/**/*.test.ts",
-    "dev": "tsx watch src/index.ts"
+    "dev": "tsx watch src/index.ts",
+    "prepare": "tsc && node -e \"require('fs').chmodSync('dist/index.js', '755')\""
   },
   "files": [
     "dist"

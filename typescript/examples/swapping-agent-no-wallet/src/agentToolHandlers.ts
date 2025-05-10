@@ -10,10 +10,20 @@ import {
 } from 'viem';
 import { getChainConfigById } from './agent.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Task } from 'a2a-samples-js/schema';
+import type { Task, DataPart } from 'a2a-samples-js/schema';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { streamText } from 'ai';
+import {
+  parseMcpToolResponse as sharedParseMcpToolResponse,
+  createTransactionArtifactSchema,
+  type TransactionArtifact,
+} from 'arbitrum-vibekit';
+import {
+  validateTransactionPlans,
+  TransactionPlanSchema,
+  type TransactionPlan,
+} from 'ember-mcp-tool-server';
 
 export type TokenInfo = {
   chainId: string;
@@ -38,28 +48,7 @@ export const SwapPreviewSchema = z
   })
   .passthrough();
 
-export const TransactionEmberSchema = z
-  .object({
-    to: z.string(),
-    data: z.string(),
-    value: z.string(),
-  })
-  .passthrough();
-
-export type TransactionEmber = z.infer<typeof TransactionEmberSchema>;
-
-export const TransactionResponseSchema = TransactionEmberSchema.extend({
-  chainId: z.string(),
-});
-
-export type TransactionResponse = z.infer<typeof TransactionResponseSchema>;
-
-export const TransactionArtifactSchema = z.object({
-  txPreview: SwapPreviewSchema,
-  txPlan: z.array(TransactionResponseSchema),
-});
-
-export type TransactionArtifact = z.infer<typeof TransactionArtifactSchema>;
+export type SwapPreview = z.infer<typeof SwapPreviewSchema>;
 
 const TokenDetailSchema = z.object({
   address: z.string(),
@@ -85,7 +74,7 @@ export const SwapResponseSchema = z.object({
   quoteToken: TokenDetailSchema,
   estimation: EstimationSchema,
   providerTracking: ProviderTrackingSchema,
-  transactions: z.array(TransactionEmberSchema),
+  transactions: z.array(TransactionPlanSchema),
 });
 
 export type SwapResponse = z.infer<typeof SwapResponseSchema>;
@@ -179,73 +168,6 @@ function findTokenDetail(
   }
 
   return tokenDetail;
-}
-
-export function parseMcpToolResponse(
-  rawResponse: unknown,
-  context: HandlerContext,
-  toolName: string
-): unknown {
-  let dataToValidate: unknown;
-
-  if (
-    rawResponse &&
-    typeof rawResponse === 'object' &&
-    'content' in rawResponse &&
-    Array.isArray((rawResponse as any).content) &&
-    (rawResponse as any).content.length > 0 &&
-    (rawResponse as any).content[0]?.type === 'text' &&
-    typeof (rawResponse as any).content[0]?.text === 'string'
-  ) {
-    context.log(`Raw ${toolName} result appears nested, parsing inner text...`);
-    try {
-      const parsedData = JSON.parse((rawResponse as any).content[0].text);
-      dataToValidate = parsedData;
-    } catch (e) {
-      context.log(`Error parsing inner text content from ${toolName} result:`, e);
-      throw new Error(`Failed to parse nested JSON response from ${toolName}: ${rawResponse}}`);
-    }
-  } else {
-    context.log(
-      `Raw ${toolName} result does not have expected nested structure, validating as is.`
-    );
-    dataToValidate = rawResponse;
-  }
-
-  return dataToValidate;
-}
-
-function validateTransactions(
-  actionName: string,
-  rawTransactions: unknown,
-  expectedChainId: string,
-  context: HandlerContext
-): TransactionResponse[] {
-  const validationResult = z.array(TransactionEmberSchema).safeParse(rawTransactions);
-  if (!validationResult.success) {
-    const errorMsg = `MCP tool '${actionName}' returned invalid transaction data structure.`;
-    context.log(errorMsg, validationResult.error);
-    context.log('Raw data that failed validation:', JSON.stringify(rawTransactions));
-    throw new Error(errorMsg);
-  }
-  context.log(
-    `Validated structure for ${validationResult.data.length} transactions for ${actionName}. Adding chainId: ${expectedChainId}`
-  );
-
-  const transactionsWithChainId = validationResult.data.map(tx => ({
-    ...tx,
-    chainId: expectedChainId,
-  }));
-
-  const finalValidation = z.array(TransactionResponseSchema).safeParse(transactionsWithChainId);
-  if (!finalValidation.success) {
-    const errorMsg = `Failed to add required chainId '${expectedChainId}' to transactions for ${actionName}.`;
-    context.log(errorMsg, finalValidation.error);
-    context.log('Data after adding chainId:', JSON.stringify(transactionsWithChainId));
-    throw new Error(errorMsg);
-  }
-
-  return finalValidation.data;
 }
 
 export async function handleSwapTokens(
@@ -394,7 +316,7 @@ export async function handleSwapTokens(
     },
   });
 
-  const dataToValidate = parseMcpToolResponse(swapResponseRaw, context, 'swapTokens');
+  const dataToValidate = sharedParseMcpToolResponse(swapResponseRaw);
   context.log('Parsed swap response data:', dataToValidate);
 
   const validationResult = SwapResponseSchema.safeParse(dataToValidate);
@@ -433,8 +355,8 @@ export async function handleSwapTokens(
     };
   }
 
-  const firstSwapTx = rawSwapTransactions[0];
-  if (!firstSwapTx || typeof firstSwapTx !== 'object' || !firstSwapTx.to) {
+  const firstSwapTx = rawSwapTransactions[0] as TransactionPlan;
+  if (!firstSwapTx || typeof firstSwapTx !== 'object' || !('to' in firstSwapTx)) {
     context.log('Invalid swap transaction object received from MCP:', firstSwapTx);
     return {
       id: userAddress,
@@ -452,7 +374,7 @@ export async function handleSwapTokens(
       },
     };
   }
-  const spenderAddress = firstSwapTx.to as Address;
+  const spenderAddress = (firstSwapTx as TransactionPlan).to as Address;
 
   context.log(
     `Checking allowance: User ${userAddress} needs to allow Spender ${spenderAddress} to spend ${atomicAmount} of Token ${fromTokenAddress} on Chain ${txChainId}`
@@ -474,7 +396,7 @@ export async function handleSwapTokens(
     context.log('Assuming allowance is insufficient due to check failure.');
   }
 
-  let approveTxResponse: TransactionResponse | undefined;
+  let approveTxResponse: TransactionPlan | undefined;
   if (currentAllowance < atomicAmount) {
     context.log(
       `Insufficient allowance or check failed. Need ${atomicAmount}, have ${currentAllowance}. Preparing approval transaction...`
@@ -494,19 +416,14 @@ export async function handleSwapTokens(
   }
 
   context.log('Validating the swap transactions received from MCP tool...');
-  const validatedSwapTxPlan: TransactionResponse[] = validateTransactions(
-    'swapTokens',
-    rawSwapTransactions,
-    txChainId,
-    context
-  );
+  const validatedSwapTxPlan: TransactionPlan[] = validateTransactionPlans(rawSwapTransactions);
 
-  const finalTxPlan: TransactionResponse[] = [
+  const finalTxPlan: TransactionPlan[] = [
     ...(approveTxResponse ? [approveTxResponse] : []),
     ...validatedSwapTxPlan,
   ];
 
-  const txArtifact: TransactionArtifact = {
+  const txArtifact: SwapTransactionArtifact = {
     txPreview: {
       fromTokenSymbol: fromToken,
       fromTokenAddress: validatedSwapResponse.baseToken.address,
@@ -544,7 +461,9 @@ export async function handleSwapTokens(
         parts: [
           {
             type: 'data',
-            data: txArtifact,
+            // The double-cast is intentional: DataPart expects Record<string, unknown>,
+            // but our artifact is validated by schema elsewhere.
+            data: txArtifact as unknown as Record<string, unknown>,
           },
         ],
       },
@@ -654,3 +573,21 @@ ${camelotContextContent}`;
     };
   }
 }
+
+export function parseMcpToolResponse(
+  rawResponse: unknown,
+  context: HandlerContext,
+  toolName: string
+): unknown {
+  context.log(`Invoking shared parser for ${toolName}`);
+  const text = sharedParseMcpToolResponse(rawResponse);
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    context.log(`Error parsing JSON from ${toolName}:`, e);
+    throw e;
+  }
+}
+
+const SwapTransactionArtifactSchema = createTransactionArtifactSchema(SwapPreviewSchema);
+export type SwapTransactionArtifact = TransactionArtifact<SwapPreview>;

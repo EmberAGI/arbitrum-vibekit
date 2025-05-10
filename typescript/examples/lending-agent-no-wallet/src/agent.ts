@@ -399,7 +399,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
         );
       }
 
-      const jsonString = wrapperValidationResult.data.content[0].text;
+      const jsonString = wrapperValidationResult.data.content[0]!.text;
       let parsedData: any;
       try {
         console.error('Attempting to parse JSON string from content[0].text...');
@@ -642,7 +642,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
       console.error('No tool called or task found, returning text response.');
       return {
-        id: this.userAddress,
+        id: this.userAddress!,
         status: {
           state: 'completed',
           message: {
@@ -660,7 +660,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       };
       this.conversationHistory.push(errorAssistantMessage);
       return {
-        id: this.userAddress ?? 'unknown',
+        id: this.userAddress!,
         status: {
           state: 'failed',
           message: {
