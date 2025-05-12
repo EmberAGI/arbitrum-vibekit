@@ -18,7 +18,7 @@ COPY tsconfig.base.json ./
 # ------------------------------
 # 2. Copy all workspace package.json files (to maximise Docker cache)
 # ------------------------------
-COPY lib/mcp-tools/emberai-mcp/package.json ./lib/mcp-tools/emberai-mcp/
+COPY lib/ lib/
 COPY examples/swapping-agent/package.json ./examples/swapping-agent/
 
 # ------------------------------
@@ -34,7 +34,7 @@ COPY . .
 # ------------------------------
 # 5. Build every workspace package that provides a build script (recursive build)
 # ------------------------------
-RUN pnpm -r --if-present build
+RUN pnpm --filter swapping-agent... build
 
 # Production stage
 FROM node:20-slim AS production
@@ -56,14 +56,10 @@ RUN npm install -g pnpm@10.7.0
 # Copy only what we need from the builder stage
 COPY --from=builder /app/examples/swapping-agent/dist /app/examples/swapping-agent/dist
 COPY --from=builder /app/examples/swapping-agent/package.json /app/examples/swapping-agent/
-COPY --from=builder /app/lib/mcp-tools/emberai-mcp/dist /app/lib/mcp-tools/emberai-mcp/dist
-COPY --from=builder /app/lib/mcp-tools/emberai-mcp/package.json /app/lib/mcp-tools/emberai-mcp/
+COPY --from=builder /app/examples/swapping-agent/node_modules /app/examples/swapping-agent/node_modules
+COPY --from=builder /app/lib /app/lib
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/node_modules/.pnpm /app/node_modules/.pnpm
-# Also copy the example package's direct node_modules folder to preserve local symlinks
-COPY --from=builder /app/examples/swapping-agent/node_modules /app/examples/swapping-agent/node_modules
-# Also copy the mcp-tool package's node_modules folder
-COPY --from=builder /app/lib/mcp-tools/emberai-mcp/node_modules /app/lib/mcp-tools/emberai-mcp/node_modules
 
 # Set the working directory for the final image
 WORKDIR /app/examples/swapping-agent/dist
