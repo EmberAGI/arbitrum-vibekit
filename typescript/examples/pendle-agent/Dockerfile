@@ -36,7 +36,7 @@ COPY . .
 # ------------------------------
 # 5. Build every workspace package that provides a build script (recursive build)
 # ------------------------------
-RUN pnpm --filter pendle-agent... build
+RUN pnpm --filter pendle-agent-example... build
 
 # Production stage
 FROM node:20-slim AS production
