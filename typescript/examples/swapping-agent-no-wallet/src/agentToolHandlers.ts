@@ -316,7 +316,7 @@ export async function handleSwapTokens(
     },
   });
 
-  const dataToValidate = sharedParseMcpToolResponse(swapResponseRaw);
+  const dataToValidate = sharedParseMcpToolResponse(swapResponseRaw, SwapResponseSchema);
   context.log('Parsed swap response data:', dataToValidate);
 
   const validationResult = SwapResponseSchema.safeParse(dataToValidate);
@@ -580,13 +580,8 @@ export function parseMcpToolResponse(
   toolName: string
 ): unknown {
   context.log(`Invoking shared parser for ${toolName}`);
-  const text = sharedParseMcpToolResponse(rawResponse);
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    context.log(`Error parsing JSON from ${toolName}:`, e);
-    throw e;
-  }
+  // Always parse JSON payload
+  return sharedParseMcpToolResponse(rawResponse, z.any());
 }
 
 const SwapTransactionArtifactSchema = createTransactionArtifactSchema(SwapPreviewSchema);
