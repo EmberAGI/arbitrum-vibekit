@@ -1,4 +1,4 @@
-import { Chain } from 'viem/chains';
+import type { Chain } from 'viem/chains';
 import { mainnet, arbitrum, optimism, polygon, base } from 'viem/chains';
 
 export function logError(...args: unknown[]) {

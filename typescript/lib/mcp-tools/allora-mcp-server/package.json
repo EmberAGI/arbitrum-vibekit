@@ -1,6 +1,7 @@
 {
   "name": "@alloralabs/mcp-server",
   "version": "1.0.0",
+  "type": "module",
   "main": "dist/index.js",
   "bin": {
     "@alloralabs/mcp-server": "./dist/index.js"

@@ -13,6 +13,18 @@ import type { Task } from 'a2a-samples-js/schema';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { streamText } from 'ai';
+import {
+  parseMcpToolResponse as sharedParseMcpToolResponse,
+  createTransactionArtifactSchema,
+  type TransactionArtifact,
+} from 'arbitrum-vibekit';
+import {
+  TransactionPlanSchema as SharedTransactionPlanSchema,
+  type TransactionPlan,
+  validateTransactionPlans,
+} from 'ember-mcp-tool-server';
+import type { ZodType } from 'zod';
+import type { DataPart } from 'a2a-samples-js/schema';
 
 import type { LiquidityPair, LiquidityPosition } from './agent.js';
 import { getChainConfigById } from './agent.js';
@@ -22,29 +34,6 @@ export type TokenInfo = {
   address: string;
   decimals: number;
 };
-
-export const TransactionEmberSchema = z
-  .object({
-    to: z.string(),
-    data: z.string(),
-    value: z.string(),
-  })
-  .passthrough();
-
-export type TransactionEmber = z.infer<typeof TransactionEmberSchema>;
-
-export const TransactionResponseSchema = TransactionEmberSchema.extend({
-  chainId: z.string(),
-});
-
-export type TransactionResponse = z.infer<typeof TransactionResponseSchema>;
-
-export const TransactionArtifactSchema = z.object({
-  txPreview: z.record(z.string(), z.unknown()),
-  txPlan: z.array(TransactionResponseSchema),
-});
-
-export type TransactionArtifact = z.infer<typeof TransactionArtifactSchema>;
 
 // --- Liquidity Specific Schemas Start ---
 export const LiquidityPreviewSchema = z.object({
@@ -60,13 +49,11 @@ export const LiquidityPreviewSchema = z.object({
   // Add other relevant preview fields if needed
 });
 
-export const LiquidityTransactionArtifactSchema = z.object({
-  txPreview: LiquidityPreviewSchema,
-  txPlan: z.array(TransactionResponseSchema),
-});
+// Create a shared artifact schema for liquidity
+const LiquidityArtifactSchema = createTransactionArtifactSchema(LiquidityPreviewSchema);
 
-export type LiquidityTransactionArtifact = z.infer<typeof LiquidityTransactionArtifactSchema>;
-// --- Liquidity Specific Schemas End ---
+// Define the shared artifact type for liquidity transactions
+export type LiquidityTransactionArtifact = TransactionArtifact<typeof LiquidityPreviewSchema>;
 
 // --- Pools/Positions Artifact Schemas Start ---
 // Define schema based on LiquidityPair type used internally
@@ -110,7 +97,7 @@ export type UserPositionsArtifact = z.infer<typeof UserPositionsArtifactSchema>;
 // --- Pools/Positions Artifact Schemas End ---
 
 // Schema for the MCP response of getUserLiquidityPositions
-const EmberPositionSchema = z
+export const EmberPositionSchema = z
   .object({
     tokenId: z.string(),
     providerId: z.string(),
@@ -125,15 +112,6 @@ const EmberPositionSchema = z
 const GetUserLiquidityPositionsResponseSchema = z
   .object({
     positions: z.array(EmberPositionSchema),
-  })
-  .passthrough();
-
-// Zod schema for the actual TransactionPlan structure returned by Ember MCP tools
-const TransactionPlanSchema = z
-  .object({
-    to: z.string(),
-    data: z.string(),
-    value: z.string(),
   })
   .passthrough();
 
@@ -164,53 +142,6 @@ export interface HandlerContext {
   quicknodeApiKey: string;
 }
 
-export function parseMcpToolResponse<T>(
-  rawResponse: unknown,
-  schema: z.ZodType<T>,
-  context: HandlerContext,
-  toolName: string
-): T {
-  let dataToValidate: unknown;
-
-  if (
-    rawResponse &&
-    typeof rawResponse === 'object' &&
-    'content' in rawResponse &&
-    Array.isArray((rawResponse as any).content) &&
-    (rawResponse as any).content.length > 0 &&
-    (rawResponse as any).content[0]?.type === 'text' &&
-    typeof (rawResponse as any).content[0]?.text === 'string'
-  ) {
-    context.log(`Attempting to parse nested JSON from ${toolName} response...`);
-    try {
-      const parsedJson = JSON.parse((rawResponse as any).content[0].text);
-      dataToValidate = parsedJson;
-    } catch (e) {
-      context.log(`Error parsing nested JSON content from ${toolName} result:`, e);
-      context.log(`Raw text content: ${(rawResponse as any).content[0].text}`);
-      throw new Error(`Failed to parse nested JSON response from ${toolName}.`);
-    }
-  } else {
-    context.log(
-      `MCP response for ${toolName} does not have expected nested text structure, trying to validate directly.`
-    );
-    dataToValidate = rawResponse;
-  }
-
-  try {
-    const validationResult = schema.parse(dataToValidate);
-    context.log(`Successfully parsed and validated ${toolName} response.`);
-    return validationResult;
-  } catch (error) {
-    context.log(`Error validating ${toolName} response against schema:`, error);
-    if (error instanceof z.ZodError) {
-      context.log('Zod validation errors:', JSON.stringify(error.errors, null, 2));
-    }
-    context.log('Data that failed validation:', JSON.stringify(dataToValidate, null, 2));
-    throw new Error(`Invalid response structure received from ${toolName}.`);
-  }
-}
-
 function createTaskResult(
   id: string | undefined,
   state: Task['status']['state'],
@@ -235,7 +166,23 @@ export async function handleGetLiquidityPools(
     const pairs = context.getPairs();
 
     if (pairs.length === 0) {
-      return createTaskResult(context.userAddress, 'completed', 'No liquidity pools available.');
+      // No liquidity pools available: return an empty artifact
+      return {
+        id: context.userAddress || 'liquidity-agent-task',
+        status: {
+          state: 'completed',
+          message: {
+            role: 'agent',
+            parts: [{ type: 'text', text: 'No liquidity pools available.' }],
+          },
+        },
+        artifacts: [
+          {
+            name: 'available-liquidity-pools',
+            parts: [{ type: 'data', data: { pools: [] } as LiquidityPoolsArtifact }],
+          },
+        ],
+      };
     }
 
     let responseText = 'Available Liquidity Pools:\n';
@@ -283,14 +230,12 @@ export async function handleGetUserLiquidityPositions(
       arguments: mcpArgs,
     });
 
-    const validatedData = parseMcpToolResponse(
+    const validatedData = sharedParseMcpToolResponse(
       mcpResponse,
-      GetUserLiquidityPositionsResponseSchema,
-      context,
-      'getUserLiquidityPositions'
-    );
+      GetUserLiquidityPositionsResponseSchema
+    ) as any;
 
-    const positions: LiquidityPosition[] = validatedData.positions.map(pos => ({
+    const positions: LiquidityPosition[] = validatedData.positions.map((pos: any) => ({
       tokenId: pos.tokenId,
       providerId: pos.providerId,
       symbol0: pos.symbol0,
@@ -303,7 +248,23 @@ export async function handleGetUserLiquidityPositions(
     context.log(`Updated internal state with ${positions.length} positions.`);
 
     if (positions.length === 0) {
-      return createTaskResult(context.userAddress, 'completed', 'No liquidity positions found.');
+      // No liquidity positions found: return an empty artifact
+      return {
+        id: context.userAddress || 'liquidity-agent-task',
+        status: {
+          state: 'completed',
+          message: {
+            role: 'agent',
+            parts: [{ type: 'text', text: 'No liquidity positions found.' }],
+          },
+        },
+        artifacts: [
+          {
+            name: 'user-liquidity-positions',
+            parts: [{ type: 'data', data: { positions: [] } as UserPositionsArtifact }],
+          },
+        ],
+      };
     }
 
     let responseText = 'Your Liquidity Positions:\n\n';
@@ -503,37 +464,32 @@ export async function handleSupplyLiquidity(
       arguments: mcpArgs,
     });
 
-    const txPlanRaw = parseMcpToolResponse(
+    const txPlanRaw = sharedParseMcpToolResponse(
       mcpResponse,
-      z.array(TransactionPlanSchema),
-      context,
-      'supplyLiquidity'
-    );
+      z.array(SharedTransactionPlanSchema)
+    ) as TransactionPlan[];
 
     context.log('Received raw transaction plan for supplyLiquidity:', txPlanRaw);
 
-    // Manually add chainId (assuming all txs are on the same chain as token0 for simplicity)
-    // A more robust implementation might check chain IDs if cross-chain liquidity is possible
-    const txPlan: TransactionResponse[] = txPlanRaw.map(tx => ({
-      ...tx,
-      chainId: token0.chainId,
-    }));
+    // Use chainId injected by MCP
+    const txPlan: TransactionPlan[] = txPlanRaw;
 
     // --- Construct Artifact Start ---
-    const artifact: LiquidityTransactionArtifact = {
-      txPreview: {
-        action: 'supply',
-        pairHandle: selectedPair.handle,
-        token0Symbol: selectedPair.symbol0,
-        token0Amount: params.amount0, // User provided amount
-        token1Symbol: selectedPair.symbol1,
-        token1Amount: params.amount1, // User provided amount
-        priceFrom: params.priceFrom,
-        priceTo: params.priceTo,
-      },
-      txPlan: txPlan, // Use the original plan without approvals
+    const preview = {
+      action: 'supply',
+      pairHandle: selectedPair.handle,
+      token0Symbol: selectedPair.symbol0,
+      token0Amount: params.amount0,
+      token1Symbol: selectedPair.symbol1,
+      token1Amount: params.amount1,
+      priceFrom: params.priceFrom,
+      priceTo: params.priceTo,
     };
-    // --- Construct Artifact End ---
+    const artifactContent: TransactionArtifact<typeof preview> = { txPlan, txPreview: preview };
+    const dataPart: DataPart = {
+      type: 'data',
+      data: artifactContent as any,
+    };
 
     return {
       id: context.userAddress || 'liquidity-agent-task',
@@ -549,12 +505,7 @@ export async function handleSupplyLiquidity(
           ],
         },
       },
-      artifacts: [
-        {
-          name: 'liquidity-transaction',
-          parts: [{ type: 'data', data: artifact }],
-        },
-      ],
+      artifacts: [{ name: 'liquidity-transaction', parts: [dataPart] }],
     };
   } catch (error) {
     const errorMsg = `Error in handleSupplyLiquidity: ${error instanceof Error ? error.message : String(error)}`;
@@ -606,55 +557,32 @@ export async function handleWithdrawLiquidity(
     });
 
     // Parse without chainId first
-    const txPlanRaw = parseMcpToolResponse(
+    const txPlanRaw = sharedParseMcpToolResponse(
       mcpResponse,
-      z.array(TransactionPlanSchema), // Use base schema
-      context,
-      'withdrawLiquidity'
-    );
+      z.array(SharedTransactionPlanSchema)
+    ) as TransactionPlan[];
     context.log('Received raw transaction plan for withdrawLiquidity:', txPlanRaw);
 
-    // Find the pair to get token details (needed for chainId)
-    const pairs = context.getPairs();
-    // Find pair based on symbols from the position
-    const correspondingPair = pairs.find(
-      p =>
-        (p.symbol0 === selectedPosition.symbol0 && p.symbol1 === selectedPosition.symbol1) ||
-        (p.symbol0 === selectedPosition.symbol1 && p.symbol1 === selectedPosition.symbol0)
-    );
+    // Use chainId injected by MCP
+    const txPlan: TransactionPlan[] = txPlanRaw;
 
-    if (!correspondingPair) {
-      // This should ideally not happen if positions are derived from available pairs
-      return createTaskResult(
-        context.userAddress,
-        'failed',
-        `Could not find corresponding pair details for position symbols ${selectedPosition.symbol0}/${selectedPosition.symbol1}`
-      );
-    }
-
-    // Manually add chainId using the found pair's token0 chainId
-    const txPlan: TransactionResponse[] = txPlanRaw.map(tx => ({
-      ...tx,
-      chainId: correspondingPair.token0.chainId, // Use chainId from found pair
-    }));
-
-    context.log('Transaction plan with chainId added:', txPlan);
+    context.log('Transaction plan for withdrawLiquidity:', txPlan);
 
     // --- Construct Artifact Start ---
-    const artifact: LiquidityTransactionArtifact = {
-      txPreview: {
-        action: 'withdraw',
-        positionNumber: params.positionNumber,
-        pairHandle: correspondingPair.handle, // Add handle from pair
-        token0Symbol: selectedPosition.symbol0,
-        token0Amount: selectedPosition.amount0, // Placeholder amount
-        token1Symbol: selectedPosition.symbol1,
-        token1Amount: selectedPosition.amount1, // Placeholder amount
-        // priceFrom, priceTo are omitted
-      },
-      txPlan: txPlan, // Use the plan with chainId added
+    const previewW = {
+      action: 'withdraw',
+      positionNumber: params.positionNumber,
+      pairHandle: selectedPosition.symbol0 + '/' + selectedPosition.symbol1,
+      token0Symbol: selectedPosition.symbol0,
+      token0Amount: selectedPosition.amount0,
+      token1Symbol: selectedPosition.symbol1,
+      token1Amount: selectedPosition.amount1,
     };
-    // --- Construct Artifact End ---
+    const artifactContentW: TransactionArtifact<typeof previewW> = { txPlan, txPreview: previewW };
+    const dataPartW: DataPart = {
+      type: 'data',
+      data: artifactContentW as any,
+    };
 
     return {
       id: context.userAddress || 'liquidity-agent-task',
@@ -670,12 +598,7 @@ export async function handleWithdrawLiquidity(
           ],
         },
       },
-      artifacts: [
-        {
-          name: 'liquidity-transaction',
-          parts: [{ type: 'data', data: artifact }],
-        },
-      ],
+      artifacts: [{ name: 'liquidity-transaction', parts: [dataPartW] }],
     };
   } catch (error) {
     const errorMsg = `Error in handleWithdrawLiquidity: ${error instanceof Error ? error.message : String(error)}`;

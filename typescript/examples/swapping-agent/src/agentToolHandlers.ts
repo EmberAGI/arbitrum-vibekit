@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import {
   parseUnits,
   createPublicClient,
@@ -9,23 +8,15 @@ import {
 } from 'viem';
 import { getChainConfigById } from './agent.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { parseMcpToolResponse as sharedParseMcpToolResponse } from 'arbitrum-vibekit';
+import { TransactionPlanSchema, type TransactionPlan } from 'ember-mcp-tool-server';
+import { z } from 'zod';
 
 export type TokenInfo = {
   chainId: string;
   address: string;
   decimals: number;
 };
-
-export const TransactionPlanSchema = z
-  .object({
-    to: z.string(),
-    data: z.string(),
-    value: z.string().optional(),
-    chainId: z.string(),
-  })
-  .passthrough();
-
-export type TransactionPlan = z.infer<typeof TransactionPlanSchema>;
 
 export interface HandlerContext {
   mcpClient: Client;
@@ -44,7 +35,7 @@ function findTokensCaseInsensitive(
   const lowerCaseTokenName = tokenName.toLowerCase();
   for (const key in tokenMap) {
     if (key.toLowerCase() === lowerCaseTokenName) {
-      return tokenMap[key];
+      return tokenMap[key]!;
     }
   }
   return [];
@@ -119,36 +110,9 @@ export function parseMcpToolResponse(
   context: HandlerContext,
   toolName: string
 ): unknown {
-  let dataToValidate: unknown;
-
-  if (
-    rawResponse &&
-    typeof rawResponse === 'object' &&
-    'content' in rawResponse &&
-    Array.isArray((rawResponse as any).content) &&
-    (rawResponse as any).content.length > 0 &&
-    (rawResponse as any).content[0]?.type === 'text' &&
-    typeof (rawResponse as any).content[0]?.text === 'string'
-  ) {
-    context.log(`Raw ${toolName} result appears nested, parsing inner text...`);
-    try {
-      const parsedData = JSON.parse((rawResponse as any).content[0].text);
-      context.log('Parsed inner text content for validation:', parsedData);
-      dataToValidate = parsedData;
-    } catch (e) {
-      context.log(`Error parsing inner text content from ${toolName} result:`, e);
-      throw new Error(
-        `Failed to parse nested JSON response from ${toolName}: ${(e as Error).message}`
-      );
-    }
-  } else {
-    context.log(
-      `Raw ${toolName} result does not have expected nested structure, validating as is.`
-    );
-    dataToValidate = rawResponse;
-  }
-
-  return dataToValidate;
+  context.log(`Invoking shared parser for ${toolName}`);
+  // Always return parsed JSON
+  return sharedParseMcpToolResponse(rawResponse, z.any());
 }
 
 async function validateAndExecuteAction(

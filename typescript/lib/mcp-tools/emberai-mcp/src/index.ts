@@ -1,5 +1,4 @@
 import EmberGrpcClient, {
-  TransactionPlan,
   GetCapabilitiesResponse,
   Capability,
   CapabilityType,
@@ -19,16 +18,25 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import "dotenv/config";
 
-export {
+// Re-export types and runtime values separately to comply with `verbatimModuleSyntax`
+export type {
   GetCapabilitiesResponse,
   Capability,
-  CapabilityType,
   GetWalletPositionsResponse,
   WalletPosition,
-  TransactionPlan,
   GetTokensResponse,
   Token,
-};
+} from "@emberai/sdk-typescript";
+
+// CapabilityType is a runtime enum (value), so export it normally
+export { CapabilityType } from "@emberai/sdk-typescript";
+
+// Re-export shared transaction helpers
+export {
+  TransactionPlanSchema,
+  validateTransactionPlans,
+} from "./schemas/transaction.js";
+export type { TransactionPlan } from "./schemas/transaction.js";
 
 // --- Define Zod Schemas ---
 // Convert our Zod objects to schema objects for MCP
@@ -288,7 +296,17 @@ server.tool(
         content: [
           {
             type: "text",
-            text: JSON.stringify(response, null, 2),
+            text: JSON.stringify(
+              {
+                ...response,
+                transactions: response.transactions.map((tx) => ({
+                  ...tx,
+                  chainId: response.chainId,
+                })),
+              },
+              null,
+              2
+            ),
           },
         ],
       };
@@ -335,7 +353,17 @@ server.tool(
         content: [
           {
             type: "text",
-            text: JSON.stringify(response.transactions),
+            text: JSON.stringify(
+              {
+                ...response,
+                transactions: response.transactions.map((tx) => ({
+                  ...tx,
+                  chainId: response.chainId,
+                })),
+              },
+              null,
+              2
+            ),
           },
         ],
       };
@@ -379,7 +407,17 @@ server.tool(
         content: [
           {
             type: "text",
-            text: JSON.stringify(response.transactions),
+            text: JSON.stringify(
+              {
+                ...response,
+                transactions: response.transactions.map((tx) => ({
+                  ...tx,
+                  chainId: response.chainId,
+                })),
+              },
+              null,
+              2
+            ),
           },
         ],
       };
@@ -426,7 +464,17 @@ server.tool(
         content: [
           {
             type: "text",
-            text: JSON.stringify(response.transactions),
+            text: JSON.stringify(
+              {
+                ...response,
+                transactions: response.transactions.map((tx) => ({
+                  ...tx,
+                  chainId: response.chainId,
+                })),
+              },
+              null,
+              2
+            ),
           },
         ],
       };
@@ -473,7 +521,17 @@ server.tool(
         content: [
           {
             type: "text",
-            text: JSON.stringify(response.transactions),
+            text: JSON.stringify(
+              {
+                ...response,
+                transactions: response.transactions.map((tx) => ({
+                  ...tx,
+                  chainId: response.chainId,
+                })),
+              },
+              null,
+              2
+            ),
           },
         ],
       };
@@ -638,7 +696,17 @@ server.tool(
           {
             type: "text",
             // Return the transaction plan for the client to execute
-            text: JSON.stringify(response.transactions),
+            text: JSON.stringify(
+              {
+                ...response,
+                transactions: response.transactions.map((tx) => ({
+                  ...tx,
+                  chainId: response.chainId,
+                })),
+              },
+              null,
+              2
+            ),
           },
         ],
       };
@@ -686,7 +754,17 @@ server.tool(
           {
             type: "text",
             // Return the transaction plan for the client to execute
-            text: JSON.stringify(response.transactions),
+            text: JSON.stringify(
+              {
+                ...response,
+                transactions: response.transactions.map((tx) => ({
+                  ...tx,
+                  chainId: response.chainId,
+                })),
+              },
+              null,
+              2
+            ),
           },
         ],
       };

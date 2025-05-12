@@ -1,11 +1,8 @@
 import { z } from 'zod';
-import { type Address } from 'viem';
-import {
-  HandlerContext,
-  TransactionPlan,
-  handleSwapTokens,
-  parseMcpToolResponse,
-} from './agentToolHandlers.js';
+import type { Address } from 'viem';
+import { type HandlerContext, handleSwapTokens } from './agentToolHandlers.js';
+import { parseMcpToolResponse as sharedParseMcpToolResponse } from 'arbitrum-vibekit';
+import { type TransactionPlan } from 'ember-mcp-tool-server';
 import {
   generateText,
   tool,
@@ -253,31 +250,29 @@ Never respond in markdown, always use plain text. Never add links to your respon
         },
       });
 
-      const parsedResult = parseMcpToolResponse(result, this.getHandlerContext(), 'getTokens');
+      const parsedResult = sharedParseMcpToolResponse(result);
+      // If result is a JSON string, parse it
+      const parsedTokens =
+        typeof parsedResult === 'string' ? JSON.parse(parsedResult) : parsedResult;
 
-      if (parsedResult && typeof parsedResult === 'object' && 'tokens' in parsedResult) {
-        const tokens = (parsedResult as any).tokens;
-        if (Array.isArray(tokens)) {
-          this.tokenMap = {};
-          this.availableTokens = [];
+      if (parsedTokens && Array.isArray(parsedTokens)) {
+        this.tokenMap = {};
+        this.availableTokens = [];
 
-          tokens.forEach(token => {
-            if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
-              if (!this.tokenMap[token.symbol]) {
-                this.tokenMap[token.symbol] = [];
-                this.availableTokens.push(token.symbol);
-              }
-              this.tokenMap[token.symbol].push({
-                chainId: token.tokenUid.chainId,
-                address: token.tokenUid.address,
-              });
+        parsedTokens.forEach(token => {
+          if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
+            if (!this.tokenMap[token.symbol]) {
+              this.tokenMap[token.symbol] = [];
+              this.availableTokens.push(token.symbol);
             }
-          });
+            (this.tokenMap[token.symbol] as { chainId: string; address: string }[]).push({
+              chainId: token.tokenUid.chainId,
+              address: token.tokenUid.address,
+            });
+          }
+        });
 
-          this.log(`Loaded ${this.availableTokens.length} available tokens`);
-        }
-      } else {
-        this.log('Failed to parse tokens data from MCP');
+        this.log(`Loaded ${this.availableTokens.length} available tokens`);
       }
     } catch (error) {
       this.log('Error fetching tokens:', error);

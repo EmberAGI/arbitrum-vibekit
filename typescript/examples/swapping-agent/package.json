@@ -5,13 +5,14 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc && node -e \"require('fs').chmodSync('dist/index.js', '755')\"",
+    "build": "tsc --build && node -e \"require('fs').chmodSync('dist/index.js', '755')\"",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
-    "docker:build": "docker build -t swapping-agent .",
+    "docker:build": "docker build -t swapping-agent ../../",
     "docker:run": "docker run --env-file .env -p 3001:3001 swapping-agent",
-    "docker:compose:up": "docker compose up --build",
+    "docker:compose:build": "docker compose build --no-cache",
+    "docker:compose:up": "docker compose up --build --no-log-prefix",
     "docker:compose:down": "docker compose down",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
@@ -21,21 +22,24 @@
     "@grpc/grpc-js": "^1.12.5",
     "@modelcontextprotocol/sdk": "^1.5.0",
     "@openrouter/ai-sdk-provider": "^0.4.5",
-    "@types/cors": "^2.8.17",
-    "@types/express": "^5.0.0",
+    "@openzeppelin/contracts": "^5.3.0",
+    "a2a-samples-js": "workspace:*",
     "ai": "^4.3.2",
+    "arbitrum-vibekit": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "ember-mcp-tool-server": "workspace:*",
-    "ethers": "^5.7.2",
     "express": "^4.21.2",
-    "tsx": "^4.6.2",
     "viem": "^2.26.3",
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
     "@types/node": "^20.10.0",
+    "cpx": "^1.5.0",
     "prettier": "^3.5.3",
+    "tsx": "^4.6.2",
     "typescript": "^5.3.2"
   }
 }

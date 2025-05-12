@@ -18,13 +18,13 @@ COPY tsconfig.base.json ./
 # ------------------------------
 # 2. Copy all workspace package.json files (to maximise Docker cache)
 # ------------------------------
-COPY lib/a2a/package.json ./lib/a2a/
-COPY lib/mcp-tools/emberai-mcp/package.json ./lib/mcp-tools/emberai-mcp/
-COPY lib/mcp-tools/allora-mcp-server/package.json ./lib/mcp-tools/allora-mcp-server/
+COPY lib/ lib/
 COPY examples/pendle-agent/package.json ./examples/pendle-agent/
 
 # ------------------------------
-# 3. Install deps based on the copied package.json set. This is cache-friendly and establishes workspace links.
+# 3. Install deps based on the copied package.json set. Skip lifecycle scripts for now
+#    because source files are not yet in the build context (they are copied in step 4).
+#    This keeps the layer cache-friendly while avoiding prepare/postinstall failures.
 # ------------------------------
 RUN pnpm install --prefer-frozen-lockfile
 
@@ -36,7 +36,7 @@ COPY . .
 # ------------------------------
 # 5. Build every workspace package that provides a build script (recursive build)
 # ------------------------------
-RUN pnpm -r --if-present build
+RUN pnpm --filter pendle-agent-example... build
 
 # Production stage
 FROM node:20-slim AS production
@@ -58,16 +58,10 @@ RUN npm install -g pnpm@10.7.0
 # Copy only what we need from the builder stage
 COPY --from=builder /app/examples/pendle-agent/dist /app/examples/pendle-agent/dist
 COPY --from=builder /app/examples/pendle-agent/package.json /app/examples/pendle-agent/
-COPY --from=builder /app/lib/a2a/dist /app/lib/a2a/dist
-COPY --from=builder /app/lib/a2a/package.json /app/lib/a2a/
-COPY --from=builder /app/lib/mcp-tools/emberai-mcp/dist /app/lib/mcp-tools/emberai-mcp/dist
-COPY --from=builder /app/lib/mcp-tools/emberai-mcp/package.json /app/lib/mcp-tools/emberai-mcp/
+COPY --from=builder /app/examples/pendle-agent/node_modules /app/examples/pendle-agent/node_modules
+COPY --from=builder /app/lib /app/lib
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/node_modules/.pnpm /app/node_modules/.pnpm
-# Also copy the example package's direct node_modules folder to preserve local symlinks
-COPY --from=builder /app/examples/pendle-agent/node_modules /app/examples/pendle-agent/node_modules
-# Also copy the mcp-tool package's node_modules folder
-COPY --from=builder /app/lib/mcp-tools/emberai-mcp/node_modules /app/lib/mcp-tools/emberai-mcp/node_modules
 
 # Set the working directory for the final image
 WORKDIR /app/examples/pendle-agent/dist
