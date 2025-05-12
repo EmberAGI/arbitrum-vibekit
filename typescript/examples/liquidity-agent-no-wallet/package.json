@@ -11,7 +11,7 @@
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
     "docker:build": "docker build -t liquidity-agent-no-wallet ../../",
     "docker:run": "docker run --env-file .env -p 3001:3001 liquidity-agent-no-wallet",
-    "docker:compose:up": "docker compose up --build",
+    "docker:compose:up": "docker compose up --build --no-log-prefix",
     "docker:compose:build": "docker compose build --no-cache",
     "docker:compose:down": "docker compose down",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",

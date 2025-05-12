@@ -12,7 +12,7 @@
     "docker:build": "docker build -t swapping-agent ../../",
     "docker:run": "docker run --env-file .env -p 3001:3001 swapping-agent",
     "docker:compose:build": "docker compose build --no-cache",
-    "docker:compose:up": "docker compose up --build",
+    "docker:compose:up": "docker compose up --build --no-log-prefix",
     "docker:compose:down": "docker compose down",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
