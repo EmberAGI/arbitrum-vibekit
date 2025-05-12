@@ -78,6 +78,20 @@ export const ZodGetWalletPositionsResponseSchema = z
   })
   .passthrough();
 
+// Schema for the supply tool's nested JSON response
+const ZodSupplyResponseSchema = z
+  .object({
+    tokenUid: ZodTokenUidSchema,
+    amount: z.string(),
+    supplierWalletAddress: z.string(),
+    transactions: z.array(TransactionPlanSchema),
+    chainId: z.string(),
+  })
+  .passthrough();
+
+// Type for the supply tool response
+type SupplyResponse = z.infer<typeof ZodSupplyResponseSchema>;
+
 type McpGetWalletPositionsResponse = z.infer<typeof ZodGetWalletPositionsResponseSchema>;
 
 export interface TokenInfo {
@@ -100,6 +114,47 @@ export type LendingPreview = z.infer<typeof LendingPreviewSchema>;
 // Define shared artifact schema for lending transactions
 const LendingTransactionArtifactSchema = createTransactionArtifactSchema(LendingPreviewSchema);
 export type LendingTransactionArtifact = TransactionArtifact<LendingPreview>;
+
+// Schema for the withdraw tool's nested JSON response
+const ZodWithdrawResponseSchema = z
+  .object({
+    tokenUid: ZodTokenUidSchema,
+    amount: z.string(),
+    lenderWalletAddress: z.string(),
+    transactions: z.array(TransactionPlanSchema),
+    chainId: z.string(),
+  })
+  .passthrough();
+
+// Type for the withdraw tool response
+type WithdrawResponse = z.infer<typeof ZodWithdrawResponseSchema>;
+
+// Schema for the borrow tool's nested JSON response
+const ZodBorrowResponseSchema = z
+  .object({
+    currentBorrowApy: z.string(),
+    liquidationThreshold: z.string(),
+    transactions: z.array(TransactionPlanSchema),
+    chainId: z.string(),
+  })
+  .passthrough();
+
+// Type for the borrow tool response
+type BorrowResponse = z.infer<typeof ZodBorrowResponseSchema>;
+
+// Schema for the repay tool's nested JSON response
+const ZodRepayResponseSchema = z
+  .object({
+    tokenUid: ZodTokenUidSchema,
+    amount: z.string(),
+    borrowerWalletAddress: z.string(),
+    transactions: z.array(TransactionPlanSchema),
+    chainId: z.string(),
+  })
+  .passthrough();
+
+// Type for the repay tool response
+type RepayResponse = z.infer<typeof ZodRepayResponseSchema>;
 
 export interface HandlerContext {
   mcpClient: Client;
@@ -133,21 +188,6 @@ function findTokenInfo(
   }
 
   return { type: 'clarificationNeeded', options: possibleTokens };
-}
-
-function parseToolResponse(
-  rawResponse: unknown,
-  context: HandlerContext,
-  toolName: string
-): unknown {
-  context.log(`Invoking shared parser for ${toolName}`);
-  const text = sharedParseMcpToolResponse(rawResponse);
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    context.log(`Error parsing JSON from ${toolName}:`, e);
-    throw e;
-  }
 }
 
 export async function handleBorrow(
@@ -215,11 +255,9 @@ export async function handleBorrow(
           },
         });
 
-        const parsedResponse = parseToolResponse(rawResult, context, 'borrow');
-        // Validate transactions using shared type
-        const transactions = validateTransactionPlans(
-          parsedResponse as unknown[]
-        ) as TransactionPlan[];
+        // Parse and validate the MCP borrow tool response using the new ZodBorrowResponseSchema
+        const borrowResp = sharedParseMcpToolResponse(rawResult, ZodBorrowResponseSchema);
+        const { transactions, currentBorrowApy, liquidationThreshold } = borrowResp;
 
         // Build artifact using shared generic schema
         const txArtifact: LendingTransactionArtifact = {
@@ -228,6 +266,8 @@ export async function handleBorrow(
             amount,
             action: 'borrow',
             chainId: tokenDetail.chainId,
+            currentBorrowApy,
+            liquidationThreshold,
           },
           txPlan: transactions,
         };
@@ -435,10 +475,12 @@ export async function handleRepay(
 
       context.log('MCP repay tool response:', toolResult);
 
-      // Parse and validate the transaction plan
-      const parsedData = parseToolResponse(toolResult, context, 'repay');
-      const transactions = validateTransactionPlans(parsedData as unknown[]) as TransactionPlan[];
-
+      // Parse and validate the MCP repay tool response using the new ZodRepayResponseSchema
+      const repayResp = sharedParseMcpToolResponse(
+        toolResult,
+        ZodRepayResponseSchema
+      ) as RepayResponse;
+      const { transactions } = repayResp;
       context.log(`Processed and validated ${transactions.length} transactions for repay.`);
 
       // Build preview and artifact
@@ -636,16 +678,15 @@ export async function handleSupply(
 
       context.log('MCP supply tool response:', toolResult);
 
-      let validatedTxPlan: TransactionPlan[] = [];
+      let finalTxPlan: TransactionPlan[] = [];
       try {
-        const parsedData = parseToolResponse(toolResult, context, 'supply');
-        validatedTxPlan = validateTransactionPlans(parsedData as unknown[]);
-
+        // Parse and validate the MCP supply tool response using the new ZodSupplyResponseSchema
+        const supplyResp = sharedParseMcpToolResponse(toolResult, ZodSupplyResponseSchema);
+        finalTxPlan = supplyResp.transactions;
         context.log(
-          `Processed and validated ${validatedTxPlan.length} transactions from MCP for supply.`
+          `Processed and validated ${finalTxPlan.length} transactions from MCP for supply.`
         );
-
-        if (validatedTxPlan.length === 0) {
+        if (finalTxPlan.length === 0) {
           throw new Error('MCP tool returned an empty transaction plan.');
         }
       } catch (error) {
@@ -667,7 +708,6 @@ export async function handleSupply(
         };
       }
 
-      const finalTxPlan = validatedTxPlan;
       const txPreview: LendingPreview = {
         tokenName: tokenName,
         amount: amount,
@@ -793,10 +833,9 @@ export async function handleWithdraw(
       context.log('MCP withdraw tool response:', toolResult);
 
       try {
-        const parsedResult = parseToolResponse(toolResult, context, 'withdraw');
-        const validatedTxPlan: TransactionPlan[] = validateTransactionPlans(
-          parsedResult as unknown[]
-        );
+        // Parse and validate the MCP withdraw tool response using the new ZodWithdrawResponseSchema
+        const withdrawResp = sharedParseMcpToolResponse(toolResult, ZodWithdrawResponseSchema);
+        const validatedTxPlan: TransactionPlan[] = withdrawResp.transactions;
         context.log('Withdraw transaction plan validated:', validatedTxPlan);
 
         const txPreview: LendingPreview = {
@@ -872,23 +911,20 @@ export async function handleGetUserPositions(
 
     console.log('rawResult', rawResult);
 
-    const parsedData = parseToolResponse(rawResult, context, 'getUserPositions');
-
-    console.log('parsedData', parsedData);
-
-    const validationResult = ZodGetWalletPositionsResponseSchema.safeParse(parsedData);
-
-    if (!validationResult.success) {
-      context.log('Get User Positions validation failed:', validationResult.error);
-      throw Error(`Validation failed: ${JSON.stringify(parsedData)}`);
-    }
-
-    const validatedPositions = validationResult.data;
+    // Parse and validate the MCP tool response using the shared parser with Zod schema
+    const validatedPositions = sharedParseMcpToolResponse(
+      rawResult,
+      ZodGetWalletPositionsResponseSchema
+    );
 
     return {
       id: context.userAddress,
       status: {
         state: 'completed',
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: 'Positions fetched successfully.' }],
+        },
       },
       artifacts: [
         {
