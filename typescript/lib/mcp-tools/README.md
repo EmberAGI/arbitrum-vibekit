@@ -1,28 +1,39 @@
-# Contributing New Tools to Vibekit
+## 🧩 Contributing New Tools to Vibekit
 
-Before submitting a pull request for your work, please review the guidelines in [`CONTRIBUTIONS.md`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md) to ensure best practices are followed.
+Welcome to Vibekit's MCP Tools! This directory houses the core building blocks that give DeFi agents their superpowers. Model Context Protocol (MCP) tools are standardized interfaces that allow agents to easily interact with on-chain data, execute DeFi operations, and integrate with external services.
 
-## Creating Your MCP Tool
+By contributing new MCP tools, you're expanding the possibilities for all Vibekit agents. Your tools can enable new DeFi strategies, integrate additional protocols, or enhance existing capabilities. This guide will walk you through the process of creating and contributing your own MCP tools to the ecosystem. Before submitting a pull request for your work, please review the guidelines in [`CONTRIBUTIONS.md`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md) to ensure best practices are followed.
 
-If you prefer an automated approach, consider using [FastMCP](https://github.com/punkpeye/fastmcp/) or [AI Tool Maker](https://github.com/nihaocami/ai-tool-maker). Otherwise, the steps below outline how to create custom MCP tools to adapt the process to your specific requirements.
+## 🛠️ Building Your MCP Tool
+
+If you'd like to speed up the setup process, consider using [FastMCP](https://github.com/punkpeye/fastmcp/) or [AI Tool Maker](https://github.com/nihaocami/ai-tool-maker). These tools can automatically generate the boilerplate code and folder structure for your MCP tool, allowing you to focus on your tool's unique logic. If you prefer a more hands-on approach or need a custom setup, follow the manual steps outlined below to build your MCP tool from scratch.
 
 ### 1. Set Up Your Project:
 
-1. Inside the `mcp-tools` directory, create a new directory for your tool.
+1. Inside the `mcp-tools` directory, create a new directory for your project.
 
 2. Within this directory, add a `src` folder and create an `index.ts` file inside for your tool definitions. For reference, [`emberai-mcp/src/index.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/mcp-tools/emberai-mcp/src/index.ts) is a template file that demonstrates the folder structure.
 
-3. Create a`.env` file containing the configuration variables needed for your SDK or API.
+3. Create a `.env` file containing the configuration variables needed for your SDK or API.
 
-4. Create a `package.json` file for your project. You can copy the provided [`emberai-mcp/package.json`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/mcp-tools/emberai-mcp/package.json) file and change it to your project's specifications and dependencies.
+4. Create a `package.json` file for your project. You can use the provided [`emberai-mcp/package.json`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/mcp-tools/emberai-mcp/package.json) file and change it to your project's specifications and dependencies.
 
-5. Optional: Create a `tsconfig.json` file to configure the TypeScript compiler for your project. You can copy the provided [`emberai-mcp/tsconfig.json`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/mcp-tools/emberai-mcp/tsconfig.json) file and change it to your project's specifications.
+5. Optional: Create a `tsconfig.json` file to configure the TypeScript compiler for your project. You can use the provided [`emberai-mcp/tsconfig.json`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/mcp-tools/emberai-mcp/tsconfig.json) file and change it to your project's specifications.
 
-6. Install the necessary packages. This command can be different depending on the package manager defined in your `package.json` file:
+6. Install the necessary packages. This command depends on the package manager defined in your `package.json` file. Use the appropriate command below:
 
-```bash
-pnpm install
-```
+- **pnpm** (recommended):
+  ```bash
+  pnpm install
+  ```
+- **npm**:
+  ```bash
+  npm install
+  ```
+- **yarn**:
+  ```bash
+  yarn install
+  ```
 
 Now you can start creating your tool in the `src/index.ts` file.
 
@@ -108,20 +119,14 @@ async function main() {
 main();
 ```
 
-## Testing
+### 6. Test Your New Tool:
 
-To test the server functionality, you can add the following script to your `package.json` file to enable launching the Inspector via npx:
-
-```json
-"pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js"
-```
-
-Next, run the following command in the terminal to interact with your server:
+To test your MCP server, you can launch the Inspector directly with the following command:
 
 ```bash
-pnpm run inspect:npx
+pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js
 ```
 
-## Conclusion
+This will start your tool and open the Inspector interface, allowing you to interact with and debug your MCP tool implementation.
 
-You have now created a custom MCP server tailored to your project’s requirements. Your new tools can now perform on-chain operations, integrate external SDKs or APIs, or perform specialized functions within Vibekit.
+## 🛠️ Vibe Coding Your MCP Tool

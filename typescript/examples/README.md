@@ -4,17 +4,18 @@ The `examples` directory contains ready-to-roll DeFi agents built with the Vibek
 
 Want to vibe code your own custom agent? Jump to [Building Your Own Agent](#-building-your-own-agent) to get started.
 
-### 🚀 Running an Existing Agent
+## 🚀 Running an Existing Agent
 
-#### 1. Setup Environment
+### 1. Setup Environment
 
 Navigate to the desired agent's directory and create an `.env` file. Copy the contents of `.env.example` into the `.env` file and fill in any required secrets or configuration variables.
 
-#### 2. Start the Agent
+### 2. Start the Agent
 
 There are three main ways to start an agent:
 
 **1. Cursor's AI Assistant (Vibe Coding)**:
+
 Ask Cursor's integrated AI assistant to run your desired agent.
 
 **2. Docker Compose**:
@@ -64,11 +65,11 @@ pnpm --filter "agent-name" build
 pnpm --filter "agent-name" dev
 ```
 
-#### 3. Interact with the Agent
+### 3. Interact with the Agent
 
 Once the agent is up and running on port 3001, you have two ways to engage with it:
 
-- **Launch the Inspector interface:**
+**Launch the Inspector interface:**
 
 Open a new terminal window and run the following to start the inspector:
 
@@ -90,7 +91,7 @@ Next, click on "List Tools" to view and run the tools your agent offers:
 
 The Inspector interface provides a straightforward way to interact with your agent. For a more integrated development experience, you can use the Cursor IDE.
 
-- **Integrate with Cursor IDE**
+**Integrate with Cursor IDE**
 
 To interact with the agent though Cursor, [create or update](https://docs.cursor.com/context/model-context-protocol) your `mcp.json` file through Cursor settings with the following content:
 
@@ -109,6 +110,6 @@ Restart Cursor to apply the new configuration. Upon successful integration, Curs
 
 **Note:** This configuration approach is also compatible with other graphical MCP clients like [Claude Desktop](https://modelcontextprotocol.io/quickstart/user) and [Windsurf](https://docs.windsurf.com/windsurf/mcp). Simply adjust the settings accordingly in their respective configuration files.
 
-### 🛠️ Building Your Own Agent
+## 🛠️ Building Your Own Agent
 
 coming soon!
