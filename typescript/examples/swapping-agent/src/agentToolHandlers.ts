@@ -111,13 +111,8 @@ export function parseMcpToolResponse(
   toolName: string
 ): unknown {
   context.log(`Invoking shared parser for ${toolName}`);
-  const text = sharedParseMcpToolResponse(rawResponse);
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    context.log(`Error parsing JSON from ${toolName}:`, e);
-    throw e;
-  }
+  // Always return parsed JSON
+  return sharedParseMcpToolResponse(rawResponse, z.any());
 }
 
 async function validateAndExecuteAction(
