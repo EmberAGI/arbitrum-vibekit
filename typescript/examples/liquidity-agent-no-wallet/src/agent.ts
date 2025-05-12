@@ -162,6 +162,10 @@ export type LiquidityPosition = {
   amount0: string;
   amount1: string;
   price: string;
+  positionRange?: {
+    fromPrice: string;
+    toPrice: string;
+  };
 };
 // --- End added types ---
 
