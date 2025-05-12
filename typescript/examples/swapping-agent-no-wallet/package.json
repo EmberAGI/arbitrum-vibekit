@@ -30,7 +30,6 @@
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "ember-mcp-tool-server": "workspace:*",
-    "ethers": "^5.7.2",
     "express": "^4.21.2",
     "tsx": "^4.6.2",
     "viem": "^2.26.3",
