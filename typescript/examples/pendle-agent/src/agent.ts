@@ -18,7 +18,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { logError, getChainConfigById, type ChainConfig } from './utils.js';
 import { createRequire } from 'module';
-import type { Task } from 'a2a-samples-js/schema';
+import type { Task } from 'a2a-samples-js';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -50,15 +50,48 @@ export type Token = z.infer<typeof TokenSchema>;
 export const GetPendleMarketsRequestSchema = z.object({});
 export type GetPendleMarketsRequestArgs = z.infer<typeof GetPendleMarketsRequestSchema>;
 
+export const YieldMarketPoolDailyRewardEstimationSchema = z.object({
+  asset: TokenSchema.optional(),
+  amount: z.string(),
+});
+export type YieldMarketPoolDailyRewardEstimation = z.infer<typeof YieldMarketPoolDailyRewardEstimationSchema>;
+
+export const YieldMarketVolatileDataSchema = z.object({
+  timestamp: z.string(),
+  marketLiquidityUsd: z.string(),
+  tradingVolumeUsd: z.string(),
+  underlyingInterestApy: z.string(),
+  underlyingRewardApy: z.string(),
+  underlyingApy: z.string(),
+  impliedApy: z.string(),
+  ytFloatingApy: z.string(),
+  swapFeeApy: z.string(),
+  voterApy: z.string(),
+  ptDiscount: z.string(),
+  pendleApy: z.string(),
+  arbApy: z.string(),
+  lpRewardApy: z.string(),
+  aggregatedApy: z.string(),
+  maxBoostedApy: z.string(),
+  estimatedDailyPoolRewards: z.array(YieldMarketPoolDailyRewardEstimationSchema),
+  totalPt: z.string(),
+  totalSy: z.string(),
+  totalLp: z.string(),
+  totalActiveSupply: z.string(),
+  assetPriceUsd: z.string(),
+});
+export type YieldMarketVolatileData = z.infer<typeof YieldMarketVolatileDataSchema>;
+
 export const YieldMarketSchema = z.object({
   name: z.string().describe('The name of the yield market.'),
   address: z.string().describe('The address of the yield market.'),
-  expiry: z.string().describe('The expiry identifier of the yield market.'),
+  expiry: z.string().describe('The expiry timestamp of the yield market.'),
   pt: z.string().describe('The address of the PT (principal token).'),
   yt: z.string().describe('The address of the YT (yield token).'),
   sy: z.string().describe('The address of the SY (standardized yield token).'),
   underlyingAsset: TokenSchema.describe('The underlying asset of the Pendle market.'),
   chainId: z.string().describe('The chain ID on which this yield market exists.'),
+  volatileData: YieldMarketVolatileDataSchema.optional(),
 });
 export type YieldMarket = z.infer<typeof YieldMarketSchema>;
 
@@ -83,6 +116,39 @@ export const SwapTokensSchema = z.object({
     .describe('Optional chain name for the swap. Both tokens must be on the same chain.'),
 });
 export type SwapTokensArgs = z.infer<typeof SwapTokensSchema>;
+
+function formatYieldMarketInfo(market: YieldMarket): string {
+  try {
+    // Handle expiry - will throw if expiry is not a string
+    let info = `${market.name} (Expires: ${market.expiry})`;
+    
+    // Add volatileData if available
+    if (market.volatileData) {
+      const vd = market.volatileData;
+      
+      // Convert decimal APY values to percentages (multiply by 100)
+      const impliedApy = `${(Number(vd.impliedApy) * 100).toFixed(2)}%`;
+      const underlyingApy = `${(Number(vd.underlyingApy) * 100).toFixed(2)}%`;
+      const aggregatedApy = `${(Number(vd.aggregatedApy) * 100).toFixed(2)}%`;
+      const maxBoostedApy = `${(Number(vd.maxBoostedApy) * 100).toFixed(2)}%`;
+      
+      // Format monetary data as integers
+      const liquidity = `$${Math.round(Number(vd.marketLiquidityUsd)).toLocaleString()}`;
+      const volume = `$${Math.round(Number(vd.tradingVolumeUsd)).toLocaleString()}`;
+      
+      info += `\nLiquidity: ${liquidity}`;
+      info += `\nVolume: ${volume}`;
+      info += `\nImplied APY: ${impliedApy}`;
+      info += `\nUnderlying APY: ${underlyingApy}`;
+      info += `\nAggregated APY: ${aggregatedApy}`;
+      info += `\nMax Boosted APY: ${maxBoostedApy}`;
+    }
+    
+    return info;
+  } catch (error) {
+    return `${market.name} (Error formatting market data: ${error instanceof Error ? error.message : String(error)})`;
+  }
+}
 
 type YieldToolSet = {
   listMarkets: Tool<z.ZodObject<{}>, Awaited<Task>>;
@@ -297,20 +363,30 @@ Never respond in markdown, always use plain text. Never add links to your respon
         parameters: z.object({}),
         execute: async () => {
           try {
-            const parts = this.yieldMarkets.map(market => ({
+            // First, create data artifacts for the full market data
+            const dataArtifacts = this.yieldMarkets.map(market => ({
               type: 'data' as const,
               data: market,
             }));
+            
+            // Then, create a formatted text summary of key market metrics
+            const marketSummaries = this.yieldMarkets.map(market => formatYieldMarketInfo(market));
+            
             const task: Task = {
               id: this.userAddress!,
               status: {
                 state: 'completed',
                 message: {
                   role: 'agent',
-                  parts: [{ type: 'text', text: 'Pendle markets fetched successfully.' }],
+                  parts: [
+                    { 
+                      type: 'text', 
+                      text: `Found ${this.yieldMarkets.length} Pendle markets:\n\n${marketSummaries.join('\n\n')}` 
+                    }
+                  ],
                 },
               },
-              artifacts: [{ name: 'yield-markets', parts }],
+              artifacts: [{ name: 'yield-markets', parts: dataArtifacts }],
             };
             return task;
           } catch (error: any) {

@@ -27,19 +27,16 @@ export function parseMcpToolResponse<T>(
   // Validate and extract 'text' from the first content item
   const { text } = TextContentSchema.parse(content[0]);
 
-  let jsonPayload: unknown;
-  try {
-    jsonPayload = JSON.parse(text);
-  } catch {
-    if (schema) {
-      throw new Error("Expected JSON payload but received plain text.");
-    }
+  // If no schema provided, return the text directly
+  if (!schema) {
     return text;
   }
 
-  if (!schema) {
-    throw new Error("Expected plain text but received JSON payload.");
+  // If schema is provided, try to parse as JSON and validate
+  try {
+    const jsonPayload = JSON.parse(text);
+    return schema.parse(jsonPayload);
+  } catch (e) {
+    throw new Error(`Failed to parse or validate JSON: ${e instanceof Error ? e.message : String(e)}`);
   }
-
-  return schema.parse(jsonPayload);
 }
