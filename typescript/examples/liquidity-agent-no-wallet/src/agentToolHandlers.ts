@@ -79,15 +79,32 @@ export const LiquidityPoolsArtifactSchema = z.object({
 });
 export type LiquidityPoolsArtifact = z.infer<typeof LiquidityPoolsArtifactSchema>;
 
-// Define schema based on LiquidityPosition type used internally
+// Define schema based on MCP response structure for user positions
+const PositionRangeSchema = z.object({
+  fromPrice: z.string(),
+  toPrice: z.string(),
+});
+
+const TokenIdentifierSchema = z.object({
+  chainId: z.string(),
+  address: z.string(),
+});
+
 const LiquidityPositionArtifactSchema = z.object({
   tokenId: z.string(),
-  providerId: z.string(),
-  symbol0: z.string(),
-  symbol1: z.string(),
+  poolAddress: z.string(),
+  operator: z.string(),
+  token0: TokenIdentifierSchema,
+  token1: TokenIdentifierSchema,
+  tokensOwed0: z.string(),
+  tokensOwed1: z.string(),
   amount0: z.string(),
   amount1: z.string(),
+  symbol0: z.string(),
+  symbol1: z.string(),
   price: z.string(),
+  providerId: z.string(),
+  positionRange: PositionRangeSchema,
 });
 
 export const UserPositionsArtifactSchema = z.object({
@@ -97,17 +114,7 @@ export type UserPositionsArtifact = z.infer<typeof UserPositionsArtifactSchema>;
 // --- Pools/Positions Artifact Schemas End ---
 
 // Schema for the MCP response of getUserLiquidityPositions
-export const EmberPositionSchema = z
-  .object({
-    tokenId: z.string(),
-    providerId: z.string(),
-    symbol0: z.string(),
-    symbol1: z.string(),
-    amount0: z.string(),
-    amount1: z.string(),
-    price: z.string(),
-  })
-  .passthrough();
+export const EmberPositionSchema = LiquidityPositionArtifactSchema;
 
 const GetUserLiquidityPositionsResponseSchema = z
   .object({
@@ -233,17 +240,10 @@ export async function handleGetUserLiquidityPositions(
     const validatedData = sharedParseMcpToolResponse(
       mcpResponse,
       GetUserLiquidityPositionsResponseSchema
-    ) as any;
+    );
 
-    const positions: LiquidityPosition[] = validatedData.positions.map((pos: any) => ({
-      tokenId: pos.tokenId,
-      providerId: pos.providerId,
-      symbol0: pos.symbol0,
-      symbol1: pos.symbol1,
-      amount0: pos.amount0,
-      amount1: pos.amount1,
-      price: pos.price,
-    }));
+    // Use the validatedData.positions array directly, as it matches the new schema
+    const positions = validatedData.positions;
     context.updatePositions(positions);
     context.log(`Updated internal state with ${positions.length} positions.`);
 
@@ -464,15 +464,16 @@ export async function handleSupplyLiquidity(
       arguments: mcpArgs,
     });
 
-    const txPlanRaw = sharedParseMcpToolResponse(
+    // Parse and extract transactions from MCP response object
+    const parsed = sharedParseMcpToolResponse(
       mcpResponse,
-      z.array(SharedTransactionPlanSchema)
-    ) as TransactionPlan[];
-
-    context.log('Received raw transaction plan for supplyLiquidity:', txPlanRaw);
-
-    // Use chainId injected by MCP
-    const txPlan: TransactionPlan[] = txPlanRaw;
+      z.object({
+        chainId: z.string(),
+        transactions: z.array(SharedTransactionPlanSchema),
+      })
+    );
+    const txPlan: TransactionPlan[] = parsed.transactions;
+    context.log('Received raw transaction plan for supplyLiquidity:', txPlan);
 
     // --- Construct Artifact Start ---
     const preview = {
@@ -556,15 +557,16 @@ export async function handleWithdrawLiquidity(
       arguments: mcpArgs,
     });
 
-    // Parse without chainId first
-    const txPlanRaw = sharedParseMcpToolResponse(
+    // Parse and extract transactions from MCP response object
+    const parsed = sharedParseMcpToolResponse(
       mcpResponse,
-      z.array(SharedTransactionPlanSchema)
-    ) as TransactionPlan[];
-    context.log('Received raw transaction plan for withdrawLiquidity:', txPlanRaw);
-
-    // Use chainId injected by MCP
-    const txPlan: TransactionPlan[] = txPlanRaw;
+      z.object({
+        chainId: z.string(),
+        transactions: z.array(SharedTransactionPlanSchema),
+      })
+    );
+    const txPlan: TransactionPlan[] = parsed.transactions;
+    context.log('Received raw transaction plan for withdrawLiquidity:', txPlan);
 
     context.log('Transaction plan for withdrawLiquidity:', txPlan);
 
