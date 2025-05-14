@@ -19,7 +19,21 @@ export function parseMcpToolResponse<T>(
   rawResponse: unknown,
   schema?: ZodType<T>
 ): string | T {
-  const { content } = CallToolResultSchema.parse(rawResponse);
+  // Parse the MCP envelope
+  const envelope = CallToolResultSchema.parse(rawResponse);
+
+  // If the MCP tool signaled an error, extract and throw its message
+  if (envelope.isError) {
+    if (envelope.content.length === 0) {
+      throw new Error("MCP tool error without content.");
+    }
+    // Extract text from first content part and throw
+    const { text } = TextContentSchema.parse(envelope.content[0]);
+    throw new Error(text);
+  }
+
+  // Continue with normal content parsing
+  const { content } = envelope;
 
   if (content.length === 0) {
     throw new Error("MCP response content is empty.");
