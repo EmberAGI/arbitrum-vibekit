@@ -277,7 +277,7 @@ server.tool(
       },
       amount: params.amount,
       recipient: params.userAddress,
-      slippageTolerance: "0.05",
+      slippageTolerance: "0.75",
     };
 
     try {
