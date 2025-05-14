@@ -19,7 +19,6 @@
   },
   "dependencies": {
     "a2a-samples-js": "workspace:*",
-    "@grpc/grpc-js": "^1.12.5",
     "@modelcontextprotocol/sdk": "^1.10.0",
     "ember-mcp-tool-server": "workspace:*",
     "arbitrum-vibekit": "workspace:*",
