@@ -316,30 +316,35 @@ export async function handleSwapTokens(
     },
   });
 
-  const dataToValidate = sharedParseMcpToolResponse(swapResponseRaw, SwapResponseSchema);
-  context.log('Parsed swap response data:', dataToValidate);
-
-  const validationResult = SwapResponseSchema.safeParse(dataToValidate);
-  if (!validationResult.success) {
-    context.log('MCP tool swapTokens returned invalid data structure:', validationResult.error);
+  // Parse and validate the MCP tool response in one step
+  let rawSwapTransactions: TransactionPlan[];
+  let validatedSwapResponse: SwapResponse;
+  try {
+    validatedSwapResponse = sharedParseMcpToolResponse(swapResponseRaw, SwapResponseSchema);
+    rawSwapTransactions = validatedSwapResponse.transactions;
+    context.log('Parsed and validated swap response:', validatedSwapResponse);
+  } catch (error) {
+    let errorMessage = (error as Error).message;
+    // If payload was plain text, extract raw message instead
+    if (errorMessage.includes('Expected JSON payload')) {
+      try {
+        errorMessage = sharedParseMcpToolResponse(swapResponseRaw) as string;
+      } catch {
+        // Fallback to original errorMessage
+      }
+    }
+    context.log(`Error processing swapTokens response: ${errorMessage}`);
     return {
       id: userAddress,
       status: {
         state: 'failed',
         message: {
           role: 'agent',
-          parts: [
-            {
-              type: 'text',
-              text: `Received invalid response from swap service: ${validationResult.error.message}`,
-            },
-          ],
+          parts: [{ type: 'text', text: errorMessage }],
         },
       },
     };
   }
-  const validatedSwapResponse = validationResult.data;
-  const rawSwapTransactions = validatedSwapResponse.transactions;
 
   if (rawSwapTransactions.length === 0) {
     context.log('Invalid or empty transaction plan received from MCP tool:', rawSwapTransactions);

@@ -156,16 +156,19 @@ export type LiquidityPair = {
 
 export type LiquidityPosition = {
   tokenId: string;
-  providerId: string;
-  symbol0: string;
-  symbol1: string;
+  poolAddress: string;
+  operator: string;
+  token0: { chainId: string; address: string };
+  token1: { chainId: string; address: string };
+  tokensOwed0: string;
+  tokensOwed1: string;
   amount0: string;
   amount1: string;
+  symbol0: string;
+  symbol1: string;
   price: string;
-  positionRange?: {
-    fromPrice: string;
-    toPrice: string;
-  };
+  providerId: string;
+  positionRange: { fromPrice: string; toPrice: string };
 };
 // --- End added types ---
 
