@@ -273,6 +273,11 @@ export async function handleGetUserLiquidityPositions(
       responseText += `  Amount0: ${pos.amount0} ${pos.symbol0}\n`;
       responseText += `  Amount1: ${pos.amount1} ${pos.symbol1}\n`;
       responseText += `  Price: ${pos.price}\n`;
+      responseText += `  Price Range: ${
+        pos.positionRange
+          ? pos.positionRange.fromPrice + ' to ' + pos.positionRange.toPrice
+          : '0 to ∞'
+      }\n`;
     });
 
     // Construct artifact
