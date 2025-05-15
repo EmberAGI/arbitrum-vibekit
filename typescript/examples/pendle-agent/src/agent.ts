@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { Address } from 'viem';
 import { type HandlerContext, handleSwapTokens } from './agentToolHandlers.js';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
-import { type TransactionPlan } from 'ember-mcp-tool-server';
+import { type TransactionPlan, type GetTokensResponse } from 'ember-mcp-tool-server';
 import {
   generateText,
   tool,
@@ -284,11 +284,21 @@ Never respond in markdown, always use plain text. Never add links to your respon
         },
       });
 
-      const TokenResponseSchema = z.object({
-        tokens: z.array(TokenSchema),
+      this.log('GetTokens tool success.');
+
+      // Define a schema for token response validation that matches GetTokensResponse structure
+      const GetTokensResponseSchema = z.object({
+        tokens: z.array(z.object({
+          symbol: z.string().optional(),
+          tokenUid: z.object({
+            chainId: z.string(),
+            address: z.string()
+          }).optional()
+        }))
       });
 
-      const parsedResponse = parseMcpToolResponsePayload(result, TokenResponseSchema);
+      // Parse with the schema
+      const parsedResponse = parseMcpToolResponsePayload(result, GetTokensResponseSchema);
       const parsedTokens = parsedResponse.tokens;
 
       if (parsedTokens && Array.isArray(parsedTokens)) {
@@ -504,7 +514,6 @@ Never respond in markdown, always use plain text. Never add links to your respon
       name: 'getYieldMarkets',
       arguments: {},
     });
-
     this.log('GetYieldMarkets tool success.');
     return parseMcpToolResponsePayload(result, GetYieldMarketsResponseSchema);
   }

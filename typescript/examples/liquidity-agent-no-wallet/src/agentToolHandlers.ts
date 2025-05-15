@@ -74,15 +74,32 @@ export const LiquidityPoolsArtifactSchema = z.object({
 });
 export type LiquidityPoolsArtifact = z.infer<typeof LiquidityPoolsArtifactSchema>;
 
-// Define schema based on LiquidityPosition type used internally
+// Define schema based on MCP response structure for user positions
+const PositionRangeSchema = z.object({
+  fromPrice: z.string(),
+  toPrice: z.string(),
+});
+
+const TokenIdentifierSchema = z.object({
+  chainId: z.string(),
+  address: z.string(),
+});
+
 const LiquidityPositionArtifactSchema = z.object({
   tokenId: z.string(),
-  providerId: z.string(),
-  symbol0: z.string(),
-  symbol1: z.string(),
+  poolAddress: z.string(),
+  operator: z.string(),
+  token0: TokenIdentifierSchema,
+  token1: TokenIdentifierSchema,
+  tokensOwed0: z.string(),
+  tokensOwed1: z.string(),
   amount0: z.string(),
   amount1: z.string(),
+  symbol0: z.string(),
+  symbol1: z.string(),
   price: z.string(),
+  providerId: z.string(),
+  positionRange: PositionRangeSchema,
 });
 
 export const UserPositionsArtifactSchema = z.object({
@@ -92,23 +109,7 @@ export type UserPositionsArtifact = z.infer<typeof UserPositionsArtifactSchema>;
 // --- Pools/Positions Artifact Schemas End ---
 
 // Schema for the MCP response of getUserLiquidityPositions
-export const EmberPositionSchema = z
-  .object({
-    tokenId: z.string(),
-    providerId: z.string(),
-    symbol0: z.string(),
-    symbol1: z.string(),
-    amount0: z.string(),
-    amount1: z.string(),
-    price: z.string(),
-    positionRange: z
-      .object({
-        fromPrice: z.string(),
-        toPrice: z.string(),
-      })
-      .optional(),
-  })
-  .passthrough();
+export const EmberPositionSchema = LiquidityPositionArtifactSchema;
 
 const GetUserLiquidityPositionsResponseSchema = z
   .object({
@@ -233,16 +234,8 @@ export async function handleGetUserLiquidityPositions(
 
     const validatedData = parseMcpToolResponsePayload(mcpResponse, GetUserLiquidityPositionsResponseSchema);
 
-    const positions: LiquidityPosition[] = validatedData.positions.map((pos: any) => ({
-      tokenId: pos.tokenId,
-      providerId: pos.providerId,
-      symbol0: pos.symbol0,
-      symbol1: pos.symbol1,
-      amount0: pos.amount0,
-      amount1: pos.amount1,
-      price: pos.price,
-      positionRange: pos.positionRange,
-    }));
+    // Use the validatedData.positions array directly, as it matches the new schema
+    const positions = validatedData.positions;
     context.updatePositions(positions);
     context.log(`Updated internal state with ${positions.length} positions.`);
 
@@ -468,9 +461,14 @@ export async function handleSupplyLiquidity(
       arguments: mcpArgs,
     });
 
-    const txPlan: TransactionPlan[] = parseMcpToolResponsePayload(mcpResponse, z.array(SharedTransactionPlanSchema));
-
-    context.log('Received raw transaction plan for supplyLiquidity:', txPlan);
+    const parsed = parseMcpToolResponsePayload(
+      mcpResponse,
+      z.object({
+        chainId: z.string(),
+        transactions: z.array(SharedTransactionPlanSchema),
+      })
+    );
+    const txPlan: TransactionPlan[] = parsed.transactions;
 
     // --- Construct Artifact Start ---
     const preview = {
@@ -555,7 +553,13 @@ export async function handleWithdrawLiquidity(
     });
 
     // Parse without chainId first
-    const txPlan = parseMcpToolResponsePayload(mcpResponse, z.array(SharedTransactionPlanSchema));
+    const txPlan = parseMcpToolResponsePayload(
+      mcpResponse, 
+      z.object({
+        chainId: z.string(),
+        transactions: z.array(SharedTransactionPlanSchema),
+      })
+    ).transactions;
 
     context.log('Transaction plan for withdrawLiquidity:', txPlan);
 

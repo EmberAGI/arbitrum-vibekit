@@ -15,12 +15,6 @@ importers:
 
   examples/lending-agent-no-wallet:
     dependencies:
-      '@emberai/sdk-typescript':
-        specifier: 0.3.0-beta.6
-        version: 0.3.0-beta.6
-      '@grpc/grpc-js':
-        specifier: ^1.12.5
-        version: 1.13.3
       '@modelcontextprotocol/sdk':
         specifier: ^1.5.0
         version: 1.10.0
@@ -79,12 +73,6 @@ importers:
 
   examples/liquidity-agent-no-wallet:
     dependencies:
-      '@emberai/sdk-typescript':
-        specifier: 0.3.0-beta.6
-        version: 0.3.0-beta.6
-      '@grpc/grpc-js':
-        specifier: ^1.12.5
-        version: 1.13.3
       '@modelcontextprotocol/sdk':
         specifier: ^1.5.0
         version: 1.10.0
@@ -143,9 +131,6 @@ importers:
 
   examples/pendle-agent:
     dependencies:
-      '@grpc/grpc-js':
-        specifier: ^1.12.5
-        version: 1.13.3
       '@modelcontextprotocol/sdk':
         specifier: ^1.10.0
         version: 1.10.0
@@ -204,12 +189,6 @@ importers:
 
   examples/swapping-agent:
     dependencies:
-      '@emberai/sdk-typescript':
-        specifier: 0.3.0-beta.6
-        version: 0.3.0-beta.6
-      '@grpc/grpc-js':
-        specifier: ^1.12.5
-        version: 1.13.3
       '@modelcontextprotocol/sdk':
         specifier: ^1.5.0
         version: 1.10.0
@@ -271,12 +250,6 @@ importers:
 
   examples/swapping-agent-no-wallet:
     dependencies:
-      '@emberai/sdk-typescript':
-        specifier: 0.3.0-beta.6
-        version: 0.3.0-beta.6
-      '@grpc/grpc-js':
-        specifier: ^1.12.5
-        version: 1.13.3
       '@modelcontextprotocol/sdk':
         specifier: ^1.5.0
         version: 1.10.0
@@ -425,8 +398,8 @@ importers:
   lib/mcp-tools/emberai-mcp:
     dependencies:
       '@emberai/sdk-typescript':
-        specifier: 0.3.0-beta.7
-        version: 0.3.0-beta.7
+        specifier: 0.3.0-beta.8
+        version: 0.3.0-beta.8
       '@grpc/grpc-js':
         specifier: ^1.13.2
         version: 1.13.3
@@ -526,12 +499,8 @@ packages:
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
     engines: {node: '>=12'}
 
-  '@emberai/sdk-typescript@0.3.0-beta.6':
-    resolution: {integrity: sha512-6rWgTgBx/4COb3uAvI9bh4zpT8aQVreMqZoL95HZZ32Zu1x8M5pyO1isR3uFRBUV0LB4S/VRXUr9rnAQWS/8MA==}
-    engines: {node: '>=18.0.0'}
-
-  '@emberai/sdk-typescript@0.3.0-beta.7':
-    resolution: {integrity: sha512-2Pb34BmuHddRyI7cQP7DZRouf+nohXyx0uvCghpVrwedSg1auNYTZFfjR5y4gq3J6DkRG/m1YUFZZ55fQA0tbA==}
+  '@emberai/sdk-typescript@0.3.0-beta.8':
+    resolution: {integrity: sha512-LYpq1kWsN+u9b9jgWU6JQP7az1O3mATKh/i9MzTachzZx41LdUkzPAYw4Gqrlf+DY6M4PtQQD389lM7q1HFhWw==}
     engines: {node: '>=18.0.0'}
 
   '@esbuild/aix-ppc64@0.25.2':
@@ -3246,11 +3215,7 @@ snapshots:
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
 
-  '@emberai/sdk-typescript@0.3.0-beta.6':
-    dependencies:
-      '@bufbuild/protobuf': 2.2.5
-
-  '@emberai/sdk-typescript@0.3.0-beta.7':
+  '@emberai/sdk-typescript@0.3.0-beta.8':
     dependencies:
       '@bufbuild/protobuf': 2.2.5
       '@openzeppelin/contracts': 5.3.0
@@ -4476,7 +4441,7 @@ snapshots:
 
   ember-mcp-tool-server@file:lib/mcp-tools/emberai-mcp:
     dependencies:
-      '@emberai/sdk-typescript': 0.3.0-beta.7
+      '@emberai/sdk-typescript': 0.3.0-beta.8
       '@grpc/grpc-js': 1.13.3
       '@modelcontextprotocol/sdk': 1.11.1
       zod: 3.24.3

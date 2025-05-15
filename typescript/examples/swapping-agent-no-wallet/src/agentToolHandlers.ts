@@ -316,7 +316,7 @@ export async function handleSwapTokens(
     },
   });
 
-  const dataToValidate = parseMcpToolResponsePayload(swapResponseRaw, SwapResponseSchema);
+  const dataToValidate = parseMcpToolResponsePayload(swapResponseRaw, z.any());
   context.log('Parsed swap response data:', dataToValidate);
 
   const validationResult = SwapResponseSchema.safeParse(dataToValidate);
@@ -328,17 +328,13 @@ export async function handleSwapTokens(
         state: 'failed',
         message: {
           role: 'agent',
-          parts: [
-            {
-              type: 'text',
-              text: `Received invalid response from swap service: ${validationResult.error.message}`,
-            },
-          ],
+          parts: [{ type: 'text', text: validationResult.error.message }],
         },
       },
     };
   }
-  const validatedSwapResponse = validationResult.data;
+
+  const validatedSwapResponse = parseMcpToolResponsePayload(swapResponseRaw, SwapResponseSchema);
   const rawSwapTransactions = validatedSwapResponse.transactions;
 
   if (rawSwapTransactions.length === 0) {
