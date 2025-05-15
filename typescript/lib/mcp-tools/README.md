@@ -130,3 +130,5 @@ pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js
 This will start your tool and open the Inspector interface, allowing you to interact with and debug your MCP tool implementation.
 
 ## 🛠️ Vibe Coding Your MCP Tool
+
+Coming Soon!

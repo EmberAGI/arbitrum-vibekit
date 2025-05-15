@@ -37,6 +37,7 @@ Vibekit/
 │       └── swapping-agent/
 │----── lib/
 │       └── a2a/
+│       └── arbitrum-vibekit/
 │       └── mcp-tools/
 │           └── allora-mcp-server/
 │           └── emberai-mcp/
@@ -158,8 +159,8 @@ To interact with the Lending agent though Curosr, [create or update](https://doc
 
 Restart Cursor to apply the new configuration. Upon successful integration, the MCP settings should look like this:
 
-<p align="center">
-  <img src="img/mcp.png" width="700px" alt="MCP"/>
+<p align="left">
+  <img src="img/mcp.png" width="800px" alt="MCP"/>
 </p>
 
 Cursor will now automatically detect the Lending Agent MCP tool and you can interact with it directly through prompts.

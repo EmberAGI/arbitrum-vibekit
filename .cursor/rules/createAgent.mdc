@@ -24,3 +24,16 @@ alwaysApply: true
 - Ember On-chain Actions (ember-mcp-tool-server workspace)
 - Viem (viem)
 - OpenZeppelin (@openzeppelin/contracts)
+
+# Agent Setup & Run Instructions
+
+To run an agent:
+1. From the `typescript` folder, run:
+   ```
+   pnpm install
+   pnpm build
+   ```
+2. Then, to start the agent, run the following inside the agent's directory:
+   ```
+   pnpm dev
+   ```

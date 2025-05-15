@@ -112,4 +112,4 @@ Restart Cursor to apply the new configuration. Upon successful integration, Curs
 
 ## 🛠️ Building Your Own Agent
 
-coming soon!
+Coming soon!
