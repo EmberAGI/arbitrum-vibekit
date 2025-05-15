@@ -15,9 +15,9 @@ import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with {
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { streamText } from 'ai';
 import {
-  parseMcpToolResponse as sharedParseMcpToolResponse,
   createTransactionArtifactSchema,
   type TransactionArtifact,
+  parseMcpToolResponsePayload,
 } from 'arbitrum-vibekit';
 import {
   validateTransactionPlans,
@@ -316,7 +316,7 @@ export async function handleSwapTokens(
     },
   });
 
-  const dataToValidate = sharedParseMcpToolResponse(swapResponseRaw, SwapResponseSchema);
+  const dataToValidate = parseMcpToolResponsePayload(swapResponseRaw, SwapResponseSchema);
   context.log('Parsed swap response data:', dataToValidate);
 
   const validationResult = SwapResponseSchema.safeParse(dataToValidate);
@@ -572,16 +572,6 @@ ${camelotContextContent}`;
       },
     };
   }
-}
-
-export function parseMcpToolResponse(
-  rawResponse: unknown,
-  context: HandlerContext,
-  toolName: string
-): unknown {
-  context.log(`Invoking shared parser for ${toolName}`);
-  // Always parse JSON payload
-  return sharedParseMcpToolResponse(rawResponse, z.any());
 }
 
 const SwapTransactionArtifactSchema = createTransactionArtifactSchema(SwapPreviewSchema);

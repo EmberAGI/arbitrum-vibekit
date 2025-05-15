@@ -3,7 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { SwapTokensArgs } from './agent.js';
 import type { Task, Artifact, DataPart } from 'a2a-samples-js';
 import {
-  parseMcpToolResponse as sharedParseMcpToolResponse,
+  parseMcpToolResponsePayload,
   createTransactionArtifactSchema,
   type TransactionArtifact,
 } from 'arbitrum-vibekit';
@@ -213,7 +213,7 @@ export async function handleSwapTokens(
   });
 
   // Parse and validate tool response with Zod
-  const parsedData = sharedParseMcpToolResponse(mcpResponse, SwapResponseSchema);
+  const parsedData = parseMcpToolResponsePayload(mcpResponse, SwapResponseSchema);
   const { chainId, transactions } = parsedData;
   const txs: TransactionPlan[] = validateTransactionPlans(transactions);
 

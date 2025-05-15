@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Address } from 'viem';
 import { type HandlerContext, handleSwapTokens } from './agentToolHandlers.js';
-import { parseMcpToolResponse as sharedParseMcpToolResponse } from 'arbitrum-vibekit';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
 import { type TransactionPlan } from 'ember-mcp-tool-server';
 import {
   generateText,
@@ -117,38 +117,6 @@ export const SwapTokensSchema = z.object({
 });
 export type SwapTokensArgs = z.infer<typeof SwapTokensSchema>;
 
-function formatYieldMarketInfo(market: YieldMarket): string {
-  try {
-    // Handle expiry - will throw if expiry is not a string
-    let info = `${market.name} (Expires: ${market.expiry})`;
-    
-    // Add volatileData if available
-    if (market.volatileData) {
-      const vd = market.volatileData;
-      
-      // Convert decimal APY values to percentages (multiply by 100)
-      const impliedApy = `${(Number(vd.impliedApy) * 100).toFixed(2)}%`;
-      const underlyingApy = `${(Number(vd.underlyingApy) * 100).toFixed(2)}%`;
-      const aggregatedApy = `${(Number(vd.aggregatedApy) * 100).toFixed(2)}%`;
-      const maxBoostedApy = `${(Number(vd.maxBoostedApy) * 100).toFixed(2)}%`;
-      
-      // Format monetary data as integers
-      const liquidity = `$${Math.round(Number(vd.marketLiquidityUsd)).toLocaleString()}`;
-      const volume = `$${Math.round(Number(vd.tradingVolumeUsd)).toLocaleString()}`;
-      
-      info += `\nLiquidity: ${liquidity}`;
-      info += `\nVolume: ${volume}`;
-      info += `\nImplied APY: ${impliedApy}`;
-      info += `\nUnderlying APY: ${underlyingApy}`;
-      info += `\nAggregated APY: ${aggregatedApy}`;
-      info += `\nMax Boosted APY: ${maxBoostedApy}`;
-    }
-    
-    return info;
-  } catch (error) {
-    return `${market.name} (Error formatting market data: ${error instanceof Error ? error.message : String(error)})`;
-  }
-}
 
 type YieldToolSet = {
   listMarkets: Tool<z.ZodObject<{}>, Awaited<Task>>;
@@ -316,10 +284,12 @@ Never respond in markdown, always use plain text. Never add links to your respon
         },
       });
 
-      const parsedResult = sharedParseMcpToolResponse(result);
-      // If result is a JSON string, parse it
-      const parsedTokens =
-        typeof parsedResult === 'string' ? JSON.parse(parsedResult) : parsedResult;
+      const TokenResponseSchema = z.object({
+        tokens: z.array(TokenSchema),
+      });
+
+      const parsedResponse = parseMcpToolResponsePayload(result, TokenResponseSchema);
+      const parsedTokens = parsedResponse.tokens;
 
       if (parsedTokens && Array.isArray(parsedTokens)) {
         this.tokenMap = {};
@@ -368,10 +338,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
               type: 'data' as const,
               data: market,
             }));
-            
-            // Then, create a formatted text summary of key market metrics
-            const marketSummaries = this.yieldMarkets.map(market => formatYieldMarketInfo(market));
-            
+
             const task: Task = {
               id: this.userAddress!,
               status: {
@@ -379,10 +346,6 @@ Never respond in markdown, always use plain text. Never add links to your respon
                 message: {
                   role: 'agent',
                   parts: [
-                    { 
-                      type: 'text', 
-                      text: `Found ${this.yieldMarkets.length} Pendle markets:\n\n${marketSummaries.join('\n\n')}` 
-                    }
                   ],
                 },
               },
@@ -542,26 +505,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
       arguments: {},
     });
 
-    // Check if the response has the expected structure
-    if (!result.content || !Array.isArray(result.content) || result.content.length === 0) {
-      throw new Error('Invalid response format from getYieldMarkets tool');
-    }
-
-    const contentItem = result.content[0];
-    if (contentItem.type !== 'text' || typeof contentItem.text !== 'string') {
-      throw new Error('Invalid content format from getYieldMarkets tool');
-    }
-
-    // Parse the JSON string from the text field
-    const parsedData = JSON.parse(contentItem.text);
-
-    // Validate the parsed data with our schema
-    const validationResult = GetYieldMarketsResponseSchema.safeParse(parsedData);
-
-    if (!validationResult.success) {
-      throw new Error('Failed to validate Pendle markets data structure');
-    }
-
-    return validationResult.data;
+    this.log('GetYieldMarkets tool success.');
+    return parseMcpToolResponsePayload(result, GetYieldMarketsResponseSchema);
   }
 }
