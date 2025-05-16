@@ -12,7 +12,15 @@ import {
  * Use this when expecting a plain text response, not JSON.
  */
 export function parseMcpToolResponseText(rawResponse: unknown): string {
-  const { content } = CallToolResultSchema.parse(rawResponse);
+  const { content, isError } = CallToolResultSchema.parse(rawResponse);
+
+  if (isError) {
+    if (content.length > 0) {
+      const { text } = TextContentSchema.parse(content[0]);
+      throw new Error(text);
+    }
+    throw new Error("MCP response is an error.");
+  }
 
   if (content.length === 0) {
     throw new Error("MCP response content is empty.");
@@ -31,12 +39,20 @@ export function parseMcpToolResponsePayload<T>(
   rawResponse: unknown,
   schema: ZodType<T>
 ): T {
-  const { content } = CallToolResultSchema.parse(rawResponse);
+  const { content, isError } = CallToolResultSchema.parse(rawResponse);
+
+  if (isError) {
+    if (content.length > 0) {
+      const { text } = TextContentSchema.parse(content[0]);
+      throw new Error(text);
+    }
+    throw new Error("MCP response is an error.");
+  }
 
   if (content.length === 0) {
     throw new Error("MCP response content is empty.");
   }
-  
+
   // Validate and extract 'text' from the first content item
   const { text } = TextContentSchema.parse(content[0]);
 
