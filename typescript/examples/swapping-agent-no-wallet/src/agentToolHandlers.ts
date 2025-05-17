@@ -316,25 +316,22 @@ export async function handleSwapTokens(
     },
   });
 
-  const dataToValidate = parseMcpToolResponsePayload(swapResponseRaw, z.any());
-  context.log('Parsed swap response data:', dataToValidate);
-
-  const validationResult = SwapResponseSchema.safeParse(dataToValidate);
-  if (!validationResult.success) {
-    context.log('MCP tool swapTokens returned invalid data structure:', validationResult.error);
+  let validatedSwapResponse: SwapResponse;
+  try {
+    validatedSwapResponse = parseMcpToolResponsePayload(swapResponseRaw, SwapResponseSchema);
+  } catch (error) {
+    context.log('MCP tool swapTokens returned invalid data structure:', error);
     return {
       id: userAddress,
       status: {
         state: 'failed',
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: validationResult.error.message }],
+          parts: [{ type: 'text', text: (error as Error).message }],
         },
       },
     };
   }
-
-  const validatedSwapResponse = parseMcpToolResponsePayload(swapResponseRaw, SwapResponseSchema);
   const rawSwapTransactions = validatedSwapResponse.transactions;
 
   if (rawSwapTransactions.length === 0) {

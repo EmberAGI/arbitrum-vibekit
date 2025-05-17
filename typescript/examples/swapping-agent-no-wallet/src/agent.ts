@@ -1,10 +1,7 @@
 import { z } from 'zod';
 import { type Address } from 'viem';
 import type { HandlerContext } from './agentToolHandlers.js';
-import {
-  handleSwapTokens,
-  handleAskEncyclopedia,
-} from './agentToolHandlers.js';
+import { handleSwapTokens, handleAskEncyclopedia } from './agentToolHandlers.js';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
 import { promises as fs } from 'fs';
 import path from 'path';
