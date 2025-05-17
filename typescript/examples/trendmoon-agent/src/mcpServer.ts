@@ -563,6 +563,10 @@ export class TrendMoonMcpServer {
     ema20Percentage: number;
     ema50Percentage: number;
     date: string;
+    macd?: number;
+    signal?: number;
+    histogram?: number;
+    isMacdAboveSignal?: boolean;
   }> {
     const binanceSymbol = `${symbol.toUpperCase()}USDT`; // Assume USDT pairing
     const url = "https://api.binance.com/api/v3/klines";
@@ -605,10 +609,21 @@ export class TrendMoonMcpServer {
         period: 50,
       });
 
+      // Calculate MACD
+      const macdResults = technicalindicators.MACD.calculate({
+        values: closePrices,
+        fastPeriod: 12,
+        slowPeriod: 26,
+        signalPeriod: 9,
+        SimpleMAOscillator: false,
+        SimpleMASignal: false,
+      });
+
       // Get the most recent values
       const currentPrice = closePrices[closePrices.length - 1];
       const ema20 = ema20Results[ema20Results.length - 1];
       const ema50 = ema50Results[ema50Results.length - 1];
+      const latestMacd = macdResults[macdResults.length - 1];
 
       // Check if we have valid values
       if (
@@ -639,6 +654,14 @@ export class TrendMoonMcpServer {
       const dateStr = (latestDate.toISOString().split("T")[0] ||
         "Unknown date") as string;
 
+      // Add MACD information if available
+      const macdInfo = latestMacd && latestMacd.MACD !== undefined && latestMacd.signal !== undefined ? {
+        macd: latestMacd.MACD,
+        signal: latestMacd.signal,
+        histogram: latestMacd.histogram,
+        isMacdAboveSignal: latestMacd.MACD > latestMacd.signal
+      } : {};
+
       return {
         symbol: symbol.toUpperCase(),
         currentPrice,
@@ -649,6 +672,7 @@ export class TrendMoonMcpServer {
         ema20Percentage,
         ema50Percentage,
         date: dateStr,
+        ...macdInfo
       };
     } catch (error: any) {
       console.error(`Error checking EMA position for ${binanceSymbol}:`, error);
