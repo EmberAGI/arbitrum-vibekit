@@ -57,32 +57,64 @@ interface PriceDataWithMACD {
 // Define interface for social data with MA
 interface SocialDataWithMA {
   symbol: string;
+  technical_indicators: {
+    mentions: {
+      macd: number;
+      signal: number;
+      histogram: number;
+      is_above_signal: boolean;
+    };
+    sentiment: {
+      macd: number;
+      signal: number;
+      histogram: number;
+      is_above_signal: boolean;
+    };
+    dominance: {
+      macd: number;
+      signal: number;
+      histogram: number;
+      is_above_signal: boolean;
+    };
+  };
+}
+
+interface SocialTrendResponse {
   social_data: Array<{
-    date: string;
     mentions_count: number;
     sentiment_score: number;
     lc_social_dominance: number;
-    mentions_ma?: number;
-    sentiment_ma?: number;
-    dominance_ma?: number;
   }>;
-  ma_analysis?: {
-    mentions_trend?: string;
-    sentiment_trend?: string;
-    dominance_trend?: string;
+}
+
+interface TechnicalIndicators {
+  symbol: string;
+  technical_indicators: {
+    mentions: {
+      macd: number;
+      signal: number;
+      histogram: number;
+      is_above_signal: boolean;
+    };
+    sentiment: {
+      macd: number;
+      signal: number;
+      histogram: number;
+      is_above_signal: boolean;
+    };
+    dominance: {
+      macd: number;
+      signal: number;
+      histogram: number;
+      is_above_signal: boolean;
+    };
   };
-  summary?: {
-    current_dominance?: number;
-    dominance_ma_current?: number;
-    dominance_ma_previous?: number;
-    dominance_change_percent?: number;
-    [key: string]: any;
-  };
-  [key: string]: any; // For any other properties in the response
 }
 
 export class TrendMoonMcpServer {
   private mcpServer: McpServer;
+  private baseUrl: string;
+  private apiKey: string;
 
   constructor() {
     console.error("Initializing TrendMoon MCP Server...");
@@ -96,7 +128,8 @@ export class TrendMoonMcpServer {
       throw new Error("TRENDMOON_API_KEY not set!");
     }
 
-    const apiKey = process.env.TRENDMOON_API_KEY;
+    this.baseUrl = process.env.TRENDMOON_API_URL || 'https://api.qa.trendmoon.ai';
+    this.apiKey = process.env.TRENDMOON_API_KEY || '';
 
     console.error("Creating MCP server...");
     // Initialize MCP server
@@ -105,7 +138,7 @@ export class TrendMoonMcpServer {
       version: "1.0.0",
     });
 
-    this.registerTools(apiKey);
+    this.registerTools(this.apiKey);
   }
 
   private registerTools(apiKey: string) {
@@ -212,7 +245,7 @@ export class TrendMoonMcpServer {
             );
           }
 
-          const data = await response.json();
+          const data = await response.json() as SocialTrendResponse;
 
           // Check if the response contains valid data
           if (!data || Object.keys(data).length === 0) {
@@ -683,223 +716,90 @@ export class TrendMoonMcpServer {
   }
 
   // Change from private to public
-  public async getSocialTrendWithMA(symbol: string): Promise<SocialDataWithMA> {
-    // First get the raw social trend data
-    const symbolUppercase = symbol.toUpperCase();
-    console.error(
-      `Fetching social trend data for ${symbolUppercase} to calculate MA...`
-    );
-
+  public async getSocialTrendWithMA(symbol: string): Promise<TechnicalIndicators> {
     try {
+      const symbolUppercase = symbol.toUpperCase();
       const response = await fetch(
-        `https://api.qa.trendmoon.ai/social/trend?symbol=${symbolUppercase}&date_interval=7&time_interval=1d`,
+        `${this.baseUrl}/social-trend/${symbolUppercase}?interval=30d`,
         {
-          method: "GET",
           headers: {
-            "Api-key": process.env.TRENDMOON_API_KEY!,
-            accept: "application/json",
+            "x-api-key": this.apiKey,
           },
         }
       );
 
       if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
+        throw new Error(`Failed to fetch social trend data: ${response.statusText}`);
       }
 
-      const data = (await response.json()) as SocialDataWithMA;
+      const data = await response.json() as SocialTrendResponse;
 
       if (!data || !data.social_data || !Array.isArray(data.social_data)) {
         console.error(`No valid social data found for ${symbolUppercase}`);
-        return data; // Return original data if not in expected format
+        return {
+          symbol: symbolUppercase,
+          technical_indicators: {
+            mentions: { macd: 0, signal: 0, histogram: 0, is_above_signal: false },
+            sentiment: { macd: 0, signal: 0, histogram: 0, is_above_signal: false },
+            dominance: { macd: 0, signal: 0, histogram: 0, is_above_signal: false }
+          }
+        };
       }
 
       // Extract time series for mentions, sentiment, and social dominance
       const mentionsData = data.social_data.map(
-        (day) => day.mentions_count || 0
+        (day: { mentions_count: number }) => day.mentions_count || 0
       );
       const sentimentData = data.social_data.map(
-        (day) => day.sentiment_score || 0
+        (day: { sentiment_score: number }) => day.sentiment_score || 0
       );
       const dominanceData = data.social_data.map(
-        (day) => day.lc_social_dominance || 0
+        (day: { lc_social_dominance: number }) => day.lc_social_dominance || 0
       );
 
-      // Calculate 3-day MAs for mentions and sentiment if we have enough data
-      if (mentionsData.length >= 3) {
-        const mentionsMA = technicalindicators.SMA.calculate({
-          values: mentionsData,
-          period: 3,
-        });
-
-        const sentimentMA = technicalindicators.SMA.calculate({
-          values: sentimentData,
-          period: 3,
-        });
-
-        // Add MA data to each day's entry
-        // Note: MA will start from the 3rd day
-        const offset = mentionsData.length - mentionsMA.length;
-        for (let i = 0; i < mentionsMA.length; i++) {
-          if (data.social_data[i + offset]) {
-            // Use type assertion to tell TypeScript this is a modifiable object
-            (data.social_data[i + offset] as any).mentions_ma = mentionsMA[i];
-            (data.social_data[i + offset] as any).sentiment_ma = sentimentMA[i];
-          }
+      // Calculate MACD for each metric
+      const calculateMACD = (data: number[]) => {
+        if (data.length < 26) {
+          return { macd: 0, signal: 0, histogram: 0, is_above_signal: false };
         }
 
-        // Add MA analysis to the data
-        data.ma_analysis = {
-          mentions_trend:
-            mentionsMA.length >= 2 &&
-            mentionsMA[mentionsMA.length - 1] !== undefined &&
-            mentionsMA[mentionsMA.length - 2] !== undefined
-              ? mentionsMA[mentionsMA.length - 1]! >
-                mentionsMA[mentionsMA.length - 2]!
-                ? "rising"
-                : "falling"
-              : "unknown",
-          sentiment_trend:
-            sentimentMA.length >= 2 &&
-            sentimentMA[sentimentMA.length - 1] !== undefined &&
-            sentimentMA[sentimentMA.length - 2] !== undefined
-              ? sentimentMA[sentimentMA.length - 1]! >
-                sentimentMA[sentimentMA.length - 2]!
-                ? "improving"
-                : "declining"
-              : "unknown",
+        const macdResult = technicalindicators.MACD.calculate({
+          values: data,
+          fastPeriod: 12,
+          slowPeriod: 26,
+          signalPeriod: 9,
+          SimpleMAOscillator: false,
+          SimpleMASignal: false
+        });
+
+        if (!macdResult || macdResult.length === 0) {
+          return { macd: 0, signal: 0, histogram: 0, is_above_signal: false };
+        }
+
+        const latestMacd = macdResult[macdResult.length - 1];
+        if (!latestMacd || typeof latestMacd.MACD !== 'number' || typeof latestMacd.signal !== 'number' || typeof latestMacd.histogram !== 'number') {
+          return { macd: 0, signal: 0, histogram: 0, is_above_signal: false };
+        }
+
+        return {
+          macd: latestMacd.MACD,
+          signal: latestMacd.signal,
+          histogram: latestMacd.histogram,
+          is_above_signal: latestMacd.MACD > latestMacd.signal
         };
-      }
+      };
 
-      // Calculate 2-day MA for social dominance if we have enough data
-      if (dominanceData.length >= 2) {
-        const dominanceMA = technicalindicators.SMA.calculate({
-          values: dominanceData,
-          period: 2,
-        });
-
-        // Add MA data to each day's entry
-        const domOffset = dominanceData.length - dominanceMA.length;
-        for (let i = 0; i < dominanceMA.length; i++) {
-          if (data.social_data[i + domOffset]) {
-            (data.social_data[i + domOffset] as any).dominance_ma =
-              dominanceMA[i];
-          }
+      return {
+        symbol: symbolUppercase,
+        technical_indicators: {
+          mentions: calculateMACD(mentionsData),
+          sentiment: calculateMACD(sentimentData),
+          dominance: calculateMACD(dominanceData)
         }
-
-        // Fix array access errors in the dominance trend analysis
-        if (dominanceMA.length >= 2) {
-          const lastDominanceMA = dominanceMA[dominanceMA.length - 1]!;
-          const prevDominanceMA = dominanceMA[dominanceMA.length - 2]!;
-
-          if (data.ma_analysis) {
-            (data.ma_analysis as any).dominance_trend =
-              lastDominanceMA > prevDominanceMA ? "rising" : "falling";
-          } else {
-            data.ma_analysis = {
-              dominance_trend:
-                lastDominanceMA > prevDominanceMA ? "rising" : "falling",
-            };
-          }
-
-          // Fix array access errors in the dominance summary
-          if (dominanceData.length > 1) {
-            const lastDominance = dominanceData[dominanceData.length - 1]!;
-            const prevDominance = dominanceData[dominanceData.length - 2]!;
-
-            data.summary = {
-              ...(data.summary || {}),
-              current_dominance: lastDominance,
-              dominance_ma_current: lastDominanceMA,
-              dominance_ma_previous: prevDominanceMA,
-              dominance_change_percent:
-                ((lastDominance - prevDominance) / (prevDominance || 1)) * 100,
-            };
-          }
-        } else {
-          // Not enough data points for dominance trend
-          if (data.ma_analysis) {
-            (data.ma_analysis as any).dominance_trend = "unknown";
-          } else {
-            data.ma_analysis = {
-              dominance_trend: "unknown",
-            };
-          }
-
-          if (dominanceData.length > 0) {
-            data.summary = {
-              ...(data.summary || {}),
-              current_dominance: dominanceData[dominanceData.length - 1]!,
-              dominance_ma_current:
-                dominanceMA.length > 0
-                  ? dominanceMA[dominanceMA.length - 1]!
-                  : 0,
-              dominance_ma_previous: 0,
-              dominance_change_percent: 0,
-            };
-          }
-        }
-      }
-
-      console.error(
-        `Successfully calculated MA for social data for ${symbolUppercase}`
-      );
-
-      // Extract and process day_social_perc_diff data
-      if (
-        data.trend_market_data &&
-        Array.isArray(data.trend_market_data) &&
-        data.trend_market_data.length >= 2
-      ) {
-        console.error("Processing day_social_perc_diff values...");
-
-        // Extract day_social_perc_diff values
-        const percDiffValues = data.trend_market_data
-          .map((day) => day.day_social_perc_diff)
-          .filter((val) => val !== undefined && !isNaN(val));
-
-        console.error("day_social_perc_diff values:", percDiffValues);
-
-        // Calculate 2-day moving average for day_social_perc_diff
-        if (percDiffValues.length >= 2) {
-          // Create a new array for the moving averages
-          const percDiffMA2 = [];
-
-          for (let i = 1; i < percDiffValues.length; i++) {
-            const ma2 = (percDiffValues[i] + percDiffValues[i - 1]) / 2;
-            percDiffMA2.push(parseFloat(ma2.toFixed(2)));
-          }
-
-          console.error("2-day MA for day_social_perc_diff:", percDiffMA2);
-
-          // Add the MA values to a new timeseries array in the data
-          data.perc_diff_ma = {
-            values: percDiffValues,
-            ma2: percDiffMA2,
-          };
-
-          // Add MA values to each day's data point starting from the second day
-          for (let i = 0; i < percDiffMA2.length; i++) {
-            // MA2 starts from the second entry (index 1)
-            const dataIndex = i + 1;
-            if (dataIndex < data.trend_market_data.length) {
-              data.trend_market_data[dataIndex].day_social_perc_diff_ma2 =
-                percDiffMA2[i];
-            }
-          }
-        }
-      }
-
-      // Add normalized data structure for easier consumption
-      data.normalized = this.normalizeTimeSeriesData(data);
-      console.error("Added normalized data structure to response");
-
-      return data;
-    } catch (error: any) {
-      console.error(
-        `Error getting social trend with MA for ${symbolUppercase}:`,
-        error
-      );
-      throw new Error(`Failed to get social trend with MA: ${error.message}`);
+      };
+    } catch (error) {
+      console.error("Error in getSocialTrendWithMA:", error);
+      throw error;
     }
   }
 
