@@ -18,7 +18,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { logError, getChainConfigById, type ChainConfig } from './utils.js';
 import { createRequire } from 'module';
-import type { Task } from 'a2a-samples-js';
+import type { Task } from 'a2a-samples-js/schema';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -54,7 +54,9 @@ export const YieldMarketPoolDailyRewardEstimationSchema = z.object({
   asset: TokenSchema.optional(),
   amount: z.string(),
 });
-export type YieldMarketPoolDailyRewardEstimation = z.infer<typeof YieldMarketPoolDailyRewardEstimationSchema>;
+export type YieldMarketPoolDailyRewardEstimation = z.infer<
+  typeof YieldMarketPoolDailyRewardEstimationSchema
+>;
 
 export const YieldMarketVolatileDataSchema = z.object({
   timestamp: z.string(),
@@ -116,7 +118,6 @@ export const SwapTokensSchema = z.object({
     .describe('Optional chain name for the swap. Both tokens must be on the same chain.'),
 });
 export type SwapTokensArgs = z.infer<typeof SwapTokensSchema>;
-
 
 type YieldToolSet = {
   listMarkets: Tool<z.ZodObject<{}>, Awaited<Task>>;
@@ -288,13 +289,17 @@ Never respond in markdown, always use plain text. Never add links to your respon
 
       // Define a schema for token response validation that matches GetTokensResponse structure
       const GetTokensResponseSchema = z.object({
-        tokens: z.array(z.object({
-          symbol: z.string().optional(),
-          tokenUid: z.object({
-            chainId: z.string(),
-            address: z.string()
-          }).optional()
-        }))
+        tokens: z.array(
+          z.object({
+            symbol: z.string().optional(),
+            tokenUid: z
+              .object({
+                chainId: z.string(),
+                address: z.string(),
+              })
+              .optional(),
+          })
+        ),
       });
 
       // Parse with the schema
@@ -355,8 +360,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
                 state: 'completed',
                 message: {
                   role: 'agent',
-                  parts: [
-                  ],
+                  parts: [],
                 },
               },
               artifacts: [{ name: 'yield-markets', parts: dataArtifacts }],
