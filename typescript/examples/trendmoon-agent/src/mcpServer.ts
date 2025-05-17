@@ -111,6 +111,19 @@ interface TechnicalIndicators {
   };
 }
 
+interface TrendMarketData {
+  date: string;
+  social_mentions: number;
+  lc_sentiment: number;
+  lc_social_dominance: number;
+  [key: string]: any;
+}
+
+interface TrendResponse {
+  trend_market_data: TrendMarketData[];
+  [key: string]: any;
+}
+
 export class TrendMoonMcpServer {
   private mcpServer: McpServer;
   private baseUrl: string;
@@ -128,8 +141,9 @@ export class TrendMoonMcpServer {
       throw new Error("TRENDMOON_API_KEY not set!");
     }
 
-    this.baseUrl = process.env.TRENDMOON_API_URL || 'https://api.qa.trendmoon.ai';
-    this.apiKey = process.env.TRENDMOON_API_KEY || '';
+    this.baseUrl =
+      process.env.TRENDMOON_API_URL || "https://api.qa.trendmoon.ai";
+    this.apiKey = process.env.TRENDMOON_API_KEY || "";
 
     console.error("Creating MCP server...");
     // Initialize MCP server
@@ -245,7 +259,7 @@ export class TrendMoonMcpServer {
             );
           }
 
-          const data = await response.json() as SocialTrendResponse;
+          const data = (await response.json()) as SocialTrendResponse;
 
           // Check if the response contains valid data
           if (!data || Object.keys(data).length === 0) {
@@ -688,12 +702,17 @@ export class TrendMoonMcpServer {
         "Unknown date") as string;
 
       // Add MACD information if available
-      const macdInfo = latestMacd && latestMacd.MACD !== undefined && latestMacd.signal !== undefined ? {
-        macd: latestMacd.MACD,
-        signal: latestMacd.signal,
-        histogram: latestMacd.histogram,
-        isMacdAboveSignal: latestMacd.MACD > latestMacd.signal
-      } : {};
+      const macdInfo =
+        latestMacd &&
+        latestMacd.MACD !== undefined &&
+        latestMacd.signal !== undefined
+          ? {
+              macd: latestMacd.MACD,
+              signal: latestMacd.signal,
+              histogram: latestMacd.histogram,
+              isMacdAboveSignal: latestMacd.MACD > latestMacd.signal,
+            }
+          : {};
 
       return {
         symbol: symbol.toUpperCase(),
@@ -705,7 +724,7 @@ export class TrendMoonMcpServer {
         ema20Percentage,
         ema50Percentage,
         date: dateStr,
-        ...macdInfo
+        ...macdInfo,
       };
     } catch (error: any) {
       console.error(`Error checking EMA position for ${binanceSymbol}:`, error);
@@ -716,45 +735,70 @@ export class TrendMoonMcpServer {
   }
 
   // Change from private to public
-  public async getSocialTrendWithMA(symbol: string): Promise<TechnicalIndicators> {
+  public async getSocialTrendWithMA(
+    symbol: string
+  ): Promise<TechnicalIndicators> {
     try {
       const symbolUppercase = symbol.toUpperCase();
       const response = await fetch(
-        `${this.baseUrl}/social-trend/${symbolUppercase}?interval=30d`,
+        `https://api.qa.trendmoon.ai/social/trend?symbol=${symbolUppercase}&date_interval=10&time_interval=1d`,
         {
+          method: "GET",
           headers: {
-            "x-api-key": this.apiKey,
+            "Api-key": this.apiKey,
+            accept: "application/json",
           },
         }
       );
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch social trend data: ${response.statusText}`);
+        throw new Error(
+          `Failed to fetch social trend data: ${response.statusText}`
+        );
       }
 
-      const data = await response.json() as SocialTrendResponse;
+      const data = (await response.json()) as TrendResponse;
 
-      if (!data || !data.social_data || !Array.isArray(data.social_data)) {
-        console.error(`No valid social data found for ${symbolUppercase}`);
+      if (
+        !data ||
+        !data.trend_market_data ||
+        !Array.isArray(data.trend_market_data)
+      ) {
+        console.error(`No valid trend data found for ${symbolUppercase}`);
         return {
           symbol: symbolUppercase,
           technical_indicators: {
-            mentions: { macd: 0, signal: 0, histogram: 0, is_above_signal: false },
-            sentiment: { macd: 0, signal: 0, histogram: 0, is_above_signal: false },
-            dominance: { macd: 0, signal: 0, histogram: 0, is_above_signal: false }
-          }
+            mentions: {
+              macd: 0,
+              signal: 0,
+              histogram: 0,
+              is_above_signal: false,
+            },
+            sentiment: {
+              macd: 0,
+              signal: 0,
+              histogram: 0,
+              is_above_signal: false,
+            },
+            dominance: {
+              macd: 0,
+              signal: 0,
+              histogram: 0,
+              is_above_signal: false,
+            },
+          },
         };
       }
 
       // Extract time series for mentions, sentiment, and social dominance
-      const mentionsData = data.social_data.map(
-        (day: { mentions_count: number }) => day.mentions_count || 0
+      const mentionsData = data.trend_market_data.map(
+        (day: any) => day.social_mentions || 0
       );
-      const sentimentData = data.social_data.map(
-        (day: { sentiment_score: number }) => day.sentiment_score || 0
+      const sentimentData = data.trend_market_data.map(
+        (day: any) => day.lc_sentiment || 0
       );
-      const dominanceData = data.social_data.map(
-        (day: { lc_social_dominance: number }) => day.lc_social_dominance || 0
+      const dominanceData = data.trend_market_data.map(
+        (day: any) => day.lc_social_dominance || 0
       );
 
       // Calculate MACD for each metric
@@ -769,7 +813,7 @@ export class TrendMoonMcpServer {
           slowPeriod: 26,
           signalPeriod: 9,
           SimpleMAOscillator: false,
-          SimpleMASignal: false
+          SimpleMASignal: false,
         });
 
         if (!macdResult || macdResult.length === 0) {
@@ -777,7 +821,12 @@ export class TrendMoonMcpServer {
         }
 
         const latestMacd = macdResult[macdResult.length - 1];
-        if (!latestMacd || typeof latestMacd.MACD !== 'number' || typeof latestMacd.signal !== 'number' || typeof latestMacd.histogram !== 'number') {
+        if (
+          !latestMacd ||
+          typeof latestMacd.MACD !== "number" ||
+          typeof latestMacd.signal !== "number" ||
+          typeof latestMacd.histogram !== "number"
+        ) {
           return { macd: 0, signal: 0, histogram: 0, is_above_signal: false };
         }
 
@@ -785,7 +834,7 @@ export class TrendMoonMcpServer {
           macd: latestMacd.MACD,
           signal: latestMacd.signal,
           histogram: latestMacd.histogram,
-          is_above_signal: latestMacd.MACD > latestMacd.signal
+          is_above_signal: latestMacd.MACD > latestMacd.signal,
         };
       };
 
@@ -794,8 +843,8 @@ export class TrendMoonMcpServer {
         technical_indicators: {
           mentions: calculateMACD(mentionsData),
           sentiment: calculateMACD(sentimentData),
-          dominance: calculateMACD(dominanceData)
-        }
+          dominance: calculateMACD(dominanceData),
+        },
       };
     } catch (error) {
       console.error("Error in getSocialTrendWithMA:", error);
