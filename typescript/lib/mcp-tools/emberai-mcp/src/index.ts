@@ -17,6 +17,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import "dotenv/config";
+import { addX402Key, getX402PayedTool } from "x402-mcp-tool";
 
 // Re-export types and runtime values separately to comply with `verbatimModuleSyntax`
 export type {
@@ -57,7 +58,7 @@ const swapTokensSchema = {
   amount: z
     .string()
     .describe(
-      "The amount of the fromToken to swap (atomic, non-human readable format)."
+      "The amount of the fromToken to swap (atomic, non-human readable format).",
     ),
   userAddress: z.string().describe("The wallet address initiating the swap."),
 };
@@ -151,12 +152,12 @@ const supplyLiquiditySchema = {
   priceFrom: z
     .string()
     .describe(
-      "The lower bound price for the liquidity range (human-readable format)."
+      "The lower bound price for the liquidity range (human-readable format).",
     ),
   priceTo: z
     .string()
     .describe(
-      "The upper bound price for the liquidity range (human-readable format)."
+      "The upper bound price for the liquidity range (human-readable format).",
     ),
   userAddress: z
     .string()
@@ -167,12 +168,12 @@ const withdrawLiquiditySchema = {
   tokenId: z
     .string()
     .describe(
-      "The NFT token ID representing the liquidity position to withdraw."
+      "The NFT token ID representing the liquidity position to withdraw.",
     ),
   providerId: z
     .string()
     .describe(
-      "The ID of the liquidity provider protocol (e.g., 'uniswap_v3'). Usually obtained from the getUserLiquidityPositions tool."
+      "The ID of the liquidity provider protocol (e.g., 'uniswap_v3'). Usually obtained from the getUserLiquidityPositions tool.",
     ),
   userAddress: z
     .string()
@@ -205,7 +206,7 @@ const supplyLiquidityParamsValidator = z.object(supplyLiquiditySchema);
 const withdrawLiquidityParamsValidator = z.object(withdrawLiquiditySchema);
 const getLiquidityPoolsParamsValidator = z.object(getLiquidityPoolsSchema);
 const getUserLiquidityPositionsParamsValidator = z.object(
-  getUserLiquidityPositionsSchema
+  getUserLiquidityPositionsSchema,
 );
 const getYieldMarketsParamsValidator = z.object(getYieldMarketsSchema);
 
@@ -249,11 +250,11 @@ const emberEndpoint = process.env.EMBER_ENDPOINT || defaultEndpoint;
 
 if (emberEndpoint === defaultEndpoint) {
   console.error(
-    `Using default Ember endpoint: ${defaultEndpoint}. Set EMBER_ENDPOINT env var to override.`
+    `Using default Ember endpoint: ${defaultEndpoint}. Set EMBER_ENDPOINT env var to override.`,
   );
 } else {
   console.error(
-    `Using Ember endpoint from EMBER_ENDPOINT env var: ${emberEndpoint}`
+    `Using Ember endpoint from EMBER_ENDPOINT env var: ${emberEndpoint}`,
   );
 }
 
@@ -263,8 +264,8 @@ const emberClient = new EmberGrpcClient(emberEndpoint);
 server.tool(
   "swapTokens",
   "Swap or convert tokens using Ember On-chain Actions",
-  swapTokensSchema,
-  async (params: SwapTokensParams) => {
+  addX402Key(swapTokensSchema),
+  getX402PayedTool(async (params: SwapTokensParams) => {
     const swapRequest: SwapTokensRequest = {
       orderType: OrderType.MARKET_SELL,
       baseToken: {
@@ -288,7 +289,7 @@ server.tool(
         !response.transactions.length
       ) {
         throw new Error(
-          response.error?.message || "No transaction plan returned for swap"
+          response.error?.message || "No transaction plan returned for swap",
         );
       }
 
@@ -305,7 +306,7 @@ server.tool(
                 })),
               },
               null,
-              2
+              2,
             ),
           },
         ],
@@ -317,7 +318,7 @@ server.tool(
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
       };
     }
-  }
+  }),
 );
 
 server.tool(
@@ -340,13 +341,13 @@ server.tool(
 
       if (response.error || !response.transactions) {
         throw new Error(
-          response.error?.message || "No transaction plan returned for borrow"
+          response.error?.message || "No transaction plan returned for borrow",
         );
       }
 
       console.error(
         `Borrow tool success. Transactions:`,
-        response.transactions
+        response.transactions,
       );
 
       return {
@@ -362,7 +363,7 @@ server.tool(
                 })),
               },
               null,
-              2
+              2,
             ),
           },
         ],
@@ -374,7 +375,7 @@ server.tool(
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
       };
     }
-  }
+  },
 );
 
 server.tool(
@@ -397,7 +398,7 @@ server.tool(
 
       if (response.error || !response.transactions) {
         throw new Error(
-          response.error?.message || "No transaction plan returned for repay"
+          response.error?.message || "No transaction plan returned for repay",
         );
       }
 
@@ -416,7 +417,7 @@ server.tool(
                 })),
               },
               null,
-              2
+              2,
             ),
           },
         ],
@@ -428,7 +429,7 @@ server.tool(
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
       };
     }
-  }
+  },
 );
 
 server.tool(
@@ -451,13 +452,13 @@ server.tool(
 
       if (response.error || !response.transactions) {
         throw new Error(
-          response.error?.message || "No transaction plan returned for supply"
+          response.error?.message || "No transaction plan returned for supply",
         );
       }
 
       console.error(
         `Supply tool success. Transactions:`,
-        response.transactions
+        response.transactions,
       );
 
       return {
@@ -473,7 +474,7 @@ server.tool(
                 })),
               },
               null,
-              2
+              2,
             ),
           },
         ],
@@ -485,7 +486,7 @@ server.tool(
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
       };
     }
-  }
+  },
 );
 
 server.tool(
@@ -508,13 +509,14 @@ server.tool(
 
       if (response.error || !response.transactions) {
         throw new Error(
-          response.error?.message || "No transaction plan returned for withdraw"
+          response.error?.message ||
+            "No transaction plan returned for withdraw",
         );
       }
 
       console.error(
         `Withdraw tool success. Transactions:`,
-        response.transactions
+        response.transactions,
       );
 
       return {
@@ -530,7 +532,7 @@ server.tool(
                 })),
               },
               null,
-              2
+              2,
             ),
           },
         ],
@@ -542,7 +544,7 @@ server.tool(
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
       };
     }
-  }
+  },
 );
 
 server.tool(
@@ -578,7 +580,7 @@ server.tool(
         ],
       };
     }
-  }
+  },
 );
 
 server.tool(
@@ -616,7 +618,7 @@ server.tool(
         ],
       };
     }
-  }
+  },
 );
 
 server.tool(
@@ -641,7 +643,7 @@ server.tool(
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
       };
     }
-  }
+  },
 );
 
 server.tool(
@@ -682,13 +684,13 @@ server.tool(
       if (!response.transactions || response.transactions.length === 0) {
         throw new Error(
           // response.error?.message || // Removed direct error check
-          "No transaction plan returned for supplyLiquidity"
+          "No transaction plan returned for supplyLiquidity",
         );
       }
 
       console.error(
         `SupplyLiquidity tool success. Transactions:`,
-        response.transactions
+        response.transactions,
       );
 
       return {
@@ -705,7 +707,7 @@ server.tool(
                 })),
               },
               null,
-              2
+              2,
             ),
           },
         ],
@@ -717,7 +719,7 @@ server.tool(
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
       };
     }
-  }
+  },
 );
 
 server.tool(
@@ -740,13 +742,13 @@ server.tool(
       if (!response.transactions || response.transactions.length === 0) {
         throw new Error(
           // response.error?.message || // Removed direct error check
-          "No transaction plan returned for withdrawLiquidity"
+          "No transaction plan returned for withdrawLiquidity",
         );
       }
 
       console.error(
         `WithdrawLiquidity tool success. Transactions:`,
-        response.transactions
+        response.transactions,
       );
 
       return {
@@ -763,7 +765,7 @@ server.tool(
                 })),
               },
               null,
-              2
+              2,
             ),
           },
         ],
@@ -775,7 +777,7 @@ server.tool(
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
       };
     }
-  }
+  },
 );
 
 server.tool(
@@ -812,7 +814,7 @@ server.tool(
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
       };
     }
-  }
+  },
 );
 
 server.tool(
@@ -822,7 +824,7 @@ server.tool(
   async (params: GetUserLiquidityPositionsParams, extra: any) => {
     console.error(
       `Executing getUserLiquidityPositions tool with params:`,
-      params
+      params,
     );
     console.error(`Extra object for getUserLiquidityPositions:`, extra);
 
@@ -855,7 +857,7 @@ server.tool(
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
       };
     }
-  }
+  },
 );
 
 // Add getYieldMarkets tool implementation after the getTokens implementation
@@ -887,7 +889,7 @@ server.tool(
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
       };
     }
-  }
+  },
 );
 
 // --- Connect Transport and Start Server ---

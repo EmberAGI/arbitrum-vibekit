@@ -1,0 +1,26 @@
+{
+  "name": "x402-mcp-tool",
+  "version": "1.0.0",
+  "description": "x402 middleware for an MCP server tool.",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "packageManager": "pnpm@10.7.0",
+  "dependencies": {
+    "x402": "^0.3.5",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.11.4",
+    "dotenv": "^16.3.1",
+    "typescript": "^5.8.2"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  }
+}
