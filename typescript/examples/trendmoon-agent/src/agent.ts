@@ -45,7 +45,7 @@ const GetHistoricalPriceSchema = z.object({
 type GetHistoricalPriceArgs = z.infer<typeof GetHistoricalPriceSchema>;
 
 export class Agent {
-  private mcpServer: TrendMoonMcpServer;
+  public mcpServer: TrendMoonMcpServer;
   public conversationHistory: CoreMessage[] = [];
   private openai: OpenAI;
 
@@ -81,7 +81,7 @@ export class Agent {
     this.conversationHistory = [
       {
         role: "system",
-        content: `You are an AI agent that provides access to TrendMoon API data. Use the available tools ('getTopAlerts', 'getSocialTrend', 'getProjectSummary', 'getHistoricalPrice') to fetch relevant data based on the user's request.
+        content: `You are an AI agent that provides access to TrendMoon API data. Use the available tools ('getTopAlerts', 'getSocialTrend', 'getProjectSummary', 'getHistoricalPrice', 'checkEMAPosition') to fetch relevant data based on the user's request.
 
 IMPORTANT: When you retrieve numerical data (e.g., social mentions, sentiment scores, ranks, alerts), **do not just list the raw numbers.**
 Instead, **analyze the data**, identify key trends or significant changes (e.g., increases/decreases over time if the data spans multiple days), and **provide a brief explanation or interpretation** in clear, natural language. Explain what these changes might signify (e.g., "Social mentions increased significantly, suggesting growing interest", "AltRank improved, indicating better relative performance").
@@ -90,7 +90,61 @@ Tool Usage Guide:
 - For general "what happened in crypto today?" or trending information, use 'getTopAlerts'.
 - For project details or "what does SYMBOL do?", use 'getProjectSummary' with the token symbol.
 - For social sentiment, mentions, or rank over time for a specific token, use 'getSocialTrend' with the token symbol.
-- For historical price data, use 'getHistoricalPrice' with the token symbol.`,
+- For historical price data, use 'getHistoricalPrice' with the token symbol.
+- For technical trend analysis, use 'checkEMAPosition' with the token symbol.
+
+MACD Technical Indicator:
+The historical price data now includes MACD (Moving Average Convergence Divergence) values where available:
+- macd: The MACD line (difference between 12-day and 26-day EMA)
+- signal: The signal line (9-day EMA of MACD line)
+- histogram: The histogram (MACD line minus signal line)
+
+MACD Interpretation:
+- MACD line above signal line = bullish trend
+- MACD line below signal line = bearish trend
+- MACD line crossing above signal line = bullish crossover (buy signal)
+- MACD line crossing below signal line = bearish crossover (sell signal)
+- Histogram growing = increasing momentum in the current direction
+- Histogram shrinking = losing momentum (potential reversal)
+- Divergence between MACD and price = potential trend reversal
+
+When analyzing price data with MACD, mention the current MACD position relative to the signal line, any recent crossovers, and what this suggests about price momentum.
+
+EMA Position Analysis:
+The 'checkEMAPosition' tool provides information about a token's price relation to its 20-day and 50-day Exponential Moving Averages:
+- isAboveEma20: Whether price is above 20-day EMA (short-term trend)
+- isAboveEma50: Whether price is above 50-day EMA (medium-term trend)
+- ema20Percentage: How far price is from 20-day EMA as a percentage
+- ema50Percentage: How far price is from 50-day EMA as a percentage
+
+EMA Interpretation:
+- Price above both EMAs (20 & 50) = Strong bullish trend
+- Price above 50-day but below 20-day EMA = Possible short-term pullback in bullish trend
+- Price below 50-day but above 20-day EMA = Possible bullish reversal of a bearish trend
+- Price below both EMAs = Bearish trend
+- The percentages show how extended price is from these EMAs
+- Large positive percentages may indicate overbought conditions
+- Large negative percentages may indicate oversold conditions
+
+When analyzing EMA position, explain what the current position means for the overall trend and potential future movements.
+
+Social Trend Analysis:
+The 'getSocialTrend' tool now includes additional social mentions analysis:
+- social_mentions_ma2: 2-day moving average of social mentions (available from the 2nd day onwards)
+- social_mentions_ma3: 3-day moving average of social mentions (available from the 3rd day onwards)
+- social_trend_analysis: Contains trend information including:
+  * mentions_trend: Shows if social mentions are "rising" or "falling"
+  * last_value: The most recent social mentions count
+  * previous_value: The previous day's social mentions count
+  * change_percent: Percentage change in social mentions
+
+Social Trend Interpretation:
+- Rising social mentions with consistent uptrend in the MA = Strong positive social momentum
+- Rising social mentions with flat MA = Potential spike that may not be sustainable
+- Social mentions below their MA but rising = Early recovery in social interest
+- Social mentions above their MA but falling = Possible peak in social interest
+
+When analyzing social trend data, mention both the raw mentions and the moving average trend to provide context on whether the social interest is sustained or temporary.`,
       },
     ];
   }
@@ -204,6 +258,73 @@ Tool Usage Guide:
         return null;
       }
 
+      // Calculate moving averages for social mentions if we have trend_market_data
+      if (
+        data.trend_market_data &&
+        Array.isArray(data.trend_market_data) &&
+        data.trend_market_data.length >= 2
+      ) {
+        console.error("Calculating moving averages for social trend data...");
+
+        // Get social mentions array
+        const socialMentions = data.trend_market_data.map(
+          (day: any) => day.social_mentions || 0
+        );
+        console.error("Social mentions:", socialMentions);
+
+        // Calculate 2-day moving average for all points that have sufficient data
+        for (let i = 1; i < data.trend_market_data.length; i++) {
+          const ma2 = (socialMentions[i] + socialMentions[i - 1]) / 2;
+          data.trend_market_data[i].social_mentions_ma2 = parseFloat(
+            ma2.toFixed(2)
+          );
+        }
+
+        // Calculate 3-day moving average if we have enough data points
+        if (data.trend_market_data.length >= 3) {
+          for (let i = 2; i < data.trend_market_data.length; i++) {
+            const ma3 =
+              (socialMentions[i] +
+                socialMentions[i - 1] +
+                socialMentions[i - 2]) /
+              3;
+            data.trend_market_data[i].social_mentions_ma3 = parseFloat(
+              ma3.toFixed(2)
+            );
+          }
+        }
+
+        // Add simple trend analysis
+        if (data.trend_market_data.length >= 2) {
+          const lastDay =
+            data.trend_market_data[data.trend_market_data.length - 1];
+          const prevDay =
+            data.trend_market_data[data.trend_market_data.length - 2];
+
+          const trendDirection =
+            lastDay.social_mentions > prevDay.social_mentions
+              ? "rising"
+              : "falling";
+
+          // Add trend analysis to the data object
+          data.social_trend_analysis = {
+            mentions_trend: trendDirection,
+            last_value: lastDay.social_mentions,
+            previous_value: prevDay.social_mentions,
+            change_percent:
+              lastDay.social_mentions > 0 && prevDay.social_mentions > 0
+                ? (
+                    ((lastDay.social_mentions - prevDay.social_mentions) /
+                      prevDay.social_mentions) *
+                    100
+                  ).toFixed(2) + "%"
+                : "N/A",
+          };
+        }
+
+        console.error("Added moving averages to social trend data");
+      }
+
       console.error(
         `Successfully retrieved social trend data for ${symbolUppercase}`
       );
@@ -221,7 +342,6 @@ Tool Usage Guide:
     }
   }
 
-  // Directly fetch a 7-day project summary for a given token
   async getProjectSummary(symbol: string) {
     try {
       const symbolUppercase = symbol.toUpperCase();
@@ -524,6 +644,21 @@ If no token symbol is found, respond with "NULL".`,
           required: ["symbol"],
         },
       },
+      {
+        name: "checkEMAPosition",
+        description:
+          "Check if a token's price is above its 20-day and 50-day EMA (Exponential Moving Average)",
+        parameters: {
+          type: "object",
+          properties: {
+            symbol: {
+              type: "string",
+              description: "Token symbol, e.g. BTC, ETH",
+            },
+          },
+          required: ["symbol"],
+        },
+      },
     ];
 
     // 3) loop until the LLM stops asking for a function
@@ -609,6 +744,9 @@ If no token symbol is found, respond with "NULL".`,
             result = await this.getProjectSummary(args.symbol);
           } else if (name === "getHistoricalPrice") {
             result = await this.getHistoricalPrice(args.symbol);
+          } else if (name === "checkEMAPosition") {
+            // Call the MCP server's checkEMAPosition method directly
+            result = await this.mcpServer.checkEMAPosition(args.symbol);
           } else {
             console.error(`Attempted to call unknown function: ${name}`);
             throw new Error(`Unknown function: ${name}`);
@@ -731,5 +869,13 @@ Use this context to classify coins as rising, stable, or falling in popularity a
     } catch (error) {
       console.error("Error closing MCP connections:", error);
     }
+  }
+
+  async getSocialTrendWithMA(symbol: string): Promise<any> {
+    return this.mcpServer.getSocialTrendWithMA(symbol);
+  }
+
+  async checkEMAPosition(symbol: string): Promise<any> {
+    return this.mcpServer.checkEMAPosition(symbol);
   }
 }

@@ -48,6 +48,12 @@ app.get("/", (_req, res) => {
       "/social-trend":
         "POST endpoint to extract token and get social trend data",
       "/extract-token": "POST endpoint to test token extraction",
+      "/social-trend-ma/:symbol":
+        "GET endpoint for social trend data with moving averages for a specific token",
+      "/ema-position/:symbol":
+        "GET endpoint to check if token price is above 20-day and 50-day EMAs",
+      "/api":
+        "POST endpoint to access all functionality with an 'action' parameter",
     },
   });
 });
@@ -238,6 +244,24 @@ app.post("/api", async (req, res) => {
         const result = await agent.processUserInput(query);
         data = { result, conversation: agent.conversationHistory };
         break;
+      case "getSocialTrendWithMA":
+        console.error(`Action getSocialTrendWithMA for symbol: ${symbol}`);
+        if (!symbol || typeof symbol !== "string") {
+          return res
+            .status(400)
+            .json({ error: "Missing or invalid symbol parameter" });
+        }
+        data = await agent.getSocialTrendWithMA(symbol.toUpperCase());
+        break;
+      case "checkEMAPosition":
+        console.error(`Action checkEMAPosition for symbol: ${symbol}`);
+        if (!symbol || typeof symbol !== "string") {
+          return res
+            .status(400)
+            .json({ error: "Missing or invalid symbol parameter" });
+        }
+        data = await agent.checkEMAPosition(symbol.toUpperCase());
+        break;
       default:
         return res.status(400).json({ error: `Unknown action: ${action}` });
     }
@@ -284,6 +308,86 @@ app.get("/filter/:symbol", async (req, res) => {
       `Error handling /filter/${req.params.symbol} request:`,
       error
     );
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+// Add endpoint for social trend with moving averages
+app.get("/social-trend-ma/:symbol", async (req, res) => {
+  console.error(
+    `Received request to /social-trend-ma/${req.params.symbol} endpoint`
+  );
+
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const trendData = await agent.getSocialTrendWithMA(symbol);
+
+    if (!Array.isArray(trendData) || trendData.length === 0) {
+      console.error(`No valid social trend data found for ${symbol}`);
+      return res
+        .status(404)
+        .json({ error: `No trend data found for ${symbol}` });
+    }
+
+    const normalizeField = (data: Array<Record<string, any>>, key: string) => {
+      const values = data
+        .map((item: Record<string, any>) => item[key])
+        .filter((v: any) => typeof v === "number");
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      return data.map((item: Record<string, any>) => ({
+        ...item,
+        [`${key}_normalized`]:
+          typeof item[key] === "number" && max !== min
+            ? (item[key] - min) / (max - min)
+            : 0,
+      }));
+    };
+
+    const normalizeTimeSeries = (data: Array<Record<string, any>>) => {
+      let normalizedData = [...data].sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      const keysToNormalize = [
+        "social_mentions",
+        "social_dominance",
+        "price",
+        "market_cap",
+        "total_volume",
+        "lc_sentiment",
+        "lc_social_dominance",
+        "lc_galaxy_score",
+      ];
+
+      for (const key of keysToNormalize) {
+        normalizedData = normalizeField(normalizedData, key);
+      }
+
+      return normalizedData;
+    };
+
+    const normalizedTrendData = normalizeTimeSeries(trendData);
+    console.error(`Successfully normalized social trend data for ${symbol}`);
+    res.json(normalizedTrendData);
+  } catch (error) {
+    console.error("Error handling /social-trend-ma request:", error);
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+// Add endpoint for EMA position check
+app.get("/ema-position/:symbol", async (req, res) => {
+  console.error(
+    `Received request to /ema-position/${req.params.symbol} endpoint`
+  );
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const emaData = await agent.checkEMAPosition(symbol);
+    console.error(`Successfully retrieved EMA position data for ${symbol}`);
+    res.json(emaData);
+  } catch (error) {
+    console.error("Error handling /ema-position request:", error);
     res.status(500).json({ error: (error as Error).message });
   }
 });

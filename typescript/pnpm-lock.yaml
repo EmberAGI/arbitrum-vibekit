@@ -11,7 +11,7 @@ importers:
     dependencies:
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(ws@8.18.1)(zod@3.24.3)
+        version: file:lib/a2a(zod@3.24.3)
       ember-mcp-tool-server:
         specifier: workspace:*
         version: link:lib/mcp-tools/emberai-mcp
@@ -45,7 +45,7 @@ importers:
         version: 5.0.1
       a2a-samples-js:
         specifier: workspace:*
-        version: link:../../lib/a2a
+        version: file:lib/a2a(zod@3.24.3)
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
@@ -106,7 +106,7 @@ importers:
         version: 5.0.1
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(ws@8.18.1)(zod@3.24.3)
+        version: file:lib/a2a(zod@3.24.3)
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
@@ -219,7 +219,7 @@ importers:
         version: 5.0.1
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(ws@8.18.1)(zod@3.24.3)
+        version: file:lib/a2a(zod@3.24.3)
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
@@ -278,6 +278,9 @@ importers:
       openai:
         specifier: ^4.28.0
         version: 4.95.0(ws@8.18.1)(zod@3.24.3)
+      technicalindicators:
+        specifier: ^3.1.0
+        version: 3.1.0
       tsx:
         specifier: ^4.6.2
         version: 4.19.3
@@ -1145,6 +1148,9 @@ packages:
 
   '@types/node@22.14.1':
     resolution: {integrity: sha512-u0HuPQwe/dHrItgHHpmw3N2fYCR6x4ivMNbPHRkBVP4CvN+kiRrKHWk3i8tXiO/joPwXLMYvF9TTF0eqgHIuOw==}
+
+  '@types/node@6.14.13':
+    resolution: {integrity: sha512-J1F0XJ/9zxlZel5ZlbeSuHW2OpabrUAqpFuC2sm2I3by8sERQ8+KCjNKUcq8QHuzpGMWiJpo9ZxeHrqrP2KzQw==}
 
   '@types/qs@6.9.18':
     resolution: {integrity: sha512-kK7dgTYDyGqS+e2Q4aK9X3D7q234CIZ1Bv0q/7Z5IwRDoADNU81xXJK/YVyLbLTZCoIwUoDoffFeF+p/eIklAA==}
@@ -2491,6 +2497,9 @@ packages:
     peerDependencies:
       react: ^16.11.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
+  technicalindicators@3.1.0:
+    resolution: {integrity: sha512-f16mOc+Y05hNy/of+UbGxhxQQmxUztCiluhsqC5QLUYz4WowUgKde9m6nIjK1Kay0wGHigT0IkOabpp0+22UfA==}
+
   tee@0.2.0:
     resolution: {integrity: sha512-aL+Ct+AkoryaVDFxc2bjk2J7xe1LSsqnQHCoNdgL+AcAOGaBjVnTYFCSNgvjqwzAh7NgqKhNssFqpKvoVt3WAg==}
 
@@ -3758,6 +3767,8 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
+  '@types/node@6.14.13': {}
+
   '@types/qs@6.9.18': {}
 
   '@types/range-parser@1.2.7': {}
@@ -3784,7 +3795,7 @@ snapshots:
 
   '@types/tough-cookie@4.0.5': {}
 
-  a2a-samples-js@file:lib/a2a(ws@8.18.1)(zod@3.24.3):
+  a2a-samples-js@file:lib/a2a(zod@3.24.3):
     dependencies:
       '@genkit-ai/googleai': 1.6.0(genkit@1.6.0)
       '@genkit-ai/vertexai': 1.6.0(genkit@1.6.0)(ws@8.18.1)(zod@3.24.3)
@@ -5345,6 +5356,10 @@ snapshots:
       dequal: 2.0.3
       react: 19.1.0
       use-sync-external-store: 1.5.0(react@19.1.0)
+
+  technicalindicators@3.1.0:
+    dependencies:
+      '@types/node': 6.14.13
 
   tee@0.2.0:
     dependencies:
