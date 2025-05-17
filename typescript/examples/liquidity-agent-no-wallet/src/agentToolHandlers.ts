@@ -4,26 +4,21 @@ import {
   createPublicClient,
   http,
   type Address,
-  encodeFunctionData,
   type PublicClient,
   formatUnits,
 } from 'viem';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Task } from 'a2a-samples-js/schema';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { streamText } from 'ai';
 import {
-  parseMcpToolResponse as sharedParseMcpToolResponse,
+  parseMcpToolResponsePayload,
   createTransactionArtifactSchema,
   type TransactionArtifact,
 } from 'arbitrum-vibekit';
 import {
   TransactionPlanSchema as SharedTransactionPlanSchema,
   type TransactionPlan,
-  validateTransactionPlans,
 } from 'ember-mcp-tool-server';
-import type { ZodType } from 'zod';
 import type { DataPart } from 'a2a-samples-js/schema';
 
 import type { LiquidityPair, LiquidityPosition } from './agent.js';
@@ -237,10 +232,7 @@ export async function handleGetUserLiquidityPositions(
       arguments: mcpArgs,
     });
 
-    const validatedData = sharedParseMcpToolResponse(
-      mcpResponse,
-      GetUserLiquidityPositionsResponseSchema
-    );
+    const validatedData = parseMcpToolResponsePayload(mcpResponse, GetUserLiquidityPositionsResponseSchema);
 
     // Use the validatedData.positions array directly, as it matches the new schema
     const positions = validatedData.positions;
@@ -469,8 +461,7 @@ export async function handleSupplyLiquidity(
       arguments: mcpArgs,
     });
 
-    // Parse and extract transactions from MCP response object
-    const parsed = sharedParseMcpToolResponse(
+    const parsed = parseMcpToolResponsePayload(
       mcpResponse,
       z.object({
         chainId: z.string(),
@@ -478,7 +469,6 @@ export async function handleSupplyLiquidity(
       })
     );
     const txPlan: TransactionPlan[] = parsed.transactions;
-    context.log('Received raw transaction plan for supplyLiquidity:', txPlan);
 
     // --- Construct Artifact Start ---
     const preview = {
@@ -562,16 +552,14 @@ export async function handleWithdrawLiquidity(
       arguments: mcpArgs,
     });
 
-    // Parse and extract transactions from MCP response object
-    const parsed = sharedParseMcpToolResponse(
-      mcpResponse,
+    // Parse without chainId first
+    const txPlan = parseMcpToolResponsePayload(
+      mcpResponse, 
       z.object({
         chainId: z.string(),
         transactions: z.array(SharedTransactionPlanSchema),
       })
-    );
-    const txPlan: TransactionPlan[] = parsed.transactions;
-    context.log('Received raw transaction plan for withdrawLiquidity:', txPlan);
+    ).transactions;
 
     context.log('Transaction plan for withdrawLiquidity:', txPlan);
 
