@@ -20,6 +20,9 @@ Welcome to Vibekit – your polyglot toolkit for vibe coding smart, autonomous D
 
 At its core, Vibekit leverages the Model Context Protocol (MCP), a framework that standardizes how agents interact with tools and data. Vibekit also integrates smoothly with your current agent frameworks such as Eliza and LangGraph. Just plug in our MCP tools into your existing agents and watch them level up with DeFi superpowers!
 
+**_Development Status_**
+Rapidly evolving toward a stable launch, Vibekit already provides the core toolkit you need today. Our documentation and codebase form a robust release candidate as we polish specs and features. We welcome community feedback and contributions to guide our path to a formal v1.0 release.
+
 ## 🧬 Repository Organization
 
 Vibekit is structured as a monorepo with TypeScript at its core, with a Rust implementation is on the horizon. Here's how it's organized:
@@ -66,14 +69,22 @@ pnpm -v # Check that pnpm is installed
 
 **2. Clone the repository:**
 
+You can do so though the command line or through your preferred IDE.
+
 ```
 git clone https://github.com/EmberAGI/arbitrum-vibekit.git
 cd arbitrum-vibekit
 ```
 
+We recommend using the [Cursor IDE](https://www.cursor.com/). Click on the `Clone Repo` button and on the top paste the Vibekit's Github URL: https://github.com/EmberAGI/arbitrum-vibekit.git. Next, click on `Clone from Github` to setup your project.
+
+<p align="left">
+  <img src="img/cursor.png" width="700px" alt="Inspector3"/>
+</p>
+
 **3. Run your DeFi agent**
 
-Let's run the Lending Agent. Head over to the [lending-agent-no-wallet](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples/lending-agent-no-wallet) directory and create a `.env` file with the following required variables. Make sure to populate it with the necessary configuration settings and API keys specific to your setup.
+Let's run the Lending Agent. Head over to the [lending-agent-no-wallet](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples/lending-agent-no-wallet) directory and create a `.env` file with the following required variables. Alternatively, you can create your `.env` file by copying the `.env.example` template from the agent's directory. Make sure to populate the `.env` file with the necessary configuration settings and API keys specific to your setup.
 
 ```env
 OPENROUTER_API_KEY=your_openrouter_api_key
@@ -91,26 +102,24 @@ PORT=3001
 Next, navigate to the `typescript` directory and run the following `pnpm` commands to build and start your agent:
 
 ```
-cd typescript
-pnpm build
-
-pnpm --filter "lending-agent-no-wallet" install
-pnpm --filter "lending-agent-no-wallet" build
+cd typescript &&
+pnpm install &&
+pnpm build &&
 pnpm --filter "lending-agent-no-wallet" dev
 ```
 
 Alternatively, you can use Docker to start up the agent:
 
 ```
-cd typescript
-pnpm build
+cd typescript &&
+pnpm build &&
 
 sudo pnpm --filter "lending-agent-no-wallet" docker:compose:up
 ```
 
 **4. Interact with the DeFi agent:**
 
-Once the agent is up and running on port 3001, you have two ways to engage with it:
+Once the agent is up and running, you have two ways to engage with it:
 
 - **Launch the Inspector interface:**
 
@@ -142,7 +151,7 @@ The Inspector interface provides a straightforward way to interact with your age
 
 - **Integrate with Cursor IDE**
 
-To interact with the Lending agent though Curosr, [create or update](https://docs.cursor.com/context/model-context-protocol) your `mcp.json` file through Cursor settings with the following content:
+To interact with the Lending agent though Cursor, [create or update](https://docs.cursor.com/context/model-context-protocol) your `mcp.json` file through Cursor settings with the following content. If your agent is running on a different port than 3001, make sure to adjust it:
 
 ```
 {
@@ -155,7 +164,7 @@ To interact with the Lending agent though Curosr, [create or update](https://doc
 
 ```
 
-Restart Cursor to apply the new configuration. Upon successful integration, the MCP settings should look like this:
+You might need to restart Cursor to apply the new configuration. Upon successful integration, the MCP settings should look like this:
 
 <p align="left">
   <img src="img/mcp.png" width="800px" alt="MCP"/>
@@ -164,7 +173,7 @@ Restart Cursor to apply the new configuration. Upon successful integration, the 
 Cursor will now automatically detect the Lending Agent MCP tool and you can interact with it directly through prompts.
 
 **5. Build your own DeFi agent:**
-Dive into the [examples/](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) directory to explore other agent templates and start building your own!
+Checkout the [examples/](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) directory to explore other agent templates and start building your own!
 
 ## 🎧 Vibe Coding
 

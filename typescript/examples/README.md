@@ -23,7 +23,7 @@ Ask Cursor's integrated AI assistant to run your desired agent.
 Navigate to the `typescript` directory and install the necessary packages.
 
 ```
-cd typescript
+cd typescript &&
 pnpm install
 ```
 
@@ -57,11 +57,9 @@ Navigate to the `typescript` directory and run the following `pnpm` commands to 
 your agent. Replace the `"agent-name"` with the name of your desired agent, for example: `"swapping-agent-no-wallet"`.
 
 ```
-cd typescript
-pnpm install
-
-pnpm --filter "agent-name" install
-pnpm --filter "agent-name" build
+cd typescript &&
+pnpm install &&
+pnpm build &&
 pnpm --filter "agent-name" dev
 ```
 
@@ -93,7 +91,9 @@ The Inspector interface provides a straightforward way to interact with your age
 
 **Integrate with Cursor IDE**
 
-To interact with the agent though Cursor, [create or update](https://docs.cursor.com/context/model-context-protocol) your `mcp.json` file through Cursor settings with the following content:
+**Note:** This configuration approach is also compatible with other graphical MCP clients like [Claude Desktop](https://modelcontextprotocol.io/quickstart/user) and [Windsurf](https://docs.windsurf.com/windsurf/mcp). Simply adjust the settings accordingly in their respective configuration files.
+
+To interact with the agent though Cursor, [create or update](https://docs.cursor.com/context/model-context-protocol) your `mcp.json` file through Cursor settings with the following content. If your agent is running on a different port than 3001, make sure to adjust it:
 
 ```
 {
@@ -106,9 +106,7 @@ To interact with the agent though Cursor, [create or update](https://docs.cursor
 
 ```
 
-Restart Cursor to apply the new configuration. Upon successful integration, Cursor will automatically detect the Agent MCP tool and you can interact with it directly through prompts.
-
-**Note:** This configuration approach is also compatible with other graphical MCP clients like [Claude Desktop](https://modelcontextprotocol.io/quickstart/user) and [Windsurf](https://docs.windsurf.com/windsurf/mcp). Simply adjust the settings accordingly in their respective configuration files.
+You might need to restart Cursor to apply the new configuration. Upon successful integration, Cursor will automatically detect the Agent MCP tool and you can interact with it directly through prompts.
 
 ## 🛠️ Building Your Own Agent
 
