@@ -1,3 +1,6 @@
 packages:
   - "lib/**/*"
   - "examples/*"
+
+overrides:
+  "@modelcontextprotocol/sdk": "1.11.0"
