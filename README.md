@@ -79,7 +79,7 @@ cd arbitrum-vibekit
 We recommend using the [Cursor IDE](https://www.cursor.com/). Click on the `Clone Repo` button and on the top paste the Vibekit's Github URL: https://github.com/EmberAGI/arbitrum-vibekit.git. Next, click on `Clone from Github` to setup your project.
 
 <p align="left">
-  <img src="img/cursor.png" width="700px" alt="Inspector3"/>
+  <img src="img/cursor.png" width="700px" alt="cursor"/>
 </p>
 
 **3. Run your DeFi agent**
@@ -197,6 +197,10 @@ To clone Vibekit in Cursor:
 2. Paste the repository URL: `https://github.com/EmberAGI/arbitrum-vibekit.git`.
 3. Choose your local directory and click "Clone".
 4. Once cloned, Cursor will automatically detect the `.cursor/rules` folder and set up the AI context.
+
+<p align="left">
+  <img src="img/cursor.png" width="700px" alt="cursor"/>
+</p>
 
 ### 🤖 Vibe Coding Agents
 
