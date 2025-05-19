@@ -6,7 +6,6 @@ import type {
   PaymentRequirements,
   Price,
   Resource,
-  VerifyResponse,
 } from "x402/types";
 import { useFacilitator } from "x402/verify";
 import { processPriceToAtomicAmount } from "x402/shared";
@@ -16,6 +15,7 @@ import type {
   RegisteredTool,
   ToolCallback,
 } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { X402PaymentResponse } from "./client.js";
 
 config();
 
@@ -29,16 +29,6 @@ if (!facilitatorUrl || !payTo) {
 
 const { verify, settle } = useFacilitator({ url: facilitatorUrl });
 const x402Version = 1;
-
-/**
- * The response from the X402 payment when there is an error
- */
-export interface X402PaymentResponse {
-  x402Version: number;
-  error?: string;
-  payer?: VerifyResponse["payer"];
-  accepts: PaymentRequirements[];
-}
 
 /**
  * Creates payment requirements for a given price and network

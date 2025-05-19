@@ -14,7 +14,8 @@
   },
   "devDependencies": {
     "dotenv": "^16.3.1",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "viem": "^2.26.3"
   },
   "peerDependencies": {
     "@modelcontextprotocol/sdk": "^1.11.0"
