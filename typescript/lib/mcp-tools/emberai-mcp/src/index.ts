@@ -1,11 +1,5 @@
 import EmberGrpcClient, {
-  GetCapabilitiesResponse,
-  Capability,
   CapabilityType,
-  GetWalletPositionsResponse,
-  WalletPosition,
-  Token,
-  GetTokensResponse,
   OrderType,
   TokenIdentifier,
   GetLiquidityPoolsResponse,
@@ -17,7 +11,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import "dotenv/config";
-import { addX402Key, getX402PayedTool } from "x402-mcp-tool";
+import { xServerTool } from "x402-mcp-tool";
 
 // Re-export types and runtime values separately to comply with `verbatimModuleSyntax`
 export type {
@@ -261,11 +255,14 @@ if (emberEndpoint === defaultEndpoint) {
 const emberClient = new EmberGrpcClient(emberEndpoint);
 // --- Register Tools ---
 // Pass the raw schema (e.g., swapTokensSchema) instead of the validator instance
-server.tool(
+xServerTool(
+  server,
   "swapTokens",
   "Swap or convert tokens using Ember On-chain Actions",
-  addX402Key(swapTokensSchema),
-  getX402PayedTool(async (params: SwapTokensParams) => {
+  "0.001",
+  "base",
+  swapTokensSchema,
+  async (params: SwapTokensParams) => {
     const swapRequest: SwapTokensRequest = {
       orderType: OrderType.MARKET_SELL,
       baseToken: {
@@ -318,7 +315,7 @@ server.tool(
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
       };
     }
-  }),
+  },
 );
 
 server.tool(

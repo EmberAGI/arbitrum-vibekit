@@ -1,4 +1,4 @@
-import { PaymentRequirements, VerifyResponse } from "x402/types";
+import type { PaymentRequirements, VerifyResponse } from "x402/types";
 
 /**
  * The response from the X402 payment when there is an error

@@ -1,6 +1,6 @@
 import { config } from "dotenv";
 import { exact } from "x402/schemes";
-import {
+import type {
   Network,
   PaymentPayload,
   PaymentRequirements,
@@ -9,9 +9,13 @@ import {
 } from "x402/types";
 import { useFacilitator } from "x402/verify";
 import { processPriceToAtomicAmount } from "x402/shared";
-import z, { ZodRawShape, ZodTypeAny } from "zod";
-import { X402PaymentResponse } from "./client";
-import { ToolCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
+import z, { type ZodRawShape } from "zod";
+import type { X402PaymentResponse } from "./client.js";
+import type {
+  McpServer,
+  RegisteredTool,
+  ToolCallback,
+} from "@modelcontextprotocol/sdk/server/mcp.js";
 
 config();
 
@@ -76,7 +80,11 @@ async function verifyPayment(
   payment: string | undefined,
   paymentRequirements: PaymentRequirements[],
 ): Promise<X402PaymentResponse | undefined> {
-  if (!payment || paymentRequirements.length === 0) {
+  if (
+    !payment ||
+    paymentRequirements.length === 0 ||
+    typeof payment !== "string"
+  ) {
     return {
       x402Version,
       error: "X-PAYMENT header is required",
@@ -117,55 +125,45 @@ async function verifyPayment(
   }
 }
 
-type XPaymentKey = {
-  XPayment: z.ZodOptional<z.ZodString>;
-};
-
 /**
  * @param shape The Zod schema for the tool's input
  * @returns The modified shape with the XPayment key added
  */
-export function addX402Key<Shape extends ZodRawShape>(
-  shape: Shape,
-): Shape & XPaymentKey {
+export function addX402Key(shape: ZodRawShape): ZodRawShape {
   return {
     ...shape,
     XPayment: z.string().optional(),
   };
 }
 
-/**
- * This adds a new tool to the MCP with X402 middleware running before the tool.
- * @param name The name of the tool
- * @param description The description of the tool
- * @param schema The Zod schema for the tool's input
- * @param tool The function that implements the tool
- * @param price The price for using the tool
- * @param network The network to use for payment
- */
-export function getX402PayedTool<Shape extends ZodRawShape>(
-  tool: ToolCallback<Shape & XPaymentKey>,
+export function xServerTool<Args extends ZodRawShape>(
+  server: McpServer,
+  name: string,
+  description: string,
   price: string,
   network: Network,
-): ToolCallback<Shape & XPaymentKey> {
+  shape: Args,
+  cb: ToolCallback<Args>,
+): RegisteredTool {
+  const xShape = addX402Key(shape);
   const requirement = createExactPaymentRequirements(
     price,
     network,
-    "x402://tool/",
+    `x402://tool/${name}`,
   );
-  // @ts-ignore
-  return async (params, extra) => {
-    if (!("XPayment" in params)) {
-      throw new Error("XPayment is required. Use the addX402Key function");
-    }
+  return server.tool(name, description, xShape, async (params, extra) => {
     const xpayment = params.XPayment as string | undefined;
 
     const errorValidatingPayment = await verifyPayment(xpayment, [requirement]);
     if (errorValidatingPayment) {
-      return errorValidatingPayment;
+      return {
+        content: [
+          { type: "text", text: JSON.stringify(errorValidatingPayment) },
+        ],
+      };
     }
     await settle(exact.evm.decodePayment(xpayment!), requirement);
-    const toolResult = await tool(params, extra);
+    const toolResult = await cb(params, extra);
     return toolResult;
-  };
+  });
 }
