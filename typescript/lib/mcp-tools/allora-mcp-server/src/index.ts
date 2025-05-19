@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import express from "express";
 import { createServer } from "./mcp.js";
 import { AlloraAPIClient, ChainSlug } from "@alloralabs/allora-sdk";
@@ -72,6 +73,13 @@ async function main() {
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
   });
+
+  // Start stdio transport
+  const stdioTransport = new StdioServerTransport();
+  console.error("Initializing stdio transport...");
+  await server.connect(stdioTransport);
+  console.error("Allora MCP stdio server started and connected.");
+  console.error("Server is now ready to receive stdio requests.");
 }
 
 main().catch(() => process.exit(-1));
