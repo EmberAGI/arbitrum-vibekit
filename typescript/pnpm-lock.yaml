@@ -398,8 +398,8 @@ importers:
   lib/mcp-tools/emberai-mcp:
     dependencies:
       '@emberai/sdk-typescript':
-        specifier: 0.3.0-beta.8
-        version: 0.3.0-beta.8
+        specifier: 0.3.0-beta.9
+        version: 0.3.0-beta.9
       '@grpc/grpc-js':
         specifier: ^1.13.2
         version: 1.13.3
@@ -499,8 +499,8 @@ packages:
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
     engines: {node: '>=12'}
 
-  '@emberai/sdk-typescript@0.3.0-beta.8':
-    resolution: {integrity: sha512-LYpq1kWsN+u9b9jgWU6JQP7az1O3mATKh/i9MzTachzZx41LdUkzPAYw4Gqrlf+DY6M4PtQQD389lM7q1HFhWw==}
+  '@emberai/sdk-typescript@0.3.0-beta.9':
+    resolution: {integrity: sha512-J84y7rut0EzFpYPvf7c+P+NO28gFz/Kyr3CYepUOgmS4hY88KIng/9pdJkEm5JLA4F7/cGxSbAvLehYBREOQLg==}
     engines: {node: '>=18.0.0'}
 
   '@esbuild/aix-ppc64@0.25.2':
@@ -3215,7 +3215,7 @@ snapshots:
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
 
-  '@emberai/sdk-typescript@0.3.0-beta.8':
+  '@emberai/sdk-typescript@0.3.0-beta.9':
     dependencies:
       '@bufbuild/protobuf': 2.2.5
       '@openzeppelin/contracts': 5.3.0
@@ -4441,7 +4441,7 @@ snapshots:
 
   ember-mcp-tool-server@file:lib/mcp-tools/emberai-mcp:
     dependencies:
-      '@emberai/sdk-typescript': 0.3.0-beta.8
+      '@emberai/sdk-typescript': 0.3.0-beta.9
       '@grpc/grpc-js': 1.13.3
       '@modelcontextprotocol/sdk': 1.11.1
       zod: 3.24.3
