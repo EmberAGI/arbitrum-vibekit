@@ -1,0 +1,39 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Monorepo Workspace Guidelines
+
+Rules and best practices that apply to the entire pnpm workspace monorepo.
+
+## PNPM Workspace Setup
+- Bootstrap all dependencies: run `pnpm install` at the repository root.
+- Build all packages: run `pnpm build` at root (executes each package's TypeScript compiler).
+
+## Running in Development
+- Prefer `tsx` for ESM TypeScript entrypoints:
+  - Install as a dev dependency at root: `pnpm add -Dw tsx`
+  - In each package's `package.json`, configure:
+    ```json
+    "scripts": {
+      "dev": "tsx src/index.ts"
+    }
+    ```
+- To start a single package in dev mode: `pnpm dev -F <package-name>`.
+
+## Module Resolution & Transpilation
+- Use `NodeNext` module resolution and ES2022 target in all `tsconfig.json` files.
+- Avoid using `ts-node` without `--esm`; rely on `tsx` for local ESM TypeScript execution.
+
+## CI/CD & Non-interactive Flags
+- Use non-interactive flags for automation (e.g., `pnpm install --frozen-lockfile`, `pnpm test -- --ci`).
+- Always run scripts via `pnpm run <script>` to ensure consistency.
+
+## Version Control & Force Flags
+- Do not use any `--force` flags (e.g., `git push --force`, `pnpm install --force`) without explicit approval.
+
+## General Best Practices
+- Maintain consistent dependency versions across packages; leverage `pnpm` overrides in root `package.json` if necessary.
+- Use pnpm filters (`-r`, `-F`) or `pnpm recursive` for efficient cross-package commands.
+- Document any new workspace-level tool or script additions in this file.
