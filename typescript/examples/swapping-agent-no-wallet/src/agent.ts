@@ -1,11 +1,8 @@
 import { z } from 'zod';
 import { type Address } from 'viem';
 import type { HandlerContext } from './agentToolHandlers.js';
-import {
-  handleSwapTokens,
-  parseMcpToolResponse,
-  handleAskEncyclopedia,
-} from './agentToolHandlers.js';
+import { handleSwapTokens, handleAskEncyclopedia } from './agentToolHandlers.js';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -564,11 +561,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
 
       this.log('Raw capabilitiesResult received from MCP.');
 
-      const dataToValidate = parseMcpToolResponse(
-        capabilitiesResult,
-        this.getHandlerContext(),
-        'getCapabilities'
-      );
+      const dataToValidate = parseMcpToolResponsePayload(capabilitiesResult, z.any());
 
       const validationResult = McpGetCapabilitiesResponseSchema.safeParse(dataToValidate);
 

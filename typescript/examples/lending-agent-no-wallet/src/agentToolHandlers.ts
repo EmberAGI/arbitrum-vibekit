@@ -14,9 +14,9 @@ import { getChainConfigById } from './agent.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { streamText } from 'ai';
 import {
-  parseMcpToolResponse as sharedParseMcpToolResponse,
   createTransactionArtifactSchema,
   type TransactionArtifact,
+  parseMcpToolResponsePayload,
 } from 'arbitrum-vibekit';
 import {
   validateTransactionPlans,
@@ -256,7 +256,7 @@ export async function handleBorrow(
         });
 
         // Parse and validate the MCP borrow tool response using the new ZodBorrowResponseSchema
-        const borrowResp = sharedParseMcpToolResponse(rawResult, ZodBorrowResponseSchema);
+        const borrowResp = parseMcpToolResponsePayload(rawResult, ZodBorrowResponseSchema);
         const { transactions, currentBorrowApy, liquidationThreshold } = borrowResp;
 
         // Build artifact using shared generic schema
@@ -476,10 +476,7 @@ export async function handleRepay(
       context.log('MCP repay tool response:', toolResult);
 
       // Parse and validate the MCP repay tool response using the new ZodRepayResponseSchema
-      const repayResp = sharedParseMcpToolResponse(
-        toolResult,
-        ZodRepayResponseSchema
-      ) as RepayResponse;
+      const repayResp = parseMcpToolResponsePayload(toolResult, ZodRepayResponseSchema) as RepayResponse;
       const { transactions } = repayResp;
       context.log(`Processed and validated ${transactions.length} transactions for repay.`);
 
@@ -681,7 +678,7 @@ export async function handleSupply(
       let finalTxPlan: TransactionPlan[] = [];
       try {
         // Parse and validate the MCP supply tool response using the new ZodSupplyResponseSchema
-        const supplyResp = sharedParseMcpToolResponse(toolResult, ZodSupplyResponseSchema);
+        const supplyResp = parseMcpToolResponsePayload(toolResult, ZodSupplyResponseSchema);
         finalTxPlan = supplyResp.transactions;
         context.log(
           `Processed and validated ${finalTxPlan.length} transactions from MCP for supply.`
@@ -834,7 +831,7 @@ export async function handleWithdraw(
 
       try {
         // Parse and validate the MCP withdraw tool response using the new ZodWithdrawResponseSchema
-        const withdrawResp = sharedParseMcpToolResponse(toolResult, ZodWithdrawResponseSchema);
+        const withdrawResp = parseMcpToolResponsePayload(toolResult, ZodWithdrawResponseSchema);
         const validatedTxPlan: TransactionPlan[] = withdrawResp.transactions;
         context.log('Withdraw transaction plan validated:', validatedTxPlan);
 
@@ -912,7 +909,7 @@ export async function handleGetUserPositions(
     console.log('rawResult', rawResult);
 
     // Parse and validate the MCP tool response using the shared parser with Zod schema
-    const validatedPositions = sharedParseMcpToolResponse(
+    const validatedPositions = parseMcpToolResponsePayload(
       rawResult,
       ZodGetWalletPositionsResponseSchema
     );
