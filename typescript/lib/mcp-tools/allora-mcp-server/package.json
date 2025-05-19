@@ -9,8 +9,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
-    "watch": "nodemon --watch 'src/**/*.ts' --exec 'ts-node --esm' src/index.ts"
+    "dev": "tsx src/index.ts",
+    "watch": "nodemon --watch 'src/**/*.ts' --exec 'tsx' src/index.ts"
   },
   "keywords": [
     "mcp",
@@ -29,11 +29,13 @@
     "nodemon": "^3.1.9",
     "raw-body": "^3.0.0",
     "tee": "^0.2.0",
-    "ts-node": "^10.9.2",
     "typescript": "^5.8.2",
     "zod": "^3.24.2"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4"
   }
 }
