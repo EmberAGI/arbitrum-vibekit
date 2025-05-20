@@ -53,7 +53,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
 WORKDIR /app
 
 # Install pnpm globally
-RUN npm install -g pnpm@10.7.0
+RUN npm install -g --prefer-frozen-lockfile -y pnpm@10.7.0
 
 # Copy only what we need from the builder stage
 COPY --from=builder /app/examples/lending-agent-no-wallet/dist /app/examples/lending-agent-no-wallet/dist

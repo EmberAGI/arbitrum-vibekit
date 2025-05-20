@@ -1,0 +1,4 @@
+[submodule "chatbot"]
+	path = typescript/clients/web
+	url = https://github.com/EmberAGI/chatbot
+	branch = 99-feat-dockerize-frontend
