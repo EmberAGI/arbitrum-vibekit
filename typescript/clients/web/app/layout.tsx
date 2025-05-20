@@ -6,8 +6,6 @@ import { ThemeProvider } from "@/components/theme-provider";
 
 import "./globals.css";
 
-export const dynamic = "force-dynamic";
-
 export const metadata: Metadata = {
   metadataBase: new URL("https://questbook.emberai.xyz"),
   title: "Questbook Demo",

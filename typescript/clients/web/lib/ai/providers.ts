@@ -31,7 +31,7 @@ export const openRouterProvider = isTestEnvironment
       languageModels: {
         'chat-model': openRouter('google/gemini-2.5-pro-preview-03-25', {
           reasoning: {
-            exclude: false,
+            exclude: true,
             effort: 'low',
           },
         }),

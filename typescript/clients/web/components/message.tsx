@@ -5,23 +5,13 @@ import cx from "classnames";
 import { AnimatePresence, motion } from "framer-motion";
 import { memo, useState } from "react";
 import type { Vote } from "@/lib/db/schema";
-import { DocumentToolCall, DocumentToolResult } from "./document";
-import { PencilEditIcon, SparklesIcon } from "./icons";
-import { Markdown } from "./markdown";
+import { SparklesIcon } from "./icons";
 import { MessageActions } from "./message-actions";
 import { PreviewAttachment } from "./preview-attachment";
-import { Weather } from "./weather";
 import equal from "fast-deep-equal";
 import { cn } from "@/lib/utils";
-import { Button } from "./ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
-import { MessageEditor } from "./message-editor";
-import { DocumentPreview } from "./document-preview";
-import { MessageReasoning } from "./message-reasoning";
-import { UseChatHelpers } from "@ai-sdk/react";
-import { Transaction } from "./Transaction";
-import { Lending } from "./Lending";
-import { Liquidity } from "./Liquidity";
+import type { UseChatHelpers } from "@ai-sdk/react";
+import { MessageRenderer } from "./message.renderer";
 
 const PurePreviewMessage = ({
   chatId,
@@ -57,7 +47,7 @@ const PurePreviewMessage = ({
             {
               "w-full": mode === "edit",
               "group-data-[role=user]/message:w-fit": mode !== "edit",
-            }
+            },
           )}
         >
           {message.role === "assistant" && (
@@ -83,247 +73,19 @@ const PurePreviewMessage = ({
               </div>
             )}
 
-            {message.parts?.map((part, index) => {
-              const { type } = part;
-              const key = `message-${message.id}-part-${index}`;
-              console.log(part);
-
-              if (type === "reasoning") {
-                return (
-                  <MessageReasoning
-                    key={key}
-                    isLoading={isLoading}
-                    reasoning={part.reasoning}
-                  />
-                );
-              }
-
-              if (type === "text") {
-                if (mode === "view") {
-                  return (
-                    <div key={key} className="flex flex-row gap-2 items-start">
-                      {message.role === "user" && !isReadonly && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              data-testid="message-edit-button"
-                              variant="ghost"
-                              className="px-2 h-fit rounded-full text-muted-foreground opacity-0 group-hover/message:opacity-100"
-                              onClick={() => {
-                                setMode("edit");
-                              }}
-                            >
-                              <PencilEditIcon />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Edit message</TooltipContent>
-                        </Tooltip>
-                      )}
-
-                      <div
-                        data-testid="message-content"
-                        className={cn("flex flex-col gap-4", {
-                          "bg-primary text-primary-foreground px-3 py-2 rounded-xl":
-                            message.role === "user",
-                        })}
-                      >
-                        <Markdown>{part.text}</Markdown>
-                      </div>
-                    </div>
-                  );
-                }
-
-                if (mode === "edit") {
-                  return (
-                    <div key={key} className="flex flex-row gap-2 items-start">
-                      <div className="size-8" />
-
-                      <MessageEditor
-                        key={message.id}
-                        message={message}
-                        setMode={setMode}
-                        setMessages={setMessages}
-                        reload={reload}
-                      />
-                    </div>
-                  );
-                }
-              }
-
-              if (type === "tool-invocation") {
-                const { toolInvocation } = part;
-                const { toolName, toolCallId, state } = toolInvocation;
-
-                if (state === "call") {
-                  const { args } = toolInvocation;
-                  console.log("toolInvocation", toolInvocation);
-                  return (
-                    <div
-                      key={toolCallId}
-                      className={cx({
-                        skeleton:
-                          ["getWeather"].includes(toolName) ||
-                          ["askSwapAgent"].includes(toolName),
-                      })}
-                    >
-                      {toolName === "getWeather" ? (
-                        <Weather />
-                      ) : toolName === "createDocument" ? (
-                        <DocumentPreview isReadonly={isReadonly} args={args} />
-                      ) : toolName === "updateDocument" ? (
-                        <DocumentToolCall
-                          type="update"
-                          args={args}
-                          isReadonly={isReadonly}
-                        />
-                      ) : toolName === "requestSuggestions" ? (
-                        <DocumentToolCall
-                          type="request-suggestions"
-                          args={args}
-                          isReadonly={isReadonly}
-                        />
-                      ) : toolName === "askSwapAgent" ? (
-                        <Transaction txPreview={null} txPlan={null} />
-                      ) : toolName === "askLendingAgent" ? (
-                        <Lending txPreview={null} txPlan={null} />
-                      ) : toolName === "askLiquidityAgent" ? (
-                        <Liquidity
-                          positions={null}
-                          txPreview={null}
-                          txPlan={null}
-                        />
-                      ) : null}
-                    </div>
-                  );
-                }
-
-                if (state === "result") {
-                  const { result } = toolInvocation;
-                  const stringify =
-                    toolInvocation?.result?.result?.content &&
-                    toolInvocation?.result?.result?.content[0]
-                      ? JSON.parse(
-                          toolInvocation?.result?.result?.content[0]?.text
-                        )
-                      : null;
-
-                  return (
-                    <div key={toolCallId}>
-                      {toolName === "getWeather" ? (
-                        <Weather weatherAtLocation={result} />
-                      ) : toolName === "createDocument" ? (
-                        <DocumentPreview
-                          isReadonly={isReadonly}
-                          result={result}
-                        />
-                      ) : toolName === "updateDocument" ? (
-                        <DocumentToolResult
-                          type="update"
-                          result={result}
-                          isReadonly={isReadonly}
-                        />
-                      ) : toolName === "requestSuggestions" ? (
-                        <DocumentToolResult
-                          type="request-suggestions"
-                          result={result}
-                          isReadonly={isReadonly}
-                        />
-                      ) : toolName === "askSwapAgent" ? (
-                        <Transaction
-                          txPreview={
-                            stringify &&
-                            stringify?.artifacts &&
-                            stringify?.artifacts[0]?.parts &&
-                            stringify?.artifacts[0]?.parts[0]?.data
-                              ? JSON.parse(
-                                  toolInvocation?.result?.result?.content[0]
-                                    ?.text
-                                )?.artifacts[0]?.parts[0]?.data?.txPreview
-                              : null
-                          }
-                          txPlan={
-                            stringify &&
-                            stringify?.artifacts &&
-                            stringify?.artifacts[0]?.parts &&
-                            stringify?.artifacts[0]?.parts[0]?.data
-                              ? JSON.parse(
-                                  toolInvocation?.result?.result?.content[0]
-                                    ?.text
-                                )?.artifacts[0]?.parts[0]?.data?.txPlan
-                              : null
-                          }
-                        />
-                      ) : toolName === "askLendingAgent" ? (
-                        stringify && (
-                          <Lending
-                            txPreview={
-                              stringify &&
-                              stringify?.artifacts &&
-                              stringify?.artifacts[0]?.parts &&
-                              stringify?.artifacts[0]?.parts[0]?.data
-                                ? JSON.parse(
-                                    toolInvocation?.result?.result?.content[0]
-                                      ?.text
-                                  )?.artifacts[0]?.parts[0]?.data?.txPreview
-                                : null
-                            }
-                            txPlan={
-                              stringify &&
-                              stringify?.artifacts &&
-                              stringify?.artifacts[0]?.parts &&
-                              stringify?.artifacts[0]?.parts[0]?.data
-                                ? JSON.parse(
-                                    toolInvocation?.result?.result?.content[0]
-                                      ?.text
-                                  )?.artifacts[0]?.parts[0]?.data?.txPlan
-                                : null
-                            }
-                          />
-                        )
-                      ) : toolName === "askLiquidityAgent" ? (
-                        stringify && (
-                          <Liquidity
-                            positions={
-                              stringify &&
-                              stringify?.artifacts &&
-                              stringify?.artifacts[0]?.parts &&
-                              stringify?.artifacts[0]?.parts[0]?.data
-                                ? JSON.parse(
-                                    toolInvocation?.result?.result?.content[0]
-                                      ?.text
-                                  )?.artifacts[0]?.parts[0]?.data?.positions
-                                : null
-                            }
-                            txPreview={
-                              stringify &&
-                              stringify?.artifacts &&
-                              stringify?.artifacts[0]?.parts &&
-                              stringify?.artifacts[0]?.parts[0]?.data
-                                ? JSON.parse(
-                                    toolInvocation?.result?.result?.content[0]
-                                      ?.text
-                                  )?.artifacts[0]?.parts[0]?.data?.txPreview
-                                : null
-                            }
-                            txPlan={
-                              stringify &&
-                              stringify?.artifacts &&
-                              stringify?.artifacts[0]?.parts &&
-                              stringify?.artifacts[0]?.parts[0]?.data
-                                ? JSON.parse(
-                                    toolInvocation?.result?.result?.content[0]
-                                      ?.text
-                                  )?.artifacts[0]?.parts[0]?.data?.txPlan
-                                : null
-                            }
-                          />
-                        )
-                      ) : null}
-                    </div>
-                  );
-                }
-              }
-            })}
+            {message.parts?.map((part, index) => (
+              <MessageRenderer
+                key={`${message.id}-${index}`}
+                part={part}
+                isLoading={isLoading}
+                isReadonly={isReadonly}
+                mode={mode}
+                setMode={setMode}
+                message={message}
+                setMessages={setMessages}
+                reload={reload}
+              />
+            ))}
 
             {!isReadonly && (
               <MessageActions
@@ -350,7 +112,7 @@ export const PreviewMessage = memo(
     if (!equal(prevProps.vote, nextProps.vote)) return false;
 
     return true;
-  }
+  },
 );
 
 export const ThinkingMessage = () => {
@@ -369,7 +131,7 @@ export const ThinkingMessage = () => {
           "flex gap-4 group-data-[role=user]/message:px-3 w-full group-data-[role=user]/message:w-fit group-data-[role=user]/message:ml-auto group-data-[role=user]/message:max-w-2xl group-data-[role=user]/message:py-2 rounded-xl",
           {
             "group-data-[role=user]/message:bg-muted": true,
-          }
+          },
         )}
       >
         <div className="size-8 flex items-center rounded-full justify-center ring-1 shrink-0 ring-border">

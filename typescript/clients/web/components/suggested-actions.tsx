@@ -63,6 +63,20 @@ function PureSuggestedActions({
         },
       ];
       break;
+    case "ember-pendle":
+      suggestedActions = [
+        {
+          title: "Deposit WETH",
+          label: "to my balance",
+          action: "Deposit WETH to my balance",
+        },
+        {
+          title: "Check",
+          label: "balance",
+          action: "Check balance",
+        },
+      ];
+      break;
     default:
       suggestedActions = [
         {

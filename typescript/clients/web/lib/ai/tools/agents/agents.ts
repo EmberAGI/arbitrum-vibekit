@@ -1,34 +1,29 @@
-interface ChatAgent {
-    id: string;
-    name: string;
-    description: string;
-  }
-  
-export const chatAgents: Array<ChatAgent> = [
-    {
-      id: 'ember-aave',
-      name: 'Lending',
-      description: 'AAVE lending agent',
-    },
-    {
-      id: 'ember-camelot',
-      name: 'Trading',
-      description: 'Camelot Swapping agent',
+export const chatAgents = [
+  {
+    id: 'ember-aave' as const,
+    name: 'Lending',
+    description: 'AAVE lending agent',
   },
   {
-    id: 'ember-lp',
+    id: 'ember-camelot' as const,
+    name: 'Trading',
+    description: 'Camelot Swapping agent',
+  },
+  {
+    id: 'ember-lp' as const,
     name: 'LPing',
     description: 'Camelot Liquidity Provisioning agent',
   },
   {
-    id: 'ember-pendle',
+    id: 'ember-pendle' as const,
     name: 'Pendle',
     description: 'Test agent for Pendle',
   },
   {
-    id: 'all',
-    name: 'Default Agent',
+    id: 'all' as const,
+    name: 'All agents',
     description: 'All agents',
-    }
-    
-  ];
+  },
+] as const;
+
+export type ChatAgentId = (typeof chatAgents)[number]['id'];

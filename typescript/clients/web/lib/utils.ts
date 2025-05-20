@@ -163,3 +163,24 @@ export function getTrailingMessageId({
 
   return trailingMessage.id;
 }
+
+export function strToDecimal(input: string): string {
+  if (input === '∞') {
+    return '∞'
+  } else {
+    //convert decimal string into 2 decimal string
+    const decimal = parseFloat(input);
+    if (isNaN(decimal)) {
+      return ''
+    }
+    const decimalString = decimal.toFixed(2).toString()
+    return decimalString
+  }
+}
+
+//function to convert an address into 0xABC...AB1234 format
+export function shortenAddress(address: string): string {
+  if (address.length <= 6) return address;
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
