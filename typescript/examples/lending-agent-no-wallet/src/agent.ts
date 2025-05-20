@@ -14,6 +14,7 @@ import type { Task } from 'a2a-samples-js/schema';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import {
   generateText,
   tool,
@@ -320,6 +321,8 @@ Only use tools if the user explicitly asks to perform an action and provides the
 
 If parameters are missing, ask the user to provide them. Do not assume parameters.
 
+IMPORTANT: Always call the appropriate tool with the exact parameters provided by the user. Do not make assumptions about minimum amounts, protocol limitations, or other restrictions. Let the tool handle all validation. Never refuse to call a tool based on the amount value - always pass it through to the tool.
+
 <examples>
 <example1 - Borrow>
 <user>Borrow 100 USDC</user>
@@ -350,6 +353,11 @@ If parameters are missing, ask the user to provide them. Do not assume parameter
 <user>What is the liquidation threshold for WETH on Aave Arbitrum?</user>
 <tool_call> {"toolName": "askEncyclopedia", "args": { "question": "What is the liquidation threshold for WETH on Aave Arbitrum?" }} </tool_call>
 </example6>
+
+<example7 - Small Amount Borrow>
+<user>Borrow 0.001 USDC</user>
+<tool_call> {"toolName": "borrow", "args": { "tokenName": "USDC", "amount": "0.001" }} </tool_call>
+</example7>
 </examples>
 
 Always use plain text. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason. Present the user with a list of tokens/chains if clarification is needed (as handled by the tool).`,
@@ -378,7 +386,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       const capabilitiesResult = await this.mcpClient.callTool(
         {
           name: 'getCapabilities',
-          arguments: { type: 'LENDING' },
+          arguments: { type: 'LENDING_MARKET' },
         },
         undefined,
         { timeout: mcpTimeoutMs }
@@ -399,7 +407,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
         );
       }
 
-      const jsonString = wrapperValidationResult.data.content[0].text;
+      const jsonString = wrapperValidationResult.data.content[0]!.text;
       let parsedData: any;
       try {
         console.error('Attempting to parse JSON string from content[0].text...');
@@ -642,7 +650,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
       console.error('No tool called or task found, returning text response.');
       return {
-        id: this.userAddress,
+        id: this.userAddress!,
         status: {
           state: 'completed',
           message: {
@@ -660,7 +668,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       };
       this.conversationHistory.push(errorAssistantMessage);
       return {
-        id: this.userAddress ?? 'unknown',
+        id: this.userAddress!,
         status: {
           state: 'failed',
           message: {
@@ -710,9 +718,10 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
   }
 
   private async _loadAaveDocumentation(): Promise<void> {
-    const defaultDocsPath = path.resolve(__dirname, '../encyclopedia');
-    const docsPath = defaultDocsPath;
-    const filePaths = [path.join(docsPath, 'aave-01.md'), path.join(docsPath, 'aave-02.md')];
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const docsPath = join(__dirname, '../encyclopedia');
+    const filePaths = [join(docsPath, 'aave-01.md'), join(docsPath, 'aave-02.md')];
     let combinedContent = '';
 
     console.error(`Loading Aave documentation from: ${docsPath}`);

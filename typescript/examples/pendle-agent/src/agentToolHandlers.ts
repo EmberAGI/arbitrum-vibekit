@@ -1,7 +1,17 @@
 import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { SwapTokensArgs } from './agent.js';
-import type { Task } from 'a2a-samples-js/schema';
+import type { SwapTokensArgs } from './agent.js';
+import type { Task, Artifact, DataPart } from 'a2a-samples-js/schema';
+import {
+  parseMcpToolResponsePayload,
+  createTransactionArtifactSchema,
+  type TransactionArtifact,
+} from 'arbitrum-vibekit';
+import {
+  validateTransactionPlans,
+  type TransactionPlan,
+  TransactionPlanSchema,
+} from 'ember-mcp-tool-server';
 
 export type TokenInfo = {
   chainId: string;
@@ -22,17 +32,6 @@ export const SwapTokensParamsSchema = z.object({
 
 export type SwapTokensParams = z.infer<typeof SwapTokensParamsSchema>;
 
-export const TransactionPlanSchema = z
-  .object({
-    to: z.string(),
-    data: z.string(),
-    value: z.string().optional(),
-    chainId: z.string(),
-  })
-  .passthrough();
-
-export type TransactionPlan = z.infer<typeof TransactionPlanSchema>;
-
 export interface HandlerContext {
   mcpClient: Client;
   tokenMap: Record<string, TokenInfo[]>;
@@ -50,7 +49,10 @@ function findTokensCaseInsensitive(
   const lowerCaseTokenName = tokenName.toLowerCase();
   for (const key in tokenMap) {
     if (key.toLowerCase() === lowerCaseTokenName) {
-      return tokenMap[key];
+      const tokens = tokenMap[key];
+      if (tokens) {
+        return tokens;
+      }
     }
   }
   return [];
@@ -119,83 +121,26 @@ function findTokenDetail(
   return tokenDetail;
 }
 
-export function parseMcpToolResponse<T>(
-  rawResponse: unknown,
-  context: HandlerContext,
-  toolName: string
-): T {
-  let dataToValidate: unknown;
+// Define a Zod schema for the transaction preview specific to Pendle swaps
+const PendleSwapPreviewSchema = z.object({
+  fromTokenName: z.string(),
+  toTokenName: z.string(),
+  humanReadableAmount: z.string(),
+  chainName: z.string(),
+  parsedChainId: z.string(),
+});
 
-  if (
-    rawResponse &&
-    typeof rawResponse === 'object' &&
-    'content' in rawResponse &&
-    Array.isArray((rawResponse as any).content) &&
-    (rawResponse as any).content.length > 0 &&
-    (rawResponse as any).content[0]?.type === 'text' &&
-    typeof (rawResponse as any).content[0]?.text === 'string'
-  ) {
-    context.log(`Raw ${toolName} result appears nested, parsing inner text...`);
-    try {
-      const parsedData = JSON.parse((rawResponse as any).content[0].text);
-      context.log('Parsed inner text content for validation:', parsedData);
-      dataToValidate = parsedData;
-    } catch (e) {
-      context.log(`Error parsing inner text content from ${toolName} result:`, e);
-      throw new Error(
-        `Failed to parse nested JSON response from ${toolName}: ${(e as Error).message}`
-      );
-    }
-  } else {
-    context.log(
-      `Raw ${toolName} result does not have expected nested structure, validating as is.`
-    );
-    dataToValidate = rawResponse;
-  }
+// Define the type for the Pendle swap preview
+type PendleSwapPreview = z.infer<typeof PendleSwapPreviewSchema>;
 
-  return dataToValidate as T;
-}
+// Define the schema for the artifact content using the shared utility
+const PendleSwapArtifactSchema = createTransactionArtifactSchema(PendleSwapPreviewSchema);
 
-// Add a specialized version for SwapTokensResponse that validates the structure
-export function parseSwapTokensResponse(
-  rawResponse: unknown,
-  context: HandlerContext
-): { chainId: string; transactions: TransactionPlan[] } {
-  const data = parseMcpToolResponse<unknown>(rawResponse, context, 'swapTokens');
-
-  // Validate that the response has the expected structure
-  if (!data || typeof data !== 'object') {
-    throw new Error('Invalid response format: expected an object');
-  }
-
-  const response = data as any;
-
-  // Check for required fields
-  if (!response.transactions || !Array.isArray(response.transactions)) {
-    throw new Error('Invalid response format: missing or invalid transactions array');
-  }
-
-  if (!response.chainId || typeof response.chainId !== 'string') {
-    throw new Error('Invalid response format: missing or invalid chainId');
-  }
-
-  // Validate each transaction in the array
-  response.transactions.forEach((tx: any, index: number) => {
-    if (!tx || typeof tx !== 'object') {
-      throw new Error(`Invalid transaction at index ${index}: not an object`);
-    }
-
-    if (!tx.to || typeof tx.to !== 'string') {
-      throw new Error(`Invalid transaction at index ${index}: missing or invalid 'to' field`);
-    }
-
-    if (!tx.data || typeof tx.data !== 'string') {
-      throw new Error(`Invalid transaction at index ${index}: missing or invalid 'data' field`);
-    }
-  });
-
-  return { chainId: response.chainId, transactions: response.transactions as TransactionPlan[] };
-}
+// Schema to validate swapTokens tool response
+const SwapResponseSchema = z.object({
+  chainId: z.string(),
+  transactions: z.array(TransactionPlanSchema),
+});
 
 export async function handleSwapTokens(
   params: SwapTokensArgs,
@@ -267,16 +212,29 @@ export async function handleSwapTokens(
     arguments: swapParams,
   });
 
-  // Parse and validate tool response
-  const parsed = parseSwapTokensResponse(mcpResponse, context) as {
-    chainId: string;
-    transactions: TransactionPlan[];
+  // Parse and validate tool response with Zod
+  const parsedData = parseMcpToolResponsePayload(mcpResponse, SwapResponseSchema);
+  const { chainId, transactions } = parsedData;
+  const txs: TransactionPlan[] = validateTransactionPlans(transactions);
+
+  const preview: PendleSwapPreview = {
+    fromTokenName,
+    toTokenName,
+    humanReadableAmount,
+    chainName: effectiveChain,
+    parsedChainId: chainId,
   };
-  // Build transaction plan with chainId on each tx
-  const txs: TransactionPlan[] = parsed.transactions.map(tx => ({
-    ...tx,
-    chainId: parsed.chainId,
-  }));
+
+  const artifactContent: TransactionArtifact<PendleSwapPreview> = {
+    txPlan: txs,
+    txPreview: preview,
+  };
+
+  const dataPart: DataPart = {
+    type: 'data',
+    data: artifactContent as any,
+  };
+
   // Construct and return a Task artifact
   return {
     id: context.userAddress,
@@ -295,8 +253,8 @@ export async function handleSwapTokens(
     artifacts: [
       {
         name: 'swap-yield-transaction',
-        parts: [{ type: 'data', data: { transactions: txs, chainId: parsed.chainId } }],
-      },
+        parts: [dataPart],
+      } as Artifact,
     ],
   };
 }

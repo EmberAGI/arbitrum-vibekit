@@ -1,11 +1,8 @@
 import { z } from 'zod';
-import { type Address } from 'viem';
-import {
-  HandlerContext,
-  TransactionPlan,
-  handleSwapTokens,
-  parseMcpToolResponse,
-} from './agentToolHandlers.js';
+import type { Address } from 'viem';
+import { type HandlerContext, handleSwapTokens } from './agentToolHandlers.js';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
+import { type TransactionPlan, type GetTokensResponse } from 'ember-mcp-tool-server';
 import {
   generateText,
   tool,
@@ -53,15 +50,50 @@ export type Token = z.infer<typeof TokenSchema>;
 export const GetPendleMarketsRequestSchema = z.object({});
 export type GetPendleMarketsRequestArgs = z.infer<typeof GetPendleMarketsRequestSchema>;
 
+export const YieldMarketPoolDailyRewardEstimationSchema = z.object({
+  asset: TokenSchema.optional(),
+  amount: z.string(),
+});
+export type YieldMarketPoolDailyRewardEstimation = z.infer<
+  typeof YieldMarketPoolDailyRewardEstimationSchema
+>;
+
+export const YieldMarketVolatileDataSchema = z.object({
+  timestamp: z.string(),
+  marketLiquidityUsd: z.string(),
+  tradingVolumeUsd: z.string(),
+  underlyingInterestApy: z.string(),
+  underlyingRewardApy: z.string(),
+  underlyingApy: z.string(),
+  impliedApy: z.string(),
+  ytFloatingApy: z.string(),
+  swapFeeApy: z.string(),
+  voterApy: z.string(),
+  ptDiscount: z.string(),
+  pendleApy: z.string(),
+  arbApy: z.string(),
+  lpRewardApy: z.string(),
+  aggregatedApy: z.string(),
+  maxBoostedApy: z.string(),
+  estimatedDailyPoolRewards: z.array(YieldMarketPoolDailyRewardEstimationSchema),
+  totalPt: z.string(),
+  totalSy: z.string(),
+  totalLp: z.string(),
+  totalActiveSupply: z.string(),
+  assetPriceUsd: z.string(),
+});
+export type YieldMarketVolatileData = z.infer<typeof YieldMarketVolatileDataSchema>;
+
 export const YieldMarketSchema = z.object({
   name: z.string().describe('The name of the yield market.'),
   address: z.string().describe('The address of the yield market.'),
-  expiry: z.string().describe('The expiry identifier of the yield market.'),
+  expiry: z.string().describe('The expiry timestamp of the yield market.'),
   pt: z.string().describe('The address of the PT (principal token).'),
   yt: z.string().describe('The address of the YT (yield token).'),
   sy: z.string().describe('The address of the SY (standardized yield token).'),
   underlyingAsset: TokenSchema.describe('The underlying asset of the Pendle market.'),
   chainId: z.string().describe('The chain ID on which this yield market exists.'),
+  volatileData: YieldMarketVolatileDataSchema.optional(),
 });
 export type YieldMarket = z.infer<typeof YieldMarketSchema>;
 
@@ -253,31 +285,45 @@ Never respond in markdown, always use plain text. Never add links to your respon
         },
       });
 
-      const parsedResult = parseMcpToolResponse(result, this.getHandlerContext(), 'getTokens');
+      this.log('GetTokens tool success.');
 
-      if (parsedResult && typeof parsedResult === 'object' && 'tokens' in parsedResult) {
-        const tokens = (parsedResult as any).tokens;
-        if (Array.isArray(tokens)) {
-          this.tokenMap = {};
-          this.availableTokens = [];
+      // Define a schema for token response validation that matches GetTokensResponse structure
+      const GetTokensResponseSchema = z.object({
+        tokens: z.array(
+          z.object({
+            symbol: z.string().optional(),
+            tokenUid: z
+              .object({
+                chainId: z.string(),
+                address: z.string(),
+              })
+              .optional(),
+          })
+        ),
+      });
 
-          tokens.forEach(token => {
-            if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
-              if (!this.tokenMap[token.symbol]) {
-                this.tokenMap[token.symbol] = [];
-                this.availableTokens.push(token.symbol);
-              }
-              this.tokenMap[token.symbol].push({
-                chainId: token.tokenUid.chainId,
-                address: token.tokenUid.address,
-              });
+      // Parse with the schema
+      const parsedResponse = parseMcpToolResponsePayload(result, GetTokensResponseSchema);
+      const parsedTokens = parsedResponse.tokens;
+
+      if (parsedTokens && Array.isArray(parsedTokens)) {
+        this.tokenMap = {};
+        this.availableTokens = [];
+
+        parsedTokens.forEach(token => {
+          if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
+            if (!this.tokenMap[token.symbol]) {
+              this.tokenMap[token.symbol] = [];
+              this.availableTokens.push(token.symbol);
             }
-          });
+            (this.tokenMap[token.symbol] as { chainId: string; address: string }[]).push({
+              chainId: token.tokenUid.chainId,
+              address: token.tokenUid.address,
+            });
+          }
+        });
 
-          this.log(`Loaded ${this.availableTokens.length} available tokens`);
-        }
-      } else {
-        this.log('Failed to parse tokens data from MCP');
+        this.log(`Loaded ${this.availableTokens.length} available tokens`);
       }
     } catch (error) {
       this.log('Error fetching tokens:', error);
@@ -302,20 +348,22 @@ Never respond in markdown, always use plain text. Never add links to your respon
         parameters: z.object({}),
         execute: async () => {
           try {
-            const parts = this.yieldMarkets.map(market => ({
+            // First, create data artifacts for the full market data
+            const dataArtifacts = this.yieldMarkets.map(market => ({
               type: 'data' as const,
               data: market,
             }));
+
             const task: Task = {
               id: this.userAddress!,
               status: {
                 state: 'completed',
                 message: {
                   role: 'agent',
-                  parts: [{ type: 'text', text: 'Pendle markets fetched successfully.' }],
+                  parts: [],
                 },
               },
-              artifacts: [{ name: 'yield-markets', parts }],
+              artifacts: [{ name: 'yield-markets', parts: dataArtifacts }],
             };
             return task;
           } catch (error: any) {
@@ -470,27 +518,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
       name: 'getYieldMarkets',
       arguments: {},
     });
-
-    // Check if the response has the expected structure
-    if (!result.content || !Array.isArray(result.content) || result.content.length === 0) {
-      throw new Error('Invalid response format from getYieldMarkets tool');
-    }
-
-    const contentItem = result.content[0];
-    if (contentItem.type !== 'text' || typeof contentItem.text !== 'string') {
-      throw new Error('Invalid content format from getYieldMarkets tool');
-    }
-
-    // Parse the JSON string from the text field
-    const parsedData = JSON.parse(contentItem.text);
-
-    // Validate the parsed data with our schema
-    const validationResult = GetYieldMarketsResponseSchema.safeParse(parsedData);
-
-    if (!validationResult.success) {
-      throw new Error('Failed to validate Pendle markets data structure');
-    }
-
-    return validationResult.data;
+    this.log('GetYieldMarkets tool success.');
+    return parseMcpToolResponsePayload(result, GetYieldMarketsResponseSchema);
   }
 }

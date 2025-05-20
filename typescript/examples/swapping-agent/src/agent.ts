@@ -12,12 +12,10 @@ import {
   http,
   type LocalAccount,
 } from 'viem';
-import {
-  HandlerContext,
-  TransactionPlan,
-  handleSwapTokens,
-  parseMcpToolResponse,
-} from './agentToolHandlers.js';
+import { handleSwapTokens } from './agentToolHandlers.js';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
+import type { HandlerContext } from './agentToolHandlers.js';
+import type { TransactionPlan } from 'ember-mcp-tool-server';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -34,7 +32,8 @@ import {
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { mainnet, arbitrum, optimism, polygon, base, Chain } from 'viem/chains';
+import { mainnet, arbitrum, optimism, polygon, base } from 'viem/chains';
+import type { Chain } from 'viem/chains';
 import { createRequire } from 'module';
 
 const openrouter = createOpenRouter({
@@ -306,9 +305,9 @@ Present the user with a list of tokens and chains they can swap from and to if p
                   this.tokenMap[token.symbol] = [];
                   this.availableTokens.push(token.symbol);
                 }
-                this.tokenMap[token.symbol].push({
-                  chainId: token.tokenUid.chainId,
-                  address: token.tokenUid.address,
+                this.tokenMap[token.symbol]!.push({
+                  chainId: token.tokenUid!.chainId,
+                  address: token.tokenUid!.address,
                   decimals: token.decimals ?? 18,
                 });
               }
@@ -599,11 +598,7 @@ Present the user with a list of tokens and chains they can swap from and to if p
 
       this.log('Raw capabilitiesResult received from MCP.');
 
-      const dataToValidate = parseMcpToolResponse(
-        capabilitiesResult,
-        this.getHandlerContext(),
-        'getCapabilities'
-      );
+      const dataToValidate = parseMcpToolResponsePayload(capabilitiesResult, z.any());
 
       const validationResult = McpGetCapabilitiesResponseSchema.safeParse(dataToValidate);
 
