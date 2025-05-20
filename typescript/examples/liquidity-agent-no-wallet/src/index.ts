@@ -1,5 +1,5 @@
 import { Agent } from './agent.js';
-import { type Address, isAddress } from 'viem';
+import { isAddress } from 'viem';
 import * as dotenv from 'dotenv';
 import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
