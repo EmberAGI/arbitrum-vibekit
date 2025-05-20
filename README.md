@@ -1,7 +1,7 @@
 ![Graphic](img/Graphic.png)
 
 <p align="center"> 
-   &nbsp&nbsp 📃 <a href="https://ember-ai.gitbook.io/arbitrum-vibekit">Documentation </a> &nbsp&nbsp | &nbsp&nbsp 🤖  <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples"> Agent Templates</a>  &nbsp&nbsp | &nbsp&nbsp 🎨  <a href="https://questbook.emberai.xyz/"> Web Interface </a> &nbsp&nbsp | &nbsp&nbsp  💬  <a href="https://discord.com/invite/bgxWQ2fSBR"> Support Discord </a>  &nbsp&nbsp | &nbsp&nbsp  📩  <a href="https://t.me/EmberChat"> Ember Telegram</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://x.com/EmberAGI"> 𝕏 </a> &nbsp&nbsp
+   &nbsp&nbsp <a href="https://ember-ai.gitbook.io/arbitrum-vibekit">Documentation </a> &nbsp&nbsp | &nbsp&nbsp <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples"> Agent Playground</a>  &nbsp&nbsp |  &nbsp&nbsp   <a href="https://www.emberai.xyz/"> Ember AI</a>  &nbsp&nbsp | &nbsp&nbsp  <a> Web Interface </a> &nbsp&nbsp | &nbsp&nbsp  <a href="https://discord.com/invite/bgxWQ2fSBR"> Support Discord </a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://t.me/EmberChat"> Ember Telegram</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://x.com/EmberAGI"> 𝕏 </a> &nbsp&nbsp
 </p>
 
 ## 🧭 Table of Contents
@@ -9,19 +9,19 @@
 - [📙 Introduction](#-introduction)
 - [🧬 Repository Organization](#-repository-organization)
 - [⚡ Developer Quickstart](#-developer-quickstart)
-- [🎧 Vibe Coding](#-vibe-coding)
-- [🎨 Web Interface](#-web-interface)
-- [🔌 MCP Integration](#-mcp-integration)
-- [🙌 Contribution](#-contribution)
+- [🎧 Vibe Coding Guide](#-vibe-coding-guide)
+- [🔌 MCP Explained](#-mcp-explained)
+- [💰 Contributions & Bounties](#-contributions--bounties)
 
 ## 📙 Introduction
 
 Welcome to Vibekit – your polyglot toolkit for vibe coding smart, autonomous DeFi agents that vibe with the blockchain. Whether you're automating trades, managing liquidity, or integrating with on-chain and off-chain data, Vibekit makes it effortless and fun.
 
-At its core, Vibekit leverages the Model Context Protocol (MCP), a framework that standardizes how agents interact with tools and data. Vibekit also integrates smoothly with your current agent frameworks such as Eliza and LangGraph. Just plug in our MCP tools into your existing agents and watch them level up with DeFi superpowers!
+At its core, Vibekit uses the Model Context Protocol (MCP) to standardize how agents connect with tools and data. It also includes built-in Agent-to-Agent (A2A) integration, so the agents can easily work together. Vibekit works smoothly with popular frameworks like Eliza and LangGraph as well. Just add our MCP tools to your existing agents and watch them level up with DeFi superpowers!
 
-**_Development Status_**
-Rapidly evolving toward a stable launch, Vibekit already provides the core toolkit you need today. Our documentation and codebase form a robust release candidate as we polish specs and features. We welcome community feedback and contributions to guide our path to a formal v1.0 release.
+**_Development Status_:**
+
+Vibekit is growing fast and already gives you everything you need to start building. The docs and codebase are ready for you to use, and we're always improving things as we get closer to a full v1.0 launch. We'd love your feedback and contributions to help shape the future of Vibekit!
 
 ## 🧬 Repository Organization
 
@@ -56,9 +56,9 @@ Vibekit/
 
 ## ⚡ Developer Quickstart
 
-Ready to launch your DeFi agent?
+Follow these steps to build and run a DeFi agent:
 
-**1. Set up your environment:**
+### 1. Set Up Your Environment:
 
 Ensure that `Node.js` 22+ and `pnpm` are installed.
 
@@ -67,7 +67,7 @@ node -v # Should be 22+
 pnpm -v # Check that pnpm is installed
 ```
 
-**2. Clone the repository:**
+### 2. Clone the Repository:
 
 You can do so though the command line or through your preferred IDE.
 
@@ -79,10 +79,10 @@ cd arbitrum-vibekit
 We recommend using the [Cursor IDE](https://www.cursor.com/). Click on the `Clone Repo` button and on the top paste the Vibekit's Github URL: https://github.com/EmberAGI/arbitrum-vibekit.git. Next, click on `Clone from Github` to setup your project.
 
 <p align="left">
-  <img src="img/cursor.png" width="700px" alt="cursor"/>
+  <img src="img/cursor.png" width="900px" alt="cursor"/>
 </p>
 
-**3. Run your DeFi agent**
+### 3. Run Your DeFi Agent:
 
 Let's run the Lending Agent. Head over to the [lending-agent-no-wallet](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples/lending-agent-no-wallet) directory and create a `.env` file with the following required variables. Alternatively, you can create your `.env` file by copying the `.env.example` template from the agent's directory. Make sure to populate the `.env` file with the necessary configuration settings and API keys specific to your setup.
 
@@ -113,15 +113,14 @@ Alternatively, you can use Docker to start up the agent:
 ```
 cd typescript &&
 pnpm build &&
-
 sudo pnpm --filter "lending-agent-no-wallet" docker:compose:up
 ```
 
-**4. Interact with the DeFi agent:**
+### 4. Interact With the DeFi Agent:
 
-Once the agent is up and running, you have two ways to engage with it:
+Once the agent is up and running, you have three ways of interacting with it:
 
-- **Launch the Inspector interface:**
+**1. Launch the Inspector Interface:**
 
 Open a new terminal window and run the following to start the inspector:
 
@@ -149,9 +148,9 @@ Next, select "askLendingAgent", input your wallet address and query, and execute
 
 The Inspector interface provides a straightforward way to interact with your agent. For a more integrated development experience, you can use the Cursor IDE.
 
-- **Integrate with Cursor IDE**
+**2. Integrate With Cursor IDE**
 
-To interact with the Lending agent though Cursor, [create or update](https://docs.cursor.com/context/model-context-protocol) your `mcp.json` file through Cursor settings with the following content. If your agent is running on a different port than 3001, make sure to adjust it:
+To interact with the Lending Agent though Cursor, [create or update](https://docs.cursor.com/context/model-context-protocol) your `mcp.json` file through Cursor's MCP settings with the following content. If your agent is running on a different port than 3001, make sure to adjust it:
 
 ```
 {
@@ -172,10 +171,15 @@ You might need to restart Cursor to apply the new configuration. Upon successful
 
 Cursor will now automatically detect the Lending Agent MCP tool and you can interact with it directly through prompts.
 
-**5. Build your own DeFi agent:**
+**3. Web Interface**
+
+Coming Soon!
+
+### 5. Build Your Custom DeFi Agent:
+
 Checkout the [examples/](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) directory to explore other agent templates and start building your own!
 
-## 🎧 Vibe Coding
+## 🎧 Vibe Coding Guide
 
 Vibe coding is all about teaming up with AI to streamline your development process. Instead of writing every line of code manually, you guide an AI assistant using natural language prompts. The AI understands your project's context—like folder structures, tools, and data schemas—and provides targeted suggestions to help you build more efficiently.
 
@@ -199,10 +203,10 @@ To clone Vibekit in Cursor:
 4. Once cloned, Cursor will automatically detect the `.cursor/rules` folder and set up the AI context.
 
 <p align="left">
-  <img src="img/cursor.png" width="700px" alt="cursor"/>
+  <img src="img/cursor.png" width="900px" alt="cursor"/>
 </p>
 
-### 🤖 Vibe Coding Agents
+### 🤖 Vibe Coding DeFi Agents
 
 Ready to vibe with some DeFi agents? to run any of the existing agents or vibe code your own, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/examples/README.md).
 
@@ -212,90 +216,55 @@ To make the most of vibe coding, it's important to provide your AI assistant wit
 
 #### 📝 Vibekit's Cursor Rules Files Structure
 
-Vibekit's rules files are located in the project's [.cursor/rules](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/.cursor/rules) directory and include:
+Vibekit's rules files are located in the project's [`arbitrum-vibekit/.cursor/rules`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/.cursor/rules) directory. These files define best practices, workflows, and workspace conventions for building and maintaining agents:
 
-1. **createAgent.mdc**: Defines how to create and configure new agents
+- **createAgent.mdc**:
 
-   - Agent initialization parameters
-   - Required dependencies
-   - Configuration templates
-   - Best practices for agent setup
+  A guide for creating and configuring new agents, including best practices, required dependencies, and setup instructions.
 
-2. **scratchpad.mdc**: Serves as a workspace for testing and prototyping
+- **vibeCodingWorkflow.mdc**:
 
-   - Task descriptions
-   - Code snippets
-   - Quick tests and validations
-   - Development notes
+  Outlines the step-by-step development workflow for agents, including the Planner/Executor roles, task breakdowns, and conventions for collaborative development.
 
-3. **vibeCodingWorkflow.mdc**: Outlines the development workflow
-   - Step-by-step processes
-   - Common patterns
-   - Best practices
-   - Troubleshooting guides
+- **workspaceRules.mdc**:
+
+  Documents workspace-wide guidelines and best practices for the monorepo, such as dependency management, development scripts, and CI/CD standards.
 
 #### 🔄 Extending and Maintaining Rules
 
-To add new rules or modify existing ones:
+To add new rules or update existing ones:
 
-1. **Create New Rules**
+- **Add a New Rule File:**
 
-- You can create a new `.mdc` file in `.cursor/rules` when:
-  - Adding a new agent type
-  - Creating a new tool category
-  - Defining a new workflow
-- Follow the structure in `createAgent.mdc` for agent rules
-- Include clear documentation and examples
+  Create a new `.mdc` file in `.cursor/rules` if you want to introduce a new agent type, workflow, or set of best practices. Follow the structure of the existing files for consistency.
 
-2. **Update Existing Rules**
+- **Update Existing Rules:**
+  - Edit `createAgent.mdc` to add new agent configuration options, initialization parameters, or tool integrations.
+  - Update `vibeCodingWorkflow.mdc` to refine development workflows, add new patterns, or document troubleshooting steps.
+  - Revise `workspaceRules.mdc` to keep workspace-wide practices and scripts up to date.
 
-- You can modify `createAgent.mdc` when:
-  - Adding new agent configuration options
-  - Updating initialization parameters
-  - Adding new tool integrations
-- You can update `scratchpad.mdc` for:
-  - Testing new features
-  - Prototyping new workflows
-  - Validating tool integrations
-- Keep `vibeCodingWorkflow.mdc` up-to-date with:
-  - New development patterns
-  - Updated best practices
-  - Common troubleshooting solutions
+Keep these files current to ensure your team and agents always follow the latest best practices and workflows.
 
-## 🎨 Web Interface
-
-You can also access the example agents through our [web-based GUI](https://questbook.emberai.xyz/) that provides a user-friendly interface for:
-
-- Interacting with agents without local setup
-- Visualizing agent responses and transactions
-- Managing multiple agent interactions
-
-To use the web-based GUI:
-
-1. Head over to our [web interface](https://questbook.emberai.xyz/)
-2. Connect your wallet (if required for the agent)
-3. Select the agent you want to interact with
-4. Use the chat interface to send commands
-5. View transaction details and agent responses in real-time
-
-## 🔌 MCP Integration
+## 🔌 MCP Explained
 
 MCP (Model Context Protocol) makes it easy for on-chain agents to tap into external data and tools. Here's how it works: tools get registered with the MCP server, and agents can plug in to browse what's available, and start calling those tools whenever it makes sense. Agents may decide on their own when and how to use each tool, and they loop the results back into their flow, keeping everything running smoothly.
+
 Want to dig deeper? Check out the [official MCP docs](https://modelcontextprotocol.io/introduction).
+
+### 🤝 Our MCP Integrations
 
 Vibekit integrates MCP in three powerful ways:
 
-#### 🛠️ Built-in MCP Tools
+#### 1. Built-in MCP Tools
 
-Vibekit comes with a suite of ready-to-use MCP tools in the [mcp-tools](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools) directory:
+Vibekit comes with a suite of implemented MCP tools in the [mcp-tools](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools) directory:
 
 - Access real-time market data and on-chain information
 - Interact with DeFi protocols and smart contracts
 - Execute complex trading and liquidity operations
-- Bridge assets across different blockchain networks
-- Each tool is designed to be plug-and-play with any MCP-compatible agent
+- Each tool is designed to be easily integrated with any MCP-compatible agent
 
-#### 🤝 Framework Integration
+#### 2. Framework Integration
 
 Vibekit integrates with popular agent frameworks like Eliza, allowing them to:
 
@@ -303,7 +272,7 @@ Vibekit integrates with popular agent frameworks like Eliza, allowing them to:
 - Maintain their existing functionality while gaining new capabilities
 - Use Vibekit's pre-built tools without modifying their core architecture
 
-#### 🔄 Agent as MCP Server
+#### 3. Agent as MCP Server
 
 Every agent built with Vibekit is itself an MCP server, which means:
 
@@ -312,8 +281,12 @@ Every agent built with Vibekit is itself an MCP server, which means:
 - Agents can be both consumers and providers of MCP tools
 - This creates a network of interoperable agents
 
-You'll find our ready-to-go MCP tools and documentation in the [mcp-tools](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools) directory, great for building your own tools with minimal setup.
+### 🛠️ Creating Your Own MCP Tools
 
-## 🙌 Contribution
+You'll find a collection of ready-to-use MCP tools, along with step-by-step guidelines for creating your own, in our [mcp-tools](<(https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools)>) directory. This makes it easy to build and customize new tools with minimal setup.
 
-We welcome contributions from the community! If you'd like to help improve Vibekit —whether by adding new agent templates, adding new MCP tools, or fixing bugs— please check out our [Contributing Guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md). To show our appreciation, we're launching an incentive program that will reward valuable contributions. Join us in pushing the boundaries of DeFi innovation!
+## 💰 Contributions & Bounties
+
+We welcome contributions from the community! If you'd like to help improve Vibekit, please check out our [Contributing Guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md).
+
+To show our appreciation, we have launched an incentive program that rewards [valuable contributions](https://github.com/orgs/EmberAGI/projects/13) to the Vibekit. Checkout our [blog post]() to learn more!
