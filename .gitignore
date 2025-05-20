@@ -47,6 +47,7 @@ Cargo.lock
 .history/
 *~
 .*.swp
+.cursor/rules/scratchpad.mdc
 
 # Logs
 logs/
