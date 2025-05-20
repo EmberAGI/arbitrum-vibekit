@@ -24,12 +24,13 @@ import {
   type TransactionPlan,
 } from 'ember-mcp-tool-server';
 
-const ZodTokenUidSchema = z.object({
+export const ZodTokenUidSchema = z.object({
   chainId: z.string(),
   address: z.string(),
 });
+export type TokenUid = z.infer<typeof ZodTokenUidSchema>;
 
-const ZodTokenSchema = z
+export const ZodTokenSchema = z
   .object({
     tokenUid: ZodTokenUidSchema,
     name: z.string(),
@@ -39,8 +40,10 @@ const ZodTokenSchema = z
     isVetted: z.boolean(),
   })
   .passthrough();
+export type Token = z.infer<typeof ZodTokenSchema>;
 
-const ZodUserReserveSchema = z
+// Export the schema for testing
+export const ZodUserReserveSchema = z
   .object({
     token: ZodTokenSchema,
     underlyingBalance: z.string(),
@@ -51,8 +54,9 @@ const ZodUserReserveSchema = z
     totalBorrowsUsd: z.string(),
   })
   .passthrough();
+export type UserReserve = z.infer<typeof ZodUserReserveSchema>;
 
-const ZodLendingPositionSchema = z
+export const ZodLendingPositionSchema = z
   .object({
     userReserves: z.array(ZodUserReserveSchema),
     totalLiquidityUsd: z.string(),
@@ -65,21 +69,24 @@ const ZodLendingPositionSchema = z
     healthFactor: z.string(),
   })
   .passthrough();
+export type LendingPosition = z.infer<typeof ZodLendingPositionSchema>;
 
-const ZodPositionSchema = z
+export const ZodPositionSchema = z
   .object({
     lendingPosition: ZodLendingPositionSchema,
   })
   .passthrough();
+export type Position = z.infer<typeof ZodPositionSchema>;
 
 export const ZodGetWalletPositionsResponseSchema = z
   .object({
     positions: z.array(ZodPositionSchema),
   })
   .passthrough();
+export type GetWalletPositionsResponse = z.infer<typeof ZodGetWalletPositionsResponseSchema>;
 
 // Schema for the supply tool's nested JSON response
-const ZodSupplyResponseSchema = z
+export const ZodSupplyResponseSchema = z
   .object({
     tokenUid: ZodTokenUidSchema,
     amount: z.string(),
@@ -90,9 +97,9 @@ const ZodSupplyResponseSchema = z
   .passthrough();
 
 // Type for the supply tool response
-type SupplyResponse = z.infer<typeof ZodSupplyResponseSchema>;
+export type SupplyResponse = z.infer<typeof ZodSupplyResponseSchema>;
 
-type McpGetWalletPositionsResponse = z.infer<typeof ZodGetWalletPositionsResponseSchema>;
+export type McpGetWalletPositionsResponse = z.infer<typeof ZodGetWalletPositionsResponseSchema>;
 
 export interface TokenInfo {
   chainId: string;
@@ -112,11 +119,12 @@ export const LendingPreviewSchema = z
 export type LendingPreview = z.infer<typeof LendingPreviewSchema>;
 
 // Define shared artifact schema for lending transactions
-const LendingTransactionArtifactSchema = createTransactionArtifactSchema(LendingPreviewSchema);
+export const LendingTransactionArtifactSchema =
+  createTransactionArtifactSchema(LendingPreviewSchema);
 export type LendingTransactionArtifact = TransactionArtifact<LendingPreview>;
 
 // Schema for the withdraw tool's nested JSON response
-const ZodWithdrawResponseSchema = z
+export const ZodWithdrawResponseSchema = z
   .object({
     tokenUid: ZodTokenUidSchema,
     amount: z.string(),
@@ -127,10 +135,10 @@ const ZodWithdrawResponseSchema = z
   .passthrough();
 
 // Type for the withdraw tool response
-type WithdrawResponse = z.infer<typeof ZodWithdrawResponseSchema>;
+export type WithdrawResponse = z.infer<typeof ZodWithdrawResponseSchema>;
 
 // Schema for the borrow tool's nested JSON response
-const ZodBorrowResponseSchema = z
+export const ZodBorrowResponseSchema = z
   .object({
     currentBorrowApy: z.string(),
     liquidationThreshold: z.string(),
@@ -140,10 +148,10 @@ const ZodBorrowResponseSchema = z
   .passthrough();
 
 // Type for the borrow tool response
-type BorrowResponse = z.infer<typeof ZodBorrowResponseSchema>;
+export type BorrowResponse = z.infer<typeof ZodBorrowResponseSchema>;
 
 // Schema for the repay tool's nested JSON response
-const ZodRepayResponseSchema = z
+export const ZodRepayResponseSchema = z
   .object({
     tokenUid: ZodTokenUidSchema,
     amount: z.string(),
@@ -154,7 +162,7 @@ const ZodRepayResponseSchema = z
   .passthrough();
 
 // Type for the repay tool response
-type RepayResponse = z.infer<typeof ZodRepayResponseSchema>;
+export type RepayResponse = z.infer<typeof ZodRepayResponseSchema>;
 
 export interface HandlerContext {
   mcpClient: Client;
@@ -167,7 +175,7 @@ export interface HandlerContext {
   aaveContextContent: string;
 }
 
-type FindTokenResult =
+export type FindTokenResult =
   | { type: 'found'; token: TokenInfo }
   | { type: 'notFound' }
   | { type: 'clarificationNeeded'; options: TokenInfo[] };

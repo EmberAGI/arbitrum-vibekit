@@ -373,6 +373,12 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
     console.error('Agent started.');
   }
 
+  async stop(): Promise<void> {
+    if (this.mcpClient) {
+      await this.mcpClient.close();
+    }
+  }
+
   private async fetchAndCacheCapabilities(): Promise<McpGetCapabilitiesResponse> {
     if (!this.mcpClient) {
       throw new Error('MCP Client not initialized. Cannot fetch capabilities.');

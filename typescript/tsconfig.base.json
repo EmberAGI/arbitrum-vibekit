@@ -28,6 +28,9 @@
     "sourceMap": true,
     /* Path resolution */
     "baseUrl": "./",
+    
+    /* Output directories */
+    "outDir": "dist",
 
     /* Lib */
     "lib": [
