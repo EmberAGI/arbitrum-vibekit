@@ -1,5 +1,5 @@
 {
-  "name": "ai-chatbot",
+  "name": "vibekit-web-client",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -17,6 +17,9 @@
     "db:pull": "drizzle-kit pull",
     "db:check": "drizzle-kit check",
     "db:up": "drizzle-kit up",
+    "docker:compose:up": "docker compose up --build --no-log-prefix",
+    "docker:compose:build": "docker compose build --no-cache",
+    "docker:compose:down": "docker compose down",
     "test": "export PLAYWRIGHT=True && pnpm exec playwright test --workers=4"
   },
   "dependencies": {
