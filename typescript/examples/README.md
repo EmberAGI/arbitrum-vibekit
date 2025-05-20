@@ -2,7 +2,9 @@
 
 The `examples` directory contains ready-to-roll DeFi agents built with the Vibekit. These agents showcase how to deploy smart, autonomous on-chain agents in a few steps. Each agent doubles as an MCP tool, enabling agent-to-agent integration for powerful workflows.
 
-Want to vibe code your own custom agent? Jump to [Building Your Own Agent](#-building-your-own-agent) to get started.
+Many of the tools and operations these agents use are defined in the [`mcp-tools`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools) folder. If you're building a new agent or want to extend functionality, the `mcp-tools` directory is the place to define your tool logic and add new capabilities for your agents to use.
+
+Want to vibe code your own custom agent? Jump to [Building Your Own Agent](#️-building-your-own-agent) to get started.
 
 ## 🚀 Running an Existing Agent
 
