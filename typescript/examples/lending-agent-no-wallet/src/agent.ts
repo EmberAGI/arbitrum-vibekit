@@ -172,6 +172,7 @@ export function getChainConfigById(chainId: string): ChainConfig {
 
 export class Agent {
   private mcpClient: Client | null = null;
+  private transport: StdioClientTransport | null = null;
   private tokenMap: Record<string, Array<TokenInfo>> = {};
   private quicknodeSubdomain: string;
   private quicknodeApiKey: string;
@@ -200,7 +201,7 @@ export class Agent {
       console.error(`Found MCP tool server path: ${mcpToolPath}`);
 
       console.error(`Connecting to MCP server at ${process.env.EMBER_ENDPOINT}`);
-      const transport = new StdioClientTransport({
+      this.transport = new StdioClientTransport({
         command: 'node',
         args: [mcpToolPath],
         env: {
@@ -212,7 +213,7 @@ export class Agent {
       if (!this.mcpClient) {
         throw new Error('MCP Client was not initialized before attempting connection.');
       }
-      await this.mcpClient.connect(transport);
+      await this.mcpClient.connect(this.transport);
       console.error('MCP client connected successfully.');
     } catch (error) {
       console.error('Failed to initialize MCP client transport or connect:', error);
@@ -376,6 +377,9 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
   async stop(): Promise<void> {
     if (this.mcpClient) {
       await this.mcpClient.close();
+    }
+    if (this.transport) {
+      await this.transport.close();
     }
   }
 
@@ -599,26 +603,6 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       console.error(`generateText finished. Reason: ${finishReason}`);
       console.error(`LLM response text: ${text}`);
 
-      response.messages.forEach((msg, index) => {
-        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-          msg.content.forEach(part => {
-            if (part.type === 'tool-call') {
-              console.error(
-                `[LLM Request ${index}]: Tool Call - ${part.toolName} with args ${JSON.stringify(part.args)}`
-              );
-            }
-          });
-        } else if (msg.role === 'tool') {
-          if (Array.isArray(msg.content)) {
-            msg.content.forEach((toolResult: ToolResultPart) => {
-              console.error(`[Tool Result ${index} for ${toolResult.toolName} received]`);
-            });
-          }
-        } else if (msg.role === 'assistant') {
-          console.error(`[LLM Response ${index}]: ${msg.content}`);
-        }
-      });
-
       this.conversationHistory.push(...response.messages);
 
       let finalTask: Task | null = null;
@@ -631,13 +615,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
               typeof part.result === 'object' &&
               'id' in part.result
             ) {
-              console.error(`Processing tool result for ${part.toolName} from response.messages`);
               finalTask = part.result as Task;
-              console.error(`Task Result State: ${finalTask?.status?.state ?? 'N/A'}`);
-              const firstPart = finalTask?.status?.message?.parts[0];
-              const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';
-              console.error(`Task Result Message: ${messageText}`);
-              break;
             }
           }
         }
@@ -646,9 +624,6 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
       if (finalTask) {
         if (['completed', 'failed', 'canceled'].includes(finalTask.status.state)) {
-          console.error(
-            `Task finished with state ${finalTask.status.state}. Clearing conversation history.`
-          );
           this.conversationHistory = [];
         }
         return finalTask;
@@ -697,30 +672,6 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       openRouterApiKey: process.env.OPENROUTER_API_KEY!,
       aaveContextContent: this.aaveContextContent,
     };
-  }
-
-  private formatNumeric(
-    value: string | number | undefined,
-    minDecimals = 2,
-    maxDecimals = 2
-  ): string {
-    if (value === undefined) return 'N/A';
-    try {
-      const num = typeof value === 'string' ? parseFloat(value) : value;
-      if (isNaN(num)) return 'N/A';
-
-      if (Math.abs(num) < 1e-6 && num !== 0) {
-        return num.toExponential(maxDecimals);
-      }
-
-      return num.toLocaleString(undefined, {
-        minimumFractionDigits: minDecimals,
-        maximumFractionDigits: maxDecimals,
-      });
-    } catch (e) {
-      console.error(`Error formatting numeric value: ${value}`, e);
-      return 'N/A';
-    }
   }
 
   private async _loadAaveDocumentation(): Promise<void> {

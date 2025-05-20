@@ -324,9 +324,8 @@ server.tool(
   "borrow",
   "Borrow tokens using Ember On-chain Actions",
   borrowSchema,
-  async (params: BorrowParams, extra: any) => {
+  async (params: BorrowParams) => {
     console.error(`Executing borrow tool with params:`, params);
-    console.error(`Extra object for borrow:`, extra);
 
     try {
       const response = await emberClient.borrowTokens({
@@ -381,9 +380,8 @@ server.tool(
   "repay",
   "Repay borrowed tokens using Ember On-chain Actions",
   repaySchema,
-  async (params: RepayParams, extra: any) => {
+  async (params: RepayParams) => {
     console.error(`Executing repay tool with params:`, params);
-    console.error(`Extra object for repay:`, extra);
 
     try {
       const response = await emberClient.repayTokens({
@@ -435,9 +433,8 @@ server.tool(
   "supply",
   "Supply tokens using Ember On-chain Actions",
   supplySchema,
-  async (params: SupplyParams, extra: any) => {
+  async (params: SupplyParams) => {
     console.error(`Executing supply tool with params:`, params);
-    console.error(`Extra object for supply:`, extra);
 
     try {
       const response = await emberClient.supplyTokens({
@@ -492,9 +489,8 @@ server.tool(
   "withdraw",
   "Withdraw tokens using Ember On-chain Actions",
   withdrawSchema,
-  async (params: WithdrawParams, extra: any) => {
+  async (params: WithdrawParams) => {
     console.error(`Executing withdraw tool with params:`, params);
-    console.error(`Extra object for withdraw:`, extra);
 
     try {
       const response = await emberClient.withdrawTokens({
@@ -549,9 +545,8 @@ server.tool(
   "getCapabilities",
   "Get Ember On-chain Actions capabilities",
   getCapabilitiesSchema,
-  async (params: GetCapabilitiesParams, extra: any) => {
+  async (params: GetCapabilitiesParams) => {
     console.error(`Executing getCapabilities tool with params:`, params);
-    console.error(`Extra object for getCapabilities:`, extra);
 
     try {
       const response = await emberClient.getCapabilities({ type: params.type });
@@ -585,9 +580,8 @@ server.tool(
   "getUserPositions",
   "Get user wallet positions using Ember On-chain Actions",
   getUserPositionsSchema,
-  async (params: GetUserPositionsParams, extra: any) => {
+  async (params: GetUserPositionsParams) => {
     console.error(`Executing getUserPositions tool with params:`, params);
-    console.error(`Extra object for getUserPositions:`, extra);
 
     try {
       const response = await emberClient.getWalletPositions({
@@ -623,9 +617,8 @@ server.tool(
   "getTokens",
   "Get a list of supported tokens using Ember On-chain Actions",
   getTokensSchema,
-  async (params: GetTokensParams, extra: any) => {
+  async (params: GetTokensParams) => {
     console.error(`Executing getTokens tool with params:`, params);
-    console.error(`Extra object for getTokens:`, extra);
 
     try {
       const response = await emberClient.getTokens({
@@ -648,9 +641,8 @@ server.tool(
   "supplyLiquidity",
   "Supply liquidity to a token pair using Ember On-chain Actions.",
   supplyLiquiditySchema,
-  async (params: SupplyLiquidityParams, extra: any) => {
+  async (params: SupplyLiquidityParams) => {
     console.error(`Executing supplyLiquidity tool with params:`, params);
-    console.error(`Extra object for supplyLiquidity:`, extra);
 
     try {
       const token0: TokenIdentifier = {
@@ -724,9 +716,8 @@ server.tool(
   "withdrawLiquidity",
   "Withdraw liquidity from a position using Ember On-chain Actions.",
   withdrawLiquiditySchema,
-  async (params: WithdrawLiquidityParams, extra: any) => {
+  async (params: WithdrawLiquidityParams) => {
     console.error(`Executing withdrawLiquidity tool with params:`, params);
-    console.error(`Extra object for withdrawLiquidity:`, extra);
 
     try {
       const response = await emberClient.withdrawLiquidity({
@@ -782,9 +773,8 @@ server.tool(
   "getLiquidityPools",
   "Get a list of available liquidity pools using Ember On-chain Actions.",
   getLiquidityPoolsSchema,
-  async (params: GetLiquidityPoolsParams, extra: any) => {
+  async (params: GetLiquidityPoolsParams) => {
     console.error(`Executing getLiquidityPools tool with params:`, params);
-    console.error(`Extra object for getLiquidityPools:`, extra);
     try {
       // Pass undefined if no args/metadata needed
       const response: GetLiquidityPoolsResponse =
@@ -819,12 +809,11 @@ server.tool(
   "getUserLiquidityPositions",
   "Get user's liquidity positions using Ember On-chain Actions.",
   getUserLiquidityPositionsSchema,
-  async (params: GetUserLiquidityPositionsParams, extra: any) => {
+  async (params: GetUserLiquidityPositionsParams) => {
     console.error(
       `Executing getUserLiquidityPositions tool with params:`,
       params
     );
-    console.error(`Extra object for getUserLiquidityPositions:`, extra);
 
     try {
       // Use correct argument name: supplierAddress
@@ -863,9 +852,8 @@ server.tool(
   "getYieldMarkets",
   "Get Yield markets",
   getYieldMarketsSchema,
-  async (params: GetYieldMarketsParams, extra: any) => {
+  async (params: GetYieldMarketsParams) => {
     console.error(`Executing getYieldMarkets tool with params:`, params);
-    console.error(`Extra object for getYieldMarkets:`, extra);
 
     try {
       const response = await emberClient.getYieldMarkets({
@@ -909,6 +897,46 @@ async function main() {
     console.error("Failed to start or connect the MCP server:", error);
     process.exit(1);
   }
+
+  // Graceful shutdown
+  const cleanup = async () => {
+    console.error("Shutting down Ember MCP stdio server...");
+    let exitCode = 0;
+    try {
+      if (emberClient) {
+        // If emberClient.close() is synchronous and starts the closing process:
+        emberClient.close(); 
+        console.error("Ember gRPC client close initiated.");
+        // Add a small delay to allow gRPC to start closing connections, if necessary.
+        // This is a bit of a workaround; ideally, the SDK would provide a promise for full closure.
+        await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay
+        console.error("Assumed Ember gRPC client had time to process close.");
+      }
+      if (server) {
+        await server.close(); // McpServer should have a close method that returns a Promise
+        console.error("MCP server closed.");
+      }
+    } catch (err) {
+      console.error("Error during shutdown:", err);
+      exitCode = 1;
+    } finally {
+      console.error(`Exiting Ember MCP stdio server with code ${exitCode}.`);
+      process.exit(exitCode);
+    }
+  };
+
+  process.on("SIGINT", async () => {
+    console.error("Received SIGINT.");
+    await cleanup();
+  });
+  process.on("SIGTERM", async () => {
+    console.error("Received SIGTERM.");
+    await cleanup();
+  });
+  process.on("SIGUSR2", async () => { // For nodemon restarts
+    console.error("Received SIGUSR2.");
+    await cleanup();
+  });
 }
 
 // Run the server

@@ -24,7 +24,7 @@ export function parseMcpToolResponse<T>(
 
   // If the MCP tool signaled an error, extract and throw its message
   if (envelope.isError) {
-    if (envelope.content.length === 0) {
+    if (!envelope.content || envelope.content.length === 0) {
       throw new Error("MCP tool error without content.");
     }
     // Extract text from first content part and throw
@@ -35,7 +35,7 @@ export function parseMcpToolResponse<T>(
   // Continue with normal content parsing
   const { content } = envelope;
 
-  if (content.length === 0) {
+  if (!content || content.length === 0) {
     throw new Error("MCP response content is empty.");
   }
   // Validate and extract 'text' from the first content item

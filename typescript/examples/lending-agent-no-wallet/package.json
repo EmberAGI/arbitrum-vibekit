@@ -8,14 +8,16 @@
     "build": "tsc --build && cpx \"encyclopedia/**/*\" dist/encyclopedia",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
+    "test": "pnpm --filter arbitrum-vibekit build && pnpm --filter ember-schemas build && pnpm --filter test-utils build && NODE_OPTIONS=\"--no-warnings\" mocha --require tsx --require mocha-suppress-logs --exit --config ../../.mocharc.json 'test/**/*.test.ts'",
+    "test:ts": "tsc --project tsconfig.test.json",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
     "docker:build": "docker build -t lending-agent-no-wallet ../../",
-    "docker:run": "docker run --env-file .env -p 3001:3001 lending-agent-no-wallet",
-    "docker:compose:up": "docker compose up --build --no-log-prefix",
+    "docker:run": "docker run -p 8080:8080 --env-file .env lending-agent-no-wallet",
+    "docker:compose:up": "docker compose up -d",
     "docker:compose:build": "docker compose build --no-cache",
     "docker:compose:down": "docker compose down",
-    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\" \"test/**/*.{ts,tsx,js,jsx}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\" \"test/**/*.{ts,tsx,js,jsx}\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.5.0",
@@ -27,16 +29,23 @@
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "ember-mcp-tool-server": "workspace:*",
+    "ember-schemas": "workspace:*",
     "express": "^4.21.2",
     "viem": "^2.26.3",
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@types/chai": "^4.3.20",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^20.10.0",
+    "chai": "^4.5.0",
     "cpx": "^1.5.0",
+    "mocha": "^10.8.2",
+    "mocha-suppress-logs": "^0.3.1",
     "prettier": "^3.5.3",
+    "test-utils": "workspace:*",
     "tsx": "^4.6.2"
   }
 }

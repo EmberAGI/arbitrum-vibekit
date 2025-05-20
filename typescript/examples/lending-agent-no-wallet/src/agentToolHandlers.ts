@@ -42,7 +42,6 @@ export const ZodTokenSchema = z
   .passthrough();
 export type Token = z.infer<typeof ZodTokenSchema>;
 
-// Export the schema for testing
 export const ZodUserReserveSchema = z
   .object({
     token: ZodTokenSchema,
