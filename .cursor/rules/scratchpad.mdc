@@ -7,111 +7,19 @@ alwaysApply: true
 
 ## Background and Motivation
 
-We want to standardize transaction handling across our entire agent ecosystem by leveraging the `transactions` parameter supplied by the MCP tool context. The Pendle agent already follows this pattern—producing transaction artifacts without signing or sending on-chain. To reduce complexity, decouple signing, and ensure consistency, we will refactor all other agents to consume and propagate the `transactions` array provided by MCP.
+
 
 ## Key Challenges and Analysis
 
-1. Inventory: Agents are structured differently (Pendle, liquidity, limit-order, staking, etc.) and embed signing logic in various modules.
-2. Schema: We need a unified `TransactionArtifact` or `TransactionPlan` type (Zod schema/TS interface) to represent the `txPlan` array across agents, while retaining historical field names (`txPlan`, `txPreview`) for backward compatibility.
-3. Removal of signing logic: Each agent currently imports wallet dependencies (`viem`, `LocalAccount`, `mnemonicToAccount`) and directly signs and submits transactions.
-4. Tool interface changes: MCP tool definitions and JSON schemas must include the `transactions` parameter in request/response shapes.
-5. Backward compatibility: Downstream consumers expect execution receipts; we must communicate the transition and update tests.
-6. Testing: All existing unit and integration tests that assert on receipts need updating to validate the `transactions` artifacts.
-7. Documentation and deployment: README, Dockerfiles, CI/CD pipelines must be updated to drop MNEMONIC and reflect the new no-wallet pattern.
-8. A2A compliance: Every tool handler (agent side and MCP server) must return a Task object conforming to the A2A JSON schema, stringified inside the `content` array of the MCP response. Past errors (e.g., Pendle) show agents sometimes returned data directly instead of a Task.
+
 
 ## High-level Task Breakdown
 
-- [x] T1: Review Pendle agent usage of the `transactions` parameter.
-    Success: Document where and how the `transactions` parameter is consumed and propagated in Pendle agent code.
-- [x] T2: Review other no-wallet agents (liquidity, limit-order, staking, etc.) to identify how they implement and expose transaction artifacts.
-    Success: Summarize the common patterns and differences in transactions handling across these agents.
-- [x] T3: Based on T1 and T2 findings, draft a shared `TransactionPlan` schema and TypeScript types for use across agents.
-    Success: A single shared schema and TS type that all agents can consume for transaction plans.
-- [x] T4: Refactor emberai-mcp tool server to inject `chainId` into each `TransactionPlan` object in the response.
-    Subtasks:
-    - [x] T4.1: Update server to map `response.transactions` to include `chainId` property on each transaction plan.
-    - [x] T4.2: Ensure `parseMcpToolResponse` and tool payloads still parse nested JSON correctly.
-    Success: Clients receive each transaction plan with `chainId` embedded, removing agents' manual injection.
-- [x] T5: Extract common parsing utilities (runtime A2A validation skipped)
-    Subtasks:
-    - [x] T5.1: Extract shared `parseMcpToolResponse` into the arbitrum-agent library.
-    - [x] T5.2: Remove duplicate parsing utilities from agent code, updating agents to import and use the shared function.
-    - [ ] T5.3: SKIPPED: runtime A2A validation helper omitted per user direction.
-    - [ ] T5.4: SKIPPED: runtime A2A validation usage omitted per user direction.
-    Success: Agents consume parsing logic from a single source and rely on strong Task typing; no runtime A2A validation.
-- [x] T6: Audit other MCP-related utilities for consolidation in the library.
-    Success: No duplicated MCP code across agents.
-- [ ] T7: Refactor no-wallet agents to use shared transaction schemas and define standardized artifact structures.
-    Description: This task focuses on ensuring all no-wallet agents (`pendle-agent`, `liquidity-agent-no-wallet`, `lending-agent-no-wallet`, `swapping-agent-no-wallet`) consistently use the `TransactionPlanSchema` and `TransactionPlan` type from `arbitrum-vibekit` and adopt a standardized approach for their output task artifacts containing `txPlan` and `txPreview`.
-    Subtasks:
-    - [x] T7.1: Refactor pendle-agent to use shared transaction schema and ensure completed tasks include artifacts.
-    - [ ] T7.2: Refactor liquidity-agent-no-wallet to always include artifacts for empty cases and remove bogus properties.
-    - [x] T7.3: Refactor lending-agent-no-wallet to use shared transaction schema and DataPart artifacts in borrow, repay, supply, and withdraw handlers.
-    - [x] T7.4: Refactor swapping-agent-no-wallet.
-    - [ ] T7.5: Final check: Compile and lint all no-wallet agents.
-- [x] T8: Refactor agents to import shared parsing and schema from `arbitrum-vibekit`.
-    Subtasks:
-    - [x] T8.1: Update imports of `TransactionPlanSchema` and `TransactionPlan` to come from the `arbitrum-vibekit` package (all no-wallet agents refactored; no local definitions remain).
-    - [x] T8.2: Update imports of `parseMcpToolResponse` to come from the `arbitrum-vibekit` package (should be largely done by T5).
-    Success: No relative imports for these utilities; all MCP-related/transaction plan imports come from the `arbitrum-vibekit` package.
-- [ ] T9: Plan test migration and CI/CD updates.
-    Subtasks:
-    - [ ] T9.1: Audit existing tests in each agent that assert on receipts or `txPlan` keys.
-    - [ ] T9.2: Update tests to assert on the `txPlan` field and correct artifact shapes.
-    - [ ] T9.3: Remove wallet-related environment variables and setup from CI workflows.
-    - [ ] T9.4: Update Dockerfiles and `docker-compose.yml` to drop `MNEMONIC` and wallet env vars.
-    Success: All tests pass in CI with no-wallet environment and documentation updated.
+
 
 ## Project Status Board
 
-- [x] T1: Review Pendle agent transactions
-- [x] T2: Review other no-wallet agents
-- [x] T3: Draft shared schema
-- [x] T4: Refactor emberai-mcp server
-- [x] T4.1: Update server to map `response.transactions` to include `chainId`
-- [x] T4.2: Ensure `parseMcpToolResponse` and tool payloads still parse nested JSON correctly
-- [x] T5: Extract common parsing utilities (runtime A2A validation skipped)
-- [x] T6: Consolidate MCP utilities (including extraction of `validateTransactionPlans` and updating no-wallet agents to use it)
-- [ ] T7: Refactor no-wallet agents to use shared transaction schemas and define standardized artifact structures.
-- [x] T8: Refactor agent imports
-- [ ] T9: Plan test & CI/CD updates
+
 
 ## Executor's Feedback or Assistance Requests
 
-- Completed T1: Reviewed Pendle agent usage of the `transactions` parameter.
-  * HandlerContext provides `executeAction(actionName: string, transactions: TransactionPlan[])` stub in `agent.ts` (lines 457-464). This stub logs and returns a message without on-chain execution.
-  * In `agentToolHandlers.ts`, `parseSwapTokensResponse` (lines 104-137) validates the `transactions` array from the MCP tool response and ensures each tx has `to` and `data` fields.
-  * In `handleSwapTokens` (lines 264-303), the agent calls the MCP `swapTokens` tool, receives `txPlan` (array of transactions), maps over them to add `chainId`, and returns a Task artifact named `swap-yield-transaction` containing `{ txPlan, txPreview }`.
-  * No local signing or RPC calls are made; the agent purely forwards the `transactions` provided by MCP.
-  * Refactored `handleSwapTokens` in `pendle-agent` to use `SwapResponseSchema` for Zod-based validation of chainId and transactions, removing redundant manual runtime checks. Builds and lints cleanly.
-- Completed T2: Reviewed other no-wallet agents (liquidity, swapping, lending).
-  * All no-wallet agents define a base `TransactionEmberSchema` (to, data, value) and extend it to `TransactionResponseSchema` (adding `chainId`).
-  * They each include a `TransactionArtifactSchema` wrapping a domain-specific preview (`txPreview`) and the `txPlan` array.
-  * Handlers call `context.mcpClient.callTool`, parse nested JSON if needed, validate raw transactions, add `chainId` per transaction, and build a Task artifact containing `{ txPreview, txPlan }`.
-  * Artifact names differ: `liquidity-transaction`, `transaction-plan`, `swap-yield-transaction`, etc.
-  * Preview schemas and validation utilities vary per agent (e.g., `validateTransactions`, `parseSwapTokensResponse`).
-  * None perform any on-chain signing; they all rely on the MCP transactions array.
-- Completed T3.1: Cataloged all transaction fields in no-wallet agents: `to`, `data`, `value`, `chainId`.
-- Completed T3.2: Agreed to keep artifact field names `txPlan` and `txPreview`, with each transaction in `txPlan` carrying a `chainId`.
-- Completed T3.3 & T3.4: Created `TransactionPlan` schema.
-- Completed T4.1: Updated emberai-mcp tool server to inject `chainId` into each TransactionPlan for all transaction-producing tool handlers.
-- Completed T4.2: Verified that nested JSON responses from the server, including injected chainIds, can be parsed by existing `parseMcpToolResponse` utilities without errors.
-- Completed T5.1: Confirmed that `parseMcpToolResponse` is implemented in the `arbitrum-vibekit` package (in `src/mcp-utils.ts`) and all agents have been updated to import it from there.
-- Completed T5.2: Removed local parsing utilities from `pendle-agent`, `swapping-agent`, and `lending-agent-no-wallet` handler modules, replaced with wrappers around shared `parseMcpToolResponse` and added `arbitrum-vibekit` workspace dependency.
-- Completed T5: Extract common parsing utilities (runtime A2A validation skipped).
-- Completed T6: All subtasks for T6 are complete. `validateTransactionPlans` was extracted to `arbitrum-vibekit`. `lending-agent-no-wallet` and `swapping-agent-no-wallet` were updated to import and use this shared utility, and their local validation code was removed.
-- Additionally, applied necessary TypeScript fixes (type-only imports, non-null assertions) to the wallet-based `swapping-agent` (`typescript/examples/swapping-agent/src/agent.ts` and `typescript/examples/swapping-agent/src/agentToolHandlers.ts`). This resolved previous build errors, ensuring the entire repository compiles cleanly.
-- Proceeding to T7 (Planner mode) to outline detailed refactoring steps for no-wallet agents.
-- Completed T6: Audit other MCP-related utilities for consolidation in the library.
-    Subtasks:
-    - [x] T6.1: Extracted `validateTransactions` into `arbitrum-vibekit` as `validateTransactionPlans`, using shared `TransactionPlanSchema`.
-    - [x] T6.2: Updated `lending-agent-no-wallet` and `swapping-agent-no-wallet` to import `validateTransactionPlans` from `arbitrum-vibekit` instead of defining it locally.
-    - [x] T6.3: Removed redundant local validation code from `lending-agent-no-wallet` and `swapping-agent-no-wallet` after switching consumption.
-    Success: No duplicated MCP code across agents. `validateTransactionPlans` is centralized. No-wallet agents consuming it build cleanly. Entire repository builds cleanly after fixes to wallet-based `swapping-agent`.
-- Completed T7.2: Updated `handleGetLiquidityPools` and `handleGetUserLiquidityPositions` in liquidity-agent-no-wallet to always return artifacts (inlined empty-case artifacts) and resolved syntax errors via inline type assertions.
-- Completed T7.1: Verified `pendle-agent` uses shared `TransactionPlanSchema` and `createTransactionArtifactSchema`, and returns proper artifacts in all completed Task states, with no missing or bogus properties.
-- Completed T7.3: Updated `handleBorrow`, `handleRepay`, `handleSupply`, and `handleWithdraw` to use `TransactionPlan[]`, `LendingTransactionArtifact`, and proper `DataPart` casting. Builds cleanly.
-- Completed T7.4: Updated swapping-agent-no-wallet to use shared TransactionPlan, removed local schemas, and cast artifacts for DataPart compatibility. All linter errors resolved.
-- Completed T8.1: All no-wallet agents now import `TransactionPlanSchema` and `TransactionPlan` from `arbitrum-vibekit` with no local definitions remaining. Next: T8.2 (update imports of `parseMcpToolResponse`).
-- Completed T8.2: All no-wallet agents now import `parseMcpToolResponse` from `arbitrum-vibekit` with no local definitions remaining. All builds pass cleanly.
