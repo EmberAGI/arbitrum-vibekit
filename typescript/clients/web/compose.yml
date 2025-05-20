@@ -1,0 +1,40 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatbot
+    env_file:
+      - .env
+    ports:
+      - 3000:3000
+    depends_on:
+      - db
+      # - storage
+
+  db:
+    image: postgres:17
+    user: postgres
+    environment:
+      POSTGRES_USER: chatbot
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: chatbot
+    ports:
+      - 5432:5432
+    volumes:
+      - db_data:/var/lib/postgresql/data
+  # storage:
+  #   image: minio/minio
+  #   user: minio
+  #   environment:
+  #     MINIO_ROOT_USER: minioadmin
+  #     MINIO_ROOT_PASSWORD: minioadmin
+  #   ports:
+  #     - 9000:9000
+  #   command: server /data
+  #   volumes:
+  #     - storage_data:/data
+  #   restart: always
+
+volumes:
+  db_data: # storage_data:
