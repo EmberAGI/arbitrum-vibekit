@@ -30,6 +30,8 @@ Vibekit is structured as a monorepo with TypeScript at its core, with a Rust imp
 ```
 Vibekit/
 ├── typescript/
+|   └── clients/
+|       └── web/
 │   └── examples/
 │       └── lending-agent-no-wallet/
 │       └── liquidity-agent-no-wallet/
@@ -47,6 +49,8 @@ Vibekit/
 ├── LICENSE
 ├── README.md
 ```
+
+- `clients/`: Clients for front-end interaction with agents.
 
 - `examples/`: Playground for different agent templates.
 
