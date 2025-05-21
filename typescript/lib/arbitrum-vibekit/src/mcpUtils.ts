@@ -15,14 +15,14 @@ export function parseMcpToolResponseText(rawResponse: unknown): string {
   const { content, isError } = CallToolResultSchema.parse(rawResponse);
 
   if (isError) {
-    if (content.length > 0) {
+    if (content && content.length > 0) {
       const { text } = TextContentSchema.parse(content[0]);
       throw new Error(text);
     }
     throw new Error("MCP response is an error.");
   }
 
-  if (content.length === 0) {
+  if (!content || content.length === 0) {
     throw new Error("MCP response content is empty.");
   }
   

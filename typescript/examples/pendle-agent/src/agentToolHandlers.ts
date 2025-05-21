@@ -233,7 +233,7 @@ export async function handleSwapTokens(
         parts: [
           {
             type: 'text',
-            text: `Swap transaction plan prepared (${txs.length} txs). Please review and execute.`,
+            text: `Swap transaction plan prepared (${transactions.length} txs). Please review and execute.`,
           },
         ],
       },

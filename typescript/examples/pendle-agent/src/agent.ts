@@ -19,7 +19,7 @@ import {
   GetPendleMarketsRequestSchema,
   GetYieldMarketsResponseSchema,
   SwapTokensSchema,
-  type PendleAgentToken,
+  GetTokensResponseSchema,
   type YieldMarket,
   type GetYieldMarketsResponse,
 } from 'ember-schemas';
@@ -196,28 +196,17 @@ Never respond in markdown, always use plain text. Never add links to your respon
         },
       });
 
-      // Define a schema for token response validation that matches GetTokensResponse structure
-      const GetTokensResponseSchema = z.object({
-        tokens: z.array(
-          z.object({
-            symbol: z.string().optional(),
-            tokenUid: z
-              .object({
-                chainId: z.string(),
-                address: z.string(),
-              })
-              .optional(),
-          })
-        ),
-      });
+      const parsedResult = parseMcpToolResponsePayload(result, GetTokensResponseSchema);
+      
+      const tokensArray = Array.isArray(parsedResult) 
+        ? parsedResult 
+        : (parsedResult.tokens || []);
 
-      const parsedTokens = parseMcpToolResponsePayload(result, GetTokensResponseSchema);
-
-      if (parsedTokens && Array.isArray(parsedTokens)) {
+      if (tokensArray.length > 0) {
         this.tokenMap = {};
         this.availableTokens = [];
 
-        parsedTokens.forEach(token => {
+        tokensArray.forEach(token => {
           if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
             if (!this.tokenMap[token.symbol]) {
               this.tokenMap[token.symbol] = [];
