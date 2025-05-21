@@ -26,6 +26,18 @@ import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
 import type { Task } from 'a2a-samples-js/schema';
 import { createRequire } from 'module';
+import {
+  AskEncyclopediaSchema,
+  McpGetCapabilitiesResponseSchema,
+  type McpGetCapabilitiesResponse,
+  SwapTokensSchema,
+  McpCapabilityTokenSchema,
+  McpCapabilitySchema,
+  McpSingleCapabilityEntrySchema,
+  type SwapTokensArgs,
+  type AskEncyclopediaArgs,
+  type McpCapabilityToken,
+} from 'ember-schemas';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -35,71 +47,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const CACHE_FILE_PATH = path.join(__dirname, '.cache', 'swap_capabilities.json');
 
-const SwapTokensSchema = z.object({
-  fromToken: z
-    .string()
-    .describe(
-      'The symbol of the token to swap from (source token). It may be lowercase or uppercase.'
-    ),
-  toToken: z
-    .string()
-    .describe(
-      'The symbol of the token to swap to (destination token). It may be lowercase or uppercase.'
-    ),
-  amount: z
-    .string()
-    .describe(
-      'The amount of the token to swap from. It will be in a human readable format, e.g. The amount \"1.02 ETH\" will be 1.02.'
-    ),
-  fromChain: z.string().optional().describe('Optional chain name for the source token.'),
-  toChain: z.string().optional().describe('Optional chain name for the destination token.'),
-});
-type SwapTokensArgs = z.infer<typeof SwapTokensSchema>;
-
-const AskEncyclopediaSchema = z.object({
-  question: z.string().describe('The question to ask the Camelot DEX expert.'),
-});
-
-const McpCapabilityTokenSchema = z
-  .object({
-    symbol: z.string().optional(),
-    name: z.string().optional(),
-    decimals: z.number().optional(),
-    tokenUid: z
-      .object({
-        chainId: z.string().optional(),
-        address: z.string().optional(),
-      })
-      .optional(),
-  })
-  .passthrough();
-
-const McpCapabilitySchema = z
-  .object({
-    protocol: z.string().optional(),
-    capabilityId: z.string().optional(),
-    supportedTokens: z.array(McpCapabilityTokenSchema).optional(),
-  })
-  .passthrough();
-
-const McpSingleCapabilityEntrySchema = z
-  .object({
-    swapCapability: McpCapabilitySchema.optional(),
-  })
-  .passthrough();
-
-const McpGetCapabilitiesResponseSchema = z.object({
-  capabilities: z.array(McpSingleCapabilityEntrySchema),
-});
-
-type McpGetCapabilitiesResponse = z.infer<typeof McpGetCapabilitiesResponseSchema>;
-
 function logError(...args: unknown[]) {
   console.error(...args);
 }
 
 type SwappingToolSet = {
-  swapTokens: Tool<typeof SwapTokensSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
+  swapTokens: Tool<typeof SwapTokensSchema, Task>;
   askEncyclopedia: Tool<
     typeof AskEncyclopediaSchema,
     Awaited<ReturnType<typeof handleAskEncyclopedia>>
@@ -357,7 +310,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
 
       this.toolSet = {
         swapTokens: tool({
-          description: 'Swap or convert tokens. Requires the fromToken, toToken, and amount.',
+          description: 'Swap or convert tokens.',
           parameters: SwapTokensSchema,
           execute: async args => {
             try {

@@ -1,5 +1,4 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { z } from 'zod';
 import {
   handleBorrow,
   handleRepay,
@@ -30,6 +29,16 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { createRequire } from 'module';
 import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
+import {
+  LendingGetCapabilitiesResponseSchema,
+  McpTextWrapperSchema,
+  BorrowRepaySupplyWithdrawSchema,
+  GetUserPositionsSchema,
+  LendingAskEncyclopediaSchema,
+  type LendingGetCapabilitiesResponse,
+  type McpTextWrapper,
+} from 'ember-schemas';
+import { z } from 'zod';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,77 +48,10 @@ const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-const ZodTokenUidSchema = z.object({
-  chainId: z.string().optional(),
-  address: z.string().optional(),
-});
-
-const ZodTokenSchema = z
-  .object({
-    symbol: z.string().optional(),
-    name: z.string().optional(),
-    decimals: z.number().optional(),
-    tokenUid: ZodTokenUidSchema.optional(),
-  })
-  .passthrough();
-
-const ZodLendingCapabilitySchema = z
-  .object({
-    capabilityId: z.string().optional(),
-    currentSupplyApy: z.string().optional(),
-    currentBorrowApy: z.string().optional(),
-    underlyingToken: ZodTokenSchema.optional(),
-    maxLtv: z.string().optional(),
-    liquidationThreshold: z.string().optional(),
-  })
-  .passthrough();
-
-const ZodCapabilitySchema = z
-  .object({
-    lendingCapability: ZodLendingCapabilitySchema.optional(),
-  })
-  .passthrough();
-
-const ZodGetCapabilitiesResponseSchema = z
-  .object({
-    capabilities: z.array(ZodCapabilitySchema),
-  })
-  .passthrough();
-
-type McpGetCapabilitiesResponse = z.infer<typeof ZodGetCapabilitiesResponseSchema>;
-
-const ZodMcpTextWrapperSchema = z.object({
-  content: z
-    .array(
-      z.object({
-        type: z.literal('text'),
-        text: z.string(),
-      })
-    )
-    .min(1),
-});
-
 const TokenInfoSchema = z.object({
   chainId: z.string(),
   address: z.string(),
   decimals: z.number(),
-});
-
-const BorrowRepaySupplyWithdrawSchema = z.object({
-  tokenName: z
-    .string()
-    .describe(
-      "The symbol of the token (e.g., 'USDC', 'WETH'). Must be one of the available tokens."
-    ),
-  amount: z
-    .string()
-    .describe('The amount of the token to use, as a string representation of a number.'),
-});
-
-const GetUserPositionsSchema = z.object({});
-
-const AskEncyclopediaSchema = z.object({
-  question: z.string().describe('The question to ask the Aave encyclopedia.'),
 });
 
 function logError(...args: unknown[]) {
@@ -127,7 +69,7 @@ type LendingToolSet = {
   supply: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
   withdraw: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
   getUserPositions: Tool<typeof GetUserPositionsSchema, Task>;
-  askEncyclopedia: Tool<typeof AskEncyclopediaSchema, Task>;
+  askEncyclopedia: Tool<typeof LendingAskEncyclopediaSchema, Task>;
 };
 
 interface ChainConfig {
@@ -172,7 +114,6 @@ export function getChainConfigById(chainId: string): ChainConfig {
 
 export class Agent {
   private mcpClient: Client | null = null;
-  private transport: StdioClientTransport | null = null;
   private tokenMap: Record<string, Array<TokenInfo>> = {};
   private quicknodeSubdomain: string;
   private quicknodeApiKey: string;
@@ -201,7 +142,7 @@ export class Agent {
       console.error(`Found MCP tool server path: ${mcpToolPath}`);
 
       console.error(`Connecting to MCP server at ${process.env.EMBER_ENDPOINT}`);
-      this.transport = new StdioClientTransport({
+      const transport = new StdioClientTransport({
         command: 'node',
         args: [mcpToolPath],
         env: {
@@ -213,7 +154,7 @@ export class Agent {
       if (!this.mcpClient) {
         throw new Error('MCP Client was not initialized before attempting connection.');
       }
-      await this.mcpClient.connect(this.transport);
+      await this.mcpClient.connect(transport);
       console.error('MCP client connected successfully.');
     } catch (error) {
       console.error('Failed to initialize MCP client transport or connect:', error);
@@ -226,7 +167,7 @@ export class Agent {
     this.toolSet = {
       borrow: tool({
         description:
-          'Borrow a token. Provide the token name (e.g., USDC, WETH) and a human-readable amount.',
+          'Borrow a token.',
         parameters: BorrowRepaySupplyWithdrawSchema,
         execute: async args => {
           console.error('Vercel AI SDK calling handler: borrow', args);
@@ -239,7 +180,7 @@ export class Agent {
         },
       }),
       repay: tool({
-        description: 'Repay a borrowed token. Provide the token name and a human-readable amount.',
+        description: 'Repay a borrowed token.',
         parameters: BorrowRepaySupplyWithdrawSchema,
         execute: async args => {
           console.error('Vercel AI SDK calling handler: repay', args);
@@ -253,7 +194,7 @@ export class Agent {
       }),
       supply: tool({
         description:
-          'Supply (deposit) a token. Provide the token name and a human-readable amount.',
+          'Supply (deposit) a token.',
         parameters: BorrowRepaySupplyWithdrawSchema,
         execute: async args => {
           console.error('Vercel AI SDK calling handler: supply', args);
@@ -267,7 +208,7 @@ export class Agent {
       }),
       withdraw: tool({
         description:
-          'Withdraw a previously supplied token. Provide the token name and a human-readable amount.',
+          'Withdraw a previously supplied token.',
         parameters: BorrowRepaySupplyWithdrawSchema,
         execute: async args => {
           console.error('Vercel AI SDK calling handler: withdraw', args);
@@ -295,7 +236,7 @@ export class Agent {
       askEncyclopedia: tool({
         description:
           'Ask a question about Aave to retrieve specific information about the protocol using embedded documentation.',
-        parameters: AskEncyclopediaSchema,
+        parameters: LendingAskEncyclopediaSchema,
         execute: async args => {
           console.error('Vercel AI SDK calling handler: askEncyclopedia', args);
           try {
@@ -315,11 +256,7 @@ export class Agent {
 
 Available actions: borrow, repay, supply, withdraw, getUserPositions, askEncyclopedia.
 
-Only use tools if the user explicitly asks to perform an action and provides the necessary parameters.
-- borrow, repay, supply, withdraw require: tokenName, amount.
-- getUserPositions requires no parameters.
-- askEncyclopedia requires a question about Aave.
-
+Only use tools if the user explicitly asks to perform an action. Ensure all required parameters for a tool are available from the user's request or conversation history before calling the tool.
 If parameters are missing, ask the user to provide them. Do not assume parameters.
 
 IMPORTANT: Always call the appropriate tool with the exact parameters provided by the user. Do not make assumptions about minimum amounts, protocol limitations, or other restrictions. Let the tool handle all validation. Never refuse to call a tool based on the amount value - always pass it through to the tool.
@@ -378,12 +315,9 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
     if (this.mcpClient) {
       await this.mcpClient.close();
     }
-    if (this.transport) {
-      await this.transport.close();
-    }
   }
 
-  private async fetchAndCacheCapabilities(): Promise<McpGetCapabilitiesResponse> {
+  private async fetchAndCacheCapabilities(): Promise<LendingGetCapabilitiesResponse> {
     if (!this.mcpClient) {
       throw new Error('MCP Client not initialized. Cannot fetch capabilities.');
     }
@@ -404,7 +338,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
       console.error('Raw capabilitiesResult received from MCP tool call.');
 
-      const wrapperValidationResult = ZodMcpTextWrapperSchema.safeParse(capabilitiesResult);
+      const wrapperValidationResult = McpTextWrapperSchema.safeParse(capabilitiesResult);
 
       if (!wrapperValidationResult.success) {
         logError(
@@ -417,7 +351,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
         );
       }
 
-      const jsonString = wrapperValidationResult.data.content[0]!.text;
+      const jsonString = (wrapperValidationResult.data as McpTextWrapper).content[0]!.text;
       let parsedData: any;
       try {
         console.error('Attempting to parse JSON string from content[0].text...');
@@ -445,7 +379,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
         );
       }
 
-      const capabilitiesValidationResult = ZodGetCapabilitiesResponseSchema.safeParse(parsedData);
+      const capabilitiesValidationResult = LendingGetCapabilitiesResponseSchema.safeParse(parsedData);
 
       if (!capabilitiesValidationResult.success) {
         logError(
@@ -479,7 +413,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
   }
 
   private async setupTokenMap(): Promise<void> {
-    let capabilitiesResponse: McpGetCapabilitiesResponse | undefined;
+    let capabilitiesResponse: LendingGetCapabilitiesResponse | undefined;
     const useCache = process.env.AGENT_CACHE_TOKENS === 'true';
 
     if (useCache) {
@@ -488,7 +422,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
         console.error('Loading lending capabilities from cache...');
         const cachedData = await fs.readFile(CACHE_FILE_PATH, 'utf-8');
         const parsedJson = JSON.parse(cachedData);
-        const validationResult = ZodGetCapabilitiesResponseSchema.safeParse(parsedJson);
+        const validationResult = LendingGetCapabilitiesResponseSchema.safeParse(parsedJson);
         if (validationResult.success) {
           capabilitiesResponse = validationResult.data;
           console.error('Cached capabilities loaded and validated successfully.');

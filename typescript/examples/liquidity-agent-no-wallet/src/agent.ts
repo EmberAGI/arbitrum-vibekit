@@ -24,75 +24,22 @@ import type { Task } from 'a2a-samples-js/schema';
 import { createRequire } from 'module';
 import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
+import {
+  GetLiquidityPoolsAgentResponseSchema,
+  SupplyLiquiditySchema,
+  WithdrawLiquiditySchema,
+  GetLiquidityPoolsToolSchema,
+  GetUserLiquidityPositionsToolSchema,
+} from 'ember-schemas';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-// --- Define Zod Schemas ---
-
-// Schema for the response from the getLiquidityPools MCP tool
-// Based on the expected structure of GetLiquidityPoolsResponse from @emberai/sdk-typescript
-const EmberTokenIdentifierSchema = z.object({
-  chainId: z.string(),
-  address: z.string(),
-});
-
-const EmberLiquidityPoolSchema = z
-  .object({
-    symbol0: z.string(),
-    symbol1: z.string(),
-    token0: EmberTokenIdentifierSchema,
-    token1: EmberTokenIdentifierSchema,
-    price: z.string(),
-    providerId: z.string().optional(),
-  })
-  .passthrough(); // Allow other fields not explicitly defined
-
-const GetLiquidityPoolsResponseSchema = z
-  .object({
-    liquidityPools: z.array(EmberLiquidityPoolSchema),
-  })
-  .passthrough(); // Allow other top-level fields
-
-// Schemas for OpenAI functions (user-facing)
-const SupplyLiquiditySchema = z.object({
-  pair: z
-    .string()
-    .describe(
-      'The handle for the liquidity pair (e.g., WETH/USDC). Enum will be populated dynamically.'
-    ),
-  amount0: z.string().describe('The amount of the first token to supply (human-readable format).'),
-  amount1: z.string().describe('The amount of the second token to supply (human-readable format).'),
-  priceFrom: z
-    .string()
-    .describe('The lower bound price for the liquidity range (human-readable format).'),
-  priceTo: z
-    .string()
-    .describe('The upper bound price for the liquidity range (human-readable format).'),
-});
-
-const WithdrawLiquiditySchema = z.object({
-  positionNumber: z
-    .number()
-    .int()
-    .positive()
-    .describe(
-      'The index number (starting from 1) of the liquidity position to withdraw, as listed by getUserLiquidityPositions.'
-    ),
-});
-
-const GetLiquidityPoolsSchema = z.object({}); // No args needed for OpenAI function
-
-const GetUserLiquidityPositionsSchema = z.object({}); // No args needed for OpenAI function
-
-// --- End Zod Schemas ---
-
 function logError(...args: unknown[]) {
   console.error(...args);
 }
 
-// --- Add QuickNode/Viem related types and helpers ---
 interface ChainConfig {
   viemChain: Chain;
   quicknodeSegment: string;
@@ -135,10 +82,7 @@ export function getChainConfigById(chainId: string): ChainConfig {
   // We need to cast viemChain because Object.values(chains) includes non-Chain types if not filtered carefully
   return { viemChain: viemChain as Chain, quicknodeSegment };
 }
-// --- End QuickNode/Viem related types and helpers ---
 
-// --- Add necessary types ---
-// Redefine types previously removed
 type TokenIdentifier = {
   chainId: string;
   address: string;
@@ -170,17 +114,14 @@ export type LiquidityPosition = {
   providerId: string;
   positionRange: { fromPrice: string; toPrice: string };
 };
-// --- End added types ---
 
-// Define ToolSet anticipating the dynamic schema for supplyLiquidity
-// Create a placeholder dynamic schema type for the ToolSet definition
 const DynamicSupplyLiquiditySchemaPlaceholder = SupplyLiquiditySchema.extend({
-  pair: z.enum(['placeholder'] as [string, ...string[]]), // Placeholder enum
+  pair: z.enum(['placeholder'] as [string, ...string[]]),
 });
 
 type LiquidityToolSet = {
   supplyLiquidity: Tool<
-    typeof DynamicSupplyLiquiditySchemaPlaceholder, // Use the dynamic-like schema type
+    typeof DynamicSupplyLiquiditySchemaPlaceholder,
     Awaited<ReturnType<typeof handleSupplyLiquidity>>
   >;
   withdrawLiquidity: Tool<
@@ -188,11 +129,11 @@ type LiquidityToolSet = {
     Awaited<ReturnType<typeof handleWithdrawLiquidity>>
   >;
   getLiquidityPools: Tool<
-    typeof GetLiquidityPoolsSchema,
+    typeof GetLiquidityPoolsToolSchema,
     Awaited<ReturnType<typeof handleGetLiquidityPools>>
   >;
   getUserLiquidityPositions: Tool<
-    typeof GetUserLiquidityPositionsSchema,
+    typeof GetUserLiquidityPositionsToolSchema,
     Awaited<ReturnType<typeof handleGetUserLiquidityPositions>>
   >;
 };
@@ -205,10 +146,8 @@ export class Agent {
   private quicknodeSubdomain: string;
   private quicknodeApiKey: string;
 
-  // --- Add state properties ---
   private pairs: LiquidityPair[] = [];
   private positions: LiquidityPosition[] = [];
-  // --- End added properties ---
 
   constructor(quicknodeSubdomain: string, quicknodeApiKey: string) {
     if (!process.env.OPENROUTER_API_KEY) {
@@ -341,7 +280,7 @@ Rules:
 
       try {
         // Parse and validate the JSON using the Zod schema
-        const parsedPoolsData = GetLiquidityPoolsResponseSchema.parse(JSON.parse(poolsJson));
+        const parsedPoolsData = GetLiquidityPoolsAgentResponseSchema.parse(JSON.parse(poolsJson));
         this.log(`Validated ${parsedPoolsData.liquidityPools.length} pools from MCP response.`);
 
         // Populate internal `this.pairs` state from validated data
@@ -387,38 +326,24 @@ Rules:
       // Initialize toolSet using the actual dynamic schema
       this.toolSet = {
         supplyLiquidity: tool({
-          description: 'Supply liquidity to a token pair within a specified price range.',
-          parameters: dynamicSupplyLiquiditySchema, // Use the actual dynamic schema
-          execute: async args => {
-            this.log('Executing supplyLiquidity handler with args:', args);
-            // Handler expects a string pair, Tool provides enum value.
-            // Runtime coercion should handle this, but ideally handler takes enum or we cast here.
-            return await handleSupplyLiquidity(args, this.getHandlerContext());
-          },
+          description: 'Supply liquidity to a pair, optionally within a specified price range.',
+          parameters: DynamicSupplyLiquiditySchemaPlaceholder,
+          execute: async args => handleSupplyLiquidity(args, this.getHandlerContext()),
         }),
         withdrawLiquidity: tool({
-          description: 'Withdraw liquidity from a position identified by its number.',
+          description: 'Withdraw a liquidity position by its number.',
           parameters: WithdrawLiquiditySchema,
-          execute: async args => {
-            this.log('Executing withdrawLiquidity handler with args:', args);
-            return await handleWithdrawLiquidity(args, this.getHandlerContext());
-          },
+          execute: async args => handleWithdrawLiquidity(args, this.getHandlerContext()),
         }),
         getLiquidityPools: tool({
           description: 'List available liquidity pools.',
-          parameters: GetLiquidityPoolsSchema,
-          execute: async args => {
-            this.log('Executing getLiquidityPools handler with args:', args);
-            return await handleGetLiquidityPools(args, this.getHandlerContext());
-          },
+          parameters: GetLiquidityPoolsToolSchema,
+          execute: async () => handleGetLiquidityPools({}, this.getHandlerContext()),
         }),
         getUserLiquidityPositions: tool({
           description: 'List your current liquidity positions.',
-          parameters: GetUserLiquidityPositionsSchema,
-          execute: async args => {
-            this.log('Executing getUserLiquidityPositions handler with args:', args);
-            return await handleGetUserLiquidityPositions(args, this.getHandlerContext());
-          },
+          parameters: GetUserLiquidityPositionsToolSchema,
+          execute: async () => handleGetUserLiquidityPositions({}, this.getHandlerContext()),
         }),
       };
       this.log('Toolset defined with liquidity tools.');

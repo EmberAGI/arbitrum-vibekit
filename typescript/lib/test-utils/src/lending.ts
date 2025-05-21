@@ -3,8 +3,8 @@
  */
 
 import type { GetWalletPositionsResponse } from '@emberai/sdk-typescript';
-import type { UserReserve } from 'ember-schemas';
 import type { TransactionPlan } from './transactions.js';
+import { type UserReserve, UserReserveSchema } from 'ember-schemas';
 
 /**
  * Extract transaction plan from artifacts
@@ -76,8 +76,13 @@ export function getReserveForToken(
       const symbol = reserve.token!.symbol;
 
       if (name === tokenNameOrSymbol || symbol === tokenNameOrSymbol) {
-        // Cast the reserve to UserReserve type since we know it has the required structure
-        return reserve as unknown as UserReserve;
+        try {
+          return UserReserveSchema.parse(reserve);
+        } catch (error) {
+          console.error('Failed to parse UserReserve:', error);
+          console.error('Reserve object that failed parsing:', reserve);
+          throw new Error(`Failed to parse reserve data for token ${tokenNameOrSymbol}. Ensure the SDK response matches UserReserveSchema.`);
+        }
       }
     }
   }

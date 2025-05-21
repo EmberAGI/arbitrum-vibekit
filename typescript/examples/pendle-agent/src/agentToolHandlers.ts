@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { SwapTokensArgs } from './agent.js';
+import type { SwapTokensArgs } from 'ember-schemas';
 import type { Task, Artifact, DataPart } from 'a2a-samples-js/schema';
 import {
   parseMcpToolResponse as sharedParseMcpToolResponse,
@@ -146,38 +146,47 @@ export async function handleSwapTokens(
   params: SwapTokensArgs,
   context: HandlerContext
 ): Promise<Task> {
-  const { fromTokenName, toTokenName, humanReadableAmount, chainName } = params;
+  const { fromToken, toToken, amount, fromChain, toChain } = params;
 
-  // Get from token details and handle possible string response
-  const fromTokenResult = findTokenDetail(fromTokenName, chainName, context.tokenMap);
+  let effectiveChainName: string | undefined = fromChain;
+  if (fromChain && toChain && fromChain !== toChain) {
+    return {
+      id: context.userAddress,
+      status: {
+        state: 'failed',
+        message: { role: 'agent', parts: [{ type: 'text', text: 'Pendle swaps must occur on a single chain. fromChain and toChain must match if both are provided.' }] },
+      },
+      artifacts: [],
+    };
+  }
+  if (!effectiveChainName && toChain) {
+    effectiveChainName = toChain;
+  }
+
+  const fromTokenResult = findTokenDetail(fromToken, effectiveChainName, context.tokenMap);
   if (typeof fromTokenResult === 'string') {
     return {
       id: context.userAddress,
-      status: {
-        state: 'failed',
-        message: { role: 'agent', parts: [{ type: 'text', text: fromTokenResult }] },
-      },
+      status: { state: 'failed', message: { role: 'agent', parts: [{ type: 'text', text: fromTokenResult }] } },
       artifacts: [],
     };
   }
 
-  // Determine effective chain for to token lookup
-  const effectiveChain = chainName || mapChainIdToName(fromTokenResult.chainId);
+  const toTokenChainName = toChain || mapChainIdToName(fromTokenResult.chainId);
+  if (effectiveChainName && toTokenChainName.toLowerCase() !== effectiveChainName.toLowerCase() && toChain) {
+  } else if (!effectiveChainName) {
+    effectiveChainName = mapChainIdToName(fromTokenResult.chainId);
+  }
 
-  // Get to token details and handle possible string response
-  const toTokenResult = findTokenDetail(toTokenName, effectiveChain, context.tokenMap);
+  const toTokenResult = findTokenDetail(toToken, toTokenChainName, context.tokenMap);
   if (typeof toTokenResult === 'string') {
     return {
       id: context.userAddress,
-      status: {
-        state: 'failed',
-        message: { role: 'agent', parts: [{ type: 'text', text: toTokenResult }] },
-      },
+      status: { state: 'failed', message: { role: 'agent', parts: [{ type: 'text', text: toTokenResult }] } },
       artifacts: [],
     };
   }
 
-  // Assert that tokens are on the same chain
   if (fromTokenResult.chainId !== toTokenResult.chainId) {
     return {
       id: context.userAddress,
@@ -188,7 +197,7 @@ export async function handleSwapTokens(
           parts: [
             {
               type: 'text',
-              text: `Cannot swap tokens across different chains. From chain: ${fromTokenResult.chainId}, To chain: ${toTokenResult.chainId}`,
+              text: `Cannot swap tokens across different chains. From token chain: ${mapChainIdToName(fromTokenResult.chainId)}, To token chain: ${mapChainIdToName(toTokenResult.chainId)}.`,
             },
           ],
         },
@@ -197,33 +206,31 @@ export async function handleSwapTokens(
     };
   }
 
-  // Create properly typed swap params directly
-  const swapParams: SwapTokensParams = {
+  const swapParamsForMcp: SwapTokensParams = {
     fromTokenAddress: fromTokenResult.address,
     fromTokenChainId: fromTokenResult.chainId,
     toTokenAddress: toTokenResult.address,
     toTokenChainId: toTokenResult.chainId,
-    amount: humanReadableAmount,
+    amount: amount,
     userAddress: context.userAddress,
   };
 
   const mcpResponse = await context.mcpClient.callTool({
     name: 'swapTokens',
-    arguments: swapParams,
+    arguments: swapParamsForMcp,
   });
 
-  // Parse and validate tool response with Zod
   const rawJsonText = sharedParseMcpToolResponse(mcpResponse);
   const parsedData = JSON.parse(rawJsonText);
-  const { chainId, transactions } = SwapResponseSchema.parse(parsedData);
+  const { chainId: mcpChainId, transactions } = SwapResponseSchema.parse(parsedData);
   const txs: TransactionPlan[] = validateTransactionPlans(transactions);
 
   const preview: PendleSwapPreview = {
-    fromTokenName,
-    toTokenName,
-    humanReadableAmount,
-    chainName: effectiveChain,
-    parsedChainId: chainId,
+    fromTokenName: fromToken,
+    toTokenName: toToken,
+    humanReadableAmount: amount,
+    chainName: effectiveChainName || mapChainIdToName(fromTokenResult.chainId),
+    parsedChainId: mcpChainId,
   };
 
   const artifactContent: TransactionArtifact<PendleSwapPreview> = {
@@ -236,7 +243,11 @@ export async function handleSwapTokens(
     data: artifactContent as any,
   };
 
-  // Construct and return a Task artifact
+  const artifact: Artifact = {
+    name: 'swap-transaction-plan',
+    parts: [dataPart],
+  };
+
   return {
     id: context.userAddress,
     status: {
@@ -251,11 +262,6 @@ export async function handleSwapTokens(
         ],
       },
     },
-    artifacts: [
-      {
-        name: 'swap-yield-transaction',
-        parts: [dataPart],
-      } as Artifact,
-    ],
+    artifacts: [artifact],
   };
 }
