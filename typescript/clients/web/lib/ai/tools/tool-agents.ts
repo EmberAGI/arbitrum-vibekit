@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { cookies } from 'next/headers';
-import type { ChatAgentId } from './agents/agents';
+import { DEFAULT_SERVER_URLS } from '@/agents';
+import type { ChatAgentId } from '../../../agents';
 
 /*export const getEmberLending = tool({
   description: 'Get the current weather at a location',
@@ -21,14 +22,7 @@ import type { ChatAgentId } from './agents/agents';
   },
 }); */
 
-const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
 
-  ['ember-aave', 'http://173.230.139.151:3010/sse'],
-  ['ember-camelot', 'http://173.230.139.151:3011/sse'],
-  ['ember-lp', 'http://173.230.139.151:3012/sse'],
-  ['ember-pendle', 'http://173.230.139.151:3013/sse'],
-
-]);
 const URL_CHAT_IDS = new Map<string, ChatAgentId>();
 DEFAULT_SERVER_URLS.forEach((value, key) => URL_CHAT_IDS.set(value, key));
 

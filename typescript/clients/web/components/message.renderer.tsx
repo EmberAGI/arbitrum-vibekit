@@ -141,7 +141,8 @@ export const MessageRenderer = ({
             txPreview={null}
             txPlan={null}
             markets={[]}
-            isMarketList={false}             
+            isMarketList={false}
+          />          
         ) : null}
       </div>
     );

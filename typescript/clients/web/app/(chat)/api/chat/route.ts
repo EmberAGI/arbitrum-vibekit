@@ -25,7 +25,7 @@ import { generateTitleFromUserMessage } from '../../actions';
 // import { getWeather } from '@/lib/ai/tools/get-weather';
 import { isProductionEnvironment } from '@/lib/constants';
 import { openRouterProvider } from '@/lib/ai/providers';
-import { getTools as getDynamicTools } from '@/lib/ai/tools/ember-lending';
+import { getTools as getDynamicTools } from '@/lib/ai/tools/tool-agents';
 
 import type { Session } from 'next-auth';
 

@@ -12,7 +12,7 @@ import {
 import { cn } from '@/lib/utils';
 
 import { CheckCircleFillIcon, ChevronDownIcon } from './icons';
-import { chatAgents } from '@/lib/ai/tools/agents/agents';
+import { chatAgents } from '@/agents';
 
 export function AgentSelector({
   selectedAgentId,
