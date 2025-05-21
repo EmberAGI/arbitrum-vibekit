@@ -9,7 +9,7 @@ import {
 import { getChainConfigById } from './agent.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { parseMcpToolResponse as sharedParseMcpToolResponse } from 'arbitrum-vibekit';
-import { TransactionPlanSchema, type TransactionPlan } from 'ember-mcp-tool-server';
+import { TransactionPlanSchema, type TransactionPlan } from 'ember-schemas';
 import { z } from 'zod';
 
 export type TokenInfo = {

@@ -1,7 +1,7 @@
 import { type Address } from 'viem';
 import { type HandlerContext, handleSwapTokens } from './agentToolHandlers.js';
 import { parseMcpToolResponse as sharedParseMcpToolResponse } from 'arbitrum-vibekit';
-import { type TransactionPlan } from 'ember-mcp-tool-server';
+import { type TransactionPlan } from 'ember-schemas';
 import {
   generateText,
   tool,
@@ -19,18 +19,12 @@ import { logError, getChainConfigById, type ChainConfig } from './utils.js';
 import { createRequire } from 'module';
 import type { Task } from 'a2a-samples-js/schema';
 import {
-  TokenIdentifierSchema,
-  PendleAgentTokenSchema,
   GetPendleMarketsRequestSchema,
-  YieldMarketSchema,
   GetYieldMarketsResponseSchema,
   SwapTokensSchema,
-  type TokenIdentifier,
   type PendleAgentToken,
-  type GetPendleMarketsRequestArgs,
   type YieldMarket,
   type GetYieldMarketsResponse,
-  type SwapTokensArgs,
 } from 'ember-schemas';
 import { z } from 'zod';
 

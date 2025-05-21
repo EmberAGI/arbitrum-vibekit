@@ -1,4 +1,5 @@
 import * as ethers from "ethers";
+import 'dotenv/config';
 import { type ChainConfig, CHAIN_CONFIGS } from "./chains.js";
 
 export interface ChainTestConfig {
@@ -97,12 +98,12 @@ export class MultiChainSigner {
   }
 
   /**
-   * Create a MultiChainSigner for multiple test chains, discovering available anvil instances
+   * Create a MultiChainSigner for multiple test chains, discovering available anvil instances.
+   * The mnemonic for the wallet is sourced from the `MNEMONIC` environment variable.
    *
    * @param chainIdsToTest Array of chain IDs that should be available for testing
-   * @param mnemonic Optional mnemonic to use for wallet initialization
    * @returns MultiChainSigner configured with all required chains
-   * @throws Error if any of the required chains cannot be discovered
+   * @throws Error if any of the required chains cannot be discovered or if the `MNEMONIC` environment variable is not set.
    */
   static async fromTestChains(
     chainIdsToTest: number[],

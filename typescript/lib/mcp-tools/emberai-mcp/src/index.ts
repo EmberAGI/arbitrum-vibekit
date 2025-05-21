@@ -31,12 +31,6 @@ export type {
 // CapabilityType is a runtime enum (value), so export it normally
 export { CapabilityType } from "@emberai/sdk-typescript";
 
-// Re-export shared transaction helpers
-export {
-  TransactionPlanSchema,
-  validateTransactionPlans,
-} from "./schemas/transaction.js";
-export type { TransactionPlan } from "./schemas/transaction.js";
 
 // --- Define Zod Schemas ---
 // Convert our Zod objects to schema objects for MCP

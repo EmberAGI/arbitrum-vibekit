@@ -8,29 +8,24 @@ import {
   type TransactionArtifact,
 } from 'arbitrum-vibekit';
 import {
-  validateTransactionPlans,
-  type TransactionPlan,
   TransactionPlanSchema,
-} from 'ember-mcp-tool-server';
+  TransactionPlansSchema,
+  type TransactionPlan,
+  PendleSwapPreviewSchema,
+  type SwapTokensParams,
+  type PendleSwapPreview
+} from 'ember-schemas';
 
 export type TokenInfo = {
   chainId: string;
   address: string;
 };
 
-// Define swap schema to match the MCP tool server
-export const SwapTokensParamsSchema = z.object({
-  fromTokenAddress: z.string().describe('The contract address of the token to swap from.'),
-  fromTokenChainId: z.string().describe('The chain ID where the fromToken contract resides.'),
-  toTokenAddress: z.string().describe('The contract address of the token to swap to.'),
-  toTokenChainId: z.string().describe('The chain ID where the toToken contract resides.'),
-  amount: z
-    .string()
-    .describe('The amount of the fromToken to swap (atomic, non-human readable format).'),
-  userAddress: z.string().describe('The wallet address initiating the swap.'),
+// Schema to validate swapTokens tool response
+const SwapResponseSchema = z.object({
+  chainId: z.string(),
+  transactions: z.array(TransactionPlanSchema),
 });
-
-export type SwapTokensParams = z.infer<typeof SwapTokensParamsSchema>;
 
 export interface HandlerContext {
   mcpClient: Client;
@@ -121,26 +116,8 @@ function findTokenDetail(
   return tokenDetail;
 }
 
-// Define a Zod schema for the transaction preview specific to Pendle swaps
-const PendleSwapPreviewSchema = z.object({
-  fromTokenName: z.string(),
-  toTokenName: z.string(),
-  humanReadableAmount: z.string(),
-  chainName: z.string(),
-  parsedChainId: z.string(),
-});
-
-// Define the type for the Pendle swap preview
-type PendleSwapPreview = z.infer<typeof PendleSwapPreviewSchema>;
-
 // Define the schema for the artifact content using the shared utility
 const PendleSwapArtifactSchema = createTransactionArtifactSchema(PendleSwapPreviewSchema);
-
-// Schema to validate swapTokens tool response
-const SwapResponseSchema = z.object({
-  chainId: z.string(),
-  transactions: z.array(TransactionPlanSchema),
-});
 
 export async function handleSwapTokens(
   params: SwapTokensArgs,
@@ -223,7 +200,7 @@ export async function handleSwapTokens(
   const rawJsonText = sharedParseMcpToolResponse(mcpResponse);
   const parsedData = JSON.parse(rawJsonText);
   const { chainId: mcpChainId, transactions } = SwapResponseSchema.parse(parsedData);
-  const txs: TransactionPlan[] = validateTransactionPlans(transactions);
+  const txs: TransactionPlan[] = TransactionPlansSchema.parse(transactions);
 
   const preview: PendleSwapPreview = {
     fromTokenName: fromToken,

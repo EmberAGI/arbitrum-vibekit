@@ -7,7 +7,6 @@ import {
   handleGetUserPositions,
   handleAskEncyclopedia,
   type HandlerContext,
-  type TokenInfo,
 } from './agentToolHandlers.js';
 import type { Task } from 'a2a-samples-js/schema';
 import { promises as fs } from 'fs';
@@ -37,6 +36,8 @@ import {
   LendingAskEncyclopediaSchema,
   type LendingGetCapabilitiesResponse,
   type McpTextWrapper,
+  type TokenInfo,
+  TokenIdentifierSchema
 } from 'ember-schemas';
 import { z } from 'zod';
 
@@ -48,9 +49,7 @@ const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-const TokenInfoSchema = z.object({
-  chainId: z.string(),
-  address: z.string(),
+const TokenInfoSchema = TokenIdentifierSchema.extend({
   decimals: z.number(),
 });
 

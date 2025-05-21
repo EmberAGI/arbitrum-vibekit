@@ -1,13 +1,30 @@
 import { z } from 'zod';
+import { TokenIdentifierSchema } from './common.js';
 
-// Original TokenIdentifierSchema from pendle-agent
-export const TokenIdentifierSchema = z.object({
-  chainId: z.string().describe('The chain ID of the token identifier.'),
-  address: z.string().describe('The address of the token identifier.'),
+export const SwapTokensParamsSchema = z.object({
+  fromTokenAddress: z.string().describe('The contract address of the token to swap from.'),
+  fromTokenChainId: z.string().describe('The chain ID where the fromToken contract resides.'),
+  toTokenAddress: z.string().describe('The contract address of the token to swap to.'),
+  toTokenChainId: z.string().describe('The chain ID where the toToken contract resides.'),
+  amount: z
+    .string()
+    .describe('The amount of the fromToken to swap (atomic, non-human readable format).'),
+  userAddress: z.string().describe('The wallet address initiating the swap.'),
 });
-export type TokenIdentifier = z.infer<typeof TokenIdentifierSchema>;
+export type SwapTokensParams = z.infer<typeof SwapTokensParamsSchema>;
 
-// Original TokenSchema from pendle-agent, renamed to PendleAgentTokenSchema
+export const PendleSwapPreviewSchema = z.object({
+  fromTokenName: z.string(),
+  toTokenName: z.string(),
+  humanReadableAmount: z.string(),
+  chainName: z.string(),
+  parsedChainId: z.string(),
+});
+export type PendleSwapPreview = z.infer<typeof PendleSwapPreviewSchema>;
+
+export const GetPendleMarketsRequestSchema = z.object({});
+export type GetPendleMarketsRequestArgs = z.infer<typeof GetPendleMarketsRequestSchema>;
+
 export const PendleAgentTokenSchema = z.object({
   tokenUid: TokenIdentifierSchema.describe('For native tokens, this may be empty.').optional(),
   name: z.string().describe('The human-readable name of the token.'),
@@ -25,9 +42,6 @@ export const PendleAgentTokenSchema = z.object({
 });
 export type PendleAgentToken = z.infer<typeof PendleAgentTokenSchema>;
 
-export const GetPendleMarketsRequestSchema = z.object({});
-export type GetPendleMarketsRequestArgs = z.infer<typeof GetPendleMarketsRequestSchema>;
-
 export const YieldMarketSchema = z.object({
   name: z.string().describe('The name of the yield market.'),
   address: z.string().describe('The address of the yield market.'),
@@ -35,7 +49,7 @@ export const YieldMarketSchema = z.object({
   pt: z.string().describe('The address of the PT (principal token).'),
   yt: z.string().describe('The address of the YT (yield token).'),
   sy: z.string().describe('The address of the SY (standardized yield token).'),
-  underlyingAsset: PendleAgentTokenSchema.describe('The underlying asset of the Pendle market.'), // Adjusted to use PendleAgentTokenSchema
+  underlyingAsset: PendleAgentTokenSchema.describe('The underlying asset of the Pendle market.'),
   chainId: z.string().describe('The chain ID on which this yield market exists.'),
 });
 export type YieldMarket = z.infer<typeof YieldMarketSchema>;
@@ -45,7 +59,4 @@ export const GetYieldMarketsResponseSchema = z.object({
     .array(YieldMarketSchema)
     .describe('List of yield markets matching the request criteria.'),
 });
-export type GetYieldMarketsResponse = z.infer<typeof GetYieldMarketsResponseSchema>;
-
-// Removed SwapTokensSchema and SwapTokensArgs from here
-// They will be imported from the unified version in swapping-agent-schemas.ts (via ember-schemas index) 
+export type GetYieldMarketsResponse = z.infer<typeof GetYieldMarketsResponseSchema>; 

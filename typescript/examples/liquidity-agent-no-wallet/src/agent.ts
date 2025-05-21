@@ -28,8 +28,8 @@ import {
   GetLiquidityPoolsAgentResponseSchema,
   SupplyLiquiditySchema,
   WithdrawLiquiditySchema,
-  GetLiquidityPoolsToolSchema,
-  GetUserLiquidityPositionsToolSchema,
+  GetLiquidityPoolsSchema,
+  GetUserLiquidityPositionsSchema,
 } from 'ember-schemas';
 
 const openrouter = createOpenRouter({
@@ -129,11 +129,11 @@ type LiquidityToolSet = {
     Awaited<ReturnType<typeof handleWithdrawLiquidity>>
   >;
   getLiquidityPools: Tool<
-    typeof GetLiquidityPoolsToolSchema,
+    typeof GetLiquidityPoolsSchema,
     Awaited<ReturnType<typeof handleGetLiquidityPools>>
   >;
   getUserLiquidityPositions: Tool<
-    typeof GetUserLiquidityPositionsToolSchema,
+    typeof GetUserLiquidityPositionsSchema,
     Awaited<ReturnType<typeof handleGetUserLiquidityPositions>>
   >;
 };
@@ -285,10 +285,7 @@ Rules:
 
         // Populate internal `this.pairs` state from validated data
         this.pairs = parsedPoolsData.liquidityPools.map(
-          (
-            pool
-          ): // Type assertion needed because Zod schema uses .passthrough()
-          LiquidityPair => ({
+          (pool): LiquidityPair => ({
             handle: `${pool.symbol0}/${pool.symbol1}`,
             symbol0: pool.symbol0,
             symbol1: pool.symbol1,
@@ -337,12 +334,12 @@ Rules:
         }),
         getLiquidityPools: tool({
           description: 'List available liquidity pools.',
-          parameters: GetLiquidityPoolsToolSchema,
+          parameters: GetLiquidityPoolsSchema,
           execute: async () => handleGetLiquidityPools({}, this.getHandlerContext()),
         }),
         getUserLiquidityPositions: tool({
           description: 'List your current liquidity positions.',
-          parameters: GetUserLiquidityPositionsToolSchema,
+          parameters: GetUserLiquidityPositionsSchema,
           execute: async () => handleGetUserLiquidityPositions({}, this.getHandlerContext()),
         }),
       };

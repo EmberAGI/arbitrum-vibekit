@@ -418,6 +418,9 @@ importers:
       ember-mcp-tool-server:
         specifier: workspace:*
         version: link:../mcp-tools/emberai-mcp
+      ember-schemas:
+        specifier: workspace:*
+        version: link:../ember-schemas
       zod:
         specifier: ^3.24.3
         version: 3.25.7
@@ -492,6 +495,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.9.0
         version: 1.11.4
+      ember-schemas:
+        specifier: workspace:*
+        version: link:../../ember-schemas
       zod:
         specifier: ^3.24.2
         version: 3.25.7

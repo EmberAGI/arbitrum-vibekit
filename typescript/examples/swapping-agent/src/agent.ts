@@ -14,7 +14,7 @@ import {
 } from 'viem';
 import { handleSwapTokens, parseMcpToolResponse } from './agentToolHandlers.js';
 import type { HandlerContext } from './agentToolHandlers.js';
-import type { TransactionPlan } from 'ember-mcp-tool-server';
+import type { TransactionPlan } from 'ember-schemas';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';

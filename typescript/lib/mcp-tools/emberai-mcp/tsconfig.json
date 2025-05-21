@@ -3,8 +3,15 @@
   "compilerOptions": {
     "moduleResolution": "Node16",
     "outDir": "dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "paths": {
+      "ember-schemas": ["../../ember-schemas/src/index.js"],
+      "ember-schemas/*": ["../../ember-schemas/src/*"]
+    }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist"],
+  "references": [
+    { "path": "../../ember-schemas" }
+  ]
 }

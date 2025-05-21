@@ -20,64 +20,19 @@ import {
   type TransactionArtifact,
 } from 'arbitrum-vibekit';
 import {
-  validateTransactionPlans,
-  TransactionPlanSchema,
+  SwapResponseSchema,
+  SwapPreviewSchema,
+  TransactionPlansSchema,
+  type SwapResponse,
+  type SwapPreview,
   type TransactionPlan,
-} from 'ember-mcp-tool-server';
+} from 'ember-schemas';
 
 export type TokenInfo = {
   chainId: string;
   address: string;
   decimals: number;
 };
-
-export const SwapPreviewSchema = z
-  .object({
-    fromTokenSymbol: z.string(),
-    fromTokenAddress: z.string(),
-    fromTokenAmount: z.string(),
-    fromChain: z.string(),
-    toTokenSymbol: z.string(),
-    toTokenAddress: z.string(),
-    toTokenAmount: z.string(),
-    toChain: z.string(),
-    exchangeRate: z.string(),
-    executionTime: z.string(),
-    expiration: z.string(),
-    explorerUrl: z.string(),
-  })
-  .passthrough();
-
-export type SwapPreview = z.infer<typeof SwapPreviewSchema>;
-
-const TokenDetailSchema = z.object({
-  address: z.string(),
-  chainId: z.string(),
-});
-
-const EstimationSchema = z.object({
-  effectivePrice: z.string(),
-  timeEstimate: z.string(),
-  expiration: z.string(),
-  baseTokenDelta: z.string(),
-  quoteTokenDelta: z.string(),
-});
-
-const ProviderTrackingSchema = z.object({
-  requestId: z.string().optional(),
-  providerName: z.string().optional(),
-  explorerUrl: z.string(),
-});
-
-export const SwapResponseSchema = z.object({
-  baseToken: TokenDetailSchema,
-  quoteToken: TokenDetailSchema,
-  estimation: EstimationSchema,
-  providerTracking: ProviderTrackingSchema,
-  transactions: z.array(TransactionPlanSchema),
-});
-
-export type SwapResponse = z.infer<typeof SwapResponseSchema>;
 
 export interface HandlerContext {
   mcpClient: Client;
@@ -421,7 +376,7 @@ export async function handleSwapTokens(
   }
 
   context.log('Validating the swap transactions received from MCP tool...');
-  const validatedSwapTxPlan: TransactionPlan[] = validateTransactionPlans(rawSwapTransactions);
+  const validatedSwapTxPlan: TransactionPlan[] = TransactionPlansSchema.parse(rawSwapTransactions);
 
   const finalTxPlan: TransactionPlan[] = [
     ...(approveTxResponse ? [approveTxResponse] : []),
