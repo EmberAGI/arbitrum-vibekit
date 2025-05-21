@@ -1,6 +1,6 @@
 ## 🧩 Contributing New Tools to Vibekit
 
-Welcome to Vibekit's MCP Tools! This directory houses the core building blocks that give DeFi agents their superpowers. Model Context Protocol (MCP) tools are standardized interfaces that allow agents to easily interact with on-chain data, execute DeFi operations, and integrate with external services.
+Welcome to Vibekit's MCP tools directory! Model Context Protocol (MCP) tools are standardized interfaces that allow agents to easily interact with on-chain data, execute DeFi operations, and integrate with external services. This directory contains the MCP building blocks that give DeFi agents their superpowers.
 
 By contributing new MCP tools, you're expanding the possibilities for all Vibekit agents. Your tools can enable new DeFi strategies, integrate additional protocols, or enhance existing capabilities. This guide will walk you through the process of creating and contributing your own MCP tools to the ecosystem. Before submitting a pull request for your work, please review the guidelines in [`CONTRIBUTIONS.md`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md) to ensure best practices are followed.
 
@@ -128,6 +128,10 @@ pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js
 ```
 
 This will start your tool and open the Inspector interface, allowing you to interact with and debug your MCP tool implementation.
+
+### 7. Showcase Your Tool with a Demo Agent:
+
+Consider showcasing your new MCP tool by building a demo agent in the [examples](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) directory. Creating a simple agent that uses your tool is a great way to demonstrate its functionality and help others understand how to integrate it into their own projects.
 
 ## 🛠️ Vibe Coding Your MCP Tool
 

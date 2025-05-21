@@ -3,7 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { SwapTokensArgs } from 'ember-schemas';
 import type { Task, Artifact, DataPart } from 'a2a-samples-js/schema';
 import {
-  parseMcpToolResponse as sharedParseMcpToolResponse,
+  parseMcpToolResponsePayload,
   createTransactionArtifactSchema,
   type TransactionArtifact,
 } from 'arbitrum-vibekit';
@@ -197,21 +197,20 @@ export async function handleSwapTokens(
     arguments: swapParamsForMcp,
   });
 
-  const rawJsonText = sharedParseMcpToolResponse(mcpResponse);
-  const parsedData = JSON.parse(rawJsonText);
-  const { chainId: mcpChainId, transactions } = SwapResponseSchema.parse(parsedData);
-  const txs: TransactionPlan[] = TransactionPlansSchema.parse(transactions);
+  // Parse and validate tool response with Zod
+  const parsedData = parseMcpToolResponsePayload(mcpResponse, SwapResponseSchema);
+  const { chainId, transactions } = parsedData;
 
   const preview: PendleSwapPreview = {
     fromTokenName: fromToken,
     toTokenName: toToken,
     humanReadableAmount: amount,
     chainName: effectiveChainName || mapChainIdToName(fromTokenResult.chainId),
-    parsedChainId: mcpChainId,
+    parsedChainId: chainId,
   };
 
   const artifactContent: TransactionArtifact<PendleSwapPreview> = {
-    txPlan: txs,
+    txPlan: transactions,
     txPreview: preview,
   };
 

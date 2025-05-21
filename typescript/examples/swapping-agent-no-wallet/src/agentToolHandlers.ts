@@ -15,9 +15,9 @@ import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with {
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { streamText } from 'ai';
 import {
-  parseMcpToolResponse as sharedParseMcpToolResponse,
   createTransactionArtifactSchema,
   type TransactionArtifact,
+  parseMcpToolResponsePayload,
 } from 'arbitrum-vibekit';
 import {
   SwapResponseSchema,
@@ -271,35 +271,23 @@ export async function handleSwapTokens(
     },
   });
 
-  // Parse and validate the MCP tool response in one step
-  let rawSwapTransactions: TransactionPlan[];
   let validatedSwapResponse: SwapResponse;
   try {
-    validatedSwapResponse = sharedParseMcpToolResponse(swapResponseRaw, SwapResponseSchema);
-    rawSwapTransactions = validatedSwapResponse.transactions;
-    context.log('Parsed and validated swap response:', validatedSwapResponse);
+    validatedSwapResponse = parseMcpToolResponsePayload(swapResponseRaw, SwapResponseSchema);
   } catch (error) {
-    let errorMessage = (error as Error).message;
-    // If payload was plain text, extract raw message instead
-    if (errorMessage.includes('Expected JSON payload')) {
-      try {
-        errorMessage = sharedParseMcpToolResponse(swapResponseRaw) as string;
-      } catch {
-        // Fallback to original errorMessage
-      }
-    }
-    context.log(`Error processing swapTokens response: ${errorMessage}`);
+    context.log('MCP tool swapTokens returned invalid data structure:', error);
     return {
       id: userAddress,
       status: {
         state: 'failed',
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: errorMessage }],
+          parts: [{ type: 'text', text: (error as Error).message }],
         },
       },
     };
   }
+  const rawSwapTransactions = validatedSwapResponse.transactions;
 
   if (rawSwapTransactions.length === 0) {
     context.log('Invalid or empty transaction plan received from MCP tool:', rawSwapTransactions);
@@ -532,16 +520,6 @@ ${camelotContextContent}`;
       },
     };
   }
-}
-
-export function parseMcpToolResponse(
-  rawResponse: unknown,
-  context: HandlerContext,
-  toolName: string
-): unknown {
-  context.log(`Invoking shared parser for ${toolName}`);
-  // Always parse JSON payload
-  return sharedParseMcpToolResponse(rawResponse, z.any());
 }
 
 const SwapTransactionArtifactSchema = createTransactionArtifactSchema(SwapPreviewSchema);

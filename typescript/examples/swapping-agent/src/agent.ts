@@ -12,7 +12,8 @@ import {
   http,
   type LocalAccount,
 } from 'viem';
-import { handleSwapTokens, parseMcpToolResponse } from './agentToolHandlers.js';
+import { handleSwapTokens } from './agentToolHandlers.js';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
 import type { HandlerContext } from './agentToolHandlers.js';
 import type { TransactionPlan } from 'ember-schemas';
 import { promises as fs } from 'fs';
@@ -546,11 +547,7 @@ Present the user with a list of tokens and chains they can swap from and to if p
 
       this.log('Raw capabilitiesResult received from MCP.');
 
-      const dataToValidate = parseMcpToolResponse(
-        capabilitiesResult,
-        this.getHandlerContext(),
-        'getCapabilities'
-      );
+      const dataToValidate = parseMcpToolResponsePayload(capabilitiesResult, z.any());
 
       const validationResult = McpGetCapabilitiesResponseSchema.safeParse(dataToValidate);
 

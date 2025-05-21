@@ -1,15 +1,12 @@
 import { type Address } from 'viem';
 import { type HandlerContext, handleSwapTokens } from './agentToolHandlers.js';
-import { parseMcpToolResponse as sharedParseMcpToolResponse } from 'arbitrum-vibekit';
-import { type TransactionPlan } from 'ember-schemas';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
 import {
   generateText,
   tool,
   type Tool,
   type CoreMessage,
   type ToolResultPart,
-  type CoreUserMessage,
-  type CoreAssistantMessage,
   type StepResult,
 } from 'ai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -27,6 +24,7 @@ import {
   type GetYieldMarketsResponse,
 } from 'ember-schemas';
 import { z } from 'zod';
+import { type TransactionPlan } from 'ember-schemas';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -198,15 +196,22 @@ Never respond in markdown, always use plain text. Never add links to your respon
         },
       });
 
-      const parsedResult = sharedParseMcpToolResponse(result);
-      // If result is a JSON string, parse it
-      const parsedTokensRaw =
-        typeof parsedResult === 'string' ? JSON.parse(parsedResult) : parsedResult;
+      // Define a schema for token response validation that matches GetTokensResponse structure
+      const GetTokensResponseSchema = z.object({
+        tokens: z.array(
+          z.object({
+            symbol: z.string().optional(),
+            tokenUid: z
+              .object({
+                chainId: z.string(),
+                address: z.string(),
+              })
+              .optional(),
+          })
+        ),
+      });
 
-      // Assuming parsedTokensRaw is an array of objects that should conform to PendleAgentToken
-      // We should ideally validate this with PendleAgentTokenSchema.array().safeParse(parsedTokensRaw)
-      // For now, casting as any for brevity in this refactor step, but validation is recommended.
-      const parsedTokens: PendleAgentToken[] = parsedTokensRaw as any;
+      const parsedTokens = parseMcpToolResponsePayload(result, GetTokensResponseSchema);
 
       if (parsedTokens && Array.isArray(parsedTokens)) {
         this.tokenMap = {};
@@ -250,20 +255,22 @@ Never respond in markdown, always use plain text. Never add links to your respon
         parameters: GetPendleMarketsRequestSchema,
         execute: async () => {
           try {
-            const parts = this.yieldMarkets.map(market => ({
+            // First, create data artifacts for the full market data
+            const dataArtifacts = this.yieldMarkets.map(market => ({
               type: 'data' as const,
               data: market,
             }));
+
             const task: Task = {
               id: this.userAddress!,
               status: {
                 state: 'completed',
                 message: {
                   role: 'agent',
-                  parts: [{ type: 'text', text: 'Pendle markets fetched successfully.' }],
+                  parts: [],
                 },
               },
-              artifacts: [{ name: 'yield-markets', parts }],
+              artifacts: [{ name: 'yield-markets', parts: dataArtifacts }],
             };
             return task;
           } catch (error: any) {
@@ -418,27 +425,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
       name: 'getYieldMarkets',
       arguments: {},
     });
-
-    // Check if the response has the expected structure
-    if (!result.content || !Array.isArray(result.content) || result.content.length === 0) {
-      throw new Error('Invalid response format from getYieldMarkets tool');
-    }
-
-    const contentItem = result.content[0];
-    if (contentItem.type !== 'text' || typeof contentItem.text !== 'string') {
-      throw new Error('Invalid content format from getYieldMarkets tool');
-    }
-
-    // Parse the JSON string from the text field
-    const parsedData = JSON.parse(contentItem.text);
-
-    // Validate the parsed data with our schema
-    const validationResult = GetYieldMarketsResponseSchema.safeParse(parsedData);
-
-    if (!validationResult.success) {
-      throw new Error('Failed to validate Pendle markets data structure');
-    }
-
-    return validationResult.data;
+    this.log('GetYieldMarkets tool success.');
+    return parseMcpToolResponsePayload(result, GetYieldMarketsResponseSchema);
   }
 }
