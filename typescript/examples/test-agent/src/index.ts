@@ -22,7 +22,8 @@ type SwapAgentArgs = z.infer<typeof SwapAgentSchema>;
 
 dotenv.config();
 
-const server = new McpServer({
+// Initialize MCP server but don't connect yet
+const mcpServer = new McpServer({
   name: 'mcp-sse-agent-server',
   version: '1.0.0',
 });
@@ -46,7 +47,7 @@ const agentToolName = 'askSwapAgent';
 const agentToolDescription =
   'Sends a free‑form, natural‑language swap instruction to this token‑swap AI agent and returns a structured quote (route, estimate, fees, calldata). You can also ask questions to the agent about the Camelot protocol. This agent can help you swap tokens on Camelot and other protocols. It supports both same-chain and cross-chain swaps.';
 
-server.tool(
+mcpServer.tool(
   agentToolName,
   agentToolDescription,
   SwapAgentSchema.shape,
@@ -102,13 +103,13 @@ app.get('/', (_req, res) => {
   });
 });
 
-const sseConnections = new Set();
+const sseConnections = new Set<express.Response>();
 
 let transport: SSEServerTransport;
 
 app.get('/sse', async (_req, res) => {
   transport = new SSEServerTransport('/messages', res);
-  await server.connect(transport);
+  await mcpServer.connect(transport); // Use mcpServer instead of server
 
   sseConnections.add(res);
 
@@ -140,16 +141,47 @@ app.post('/messages', async (req, res) => {
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 const main = async () => {
+  let expressServer: ReturnType<typeof app.listen> | undefined;
   try {
+    // First initialize the agent
     await initializeAgent();
-    app.listen(PORT, () => {
-      console.error(`MCP SSE Agent Server running on port ${PORT}`);
+
+    // Then start the Express server
+    await new Promise<void>((resolve, reject) => {
+      expressServer = app.listen(PORT, () => {
+        console.error(`MCP SSE Agent Server running on port ${PORT}`);
+        resolve();
+      });
+
+      expressServer.on('error', err => {
+        reject(err);
+      });
     });
   } catch (error: unknown) {
     const err = error as Error;
     console.error('Failed to start server:', err.message);
+
+    // Cleanup if initialization failed
+    if (agent) {
+      await agent.stop();
+    }
+    if (expressServer) {
+      expressServer.close();
+    }
     process.exit(1);
   }
+
+  // Handle graceful shutdown
+  process.on('SIGINT', async () => {
+    console.error('Shutting down gracefully...');
+    if (agent) {
+      await agent.stop();
+    }
+    if (expressServer) {
+      expressServer.close();
+    }
+    process.exit(0);
+  });
 };
 
 main();
