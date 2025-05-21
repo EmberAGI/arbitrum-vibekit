@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+If you encounter a problem related to missing environment variables, do not try to mock them - simply stop and prompt the user to fill them.
