@@ -16,6 +16,7 @@ The Allora MCP server allows AI systems and applications to access Allora predic
 ## Quickstart
 
 Docker:
+
 ```
 docker run -p 3001:3001 -e PORT=3001 -e ALLORA_API_KEY=your_api_key alloranetwork/mcp-server
 
@@ -24,16 +25,19 @@ docker run -p 3001:3001 --env-file .env alloranetwork/mcp-server
 ```
 
 `docker-compose`:
+
 ```
 docker-compose up
 ```
 
 `npx`:
+
 ```
 npx @alloralabs/mcp-server
 ```
 
 Node.js:
+
 ```
 npm run start
 ```
@@ -47,11 +51,54 @@ Once the server is running, you can interact with it using any MCP client. The s
 
 Point your LLM/tooling at http://localhost:3001/sse to start using the server.
 
+### Local STDIO Transport
+
+Alternatively, for local integrations, the Allora MCP server can be connected via STDIO. This is useful when running the server as a child process managed by an AI agent or another Node.js application.
+
+To use STDIO transport, configure your MCP client (e.g., `@modelcontextprotocol/sdk`) to launch the server using its executable script. Ensure `ALLORA_API_KEY` is available in the environment for the child process.
+
+Example client-side setup with `@modelcontextprotocol/sdk`:
+
+```typescript
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { createRequire } from "module";
+
+// Assuming your agent and allora-mcp-server are part of a pnpm workspace
+// or allora-mcp-server is installed as a dependency.
+const require = createRequire(import.meta.url);
+const alloraServerPath = require.resolve(
+  "@alloralabs/mcp-server/dist/index.js"
+); // Adjust path if necessary
+
+const alloraClient = new Client(
+  { name: "MyAgent", version: "1.0.0" },
+  { capabilities: { tools: {}, resources: {}, prompts: {} } }
+);
+
+const transport = new StdioClientTransport({
+  command: "node",
+  args: [alloraServerPath],
+  env: {
+    ...process.env, // Pass existing environment variables
+    ALLORA_API_KEY: "your_allora_api_key", // Or ensure it's set in the parent process.env
+    // PORT is not strictly needed for STDIO but good practice if server reads it
+  },
+});
+
+await alloraClient.connect(transport);
+
+// Now you can call tools from allora-mcp-server
+// const topics = await alloraClient.callTool({ name: 'list_all_topics' });
+```
+
+This setup allows the MCP client to manage the lifecycle of the Allora MCP server, communicating with it over `stdin`/`stdout`.
+
 ### Available Tools
 
-| Tool Name | Description | Parameters |
-|-----------|-------------|------------|
-| `list_all_topics` | Fetch a list of all Allora topics | None |
+| Tool Name                   | Description                               | Parameters        |
+| --------------------------- | ----------------------------------------- | ----------------- |
+| `list_all_topics`           | Fetch a list of all Allora topics         | None              |
 | `get_inference_by_topic_id` | Fetch inference data for a specific topic | `topicID`: number |
 
 ### Example Usage with Claude

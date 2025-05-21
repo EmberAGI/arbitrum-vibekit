@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { type Address } from 'viem';
 import type { HandlerContext } from './agentToolHandlers.js';
 import { handleSwapTokens, handleAskEncyclopedia } from './agentToolHandlers.js';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
+import { parseMcpToolResponse } from 'arbitrum-vibekit';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -24,8 +24,10 @@ import type { Chain } from 'viem/chains';
 import type { Task } from 'a2a-samples-js/schema';
 import { createRequire } from 'module';
 
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
+import { createHyperbolic } from '@hyperbolic/ai-sdk-provider';
+
+const hyperbolic = createHyperbolic({
+  apiKey: process.env.HYPERBOLIC_API_KEY,
 });
 
 const __filename = fileURLToPath(import.meta.url);
@@ -165,8 +167,8 @@ export class Agent {
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
 
-    if (!process.env.OPENROUTER_API_KEY) {
-      throw new Error('OPENROUTER_API_KEY not set!');
+    if (!process.env.HYPERBOLIC_API_KEY) {
+      throw new Error('HYPERBOLIC_API_KEY not set!');
     }
   }
 
@@ -186,7 +188,7 @@ export class Agent {
       log: this.log.bind(this),
       quicknodeSubdomain: this.quicknodeSubdomain,
       quicknodeApiKey: this.quicknodeApiKey,
-      openRouterApiKey: process.env.OPENROUTER_API_KEY,
+      openRouterApiKey: process.env.HYPERBOLIC_API_KEY,
       camelotContextContent: this.camelotContextContent,
     };
     return context;
@@ -415,7 +417,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
-        model: openrouter('google/gemini-2.5-flash-preview'),
+        model: hyperbolic.chat('deepseek-ai/DeepSeek-R1'),
         messages: this.conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,
@@ -423,6 +425,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
           this.log(`Step finished. Reason: ${stepResult.finishReason}`);
         },
       });
+
       this.log(`generateText finished. Reason: ${finishReason}`);
 
       response.messages.forEach((msg, index) => {
@@ -561,7 +564,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
 
       this.log('Raw capabilitiesResult received from MCP.');
 
-      const dataToValidate = parseMcpToolResponsePayload(capabilitiesResult, z.any());
+      const dataToValidate = parseMcpToolResponse(capabilitiesResult, z.any());
 
       const validationResult = McpGetCapabilitiesResponseSchema.safeParse(dataToValidate);
 
