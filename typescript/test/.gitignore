@@ -1,0 +1,9 @@
+# Ignore TypeScript generated files
+*.js
+*.js.map
+*.d.ts
+*.d.ts.map
+*.tsbuildinfo
+
+# Allow specific JS files that might be needed
+!jest.config.js 
