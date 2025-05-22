@@ -1,10 +1,10 @@
-import { tool, type CoreTool } from 'ai';
-import { z } from 'zod';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import { cookies } from 'next/headers';
-import { DEFAULT_SERVER_URLS } from '@/agents';
-import type { ChatAgentId } from '../../../agents';
+import { tool, type CoreTool } from "ai";
+import { z } from "zod";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { cookies } from "next/headers";
+import { DEFAULT_SERVER_URLS } from "@/agents-config";
+import type { ChatAgentId } from "../../../agents-config";
 
 /*export const getEmberLending = tool({
   description: 'Get the current weather at a location',
@@ -22,7 +22,6 @@ import type { ChatAgentId } from '../../../agents';
   },
 }); */
 
-
 const URL_CHAT_IDS = new Map<string, ChatAgentId>();
 DEFAULT_SERVER_URLS.forEach((value, key) => URL_CHAT_IDS.set(value, key));
 
@@ -33,25 +32,25 @@ const convertToZodSchema = (schema: any): z.ZodSchema => {
   if (schema._def !== undefined) return schema;
 
   // For an object schema, convert properties
-  if (schema.type === 'object' && schema.properties) {
+  if (schema.type === "object" && schema.properties) {
     const zodProperties: { [key: string]: z.ZodTypeAny } = {};
     Object.entries(schema.properties).forEach(
       ([key, propSchema]: [string, any]) => {
         switch (propSchema.type) {
-          case 'string':
+          case "string":
             zodProperties[key] = z.string();
             break;
-          case 'number':
+          case "number":
             zodProperties[key] = z.number();
             break;
-          case 'boolean':
+          case "boolean":
             zodProperties[key] = z.boolean();
             break;
           default:
             // Default to any for complex types
             zodProperties[key] = z.any();
         }
-      },
+      }
     );
     return z.object(zodProperties);
   }
@@ -65,8 +64,8 @@ async function getTool(serverUrl: string) {
 
   // Create MCP Client
   mcpClient = new Client(
-    { name: 'TestClient', version: '1.0.0' },
-    { capabilities: { tools: {}, resources: {}, prompts: {} } },
+    { name: "TestClient", version: "1.0.0" },
+    { capabilities: { tools: {}, resources: {}, prompts: {} } }
   );
 
   // Create SSE transport
@@ -78,103 +77,100 @@ async function getTool(serverUrl: string) {
   // Connect to the server
   if (transport) {
     await mcpClient.connect(transport);
-    console.log('MCP client initialized successfully!');
+    console.log("MCP client initialized successfully!");
   }
 
   // Try to discover tools
-  console.log('Attempting to discover tools via MCP client...');
+  console.log("Attempting to discover tools via MCP client...");
   // biome-ignore lint/suspicious/noImplicitAnyLet: <explanation>
   let toolsResponse;
   try {
     toolsResponse = await mcpClient.listTools();
     console.log(toolsResponse);
   } catch (error) {
-    console.error('Error discovering tools:', error);
+    console.error("Error discovering tools:", error);
     toolsResponse = { tools: [] }; // Fallback to empty tools array
   }
 
   // Use reduce to create an object mapping tool names to AI tools
-  const toolObject = toolsResponse.tools.reduce(
-    (acc, mcptool) => {
-      // Convert MCP tool schema to Zod schema
-      const aiTool = tool({
-        description: mcptool.description,
-        parameters: convertToZodSchema(mcptool.inputSchema),
-        execute: async (args) => {
-          console.log('Executing tool:', mcptool.name);
-          console.log('Arguments:', args);
-          console.log('MCP Client:', mcpClient);
-          const result = await mcpClient.callTool({
-            name: mcptool.name,
-            arguments: args,
-          });
-          //const result = 'chat lending USDC successfully';
-          console.log('RUNNING TOOL:', mcptool.name);
-          console.log(result);
-          const toolResult = { status: 'completed', result: result };
-          return toolResult;
-        },
-      });
-      // Add the tool to the accumulator object, using its name as the key
-      acc[mcptool.name] = aiTool;
-      return acc;
-    },
-    {} as { [key: string]: CoreTool },
-  ); // Initialize with the correct type
+  const toolObject = toolsResponse.tools.reduce((acc, mcptool) => {
+    // Convert MCP tool schema to Zod schema
+    const aiTool = tool({
+      description: mcptool.description,
+      parameters: convertToZodSchema(mcptool.inputSchema),
+      execute: async (args) => {
+        console.log("Executing tool:", mcptool.name);
+        console.log("Arguments:", args);
+        console.log("MCP Client:", mcpClient);
+        const result = await mcpClient.callTool({
+          name: mcptool.name,
+          arguments: args,
+        });
+        //const result = 'chat lending USDC successfully';
+        console.log("RUNNING TOOL:", mcptool.name);
+        console.log(result);
+        const toolResult = { status: "completed", result: result };
+        return toolResult;
+      },
+    });
+    // Add the tool to the accumulator object, using its name as the key
+    acc[mcptool.name] = aiTool;
+    return acc;
+  }, {} as { [key: string]: CoreTool }); // Initialize with the correct type
 
   // Return the object of tools
-  console.log('toolObject =', toolObject);
+  console.log("toolObject =", toolObject);
   return toolObject;
 }
 
 export const getTools = async (): Promise<{ [key: string]: CoreTool }> => {
-  console.log('Initializing MCP client...');
+  console.log("Initializing MCP client...");
 
   // Helper function to convert MCP tool schema to Zod schema
   //POC: Change avaliable tools based on  cookie agent
   const cookieStore = await cookies();
-  const agentIdFromCookie = cookieStore.get('agent');
+  const agentIdFromCookie = cookieStore.get("agent");
   console.log(agentIdFromCookie);
-  let serverUrl = '';
+  let serverUrl = "";
 
-  if (agentIdFromCookie && agentIdFromCookie.value === 'ember-aave') {
+  if (agentIdFromCookie && agentIdFromCookie.value === "ember-aave") {
     serverUrl =
-      (process.env.MCP_SERVER_URL || DEFAULT_SERVER_URLS.get('ember-aave')) ??
-      '';
+      (process.env.MCP_SERVER_URL || DEFAULT_SERVER_URLS.get("ember-aave")) ??
+      "";
   }
 
-  if (agentIdFromCookie && agentIdFromCookie.value === 'ember-camelot') {
+  if (agentIdFromCookie && agentIdFromCookie.value === "ember-camelot") {
     serverUrl =
       (process.env.MCP_SERVER_URL ||
-        DEFAULT_SERVER_URLS.get('ember-camelot')) ??
-      '';
+        DEFAULT_SERVER_URLS.get("ember-camelot")) ??
+      "";
   }
 
-  if (agentIdFromCookie && agentIdFromCookie.value === 'ember-lp') {
+  if (agentIdFromCookie && agentIdFromCookie.value === "ember-lp") {
     serverUrl =
-      (process.env.MCP_SERVER_URL || DEFAULT_SERVER_URLS.get('ember-lp')) ?? '';
+      (process.env.MCP_SERVER_URL || DEFAULT_SERVER_URLS.get("ember-lp")) ?? "";
   }
 
-  if (agentIdFromCookie && agentIdFromCookie.value === 'ember-pendle') {
+  if (agentIdFromCookie && agentIdFromCookie.value === "ember-pendle") {
     serverUrl =
-      (process.env.MCP_SERVER_URL || DEFAULT_SERVER_URLS.get('ember-pendle')) ?? '';
+      (process.env.MCP_SERVER_URL || DEFAULT_SERVER_URLS.get("ember-pendle")) ??
+      "";
   }
 
-
-  if (!agentIdFromCookie || agentIdFromCookie.value !== 'all') {
+  if (!agentIdFromCookie || agentIdFromCookie.value !== "all") {
     return await getTool(serverUrl);
   }
 
   const serverUrls = [
-    DEFAULT_SERVER_URLS.get('ember-aave') ?? '',
-    DEFAULT_SERVER_URLS.get('ember-camelot') ?? '',
-    DEFAULT_SERVER_URLS.get('ember-lp') ?? '',
-    DEFAULT_SERVER_URLS.get('ember-pendle') ?? '',
+    DEFAULT_SERVER_URLS.get("ember-aave") ?? "",
+    DEFAULT_SERVER_URLS.get("ember-camelot") ?? "",
+    DEFAULT_SERVER_URLS.get("ember-lp") ?? "",
+    DEFAULT_SERVER_URLS.get("ember-pendle") ?? "",
   ];
   const tools = await Promise.all(serverUrls.map((url) => getTool(url)));
   const allTools: { [key: string]: CoreTool } = {};
   for (let i = 0; i < tools.length; i++) {
-    const agentName = URL_CHAT_IDS.get(serverUrls[i]) ?? 'default';
+    const agentName = URL_CHAT_IDS.get(serverUrls[i]) ?? "default";
     for (const [toolKey, toolValue] of Object.entries(tools[i])) {
       allTools[`${agentName}${toolKey}`] = toolValue;
     }
