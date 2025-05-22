@@ -1,5 +1,5 @@
 {
-  "name": "test-agent",
+  "name": "predict-agent",
   "version": "1.0.0",
   "description": "An agent that uses Allora predictions to inform token swaps, based on swapping-agent-no-wallet.",
   "type": "module",
@@ -9,8 +9,8 @@
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
-    "docker:build": "docker build -t test-agent ../../",
-    "docker:run": "docker run --env-file .env -p 3001:3001 test-agent",
+    "docker:build": "docker build -t predict-agent ../../",
+    "docker:run": "docker run --env-file .env -p 3001:3001 predict-agent",
     "docker:compose:up": "docker compose up --build --no-log-prefix",
     "docker:compose:down": "docker compose down",
     "docker:compose:build": "docker compose build --no-cache",

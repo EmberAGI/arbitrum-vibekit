@@ -1,6 +1,6 @@
 ## Introduction
 
-This directory contains the `test-agent`, an AI agent that uses token price predictions from the Allora Network to make decisions about swapping tokens. It is based on the `swapping-agent-no-wallet` and integrates with the `allora-mcp-server` to fetch predictions and the Ember On-chain Actions MCP server to execute swaps.
+This directory contains the `predict-agent`, an AI agent that uses token price predictions from the Allora Network to make decisions about swapping tokens. It is based on the `swapping-agent-no-wallet` and integrates with the `allora-mcp-server` to fetch predictions and the Ember On-chain Actions MCP server to execute swaps.
 
 ## File Overview
 
@@ -14,7 +14,7 @@ This directory contains the `test-agent`, an AI agent that uses token price pred
 
 2. **`agent.ts`**
 
-   Defines the core logic of the `test-agent`.
+   Defines the core logic of the `predict-agent`.
 
    Includes an MCP client to connect to the `allora-mcp-server` to fetch token predictions (e.g., using `get_inference_by_topic_id`).
 

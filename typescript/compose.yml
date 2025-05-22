@@ -1,13 +1,13 @@
 services:
-  lending-agent-no-wallet:
+  predict-agent:
     build:
       context: ./
-      dockerfile: examples/lending-agent-no-wallet/Dockerfile
-    container_name: vibekit-lending-agent-no-wallet
+      dockerfile: examples/predict-agent/Dockerfile
+    container_name: predict-agent
     env_file:
       - .env
     ports:
-      - '${PORT:-3001}:${PORT:-3001}'
+      - "${PORT:-3001}:${PORT:-3001}"
     restart: unless-stopped
   web:
     build:

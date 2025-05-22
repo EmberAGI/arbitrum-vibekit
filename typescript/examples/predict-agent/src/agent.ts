@@ -121,11 +121,6 @@ function logError(...args: unknown[]) {
 }
 
 type SwappingToolSet = {
-  swapTokens: Tool<typeof SwapTokensSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
-  askEncyclopedia: Tool<
-    typeof AskEncyclopediaSchema,
-    Awaited<ReturnType<typeof handleAskEncyclopedia>>
-  >;
   predictAndSwap: Tool<typeof PredictAndSwapSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
 };
 
@@ -233,59 +228,60 @@ export class Agent {
     this.conversationHistory = [
       {
         role: 'system',
-        content: `You are an AI agent that provides access to blockchain swapping functionalities via Ember AI On-chain Actions. You use the tool "swapTokens" to swap or convert tokens. You can also answer questions about Camelot DEX using the "askEncyclopedia" tool.
+        content: `You are an AI agent that leverages Allora price predictions to help users make informed trading decisions and execute token swaps. Your primary tool is "predictAndSwap".
 
-Available actions:
-- swapTokens: Only use if the user has provided the required parameters.
-- askEncyclopedia: Use when the user asks questions about Camelot DEX.
+Based on the predicted future price of a token, you will advise whether to buy, sell, or hold. If a buy or sell action is advised and confirmed, you can execute the swap.
 
 <examples>
 <example1>
-<user>swap 1 ETH to USDC on Ethereum</user>
-<parameters>
+<user>Should I trade 1 ETH based on the 4-hour prediction? And what\'s the outlook?</user>
+<parameters_for_predictAndSwap>
+<tokenSymbol>ETH</tokenSymbol>
 <amount>1</amount>
-<fromToken>ETH</fromToken>
-<toToken>USDC</toToken>
-<toChain>Ethereum</toChain>
-</parameters>
+<horizon>4 hours</horizon>
+</parameters_for_predictAndSwap>
+(Agent will first get prediction, advise buy/sell/hold, then may ask if user wants to proceed with a swap if action is buy/sell)
 </example1>
 
 <example2>
-<user>sell 89 fartcoin</user>
-<parameters>
-<amount>89</amount>
-<fromToken>fartcoin</fromToken>
-</parameters>
-*Note: Required "toToken" parameter is not provided. If it is not provided in the conversation history, you will need to ask the user for it.*
+<user>Predict and swap 50 ARB if it looks like a good buy in the next 24 hours. I want to use my ETH on Arbitrum to buy it.</user>
+<parameters_for_predictAndSwap>
+<tokenSymbol>ARB</tokenSymbol>
+<amount>50</amount>
+<horizon>24 hours</horizon>
+<fromToken>ETH</fromToken>
+<fromChain>Arbitrum</fromChain>
+<toChain>Arbitrum</toChain> (assuming ARB is on Arbitrum, toChain might be inferred or user prompted if ambiguous)
+</parameters_for_predictAndSwap>
 </example2>
 
 <example3>
-<user>Convert 10.5 USDC to ETH</user>
-<parameters>
-<amount>10.5</amount>
-<fromToken>USDC</fromToken>
-<toToken>ETH</toToken>
-</parameters>
+<user>What\'s the prediction for SOL over the next day? If it\'s a strong sell, sell 10 SOL for USDC on Solana.</user>
+<parameters_for_predictAndSwap>
+<tokenSymbol>SOL</tokenSymbol>
+<amount>10</amount>
+<horizon>1 day</horizon>
+<toToken>USDC</toToken>
+<fromChain>Solana</fromChain> (assuming SOL is on Solana)
+<toChain>Solana</toChain>   (assuming USDC is desired on Solana)
+<sellThreshold>0.02</sellThreshold> (User implies a 'strong sell', agent might use a higher default or user specified threshold)
+</parameters_for_predictAndSwap>
 </example3>
-
-<example4>
-<user>Swap 100.076 arb on arbitrum for dog on base</user>
-<parameters>
-<amount>100.076</amount>
-<fromToken>arb</fromToken>
-<toToken>dog</toToken>
-<fromChain>arbitrum</fromChain>
-<toChain>base</toChain>
-</parameters>
-</example4>
-
-<example5>
-<user>What is Camelot's liquidity mining program?</user>
-<tool_call> {"toolName": "askEncyclopedia", "args": { "question": "What is Camelot's liquidity mining program?" }} </tool_call>
-</example5>
 </examples>
 
-Use relavant conversation history to obtain required tool parameters. Present the user with a list of tokens and chains they can swap from and to if provided by the tool response. Never respond in markdown, always use plain text. Never add links to your response. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.`,
+Interaction Guidelines:
+- Use relevant conversation history to obtain required tool parameters.
+- If critical parameters like \`tokenSymbol\` or \`amount\` are missing, ask the user for them.
+- Clearly state the prediction, the suggested action (buy, sell, hold), and the strength of the signal before asking to proceed with a swap.
+- If the action is 'hold', no swap will be executed.
+- When executing a swap:
+    - If buying \`tokenSymbol\` and \`fromToken\` is not specified, assume \`fromToken\` is USDC.
+    - If selling \`tokenSymbol\` and \`toToken\` is not specified, assume \`toToken\` is USDC.
+- Present the user with a list of tokens and chains they can swap from and to if relevant and if this information is easily available from the tool or context.
+- Never respond in markdown, always use plain text.
+- Never add links to your response.
+- Do not suggest the user to ask questions unrelated to the current task.
+- When an unknown error happens, do not try to guess the error reason; report it as is.`,
       },
     ];
 
@@ -431,31 +427,6 @@ Use relavant conversation history to obtain required tool parameters. Present th
       await this._loadCamelotDocumentation();
 
       this.toolSet = {
-        swapTokens: tool({
-          description: 'Swap or convert tokens. Requires the fromToken, toToken, and amount.',
-          parameters: SwapTokensSchema,
-          execute: async args => {
-            try {
-              return await handleSwapTokens(args, this.getHandlerContext());
-            } catch (error: any) {
-              logError(`Error during swapTokens via toolSet: ${error.message}`);
-              throw error;
-            }
-          },
-        }),
-        askEncyclopedia: tool({
-          description:
-            'Ask questions about Camelot DEX to get expert information about the protocol.',
-          parameters: AskEncyclopediaSchema,
-          execute: async args => {
-            try {
-              return await handleAskEncyclopedia(args, this.getHandlerContext());
-            } catch (error: any) {
-              logError(`Error during askEncyclopedia via toolSet: ${error.message}`);
-              throw error;
-            }
-          },
-        }),
         predictAndSwap: tool({
           description: 'Execute a swap based on Allora prediction for a token.',
           parameters: PredictAndSwapSchema,
