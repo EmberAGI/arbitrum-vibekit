@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Do not add trivial comments that simply state the meaning of next line. Only add comments that convey non-trivial information.
