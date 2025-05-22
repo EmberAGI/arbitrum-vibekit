@@ -11,7 +11,6 @@ import {
   mintUSDC,
   ERC20Wrapper
 } from 'test-utils';
-import whyIsNodeRunning from 'why-is-node-running';
 import { type Address } from 'viem';
 import * as ethers from 'ethers';
 
@@ -57,7 +56,6 @@ describe('Liquidity Agent Integration Tests', function () {
   });
 
   after(async function () {
-    whyIsNodeRunning();
     await agent.stop();
   });
 

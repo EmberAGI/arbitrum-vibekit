@@ -29,7 +29,6 @@
     "mocha-suppress-logs": "^0.5.1",
     "prettier": "^3.5.3",
     "tsx": "^4.19.3",
-    "why-is-node-running": "^3.2.2",
     "typescript": "^5.8.3"
   },
   "dependencies": {

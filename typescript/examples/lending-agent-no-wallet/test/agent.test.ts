@@ -21,7 +21,6 @@ import {
   type Position,
   type LendingPosition
 } from '../src/agentToolHandlers.js';
-import whyIsNodeRunning from 'why-is-node-running';
 
 // Define chain IDs that should be tested
 const CHAINS_TO_TEST: number[] = [42161]; // Arbitrum One
@@ -63,7 +62,6 @@ describe('Lending Agent Integration Tests', function () {
   });
 
   after(async function () {
-    whyIsNodeRunning();
     await agent.stop();
   });
 
