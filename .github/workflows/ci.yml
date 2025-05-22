@@ -34,6 +34,10 @@ jobs:
           token: ${{ secrets.GH_PAT }}
           submodules: recursive
 
+      - name: Build project
+        working-directory: ./typescript
+        run: pnpm run build
+
       - name: Install protoc
         run: |
           sudo apt-get update
@@ -93,10 +97,6 @@ jobs:
       - name: Install dependencies in project
         working-directory: ./typescript
         run: pnpm install 
-        
-      - name: Build project
-        working-directory: ./typescript
-        run: pnpm run build
 
       - name: Run tests
         working-directory: ./typescript
