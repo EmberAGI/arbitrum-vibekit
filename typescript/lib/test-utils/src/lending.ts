@@ -7,9 +7,9 @@ import type { TransactionPlan } from './transactions.js';
 import { type UserReserve, UserReserveSchema } from 'ember-schemas';
 
 /**
- * Extract transaction plan from artifacts
+ * Extract transaction plan from lending artifacts
  */
-export function extractTransactionPlan(
+export function extractLendingTransactionPlan(
   response: any
 ): Array<TransactionPlan> {
   if (!response.artifacts) {

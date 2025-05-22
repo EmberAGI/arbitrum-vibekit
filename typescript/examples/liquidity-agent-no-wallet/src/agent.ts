@@ -114,27 +114,31 @@ export type LiquidityPosition = {
   providerId: string;
   positionRange: { fromPrice: string; toPrice: string };
 };
-
-const DynamicSupplyLiquiditySchemaPlaceholder = SupplyLiquiditySchema.extend({
-  pair: z.enum(['placeholder'] as [string, ...string[]]),
-});
+// Define the extended schema with concrete values
+type SupplyLiquidityExtendedSchema = z.ZodObject<{
+  pair: z.ZodEnum<[string, ...string[]]>;
+  amount0: z.ZodString;
+  amount1: z.ZodString;
+  priceFrom: z.ZodString;
+  priceTo: z.ZodString;
+}>;
 
 type LiquidityToolSet = {
   supplyLiquidity: Tool<
-    typeof DynamicSupplyLiquiditySchemaPlaceholder,
-    Awaited<ReturnType<typeof handleSupplyLiquidity>>
+    SupplyLiquidityExtendedSchema,
+    Task
   >;
   withdrawLiquidity: Tool<
     typeof WithdrawLiquiditySchema,
-    Awaited<ReturnType<typeof handleWithdrawLiquidity>>
+    Task
   >;
   getLiquidityPools: Tool<
     typeof GetLiquidityPoolsSchema,
-    Awaited<ReturnType<typeof handleGetLiquidityPools>>
+    Task
   >;
   getUserLiquidityPositions: Tool<
     typeof GetUserLiquidityPositionsSchema,
-    Awaited<ReturnType<typeof handleGetUserLiquidityPositions>>
+    Task
   >;
 };
 
@@ -324,7 +328,7 @@ Rules:
       this.toolSet = {
         supplyLiquidity: tool({
           description: 'Supply liquidity to a pair, optionally within a specified price range.',
-          parameters: DynamicSupplyLiquiditySchemaPlaceholder,
+          parameters: dynamicSupplyLiquiditySchema,
           execute: async args => handleSupplyLiquidity(args, this.getHandlerContext()),
         }),
         withdrawLiquidity: tool({

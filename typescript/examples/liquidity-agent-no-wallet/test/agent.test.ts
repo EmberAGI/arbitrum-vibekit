@@ -1,0 +1,206 @@
+/// <reference types="mocha" />
+import { expect } from 'chai';
+import 'dotenv/config';
+import { Agent } from '../src/agent.js';
+import {  
+  MultiChainSigner,
+  CHAIN_CONFIGS,
+  ensureWethBalance,
+  extractMessageText,
+  extractAndExecuteTransactions,
+  mintUSDC,
+  ERC20Wrapper
+} from 'test-utils';
+import whyIsNodeRunning from 'why-is-node-running';
+import { type Address } from 'viem';
+
+// Define chain IDs that should be tested
+const CHAINS_TO_TEST: number[] = [42161]; // Arbitrum One
+
+describe('Liquidity Agent Integration Tests', function () {
+  this.timeout(90_000);
+
+  let multiChainSigner: MultiChainSigner;
+  let agent: Agent;
+  let walletAddress: Address;
+  let usdc: ERC20Wrapper;
+
+  const quicknodeSubdomain = process.env.QUICKNODE_SUBDOMAIN;
+  if (!quicknodeSubdomain) {
+    throw new Error('QUICKNODE_SUBDOMAIN not found in the environment.');
+  }
+
+  const quicknodeApiKey = process.env.QUICKNODE_API_KEY;
+  if (!quicknodeApiKey) {
+    throw new Error('QUICKNODE_API_KEY not found in the environment.');
+  }
+
+  const mnemonic = process.env.MNEMONIC;
+  if (!mnemonic) {
+    throw new Error('MNEMONIC not found in the environment.');
+  }
+
+  before(async function () {
+    try {
+      // Create a single MultiChainSigner for all chains being tested
+      multiChainSigner = await MultiChainSigner.fromTestChains(CHAINS_TO_TEST);
+      
+      // Get the wallet address in the correct format
+      walletAddress = await multiChainSigner.getAddress();
+
+      // Initialize agent
+      agent = new Agent(quicknodeSubdomain, quicknodeApiKey);
+      await agent.init();
+      await agent.start();
+    } catch (error) {
+      console.error('Failed to initialize test environment:', error);
+      throw error;
+    }
+  });
+
+  after(async function () {
+    whyIsNodeRunning();
+    await agent.stop();
+  });
+
+  // Create a separate test suite for each chain
+  for (const chainId of CHAINS_TO_TEST) {
+    describe(`Chain: ${CHAIN_CONFIGS[chainId]?.name || `Chain ${chainId}`}`, function () {
+      before(async function () {
+        if (!CHAIN_CONFIGS[chainId]) {
+          throw new Error(
+            `Chain configuration missing for chain ID ${chainId}. Please add it to CHAIN_CONFIGS.`
+          );
+        }
+
+        const wethAddress = CHAIN_CONFIGS[chainId]?.wrappedNativeToken?.address;
+        if (!wethAddress) {
+          throw new Error(
+            `No wrapped native token (WETH) defined for chain ${chainId}.`
+          );
+        }
+
+        const usdcAddress = CHAIN_CONFIGS[chainId]?.anotherToken?.address;
+        if (!usdcAddress) {
+          throw new Error(
+            `No secondary token (USDC) defined for chain ${chainId}.`
+          );
+        }
+
+        // Ensure WETH balance - use higher amount to ensure all operations can be completed
+        const signer = multiChainSigner.getSignerForChainId(chainId);
+        await ensureWethBalance(signer, '0.5', wethAddress);
+        
+        // Mint USDC to the test wallet
+        // Get provider from signer and ensure it's a JsonRpcProvider
+        const provider = signer.provider as ethers.providers.JsonRpcProvider;
+        await mintUSDC({
+          provider,
+          tokenAddress: usdcAddress,
+          userAddress: walletAddress,
+          balanceStr: (1000_000_000).toString(), // 1000 USDC (assuming 6 decimals)
+        });
+        
+        // Initialize USDC wrapper
+        usdc = new ERC20Wrapper(provider, usdcAddress);
+        // Verify USDC balance
+        const usdcBalance = await usdc.balanceOf(walletAddress);
+        console.log(`USDC Balance: ${usdcBalance.toString()}`);
+        expect(usdcBalance.gte(1000_000_000)).to.be.true;
+      });
+
+      describe('Basic Capabilities', function () {
+        it('should be able to describe what it can do', async function () {
+          const response = await agent.processUserInput(
+            'What can you do?',
+            walletAddress
+          );
+          const messageText = extractMessageText(response);
+          expect(messageText.toLowerCase()).to.satisfy(
+            (text: string) =>
+              text.includes('liquidity') || text.includes('pool') || text.includes('swap')
+          );
+        });
+      });
+
+      describe('Pool Management', function () {
+        it('should be able to list pools', async function () {
+          const response = await agent.processUserInput(
+            'list pools',
+            walletAddress
+          );
+
+          // Verify we get a response with pools data
+          expect(response.status?.state).to.not.equal('failed', 'List pools operation failed');
+          
+          const messageText = extractMessageText(response);
+          expect(messageText.toLowerCase()).to.include('pool');
+        });
+      });
+
+      describe('Liquidity Operations', function () {
+        it('should be able to deposit liquidity', async function () {
+          // First get price information about the WETH/USDC pool
+          const priceResponse = await agent.processUserInput(
+            'What is the price of the WETH/USDC liquidity pool?',
+            walletAddress
+          );
+
+          // Extract a numerical price from the text
+          const priceText = extractMessageText(priceResponse);
+          console.error('Extracted price text:', priceText);
+          const priceMatch = priceText.match(/(\d+(\.\d+)?)/);
+          const price = priceMatch ? parseFloat(priceMatch[0]) : (() => {
+            throw new Error('Failed to extract price from response: ' + priceText);
+          })();
+          
+          const targetUSDCAmount = 0.01;
+          const wethAmount = (targetUSDCAmount / price).toFixed(6);
+
+          const usdcBalanceBefore = await usdc.balanceOf(walletAddress);
+          console.log(`USDC Balance before deposit: ${usdcBalanceBefore.toString()}`);
+
+          // Deposit liquidity
+          const response = await agent.processUserInput(
+            `Deposit ${targetUSDCAmount} USDC and ${wethAmount} WETH within the range from ${(price * 0.8).toFixed(2)} to ${(price * 1.2).toFixed(2)}`,
+            walletAddress
+          );
+          
+          expect(response.status?.state).to.not.equal('failed', 'Deposit operation failed');
+ 
+          const txHashes = await extractAndExecuteTransactions(
+            response,
+            multiChainSigner,
+            'deposit'
+          );
+          expect(txHashes.length).to.be.greaterThan(0, 'No transaction hashes returned');
+          
+          // Check USDC balance after deposit
+          const usdcBalanceAfter = await usdc.balanceOf(walletAddress);
+          console.log(`USDC Balance after deposit: ${usdcBalanceAfter.toString()}`);
+          
+          // Verify USDC balance decreased
+          expect(usdcBalanceBefore.sub(usdcBalanceAfter).gt(0)).to.be.true;
+        });
+      });
+
+      describe('Position Management', function () {
+        it('should be able to list positions', async function () {
+          // Get and display positions
+          const response = await agent.processUserInput(
+            'show my positions',
+            walletAddress
+          );
+          
+          expect(response.status?.state).to.not.equal('failed', 'Show positions operation failed');
+          
+          const messageText = extractMessageText(response)
+          expect(messageText.toLowerCase()).to.satisfy(
+            (text: string) =>
+              text.includes('position') || text.includes('liquidity') || text.includes('pool')
+          );
+        });
+      });
+    });
+  }
+}); 

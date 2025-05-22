@@ -171,24 +171,45 @@ importers:
         specifier: ^3.22.4
         version: 3.25.7
     devDependencies:
+      '@types/chai':
+        specifier: ^4.3.20
+        version: 4.3.20
       '@types/cors':
         specifier: ^2.8.17
         version: 2.8.18
       '@types/express':
         specifier: ^5.0.0
         version: 5.0.2
+      '@types/mocha':
+        specifier: ^10.0.10
+        version: 10.0.10
       '@types/node':
         specifier: ^20.10.0
         version: 20.17.48
+      chai:
+        specifier: ^4.5.0
+        version: 4.5.0
       cpx:
         specifier: ^1.5.0
         version: 1.5.0
+      mocha:
+        specifier: ^10.8.2
+        version: 10.8.2
+      mocha-suppress-logs:
+        specifier: ^0.3.1
+        version: 0.3.1
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
+      test-utils:
+        specifier: workspace:*
+        version: link:../../lib/test-utils
       tsx:
         specifier: ^4.6.2
         version: 4.19.4
+      why-is-node-running:
+        specifier: ^2.2.2
+        version: 2.3.0
 
   examples/pendle-agent:
     dependencies:
@@ -536,6 +557,9 @@ importers:
       ember-schemas:
         specifier: workspace:*
         version: link:../ember-schemas
+      viem:
+        specifier: ^2.26.3
+        version: 2.30.0(typescript@5.8.3)(zod@3.25.7)
       zod:
         specifier: ^3.22.4
         version: 3.25.7
@@ -3031,6 +3055,9 @@ packages:
     resolution: {integrity: sha512-ZX99e6tRweoUXqR+VBrslhda51Nh5MTQwou5tnUDgbtyM0dBgmhEDtWGP/xbKn6hqfPRHujUNwz5fy/wbbhnpw==}
     engines: {node: '>= 0.4'}
 
+  siginfo@2.0.0:
+    resolution: {integrity: sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g==}
+
   signal-exit@4.1.0:
     resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}
     engines: {node: '>=14'}
@@ -3070,6 +3097,9 @@ packages:
   split-string@3.1.0:
     resolution: {integrity: sha512-NzNVhJDYpwceVVii8/Hu6DKfD2G+NrQHlS/V/qgv763EYudVwEcMQNxd2lh+0VrUByXN/oJkl5grOhYWvQUYiw==}
     engines: {node: '>=0.10.0'}
+
+  stackback@0.0.2:
+    resolution: {integrity: sha512-1XMJE5fQo1jGH6Y/7ebnwPOBEkIEnT4QF32d5R1+VXdXveM0IBMJt8zfaxX1P3QhVwrYe+576+jkANtSS2mBbw==}
 
   static-extend@0.1.2:
     resolution: {integrity: sha512-72E9+uLc27Mt718pMHt9VMNiAL4LMsmDbBva8mxWUCkT07fSzEGMYUCk0XWY6lp0j6RBAG4cJ3mWuZv2OE3s0g==}
@@ -3315,6 +3345,11 @@ packages:
   which@2.0.2:
     resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
     engines: {node: '>= 8'}
+    hasBin: true
+
+  why-is-node-running@2.3.0:
+    resolution: {integrity: sha512-hUrmaWBdVDcxvYqnyh09zunKzROWjbZTiNy8dBEjkS7ehEDQibXJ7XvlmtbwuTclUiIyN+CyXQD4Vmko8fNm8w==}
+    engines: {node: '>=8'}
     hasBin: true
 
   why-is-node-running@3.2.2:
@@ -6552,6 +6587,8 @@ snapshots:
       side-channel-map: 1.0.1
       side-channel-weakmap: 1.0.2
 
+  siginfo@2.0.0: {}
+
   signal-exit@4.1.0: {}
 
   simple-update-notifier@2.0.0:
@@ -6598,6 +6635,8 @@ snapshots:
   split-string@3.1.0:
     dependencies:
       extend-shallow: 3.0.2
+
+  stackback@0.0.2: {}
 
   static-extend@0.1.2:
     dependencies:
@@ -6834,6 +6873,11 @@ snapshots:
   which@2.0.2:
     dependencies:
       isexe: 2.0.0
+
+  why-is-node-running@2.3.0:
+    dependencies:
+      siginfo: 2.0.0
+      stackback: 0.0.2
 
   why-is-node-running@3.2.2: {}
 

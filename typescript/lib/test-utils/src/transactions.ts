@@ -1,16 +1,8 @@
-/**
- * Utility functions for handling transactions in tests
- */
-
-// Import the MultiChainSigner interface to use in this file
 import { MultiChainSigner } from './multi-chain-signer.js';
-import { extractTransactionPlan } from './lending.js';
+import { extractLendingTransactionPlan } from './lending.js';
 import * as ethers from 'ethers';
 import { parseFunctionCallArgs } from './response.js';
 
-/**
- * Type for a transaction plan entry
- */
 export interface TransactionPlan {
   to: string;
   data: string;
@@ -91,6 +83,30 @@ export async function signAndSendTransaction(
 }
 
 /**
+ * Extract transaction plan from liquidity artifacts
+ */
+export function extractLiquidityTransactionPlan(
+  response: any
+): Array<TransactionPlan> {
+  if (!response.artifacts) {
+    throw new Error('No artifacts found in response');
+  }
+
+  // Look for liquidity-transaction artifact
+  for (const artifact of response.artifacts) {
+    if (artifact.name === 'liquidity-transaction') {
+      for (const part of artifact.parts || []) {
+        if (part.type === 'data' && part.data?.txPlan) {
+          return part.data.txPlan;
+        }
+      }
+    }
+  }
+
+  throw new Error('No transaction plan found in artifacts');
+}
+
+/**
  * Extract transactions and execute them, with proper error handling
  */
 export async function extractAndExecuteTransactions(
@@ -101,7 +117,13 @@ export async function extractAndExecuteTransactions(
   // First try to get the transaction plan from the artifacts
   let txPlanEntries: TransactionPlan[];
   try {
-    txPlanEntries = extractTransactionPlan(response);
+    // Try extracting from transaction-plan first (lending)
+    try {
+      txPlanEntries = extractLendingTransactionPlan(response);
+    } catch (lendingError) {
+      // If that fails, try extracting from liquidity-transaction (liquidity)
+      txPlanEntries = extractLiquidityTransactionPlan(response);
+    }
   } catch (e) {
     // If no transaction plan in artifacts, try the old function call method
     try {

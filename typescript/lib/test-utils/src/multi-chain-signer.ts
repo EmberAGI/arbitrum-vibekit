@@ -1,6 +1,7 @@
 import * as ethers from "ethers";
 import 'dotenv/config';
 import { type ChainConfig, CHAIN_CONFIGS } from "./chains.js";
+import { type Address } from "viem";
 
 export interface ChainTestConfig {
   provider: ethers.providers.Provider;
@@ -32,8 +33,9 @@ export class MultiChainSigner {
     );
   }
 
-  public getAddress(): Promise<string> {
-    return this.wallet.getAddress();
+  public async getAddress(): Promise<Address> {
+    const address = await this.wallet.getAddress();
+    return address as Address;
   }
 
   public getChainConfig(chainId: number): ChainConfig {

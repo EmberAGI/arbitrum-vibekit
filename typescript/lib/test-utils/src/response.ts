@@ -13,4 +13,20 @@ export function parseFunctionCallArgs(functionCall: {
     console.error('Error parsing function arguments:', error);
     return {};
   }
+}
+
+/**
+ * Extract text message from agent response
+ * @param response The agent response object
+ * @returns The text message from the response
+ */
+export function extractMessageText(response: any): string {
+  if (response?.status?.message?.parts) {
+    for (const part of response.status.message.parts) {
+      if (part.type === 'text') {
+        return part.text;
+      }
+    }
+  }
+  return '';
 } 
