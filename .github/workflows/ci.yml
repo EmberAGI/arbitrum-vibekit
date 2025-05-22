@@ -23,7 +23,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
-          version: 9
+          version: 10
           run_install: false
 
       - name: Clone EmberAGI SDK repository
@@ -33,6 +33,10 @@ jobs:
           path: ember-sdk-typescript
           token: ${{ secrets.GH_PAT }}
           submodules: recursive
+
+      - name: Install dependencies in project
+        working-directory: ./typescript
+        run: pnpm install
 
       - name: Build project
         working-directory: ./typescript
