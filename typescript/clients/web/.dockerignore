@@ -1,0 +1,11 @@
+Containerfile
+Dockerfile
+.containerignore
+.dockerignore
+node_modules
+README.md
+.next
+.git
+.gitignore
+*.md
+dist

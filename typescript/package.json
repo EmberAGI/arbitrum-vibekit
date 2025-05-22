@@ -9,8 +9,10 @@
     "clean": "rm -rf .pnpm && find . -name tsconfig.tsbuildinfo -type f -exec rm -f {} + && find . -name node_modules -type d -prune -exec rm -rf {} + && find . -name dist -type d -prune -exec rm -rf {} + && find . -name dist-test -type d -prune -exec rm -rf {} + && echo \"Workspace cleaned.\"",
     "build": "pnpm recursive run build",
     "build:sequential": "pnpm recursive run --sort --workspace-concurrency=1 build",
-    "test": "NODE_OPTIONS=\"--import tsx --no-deprecation --no-warnings\" mocha --require tsx --require mocha-suppress-logs --config .mocharc.json 'test/**/*.test.ts'",
-    "test:lending-agent": "NODE_OPTIONS=\"--import tsx --no-deprecation --no-warnings\" mocha --require tsx --require mocha-suppress-logs 'test/lending-agent-no-wallet.test.ts'",
+    "docker:compose:up": "docker compose up --build --no-log-prefix",
+    "docker:compose:build": "docker compose build --no-cache",
+    "docker:compose:down": "docker compose down",
+    "test": "NODE_OPTIONS=\"--import tsx --no-deprecation --no-warnings\" mocha --require tsx --config .mocharc.json 'test/**/*.test.ts'",
     "format": "prettier --write \"./{src,test}/**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "prettier --check \"./{src,test}/**/*.{ts,tsx,js,jsx,json,md}\""
   },
