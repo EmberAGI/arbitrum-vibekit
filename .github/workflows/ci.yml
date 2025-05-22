@@ -13,30 +13,45 @@ jobs:
     environment: ci
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'pnpm'
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v3
         with:
-          version: 7
+          version: 9
           run_install: false
 
       - name: Clone EmberAGI SDK repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: EmberAGI/ember-sdk-typescript
           path: ember-sdk-typescript
           token: ${{ secrets.GH_PAT }}
           submodules: recursive
 
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
       - name: Install dependencies in EmberAGI SDK
         working-directory: ./ember-sdk-typescript
         run: pnpm install
+
+      - name: Initialize environment files
+        working-directory: ./ember-sdk-typescript
+        run: |
+          cp .env.example .env
+          cp onchain-actions/.env.template onchain-actions/.env
 
       - name: Start anvil server and wait for readiness
         working-directory: ./ember-sdk-typescript
