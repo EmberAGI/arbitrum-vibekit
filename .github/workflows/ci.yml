@@ -25,10 +25,66 @@ jobs:
           version: 7
           run_install: false
 
-      - name: Install dependencies
-        working-directory: ./typescript
+      # Use git config to securely handle private repository access
+      - name: Clone EmberAGI SDK repository with submodules
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          # Configure Git to use the token for GitHub operations
+          git config --global url."https://${GH_PAT}@github.com/".insteadOf "https://github.com/"
+          # Clone the repository with submodules
+          git clone --recurse-submodules https://github.com/EmberAGI/ember-sdk-typescript.git
+          cd ember-sdk-typescript
+          git submodule update --init --recursive
+
+      - name: Install dependencies in EmberAGI SDK
+        working-directory: ./ember-sdk-typescript
         run: pnpm install
 
+      - name: Start anvil server and wait for readiness
+        working-directory: ./ember-sdk-typescript
+        run: |
+          # Start the anvil server and capture its output to a log file
+          pnpm run start:anvil 2>&1 | tee anvil_server.log &
+          SERVER_PID=$!
+          
+          echo "Waiting for anvil server to be ready..."
+          
+          # Set a timeout (in seconds)
+          timeout=300
+          
+          # Wait until we see the readiness message or timeout
+          until grep -q "You can run integration tests now" anvil_server.log || [ $timeout -le 0 ]; do
+            sleep 1
+            timeout=$((timeout - 1))
+          done
+          
+          # Check if we timed out
+          if [ $timeout -le 0 ]; then
+            echo "Anvil server did not start in time. Logs:"
+            cat anvil_server.log
+            kill $SERVER_PID
+            exit 1
+          fi
+          
+          echo "Anvil server is ready!"
+          echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
+
+      - name: Install dependencies in project
+        working-directory: ./typescript
+        run: pnpm install 
+        
       - name: Build project
         working-directory: ./typescript
-        run: pnpm build
+        run: pnpm run build
+
+      - name: Run tests
+        working-directory: ./typescript
+        run: pnpm run test
+
+      - name: Kill anvil server
+        if: always()
+        run: |
+          if [[ -n "${{ env.SERVER_PID }}" ]]; then
+            kill ${{ env.SERVER_PID }} || true
+          fi
