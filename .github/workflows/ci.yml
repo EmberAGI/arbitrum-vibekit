@@ -30,10 +30,6 @@ jobs:
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
-          # Configure Git to use the token for both HTTPS and SSH URLs
-          git config --global url."https://${GH_PAT}@github.com/".insteadOf "https://github.com/"
-          git config --global url."https://${GH_PAT}@github.com/".insteadOf "git@github.com:"
-          
           # Clone the repository without submodules first
           git clone https://github.com/EmberAGI/ember-sdk-typescript.git
           cd ember-sdk-typescript
@@ -42,10 +38,10 @@ jobs:
           echo "Submodule configuration:"
           cat .gitmodules
           
-          # Update submodule URLs to use HTTPS instead of SSH
-          sed -i 's|git@github.com:|https://github.com/|g' .gitmodules
-          echo "Updated submodule configuration:"
-          cat .gitmodules
+          # Update submodule URLs to use HTTPS with token
+          sed -i "s|git@github.com:|https://${GH_PAT}@github.com/|g" .gitmodules
+          # Don't echo the updated configuration as it contains the token
+          echo "Updated submodule configuration (token hidden)"
           
           # Now initialize and update submodules
           git submodule init
