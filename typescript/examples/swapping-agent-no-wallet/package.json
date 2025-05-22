@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc --build && cpx \"encyclopedia/**/*\" dist/encyclopedia",
+    "build": "tsc --build",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",

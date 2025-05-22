@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { type Address } from 'viem';
 import type { HandlerContext } from './agentToolHandlers.js';
 import { handleSwapTokens, handleAskEncyclopedia } from './agentToolHandlers.js';
-import { parseMcpToolResponse } from 'arbitrum-vibekit';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -717,27 +717,10 @@ Use relavant conversation history to obtain required tool parameters. Present th
 
       this.log('Raw capabilitiesResult received from MCP.');
 
-      const dataToValidate = parseMcpToolResponse(capabilitiesResult, z.any());
-
-      const validationResult = McpGetCapabilitiesResponseSchema.safeParse(dataToValidate);
-
-      this.log('Validation performed on potentially parsed data.');
-      const validationResultString = JSON.stringify(validationResult, null, 2);
-      this.log(
-        'Validation result (first 10 lines):\n',
-        validationResultString.split('\n').slice(0, 10).join('\n') +
-          (validationResultString.includes('\n') ? '\n... (truncated)' : '')
+      const capabilities = parseMcpToolResponsePayload(
+        capabilitiesResult,
+        McpGetCapabilitiesResponseSchema
       );
-
-      if (!validationResult.success) {
-        logError('Fetched capabilities validation failed:', validationResult.error);
-        logError('Data that failed validation:', JSON.stringify(dataToValidate));
-        throw new Error(
-          `Fetched capabilities failed validation: ${validationResult.error.message}`
-        );
-      }
-
-      const capabilities = validationResult.data;
 
       try {
         await fs.mkdir(path.dirname(CACHE_FILE_PATH), { recursive: true });
@@ -790,8 +773,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
       name: 'list_all_topics',
       arguments: {},
     });
-    const parsed = parseMcpToolResponse(rawResult, z.any());
-    const topics = ListAllTopicsResponseSchema.parse(parsed);
+    const topics = parseMcpToolResponsePayload(rawResult, ListAllTopicsResponseSchema);
     this.log(`Fetched ${topics.length} topics from Allora.`);
     return topics;
   }
@@ -806,8 +788,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
       name: 'get_inference_by_topic_id',
       arguments: { topicID },
     });
-    const parsed = parseMcpToolResponse(rawResult, z.any());
-    const inference = InferenceResponseSchema.parse(parsed);
+    const inference = parseMcpToolResponsePayload(rawResult, InferenceResponseSchema);
     this.log(`Fetched inference for topic ID ${topicID}.`);
     return inference;
   }
@@ -839,9 +820,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
   async fetchTopics(): Promise<unknown[]> {
     if (!this.alloraMcpClient) throw new Error('Allora client not initialized.');
     const raw = await this.alloraMcpClient.callTool({ name: 'list_all_topics', arguments: {} });
-    const parsed = parseMcpToolResponse(raw, z.any());
-    // Validate as array
-    const topics = ListAllTopicsResponseSchema.parse(parsed);
+    const topics = parseMcpToolResponsePayload(raw, ListAllTopicsResponseSchema);
     return topics;
   }
 
@@ -851,8 +830,8 @@ Use relavant conversation history to obtain required tool parameters. Present th
       name: 'get_inference_by_topic_id',
       arguments: { topicID },
     });
-    const parsed = parseMcpToolResponse(raw, z.any());
-    return InferenceResponseSchema.parse(parsed);
+    const inference = parseMcpToolResponsePayload(raw, InferenceResponseSchema);
+    return inference;
   }
 
   /**

@@ -24,7 +24,7 @@ import { streamText } from 'ai';
 import {
   createTransactionArtifactSchema,
   type TransactionArtifact,
-  parseMcpToolResponse,
+  parseMcpToolResponsePayload,
 } from 'arbitrum-vibekit';
 import {
   validateTransactionPlans,
@@ -325,7 +325,7 @@ export async function handleSwapTokens(
 
   let validatedSwapResponse: SwapResponse;
   try {
-    validatedSwapResponse = parseMcpToolResponse(swapResponseRaw, SwapResponseSchema);
+    validatedSwapResponse = parseMcpToolResponsePayload(swapResponseRaw, SwapResponseSchema);
   } catch (error) {
     context.log('MCP tool swapTokens returned invalid data structure:', error);
     return {
