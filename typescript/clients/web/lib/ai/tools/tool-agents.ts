@@ -3,7 +3,7 @@ import { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { cookies } from "next/headers";
-import { DEFAULT_SERVER_URLS } from "@/agents-config";
+import { DEFAULT_SERVER_URLS } from "../../../agents-config";
 import type { ChatAgentId } from "../../../agents-config";
 
 /*export const getEmberLending = tool({
@@ -126,54 +126,46 @@ async function getTool(serverUrl: string) {
 export const getTools = async (): Promise<{ [key: string]: CoreTool }> => {
   console.log("Initializing MCP client...");
 
-  // Helper function to convert MCP tool schema to Zod schema
-  //POC: Change avaliable tools based on  cookie agent
   const cookieStore = await cookies();
-  const agentIdFromCookie = cookieStore.get("agent");
-  console.log(agentIdFromCookie);
-  let serverUrl = "";
+  const rawAgentId = cookieStore.get("agent")?.value;
+  const agentId = rawAgentId as ChatAgentId | undefined;
+  const overrideUrl = process.env.MCP_SERVER_URL; // optional env override
 
-  if (agentIdFromCookie && agentIdFromCookie.value === "ember-aave") {
-    serverUrl =
-      (process.env.MCP_SERVER_URL || DEFAULT_SERVER_URLS.get("ember-aave")) ??
-      "";
+  // helper that chooses override first, then config file
+  const resolveUrl = (id: ChatAgentId) =>
+    overrideUrl ?? DEFAULT_SERVER_URLS.get(id) ?? "";
+
+  // "all" agents: fan-out to every URL
+  if (!agentId || agentId === "all") {
+    const urls = Array.from(DEFAULT_SERVER_URLS.keys()).map((id) =>
+      resolveUrl(id)
+    );
+    const toolsByAgent = await Promise.all(urls.map(getTool));
+    // flatten and prefix so you don't get name collisions
+    return toolsByAgent.reduce(
+      (
+        all: Record<string, CoreTool>,
+        tools: { [key: string]: CoreTool },
+        idx: number
+      ) => {
+        const id = Array.from(DEFAULT_SERVER_URLS.keys())[idx];
+        Object.entries(tools).forEach(([toolName, tool]) => {
+          all[`${id}-${toolName}`] = tool; // Changed to dash for clarity
+        });
+        return all;
+      },
+      {} as Record<string, CoreTool>
+    );
   }
 
-  if (agentIdFromCookie && agentIdFromCookie.value === "ember-camelot") {
-    serverUrl =
-      (process.env.MCP_SERVER_URL ||
-        DEFAULT_SERVER_URLS.get("ember-camelot")) ??
-      "";
+  // single agent
+  const serverUrl = resolveUrl(agentId);
+  if (!serverUrl) {
+    // It's better to return an empty object or handle this case as per your application's needs
+    // Throwing an error might be too disruptive for some use cases.
+    // For now, let's log an error and return an empty toolset.
+    console.error(`No server URL configured for agent "${agentId}"`);
+    return {};
   }
-
-  if (agentIdFromCookie && agentIdFromCookie.value === "ember-lp") {
-    serverUrl =
-      (process.env.MCP_SERVER_URL || DEFAULT_SERVER_URLS.get("ember-lp")) ?? "";
-  }
-
-  if (agentIdFromCookie && agentIdFromCookie.value === "ember-pendle") {
-    serverUrl =
-      (process.env.MCP_SERVER_URL || DEFAULT_SERVER_URLS.get("ember-pendle")) ??
-      "";
-  }
-
-  if (!agentIdFromCookie || agentIdFromCookie.value !== "all") {
-    return await getTool(serverUrl);
-  }
-
-  const serverUrls = [
-    DEFAULT_SERVER_URLS.get("ember-aave") ?? "",
-    DEFAULT_SERVER_URLS.get("ember-camelot") ?? "",
-    DEFAULT_SERVER_URLS.get("ember-lp") ?? "",
-    DEFAULT_SERVER_URLS.get("ember-pendle") ?? "",
-  ];
-  const tools = await Promise.all(serverUrls.map((url) => getTool(url)));
-  const allTools: { [key: string]: CoreTool } = {};
-  for (let i = 0; i < tools.length; i++) {
-    const agentName = URL_CHAT_IDS.get(serverUrls[i]) ?? "default";
-    for (const [toolKey, toolValue] of Object.entries(tools[i])) {
-      allTools[`${agentName}${toolKey}`] = toolValue;
-    }
-  }
-  return allTools;
+  return getTool(serverUrl);
 };
