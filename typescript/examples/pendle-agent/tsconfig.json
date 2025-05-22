@@ -2,11 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist",
-    "paths": {
-      "a2a-samples-js": ["../../lib/a2a/dist/index.js"],
-      "a2a-samples-js/schema": ["../../lib/a2a/dist/schema.js"]
-    }
+    "outDir": "dist"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"],
