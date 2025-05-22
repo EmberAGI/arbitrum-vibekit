@@ -7,9 +7,9 @@ import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://questbook.emberai.xyz"),
-  title: "Questbook Demo",
-  description: "Conversational DeFi",
+  metadataBase: new URL("https://github.com/EmberAGI/arbitrum-vibekit"),
+  title: "Arbitrum Vibekit",
+  description: "Vibe code DeFAI agents in minutes",
 };
 
 export const viewport = {
