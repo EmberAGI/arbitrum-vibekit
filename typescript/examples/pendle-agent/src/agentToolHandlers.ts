@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { SwapTokensArgs } from 'ember-schemas';
-import type { Task, Artifact, DataPart } from 'a2a-samples-js/schema';
+import { type Task, type Artifact, type DataPart } from 'a2a-samples-js';
 import {
   parseMcpToolResponsePayload,
   createTransactionArtifactSchema,

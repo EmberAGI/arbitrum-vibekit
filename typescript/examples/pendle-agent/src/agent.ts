@@ -14,7 +14,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { logError, getChainConfigById, type ChainConfig } from './utils.js';
 import { createRequire } from 'module';
-import type { Task } from 'a2a-samples-js/schema';
+import { type Task } from 'a2a-samples-js';
 import {
   GetPendleMarketsRequestSchema,
   GetYieldMarketsResponseSchema,
