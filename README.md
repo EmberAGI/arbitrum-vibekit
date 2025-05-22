@@ -20,7 +20,7 @@ Welcome to Vibekit – your polyglot toolkit for vibe coding smart, autonomous D
 At its core, Vibekit uses the Model Context Protocol (MCP) to standardize how agents connect with tools and data. It also includes built-in Agent-to-Agent (A2A) integration, so the agents can easily work together. Vibekit works smoothly with popular frameworks like Eliza and LangGraph as well. Just add our MCP tools to your existing agents and watch them level up with DeFi superpowers!
 
 <p align="left">
-  <img src="img/Flow Chart.png" width="700px" alt="FlowChart"/>
+  <img src="img/Flow Chart.png" width="800px" alt="FlowChart"/>
 </p>
 
 **_Development Status_:**
