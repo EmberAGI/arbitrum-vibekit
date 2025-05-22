@@ -40,6 +40,9 @@ jobs:
 
       - name: Start anvil server and wait for readiness
         working-directory: ./ember-sdk-typescript
+        env:
+          MNEMONIC: ${{ secrets.MNEMONIC }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           # Start the anvil server and capture its output to a log file
           pnpm run start:anvil 2>&1 | tee anvil_server.log &
@@ -77,6 +80,12 @@ jobs:
 
       - name: Run tests
         working-directory: ./typescript
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          QUICKNODE_API_KEY: ${{ secrets.QUICKNODE_API_KEY }}
+          QUICKNODE_SUBDOMAIN: ${{ secrets.QUICKNODE_SUBDOMAIN }}
+          MNEMONIC: ${{ secrets.MNEMONIC }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: pnpm run test
 
       - name: Kill anvil server
