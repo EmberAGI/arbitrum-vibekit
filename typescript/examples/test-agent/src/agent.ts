@@ -329,6 +329,8 @@ Use relavant conversation history to obtain required tool parameters. Present th
             env: {
               ...process.env,
               ALLORA_API_KEY: process.env.ALLORA_API_KEY,
+              // Use port 0 (ephemeral port) so the OS assigns an available port and avoids conflicts
+              PORT: '0',
             },
           });
 
