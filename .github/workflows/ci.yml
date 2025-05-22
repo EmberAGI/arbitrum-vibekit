@@ -46,9 +46,9 @@ jobs:
         working-directory: ./ember-sdk-typescript
         run: pnpm install
 
-      - name: Install dependencies in onchain-actions
-        working-directory: ./ember-sdk-typescript/onchain-actions
-        run: pnpm install
+      - name: Build the package
+        working-directory: ./ember-sdk-typescript
+        run: pnpm run build
 
       - name: Initialize environment files
         working-directory: ./ember-sdk-typescript
