@@ -20,20 +20,25 @@ If you'd like to speed up the setup process, consider using [FastMCP](https://gi
 
 5. Optional: Create a `tsconfig.json` file to configure the TypeScript compiler for your project. You can use the provided [`emberai-mcp/tsconfig.json`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/mcp-tools/emberai-mcp/tsconfig.json) file and change it to your project's specifications.
 
-6. Install the necessary packages. This command depends on the package manager defined in your `package.json` file. Use the appropriate command below:
+6. Install the necessary packages. This command depends on the package manager defined in your `package.json` file. Use the appropriate command from the options below:
 
-- **pnpm** (recommended):
-  ```bash
-  pnpm install
-  ```
-- **npm**:
-  ```bash
-  npm install
-  ```
-- **yarn**:
-  ```bash
-  yarn install
-  ```
+   **pnpm** (recommended)
+
+   ```bash
+   pnpm install
+   ```
+
+   **npm**
+
+   ```bash
+   npm install
+   ```
+
+   **yarn**
+
+   ```bash
+   yarn install
+   ```
 
 Now you can start creating your tool in the `src/index.ts` file.
 

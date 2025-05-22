@@ -1,4 +1,4 @@
-## **EmberAI Overview**
+## EmberAI Overview
 
 - Ember is a powerful MCP (Model Context Protocol) server that enables AI agents to interact with DeFi protocols or on-chain services without requiring custom implementations.
 
@@ -8,7 +8,7 @@
 
 - Ember serves as a one-stop solution for managing and executing complex DeFi operations across various chains. Developers can use Ember's rich market data to create custom DeFi strategies.
 
-## **Prerequisites**
+## Prerequisites
 
 **1. Node.js ≥22**
 
@@ -16,7 +16,7 @@
 
 **3. TypeScript** (configured in the `tsconfig.json` file)
 
-## **Quickstart**
+## Quickstart
 
 1. Clone the Vibekit repository and navigate to the `emberai-mcp` folder.
 
@@ -41,7 +41,7 @@
 
 Clients can now connect via STDIO transport to invoke the MCP tools.
 
-## **Available Tools**
+## Available Tools
 
 Below is a comprehensive list of MCP tools offered by Ember. For more details on Ember's capabilities, visit the [official documentation page](https://docs.emberai.xyz/).
 
@@ -263,7 +263,7 @@ Retrieves information about available yield-generating opportunities across vari
 
 An object containing yield market information.
 
-## **Chains and Protocols**
+## Chains and Protocols
 
 ### 1. Lending and Borrowing
 
@@ -282,6 +282,8 @@ Users can supply tokens as collateral to borrow other assets or lend them out to
 - Optimism (`10`)
 - Polygon (`137`)
 - Ethereum Mainnet (`1`)
+
+---
 
 ### 2. Token Swaps
 
@@ -335,6 +337,8 @@ Ember supports swaps across 200+ chains, including:
 4. ZetaChain (`7000`)
 5. Zilliqa (`32769`)
 6. Klaytn (`8217`)
+
+---
 
 ### 3. Liquidity Provision & Management
 
