@@ -546,6 +546,7 @@ Interaction Guidelines:
         model: hyperbolic.chat('deepseek-ai/DeepSeek-R1'),
         messages: this.conversationHistory,
         tools: this.toolSet,
+        maxTokens: 16384,
         maxSteps: 10,
         onStepFinish: async (stepResult: StepResult<typeof this.toolSet>) => {
           this.log(`Step finished. Reason: ${stepResult.finishReason}`);

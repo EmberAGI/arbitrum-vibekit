@@ -43,9 +43,9 @@ const initializeAgent = async (): Promise<void> => {
   await agent.init();
 };
 
-const agentToolName = 'askSwapAgent';
+const agentToolName = 'askPredictAgent';
 const agentToolDescription =
-  'Sends a free‑form, natural‑language swap instruction to this token‑swap AI agent and returns a structured quote (route, estimate, fees, calldata). You can also ask questions to the agent about the Camelot protocol. This agent can help you swap tokens on Camelot and other protocols. It supports both same-chain and cross-chain swaps.';
+  'Responds to natural language queries about token price predictions and can execute swaps based on those predictions. Use this tool to ask questions like "Should I trade 1 ETH based on the 4-hour prediction?" or "Predict and swap 50 ARB if it looks like a good buy in the next 24 hours, using my ETH on Arbitrum to buy it." The agent uses Allora predictions and its `predictAndSwap` tool to provide predictions (buy/sell/hold) and execute trades.';
 
 mcpServer.tool(
   agentToolName,
