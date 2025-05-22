@@ -25,27 +25,13 @@ jobs:
           version: 7
           run_install: false
 
-      # Use git config to securely handle private repository access
-      - name: Clone EmberAGI SDK repository with submodules
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
-        run: |
-          # Clone the repository without submodules first
-          git clone https://github.com/EmberAGI/ember-sdk-typescript.git
-          cd ember-sdk-typescript
-          
-          # Check the submodule config
-          echo "Submodule configuration:"
-          cat .gitmodules
-          
-          # Update submodule URLs to use HTTPS with token
-          sed -i "s|git@github.com:|https://${GH_PAT}@github.com/|g" .gitmodules
-          # Don't echo the updated configuration as it contains the token
-          echo "Updated submodule configuration (token hidden)"
-          
-          # Now initialize and update submodules
-          git submodule init
-          git submodule update --recursive
+      - name: Clone EmberAGI SDK repository
+        uses: actions/checkout@v3
+        with:
+          repository: EmberAGI/ember-sdk-typescript
+          path: ember-sdk-typescript
+          token: ${{ secrets.GH_PAT }}
+          submodules: recursive
 
       - name: Install dependencies in EmberAGI SDK
         working-directory: ./ember-sdk-typescript
