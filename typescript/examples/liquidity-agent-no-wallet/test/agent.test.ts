@@ -13,6 +13,7 @@ import {
 } from 'test-utils';
 import whyIsNodeRunning from 'why-is-node-running';
 import { type Address } from 'viem';
+import * as ethers from 'ethers';
 
 // Define chain IDs that should be tested
 const CHAINS_TO_TEST: number[] = [42161]; // Arbitrum One
@@ -42,13 +43,10 @@ describe('Liquidity Agent Integration Tests', function () {
 
   before(async function () {
     try {
-      // Create a single MultiChainSigner for all chains being tested
       multiChainSigner = await MultiChainSigner.fromTestChains(CHAINS_TO_TEST);
       
-      // Get the wallet address in the correct format
       walletAddress = await multiChainSigner.getAddress();
 
-      // Initialize agent
       agent = new Agent(quicknodeSubdomain, quicknodeApiKey);
       await agent.init();
       await agent.start();
@@ -140,19 +138,28 @@ describe('Liquidity Agent Integration Tests', function () {
 
       describe('Liquidity Operations', function () {
         it('should be able to deposit liquidity', async function () {
-          // First get price information about the WETH/USDC pool
-          const priceResponse = await agent.processUserInput(
-            'What is the price of the WETH/USDC liquidity pool?',
+          // First get pools to find WETH/USDC pool and its price
+          const poolsResponse = await agent.processUserInput(
+            'list pools',
             walletAddress
           );
-
-          // Extract a numerical price from the text
-          const priceText = extractMessageText(priceResponse);
-          console.error('Extracted price text:', priceText);
-          const priceMatch = priceText.match(/(\d+(\.\d+)?)/);
-          const price = priceMatch ? parseFloat(priceMatch[0]) : (() => {
-            throw new Error('Failed to extract price from response: ' + priceText);
-          })();
+          expect(poolsResponse.status?.state).to.not.equal('failed', 'List pools operation failed');
+          
+          // Extract pools from response artifacts
+          const pools = extractPools(poolsResponse);
+          expect(pools.length).to.be.greaterThan(0, 'No pools found in response');
+          
+          // Find WETH/USDC pool
+          const wethUsdcPool = pools.find(pool => 
+            (pool.symbol0 === 'WETH' && pool.symbol1 === 'USDC') || 
+            (pool.symbol0 === 'USDC' && pool.symbol1 === 'WETH')
+          );
+          expect(wethUsdcPool).to.not.be.undefined, 'WETH/USDC pool not found';
+          
+          // Get price from pool data
+          const price = parseFloat(wethUsdcPool!.price);
+          expect(price).to.be.greaterThan(0, 'Invalid pool price');
+          console.log(`WETH/USDC pool price: ${price}`);
           
           const targetUSDCAmount = 0.01;
           const wethAmount = (targetUSDCAmount / price).toFixed(6);
@@ -162,7 +169,7 @@ describe('Liquidity Agent Integration Tests', function () {
 
           // Deposit liquidity
           const response = await agent.processUserInput(
-            `Deposit ${targetUSDCAmount} USDC and ${wethAmount} WETH within the range from ${(price * 0.8).toFixed(2)} to ${(price * 1.2).toFixed(2)}`,
+            `Deposit ${targetUSDCAmount} USDC and ${wethAmount} WETH to the WETH/USDC pool within the range from ${(price * 0.8).toFixed(2)} to ${(price * 1.2).toFixed(2)}`,
             walletAddress
           );
           
@@ -203,4 +210,35 @@ describe('Liquidity Agent Integration Tests', function () {
       });
     });
   }
-}); 
+});
+
+/**
+ * Extract pools from agent response artifacts
+ * @param response The agent response object
+ * @returns Array of pool objects or empty array if none found
+ */
+function extractPools(response: any): Array<{
+  handle: string;
+  symbol0: string;
+  symbol1: string;
+  token0: { chainId: string; address: string };
+  token1: { chainId: string; address: string };
+  price: string;
+}> {
+  if (!response.artifacts) {
+    return [];
+  }
+
+  // Look for available-liquidity-pools artifact
+  for (const artifact of response.artifacts) {
+    if (artifact.name === 'available-liquidity-pools') {
+      for (const part of artifact.parts || []) {
+        if (part.type === 'data' && part.data?.pools) {
+          return part.data.pools;
+        }
+      }
+    }
+  }
+
+  return [];
+}
