@@ -24,10 +24,9 @@ import type { Chain } from 'viem/chains';
 import type { Task } from 'a2a-samples-js/schema';
 import { createRequire } from 'module';
 
-import { createHyperbolic } from '@hyperbolic/ai-sdk-provider';
-
-const hyperbolic = createHyperbolic({
-  apiKey: process.env.HYPERBOLIC_API_KEY,
+// Instantiate OpenRouter provider
+const openrouter = createOpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY!,
 });
 
 const __filename = fileURLToPath(import.meta.url);
@@ -97,6 +96,12 @@ type McpGetCapabilitiesResponse = z.infer<typeof McpGetCapabilitiesResponseSchem
 const ListAllTopicsResponseSchema = z.array(z.any()).describe('Array of Allora topics');
 const InferenceResponseSchema = z.any().describe('Allora inference data');
 
+// FIRST_EDIT: Add tool parameter schemas for listing and fetching Allora topics
+const ListAllTopicsToolSchema = z.object({}).describe('No parameters to list Allora topics');
+const GetInferenceToolSchema = z.object({
+  topicID: z.number().describe('ID of the topic to fetch inference for'),
+});
+
 // Zod schemas for decision logic
 const PredictedPriceSchema = z
   .object({ predictedPrice: z.number(), currentPrice: z.number() })
@@ -121,7 +126,9 @@ function logError(...args: unknown[]) {
 }
 
 type SwappingToolSet = {
-  predictAndSwap: Tool<typeof PredictAndSwapSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
+  list_all_topics: Tool<typeof ListAllTopicsToolSchema, Task>;
+  get_inference_by_topic_id: Tool<typeof GetInferenceToolSchema, Task>;
+  swapTokens: Tool<typeof SwapTokensSchema, Task>;
 };
 
 interface ChainConfig {
@@ -187,8 +194,8 @@ export class Agent {
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
 
-    if (!process.env.HYPERBOLIC_API_KEY) {
-      throw new Error('HYPERBOLIC_API_KEY not set!');
+    if (!process.env.OPENROUTER_API_KEY) {
+      throw new Error('OPENROUTER_API_KEY not set!');
     }
     if (!process.env.ALLORA_API_KEY) {
       this.log(
@@ -218,7 +225,7 @@ export class Agent {
       log: this.log.bind(this),
       quicknodeSubdomain: this.quicknodeSubdomain,
       quicknodeApiKey: this.quicknodeApiKey,
-      openRouterApiKey: process.env.HYPERBOLIC_API_KEY,
+      openRouterApiKey: process.env.OPENROUTER_API_KEY,
       camelotContextContent: this.camelotContextContent,
     };
     return context;
@@ -228,60 +235,7 @@ export class Agent {
     this.conversationHistory = [
       {
         role: 'system',
-        content: `You are an AI agent that leverages Allora price predictions to help users make informed trading decisions and execute token swaps. Your primary tool is "predictAndSwap".
-
-Based on the predicted future price of a token, you will advise whether to buy, sell, or hold. If a buy or sell action is advised and confirmed, you can execute the swap.
-
-<examples>
-<example1>
-<user>Should I trade 1 ETH based on the 4-hour prediction? And what\'s the outlook?</user>
-<parameters_for_predictAndSwap>
-<tokenSymbol>ETH</tokenSymbol>
-<amount>1</amount>
-<horizon>4 hours</horizon>
-</parameters_for_predictAndSwap>
-(Agent will first get prediction, advise buy/sell/hold, then may ask if user wants to proceed with a swap if action is buy/sell)
-</example1>
-
-<example2>
-<user>Predict and swap 50 ARB if it looks like a good buy in the next 24 hours. I want to use my ETH on Arbitrum to buy it.</user>
-<parameters_for_predictAndSwap>
-<tokenSymbol>ARB</tokenSymbol>
-<amount>50</amount>
-<horizon>24 hours</horizon>
-<fromToken>ETH</fromToken>
-<fromChain>Arbitrum</fromChain>
-<toChain>Arbitrum</toChain> (assuming ARB is on Arbitrum, toChain might be inferred or user prompted if ambiguous)
-</parameters_for_predictAndSwap>
-</example2>
-
-<example3>
-<user>What\'s the prediction for SOL over the next day? If it\'s a strong sell, sell 10 SOL for USDC on Solana.</user>
-<parameters_for_predictAndSwap>
-<tokenSymbol>SOL</tokenSymbol>
-<amount>10</amount>
-<horizon>1 day</horizon>
-<toToken>USDC</toToken>
-<fromChain>Solana</fromChain> (assuming SOL is on Solana)
-<toChain>Solana</toChain>   (assuming USDC is desired on Solana)
-<sellThreshold>0.02</sellThreshold> (User implies a 'strong sell', agent might use a higher default or user specified threshold)
-</parameters_for_predictAndSwap>
-</example3>
-</examples>
-
-Interaction Guidelines:
-- Use relevant conversation history to obtain required tool parameters.
-- If critical parameters like \`tokenSymbol\` or \`amount\` are missing, ask the user for them.
-- Clearly state the prediction, the suggested action (buy, sell, hold), and the strength of the signal before asking to proceed with a swap.
-- If the action is 'hold', no swap will be executed.
-- When executing a swap:
-    - If buying \`tokenSymbol\` and \`fromToken\` is not specified, assume \`fromToken\` is USDC.
-    - If selling \`tokenSymbol\` and \`toToken\` is not specified, assume \`toToken\` is USDC.
-- Present the user with a list of tokens and chains they can swap from and to if relevant and if this information is easily available from the tool or context.
-- Never respond in markdown, always use plain text.
-- Never add links to your response.
-- Do not suggest the user to ask questions unrelated to the current task.
-- When an unknown error happens, do not try to guess the error reason; report it as is.`,
+        content: `You are an AI agent that leverages Allora price predictions to help users make informed trading decisions. First, call the "list_all_topics" tool to retrieve all available signal topics. From the returned list, identify the single topic whose metadata (token symbol and optional horizon) matches the user's request. Then call the "get_inference_by_topic_id" tool once with that topicID to fetch its raw prediction JSON. If that inference indicates a buy or sell, invoke the "swapTokens" tool with the correct parameters (tokenSymbol, amount, fromToken, toToken, fromChain, toChain). If the inference indicates a hold (no buy or sell), respond with a clear explanation of why no action was taken. Ask the user any missing information needed for swapping. Always respond in plain text.`,
       },
     ];
 
@@ -427,74 +381,84 @@ Interaction Guidelines:
       await this._loadCamelotDocumentation();
 
       this.toolSet = {
-        predictAndSwap: tool({
-          description: 'Execute a swap based on Allora prediction for a token.',
-          parameters: PredictAndSwapSchema,
+        list_all_topics: tool<typeof ListAllTopicsToolSchema, Task>({
+          description: 'List all Allora signal topics.',
+          parameters: ListAllTopicsToolSchema,
+          execute: async () => {
+            this.log('Tool list_all_topics invoked');
+            try {
+              const topics = await this.fetchAlloraTopics();
+              return {
+                id: this.userAddress || 'unknown-user',
+                status: {
+                  state: 'completed',
+                  message: {
+                    role: 'agent',
+                    parts: [{ type: 'text', text: JSON.stringify(topics) }],
+                  },
+                },
+              };
+            } catch (error: any) {
+              return {
+                id: this.userAddress || 'unknown-user',
+                status: {
+                  state: 'failed',
+                  message: {
+                    role: 'agent',
+                    parts: [{ type: 'text', text: `Error listing topics: ${error.message}` }],
+                  },
+                },
+              };
+            }
+          },
+        }),
+        get_inference_by_topic_id: tool<typeof GetInferenceToolSchema, Task>({
+          description: 'Fetch the Allora inference for a given topic ID.',
+          parameters: GetInferenceToolSchema,
           execute: async args => {
-            const {
-              tokenSymbol,
-              amount,
-              horizon,
-              buyThreshold,
-              sellThreshold,
-              fromToken,
-              toToken,
-              fromChain,
-              toChain,
-            } = args;
-            // Fetch prediction and compute decision
-            const inference = await this.getPredictionForToken(tokenSymbol, horizon);
-            if (!inference) {
+            this.log('Tool get_inference_by_topic_id invoked with args:', args);
+            try {
+              const inference = await this.fetchAlloraInference(args.topicID);
               return {
                 id: this.userAddress || 'unknown-user',
                 status: {
                   state: 'completed',
                   message: {
                     role: 'agent',
-                    parts: [
-                      {
-                        type: 'text',
-                        text: `No prediction topic found for ${tokenSymbol}${horizon ? ' @ ' + horizon : ''}.`,
-                      },
-                    ],
+                    parts: [{ type: 'text', text: JSON.stringify(inference) }],
                   },
                 },
               };
-            }
-            const { action, strength } = this.decideAction(
-              inference,
-              buyThreshold ?? 0.01,
-              sellThreshold ?? 0.01
-            );
-            if (action === 'hold') {
+            } catch (error: any) {
               return {
                 id: this.userAddress || 'unknown-user',
                 status: {
-                  state: 'completed',
+                  state: 'failed',
                   message: {
                     role: 'agent',
                     parts: [
                       {
                         type: 'text',
-                        text: `Decision: hold (strength: ${strength}). No swap executed.`,
+                        text: `Error fetching inference for topicID ${args.topicID}: ${error.message}`,
                       },
                     ],
                   },
                 },
               };
             }
-            // Determine swap direction
-            const actualFromToken = action === 'buy' ? (fromToken ?? 'USDC') : tokenSymbol;
-            const actualToToken = action === 'buy' ? tokenSymbol : (toToken ?? 'USDC');
-            const swapArgs = {
-              fromToken: actualFromToken,
-              toToken: actualToToken,
-              amount,
-              fromChain,
-              toChain,
-            };
-            // Execute swap via existing handler
-            return await handleSwapTokens(swapArgs, this.getHandlerContext());
+          },
+        }),
+        swapTokens: tool<typeof SwapTokensSchema, Task>({
+          description: 'Swap or convert tokens. Use after prediction suggests buy or sell.',
+          parameters: SwapTokensSchema,
+          execute: async args => {
+            this.log('Tool swapTokens invoked with args:', args);
+            try {
+              return await handleSwapTokens(args, this.getHandlerContext());
+            } catch (error: any) {
+              logError(`Error during swapTokens via toolSet: ${error.message}`);
+              throw error;
+            }
           },
         }),
       };
@@ -543,7 +507,7 @@ Interaction Guidelines:
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
-        model: hyperbolic.chat('deepseek-ai/DeepSeek-R1'),
+        model: openrouter('google/gemini-2.5-flash-preview'),
         messages: this.conversationHistory,
         tools: this.toolSet,
         maxTokens: 16384,
