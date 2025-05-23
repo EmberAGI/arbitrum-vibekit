@@ -91,7 +91,7 @@ Next, click on "List Tools" to view and run the tools your agent offers:
 
 The Inspector interface provides a straightforward way to interact with your agent. For a more integrated development experience, you can use the Cursor IDE.
 
-**3. Integrate with Cursor IDE**
+**2. Integrate with Cursor IDE**
 
 **Note:** This configuration approach is also compatible with other graphical MCP clients like [Claude Desktop](https://modelcontextprotocol.io/quickstart/user) and [Windsurf](https://docs.windsurf.com/windsurf/mcp). Simply adjust the settings accordingly in their respective configuration files.
 
