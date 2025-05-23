@@ -35,4 +35,4 @@ If you need assistance at any step of the contribution process:
 - Search [existing issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) for similar questions or problems.
 - If your concern isn’t already covered, create a new issue with detailed information.
 - Reach out to our team for guidance.
-- Join Our [Support Discord](https://discord.com/invite/bgxWQ2fSBR) and connect with other builders.
+- Join our [support Discord](https://discord.com/invite/bgxWQ2fSBR) and connect with other builders.
