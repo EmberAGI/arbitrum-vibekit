@@ -70,3 +70,11 @@ They simplify LLM-driven workflows, let you enforce logic and validation, and al
 An **agent is a tool-powered, LLM-friendly function server** that can be stateless or stateful, and can collaborate with other agents over a standard protocol. It handles requests, executes logic, manages optional state, and returns structured results—all in a way that's easy to scale and extend.
 
 > “Agents are just functions with context, coordination, and control—wrapped in a simple service shell.”
+
+| Decision                            | Rationale                                                                                                                   |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **Single-entry tool (`askXAgent`)** | Keeps the public interface tiny and self-describing for LLMs; avoids “many-tool sprawl,” which bloats prompt context.       |
+| **Single-responsibility rule**      | Each agent owns one domain (price feed, wallet ops, etc.). Makes reasoning, scaling, and charging simpler.                  |
+| **Dual role (MCP server + client)** | Lets any agent call or be called without extra glue; aligns with “lego block” vision.                                       |
+| **A2A as internal language**        | Guarantees every agent understands every other—no matter which outer wrapper (MCP, CLI, webhook) invoked it.                |
+| **Swarm narrative**                 | Explicitly encourages composing many focused agents instead of one mega-agent, preventing context bloat and latency spikes. |

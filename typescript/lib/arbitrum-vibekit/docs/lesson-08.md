@@ -81,3 +81,10 @@ Hooks let you wrap tool logic with flexible pre/post behavior. They help with no
 > • **Typed and focused** – Hooks operate on a validated `ctx` object, reducing boilerplate and improving safety.
 >
 > Middleware could have achieved similar effects, but hooks keep behavior more modular, visible, and per-tool. They offer the simplest way to wrap logic without introducing system-wide coupling or ambiguity.
+
+| Decision                     | Rationale                                                                                                                                            |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **File-local hooks**         | Hooks live next to each tool file, making their effects discoverable in one place—no hunting through global registration or middleware chains.       |
+| **Implicit execution order** | Guarantees `before → impl → after` without explicit `next()` calls, avoiding common Express middleware mistakes and making control flow predictable. |
+| **Typed `ctx` object**       | Hooks operate on a schema-validated context, not raw `req`/`res`, reducing boilerplate and preventing type mismatches.                               |
+| **Decorator compatibility**  | Heavy cross-cutting concerns (e.g., paywall, rate-limit) stay in decorators outside the hook pipeline, preserving separation of responsibilities.    |

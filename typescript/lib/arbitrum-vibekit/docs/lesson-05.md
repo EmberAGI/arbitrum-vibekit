@@ -83,3 +83,12 @@ Tool calls always follow the same clear path:
 This consistent lifecycle ensures reliability, traceability, and flexibility—whether you're building simple utilities or orchestrating complex multi-agent workflows.
 
 > "Every tool call is a conversation. The lifecycle makes sure it's heard, checked, and answered."
+
+| Decision                                                     | Rationale                                                                                                    |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| **Fixed order: validation → paywall → hooks → impl → after** | Guarantees fees are charged before heavy work, and `before/after` hooks cannot reorder unexpectedly.         |
+| **Schema validation with Zod**                               | Single source of truth for both runtime checks and static typing; discourages duplicating checks in hooks.   |
+| **Payment decorator, not hook**                              | Enforces fee even if tool author forgets to write a hook; keeps business logic pure.                         |
+| **Context object (`ctx`)**                                   | Typed wrapper carrying validated args, task helpers, meta; avoids mutation of `req/res`.                     |
+| **ThreadId creation for every call**                         | Unifies MCP and A2A observability; lets DevTools time-travel any call path.                                  |
+| **wrapAsync + AgentError**                                   | Removes boilerplate try/catch; returns model-friendly structured errors consistent with OpenAI SDK patterns. |

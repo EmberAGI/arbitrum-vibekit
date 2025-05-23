@@ -70,3 +70,10 @@ This default layout separates responsibilities cleanly:
 You can always rearrange as your agent grows—but this structure gives you a scalable, legible starting point.
 
 > "Folders are mental boundaries. Structure helps you think clearly before you code."
+
+| Decision                              | Rationale                                                                                                                                                          |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Repo vs Library split**             | Keeps agent repos tiny (only `tools/`, `adapters/`, `state/`, `config.ts`) while all boilerplate and common code lives in `arbitrum-vibekit`. Simplifies upgrades. |
+| **`adapters/` directory**             | Clearly delineates where interface-mapping or wrapper logic lives, preventing third-party adapters from being mixed with core tool code.                           |
+| **Providers inside library**          | Ships battle-tested MCP servers (price, wallet, explorer) for instant use—no per-repo setup.                                                                       |
+| **One-line bootstrap (`startAgent`)** | Hides Express/MCP/A2A wiring under the hood, ensuring all agents share the same security, error-handling, and state initialization.                                |

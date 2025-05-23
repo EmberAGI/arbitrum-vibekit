@@ -75,3 +75,11 @@ If in doubt, **build it stateless first**, and reach for state only when needed.
 This choice applies across the board—from individual tools to full A2A task handlers.
 
 > "A stateless tool solves a problem. A stateful one solves a process."
+
+| Decision                                    | Rationale                                                                                                      |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **Concept applies to any function**         | Avoids limiting the mental model to “tools”; loops & A2A handlers follow the same rule.                        |
+| **Task object created even if stateless**   | Gives every call a `threadId` for tracing and observability with zero cost if unused.                          |
+| **Global state via Immer**                  | Allows copy-on-write without teaching juniors functional programming; mutations look imperative but stay safe. |
+| **Reserved slices (`llm.ctx`, `llm.meta`)** | Separates prompt data from internal memory; prevents accidentally dumping huge objects into the LLM context.   |
+| **Guidance: build stateless first**         | Performance + testability by default; reach for state only when progress needs persisting.                     |

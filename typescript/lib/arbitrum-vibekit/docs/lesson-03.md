@@ -14,13 +14,12 @@ A2A is ideal for orchestrating complex or long-running workflows across multiple
 
 ### ⚙️ Key Concepts
 
-- **Agent Cards**: Each agent publishes a card describing who it is, what it can do, and how to reach it.
-- **Task Delegation**: Agents send tasks to each other over HTTP using a structured message format.
-- **Task Threads**: Each delegated task is tracked using a unique thread ID, allowing for stateful back-and-forth.
-- **Streaming Updates**: Agents can send real-time updates back to the task originator via SSE (server-sent events).
-- **Long-running Tasks**: Perfect for loops, monitoring, or multi-phase actions.
-
----
+- **Agent Cards**: Each agent publishes a card with its ID, capabilities, endpoints, and authentication details.
+- **Protocol + Message Schema**: A2A defines both the wire protocol (HTTP POST / JSON-RPC or SSE) and the message schema (`thread_id`, `type`, `payload`, streaming flags).
+- **Task Delegation**: Agents send tasks to each other using structured messages over HTTP.
+- **Task Threads**: Each delegated task uses a unique `thread_id`, enabling stateful back-and-forth and traceability.
+- **Streaming Updates**: Agents can push incremental results or progress via SSE.
+- **Long-running Tasks**: Perfect for loops, monitoring, or multi-phase actions, with cancellation support.
 
 ### ➡️ A2A Agent Flow (Simplified)
 
@@ -47,9 +46,14 @@ MCP is still used as the entrypoint for LLMs because it's widely adopted and ena
 
 ### ✨ Why Use A2A Instead of MCP Directly
 
-MCP and A2A both support key principles like decoupling, delegation, streaming, observability, and swarm collaboration. The choice to use A2A directly comes down to its advantages in decentralized coordination, minimal overhead, and self-hosted simplicity:
+While MCP and A2A both support core principles like delegation, observability, and streaming, we use A2A directly when we want:
 
-- **Decentralization**: Agents discover and talk to each other directly.
+- **Decentralization**: Agents communicate peer-to-peer without central registry requirements.
+- **Minimal Overhead**: Simpler message structure, no external model runtime needed.
+- **Self-Hosting Simplicity**: Agents can be hosted anywhere, by anyone, without MCP wrappers.
+
+A2A is the internal backbone of all agent communication—even tools exposed via MCP ultimately speak A2A internally.- **Decentralization**: Agents discover and talk to each other directly.
+
 - **Minimal Overhead**: No need for extra schema wrapping or tool registration.
 - **Self-Hosting Simplicity**: Agents can run anywhere without upstream model integration.
 - **Decoupling**: Each agent can evolve independently.
@@ -68,6 +72,14 @@ Every agent is both an **MCP server** (so others can call it) and an **MCP clien
 
 ### ✅ Summary
 
-A2A gives agents a shared protocol for communication and collaboration. It supports delegation, streaming, long-running tasks, and clean separation of concerns. It enables swarm-based orchestration, where many small agents coordinate to solve complex problems in a modular, scalable way.
+A2A gives agents a shared protocol—both in message format and transport—so they can delegate, stream, and coordinate tasks in a decentralized swarm. Each agent remains focused on a single responsibility, and the shared A2A schema keeps orchestration predictable and scalable.
 
 > "A2A gives agents a voice. Swarms give them purpose."
+
+| Decision                             | Rationale                                                                                                       |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| **Protocol _and_ schema emphasised** | Devs understand A2A is not just “send JSON” but a full task envelope with `thread_id`, streaming, errors.       |
+| **Decentralised discovery**          | Agents can publish cards to any registry—or just a URL—eliminating single-point directories.                    |
+| **Task threads & streaming**         | Enables long-running loops, partial results, and cancellation with a single construct.                          |
+| **Why choose A2A over raw MCP**      | Lower overhead (no model gateway), peer-to-peer, self-hosting ease; yet same delegation/observability benefits. |
+| **Swarm pattern reinforced**         | Shows how outer LLM delegates to coordinator-agent via MCP, which fans out to specialist agents via A2A.        |

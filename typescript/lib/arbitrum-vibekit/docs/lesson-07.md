@@ -70,3 +70,10 @@ export default withPaywall(getPrice, { pct: 0.01 });
 - Create **adapters** when you want to modify or augment their behavior
 
 > "Providers give you power. Adapters give you control."
+
+| Decision                                   | Rationale                                                                                                                                                  |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Providers = MCP servers**                | Clarifies that agents _call_ framework-bundled services via MCP, rather than importing SDK clients—maintains a uniform tool-calling model.                 |
+| **Adapters reuse hook/decorator patterns** | No new API surface: you wrap third-party tools with the same `before`/`after` and decorator primitives you already know, so there’s one mental model.      |
+| **Adapters instead of forking**            | When upstream schemas or behavior change, you update a single adapter file—core agent logic and provider code remain untouched.                            |
+| **Built-in provider catalogue**            | Gives juniors immediate access to common infrastructure (price feeds, execution engines, analytics) without external configuration or credit-card sign-up. |

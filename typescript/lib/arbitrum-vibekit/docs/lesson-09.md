@@ -55,3 +55,10 @@ This lets you wrap behavior cleanly while keeping the underlying tool untouched.
 Adapters let you reshape third-party tools into the exact form your agent needs. Use them to modify input, output, or intermediate behavior in a clean, modular, and testable way.
 
 > "Don’t rewrite the wheel. Wrap it."
+
+| Decision                              | Rationale                                                                                                                          |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Adapter = wrapper tool**            | When you don’t control a provider’s source, an adapter file lets you attach hooks/decorators without modifying upstream code.      |
+| **Schema remapping in one place**     | Keeps input/output transformations (symbol→address, param renames) centralized, avoiding scattered logic across multiple tools.    |
+| **Single-purpose adapters**           | Encourages focused adapter files—each does one job (mapping, validation, paywall), so they remain small, testable, and composable. |
+| **Guidance on when _not_ to adapter** | Prevents over-engineering: if you control the source, use hooks directly; if no modification is needed, call the tool straight.    |
