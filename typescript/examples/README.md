@@ -112,7 +112,19 @@ You might need to restart Cursor to apply the new configuration. Upon successful
 
 **3. Web Interface**
 
-Coming Soon!
+You can also interact with your agent using the [Vibekit Web Frontend](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web). To do so:
+
+- Make sure your agent (MCP server) is running on http://localhost:3001.
+
+- In the `typescript` directory, ensure your `.env` is configured and run:
+
+  ```bash
+  docker compose up -d
+  ```
+
+- Open your browser and go to [http://localhost:3000](http://localhost:3000).
+
+- The web frontend provides a user-friendly chat interface for sending queries to your on-chain AI agent and viewing responses in real time.
 
 ## 🛠️ Building Your Own Agent
 
