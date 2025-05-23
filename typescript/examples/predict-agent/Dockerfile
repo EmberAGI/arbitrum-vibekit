@@ -19,7 +19,7 @@ COPY tsconfig.base.json ./
 # 2. Copy all workspace package.json files (to maximise Docker cache)
 # ------------------------------
 COPY lib/ lib/
-COPY examples/swapping-agent-no-wallet/package.json ./examples/swapping-agent-no-wallet/
+COPY examples/predict-agent/package.json ./examples/predict-agent/
 
 # ------------------------------
 # 3. Install deps based on the copied package.json set. This is cache-friendly and establishes workspace links.
@@ -34,7 +34,7 @@ COPY . .
 # ------------------------------
 # 5. Build every workspace package that provides a build script (recursive build)
 # ------------------------------
-RUN pnpm --filter swapping-agent-no-wallet... build
+RUN pnpm --filter predict-agent... build
 
 # Production stage
 FROM node:20-slim AS production
@@ -54,16 +54,15 @@ WORKDIR /app
 RUN npm install -g pnpm@10.7.0
 
 # Copy only what we need from the builder stage
-COPY --from=builder /app/examples/swapping-agent-no-wallet/dist /app/examples/swapping-agent-no-wallet/dist
-COPY --from=builder /app/examples/swapping-agent-no-wallet/encyclopedia /app/examples/swapping-agent-no-wallet/encyclopedia
-COPY --from=builder /app/examples/swapping-agent-no-wallet/package.json /app/examples/swapping-agent-no-wallet/
-COPY --from=builder /app/examples/swapping-agent-no-wallet/node_modules /app/examples/swapping-agent-no-wallet/node_modules
+COPY --from=builder /app/examples/predict-agent/dist /app/examples/predict-agent/dist
+COPY --from=builder /app/examples/predict-agent/package.json /app/examples/predict-agent/
+COPY --from=builder /app/examples/predict-agent/node_modules /app/examples/predict-agent/node_modules
 COPY --from=builder /app/lib /app/lib
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/node_modules/.pnpm /app/node_modules/.pnpm
 
 # Set the working directory for the final image
-WORKDIR /app/examples/swapping-agent-no-wallet/dist
+WORKDIR /app/examples/predict-agent/dist
 
 # Change ownership to non-root user
 RUN chown -R ember:ember /app
