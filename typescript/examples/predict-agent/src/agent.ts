@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { type Address } from 'viem';
 import type { HandlerContext } from './agentToolHandlers.js';
-import { handleSwapTokens, handleAskEncyclopedia } from './agentToolHandlers.js';
+import { handleSwapTokens, handlePredictTrade } from './agentToolHandlers.js';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -54,9 +54,10 @@ const SwapTokensSchema = z.object({
 });
 type SwapTokensArgs = z.infer<typeof SwapTokensSchema>;
 
-const AskEncyclopediaSchema = z.object({
-  question: z.string().describe('The question to ask the Camelot DEX expert.'),
+const PredictTradeSchema = z.object({
+  token: z.string().describe('The token to predict trade for.'),
 });
+type PredictTradeArgs = z.infer<typeof PredictTradeSchema>;
 
 const McpCapabilityTokenSchema = z
   .object({
@@ -92,33 +93,10 @@ const McpGetCapabilitiesResponseSchema = z.object({
 
 type McpGetCapabilitiesResponse = z.infer<typeof McpGetCapabilitiesResponseSchema>;
 
-// Zod schemas for Allora MCP responses
-const ListAllTopicsResponseSchema = z.array(z.any()).describe('Array of Allora topics');
-const InferenceResponseSchema = z.any().describe('Allora inference data');
-
 // FIRST_EDIT: Add tool parameter schemas for listing and fetching Allora topics
 const ListAllTopicsToolSchema = z.object({}).describe('No parameters to list Allora topics');
 const GetInferenceToolSchema = z.object({
   topicID: z.number().describe('ID of the topic to fetch inference for'),
-});
-
-// Zod schemas for decision logic
-const PredictedPriceSchema = z
-  .object({ predictedPrice: z.number(), currentPrice: z.number() })
-  .passthrough();
-const ProbabilitySchema = z.object({ probUp: z.number(), probDown: z.number() }).passthrough();
-
-// Schema for prediction-based trading tool
-const PredictAndSwapSchema = z.object({
-  tokenSymbol: z.string().describe('Symbol of the token to trade, e.g. ETH'),
-  amount: z.string().describe('Amount of the token to trade'),
-  horizon: z.string().optional().describe('Prediction horizon text to match topic, e.g. "8 hours"'),
-  buyThreshold: z.number().optional().describe('Threshold strength to trigger buy action'),
-  sellThreshold: z.number().optional().describe('Threshold strength to trigger sell action'),
-  fromToken: z.string().optional().describe('Symbol of token to sell when action is sell'),
-  toToken: z.string().optional().describe('Symbol of token to buy when action is buy'),
-  fromChain: z.string().optional().describe('Source chain for the swap'),
-  toChain: z.string().optional().describe('Destination chain for the swap'),
 });
 
 function logError(...args: unknown[]) {
@@ -126,8 +104,7 @@ function logError(...args: unknown[]) {
 }
 
 type SwappingToolSet = {
-  list_all_topics: Tool<typeof ListAllTopicsToolSchema, Task>;
-  get_inference_by_topic_id: Tool<typeof GetInferenceToolSchema, Task>;
+  predictTrade: Tool<typeof PredictTradeSchema, Task>;
   swapTokens: Tool<typeof SwapTokensSchema, Task>;
 };
 
@@ -185,10 +162,9 @@ export class Agent {
   > = {};
   private availableTokens: string[] = [];
   public conversationHistory: CoreMessage[] = [];
-  private mcpClient: Client | null = null;
+  private emberMcpClient: Client | null = null;
   private alloraMcpClient: Client | null = null;
   private toolSet: SwappingToolSet | null = null;
-  private camelotContextContent: string = '';
 
   constructor(quicknodeSubdomain: string, quicknodeApiKey: string) {
     this.quicknodeSubdomain = quicknodeSubdomain;
@@ -214,19 +190,19 @@ export class Agent {
   }
 
   private getHandlerContext(): HandlerContext {
-    if (!this.mcpClient) {
+    if (!this.emberMcpClient) {
       throw new Error('MCP Client not initialized!');
     }
 
     const context: HandlerContext = {
-      mcpClient: this.mcpClient,
+      emberMcpClient: this.emberMcpClient,
+      alloraMcpClient: this.alloraMcpClient,
       tokenMap: this.tokenMap,
       userAddress: this.userAddress,
       log: this.log.bind(this),
       quicknodeSubdomain: this.quicknodeSubdomain,
       quicknodeApiKey: this.quicknodeApiKey,
       openRouterApiKey: process.env.OPENROUTER_API_KEY,
-      camelotContextContent: this.camelotContextContent,
     };
     return context;
   }
@@ -244,7 +220,7 @@ export class Agent {
 
     this.log('Initializing MCP client via stdio...');
     try {
-      this.mcpClient = new Client(
+      this.emberMcpClient = new Client(
         { name: 'SwappingAgent', version: '1.0.0' },
         { capabilities: { tools: {}, resources: {}, prompts: {} } }
       );
@@ -263,7 +239,7 @@ export class Agent {
         },
       });
 
-      await this.mcpClient.connect(transport);
+      await this.emberMcpClient.connect(transport);
       this.log('MCP client initialized successfully.');
 
       if (this.alloraMcpClient && process.env.ALLORA_API_KEY) {
@@ -378,78 +354,22 @@ export class Agent {
         this.log('Warning: Could not load available tokens from MCP server.');
       }
 
-      await this._loadCamelotDocumentation();
-
       this.toolSet = {
-        list_all_topics: tool<typeof ListAllTopicsToolSchema, Task>({
-          description: 'List all Allora signal topics.',
-          parameters: ListAllTopicsToolSchema,
-          execute: async () => {
-            this.log('Tool list_all_topics invoked');
-            try {
-              const topics = await this.fetchAlloraTopics();
-              return {
-                id: this.userAddress || 'unknown-user',
-                status: {
-                  state: 'completed',
-                  message: {
-                    role: 'agent',
-                    parts: [{ type: 'text', text: JSON.stringify(topics) }],
-                  },
-                },
-              };
-            } catch (error: any) {
-              return {
-                id: this.userAddress || 'unknown-user',
-                status: {
-                  state: 'failed',
-                  message: {
-                    role: 'agent',
-                    parts: [{ type: 'text', text: `Error listing topics: ${error.message}` }],
-                  },
-                },
-              };
-            }
-          },
-        }),
-        get_inference_by_topic_id: tool<typeof GetInferenceToolSchema, Task>({
-          description: 'Fetch the Allora inference for a given topic ID.',
-          parameters: GetInferenceToolSchema,
+        predictTrade: tool<typeof PredictTradeSchema, Task>({
+          description: 'Fetch the 5-minute and 24-hour Allora price predictions for a given token.',
+          parameters: PredictTradeSchema,
           execute: async args => {
             this.log('Tool get_inference_by_topic_id invoked with args:', args);
             try {
-              const inference = await this.fetchAlloraInference(args.topicID);
-              return {
-                id: this.userAddress || 'unknown-user',
-                status: {
-                  state: 'completed',
-                  message: {
-                    role: 'agent',
-                    parts: [{ type: 'text', text: JSON.stringify(inference) }],
-                  },
-                },
-              };
+              return await handlePredictTrade(args, this.getHandlerContext());
             } catch (error: any) {
-              return {
-                id: this.userAddress || 'unknown-user',
-                status: {
-                  state: 'failed',
-                  message: {
-                    role: 'agent',
-                    parts: [
-                      {
-                        type: 'text',
-                        text: `Error fetching inference for topicID ${args.topicID}: ${error.message}`,
-                      },
-                    ],
-                  },
-                },
-              };
+              logError(`Error during swapTokens via toolSet: ${error.message}`);
+              throw error;
             }
           },
         }),
         swapTokens: tool<typeof SwapTokensSchema, Task>({
-          description: 'Swap or convert tokens. Use after prediction suggests buy or sell.',
+          description: 'Swap or convert tokens. Use after prediction prices suggest buy or sell.',
           parameters: SwapTokensSchema,
           execute: async args => {
             this.log('Tool swapTokens invoked with args:', args);
@@ -476,10 +396,10 @@ export class Agent {
   }
 
   async stop() {
-    if (this.mcpClient) {
+    if (this.emberMcpClient) {
       this.log('Closing MCP client...');
       try {
-        await this.mcpClient.close();
+        await this.emberMcpClient.close();
         this.log('MCP client closed.');
       } catch (error) {
         logError('Error closing MCP client:', error);
@@ -636,7 +556,7 @@ export class Agent {
 
   private async fetchAndCacheCapabilities(): Promise<McpGetCapabilitiesResponse> {
     this.log('Fetching swap capabilities via MCP...');
-    if (!this.mcpClient) {
+    if (!this.emberMcpClient) {
       throw new Error('MCP Client not initialized. Cannot fetch capabilities.');
     }
 
@@ -644,7 +564,7 @@ export class Agent {
       const mcpTimeoutMs = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '30000', 10);
       this.log(`Using MCP tool timeout: ${mcpTimeoutMs}ms`);
 
-      const capabilitiesResult = await this.mcpClient.callTool(
+      const capabilitiesResult = await this.emberMcpClient.callTool(
         {
           name: 'getCapabilities',
           arguments: { type: 'SWAP' },
@@ -675,136 +595,5 @@ export class Agent {
         `Failed to fetch/validate capabilities from MCP server: ${(error as Error).message}`
       );
     }
-  }
-
-  private async _loadCamelotDocumentation(): Promise<void> {
-    const defaultDocsPath = path.resolve(__dirname, '../encyclopedia');
-    const docsPath = defaultDocsPath;
-    const filePaths = [path.join(docsPath, 'camelot-01.md')];
-    let combinedContent = '';
-
-    this.log(`Loading Camelot documentation from: ${docsPath}`);
-
-    for (const filePath of filePaths) {
-      try {
-        const content = await fs.readFile(filePath, 'utf-8');
-        combinedContent += `\n\n--- Content from ${path.basename(filePath)} ---\n\n${content}`;
-        this.log(`Successfully loaded ${path.basename(filePath)}`);
-      } catch (error) {
-        logError(`Warning: Could not load or read Camelot documentation file ${filePath}:`, error);
-        combinedContent += `\n\n--- Failed to load ${path.basename(filePath)} ---`;
-      }
-    }
-    this.camelotContextContent = combinedContent;
-    if (!this.camelotContextContent.trim()) {
-      logError('Warning: Camelot documentation context is empty after loading attempts.');
-    }
-  }
-
-  // Fetch all available topics from Allora MCP server
-  public async fetchAlloraTopics(): Promise<unknown[]> {
-    if (!this.alloraMcpClient) {
-      throw new Error('Allora MCP client not initialized.');
-    }
-    this.log('Fetching Allora topics via MCP...');
-    const rawResult = await this.alloraMcpClient.callTool({
-      name: 'list_all_topics',
-      arguments: {},
-    });
-    const topics = parseMcpToolResponsePayload(rawResult, ListAllTopicsResponseSchema);
-    this.log(`Fetched ${topics.length} topics from Allora.`);
-    return topics;
-  }
-
-  // Fetch inference for a specific topic ID from Allora MCP server
-  public async fetchAlloraInference(topicID: number): Promise<unknown> {
-    if (!this.alloraMcpClient) {
-      throw new Error('Allora MCP client not initialized.');
-    }
-    this.log(`Fetching inference for Allora topic ID ${topicID} via MCP...`);
-    const rawResult = await this.alloraMcpClient.callTool({
-      name: 'get_inference_by_topic_id',
-      arguments: { topicID },
-    });
-    const inference = parseMcpToolResponsePayload(rawResult, InferenceResponseSchema);
-    this.log(`Fetched inference for topic ID ${topicID}.`);
-    return inference;
-  }
-
-  // Example helper to get prediction by matching topic name
-  public async getPredictionForToken(
-    tokenSymbol: string,
-    horizon?: string
-  ): Promise<unknown | null> {
-    const topics: unknown[] = await this.fetchAlloraTopics();
-    // Basic matching: look for topics whose JSON string contains tokenSymbol and horizon
-    const match = topics.find(t => {
-      const json = JSON.stringify(t).toLowerCase();
-      return (
-        json.includes(tokenSymbol.toLowerCase()) &&
-        (horizon ? json.includes(horizon.toLowerCase()) : true)
-      );
-    }) as { topicID: number } | undefined;
-    if (!match || typeof match.topicID !== 'number') {
-      this.log(
-        `No Allora topic found for token ${tokenSymbol}${horizon ? ' and horizon ' + horizon : ''}.`
-      );
-      return null;
-    }
-    const inference = await this.fetchAlloraInference(match.topicID);
-    return inference;
-  }
-
-  async fetchTopics(): Promise<unknown[]> {
-    if (!this.alloraMcpClient) throw new Error('Allora client not initialized.');
-    const raw = await this.alloraMcpClient.callTool({ name: 'list_all_topics', arguments: {} });
-    const topics = parseMcpToolResponsePayload(raw, ListAllTopicsResponseSchema);
-    return topics;
-  }
-
-  async fetchInference(topicID: number): Promise<unknown> {
-    if (!this.alloraMcpClient) throw new Error('Allora client not initialized.');
-    const raw = await this.alloraMcpClient.callTool({
-      name: 'get_inference_by_topic_id',
-      arguments: { topicID },
-    });
-    const inference = parseMcpToolResponsePayload(raw, InferenceResponseSchema);
-    return inference;
-  }
-
-  /**
-   * Decide a trading action based on inference data.
-   * Supports price-based inference (predictedPrice vs. currentPrice) and probability-based (probUp vs. probDown).
-   * @param inference Raw inference object returned by Allora MCP server.
-   * @param buyThreshold Minimum strength to trigger a buy (e.g., 0.01 = +1%).
-   * @param sellThreshold Minimum strength to trigger a sell (e.g., 0.01 = -1%).
-   * @returns An object with action 'buy' | 'sell' | 'hold' and the computed strength.
-   */
-  public decideAction(
-    inference: unknown,
-    buyThreshold = 0.01,
-    sellThreshold = 0.01
-  ): { action: 'buy' | 'sell' | 'hold'; strength: number } {
-    // Try price-based schema
-    const priceParse = PredictedPriceSchema.safeParse(inference);
-    if (priceParse.success) {
-      const { predictedPrice, currentPrice } = priceParse.data;
-      const strength = (predictedPrice - currentPrice) / currentPrice;
-      let action: 'buy' | 'sell' | 'hold' = 'hold';
-      if (strength >= buyThreshold) action = 'buy';
-      else if (strength <= -sellThreshold) action = 'sell';
-      return { action, strength };
-    }
-    // Try probability-based schema
-    const probParse = ProbabilitySchema.safeParse(inference);
-    if (probParse.success) {
-      const { probUp, probDown } = probParse.data;
-      const strength = probUp - probDown;
-      let action: 'buy' | 'sell' | 'hold' = 'hold';
-      if (strength >= buyThreshold) action = 'buy';
-      else if (strength <= -sellThreshold) action = 'sell';
-      return { action, strength };
-    }
-    throw new Error('Inference does not match expected price-based or probability-based formats.');
   }
 }

@@ -20,7 +20,7 @@ const Erc20Json = JSON.parse(
 );
 const Erc20Abi = Erc20Json.abi;
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { streamText } from 'ai';
+import { generateObject } from 'ai';
 import {
   createTransactionArtifactSchema,
   type TransactionArtifact,
@@ -31,6 +31,84 @@ import {
   TransactionPlanSchema,
   type TransactionPlan,
 } from 'ember-mcp-tool-server';
+
+// Allora schemas
+const AlloraTopicSchema = z.object({
+  topic_id: z.number(),
+  topic_name: z.string(),
+  description: z.string().nullable(),
+  epoch_length: z.number(),
+  ground_truth_lag: z.number(),
+  loss_method: z.string(),
+  worker_submission_window: z.number(),
+  worker_count: z.number(),
+  reputer_count: z.number(),
+  total_staked_allo: z.number(),
+  total_emissions_allo: z.number(),
+  is_active: z.boolean(),
+  is_endorsed: z.boolean(),
+  forge_competition_id: z.number().nullable(),
+  forge_competition_start_date: z.string().nullable(),
+  forge_competition_end_date: z.string().nullable(),
+  updated_at: z.string(),
+});
+
+export const ListAllTopicsResponseSchema = z.array(AlloraTopicSchema);
+export type AlloraTopic = z.infer<typeof AlloraTopicSchema>;
+export type ListAllTopicsResponse = z.infer<typeof ListAllTopicsResponseSchema>;
+
+export const InferenceResponseSchema = z
+  .object({
+    signature: z.string(),
+    token_decimals: z.number(),
+    inference_data: z.object({
+      network_inference: z.string(),
+      network_inference_normalized: z.string(),
+      confidence_interval_percentiles: z.array(z.number()),
+      confidence_interval_percentiles_normalized: z.array(z.number()),
+      confidence_interval_values: z.array(z.number()),
+      confidence_interval_values_normalized: z.array(z.number()),
+      topic_id: z.string(),
+      timestamp: z.number(),
+      extra_data: z.string(),
+    }),
+  })
+  .passthrough(); // Allow additional fields that might be in the response
+
+export type InferenceResponse = z.infer<typeof InferenceResponseSchema>;
+
+// Standardized timeframe schema
+const TimeframeSchema = z.object({
+  value: z.number().positive(),
+  unit: z.enum(['minute', 'hour', 'day']),
+});
+
+// Schema for first LLM call - Topic Discovery
+const TopicFinderSchema = z.object({
+  relatedTopicIds: z.array(z.string()),
+  reasoning: z.string(),
+});
+
+// Schema for second LLM call - Best Prediction Selection
+const PredictionSelectorSchema = z.object({
+  shortTermPrediction: z
+    .object({
+      topicId: z.string(),
+      timeframe: TimeframeSchema,
+      predictionValue: z.number(),
+      confidence: z.enum(['high', 'medium', 'low']),
+    })
+    .nullable(),
+  longTermPrediction: z
+    .object({
+      topicId: z.string(),
+      timeframe: TimeframeSchema,
+      predictionValue: z.number(),
+      confidence: z.enum(['high', 'medium', 'low']),
+    })
+    .nullable(),
+  reasoning: z.string(),
+});
 
 export type TokenInfo = {
   chainId: string;
@@ -56,6 +134,9 @@ export const SwapPreviewSchema = z
   .passthrough();
 
 export type SwapPreview = z.infer<typeof SwapPreviewSchema>;
+
+const SwapTransactionArtifactSchema = createTransactionArtifactSchema(SwapPreviewSchema);
+export type SwapTransactionArtifact = TransactionArtifact<SwapPreview>;
 
 const TokenDetailSchema = z.object({
   address: z.string(),
@@ -87,14 +168,15 @@ export const SwapResponseSchema = z.object({
 export type SwapResponse = z.infer<typeof SwapResponseSchema>;
 
 export interface HandlerContext {
-  mcpClient: Client;
+  emberMcpClient: Client;
+  alloraMcpClient: Client | null;
   tokenMap: Record<string, TokenInfo[]>;
   userAddress: string | undefined;
   log: (...args: unknown[]) => void;
   quicknodeSubdomain: string;
   quicknodeApiKey: string;
   openRouterApiKey?: string;
-  camelotContextContent: string;
+  camelotContextContent?: string;
 }
 
 function findTokensCaseInsensitive(
@@ -311,7 +393,7 @@ export async function handleSwapTokens(
     `Executing swap via MCP: ${fromToken} (address: ${fromTokenDetail.address}, chain: ${fromTokenDetail.chainId}) to ${toToken} (address: ${toTokenDetail.address}, chain: ${toTokenDetail.chainId}), amount: ${amount}, atomicAmount: ${atomicAmount}, userAddress: ${context.userAddress}`
   );
 
-  const swapResponseRaw = await context.mcpClient.callTool({
+  const swapResponseRaw = await context.emberMcpClient.callTool({
     name: 'swapTokens',
     arguments: {
       fromTokenAddress: fromTokenDetail.address,
@@ -471,42 +553,55 @@ export async function handleSwapTokens(
   };
 }
 
-export async function handleAskEncyclopedia(
-  params: { question: string },
+export async function handlePredictTrade(
+  params: {
+    token: string;
+  },
   context: HandlerContext
 ): Promise<Task> {
-  const { question } = params;
-  const { userAddress, openRouterApiKey, log, camelotContextContent } = context;
-
-  if (!userAddress) {
-    throw new Error('User address not set!');
-  }
-  if (!openRouterApiKey) {
-    log('Error: OpenRouter API key is not configured in HandlerContext.');
-    return {
-      id: userAddress,
-      status: {
-        state: 'failed',
-        message: {
-          role: 'agent',
-          parts: [
-            {
-              type: 'text',
-              text: 'The Camelot expert tool is not configured correctly (Missing API Key). Please contact support.',
-            },
-          ],
-        },
-      },
-    };
-  }
-
-  log(`Handling askEncyclopedia for user ${userAddress} with question: "${question}"`);
-
+  const { token } = params;
   try {
-    if (!camelotContextContent.trim()) {
-      log('Error: Camelot context documentation provided by the agent is empty.');
+    const topics = await fetchAlloraTopics(context);
+
+    // Debug: Print entire topics list
+    // NOTE: Commented out verbose debugging - the LLM now intelligently selects topics
+    /*
+    context.log('=== COMPLETE ALLORA TOPICS LIST FOR DEBUGGING ===');
+    topics.forEach((topic, index) => {
+      const topicNameLower = topic.topic_name.toLowerCase();
+      if (topicNameLower.includes('btc') || topicNameLower.includes('bitcoin')) {
+        context.log(`Topic ${index + 1} (${topic.topic_name} - BTC Full Details):`, topic);
+      } else {
+        context.log(`Topic ${index + 1} (${topic.topic_name} - Summary):`, {
+          id: topic.topic_id,
+          name: topic.topic_name,
+          worker_count: topic.worker_count,
+          reputer_count: topic.reputer_count,
+          is_active: topic.is_active,
+        });
+      }
+    });
+    context.log('=== END COMPLETE TOPICS LIST ===');
+    */
+
+    // If debugging BTC, fetch and log all BTC topic inferences
+    // NOTE: Commented out - the LLM now intelligently fetches only relevant inferences
+    /*
+    if (token.toLowerCase() === 'btc') {
+      await debugBtcTopicInferences(topics, context);
+    }
+    */
+
+    // Use two-stage LLM approach to find the best predictions for a token
+    const { shortTermPrediction, longTermPrediction } = await findBestPredictionsForToken(
+      token,
+      topics,
+      context
+    );
+
+    if (!shortTermPrediction && !longTermPrediction) {
       return {
-        id: userAddress,
+        id: context.userAddress || 'unknown-user',
         status: {
           state: 'failed',
           message: {
@@ -514,7 +609,7 @@ export async function handleAskEncyclopedia(
             parts: [
               {
                 type: 'text',
-                text: 'Could not load the necessary Camelot documentation to answer your question.',
+                text: `LLM could not find any suitable short-term or long-term prediction topics for ${token}.`,
               },
             ],
           },
@@ -522,57 +617,374 @@ export async function handleAskEncyclopedia(
       };
     }
 
-    const openrouter = createOpenRouter({
-      apiKey: openRouterApiKey,
-    });
+    // Validate topics meet reliability thresholds
+    const MIN_WORKERS = 10;
+    const MIN_REPUTERS = 3;
 
-    const systemPrompt = `You are a Camelot DEX expert. The following information is your own knowledge and expertise - do not refer to it as provided, given, or external information. Speak confidently in the first person as the expert you are.
+    // Format results - we already have the inferences from the two-stage LLM approach
+    const predictions: Array<{
+      timeframe: string;
+      topic: AlloraTopic;
+      inference: InferenceResponse;
+    }> = [];
 
-Do not say phrases like "Based on my knowledge" or "According to the information". Instead, simply state the facts directly as an expert would.
-
-If you don't know something, simply say "I don't know" or "I don't have information about that" without apologizing or referring to limited information.
-
-${camelotContextContent}`;
-
-    log('Calling OpenRouter model...');
-    const { textStream } = await streamText({
-      model: openrouter('google/gemini-2.5-flash-preview'),
-      system: systemPrompt,
-      prompt: question,
-    });
-
-    let responseText = '';
-    for await (const textPart of textStream) {
-      responseText += textPart;
+    // Add predictions that passed validation
+    if (
+      shortTermPrediction &&
+      shortTermPrediction.topic.worker_count >= MIN_WORKERS &&
+      shortTermPrediction.topic.reputer_count >= MIN_REPUTERS &&
+      shortTermPrediction.topic.is_active
+    ) {
+      predictions.push({
+        timeframe: shortTermPrediction.timeframe,
+        topic: shortTermPrediction.topic,
+        inference: shortTermPrediction.inference,
+      });
     }
 
-    log(`Received response from OpenRouter: ${responseText}`);
+    if (
+      longTermPrediction &&
+      longTermPrediction.topic.worker_count >= MIN_WORKERS &&
+      longTermPrediction.topic.reputer_count >= MIN_REPUTERS &&
+      longTermPrediction.topic.is_active
+    ) {
+      predictions.push({
+        timeframe: longTermPrediction.timeframe,
+        topic: longTermPrediction.topic,
+        inference: longTermPrediction.inference,
+      });
+    }
+
+    if (predictions.length === 0) {
+      const rejectedTopics = [shortTermPrediction?.topic, longTermPrediction?.topic].filter(
+        Boolean
+      );
+      const rejectionReasons = rejectedTopics
+        .map(
+          topic =>
+            `${topic!.topic_name}: ${topic!.worker_count} workers (need ${MIN_WORKERS}), ${topic!.reputer_count} reputers (need ${MIN_REPUTERS})`
+        )
+        .join('; ');
+
+      return {
+        id: context.userAddress || 'unknown-user',
+        status: {
+          state: 'failed',
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                type: 'text',
+                text: `Found topics for ${token} but none meet reliability thresholds: ${rejectionReasons}`,
+              },
+            ],
+          },
+        },
+      };
+    }
+
+    // Format results
+    const resultText = predictions
+      .map(({ timeframe, topic, inference }) => {
+        const prediction = inference.inference_data.network_inference_normalized;
+        context.log(
+          `[DEBUG INFERENCE - ${topic.topic_name}] Timeframe: ${timeframe}:`,
+          inference // Log the entire inference object
+        );
+        return `${timeframe} prediction for ${token}: $${prediction} (from ${topic.topic_name} with ${topic.worker_count} workers)`;
+      })
+      .join('\n');
+
+    // Check if we have both short and long term predictions after validation
+    if (!shortTermPrediction || !longTermPrediction) {
+      let errorDetail = '';
+      if (!shortTermPrediction) {
+        errorDetail += 'LLM did not select a short-term prediction. ';
+      }
+
+      if (!longTermPrediction) {
+        errorDetail += 'LLM did not select a long-term prediction. ';
+      }
+      return {
+        id: context.userAddress || 'unknown-user',
+        status: {
+          state: 'failed',
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                type: 'text',
+                text: `Failed to secure both short and long-term predictions for ${token}. ${errorDetail.trim()}`,
+              },
+            ],
+          },
+        },
+      };
+    }
+
+    // At this point, we have validated both short and long term predictions
 
     return {
-      id: userAddress,
+      id: context.userAddress || 'unknown-user',
       status: {
         state: 'completed',
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: responseText }],
+          parts: [{ type: 'text', text: resultText }],
         },
       },
     };
   } catch (error: any) {
-    log(`Error during askEncyclopedia execution:`, error);
-    const errorMessage = error?.message || 'An unexpected error occurred.';
     return {
-      id: userAddress,
+      id: context.userAddress || 'unknown-user',
       status: {
         state: 'failed',
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: `Error asking Camelot expert: ${errorMessage}` }],
+          parts: [
+            {
+              type: 'text',
+              text: `Error fetching prediction for token ${token}: ${error.message}`,
+            },
+          ],
         },
       },
     };
   }
 }
 
-const SwapTransactionArtifactSchema = createTransactionArtifactSchema(SwapPreviewSchema);
-export type SwapTransactionArtifact = TransactionArtifact<SwapPreview>;
+// Fetch all available topics from Allora MCP server
+export async function fetchAlloraTopics(context: HandlerContext): Promise<AlloraTopic[]> {
+  if (!context.alloraMcpClient) {
+    throw new Error('Allora MCP client not initialized.');
+  }
+  context.log('Fetching Allora topics via MCP...');
+  const rawResult = await context.alloraMcpClient.callTool({
+    name: 'list_all_topics',
+    arguments: {},
+  });
+  const topics = parseMcpToolResponsePayload(rawResult, ListAllTopicsResponseSchema);
+  context.log(`Fetched ${topics.length} topics from Allora.`);
+  return topics;
+}
+
+// Fetch inference for a specific topic ID from Allora MCP server
+export async function fetchAlloraInference(
+  topicID: number,
+  context: HandlerContext
+): Promise<InferenceResponse> {
+  if (!context.alloraMcpClient) {
+    throw new Error('Allora MCP client not initialized.');
+  }
+  context.log(`Fetching inference for Allora topic ID ${topicID} via MCP...`);
+  const rawResult = await context.alloraMcpClient.callTool({
+    name: 'get_inference_by_topic_id',
+    arguments: { topicID },
+  });
+  const inference = parseMcpToolResponsePayload(rawResult, InferenceResponseSchema);
+  context.log(`Fetched inference for topic ID ${topicID}.`);
+  return inference;
+}
+
+// Use two-stage LLM approach to find the best predictions for a token
+async function findBestPredictionsForToken(
+  token: string,
+  topics: AlloraTopic[],
+  context: HandlerContext
+): Promise<{
+  shortTermPrediction: {
+    topic: AlloraTopic;
+    inference: InferenceResponse;
+    timeframe: string;
+  } | null;
+  longTermPrediction: {
+    topic: AlloraTopic;
+    inference: InferenceResponse;
+    timeframe: string;
+  } | null;
+}> {
+  if (!context.openRouterApiKey) {
+    context.log('OpenRouter API key not available');
+    return { shortTermPrediction: null, longTermPrediction: null };
+  }
+
+  if (topics.length === 0) {
+    return { shortTermPrediction: null, longTermPrediction: null };
+  }
+
+  try {
+    const openrouter = createOpenRouter({
+      apiKey: context.openRouterApiKey,
+    });
+
+    // Stage 1: Find all topics related to the token
+    context.log(`Stage 1: Finding topics related to ${token}...`);
+
+    const topicFinderPrompt = `You are analyzing cryptocurrency prediction topics to find ALL topics related to the token "${token}".
+
+All available topics:
+${topics.map(t => `- ID: ${t.topic_id}, Name: "${t.topic_name}", Workers: ${t.worker_count}, Reputers: ${t.reputer_count}, Active: ${t.is_active}`).join('\n')}
+
+Find ALL topics that could be related to predicting the price of "${token}". Consider:
+- Exact token symbol matches (e.g., "BTC" for Bitcoin, "ETH" for Ethereum)
+- Common alternative names (e.g., "Bitcoin" for BTC, "Ethereum" for ETH)
+- Only select ACTIVE topics (Active: true)
+- Only select PRICE PREDICTION topics (not volatility, volume, or other types)
+- Include topics with various timeframes (5min, 10min, 8h, 24h, etc.)
+
+Return ALL relevant topic IDs, not just the best ones.`;
+
+    const topicFinderResult = await generateObject({
+      model: openrouter('google/gemini-2.5-flash-preview-05-20'),
+      schema: TopicFinderSchema,
+      prompt: topicFinderPrompt,
+      maxTokens: 500,
+    });
+
+    context.log(`Stage 1 result:`, topicFinderResult.object);
+
+    // Get the related topics
+    const relatedTopics = topicFinderResult.object.relatedTopicIds
+      .map(id => topics.find(t => t.topic_id.toString() === id))
+      .filter(Boolean) as AlloraTopic[];
+
+    if (relatedTopics.length === 0) {
+      context.log('No related topics found');
+      return { shortTermPrediction: null, longTermPrediction: null };
+    }
+
+    // Stage 2: Fetch inferences for all related topics
+    context.log(`Stage 2: Fetching inferences for ${relatedTopics.length} topics...`);
+
+    const topicInferencePairs: { topic: AlloraTopic; inference: InferenceResponse }[] = [];
+
+    for (const topic of relatedTopics) {
+      try {
+        const inference = await fetchAlloraInference(topic.topic_id, context);
+        topicInferencePairs.push({ topic, inference });
+        context.log(
+          `Fetched inference for ${topic.topic_name}: $${inference.inference_data.network_inference_normalized}`
+        );
+      } catch (error) {
+        context.log(`Failed to fetch inference for ${topic.topic_name}:`, error);
+      }
+    }
+
+    if (topicInferencePairs.length === 0) {
+      context.log('No inferences could be fetched');
+      return { shortTermPrediction: null, longTermPrediction: null };
+    }
+
+    // Stage 3: Use LLM to select best predictions based on actual data
+    context.log(
+      `Stage 3: Selecting best predictions from ${topicInferencePairs.length} valid options...`
+    );
+
+    const predictionSelectorPrompt = `You are selecting the best cryptocurrency predictions for ${token} based on actual inference data.
+
+Available topic and inference pairs:
+${topicInferencePairs
+  .map(
+    ({ topic, inference }) =>
+      `- Topic ${topic.topic_id} (${topic.topic_name}): $${inference.inference_data.network_inference_normalized}, ${topic.worker_count} workers, ${topic.reputer_count} reputers`
+  )
+  .join('\n')}
+
+Select the best short-term (≤1 hour) and long-term (>1 hour) predictions considering:
+1. Prediction reasonableness (realistic price for ${token})
+2. Worker participation (higher is generally better)
+3. Timeframe appropriateness
+4. Avoid obvious outliers or corrupt data
+
+Return timeframes as {value: number, unit: 'minute'|'hour'|'day'} format.
+Set confidence based on worker count and price reasonableness.`;
+
+    const predictionSelectorResult = await generateObject({
+      model: openrouter('google/gemini-2.5-flash-preview-05-20'),
+      schema: PredictionSelectorSchema,
+      prompt: predictionSelectorPrompt,
+      maxTokens: 800,
+    });
+
+    context.log(`Stage 3 result:`, predictionSelectorResult.object);
+
+    // Convert results to our return format
+    const result = {
+      shortTermPrediction: null as any,
+      longTermPrediction: null as any,
+    };
+
+    if (predictionSelectorResult.object.shortTermPrediction) {
+      const shortTermTopicId = predictionSelectorResult.object.shortTermPrediction.topicId;
+      const shortTermPair = topicInferencePairs.find(
+        pair => pair.topic.topic_id.toString() === shortTermTopicId
+      );
+      if (shortTermPair) {
+        const timeframe = predictionSelectorResult.object.shortTermPrediction.timeframe;
+        result.shortTermPrediction = {
+          topic: shortTermPair.topic,
+          inference: shortTermPair.inference,
+          timeframe: `${timeframe.value} ${timeframe.unit}${timeframe.value !== 1 ? 's' : ''}`,
+        };
+      }
+    }
+
+    if (predictionSelectorResult.object.longTermPrediction) {
+      const longTermTopicId = predictionSelectorResult.object.longTermPrediction.topicId;
+      const longTermPair = topicInferencePairs.find(
+        pair => pair.topic.topic_id.toString() === longTermTopicId
+      );
+      if (longTermPair) {
+        const timeframe = predictionSelectorResult.object.longTermPrediction.timeframe;
+        result.longTermPrediction = {
+          topic: longTermPair.topic,
+          inference: longTermPair.inference,
+          timeframe: `${timeframe.value} ${timeframe.unit}${timeframe.value !== 1 ? 's' : ''}`,
+        };
+      }
+    }
+
+    return result;
+  } catch (error) {
+    context.log(`Two-stage LLM prediction selection failed:`, error);
+    return { shortTermPrediction: null, longTermPrediction: null };
+  }
+}
+
+// Helper function to debug BTC topic inferences
+async function debugBtcTopicInferences(topics: AlloraTopic[], context: HandlerContext) {
+  context.log('\n=== DEBUGGING ALL ACTIVE BTC PREDICTION TOPIC INFERENCES ===');
+  const btcPredictionTopics = topics.filter(
+    topic =>
+      (topic.topic_name.toLowerCase().includes('btc') ||
+        topic.topic_name.toLowerCase().includes('bitcoin')) &&
+      topic.topic_name.toLowerCase().includes('prediction') &&
+      !topic.topic_name.toLowerCase().includes('volatility') &&
+      topic.is_active
+  );
+
+  if (btcPredictionTopics.length === 0) {
+    context.log('No active BTC prediction topics found for debugging.');
+    context.log('=== END BTC DEBUGGING ===\n');
+    return;
+  }
+
+  for (const topic of btcPredictionTopics) {
+    try {
+      context.log(
+        `Fetching debug inference for: ${topic.topic_name} (ID: ${topic.topic_id}, Workers: ${topic.worker_count}, Reputers: ${topic.reputer_count})`
+      );
+      const inference = await fetchAlloraInference(topic.topic_id, context);
+      context.log(
+        `  [DEBUG BTC INFERENCE - ${topic.topic_name}]:`,
+        inference // Log the entire inference object
+      );
+    } catch (error) {
+      context.log(
+        `  Error fetching debug inference for ${topic.topic_name}:`,
+        (error as Error).message
+      );
+    }
+  }
+  context.log('=== END BTC DEBUGGING ===\n');
+}
