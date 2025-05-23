@@ -19,7 +19,7 @@ Welcome to Vibekit, the polyglot toolkit for vibe coding smart, autonomous DeFi 
 
 At its core, Vibekit uses the Model Context Protocol (MCP) to standardize how agents connect with tools and data. It also includes built-in Agent-to-Agent (A2A) integration, so the agents can easily work together. Vibekit also works smoothly with popular frameworks like Eliza and LangGraph, just add our MCP tools to your existing agents and watch them level up with DeFi superpowers!
 
-Here’s an overview of how everything fits together:
+Here's an overview of how everything fits together:
 
 <p align="left">
   <img src="img/Flow Chart.png" width="800px" alt="FlowChart"/>
@@ -170,7 +170,6 @@ To interact with the Lending Agent though Cursor, [create or update](https://doc
    }
  }
 }
-
 ```
 
 You might need to restart Cursor to apply the new configuration. Upon successful integration, the MCP settings should look like this:
@@ -183,7 +182,19 @@ Cursor will now automatically detect the Lending Agent MCP tool and you can inte
 
 **3. Web Interface**
 
-Coming Soon!
+You can also interact with your agent using the [Vibekit Web Frontend](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web). To do so:
+
+- Make sure your agent (MCP server) is running on http://localhost:3001.
+
+- In the `typescript` directory, ensure your `.env` is configured and run:
+
+  ```bash
+  docker compose up -d
+  ```
+
+- Open your browser and go to [http://localhost:3000](http://localhost:3000).
+
+- The web frontend provides a user-friendly chat interface for sending queries to your on-chain AI agent and viewing responses in real time.
 
 ### 5. Build Your Custom DeFi Agent:
 
