@@ -1,12 +1,8 @@
-## EmberAI Overview
+## EmberAI MCP Server
 
-- Ember is a powerful MCP (Model Context Protocol) server that enables AI agents to interact with DeFi protocols or on-chain services without requiring custom implementations.
+Ember is a powerful MCP (Model Context Protocol) server that acts as a one-stop solution for managing and executing complex DeFi operations across multiple chains. By providing simple, well-documented interfaces, Ember empowers AI agents and LLMs to dynamically select, compose, and interact with DeFi protocols without the need for custom implementations.
 
-- Ember features simple, well-documented interfaces that empower LLMs to dynamically select and compose tools.
-
-- Ember's MCP-powered connectivity establishes a declarative DeFi layer, which not only enables AI agents to interpret and execute user intents but also offers developers a unified interface to the entire DeFi ecosystem.
-
-- Ember serves as a one-stop solution for managing and executing complex DeFi operations across various chains. Developers can use Ember's rich market data to create custom DeFi strategies.
+Ember's MCP-powered connectivity establishes a declarative DeFi layer, enabling agents to interpret and execute user intents while offering developers a unified interface to the entire DeFi ecosystem. With access to rich market data, developers can leverage Ember to create custom DeFi strategies and effortlessly automate advanced workflows.
 
 ## Prerequisites
 
@@ -39,13 +35,31 @@
    pnpm start
    ```
 
-Clients can now connect via STDIO transport to invoke the MCP tools.
+Clients can now connect via STDIO transport to invoke the MCP tools. For instance, you can use the Inspector to interact with Ember's MCP tools. In a new terminal, run the following to launch the inspector:
+
+```bash
+npx -y @modelcontextprotocol/inspector
+```
+
+Navigate to http://127.0.0.1:6274 in your browser to access the interface and click on "Connect" to establish a connection with your local server:
+
+<p align="left">
+  <img src="../../../../img/Ember_Inspector_1.png" width="700px" alt="Inspector1"/>
+</p>
+
+Next, click on "List Tools" to get a list of Ember's MCP tools:
+
+<p align="left">
+  <img src="../../../../img/Ember_Inspector_2.png" width="700px" alt="Inspector2"/>
+</p>
+
+Next, simply click on the desired tool to start interacting with it.
 
 ## Available Tools
 
 Below is a comprehensive list of MCP tools offered by Ember. For more details on Ember's capabilities, visit the [official documentation page](https://docs.emberai.xyz/).
 
-### 1. swapTokens:
+#### 1. swapTokens:
 
 Facilitates the exchange of one cryptocurrency for another across various decentralized exchanges (DEXs).
 
@@ -69,7 +83,7 @@ An array of transaction objects representing the swap operation.​
 
 ---
 
-### 2. borrow:
+#### 2. borrow:
 
 Enables users to take out loans from various DeFi lending protocols by supplying collateral.
 
@@ -89,7 +103,7 @@ An array of transaction objects representing the borrow operation.​
 
 ---
 
-### 3.repay:
+#### 3.repay:
 
 Allows users to pay back outstanding loans on DeFi lending protocols.
 
@@ -109,7 +123,7 @@ An array of transaction objects representing the repayment operation.​
 
 ---
 
-### 4. supply:
+#### 4. supply:
 
 Enables users to deposit assets into DeFi lending protocols to earn interest or to serve as collateral for borrowing.
 
@@ -129,7 +143,7 @@ An array of transaction objects representing the supply operation.​
 
 ---
 
-### 5. withdraw:
+#### 5. withdraw:
 
 Allows users to retrieve assets they have previously deposited into DeFi lending protocols, including any accrued interest or unlocking collateral.
 
@@ -149,7 +163,7 @@ An array of transaction objects representing the withdrawal operation.​
 
 ---
 
-### 6. getCapabilities:
+#### 6. getCapabilities:
 
 Retrieves a detailed list of functionalities and services supported by the Ember MCP server. This can include supported chains, protocols, and specific actions the server can perform.
 
@@ -163,7 +177,7 @@ An object detailing the capabilities supported by Ember's MCP server.​
 
 ---
 
-### 7. getUserPositions:
+#### 7. getUserPositions:
 
 Fetches a comprehensive overview of a user's holdings and investments across various DeFi protocols and assets, including token balances, supplied/borrowed amounts, and liquidity pool shares.
 
@@ -177,7 +191,7 @@ An object containing the user's wallet positions across various tokens and proto
 
 ---
 
-### 8. getTokens:
+#### 8. getTokens:
 
 Retrieves a list of tradable tokens supported by Ember, with options to filter by chain ID or other criteria.
 
@@ -193,7 +207,7 @@ An array of token objects matching the specified criteria.
 
 ---
 
-### 9. supplyLiquidity:
+#### 9. supplyLiquidity:
 
 Enables users to deposit a pair of tokens into a liquidity pool on a decentralized exchange (DEX), facilitating trading and earning fees.
 
@@ -215,7 +229,7 @@ An array of transaction objects representing the supply operation.
 
 ---
 
-### 10. withdrawLiquidity:
+#### 10. withdrawLiquidity:
 
 Allows users to remove their supplied tokens from a liquidity pool on a DEX, retrieving their share of the pool's assets and any accrued fees.
 
@@ -231,9 +245,13 @@ An array of transaction objects representing the withdrawal operation.
 
 ---
 
-### 11. getLiquidityPools:
+#### 11. getLiquidityPools:
 
 Retrieves information about available liquidity pools across various DEXs, including details on token pairs, current liquidity, and fee structures.
+
+**Parameters:**
+
+- This tool does not require any parameters.
 
 **Return Value:**
 
@@ -241,7 +259,7 @@ An object containing the available liquidity pools.
 
 ---
 
-### 12. getUserLiquidityPositions:
+#### 12. getUserLiquidityPositions:
 
 Fetches details of a user's specific investments in liquidity pools, including the amount of tokens supplied, the share of the pool, and unrealized gains or losses.
 
@@ -255,9 +273,13 @@ An object containing the user's liquidity positions.
 
 ---
 
-### 13. getYieldMarkets:
+#### 13. getYieldMarkets:
 
 Retrieves information about available yield-generating opportunities across various DeFi protocols. This can include details on staking, lending, and liquidity mining, along with their potential returns and associated risks.
+
+**Parameters:**
+
+- This tool does not require any parameters.
 
 **Return Value:**
 
@@ -267,7 +289,7 @@ An object containing yield market information.
 
 ### 1. Lending and Borrowing
 
-Users can supply tokens as collateral to borrow other assets or lend them out to earn interest. Key actions include:
+One of Ember's core capabilities is supporting lending and borrowing protocols across multiple chains. This allows users to interact with DeFi markets in a variety of ways, such as:
 
 - Supply tokens to earn yield
 - Use supplied tokens as collateral
@@ -287,7 +309,7 @@ Users can supply tokens as collateral to borrow other assets or lend them out to
 
 ### 2. Token Swaps
 
-Enables users to exchange one token for another at determined rates. Key features include:
+Ember makes it easy to swap tokens across supported protocols and chains, giving users flexible options for trading digital assets. Key features include:
 
 - Direct token exchanges
 - Cross-chain swaps
