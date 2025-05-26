@@ -1,4 +1,22 @@
-import { z } from 'zod';
+import { promises as fs } from 'fs';
+import { createRequire } from 'module';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import {
+  generateText,
+  tool,
+  type Tool,
+  type CoreMessage,
+  type ToolResultPart,
+  type CoreUserMessage,
+  type CoreAssistantMessage,
+  type StepResult,
+} from 'ai';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
 import {
   type Address,
   type Hex,
@@ -12,34 +30,23 @@ import {
   http,
   type LocalAccount,
 } from 'viem';
+import { z } from 'zod';
 import { handleSwapTokens } from './agentToolHandlers.js';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
+
+
 import type { HandlerContext } from './agentToolHandlers.js';
-import type { TransactionPlan } from 'ember-schemas';
-import { promises as fs } from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import {
-  generateText,
-  tool,
-  type Tool,
-  type CoreMessage,
-  type ToolResultPart,
-  type CoreUserMessage,
-  type CoreAssistantMessage,
-  type StepResult,
-} from 'ai';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { mainnet, arbitrum, optimism, polygon, base } from 'viem/chains';
-import type { Chain } from 'viem/chains';
-import { createRequire } from 'module';
+
 import {
   SwapTokensSchema,
   McpGetCapabilitiesResponseSchema,
+  type TransactionPlan,
   type McpGetCapabilitiesResponse,
 } from 'ember-schemas';
+
+
+import { mainnet, arbitrum, optimism, polygon, base } from 'viem/chains';
+import type { Chain } from 'viem/chains';
+
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -280,8 +287,9 @@ Present the user with a list of tokens and chains they can swap from and to if p
           execute: async args => {
             try {
               return await handleSwapTokens(args, this.getHandlerContext());
-            } catch (error: any) {
-              logError(`Error during swapTokens tool execution: ${error.message}`);
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              logError(`Error during swapTokens tool execution: ${errorMessage}`);
               throw error;
             }
           },
@@ -323,7 +331,7 @@ Present the user with a list of tokens and chains they can swap from and to if p
 
     try {
       this.log('Calling generateText with Vercel AI SDK...');
-      const { response, text, toolCalls, toolResults, finishReason } = await generateText({
+      const { response, text, finishReason } = await generateText({
         model: openrouter('google/gemini-2.0-flash-001'),
         messages: this.conversationHistory,
         tools: this.toolSet,

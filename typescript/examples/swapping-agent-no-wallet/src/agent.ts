@@ -1,11 +1,11 @@
-import { z } from 'zod';
-import { type Address } from 'viem';
-import type { HandlerContext } from './agentToolHandlers.js';
-import { handleSwapTokens, handleAskEncyclopedia } from './agentToolHandlers.js';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
 import { promises as fs } from 'fs';
+import { createRequire } from 'module';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import {
   generateText,
   tool,
@@ -16,24 +16,20 @@ import {
   type CoreAssistantMessage,
   type StepResult,
 } from 'ai';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
+import { type Address } from 'viem';
+import { z } from 'zod';
+import type { HandlerContext } from './agentToolHandlers.js';
+import { handleSwapTokens, handleAskEncyclopedia } from './agentToolHandlers.js';
+
 import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
-import type { Task } from 'a2a-samples-js/schema';
-import { createRequire } from 'module';
+import type { Task } from 'a2a-samples-js';
 import {
   AskEncyclopediaSchema,
   McpGetCapabilitiesResponseSchema,
   type McpGetCapabilitiesResponse,
   SwapTokensSchema,
-  McpCapabilityTokenSchema,
-  McpCapabilitySchema,
-  McpSingleCapabilityEntrySchema,
-  type SwapTokensArgs,
-  type AskEncyclopediaArgs,
-  type McpCapabilityToken,
 } from 'ember-schemas';
 
 const openrouter = createOpenRouter({
@@ -312,8 +308,9 @@ Use relavant conversation history to obtain required tool parameters. Present th
           execute: async args => {
             try {
               return await handleSwapTokens(args, this.getHandlerContext());
-            } catch (error: any) {
-              logError(`Error during swapTokens via toolSet: ${error.message}`);
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              logError(`Error during swapTokens via toolSet: ${errorMessage}`);
               throw error;
             }
           },
@@ -325,8 +322,9 @@ Use relavant conversation history to obtain required tool parameters. Present th
           execute: async args => {
             try {
               return await handleAskEncyclopedia(args, this.getHandlerContext());
-            } catch (error: any) {
-              logError(`Error during askEncyclopedia via toolSet: ${error.message}`);
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              logError(`Error during askEncyclopedia via toolSet: ${errorMessage}`);
               throw error;
             }
           },

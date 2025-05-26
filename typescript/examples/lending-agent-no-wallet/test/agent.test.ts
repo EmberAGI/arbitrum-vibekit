@@ -1,26 +1,18 @@
 /// <reference types="mocha" />
 import { expect } from 'chai';
+
 import 'dotenv/config';
-import { Agent } from '../src/agent.js';
-import { 
-  executeTransactionPlan, 
-  parseFunctionCallArgs, 
-  TransactionPlan,
+import {
   MultiChainSigner,
   CHAIN_CONFIGS,
   ensureWethBalance,
-  extractTransactionPlan,
   extractPositionsData,
   getReserveForToken,
   getTokenReserve,
   extractAndExecuteTransactions
 } from 'test-utils';
-import type { TokenUid, Token, UserReserve } from 'ember-schemas';
-import type { GetWalletPositionsResponse } from '@emberai/sdk-typescript';
-import { 
-  type Position,
-  type LendingPosition
-} from '../src/agentToolHandlers.js';
+
+import { Agent } from '../src/agent.js';
 
 // Define chain IDs that should be tested
 const CHAINS_TO_TEST: number[] = [42161]; // Arbitrum One
@@ -230,9 +222,6 @@ describe('Lending Agent Integration Tests', function () {
       describe('Withdraw Operations', function () {
         it('should withdraw WETH successfully', async function () {
           const amountToWithdraw = '0.0001';
-
-          // Wait to make sure previous operations were processed
-          await new Promise(resolve => setTimeout(resolve, 5000));
 
           // Get original balance
           const oldReserve = await getTokenReserve(agent, multiChainSigner.wallet.address, 'WETH');

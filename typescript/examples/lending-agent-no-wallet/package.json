@@ -6,6 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc --build && cpx \"encyclopedia/**/*\" dist/encyclopedia",
+    "lint": "eslint --ext .ts,.tsx src",
+    "lint:fix": "eslint --ext .ts,.tsx src --fix",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "test": "pnpm --filter arbitrum-vibekit build && pnpm --filter ember-schemas build && pnpm --filter test-utils build && NODE_OPTIONS=\"--no-warnings\" mocha --require tsx --require mocha-suppress-logs --exit --config ../../.mocharc.json 'test/**/*.test.ts'",

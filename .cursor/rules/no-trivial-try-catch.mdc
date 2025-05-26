@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Do not wrap blocks of code in try/catch only to add context to the error. simply propagate errors.

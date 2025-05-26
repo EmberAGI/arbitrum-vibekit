@@ -1,6 +1,9 @@
-import { type Address } from 'viem';
-import { type HandlerContext, handleSwapTokens } from './agentToolHandlers.js';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
+import { createRequire } from 'module';
+
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { type Task } from 'a2a-samples-js';
 import {
   generateText,
   tool,
@@ -9,12 +12,7 @@ import {
   type ToolResultPart,
   type StepResult,
 } from 'ai';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { logError, getChainConfigById, type ChainConfig } from './utils.js';
-import { createRequire } from 'module';
-import { type Task } from 'a2a-samples-js';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
 import {
   GetPendleMarketsRequestSchema,
   GetYieldMarketsResponseSchema,
@@ -22,16 +20,19 @@ import {
   GetTokensResponseSchema,
   type YieldMarket,
   type GetYieldMarketsResponse,
-} from 'ember-schemas';
+ type TransactionPlan } from 'ember-schemas';
+import { type Address } from 'viem';
 import { z } from 'zod';
-import { type TransactionPlan } from 'ember-schemas';
+
+import { type HandlerContext, handleSwapTokens } from './agentToolHandlers.js';
+import { logError } from './utils.js';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
 type YieldToolSet = {
-  listMarkets: Tool<z.ZodObject<{}>, Awaited<Task>>;
+  listMarkets: Tool<z.ZodObject<Record<string, never>>, Awaited<Task>>;
   swapTokens: Tool<typeof SwapTokensSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
 };
 
@@ -96,7 +97,6 @@ export class Agent {
     markets.forEach(market => {
       const chainId = market.chainId;
       const baseSymbol = market.underlyingAsset?.symbol || market.name;
-      const baseName = market.underlyingAsset?.name || market.name;
 
       // Add PT token
       const ptSymbol = `${baseSymbol}_PT`;
@@ -262,8 +262,9 @@ Never respond in markdown, always use plain text. Never add links to your respon
               artifacts: [{ name: 'yield-markets', parts: dataArtifacts }],
             };
             return task;
-          } catch (error: any) {
-            const msg = `Error listing Pendle markets: ${error.message}`;
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const msg = `Error listing Pendle markets: ${errorMessage}`;
             logError(msg);
             return {
               id: this.userAddress!,
@@ -284,8 +285,9 @@ Never respond in markdown, always use plain text. Never add links to your respon
           try {
             const result = await handleSwapTokens(args, this.getHandlerContext());
             return result;
-          } catch (error: any) {
-            logError(`Error during swapTokens: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during swapTokens: ${errorMessage}`);
             // Return a failed Task on error
             return {
               id: this.userAddress!,
@@ -293,7 +295,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
                 state: 'failed',
                 message: {
                   role: 'agent',
-                  parts: [{ type: 'text', text: `Error swapping tokens: ${error.message}` }],
+                  parts: [{ type: 'text', text: `Error swapping tokens: ${errorMessage}` }],
                 },
               },
             };
@@ -394,8 +396,9 @@ Never respond in markdown, always use plain text. Never add links to your respon
       }
 
       throw new Error('Agent processing failed: no tool result and no final text response.');
-    } catch (error: any) {
-      const msg = `Error calling Vercel AI SDK generateText: ${error?.message ?? error}`;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const msg = `Error calling Vercel AI SDK generateText: ${errorMessage}`;
       logError(msg);
       throw error;
     }

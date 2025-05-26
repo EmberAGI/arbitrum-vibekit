@@ -14,22 +14,31 @@
     "docker:compose:down": "docker compose down",
     "test": "NODE_OPTIONS=\"--import tsx --no-deprecation --no-warnings\" mocha --require tsx --config .mocharc.json 'test/**/*.test.ts'",
     "format": "prettier --write \"./{src,test}/**/*.{ts,tsx,js,jsx,json,md}\"",
-    "format:check": "prettier --check \"./{src,test}/**/*.{ts,tsx,js,jsx,json,md}\""
+    "format:check": "prettier --check \"./{src,test}/**/*.{ts,tsx,js,jsx,json,md}\"",
+    "lint": "eslint --ext .ts,.tsx .",
+    "lint:fix": "eslint --ext .ts,.tsx . --fix"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@emberai/sdk-typescript": "^0.3.0-beta.4",
+    "@eslint/js": "^9.0.0",
     "@types/chai": "^4.3.11",
     "@types/mocha": "^10.0.6",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
     "chai": "^4.3.10",
     "dotenv": "^16.3.1",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^16.1.0",
     "mocha": "^10.2.0",
     "mocha-suppress-logs": "^0.5.1",
     "prettier": "^3.5.3",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.32.1"
   },
   "dependencies": {
     "ethers": "^5.7.2",

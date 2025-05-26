@@ -1,4 +1,19 @@
-import { z } from 'zod';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
+import type { Task } from 'a2a-samples-js';
+import { streamText } from 'ai';
+import {
+  type TransactionArtifact,
+  parseMcpToolResponsePayload,
+} from 'arbitrum-vibekit';
+import {
+  SwapResponseSchema,
+  TransactionPlansSchema,
+  type SwapResponse,
+  type SwapPreview,
+  type TransactionPlan,
+} from 'ember-schemas';
 import {
   parseUnits,
   createPublicClient,
@@ -8,25 +23,8 @@ import {
   type PublicClient,
   formatUnits,
 } from 'viem';
+
 import { getChainConfigById } from './agent.js';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Task, DataPart } from 'a2a-samples-js/schema';
-import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { streamText } from 'ai';
-import {
-  createTransactionArtifactSchema,
-  type TransactionArtifact,
-  parseMcpToolResponsePayload,
-} from 'arbitrum-vibekit';
-import {
-  SwapResponseSchema,
-  SwapPreviewSchema,
-  TransactionPlansSchema,
-  type SwapResponse,
-  type SwapPreview,
-  type TransactionPlan,
-} from 'ember-schemas';
 
 export type TokenInfo = {
   chainId: string;
@@ -409,9 +407,7 @@ export async function handleSwapTokens(
         parts: [
           {
             type: 'data',
-            // The double-cast is intentional: DataPart expects Record<string, unknown>,
-            // but our artifact is validated by schema elsewhere.
-            data: txArtifact as unknown as Record<string, unknown>,
+            data: { ...txArtifact },
           },
         ],
       },
@@ -506,9 +502,9 @@ ${camelotContextContent}`;
         },
       },
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     log(`Error during askEncyclopedia execution:`, error);
-    const errorMessage = error?.message || 'An unexpected error occurred.';
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return {
       id: userAddress,
       status: {
@@ -522,5 +518,4 @@ ${camelotContextContent}`;
   }
 }
 
-const SwapTransactionArtifactSchema = createTransactionArtifactSchema(SwapPreviewSchema);
 export type SwapTransactionArtifact = TransactionArtifact<SwapPreview>;

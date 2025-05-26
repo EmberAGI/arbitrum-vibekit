@@ -1,15 +1,6 @@
-import { z } from 'zod';
-import {
-  parseUnits,
-  createPublicClient,
-  http,
-  type Address,
-  type PublicClient,
-  formatUnits,
-} from 'viem';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Task, DataPart, Artifact } from 'a2a-samples-js/schema';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
+import type { Task, DataPart } from 'a2a-samples-js';
 import {
   parseMcpToolResponsePayload,
   type TransactionArtifact,
@@ -25,6 +16,16 @@ import {
   type UserPositionsArtifact,
   type TransactionPlan
 } from 'ember-schemas';
+import {
+  parseUnits,
+  createPublicClient,
+  http,
+  type Address,
+  type PublicClient,
+  formatUnits,
+} from 'viem';
+import { z } from 'zod';
+
 import type { LiquidityPair, LiquidityPosition } from './agent.js';
 import { getChainConfigById } from './agent.js';
 
@@ -385,7 +386,7 @@ export async function handleSupplyLiquidity(
     const artifactContent: TransactionArtifact<typeof preview> = { txPlan, txPreview: preview };
     const dataPart: DataPart = {
       type: 'data',
-      data: artifactContent as any,
+      data: { ...artifactContent },
     };
 
     return {
@@ -477,7 +478,7 @@ export async function handleWithdrawLiquidity(
     const artifactContentW: TransactionArtifact<typeof previewW> = { txPlan, txPreview: previewW };
     const dataPartW: DataPart = {
       type: 'data',
-      data: artifactContentW as any,
+      data: { ...artifactContentW },
     };
 
     return {
