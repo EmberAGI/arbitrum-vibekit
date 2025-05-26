@@ -30,6 +30,10 @@ jobs:
         working-directory: ./typescript
         run: pnpm install
 
+      - name: Run linter
+        working-directory: ./typescript
+        run: pnpm recursive run lint
+
       - name: Build project
         working-directory: ./typescript
         run: pnpm run build || true
