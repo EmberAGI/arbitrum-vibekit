@@ -1,0 +1,10 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+- ALWAYS use pnpm
+- never use NPM
+- this project is a multi-package PNPM workspace with root in `./typescript/`
+- NEVER use relative file imports to import a package within the workspace
+- NEVER use `file:/` in package.json to refer to a package within the workspace - use `workspace:*` instead
