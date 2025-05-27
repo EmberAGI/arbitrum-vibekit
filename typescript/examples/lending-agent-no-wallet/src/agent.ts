@@ -25,6 +25,9 @@ import {
   type LendingGetCapabilitiesResponse,
   type McpTextWrapper,
   type TokenInfo,
+  type UserReserve,
+  UserReserveSchema,
+  type GetWalletPositionsResponse
 } from 'ember-schemas';
 import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
@@ -630,5 +633,65 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
     if (!this.aaveContextContent.trim()) {
       logError('Warning: Aave documentation context is empty after loading attempts.');
     }
+  }
+
+  /**
+   * Extract positions data from response
+   */
+  private extractPositionsData(response: any): GetWalletPositionsResponse {
+    if (!response.artifacts) {
+      throw new Error(`No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`);
+    }
+
+    // Look for positions artifact (support both legacy and new names)
+    for (const artifact of response.artifacts) {
+      if (artifact.name === 'positions' || artifact.name === 'wallet-positions') {
+        for (const part of artifact.parts || []) {
+          if (part.type === 'data' && part.data?.positions) {
+            return part.data;
+          }
+        }
+      }
+    }
+
+    throw new Error(`No positions data found in artifacts. Response: ${JSON.stringify(response, null, 2)}`);
+  }
+
+  /**
+   * Finds the reserve information for a given token symbol or name within the positions response.
+   */
+  private getReserveForToken(
+    response: GetWalletPositionsResponse,
+    tokenNameOrSymbol: string
+  ): UserReserve {
+    for (const position of response.positions) {
+      if (!position.lendingPosition) continue;
+
+      for (const reserve of position.lendingPosition.userReserves) {
+        const name = reserve.token!.name;
+        const symbol = reserve.token!.symbol;
+
+        if (name === tokenNameOrSymbol || symbol === tokenNameOrSymbol) {
+          try {
+            return UserReserveSchema.parse(reserve);
+          } catch (error) {
+            console.error('Failed to parse UserReserve:', error);
+            console.error('Reserve object that failed parsing:', reserve);
+            throw new Error(`Failed to parse reserve data for token ${tokenNameOrSymbol}. Ensure the SDK response matches UserReserveSchema. Reserve: ${JSON.stringify(reserve, null, 2)}`);
+          }
+        }
+      }
+    }
+
+    throw new Error(`No reserve found for token ${tokenNameOrSymbol}. Response: ${JSON.stringify(response, null, 2)}`);
+  }
+
+  /**
+   * Helper to get reserve for a token
+   */
+  async getTokenReserve(userAddress: string, tokenName: string): Promise<UserReserve> {
+    const response = await this.processUserInput('show my positions', userAddress);
+    const positionsData = this.extractPositionsData(response);
+    return this.getReserveForToken(positionsData, tokenName);
   }
 }
