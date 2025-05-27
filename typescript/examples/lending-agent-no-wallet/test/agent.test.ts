@@ -172,21 +172,16 @@ describe('Lending Agent Integration Tests', function () {
           // Check for response errors
           expect(response.status?.state).to.not.equal('failed', 'Borrow operation failed');
 
-          // Execute transactions
+          // Execute transactions immediately after getting response
           const txHashes = await extractAndExecuteTransactions(
             response,
             multiChainSigner,
             'borrow'
           );
           expect(txHashes.length).to.be.greaterThan(0, 'No transaction hashes returned');
-
-          // Just log transaction hash without explorer link
           console.log(`Borrow transaction hash: ${txHashes[0]}`);
 
-          // Wait for transaction to be mined and indexed
-          await new Promise(resolve => setTimeout(resolve, 20000));
-
-          // Check the new borrow amount increased by the expected amount
+          // Now check the balance - transaction is already executed and confirmed
           const newReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
           const newBorrows = parseFloat(newReserve.totalBorrows || '0');
           const borrowIncrease = newBorrows - oldBorrows;
@@ -229,9 +224,6 @@ describe('Lending Agent Integration Tests', function () {
         it('should withdraw WETH successfully', async function () {
           const amountToWithdraw = '0.0001';
 
-          // Wait to make sure previous operations were processed
-          await new Promise(resolve => setTimeout(resolve, 5000));
-
           // Get original balance
           const oldReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
           const oldBalance = parseFloat(oldReserve.underlyingBalance);
@@ -245,21 +237,16 @@ describe('Lending Agent Integration Tests', function () {
           // Check for response errors
           expect(response.status?.state).to.not.equal('failed', 'Withdraw operation failed');
 
-          // Execute transactions
+          // Execute transactions immediately after getting response
           const txHashes = await extractAndExecuteTransactions(
             response,
             multiChainSigner,
             'withdraw'
           );
           expect(txHashes.length).to.be.greaterThan(0, 'No transaction hashes returned');
-
-          // Just log transaction hash without explorer link
           console.log(`Withdraw transaction hash: ${txHashes[0]}`);
 
-          // Wait for transaction to be mined and indexed
-          await new Promise(resolve => setTimeout(resolve, 5000));
-
-          // Check the new balance decreased
+          // Now check the balance - transaction is already executed and confirmed
           const newReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
           const newBalance = parseFloat(newReserve.underlyingBalance);
           expect(oldBalance).to.be.closeTo(
