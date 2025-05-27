@@ -1,14 +1,14 @@
 ## 🎛️ Agent Playground
 
-The `examples` directory contains ready-to-roll DeFi agents built with the Vibekit. These agents showcase how to deploy smart, autonomous on-chain agents in a few steps. Each agent doubles as an MCP tool, enabling agent-to-agent integration for powerful workflows.
+The `examples` directory contains ready-to-roll DeFi agents built with the Vibekit. These agents showcase how to deploy smart, autonomous on-chain agents in a few steps. Each agent also doubles as an MCP tool, which enables powerful agent-to-agent integrations.
 
-Many of the tools and operations these agents use are defined in the [`mcp-tools`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools) folder. If you're building a new agent or want to extend functionality, the `mcp-tools` directory is the place to define your tool logic and add new capabilities for your agents to use.
+Many of the tools and operations these agents use are defined in [`mcp-tools`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools). If you're building a new agent or want to extend functionality, the `mcp-tools` directory is the place to define your tool logic and add new capabilities for your agents to use.
 
-Want to vibe code your own custom agent? Jump to [Building Your Own Agent](#️-building-your-own-agent) to get started.
+if you want to vibe code your own custom agent, jump to [Building Your Own Agent](#️-building-your-own-agent) to get started.
 
 ## 🚀 Running an Existing Agent
 
-### 1. Setup Environment
+### 1. Setup You Environment
 
 Navigate to the desired agent's directory and create an `.env` file. Copy the contents of `.env.example` into the `.env` file and fill in any required secrets or configuration variables.
 
@@ -67,9 +67,9 @@ pnpm --filter "agent-name" dev
 
 ### 3. Interact with the Agent
 
-Once the agent is up and running on port 3001, you have two ways to engage with it:
+Once the agent is up and running, you have three ways of interacting with it:
 
-**Launch the Inspector interface:**
+**1. Launch the Inspector interface:**
 
 Open a new terminal window and run the following to start the inspector:
 
@@ -91,11 +91,11 @@ Next, click on "List Tools" to view and run the tools your agent offers:
 
 The Inspector interface provides a straightforward way to interact with your agent. For a more integrated development experience, you can use the Cursor IDE.
 
-**Integrate with Cursor IDE**
+**2. Integrate with Cursor IDE**
 
 **Note:** This configuration approach is also compatible with other graphical MCP clients like [Claude Desktop](https://modelcontextprotocol.io/quickstart/user) and [Windsurf](https://docs.windsurf.com/windsurf/mcp). Simply adjust the settings accordingly in their respective configuration files.
 
-To interact with the agent though Cursor, [create or update](https://docs.cursor.com/context/model-context-protocol) your `mcp.json` file through Cursor settings with the following content. If your agent is running on a different port than 3001, make sure to adjust it:
+To interact with the agent though Cursor, [create or update](https://docs.cursor.com/context/model-context-protocol) your `mcp.json` file through Cursor's MCP settings with the following content. If your agent is running on a different port than 3001, make sure to adjust it:
 
 ```
 {
@@ -109,6 +109,22 @@ To interact with the agent though Cursor, [create or update](https://docs.cursor
 ```
 
 You might need to restart Cursor to apply the new configuration. Upon successful integration, Cursor will automatically detect the Agent MCP tool and you can interact with it directly through prompts.
+
+**3. Web Interface**
+
+You can also interact with your agent using the [Vibekit Web Frontend](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web). To do so:
+
+- Make sure your agent (MCP server) is running on http://localhost:3001.
+
+- In the `typescript` directory, ensure your `.env` is configured and run:
+
+  ```bash
+  docker compose up -d
+  ```
+
+- Open your browser and go to [http://localhost:3000](http://localhost:3000).
+
+- The web frontend provides a user-friendly chat interface for sending queries to your on-chain AI agent and viewing responses in real time.
 
 ## 🛠️ Building Your Own Agent
 
