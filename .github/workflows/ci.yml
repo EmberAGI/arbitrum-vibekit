@@ -114,6 +114,7 @@ jobs:
           QUICKNODE_SUBDOMAIN: ${{ secrets.QUICKNODE_SUBDOMAIN }}
           MNEMONIC: ${{ secrets.MNEMONIC }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          EMBER_ENDPOINT: localhost:50051
         run: pnpm recursive run test
 
       - name: Kill anvil server
