@@ -142,12 +142,15 @@ describe('Lending Agent Integration Tests', function () {
           // Just log transaction hash without explorer link
           console.log(`Supply transaction hash: ${txHashes[0]}`);
 
-          // Check the new balance increased
+
+          // Check the new balance increased by the expected amount
           const newReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
           const newBalance = parseFloat(newReserve.underlyingBalance);
-          expect(oldBalance).to.be.closeTo(
-            newBalance - parseFloat(amountToSupply),
-            0.0001 // Allow for some tolerance due to rounding and gas fees
+          const balanceIncrease = newBalance - oldBalance;
+          expect(balanceIncrease).to.be.closeTo(
+            parseFloat(amountToSupply),
+            0.0001, // Allow for some tolerance due to rounding and gas fees
+            `Expected balance to increase by ${amountToSupply}, but increased by ${balanceIncrease}`
           );
         });
       });
@@ -183,12 +186,14 @@ describe('Lending Agent Integration Tests', function () {
           // Wait for transaction to be mined and indexed
           await new Promise(resolve => setTimeout(resolve, 20000));
 
-          // Check the new borrow amount increased
+          // Check the new borrow amount increased by the expected amount
           const newReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
           const newBorrows = parseFloat(newReserve.totalBorrows || '0');
-          expect(oldBorrows).to.be.closeTo(
-            newBorrows - parseFloat(amountToBorrow),
-            0.00001 // Allow for some tolerance due to rounding
+          const borrowIncrease = newBorrows - oldBorrows;
+          expect(borrowIncrease).to.be.closeTo(
+            parseFloat(amountToBorrow),
+            0.00001, // Allow for some tolerance due to rounding
+            `Expected borrow to increase by ${amountToBorrow}, but increased by ${borrowIncrease}`
           );
         });
       });
