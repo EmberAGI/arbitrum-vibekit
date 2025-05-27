@@ -81,7 +81,7 @@ export async function signAndSendTransaction(
   }
 
   const txResponse = await signer.sendTransaction(tx);
-  await txResponse.wait();
+  await txResponse.wait(1);
   return txResponse.hash;
 }
 
@@ -127,6 +127,7 @@ export async function extractAndExecuteTransactions(
     }
   } catch (e) {
     // If no transaction plan in artifacts, try the old function call method
+    // TODO: should be eventually removed
     try {
       const functionCall = extractFunctionCall(response);
       const args = parseFunctionCallArgs(functionCall);
