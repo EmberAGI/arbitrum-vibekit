@@ -35,7 +35,7 @@ export function extractLendingTransactionPlan(
  */
 export function extractPositionsData(response: any): GetWalletPositionsResponse {
   if (!response.artifacts) {
-    throw new Error('No artifacts found in response');
+    throw new Error(`No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`);
   }
 
   // Look for positions artifact (support both legacy and new names)
@@ -58,7 +58,7 @@ export function extractPositionsData(response: any): GetWalletPositionsResponse 
     // ignore logging errors
   }
 
-  throw new Error('No positions data found in artifacts');
+  throw new Error(`No positions data found in artifacts. Response: ${JSON.stringify(response, null, 2)}`);
 }
 
 /**
@@ -81,24 +81,11 @@ export function getReserveForToken(
         } catch (error) {
           console.error('Failed to parse UserReserve:', error);
           console.error('Reserve object that failed parsing:', reserve);
-          throw new Error(`Failed to parse reserve data for token ${tokenNameOrSymbol}. Ensure the SDK response matches UserReserveSchema.`);
+          throw new Error(`Failed to parse reserve data for token ${tokenNameOrSymbol}. Ensure the SDK response matches UserReserveSchema. Reserve: ${JSON.stringify(reserve, null, 2)}`);
         }
       }
     }
   }
 
-  throw new Error(`No reserve found for token ${tokenNameOrSymbol}`);
-}
-
-/**
- * Helper to get reserve for a token
- */
-export async function getTokenReserve(
-  agent: any,
-  userAddress: string,
-  tokenName: string
-): Promise<UserReserve> {
-  const response = await agent.processUserInput('show my positions', userAddress);
-  const positionsData = extractPositionsData(response);
-  return getReserveForToken(positionsData, tokenName);
+  throw new Error(`No reserve found for token ${tokenNameOrSymbol}. Response: ${JSON.stringify(response, null, 2)}`);
 } 

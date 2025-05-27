@@ -12,7 +12,6 @@ import {
   extractTransactionPlan,
   extractPositionsData,
   getReserveForToken,
-  getTokenReserve,
   extractAndExecuteTransactions
 } from 'test-utils';
 import type { TokenUid, Token, UserReserve } from 'ember-schemas';
@@ -120,7 +119,7 @@ describe('Lending Agent Integration Tests', function () {
           const amountToSupply = '0.0005';
 
           // Get original balance
-          const oldReserve = await getTokenReserve(agent, multiChainSigner.wallet.address, 'WETH');
+          const oldReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
           const oldBalance = parseFloat(oldReserve.underlyingBalance);
 
           // Supply some WETH
@@ -147,7 +146,7 @@ describe('Lending Agent Integration Tests', function () {
           await new Promise(resolve => setTimeout(resolve, 5000));
 
           // Check the new balance increased
-          const newReserve = await getTokenReserve(agent, multiChainSigner.wallet.address, 'WETH');
+          const newReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
           const newBalance = parseFloat(newReserve.underlyingBalance);
           expect(oldBalance).to.be.closeTo(
             newBalance - parseFloat(amountToSupply),
@@ -164,7 +163,7 @@ describe('Lending Agent Integration Tests', function () {
           await new Promise(resolve => setTimeout(resolve, 5000));
 
           // Get original borrow balance
-          const oldReserve = await getTokenReserve(agent, multiChainSigner.wallet.address, 'WETH');
+          const oldReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
           const oldBorrows = parseFloat(oldReserve.totalBorrows || '0');
 
           // Borrow some WETH
@@ -191,7 +190,7 @@ describe('Lending Agent Integration Tests', function () {
           await new Promise(resolve => setTimeout(resolve, 5000));
 
           // Check the new borrow amount increased
-          const newReserve = await getTokenReserve(agent, multiChainSigner.wallet.address, 'WETH');
+          const newReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
           const newBorrows = parseFloat(newReserve.totalBorrows || '0');
           expect(oldBorrows).to.be.closeTo(
             newBorrows - parseFloat(amountToBorrow),
@@ -235,7 +234,7 @@ describe('Lending Agent Integration Tests', function () {
           await new Promise(resolve => setTimeout(resolve, 5000));
 
           // Get original balance
-          const oldReserve = await getTokenReserve(agent, multiChainSigner.wallet.address, 'WETH');
+          const oldReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
           const oldBalance = parseFloat(oldReserve.underlyingBalance);
 
           // Withdraw some WETH
@@ -262,7 +261,7 @@ describe('Lending Agent Integration Tests', function () {
           await new Promise(resolve => setTimeout(resolve, 5000));
 
           // Check the new balance decreased
-          const newReserve = await getTokenReserve(agent, multiChainSigner.wallet.address, 'WETH');
+          const newReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
           const newBalance = parseFloat(newReserve.underlyingBalance);
           expect(oldBalance).to.be.closeTo(
             newBalance + parseFloat(amountToWithdraw),
