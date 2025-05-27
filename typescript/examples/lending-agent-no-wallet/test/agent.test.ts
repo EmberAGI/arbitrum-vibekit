@@ -209,11 +209,11 @@ describe('Lending Agent Integration Tests', function () {
           // Verify we have both supplies and borrows
           expect(
             parseFloat(wethReserve.underlyingBalance),
-            'No WETH supply balance found'
+            `No WETH supply balance found: ${JSON.stringify(positionsData, null, 2)}`
           ).to.be.greaterThan(0);
           expect(
             parseFloat(wethReserve.totalBorrows || '0'),
-            'No WETH borrow balance found'
+            `No WETH borrow balance found: ${JSON.stringify(positionsData, null, 2)}`
           ).to.be.greaterThan(0);
         });
       });
