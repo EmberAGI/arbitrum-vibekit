@@ -116,7 +116,7 @@ describe('Lending Agent Integration Tests', function () {
 
       describe('Supply Operations', function () {
         it('should supply WETH successfully', async function () {
-          const amountToSupply = '0.0005';
+          const amountToSupply = '0.001';
 
           // Get original balance
           const oldReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
@@ -142,25 +142,19 @@ describe('Lending Agent Integration Tests', function () {
           // Just log transaction hash without explorer link
           console.log(`Supply transaction hash: ${txHashes[0]}`);
 
-          // Wait for transaction to be mined and indexed
-          await new Promise(resolve => setTimeout(resolve, 5000));
-
           // Check the new balance increased
           const newReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
           const newBalance = parseFloat(newReserve.underlyingBalance);
           expect(oldBalance).to.be.closeTo(
             newBalance - parseFloat(amountToSupply),
-            0.005 // Allow for some tolerance due to rounding and gas fees
+            0.0001 // Allow for some tolerance due to rounding and gas fees
           );
         });
       });
 
       describe('Borrow Operations', function () {
         it('should borrow WETH successfully', async function () {
-          const amountToBorrow = '0.0001';
-
-          // Wait to make sure supply was processed
-          await new Promise(resolve => setTimeout(resolve, 5000));
+          const amountToBorrow = 0.0005;
 
           // Get original borrow balance
           const oldReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
@@ -187,14 +181,14 @@ describe('Lending Agent Integration Tests', function () {
           console.log(`Borrow transaction hash: ${txHashes[0]}`);
 
           // Wait for transaction to be mined and indexed
-          await new Promise(resolve => setTimeout(resolve, 5000));
+          await new Promise(resolve => setTimeout(resolve, 20000));
 
           // Check the new borrow amount increased
           const newReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
           const newBorrows = parseFloat(newReserve.totalBorrows || '0');
           expect(oldBorrows).to.be.closeTo(
             newBorrows - parseFloat(amountToBorrow),
-            0.001 // Allow for some tolerance due to rounding
+            0.00001 // Allow for some tolerance due to rounding
           );
         });
       });
