@@ -4,15 +4,11 @@
     "rootDir": ".",
     "outDir": "./dist-test",
     "composite": true,
-    "declaration": true,
-    "declarationMap": true,
     "baseUrl": ".",
     "paths": {
       "test-utils": ["../../lib/test-utils/src"]
     }
   },
   "include": ["test/**/*", "src/**/*"],
-  "references": [
-    { "path": "../../lib/test-utils" }
-  ]
-} 
+  "references": [{ "path": "../../lib/test-utils" }]
+}
