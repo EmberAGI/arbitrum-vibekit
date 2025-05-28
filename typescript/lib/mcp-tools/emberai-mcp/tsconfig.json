@@ -4,6 +4,7 @@
     "moduleResolution": "Node16",
     "outDir": "dist",
     "rootDir": "./src",
+    "composite": true,
     "paths": {
       "ember-schemas": ["../../ember-schemas/src/index.js"],
       "ember-schemas/*": ["../../ember-schemas/src/*"]
@@ -11,7 +12,5 @@
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"],
-  "references": [
-    { "path": "../../ember-schemas" }
-  ]
+  "references": [{ "path": "../../ember-schemas" }]
 }

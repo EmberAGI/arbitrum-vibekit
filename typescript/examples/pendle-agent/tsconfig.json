@@ -4,12 +4,9 @@
     "rootDir": "src",
     "outDir": "dist",
     "composite": true,
-    "declaration": true,
-    "declarationMap": true
+    "baseUrl": "."
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"],
-  "references": [
-    { "path": "../../lib/a2a" }
-  ]
+  "references": [{ "path": "../../lib/a2a" }]
 }
