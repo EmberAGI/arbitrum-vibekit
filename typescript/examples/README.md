@@ -12,6 +12,13 @@ if you want to vibe code your own custom agent, jump to [Building Your Own Agent
 
 Navigate to the desired agent's directory and create an `.env` file. Copy the contents of `.env.example` into the `.env` file and fill in any required secrets or configuration variables.
 
+Next, navigate to the `typescript` directory and install the necessary packages.
+
+```
+cd typescript &&
+pnpm install
+```
+
 ### 2. Start the Agent
 
 There are three main ways to start an agent:
@@ -22,14 +29,7 @@ Ask Cursor's integrated AI assistant to run your desired agent.
 
 **2. Docker Compose**:
 
-Navigate to the `typescript` directory and install the necessary packages.
-
-```
-cd typescript &&
-pnpm install
-```
-
-Next, run the MCP-enabled Docker container to start your agent. Replace the `"agent-name"` with the name of your desired agent, for example: `"swapping-agent-no-wallet"`.
+Run the MCP-enabled Docker container in the `typescript` directory to start your agent. Replace the `"agent-name"` with the name of your desired agent, for example: `"swapping-agent-no-wallet"`.
 
 ```
 pnpm --filter "agent-name" docker:compose:up
@@ -54,13 +54,10 @@ pnpm --filter "agent-name" docker:compose:down
 ```
 
 **3. Local Development**:
-
-Navigate to the `typescript` directory and run the following `pnpm` commands to build
+Run the following `pnpm` commands in the `typescript` directory to build and run
 your agent. Replace the `"agent-name"` with the name of your desired agent, for example: `"swapping-agent-no-wallet"`.
 
 ```
-cd typescript &&
-pnpm install &&
 pnpm build &&
 pnpm --filter "agent-name" dev
 ```

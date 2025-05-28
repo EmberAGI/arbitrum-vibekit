@@ -37,6 +37,12 @@ Run the following docker compose command to run the frontend:
 docker compose up -d
 ```
 
+**Note**: If you get a `permission denied error`, try running the above command with `sudo`:
+
+```
+sudo  docker compose up -d
+```
+
 To access your applications:
 
 - Web app: [http://localhost:3000](http://localhost:3000)
