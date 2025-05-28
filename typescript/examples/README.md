@@ -54,6 +54,7 @@ pnpm --filter "agent-name" docker:compose:down
 ```
 
 **3. Local Development**:
+
 Run the following `pnpm` commands in the `typescript` directory to build and run
 your agent. Replace the `"agent-name"` with the name of your desired agent, for example: `"swapping-agent-no-wallet"`.
 

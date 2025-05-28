@@ -83,10 +83,10 @@ export const chatAgents = [
 ] as const;
 
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
-  ["ember-aave", "http://173.230.139.151:3010/sse"],
-  ["ember-camelot", "http://173.230.139.151:3011/sse"],
-  ["ember-lp", "http://173.230.139.151:3012/sse"],
-  ["ember-pendle", "http://173.230.139.151:3013/sse"],
+  ["ember-aave", "http://173.230.139.151:3010/sse"], // lending agent
+  ["ember-camelot", "http://173.230.139.151:3011/sse"], // swapping agent
+  ["ember-lp", "http://173.230.139.151:3012/sse"], // liquidity agent
+  ["ember-pendle", "http://173.230.139.151:3013/sse"], // pendle agent
 ]);
 
 export type ChatAgentId = (typeof chatAgents)[number]["id"];
