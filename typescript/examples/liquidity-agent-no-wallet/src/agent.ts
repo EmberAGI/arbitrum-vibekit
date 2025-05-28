@@ -1,19 +1,20 @@
-import { createRequire } from 'module';
-
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import type { Task } from 'a2a-samples-js';
 import {
   generateText,
   tool,
   type Tool,
   type CoreMessage,
-  type ToolResultPart,
   type CoreUserMessage,
   type CoreAssistantMessage,
   type StepResult,
+  type ToolResultPart,
 } from 'ai';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import type { Task } from 'a2a-samples-js';
+import { createRequire } from 'module';
+import * as chains from 'viem/chains';
+import type { Chain } from 'viem/chains';
 import {
   GetLiquidityPoolsAgentResponseSchema,
   SupplyLiquiditySchema,
@@ -22,8 +23,6 @@ import {
   GetUserLiquidityPositionsSchema,
 } from 'ember-schemas';
 import { type Address } from 'viem';
-import * as chains from 'viem/chains';
-import type { Chain } from 'viem/chains';
 import { z } from 'zod';
 import {
   handleSupplyLiquidity,
@@ -32,7 +31,6 @@ import {
   handleGetUserLiquidityPositions,
   type HandlerContext,
 } from './agentToolHandlers.js';
-
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
