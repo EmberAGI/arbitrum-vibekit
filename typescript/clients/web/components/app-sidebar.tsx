@@ -34,8 +34,8 @@ export function AppSidebar({ user }: { user: User | undefined }) {
               }}
               className="flex flex-row gap-3 items-center"
             >
-              <span className="text-lg font-semibold px-2 hover:bg-muted rounded-md cursor-pointer text-orange-500">
-                {process.env.PROJECT_NAME || "EmberAI"}
+              <span className="text-lg font-semibold px-2 hover:bg-muted rounded-md cursor-pointer text-cyan-700">
+                {process.env.PROJECT_NAME || "Vibekit"}
               </span>
             </Link>
             <Tooltip>
