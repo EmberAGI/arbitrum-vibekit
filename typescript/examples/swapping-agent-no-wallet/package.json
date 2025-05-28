@@ -24,6 +24,7 @@
     "a2a-samples-js": "workspace:*",
     "ai": "^4.3.2",
     "arbitrum-vibekit": "workspace:*",
+    "ember-schemas": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "ember-mcp-tool-server": "workspace:*",
