@@ -10,7 +10,7 @@ import {
 } from 'viem';
 import { getChainConfigById } from './agent.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Task, DataPart } from 'a2a-samples-js/schema';
+import type { Task, DataPart } from 'a2a-samples-js';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { streamText } from 'ai';

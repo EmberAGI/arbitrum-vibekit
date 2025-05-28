@@ -8,7 +8,7 @@ import {
   handleAskEncyclopedia,
   type HandlerContext,
 } from './agentToolHandlers.js';
-import type { Task } from 'a2a-samples-js/schema';
+import type { Task } from 'a2a-samples-js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -40,7 +40,7 @@ import {
   TokenIdentifierSchema,
   type UserReserve,
   UserReserveSchema,
-  type GetWalletPositionsResponse
+  type GetWalletPositionsResponse,
 } from 'ember-schemas';
 import { z } from 'zod';
 
@@ -168,8 +168,7 @@ export class Agent {
 
     this.toolSet = {
       borrow: tool({
-        description:
-          'Borrow a token.',
+        description: 'Borrow a token.',
         parameters: BorrowRepaySupplyWithdrawSchema,
         execute: async args => {
           console.error('Vercel AI SDK calling handler: borrow', args);
@@ -195,8 +194,7 @@ export class Agent {
         },
       }),
       supply: tool({
-        description:
-          'Supply (deposit) a token.',
+        description: 'Supply (deposit) a token.',
         parameters: BorrowRepaySupplyWithdrawSchema,
         execute: async args => {
           console.error('Vercel AI SDK calling handler: supply', args);
@@ -209,8 +207,7 @@ export class Agent {
         },
       }),
       withdraw: tool({
-        description:
-          'Withdraw a previously supplied token.',
+        description: 'Withdraw a previously supplied token.',
         parameters: BorrowRepaySupplyWithdrawSchema,
         execute: async args => {
           console.error('Vercel AI SDK calling handler: withdraw', args);
@@ -381,7 +378,8 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
         );
       }
 
-      const capabilitiesValidationResult = LendingGetCapabilitiesResponseSchema.safeParse(parsedData);
+      const capabilitiesValidationResult =
+        LendingGetCapabilitiesResponseSchema.safeParse(parsedData);
 
       if (!capabilitiesValidationResult.success) {
         logError(
@@ -640,7 +638,9 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
    */
   private extractPositionsData(response: any): GetWalletPositionsResponse {
     if (!response.artifacts) {
-      throw new Error(`No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`);
+      throw new Error(
+        `No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`
+      );
     }
 
     // Look for positions artifact (support both legacy and new names)
@@ -654,7 +654,9 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       }
     }
 
-    throw new Error(`No positions data found in artifacts. Response: ${JSON.stringify(response, null, 2)}`);
+    throw new Error(
+      `No positions data found in artifacts. Response: ${JSON.stringify(response, null, 2)}`
+    );
   }
 
   /**
@@ -677,13 +679,17 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
           } catch (error) {
             console.error('Failed to parse UserReserve:', error);
             console.error('Reserve object that failed parsing:', reserve);
-            throw new Error(`Failed to parse reserve data for token ${tokenNameOrSymbol}. Ensure the SDK response matches UserReserveSchema. Reserve: ${JSON.stringify(reserve, null, 2)}`);
+            throw new Error(
+              `Failed to parse reserve data for token ${tokenNameOrSymbol}. Ensure the SDK response matches UserReserveSchema. Reserve: ${JSON.stringify(reserve, null, 2)}`
+            );
           }
         }
       }
     }
 
-    throw new Error(`No reserve found for token ${tokenNameOrSymbol}. Response: ${JSON.stringify(response, null, 2)}`);
+    throw new Error(
+      `No reserve found for token ${tokenNameOrSymbol}. Response: ${JSON.stringify(response, null, 2)}`
+    );
   }
 
   /**

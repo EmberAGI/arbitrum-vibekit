@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Task, DataPart } from 'a2a-samples-js/schema';
+import type { Task, DataPart } from 'a2a-samples-js';
 import {
   createPublicClient,
   http,

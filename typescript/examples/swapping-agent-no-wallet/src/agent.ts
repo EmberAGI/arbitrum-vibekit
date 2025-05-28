@@ -21,7 +21,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
-import type { Task } from 'a2a-samples-js/schema';
+import type { Task } from 'a2a-samples-js';
 import { createRequire } from 'module';
 import {
   AskEncyclopediaSchema,

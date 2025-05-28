@@ -8,12 +8,9 @@ import {
   formatUnits,
 } from 'viem';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Task, DataPart, Artifact } from 'a2a-samples-js/schema';
+import type { Task, DataPart, Artifact } from 'a2a-samples-js';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
-import {
-  parseMcpToolResponsePayload,
-  type TransactionArtifact,
-} from 'arbitrum-vibekit';
+import { parseMcpToolResponsePayload, type TransactionArtifact } from 'arbitrum-vibekit';
 import {
   GetLiquidityPoolsSchema,
   GetUserLiquidityPositionsSchema,
@@ -23,7 +20,7 @@ import {
   TransactionPlanSchema,
   type LiquidityPoolsArtifact,
   type UserPositionsArtifact,
-  type TransactionPlan
+  type TransactionPlan,
 } from 'ember-schemas';
 import type { LiquidityPair, LiquidityPosition } from './agent.js';
 import { getChainConfigById } from './agent.js';
@@ -133,7 +130,10 @@ export async function handleGetUserLiquidityPositions(
       arguments: mcpArgs,
     });
 
-    const validatedData = parseMcpToolResponsePayload(mcpResponse, GetUserLiquidityPositionsResponseSchema);
+    const validatedData = parseMcpToolResponsePayload(
+      mcpResponse,
+      GetUserLiquidityPositionsResponseSchema
+    );
 
     // Use the validatedData.positions array directly, as it matches the new schema
     const positions = validatedData.positions;
@@ -455,7 +455,7 @@ export async function handleWithdrawLiquidity(
 
     // Parse without chainId first
     const txPlan = parseMcpToolResponsePayload(
-      mcpResponse, 
+      mcpResponse,
       z.object({
         chainId: z.string(),
         transactions: z.array(TransactionPlanSchema),
