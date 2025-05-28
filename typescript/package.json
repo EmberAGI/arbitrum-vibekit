@@ -12,9 +12,9 @@
     "docker:compose:up": "docker compose up --build --no-log-prefix",
     "docker:compose:build": "docker compose build --no-cache",
     "docker:compose:down": "docker compose down",
-    "test": "NODE_OPTIONS=\"--import tsx --no-deprecation --no-warnings\" mocha --require tsx --config .mocharc.json 'test/**/*.test.ts'",
-    "format": "prettier --write \"./{src,test}/**/*.{ts,tsx,js,jsx,json,md}\"",
-    "format:check": "prettier --check \"./{src,test}/**/*.{ts,tsx,js,jsx,json,md}\""
+    "test": "pnpm recursive run test",
+    "format": "pnpm recursive run format",
+    "format:check": "pnpm recursive run format:check"
   },
   "keywords": [],
   "author": "",
