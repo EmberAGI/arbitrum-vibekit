@@ -3,7 +3,7 @@ import { createRequire } from 'module';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import type { Task } from 'a2a-samples-js/schema';
+import type { Task } from 'a2a-samples-js';
 import {
   generateText,
   tool,
@@ -126,22 +126,10 @@ type SupplyLiquidityExtendedSchema = z.ZodObject<{
 }>;
 
 type LiquidityToolSet = {
-  supplyLiquidity: Tool<
-    SupplyLiquidityExtendedSchema,
-    Task
-  >;
-  withdrawLiquidity: Tool<
-    typeof WithdrawLiquiditySchema,
-    Task
-  >;
-  getLiquidityPools: Tool<
-    typeof GetLiquidityPoolsSchema,
-    Task
-  >;
-  getUserLiquidityPositions: Tool<
-    typeof GetUserLiquidityPositionsSchema,
-    Task
-  >;
+  supplyLiquidity: Tool<SupplyLiquidityExtendedSchema, Task>;
+  withdrawLiquidity: Tool<typeof WithdrawLiquiditySchema, Task>;
+  getLiquidityPools: Tool<typeof GetLiquidityPoolsSchema, Task>;
+  getUserLiquidityPositions: Tool<typeof GetUserLiquidityPositionsSchema, Task>;
 };
 
 export class Agent {

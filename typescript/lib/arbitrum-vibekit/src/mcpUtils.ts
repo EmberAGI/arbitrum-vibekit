@@ -2,7 +2,7 @@ import {
   CallToolResultSchema,
   TextContentSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { z, ZodType } from "zod";
+import { ZodType } from "zod";
 // Importing from the explicit compiled output path (with extension) avoids
 // Node.js ESM resolution issues in production Docker images where specifier
 // extension searching is disabled.
