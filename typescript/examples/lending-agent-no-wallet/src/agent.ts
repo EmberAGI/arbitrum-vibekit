@@ -634,7 +634,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
   /**
    * Extract positions data from response
    */
-  private extractPositionsData(response: any): GetWalletPositionsResponse {
+  private extractPositionsData(response: Task): GetWalletPositionsResponse {
     if (!response.artifacts) {
       throw new Error(
         `No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`
@@ -646,7 +646,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       if (artifact.name === 'positions' || artifact.name === 'wallet-positions') {
         for (const part of artifact.parts || []) {
           if (part.type === 'data' && part.data?.positions) {
-            return part.data;
+            return part.data as GetWalletPositionsResponse;
           }
         }
       }
