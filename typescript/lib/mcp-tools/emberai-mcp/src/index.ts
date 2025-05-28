@@ -169,6 +169,12 @@ const getUserLiquidityPositionsSchema = {
 // Add schema definition for getYieldMarkets after the existing schema definitions
 const getYieldMarketsSchema = {};
 
+const getWalletBalancesSchema = {
+  walletAddress: z
+    .string()
+    .describe("The wallet address to fetch token balances for."),
+};
+
 // Define types from schemas using z.object() on the raw schema definitions
 type SwapTokensParams = z.infer<ReturnType<typeof z.object<typeof swapTokensSchema>>>;
 type BorrowParams = z.infer<ReturnType<typeof z.object<typeof borrowSchema>>>;
@@ -183,6 +189,7 @@ type WithdrawLiquidityParams = z.infer<ReturnType<typeof z.object<typeof withdra
 type GetLiquidityPoolsParams = z.infer<ReturnType<typeof z.object<typeof getLiquidityPoolsSchema>>>;
 type GetUserLiquidityPositionsParams = z.infer<ReturnType<typeof z.object<typeof getUserLiquidityPositionsSchema>>>;
 type GetYieldMarketsParams = z.infer<ReturnType<typeof z.object<typeof getYieldMarketsSchema>>>;
+type GetWalletBalancesParams = z.infer<ReturnType<typeof z.object<typeof getWalletBalancesSchema>>>;
 
 // --- Initialize the MCP server using the high-level McpServer API
 const server = new McpServer({
@@ -817,6 +824,42 @@ server.tool(
       };
     } catch (error) {
       console.error(`GetYieldMarkets tool error:`, error);
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+      };
+    }
+  }
+);
+
+server.tool(
+  "getWalletBalances",
+  "Get wallet token balances using Ember On-chain Actions",
+  getWalletBalancesSchema,
+  async (params: GetWalletBalancesParams) => {
+    console.error(`Executing getWalletBalances tool with params:`, params);
+
+    try {
+      const response = await emberClient.getWalletBalances({
+        walletAddress: params.walletAddress,
+      });
+      
+      // Check for expected data instead of response.error
+      if (!response.balances) {
+        throw new Error("No wallet balances data returned.");
+      }
+
+      console.error(`GetWalletBalances tool success.`);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(response, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      console.error(`GetWalletBalances tool error:`, error);
       return {
         isError: true,
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],

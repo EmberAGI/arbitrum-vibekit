@@ -20,7 +20,9 @@ import {
   GetTokensResponseSchema,
   type YieldMarket,
   type GetYieldMarketsResponse,
- type TransactionPlan } from 'ember-schemas';
+  type TransactionPlan,
+  GetWalletBalancesResponseSchema,
+} from 'ember-schemas';
 import { type Address } from 'viem';
 import { z } from 'zod';
 
@@ -34,6 +36,7 @@ const openrouter = createOpenRouter({
 type YieldToolSet = {
   listMarkets: Tool<z.ZodObject<Record<string, never>>, Awaited<Task>>;
   swapTokens: Tool<typeof SwapTokensSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
+  getWalletBalances: Tool<z.ZodObject<Record<string, never>>, Awaited<Task>>;
 };
 
 export class Agent {
@@ -158,6 +161,7 @@ About Pendle Protocol:
 You can:
 - List available Pendle markets using the listMarkets tool
 - Swap tokens to acquire PT or YT tokens using the swapTokens tool
+- Get wallet token balances using the getWalletBalances tool
 
 PT/YT Token Naming Convention:
 - PT tokens have a symbol suffix of _PT (e.g., wstETH_PT, USDC_PT)
@@ -296,6 +300,54 @@ Never respond in markdown, always use plain text. Never add links to your respon
                 message: {
                   role: 'agent',
                   parts: [{ type: 'text', text: `Error swapping tokens: ${errorMessage}` }],
+                },
+              },
+            };
+          }
+        },
+      }),
+      getWalletBalances: tool({
+        description: 'Get wallet token balances for the current user',
+        parameters: z.object({}), // No parameters needed since we use context address
+        execute: async () => {
+          this.log('Executing getWalletBalances tool for user:', this.userAddress);
+          try {
+            const result = await this.mcpClient.callTool({
+              name: 'getWalletBalances',
+              arguments: { walletAddress: this.userAddress! },
+            });
+            
+            const parsedData = parseMcpToolResponsePayload(result, GetWalletBalancesResponseSchema);
+            
+            // Create data artifacts for the wallet balances
+            const dataArtifacts = parsedData.balances.map(balance => ({
+              type: 'data' as const,
+              data: balance,
+            }));
+
+            const task: Task = {
+              id: this.userAddress!,
+              status: {
+                state: 'completed',
+                message: {
+                  role: 'agent',
+                  parts: [{ type: 'text', text: `Found ${parsedData.balances.length} token balances for wallet ${this.userAddress}` }],
+                },
+              },
+              artifacts: [{ name: 'wallet-balances', parts: dataArtifacts }],
+            };
+            return task;
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during getWalletBalances: ${errorMessage}`);
+            // Return a failed Task on error
+            return {
+              id: this.userAddress!,
+              status: {
+                state: 'failed',
+                message: {
+                  role: 'agent',
+                  parts: [{ type: 'text', text: `Error getting wallet balances: ${errorMessage}` }],
                 },
               },
             };

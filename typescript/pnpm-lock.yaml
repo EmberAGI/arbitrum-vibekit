@@ -17,8 +17,8 @@ importers:
         version: 3.25.7
     devDependencies:
       '@emberai/sdk-typescript':
-        specifier: ^0.3.0-beta.4
-        version: 0.3.0-beta.8
+        specifier: ^0.3.0-beta.10
+        version: 0.3.0-beta.10
       '@eslint/js':
         specifier: ^9.0.0
         version: 9.27.0
@@ -265,21 +265,39 @@ importers:
         specifier: ^3.22.4
         version: 3.25.7
     devDependencies:
+      '@types/chai':
+        specifier: ^4.3.20
+        version: 4.3.20
       '@types/cors':
         specifier: ^2.8.17
         version: 2.8.18
       '@types/express':
         specifier: ^5.0.0
         version: 5.0.2
+      '@types/mocha':
+        specifier: ^10.0.10
+        version: 10.0.10
       '@types/node':
         specifier: ^20.10.0
         version: 20.17.48
+      chai:
+        specifier: ^4.5.0
+        version: 4.5.0
       cpx:
         specifier: ^1.5.0
         version: 1.5.0
+      mocha:
+        specifier: ^10.8.2
+        version: 10.8.2
+      mocha-suppress-logs:
+        specifier: ^0.3.1
+        version: 0.3.1
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
+      test-utils:
+        specifier: workspace:*
+        version: link:../../lib/test-utils
       tsx:
         specifier: ^4.6.2
         version: 4.19.4
@@ -524,8 +542,8 @@ importers:
   lib/mcp-tools/emberai-mcp:
     dependencies:
       '@emberai/sdk-typescript':
-        specifier: 0.3.0-beta.9
-        version: 0.3.0-beta.9
+        specifier: 0.3.0-beta.10
+        version: 0.3.0-beta.10
       '@grpc/grpc-js':
         specifier: ^1.13.2
         version: 1.13.3
@@ -649,12 +667,8 @@ packages:
   '@bufbuild/protobuf@2.4.0':
     resolution: {integrity: sha512-RN9M76x7N11QRihKovEglEjjVCQEA9PRBVnDgk9xw8JHLrcUrp4FpAVSPSH91cNbcTft3u2vpLN4GMbiKY9PJw==}
 
-  '@emberai/sdk-typescript@0.3.0-beta.8':
-    resolution: {integrity: sha512-LYpq1kWsN+u9b9jgWU6JQP7az1O3mATKh/i9MzTachzZx41LdUkzPAYw4Gqrlf+DY6M4PtQQD389lM7q1HFhWw==}
-    engines: {node: '>=18.0.0'}
-
-  '@emberai/sdk-typescript@0.3.0-beta.9':
-    resolution: {integrity: sha512-J84y7rut0EzFpYPvf7c+P+NO28gFz/Kyr3CYepUOgmS4hY88KIng/9pdJkEm5JLA4F7/cGxSbAvLehYBREOQLg==}
+  '@emberai/sdk-typescript@0.3.0-beta.10':
+    resolution: {integrity: sha512-00cH0oOL2byUbNL0vWQJPJxduKoVPxiNY57wla1NhMbHk+psDmlQaCrXbxmjsA0wmHXf7UZ0EuqYnw8PNmioWQ==}
     engines: {node: '>=18.0.0'}
 
   '@esbuild/aix-ppc64@0.25.4':
@@ -3833,14 +3847,7 @@ snapshots:
 
   '@bufbuild/protobuf@2.4.0': {}
 
-  '@emberai/sdk-typescript@0.3.0-beta.8':
-    dependencies:
-      '@bufbuild/protobuf': 2.4.0
-      '@openzeppelin/contracts': 5.3.0
-      p-retry: 6.2.1
-      ts-pattern: 5.7.1
-
-  '@emberai/sdk-typescript@0.3.0-beta.9':
+  '@emberai/sdk-typescript@0.3.0-beta.10':
     dependencies:
       '@bufbuild/protobuf': 2.4.0
       '@openzeppelin/contracts': 5.3.0
