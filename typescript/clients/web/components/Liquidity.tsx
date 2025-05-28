@@ -280,7 +280,7 @@ export function Liquidity({
                     <div className="flex gap-3">
                       {needsApproval && (
                         <button
-                          className="mt-4 bg-orange-500 text-white py-2 px-4 rounded-full disabled:bg-zinc-600 disabled:border-2 disabled:border-zinc-500 disabled:text-gray-400"
+                          className="mt-4 bg-cyan-700 text-white py-2 px-4 rounded-full disabled:bg-zinc-600 disabled:border-2 disabled:border-zinc-500 disabled:text-gray-400"
                           type="button"
                           onClick={approveNext} // Use hook action
                           disabled={!canApprove} // Use hook state
@@ -295,7 +295,7 @@ export function Liquidity({
                         </button>
                       )}
                       <button
-                        className="mt-4 bg-orange-500 text-white py-2 px-4 rounded-full disabled:opacity-50"
+                        className="mt-4 bg-cyan-700 text-white py-2 px-4 rounded-full disabled:opacity-50"
                         type="button"
                         onClick={executeMain} // Use hook action
                         disabled={!canExecute || false} // Use hook state (extra || false is harmless but redundant)
