@@ -1,11 +1,11 @@
-import { z, ZodType } from "zod";
-// Importing from the explicit compiled output path (with extension) avoids
-// Node.js ESM resolution issues in production Docker images where specifier
-// extension searching is disabled.
 import {
   CallToolResultSchema,
   TextContentSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { ZodType } from "zod";
+// Importing from the explicit compiled output path (with extension) avoids
+// Node.js ESM resolution issues in production Docker images where specifier
+// extension searching is disabled.
 
 /**
  * Extracts the raw text content from an MCP tool response.

@@ -1,25 +1,17 @@
 /// <reference types="mocha" />
 import { expect } from 'chai';
+
 import 'dotenv/config';
-import { Agent } from '../src/agent.js';
-import { 
-  executeTransactionPlan, 
-  parseFunctionCallArgs, 
-  TransactionPlan,
+import {
   MultiChainSigner,
   CHAIN_CONFIGS,
   ensureWethBalance,
-  extractTransactionPlan,
   extractPositionsData,
   getReserveForToken,
   extractAndExecuteTransactions
 } from 'test-utils';
-import type { TokenUid, Token, UserReserve } from 'ember-schemas';
-import type { GetWalletPositionsResponse } from '@emberai/sdk-typescript';
-import { 
-  type Position,
-  type LendingPosition
-} from '../src/agentToolHandlers.js';
+
+import { Agent } from '../src/agent.js';
 
 // Define chain IDs that should be tested
 const CHAINS_TO_TEST: number[] = [42161]; // Arbitrum One

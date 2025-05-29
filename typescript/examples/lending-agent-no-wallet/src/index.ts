@@ -1,9 +1,10 @@
-import { Agent } from './agent.js';
-import { isAddress } from 'viem';
-import * as dotenv from 'dotenv';
-import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import * as dotenv from 'dotenv';
+import express from 'express';
+import { isAddress } from 'viem';
+
+import { Agent } from './agent.js';
 import cors from 'cors';
 import { z } from 'zod';
 import type { Task } from 'a2a-samples-js';

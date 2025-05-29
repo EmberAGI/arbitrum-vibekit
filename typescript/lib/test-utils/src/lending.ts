@@ -3,15 +3,15 @@
  */
 
 import type { GetWalletPositionsResponse } from '@emberai/sdk-typescript';
-import type { TransactionPlan } from './transactions.js';
+import type { Task } from 'a2a-samples-js';
 import { type UserReserve, UserReserveSchema } from 'ember-schemas';
+
+import type { TransactionPlan } from './transactions.js';
 
 /**
  * Extract transaction plan from lending artifacts
  */
-export function extractLendingTransactionPlan(
-  response: any
-): Array<TransactionPlan> {
+export function extractLendingTransactionPlan(response: Task): Array<TransactionPlan> {
   if (!response.artifacts) {
     throw new Error('No artifacts found in response');
   }
@@ -19,9 +19,9 @@ export function extractLendingTransactionPlan(
   // Look for transaction-plan artifact
   for (const artifact of response.artifacts) {
     if (artifact.name === 'transaction-plan') {
-      for (const part of artifact.parts || []) {
-        if (part.type === 'data' && part.data?.txPlan) {
-          return part.data.txPlan;
+      for (const part of artifact.parts) {
+        if (part.type === 'data' && part.data.txPlan) {
+          return part.data.txPlan as Array<TransactionPlan>;
         }
       }
     }
@@ -33,7 +33,7 @@ export function extractLendingTransactionPlan(
 /**
  * Extract positions data from response
  */
-export function extractPositionsData(response: any): GetWalletPositionsResponse {
+export function extractPositionsData(response: Task): GetWalletPositionsResponse {
   if (!response.artifacts) {
     throw new Error(`No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`);
   }
@@ -41,9 +41,9 @@ export function extractPositionsData(response: any): GetWalletPositionsResponse 
   // Look for positions artifact (support both legacy and new names)
   for (const artifact of response.artifacts) {
     if (artifact.name === 'positions' || artifact.name === 'wallet-positions') {
-      for (const part of artifact.parts || []) {
-        if (part.type === 'data' && part.data?.positions) {
-          return part.data;
+      for (const part of artifact.parts) {
+        if (part.type === 'data' && part.data.positions) {
+          return part.data as unknown as GetWalletPositionsResponse;
         }
       }
     }
@@ -51,8 +51,8 @@ export function extractPositionsData(response: any): GetWalletPositionsResponse 
 
   // Debug: log available artifact names before throwing an error
   try {
-    const names = response.artifacts.map((a: any) => a.name).join(', ');
-    // eslint-disable-next-line no-console
+    const names = response.artifacts.map((a) => a.name).join(', ');
+     
     console.log(`[extractPositionsData] Available artifact names: ${names}`);
   } catch (_) {
     // ignore logging errors
@@ -88,4 +88,19 @@ export function getReserveForToken(
   }
 
   throw new Error(`No reserve found for token ${tokenNameOrSymbol}. Response: ${JSON.stringify(response, null, 2)}`);
+}
+
+/**
+ * Helper to get reserve for a token
+ */
+export async function getTokenReserve(
+  agent: {
+    processUserInput: (input: string, userAddress: string) => Promise<Task>;
+  },
+  userAddress: string,
+  tokenName: string
+): Promise<UserReserve> {
+  const response = await agent.processUserInput('show my positions', userAddress);
+  const positionsData = extractPositionsData(response);
+  return getReserveForToken(positionsData, tokenName);
 } 

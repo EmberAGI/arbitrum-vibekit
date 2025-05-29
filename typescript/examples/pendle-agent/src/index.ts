@@ -1,11 +1,12 @@
-import { Agent } from './agent.js';
-import { type Address, isAddress } from 'viem';
-import * as dotenv from 'dotenv';
-import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import cors from 'cors';
+import * as dotenv from 'dotenv';
+import express from 'express';
+import { isAddress } from 'viem';
 import { z } from 'zod';
+
+import { Agent } from './agent.js';
 
 dotenv.config();
 

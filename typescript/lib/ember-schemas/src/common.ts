@@ -60,16 +60,17 @@ export function parseMcpToolResponse<T>(rawResponse: unknown, schema: z.ZodType<
   let contentObj = rawResponse;
 
   // Handle text content wrapper
+  const responseObj = rawResponse as Record<string, unknown>;
   if (
-    'content' in (rawResponse as any) &&
-    Array.isArray((rawResponse as any).content) &&
-    (rawResponse as any).content.length > 0
+    'content' in responseObj &&
+    Array.isArray(responseObj.content) &&
+    responseObj.content.length > 0
   ) {
-    const firstContent = (rawResponse as any).content[0];
-    if (firstContent && 'type' in firstContent && firstContent.type === 'text' && 'text' in firstContent) {
+    const firstContent = responseObj.content[0];
+    if (firstContent && typeof firstContent === 'object' && firstContent !== null && 'type' in firstContent && firstContent.type === 'text' && 'text' in firstContent) {
       try {
         // Try to parse the text content as JSON
-        contentObj = JSON.parse(firstContent.text);
+        contentObj = JSON.parse((firstContent as Record<string, unknown>).text as string);
       } catch (error) {
         throw new Error(`Failed to parse JSON from MCP text content: ${error}`);
       }

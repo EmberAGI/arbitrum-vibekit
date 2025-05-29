@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+To lint the code, run `pnpm recursive run lint` in the `typescript/` folder

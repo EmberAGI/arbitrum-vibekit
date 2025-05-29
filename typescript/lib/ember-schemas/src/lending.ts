@@ -1,8 +1,7 @@
 import { z } from 'zod';
-import { TokenSchema } from './token.js';
+
 import {
   TransactionPlanSchema,
-  type TransactionPlan,
   type TransactionArtifact,
   createTransactionArtifactSchema,
   AskEncyclopediaSchema,
@@ -10,6 +9,7 @@ import {
   TokenIdentifierSchema,
   type TokenIdentifier
 } from './common.js';
+import { TokenSchema } from './token.js';
 
 //
 // Position and Reserve Schemas
