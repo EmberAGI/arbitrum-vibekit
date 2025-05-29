@@ -31,7 +31,7 @@ export function extractFunctionCall(task: Task): { name: string; arguments: stri
     return message.function_call as { name: string; arguments: string };
   }
 
-  throw new Error('No function call found in task response');
+  throw new Error(`No function call found in task response: ${JSON.stringify(task)}`);
 }
 
 // Constants for gas limit and fee buffers
@@ -108,6 +108,28 @@ export function extractLiquidityTransactionPlan(response: Task): Array<Transacti
 }
 
 /**
+ * Extract transaction plan from pendle swap artifacts
+ */
+export function extractPendleSwapTransactionPlan(response: Task): Array<TransactionPlan> {
+  if (!response.artifacts) {
+    throw new Error(`No artifacts found in response: ${JSON.stringify(response)}`);
+  }
+
+  // Look for swap-transaction-plan artifact
+  for (const artifact of response.artifacts) {
+    if (artifact.name === 'swap-transaction-plan') {
+      for (const part of artifact.parts) {
+        if (part.type === 'data' && part.data.txPlan) {
+          return part.data.txPlan as Array<TransactionPlan>;
+        }
+      }
+    }
+  }
+
+  throw new Error('No transaction plan found in artifacts');
+}
+
+/**
  * Extract transactions and execute them, with proper error handling
  */
 export async function extractAndExecuteTransactions(
@@ -123,7 +145,12 @@ export async function extractAndExecuteTransactions(
       txPlanEntries = extractLendingTransactionPlan(response);
     } catch (_lendingError) {
       // If that fails, try extracting from liquidity-transaction (liquidity)
-      txPlanEntries = extractLiquidityTransactionPlan(response);
+      try {
+        txPlanEntries = extractLiquidityTransactionPlan(response);
+      } catch (_liquidityError) {
+        // If that fails, try extracting from swap-transaction-plan (pendle)
+        txPlanEntries = extractPendleSwapTransactionPlan(response);
+      }
     }
   } catch (e) {
     // If no transaction plan in artifacts, try the old function call method
