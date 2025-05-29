@@ -7,8 +7,12 @@
     "paths": {
       "@modelcontextprotocol/sdk/types.js": [
         "./node_modules/@modelcontextprotocol/sdk/dist/esm/types.d.ts"
+      ],
+      "@google-a2a/types/src/types.js": [
+        "./node_modules/@google-a2a/types/src/types.ts"
       ]
-    }
+    },
+    "verbatimModuleSyntax": false
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]

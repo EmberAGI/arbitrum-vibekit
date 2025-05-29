@@ -21,7 +21,7 @@
     "a2a-samples-js": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.10.0",
     "ember-mcp-tool-server": "workspace:*",
-    "arbitrum-vibekit": "workspace:*",
+    "arbitrum-vibekit-core": "workspace:*",
     "@openrouter/ai-sdk-provider": "^0.4.5",
     "ai": "^4.3.2",
     "cors": "^2.8.5",
