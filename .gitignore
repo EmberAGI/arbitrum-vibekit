@@ -57,6 +57,7 @@ logs/
 .turbo
 .cache/
 .vercel
+.next/
 
 # Package managers
 .pnp.*
