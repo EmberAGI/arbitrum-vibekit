@@ -75,6 +75,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
           SQUID_INTEGRATOR_ID: ${{ secrets.SQUID_INTEGRATOR_ID }}
+          DUNE_API_KEY: ${{ secrets.DUNE_API_KEY }}
         run: |
           # Start the anvil server and capture its output to a log file
           pnpm run start:anvil 2>&1 | tee anvil_server.log &
