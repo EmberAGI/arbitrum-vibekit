@@ -1,33 +1,20 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import {
-  handleBorrow,
-  handleRepay,
-  handleSupply,
-  handleWithdraw,
-  handleGetUserPositions,
-  handleAskEncyclopedia,
-  type HandlerContext,
-} from './agentToolHandlers.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { Task } from 'a2a-samples-js';
 import { promises as fs } from 'fs';
-import path from 'path';
+import { createRequire } from 'module';
+import path, { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import {
   generateText,
   tool,
   type Tool,
   type CoreMessage,
-  type ToolResultPart,
   type CoreUserMessage,
   type CoreAssistantMessage,
   type StepResult,
 } from 'ai';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createRequire } from 'module';
-import * as chains from 'viem/chains';
-import type { Chain } from 'viem/chains';
 import {
   LendingGetCapabilitiesResponseSchema,
   McpTextWrapperSchema,
@@ -37,12 +24,21 @@ import {
   type LendingGetCapabilitiesResponse,
   type McpTextWrapper,
   type TokenInfo,
-  TokenIdentifierSchema,
   type UserReserve,
   UserReserveSchema,
   type GetWalletPositionsResponse,
 } from 'ember-schemas';
-import { z } from 'zod';
+import * as chains from 'viem/chains';
+import type { Chain } from 'viem/chains';
+import {
+  handleBorrow,
+  handleRepay,
+  handleSupply,
+  handleWithdraw,
+  handleGetUserPositions,
+  handleAskEncyclopedia,
+  type HandlerContext,
+} from './agentToolHandlers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,10 +46,6 @@ const CACHE_FILE_PATH = path.join(__dirname, '.cache', 'lending_capabilities.jso
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
-});
-
-const TokenInfoSchema = TokenIdentifierSchema.extend({
-  decimals: z.number(),
 });
 
 function logError(...args: unknown[]) {
@@ -174,8 +166,9 @@ export class Agent {
           console.error('Vercel AI SDK calling handler: borrow', args);
           try {
             return await handleBorrow(args, this.getHandlerContext());
-          } catch (error: any) {
-            logError(`Error during borrow via toolSet: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during borrow via toolSet: ${errorMessage}`);
             throw error;
           }
         },
@@ -187,8 +180,9 @@ export class Agent {
           console.error('Vercel AI SDK calling handler: repay', args);
           try {
             return await handleRepay(args, this.getHandlerContext());
-          } catch (error: any) {
-            logError(`Error during repay via toolSet: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during repay via toolSet: ${errorMessage}`);
             throw error;
           }
         },
@@ -200,8 +194,9 @@ export class Agent {
           console.error('Vercel AI SDK calling handler: supply', args);
           try {
             return await handleSupply(args, this.getHandlerContext());
-          } catch (error: any) {
-            logError(`Error during supply via toolSet: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during supply via toolSet: ${errorMessage}`);
             throw error;
           }
         },
@@ -213,8 +208,9 @@ export class Agent {
           console.error('Vercel AI SDK calling handler: withdraw', args);
           try {
             return await handleWithdraw(args, this.getHandlerContext());
-          } catch (error: any) {
-            logError(`Error during withdraw via toolSet: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during withdraw via toolSet: ${errorMessage}`);
             throw error;
           }
         },
@@ -226,8 +222,9 @@ export class Agent {
           console.error('Vercel AI SDK calling handler: getUserPositions', args);
           try {
             return await handleGetUserPositions(args, this.getHandlerContext());
-          } catch (error: any) {
-            logError(`Error during getUserPositions via toolSet: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during getUserPositions via toolSet: ${errorMessage}`);
             throw error;
           }
         },
@@ -240,8 +237,9 @@ export class Agent {
           console.error('Vercel AI SDK calling handler: askEncyclopedia', args);
           try {
             return await handleAskEncyclopedia(args, this.getHandlerContext());
-          } catch (error: any) {
-            logError(`Error during askEncyclopedia via toolSet: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during askEncyclopedia via toolSet: ${errorMessage}`);
             throw error;
           }
         },
@@ -351,7 +349,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       }
 
       const jsonString = (wrapperValidationResult.data as McpTextWrapper).content[0]!.text;
-      let parsedData: any;
+      let parsedData: unknown;
       try {
         console.error('Attempting to parse JSON string from content[0].text...');
         parsedData = JSON.parse(jsonString);
@@ -464,7 +462,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       console.error(
         `Processing ${capabilitiesResponse.capabilities.length} capabilities entries...`
       );
-      capabilitiesResponse.capabilities.forEach((capabilityEntry, index) => {
+      capabilitiesResponse.capabilities.forEach((capabilityEntry, _index) => {
         if (capabilityEntry.lendingCapability) {
           processedCapabilityCount++;
           const lendingCap = capabilityEntry.lendingCapability;
@@ -636,7 +634,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
   /**
    * Extract positions data from response
    */
-  private extractPositionsData(response: any): GetWalletPositionsResponse {
+  private extractPositionsData(response: Task): GetWalletPositionsResponse {
     if (!response.artifacts) {
       throw new Error(
         `No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`
@@ -648,7 +646,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       if (artifact.name === 'positions' || artifact.name === 'wallet-positions') {
         for (const part of artifact.parts || []) {
           if (part.type === 'data' && part.data?.positions) {
-            return part.data;
+            return part.data as GetWalletPositionsResponse;
           }
         }
       }

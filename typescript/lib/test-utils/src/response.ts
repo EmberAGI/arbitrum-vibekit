@@ -1,3 +1,5 @@
+import type { Task } from 'a2a-samples-js';
+
 /**
  * Parse data from an agent's function call response
  * @param functionCall The function call from the agent's response
@@ -20,11 +22,11 @@ export function parseFunctionCallArgs(functionCall: {
  * @param response The agent response object
  * @returns The text message from the response
  */
-export function extractMessageText(response: any): string {
+export function extractMessageText(response: Task): string {
   if (response?.status?.message?.parts) {
     for (const part of response.status.message.parts) {
       if (part.type === 'text') {
-        return part.text;
+        return part.text || '';
       }
     }
   }

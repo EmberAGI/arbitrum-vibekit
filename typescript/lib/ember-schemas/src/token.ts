@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import { TokenIdentifierSchema } from './common.js';
 
 export const TokenSchema = z.object({

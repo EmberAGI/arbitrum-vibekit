@@ -8,6 +8,8 @@
   },
   "scripts": {
     "build": "tsc",
+    "lint": "eslint --ext .ts,.tsx src",
+    "lint:fix": "eslint --ext .ts,.tsx src --fix",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "watch": "nodemon --watch 'src/**/*.ts' --exec 'tsx' src/index.ts"

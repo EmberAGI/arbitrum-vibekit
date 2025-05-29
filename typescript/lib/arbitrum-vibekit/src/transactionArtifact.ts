@@ -1,8 +1,8 @@
-import { z, type ZodType } from "zod";
 import {
   TransactionPlanSchema,
   type TransactionPlan,
 } from "ember-schemas";
+import { z, type ZodType } from "zod";
 
 /**
  * Creates a Zod schema for a transaction artifact.
@@ -12,7 +12,7 @@ import {
  * @param {P} previewSchema - The Zod schema for the preview object.
  * @returns A Zod schema for the transaction artifact.
  */
-export function createTransactionArtifactSchema<P extends ZodType<any>>(
+export function createTransactionArtifactSchema<P extends ZodType<unknown>>(
   previewSchema: P
 ) {
   return z.object({

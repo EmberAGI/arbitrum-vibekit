@@ -1,6 +1,6 @@
 {
   "extends": [
-    "next/core-web-vitals",
+    // "next/core-web-vitals", // Removed as it causes issues and root config should be used
     "plugin:import/recommended",
     "plugin:import/typescript",
     "prettier",

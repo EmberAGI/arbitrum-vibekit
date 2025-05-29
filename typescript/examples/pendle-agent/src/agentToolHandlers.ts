@@ -1,20 +1,17 @@
-import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { SwapTokensArgs } from 'ember-schemas';
 import { type Task, type Artifact, type DataPart } from 'a2a-samples-js';
 import {
   parseMcpToolResponsePayload,
-  createTransactionArtifactSchema,
   type TransactionArtifact,
 } from 'arbitrum-vibekit';
-import {
-  TransactionPlanSchema,
-  TransactionPlansSchema,
-  type TransactionPlan,
-  PendleSwapPreviewSchema,
+import { TransactionPlansSchema} from 'ember-schemas';
+import { 
+  type SwapTokensArgs,
   type SwapTokensParams,
-  type PendleSwapPreview
+  type PendleSwapPreview,
+  type TransactionPlan,
 } from 'ember-schemas';
+import { z } from 'zod';
 
 export type TokenInfo = {
   chainId: string;
@@ -24,7 +21,7 @@ export type TokenInfo = {
 // Schema to validate swapTokens tool response
 const SwapResponseSchema = z.object({
   chainId: z.string(),
-  transactions: z.array(TransactionPlanSchema),
+  transactions: TransactionPlansSchema,
 });
 
 export interface HandlerContext {
@@ -116,9 +113,6 @@ function findTokenDetail(
   return tokenDetail;
 }
 
-// Define the schema for the artifact content using the shared utility
-const PendleSwapArtifactSchema = createTransactionArtifactSchema(PendleSwapPreviewSchema);
-
 export async function handleSwapTokens(
   params: SwapTokensArgs,
   context: HandlerContext
@@ -151,6 +145,8 @@ export async function handleSwapTokens(
 
   const toTokenChainName = toChain || mapChainIdToName(fromTokenResult.chainId);
   if (effectiveChainName && toTokenChainName.toLowerCase() !== effectiveChainName.toLowerCase() && toChain) {
+    // Chain mismatch detected but this is handled later in the cross-chain validation
+    // No immediate action needed here
   } else if (!effectiveChainName) {
     effectiveChainName = mapChainIdToName(fromTokenResult.chainId);
   }
@@ -216,7 +212,7 @@ export async function handleSwapTokens(
 
   const dataPart: DataPart = {
     type: 'data',
-    data: artifactContent as any,
+    data: { ...artifactContent },
   };
 
   const artifact: Artifact = {

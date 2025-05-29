@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Task, DataPart } from 'a2a-samples-js';
 import {
@@ -10,12 +9,9 @@ import {
   type PublicClient,
 } from 'viem';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
-import { getChainConfigById } from './agent.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { streamText } from 'ai';
 import {
-  createTransactionArtifactSchema,
-  type TransactionArtifact,
   parseMcpToolResponsePayload,
 } from 'arbitrum-vibekit';
 import {
@@ -26,13 +22,10 @@ import {
   GetWalletPositionsResponseSchema,
   type TransactionPlan,
   type TokenInfo,
-  type SupplyResponse,
-  type WithdrawResponse,
-  type RepayResponse,
   type LendingPreview,
   type LendingTransactionArtifact,
-  type GetWalletPositionsResponse,
 } from 'ember-schemas';
+import { getChainConfigById } from './agent.js';
 
 export interface HandlerContext {
   mcpClient: Client;
@@ -95,7 +88,7 @@ export async function handleBorrow(
         },
       };
 
-    case 'clarificationNeeded':
+    case 'clarificationNeeded': {
       context.log(`Borrow requires clarification for token ${rawTokenName}.`);
       const optionsText = findResult.options
         .map(opt => `- ${rawTokenName} on chain ${opt.chainId}`)
@@ -115,8 +108,9 @@ export async function handleBorrow(
           },
         },
       };
+    }
 
-    case 'found':
+    case 'found': {
       const tokenDetail = findResult.token;
       context.log(
         `Preparing borrow transaction: ${rawTokenName} (Chain: ${tokenDetail.chainId}, Addr: ${tokenDetail.address}), amount: ${amount}`
@@ -148,7 +142,7 @@ export async function handleBorrow(
           },
           txPlan: transactions,
         };
-        const dataPart: DataPart = { type: 'data', data: txArtifact as any };
+        const dataPart: DataPart = { type: 'data', data: txArtifact };
 
         return {
           id: context.userAddress,
@@ -181,6 +175,7 @@ export async function handleBorrow(
           },
         };
       }
+    }
   }
 }
 
@@ -210,7 +205,7 @@ export async function handleRepay(
         },
       };
 
-    case 'clarificationNeeded':
+    case 'clarificationNeeded': {
       const chainList = findResult.options
         .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.chainId}`)
         .join('\n');
@@ -229,6 +224,7 @@ export async function handleRepay(
           },
         },
       };
+    }
 
     case 'found': {
       const tokenInfo = findResult.token;
@@ -238,7 +234,7 @@ export async function handleRepay(
       let atomicAmount: bigint;
       try {
         atomicAmount = parseUnits(amount, tokenInfo.decimals);
-      } catch (e) {
+      } catch (_e) {
         return {
           id: userAddress,
           status: {
@@ -365,7 +361,7 @@ export async function handleRepay(
         chainId: tokenInfo.chainId,
       };
       const artifactContent: LendingTransactionArtifact = { txPreview, txPlan: transactions };
-      const dataPart: DataPart = { type: 'data', data: artifactContent as any };
+      const dataPart: DataPart = { type: 'data', data: artifactContent };
 
       // Return Task with standard artifact
       return {
@@ -411,7 +407,7 @@ export async function handleSupply(
         },
       };
 
-    case 'clarificationNeeded':
+    case 'clarificationNeeded': {
       const chainList = findResult.options
         .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.chainId}`)
         .join('\n');
@@ -430,6 +426,7 @@ export async function handleSupply(
           },
         },
       };
+    }
 
     case 'found': {
       const tokenInfo = findResult.token;
@@ -439,7 +436,7 @@ export async function handleSupply(
       let atomicAmount: bigint;
       try {
         atomicAmount = parseUnits(amount, tokenInfo.decimals);
-      } catch (e) {
+      } catch (_e) {
         return {
           id: userAddress,
           status: {
@@ -667,7 +664,7 @@ export async function handleWithdraw(
         },
       };
 
-    case 'clarificationNeeded':
+    case 'clarificationNeeded': {
       const chainList = findResult.options
         .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.chainId}`)
         .join('\n');
@@ -686,6 +683,7 @@ export async function handleWithdraw(
           },
         },
       };
+    }
 
     case 'found': {
       const tokenDetail = findResult.token;
@@ -905,9 +903,9 @@ ${aaveContextContent}`;
         },
       },
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     log(`Error during askEncyclopedia execution:`, error);
-    const errorMessage = error?.message || 'An unexpected error occurred.';
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return {
       id: userAddress,
       status: {

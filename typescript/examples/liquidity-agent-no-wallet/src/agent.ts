@@ -1,21 +1,12 @@
-import { z } from 'zod';
-import { type Address } from 'viem';
-import {
-  handleSupplyLiquidity,
-  handleWithdrawLiquidity,
-  handleGetLiquidityPools,
-  handleGetUserLiquidityPositions,
-  type HandlerContext,
-} from './agentToolHandlers.js';
 import {
   generateText,
   tool,
   type Tool,
   type CoreMessage,
-  type ToolResultPart,
   type CoreUserMessage,
   type CoreAssistantMessage,
   type StepResult,
+  type ToolResultPart,
 } from 'ai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -31,6 +22,15 @@ import {
   GetLiquidityPoolsSchema,
   GetUserLiquidityPositionsSchema,
 } from 'ember-schemas';
+import { type Address } from 'viem';
+import { z } from 'zod';
+import {
+  handleSupplyLiquidity,
+  handleWithdrawLiquidity,
+  handleGetLiquidityPools,
+  handleGetUserLiquidityPositions,
+  type HandlerContext,
+} from './agentToolHandlers.js';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,

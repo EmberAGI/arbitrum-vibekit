@@ -1,7 +1,9 @@
 /// <reference types="mocha" />
 import { expect } from 'chai';
+import type { Task } from 'a2a-samples-js';
+
 import 'dotenv/config';
-import { Agent } from '../src/agent.js';
+import * as ethers from 'ethers';
 import {  
   MultiChainSigner,
   CHAIN_CONFIGS,
@@ -12,7 +14,8 @@ import {
   ERC20Wrapper
 } from 'test-utils';
 import { type Address } from 'viem';
-import * as ethers from 'ethers';
+
+import { Agent } from '../src/agent.js';
 
 // Define chain IDs that should be tested
 const CHAINS_TO_TEST: number[] = [42161]; // Arbitrum One
@@ -215,7 +218,7 @@ describe('Liquidity Agent Integration Tests', function () {
  * @param response The agent response object
  * @returns Array of pool objects or empty array if none found
  */
-function extractPools(response: any): Array<{
+function extractPools(response: Task): Array<{
   handle: string;
   symbol0: string;
   symbol1: string;
@@ -230,9 +233,12 @@ function extractPools(response: any): Array<{
   // Look for available-liquidity-pools artifact
   for (const artifact of response.artifacts) {
     if (artifact.name === 'available-liquidity-pools') {
-      for (const part of artifact.parts || []) {
-        if (part.type === 'data' && part.data?.pools) {
-          return part.data.pools;
+      for (const part of artifact.parts) {
+        if (part.type === 'data' && part.data.pools) {
+          const pools = part.data.pools;
+          if (Array.isArray(pools)) {
+            return pools;
+          }
         }
       }
     }

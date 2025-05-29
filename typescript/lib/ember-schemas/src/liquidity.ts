@@ -1,10 +1,9 @@
 import { z } from 'zod';
+
 import { 
-  TransactionPlanSchema, 
   createTransactionArtifactSchema, 
   type TransactionArtifact,
   TokenIdentifierSchema,
-  type TokenIdentifier
 } from './common.js';
 
 export const LiquidityPoolSchema = z.object({

@@ -1,6 +1,8 @@
-import { MultiChainSigner } from './multi-chain-signer.js';
-import { extractLendingTransactionPlan } from './lending.js';
 import * as ethers from 'ethers';
+import type { Task } from 'a2a-samples-js';
+
+import { extractLendingTransactionPlan } from './lending.js';
+import { MultiChainSigner } from './multi-chain-signer.js';
 import { parseFunctionCallArgs } from './response.js';
 
 export interface TransactionPlan {
@@ -13,22 +15,23 @@ export interface TransactionPlan {
 /**
  * Extract function calls from task response
  */
-export function extractFunctionCall(task: any): { name: string; arguments: string } {
+export function extractFunctionCall(task: Task): { name: string; arguments: string } {
   // Check if there's a parts array with function_call
   if (task.status?.message?.parts) {
     for (const part of task.status.message.parts) {
-      if (part.function_call) {
-        return part.function_call;
+      if (part.type === 'text' && 'function_call' in part && part.function_call) {
+        return part.function_call as { name: string; arguments: string };
       }
     }
   }
 
   // For handling different response formats
-  if (task.status?.message?.function_call) {
-    return task.status.message.function_call;
+  if (task.status?.message && 'function_call' in task.status.message) {
+    const message = task.status.message as Record<string, unknown>;
+    return message.function_call as { name: string; arguments: string };
   }
 
-  throw new Error('No function call found in task response');
+  throw new Error(`No function call found in task response: ${JSON.stringify(task)}`);
 }
 
 // Constants for gas limit and fee buffers
@@ -85,9 +88,7 @@ export async function signAndSendTransaction(
 /**
  * Extract transaction plan from liquidity artifacts
  */
-export function extractLiquidityTransactionPlan(
-  response: any
-): Array<TransactionPlan> {
+export function extractLiquidityTransactionPlan(response: Task): Array<TransactionPlan> {
   if (!response.artifacts) {
     throw new Error('No artifacts found in response');
   }
@@ -95,9 +96,31 @@ export function extractLiquidityTransactionPlan(
   // Look for liquidity-transaction artifact
   for (const artifact of response.artifacts) {
     if (artifact.name === 'liquidity-transaction') {
-      for (const part of artifact.parts || []) {
-        if (part.type === 'data' && part.data?.txPlan) {
-          return part.data.txPlan;
+      for (const part of artifact.parts) {
+        if (part.type === 'data' && part.data.txPlan) {
+          return part.data.txPlan as Array<TransactionPlan>;
+        }
+      }
+    }
+  }
+
+  throw new Error('No transaction plan found in artifacts');
+}
+
+/**
+ * Extract transaction plan from pendle swap artifacts
+ */
+export function extractPendleSwapTransactionPlan(response: Task): Array<TransactionPlan> {
+  if (!response.artifacts) {
+    throw new Error(`No artifacts found in response: ${JSON.stringify(response)}`);
+  }
+
+  // Look for swap-transaction-plan artifact
+  for (const artifact of response.artifacts) {
+    if (artifact.name === 'swap-transaction-plan') {
+      for (const part of artifact.parts) {
+        if (part.type === 'data' && part.data.txPlan) {
+          return part.data.txPlan as Array<TransactionPlan>;
         }
       }
     }
@@ -110,7 +133,7 @@ export function extractLiquidityTransactionPlan(
  * Extract transactions and execute them, with proper error handling
  */
 export async function extractAndExecuteTransactions(
-  response: any,
+  response: Task,
   multiChainSigner: MultiChainSigner,
   operationName: string
 ): Promise<string[]> {
@@ -120,9 +143,14 @@ export async function extractAndExecuteTransactions(
     // Try extracting from transaction-plan first (lending)
     try {
       txPlanEntries = extractLendingTransactionPlan(response);
-    } catch (lendingError) {
+    } catch (_lendingError) {
       // If that fails, try extracting from liquidity-transaction (liquidity)
-      txPlanEntries = extractLiquidityTransactionPlan(response);
+      try {
+        txPlanEntries = extractLiquidityTransactionPlan(response);
+      } catch (_liquidityError) {
+        // If that fails, try extracting from swap-transaction-plan (pendle)
+        txPlanEntries = extractPendleSwapTransactionPlan(response);
+      }
     }
   } catch (e) {
     // If no transaction plan in artifacts, try the old function call method

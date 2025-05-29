@@ -1,6 +1,9 @@
-import { type Address } from 'viem';
-import { type HandlerContext, handleSwapTokens } from './agentToolHandlers.js';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
+import { createRequire } from 'module';
+
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { type Task } from 'a2a-samples-js';
 import {
   generateText,
   tool,
@@ -9,12 +12,7 @@ import {
   type ToolResultPart,
   type StepResult,
 } from 'ai';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { logError, getChainConfigById, type ChainConfig } from './utils.js';
-import { createRequire } from 'module';
-import { type Task } from 'a2a-samples-js';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
 import {
   GetPendleMarketsRequestSchema,
   GetYieldMarketsResponseSchema,
@@ -22,17 +20,23 @@ import {
   GetTokensResponseSchema,
   type YieldMarket,
   type GetYieldMarketsResponse,
+  type TransactionPlan,
+  GetWalletBalancesResponseSchema,
 } from 'ember-schemas';
+import { type Address } from 'viem';
 import { z } from 'zod';
-import { type TransactionPlan } from 'ember-schemas';
+
+import { type HandlerContext, handleSwapTokens } from './agentToolHandlers.js';
+import { logError } from './utils.js';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
 type YieldToolSet = {
-  listMarkets: Tool<z.ZodObject<{}>, Awaited<Task>>;
+  listMarkets: Tool<z.ZodObject<Record<string, never>>, Awaited<Task>>;
   swapTokens: Tool<typeof SwapTokensSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
+  getWalletBalances: Tool<z.ZodObject<Record<string, never>>, Awaited<Task>>;
 };
 
 export class Agent {
@@ -96,7 +100,6 @@ export class Agent {
     markets.forEach(market => {
       const chainId = market.chainId;
       const baseSymbol = market.underlyingAsset?.symbol || market.name;
-      const baseName = market.underlyingAsset?.name || market.name;
 
       // Add PT token
       const ptSymbol = `${baseSymbol}_PT`;
@@ -158,6 +161,7 @@ About Pendle Protocol:
 You can:
 - List available Pendle markets using the listMarkets tool
 - Swap tokens to acquire PT or YT tokens using the swapTokens tool
+- Get wallet token balances using the getWalletBalances tool
 
 PT/YT Token Naming Convention:
 - PT tokens have a symbol suffix of _PT (e.g., wstETH_PT, USDC_PT)
@@ -262,8 +266,9 @@ Never respond in markdown, always use plain text. Never add links to your respon
               artifacts: [{ name: 'yield-markets', parts: dataArtifacts }],
             };
             return task;
-          } catch (error: any) {
-            const msg = `Error listing Pendle markets: ${error.message}`;
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const msg = `Error listing Pendle markets: ${errorMessage}`;
             logError(msg);
             return {
               id: this.userAddress!,
@@ -284,8 +289,9 @@ Never respond in markdown, always use plain text. Never add links to your respon
           try {
             const result = await handleSwapTokens(args, this.getHandlerContext());
             return result;
-          } catch (error: any) {
-            logError(`Error during swapTokens: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during swapTokens: ${errorMessage}`);
             // Return a failed Task on error
             return {
               id: this.userAddress!,
@@ -293,7 +299,55 @@ Never respond in markdown, always use plain text. Never add links to your respon
                 state: 'failed',
                 message: {
                   role: 'agent',
-                  parts: [{ type: 'text', text: `Error swapping tokens: ${error.message}` }],
+                  parts: [{ type: 'text', text: `Error swapping tokens: ${errorMessage}` }],
+                },
+              },
+            };
+          }
+        },
+      }),
+      getWalletBalances: tool({
+        description: 'Get wallet token balances for the current user',
+        parameters: z.object({}), // No parameters needed since we use context address
+        execute: async () => {
+          this.log('Executing getWalletBalances tool for user:', this.userAddress);
+          try {
+            const result = await this.mcpClient.callTool({
+              name: 'getWalletBalances',
+              arguments: { walletAddress: this.userAddress! },
+            });
+            
+            const parsedData = parseMcpToolResponsePayload(result, GetWalletBalancesResponseSchema);
+            
+            // Create data artifacts for the wallet balances
+            const dataArtifacts = parsedData.balances.map(balance => ({
+              type: 'data' as const,
+              data: balance,
+            }));
+
+            const task: Task = {
+              id: this.userAddress!,
+              status: {
+                state: 'completed',
+                message: {
+                  role: 'agent',
+                  parts: [{ type: 'text', text: `Found ${parsedData.balances.length} token balances for wallet ${this.userAddress}` }],
+                },
+              },
+              artifacts: [{ name: 'wallet-balances', parts: dataArtifacts }],
+            };
+            return task;
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during getWalletBalances: ${errorMessage}`);
+            // Return a failed Task on error
+            return {
+              id: this.userAddress!,
+              status: {
+                state: 'failed',
+                message: {
+                  role: 'agent',
+                  parts: [{ type: 'text', text: `Error getting wallet balances: ${errorMessage}` }],
                 },
               },
             };
@@ -394,8 +448,9 @@ Never respond in markdown, always use plain text. Never add links to your respon
       }
 
       throw new Error('Agent processing failed: no tool result and no final text response.');
-    } catch (error: any) {
-      const msg = `Error calling Vercel AI SDK generateText: ${error?.message ?? error}`;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const msg = `Error calling Vercel AI SDK generateText: ${errorMessage}`;
       logError(msg);
       throw error;
     }

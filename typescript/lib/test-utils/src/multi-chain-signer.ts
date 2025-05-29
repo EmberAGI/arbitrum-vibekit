@@ -1,7 +1,9 @@
 import * as ethers from "ethers";
+
 import 'dotenv/config';
-import { type ChainConfig, CHAIN_CONFIGS } from "./chains.js";
 import { type Address } from "viem";
+
+import { type ChainConfig, CHAIN_CONFIGS } from "./chains.js";
 
 export interface ChainTestConfig {
   provider: ethers.providers.Provider;

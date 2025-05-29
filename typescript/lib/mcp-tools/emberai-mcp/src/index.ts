@@ -1,11 +1,5 @@
 import EmberGrpcClient, {
-  GetCapabilitiesResponse,
-  Capability,
   CapabilityType,
-  GetWalletPositionsResponse,
-  WalletPosition,
-  Token,
-  GetTokensResponse,
   OrderType,
   TokenIdentifier,
   GetLiquidityPoolsResponse,
@@ -18,19 +12,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import "dotenv/config";
 
-// Re-export types and runtime values separately to comply with `verbatimModuleSyntax`
-export type {
-  GetCapabilitiesResponse,
-  Capability,
-  GetWalletPositionsResponse,
-  WalletPosition,
-  GetTokensResponse,
-  Token,
-} from "@emberai/sdk-typescript";
-
 // CapabilityType is a runtime enum (value), so export it normally
 export { CapabilityType } from "@emberai/sdk-typescript";
-
 
 // --- Define Zod Schemas ---
 // Convert our Zod objects to schema objects for MCP
@@ -186,50 +169,27 @@ const getUserLiquidityPositionsSchema = {
 // Add schema definition for getYieldMarkets after the existing schema definitions
 const getYieldMarketsSchema = {};
 
-// Define types from schemas using z.object() on the raw schema definitions
-const swapTokensParamsValidator = z.object(swapTokensSchema);
-const borrowParamsValidator = z.object(borrowSchema);
-const repayParamsValidator = z.object(repaySchema);
-const supplyParamsValidator = z.object(supplySchema);
-const withdrawParamsValidator = z.object(withdrawSchema);
-const getCapabilitiesParamsValidator = z.object(getCapabilitiesSchema);
-const getUserPositionsParamsValidator = z.object(getUserPositionsSchema);
-const getTokensParamsValidator = z.object(getTokensSchema);
-const supplyLiquidityParamsValidator = z.object(supplyLiquiditySchema);
-const withdrawLiquidityParamsValidator = z.object(withdrawLiquiditySchema);
-const getLiquidityPoolsParamsValidator = z.object(getLiquidityPoolsSchema);
-const getUserLiquidityPositionsParamsValidator = z.object(
-  getUserLiquidityPositionsSchema
-);
-const getYieldMarketsParamsValidator = z.object(getYieldMarketsSchema);
-
-type SwapTokensParams = z.infer<typeof swapTokensParamsValidator>;
-type BorrowParams = z.infer<typeof borrowParamsValidator>;
-type RepayParams = z.infer<typeof repayParamsValidator>;
-type SupplyParams = z.infer<typeof supplyParamsValidator>;
-type WithdrawParams = z.infer<typeof withdrawParamsValidator>;
-type GetCapabilitiesParams = z.infer<typeof getCapabilitiesParamsValidator>;
-type GetUserPositionsParams = z.infer<typeof getUserPositionsParamsValidator>;
-type GetTokensParams = z.infer<typeof getTokensParamsValidator>;
-type SupplyLiquidityParams = z.infer<typeof supplyLiquidityParamsValidator>;
-type WithdrawLiquidityParams = z.infer<typeof withdrawLiquidityParamsValidator>;
-type GetLiquidityPoolsParams = z.infer<typeof getLiquidityPoolsParamsValidator>;
-type GetUserLiquidityPositionsParams = z.infer<
-  typeof getUserLiquidityPositionsParamsValidator
->;
-type GetYieldMarketsParams = z.infer<typeof getYieldMarketsParamsValidator>;
-
-// Helper to convert Zod schema to MCP argument definition
-const zodSchemaToMcpArgs = (schema: Record<string, z.ZodTypeAny>) => {
-  return Object.entries(schema).map(([name, zodType]) => ({
-    name,
-    description: zodType.description || "",
-    required: !zodType.isOptional(),
-    // We might need a mapping from Zod types to JSON schema types here
-    // For now, just using 'any' - refine if needed
-    typeSchema: { type: "any" },
-  }));
+const getWalletBalancesSchema = {
+  walletAddress: z
+    .string()
+    .describe("The wallet address to fetch token balances for."),
 };
+
+// Define types from schemas using z.object() on the raw schema definitions
+type SwapTokensParams = z.infer<ReturnType<typeof z.object<typeof swapTokensSchema>>>;
+type BorrowParams = z.infer<ReturnType<typeof z.object<typeof borrowSchema>>>;
+type RepayParams = z.infer<ReturnType<typeof z.object<typeof repaySchema>>>;
+type SupplyParams = z.infer<ReturnType<typeof z.object<typeof supplySchema>>>;
+type WithdrawParams = z.infer<ReturnType<typeof z.object<typeof withdrawSchema>>>;
+type GetCapabilitiesParams = z.infer<ReturnType<typeof z.object<typeof getCapabilitiesSchema>>>;
+type GetUserPositionsParams = z.infer<ReturnType<typeof z.object<typeof getUserPositionsSchema>>>;
+type GetTokensParams = z.infer<ReturnType<typeof z.object<typeof getTokensSchema>>>;
+type SupplyLiquidityParams = z.infer<ReturnType<typeof z.object<typeof supplyLiquiditySchema>>>;
+type WithdrawLiquidityParams = z.infer<ReturnType<typeof z.object<typeof withdrawLiquiditySchema>>>;
+type GetLiquidityPoolsParams = z.infer<ReturnType<typeof z.object<typeof getLiquidityPoolsSchema>>>;
+type GetUserLiquidityPositionsParams = z.infer<ReturnType<typeof z.object<typeof getUserLiquidityPositionsSchema>>>;
+type GetYieldMarketsParams = z.infer<ReturnType<typeof z.object<typeof getYieldMarketsSchema>>>;
+type GetWalletBalancesParams = z.infer<ReturnType<typeof z.object<typeof getWalletBalancesSchema>>>;
 
 // --- Initialize the MCP server using the high-level McpServer API
 const server = new McpServer({
@@ -864,6 +824,42 @@ server.tool(
       };
     } catch (error) {
       console.error(`GetYieldMarkets tool error:`, error);
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+      };
+    }
+  }
+);
+
+server.tool(
+  "getWalletBalances",
+  "Get wallet token balances using Ember On-chain Actions",
+  getWalletBalancesSchema,
+  async (params: GetWalletBalancesParams) => {
+    console.error(`Executing getWalletBalances tool with params:`, params);
+
+    try {
+      const response = await emberClient.getWalletBalances({
+        walletAddress: params.walletAddress,
+      });
+      
+      // Check for expected data instead of response.error
+      if (!response.balances) {
+        throw new Error("No wallet balances data returned.");
+      }
+
+      console.error(`GetWalletBalances tool success.`);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(response, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      console.error(`GetWalletBalances tool error:`, error);
       return {
         isError: true,
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
