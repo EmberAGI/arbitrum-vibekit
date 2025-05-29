@@ -2,7 +2,7 @@ import { z, type ZodType } from "zod";
 import {
   TransactionPlanSchema,
   type TransactionPlan,
-} from "ember-mcp-tool-server";
+} from "ember-schemas";
 
 /**
  * Creates a Zod schema for a transaction artifact.

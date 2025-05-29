@@ -6,7 +6,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import cors from 'cors';
 import { z } from 'zod';
-import type { Task } from 'a2a-samples-js/schema';
+import type { Task } from 'a2a-samples-js';
 
 const LiquidityAgentSchema = z.object({
   instruction: z
