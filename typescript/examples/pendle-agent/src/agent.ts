@@ -97,43 +97,31 @@ export class Agent {
     let ptTokensAdded = 0;
     let ytTokensAdded = 0;
 
-    markets.forEach(market => {
-      const chainId = market.chainId;
-      const baseSymbol = market.underlyingAsset?.symbol || market.name;
-
-      // Add PT token
-      const ptSymbol = `${baseSymbol}_PT`;
-
-      if (!this.tokenMap[ptSymbol]) {
-        this.tokenMap[ptSymbol] = [];
-        this.availableTokens.push(ptSymbol);
+    const addTokenToMap = (symbol: string, chainId: string, address: string): boolean => {
+      if (!this.tokenMap[symbol]) {
+        this.tokenMap[symbol] = [];
+        this.availableTokens.push(symbol);
       }
 
-      // Check if this PT token for this chain is already added
-      const existingPtForChain = this.tokenMap[ptSymbol].find(token => token.chainId === chainId);
-      if (!existingPtForChain) {
-        this.tokenMap[ptSymbol].push({
-          chainId,
-          address: market.pt,
-        });
+      // Check if this token for this chain is already added
+      const existingForChain = this.tokenMap[symbol].find(token => token.chainId === chainId);
+      if (!existingForChain) {
+        this.tokenMap[symbol].push({ chainId, address });
+        return true; // Token was added
+      }
+      return false; // Token already existed
+    };
+
+    markets.forEach(market => {
+      const chainId = market.chainId;
+
+      // Add PT token
+      if (addTokenToMap(market.pt.symbol, chainId, market.pt.tokenUid.address)) {
         ptTokensAdded++;
       }
 
       // Add YT token
-      const ytSymbol = `${baseSymbol}_YT`;
-
-      if (!this.tokenMap[ytSymbol]) {
-        this.tokenMap[ytSymbol] = [];
-        this.availableTokens.push(ytSymbol);
-      }
-
-      // Check if this YT token for this chain is already added
-      const existingYtForChain = this.tokenMap[ytSymbol].find(token => token.chainId === chainId);
-      if (!existingYtForChain) {
-        this.tokenMap[ytSymbol].push({
-          chainId,
-          address: market.yt,
-        });
+      if (addTokenToMap(market.yt.symbol, chainId, market.yt.tokenUid.address)) {
         ytTokensAdded++;
       }
     });
@@ -163,13 +151,12 @@ You can:
 - Swap tokens to acquire PT or YT tokens using the swapTokens tool
 - Get wallet token balances using the getWalletBalances tool
 
-PT/YT Token Naming Convention:
-- PT tokens have a symbol suffix of _PT (e.g., wstETH_PT, USDC_PT)
-- YT tokens have a symbol suffix of _YT (e.g., wstETH_YT, USDC_YT)
-- These tokens are derived from their underlying tokens (e.g., wstETH, USDC)
+Available Token Symbols:
+- PT and YT tokens are available with their actual on-chain symbol names (fetched from the smart contracts)
+- For example, you might see symbols like "PT-wstETH-26DEC2024", "YT-USDC-26DEC2024", etc.
+- These are the real token symbols as they exist on-chain, not artificial constructions
 
-Note that PT (Principal Tokens) are suffixed with _PT in their symbol and YT (Yield Tokens) are suffixed with _YT.
-For example, wstETH_PT is the Principal Token for wstETH, and USDC_YT is the Yield Token for USDC.
+Note that PT (Principal Tokens) and YT (Yield Tokens) have their actual on-chain symbols that may include expiry dates and other market-specific information.
 
 Never respond in markdown, always use plain text. Never add links to your response. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.`,
       },
@@ -190,57 +177,49 @@ Never respond in markdown, always use plain text. Never add links to your respon
     this.log('MCP client initialized successfully.');
 
     // Initialize available tokens from MCP capabilities
-    try {
-      this.log('Fetching available tokens...');
-      const result = await this.mcpClient.callTool({
-        name: 'getTokens',
-        arguments: {
-          chainId: '',
-          filter: '',
-        },
+    this.log('Fetching available tokens...');
+    const result = await this.mcpClient.callTool({
+      name: 'getTokens',
+      arguments: {
+        chainId: '',
+        filter: '',
+      },
+    });
+
+    const parsedResult = parseMcpToolResponsePayload(result, GetTokensResponseSchema);
+    
+    const tokensArray = Array.isArray(parsedResult) 
+      ? parsedResult 
+      : (parsedResult.tokens || []);
+
+    if (tokensArray.length > 0) {
+      this.tokenMap = {};
+      this.availableTokens = [];
+
+      tokensArray.forEach(token => {
+        if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
+          if (!this.tokenMap[token.symbol]) {
+            this.tokenMap[token.symbol] = [];
+            this.availableTokens.push(token.symbol);
+          }
+          (this.tokenMap[token.symbol] as { chainId: string; address: string }[]).push({
+            chainId: token.tokenUid.chainId,
+            address: token.tokenUid.address,
+          });
+        }
       });
 
-      const parsedResult = parseMcpToolResponsePayload(result, GetTokensResponseSchema);
-      
-      const tokensArray = Array.isArray(parsedResult) 
-        ? parsedResult 
-        : (parsedResult.tokens || []);
-
-      if (tokensArray.length > 0) {
-        this.tokenMap = {};
-        this.availableTokens = [];
-
-        tokensArray.forEach(token => {
-          if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
-            if (!this.tokenMap[token.symbol]) {
-              this.tokenMap[token.symbol] = [];
-              this.availableTokens.push(token.symbol);
-            }
-            (this.tokenMap[token.symbol] as { chainId: string; address: string }[]).push({
-              chainId: token.tokenUid.chainId,
-              address: token.tokenUid.address,
-            });
-          }
-        });
-
-        this.log(`Loaded ${this.availableTokens.length} available tokens`);
-      }
-    } catch (error) {
-      this.log('Error fetching tokens:', error);
+      this.log(`Loaded ${this.availableTokens.length} available tokens`);
     }
 
     // Fetch yield markets during initialization
-    try {
-      this.log('Fetching yield markets during initialization...');
-      const marketsResponse = await this.fetchMarkets();
-      this.yieldMarkets = marketsResponse.markets;
-      this.log(`Successfully loaded ${this.yieldMarkets.length} Pendle markets`);
+    this.log('Fetching yield markets during initialization...');
+    const marketsResponse = await this.fetchMarkets();
+    this.yieldMarkets = marketsResponse.markets;
+    this.log(`Successfully loaded ${this.yieldMarkets.length} Pendle markets`);
 
-      // Populate PT and YT tokens in the token map
-      this.populatePendleTokens(this.yieldMarkets);
-    } catch (error) {
-      this.log('Error fetching Pendle markets during initialization:', error);
-    }
+    // Populate PT and YT tokens in the token map
+    this.populatePendleTokens(this.yieldMarkets);
 
     this.toolSet = {
       listMarkets: tool({
