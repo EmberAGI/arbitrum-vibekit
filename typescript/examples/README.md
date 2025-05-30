@@ -21,13 +21,35 @@ pnpm install
 
 ### 2. Start the Agent
 
-There are three main ways to start an agent:
+You can start an agent in four different ways. Simply choose the approach that best fits your preferences and project setup:
 
 **1. Cursor's AI Assistant (Vibe Coding)**:
 
 Ask Cursor's integrated AI assistant to run your desired agent.
 
-**2. Docker Compose**:
+**2. Agent as Task**:
+
+If you are using VSCODE or Cursor, you can run agents as [tasks](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/.vscode/tasks.json). To start an agent:
+
+- Open the Vibekit repo in your preferrede IDE.
+- Press on `Cntrl + shift + P` ( `Cmnd + shift + P` on Mac) to open up the Command Pallete
+- Search for "Run Task".
+
+<p align="left">
+  <img src="../../img/run_tasks1.png" width="600px" alt="Inspector2"/>
+</p>
+
+- Choose you're desired agent to run.
+
+<p align="left">
+  <img src="../../img/run_tasks2.png" width="600px" alt="Inspector2"/>
+</p>
+
+The agent will be available locally on the port specified in the Dockerfile within the agent's folder.
+
+**Note:** If you are running multiple agents simultaneously, make sure their ports do not conflict. You can verify and adjust the port settings by referring to the Dockerfile in each agent's directory.
+
+**3. Docker Compose**:
 
 Run the MCP-enabled Docker container in the `typescript` directory to start your agent. Replace the `"agent-name"` with the name of your desired agent, for example: `"swapping-agent-no-wallet"`.
 
@@ -53,7 +75,7 @@ To stop the agent afterwards, use the following command:
 pnpm --filter "agent-name" docker:compose:down
 ```
 
-**3. Local Development**:
+**4. Local Development**:
 
 Run the following `pnpm` commands in the `typescript` directory to build and run
 your agent. Replace the `"agent-name"` with the name of your desired agent, for example: `"swapping-agent-no-wallet"`.
@@ -110,19 +132,7 @@ You might need to restart Cursor to apply the new configuration. Upon successful
 
 **3. Web Interface**
 
-You can also interact with your agent using the [Vibekit Web Frontend](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web). To do so:
-
-- Make sure your agent (MCP server) is running on http://localhost:3001.
-
-- In the `typescript` directory, ensure your `.env` is configured and run:
-
-  ```bash
-  docker compose up -d
-  ```
-
-- Open your browser and go to [http://localhost:3000](http://localhost:3000).
-
-- The web frontend provides a user-friendly chat interface for sending queries to your on-chain AI agent and viewing responses in real time.
+You can also interact with your agent using Vibekit's web frontend.
 
 ## 🛠️ Building Your Own Agent
 
