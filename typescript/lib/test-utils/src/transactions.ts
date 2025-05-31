@@ -31,7 +31,7 @@ export function extractFunctionCall(task: Task): { name: string; arguments: stri
     return message.function_call as { name: string; arguments: string };
   }
 
-  throw new Error(`No function call found in task response: ${JSON.stringify(task)}`);
+  throw new Error(`No function call found in task response. Task status: ${JSON.stringify(task.status, null, 2)}`);
 }
 
 // Constants for gas limit and fee buffers
@@ -90,7 +90,7 @@ export async function signAndSendTransaction(
  */
 export function extractLiquidityTransactionPlan(response: Task): Array<TransactionPlan> {
   if (!response.artifacts) {
-    throw new Error('No artifacts found in response');
+    throw new Error(`No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`);
   }
 
   // Look for liquidity-transaction artifact
@@ -101,10 +101,11 @@ export function extractLiquidityTransactionPlan(response: Task): Array<Transacti
           return part.data.txPlan as Array<TransactionPlan>;
         }
       }
+      throw new Error(`No txPlan found in liquidity-transaction artifact. Artifact parts: ${JSON.stringify(artifact.parts, null, 2)}`);
     }
   }
 
-  throw new Error('No transaction plan found in artifacts');
+  throw new Error(`No liquidity-transaction artifact found. Available artifacts: ${JSON.stringify(response.artifacts.map(a => ({ name: a.name, partsCount: a.parts?.length || 0 })), null, 2)}`);
 }
 
 /**
@@ -112,7 +113,7 @@ export function extractLiquidityTransactionPlan(response: Task): Array<Transacti
  */
 export function extractPendleSwapTransactionPlan(response: Task): Array<TransactionPlan> {
   if (!response.artifacts) {
-    throw new Error(`No artifacts found in response: ${JSON.stringify(response)}`);
+    throw new Error(`No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`);
   }
 
   // Look for swap-transaction-plan artifact
@@ -123,10 +124,11 @@ export function extractPendleSwapTransactionPlan(response: Task): Array<Transact
           return part.data.txPlan as Array<TransactionPlan>;
         }
       }
+      throw new Error(`No txPlan found in swap-transaction-plan artifact. Artifact parts: ${JSON.stringify(artifact.parts, null, 2)}`);
     }
   }
 
-  throw new Error('No transaction plan found in artifacts');
+  throw new Error(`No swap-transaction-plan artifact found. Available artifacts: ${JSON.stringify(response.artifacts.map(a => ({ name: a.name, partsCount: a.parts?.length || 0 })), null, 2)}`);
 }
 
 /**

@@ -1,13 +1,18 @@
 /// <reference types="mocha" />
 import { expect } from 'chai';
+import { utils } from 'ethers';
 
 import 'dotenv/config';
 import {
   MultiChainSigner,
   CHAIN_CONFIGS,
-  extractAndExecuteTransactions
+  extractAndExecuteTransactions,
+  extractBalanceData,
+  extractYieldMarketsData,
+  isNotFailed
 } from 'test-utils';
 import { type Address } from 'viem';
+import { type YieldMarket } from 'ember-schemas';
 
 import { Agent } from '../src/agent.js';
 
@@ -72,31 +77,171 @@ describe('Pendle Agent Integration Tests', function () {
             multiChainSigner.wallet.address as Address
           );
 
-          expect(response.status?.state).to.not.equal('failed', 'List markets operation failed');
+          expect(isNotFailed(response)).to.equal(true, `List markets operation failed. Response: ${JSON.stringify(response, null, 2)}`);
 
-          const marketArtifact = response!.artifacts!.find(artifact => artifact.name === 'yield-markets');
-          expect(marketArtifact!.parts!.length).to.be.greaterThan(0, 'No market data found');              
+          // Extract markets data using utility function
+          const marketsData = extractYieldMarketsData(response);
+          expect(marketsData.markets.length).to.be.greaterThan(0, `No markets found. Markets data: ${JSON.stringify(marketsData, null, 2)}`);
         });
       });
 
-      describe('Token Swapping', function () {
-        it('should execute swap transactions successfully', async function () {
-          // Try to swap a small amount of WETH for a PT token
+      describe('Pendle internal token swapping', function () {
+        let wstETHMarket: YieldMarket | undefined;
+        let ptTokenSymbol: string;
+        let ytTokenSymbol: string;
+
+        before(async function () {
+          // Find wstETH market dynamically
+          const yieldMarkets = agent.getYieldMarkets();
+          wstETHMarket = yieldMarkets.find(market => 
+            market.underlyingAsset.symbol === 'wstETH' && 
+            market.chainId === chainId.toString()
+          );
+          
+          if (!wstETHMarket) {
+            throw new Error(`No wstETH market found for testing. Available markets: ${JSON.stringify(yieldMarkets.map(m => ({ 
+              symbol: m.underlyingAsset.symbol, 
+              chainId: m.chainId,
+              ptSymbol: m.pt.symbol,
+              ytSymbol: m.yt.symbol
+            })), null, 2)}`);
+          }
+          
+          ptTokenSymbol = wstETHMarket.pt.symbol;
+          ytTokenSymbol = wstETHMarket.yt.symbol;
+          
+          console.log(`Found wstETH market with PT: ${ptTokenSymbol}, YT: ${ytTokenSymbol}`);
+        });
+
+        it('should swap wstETH to PT token successfully', async function () {
           const swapAmount = '0.0001';
           const response = await agent.processUserInput(
-            `Swap ${swapAmount} wstETH for wstETH_PT on Arbitrum One`,
+            `Swap ${swapAmount} wstETH for ${ptTokenSymbol} on Arbitrum One`,
             multiChainSigner.wallet.address as Address
           );
 
-          expect(response.status?.state).to.not.equal('failed', 'Swap operation failed');
+          expect(isNotFailed(response)).to.equal(true, `Swap wstETH to PT token operation failed. Response: ${JSON.stringify(response, null, 2)}`);
 
           const txHashes = await extractAndExecuteTransactions(
             response,
             multiChainSigner,
             'swap'
           );
-          expect(txHashes.length).to.be.greaterThan(0, 'No transaction hashes returned');
-        });        
+          expect(txHashes.length).to.be.greaterThan(0, `No transaction hashes returned for wstETH to PT swap. Response artifacts: ${JSON.stringify(response.artifacts, null, 2)}`);
+        });
+
+        it('should swap wstETH to YT token successfully', async function () {
+          const swapAmount = '0.0001';
+          const response = await agent.processUserInput(
+            `Swap ${swapAmount} wstETH for ${ytTokenSymbol} on Arbitrum One`,
+            multiChainSigner.wallet.address as Address
+          );
+
+          expect(isNotFailed(response)).to.equal(true, `Swap wstETH to YT token operation failed. Response: ${JSON.stringify(response, null, 2)}`);
+
+          const txHashes = await extractAndExecuteTransactions(
+            response,
+            multiChainSigner,
+            'swap'
+          );
+          expect(txHashes.length).to.be.greaterThan(0, `No transaction hashes returned for wstETH to YT swap. Response artifacts: ${JSON.stringify(response.artifacts, null, 2)}`);
+        });
+
+        it('should check balances and confirm PT/YT tokens appear', async function () {
+          const response = await agent.processUserInput(
+            'show me my current token balances',
+            multiChainSigner.wallet.address as Address
+          );
+
+          expect(isNotFailed(response)).to.equal(true, `Get wallet balances operation failed. Response: ${JSON.stringify(response, null, 2)}`);
+          
+          // Extract balance data using utility function
+          const balanceData = extractBalanceData(response);
+          expect(balanceData.balances.length).to.be.greaterThan(0, `Balances array should not be empty. Balance data: ${JSON.stringify(balanceData, null, 2)}`);
+          
+          const ptBalance = balanceData.balances.find(balance => 
+            balance.symbol === ptTokenSymbol
+          );
+          const ytBalance = balanceData.balances.find(balance => 
+            balance.symbol === ytTokenSymbol
+          );
+          
+          expect(ptBalance).to.not.equal(undefined, `PT token ${ptTokenSymbol} should appear in balances. Available balances: ${JSON.stringify(balanceData.balances.map(b => ({ symbol: b.symbol, amount: b.amount })), null, 2)}`);
+          expect(ytBalance).to.not.equal(undefined, `YT token ${ytTokenSymbol} should appear in balances. Available balances: ${JSON.stringify(balanceData.balances.map(b => ({ symbol: b.symbol, amount: b.amount })), null, 2)}`);
+          
+          if (ptBalance) {
+            expect(parseFloat(ptBalance.amount)).to.be.greaterThan(0, `PT token ${ptTokenSymbol} balance should be greater than 0. Current balance: ${JSON.stringify(ptBalance, null, 2)}`);
+          }
+          if (ytBalance) {
+            expect(parseFloat(ytBalance.amount)).to.be.greaterThan(0, `YT token ${ytTokenSymbol} balance should be greater than 0. Current balance: ${JSON.stringify(ytBalance, null, 2)}`);
+          }
+        });
+
+        it('should swap PT token back to WETH successfully', async function () {
+          // Get current PT balance first
+          const balancesResponse = await agent.processUserInput(
+            'show me my current token balances',
+            multiChainSigner.wallet.address as Address
+          );
+          
+          const balanceData = extractBalanceData(balancesResponse);
+          const ptBalance = balanceData.balances.find(balance => 
+            balance.symbol === ptTokenSymbol
+          );
+          
+          if (!ptBalance || parseFloat(ptBalance.amount) === 0) {
+            throw new Error(`No ${ptTokenSymbol} balance available for swap back to WETH. Available balances: ${JSON.stringify(balanceData.balances.map(b => ({ symbol: b.symbol, amount: b.amount })), null, 2)}`);
+          }
+
+          // Convert atomic units to human readable using decimals
+          const humanReadableAmount = utils.formatUnits(ptBalance.amount, ptBalance.decimals);
+          const response = await agent.processUserInput(
+            `Swap ${humanReadableAmount} ${ptTokenSymbol} for WETH on Arbitrum One`,
+            multiChainSigner.wallet.address as Address
+          );
+
+          expect(isNotFailed(response)).to.equal(true, `Swap PT token to WETH operation failed. Response: ${JSON.stringify(response, null, 2)}`);
+
+          const txHashes = await extractAndExecuteTransactions(
+            response,
+            multiChainSigner,
+            'swap'
+          );
+          expect(txHashes.length).to.be.greaterThan(0, `No transaction hashes returned for PT to WETH swap. Response artifacts: ${JSON.stringify(response.artifacts, null, 2)}`);
+        });
+
+        it('should swap YT token back to WETH successfully', async function () {
+          // Get current YT balance first
+          const balancesResponse = await agent.processUserInput(
+            'show me my current token balances',
+            multiChainSigner.wallet.address as Address
+          );
+          
+          const balanceData = extractBalanceData(balancesResponse);
+          const ytBalance = balanceData.balances.find(balance => 
+            balance.symbol === ytTokenSymbol
+          );
+          
+          if (!ytBalance || parseFloat(ytBalance.amount) === 0) {
+            throw new Error(`No ${ytTokenSymbol} balance available for swap back to WETH. Available balances: ${JSON.stringify(balanceData.balances.map(b => ({ symbol: b.symbol, amount: b.amount })), null, 2)}`);
+          }
+
+          // Convert atomic units to human readable using decimals
+          const humanReadableAmount = utils.formatUnits(ytBalance.amount, ytBalance.decimals);
+          const response = await agent.processUserInput(
+            `Swap ${humanReadableAmount} ${ytTokenSymbol} for WETH on Arbitrum One`,
+            multiChainSigner.wallet.address as Address
+          );
+
+          expect(isNotFailed(response)).to.equal(true, `Swap YT token to WETH operation failed. Response: ${JSON.stringify(response, null, 2)}`);
+
+          const txHashes = await extractAndExecuteTransactions(
+            response,
+            multiChainSigner,
+            'swap'
+          );
+          expect(txHashes.length).to.be.greaterThan(0, `No transaction hashes returned for YT to WETH swap. Response artifacts: ${JSON.stringify(response.artifacts, null, 2)}`);
+        });
       });
 
       describe('Agent State Management', function () {
@@ -106,26 +251,21 @@ describe('Pendle Agent Integration Tests', function () {
             'What Pendle markets are available?',
             multiChainSigner.wallet.address as Address
           );
-          expect(marketsResponse).to.exist;
-          expect(marketsResponse.status?.state).to.not.equal('failed');
+          expect(isNotFailed(marketsResponse)).to.equal(true, `Market listing operation failed. Response: ${JSON.stringify(marketsResponse, null, 2)}`);
           
-          if (marketsResponse.artifacts && marketsResponse.artifacts.length > 0) {
-            const marketArtifact = marketsResponse.artifacts.find(artifact => artifact.name === 'yield-markets');
-            if (marketArtifact && marketArtifact.parts) {
-              expect(marketArtifact.parts.length).to.be.greaterThan(0, 'Markets array should not be empty');
-            }
-          }
+          // Extract markets data using utility function  
+          const marketsData = extractYieldMarketsData(marketsResponse);
+          expect(marketsData.markets.length).to.be.greaterThan(0, `Markets array should not be empty. Markets data: ${JSON.stringify(marketsData, null, 2)}`);
 
           // Test wallet balances returns non-empty array
           const balancesResponse = await agent.processUserInput(
             'show me my current token balances',
             multiChainSigner.wallet.address as Address
           );
-          expect(balancesResponse).to.exist;
-          expect(balancesResponse.status?.state).to.not.equal('failed');
-          console.error("Balances response", JSON.stringify(balancesResponse, null, 2));
-          const balanceArtifact = balancesResponse!.artifacts!.find(artifact => artifact.name === 'wallet-balances');
-          expect(balanceArtifact!.parts!.length).to.be.greaterThan(0, 'Balances array should not be empty');
+          expect(isNotFailed(balancesResponse)).to.equal(true, `Get wallet balances operation failed. Response: ${JSON.stringify(balancesResponse, null, 2)}`);
+          
+          const balanceData = extractBalanceData(balancesResponse);
+          expect(balanceData.balances.length).to.be.greaterThan(0, `Balances array should not be empty. Balance data: ${JSON.stringify(balanceData, null, 2)}`);
         });
       });
     });
