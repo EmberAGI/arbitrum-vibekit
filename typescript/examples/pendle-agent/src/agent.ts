@@ -217,6 +217,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
     const marketsResponse = await this.fetchMarkets();
     this.yieldMarkets = marketsResponse.markets;
     this.log(`Successfully loaded ${this.yieldMarkets.length} Pendle markets`);
+    this.log('Received pendle markets', JSON.stringify(this.yieldMarkets, null, 2));
 
     // Populate PT and YT tokens in the token map
     this.populatePendleTokens(this.yieldMarkets);
@@ -450,5 +451,10 @@ Never respond in markdown, always use plain text. Never add links to your respon
     });
     this.log('GetYieldMarkets tool success.');
     return parseMcpToolResponsePayload(result, GetYieldMarketsResponseSchema);
+  }
+
+  // Getter method for accessing yieldMarkets in tests
+  public getYieldMarkets(): YieldMarket[] {
+    return this.yieldMarkets;
   }
 }

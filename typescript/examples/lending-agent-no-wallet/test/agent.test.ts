@@ -8,7 +8,8 @@ import {
   ensureWethBalance,
   extractPositionsData,
   getReserveForToken,
-  extractAndExecuteTransactions
+  extractAndExecuteTransactions,
+  isNotFailed
 } from 'test-utils';
 
 import { Agent } from '../src/agent.js';
@@ -121,7 +122,7 @@ describe('Lending Agent Integration Tests', function () {
           );
 
           // Check for response errors
-          expect(response.status?.state).to.not.equal('failed', 'Supply operation failed');
+          expect(isNotFailed(response)).to.be.true(`Supply WETH operation failed`);
 
           // Execute transactions
           const txHashes = await extractAndExecuteTransactions(
@@ -149,7 +150,7 @@ describe('Lending Agent Integration Tests', function () {
 
       describe('Borrow Operations', function () {
         it('should borrow WETH successfully', async function () {
-          const amountToBorrow = 0.0005;
+          const amountToBorrow = '0.0005';
 
           // Get original borrow balance
           const oldReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
@@ -162,7 +163,7 @@ describe('Lending Agent Integration Tests', function () {
           );
 
           // Check for response errors
-          expect(response.status?.state).to.not.equal('failed', 'Borrow operation failed');
+          expect(isNotFailed(response)).to.be.true(`Borrow WETH operation failed`);
 
           // Execute transactions immediately after getting response
           const txHashes = await extractAndExecuteTransactions(
@@ -227,7 +228,7 @@ describe('Lending Agent Integration Tests', function () {
           );
 
           // Check for response errors
-          expect(response.status?.state).to.not.equal('failed', 'Withdraw operation failed');
+          expect(isNotFailed(response)).to.be.true(`Withdraw WETH operation failed`);
 
           // Execute transactions immediately after getting response
           const txHashes = await extractAndExecuteTransactions(

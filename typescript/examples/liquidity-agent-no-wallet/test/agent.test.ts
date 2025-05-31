@@ -11,7 +11,8 @@ import {
   extractMessageText,
   extractAndExecuteTransactions,
   mintUSDC,
-  ERC20Wrapper
+  ERC20Wrapper,
+  isNotFailed
 } from 'test-utils';
 import { type Address } from 'viem';
 
@@ -130,7 +131,7 @@ describe('Liquidity Agent Integration Tests', function () {
           );
 
           // Verify we get a response with pools data
-          expect(response.status?.state).to.not.equal('failed', 'List pools operation failed');
+          expect(isNotFailed(response)).to.be.true(`List pools operation failed`);
           
           const messageText = extractMessageText(response);
           expect(messageText.toLowerCase()).to.include('pool');
@@ -144,7 +145,7 @@ describe('Liquidity Agent Integration Tests', function () {
             'list pools',
             walletAddress
           );
-          expect(poolsResponse.status?.state).to.not.equal('failed', 'List pools operation failed');
+          expect(isNotFailed(poolsResponse)).to.be.true(`Get pools for deposit operation failed`);
           
           // Extract pools from response artifacts
           const pools = extractPools(poolsResponse);
@@ -174,7 +175,7 @@ describe('Liquidity Agent Integration Tests', function () {
             walletAddress
           );
           
-          expect(response.status?.state).to.not.equal('failed', 'Deposit operation failed');
+          expect(isNotFailed(response)).to.be.true(`Deposit liquidity operation failed`);
  
           const txHashes = await extractAndExecuteTransactions(
             response,
@@ -199,8 +200,8 @@ describe('Liquidity Agent Integration Tests', function () {
             'show my positions',
             walletAddress
           );
-          
-          expect(response.status?.state).to.not.equal('failed', 'Show positions operation failed');
+
+          expect(isNotFailed(response)).to.be.true(`Show positions operation failed`);
           
           const messageText = extractMessageText(response)
           expect(messageText.toLowerCase()).to.satisfy(

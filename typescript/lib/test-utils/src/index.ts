@@ -10,3 +10,5 @@ export * from './chains.js';
 export * from './response.js';
 export * from './weth.js';
 export * from './tokens.js';
+export * from './wallet.js';
+export * from './yield.js';
