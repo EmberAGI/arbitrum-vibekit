@@ -1,4 +1,4 @@
-import {
+import type {
   JSONRPCError,
   A2AError,
   JSONParseError,
@@ -20,14 +20,14 @@ import {
  */
 export class VibkitError extends Error {
   public code: number;
-  public data?: any;
+  public data?: unknown;
   public taskId?: string; // Optional task ID context
 
   constructor(
     name: string,
     code: number,
     message: string,
-    data?: any,
+    data?: unknown,
     taskId?: string
   ) {
     super(message);
@@ -96,14 +96,14 @@ export class VibkitError extends Error {
 
   static parseError(
     message: string = "Invalid JSON payload",
-    data?: any
+    data?: unknown
   ): VibkitError {
     return new VibkitError("JSONParseError", -32700, message, data);
   }
 
   static invalidRequest(
     message: string = "Request payload validation error",
-    data?: any
+    data?: unknown
   ): VibkitError {
     return new VibkitError("InvalidRequestError", -32600, message, data);
   }
@@ -115,14 +115,14 @@ export class VibkitError extends Error {
 
   static invalidParams(
     message: string = "Invalid parameters",
-    data?: any
+    data?: unknown
   ): VibkitError {
     return new VibkitError("InvalidParamsError", -32602, message, data);
   }
 
   static internalError(
     message: string = "Internal error",
-    data?: any
+    data?: unknown
   ): VibkitError {
     return new VibkitError("InternalError", -32603, message, data);
   }

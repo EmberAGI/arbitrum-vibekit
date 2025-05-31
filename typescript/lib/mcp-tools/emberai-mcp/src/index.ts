@@ -913,3 +913,35 @@ async function main() {
 
 // Run the server
 main();
+
+// Export server instance and helper to close it programmatically (useful for tests)
+export { server };
+
+export async function closeServer() {
+  try {
+    await server.close();
+  } catch (e) {
+    console.error("Error while closing Ember MCP server via closeServer():", e);
+  }
+}
+
+// Graceful shutdown on process signals
+process.on("SIGINT", async () => {
+  console.error("Received SIGINT, shutting down MCP server");
+  try {
+    await server.close();
+  } catch (e) {
+    console.error("Error closing MCP server:", e);
+  }
+  process.exit(0);
+});
+
+process.on("SIGTERM", async () => {
+  console.error("Received SIGTERM, shutting down MCP server");
+  try {
+    await server.close();
+  } catch (e) {
+    console.error("Error closing MCP server:", e);
+  }
+  process.exit(0);
+});

@@ -1,7 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
-import * as schema from "@google-a2a/types/src/types.js";
+import type * as schema from "@google-a2a/types/src/types.js";
 import { VibkitError } from "./error.js";
+import { isObject } from "./utils.js";
 // import {
 //   getCurrentTimestamp,
 //   isArtifactUpdate,
@@ -75,9 +76,10 @@ export class FileStore implements TaskStore {
   private async ensureDirectoryExists(): Promise<void> {
     try {
       await fs.mkdir(this.baseDir, { recursive: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       throw VibkitError.internalError(
-        `Failed to create directory ${this.baseDir}: ${error.message}`,
+        `Failed to create directory ${this.baseDir}: ${message}`,
         error
       );
     }
@@ -100,16 +102,20 @@ export class FileStore implements TaskStore {
 
   // Type guard for history file content
   private isHistoryFileContent(
-    content: any
+    content: unknown
   ): content is { messageHistory: schema.Message[] } {
-    return (
-      typeof content === "object" &&
-      content !== null &&
-      Array.isArray(content.messageHistory) &&
-      // Optional: Add deeper validation of message structure if needed
-      content.messageHistory.every(
-        (msg: any) => typeof msg === "object" && msg.role && msg.parts
-      )
+    if (!isObject(content)) {
+      return false;
+    }
+    const mh = (content as Record<string, unknown>).messageHistory;
+    if (!Array.isArray(mh)) {
+      return false;
+    }
+    return mh.every(
+      (msg): msg is schema.Message =>
+        isObject(msg) &&
+        typeof msg.role === "string" &&
+        Array.isArray(msg.parts)
     );
   }
 
@@ -117,24 +123,27 @@ export class FileStore implements TaskStore {
     try {
       const data = await fs.readFile(filePath, "utf8");
       return JSON.parse(data) as T;
-    } catch (error: any) {
-      if (error.code === "ENOENT") {
+    } catch (error: unknown) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code === "ENOENT") {
         return null; // File not found is not an error for loading
       }
+      const message = error instanceof Error ? error.message : String(error);
       throw VibkitError.internalError(
-        `Failed to read file ${filePath}: ${error.message}`,
+        `Failed to read file ${filePath}: ${message}`,
         error
       );
     }
   }
 
-  private async writeJsonFile(filePath: string, data: any): Promise<void> {
+  private async writeJsonFile(filePath: string, data: unknown): Promise<void> {
     try {
       await this.ensureDirectoryExists();
       await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf8");
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       throw VibkitError.internalError(
-        `Failed to write file ${filePath}: ${error.message}`,
+        `Failed to write file ${filePath}: ${message}`,
         error
       );
     }
@@ -162,11 +171,10 @@ export class FileStore implements TaskStore {
         console.warn(
           `[FileStore] Malformed history file found for task ${taskId} at ${historyFilePath}. Ignoring content.`
         );
-        // Attempt to delete or rename the malformed file? Or just proceed with empty history.
-        // For now, proceed with empty. A 'save' will overwrite it correctly later.
+        // Proceed with empty history.
       }
       // If historyContent is null (file not found), history remains []
-    } catch (error) {
+    } catch (error: unknown) {
       // Log error reading history but proceed with empty history
       console.error(
         `[FileStore] Error reading history file for task ${taskId}:`,

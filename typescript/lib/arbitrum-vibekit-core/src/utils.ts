@@ -1,4 +1,71 @@
-import { Artifact, TaskStatus } from "@google-a2a/types/src/types.js";
+import type {
+  Artifact,
+  TaskStatus,
+  Task,
+  Message,
+  Part,
+  TaskState,
+} from "@google-a2a/types/src/types.js";
+import { z } from "zod";
+import { VibkitError } from "./error.js";
+import { nanoid } from "nanoid";
+
+/**
+ * Error thrown when trying to use an unsupported Zod schema type
+ */
+export class UnsupportedSchemaError extends VibkitError {
+  constructor(schemaType: string, skillName?: string) {
+    const message = skillName
+      ? `Skill "${skillName}": ${schemaType} not supported`
+      : `${schemaType} not supported`;
+    super("UnsupportedSchemaError", -32004, message); // Using UnsupportedOperationError code
+  }
+}
+
+/**
+ * Derives conceptual input and output MIME types from Zod schemas.
+ * Used to align with A2A inputModes and outputModes concepts.
+ *
+ * @param inputSchema - Zod schema for input validation
+ * @param outputSchema - Zod schema for output payload validation
+ * @param skillName - Optional skill name for better error messages
+ * @returns Object containing inputMimeType and outputMimeType
+ * @throws UnsupportedSchemaError for unsupported schema types
+ */
+export function getMimeTypesFromZodSchema(
+  inputSchema: z.ZodTypeAny,
+  outputSchema: z.ZodTypeAny,
+  skillName?: string
+): { inputMimeType: string; outputMimeType: string } {
+  function getSchemaTypeName(schema: z.ZodTypeAny): string {
+    return schema.constructor.name;
+  }
+
+  function getMimeTypeForSchema(schema: z.ZodTypeAny): string {
+    // Check for unsupported primitive types first
+    if (
+      schema instanceof z.ZodBoolean ||
+      schema instanceof z.ZodNumber ||
+      schema instanceof z.ZodEnum ||
+      schema instanceof z.ZodNativeEnum
+    ) {
+      throw new UnsupportedSchemaError(getSchemaTypeName(schema), skillName);
+    }
+
+    // ZodString maps to text/plain
+    if (schema instanceof z.ZodString) {
+      return "text/plain";
+    }
+
+    // Everything else (objects, arrays, etc.) maps to application/json
+    return "application/json";
+  }
+
+  return {
+    inputMimeType: getMimeTypeForSchema(inputSchema),
+    outputMimeType: getMimeTypeForSchema(outputSchema),
+  };
+}
 
 /**
  * Generates a timestamp in ISO 8601 format.
@@ -13,7 +80,7 @@ export function getCurrentTimestamp(): string {
  * @param value The value to check.
  * @returns True if the value is a plain object, false otherwise.
  */
-export function isObject(value: unknown): value is Record<string, any> {
+export function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -22,19 +89,151 @@ export function isObject(value: unknown): value is Record<string, any> {
  * Used to differentiate yielded updates from the handler.
  */
 export function isTaskStatusUpdate(
-  update: any // eslint-disable-line @typescript-eslint/no-explicit-any
+  update: unknown
 ): update is Omit<TaskStatus, "timestamp"> {
   // Check if it has 'state' and NOT 'parts' (which Artifacts have)
-  return isObject(update) && "state" in update && !("parts" in update);
+  return (
+    isObject(update) &&
+    "state" in update &&
+    !("parts" in (update as Record<string, unknown>))
+  );
 }
 
 /**
  * Type guard to check if an object is an Artifact update (has 'parts').
  * Used to differentiate yielded updates from the handler.
  */
-export function isArtifactUpdate(
-  update: any // eslint-disable-line @typescript-eslint/no-explicit-any
-): update is Artifact {
+export function isArtifactUpdate(update: unknown): update is Artifact {
   // Check if it has 'parts'
-  return isObject(update) && "parts" in update;
+  return isObject(update) && "parts" in (update as Record<string, unknown>);
+}
+
+/**
+ * Creates an A2A Artifact object with the given parts and metadata.
+ * @param parts - Array of Part objects for the artifact content
+ * @param name - Optional name for the artifact
+ * @param description - Optional description for the artifact
+ * @param metadata - Optional metadata object
+ * @returns A properly structured A2A Artifact
+ */
+export function createArtifact(
+  parts: Part[],
+  name?: string,
+  description?: string,
+  metadata?: Record<string, unknown>
+): Artifact {
+  return {
+    artifactId: nanoid(),
+    name,
+    description,
+    parts,
+    metadata,
+  };
+}
+
+/**
+ * Creates an A2A Message object with the given content and role.
+ * @param text - The message text content
+ * @param role - The role (defaults to "agent")
+ * @param contextId - Optional context ID for the message
+ * @param taskId - Optional task ID for the message
+ * @param metadata - Optional metadata for the message
+ * @param referenceTaskIds - Optional array of reference task IDs for the message
+ * @returns A properly structured A2A Message
+ */
+export function createInfoMessage(
+  text: string,
+  role: "agent" | "user" = "agent",
+  contextId?: string,
+  taskId?: string,
+  metadata?: Record<string, unknown>,
+  referenceTaskIds?: string[]
+): Message {
+  return {
+    kind: "message",
+    role,
+    parts: [{ kind: "text", text }],
+    messageId: nanoid(),
+    ...(contextId ? { contextId } : {}),
+    ...(taskId ? { taskId } : {}),
+    ...(metadata ? { metadata } : {}),
+    ...(referenceTaskIds ? { referenceTaskIds } : {}),
+  };
+}
+
+/**
+ * Creates an A2A Task object indicating successful completion.
+ * @param skillName - Name of the skill for contextId generation
+ * @param artifacts - Optional array of artifacts produced by the task
+ * @param message - Success message text
+ * @param contextIdSuffix - Optional suffix for contextId (defaults to "success")
+ * @returns A properly structured A2A Task with "completed" status
+ */
+export function createSuccessTask(
+  skillName: string,
+  artifacts?: Artifact[],
+  message: string = "Task completed successfully",
+  contextIdSuffix: string = "success"
+): Task {
+  return {
+    id: nanoid(),
+    contextId: `${skillName}-${contextIdSuffix}-${Date.now()}-${nanoid(6)}`,
+    kind: "task",
+    status: {
+      state: "completed" as TaskState,
+      message: createInfoMessage(message, "agent"),
+      timestamp: getCurrentTimestamp(),
+    },
+    ...(artifacts && artifacts.length > 0 ? { artifacts } : {}),
+  };
+}
+
+/**
+ * Creates an A2A Task object indicating failure.
+ * @param skillName - Name of the skill for contextId generation
+ * @param error - VibkitError or Error object with failure details
+ * @param contextIdSuffix - Optional suffix for contextId (defaults to "error")
+ * @returns A properly structured A2A Task with "failed" status
+ */
+export function createErrorTask(
+  skillName: string,
+  error: VibkitError | Error,
+  contextIdSuffix: string = "error"
+): Task {
+  const errorDetails =
+    error instanceof VibkitError
+      ? { name: error.name, message: error.message, code: error.code }
+      : { name: error.name || "Error", message: error.message };
+  return {
+    id: nanoid(),
+    contextId: `${skillName}-${contextIdSuffix}-${Date.now()}-${nanoid(6)}`,
+    kind: "task",
+    status: {
+      state: "failed" as TaskState,
+      message: createInfoMessage(error.message, "agent"),
+      timestamp: getCurrentTimestamp(),
+    },
+    metadata: { error: errorDetails },
+  };
+}
+
+/**
+ * Formats a tool description with tags and examples in XML for MCP tool metadata.
+ * @param description - The base description string
+ * @param tags - Array of tag strings
+ * @param examples - Array of example strings
+ * @returns The formatted description string with XML tags/examples
+ */
+export function formatToolDescriptionWithTagsAndExamples(
+  description: string,
+  tags: string[],
+  examples: string[]
+): string {
+  const tagsXml = `<tags>${tags
+    .map((tag) => `<tag>${tag}</tag>`)
+    .join("")}</tags>`;
+  const examplesXml = `<examples>${examples
+    .map((ex) => `<example>${ex}</example>`)
+    .join("")}</examples>`;
+  return `${description}\n\n${tagsXml}\n${examplesXml}`;
 }

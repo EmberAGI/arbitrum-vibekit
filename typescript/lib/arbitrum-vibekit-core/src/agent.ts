@@ -1,7 +1,9 @@
-import {
+import type {
   AgentCard,
   AgentSkill,
   AgentCapabilities,
+  Task,
+  Message,
 } from "@google-a2a/types/src/types.js";
 import { CorsOptions } from "cors";
 import { InMemoryTaskStore, TaskStore } from "./store.js";
@@ -12,6 +14,12 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { Server } from "http";
+import {
+  getMimeTypesFromZodSchema,
+  UnsupportedSchemaError,
+  formatToolDescriptionWithTagsAndExamples,
+} from "./utils.js";
+import { createMcpA2AResponse, createMcpErrorResponse } from "./mcpUtils.js";
 
 /**
  * Options for configuring an Agent's runtime behavior (e.g., server settings).
@@ -23,43 +31,96 @@ export interface AgentRuntimeOptions {
 }
 
 /**
- * Represents a skill definition coupled with its implementation handler.
+ * A2A-aligned skill definition with strong typing for inputs and output payload
  */
-export interface SkillWithHandler {
-  skill: AgentSkill;
-  handler: (args: { instruction: string; userAddress: string }) => Promise<any>;
+export interface SkillDefinition<
+  I extends z.ZodObject<z.ZodRawShape>,
+  O extends z.ZodTypeAny
+> {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[]; // required, must have at least one tag
+  examples: string[]; // required, must have at least one example
+  inputSchema: I;
+  outputPayloadSchema: O;
+  handler: (input: z.infer<I>) => Promise<Task | Message>;
 }
 
 /**
- * Agent config that inherits all AgentCard properties except 'skills',
- * and adds skillsWithHandlers for the coupled skill definitions.
+ * Helper type for any skill definition with unknown schema types
  */
-export type AgentConfig = Omit<AgentCard, "skills"> & {
-  skillsWithHandlers: SkillWithHandler[];
-};
+export type AnySkillDefinition = SkillDefinition<
+  z.ZodObject<z.ZodRawShape>,
+  z.ZodTypeAny
+>;
 
-export class Agent {
+/**
+ * Agent config with A2A-aligned skills
+ */
+export interface AgentConfig<
+  TSkills extends AnySkillDefinition[] = AnySkillDefinition[]
+> extends Omit<AgentCard, "skills"> {
+  skills: TSkills;
+}
+
+/**
+ * Validates and creates a skill definition with A2A alignment.
+ * Throws errors for unsupported schema types and missing required fields.
+ */
+export function defineSkill<
+  I extends z.ZodObject<z.ZodRawShape>,
+  O extends z.ZodTypeAny
+>(definition: SkillDefinition<I, O>): SkillDefinition<I, O> {
+  // Validate required fields
+  if (!definition.id || !definition.id.trim()) {
+    throw new Error(`Skill must have a non-empty id`);
+  }
+  if (!definition.tags.length) {
+    throw new Error(`Skill "${definition.name}" must have at least one tag`);
+  }
+  if (!definition.examples.length) {
+    throw new Error(
+      `Skill "${definition.name}" must have at least one example`
+    );
+  }
+
+  // Check for unsupported schema types (this will throw UnsupportedSchemaError if needed)
+  getMimeTypesFromZodSchema(
+    definition.inputSchema,
+    definition.outputPayloadSchema,
+    definition.name
+  );
+
+  return definition;
+}
+
+export class Agent<TSkills extends AnySkillDefinition[]> {
   private corsOptions: CorsOptions | boolean | string;
   private basePath: string;
   card: AgentCard;
-  private mcpServer: McpServer;
+  public mcpServer: McpServer;
   private httpServer?: Server;
   private sseConnections: Set<Response> = new Set();
   private transport?: SSEServerTransport;
-  private skillHandlers: Record<string, (args: any) => Promise<any>>;
+  private skillsMap = new Map<string, TSkills[number]>();
 
   private constructor(
     card: AgentCard,
-    skillHandlers: Record<string, (args: any) => Promise<any>>,
+    skills: TSkills,
     runtimeOptions: AgentRuntimeOptions = {}
   ) {
     this.card = card;
-    this.skillHandlers = skillHandlers;
     this.corsOptions = runtimeOptions.cors ?? true;
     this.basePath = runtimeOptions.basePath ?? "/";
     if (this.basePath !== "/") {
       this.basePath = `/${this.basePath.replace(/^\/|\/$/g, "")}/`;
     }
+
+    // Store skills in map for easy access
+    skills.forEach((skill) => {
+      this.skillsMap.set(skill.name, skill);
+    });
 
     this.mcpServer = new McpServer({
       name: this.card.name,
@@ -70,117 +131,121 @@ export class Agent {
 
   /**
    * The primary and only public factory method for creating an Agent.
-   * It takes a manifest object to define the agent's properties and skills (with handlers).
+   * It takes a manifest object to define the agent's properties and skills.
    * The AgentCard is constructed internally, ensuring consistency.
    */
-  static create(
-    manifest: AgentConfig,
+  static create<TSkills extends AnySkillDefinition[]>(
+    manifest: AgentConfig<TSkills>,
     runtimeOptions: AgentRuntimeOptions = {}
-  ): Agent {
-    if (
-      !manifest.skillsWithHandlers ||
-      manifest.skillsWithHandlers.length === 0
-    ) {
-      throw VibkitError.invalidRequest(
-        "Agent creation requires at least one skill to be defined in 'manifest.skillsWithHandlers'."
+  ): Agent<TSkills> {
+    if (!manifest.skills || manifest.skills.length === 0) {
+      throw new VibkitError(
+        "AgentConfigMissingSkillsError",
+        -32600,
+        "Agent creation requires at least one skill to be defined in 'manifest.skills'."
       );
     }
 
-    const agentSkills: AgentSkill[] = manifest.skillsWithHandlers.map(
-      (swh) => swh.skill
-    );
-    const derivedSkillHandlers = manifest.skillsWithHandlers.reduce(
-      (acc, swh) => {
-        acc[swh.skill.id] = swh.handler;
-        return acc;
-      },
-      {} as Record<string, (args: any) => Promise<any>>
-    );
+    // Convert SkillDefinition objects to AgentSkill objects for A2A compatibility
+    const agentSkills: AgentSkill[] = manifest.skills.map((skillDef) => {
+      const { inputMimeType, outputMimeType } = getMimeTypesFromZodSchema(
+        skillDef.inputSchema,
+        skillDef.outputPayloadSchema,
+        skillDef.name
+      );
+
+      return {
+        id: skillDef.id,
+        name: skillDef.name,
+        description: skillDef.description,
+        tags: skillDef.tags,
+        examples: skillDef.examples,
+        inputModes: [inputMimeType],
+        outputModes: [outputMimeType],
+      };
+    });
 
     const agentCard: AgentCard = {
       ...manifest,
       skills: agentSkills,
     };
 
-    return new Agent(agentCard, derivedSkillHandlers, runtimeOptions);
-  }
-
-  /**
-   * Helper to create a skill with its handler for better type safety and developer experience.
-   */
-  static defineSkill(
-    skill: AgentSkill,
-    handler: (args: {
-      instruction: string;
-      userAddress: string;
-    }) => Promise<any>
-  ): SkillWithHandler {
-    return { skill, handler };
+    return new Agent(agentCard, manifest.skills, runtimeOptions);
   }
 
   private registerSkillsAsMcpTools(): void {
     if (!this.card.skills || this.card.skills.length === 0) {
-      if (Object.keys(this.skillHandlers).length === 0) {
-        console.warn(
-          `Agent '${this.card.name}' created with no skills or skill handlers defined for MCP tools.`
+      if (this.skillsMap.size === 0) {
+        throw new VibkitError(
+          "AgentConfigNoMcpSkillsError",
+          -32600,
+          `Agent '${this.card.name}' created with no skills defined for MCP tools.`
         );
-        return;
       }
     }
 
     this.card.skills.forEach((skill) => {
-      const handler = this.skillHandlers[skill.id];
+      const skillDefinition = this.skillsMap.get(skill.name);
 
-      if (!handler) {
-        console.warn(
-          `Skill "${skill.name}" (ID: ${skill.id}) is defined in AgentCard but no handler was found. Skipping MCP tool registration for this skill.`
+      if (!skillDefinition) {
+        throw new VibkitError(
+          "AgentConfigMismatchError",
+          -32603, // Internal Error code for server-side config mismatch
+          `Skill "${skill.name}" is defined in AgentCard but no skill definition was found. This indicates a configuration error.`
         );
-        return;
       }
-
-      const skillSchema = z.object({
-        instruction: z
-          .string()
-          .describe(
-            skill.description ||
-              `A natural-language instruction for the ${skill.name} skill. ${
-                skill.examples ? `Examples: ${skill.examples.join(", ")}` : ""
-              }`
-          ),
-        userAddress: z
-          .string()
-          .describe(
-            "The user wallet address which is used to sign transactions and to pay for gas."
-          ),
-      });
 
       this.mcpServer.tool(
         skill.id,
-        skill.description || `${skill.name} skill tool`,
-        skillSchema.shape,
-        async (args: z.infer<typeof skillSchema>) => {
+        formatToolDescriptionWithTagsAndExamples(
+          skill.description,
+          skill.tags ?? [],
+          skill.examples ?? []
+        ),
+        skillDefinition.inputSchema.shape,
+        {
+          title: skill.name,
+        },
+        async (args: unknown, extra?: any) => {
+          // Log extra parameter for debugging but don't forward to skills
+          console.log("Tool called", {
+            skillName: skill.name,
+            skillId: skill.id,
+            requestId: extra?.requestId,
+          });
+
+          // MCP Input Validation: Validate incoming arguments against inputSchema
+          const parseResult = skillDefinition.inputSchema.safeParse(args);
+          if (!parseResult.success) {
+            return createMcpErrorResponse(
+              `Invalid arguments for skill ${skill.name}: ${parseResult.error.message}`,
+              "InputValidationError"
+            );
+          }
+
           try {
-            const response = await handler(args);
-            return {
-              content: [{ type: "text", text: JSON.stringify(response) }],
-            };
+            // Call the skill handler with validated input
+            const a2aResponse = await skillDefinition.handler(parseResult.data);
+
+            // Return A2A response wrapped as MCP envelope
+            return createMcpA2AResponse(a2aResponse, this.card.name);
           } catch (error: unknown) {
-            const err = error as Error;
-            return {
-              isError: true,
-              content: [
-                {
-                  type: "text",
-                  text: `Error processing skill ${skill.name} (ID: ${skill.id}): ${err.message}`,
-                },
-              ],
-            };
+            // Unexpected skill crash - MCP wrapper catches this
+            console.error(`Unexpected error in skill ${skill.name}:`, error);
+            if (error instanceof VibkitError) {
+              return createMcpErrorResponse(error.message, error.name);
+            } else {
+              const errorMessage =
+                error instanceof Error ? error.message : String(error);
+              return createMcpErrorResponse(
+                `Error processing skill ${skill.name} (ID: ${skill.id}): ${errorMessage}`,
+                "UnhandledSkillError"
+              );
+            }
           }
         }
       );
-      console.log(
-        `Registered MCP tool for skill: "${skill.name}" (ID: ${skill.id})`
-      );
+      console.log(`Registered MCP tool for skill: "${skill.name}"`);
     });
   }
 
