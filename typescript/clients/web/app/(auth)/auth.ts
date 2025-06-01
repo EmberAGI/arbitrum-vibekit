@@ -1,13 +1,29 @@
-import { compare } from 'bcrypt-ts';
-import NextAuth, { type User, type Session } from 'next-auth';
-import Credentials from 'next-auth/providers/credentials';
-
-import { getUser } from '@/lib/db/queries';
+import NextAuth, { type DefaultSession } from 'next-auth';
 
 import { authConfig } from './auth.config';
+import Credentials from 'next-auth/providers/credentials';
+import { parseSiweMessage, validateSiweMessage } from 'viem/siwe';
+import { getOrCreateUser } from '@/lib/db/queries';
+import type { DefaultJWT } from 'next-auth/jwt';
 
-interface ExtendedSession extends Session {
-  user: User;
+declare module 'next-auth' {
+  interface Session extends DefaultSession {
+    user: {
+      id: string;
+      address: string;
+    } & DefaultSession['user'];
+  }
+  interface User {
+    id?: string;
+    address?: string;
+  }
+}
+
+declare module 'next-auth/jwt' {
+  interface JWT extends DefaultJWT {
+    id: string;
+    address: string;
+  }
 }
 
 export const {
@@ -19,37 +35,66 @@ export const {
   ...authConfig,
   providers: [
     Credentials({
-      credentials: {},
-      async authorize({ email, password }: any) {
-        const users = await getUser(email);
-        if (users.length === 0) return null;
-        // biome-ignore lint: Forbidden non-null assertion.
-        const passwordsMatch = await compare(password, users[0].password!);
-        if (!passwordsMatch) return null;
-        return users[0] as any;
+      name: 'RainbowKit',
+      credentials: {
+        message: {
+          label: 'Message',
+          placeholder: '0x0',
+          type: 'text',
+        },
+        signature: {
+          label: 'Signature',
+          placeholder: '0x0',
+          type: 'text',
+        },
+      },
+      async authorize(credentials: any) {
+        try {
+          const siweMessage = parseSiweMessage(credentials?.message);
+
+          if (!siweMessage.address) {
+            return null;
+          }
+
+          if (
+            !validateSiweMessage({
+              address: siweMessage?.address,
+              message: siweMessage,
+            })
+          ) {
+            return null;
+          }
+
+          const user = (await getOrCreateUser(siweMessage.address))[0];
+          return {
+            id: user.id,
+            address: user.address,
+          };
+        } catch (e) {
+          console.error('Error authorizing user', e);
+          return null;
+        }
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
+      if (user?.id && user?.address) {
         token.id = user.id;
+        token.address = user.address;
       }
 
       return token;
     },
-    async session({
-      session,
-      token,
-    }: {
-      session: ExtendedSession;
-      token: any;
-    }) {
-      if (session.user) {
-        session.user.id = token.id as string;
-      }
-
-      return session;
+    async session({ session, token }) {
+      return {
+        ...session,
+        user: {
+          ...session.user,
+          id: token.id,
+          address: token.address,
+        },
+      };
     },
   },
 });

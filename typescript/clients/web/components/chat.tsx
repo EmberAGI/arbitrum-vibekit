@@ -2,7 +2,7 @@
 
 import type { Attachment, UIMessage } from "ai";
 import { useChat } from "@ai-sdk/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { ChatHeader } from "@/components/chat-header";
 import type { Vote } from "@/lib/db/schema";
@@ -14,6 +14,8 @@ import type { VisibilityType } from "./visibility-selector";
 import { useArtifactSelector } from "@/hooks/use-artifact";
 import { toast } from "sonner";
 import { useAccount } from "wagmi";
+import { useSession } from "next-auth/react";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 export function Chat({
   id,
@@ -32,8 +34,9 @@ export function Chat({
 }) {
   const { mutate } = useSWRConfig();
   const { address } = useAccount();
+  const { data: session } = useSession();
 
-  const [selectedChatAgent, setSelectedChatAgent] = useState(initialChatAgent);
+  const [selectedChatAgent, _setSelectedChatAgent] = useState(initialChatAgent);
 
   const {
     messages,
@@ -68,7 +71,7 @@ export function Chat({
 
   const { data: votes } = useSWR<Array<Vote>>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
-    fetcher
+    fetcher,
   );
 
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
@@ -77,6 +80,15 @@ export function Chat({
   return (
     <>
       <div className="flex flex-col min-w-0 h-dvh bg-background">
+        {(!session || !session.user) && (
+          <div className="fixed inset-0 backdrop-blur-sm bg-background/70 z-50 flex flex-col items-center justify-center gap-4">
+            <h2 className="text-xl font-semibold">Connect Your Wallet</h2>
+            <p className="text-muted-foreground mb-4">
+              Authentication required to chat with Ember Agents
+            </p>
+            <ConnectButton />
+          </div>
+        )}
         <ChatHeader
           chatId={id}
           selectedModelId={selectedChatModel}
