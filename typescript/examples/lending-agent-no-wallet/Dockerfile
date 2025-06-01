@@ -32,7 +32,7 @@ COPY examples/lending-agent-no-wallet/package.json ./examples/lending-agent-no-w
 #    because source files are not yet in the build context (they are copied in step 4).
 #    This keeps the layer cache-friendly while avoiding prepare/postinstall failures.
 # ------------------------------
-RUN pnpm install --prefer-frozen-lockfile
+RUN pnpm install --frozen-lockfile
 
 # ------------------------------
 # 4. Now copy the rest of the source code
