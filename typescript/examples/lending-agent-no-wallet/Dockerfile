@@ -6,32 +6,9 @@ WORKDIR /app
 # Install pnpm globally
 RUN npm install -g pnpm@10.7.0 typescript@5.8.3
 
-# ------------------------------
-# 1. Copy lockfile & workspace config that affect dependency graph cache
-# ------------------------------
-COPY pnpm-lock.yaml* pnpm-workspace.yaml .npmrc ./
-# Copy root package.json for pnpm workspace
-COPY package.json ./
-# Copy base TS configuration so that tsconfig.base.json can be resolved
-COPY tsconfig.base.json ./
-
-# ------------------------------
-# 2. Copy all workspace package.json files (to maximise Docker cache)
-# ------------------------------
-COPY lib/ lib/
-COPY examples/lending-agent-no-wallet/package.json ./examples/lending-agent-no-wallet/
-
-# ------------------------------
-# 3. Install deps based on the copied package.json set. Skip lifecycle scripts for now
-#    because source files are not yet in the build context (they are copied in step 4).
-#    This keeps the layer cache-friendly while avoiding prepare/postinstall failures.
-# ------------------------------
-RUN pnpm install --prefer-frozen-lockfile
-
-# ------------------------------
-# 4. Now copy the rest of the source code
-# ------------------------------
 COPY . .
+
+RUN pnpm install --prefer-frozen-lockfile
 
 # ------------------------------
 # 5. Build every workspace package that provides a build script (recursive build)

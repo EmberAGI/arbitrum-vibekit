@@ -1,77 +1,22 @@
 # Build stage - Context should be the typescript/ directory
-FROM node:20-slim AS builder
+FROM node:20
 
 WORKDIR /app
 
 # Install pnpm globally
 RUN npm install -g pnpm@10.7.0 typescript@5.8.3
 
-# ------------------------------
-# 1. Copy lockfile & workspace config that affect dependency graph cache
-# ------------------------------
-COPY pnpm-lock.yaml* pnpm-workspace.yaml .npmrc ./
-# Copy root package.json for pnpm workspace
-COPY package.json ./
-# Copy base TS configuration so that tsconfig.base.json can be resolved
-COPY tsconfig.base.json ./
-
-# ------------------------------
-# 2. Copy all workspace package.json files (to maximise Docker cache)
-# ------------------------------
-COPY lib/ lib/
-COPY examples/liquidity-agent-no-wallet/package.json ./examples/liquidity-agent-no-wallet/
-
-# ------------------------------
-# 3. Install deps based on the copied package.json set. Skip lifecycle scripts for now
-#    because source files are not yet in the build context (they are copied in step 4).
-#    This keeps the layer cache-friendly while avoiding prepare/postinstall failures.
-# ------------------------------
-RUN pnpm install --prefer-frozen-lockfile
-
-# ------------------------------
-# 4. Now copy the rest of the source code
-# ------------------------------
 COPY . .
 
-# ------------------------------
-# 5. Build every workspace package that provides a build script (recursive build)
-# ------------------------------
-RUN pnpm --filter liquidity-agent-no-wallet... build
+RUN pnpm install --prefer-frozen-lockfile
 
-# Production stage
-FROM node:20-slim AS production
+RUN pnpm --filter lending-agent-no-wallet... build
 
-# Copy pnpm config
-COPY --from=builder /app/.npmrc ./
-
-# Create a non-root user
 RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    groupadd -r ember && useradd -r -g ember ember
+    rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-
-# Install pnpm globally
-RUN npm install -g pnpm@10.7.0
-
-# Copy only what we need from the builder stage
-COPY --from=builder /app/examples/liquidity-agent-no-wallet/dist /app/examples/liquidity-agent-no-wallet/dist
-COPY --from=builder /app/examples/liquidity-agent-no-wallet/encyclopedia /app/examples/liquidity-agent-no-wallet/encyclopedia
-COPY --from=builder /app/examples/liquidity-agent-no-wallet/package.json /app/examples/liquidity-agent-no-wallet/
-COPY --from=builder /app/examples/liquidity-agent-no-wallet/node_modules /app/examples/liquidity-agent-no-wallet/node_modules
-COPY --from=builder /app/lib /app/lib
-COPY --from=builder /app/node_modules /app/node_modules
-COPY --from=builder /app/node_modules/.pnpm /app/node_modules/.pnpm
-
-# Set the working directory for the final image
-WORKDIR /app/examples/liquidity-agent-no-wallet/dist
-
-# Change ownership to non-root user
-RUN chown -R ember:ember /app
-
-# Switch to non-root user
-USER ember
+WORKDIR /app/examples/lending-agent-no-wallet/dist
 
 # Expose port for SSE MCP server
 EXPOSE 3001
@@ -79,5 +24,5 @@ EXPOSE 3001
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the Liquidity agent (path is relative to the WORKDIR set above)
-CMD ["node", "index.js"]
+# Start the Lending agent (path is relative to the WORKDIR set above)
+CMD ["node", "index.js"] 
