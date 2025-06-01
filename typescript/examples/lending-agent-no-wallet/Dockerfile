@@ -11,16 +11,14 @@ COPY . .
 RUN pnpm install --prefer-frozen-lockfile
 
 # ------------------------------
-# 5. Build every workspace package that provides a build script (recursive build)
+# Build every workspace package that provides a build script (recursive build)
 # ------------------------------
 RUN pnpm --filter lending-agent-no-wallet... build
 
-# Create a non-root user
 RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Set the working directory for the final image
 WORKDIR /app/examples/lending-agent-no-wallet/dist
 
 # Expose port for SSE MCP server
