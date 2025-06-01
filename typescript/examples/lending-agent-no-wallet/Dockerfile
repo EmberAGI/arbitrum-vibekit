@@ -1,6 +1,7 @@
 # Build stage - Context should be the typescript/ directory
 FROM node:23-slim
 
+# Install python3 for buffer-util support dependency
 RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
