@@ -1,8 +1,0 @@
----
-description: Rules for writing tests
-globs: 
-alwaysApply: false
----
-Do not add trivial assertions like this:
-
-> expect(response).to.exist;
