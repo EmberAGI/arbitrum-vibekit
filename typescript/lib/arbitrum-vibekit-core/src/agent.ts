@@ -15,87 +15,116 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { Server } from "http";
 import {
-  getMimeTypesFromZodSchema,
+  createSuccessTask,
+  createErrorTask,
+  createInfoMessage,
+  getInputMimeType,
   UnsupportedSchemaError,
   formatToolDescriptionWithTagsAndExamples,
 } from "./utils.js";
 import { createMcpA2AResponse, createMcpErrorResponse } from "./mcpUtils.js";
+import { generateText } from "ai";
+import type { LanguageModel, CoreMessage } from "ai";
+import { nanoid } from "nanoid";
 
 /**
  * Options for configuring an Agent's runtime behavior (e.g., server settings).
  */
-export interface AgentRuntimeOptions {
+export interface AgentRuntimeOptions<TContext = any> {
   taskStore?: TaskStore;
   cors?: CorsOptions | boolean | string;
   basePath?: string;
+  llm?: {
+    model: LanguageModel;
+    baseSystemPrompt?: string;
+  };
 }
 
 /**
- * A2A-aligned skill definition with strong typing for inputs and output payload
+ * A2A-aligned skill definition with strong typing for inputs
  */
-export interface SkillDefinition<
-  I extends z.ZodObject<z.ZodRawShape>,
-  O extends z.ZodTypeAny
-> {
+export interface SkillDefinition<I extends z.ZodTypeAny, TContext = any> {
   id: string;
   name: string;
   description: string;
   tags: string[]; // required, must have at least one tag
   examples: string[]; // required, must have at least one example
   inputSchema: I;
-  outputPayloadSchema: O;
-  handler: (input: z.infer<I>) => Promise<Task | Message>;
+  tools: Array<VibkitToolDefinition<any, Task | Message, TContext>>; // REQUIRED for business logic
+  handler?: (input: z.infer<I>) => Promise<Task | Message>; // Optional - when provided, bypasses LLM orchestration
 }
-
-/**
- * Helper type for any skill definition with unknown schema types
- */
-export type AnySkillDefinition = SkillDefinition<
-  z.ZodObject<z.ZodRawShape>,
-  z.ZodTypeAny
->;
 
 /**
  * Agent config with A2A-aligned skills
  */
-export interface AgentConfig<
-  TSkills extends AnySkillDefinition[] = AnySkillDefinition[]
+export interface AgentConfig extends Omit<AgentCard, "skills"> {
+  skills: SkillDefinition<any>[];
+}
+
+/**
+ * Generic agent config for when you need type safety
+ */
+export interface AgentConfigGeneric<
+  TSkill extends SkillDefinition<z.ZodTypeAny>
 > extends Omit<AgentCard, "skills"> {
-  skills: TSkills;
+  skills: TSkill[];
 }
 
 /**
  * Validates and creates a skill definition with A2A alignment.
  * Throws errors for unsupported schema types and missing required fields.
  */
-export function defineSkill<
-  I extends z.ZodObject<z.ZodRawShape>,
-  O extends z.ZodTypeAny
->(definition: SkillDefinition<I, O>): SkillDefinition<I, O> {
+export function defineSkill<TInputSchema extends z.ZodTypeAny>(
+  definition: SkillDefinition<TInputSchema>
+): SkillDefinition<TInputSchema> {
   // Validate required fields
-  if (!definition.id || !definition.id.trim()) {
-    throw new Error(`Skill must have a non-empty id`);
+  if (!definition.id?.trim()) {
+    throw new Error("Skill must have a non-empty id");
   }
-  if (!definition.tags.length) {
+
+  if (definition.tags.length === 0) {
     throw new Error(`Skill "${definition.name}" must have at least one tag`);
   }
-  if (!definition.examples.length) {
+
+  if (definition.examples.length === 0) {
     throw new Error(
       `Skill "${definition.name}" must have at least one example`
     );
   }
 
-  // Check for unsupported schema types (this will throw UnsupportedSchemaError if needed)
-  getMimeTypesFromZodSchema(
-    definition.inputSchema,
-    definition.outputPayloadSchema,
-    definition.name
-  );
+  if (!definition.tools || definition.tools.length === 0) {
+    throw new Error(
+      `Skill "${definition.name}" must have at least one tool for business logic`
+    );
+  }
+
+  // Validate schemas by attempting to derive MIME types (will throw if unsupported)
+  getInputMimeType(definition.inputSchema, definition.name);
 
   return definition;
 }
 
-export class Agent<TSkills extends AnySkillDefinition[]> {
+export interface AgentContext<TCustom = any> {
+  custom: TCustom;
+}
+
+export interface VibkitToolDefinition<
+  TParams extends z.ZodTypeAny,
+  TResult = Task | Message,
+  TContext = any
+> {
+  description: string;
+  parameters: TParams;
+  execute: (
+    args: z.infer<TParams>,
+    context: AgentContext<TContext>
+  ) => Promise<TResult>;
+}
+
+export class Agent<
+  TSkillsArray extends SkillDefinition<z.ZodTypeAny, TContext>[],
+  TContext = any
+> {
   private corsOptions: CorsOptions | boolean | string;
   private basePath: string;
   card: AgentCard;
@@ -103,12 +132,15 @@ export class Agent<TSkills extends AnySkillDefinition[]> {
   private httpServer?: Server;
   private sseConnections: Set<Response> = new Set();
   private transport?: SSEServerTransport;
-  private skillsMap = new Map<string, TSkills[number]>();
+  private skillsMap = new Map<string, TSkillsArray[number]>();
+  private model?: LanguageModel;
+  private baseSystemPrompt?: string;
+  private customContext?: TContext;
 
   private constructor(
     card: AgentCard,
-    skills: TSkills,
-    runtimeOptions: AgentRuntimeOptions = {}
+    skills: TSkillsArray,
+    runtimeOptions: AgentRuntimeOptions<TContext> = {}
   ) {
     this.card = card;
     this.corsOptions = runtimeOptions.cors ?? true;
@@ -122,6 +154,11 @@ export class Agent<TSkills extends AnySkillDefinition[]> {
       this.skillsMap.set(skill.name, skill);
     });
 
+    if (runtimeOptions.llm) {
+      this.model = runtimeOptions.llm.model;
+      this.baseSystemPrompt = runtimeOptions.llm.baseSystemPrompt;
+    }
+
     this.mcpServer = new McpServer({
       name: this.card.name,
       version: this.card.version,
@@ -134,11 +171,11 @@ export class Agent<TSkills extends AnySkillDefinition[]> {
    * It takes a manifest object to define the agent's properties and skills.
    * The AgentCard is constructed internally, ensuring consistency.
    */
-  static create<TSkills extends AnySkillDefinition[]>(
-    manifest: AgentConfig<TSkills>,
+  static create<TSkill extends SkillDefinition<z.ZodTypeAny>>(
+    config: AgentConfig | AgentConfigGeneric<TSkill>,
     runtimeOptions: AgentRuntimeOptions = {}
-  ): Agent<TSkills> {
-    if (!manifest.skills || manifest.skills.length === 0) {
+  ): Agent<TSkill[]> {
+    if (!config.skills || config.skills.length === 0) {
       throw new VibkitError(
         "AgentConfigMissingSkillsError",
         -32600,
@@ -147,30 +184,31 @@ export class Agent<TSkills extends AnySkillDefinition[]> {
     }
 
     // Convert SkillDefinition objects to AgentSkill objects for A2A compatibility
-    const agentSkills: AgentSkill[] = manifest.skills.map((skillDef) => {
-      const { inputMimeType, outputMimeType } = getMimeTypesFromZodSchema(
-        skillDef.inputSchema,
-        skillDef.outputPayloadSchema,
-        skillDef.name
-      );
+    const agentSkills: AgentSkill[] = config.skills.map(
+      (skillDef: SkillDefinition<any>) => {
+        const inputMimeType = getInputMimeType(
+          skillDef.inputSchema,
+          skillDef.name
+        );
 
-      return {
-        id: skillDef.id,
-        name: skillDef.name,
-        description: skillDef.description,
-        tags: skillDef.tags,
-        examples: skillDef.examples,
-        inputModes: [inputMimeType],
-        outputModes: [outputMimeType],
-      };
-    });
+        return {
+          id: skillDef.id,
+          name: skillDef.name,
+          description: skillDef.description,
+          tags: skillDef.tags,
+          examples: skillDef.examples,
+          inputModes: [inputMimeType],
+          outputModes: ["application/json"], // Task/Message are always JSON
+        };
+      }
+    );
 
     const agentCard: AgentCard = {
-      ...manifest,
+      ...config,
       skills: agentSkills,
     };
 
-    return new Agent(agentCard, manifest.skills, runtimeOptions);
+    return new Agent(agentCard, config.skills as TSkill[], runtimeOptions);
   }
 
   private registerSkillsAsMcpTools(): void {
@@ -202,19 +240,16 @@ export class Agent<TSkills extends AnySkillDefinition[]> {
           skill.tags ?? [],
           skill.examples ?? []
         ),
-        skillDefinition.inputSchema.shape,
+        (skillDefinition.inputSchema as z.ZodObject<any>).shape,
         {
           title: skill.name,
         },
         async (args: unknown, extra?: any) => {
-          // Log extra parameter for debugging but don't forward to skills
           console.log("Tool called", {
             skillName: skill.name,
             skillId: skill.id,
             requestId: extra?.requestId,
           });
-
-          // MCP Input Validation: Validate incoming arguments against inputSchema
           const parseResult = skillDefinition.inputSchema.safeParse(args);
           if (!parseResult.success) {
             return createMcpErrorResponse(
@@ -222,15 +257,18 @@ export class Agent<TSkills extends AnySkillDefinition[]> {
               "InputValidationError"
             );
           }
-
           try {
-            // Call the skill handler with validated input
-            const a2aResponse = await skillDefinition.handler(parseResult.data);
-
-            // Return A2A response wrapped as MCP envelope
+            // Use manual handler if present, else LLM handler
+            let handler = skillDefinition.handler;
+            if (!handler) {
+              handler = this.createSkillHandler(skillDefinition);
+            }
+            if (!handler) {
+              throw new Error(`No handler available for skill ${skill.name}`);
+            }
+            const a2aResponse = await handler(parseResult.data);
             return createMcpA2AResponse(a2aResponse, this.card.name);
           } catch (error: unknown) {
-            // Unexpected skill crash - MCP wrapper catches this
             console.error(`Unexpected error in skill ${skill.name}:`, error);
             if (error instanceof VibkitError) {
               return createMcpErrorResponse(error.message, error.name);
@@ -249,7 +287,19 @@ export class Agent<TSkills extends AnySkillDefinition[]> {
     });
   }
 
-  start(port = 41241): express.Express {
+  async start(
+    port = 41241,
+    contextProvider?: () => Promise<TContext> | TContext
+  ): Promise<express.Express> {
+    if (contextProvider) {
+      this.customContext = await (typeof contextProvider === "function"
+        ? contextProvider()
+        : contextProvider);
+    }
+    return this._startServer(port);
+  }
+
+  private _startServer(port: number): express.Express {
     if (this.httpServer) {
       throw VibkitError.invalidRequest("Agent server is already running");
     }
@@ -339,5 +389,87 @@ export class Agent<TSkills extends AnySkillDefinition[]> {
       this.httpServer = undefined;
     }
     console.log("Agent stopped");
+  }
+
+  private createSkillHandler(skill: SkillDefinition<any, TContext>) {
+    return async (input: any) => {
+      if (!this.model) {
+        throw new Error("No language model configured");
+      }
+      const skillPrompt = this.generateSystemPromptForSkill(skill);
+      const conversationHistory: CoreMessage[] = [
+        { role: "system", content: skillPrompt },
+        { role: "user", content: JSON.stringify(input) },
+      ];
+      // Convert tools to Vercel AI SDK format with context injection
+      const sdkTools = Object.fromEntries(
+        skill.tools.map((vibkitTool, idx) => [
+          vibkitTool.description || `tool${idx}`,
+          {
+            description: vibkitTool.description,
+            parameters: vibkitTool.parameters,
+            execute: async (args: any) => {
+              const context: AgentContext<TContext> = {
+                custom: this.customContext!,
+              };
+              return await vibkitTool.execute(args, context);
+            },
+          },
+        ])
+      );
+      try {
+        const { response, text } = await generateText({
+          model: this.model,
+          messages: conversationHistory,
+          tools: sdkTools,
+          maxSteps: 5,
+          onStepFinish: async (stepResult: any) => {
+            console.error(`Step finished. Reason: ${stepResult.finishReason}`);
+          },
+        });
+        // Extract Task/Message from response
+        return this.extractA2AResult(response, text, skill.id);
+      } catch (error) {
+        console.error(`Error in skill ${skill.name}:`, error);
+        return createErrorTask(
+          skill.name,
+          error instanceof Error ? error : new Error("Unknown error")
+        );
+      }
+    };
+  }
+
+  private generateSystemPromptForSkill(
+    skill: SkillDefinition<any, TContext>
+  ): string {
+    const examplePrompts = skill.examples
+      .map(
+        (ex, idx) =>
+          `<example${idx + 1}>\nUser: ${ex}\nExpected behavior: ${
+            skill.description
+          }\n</example${idx + 1}>`
+      )
+      .join("\n");
+    return `You are fulfilling the "${
+      skill.name
+    }" skill.\n\nSkill Description: ${
+      skill.description
+    }\nTags: ${skill.tags.join(
+      ", "
+    )}\n\nYour task is to use the available tools to accomplish what the user is asking for within the context of this skill.\n\nExamples of requests for this skill:\n${examplePrompts}\n\n${
+      this.baseSystemPrompt || ""
+    }`.trim();
+  }
+
+  private extractA2AResult(
+    response: any,
+    text: string,
+    skillId: string
+  ): Task | Message {
+    // TODO: Implement robust extraction logic based on Vercel AI SDK response.
+    // This could involve checking if 'text' is a JSON string representing a valid Task/Message.
+    // For now, return a valid Message using the provided text.
+    const contextId = `${skillId}-llm-response-${Date.now()}-${nanoid(6)}`;
+    return createInfoMessage(text, "agent", contextId);
   }
 }

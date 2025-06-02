@@ -1,18 +1,44 @@
 import { expect } from "chai";
 import { z } from "zod";
-import { defineSkill, Agent } from "../dist/agent.js";
-import { UnsupportedSchemaError } from "../dist/utils.js";
-import { formatToolDescriptionWithTagsAndExamples } from "../dist/utils.js";
+import { defineSkill, Agent, VibkitToolDefinition } from "../src/agent.js"; // Changed import path
+import { UnsupportedSchemaError } from "../src/utils.js";
+import { formatToolDescriptionWithTagsAndExamples } from "../src/utils.js";
+import type {
+  Task,
+  Message,
+  SkillDefinition,
+  AgentConfig,
+  TaskState,
+} from "../src/index.js";
+
+const dummyTool: VibkitToolDefinition<z.ZodObject<{}>, Task> = {
+  description: "Dummy tool",
+  parameters: z.object({}),
+  execute: async () => ({
+    id: "dummy",
+    kind: "task",
+    contextId: "dummy",
+    status: {
+      state: "completed" as TaskState,
+      message: {
+        kind: "message",
+        role: "agent",
+        parts: [{ kind: "text", text: "ok" }],
+        messageId: "dummy",
+      },
+      timestamp: new Date().toISOString(),
+    },
+  }),
+};
 
 describe("defineSkill", () => {
   const validInputSchema = z.object({ text: z.string() });
-  const validOutputSchema = z.object({ result: z.string() });
-  const validHandler = async (input) => ({
+  const validHandler = async (input: { text: string }): Promise<Task> => ({
     id: "task-id",
     contextId: "test-context",
     kind: "task",
     status: {
-      state: "completed",
+      state: "completed" as TaskState,
       message: {
         role: "agent",
         parts: [{ kind: "text", text: "Success" }],
@@ -25,15 +51,15 @@ describe("defineSkill", () => {
 
   describe("valid skill definitions", () => {
     it("should accept a complete valid skill definition", () => {
-      const skillDefinition = {
+      const skillDefinition: SkillDefinition<typeof validInputSchema> = {
         id: "test-skill-id",
         name: "Test Skill",
         description: "A test skill",
         tags: ["test"],
         examples: ["Example usage"],
         inputSchema: validInputSchema,
-        outputPayloadSchema: validOutputSchema,
         handler: validHandler,
+        tools: [dummyTool],
       };
 
       const result = defineSkill(skillDefinition);
@@ -41,15 +67,15 @@ describe("defineSkill", () => {
     });
 
     it("should accept multiple tags and examples", () => {
-      const skillDefinition = {
+      const skillDefinition: SkillDefinition<typeof validInputSchema> = {
         id: "multi-test-skill",
         name: "Multi Test Skill",
         description: "A skill with multiple tags and examples",
         tags: ["test", "utility", "example"],
         examples: ["Usage 1", "Usage 2", "Usage 3"],
         inputSchema: validInputSchema,
-        outputPayloadSchema: validOutputSchema,
         handler: validHandler,
+        tools: [dummyTool],
       };
 
       const result = defineSkill(skillDefinition);
@@ -66,8 +92,8 @@ describe("defineSkill", () => {
         tags: ["test"],
         examples: ["Example usage"],
         inputSchema: validInputSchema,
-        outputPayloadSchema: validOutputSchema,
         handler: validHandler,
+        tools: [dummyTool],
       };
 
       expect(() => defineSkill(skillDefinition))
@@ -83,8 +109,8 @@ describe("defineSkill", () => {
         tags: ["test"],
         examples: ["Example usage"],
         inputSchema: validInputSchema,
-        outputPayloadSchema: validOutputSchema,
         handler: validHandler,
+        tools: [dummyTool],
       };
 
       expect(() => defineSkill(skillDefinition))
@@ -100,8 +126,8 @@ describe("defineSkill", () => {
         tags: [],
         examples: ["Example usage"],
         inputSchema: validInputSchema,
-        outputPayloadSchema: validOutputSchema,
         handler: validHandler,
+        tools: [dummyTool],
       };
 
       expect(() => defineSkill(skillDefinition))
@@ -120,8 +146,8 @@ describe("defineSkill", () => {
         tags: ["test"],
         examples: [],
         inputSchema: validInputSchema,
-        outputPayloadSchema: validOutputSchema,
         handler: validHandler,
+        tools: [dummyTool],
       };
 
       expect(() => defineSkill(skillDefinition))
@@ -140,28 +166,11 @@ describe("defineSkill", () => {
         tags: ["test"],
         examples: ["Example usage"],
         inputSchema: z.boolean(), // Unsupported
-        outputPayloadSchema: validOutputSchema,
         handler: validHandler,
+        tools: [dummyTool],
       };
 
-      expect(() => defineSkill(skillDefinition)).to.throw(
-        UnsupportedSchemaError
-      );
-    });
-
-    it("should throw UnsupportedSchemaError for unsupported output schema", () => {
-      const skillDefinition = {
-        id: "test-skill",
-        name: "Test Skill",
-        description: "A test skill",
-        tags: ["test"],
-        examples: ["Example usage"],
-        inputSchema: validInputSchema,
-        outputPayloadSchema: z.number(), // Unsupported
-        handler: validHandler,
-      };
-
-      expect(() => defineSkill(skillDefinition)).to.throw(
+      expect(() => defineSkill(skillDefinition as any)).to.throw(
         UnsupportedSchemaError
       );
     });
@@ -176,13 +185,12 @@ describe("Agent", () => {
     tags: ["utility"],
     examples: ["Echo hello"],
     inputSchema: z.object({ text: z.string() }),
-    outputPayloadSchema: z.object({ echoed: z.string() }),
-    handler: async (input) => ({
+    handler: async (input): Promise<Task> => ({
       id: "task-id",
       contextId: "echo-context",
       kind: "task",
       status: {
-        state: "completed",
+        state: "completed" as TaskState,
         message: {
           role: "agent",
           parts: [{ kind: "text", text: `Echoed: ${input.text}` }],
@@ -192,14 +200,23 @@ describe("Agent", () => {
         timestamp: new Date().toISOString(),
       },
     }),
+    tools: [dummyTool],
   });
 
   describe("Agent.create", () => {
     it("should create an agent with valid configuration", () => {
-      const manifest = {
+      const manifest: AgentConfig = {
         name: "Test Agent",
         version: "1.0.0",
         description: "A test agent",
+        url: "http://localhost:41241",
+        capabilities: {
+          streaming: false,
+          pushNotifications: false,
+          stateTransitionHistory: false,
+        },
+        defaultInputModes: ["application/json"],
+        defaultOutputModes: ["application/json"],
         skills: [testSkill],
       };
 
@@ -208,19 +225,27 @@ describe("Agent", () => {
       expect(agent.card.name).to.equal("Test Agent");
       expect(agent.card.version).to.equal("1.0.0");
       expect(agent.card.skills).to.have.length(1);
-      expect(agent.card.skills[0].name).to.equal("Echo Skill");
+      expect(agent.card.skills[0]!.name).to.equal("Echo Skill");
     });
 
     it("should convert SkillDefinition to AgentSkill with correct MIME types", () => {
-      const manifest = {
+      const manifest: AgentConfig = {
         name: "Test Agent",
         version: "1.0.0",
         description: "A test agent",
+        url: "http://localhost:41241",
+        capabilities: {
+          streaming: false,
+          pushNotifications: false,
+          stateTransitionHistory: false,
+        },
+        defaultInputModes: ["application/json"],
+        defaultOutputModes: ["application/json"],
         skills: [testSkill],
       };
 
       const agent = Agent.create(manifest);
-      const agentSkill = agent.card.skills[0];
+      const agentSkill = agent.card.skills[0]!;
 
       expect(agentSkill.id).to.equal("echo-skill");
       expect(agentSkill.name).to.equal("Echo Skill");
@@ -232,10 +257,18 @@ describe("Agent", () => {
     });
 
     it("should throw error for agent without skills", () => {
-      const manifest = {
+      const manifest: AgentConfig = {
         name: "Empty Agent",
         version: "1.0.0",
         description: "An agent with no skills",
+        url: "http://localhost:41241",
+        capabilities: {
+          streaming: false,
+          pushNotifications: false,
+          stateTransitionHistory: false,
+        },
+        defaultInputModes: ["application/json"],
+        defaultOutputModes: ["application/json"],
         skills: [],
       };
 
@@ -252,13 +285,12 @@ describe("Agent", () => {
         tags: ["utility", "text"],
         examples: ["Reverse hello"],
         inputSchema: z.object({ text: z.string() }),
-        outputPayloadSchema: z.object({ reversed: z.string() }),
-        handler: async (input) => ({
+        handler: async (input): Promise<Task> => ({
           id: "task-id-2",
           contextId: "reverse-context",
           kind: "task",
           status: {
-            state: "completed",
+            state: "completed" as TaskState,
             message: {
               role: "agent",
               parts: [
@@ -270,19 +302,28 @@ describe("Agent", () => {
             timestamp: new Date().toISOString(),
           },
         }),
+        tools: [dummyTool],
       });
 
-      const manifest = {
+      const manifest: AgentConfig = {
         name: "Multi-Skill Agent",
         version: "1.0.0",
         description: "An agent with multiple skills",
+        url: "http://localhost:41241",
+        capabilities: {
+          streaming: false,
+          pushNotifications: false,
+          stateTransitionHistory: false,
+        },
+        defaultInputModes: ["application/json"],
+        defaultOutputModes: ["application/json"],
         skills: [testSkill, secondSkill],
       };
 
       const agent = Agent.create(manifest);
       expect(agent.card.skills).to.have.length(2);
-      expect(agent.card.skills[0].name).to.equal("Echo Skill");
-      expect(agent.card.skills[1].name).to.equal("Reverse Skill");
+      expect(agent.card.skills[0]!.name).to.equal("Echo Skill");
+      expect(agent.card.skills[1]!.name).to.equal("Reverse Skill");
     });
   });
 
@@ -295,29 +336,36 @@ describe("Agent", () => {
         tags: ["text"],
         examples: ["Process text"],
         inputSchema: z.object({ data: z.string() }),
-        outputPayloadSchema: z.string(),
-        handler: async () => ({
-          id: "msg-id",
+        handler: async (): Promise<Message> => ({
           contextId: "string-context",
           kind: "message",
           role: "agent",
           parts: [{ kind: "text", text: "result" }],
           messageId: "msg-id",
         }),
+        tools: [dummyTool],
       });
 
-      const manifest = {
+      const manifest: AgentConfig = {
         name: "String Agent",
         version: "1.0.0",
         description: "An agent that works with strings",
+        url: "http://localhost:41241",
+        capabilities: {
+          streaming: false,
+          pushNotifications: false,
+          stateTransitionHistory: false,
+        },
+        defaultInputModes: ["application/json"],
+        defaultOutputModes: ["application/json"],
         skills: [stringSkill],
       };
 
       const agent = Agent.create(manifest);
-      const agentSkill = agent.card.skills[0];
+      const agentSkill = agent.card.skills[0]!;
 
       expect(agentSkill.inputModes).to.deep.equal(["application/json"]);
-      expect(agentSkill.outputModes).to.deep.equal(["text/plain"]);
+      expect(agentSkill.outputModes).to.deep.equal(["application/json"]);
     });
   });
 
@@ -330,13 +378,12 @@ describe("Agent", () => {
         tags: ["utility", "test", "example"],
         examples: ["Usage example 1", "Usage example 2", "Usage example 3"],
         inputSchema: z.object({ input: z.string() }),
-        outputPayloadSchema: z.object({ output: z.string() }),
-        handler: async (input) => ({
+        handler: async (input): Promise<Task> => ({
           id: "task-id",
           contextId: "multi-context",
           kind: "task",
           status: {
-            state: "completed",
+            state: "completed" as TaskState,
             message: {
               role: "agent",
               parts: [{ kind: "text", text: "Success" }],
@@ -346,12 +393,21 @@ describe("Agent", () => {
             timestamp: new Date().toISOString(),
           },
         }),
+        tools: [dummyTool],
       });
 
-      const manifest = {
+      const manifest: AgentConfig = {
         name: "Test Agent",
         version: "1.0.0",
         description: "A test agent",
+        url: "http://localhost:41241",
+        capabilities: {
+          streaming: false,
+          pushNotifications: false,
+          stateTransitionHistory: false,
+        },
+        defaultInputModes: ["application/json"],
+        defaultOutputModes: ["application/json"],
         skills: [testSkillWithMultiple],
       };
 
@@ -377,13 +433,12 @@ describe("Agent", () => {
         tags: ["utility"],
         examples: ["Single usage example"],
         inputSchema: z.object({ data: z.string() }),
-        outputPayloadSchema: z.object({ result: z.string() }),
-        handler: async (input) => ({
+        handler: async (input): Promise<Task> => ({
           id: "task-id",
           contextId: "single-context",
           kind: "task",
           status: {
-            state: "completed",
+            state: "completed" as TaskState,
             message: {
               role: "agent",
               parts: [{ kind: "text", text: "Success" }],
@@ -393,12 +448,21 @@ describe("Agent", () => {
             timestamp: new Date().toISOString(),
           },
         }),
+        tools: [dummyTool],
       });
 
-      const manifest = {
+      const manifest: AgentConfig = {
         name: "Single Meta Agent",
         version: "1.0.0",
         description: "An agent with single metadata",
+        url: "http://localhost:41241",
+        capabilities: {
+          streaming: false,
+          pushNotifications: false,
+          stateTransitionHistory: false,
+        },
+        defaultInputModes: ["application/json"],
+        defaultOutputModes: ["application/json"],
         skills: [singleMetaSkill],
       };
 
@@ -406,8 +470,8 @@ describe("Agent", () => {
       expect(agent).to.be.instanceOf(Agent);
 
       // Verify the skill was registered and the metadata is correctly structured
-      expect(agent.card.skills[0].tags).to.deep.equal(["utility"]);
-      expect(agent.card.skills[0].examples).to.deep.equal([
+      expect(agent.card.skills[0]!.tags).to.deep.equal(["utility"]);
+      expect(agent.card.skills[0]!.examples).to.deep.equal([
         "Single usage example",
       ]);
     });
@@ -420,13 +484,12 @@ describe("Agent", () => {
         tags: ["test"],
         examples: ["Test usage"],
         inputSchema: z.object({ value: z.string() }),
-        outputPayloadSchema: z.object({ processed: z.string() }),
-        handler: async (input) => ({
+        handler: async (input): Promise<Task> => ({
           id: "task-id",
           contextId: "id-name-context",
           kind: "task",
           status: {
-            state: "completed",
+            state: "completed" as TaskState,
             message: {
               role: "agent",
               parts: [{ kind: "text", text: "Processed" }],
@@ -436,17 +499,26 @@ describe("Agent", () => {
             timestamp: new Date().toISOString(),
           },
         }),
+        tools: [dummyTool],
       });
 
-      const manifest = {
+      const manifest: AgentConfig = {
         name: "ID Name Test Agent",
         version: "1.0.0",
         description: "Testing ID vs name usage",
+        url: "http://localhost:41241",
+        capabilities: {
+          streaming: false,
+          pushNotifications: false,
+          stateTransitionHistory: false,
+        },
+        defaultInputModes: ["application/json"],
+        defaultOutputModes: ["application/json"],
         skills: [skillWithDifferentIdName],
       };
 
       const agent = Agent.create(manifest);
-      const agentSkill = agent.card.skills[0];
+      const agentSkill = agent.card.skills[0]!;
 
       // Verify that the AgentSkill uses the correct ID and name
       expect(agentSkill.id).to.equal("tool-id-123");

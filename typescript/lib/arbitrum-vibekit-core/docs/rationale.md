@@ -196,4 +196,382 @@
 
 ---
 
+## Dynamic Tool Discovery & Adapter Application
+
+- **Decision:** Adapters and hooks for external MCP tools must be applied _after_ runtime discovery, not at compile time, since remote tool definitions (names, schemas) are only available after a `tools/list` handshake.
+- **Rationale:** Enables the framework to support arbitrary, previously-unknown tools from any MCP server, while still allowing developers to inject business logic, validation, or cross-cutting concerns (e.g., logging, paywall) via adapters and hooks. Allows wildcard/generic decorators to be applied to all tools, and supports hot-reloading if the remote tool list changes.
+- **Reference:** Scratchpad §Dynamic Adapter Strategy, §Key Challenges
+
+---
+
+## withHooks as the Standard Hook/Adapter Utility
+
+- **Decision:** The framework provides a single, composable utility (`withHooks`) to wrap any ToolDefinition (local or remote) with before/after hooks, ensuring a uniform extension point for all tool logic.
+- **Rationale:** Simplifies the mental model for developers: all tool customization (normalization, logging, access control, etc.) uses the same API, regardless of whether the tool is local, remote, or dynamically discovered. Enables ergonomic composition and layering of adapters.
+- **Reference:** Scratchpad §Key Challenges, §Lessons
+
+---
+
+## Registry Replacement Semantics
+
+- **Decision:** When an adapter is applied to a tool, the registry replaces the original proxy entry (same name) so only the adapted version is exposed to the LLM. Aliasing and coexistence are not the default.
+- **Rationale:** Prevents confusion, duplication, and accidental exposure of unadapted tools. Ensures that only the intended, safe, and decorated logic is available for orchestration.
+- **Reference:** Scratchpad §Notes on Adapters vs. Original Tools
+
+---
+
+## Single Manifest for Tool Exposure
+
+- **Decision:** Junior developers configure all tools (local and remote, with adaptation rules) in a single manifest object (e.g., `defineTools`). The framework handles registry creation, remote discovery, adaptation, and LLM exposure internally.
+- **Rationale:** Reduces cognitive load and boilerplate for new contributors. Mirrors the existing skill declaration pattern, making it easy to onboard and maintain. Ensures a single source of truth for all tool exposure.
+- **Reference:** Scratchpad §Simplified Developer Surface
+
+---
+
+## Runtime Schema Conversion for Remote Tools
+
+- **Decision:** Remote tool input schemas (JSON Schema) are converted to Zod schemas at runtime for validation and type safety in the local framework.
+- **Rationale:** Ensures that all tool invocations—local or remote—benefit from the same validation, error handling, and developer ergonomics, even when the tool's schema is not known until runtime.
+- **Reference:** Scratchpad §Dynamic Adapter Strategy, §Key Challenges
+
+---
+
+## Skills vs Tools Distinction
+
+- **Decision:** Skills are the externally exposed interface of the agent (as MCP tools or an A2A endpoint), while Tools are the internal, orchestratable units of business logic the agent uses to fulfill skills.
+- **Rationale:** This separation prevents recursive confusion, clarifies the agent's architecture, and allows the agent to orchestrate complex workflows internally while exposing a clean, stable interface to the outside world. Skills are what the world sees; tools are what the agent uses.
+- **Reference:** Scratchpad, lessons, and framework design docs.
+
+## MCP-First, A2A-Ready Strategy
+
+- **Decision:** The framework exposes agents as MCP servers first, using A2A Task/Message structures internally, with direct A2A protocol support planned for a future release.
+- **Rationale:** MCP is widely adopted and compatible with major LLM clients today, enabling immediate utility. Using A2A structures internally future-proofs the framework for richer async, streaming, and agent-to-agent workflows as the ecosystem matures. This staged approach maximizes compatibility and minimizes risk.
+- **Reference:** Scratchpad, MCP/A2A docs, project roadmap.
+
+## Agent as Orchestrator (Middleman)
+
+- **Decision:** The agent is responsible for interpreting incoming skill requests and orchestrating internal tools to accomplish the requested task, rather than simply forwarding calls.
+- **Rationale:** This centralizes business logic, enables complex workflows, and allows the agent to mediate between external requests and internal capabilities. The agent is the 'brain' that decides how to fulfill a skill using its available tools, state, and logic.
+- **Reference:** Scratchpad, lessons, rationale discussions.
+
+## Stateless v1, State in Future Releases
+
+- **Decision:** The initial release is stateless, with a simple context object passed through orchestration. Persistent task state, memory, and conversation history will be added in future releases.
+- **Rationale:** Starting stateless keeps the framework simple and easy to reason about, enabling rapid iteration and feedback. State management is deferred to avoid premature complexity and to learn from real usage patterns.
+- **Reference:** Lessons, scratchpad, incremental roadmap.
+
+## Streaming Deferred for Simplicity
+
+- **Decision:** Streaming (SSE, chunked responses, etc.) is not implemented in the initial release, but is planned for future versions.
+- **Rationale:** Streaming adds significant complexity to both the protocol and implementation. By starting with synchronous, single-response flows, the framework can deliver value quickly and layer on streaming once the core is stable.
+- **Reference:** Scratchpad, lessons, roadmap.
+
+## Web3 as Core, Not Optional
+
+- **Decision:** Web3 capabilities (delegation, unsigned txs, etc.) are first-class in the framework, not an optional add-on. However, these capabilities are decoupled from the core agent logic by being provided through separate MCP servers.
+- **Rationale:** The primary value proposition is making it easy to build Web3 AI agents. By baking Web3 support into the ecosystem via MCP servers, the framework ensures that all agents can leverage these features out of the box, while keeping the core agent logic clean and extensible for non-Web3 use cases. This decoupling allows the agent to orchestrate Web3 actions through MCP interfaces, supporting both Web3 and non-Web3 agents with minimal friction.
+- **Reference:** Scratchpad, lessons, rationale discussions.
+
+## Incremental Protocol Adoption & Evolution
+
+- **Decision:** The framework is designed to evolve incrementally: start with MCP exposure, add orchestration and internal tool registry, then state, streaming, and direct A2A support.
+- **Rationale:** This staged approach allows for rapid delivery of value, continuous feedback, and manageable complexity. Each step is chosen to maximize compatibility, developer experience, and future extensibility.
+- **Reference:** Scratchpad, roadmap, rationale discussions.
+
+## LLM Integration Before Tool Registry
+
+- **Decision:** LLM integration and reasoning engine (v2) must be implemented before advanced tool registry and adapters (v3).
+- **Rationale:** Without the LLM reasoning engine, the agent cannot interpret skill requests or decide which tools to use. The MCP server from v1 is just an empty interface without the "brain" to process requests. Once basic LLM integration works, we can layer on sophisticated tool management, adapters, and dynamic discovery.
+- **Reference:** Release plan restructuring, architectural dependencies.
+
+## Implementation Details for Future Releases 🚀
+
+Based on the scratchpad vision, here are the key implementation details planned for v2 and beyond:
+
+### v2: LLM Integration & Reasoning Engine
+
+- **Decision:** Implement the LLM integration and reasoning engine that interprets skill requests and coordinates execution.
+- **Rationale:** Provides the essential "brain" that makes the agent functional, enabling it to understand requests and decide how to fulfill them using available tools.
+- **Components:**
+  - LLM integration using dependency injection (any Vercel AI SDK compatible model)
+  - Basic tool abstraction for internal business logic
+  - Context object for per-request data flow
+  - Simple conversation flow (single-turn initially)
+  - Request interpretation and tool selection logic
+
+### v3: Tool Abstraction & Registry
+
+- **Decision:** Every meaningful action must be implemented as a tool (local or adapter). Remote tools are surfaced through generated proxy stubs.
+- **Rationale:** Provides a uniform interface for all agent capabilities, whether local business logic or remote MCP server calls.
+- **Implementation:**
+  - Local tools: Direct `ToolDefinition` objects with execute functions
+  - Remote tools: Runtime proxy generation from `tools/list` with Zod schema conversion
+  - Registry with O(1) lookup and replacement semantics (adapters replace originals)
+
+### v3: Dynamic Adapter Strategy
+
+- **Decision:** Four-phase process for runtime tool discovery and adaptation.
+- **Rationale:** Enables adapters/hooks on tools discovered only at runtime, not compile time.
+- **Phases:**
+  1. **Discovery**: `registry.registerRemote(client)` fetches tool list
+  2. **Matching**: Compare tool names against developer-supplied adapter config
+  3. **Application**: Apply adapters/hooks, replacing original tools
+  4. **Exposure**: Orchestrator uses final adapted tools
+
+### v3: Simplified Developer Surface
+
+- **Decision:** Single `defineTools()` manifest for all tool configuration.
+- **Rationale:** Reduces cognitive load—one place to declare local tools, remote servers, and adaptation rules.
+- **Example Structure:**
+  ```typescript
+  export const toolManifest = defineTools({
+    local: [supply, withdraw],
+    remote: [
+      connectMcp("aave.server", {
+        adapt: {
+          borrow: borrowAdapter,
+          "*": withLogging,
+        },
+      }),
+    ],
+  });
+  ```
+
+### v3: Hook System
+
+- **Decision:** Standalone `withHooks(tool, {before?, after?})` utility for composable tool enhancement.
+- **Rationale:** Simpler than middleware, works uniformly for local and remote tools, enables clean composition.
+- **Note:** This differs from the file-local hooks mentioned in lessons—it's a wrapper pattern, not export-based.
+
+### v4: Stateful Conversation Management
+
+- **Decision:** Add persistent task state, memory, and conversation history management.
+- **Rationale:** Enables multi-turn conversations, long-running tasks, and resumable workflows.
+- **Components:**
+  - Conversation history management (built on task state)
+  - Per-task memory and context persistence
+  - Task store abstraction (in-memory, file, etc.)
+  - Multi-turn conversation flow
+
+### Task Breakdown Mapping
+
+From scratchpad to release plan:
+
+- ✅ v1: MCP server exposure, basic skill handling
+- 🧠 v2: LLM integration, reasoning engine, basic tools
+- 🔧 v3: Tool registry, remote proxy building, hook system, adapters
+- 💾 v4: Conversation history, state management, multi-turn
+- 🌊 v5: Streaming support throughout
+- 🤝 v6: Direct A2A transport, multi-agent coordination
+
+## Direct OpenRouter Integration (v2)
+
+- **Decision:** Use OpenRouter directly from `@openrouter/ai-sdk-provider` without custom LLMProvider abstraction.
+- **Rationale:** Keeps v2 implementation simple and aligned with the working reference implementation (lending-agent-no-wallet). Avoids premature abstraction and reduces complexity for initial orchestration implementation.
+- **Implementation:**
+  ```typescript
+  import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+  const openrouter = createOpenRouter({
+    apiKey: process.env.OPENROUTER_API_KEY,
+  });
+  // Use directly in generateText/streamText
+  ```
+- **Reference:** lending-agent-no-wallet implementation pattern
+
+## Dependency Injection for Language Models (v2)
+
+- **Decision:** Use dependency injection to pass any Vercel AI SDK compatible model instance to the agent, rather than hardcoding OpenRouter.
+- **Rationale:** Even though v2 uses OpenRouter, this pattern keeps the agent provider-agnostic. Users can pass any compatible model (OpenAI, Anthropic, etc.), making the framework more flexible without adding complexity. Follows Vercel AI SDK design patterns.
+- **Implementation:**
+  ```typescript
+  interface AgentRuntimeOptions {
+    llm?: {
+      model: LanguageModel; // Any Vercel AI SDK model instance
+      systemPrompt?: string;
+      tools?: Array<ReturnType<typeof tool>>;
+    };
+  }
+  ```
+
+## LLM Configuration Naming (v2)
+
+- **Decision:** Name the language model configuration `llm` instead of `orchestration`.
+- **Rationale:** "LLM" is clear, direct, and accurately describes what's being configured. The term "orchestration" is too narrow—this config handles the entire language model runtime including reasoning, tool usage, and response generation. Aligns with Karpathy's LLM OS concept where the LLM is the kernel.
+- **Reference:** Industry standard terminology, LLM OS concepts
+
+## Key Patterns from lending-agent-no-wallet for v2
+
+- **Decision:** Adopt proven patterns from the reference implementation to accelerate v2 development.
+- **Rationale:** The lending-agent-no-wallet provides battle-tested patterns for LLM integration, tool handling, and A2A response generation.
+- **Key Patterns:**
+  1. **Tool Result Extraction**: Look for `tool-result` parts in response messages that contain Task objects
+  2. **System Prompt with Examples**: Include concrete `<examples>` in system prompt to guide LLM behavior
+  3. **HandlerContext Pattern**: Pass request-specific context (user address, etc.) to tool handlers
+  4. **Debug Logging**: Use `console.error` for all debug output to keep stdout clean
+  5. **onStepFinish Callback**: Track multi-step execution progress
+  6. **Stateless Conversation History**: Clear history when tasks complete to prevent context bleed
+  7. **Type-Safe Tool Sets**: Define typed interfaces for tool collections
+  8. **Fallback Text Responses**: Always return valid A2A Task/Message even when no tool is called
+  9. **Task State Mapping**: Use appropriate A2A task states ('completed', 'failed', 'input-required')
+  10. **Structured Artifacts**: Return transaction plans and other data as typed artifacts
+- **Reference:** lending-agent-no-wallet implementation
+
+## Global LLM vs Per-Skill LLM Configuration (v2)
+
+- **Decision:** Use a single global LLM configuration for all skills in v2, with automatic skill-specific system prompt generation.
+- **Rationale:**
+  - **Architectural clarity**: The LLM doesn't choose which skill to execute - that's already determined by the MCP tool call
+  - **Focused orchestration**: Each skill handler gets a prompt specific to its purpose and available internal tools
+  - **Simplicity**: One LLM instance, but with context-aware prompts per skill
+  - **Stateless design**: Each skill invocation is independent with its own conversation context
+  - **Example reuse**: Skill examples guide the LLM on expected behavior for that specific skill
+- **Implementation:**
+  - When a skill is called via MCP, its handler creates a skill-specific system prompt
+  - The prompt includes the skill's description, examples, and available internal tools
+  - Each request is stateless - no conversation history persists between calls
+- **Key insight:** The LLM's role is to orchestrate internal tools to fulfill a specific skill, not to route between skills
+- **Future consideration:** Per-skill LLM models (not just prompts) could be added in v7+ for optimization
+- **Reference:** User feedback on architecture, MCP tool invocation flow
+
+## LLM as Skill Fulfiller, Not Skill Selector (v2)
+
+- **Decision:** The LLM orchestrates internal tools to fulfill a specific skill, rather than choosing between skills.
+- **Rationale:**
+  - **Architecture alignment**: MCP tool invocation already determines which skill is being called
+  - **Clearer responsibility**: The LLM focuses on HOW to accomplish the skill, not WHICH skill to use
+  - **Better prompting**: Skill-specific prompts can be more focused and effective
+  - **Reduced complexity**: No need for the LLM to understand the entire skill catalog
+  - **Natural flow**: Client → MCP tool → Skill handler → LLM orchestration → Internal tools
+- **Implementation:** Each skill handler creates its own LLM context with skill-specific prompts
+- **Implications:**
+  - System prompts are generated per-skill, not globally
+  - Each skill invocation is stateless and independent
+  - The LLM only needs to know about internal tools, not other skills
+- **Reference:** User clarification about MCP tool routing, architectural analysis
+
+## Tool Visibility in LLM System Prompts (v2)
+
+- **Decision:** Tools are passed to LLMs through the Vercel AI SDK's native tool-calling interface.
+- **Rationale:**
+  - **SDK Mechanism**: Vercel AI SDK passes tools to the LLM's function/tool calling API, not by adding them to the system prompt text
+  - **Modern LLM Design**: GPT-4, Claude, Gemini have dedicated tool APIs separate from the conversation
+- **Reference:** Vercel AI SDK documentation, modern LLM API patterns
+
+## Per-Skill Tool Configuration (v2)
+
+- **Decision:** Internal tools are configured per skill rather than globally, allowing each skill to have its own specific set of tools.
+- **Rationale:**
+  - **Skill Specificity**: Different skills need different tools (e.g., lending vs. trading vs. analytics)
+  - **Security**: Limits tool access to only what's needed for each skill
+  - **Clarity**: Makes it explicit which tools are available for which skills
+  - **Maintainability**: Easier to understand and modify skill-specific functionality
+  - **Prevents Confusion**: LLM only sees relevant tools for the current skill
+- **Implementation:**
+  - Tools are defined directly on the `SkillDefinition` interface
+  - Each skill handler receives only its associated tools
+  - Tools are created using Vercel AI SDK's `tool` function with Zod schemas
+- **Reference:** User feedback on skill-tool association, security best practices
+
+## Tools Required on Skills (v2)
+
+- **Decision:** Make `tools` a required property on SkillDefinition with at least one tool.
+- **Rationale:**
+  - **No Business Logic Without Tools**: A skill without tools can't actually execute any business logic in the LLM-powered v2
+  - **Explicit Dependencies**: Makes it clear what capabilities each skill has
+  - **Prevents Empty Skills**: Enforces that skills are functional, not just descriptive
+  - **Simplifies Configuration**: Skills are self-contained with their tools, no separate runtime mapping needed
+- **Implementation:** `defineSkill` validates that at least one tool is provided
+- **Reference:** User feedback on simplicity, architectural clarity
+
+## Simplified Tool Visibility in System Prompts (v2)
+
+- **Decision:** Do not manually list tools in system prompts; rely on Vercel AI SDK's native tool-calling mechanism.
+- **Rationale:**
+  - **SDK Handles It**: Vercel AI SDK passes tools to the LLM through the proper API channels
+  - **Avoid Redundancy**: No need to duplicate tool information that's already provided
+  - **Simpler Prompts**: Focus prompts on skill context and examples, not implementation details
+  - **Flexibility**: LLMs automatically see updated tool descriptions if they change
+- **Implementation:** System prompts only include skill description, tags, and examples
+- **Reference:** User feedback on keeping things simple, Vercel AI SDK best practices
+
+## LLM-First with Optional Manual Handlers (v2)
+
+- **Decision:** Make skill handlers optional, with LLM orchestration as the default behavior. Manual handlers become an escape hatch for bypassing the LLM.
+- **Rationale:**
+  - **Aligns with v2 Goal**: v2's primary purpose is adding LLM orchestration
+  - **Reduces Boilerplate**: No need for placeholder handlers that just defer to LLM
+  - **Clear Intent**: Handler presence explicitly signals custom logic is needed
+  - **A2A Compliance**: Supports "opaque execution" - how a skill fulfills its contract is internal
+  - **Mixed Usage**: Allows both LLM and manual skills in the same agent
+- **Implementation:** MCP tool registration checks for handler presence; if absent, uses LLM orchestration
+- **Reference:** User feedback on architecture, A2A opaque execution principle
+
+## Minimal Context Management for v2 (v2)
+
+- **Decision:** Implement a simple `AgentContext` interface with just a `custom` property for v2, deferring more sophisticated context features to future releases.
+- **Rationale:**
+  - **Simplicity First**: Avoids over-engineering for unknown requirements
+  - **Real Use Case**: Addresses immediate need for tokenMap and similar data
+  - **Easy to Extend**: Simple interface can grow as needs become clear
+  - **Clear Separation**: Tools remain stateless, receiving but not managing context
+  - **Prevents Complexity**: No lifecycle hooks, logging, or metadata in v2
+- **Implementation:** `AgentContext<TCustom = any> { custom: TCustom }`
+- **Reference:** User feedback on tokenMap use case, YAGNI principle
+
+## Context Loading in start() Method (v2)
+
+- **Decision:** Load context data during the `start()` method rather than `create()`, using an optional context provider function.
+- **Rationale:**
+  - **Async-Friendly**: Context loading often involves async operations (file I/O, network calls)
+  - **Keeps create() Simple**: Factory method remains synchronous and fast
+  - **Clear Lifecycle**: Context is part of runtime startup, not configuration
+  - **Optional**: Agents without context needs can omit the provider
+  - **Testable**: Easy to provide mock context in tests
+- **Implementation:** `start(port: number, contextProvider?: () => Promise<TContext> | TContext)`
+- **Reference:** lending-agent-no-wallet pattern, user feedback on startup sequence
+
+## VibkitToolDefinition with Context Support (v2)
+
+- **Decision:** Create our own `VibkitToolDefinition` interface that includes context as a second parameter to the execute function.
+- **Rationale:**
+  - **Vercel AI SDK Limitation**: SDK's tool function doesn't support context injection
+  - **Stateless Tools**: Tools receive context but don't store it
+  - **Type Safety**: Strongly typed context parameter for better DX
+  - **Conversion Layer**: Agent converts Vibkit tools to SDK tools with context injection
+  - **Flexibility**: Allows tools to access agent-scoped data like tokenMap
+- **Implementation:** Tools have signature `execute: (args, context) => Promise<Task | Message>`
+- **Reference:** User feedback on context requirements, adapter pattern
+
+## Tools Required on Skills, Handler Optional (v2)
+
+- **Decision:** Reverse the v1 requirement - skills must have tools but handlers are optional.
+- **Rationale:**
+  - **LLM Needs Tools**: Without tools, LLM orchestration can't do anything useful
+  - **Enforces Functionality**: Prevents empty skills that can't execute business logic
+  - **Clear Dependencies**: Makes tool requirements explicit at skill definition
+  - **Validation**: `defineSkill` validates at least one tool exists
+  - **Manual Override**: Handler presence bypasses LLM for specific cases
+- **Implementation:** Update SkillDefinition interface and validation logic
+- **Reference:** LLM-first architecture, user feedback on simplicity
+
+## Agent Class Generics for Enhanced Type Safety (v2)
+
+- **Decision**: The `Agent` class was made generic: `Agent<TSkillsArray extends SkillDefinition<any, TContext>[], TContext = any>`. This allows the specific types of the skills array and the custom context to be captured and enforced by the TypeScript compiler.
+- **Rationale**:
+  - **Improved Type Safety**: Provides strong typing for the agent's configuration, skills, and the context object passed to tools. This helps catch errors at compile-time rather than runtime.
+  - **Developer Experience**: Enhances autocompletion and type inference for developers using or extending the `Agent` class, making it easier to understand what context and tool arguments are expected.
+  - **Consistency**: Ensures that the types used in `SkillDefinition`, `VibkitToolDefinition`, and `AgentContext` are consistently applied and checked throughout the agent's implementation and usage.
+  - **Maintainability**: Makes the codebase easier to refactor and maintain, as type relationships are explicit.
+- **Reference**: `agent.ts` (`Agent` class definition), `scratchpad.md` (v2 implementation summary).
+
+---
+
+## Vercel AI SDK Tool Formatting for `generateText` (v2)
+
+- **Decision**: When passing tools to Vercel AI SDK's `generateText` function, they are transformed internally into an object. In this object, keys are unique tool names, and values are the SDK-compatible tool definitions (including `description`, `parameters`, and an `execute` function that handles context injection).
+- **Rationale**: This specific object-based format is a requirement of the Vercel AI SDK's `generateText` tool-calling API. Adhering to this structure is essential for the LLM to correctly recognize, interpret, and invoke the tools provided during its orchestration process. This ensures seamless integration with the SDK's tool-using capabilities. The framework handles this transformation from the array of `VibkitToolDefinition` (defined on a skill) to the required object format, abstracting this detail from the developer.
+- **Reference**: `agent.ts` (within `createSkillHandler` method), Vercel AI SDK documentation.
+
+---
+
 _This document is a living log. Please append new rationale entries as further decisions are made._

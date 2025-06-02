@@ -5,13 +5,72 @@ settings:
   excludeLinksFromLockfile: false
   injectWorkspacePackages: true
 
+overrides:
+  zod: ^3.24.3
+
 importers:
 
   .:
+    dependencies:
+      zod:
+        specifier: ^3.24.3
+        version: 3.24.3
     devDependencies:
       typescript:
         specifier: ^5.8.3
         version: 5.8.3
+
+  examples/lending-agent-framework:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.5.0
+        version: 1.11.1
+      '@openrouter/ai-sdk-provider':
+        specifier: ^0.4.5
+        version: 0.4.5(zod@3.24.3)
+      '@openzeppelin/contracts':
+        specifier: ^5.3.0
+        version: 5.3.0
+      ai:
+        specifier: ^4.3.2
+        version: 4.3.9(react@19.1.0)(zod@3.24.3)
+      arbitrum-vibekit-core:
+        specifier: workspace:*
+        version: link:../../lib/arbitrum-vibekit-core
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.5
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
+      ember-mcp-tool-server:
+        specifier: workspace:*
+        version: file:lib/mcp-tools/emberai-mcp
+      express:
+        specifier: ^4.21.2
+        version: 4.21.2
+      viem:
+        specifier: ^2.26.3
+        version: 2.27.2(typescript@5.8.3)(zod@3.24.3)
+    devDependencies:
+      '@types/cors':
+        specifier: ^2.8.17
+        version: 2.8.17
+      '@types/express':
+        specifier: ^5.0.0
+        version: 5.0.2
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.17.30
+      cpx:
+        specifier: ^1.5.0
+        version: 1.5.0
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      tsx:
+        specifier: ^4.6.2
+        version: 4.19.4
 
   examples/lending-agent-no-wallet:
     dependencies:
@@ -26,7 +85,7 @@ importers:
         version: 5.3.0
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(ws@8.18.1)(zod@3.24.3)
+        version: file:lib/a2a(zod@3.24.3)
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
@@ -49,7 +108,7 @@ importers:
         specifier: ^2.26.3
         version: 2.27.2(typescript@5.8.3)(zod@3.24.3)
       zod:
-        specifier: ^3.22.4
+        specifier: ^3.24.3
         version: 3.24.3
     devDependencies:
       '@types/cors':
@@ -84,7 +143,7 @@ importers:
         version: 5.3.0
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(ws@8.18.1)(zod@3.24.3)
+        version: file:lib/a2a(zod@3.24.3)
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
@@ -107,7 +166,7 @@ importers:
         specifier: ^2.26.3
         version: 2.27.2(typescript@5.8.3)(zod@3.24.3)
       zod:
-        specifier: ^3.22.4
+        specifier: ^3.24.3
         version: 3.24.3
     devDependencies:
       '@types/cors':
@@ -139,7 +198,7 @@ importers:
         version: 0.4.5(zod@3.24.3)
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(ws@8.18.1)(zod@3.24.3)
+        version: file:lib/a2a(zod@3.24.3)
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
@@ -162,7 +221,7 @@ importers:
         specifier: ^2.26.3
         version: 2.27.2(typescript@5.8.3)(zod@3.24.3)
       zod:
-        specifier: ^3.22.4
+        specifier: ^3.24.3
         version: 3.24.3
     devDependencies:
       '@types/cors':
@@ -200,7 +259,7 @@ importers:
         version: 5.3.0
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(ws@8.18.1)(zod@3.24.3)
+        version: file:lib/a2a(zod@3.24.3)
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
@@ -223,7 +282,7 @@ importers:
         specifier: ^2.26.3
         version: 2.27.2(typescript@5.8.3)(zod@3.24.3)
       zod:
-        specifier: ^3.22.4
+        specifier: ^3.24.3
         version: 3.24.3
     devDependencies:
       '@types/cors':
@@ -261,7 +320,7 @@ importers:
         version: 5.3.0
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(ws@8.18.1)(zod@3.24.3)
+        version: file:lib/a2a(zod@3.24.3)
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
@@ -284,7 +343,7 @@ importers:
         specifier: ^2.26.3
         version: 2.27.2(typescript@5.8.3)(zod@3.24.3)
       zod:
-        specifier: ^3.22.4
+        specifier: ^3.24.3
         version: 3.24.3
     devDependencies:
       '@types/cors':
@@ -344,25 +403,28 @@ importers:
     dependencies:
       '@google-a2a/types':
         specifier: github:google-a2a/A2A#path:types
-        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/8ba550f5251994424c1cd9f053a6754410d74bb5#path:types
+        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/fd7044e7f22831ff42b08d1341ebf15fc8bf51fe#path:types
       '@modelcontextprotocol/sdk':
         specifier: ^1.11.1
         version: 1.11.1
+      ai:
+        specifier: ^4.3.2
+        version: 4.3.9(react@19.1.0)(zod@3.24.3)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
       ember-mcp-tool-server:
         specifier: workspace:*
         version: file:lib/mcp-tools/emberai-mcp
+      escape-html:
+        specifier: ^1.0.3
+        version: 1.0.3
       express:
         specifier: ^5.1.0
         version: 5.1.0
       nanoid:
         specifier: ^5.0.7
         version: 5.1.5
-      zod:
-        specifier: ^3.24.3
-        version: 3.24.3
     devDependencies:
       '@types/chai':
         specifier: ^5.2.1
@@ -370,21 +432,36 @@ importers:
       '@types/cors':
         specifier: ^2.8.17
         version: 2.8.17
+      '@types/escape-html':
+        specifier: ^1.0.4
+        version: 1.0.4
       '@types/express':
         specifier: ^5.0.2
         version: 5.0.2
       '@types/mocha':
         specifier: ^10.0.10
         version: 10.0.10
+      '@types/sinon':
+        specifier: ^17.0.4
+        version: 17.0.4
       chai:
         specifier: ^5.2.0
         version: 5.2.0
       mocha:
         specifier: ^11.1.0
         version: 11.1.0
+      sinon:
+        specifier: ^20.0.0
+        version: 20.0.0
+      tsx:
+        specifier: ^4.19.4
+        version: 4.19.4
       typescript:
         specifier: ^5.8.3
         version: 5.8.3
+      zod:
+        specifier: ^3.24.3
+        version: 3.24.3
 
   lib/mcp-tools/allora-mcp-server:
     dependencies:
@@ -419,7 +496,7 @@ importers:
         specifier: ^5.8.2
         version: 5.8.3
       zod:
-        specifier: ^3.24.2
+        specifier: ^3.24.3
         version: 3.24.3
     devDependencies:
       tsx:
@@ -438,7 +515,7 @@ importers:
         specifier: ^1.9.0
         version: 1.10.0
       zod:
-        specifier: ^3.24.2
+        specifier: ^3.24.3
         version: 3.24.3
     devDependencies:
       '@types/chai':
@@ -478,7 +555,7 @@ packages:
     resolution: {integrity: sha512-4GZ8GHjOFxePFzkl3q42AU0DQOtTQ5w09vmaWUf/pKFXJPizlnzKSUkF0f+VkapIUfDugyMqPMT1ge8XQzVI7Q==}
     engines: {node: '>=18'}
     peerDependencies:
-      zod: ^3.0.0
+      zod: ^3.24.3
     peerDependenciesMeta:
       zod:
         optional: true
@@ -487,7 +564,7 @@ packages:
     resolution: {integrity: sha512-kM0xS3GWg3aMChh9zfeM+80vEZfXzR3JEUBdycZLtbRZ2TRT8xOj3WodGHPb06sUK5yD7pAXC/P7ctsi2fvUGQ==}
     engines: {node: '>=18'}
     peerDependencies:
-      zod: ^3.23.8
+      zod: ^3.24.3
 
   '@ai-sdk/provider@1.0.9':
     resolution: {integrity: sha512-jie6ZJT2ZR0uVOVCDc9R2xCX5I/Dum/wEK28lx21PJx6ZnFAN9EzD2WsPhcDWfCgGx3OAZZ0GyM3CEobXpa9LA==}
@@ -502,7 +579,7 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       react: ^18 || ^19 || ^19.0.0-rc
-      zod: ^3.23.8
+      zod: ^3.24.3
     peerDependenciesMeta:
       zod:
         optional: true
@@ -511,7 +588,7 @@ packages:
     resolution: {integrity: sha512-nls/IJCY+ks3Uj6G/agNhXqQeLVqhNfoJbuNgCny+nX2veY5ADB91EcZUqVeQ/ionul2SeUswPY6Q/DxteY29Q==}
     engines: {node: '>=18'}
     peerDependencies:
-      zod: ^3.23.8
+      zod: ^3.24.3
 
   '@alloralabs/allora-sdk@0.1.1':
     resolution: {integrity: sha512-43+Psr16UY+xh7MWn/lZyHTQiOkn0GlKtsfj9IynfCFW3jac8R3WoP6GaIqyErmeTIBq48rURZ7KFfSiRrmNTA==}
@@ -808,7 +885,7 @@ packages:
   '@mistralai/mistralai-gcp@1.5.0':
     resolution: {integrity: sha512-KUv4GziIN8do4gmPe7T85gpYW1o2Q89e0hs8PQfZhFRMYz7uYPwxHyVI5UaxWlHFcmAvyxfaOAH0OuCC38Hb6g==}
     peerDependencies:
-      zod: '>= 3'
+      zod: ^3.24.3
 
   '@modelcontextprotocol/sdk@1.10.0':
     resolution: {integrity: sha512-wijOavYZfSOADbVM0LA7mrQ17N4IKNdFcfezknCCsZ1Y1KstVWlkDZ5ebcxuQJmqTTxsNjBHLc7it1SV0TBiPg==}
@@ -830,7 +907,7 @@ packages:
     resolution: {integrity: sha512-gbCOcSjNhyWlLHyYZX2rIFnpJi3C2RXNyyzJj+d6pMRfTS/mdvEEOsU66KxK9H8Qju2i9YRLOn/FdQT26K7bIQ==}
     engines: {node: '>=18'}
     peerDependencies:
-      zod: ^3.0.0
+      zod: ^3.24.3
 
   '@opentelemetry/api-logs@0.52.1':
     resolution: {integrity: sha512-qnSqB2DQ9TPP96dl8cDubDvrUyWc0/sK81xHTK8eSUspzDM3bsewX903qclQFvVhgStjRWdC5bLb3kQqMkfV5A==}
@@ -1032,6 +1109,15 @@ packages:
   '@scure/bip39@1.5.4':
     resolution: {integrity: sha512-TFM4ni0vKvCfBpohoh+/lY05i9gRbSwXWngAsF4CABQxoaOHijxuaZ2R6cStDQ5CHtHO9aGJTr4ksVJASRRyMA==}
 
+  '@sinonjs/commons@3.0.1':
+    resolution: {integrity: sha512-K3mCHKQ9sVh8o1C9cxkwxaOmXoAMlDxC1mYyHrjqOWEcBjYr76t96zL2zlj5dUGZ3HSw240X1qgH3Mjf1yJWpQ==}
+
+  '@sinonjs/fake-timers@13.0.5':
+    resolution: {integrity: sha512-36/hTbH2uaWuGVERyC6da9YwGWnzUZXuPro/F2LfsdOsLnCojz/iSH8MxUt/FD2S5XBSVPhmArFUXcpCQ2Hkiw==}
+
+  '@sinonjs/samsam@8.0.2':
+    resolution: {integrity: sha512-v46t/fwnhejRSFTGqbpn9u+LQ9xJDse10gNnPgAcxgdoCDMXj/G2asWAC/8Qs+BAZDicX+MNZouXT1A7c83kVw==}
+
   '@tootallnate/once@2.0.0':
     resolution: {integrity: sha512-XCuKFP5PS55gnMVu3dty8KPatLqUoy/ZYzDzAGCQ8JNFCkLXzmI7vNHCR+XpbZaMWQK/vQubr7PkYq8g470J/A==}
     engines: {node: '>= 10'}
@@ -1068,6 +1154,9 @@ packages:
 
   '@types/diff-match-patch@1.0.36':
     resolution: {integrity: sha512-xFdR6tkm0MWvBfO8xXCSsinYxHcqkQUlcHeSpMC2ukzOb6lwQAfDmW+Qt0AvlGd8HpsS28qKsB+oPeJn9I39jg==}
+
+  '@types/escape-html@1.0.4':
+    resolution: {integrity: sha512-qZ72SFTgUAZ5a7Tj6kf2SHLetiH5S6f8G5frB2SPQ3EyF02kxdyBFf4Tz4banE3xCgGnKgWLt//a6VuYHKYJTg==}
 
   '@types/express-serve-static-core@4.19.6':
     resolution: {integrity: sha512-N4LZ2xG7DatVqhCZzOGb1Yi5lMbXSZcmdLDe9EzSndPV2HpWYWzRbaerl2n27irrm94EPpprqa8KpskPT085+A==}
@@ -1142,6 +1231,12 @@ packages:
   '@types/shimmer@1.2.0':
     resolution: {integrity: sha512-UE7oxhQLLd9gub6JKIAhDq06T0F6FnztwMNRvYgjeQSBeMc1ZG/tA47EwfduvkuQS8apbkM/lpLpWsaCeYsXVg==}
 
+  '@types/sinon@17.0.4':
+    resolution: {integrity: sha512-RHnIrhfPO3+tJT0s7cFaXGZvsL4bbR3/k7z3P312qMS4JaS2Tk+KiwiLx1S0rQ56ERj00u1/BtdyVd0FY+Pdew==}
+
+  '@types/sinonjs__fake-timers@8.1.5':
+    resolution: {integrity: sha512-mQkU2jY8jJEF7YHjHvsQO8+3ughTL1mcnn96igfhONmR+fUPSKIkefQYpSe8bsly2Ep7oQbn/6VG5/9/0qcArQ==}
+
   '@types/tough-cookie@4.0.5':
     resolution: {integrity: sha512-/Ad8+nIOV7Rl++6f1BdKxFSMgmoqEoYbHRpPcx3JEfv8VRsQe9Z4mCXeJBzxs7mbHY/XOZZuXlRNfhpVPbs6ZA==}
 
@@ -1152,7 +1247,7 @@ packages:
     resolution: {integrity: sha512-ZeiI6h3GnW06uYDLx0etQtX/p8E24UaHHBj57RSjK7YBFe7iuVn07EDpOeP451D06sF27VOz9JJPlIKJmXgkEg==}
     peerDependencies:
       typescript: '>=5.0.4'
-      zod: ^3 >=3.22.0
+      zod: ^3.24.3
     peerDependenciesMeta:
       typescript:
         optional: true
@@ -1202,7 +1297,7 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       react: ^18 || ^19 || ^19.0.0-rc
-      zod: ^3.23.8
+      zod: ^3.24.3
     peerDependenciesMeta:
       react:
         optional: true
@@ -1575,6 +1670,10 @@ packages:
 
   diff@5.2.0:
     resolution: {integrity: sha512-uIFDxqpRZGZ6ThOk84hEfqWoHx2devRFvpTZcTHur85vImfaxUbTW9Ryh4CpCuDnToOP1CEtXKIgytHBPVff5A==}
+    engines: {node: '>=0.3.1'}
+
+  diff@7.0.0:
+    resolution: {integrity: sha512-PJWHUb1RFevKCwaFA9RlG5tCd+FO5iRh9A8HEtkmBH2Li03iJriB6m6JIN4rGz3K3JLawI7/veA1xzRKP6ISBw==}
     engines: {node: '>=0.3.1'}
 
   dotenv@16.5.0:
@@ -2248,6 +2347,10 @@ packages:
   lodash.clonedeep@4.5.0:
     resolution: {integrity: sha512-H5ZhCF25riFd9uB5UCkVKo61m3S/xZk1x4wA6yp/L3RFP6Z/eHH1ymQcGLo7J3GMPfm0V/7m1tryHuGVxpqEBQ==}
 
+  lodash.get@4.4.2:
+    resolution: {integrity: sha512-z+Uw/vLuy6gQe8cfaFWD7p0wVv8fJl3mbzXh33RS+0oW2wvUqiRXiQ69gLWSLpgB5/6sU+r6BlQR0MBILadqTQ==}
+    deprecated: This package is deprecated. Use the optional chaining (?.) operator instead.
+
   lodash.includes@4.3.0:
     resolution: {integrity: sha512-W3Bx6mdkRTGtlJISOvVD/lbqjTlPPUDTMnlXZFnVwi9NKJ6tiAk6LVdlhZMm17VZisqhKcgzpO5Wz91PCt5b0w==}
 
@@ -2510,7 +2613,7 @@ packages:
     hasBin: true
     peerDependencies:
       ws: ^8.18.0
-      zod: ^3.23.8
+      zod: ^3.24.3
     peerDependenciesMeta:
       ws:
         optional: true
@@ -2827,6 +2930,9 @@ packages:
     resolution: {integrity: sha512-a2B9Y0KlNXl9u/vsW6sTIu9vGEpfKu2wRV6l1H3XEas/0gUIzGzBoP/IouTcUQbm9JWZLH3COxyn03TYlFax6w==}
     engines: {node: '>=10'}
 
+  sinon@20.0.0:
+    resolution: {integrity: sha512-+FXOAbdnj94AQIxH0w1v8gzNxkawVvNqE3jUzRLptR71Oykeu2RrQXXl/VQjKay+Qnh73fDt/oDfMo6xMeDQbQ==}
+
   snapdragon-node@2.1.1:
     resolution: {integrity: sha512-O27l4xaMYt/RSQ5TR3vpWCAB5Kb/czIcqUFOM/C4fYcLnbZUc1PkjTAMjof2pBWaSTwOUd6qUHcFGVGj7aIwnw==}
     engines: {node: '>=0.10.0'}
@@ -3000,6 +3106,14 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
+  type-detect@4.0.8:
+    resolution: {integrity: sha512-0fr/mIH1dlO+x7TlcMy+bIDqKPsw/70tVyeHW787goQjhmqaZe10uwLujubK9q9Lg6Fiho1KUKDYz0Z7k7g5/g==}
+    engines: {node: '>=4'}
+
+  type-detect@4.1.0:
+    resolution: {integrity: sha512-Acylog8/luQ8L7il+geoSxhEkazvkslg7PSNKOX59mbB9cOveP5aq9h74Y7YU8yDpJwetzQQrfIwtf4Wp4LKcw==}
+    engines: {node: '>=4'}
+
   type-is@1.6.18:
     resolution: {integrity: sha512-TkRKr9sUTxEH8MdfuCSP7VizJyzRNMjj2J2do2Jr3Kym598JVdEksuzPQCnlFPW4ky9Q+iA+ma9BGm06XQBy8g==}
     engines: {node: '>= 0.6'}
@@ -3008,8 +3122,8 @@ packages:
     resolution: {integrity: sha512-OZs6gsjF4vMp32qrCbiVSkrFmXtG/AZhY3t0iAMrMBiAZyV9oALtXO8hsrHbMXF9x6L3grlFuwW2oAz7cav+Gw==}
     engines: {node: '>= 0.6'}
 
-  types@https://codeload.github.com/google-a2a/A2A/tar.gz/8ba550f5251994424c1cd9f053a6754410d74bb5#path:types:
-    resolution: {path: types, tarball: https://codeload.github.com/google-a2a/A2A/tar.gz/8ba550f5251994424c1cd9f053a6754410d74bb5}
+  types@https://codeload.github.com/google-a2a/A2A/tar.gz/fd7044e7f22831ff42b08d1341ebf15fc8bf51fe#path:types:
+    resolution: {path: types, tarball: https://codeload.github.com/google-a2a/A2A/tar.gz/fd7044e7f22831ff42b08d1341ebf15fc8bf51fe}
     version: 1.0.0
 
   typescript-json-schema@0.65.1:
@@ -3200,7 +3314,7 @@ packages:
   zod-to-json-schema@3.24.5:
     resolution: {integrity: sha512-/AuWwMP+YqiPbsJx5D6TfgRTc4kTLjsh5SOcd4bLsfUg2RcEXrFMJl1DGgdHy2aCfsIA/cr/1JM0xcB2GZji8g==}
     peerDependencies:
-      zod: ^3.24.1
+      zod: ^3.24.3
 
   zod@3.24.3:
     resolution: {integrity: sha512-HhY1oqzWCQWuUqvBFnsyrtZRhyPeR7SUGv+C4+MsisMuVfSPx8HpwWqH8tRahSlt6M3PiFAcoeFhZAqIXTxoSg==}
@@ -3896,6 +4010,20 @@ snapshots:
       '@noble/hashes': 1.7.1
       '@scure/base': 1.2.4
 
+  '@sinonjs/commons@3.0.1':
+    dependencies:
+      type-detect: 4.0.8
+
+  '@sinonjs/fake-timers@13.0.5':
+    dependencies:
+      '@sinonjs/commons': 3.0.1
+
+  '@sinonjs/samsam@8.0.2':
+    dependencies:
+      '@sinonjs/commons': 3.0.1
+      lodash.get: 4.4.2
+      type-detect: 4.1.0
+
   '@tootallnate/once@2.0.0': {}
 
   '@tsconfig/node10@1.0.11': {}
@@ -3928,6 +4056,8 @@ snapshots:
   '@types/deep-eql@4.0.2': {}
 
   '@types/diff-match-patch@1.0.36': {}
+
+  '@types/escape-html@1.0.4': {}
 
   '@types/express-serve-static-core@4.19.6':
     dependencies:
@@ -4030,9 +4160,15 @@ snapshots:
 
   '@types/shimmer@1.2.0': {}
 
+  '@types/sinon@17.0.4':
+    dependencies:
+      '@types/sinonjs__fake-timers': 8.1.5
+
+  '@types/sinonjs__fake-timers@8.1.5': {}
+
   '@types/tough-cookie@4.0.5': {}
 
-  a2a-samples-js@file:lib/a2a(ws@8.18.1)(zod@3.24.3):
+  a2a-samples-js@file:lib/a2a(zod@3.24.3):
     dependencies:
       '@genkit-ai/googleai': 1.6.0(genkit@1.6.0)
       '@genkit-ai/vertexai': 1.6.0(genkit@1.6.0)(ws@8.18.1)(zod@3.24.3)
@@ -4492,6 +4628,8 @@ snapshots:
   diff@4.0.2: {}
 
   diff@5.2.0: {}
+
+  diff@7.0.0: {}
 
   dotenv@16.5.0: {}
 
@@ -5360,6 +5498,8 @@ snapshots:
   lodash.clonedeep@4.5.0:
     optional: true
 
+  lodash.get@4.4.2: {}
+
   lodash.includes@4.3.0:
     optional: true
 
@@ -6002,6 +6142,14 @@ snapshots:
     dependencies:
       semver: 7.7.1
 
+  sinon@20.0.0:
+    dependencies:
+      '@sinonjs/commons': 3.0.1
+      '@sinonjs/fake-timers': 13.0.5
+      '@sinonjs/samsam': 8.0.2
+      diff: 7.0.0
+      supports-color: 7.2.0
+
   snapdragon-node@2.1.1:
     dependencies:
       define-property: 1.0.0
@@ -6196,6 +6344,10 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
 
+  type-detect@4.0.8: {}
+
+  type-detect@4.1.0: {}
+
   type-is@1.6.18:
     dependencies:
       media-typer: 0.3.0
@@ -6207,7 +6359,7 @@ snapshots:
       media-typer: 1.1.0
       mime-types: 3.0.1
 
-  types@https://codeload.github.com/google-a2a/A2A/tar.gz/8ba550f5251994424c1cd9f053a6754410d74bb5#path:types:
+  types@https://codeload.github.com/google-a2a/A2A/tar.gz/fd7044e7f22831ff42b08d1341ebf15fc8bf51fe#path:types:
     dependencies:
       typescript-json-schema: 0.65.1
     transitivePeerDependencies:

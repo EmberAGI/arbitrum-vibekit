@@ -9,6 +9,7 @@ import type {
 import { z } from "zod";
 import { VibkitError } from "./error.js";
 import { nanoid } from "nanoid";
+import escapeHtml from "escape-html";
 
 /**
  * Error thrown when trying to use an unsupported Zod schema type
@@ -23,48 +24,44 @@ export class UnsupportedSchemaError extends VibkitError {
 }
 
 /**
- * Derives conceptual input and output MIME types from Zod schemas.
- * Used to align with A2A inputModes and outputModes concepts.
+ * Derives input MIME type from Zod input schema.
+ * Used to align with A2A inputModes concept.
  *
  * @param inputSchema - Zod schema for input validation
- * @param outputSchema - Zod schema for output payload validation
- * @param skillName - Optional skill name for better error messages
- * @returns Object containing inputMimeType and outputMimeType
+ * @param skillNameForErrorMessage - Optional skill name for better error messages
+ * @returns The input MIME type string
  * @throws UnsupportedSchemaError for unsupported schema types
  */
-export function getMimeTypesFromZodSchema(
+export function getInputMimeType(
   inputSchema: z.ZodTypeAny,
-  outputSchema: z.ZodTypeAny,
-  skillName?: string
-): { inputMimeType: string; outputMimeType: string } {
-  function getSchemaTypeName(schema: z.ZodTypeAny): string {
-    return schema.constructor.name;
+  skillNameForErrorMessage?: string
+): string {
+  if (inputSchema instanceof z.ZodString) {
+    return "text/plain";
   }
 
-  function getMimeTypeForSchema(schema: z.ZodTypeAny): string {
-    // Check for unsupported primitive types first
-    if (
-      schema instanceof z.ZodBoolean ||
-      schema instanceof z.ZodNumber ||
-      schema instanceof z.ZodEnum ||
-      schema instanceof z.ZodNativeEnum
-    ) {
-      throw new UnsupportedSchemaError(getSchemaTypeName(schema), skillName);
-    }
-
-    // ZodString maps to text/plain
-    if (schema instanceof z.ZodString) {
-      return "text/plain";
-    }
-
-    // Everything else (objects, arrays, etc.) maps to application/json
+  if (inputSchema instanceof z.ZodObject || inputSchema instanceof z.ZodArray) {
     return "application/json";
   }
 
-  return {
-    inputMimeType: getMimeTypeForSchema(inputSchema),
-    outputMimeType: getMimeTypeForSchema(outputSchema),
-  };
+  // Unsupported types
+  if (inputSchema instanceof z.ZodBoolean) {
+    throw new UnsupportedSchemaError("ZodBoolean", skillNameForErrorMessage);
+  }
+  if (inputSchema instanceof z.ZodNumber) {
+    throw new UnsupportedSchemaError("ZodNumber", skillNameForErrorMessage);
+  }
+  if (inputSchema instanceof z.ZodEnum) {
+    throw new UnsupportedSchemaError("ZodEnum", skillNameForErrorMessage);
+  }
+  if (inputSchema instanceof z.ZodNativeEnum) {
+    throw new UnsupportedSchemaError("ZodNativeEnum", skillNameForErrorMessage);
+  }
+
+  throw new UnsupportedSchemaError(
+    inputSchema._def?.typeName || "Unknown",
+    skillNameForErrorMessage
+  );
 }
 
 /**
@@ -230,10 +227,10 @@ export function formatToolDescriptionWithTagsAndExamples(
   examples: string[]
 ): string {
   const tagsXml = `<tags>${tags
-    .map((tag) => `<tag>${tag}</tag>`)
+    .map((tag) => `<tag>${escapeHtml(tag)}</tag>`)
     .join("")}</tags>`;
   const examplesXml = `<examples>${examples
-    .map((ex) => `<example>${ex}</example>`)
+    .map((ex) => `<example>${escapeHtml(ex)}</example>`)
     .join("")}</examples>`;
   return `${description}\n\n${tagsXml}\n${examplesXml}`;
 }

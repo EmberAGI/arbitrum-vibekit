@@ -8,7 +8,35 @@ import {
   createErrorTask,
   createInfoMessage,
   createSuccessTask,
-} from "../dist/index.js";
+  VibkitToolDefinition,
+} from "../src/index.js"; // Changed import path
+import type {
+  Task,
+  Message,
+  SkillDefinition,
+  AgentConfig,
+} from "../src/index.js"; // Add type imports
+import type { TaskState } from "../src/index.js";
+
+const dummyTool: VibkitToolDefinition<z.ZodObject<{}>, Task> = {
+  description: "Dummy tool",
+  parameters: z.object({}),
+  execute: async () => ({
+    id: "dummy",
+    kind: "task",
+    contextId: "dummy",
+    status: {
+      state: "completed" as TaskState,
+      message: {
+        kind: "message",
+        role: "agent",
+        parts: [{ kind: "text", text: "ok" }],
+        messageId: "dummy",
+      },
+      timestamp: new Date().toISOString(),
+    },
+  }),
+};
 
 describe("MCP Integration Tests", () => {
   describe("MCP Tool Registration and Metadata", () => {
@@ -23,23 +51,31 @@ describe("MCP Integration Tests", () => {
           "Format example 2 with 'quotes' & <tags>",
         ],
         inputSchema: z.object({ text: z.string() }),
-        outputPayloadSchema: z.object({ result: z.string() }),
-        handler: async (input) => ({
+        handler: async (input): Promise<Task> => ({
           id: "task-id",
           contextId: "format-context",
           kind: "task",
           status: {
-            state: "completed",
+            state: "completed" as TaskState,
             message: createInfoMessage("Success", "agent"),
             timestamp: new Date().toISOString(),
           },
         }),
+        tools: [dummyTool],
       });
 
-      const manifest = {
+      const manifest: AgentConfig = {
         name: "Format Test Agent",
         version: "1.0.0",
         description: "Testing description formatting",
+        url: "http://localhost:41241",
+        capabilities: {
+          streaming: false,
+          pushNotifications: false,
+          stateTransitionHistory: false,
+        },
+        defaultInputModes: ["application/json"],
+        defaultOutputModes: ["application/json"],
         skills: [testSkill],
       };
 
@@ -47,7 +83,7 @@ describe("MCP Integration Tests", () => {
 
       // Verify the agent card has the correct skill information
       expect(agent.card.skills).to.have.length(1);
-      const skill = agent.card.skills[0];
+      const skill = agent.card.skills[0]!;
       expect(skill.id).to.equal("format-test-skill-id");
       expect(skill.name).to.equal("Format Test Skill Name");
       expect(skill.description).to.equal(
@@ -70,39 +106,47 @@ describe("MCP Integration Tests", () => {
         tags: ["test"],
         examples: ["test string"],
         inputSchema: z.object({ text: z.string() }),
-        outputPayloadSchema: z.string(),
-        handler: async (input) => ({
+        handler: async (input): Promise<Task> => ({
           id: "task-id",
           contextId: "string-context",
           kind: "task",
           status: {
-            state: "completed",
+            state: "completed" as TaskState,
             message: createInfoMessage("Success", "agent"),
             timestamp: new Date().toISOString(),
           },
         }),
+        tools: [dummyTool],
       });
 
-      const manifest = {
+      const manifest: AgentConfig = {
         name: "String Test Agent",
         version: "1.0.0",
         description: "Testing string schema MIME types",
+        url: "http://localhost:41241",
+        capabilities: {
+          streaming: false,
+          pushNotifications: false,
+          stateTransitionHistory: false,
+        },
+        defaultInputModes: ["application/json"],
+        defaultOutputModes: ["application/json"],
         skills: [stringSkill],
       };
 
       const agent = Agent.create(manifest);
-      const skill = agent.card.skills[0];
+      const skill = agent.card.skills[0]!;
 
       expect(skill.inputModes).to.deep.equal(["application/json"]);
-      expect(skill.outputModes).to.deep.equal(["text/plain"]);
+      expect(skill.outputModes).to.deep.equal(["application/json"]);
     });
   });
 
   describe("MCP Tool Handler Runtime Behavior", () => {
-    let agent;
-    let successfulSkill;
-    let failingSkillHandler;
-    let crashingSkill;
+    let agent: Agent<any, any>;
+    let successfulSkill: SkillDefinition<any, any>;
+    let failingSkillHandler: SkillDefinition<any, any>;
+    let crashingSkill: SkillDefinition<any, any>;
 
     beforeEach(() => {
       successfulSkill = defineSkill({
@@ -112,13 +156,12 @@ describe("MCP Integration Tests", () => {
         tags: ["test"],
         examples: ["Run success"],
         inputSchema: z.object({ data: z.string() }),
-        outputPayloadSchema: z.object({ result: z.string() }),
-        handler: async (input) => ({
+        handler: async (input): Promise<Task> => ({
           id: "task-success",
           contextId: "ctx-success",
           kind: "task",
           status: {
-            state: "completed",
+            state: "completed" as TaskState,
             message: createInfoMessage(`Processed: ${input.data}`, "agent"),
             timestamp: new Date().toISOString(),
           },
@@ -129,6 +172,7 @@ describe("MCP Integration Tests", () => {
             },
           ],
         }),
+        tools: [dummyTool],
       });
 
       failingSkillHandler = defineSkill({
@@ -138,13 +182,13 @@ describe("MCP Integration Tests", () => {
         tags: ["test", "failure"],
         examples: ["Run failing handler"],
         inputSchema: z.object({ data: z.string() }),
-        outputPayloadSchema: z.object({}), // No output payload on operational failure
-        handler: async (input) => {
+        handler: async (input): Promise<Task> => {
           const opError = VibkitError.invalidParams(
             `Operation failed for input: ${input.data}`
           );
           return createErrorTask("failing-skill-handler", opError, "op-fail");
         },
+        tools: [dummyTool],
       });
 
       crashingSkill = defineSkill({
@@ -154,16 +198,24 @@ describe("MCP Integration Tests", () => {
         tags: ["test", "crash"],
         examples: ["Run crash"],
         inputSchema: z.object({ data: z.string() }),
-        outputPayloadSchema: z.object({}),
-        handler: async (input) => {
+        handler: async (input): Promise<Task> => {
           throw new Error(`Intentional crash for input: ${input.data}`);
         },
+        tools: [dummyTool],
       });
 
-      const manifest = {
+      const manifest: AgentConfig = {
         name: "Runtime Test Agent",
         version: "1.0.0",
         description: "Agent for testing MCP tool runtime behavior",
+        url: "http://localhost:41241",
+        capabilities: {
+          streaming: false,
+          pushNotifications: false,
+          stateTransitionHistory: false,
+        },
+        defaultInputModes: ["application/json"],
+        defaultOutputModes: ["application/json"],
         skills: [successfulSkill, failingSkillHandler, crashingSkill],
       };
       agent = Agent.create(manifest);
@@ -187,22 +239,36 @@ describe("MCP Integration Tests", () => {
 
     it("should validate skill handler contracts", async () => {
       // Test that skill handlers return proper A2A objects
-      const successResult = await successfulSkill.handler({ data: "test" });
+      const successResult = await successfulSkill.handler!({ data: "test" });
       expect(successResult).to.have.property("kind", "task");
       expect(successResult).to.have.property("id");
       expect(successResult).to.have.property("contextId");
-      expect(successResult).to.have.property("status");
-      expect(successResult.status).to.have.property("state", "completed");
 
-      const failResult = await failingSkillHandler.handler({ data: "test" });
+      // Type guard to check if result is a Task
+      if (successResult.kind === "task") {
+        expect(successResult).to.have.property("status");
+        expect(successResult.status).to.have.property(
+          "state",
+          "completed" as TaskState
+        );
+      }
+
+      const failResult = await failingSkillHandler.handler!({ data: "test" });
       expect(failResult).to.have.property("kind", "task");
-      expect(failResult.status).to.have.property("state", "failed");
+
+      // Type guard to check if result is a Task
+      if (failResult.kind === "task") {
+        expect(failResult.status).to.have.property(
+          "state",
+          "failed" as TaskState
+        );
+      }
 
       // Test that crashing skill actually throws
       try {
-        await crashingSkill.handler({ data: "test" });
+        await crashingSkill.handler!({ data: "test" });
         expect.fail("Expected crashing skill to throw an error");
-      } catch (error) {
+      } catch (error: any) {
         expect(error.message).to.include("Intentional crash");
       }
     });
