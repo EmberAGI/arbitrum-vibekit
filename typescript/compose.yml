@@ -9,6 +9,17 @@ services:
     ports:
       - '${PORT:-3001}:${PORT:-3001}'
     restart: unless-stopped
+  
+  # swapping-agent-no-wallet:
+  #   build:
+  #     context: ./
+  #     dockerfile: examples/swapping-agent-no-wallet/Dockerfile
+  #   container_name: vibekit-swapping-agent-no-wallet
+  #   env_file:
+  #     - .env
+  #   ports:
+  #     - '${PORT:-3002}:${PORT:-3002}'
+  #   restart: unless-stopped
 
   web:
     container_name: vibekit-web-app
