@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
+    "prepare": "pnpm build",
     "build": "tsc -b",
     "lint": "eslint --ext .ts,.tsx src",
     "lint:fix": "eslint --ext .ts,.tsx src --fix",
@@ -18,4 +19,4 @@
   "dependencies": {
     "zod": "^3.22.4"
   }
-} 
+}

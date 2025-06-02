@@ -1,17 +1,16 @@
-FROM node:23
+FROM node:23-alpine
 
 WORKDIR /app
 
-# RUN apt-get update && apt-get install -y python3 make g++ \
-#     && apt-get clean
+# Install dependencies for node-gyp support for installing bufferutil
+RUN apk add --no-cache python3 make g++
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 ENV NEXT_TELEMETRY_DISABLED=1
-
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm i --frozen-lockfile
 COPY . .
-
-RUN pnpm install
-
-CMD ["sh", "-c", "pnpm dev"]
+EXPOSE 3000
+ENTRYPOINT ["pnpm", "dev"]
