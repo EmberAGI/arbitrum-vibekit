@@ -89,27 +89,7 @@ pnpm --filter "agent-name" dev
 
 Once the agent is up and running, you have three ways of interacting with it:
 
-**1. Launch the Inspector interface:**
-
-Open a new terminal window and run the following to start the inspector:
-
-```bash
-npx -y @modelcontextprotocol/inspector
-```
-
-Navigate to http://127.0.0.1:6274 in your browser to access the interface and click on "Connect" to establish a connection with your local server:
-
-<p align="left">
-  <img src="../../img/inspector_1.png" width="700px" alt="Inspector1"/>
-</p>
-
-Next, click on "List Tools" to view and run the tools your agent offers:
-
-<p align="left">
-  <img src="../../img/inspector_2.png" width="700px" alt="Inspector2"/>
-</p>
-
-The Inspector interface provides a straightforward way to interact with your agent. For a more integrated development experience, you can use the Cursor IDE.
+**1. Vibekit Web Interface:**
 
 **2. Integrate with Cursor IDE**
 
@@ -130,9 +110,33 @@ To interact with the agent though Cursor, [create or update](https://docs.cursor
 
 You might need to restart Cursor to apply the new configuration. Upon successful integration, Cursor will automatically detect the Agent MCP tool and you can interact with it directly through prompts.
 
-**3. Web Interface**
+**3. Launch the Inspector Interface:**
 
-You can also interact with your agent using Vibekit's web frontend.
+Open a new terminal window and run the following to start the inspector:
+
+```bash
+npx -y @modelcontextprotocol/inspector
+```
+
+Navigate to http://127.0.0.1:6274 in your browser to access the interface and click on "Connect" to establish a connection with your local server:
+
+<p align="left">
+  <img src="img/inspector_1.png" width="700px" alt="Inspector1"/>
+</p>
+
+Next, click on "List Tools" to view the tools your Lending Agent offers:
+
+<p align="left">
+  <img src="img/inspector_2.png" width="700px" alt="Inspector2"/>
+</p>
+
+Next, select "askLendingAgent", input your wallet address and query, and execute the tool to interact with your agent:
+
+<p align="left">
+  <img src="img/inspector_3.png" width="700px" alt="Inspector3"/>
+</p>
+
+The Inspector interface provides a straightforward way to interact with your agent.
 
 ## 🛠️ Building Your Own Agent
 
