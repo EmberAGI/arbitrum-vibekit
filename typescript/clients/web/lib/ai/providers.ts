@@ -29,13 +29,13 @@ export const openRouterProvider = isTestEnvironment
     })
   : customProvider({
       languageModels: {
-        'chat-model': openRouter('google/gemini-2.5-pro-preview-03-25', {
+        'chat-model': openRouter('google/gemini-2.5-pro-preview', {
           reasoning: {
             exclude: true,
             effort: 'low',
           },
         }),
-        'chat-model-medium': openRouter('google/gemini-2.5-pro-preview-03-25', {
+        'chat-model-medium': openRouter('google/gemini-2.5-pro-preview', {
           reasoning: {
             effort: 'medium',
           },

@@ -135,14 +135,15 @@ export const MessageRenderer = ({
             positions={null}
             txPreview={null}
             txPlan={null}
-            pools={null} />
+            pools={null}
+          />
         ) : toolName.endsWith("askYieldTokenizationAgent") ? (
           <Pendle
             txPreview={null}
             txPlan={null}
             markets={[]}
             isMarketList={false}
-          />          
+          />
         ) : null}
       </div>
     );
@@ -161,8 +162,14 @@ export const MessageRenderer = ({
     const txPlan = getKeyFromResult("txPlan");
     const txPreview = getKeyFromResult("txPreview");
 
-    const getParts = () => toolInvocationResult?.artifacts[0]?.parts;
-    const getArtifact = () => toolInvocationResult?.artifacts[0];
+    const getParts = () =>
+      toolInvocationResult?.artifacts
+        ? toolInvocationResult?.artifacts[0]?.parts
+        : null;
+    const getArtifact = () =>
+      toolInvocationResult?.artifacts
+        ? toolInvocationResult?.artifacts[0]
+        : null;
 
     return (
       <div key={toolCallId}>

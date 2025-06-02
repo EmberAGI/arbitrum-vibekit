@@ -4,6 +4,14 @@ import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useTransactionExecutor } from "../hooks/useTransactionExecutor"; // Import the hook
 import type { TxPlan } from "../lib/transactionUtils"; // Import shared types -> Use 'import type'
+import ShortAddress from "./ShortAddress";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { formatPercentage } from "@/lib/utils";
 
 // Removed: useState, useEffect, useCallback, useMemo, viem imports, useSendTransaction
 // Removed: getChainById, withSafeDefaults, toBigInt, signTx, ensureReady, approveTransaction, signMainTransaction
@@ -74,7 +82,92 @@ export function Pendle({
           <h2 className="text-lg font-semibold mb-4">
             Available Pendle Markets:
           </h2>
-          <div>
+          <Accordion type="single" collapsible>
+            {markets?.map((market) => (
+              <AccordionItem key={market.data?.address + market.data?.name} value={market.data?.address + market.data?.name}>
+                <AccordionTrigger>
+                  {market.data?.name} ({market.data?.expiry?.split("T")[0]})
+                  Aggr. APY:{" "}
+                  {formatPercentage(market.data?.volatileData?.aggregatedApy)}
+                </AccordionTrigger>
+                <AccordionContent>
+                <div
+                key={market.data?.address}
+                className="rounded-xl bg-zinc-700 p-4 flex flex-col gap-2 mb-4"
+              >
+                <span className="font-semibold text-md flex gap-3 w-full items-center text-sm pb-2">
+                  {market.data?.name}
+                  <span className="font-normal text-sm">
+                    - On chain {market.data?.chainId}
+                    {" - Exp. "}
+                    {market.data?.expiry?.split("T")[0]}
+                  </span>
+                </span>
+                <div className="font-semibold w-full ">                 
+                  <div className="font-normal grid grid-cols-2 gap-x-2 gap-y-0 ">
+                    <p className="font-normal bg-zinc-600 rounded-full p-2 px-4 mb-2">
+                      <span className="font-normal  text-xs flex gap-3">
+                        <span className="font-semibold">Liquidity: </span>{" "}
+                        ${market.data?.volatileData?.marketLiquidityUsd}
+                      </span>
+                    </p>
+                    <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
+                      <span className="font-normal  text-xs flex gap-3">
+                        <span className="font-semibold">Volume: </span>{" "}
+                        {market.data?.volatileData?.tradingVolumeUsd}
+                      </span>
+                    </p>
+                    <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
+                      <span className="font-normal  text-xs flex gap-3">
+                        <span className="font-semibold">PT: </span>{" "}
+                        {market.data?.volatileData?.totalPt}
+                      </span>
+                    </p>
+                    <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
+                      <span className="font-normal  text-xs flex gap-3">
+                        <span className="font-semibold">Underlying APY: </span>{" "}
+                        {formatPercentage(market.data?.volatileData?.underlyingApy)}
+                      </span>
+                        </p>
+                        <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
+                      <span className="font-normal  text-xs flex gap-3">
+                        <span className="font-semibold">Implied APY: </span>{" "}
+                        {formatPercentage(market.data?.volatileData?.impliedApy)}
+                      </span>
+                        </p>
+                        <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
+                      <span className="font-normal  text-xs flex gap-3">
+                        <span className="font-semibold">Aggregated APY: </span>{" "}
+                        {formatPercentage(market.data?.volatileData?.aggregatedApy)}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+                <span className="font-semibold pb-2 text-sm">
+                  <span>Underlying Asset: </span>
+                  <span className="font-normal  text-sm">
+                    {market.data?.underlyingAsset?.symbol}
+                    {" - "}
+                    {market.data?.underlyingAsset?.name}
+                  </span>
+                </span>{" "}
+                <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-4">
+                  <span className="font-normal  text-sm flex gap-2">
+                    <ShortAddress
+                      web3Address={
+                        market.data?.underlyingAsset?.tokenUid?.address
+                      }
+                    />{" "}
+                    {" on chain "}{" "}
+                    {market.data?.underlyingAsset?.tokenUid?.chainId}
+                  </span>
+                </p>
+              </div>
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+          {/*  <div>
             {markets?.map((market) => (
               <div
                 key={market.data?.address}
@@ -89,34 +182,38 @@ export function Pendle({
                   </span>
                 </span>
                 <p className="font-semibold w-full ">
-                  <span className="font-normal">
-                    <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
-                      <span className="font-normal  text-xs">
+                  {
+                    //use grid to create a 2 column layout
+                  }
+
+                  <div className="font-normal grid grid-cols-2 gap-x-2 gap-y-0 ">
+                    <p className="font-normal bg-zinc-600 rounded-full p-2 px-4 mb-2">
+                      <span className="font-normal  text-xs flex gap-3">
                         <span className="font-semibold">Address: </span>{" "}
-                        {market.data?.address}{" "}
+                        <ShortAddress web3Address={market.data?.address} />{" "}
                       </span>
                     </p>
                     <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
-                      <span className="font-normal  text-xs">
+                      <span className="font-normal  text-xs flex gap-3">
                         <span className="font-semibold">PT: </span>{" "}
-                        {market.data?.pt}{" "}
+                        <ShortAddress web3Address={market.data?.pt} />{" "}
                       </span>
                     </p>
                     <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
-                      <span className="font-normal  text-xs">
+                      <span className="font-normal  text-xs flex gap-3">
                         <span className="font-semibold">YT: </span>{" "}
-                        {market.data?.yt}{" "}
+                        <ShortAddress web3Address={market.data?.yt} />{" "}
                       </span>
                     </p>
                     <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
-                      <span className="font-normal  text-xs">
+                      <span className="font-normal  text-xs flex gap-3">
                         <span className="font-semibold">SY: </span>{" "}
-                        {market.data?.sy}{" "}
+                        <ShortAddress web3Address={market.data?.sy} />{" "}
                       </span>
                     </p>
-                  </span>
+                  </div>
                 </p>
-                <span className="font-semibold pb-2 text-md">
+                <span className="font-semibold pb-2 text-sm">
                   <span>Underlying Asset: </span>
                   <span className="font-normal  text-sm">
                     {market.data?.underlyingAsset?.symbol}
@@ -125,15 +222,19 @@ export function Pendle({
                   </span>
                 </span>{" "}
                 <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-4">
-                  <span className="font-normal  text-sm">
-                    {market.data?.underlyingAsset?.tokenUid?.address}
+                  <span className="font-normal  text-sm flex gap-2">
+                    <ShortAddress
+                      web3Address={
+                        market.data?.underlyingAsset?.tokenUid?.address
+                      }
+                    />{" "}
                     {" on chain "}{" "}
                     {market.data?.underlyingAsset?.tokenUid?.chainId}
                   </span>
                 </p>
               </div>
             ))}
-          </div>
+          </div> */}
         </div>
       )}
       {txPlan && txPreview && (

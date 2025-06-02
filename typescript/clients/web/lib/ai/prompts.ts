@@ -56,10 +56,7 @@ export const systemPrompt = ({
 - NEVER ask for wallet addresses directly. If a wallet address is needed, kindly ask the user to connect their wallet through the interface instead.
 - Don't request a quote when using an agent to conduct a crypto related transaction. Instruct the agent to perform the transaction instead.
 
-### Agent Specific Instructions
-
-- For any questions about Camelot, always ask the swap agent.
-- For any questions about Aave, always ask the lending agent.`;
+`;
 
   if (walletAddress && isAddress(walletAddress)) {
     basePrompt += `\n\n<connected_wallet_address>${walletAddress}</connected_wallet_address>`;
