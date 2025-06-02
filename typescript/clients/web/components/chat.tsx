@@ -1,21 +1,21 @@
-"use client";
+'use client';
 
-import type { Attachment, UIMessage } from "ai";
-import { useChat } from "@ai-sdk/react";
-import { useState } from "react";
-import useSWR, { useSWRConfig } from "swr";
-import { ChatHeader } from "@/components/chat-header";
-import type { Vote } from "@/lib/db/schema";
-import { fetcher, generateUUID } from "@/lib/utils";
-import { Artifact } from "./artifact";
-import { MultimodalInput } from "./multimodal-input";
-import { Messages } from "./messages";
-import type { VisibilityType } from "./visibility-selector";
-import { useArtifactSelector } from "@/hooks/use-artifact";
-import { toast } from "sonner";
-import { useAccount } from "wagmi";
-import { useSession } from "next-auth/react";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import type { Attachment, UIMessage } from 'ai';
+import { useChat } from '@ai-sdk/react';
+import { useState } from 'react';
+import useSWR, { useSWRConfig } from 'swr';
+import { ChatHeader } from '@/components/chat-header';
+import type { Vote } from '@/lib/db/schema';
+import { fetcher, generateUUID } from '@/lib/utils';
+import { Artifact } from './artifact';
+import { MultimodalInput } from './multimodal-input';
+import { Messages } from './messages';
+import type { VisibilityType } from './visibility-selector';
+import { useArtifactSelector } from '@/hooks/use-artifact';
+import { toast } from 'sonner';
+import { useAccount } from 'wagmi';
+import { useSession } from 'next-auth/react';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 
 export function Chat({
   id,
@@ -38,44 +38,35 @@ export function Chat({
 
   const [selectedChatAgent, _setSelectedChatAgent] = useState(initialChatAgent);
 
-  const {
-    messages,
-    setMessages,
-    handleSubmit,
-    input,
-    setInput,
-    append,
-    status,
-    stop,
-    reload,
-  } = useChat({
-    id,
-    body: {
+  const { messages, setMessages, handleSubmit, input, setInput, append, status, stop, reload } =
+    useChat({
       id,
-      selectedChatModel,
-      context: {
-        walletAddress: address,
+      body: {
+        id,
+        selectedChatModel,
+        context: {
+          walletAddress: address,
+        },
       },
-    },
-    initialMessages,
-    experimental_throttle: 100,
-    sendExtraMessageFields: true,
-    generateId: generateUUID,
-    onFinish: () => {
-      mutate("/api/history");
-    },
-    onError: () => {
-      toast.error("An error occured, please try again!");
-    },
-  });
+      initialMessages,
+      experimental_throttle: 100,
+      sendExtraMessageFields: true,
+      generateId: generateUUID,
+      onFinish: () => {
+        mutate('/api/history');
+      },
+      onError: () => {
+        toast.error('An error occured, please try again!');
+      },
+    });
 
   const { data: votes } = useSWR<Array<Vote>>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
-    fetcher,
+    fetcher
   );
 
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
-  const isArtifactVisible = useArtifactSelector((state) => state.isVisible);
+  const isArtifactVisible = useArtifactSelector(state => state.isVisible);
 
   return (
     <>
@@ -89,13 +80,7 @@ export function Chat({
             <ConnectButton />
           </div>
         )}
-        <ChatHeader
-          chatId={id}
-          selectedModelId={selectedChatModel}
-          selectedVisibilityType={selectedVisibilityType}
-          isReadonly={isReadonly}
-          selectedAgentId={selectedChatAgent}
-        />
+        <ChatHeader />
 
         <Messages
           chatId={id}
