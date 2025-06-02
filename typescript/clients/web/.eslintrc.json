@@ -1,0 +1,24 @@
+{
+  "extends": [
+    "plugin:import/recommended",
+    "plugin:import/typescript",
+    "prettier",
+    "plugin:tailwindcss/recommended",
+    "next", 
+    "next/core-web-vitals"
+  ],
+  "plugins": ["tailwindcss"],
+  "rules": {
+    "tailwindcss/no-custom-classname": "off",
+    "tailwindcss/classnames-order": "off"
+  },
+  "settings": {
+    "import/resolver": {
+      "typescript": {
+        "alwaysTryTypes": true,
+        "project": "./tsconfig.json"
+      }
+    }
+  },
+  "ignorePatterns": ["**/components/ui/**"]
+}
