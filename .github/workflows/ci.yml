@@ -116,7 +116,7 @@ jobs:
           MNEMONIC: ${{ secrets.MNEMONIC }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           EMBER_ENDPOINT: localhost:50051
-        run: pnpm recursive run test
+        run: pnpm run test
 
       - name: Kill anvil server
         if: always()
