@@ -1,4 +1,5 @@
 import type { Task } from 'a2a-samples-js';
+import { GetMarketDataResponseSchema, type GetMarketDataResponse } from 'ember-schemas';
 
 /**
  * Parse data from an agent's function call response
@@ -31,4 +32,29 @@ export function extractMessageText(response: Task): string {
     }
   }
   return '';
+}
+
+
+export function extractTokenMarketData(response: Task): GetMarketDataResponse {
+  if (!response.artifacts) {
+    throw new Error('No artifacts found in response');
+  }
+
+  for (const artifact of response.artifacts) {
+    if (artifact.name === 'token-market-data') {
+      for (const part of artifact.parts) {
+        if (part.type === 'data' && part.data) {
+          const parseResult = GetMarketDataResponseSchema.safeParse(part.data);
+          
+          if (!parseResult.success) {
+            throw new Error(`Invalid market data format: ${parseResult.error.message}`);
+          }
+          
+          return parseResult.data;
+        }
+      }
+    }
+  }
+
+  throw new Error('No token market data found in artifacts');
 } 
