@@ -34,21 +34,19 @@ Open the `.env` file and fill in the required values. This typically includes:
 
 From the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory, run the following command to build and start the frontend and its associated services (including an example agent like the lending agent, and the database):
 
-  ```bash
-  # Ensure you are in the typescript/ directory
-  docker compose up -d
-  ```
+```bash
+# Ensure you are in the typescript/ directory
+docker compose up
+```
 
-  This command runs the services in detached mode (in the background).
+**Note**: If you get a `permission denied error`, try running the above command with `sudo`:
 
-  **Note**: If you get a `permission denied error`, try running the above command with `sudo`:
+```
 
-  ```
-  sudo  docker compose up -d
-  ```
+sudo docker compose up
+
+```
 
 **4.** Access the Vibekit Web Frontend:
 
-  Open your web browser and navigate to http://localhost:3000.
-  
-  You can now interact with your on-chain AI agents through the web interface.
+Open your web browser and navigate to http://localhost:3000. You can now interact with your on-chain AI agents through the web interface.
