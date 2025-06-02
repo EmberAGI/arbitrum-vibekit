@@ -66,3 +66,14 @@ logs/
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Next
+.turbo
+.next
+.vercel
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/*

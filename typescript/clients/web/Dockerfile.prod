@@ -1,41 +1,29 @@
-FROM node:23-slim AS builder
+ARG NODE_BASE=23-slim
 
-WORKDIR /app
-
-RUN apt-get update && apt-get install -y python3 make g++ \
-    && apt-get clean
-
+FROM node:$NODE_BASE AS base
+# Install dependencies for node-gyp support for installing bufferutil
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
-ENV NEXT_TELEMETRY_DISABLED=1
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
 
+FROM base AS production-dependencies
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm i --prod --frozen-lockfile
+
+FROM base AS build
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm i --frozen-lockfile
 COPY . .
+RUN pnpm run build
 
-RUN pnpm install
-RUN pnpm build
-
-FROM node:23-slim AS runner
-
+FROM node:$NODE_BASE
 WORKDIR /app
-
-RUN apt-get update && apt-get install -y python3 make g++ \
-    && apt-get clean
-
-ENV NODE_ENV=development
-
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
-ENV NEXT_TELEMETRY_DISABLED=1
-
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/lib ./lib
-
-RUN pnpm install
-
+COPY --from=production-dependencies /app/node_modules node_modules
+COPY --from=build /app/.next ./.next
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/lib ./lib
 EXPOSE 3000
-
-CMD ["sh", "-c", "pnpm db:migrate && pnpm start"]
+ENTRYPOINT ["/bin/sh", "-c", "npx tsx lib/db/migrate.ts && npx next start"]
