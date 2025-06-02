@@ -1,4 +1,19 @@
-import { z } from 'zod';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
+import type { Task } from 'a2a-samples-js';
+import { streamText } from 'ai';
+import {
+  type TransactionArtifact,
+  parseMcpToolResponsePayload,
+} from 'arbitrum-vibekit';
+import {
+  SwapResponseSchema,
+  TransactionPlansSchema,
+  type SwapResponse,
+  type SwapPreview,
+  type TransactionPlan,
+} from 'ember-schemas';
 import {
   parseUnits,
   createPublicClient,
@@ -8,76 +23,14 @@ import {
   type PublicClient,
   formatUnits,
 } from 'viem';
+
 import { getChainConfigById } from './agent.js';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Task, DataPart } from 'a2a-samples-js/schema';
-import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { streamText } from 'ai';
-import {
-  createTransactionArtifactSchema,
-  type TransactionArtifact,
-  parseMcpToolResponsePayload,
-} from 'arbitrum-vibekit';
-import {
-  validateTransactionPlans,
-  TransactionPlanSchema,
-  type TransactionPlan,
-} from 'ember-mcp-tool-server';
 
 export type TokenInfo = {
   chainId: string;
   address: string;
   decimals: number;
 };
-
-export const SwapPreviewSchema = z
-  .object({
-    fromTokenSymbol: z.string(),
-    fromTokenAddress: z.string(),
-    fromTokenAmount: z.string(),
-    fromChain: z.string(),
-    toTokenSymbol: z.string(),
-    toTokenAddress: z.string(),
-    toTokenAmount: z.string(),
-    toChain: z.string(),
-    exchangeRate: z.string(),
-    executionTime: z.string(),
-    expiration: z.string(),
-    explorerUrl: z.string(),
-  })
-  .passthrough();
-
-export type SwapPreview = z.infer<typeof SwapPreviewSchema>;
-
-const TokenDetailSchema = z.object({
-  address: z.string(),
-  chainId: z.string(),
-});
-
-const EstimationSchema = z.object({
-  effectivePrice: z.string(),
-  timeEstimate: z.string(),
-  expiration: z.string(),
-  baseTokenDelta: z.string(),
-  quoteTokenDelta: z.string(),
-});
-
-const ProviderTrackingSchema = z.object({
-  requestId: z.string().optional(),
-  providerName: z.string().optional(),
-  explorerUrl: z.string(),
-});
-
-export const SwapResponseSchema = z.object({
-  baseToken: TokenDetailSchema,
-  quoteToken: TokenDetailSchema,
-  estimation: EstimationSchema,
-  providerTracking: ProviderTrackingSchema,
-  transactions: z.array(TransactionPlanSchema),
-});
-
-export type SwapResponse = z.infer<typeof SwapResponseSchema>;
 
 export interface HandlerContext {
   mcpClient: Client;
@@ -409,7 +362,7 @@ export async function handleSwapTokens(
   }
 
   context.log('Validating the swap transactions received from MCP tool...');
-  const validatedSwapTxPlan: TransactionPlan[] = validateTransactionPlans(rawSwapTransactions);
+  const validatedSwapTxPlan: TransactionPlan[] = TransactionPlansSchema.parse(rawSwapTransactions);
 
   const finalTxPlan: TransactionPlan[] = [
     ...(approveTxResponse ? [approveTxResponse] : []),
@@ -454,9 +407,7 @@ export async function handleSwapTokens(
         parts: [
           {
             type: 'data',
-            // The double-cast is intentional: DataPart expects Record<string, unknown>,
-            // but our artifact is validated by schema elsewhere.
-            data: txArtifact as unknown as Record<string, unknown>,
+            data: { ...txArtifact },
           },
         ],
       },
@@ -551,9 +502,9 @@ ${camelotContextContent}`;
         },
       },
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     log(`Error during askEncyclopedia execution:`, error);
-    const errorMessage = error?.message || 'An unexpected error occurred.';
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return {
       id: userAddress,
       status: {
@@ -567,5 +518,4 @@ ${camelotContextContent}`;
   }
 }
 
-const SwapTransactionArtifactSchema = createTransactionArtifactSchema(SwapPreviewSchema);
 export type SwapTransactionArtifact = TransactionArtifact<SwapPreview>;

@@ -1,11 +1,5 @@
 import EmberGrpcClient, {
-  GetCapabilitiesResponse,
-  Capability,
   CapabilityType,
-  GetWalletPositionsResponse,
-  WalletPosition,
-  Token,
-  GetTokensResponse,
   OrderType,
   TokenIdentifier,
   GetLiquidityPoolsResponse,
@@ -18,25 +12,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import "dotenv/config";
 
-// Re-export types and runtime values separately to comply with `verbatimModuleSyntax`
-export type {
-  GetCapabilitiesResponse,
-  Capability,
-  GetWalletPositionsResponse,
-  WalletPosition,
-  GetTokensResponse,
-  Token,
-} from "@emberai/sdk-typescript";
-
 // CapabilityType is a runtime enum (value), so export it normally
 export { CapabilityType } from "@emberai/sdk-typescript";
-
-// Re-export shared transaction helpers
-export {
-  TransactionPlanSchema,
-  validateTransactionPlans,
-} from "./schemas/transaction.js";
-export type { TransactionPlan } from "./schemas/transaction.js";
 
 // --- Define Zod Schemas ---
 // Convert our Zod objects to schema objects for MCP
@@ -192,50 +169,27 @@ const getUserLiquidityPositionsSchema = {
 // Add schema definition for getYieldMarkets after the existing schema definitions
 const getYieldMarketsSchema = {};
 
-// Define types from schemas using z.object() on the raw schema definitions
-const swapTokensParamsValidator = z.object(swapTokensSchema);
-const borrowParamsValidator = z.object(borrowSchema);
-const repayParamsValidator = z.object(repaySchema);
-const supplyParamsValidator = z.object(supplySchema);
-const withdrawParamsValidator = z.object(withdrawSchema);
-const getCapabilitiesParamsValidator = z.object(getCapabilitiesSchema);
-const getUserPositionsParamsValidator = z.object(getUserPositionsSchema);
-const getTokensParamsValidator = z.object(getTokensSchema);
-const supplyLiquidityParamsValidator = z.object(supplyLiquiditySchema);
-const withdrawLiquidityParamsValidator = z.object(withdrawLiquiditySchema);
-const getLiquidityPoolsParamsValidator = z.object(getLiquidityPoolsSchema);
-const getUserLiquidityPositionsParamsValidator = z.object(
-  getUserLiquidityPositionsSchema
-);
-const getYieldMarketsParamsValidator = z.object(getYieldMarketsSchema);
-
-type SwapTokensParams = z.infer<typeof swapTokensParamsValidator>;
-type BorrowParams = z.infer<typeof borrowParamsValidator>;
-type RepayParams = z.infer<typeof repayParamsValidator>;
-type SupplyParams = z.infer<typeof supplyParamsValidator>;
-type WithdrawParams = z.infer<typeof withdrawParamsValidator>;
-type GetCapabilitiesParams = z.infer<typeof getCapabilitiesParamsValidator>;
-type GetUserPositionsParams = z.infer<typeof getUserPositionsParamsValidator>;
-type GetTokensParams = z.infer<typeof getTokensParamsValidator>;
-type SupplyLiquidityParams = z.infer<typeof supplyLiquidityParamsValidator>;
-type WithdrawLiquidityParams = z.infer<typeof withdrawLiquidityParamsValidator>;
-type GetLiquidityPoolsParams = z.infer<typeof getLiquidityPoolsParamsValidator>;
-type GetUserLiquidityPositionsParams = z.infer<
-  typeof getUserLiquidityPositionsParamsValidator
->;
-type GetYieldMarketsParams = z.infer<typeof getYieldMarketsParamsValidator>;
-
-// Helper to convert Zod schema to MCP argument definition
-const zodSchemaToMcpArgs = (schema: Record<string, z.ZodTypeAny>) => {
-  return Object.entries(schema).map(([name, zodType]) => ({
-    name,
-    description: zodType.description || "",
-    required: !zodType.isOptional(),
-    // We might need a mapping from Zod types to JSON schema types here
-    // For now, just using 'any' - refine if needed
-    typeSchema: { type: "any" },
-  }));
+const getWalletBalancesSchema = {
+  walletAddress: z
+    .string()
+    .describe("The wallet address to fetch token balances for."),
 };
+
+// Define types from schemas using z.object() on the raw schema definitions
+type SwapTokensParams = z.infer<ReturnType<typeof z.object<typeof swapTokensSchema>>>;
+type BorrowParams = z.infer<ReturnType<typeof z.object<typeof borrowSchema>>>;
+type RepayParams = z.infer<ReturnType<typeof z.object<typeof repaySchema>>>;
+type SupplyParams = z.infer<ReturnType<typeof z.object<typeof supplySchema>>>;
+type WithdrawParams = z.infer<ReturnType<typeof z.object<typeof withdrawSchema>>>;
+type GetCapabilitiesParams = z.infer<ReturnType<typeof z.object<typeof getCapabilitiesSchema>>>;
+type GetUserPositionsParams = z.infer<ReturnType<typeof z.object<typeof getUserPositionsSchema>>>;
+type GetTokensParams = z.infer<ReturnType<typeof z.object<typeof getTokensSchema>>>;
+type SupplyLiquidityParams = z.infer<ReturnType<typeof z.object<typeof supplyLiquiditySchema>>>;
+type WithdrawLiquidityParams = z.infer<ReturnType<typeof z.object<typeof withdrawLiquiditySchema>>>;
+type GetLiquidityPoolsParams = z.infer<ReturnType<typeof z.object<typeof getLiquidityPoolsSchema>>>;
+type GetUserLiquidityPositionsParams = z.infer<ReturnType<typeof z.object<typeof getUserLiquidityPositionsSchema>>>;
+type GetYieldMarketsParams = z.infer<ReturnType<typeof z.object<typeof getYieldMarketsSchema>>>;
+type GetWalletBalancesParams = z.infer<ReturnType<typeof z.object<typeof getWalletBalancesSchema>>>;
 
 // --- Initialize the MCP server using the high-level McpServer API
 const server = new McpServer({
@@ -324,9 +278,8 @@ server.tool(
   "borrow",
   "Borrow tokens using Ember On-chain Actions",
   borrowSchema,
-  async (params: BorrowParams, extra: any) => {
+  async (params: BorrowParams) => {
     console.error(`Executing borrow tool with params:`, params);
-    console.error(`Extra object for borrow:`, extra);
 
     try {
       const response = await emberClient.borrowTokens({
@@ -381,9 +334,8 @@ server.tool(
   "repay",
   "Repay borrowed tokens using Ember On-chain Actions",
   repaySchema,
-  async (params: RepayParams, extra: any) => {
+  async (params: RepayParams) => {
     console.error(`Executing repay tool with params:`, params);
-    console.error(`Extra object for repay:`, extra);
 
     try {
       const response = await emberClient.repayTokens({
@@ -435,9 +387,8 @@ server.tool(
   "supply",
   "Supply tokens using Ember On-chain Actions",
   supplySchema,
-  async (params: SupplyParams, extra: any) => {
+  async (params: SupplyParams) => {
     console.error(`Executing supply tool with params:`, params);
-    console.error(`Extra object for supply:`, extra);
 
     try {
       const response = await emberClient.supplyTokens({
@@ -492,9 +443,8 @@ server.tool(
   "withdraw",
   "Withdraw tokens using Ember On-chain Actions",
   withdrawSchema,
-  async (params: WithdrawParams, extra: any) => {
+  async (params: WithdrawParams) => {
     console.error(`Executing withdraw tool with params:`, params);
-    console.error(`Extra object for withdraw:`, extra);
 
     try {
       const response = await emberClient.withdrawTokens({
@@ -549,9 +499,8 @@ server.tool(
   "getCapabilities",
   "Get Ember On-chain Actions capabilities",
   getCapabilitiesSchema,
-  async (params: GetCapabilitiesParams, extra: any) => {
+  async (params: GetCapabilitiesParams) => {
     console.error(`Executing getCapabilities tool with params:`, params);
-    console.error(`Extra object for getCapabilities:`, extra);
 
     try {
       const response = await emberClient.getCapabilities({ type: params.type });
@@ -585,9 +534,8 @@ server.tool(
   "getUserPositions",
   "Get user wallet positions using Ember On-chain Actions",
   getUserPositionsSchema,
-  async (params: GetUserPositionsParams, extra: any) => {
+  async (params: GetUserPositionsParams) => {
     console.error(`Executing getUserPositions tool with params:`, params);
-    console.error(`Extra object for getUserPositions:`, extra);
 
     try {
       const response = await emberClient.getWalletPositions({
@@ -623,9 +571,8 @@ server.tool(
   "getTokens",
   "Get a list of supported tokens using Ember On-chain Actions",
   getTokensSchema,
-  async (params: GetTokensParams, extra: any) => {
+  async (params: GetTokensParams) => {
     console.error(`Executing getTokens tool with params:`, params);
-    console.error(`Extra object for getTokens:`, extra);
 
     try {
       const response = await emberClient.getTokens({
@@ -648,9 +595,8 @@ server.tool(
   "supplyLiquidity",
   "Supply liquidity to a token pair using Ember On-chain Actions.",
   supplyLiquiditySchema,
-  async (params: SupplyLiquidityParams, extra: any) => {
+  async (params: SupplyLiquidityParams) => {
     console.error(`Executing supplyLiquidity tool with params:`, params);
-    console.error(`Extra object for supplyLiquidity:`, extra);
 
     try {
       const token0: TokenIdentifier = {
@@ -724,9 +670,8 @@ server.tool(
   "withdrawLiquidity",
   "Withdraw liquidity from a position using Ember On-chain Actions.",
   withdrawLiquiditySchema,
-  async (params: WithdrawLiquidityParams, extra: any) => {
+  async (params: WithdrawLiquidityParams) => {
     console.error(`Executing withdrawLiquidity tool with params:`, params);
-    console.error(`Extra object for withdrawLiquidity:`, extra);
 
     try {
       const response = await emberClient.withdrawLiquidity({
@@ -782,9 +727,8 @@ server.tool(
   "getLiquidityPools",
   "Get a list of available liquidity pools using Ember On-chain Actions.",
   getLiquidityPoolsSchema,
-  async (params: GetLiquidityPoolsParams, extra: any) => {
+  async (params: GetLiquidityPoolsParams) => {
     console.error(`Executing getLiquidityPools tool with params:`, params);
-    console.error(`Extra object for getLiquidityPools:`, extra);
     try {
       // Pass undefined if no args/metadata needed
       const response: GetLiquidityPoolsResponse =
@@ -819,12 +763,11 @@ server.tool(
   "getUserLiquidityPositions",
   "Get user's liquidity positions using Ember On-chain Actions.",
   getUserLiquidityPositionsSchema,
-  async (params: GetUserLiquidityPositionsParams, extra: any) => {
+  async (params: GetUserLiquidityPositionsParams) => {
     console.error(
       `Executing getUserLiquidityPositions tool with params:`,
       params
     );
-    console.error(`Extra object for getUserLiquidityPositions:`, extra);
 
     try {
       // Use correct argument name: supplierAddress
@@ -863,9 +806,8 @@ server.tool(
   "getYieldMarkets",
   "Get Yield markets",
   getYieldMarketsSchema,
-  async (params: GetYieldMarketsParams, extra: any) => {
+  async (params: GetYieldMarketsParams) => {
     console.error(`Executing getYieldMarkets tool with params:`, params);
-    console.error(`Extra object for getYieldMarkets:`, extra);
 
     try {
       const response = await emberClient.getYieldMarkets({
@@ -882,6 +824,42 @@ server.tool(
       };
     } catch (error) {
       console.error(`GetYieldMarkets tool error:`, error);
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+      };
+    }
+  }
+);
+
+server.tool(
+  "getWalletBalances",
+  "Get wallet token balances using Ember On-chain Actions",
+  getWalletBalancesSchema,
+  async (params: GetWalletBalancesParams) => {
+    console.error(`Executing getWalletBalances tool with params:`, params);
+
+    try {
+      const response = await emberClient.getWalletBalances({
+        walletAddress: params.walletAddress,
+      });
+      
+      // Check for expected data instead of response.error
+      if (!response.balances) {
+        throw new Error("No wallet balances data returned.");
+      }
+
+      console.error(`GetWalletBalances tool success.`);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(response, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      console.error(`GetWalletBalances tool error:`, error);
       return {
         isError: true,
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
@@ -909,6 +887,46 @@ async function main() {
     console.error("Failed to start or connect the MCP server:", error);
     process.exit(1);
   }
+
+  // Graceful shutdown
+  const cleanup = async () => {
+    console.error("Shutting down Ember MCP stdio server...");
+    let exitCode = 0;
+    try {
+      if (emberClient) {
+        // If emberClient.close() is synchronous and starts the closing process:
+        emberClient.close(); 
+        console.error("Ember gRPC client close initiated.");
+        // Add a small delay to allow gRPC to start closing connections, if necessary.
+        // This is a bit of a workaround; ideally, the SDK would provide a promise for full closure.
+        await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay
+        console.error("Assumed Ember gRPC client had time to process close.");
+      }
+      if (server) {
+        await server.close(); // McpServer should have a close method that returns a Promise
+        console.error("MCP server closed.");
+      }
+    } catch (err) {
+      console.error("Error during shutdown:", err);
+      exitCode = 1;
+    } finally {
+      console.error(`Exiting Ember MCP stdio server with code ${exitCode}.`);
+      process.exit(exitCode);
+    }
+  };
+
+  process.on("SIGINT", async () => {
+    console.error("Received SIGINT.");
+    await cleanup();
+  });
+  process.on("SIGTERM", async () => {
+    console.error("Received SIGTERM.");
+    await cleanup();
+  });
+  process.on("SIGUSR2", async () => { // For nodemon restarts
+    console.error("Received SIGUSR2.");
+    await cleanup();
+  });
 }
 
 // Run the server

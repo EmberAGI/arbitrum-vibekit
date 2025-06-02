@@ -1,0 +1,8 @@
+node_modules
+dist
+dist-test
+.pnpm
+**/*.js
+**/*.d.ts
+coverage
+clients/web 

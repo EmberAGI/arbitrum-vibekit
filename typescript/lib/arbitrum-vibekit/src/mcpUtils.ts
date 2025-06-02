@@ -1,11 +1,11 @@
-import { z, ZodType } from "zod";
-// Importing from the explicit compiled output path (with extension) avoids
-// Node.js ESM resolution issues in production Docker images where specifier
-// extension searching is disabled.
 import {
   CallToolResultSchema,
   TextContentSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { ZodType } from "zod";
+// Importing from the explicit compiled output path (with extension) avoids
+// Node.js ESM resolution issues in production Docker images where specifier
+// extension searching is disabled.
 
 /**
  * Extracts the raw text content from an MCP tool response.
@@ -15,14 +15,14 @@ export function parseMcpToolResponseText(rawResponse: unknown): string {
   const { content, isError } = CallToolResultSchema.parse(rawResponse);
 
   if (isError) {
-    if (content.length > 0) {
+    if (content && content.length > 0) {
       const { text } = TextContentSchema.parse(content[0]);
       throw new Error(text);
     }
     throw new Error("MCP response is an error.");
   }
 
-  if (content.length === 0) {
+  if (!content || content.length === 0) {
     throw new Error("MCP response content is empty.");
   }
   
@@ -41,15 +41,17 @@ export function parseMcpToolResponsePayload<T>(
 ): T {
   const { content, isError } = CallToolResultSchema.parse(rawResponse);
 
+  // If the MCP tool signaled an error, extract and throw its message
   if (isError) {
-    if (content.length > 0) {
-      const { text } = TextContentSchema.parse(content[0]);
-      throw new Error(text);
+    if (!content || content.length === 0) {
+      throw new Error("MCP tool error without content.");
     }
-    throw new Error("MCP response is an error.");
+    // Extract text from first content part and throw
+    const { text } = TextContentSchema.parse(content[0]);
+    throw new Error(text);
   }
 
-  if (content.length === 0) {
+  if (!content || content.length === 0) {
     throw new Error("MCP response content is empty.");
   }
 

@@ -10,11 +10,12 @@
   },
   "scripts": {
     "build": "tsc && node -e \"const { join } = require('path'); const fs=require('fs'); const p=join(process.cwd(),'dist/index.js'); if(fs.existsSync(p)){ fs.chmodSync(p,'755'); }\"",
+    "lint": "eslint --ext .ts,.tsx src",
+    "lint:fix": "eslint --ext .ts,.tsx src --fix",
     "start": "tsx src/index.ts",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
-    "test": "tsx test test/**/*.test.ts",
     "dev": "tsx watch src/index.ts",
-    "prepare": "tsc && node -e \"const { join } = require('path'); const fs=require('fs'); const p=join(process.cwd(),'dist/index.js'); if(fs.existsSync(p)){ fs.chmodSync(p,'755'); }\""
+    "prepare": "pnpm build"
   },
   "files": [
     "dist"
@@ -30,9 +31,10 @@
   "license": "ISC",
   "packageManager": "pnpm@10.7.0",
   "dependencies": {
-    "@emberai/sdk-typescript": "0.3.0-beta.9",
+    "@emberai/sdk-typescript": "0.3.0-beta.10",
     "@grpc/grpc-js": "^1.13.2",
     "@modelcontextprotocol/sdk": "^1.9.0",
+    "ember-schemas": "workspace:*",
     "zod": "^3.24.2"
   },
   "devDependencies": {
