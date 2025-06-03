@@ -674,4 +674,30 @@ From scratchpad to release plan:
 
 ---
 
+## Short-Circuit Hook Pattern for Tool Enhancement (v2.5)
+
+- **Decision:** Implement a custom `withHooks` utility for the lending agent that allows hooks to return either modified arguments (to continue execution) or a Task/Message (to short-circuit and return immediately).
+- **Rationale:**
+  - **Protocol Compliance**: A2A requires all code paths to return valid Task/Message objects, not throw exceptions. This pattern ensures protocol compliance even in error cases.
+  - **Clean Error Handling**: Instead of exceptions that break control flow, hooks return structured error responses with appropriate task states ('failed', 'input-required').
+  - **User Experience**: Provides clear, actionable feedback (e.g., "Token 'USDC' found on multiple chains. Please specify which one.") rather than generic error messages.
+  - **Early Validation**: Expensive operations (like blockchain transactions) can be prevented by early validation checks that short-circuit with informative responses.
+  - **Composability**: Multiple hooks can be chained with `composeBeforeHooks`, where any hook in the chain can terminate execution by returning a Task/Message.
+  - **Domain Alignment**: Lending operations have clear preconditions (token exists, sufficient balance, etc.) that map naturally to this pattern.
+- **Implementation:**
+  - Custom `withHooks` function that checks hook return types to determine continuation vs. short-circuit
+  - Type union `Promise<TArgs | Task | Message>` for hook returns
+  - Type guards to distinguish between modified arguments and protocol responses
+- **Trade-offs:**
+  - **Type Complexity**: The union return type requires explicit type checking, adding some complexity
+  - **Mental Model**: Developers must understand the dual nature of hook returns
+  - **Testing**: Tests need to cover both continuation and short-circuit paths
+- **Alternatives Considered:**
+  - Exception-based: Rejected due to A2A protocol requirements
+  - Result wrapper pattern: Rejected as unnecessarily complex
+  - Separate validation phase: Rejected as less flexible and composable
+- **Reference:** Lending agent hook implementations, A2A protocol requirements, user analysis of pattern benefits
+
+---
+
 _This document is a living log. Please append new rationale entries as further decisions are made._

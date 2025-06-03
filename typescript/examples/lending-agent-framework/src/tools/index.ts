@@ -1,13 +1,15 @@
-// Export individual tools
-export { borrowBase } from './borrow.js';
-export { repayBase } from './repay.js';
-export { supplyBase } from './supply.js';
-export { withdrawBase } from './withdraw.js';
-export { getUserPositionsBase } from './getUserPositions.js';
-export { askEncyclopediaBase } from './askEncyclopedia.js';
+// Export composed tools (with hooks applied)
+export {
+  borrow,
+  repay,
+  supply,
+  withdraw,
+  getUserPositions,
+  askEncyclopedia,
+} from './composedTools.js';
 
-// Export as array for easy use
-export { lendingTools } from './lendingTools.js';
+// Export the array of all tools for easy use
+export { composedLendingTools as lendingTools } from './composedTools.js';
 
 // Re-export types and schemas that might be useful
 export type {
