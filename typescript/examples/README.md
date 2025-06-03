@@ -8,7 +8,29 @@ if you want to vibe code your own custom agent, jump to [Building Your Own Agent
 
 ## 🚀 Running an Existing Agent
 
-### 1. Setup You Environment
+### 1. Set Up Your IDE
+
+To get started, we recommend using the [Cursor IDE](https://www.cursor.com/), an AI-powered development environment designed for smooth collaboration between you and your AI assistant. With Cursor, you can:
+
+- Define your project's context using simple rule files located in the [.cursor/rules](https://docs.cursor.com/context/rules) folder.
+
+- Run AI agents locally or remotely within your development environment.
+
+- Integrate with [MCP-powered](https://docs.cursor.com/context/model-context-protocol) tools and workflows for advanced functionality.
+
+To clone Vibekit in Cursor:
+
+1. Open Cursor and click "Clone Repository" in the welcome screen.
+2. Paste the repository URL: `https://github.com/EmberAGI/arbitrum-vibekit.git`.
+3. Choose your local directory and click "Clone".
+
+<p align="left">
+  <img src="../../img/cursor.png" width="900px" alt="cursor"/>
+</p>
+
+Once cloned, Cursor will automatically detect the `.cursor/rules` folder and set up the AI context.
+
+### 2. Set Up Your Environment
 
 Navigate to the desired agent's directory and create an `.env` file. Copy the contents of `.env.example` into the `.env` file and fill in any required secrets or configuration variables.
 
@@ -19,7 +41,7 @@ cd typescript &&
 pnpm install
 ```
 
-### 2. Start the Agent
+### 3. Start the Agent
 
 You can start an agent in four different ways. Simply choose the approach that best fits your preferences and project setup:
 
@@ -85,13 +107,13 @@ pnpm build &&
 pnpm --filter "agent-name" dev
 ```
 
-### 3. Interact with the Agent
+### 4. Interact with the Agent
 
 Once the agent is up and running, you have three ways of interacting with it:
 
 **1. Vibekit's Web Interface**
 
-To interact with the Lending agent through the web interface, refer to [this quickstart](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/docs/quickstart.md) guide. The Lending agent is started by default when the frontend is launched.
+To interact with the lending agent through the web interface, refer to [this quickstart](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/docs/quickstart.md) guide. The Lending agent is started by default when the frontend is launched.
 
 **2. Integrate with Cursor IDE**
 
@@ -123,19 +145,19 @@ npx -y @modelcontextprotocol/inspector
 Navigate to http://127.0.0.1:6274 in your browser to access the interface and click on "Connect" to establish a connection with your local server:
 
 <p align="left">
-  <img src="img/inspector_1.png" width="700px" alt="Inspector1"/>
+  <img src="../../img/inspector_1.png" width="700px" alt="Inspector1"/>
 </p>
 
 Next, click on "List Tools" to view the tools your Lending Agent offers:
 
 <p align="left">
-  <img src="img/inspector_2.png" width="700px" alt="Inspector2"/>
+  <img src="../../img/inspector_2.png" width="700px" alt="Inspector2"/>
 </p>
 
 Next, select "askLendingAgent", input your wallet address and query, and execute the tool to interact with your agent:
 
 <p align="left">
-  <img src="img/inspector_3.png" width="700px" alt="Inspector3"/>
+  <img src="../../img/inspector_3.png" width="700px" alt="Inspector3"/>
 </p>
 
 The Inspector interface provides a straightforward way to interact with your agent.

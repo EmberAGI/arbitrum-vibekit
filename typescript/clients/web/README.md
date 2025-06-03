@@ -26,20 +26,21 @@ This frontend uses [OpenRouter](https://openrouter.ai/) as the default LLM provi
 
 ### Prerequisites
 
-Ensure that [Docker](https://docs.docker.com/engine/install/) and [Docker Compose](https://docs.docker.com/compose/install/) are installed on your system.
+1. [Docker](https://docs.docker.com/engine/install/)
+2. [Docker Compose](https://docs.docker.com/compose/install/)
 
-**Note:** If your are on an M-series Mac, you need to install Docker using the [dmg package](https://docs.docker.com/desktop/setup/install/mac-install/) supplied officially by Docker rather than through Homebrew or other means.
+**Note:** If your are on an M-series Mac, you need to install Docker using the [dmg package](https://docs.docker.com/desktop/setup/install/mac-install/) supplied officially by Docker rather than through Homebrew or other means to avoid build issues.
 
 ### Running the Frontend
 
-**1.** Clone the [Arbitrum Vibekit repository](https://github.com/EmberAGI/arbitrum-vibekit) if you haven't already:
+**1. Clone the [Arbitrum Vibekit repository](https://github.com/EmberAGI/arbitrum-vibekit) if you haven't already:**
 
 ```bash
 git clone https://github.com/EmberAGI/arbitrum-vibekit.git &&
 cd arbitrum-vibekit
 ```
 
-**2.** Configure Environment Variables:
+**2. Configure environment variables:**
 
 Navigate to the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory and create a `.env` file by copying the example template:
 
@@ -51,10 +52,10 @@ cp .env.example .env
 Open the `.env` file and fill in the required values. This typically includes:
 
 - Your preferred LLM provider API key (e.g., `OPENROUTER_API_KEY`).
-- Generate a secure `AUTH_SECRET` (you can use `openssl rand -hex 32` or a similar tool).
+- Generate a secure `AUTH_SECRET` (you can use https://generate-secret.vercel.app/32 or `openssl rand -base64 32`).
 - Set a `POSTGRES_PASSWORD`.
 
-**3.** Start Services with Docker Compose:
+**3. Start services with Docker Compose:**
 
 From the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory, run the following command to build and start the frontend and its associated services (including the lending agent, and the database):
 
@@ -69,7 +70,7 @@ docker compose up
 sudo  docker compose up
 ```
 
-**4.** Access Vibekit's Web Interface:
+**4. Access Vibekit's web interface:**
 
 Open your web browser and navigate to http://localhost:3000. To be able to use the web interface, you need to connect your wallet first. Click on "Connect Wallet" to get started:
 
@@ -77,7 +78,7 @@ Open your web browser and navigate to http://localhost:3000. To be able to use t
   <img src="../../../img/wallet.png" width="700px" alt="wallet"/>
 </p>
 
-After setting up your wallet, you can interact with Lending agent through the chat interface:
+After setting up your wallet, you can interact with the lending agent through the chat interface:
 
 <p align="left">
   <img src="../../../img/frontend.png" width="700px" alt="frontend"/>
@@ -104,52 +105,61 @@ This is a map that links each agent's unique `id` to its specific backend server
 ```typescript
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
+  ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
+  // ["ember-lp", "http://liquidity-agent-no-wallet:3002/sse"],
+  // ["ember-pendle", "http://pendle-agent:3003/sse"],
 ]);
 ```
 
-**Note:** The web application only starts the lending agent. Other agents like `ember-camelot` or `ember-pendle` must be independently started and run as separate server processes via the [docker compose](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/compose.yml) file. The frontend then connects to these active servers using the specified URLs. To run these example agents, or any other custom agents refer to the next section.
+**Note:** The web application only starts the lending agent (`ember-aave`) and the swapping agent (`ember-camelot`). Other agents like `ember-pendle` or `ember-lp` must be started and run as separate server processes via the [docker compose](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/compose.yml) file. The frontend then connects to these active servers using the specified URLs. To run these example agents, or any other custom agents refer to the next section.
 
 ### Integrating a Custom Agent
 
 To integrate another example agent or a custom agent into the frontend:
 
-**1.** Add the agent sever to the services defined in the [docker compose](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/compose.yml) file.
+**1. Add the agent sever to the services defined in the [docker compose](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/compose.yml) file.**
 
-For instance, to add the `swapping-agent-no-wallet`, define its server right after the `lending-agent-no-wallet`:
+For instance, to add the `pendle-agent` or the `liquidity-agent-no-wallet`, uncomment their server definitions in the `compose.yml` file:
 
 ```
 services:
   lending-agent-no-wallet:
-    build:
-      context: ./
-      dockerfile: examples/lending-agent-no-wallet/Dockerfile
-    container_name: vibekit-lending-agent-no-wallet
-    env_file:
-      - .env
-    ports:
-      - '${PORT:-3001}:${PORT:-3001}'
-    restart: unless-stopped
+    ...
 
   swapping-agent-no-wallet:
-    build:
-      context: ./
-      dockerfile: examples/swapping-agent-no-wallet/Dockerfile
-    container_name: vibekit-swapping-agent-no-wallet
-    env_file:
-      - .env
-    ports:
-      - '${PORT:-3002}:${PORT:-3002}'
-    restart: unless-stopped
+    ...
+
+  # liquidity-agent-no-wallet:
+  #   build:
+  #     context: ./
+  #     dockerfile: examples/liquidity-agent-no-wallet/Dockerfile
+  #   container_name: vibekit-liquidity-agent-no-wallet
+  #   env_file:
+  #     - .env
+  #   ports:
+  #     - 3002:3002
+  #   restart: unless-stopped
+
+  # pendle-agent:
+  #   build:
+  #     context: ./
+  #     dockerfile: examples/pendle-agent/Dockerfile
+  #   container_name: vibekit-pendle-agent
+  #   env_file:
+  #     - .env
+  #   ports:
+  #     - 3003:3003
+  #   restart: unless-stopped
 ```
 
-If you're integrating a custom agent, ensure your agent's server runs and is accessible via a URL first.
+If you're integrating a custom agent, ensure your agent's server runs and is accessible via a URL first. Then add its server configurations in this file.
 
-**Note:** Each agent server must use a unique port number. If two agents are assigned the same port in your Docker Compose or server configuration, they will fail to start due to a port conflict (`port already in use` error).
+**Note:** Each agent server must use a unique port number. If two agents are assigned the same port in your Docker Compose or server configurations, they will fail to start due to a port conflict (`port already in use` error).
 To avoid this, assign a different port to each agent and update both your Docker Compose file and the corresponding URLs in `agents-config.ts` so the frontend can connect to each agent correctly.
 
-**2.** Add a new entry to the `chatAgents` array in [agents-config.ts](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/agents-config.ts) file with the new agent's `id`, `name`, `description`, and any `suggestedActions`.
+**2. Add a new entry to the `chatAgents` array in [agents-config.ts](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/agents-config.ts) file with the new agent's `id`, `name`, `description`, and any `suggestedActions`.**
 
-For example, to integrate the `swapping-agent-no-wallet`, add its configuration right after the entry for `lending-agent-no-wallet`:
+For instance, to add the `pendle-agent` or the `liquidity-agent-no-wallet`, uncomment their definitions in the `agents-config.ts` file:
 
 ```
 export const chatAgents = [
@@ -158,12 +168,7 @@ export const chatAgents = [
     name: 'Lending',
     description: 'AAVE lending agent',
     suggestedActions: [
-      {
-        title: 'Deposit WETH',
-        label: 'to my balance',
-        action: 'Deposit WETH to my balance',
-      },
-      { title: 'Check', label: 'balance', action: 'Check balance' },
+        ...
     ],
   },
   {
@@ -171,29 +176,56 @@ export const chatAgents = [
     name: "Trading",
     description: "Camelot Swapping agent",
     suggestedActions: [
-      {
-        title: "Swap USDC for ETH",
-        label: "on Arbitrum Network.",
-        action: "Swap USDC for ETH tokens from Arbitrum to Arbitrum Network.",
-      },
-      {
-        title: "Buy ARB",
-        label: "on Arbitrum Network.",
-        action: "Buy ARB token.",
-      },
+        ...
     ],
   },
+    // {
+  //   id: "ember-lp" as const,
+  //   name: "LPing",
+  //   description: "Camelot Liquidity Provisioning agent",
+  //   suggestedActions: [
+  //     {
+  //       title: "Provide Liquidity",
+  //       label: "on Arbitrum Network.",
+  //       action: "Provide Liquidity on Arbitrum Network.",
+  //     },
+  //     {
+  //       title: "Check",
+  //       label: "Liquidity positions",
+  //       action: "Check Positions",
+  //     },
+  //   ],
+  // },
+  // {
+  //   id: "ember-pendle" as const,
+  //   name: "Pendle",
+  //   description: "Test agent for Pendle",
+  //   suggestedActions: [
+  //     {
+  //       title: "Deposit WETH",
+  //       label: "to my balance",
+  //       action: "Deposit WETH to my balance",
+  //     },
+  //     {
+  //       title: "Check",
+  //       label: "balance",
+  //       action: "Check balance",
+  //     },
+  //   ],
+  // },
 
 ```
 
-**3.** Add a corresponding entry to the `DEFAULT_SERVER_URLS` map in [`agents-config.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/agents-config.ts), mapping the new agent's `id` to its running server URL.
+**3. Add a corresponding entry to the `DEFAULT_SERVER_URLS` map in [`agents-config.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/agents-config.ts), mapping the new agent's `id` to its running server URL.**
 
-For example, to integrate the `swapping-agent-no-wallet`, add its URL entry right after the one for `lending-agent-no-wallet`:
+For instance, to add the `pendle-agent` or the `liquidity-agent-no-wallet`, uncomment their URL entries in the `agents-config.ts` file:
 
 ```typescript
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
-  ['ember-camelot', 'http://swapping-agent-no-wallet:3002/sse'],
+  ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
+  // ["ember-lp", "http://liquidity-agent-no-wallet:3002/sse"],
+  // ["ember-pendle", "http://pendle-agent:3003/sse"],
 ]);
 ```
 
@@ -210,4 +242,4 @@ This configuration allows the frontend to dynamically discover, list, and connec
 
 We welcome contributions from the community! If you'd like to help improve Vibekit, please check out our [Contribution Guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md).
 
-To show our appreciation, we have launched an incentive program that rewards [valuable contributions](https://github.com/orgs/EmberAGI/projects/13) to the Vibekit. Checkout our blog post to learn more!
+To show our appreciation, we have launched an [incentive program](https://docs.google.com/forms/d/e/1FAIpQLSe-GF7UcUOuyEMsgnVpLFrG_W83RAchaPPqOCD83pZaZXskgw/viewform) that rewards [valuable contributions](https://github.com/orgs/EmberAGI/projects/13) to the Vibekit. Checkout our [blog post](https://www.emberai.xyz/blog) to learn more!

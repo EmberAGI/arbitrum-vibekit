@@ -82,22 +82,16 @@ pnpm -v # Check that pnpm is installed
 
 ### 2. Clone the Repository:
 
-You can do so though the command line or through your preferred IDE.
+You can do so through the command line or through your preferred IDE. We recommend using [Cursor IDE](https://www.cursor.com/).
 
 ```
 git clone https://github.com/EmberAGI/arbitrum-vibekit.git
 cd arbitrum-vibekit
 ```
 
-We recommend using the [Cursor IDE](https://www.cursor.com/).
-
-<p align="left">
-  <img src="img/cursor.png" width="900px" alt="cursor"/>
-</p>
-
 ### 3. Run Your DeFi Agent:
 
-Let's run the Lending Agent. Head over to the [lending-agent-no-wallet](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples/lending-agent-no-wallet) directory and create a `.env` file with the following required variables. Alternatively, you can create your `.env` file by copying the `.env.example` template in the agent's directory. Make sure to populate the `.env` file with the necessary configuration settings and API keys specific to your setup.
+Let's run the lending agent. Head over to the [lending-agent-no-wallet](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples/lending-agent-no-wallet) directory and create a `.env` file with the following required variables. Alternatively, you can create your `.env` file by copying the `.env.example` template in the agent's directory. Make sure to populate the `.env` file with the necessary configuration settings and API keys specific to your setup.
 
 ```env
 OPENROUTER_API_KEY=your_openrouter_api_key
@@ -130,15 +124,73 @@ sudo pnpm --filter "lending-agent-no-wallet" docker:compose:up
 
 ### 4. Interact With the DeFi Agent:
 
-Once the agent is up and running, you have two ways of interacting with it:
+Once the agent is up and running, you can interact with it either through Vibekit's web frontend or directly via Cursor:
 
-**1. Vibekit's Web Interface**
+### Vibekit's Web Interface
 
-To interact with the Lending agent through the web interface, refer to [this quickstart](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/docs/quickstart.md) guide. The Lending agent is started by default when the frontend is launched.
+The lending agent is started by default when the frontend is started. Follow this guide to launch the frontend:
 
-**2. Integrate With Cursor IDE**
+#### Prerequisites
 
-To interact with the Lending Agent though Cursor, [create or update](https://docs.cursor.com/context/model-context-protocol) your `mcp.json` file through Cursor's MCP settings with the following content. If your agent is running on a different port than `3001`, make sure to adjust it:
+1. [Docker](https://docs.docker.com/engine/install/)
+2. [Docker Compose](https://docs.docker.com/compose/install/)
+
+**Note:** If your are on an M-series Mac, you need to install Docker using the [dmg package](https://docs.docker.com/desktop/setup/install/mac-install/) supplied officially by Docker rather than through Homebrew or other means to avoid build issues.
+
+#### Running the Frontend
+
+**1. Clone the [Arbitrum Vibekit repository](https://github.com/EmberAGI/arbitrum-vibekit) if you haven't already:**
+
+```bash
+git clone https://github.com/EmberAGI/arbitrum-vibekit.git &&
+cd arbitrum-vibekit
+```
+
+**2. Configure environment variables:**
+
+Navigate to the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory and create a `.env` file by copying the example template:
+
+```bash
+cd typescript &&
+cp .env.example .env
+```
+
+Open the `.env` file and fill in the required values. This typically includes:
+
+- Your preferred LLM provider API key (e.g., `OPENROUTER_API_KEY`).
+- Generate a secure `AUTH_SECRET` (you can use https://generate-secret.vercel.app/32 or `openssl rand -base64 32`).
+- Set a `POSTGRES_PASSWORD`.
+
+**3. Start services with Docker Compose:**
+
+From the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory, run the following command to build and start the frontend and its associated services (including the lending agent, and the database):
+
+```bash
+# Ensure you are in the typescript/ directory
+docker compose up
+```
+
+**4. Access Vibekit's web interface:**
+
+Open your web browser and navigate to http://localhost:3000. To be able to use the web interface, you need to connect your wallet first. Click on "Connect Wallet" to get started:
+
+<p align="left">
+  <img src="img/wallet.png" width="900px" alt="wallet"/>
+</p>
+
+After setting up your wallet, you can interact with the lending agent through the chat interface:
+
+<p align="left">
+  <img src="img/frontend.png" width="900px" alt="frontend"/>
+</p>
+
+#### Integrating a Custom Agent
+
+To integrate another example agent or a custom agent into the frontend, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/README.md#agent-configuration).
+
+### Cursor IDE
+
+To interact with the lending agent through Cursor, [create or update](https://docs.cursor.com/context/model-context-protocol) your `mcp.json` file through Cursor's MCP settings with the following content. If your agent is running on a different port than `3001`, make sure to adjust it:
 
 ```
 {
@@ -167,28 +219,6 @@ Checkout the [examples/](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/
 Vibe coding is all about teaming up with AI to enhance your development process. Instead of writing every line of code manually, you guide an AI assistant using natural language prompts. The AI understands your project's context (such as folder structures, tools, and data schemas) and provides targeted suggestions to help you build more efficiently.
 
 Vibekit enables you to build and customize DeFi agents through vibe coding. Whether you're creating a swapping agent, a lending agent, or a liquidity provider, you can describe your agent's behavior in natural language and let the AI help you implement it. The framework provides pre-built tools for common DeFi operations, MCP integration for external data, and a structured way to define your agent's capabilities through rules files.
-
-### 🛠️ Setting Up Your IDE
-
-To get started, we recommend using the [Cursor IDE](https://www.cursor.com/), an AI-powered development environment designed for smooth collaboration between you and your AI assistant. With Cursor, you can:
-
-- Define your project's context using simple rule files located in the [.cursor/rules](https://docs.cursor.com/context/rules) folder.
-
-- Run AI agents locally or remotely within your development environment.
-
-- Integrate with [MCP-powered](https://docs.cursor.com/context/model-context-protocol) tools and workflows for advanced functionality.
-
-To clone Vibekit in Cursor:
-
-1. Open Cursor and click "Clone Repository" in the welcome screen.
-2. Paste the repository URL: `https://github.com/EmberAGI/arbitrum-vibekit.git`.
-3. Choose your local directory and click "Clone".
-
-<p align="left">
-  <img src="img/cursor.png" width="900px" alt="cursor"/>
-</p>
-
-Once cloned, Cursor will automatically detect the `.cursor/rules` folder and set up the AI context.
 
 ### 🤖 Vibe Coding DeFi Agents
 
@@ -235,7 +265,7 @@ MCP (Model Context Protocol) makes it easy for on-chain agents to tap into exter
 
 Want to dig deeper? Check out the [official MCP docs](https://modelcontextprotocol.io/introduction).
 
-### 🤝 Our MCP Integrations
+### 🤝 Vibekit's MCP Integrations
 
 Vibekit integrates MCP in three powerful ways:
 
@@ -273,4 +303,4 @@ You'll find a collection of ready-to-use MCP tools, along with step-by-step guid
 
 We welcome contributions from the community! If you'd like to help improve Vibekit, please check out our [Contribution Guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md).
 
-To show our appreciation, we have launched an incentive program that rewards [valuable contributions](https://github.com/orgs/EmberAGI/projects/13) to the Vibekit. Checkout our blog post to learn more!
+To show our appreciation, we have launched an [incentive program](https://docs.google.com/forms/d/e/1FAIpQLSe-GF7UcUOuyEMsgnVpLFrG_W83RAchaPPqOCD83pZaZXskgw/viewform) that rewards [valuable contributions](https://github.com/orgs/EmberAGI/projects/13) to the Vibekit. Checkout our [blog post](https://www.emberai.xyz/blog) to learn more!
