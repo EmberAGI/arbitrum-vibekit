@@ -182,8 +182,9 @@ export async function POST(request: Request) {
           sendReasoning: true,
         });
       },
-      onError: () => {
-        return 'Oops, an error occured!';
+      onError: (error: unknown) => {
+        console.error('Error:', error);
+        return `${error}`;
       },
     });
   } catch (error) {

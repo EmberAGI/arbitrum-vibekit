@@ -1226,3 +1226,47 @@ export const ToIcon = ({ size = 16 }: { size?: number }) => (
     ></path>
   </svg>
 );
+
+export const WalletIcon = ({ size = 16 }: { size?: number }) => {
+  return (
+    <svg
+      height={size}
+      strokeLinejoin="round"
+      viewBox="0 0 24 24"
+      width={size}
+      style={{ color: "currentcolor" }}
+      className="rounded-full bg-gradient-to-br from-blue-500 to-purple-600 p-1"
+    >
+      <path
+        d="M19 7h-14c-1.103 0-2 .897-2 2v9c0 1.103.897 2 2 2h14c1.103 0 2-.897 2-2v-9c0-1.103-.897-2-2-2z"
+        stroke="white"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <path
+        d="M7 7v-2c0-1.103.897-2 2-2h6c1.103 0 2 .897 2 2v2"
+        stroke="white"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <circle
+        cx="12"
+        cy="13"
+        r="2"
+        stroke="white"
+        strokeWidth="1.5"
+        fill="none"
+      />
+      <path
+        d="M12 11v4"
+        stroke="white"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+};
