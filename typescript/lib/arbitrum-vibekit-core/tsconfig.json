@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
+    "composite": true,
     "baseUrl": ".",
     "paths": {
       "@modelcontextprotocol/sdk/types.js": [
@@ -11,8 +12,11 @@
         "./node_modules/@google-a2a/types/src/types.ts"
       ]
     },
+    "ember-schemas": ["../ember-schemas/src"],
+    "ember-schemas/*": ["../ember-schemas/src/*"],
     "verbatimModuleSyntax": false
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"],
+  "references": [{ "path": "../ember-schemas" }]
 }

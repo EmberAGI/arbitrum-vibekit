@@ -1,0 +1,28 @@
+{
+  "name": "test-utils",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "prepare": "pnpm build",
+    "build": "tsc -b",
+    "lint": "eslint --ext .ts,.tsx src",
+    "lint:fix": "eslint --ext .ts,.tsx src --fix",
+    "format": "prettier --write \"src/**/*.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.19",
+    "prettier": "^3.5.3",
+    "typescript": "^5.4.2"
+  },
+  "dependencies": {
+    "a2a-samples-js": "workspace:*",
+    "ember-schemas": "workspace:*",
+    "viem": "^2.26.3",
+    "zod": "^3.22.4"
+  }
+}
