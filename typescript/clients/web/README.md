@@ -1,6 +1,6 @@
 # Vibekit Frontend
 
-A dockerized web frontend for interacting with Vibekit's AI agents via the Model Context Protocol (MCP). The frontned offers smooth LLM integration through [OpenRouter](https://openrouter.ai/), and is easily switchable to other LLM providers.
+A dockerized web frontend for interacting with Vibekit's AI agents via the Model Context Protocol (MCP). The frontend offers smooth LLM integration through [OpenRouter](https://openrouter.ai/), and is easily switchable to other LLM providers.
 
 ## Architecture
 
@@ -69,7 +69,7 @@ docker compose up
 sudo  docker compose up
 ```
 
-**4.** Access the Vibekit Web Frontend:
+**4.** Access Vibekit's Web Interface:
 
 Open your web browser and navigate to http://localhost:3000. To be able to use the web interface, you need to connect your wallet first. Click on "Connect Wallet" to get started:
 
@@ -107,15 +107,15 @@ export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
 ]);
 ```
 
-**Note:** The web application only starts the lending agent. Other agents like `ember-aave` or `ember-pendle` must be independently started and run as separate server processes via the [docker compose](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/compose.yml) file. The frontend then connects to these active servers using the specified URLs. To run these example agents, or any other custom agents refer to the next section.
+**Note:** The web application only starts the lending agent. Other agents like `ember-camelot` or `ember-pendle` must be independently started and run as separate server processes via the [docker compose](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/compose.yml) file. The frontend then connects to these active servers using the specified URLs. To run these example agents, or any other custom agents refer to the next section.
 
 ### Integrating a Custom Agent
 
-To integrate a new example agent or a custom agent into the frontend:
+To integrate another example agent or a custom agent into the frontend:
 
 **1.** Add the agent sever to the services defined in the [docker compose](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/compose.yml) file.
 
-For instance, to integrate the `swapping-agent-no-wallet`, configure its server right after the `lending-agent-no-wallet`:
+For instance, to add the `swapping-agent-no-wallet`, define its server right after the `lending-agent-no-wallet`:
 
 ```
 services:
@@ -142,13 +142,14 @@ services:
     restart: unless-stopped
 ```
 
-If you are integrating a custom agent, ensure your agent server runs and is accessible via a URL first.
+If you're integrating a custom agent, ensure your agent's server runs and is accessible via a URL first.
 
-**Note:** Make sure the agent server ports are not conflicting.
+**Note:** Each agent server must use a unique port number. If two agents are assigned the same port in your Docker Compose or server configuration, they will fail to start due to a port conflict (`port already in use` error).
+To avoid this, assign a different port to each agent and update both your Docker Compose file and the corresponding URLs in `agents-config.ts` so the frontend can connect to each agent correctly.
 
 **2.** Add a new entry to the `chatAgents` array in [agents-config.ts](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/agents-config.ts) file with the new agent's `id`, `name`, `description`, and any `suggestedActions`.
 
-For instance, to integrate the `swapping-agent-no-wallet`, add its configurations right after the `lending-agent-no-wallet`'s:
+For example, to integrate the `swapping-agent-no-wallet`, add its configuration right after the entry for `lending-agent-no-wallet`:
 
 ```
 export const chatAgents = [
@@ -187,7 +188,7 @@ export const chatAgents = [
 
 **3.** Add a corresponding entry to the `DEFAULT_SERVER_URLS` map in [`agents-config.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/agents-config.ts), mapping the new agent's `id` to its running server URL.
 
-For instance, to integrate the `swapping-agent-no-wallet`, add its URL right after the `lending-agent-no-wallet`'s:
+For example, to integrate the `swapping-agent-no-wallet`, add its URL entry right after the one for `lending-agent-no-wallet`:
 
 ```typescript
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([

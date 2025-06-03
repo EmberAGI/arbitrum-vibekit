@@ -131,9 +131,11 @@ sudo pnpm --filter "lending-agent-no-wallet" docker:compose:up
 
 ### 4. Interact With the DeFi Agent:
 
-Once the agent is up and running, you have three ways of interacting with it:
+Once the agent is up and running, you have two ways of interacting with it:
 
-**1. Vibekit Web Interface**
+**1. Vibekit's Web Interface**
+
+To interact with the Lending agent through the web interface, refer to [this quickstart](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/docs/quickstart.md) guide. The Lending agent is started by default when the frontend is launched.
 
 **2. Integrate With Cursor IDE**
 

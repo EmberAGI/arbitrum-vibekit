@@ -31,8 +31,8 @@ Ask Cursor's integrated AI assistant to run your desired agent.
 
 If you are using VSCODE or Cursor, you can run agents as [tasks](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/.vscode/tasks.json). To start an agent:
 
-- Open the Vibekit repo in your preferrede IDE.
-- Press on `Cntrl + shift + P` ( `Cmnd + shift + P` on Mac) to open up the Command Pallete
+- Open the Vibekit repo in your preferred IDE.
+- Press on `Cntrl + shift + P` ( `Cmnd + shift + P` on Mac) to open up the Command Palette.
 - Search for "Run Task".
 
 <p align="left">
@@ -89,7 +89,9 @@ pnpm --filter "agent-name" dev
 
 Once the agent is up and running, you have three ways of interacting with it:
 
-**1. Vibekit Web Interface:**
+**1. Vibekit's Web Interface**
+
+To interact with the Lending agent through the web interface, refer to [this quickstart](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/docs/quickstart.md) guide. The Lending agent is started by default when the frontend is launched.
 
 **2. Integrate with Cursor IDE**
 
