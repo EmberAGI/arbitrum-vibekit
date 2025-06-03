@@ -6,7 +6,29 @@ Welcome to Vibekit's MCP tools directory! Model Context Protocol (MCP) tools are
 
 By contributing new MCP tools, you're expanding the possibilities for all Vibekit agents. Your tools can enable new DeFi strategies, integrate additional protocols, or enhance existing capabilities. This guide will walk you through the process of creating and contributing your own MCP tools to the ecosystem. Before submitting a pull request for your work, please review the guidelines in [`CONTRIBUTIONS.md`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md) to ensure best practices are followed.
 
-### 1. Set Up Your Project:
+### 1. Set Up Your IDE
+
+To get started, we recommend using the [Cursor IDE](https://www.cursor.com/), an AI-powered development environment designed for smooth collaboration between you and your AI assistant. With Cursor, you can:
+
+- Define your project's context using simple rule files located in the [.cursor/rules](https://docs.cursor.com/context/rules) folder.
+
+- Run AI agents locally or remotely within your development environment.
+
+- Integrate with [MCP-powered](https://docs.cursor.com/context/model-context-protocol) tools and workflows for advanced functionality.
+
+To clone Vibekit in Cursor:
+
+1. Open Cursor and click "Clone Repository" in the welcome screen.
+2. Paste the repository URL: `https://github.com/EmberAGI/arbitrum-vibekit.git`.
+3. Choose your local directory and click "Clone".
+
+<p align="left">
+  <img src="../../../img/cursor.png" width="900px" alt="cursor"/>
+</p>
+
+Once cloned, Cursor will automatically detect the `.cursor/rules` folder and set up the AI context.
+
+### 2. Set Up Your Project:
 
 If you'd like to speed up the setup process, consider using [FastMCP](https://github.com/punkpeye/fastmcp/) or [AI Tool Maker](https://github.com/nihaocami/ai-tool-maker). These tools can automatically generate the boilerplate code and folder structure for your MCP tool, allowing you to focus on your tool's unique logic. If you prefer a more hands-on approach or need a custom setup, follow the manual steps outlined below to build your MCP tool from scratch.
 
@@ -40,15 +62,15 @@ If you'd like to speed up the setup process, consider using [FastMCP](https://gi
    yarn install
    ```
 
-### 2. Define Your Tools:
+### 3. Define Your Tools:
 
 In the `src/index.ts` file, you can use Zod schemas to define your MCP tools. The schemas define the types, descriptions, and required properties of the parameters.
 
 ```typescript
 // Define schema objects
 const myOperationSchema = {
-  paramOne: z.string().describe("Description of first parameter"),
-  paramTwo: z.number().describe("Description of second parameter"),
+  paramOne: z.string().describe('Description of first parameter'),
+  paramTwo: z.number().describe('Description of second parameter'),
 };
 
 // Create Zod objects and types
@@ -56,24 +78,24 @@ const myOperationParams = z.object(myOperationSchema);
 type MyOperationParams = z.infer<typeof myOperationParams>;
 ```
 
-### 3. Initialize the MCP Server:
+### 4. Initialize the MCP Server:
 
 Now that you've defined your tool's schemas, it's time to set up the MCP server that will host your tool and handle incoming requests.
 
 ```typescript
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 const server = new McpServer({
-  name: "my-mcp-tool-server",
-  version: "1.0.0",
+  name: 'my-mcp-tool-server',
+  version: '1.0.0',
 });
 
 // Initialize your SDK client if needed
-const myClient = new MySdkClient(process.env.MY_ENDPOINT || "default-endpoint");
+const myClient = new MySdkClient(process.env.MY_ENDPOINT || 'default-endpoint');
 ```
 
-### 4. Register Your Tools:
+### 5. Register Your Tools:
 
 Tools are registered with the `McpServer` using the `server.tool()` method. Each tool is registered with:
 
@@ -82,8 +104,8 @@ Tools are registered with the `McpServer` using the `server.tool()` method. Each
 
 ```typescript
 server.tool(
-  "myOperation",
-  "Description of the operation",
+  'myOperation',
+  'Description of the operation',
   myOperationSchema,
   async (params: MyOperationParams, extra: any) => {
     try {
@@ -93,19 +115,19 @@ server.tool(
       });
 
       return {
-        content: [{ type: "text", text: JSON.stringify(response, null, 2) }],
+        content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],
       };
     } catch (error) {
       return {
         isError: true,
-        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+        content: [{ type: 'text', text: `Error: ${(error as Error).message}` }],
       };
     }
   }
 );
 ```
 
-### 5. Wire Up Transport and Entrypoint:
+### 6. Wire Up Transport and Entrypoint:
 
 With your tool logic and server defined, the final step is to connect your server to a transport (such as STDIO) and provide an entrypoint for execution. This allows your MCP tool to receive and respond to requests when invoked.
 
@@ -114,9 +136,9 @@ async function main() {
   const transport = new StdioServerTransport();
   try {
     await server.connect(transport);
-    console.error("MCP server started and connected.");
+    console.error('MCP server started and connected.');
   } catch (error) {
-    console.error("Failed to start server:", error);
+    console.error('Failed to start server:', error);
     process.exit(1);
   }
 }
@@ -124,7 +146,7 @@ async function main() {
 main();
 ```
 
-### 6. Run and Inspect Your Tool:
+### 7. Run and Inspect Your Tool:
 
 You can quickly test your MCP tool using the Inspector, which provides an interactive interface for sending requests and viewing responses. Build your project and launch the Inspector with the following command:
 
@@ -132,7 +154,7 @@ You can quickly test your MCP tool using the Inspector, which provides an intera
 pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js
 ```
 
-### 7. Showcase Your Tool with a Demo Agent:
+### 8. Showcase Your Tool with a Demo Agent:
 
 Consider showcasing your new MCP tool by building a demo agent in the [examples](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) directory. Creating a simple agent that uses your tool is a great way to demonstrate its functionality and help others understand how to integrate it into their own projects.
 
