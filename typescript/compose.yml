@@ -7,19 +7,52 @@ services:
     env_file:
       - .env
     ports:
-      - '${PORT:-3001}:${PORT:-3001}'
+      - 3001:3001
     restart: unless-stopped
-  
-  # swapping-agent-no-wallet:
+
+  # liquidity-agent-no-wallet:
   #   build:
   #     context: ./
-  #     dockerfile: examples/swapping-agent-no-wallet/Dockerfile
-  #   container_name: vibekit-swapping-agent-no-wallet
+  #     dockerfile: examples/liquidity-agent-no-wallet/Dockerfile
+  #   container_name: vibekit-liquidity-agent-no-wallet
   #   env_file:
   #     - .env
   #   ports:
-  #     - '${PORT:-3002}:${PORT:-3002}'
+  #     - 3002:3002
   #   restart: unless-stopped
+
+  # pendle-agent:
+  #   build:
+  #     context: ./
+  #     dockerfile: examples/pendle-agent/Dockerfile
+  #   container_name: vibekit-pendle-agent
+  #   env_file:
+  #     - .env
+  #   ports:
+  #     - 3003:3003
+  #   restart: unless-stopped
+
+  # swapping-agent:
+  #   build:
+  #     context: ./
+  #     dockerfile: examples/swapping-agent/Dockerfile
+  #   container_name: vibekit-swapping-agent
+  #   env_file:
+  #     - .env
+  #   ports:
+  #     - 3004:3004
+  #   restart: unless-stopped
+
+  swapping-agent-no-wallet:
+    build:
+      context: ./
+      dockerfile: examples/swapping-agent-no-wallet/Dockerfile
+    container_name: vibekit-swapping-agent-no-wallet
+    env_file:
+      - .env
+    ports:
+      - 3005:3005
+    restart: unless-stopped
 
   web:
     container_name: vibekit-web-app

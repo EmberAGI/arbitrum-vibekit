@@ -108,7 +108,6 @@ OPENAI_API_KEY=your_openai_api_key
 EMBER_ENDPOINT=grpc.api.emberai.xyz:50051
 RPC_URL=https://arbitrum.llamarpc.com
 AGENT_CACHE_TOKENS=false
-PORT=3001
 
 ```
 
