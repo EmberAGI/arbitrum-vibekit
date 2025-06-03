@@ -18,7 +18,7 @@ import {
   createTransactionArtifactSchema,
   type TransactionArtifact,
   parseMcpToolResponsePayload,
-} from 'arbitrum-vibekit';
+} from 'arbitrum-vibekit-core';
 import {
   validateTransactionPlans,
   TransactionPlanSchema,

@@ -17,7 +17,7 @@ import {
   createTransactionArtifactSchema,
   type TransactionArtifact,
   parseMcpToolResponsePayload,
-} from 'arbitrum-vibekit';
+} from 'arbitrum-vibekit-core';
 import {
   validateTransactionPlans,
   TransactionPlanSchema,
@@ -476,7 +476,10 @@ export async function handleRepay(
       context.log('MCP repay tool response:', toolResult);
 
       // Parse and validate the MCP repay tool response using the new ZodRepayResponseSchema
-      const repayResp = parseMcpToolResponsePayload(toolResult, ZodRepayResponseSchema) as RepayResponse;
+      const repayResp = parseMcpToolResponsePayload(
+        toolResult,
+        ZodRepayResponseSchema
+      ) as RepayResponse;
       const { transactions } = repayResp;
       context.log(`Processed and validated ${transactions.length} transactions for repay.`);
 

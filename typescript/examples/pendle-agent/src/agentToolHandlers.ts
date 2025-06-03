@@ -6,7 +6,7 @@ import {
   parseMcpToolResponsePayload,
   createTransactionArtifactSchema,
   type TransactionArtifact,
-} from 'arbitrum-vibekit';
+} from 'arbitrum-vibekit-core';
 import {
   validateTransactionPlans,
   type TransactionPlan,

@@ -14,7 +14,7 @@ import {
   parseMcpToolResponsePayload,
   createTransactionArtifactSchema,
   type TransactionArtifact,
-} from 'arbitrum-vibekit';
+} from 'arbitrum-vibekit-core';
 import {
   TransactionPlanSchema as SharedTransactionPlanSchema,
   type TransactionPlan,
@@ -232,7 +232,10 @@ export async function handleGetUserLiquidityPositions(
       arguments: mcpArgs,
     });
 
-    const validatedData = parseMcpToolResponsePayload(mcpResponse, GetUserLiquidityPositionsResponseSchema);
+    const validatedData = parseMcpToolResponsePayload(
+      mcpResponse,
+      GetUserLiquidityPositionsResponseSchema
+    );
 
     // Use the validatedData.positions array directly, as it matches the new schema
     const positions = validatedData.positions;
@@ -554,7 +557,7 @@ export async function handleWithdrawLiquidity(
 
     // Parse without chainId first
     const txPlan = parseMcpToolResponsePayload(
-      mcpResponse, 
+      mcpResponse,
       z.object({
         chainId: z.string(),
         transactions: z.array(SharedTransactionPlanSchema),

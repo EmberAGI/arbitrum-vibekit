@@ -13,7 +13,7 @@ import {
   type LocalAccount,
 } from 'viem';
 import { handleSwapTokens } from './agentToolHandlers.js';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import type { HandlerContext } from './agentToolHandlers.js';
 import type { TransactionPlan } from 'ember-mcp-tool-server';
 import { promises as fs } from 'fs';

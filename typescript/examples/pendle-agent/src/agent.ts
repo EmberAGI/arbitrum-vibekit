@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Address } from 'viem';
 import { type HandlerContext, handleSwapTokens } from './agentToolHandlers.js';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import { type TransactionPlan, type GetTokensResponse } from 'ember-mcp-tool-server';
 import {
   generateText,
