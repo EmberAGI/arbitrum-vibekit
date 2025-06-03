@@ -91,44 +91,7 @@ cd arbitrum-vibekit
 
 ### 3. Run Your DeFi Agent:
 
-Let's run the lending agent. Head over to the [lending-agent-no-wallet](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples/lending-agent-no-wallet) directory and create a `.env` file with the following required variables. Alternatively, you can create your `.env` file by copying the `.env.example` template in the agent's directory. Make sure to populate the `.env` file with the necessary configuration settings and API keys specific to your setup.
-
-```env
-OPENROUTER_API_KEY=your_openrouter_api_key
-QUICKNODE_SUBDOMAIN=your_quicknode_subdomain
-QUICKNODE_API_KEY=your_quicknode_api_key
-OPENAI_API_KEY=your_openai_api_key
-
-EMBER_ENDPOINT=grpc.api.emberai.xyz:50051
-RPC_URL=https://arbitrum.llamarpc.com
-AGENT_CACHE_TOKENS=false
-
-```
-
-Next, navigate to the `typescript` directory and run the following `pnpm` commands to build and start your agent:
-
-```
-cd typescript &&
-pnpm install &&
-pnpm build &&
-pnpm --filter "lending-agent-no-wallet" dev
-```
-
-Alternatively, you can use Docker to start up the agent:
-
-```
-cd typescript &&
-pnpm build &&
-sudo pnpm --filter "lending-agent-no-wallet" docker:compose:up
-```
-
-### 4. Interact With the DeFi Agent:
-
-Once the agent is up and running, you can interact with it either through Vibekit's web frontend or directly via Cursor:
-
-### Vibekit's Web Interface
-
-The lending agent is started by default when the frontend is started. Follow this guide to launch the frontend:
+Let's run the lending agent. The lending agent is started by default when the frontend is started. Follow this guide to launch the frontend:
 
 #### Prerequisites
 
@@ -187,28 +150,6 @@ After setting up your wallet, you can interact with the lending agent through th
 #### Integrating a Custom Agent
 
 To integrate another example agent or a custom agent into the frontend, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/README.md#agent-configuration).
-
-### Cursor IDE
-
-To interact with the lending agent through Cursor, [create or update](https://docs.cursor.com/context/model-context-protocol) your `mcp.json` file through Cursor's MCP settings with the following content. If your agent is running on a different port than `3001`, make sure to adjust it:
-
-```
-{
- "mcpServers": {
-   "local-sse-agent": {
-     "url": "http://localhost:3001/sse"
-   }
- }
-}
-```
-
-You might need to restart Cursor to apply the new configuration. Upon successful integration, the MCP settings should look like this:
-
-<p align="left">
-  <img src="img/mcp.png" width="800px" alt="MCP"/>
-</p>
-
-Cursor will now automatically detect the Lending Agent MCP tool and you can interact with it directly through prompts.
 
 ### 5. Build Your Custom DeFi Agent:
 

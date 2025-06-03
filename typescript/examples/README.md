@@ -113,7 +113,7 @@ Once the agent is up and running, you have three ways of interacting with it:
 
 **1. Vibekit's Web Interface**
 
-To interact with the lending agent through the web interface, refer to [this quickstart](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/docs/quickstart.md) guide. The Lending agent is started by default when the frontend is launched.
+To interact with the agent through the web interface, refer to [this quickstart](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/docs/quickstart.md) guide.
 
 **2. Integrate with Cursor IDE**
 

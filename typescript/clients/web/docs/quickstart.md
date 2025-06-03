@@ -62,6 +62,6 @@ After setting up your wallet, you can interact with the lending agent through th
   <img src="../../../../img/frontend.png" width="700px" alt="frontend"/>
 </p>
 
-#### Integrating a Custom Agent
+### Integrating a Custom Agent
 
 To integrate another example agent or a custom agent into the frontend, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/README.md#agent-configuration).
