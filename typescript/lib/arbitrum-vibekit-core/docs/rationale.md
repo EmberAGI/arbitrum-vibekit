@@ -574,4 +574,59 @@ From scratchpad to release plan:
 
 ---
 
+## VibkitToolDefinition as Universal Tool Interface (v2.5)
+
+- **Decision**: VibkitToolDefinition is the single, universal interface for all tools in the framework, regardless of their implementation details or origin.
+- **Rationale**:
+  - **Simplicity**: One interface to learn and use for all tool types
+  - **Consistency**: All tools follow the same pattern whether they call MCP, execute business logic, or access databases
+  - **Composability**: Any tool can be enhanced with `withHooks` or other utilities
+  - **Future-proof**: Dynamically discovered tools use the same interface as manually created ones
+  - **No Artificial Distinctions**: Avoids creating special cases for "MCP tools" vs "internal tools"
+- **Implementation**: All tools are just VibkitToolDefinition objects with different execute implementations
+- **Reference**: User feedback on tool abstraction, architectural simplification
+
+---
+
+## withHooks Included in Urgent Scope (v2.5)
+
+- **Decision**: Include the `withHooks` utility in the initial lending agent implementation rather than deferring it.
+- **Rationale**:
+  - **Trivial Implementation**: Only ~15 lines of code
+  - **Immediate Benefits**: Reduces code duplication across 6 lending tools
+  - **Cleaner Architecture**: Separates cross-cutting concerns from business logic
+  - **Better Testing**: Hooks can be unit tested independently
+  - **No Added Complexity**: Just simple function composition
+  - **Prevents Future Refactoring**: Avoids rewriting tools later to add hooks
+- **Implementation**: Simple utility that takes a tool and returns an enhanced tool
+- **Reference**: User analysis of implementation complexity and benefits
+
+---
+
+## No Special MCP Proxy Factory (v2.5)
+
+- **Decision**: Do not create a special "MCP proxy tool factory" - just create VibkitToolDefinition implementations directly.
+- **Rationale**:
+  - **Unnecessary Abstraction**: MCP tools aren't special - they're just tools that happen to call MCP
+  - **Consistency**: All tools are created the same way, reducing cognitive load
+  - **Flexibility**: Each tool can have custom logic beyond just forwarding to MCP
+  - **Clearer Intent**: The implementation shows exactly what the tool does
+- **Implementation**: Create tools directly as VibkitToolDefinition objects with MCP calls in their execute method
+- **Reference**: User feedback on avoiding artificial distinctions
+
+---
+
+## Seamless Migration Path to Dynamic Tools (v2.5)
+
+- **Decision**: Design patterns that work identically for manually created and dynamically discovered tools.
+- **Rationale**:
+  - **Investment Protection**: Code written today continues to work with future dynamic discovery
+  - **Same Enhancement Pattern**: `withHooks` and other utilities work on any VibkitToolDefinition
+  - **Gradual Migration**: Can mix manual and dynamic tools in the same agent
+  - **No Breaking Changes**: The interface remains stable across all tool sources
+- **Implementation**: Both manual and dynamic tools produce VibkitToolDefinition objects
+- **Reference**: Forward-looking architectural design, user concerns about refactoring
+
+---
+
 _This document is a living log. Please append new rationale entries as further decisions are made._

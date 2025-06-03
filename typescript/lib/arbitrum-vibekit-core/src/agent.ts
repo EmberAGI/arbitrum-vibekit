@@ -12,8 +12,11 @@ import cors from "cors";
 import { VibkitError } from "./error.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { z } from "zod";
 import { Server } from "http";
+import { createRequire } from "module";
 import {
   createSuccessTask,
   createErrorTask,
@@ -26,6 +29,15 @@ import { createMcpA2AResponse, createMcpErrorResponse } from "./mcpUtils.js";
 import { generateText } from "ai";
 import type { LanguageModel, CoreMessage } from "ai";
 import { nanoid } from "nanoid";
+
+/**
+ * Configuration for stdio MCP server connection
+ */
+export interface StdioMcpConfig {
+  command: string; // e.g., 'node'
+  moduleName: string; // e.g., 'ember-mcp-tool-server' - will be resolved via require.resolve
+  env?: Record<string, string>; // Additional environment variables
+}
 
 /**
  * Options for configuring an Agent's runtime behavior (e.g., server settings).
@@ -52,6 +64,7 @@ export interface SkillDefinition<I extends z.ZodTypeAny, TContext = any> {
   inputSchema: I;
   tools: Array<VibkitToolDefinition<any, Task | Message, TContext>>; // REQUIRED for business logic
   handler?: (input: z.infer<I>) => Promise<Task | Message>; // Optional - when provided, bypasses LLM orchestration
+  mcpServers?: StdioMcpConfig[]; // Optional - MCP servers this skill needs
 }
 
 /**
@@ -74,9 +87,9 @@ export interface AgentConfigGeneric<
  * Validates and creates a skill definition with A2A alignment.
  * Throws errors for unsupported schema types and missing required fields.
  */
-export function defineSkill<TInputSchema extends z.ZodTypeAny>(
-  definition: SkillDefinition<TInputSchema>
-): SkillDefinition<TInputSchema> {
+export function defineSkill<TInputSchema extends z.ZodTypeAny, TContext = any>(
+  definition: SkillDefinition<TInputSchema, TContext>
+): SkillDefinition<TInputSchema, TContext> {
   // Validate required fields
   if (!definition.id?.trim()) {
     throw new Error("Skill must have a non-empty id");
@@ -106,6 +119,7 @@ export function defineSkill<TInputSchema extends z.ZodTypeAny>(
 
 export interface AgentContext<TCustom = any> {
   custom: TCustom;
+  mcpClients?: Record<string, Client>; // MCP clients by server module name
 }
 
 export interface VibkitToolDefinition<
@@ -136,6 +150,7 @@ export class Agent<
   private model?: LanguageModel;
   private baseSystemPrompt?: string;
   private customContext?: TContext;
+  private skillMcpClients = new Map<string, Map<string, Client>>(); // skillName -> (moduleName -> Client)
 
   private constructor(
     card: AgentCard,
@@ -291,12 +306,83 @@ export class Agent<
     port = 41241,
     contextProvider?: () => Promise<TContext> | TContext
   ): Promise<express.Express> {
+    // Set up custom context if provided
     if (contextProvider) {
       this.customContext = await (typeof contextProvider === "function"
         ? contextProvider()
         : contextProvider);
     }
+
+    // Set up MCP clients for skills that need them
+    await this.setupSkillMcpClients();
+
     return this._startServer(port);
+  }
+
+  private async setupSkillMcpClients(): Promise<void> {
+    for (const [skillName, skill] of this.skillsMap) {
+      if (skill.mcpServers && skill.mcpServers.length > 0) {
+        const clientsMap = new Map<string, Client>();
+
+        for (const mcpConfig of skill.mcpServers) {
+          try {
+            console.log(
+              `Setting up MCP client for skill "${skillName}", server: ${mcpConfig.moduleName}`
+            );
+            const client = await this.createMcpClient(mcpConfig, skillName);
+            clientsMap.set(mcpConfig.moduleName, client);
+          } catch (error) {
+            console.error(
+              `Failed to set up MCP client for skill "${skillName}":`,
+              error
+            );
+            throw error;
+          }
+        }
+
+        this.skillMcpClients.set(skillName, clientsMap);
+      }
+    }
+  }
+
+  private async createMcpClient(
+    mcpConfig: StdioMcpConfig,
+    skillName: string
+  ): Promise<Client> {
+    const client = new Client({
+      name: `${this.card.name}-${skillName}-client`,
+      version: this.card.version,
+    });
+
+    console.log("Initializing MCP client transport...");
+    try {
+      const require = createRequire(import.meta.url);
+      const mcpToolPath = require.resolve(mcpConfig.moduleName);
+      console.log(`Found MCP tool server path: ${mcpToolPath}`);
+
+      const transport = new StdioClientTransport({
+        command: mcpConfig.command,
+        args: [mcpToolPath],
+        env: {
+          ...(Object.fromEntries(
+            Object.entries(process.env).filter(([_, v]) => v !== undefined)
+          ) as Record<string, string>),
+          ...mcpConfig.env,
+        },
+      });
+
+      await client.connect(transport);
+      console.log("MCP client connected successfully.");
+      return client;
+    } catch (error) {
+      console.error(
+        "Failed to initialize MCP client transport or connect:",
+        error
+      );
+      throw new Error(
+        `MCP Client connection failed: ${(error as Error).message}`
+      );
+    }
   }
 
   private _startServer(port: number): express.Express {
@@ -409,8 +495,13 @@ export class Agent<
             description: vibkitTool.description,
             parameters: vibkitTool.parameters,
             execute: async (args: any) => {
+              const skillMcpClients = this.skillMcpClients.get(skill.name);
               const context: AgentContext<TContext> = {
                 custom: this.customContext!,
+                ...(skillMcpClients &&
+                  skillMcpClients.size > 0 && {
+                    mcpClients: Object.fromEntries(skillMcpClients),
+                  }),
               };
               return await vibkitTool.execute(args, context);
             },

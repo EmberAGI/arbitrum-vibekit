@@ -37,3 +37,4 @@ Rules and best practices that apply to the entire pnpm workspace monorepo.
 - Maintain consistent dependency versions across packages; leverage `pnpm` overrides in root `package.json` if necessary.
 - Use pnpm filters (`-r`, `-F`) or `pnpm recursive` for efficient cross-package commands.
 - Document any new workspace-level tool or script additions in this file.
+- Never add depenencies directly to `package.json` files. Instead use `pnpm add` or `pnpm add -D` commands to add new dependencies. This ensures you have the latest versions.

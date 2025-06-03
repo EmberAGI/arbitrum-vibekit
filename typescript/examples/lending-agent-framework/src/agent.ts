@@ -1,8 +1,10 @@
 import { z } from 'zod';
 import { defineSkill, type AgentConfig } from 'arbitrum-vibekit-core';
 
-// Placeholder for agent context (extend as needed)
-export type LendingAgentContext = {};
+// Agent context with token map (MCP client is provided by framework)
+export type LendingAgentContext = {
+  tokenMap: Record<string, Array<{ chainId: string; address: string; decimals: number }>>;
+};
 
 const inputSchema = z.object({
   instruction: z.string().describe('A natural‑language lending directive.'),
@@ -26,6 +28,16 @@ export const agentConfig: AgentConfig = {
       inputSchema,
       tools: [
         // MCP tools will be loaded dynamically at runtime and injected here
+      ],
+      // MCP servers this skill needs
+      mcpServers: [
+        {
+          command: 'node',
+          moduleName: 'ember-mcp-tool-server',
+          env: {
+            EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'grpc.api.emberai.xyz:50051',
+          },
+        },
       ],
       // No handler: LLM orchestration will be used when tools are present
     }),
