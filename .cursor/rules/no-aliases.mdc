@@ -1,7 +1,0 @@
----
-description: 
-globs: *.ts
-alwaysApply: false
----
-- Never create value or type aliases for compatibility - don't hesitate to update the call sites to use 'true' names.
-- When refactorings are done, update the import paths rather than maintaining compatibility with aliases

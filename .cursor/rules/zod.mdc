@@ -1,6 +1,0 @@
----
-description: Zod schema design rules
-globs: 
-alwaysApply: false
----
-Never use .passthrough() with zod schemas.
