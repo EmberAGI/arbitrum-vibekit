@@ -31,4 +31,15 @@ export function extractMessageText(response: Task): string {
     }
   }
   return '';
-} 
+}
+
+export function isNotFailed(response: Task): boolean {
+  return response.status?.state !== 'failed';
+}
+
+export function getFailureDetails(response: Task): string | null {
+  if (response.status?.state === 'failed') {
+    return `Response failed. Status: ${JSON.stringify(response.status, null, 2)}`;
+  }
+  return null;
+}

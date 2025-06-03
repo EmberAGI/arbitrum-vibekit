@@ -1,0 +1,6 @@
+---
+description: 
+globs: *.ts
+alwaysApply: false
+---
+NEVER use `any` type in typescript. Try to figure out proper type. If you fail to figure out a type, stop and ask the developer.

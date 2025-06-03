@@ -13,7 +13,7 @@ import type { TransactionPlan } from './transactions.js';
  */
 export function extractLendingTransactionPlan(response: Task): Array<TransactionPlan> {
   if (!response.artifacts) {
-    throw new Error('No artifacts found in response');
+    throw new Error(`No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`);
   }
 
   // Look for transaction-plan artifact
@@ -24,10 +24,11 @@ export function extractLendingTransactionPlan(response: Task): Array<Transaction
           return part.data.txPlan as Array<TransactionPlan>;
         }
       }
+      throw new Error(`No txPlan found in transaction-plan artifact. Artifact parts: ${JSON.stringify(artifact.parts, null, 2)}`);
     }
   }
 
-  throw new Error('No transaction plan found in artifacts');
+  throw new Error(`No transaction-plan artifact found. Available artifacts: ${JSON.stringify(response.artifacts.map(a => ({ name: a.name, partsCount: a.parts?.length || 0 })), null, 2)}`);
 }
 
 /**
@@ -46,19 +47,11 @@ export function extractPositionsData(response: Task): GetWalletPositionsResponse
           return part.data as unknown as GetWalletPositionsResponse;
         }
       }
+      throw new Error(`No positions data found in ${artifact.name} artifact. Artifact parts: ${JSON.stringify(artifact.parts, null, 2)}`);
     }
   }
 
-  // Debug: log available artifact names before throwing an error
-  try {
-    const names = response.artifacts.map((a) => a.name).join(', ');
-     
-    console.log(`[extractPositionsData] Available artifact names: ${names}`);
-  } catch (_) {
-    // ignore logging errors
-  }
-
-  throw new Error(`No positions data found in artifacts. Response: ${JSON.stringify(response, null, 2)}`);
+  throw new Error(`No positions or wallet-positions artifact found. Available artifacts: ${JSON.stringify(response.artifacts.map(a => ({ name: a.name, partsCount: a.parts?.length || 0 })), null, 2)}`);
 }
 
 /**
