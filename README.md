@@ -1,7 +1,7 @@
 ![Graphic](img/Banner.png)
 
 <p align="center"> 
-   &nbsp&nbsp <a href="https://ember-ai.gitbook.io/arbitrum-vibekit">Documentation </a> &nbsp&nbsp | &nbsp&nbsp <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples"> Agent Playground</a>  &nbsp&nbsp |  &nbsp&nbsp   <a href="https://www.emberai.xyz/"> Ember AI</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://discord.com/invite/bgxWQ2fSBR"> Support Discord </a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://t.me/EmberChat"> Ember Telegram</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://x.com/EmberAGI"> 𝕏 </a> &nbsp&nbsp
+   &nbsp&nbsp <a href="https://docs.emberai.xyz/vibekit/introduction">Documentation </a> &nbsp&nbsp | &nbsp&nbsp <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples"> Agent Playground</a>  &nbsp&nbsp |  &nbsp&nbsp   <a href="https://www.emberai.xyz/"> Ember AI</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://discord.com/invite/bgxWQ2fSBR"> Support Discord </a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://t.me/EmberChat"> Ember Telegram</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://x.com/EmberAGI"> 𝕏 </a> &nbsp&nbsp
 </p>
 
 ## 🧭 Table of Contents
@@ -47,9 +47,12 @@ Vibekit/
 │----── lib/
 │       └── a2a/
 │       └── arbitrum-vibekit/
+│       └── ember-schemas/
 │       └── mcp-tools/
 │           └── allora-mcp-server/
 │           └── emberai-mcp/
+│       └── test-utils/
+│----── test/
 ├── CHANGELOG.md
 ├── CONTRIBUTIONS.md
 ├── LICENSE
@@ -128,35 +131,11 @@ sudo pnpm --filter "lending-agent-no-wallet" docker:compose:up
 
 ### 4. Interact With the DeFi Agent:
 
-Once the agent is up and running, you have three ways of interacting with it:
+Once the agent is up and running, you have two ways of interacting with it:
 
-**1. Launch the Inspector Interface:**
+**1. Vibekit's Web Interface**
 
-Open a new terminal window and run the following to start the inspector:
-
-```bash
-npx -y @modelcontextprotocol/inspector
-```
-
-Navigate to http://127.0.0.1:6274 in your browser to access the interface and click on "Connect" to establish a connection with your local server:
-
-<p align="left">
-  <img src="img/inspector_1.png" width="700px" alt="Inspector1"/>
-</p>
-
-Next, click on "List Tools" to view the tools your Lending Agent offers:
-
-<p align="left">
-  <img src="img/inspector_2.png" width="700px" alt="Inspector2"/>
-</p>
-
-Next, select "askLendingAgent", input your wallet address and query, and execute the tool to interact with your agent:
-
-<p align="left">
-  <img src="img/inspector_3.png" width="700px" alt="Inspector3"/>
-</p>
-
-The Inspector interface provides a straightforward way to interact with your agent. For a more integrated development experience, you can use the Cursor IDE.
+To interact with the Lending agent through the web interface, refer to [this quickstart](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/docs/quickstart.md) guide. The Lending agent is started by default when the frontend is launched.
 
 **2. Integrate With Cursor IDE**
 
@@ -179,22 +158,6 @@ You might need to restart Cursor to apply the new configuration. Upon successful
 </p>
 
 Cursor will now automatically detect the Lending Agent MCP tool and you can interact with it directly through prompts.
-
-**3. Web Interface**
-
-You can also interact with your agent using the [Vibekit Web Frontend](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web). To do so:
-
-- Make sure your agent (MCP server) is running on http://localhost:3001.
-
-- In the `typescript` directory, ensure your `.env` is configured and run:
-
-  ```bash
-  docker compose up -d
-  ```
-
-- Open your browser and go to [http://localhost:3000](http://localhost:3000).
-
-- The web frontend provides a user-friendly chat interface for sending queries to your on-chain AI agent and viewing responses in real time.
 
 ### 5. Build Your Custom DeFi Agent:
 

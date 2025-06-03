@@ -12,24 +12,46 @@ if you want to vibe code your own custom agent, jump to [Building Your Own Agent
 
 Navigate to the desired agent's directory and create an `.env` file. Copy the contents of `.env.example` into the `.env` file and fill in any required secrets or configuration variables.
 
-### 2. Start the Agent
-
-There are three main ways to start an agent:
-
-**1. Cursor's AI Assistant (Vibe Coding)**:
-
-Ask Cursor's integrated AI assistant to run your desired agent.
-
-**2. Docker Compose**:
-
-Navigate to the `typescript` directory and install the necessary packages.
+Next, navigate to the `typescript` directory and install the necessary packages.
 
 ```
 cd typescript &&
 pnpm install
 ```
 
-Next, run the MCP-enabled Docker container to start your agent. Replace the `"agent-name"` with the name of your desired agent, for example: `"swapping-agent-no-wallet"`.
+### 2. Start the Agent
+
+You can start an agent in four different ways. Simply choose the approach that best fits your preferences and project setup:
+
+**1. Cursor's AI Assistant (Vibe Coding)**:
+
+Ask Cursor's integrated AI assistant to run your desired agent.
+
+**2. Agent as Task**:
+
+If you are using VSCODE or Cursor, you can run agents as [tasks](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/.vscode/tasks.json). To start an agent:
+
+- Open the Vibekit repo in your preferred IDE.
+- Press on `Cntrl + shift + P` ( `Cmnd + shift + P` on Mac) to open up the Command Palette.
+- Search for "Run Task".
+
+<p align="left">
+  <img src="../../img/run_tasks1.png" width="600px" alt="Inspector2"/>
+</p>
+
+- Choose you're desired agent to run.
+
+<p align="left">
+  <img src="../../img/run_tasks2.png" width="600px" alt="Inspector2"/>
+</p>
+
+The agent will be available locally on the port specified in the Dockerfile within the agent's folder.
+
+**Note:** If you are running multiple agents simultaneously, make sure their ports do not conflict. You can verify and adjust the port settings by referring to the Dockerfile in each agent's directory.
+
+**3. Docker Compose**:
+
+Run the MCP-enabled Docker container in the `typescript` directory to start your agent. Replace the `"agent-name"` with the name of your desired agent, for example: `"swapping-agent-no-wallet"`.
 
 ```
 pnpm --filter "agent-name" docker:compose:up
@@ -53,14 +75,12 @@ To stop the agent afterwards, use the following command:
 pnpm --filter "agent-name" docker:compose:down
 ```
 
-**3. Local Development**:
+**4. Local Development**:
 
-Navigate to the `typescript` directory and run the following `pnpm` commands to build
+Run the following `pnpm` commands in the `typescript` directory to build and run
 your agent. Replace the `"agent-name"` with the name of your desired agent, for example: `"swapping-agent-no-wallet"`.
 
 ```
-cd typescript &&
-pnpm install &&
 pnpm build &&
 pnpm --filter "agent-name" dev
 ```
@@ -69,27 +89,9 @@ pnpm --filter "agent-name" dev
 
 Once the agent is up and running, you have three ways of interacting with it:
 
-**1. Launch the Inspector interface:**
+**1. Vibekit's Web Interface**
 
-Open a new terminal window and run the following to start the inspector:
-
-```bash
-npx -y @modelcontextprotocol/inspector
-```
-
-Navigate to http://127.0.0.1:6274 in your browser to access the interface and click on "Connect" to establish a connection with your local server:
-
-<p align="left">
-  <img src="../../img/inspector_1.png" width="700px" alt="Inspector1"/>
-</p>
-
-Next, click on "List Tools" to view and run the tools your agent offers:
-
-<p align="left">
-  <img src="../../img/inspector_2.png" width="700px" alt="Inspector2"/>
-</p>
-
-The Inspector interface provides a straightforward way to interact with your agent. For a more integrated development experience, you can use the Cursor IDE.
+To interact with the Lending agent through the web interface, refer to [this quickstart](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/docs/quickstart.md) guide. The Lending agent is started by default when the frontend is launched.
 
 **2. Integrate with Cursor IDE**
 
@@ -110,21 +112,33 @@ To interact with the agent though Cursor, [create or update](https://docs.cursor
 
 You might need to restart Cursor to apply the new configuration. Upon successful integration, Cursor will automatically detect the Agent MCP tool and you can interact with it directly through prompts.
 
-**3. Web Interface**
+**3. Launch the Inspector Interface:**
 
-You can also interact with your agent using the [Vibekit Web Frontend](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web). To do so:
+Open a new terminal window and run the following to start the inspector:
 
-- Make sure your agent (MCP server) is running on http://localhost:3001.
+```bash
+npx -y @modelcontextprotocol/inspector
+```
 
-- In the `typescript` directory, ensure your `.env` is configured and run:
+Navigate to http://127.0.0.1:6274 in your browser to access the interface and click on "Connect" to establish a connection with your local server:
 
-  ```bash
-  docker compose up -d
-  ```
+<p align="left">
+  <img src="img/inspector_1.png" width="700px" alt="Inspector1"/>
+</p>
 
-- Open your browser and go to [http://localhost:3000](http://localhost:3000).
+Next, click on "List Tools" to view the tools your Lending Agent offers:
 
-- The web frontend provides a user-friendly chat interface for sending queries to your on-chain AI agent and viewing responses in real time.
+<p align="left">
+  <img src="img/inspector_2.png" width="700px" alt="Inspector2"/>
+</p>
+
+Next, select "askLendingAgent", input your wallet address and query, and execute the tool to interact with your agent:
+
+<p align="left">
+  <img src="img/inspector_3.png" width="700px" alt="Inspector3"/>
+</p>
+
+The Inspector interface provides a straightforward way to interact with your agent.
 
 ## 🛠️ Building Your Own Agent
 

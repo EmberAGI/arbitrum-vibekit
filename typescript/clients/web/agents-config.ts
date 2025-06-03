@@ -1,15 +1,15 @@
 export const chatAgents = [
   {
-    id: "ember-aave" as const,
-    name: "Lending",
-    description: "AAVE lending agent",
+    id: 'ember-aave' as const,
+    name: 'Lending',
+    description: 'AAVE lending agent',
     suggestedActions: [
       {
-        title: "Deposit WETH",
-        label: "to my balance",
-        action: "Deposit WETH to my balance",
+        title: 'Deposit WETH',
+        label: 'to my balance',
+        action: 'Deposit WETH to my balance',
       },
-      { title: "Check", label: "balance", action: "Check balance" },
+      { title: 'Check', label: 'balance', action: 'Check balance' },
     ],
   },
   // {
@@ -64,29 +64,29 @@ export const chatAgents = [
   //   ],
   // },
   {
-    id: "all" as const,
-    name: "All agents",
-    description: "All agents",
+    id: 'all' as const,
+    name: 'All agents',
+    description: 'All agents',
     suggestedActions: [
       {
-        title: "What Agents",
-        label: "are available?",
-        action: "What Agents are available?",
+        title: 'What Agents',
+        label: 'are available?',
+        action: 'What Agents are available?',
       },
       {
-        title: "What can Ember AI",
-        label: "help me with?",
-        action: "What can Ember AI help me with?",
+        title: 'What can Ember AI',
+        label: 'help me with?',
+        action: 'What can Ember AI help me with?',
       },
     ],
   },
 ] as const;
 
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
-  ["ember-aave", "http://lending-agent-no-wallet:3001/sse"],
+  ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
   // ["ember-camelot", "http://swapping-agent-no-wallet:3002/sse"],
   // ["ember-lp", "http://173.230.139.151:3012/sse"],
   // ["ember-pendle", "http://173.230.139.151:3013/sse"],
 ]);
 
-export type ChatAgentId = (typeof chatAgents)[number]["id"];
+export type ChatAgentId = (typeof chatAgents)[number]['id'];
