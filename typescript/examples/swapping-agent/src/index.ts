@@ -121,7 +121,7 @@ app.post('/messages', async (req, res) => {
   await transport.handlePostMessage(req, res);
 });
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
+const PORT = 3004;
 const main = async () => {
   try {
     await initializeAgent();
