@@ -5,7 +5,7 @@ import type { LendingAgentContext } from '../agent.js';
 import { BorrowRepaySupplyWithdrawSchema, ZodWithdrawResponseSchema } from './schemas.js';
 import type { LendingTransactionArtifact, LendingPreview, TokenInfo } from './types.js';
 import { createTaskId, findTokenInfo } from './utils.js';
-import type { TransactionPlan } from 'ember-mcp-tool-server';
+import type { TransactionPlan } from 'ember-schemas';
 
 export const withdrawBase: VibkitToolDefinition<
   typeof BorrowRepaySupplyWithdrawSchema,

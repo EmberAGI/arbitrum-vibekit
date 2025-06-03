@@ -14,7 +14,7 @@ import { createTaskId, findTokenInfo, getChainConfigById } from './utils.js';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import type { z } from 'zod';
 import type { LendingTransactionArtifact, LendingPreview } from './types.js';
-import type { TransactionPlan } from 'ember-mcp-tool-server';
+import type { TransactionPlan } from 'ember-schemas';
 
 // Minimal ERC20 ABI for balance check
 const MinimalErc20Abi = [

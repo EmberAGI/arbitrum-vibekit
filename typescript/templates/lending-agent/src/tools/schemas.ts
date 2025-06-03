@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TransactionPlanSchema } from 'ember-mcp-tool-server';
+import { TransactionPlanSchema } from 'ember-schemas';
 
 // Tool parameter schemas
 export const BorrowRepaySupplyWithdrawSchema = z.object({

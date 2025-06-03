@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Task, DataPart } from 'a2a-samples-js';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
-import { parseMcpToolResponsePayload, type TransactionArtifact } from 'arbitrum-vibekit';
+import { parseMcpToolResponsePayload, type TransactionArtifact } from 'arbitrum-vibekit-core';
 import {
   GetLiquidityPoolsSchema,
   GetUserLiquidityPositionsSchema,
@@ -162,7 +162,7 @@ export async function handleGetUserLiquidityPositions(
     }
 
     let responseText = 'Your Liquidity Positions:\n\n';
-    positions.forEach((pos, index) => {
+    positions.forEach((pos: LiquidityPosition, index: number) => {
       responseText += `${index + 1}: ${pos.symbol0}/${pos.symbol1}\n`;
       responseText += `  Amount0: ${pos.amount0} ${pos.symbol0}\n`;
       responseText += `  Amount1: ${pos.amount1} ${pos.symbol1}\n`;

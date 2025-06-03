@@ -8,12 +8,10 @@
       "@modelcontextprotocol/sdk/types.js": [
         "./node_modules/@modelcontextprotocol/sdk/dist/esm/types.d.ts"
       ],
-      "@google-a2a/types/src/types.js": [
-        "./node_modules/@google-a2a/types/src/types.ts"
-      ]
+      "@google-a2a/types/src/types.js": ["./node_modules/@google-a2a/types/src/types.ts"],
+      "ember-schemas": ["../ember-schemas/src"],
+      "ember-schemas/*": ["../ember-schemas/src/*"]
     },
-    "ember-schemas": ["../ember-schemas/src"],
-    "ember-schemas/*": ["../ember-schemas/src/*"],
     "verbatimModuleSyntax": false
   },
   "include": ["src/**/*.ts"],
