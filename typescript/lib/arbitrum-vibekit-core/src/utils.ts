@@ -237,56 +237,53 @@ export function formatToolDescriptionWithTagsAndExamples(
 }
 
 /**
- * Hook function type that can transform arguments before tool execution
- * or results after tool execution.
+ * Hook function type that can transform data before or after tool execution
  */
-export type HookFunction<TArgs, TResult, TContext = any> = (
+export type HookFunction<TArgs, TResult, TContext = any, TSkillInput = any> = (
   data: TArgs,
-  context: AgentContext<TContext>
+  context: AgentContext<TContext, TSkillInput>
 ) => Promise<TArgs> | TArgs;
 
 /**
- * Configuration for hooks to apply to a tool
+ * Configuration for before/after hooks on a tool
  */
-export interface HookConfig<TArgs, TResult, TContext = any> {
-  before?: HookFunction<TArgs, TArgs, TContext>;
-  after?: HookFunction<TResult, TResult, TContext>;
+export interface HookConfig<TArgs, TResult, TContext = any, TSkillInput = any> {
+  before?: HookFunction<TArgs, TArgs, TContext, TSkillInput>;
+  after?: HookFunction<TResult, TResult, TContext, TSkillInput>;
 }
 
 /**
  * Wraps a VibkitToolDefinition with before/after hooks for composable behavior.
- * The before hook transforms arguments before the tool executes.
- * The after hook transforms results after the tool executes.
+ * Before hooks can transform input arguments before the tool executes.
+ * After hooks can transform the result after the tool executes.
  *
- * @param tool - The base tool to wrap
- * @param hooks - Configuration object with optional before/after hooks
+ * @param tool The tool to wrap with hooks
+ * @param hooks Configuration object with optional before/after hooks
  * @returns A new VibkitToolDefinition with the hooks applied
  */
 export function withHooks<
   TParams extends z.ZodTypeAny,
   TResult,
-  TContext = any
+  TContext = any,
+  TSkillInput = any
 >(
-  tool: VibkitToolDefinition<TParams, TResult, TContext>,
-  hooks: HookConfig<z.infer<TParams>, TResult, TContext>
-): VibkitToolDefinition<TParams, TResult, TContext> {
+  tool: VibkitToolDefinition<TParams, TResult, TContext, TSkillInput>,
+  hooks: HookConfig<z.infer<TParams>, TResult, TContext, TSkillInput>
+): VibkitToolDefinition<TParams, TResult, TContext, TSkillInput> {
   return {
     description: tool.description,
     parameters: tool.parameters,
-    execute: async (
-      args: z.infer<TParams>,
-      context: AgentContext<TContext>
-    ) => {
-      // Apply before hook if provided
+    execute: async (args, context) => {
+      // Apply before hook if present
       let processedArgs = args;
       if (hooks.before) {
-        processedArgs = await hooks.before(processedArgs, context);
+        processedArgs = await hooks.before(args, context);
       }
 
       // Execute the original tool
       let result = await tool.execute(processedArgs, context);
 
-      // Apply after hook if provided
+      // Apply after hook if present
       if (hooks.after) {
         result = await hooks.after(result, context);
       }

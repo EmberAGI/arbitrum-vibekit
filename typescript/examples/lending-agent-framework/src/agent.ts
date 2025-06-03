@@ -1,9 +1,12 @@
 import { z } from 'zod';
 import { defineSkill, type AgentConfig } from 'arbitrum-vibekit-core';
+import { lendingTools } from './tools/index.js';
 
 // Agent context with token map (MCP client is provided by framework)
 export type LendingAgentContext = {
   tokenMap: Record<string, Array<{ chainId: string; address: string; decimals: number }>>;
+  quicknodeSubdomain: string;
+  quicknodeApiKey: string;
 };
 
 const inputSchema = z.object({
@@ -26,9 +29,7 @@ export const agentConfig: AgentConfig = {
       tags: ['lending'],
       examples: ['Borrow 50 USDC', 'Supply 10 ETH', 'What is my debt?', 'What is my balance?'],
       inputSchema,
-      tools: [
-        // MCP tools will be loaded dynamically at runtime and injected here
-      ],
+      tools: lendingTools,
       // MCP servers this skill needs
       mcpServers: [
         {

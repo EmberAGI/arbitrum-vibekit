@@ -62,7 +62,7 @@ export interface SkillDefinition<I extends z.ZodTypeAny, TContext = any> {
   tags: string[]; // required, must have at least one tag
   examples: string[]; // required, must have at least one example
   inputSchema: I;
-  tools: Array<VibkitToolDefinition<any, Task | Message, TContext>>; // REQUIRED for business logic
+  tools: Array<VibkitToolDefinition<any, Task | Message, TContext, z.infer<I>>>; // Tools now have access to skill input type
   handler?: (input: z.infer<I>) => Promise<Task | Message>; // Optional - when provided, bypasses LLM orchestration
   mcpServers?: StdioMcpConfig[]; // Optional - MCP servers this skill needs
 }
@@ -117,21 +117,23 @@ export function defineSkill<TInputSchema extends z.ZodTypeAny, TContext = any>(
   return definition;
 }
 
-export interface AgentContext<TCustom = any> {
+export interface AgentContext<TCustom = any, TSkillInput = any> {
   custom: TCustom;
   mcpClients?: Record<string, Client>; // MCP clients by server module name
+  skillInput?: TSkillInput; // Skill input parameters from the skill invocation
 }
 
 export interface VibkitToolDefinition<
   TParams extends z.ZodTypeAny,
   TResult = Task | Message,
-  TContext = any
+  TContext = any,
+  TSkillInput = any
 > {
   description: string;
   parameters: TParams;
   execute: (
     args: z.infer<TParams>,
-    context: AgentContext<TContext>
+    context: AgentContext<TContext, TSkillInput>
   ) => Promise<TResult>;
 }
 
@@ -496,8 +498,9 @@ export class Agent<
             parameters: vibkitTool.parameters,
             execute: async (args: any) => {
               const skillMcpClients = this.skillMcpClients.get(skill.name);
-              const context: AgentContext<TContext> = {
+              const context: AgentContext<TContext, typeof input> = {
                 custom: this.customContext!,
+                skillInput: input,
                 ...(skillMcpClients &&
                   skillMcpClients.size > 0 && {
                     mcpClients: Object.fromEntries(skillMcpClients),

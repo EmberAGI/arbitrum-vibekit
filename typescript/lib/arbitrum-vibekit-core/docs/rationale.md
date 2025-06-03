@@ -629,4 +629,49 @@ From scratchpad to release plan:
 
 ---
 
+## Skill Input Context Enhancement (v2.5)
+
+- **Decision:** Extended `AgentContext` to include skill input parameters, making them available to all tools via `context.skillInput`.
+- **Rationale:**
+  - **Essential Feature**: Tools often need access to skill-level parameters (e.g., walletAddress, user preferences)
+  - **Avoids Redundancy**: Without this, every tool would need these parameters passed explicitly, adding overhead to LLM tool calls
+  - **Type Safety**: Skill input type is automatically inferred from the skill's `inputSchema`, providing full type safety
+  - **Clean Architecture**: Separates skill-level concerns from tool-specific arguments
+  - **LLM Efficiency**: Reduces context overhead for the LLM by not requiring it to pass common parameters to every tool
+- **Implementation:**
+  - `AgentContext<TCustom, TSkillInput>` now has two type parameters
+  - `VibkitToolDefinition` updated to include skill input type parameter
+  - `createSkillHandler` passes the skill input to context when creating tool executors
+  - Tools can access `context.skillInput?.walletAddress` etc. with full type inference
+- **Reference:** User feedback on skill parameter access, architectural analysis of lending agent requirements
+
+---
+
+## Hook Return Type Flexibility (v2.5)
+
+- **Decision:** Allow hooks to return either modified arguments OR a Task/Message to enable short-circuiting.
+- **Rationale:**
+  - **Early Termination**: Hooks can stop execution early if preconditions aren't met (e.g., token not found, insufficient balance)
+  - **Clean Error Handling**: Instead of throwing exceptions, hooks return proper A2A Task objects with appropriate states
+  - **Composability**: Multiple hooks can be chained, with any hook able to terminate the chain
+  - **User Experience**: Provides clear, actionable feedback to users (e.g., "Please specify which chain for USDC")
+- **Implementation:** Hook functions return `Promise<TArgs | Task | Message>` instead of just `Promise<TArgs>`
+- **Reference:** Token resolution and balance check hook requirements, user experience considerations
+
+---
+
+## Base Tools Return Raw MCP Responses (v2.5)
+
+- **Decision:** Base tool implementations return raw MCP responses, with response parsing handled by hooks.
+- **Rationale:**
+  - **Separation of Concerns**: Base tools focus solely on making MCP calls, hooks handle business logic
+  - **Testability**: Raw MCP calls can be tested independently from response parsing logic
+  - **Flexibility**: Different tools might need different parsing strategies for the same MCP response
+  - **Reusability**: Response parsing hooks can be shared across multiple tools
+  - **Type Transformation**: Allows clean transformation from MCP response types to A2A Task/Message types
+- **Implementation:** Base tools have `TResult = any` and return raw MCP client responses
+- **Reference:** Clean architecture principles, hook composition patterns
+
+---
+
 _This document is a living log. Please append new rationale entries as further decisions are made._
