@@ -47,6 +47,7 @@ Cargo.lock
 .history/
 *~
 .*.swp
+.cursor/rules/scratchpad.mdc
 
 # Logs
 logs/
@@ -56,6 +57,7 @@ logs/
 .turbo
 .cache/
 .vercel
+.next/
 
 # Package managers
 .pnp.*
@@ -65,3 +67,14 @@ logs/
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Next
+.turbo
+.next
+.vercel
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/*

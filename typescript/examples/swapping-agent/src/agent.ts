@@ -1,4 +1,22 @@
-import { z } from 'zod';
+import { promises as fs } from 'fs';
+import { createRequire } from 'module';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import {
+  generateText,
+  tool,
+  type Tool,
+  type CoreMessage,
+  type ToolResultPart,
+  type CoreUserMessage,
+  type CoreAssistantMessage,
+  type StepResult,
+} from 'ai';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
 import {
   type Address,
   type Hex,
@@ -12,28 +30,23 @@ import {
   http,
   type LocalAccount,
 } from 'viem';
-import { handleSwapTokens, parseMcpToolResponse } from './agentToolHandlers.js';
+import { z } from 'zod';
+import { handleSwapTokens } from './agentToolHandlers.js';
+
+
 import type { HandlerContext } from './agentToolHandlers.js';
-import type { TransactionPlan } from 'ember-mcp-tool-server';
-import { promises as fs } from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+
 import {
-  generateText,
-  tool,
-  type Tool,
-  type CoreMessage,
-  type ToolResultPart,
-  type CoreUserMessage,
-  type CoreAssistantMessage,
-  type StepResult,
-} from 'ai';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+  SwapTokensSchema,
+  McpGetCapabilitiesResponseSchema,
+  type TransactionPlan,
+  type McpGetCapabilitiesResponse,
+} from 'ember-schemas';
+
+
 import { mainnet, arbitrum, optimism, polygon, base } from 'viem/chains';
 import type { Chain } from 'viem/chains';
-import { createRequire } from 'module';
+
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -42,61 +55,6 @@ const openrouter = createOpenRouter({
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const CACHE_FILE_PATH = path.join(__dirname, '.cache', 'swap_capabilities.json');
-
-const SwapTokensSchema = z.object({
-  fromToken: z
-    .string()
-    .describe(
-      'The symbol of the token to swap from (source token). It may be lowercase or uppercase.'
-    ),
-  toToken: z
-    .string()
-    .describe(
-      'The symbol of the token to swap to (destination token). It may be lowercase or uppercase.'
-    ),
-  amount: z
-    .string()
-    .describe(
-      'The amount of the token to swap from. It will be in a human readable format, e.g. The amount \"1.02 ETH\" will be 1.02.'
-    ),
-  fromChain: z.string().optional().describe('Optional chain name for the source token.'),
-  toChain: z.string().optional().describe('Optional chain name for the destination token.'),
-});
-type SwapTokensArgs = z.infer<typeof SwapTokensSchema>;
-
-const McpCapabilityTokenSchema = z
-  .object({
-    symbol: z.string().optional(),
-    name: z.string().optional(),
-    decimals: z.number().optional(),
-    tokenUid: z
-      .object({
-        chainId: z.string().optional(),
-        address: z.string().optional(),
-      })
-      .optional(),
-  })
-  .passthrough();
-
-const McpCapabilitySchema = z
-  .object({
-    protocol: z.string().optional(),
-    capabilityId: z.string().optional(),
-    supportedTokens: z.array(McpCapabilityTokenSchema).optional(),
-  })
-  .passthrough();
-
-const McpSingleCapabilityEntrySchema = z
-  .object({
-    swapCapability: McpCapabilitySchema.optional(),
-  })
-  .passthrough();
-
-const McpGetCapabilitiesResponseSchema = z.object({
-  capabilities: z.array(McpSingleCapabilityEntrySchema),
-});
-
-type McpGetCapabilitiesResponse = z.infer<typeof McpGetCapabilitiesResponseSchema>;
 
 function logError(...args: unknown[]) {
   console.error(...args);
@@ -324,15 +282,15 @@ Present the user with a list of tokens and chains they can swap from and to if p
 
       this.toolSet = {
         swapTokens: tool({
-          description: 'Swap or convert tokens. Requires the fromToken, toToken, and amount.',
+          description: 'Swap or convert tokens.',
           parameters: SwapTokensSchema,
           execute: async args => {
-            this.log('Vercel AI SDK calling handler: swapTokens', args);
             try {
               return await handleSwapTokens(args, this.getHandlerContext());
-            } catch (error: any) {
-              logError(`Error during swapTokens via toolSet: ${error.message}`);
-              return `Error during swapTokens: ${error.message}`;
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              logError(`Error during swapTokens tool execution: ${errorMessage}`);
+              throw error;
             }
           },
         }),
@@ -373,7 +331,7 @@ Present the user with a list of tokens and chains they can swap from and to if p
 
     try {
       this.log('Calling generateText with Vercel AI SDK...');
-      const { response, text, toolCalls, toolResults, finishReason } = await generateText({
+      const { response, text, finishReason } = await generateText({
         model: openrouter('google/gemini-2.0-flash-001'),
         messages: this.conversationHistory,
         tools: this.toolSet,
@@ -597,11 +555,7 @@ Present the user with a list of tokens and chains they can swap from and to if p
 
       this.log('Raw capabilitiesResult received from MCP.');
 
-      const dataToValidate = parseMcpToolResponse(
-        capabilitiesResult,
-        this.getHandlerContext(),
-        'getCapabilities'
-      );
+      const dataToValidate = parseMcpToolResponsePayload(capabilitiesResult, z.any());
 
       const validationResult = McpGetCapabilitiesResponseSchema.safeParse(dataToValidate);
 

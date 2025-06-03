@@ -1,12 +1,13 @@
-import { Agent } from './agent.js';
-import { isAddress } from 'viem';
-import * as dotenv from 'dotenv';
-import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import * as dotenv from 'dotenv';
+import express from 'express';
+import { isAddress } from 'viem';
+
+import { Agent } from './agent.js';
 import cors from 'cors';
 import { z } from 'zod';
-import type { Task } from 'a2a-samples-js/schema';
+import type { Task } from 'a2a-samples-js';
 
 const LendingAgentSchema = z.object({
   instruction: z
@@ -135,7 +136,7 @@ app.post('/messages', async (req, res) => {
   await transport.handlePostMessage(req, res);
 });
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
+const PORT = 3001;
 const main = async () => {
   try {
     await initializeAgent();

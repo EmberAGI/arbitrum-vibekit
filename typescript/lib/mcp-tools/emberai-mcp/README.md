@@ -1,27 +1,23 @@
-## **Introduction**
+## EmberAI MCP Server
 
-Ember On-chain Actions is a powerful MCP server that enables AI agents to interact with any DeFi protocol or crypto provider without custom implementations. It can act as a one-stop solution for managing and executing complex DeFi operations on various chains. Developers can harness Ember’s rich intent-based action infrastructure in combination with Vibekit's market data, social signals, and event infrastructure to create custom DeFi strategies.
+Ember is a powerful MCP (Model Context Protocol) server that acts as a one-stop solution for managing and executing complex DeFi operations across multiple chains. By providing simple, well-documented interfaces, Ember empowers AI agents and LLMs to dynamically select, compose, and interact with DeFi protocols without the need for custom implementations.
 
-- **Built for LLMs:** Simple, well-documented interfaces that let agents dynamically select and compose tools.
+Ember's MCP-powered connectivity establishes a declarative DeFi layer, enabling agents to interpret and execute user intents while offering developers a unified interface to the entire DeFi ecosystem. With access to rich market data, developers can leverage Ember to create custom DeFi strategies and effortlessly automate advanced workflows.
 
-- **MCP-Powered Connectivity:** A declarative DeFi layer designed to enable AI agents to interpret and execute user intents which allows developers to interact with the entire DeFi ecosystem through a unified interface.
+## Prerequisites
 
-- **Action-as-a-Service:** Instant access via wallet authentication, with pay-as-you-go pricing and flat-rate crypto payments.
+**1. Node.js ≥22**
 
-## **Prerequisites**
+**2. pnpm**
 
-- **Node.js ≥22**
+**3. TypeScript** (configured in the `tsconfig.json` file)
 
-- **pnpm**
-
-- **TypeScript** (configured in the `tsconfig.json` file)
-
-## **Quickstart**
+## Quickstart
 
 1. Clone the Vibekit repository and navigate to the `emberai-mcp` folder.
 
    ```bash
-   git clone https://github.com/EmberAGI/arbitrum-vibekit.git
+   git clone https://github.com/EmberAGI/arbitrum-vibekit.git &&
    cd arbitrum-vibekit/typescript/lib/mcp-tools/emberai-mcp
 
    ```
@@ -29,8 +25,8 @@ Ember On-chain Actions is a powerful MCP server that enables AI agents to intera
 2. Install dependencies and build the project:
 
    ```
-   pnpm install
-   pnpm run build
+   pnpm install &&
+   pnpm build
    ```
 
 3. Start the MCP server:
@@ -39,15 +35,33 @@ Ember On-chain Actions is a powerful MCP server that enables AI agents to intera
    pnpm start
    ```
 
-Clients can now connect via STDIO transport to invoke the MCP tools.
+Clients can now connect via STDIO transport to invoke the MCP tools. For instance, you can use the Inspector to interact with Ember's MCP tools. In a new terminal, run the following to launch the inspector:
 
-## **Available Tools**
+```bash
+npx -y @modelcontextprotocol/inspector
+```
 
-Below is a list of MCP tools offered by Ember AI. For more details on Ember's capabilities, visit the [official documentation page](https://docs.emberai.xyz/).
+Navigate to http://127.0.0.1:6274 in your browser to access the interface and click on "Connect" to establish a connection with your local server:
 
-### 1. swapTokens:
+<p align="left">
+  <img src="../../../../img/Ember_Inspector_1.png" width="700px" alt="Inspector1"/>
+</p>
 
-Swaps one token for another using Ember's MCP server.​
+Next, click on "List Tools" to get a list of Ember's MCP tools:
+
+<p align="left">
+  <img src="../../../../img/Ember_Inspector_2.png" width="700px" alt="Inspector2"/>
+</p>
+
+Next, simply click on the desired tool to start interacting with it.
+
+## Available Tools
+
+Below is a comprehensive list of MCP tools offered by Ember. For more details on Ember's capabilities, visit the [official documentation page](https://docs.emberai.xyz/).
+
+#### 1. swapTokens:
+
+Facilitates the exchange of one cryptocurrency for another across various decentralized exchanges (DEXs).
 
 **Parameters:**
 
@@ -69,9 +83,9 @@ An array of transaction objects representing the swap operation.​
 
 ---
 
-### 2. borrow:
+#### 2. borrow:
 
-Borrow tokens from lending protocols.
+Enables users to take out loans from various DeFi lending protocols by supplying collateral.
 
 **Parameters:**
 
@@ -89,9 +103,9 @@ An array of transaction objects representing the borrow operation.​
 
 ---
 
-### 3.repay:
+#### 3.repay:
 
-Repay borrowed tokens.
+Allows users to pay back outstanding loans on DeFi lending protocols.
 
 **Parameters:**
 
@@ -109,9 +123,9 @@ An array of transaction objects representing the repayment operation.​
 
 ---
 
-### 4. supply:
+#### 4. supply:
 
-Supply tokens to lending protocols.
+Enables users to deposit assets into DeFi lending protocols to earn interest or to serve as collateral for borrowing.
 
 **Parameters:**
 
@@ -129,9 +143,9 @@ An array of transaction objects representing the supply operation.​
 
 ---
 
-### 5. withdraw:
+#### 5. withdraw:
 
-Withdraw previously supplied tokens.
+Allows users to retrieve assets they have previously deposited into DeFi lending protocols, including any accrued interest or unlocking collateral.
 
 **Parameters:**
 
@@ -149,9 +163,9 @@ An array of transaction objects representing the withdrawal operation.​
 
 ---
 
-### 6. getCapabilities:
+#### 6. getCapabilities:
 
-Get Ember's capabilities.
+Retrieves a detailed list of functionalities and services supported by the Ember MCP server. This can include supported chains, protocols, and specific actions the server can perform.
 
 **Parameters:**
 
@@ -163,9 +177,9 @@ An object detailing the capabilities supported by Ember's MCP server.​
 
 ---
 
-### 7. getUserPositions:
+#### 7. getUserPositions:
 
-Get user wallet positions.
+Fetches a comprehensive overview of a user's holdings and investments across various DeFi protocols and assets, including token balances, supplied/borrowed amounts, and liquidity pool shares.
 
 **Parameters:**
 
@@ -177,25 +191,105 @@ An object containing the user's wallet positions across various tokens and proto
 
 ---
 
-### 8. getTokens:
+#### 8. getTokens:
 
-Get a list of supported tokens.
+Retrieves a list of tradable tokens supported by Ember, with options to filter by chain ID or other criteria.
 
 **Parameters:**
 
-chainId (string, optional): Chain ID to filter tokens.
+- chainId (string, optional): Chain ID to filter tokens.
 
-filter (string, optional): Additional filter criteria for tokens.​
+- filter (string, optional): Additional filter criteria for tokens.​
 
 **Return Value:**
 
 An array of token objects matching the specified criteria.
 
-## **Chains and Protocols**
+---
+
+#### 9. supplyLiquidity:
+
+Enables users to deposit a pair of tokens into a liquidity pool on a decentralized exchange (DEX), facilitating trading and earning fees.
+
+**Parameters:**
+
+- token0Address (string): Contract address of the first token in the pair.
+- token0ChainId (string): Chain ID where the token0 contract resides.
+- token1Address (string): Contract address of the second token in the pair.
+- token1ChainId (string): Chain ID where the token1 contract resides.
+- amount0 (string): Amount of token0 to supply.
+- amount1 (string): Amount of token1 to supply.
+- priceFrom (string): Lower bound price for the liquidity range.
+- priceTo (string): Upper bound price for the liquidity range.
+- userAddress (string): Wallet address supplying the liquidity.
+
+**Return Value:**
+
+An array of transaction objects representing the supply operation.
+
+---
+
+#### 10. withdrawLiquidity:
+
+Allows users to remove their supplied tokens from a liquidity pool on a DEX, retrieving their share of the pool's assets and any accrued fees.
+
+**Parameters:**
+
+- tokenId (string): NFT token ID representing the liquidity position to withdraw.
+- providerId (string): ID of the liquidity provider protocol.
+- userAddress (string): Wallet address withdrawing the liquidity.
+
+**Return Value:**
+
+An array of transaction objects representing the withdrawal operation.
+
+---
+
+#### 11. getLiquidityPools:
+
+Retrieves information about available liquidity pools across various DEXs, including details on token pairs, current liquidity, and fee structures.
+
+**Parameters:**
+
+- This tool does not require any parameters.
+
+**Return Value:**
+
+An object containing the available liquidity pools.
+
+---
+
+#### 12. getUserLiquidityPositions:
+
+Fetches details of a user's specific investments in liquidity pools, including the amount of tokens supplied, the share of the pool, and unrealized gains or losses.
+
+**Parameters:**
+
+- userAddress (string): Wallet address to fetch liquidity positions for.
+
+**Return Value:**
+
+An object containing the user's liquidity positions.
+
+---
+
+#### 13. getYieldMarkets:
+
+Retrieves information about available yield-generating opportunities across various DeFi protocols. This can include details on staking, lending, and liquidity mining, along with their potential returns and associated risks.
+
+**Parameters:**
+
+- This tool does not require any parameters.
+
+**Return Value:**
+
+An object containing yield market information.
+
+## Chains and Protocols
 
 ### 1. Lending and Borrowing
 
-Users can supply tokens as collateral to borrow other assets or lend them out to earn interest. Key actions include:
+One of Ember's core capabilities is supporting lending and borrowing protocols across multiple chains. This allows users to interact with DeFi markets in a variety of ways, such as:
 
 - Supply tokens to earn yield
 - Use supplied tokens as collateral
@@ -211,15 +305,19 @@ Users can supply tokens as collateral to borrow other assets or lend them out to
 - Polygon (`137`)
 - Ethereum Mainnet (`1`)
 
+---
+
 ### 2. Token Swaps
 
-Enables users to exchange one token for another at determined rates. Key features include:
+Ember makes it easy to swap tokens across supported protocols and chains, giving users flexible options for trading digital assets. Key features include:
 
 - Direct token exchanges
 - Cross-chain swaps
 - Access to 7,785 tradeable tokens
 
-#### Supported Chains: Ember supports swaps across 200+ chains, including:
+#### Supported Chains:
+
+Ember supports swaps across 200+ chains, including:
 
 #### Major EVM Networks
 
@@ -261,3 +359,14 @@ Enables users to exchange one token for another at determined rates. Key feature
 4. ZetaChain (`7000`)
 5. Zilliqa (`32769`)
 6. Klaytn (`8217`)
+
+---
+
+### 3. Liquidity Provision & Management
+
+Ember facilitates participation in decentralized exchange (DEX) liquidity pools, a cornerstone of automated market makers (AMMs). Users can contribute assets to these pools to enable trading for others and, in return, earn a share of the transaction fees. Ember provides tools to manage these activities comprehensively. Key actions include:
+
+- Supply assets to liquidity pools
+- Withdraw assets from liquidity pools
+- Discover available liquidity pools
+- Track liquidity positions

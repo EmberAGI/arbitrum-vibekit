@@ -1,36 +1,28 @@
-import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { SwapTokensArgs } from './agent.js';
-import type { Task, Artifact, DataPart } from 'a2a-samples-js/schema';
+import { type Task, type Artifact, type DataPart } from 'a2a-samples-js';
 import {
-  parseMcpToolResponse as sharedParseMcpToolResponse,
-  createTransactionArtifactSchema,
+  parseMcpToolResponsePayload,
   type TransactionArtifact,
 } from 'arbitrum-vibekit';
-import {
-  validateTransactionPlans,
+import { TransactionPlansSchema} from 'ember-schemas';
+import { 
+  type SwapTokensArgs,
+  type SwapTokensParams,
+  type PendleSwapPreview,
   type TransactionPlan,
-  TransactionPlanSchema,
-} from 'ember-mcp-tool-server';
+} from 'ember-schemas';
+import { z } from 'zod';
 
 export type TokenInfo = {
   chainId: string;
   address: string;
 };
 
-// Define swap schema to match the MCP tool server
-export const SwapTokensParamsSchema = z.object({
-  fromTokenAddress: z.string().describe('The contract address of the token to swap from.'),
-  fromTokenChainId: z.string().describe('The chain ID where the fromToken contract resides.'),
-  toTokenAddress: z.string().describe('The contract address of the token to swap to.'),
-  toTokenChainId: z.string().describe('The chain ID where the toToken contract resides.'),
-  amount: z
-    .string()
-    .describe('The amount of the fromToken to swap (atomic, non-human readable format).'),
-  userAddress: z.string().describe('The wallet address initiating the swap.'),
+// Schema to validate swapTokens tool response
+const SwapResponseSchema = z.object({
+  chainId: z.string(),
+  transactions: TransactionPlansSchema,
 });
-
-export type SwapTokensParams = z.infer<typeof SwapTokensParamsSchema>;
 
 export interface HandlerContext {
   mcpClient: Client;
@@ -121,63 +113,53 @@ function findTokenDetail(
   return tokenDetail;
 }
 
-// Define a Zod schema for the transaction preview specific to Pendle swaps
-const PendleSwapPreviewSchema = z.object({
-  fromTokenName: z.string(),
-  toTokenName: z.string(),
-  humanReadableAmount: z.string(),
-  chainName: z.string(),
-  parsedChainId: z.string(),
-});
-
-// Define the type for the Pendle swap preview
-type PendleSwapPreview = z.infer<typeof PendleSwapPreviewSchema>;
-
-// Define the schema for the artifact content using the shared utility
-const PendleSwapArtifactSchema = createTransactionArtifactSchema(PendleSwapPreviewSchema);
-
-// Schema to validate swapTokens tool response
-const SwapResponseSchema = z.object({
-  chainId: z.string(),
-  transactions: z.array(TransactionPlanSchema),
-});
-
 export async function handleSwapTokens(
   params: SwapTokensArgs,
   context: HandlerContext
 ): Promise<Task> {
-  const { fromTokenName, toTokenName, humanReadableAmount, chainName } = params;
+  const { fromToken, toToken, amount, fromChain, toChain } = params;
 
-  // Get from token details and handle possible string response
-  const fromTokenResult = findTokenDetail(fromTokenName, chainName, context.tokenMap);
+  let effectiveChainName: string | undefined = fromChain;
+  if (fromChain && toChain && fromChain !== toChain) {
+    return {
+      id: context.userAddress,
+      status: {
+        state: 'failed',
+        message: { role: 'agent', parts: [{ type: 'text', text: 'Pendle swaps must occur on a single chain. fromChain and toChain must match if both are provided.' }] },
+      },
+      artifacts: [],
+    };
+  }
+  if (!effectiveChainName && toChain) {
+    effectiveChainName = toChain;
+  }
+
+  const fromTokenResult = findTokenDetail(fromToken, effectiveChainName, context.tokenMap);
   if (typeof fromTokenResult === 'string') {
     return {
       id: context.userAddress,
-      status: {
-        state: 'failed',
-        message: { role: 'agent', parts: [{ type: 'text', text: fromTokenResult }] },
-      },
+      status: { state: 'failed', message: { role: 'agent', parts: [{ type: 'text', text: fromTokenResult }] } },
       artifacts: [],
     };
   }
 
-  // Determine effective chain for to token lookup
-  const effectiveChain = chainName || mapChainIdToName(fromTokenResult.chainId);
+  const toTokenChainName = toChain || mapChainIdToName(fromTokenResult.chainId);
+  if (effectiveChainName && toTokenChainName.toLowerCase() !== effectiveChainName.toLowerCase() && toChain) {
+    // Chain mismatch detected but this is handled later in the cross-chain validation
+    // No immediate action needed here
+  } else if (!effectiveChainName) {
+    effectiveChainName = mapChainIdToName(fromTokenResult.chainId);
+  }
 
-  // Get to token details and handle possible string response
-  const toTokenResult = findTokenDetail(toTokenName, effectiveChain, context.tokenMap);
+  const toTokenResult = findTokenDetail(toToken, toTokenChainName, context.tokenMap);
   if (typeof toTokenResult === 'string') {
     return {
       id: context.userAddress,
-      status: {
-        state: 'failed',
-        message: { role: 'agent', parts: [{ type: 'text', text: toTokenResult }] },
-      },
+      status: { state: 'failed', message: { role: 'agent', parts: [{ type: 'text', text: toTokenResult }] } },
       artifacts: [],
     };
   }
 
-  // Assert that tokens are on the same chain
   if (fromTokenResult.chainId !== toTokenResult.chainId) {
     return {
       id: context.userAddress,
@@ -188,7 +170,7 @@ export async function handleSwapTokens(
           parts: [
             {
               type: 'text',
-              text: `Cannot swap tokens across different chains. From chain: ${fromTokenResult.chainId}, To chain: ${toTokenResult.chainId}`,
+              text: `Cannot swap tokens across different chains. From token chain: ${mapChainIdToName(fromTokenResult.chainId)}, To token chain: ${mapChainIdToName(toTokenResult.chainId)}.`,
             },
           ],
         },
@@ -197,46 +179,47 @@ export async function handleSwapTokens(
     };
   }
 
-  // Create properly typed swap params directly
-  const swapParams: SwapTokensParams = {
+  const swapParamsForMcp: SwapTokensParams = {
     fromTokenAddress: fromTokenResult.address,
     fromTokenChainId: fromTokenResult.chainId,
     toTokenAddress: toTokenResult.address,
     toTokenChainId: toTokenResult.chainId,
-    amount: humanReadableAmount,
+    amount: amount,
     userAddress: context.userAddress,
   };
 
   const mcpResponse = await context.mcpClient.callTool({
     name: 'swapTokens',
-    arguments: swapParams,
+    arguments: swapParamsForMcp,
   });
 
   // Parse and validate tool response with Zod
-  const rawJsonText = sharedParseMcpToolResponse(mcpResponse);
-  const parsedData = JSON.parse(rawJsonText);
-  const { chainId, transactions } = SwapResponseSchema.parse(parsedData);
-  const txs: TransactionPlan[] = validateTransactionPlans(transactions);
+  const parsedData = parseMcpToolResponsePayload(mcpResponse, SwapResponseSchema);
+  const { chainId, transactions } = parsedData;
 
   const preview: PendleSwapPreview = {
-    fromTokenName,
-    toTokenName,
-    humanReadableAmount,
-    chainName: effectiveChain,
+    fromTokenName: fromToken,
+    toTokenName: toToken,
+    humanReadableAmount: amount,
+    chainName: effectiveChainName || mapChainIdToName(fromTokenResult.chainId),
     parsedChainId: chainId,
   };
 
   const artifactContent: TransactionArtifact<PendleSwapPreview> = {
-    txPlan: txs,
+    txPlan: transactions,
     txPreview: preview,
   };
 
   const dataPart: DataPart = {
     type: 'data',
-    data: artifactContent as any,
+    data: { ...artifactContent },
   };
 
-  // Construct and return a Task artifact
+  const artifact: Artifact = {
+    name: 'swap-transaction-plan',
+    parts: [dataPart],
+  };
+
   return {
     id: context.userAddress,
     status: {
@@ -246,16 +229,11 @@ export async function handleSwapTokens(
         parts: [
           {
             type: 'text',
-            text: `Swap transaction plan prepared (${txs.length} txs). Please review and execute.`,
+            text: `Swap transaction plan prepared (${transactions.length} txs). Please review and execute.`,
           },
         ],
       },
     },
-    artifacts: [
-      {
-        name: 'swap-yield-transaction',
-        parts: [dataPart],
-      } as Artifact,
-    ],
+    artifacts: [artifact],
   };
 }

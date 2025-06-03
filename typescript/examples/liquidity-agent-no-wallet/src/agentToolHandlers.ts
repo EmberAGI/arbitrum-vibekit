@@ -1,30 +1,27 @@
-import { z } from 'zod';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { Task, DataPart } from 'a2a-samples-js';
+import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
+import { parseMcpToolResponsePayload, type TransactionArtifact } from 'arbitrum-vibekit';
+import {
+  GetLiquidityPoolsSchema,
+  GetUserLiquidityPositionsSchema,
+  SupplyLiquiditySchema,
+  WithdrawLiquiditySchema,
+  GetUserLiquidityPositionsResponseSchema,
+  TransactionPlanSchema,
+  type LiquidityPoolsArtifact,
+  type UserPositionsArtifact,
+  type TransactionPlan,
+} from 'ember-schemas';
 import {
   parseUnits,
   createPublicClient,
   http,
   type Address,
-  encodeFunctionData,
   type PublicClient,
   formatUnits,
 } from 'viem';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Task } from 'a2a-samples-js/schema';
-import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { streamText } from 'ai';
-import {
-  parseMcpToolResponse as sharedParseMcpToolResponse,
-  createTransactionArtifactSchema,
-  type TransactionArtifact,
-} from 'arbitrum-vibekit';
-import {
-  TransactionPlanSchema as SharedTransactionPlanSchema,
-  type TransactionPlan,
-  validateTransactionPlans,
-} from 'ember-mcp-tool-server';
-import type { ZodType } from 'zod';
-import type { DataPart } from 'a2a-samples-js/schema';
+import { z } from 'zod';
 
 import type { LiquidityPair, LiquidityPosition } from './agent.js';
 import { getChainConfigById } from './agent.js';
@@ -34,109 +31,6 @@ export type TokenInfo = {
   address: string;
   decimals: number;
 };
-
-// --- Liquidity Specific Schemas Start ---
-export const LiquidityPreviewSchema = z.object({
-  action: z.enum(['supply', 'withdraw']),
-  pairHandle: z.string().optional(), // Optional for withdraw if using positionNumber
-  token0Symbol: z.string(),
-  token0Amount: z.string(), // User provided amount for supply, estimated for withdraw
-  token1Symbol: z.string(),
-  token1Amount: z.string(), // User provided amount for supply, estimated for withdraw
-  priceFrom: z.string().optional(), // Only for supply
-  priceTo: z.string().optional(), // Only for supply
-  positionNumber: z.number().optional(), // Only for withdraw
-  // Add other relevant preview fields if needed
-});
-
-// Create a shared artifact schema for liquidity
-const LiquidityArtifactSchema = createTransactionArtifactSchema(LiquidityPreviewSchema);
-
-// Define the shared artifact type for liquidity transactions
-export type LiquidityTransactionArtifact = TransactionArtifact<typeof LiquidityPreviewSchema>;
-
-// --- Pools/Positions Artifact Schemas Start ---
-// Define schema based on LiquidityPair type used internally
-const LiquidityPairArtifactSchema = z.object({
-  handle: z.string(),
-  symbol0: z.string(),
-  symbol1: z.string(),
-  token0: z.object({
-    // Use a simplified object for the artifact
-    chainId: z.string(),
-    address: z.string(),
-  }),
-  token1: z.object({
-    // Use a simplified object for the artifact
-    chainId: z.string(),
-    address: z.string(),
-  }),
-  price: z.string(),
-});
-
-export const LiquidityPoolsArtifactSchema = z.object({
-  pools: z.array(LiquidityPairArtifactSchema),
-});
-export type LiquidityPoolsArtifact = z.infer<typeof LiquidityPoolsArtifactSchema>;
-
-// Define schema based on MCP response structure for user positions
-const PositionRangeSchema = z.object({
-  fromPrice: z.string(),
-  toPrice: z.string(),
-});
-
-const TokenIdentifierSchema = z.object({
-  chainId: z.string(),
-  address: z.string(),
-});
-
-const LiquidityPositionArtifactSchema = z.object({
-  tokenId: z.string(),
-  poolAddress: z.string(),
-  operator: z.string(),
-  token0: TokenIdentifierSchema,
-  token1: TokenIdentifierSchema,
-  tokensOwed0: z.string(),
-  tokensOwed1: z.string(),
-  amount0: z.string(),
-  amount1: z.string(),
-  symbol0: z.string(),
-  symbol1: z.string(),
-  price: z.string(),
-  providerId: z.string(),
-  positionRange: PositionRangeSchema,
-});
-
-export const UserPositionsArtifactSchema = z.object({
-  positions: z.array(LiquidityPositionArtifactSchema),
-});
-export type UserPositionsArtifact = z.infer<typeof UserPositionsArtifactSchema>;
-// --- Pools/Positions Artifact Schemas End ---
-
-// Schema for the MCP response of getUserLiquidityPositions
-export const EmberPositionSchema = LiquidityPositionArtifactSchema;
-
-const GetUserLiquidityPositionsResponseSchema = z
-  .object({
-    positions: z.array(EmberPositionSchema),
-  })
-  .passthrough();
-
-// Schemas needed for handler function signatures (even if not used for MCP args)
-const GetLiquidityPoolsSchema = z.object({});
-const GetUserLiquidityPositionsSchema = z.object({});
-// Need SupplyLiquiditySchema from agent.ts (or redefine) for handleSupplyLiquidity param type
-// Let's assume it's implicitly available or redefine the relevant part for the handler signature
-const SupplyLiquidityHandlerParamsSchema = z.object({
-  pair: z.string(),
-  amount0: z.string(),
-  amount1: z.string(),
-  priceFrom: z.string(),
-  priceTo: z.string(),
-});
-const WithdrawLiquidityHandlerParamsSchema = z.object({
-  positionNumber: z.number().int().positive(),
-});
 
 export interface HandlerContext {
   mcpClient: Client;
@@ -237,7 +131,7 @@ export async function handleGetUserLiquidityPositions(
       arguments: mcpArgs,
     });
 
-    const validatedData = sharedParseMcpToolResponse(
+    const validatedData = parseMcpToolResponsePayload(
       mcpResponse,
       GetUserLiquidityPositionsResponseSchema
     );
@@ -304,7 +198,7 @@ export async function handleGetUserLiquidityPositions(
 }
 
 export async function handleSupplyLiquidity(
-  params: z.infer<typeof SupplyLiquidityHandlerParamsSchema>,
+  params: z.infer<typeof SupplyLiquiditySchema>,
   context: HandlerContext
 ): Promise<Task> {
   context.log('Handling supplyLiquidity with params:', params);
@@ -469,16 +363,14 @@ export async function handleSupplyLiquidity(
       arguments: mcpArgs,
     });
 
-    // Parse and extract transactions from MCP response object
-    const parsed = sharedParseMcpToolResponse(
+    const parsed = parseMcpToolResponsePayload(
       mcpResponse,
       z.object({
         chainId: z.string(),
-        transactions: z.array(SharedTransactionPlanSchema),
+        transactions: z.array(TransactionPlanSchema),
       })
     );
     const txPlan: TransactionPlan[] = parsed.transactions;
-    context.log('Received raw transaction plan for supplyLiquidity:', txPlan);
 
     // --- Construct Artifact Start ---
     const preview = {
@@ -494,7 +386,7 @@ export async function handleSupplyLiquidity(
     const artifactContent: TransactionArtifact<typeof preview> = { txPlan, txPreview: preview };
     const dataPart: DataPart = {
       type: 'data',
-      data: artifactContent as any,
+      data: { ...artifactContent },
     };
 
     return {
@@ -521,7 +413,7 @@ export async function handleSupplyLiquidity(
 }
 
 export async function handleWithdrawLiquidity(
-  params: z.infer<typeof WithdrawLiquidityHandlerParamsSchema>,
+  params: z.infer<typeof WithdrawLiquiditySchema>,
   context: HandlerContext
 ): Promise<Task> {
   context.log('Handling withdrawLiquidity with params:', params);
@@ -562,16 +454,14 @@ export async function handleWithdrawLiquidity(
       arguments: mcpArgs,
     });
 
-    // Parse and extract transactions from MCP response object
-    const parsed = sharedParseMcpToolResponse(
+    // Parse without chainId first
+    const txPlan = parseMcpToolResponsePayload(
       mcpResponse,
       z.object({
         chainId: z.string(),
-        transactions: z.array(SharedTransactionPlanSchema),
+        transactions: z.array(TransactionPlanSchema),
       })
-    );
-    const txPlan: TransactionPlan[] = parsed.transactions;
-    context.log('Received raw transaction plan for withdrawLiquidity:', txPlan);
+    ).transactions;
 
     context.log('Transaction plan for withdrawLiquidity:', txPlan);
 
@@ -588,7 +478,7 @@ export async function handleWithdrawLiquidity(
     const artifactContentW: TransactionArtifact<typeof previewW> = { txPlan, txPreview: previewW };
     const dataPartW: DataPart = {
       type: 'data',
-      data: artifactContentW as any,
+      data: { ...artifactContentW },
     };
 
     return {

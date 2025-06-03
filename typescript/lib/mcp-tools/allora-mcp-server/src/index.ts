@@ -1,18 +1,20 @@
 #!/usr/bin/env node
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import express from "express";
-import { createServer } from "./mcp.js";
+
 import { AlloraAPIClient, ChainSlug } from "@alloralabs/allora-sdk";
-import { PassThrough, Readable } from "stream";
-import getRawBody from "raw-body";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import dotenv from "dotenv";
+import express from "express";
+
+import { createServer } from "./mcp.js";
+
 
 dotenv.config();
 
 async function main() {
   const app = express();
 
-  app.use(function (req, res, next) {
+  app.use(function (req, _res, next) {
     console.log(`${req.method} ${req.url}`);
     next();
   });
@@ -31,7 +33,7 @@ async function main() {
 
   const transports: { [sessionId: string]: SSEServerTransport } = {};
 
-  app.get("/sse", async (req, res) => {
+  app.get("/sse", async (_req, res) => {
     console.log("Received connection");
 
     const transport = new SSEServerTransport("/messages", res);
@@ -40,17 +42,17 @@ async function main() {
     await server.connect(transport);
   });
 
-  app.post("/messages", async (req, res) => {
-    const sessionId = req.query.sessionId as string;
+  app.post("/messages", async (_req, res) => {
+    const sessionId = _req.query.sessionId as string;
     console.log(`Received message for session: ${sessionId}`);
 
     let bodyBuffer = Buffer.alloc(0);
 
-    req.on("data", (chunk) => {
+    _req.on("data", (chunk) => {
       bodyBuffer = Buffer.concat([bodyBuffer, chunk]);
     });
 
-    req.on("end", async () => {
+    _req.on("end", async () => {
       try {
         // Parse the body
         const bodyStr = bodyBuffer.toString("utf8");
@@ -65,13 +67,20 @@ async function main() {
       res.status(400).send("No transport found for sessionId");
       return;
     }
-    await transport.handlePostMessage(req, res);
+    await transport.handlePostMessage(_req, res);
   });
 
   const PORT = process.env.PORT || 3001;
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
   });
+
+  // Start stdio transport
+  const stdioTransport = new StdioServerTransport();
+  console.error("Initializing stdio transport...");
+  await server.connect(stdioTransport);
+  console.error("Allora MCP stdio server started and connected.");
+  console.error("Server is now ready to receive stdio requests.");
 }
 
 main().catch(() => process.exit(-1));

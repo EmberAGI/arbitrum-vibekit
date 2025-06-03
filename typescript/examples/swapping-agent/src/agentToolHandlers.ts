@@ -1,3 +1,6 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
+import { TransactionPlanSchema, type TransactionPlan } from 'ember-schemas';
 import {
   parseUnits,
   createPublicClient,
@@ -6,11 +9,9 @@ import {
   encodeFunctionData,
   type PublicClient,
 } from 'viem';
-import { getChainConfigById } from './agent.js';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { parseMcpToolResponse as sharedParseMcpToolResponse } from 'arbitrum-vibekit';
-import { TransactionPlanSchema, type TransactionPlan } from 'ember-mcp-tool-server';
 import { z } from 'zod';
+
+import { getChainConfigById } from './agent.js';
 
 export type TokenInfo = {
   chainId: string;
@@ -105,16 +106,6 @@ function findTokenDetail(
   return tokenDetail;
 }
 
-export function parseMcpToolResponse(
-  rawResponse: unknown,
-  context: HandlerContext,
-  toolName: string
-): unknown {
-  context.log(`Invoking shared parser for ${toolName}`);
-  // Always return parsed JSON
-  return sharedParseMcpToolResponse(rawResponse, z.any());
-}
-
 async function validateAndExecuteAction(
   actionName: string,
   rawTransactions: unknown,
@@ -198,7 +189,7 @@ export async function handleSwapTokens(
     },
   });
 
-  const dataToValidate = parseMcpToolResponse(rawTransactions, context, 'swapTokens');
+  const dataToValidate = parseMcpToolResponsePayload(rawTransactions, z.any());
 
   if (!Array.isArray(dataToValidate) || dataToValidate.length === 0) {
     context.log('Invalid or empty transaction plan received from MCP tool:', dataToValidate);

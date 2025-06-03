@@ -1,4 +1,19 @@
-import { z } from 'zod';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
+import type { Task } from 'a2a-samples-js';
+import { streamText } from 'ai';
+import {
+  type TransactionArtifact,
+  parseMcpToolResponsePayload,
+} from 'arbitrum-vibekit';
+import {
+  SwapResponseSchema,
+  TransactionPlansSchema,
+  type SwapResponse,
+  type SwapPreview,
+  type TransactionPlan,
+} from 'ember-schemas';
 import {
   parseUnits,
   createPublicClient,
@@ -8,76 +23,14 @@ import {
   type PublicClient,
   formatUnits,
 } from 'viem';
+
 import { getChainConfigById } from './agent.js';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Task, DataPart } from 'a2a-samples-js/schema';
-import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { streamText } from 'ai';
-import {
-  parseMcpToolResponse as sharedParseMcpToolResponse,
-  createTransactionArtifactSchema,
-  type TransactionArtifact,
-} from 'arbitrum-vibekit';
-import {
-  validateTransactionPlans,
-  TransactionPlanSchema,
-  type TransactionPlan,
-} from 'ember-mcp-tool-server';
 
 export type TokenInfo = {
   chainId: string;
   address: string;
   decimals: number;
 };
-
-export const SwapPreviewSchema = z
-  .object({
-    fromTokenSymbol: z.string(),
-    fromTokenAddress: z.string(),
-    fromTokenAmount: z.string(),
-    fromChain: z.string(),
-    toTokenSymbol: z.string(),
-    toTokenAddress: z.string(),
-    toTokenAmount: z.string(),
-    toChain: z.string(),
-    exchangeRate: z.string(),
-    executionTime: z.string(),
-    expiration: z.string(),
-    explorerUrl: z.string(),
-  })
-  .passthrough();
-
-export type SwapPreview = z.infer<typeof SwapPreviewSchema>;
-
-const TokenDetailSchema = z.object({
-  address: z.string(),
-  chainId: z.string(),
-});
-
-const EstimationSchema = z.object({
-  effectivePrice: z.string(),
-  timeEstimate: z.string(),
-  expiration: z.string(),
-  baseTokenDelta: z.string(),
-  quoteTokenDelta: z.string(),
-});
-
-const ProviderTrackingSchema = z.object({
-  requestId: z.string().optional(),
-  providerName: z.string().optional(),
-  explorerUrl: z.string(),
-});
-
-export const SwapResponseSchema = z.object({
-  baseToken: TokenDetailSchema,
-  quoteToken: TokenDetailSchema,
-  estimation: EstimationSchema,
-  providerTracking: ProviderTrackingSchema,
-  transactions: z.array(TransactionPlanSchema),
-});
-
-export type SwapResponse = z.infer<typeof SwapResponseSchema>;
 
 export interface HandlerContext {
   mcpClient: Client;
@@ -316,35 +269,23 @@ export async function handleSwapTokens(
     },
   });
 
-  // Parse and validate the MCP tool response in one step
-  let rawSwapTransactions: TransactionPlan[];
   let validatedSwapResponse: SwapResponse;
   try {
-    validatedSwapResponse = sharedParseMcpToolResponse(swapResponseRaw, SwapResponseSchema);
-    rawSwapTransactions = validatedSwapResponse.transactions;
-    context.log('Parsed and validated swap response:', validatedSwapResponse);
+    validatedSwapResponse = parseMcpToolResponsePayload(swapResponseRaw, SwapResponseSchema);
   } catch (error) {
-    let errorMessage = (error as Error).message;
-    // If payload was plain text, extract raw message instead
-    if (errorMessage.includes('Expected JSON payload')) {
-      try {
-        errorMessage = sharedParseMcpToolResponse(swapResponseRaw) as string;
-      } catch {
-        // Fallback to original errorMessage
-      }
-    }
-    context.log(`Error processing swapTokens response: ${errorMessage}`);
+    context.log('MCP tool swapTokens returned invalid data structure:', error);
     return {
       id: userAddress,
       status: {
         state: 'failed',
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: errorMessage }],
+          parts: [{ type: 'text', text: (error as Error).message }],
         },
       },
     };
   }
+  const rawSwapTransactions = validatedSwapResponse.transactions;
 
   if (rawSwapTransactions.length === 0) {
     context.log('Invalid or empty transaction plan received from MCP tool:', rawSwapTransactions);
@@ -421,7 +362,7 @@ export async function handleSwapTokens(
   }
 
   context.log('Validating the swap transactions received from MCP tool...');
-  const validatedSwapTxPlan: TransactionPlan[] = validateTransactionPlans(rawSwapTransactions);
+  const validatedSwapTxPlan: TransactionPlan[] = TransactionPlansSchema.parse(rawSwapTransactions);
 
   const finalTxPlan: TransactionPlan[] = [
     ...(approveTxResponse ? [approveTxResponse] : []),
@@ -466,9 +407,7 @@ export async function handleSwapTokens(
         parts: [
           {
             type: 'data',
-            // The double-cast is intentional: DataPart expects Record<string, unknown>,
-            // but our artifact is validated by schema elsewhere.
-            data: txArtifact as unknown as Record<string, unknown>,
+            data: { ...txArtifact },
           },
         ],
       },
@@ -563,9 +502,9 @@ ${camelotContextContent}`;
         },
       },
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     log(`Error during askEncyclopedia execution:`, error);
-    const errorMessage = error?.message || 'An unexpected error occurred.';
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return {
       id: userAddress,
       status: {
@@ -579,15 +518,4 @@ ${camelotContextContent}`;
   }
 }
 
-export function parseMcpToolResponse(
-  rawResponse: unknown,
-  context: HandlerContext,
-  toolName: string
-): unknown {
-  context.log(`Invoking shared parser for ${toolName}`);
-  // Always parse JSON payload
-  return sharedParseMcpToolResponse(rawResponse, z.any());
-}
-
-const SwapTransactionArtifactSchema = createTransactionArtifactSchema(SwapPreviewSchema);
 export type SwapTransactionArtifact = TransactionArtifact<SwapPreview>;

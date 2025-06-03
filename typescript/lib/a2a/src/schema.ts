@@ -617,7 +617,7 @@ export type A2AError = JSONRPCError<unknown | null, KnownErrorCode | number>;
  */
 export interface AuthenticationInfo extends AgentAuthentication {
   /** Allow any other properties */
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /**

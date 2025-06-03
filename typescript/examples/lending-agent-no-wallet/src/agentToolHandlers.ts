@@ -1,6 +1,5 @@
-import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Task, DataPart } from 'a2a-samples-js/schema';
+import type { Task, DataPart } from 'a2a-samples-js';
 import {
   createPublicClient,
   http,
@@ -10,151 +9,23 @@ import {
   type PublicClient,
 } from 'viem';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
-import { getChainConfigById } from './agent.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { streamText } from 'ai';
 import {
-  parseMcpToolResponse as sharedParseMcpToolResponse,
-  createTransactionArtifactSchema,
-  type TransactionArtifact,
+  parseMcpToolResponsePayload,
 } from 'arbitrum-vibekit';
 import {
-  validateTransactionPlans,
-  TransactionPlanSchema,
+  SupplyResponseSchema,
+  WithdrawResponseSchema,
+  BorrowResponseSchema,
+  RepayResponseSchema,
+  GetWalletPositionsResponseSchema,
   type TransactionPlan,
-} from 'ember-mcp-tool-server';
-
-const ZodTokenUidSchema = z.object({
-  chainId: z.string(),
-  address: z.string(),
-});
-
-const ZodTokenSchema = z
-  .object({
-    tokenUid: ZodTokenUidSchema,
-    name: z.string(),
-    symbol: z.string(),
-    isNative: z.boolean(),
-    decimals: z.number(),
-    isVetted: z.boolean(),
-  })
-  .passthrough();
-
-const ZodUserReserveSchema = z
-  .object({
-    token: ZodTokenSchema,
-    underlyingBalance: z.string(),
-    underlyingBalanceUsd: z.string(),
-    variableBorrows: z.string(),
-    variableBorrowsUsd: z.string(),
-    totalBorrows: z.string(),
-    totalBorrowsUsd: z.string(),
-  })
-  .passthrough();
-
-const ZodLendingPositionSchema = z
-  .object({
-    userReserves: z.array(ZodUserReserveSchema),
-    totalLiquidityUsd: z.string(),
-    totalCollateralUsd: z.string(),
-    totalBorrowsUsd: z.string(),
-    netWorthUsd: z.string(),
-    availableBorrowsUsd: z.string(),
-    currentLoanToValue: z.string(),
-    currentLiquidationThreshold: z.string(),
-    healthFactor: z.string(),
-  })
-  .passthrough();
-
-const ZodPositionSchema = z
-  .object({
-    lendingPosition: ZodLendingPositionSchema,
-  })
-  .passthrough();
-
-export const ZodGetWalletPositionsResponseSchema = z
-  .object({
-    positions: z.array(ZodPositionSchema),
-  })
-  .passthrough();
-
-// Schema for the supply tool's nested JSON response
-const ZodSupplyResponseSchema = z
-  .object({
-    tokenUid: ZodTokenUidSchema,
-    amount: z.string(),
-    supplierWalletAddress: z.string(),
-    transactions: z.array(TransactionPlanSchema),
-    chainId: z.string(),
-  })
-  .passthrough();
-
-// Type for the supply tool response
-type SupplyResponse = z.infer<typeof ZodSupplyResponseSchema>;
-
-type McpGetWalletPositionsResponse = z.infer<typeof ZodGetWalletPositionsResponseSchema>;
-
-export interface TokenInfo {
-  chainId: string;
-  address: string;
-  decimals: number;
-}
-
-export const LendingPreviewSchema = z
-  .object({
-    tokenName: z.string(),
-    amount: z.string(),
-    action: z.enum(['borrow', 'repay', 'supply', 'withdraw']),
-    chainId: z.string(),
-  })
-  .passthrough();
-
-export type LendingPreview = z.infer<typeof LendingPreviewSchema>;
-
-// Define shared artifact schema for lending transactions
-const LendingTransactionArtifactSchema = createTransactionArtifactSchema(LendingPreviewSchema);
-export type LendingTransactionArtifact = TransactionArtifact<LendingPreview>;
-
-// Schema for the withdraw tool's nested JSON response
-const ZodWithdrawResponseSchema = z
-  .object({
-    tokenUid: ZodTokenUidSchema,
-    amount: z.string(),
-    lenderWalletAddress: z.string(),
-    transactions: z.array(TransactionPlanSchema),
-    chainId: z.string(),
-  })
-  .passthrough();
-
-// Type for the withdraw tool response
-type WithdrawResponse = z.infer<typeof ZodWithdrawResponseSchema>;
-
-// Schema for the borrow tool's nested JSON response
-const ZodBorrowResponseSchema = z
-  .object({
-    currentBorrowApy: z.string(),
-    liquidationThreshold: z.string(),
-    transactions: z.array(TransactionPlanSchema),
-    chainId: z.string(),
-  })
-  .passthrough();
-
-// Type for the borrow tool response
-type BorrowResponse = z.infer<typeof ZodBorrowResponseSchema>;
-
-// Schema for the repay tool's nested JSON response
-const ZodRepayResponseSchema = z
-  .object({
-    tokenUid: ZodTokenUidSchema,
-    amount: z.string(),
-    borrowerWalletAddress: z.string(),
-    transactions: z.array(TransactionPlanSchema),
-    chainId: z.string(),
-  })
-  .passthrough();
-
-// Type for the repay tool response
-type RepayResponse = z.infer<typeof ZodRepayResponseSchema>;
+  type TokenInfo,
+  type LendingPreview,
+  type LendingTransactionArtifact,
+} from 'ember-schemas';
+import { getChainConfigById } from './agent.js';
 
 export interface HandlerContext {
   mcpClient: Client;
@@ -167,7 +38,7 @@ export interface HandlerContext {
   aaveContextContent: string;
 }
 
-type FindTokenResult =
+export type FindTokenResult =
   | { type: 'found'; token: TokenInfo }
   | { type: 'notFound' }
   | { type: 'clarificationNeeded'; options: TokenInfo[] };
@@ -217,7 +88,7 @@ export async function handleBorrow(
         },
       };
 
-    case 'clarificationNeeded':
+    case 'clarificationNeeded': {
       context.log(`Borrow requires clarification for token ${rawTokenName}.`);
       const optionsText = findResult.options
         .map(opt => `- ${rawTokenName} on chain ${opt.chainId}`)
@@ -237,8 +108,9 @@ export async function handleBorrow(
           },
         },
       };
+    }
 
-    case 'found':
+    case 'found': {
       const tokenDetail = findResult.token;
       context.log(
         `Preparing borrow transaction: ${rawTokenName} (Chain: ${tokenDetail.chainId}, Addr: ${tokenDetail.address}), amount: ${amount}`
@@ -255,8 +127,7 @@ export async function handleBorrow(
           },
         });
 
-        // Parse and validate the MCP borrow tool response using the new ZodBorrowResponseSchema
-        const borrowResp = sharedParseMcpToolResponse(rawResult, ZodBorrowResponseSchema);
+        const borrowResp = parseMcpToolResponsePayload(rawResult, BorrowResponseSchema);
         const { transactions, currentBorrowApy, liquidationThreshold } = borrowResp;
 
         // Build artifact using shared generic schema
@@ -271,7 +142,7 @@ export async function handleBorrow(
           },
           txPlan: transactions,
         };
-        const dataPart: DataPart = { type: 'data', data: txArtifact as any };
+        const dataPart: DataPart = { type: 'data', data: txArtifact };
 
         return {
           id: context.userAddress,
@@ -304,6 +175,7 @@ export async function handleBorrow(
           },
         };
       }
+    }
   }
 }
 
@@ -333,7 +205,7 @@ export async function handleRepay(
         },
       };
 
-    case 'clarificationNeeded':
+    case 'clarificationNeeded': {
       const chainList = findResult.options
         .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.chainId}`)
         .join('\n');
@@ -352,6 +224,7 @@ export async function handleRepay(
           },
         },
       };
+    }
 
     case 'found': {
       const tokenInfo = findResult.token;
@@ -361,7 +234,7 @@ export async function handleRepay(
       let atomicAmount: bigint;
       try {
         atomicAmount = parseUnits(amount, tokenInfo.decimals);
-      } catch (e) {
+      } catch (_e) {
         return {
           id: userAddress,
           status: {
@@ -476,10 +349,7 @@ export async function handleRepay(
       context.log('MCP repay tool response:', toolResult);
 
       // Parse and validate the MCP repay tool response using the new ZodRepayResponseSchema
-      const repayResp = sharedParseMcpToolResponse(
-        toolResult,
-        ZodRepayResponseSchema
-      ) as RepayResponse;
+      const repayResp = parseMcpToolResponsePayload(toolResult, RepayResponseSchema);
       const { transactions } = repayResp;
       context.log(`Processed and validated ${transactions.length} transactions for repay.`);
 
@@ -491,7 +361,7 @@ export async function handleRepay(
         chainId: tokenInfo.chainId,
       };
       const artifactContent: LendingTransactionArtifact = { txPreview, txPlan: transactions };
-      const dataPart: DataPart = { type: 'data', data: artifactContent as any };
+      const dataPart: DataPart = { type: 'data', data: artifactContent };
 
       // Return Task with standard artifact
       return {
@@ -537,7 +407,7 @@ export async function handleSupply(
         },
       };
 
-    case 'clarificationNeeded':
+    case 'clarificationNeeded': {
       const chainList = findResult.options
         .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.chainId}`)
         .join('\n');
@@ -556,6 +426,7 @@ export async function handleSupply(
           },
         },
       };
+    }
 
     case 'found': {
       const tokenInfo = findResult.token;
@@ -565,7 +436,7 @@ export async function handleSupply(
       let atomicAmount: bigint;
       try {
         atomicAmount = parseUnits(amount, tokenInfo.decimals);
-      } catch (e) {
+      } catch (_e) {
         return {
           id: userAddress,
           status: {
@@ -680,8 +551,7 @@ export async function handleSupply(
 
       let finalTxPlan: TransactionPlan[] = [];
       try {
-        // Parse and validate the MCP supply tool response using the new ZodSupplyResponseSchema
-        const supplyResp = sharedParseMcpToolResponse(toolResult, ZodSupplyResponseSchema);
+        const supplyResp = parseMcpToolResponsePayload(toolResult, SupplyResponseSchema);
         finalTxPlan = supplyResp.transactions;
         context.log(
           `Processed and validated ${finalTxPlan.length} transactions from MCP for supply.`
@@ -794,7 +664,7 @@ export async function handleWithdraw(
         },
       };
 
-    case 'clarificationNeeded':
+    case 'clarificationNeeded': {
       const chainList = findResult.options
         .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.chainId}`)
         .join('\n');
@@ -813,6 +683,7 @@ export async function handleWithdraw(
           },
         },
       };
+    }
 
     case 'found': {
       const tokenDetail = findResult.token;
@@ -833,8 +704,7 @@ export async function handleWithdraw(
       context.log('MCP withdraw tool response:', toolResult);
 
       try {
-        // Parse and validate the MCP withdraw tool response using the new ZodWithdrawResponseSchema
-        const withdrawResp = sharedParseMcpToolResponse(toolResult, ZodWithdrawResponseSchema);
+        const withdrawResp = parseMcpToolResponsePayload(toolResult, WithdrawResponseSchema);
         const validatedTxPlan: TransactionPlan[] = withdrawResp.transactions;
         context.log('Withdraw transaction plan validated:', validatedTxPlan);
 
@@ -911,10 +781,9 @@ export async function handleGetUserPositions(
 
     console.log('rawResult', rawResult);
 
-    // Parse and validate the MCP tool response using the shared parser with Zod schema
-    const validatedPositions = sharedParseMcpToolResponse(
+    const validatedPositions = parseMcpToolResponsePayload(
       rawResult,
-      ZodGetWalletPositionsResponseSchema
+      GetWalletPositionsResponseSchema
     );
 
     return {
@@ -1034,9 +903,9 @@ ${aaveContextContent}`;
         },
       },
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     log(`Error during askEncyclopedia execution:`, error);
-    const errorMessage = error?.message || 'An unexpected error occurred.';
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return {
       id: userAddress,
       status: {

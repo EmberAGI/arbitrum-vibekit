@@ -1,93 +1,92 @@
-import { z } from 'zod';
-import type { Address } from 'viem';
-import { type HandlerContext, handleSwapTokens } from './agentToolHandlers.js';
-import { parseMcpToolResponse as sharedParseMcpToolResponse } from 'arbitrum-vibekit';
-import { type TransactionPlan } from 'ember-mcp-tool-server';
+import { createRequire } from 'module';
+
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { type Task } from 'a2a-samples-js';
 import {
   generateText,
   tool,
   type Tool,
   type CoreMessage,
   type ToolResultPart,
-  type CoreUserMessage,
-  type CoreAssistantMessage,
   type StepResult,
 } from 'ai';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { logError, getChainConfigById, type ChainConfig } from './utils.js';
-import { createRequire } from 'module';
-import type { Task } from 'a2a-samples-js/schema';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
+import {
+  GetPendleMarketsRequestSchema,
+  GetYieldMarketsResponseSchema,
+  SwapTokensSchema,
+  GetTokensResponseSchema,
+  type YieldMarket,
+  type GetYieldMarketsResponse,
+  type TransactionPlan,
+  GetWalletBalancesResponseSchema,
+  GetMarketDataResponseSchema,
+} from 'ember-schemas';
+import { type Address } from 'viem';
+import { z } from 'zod';
+
+import { type HandlerContext, handleSwapTokens } from './agentToolHandlers.js';
+import { logError } from './utils.js';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-export const TokenIdentifierSchema = z.object({
-  chainId: z.string().describe('The chain ID of the token identifier.'),
-  address: z.string().describe('The address of the token identifier.'),
-});
-export type TokenIdentifier = z.infer<typeof TokenIdentifierSchema>;
-
-export const TokenSchema = z.object({
-  tokenUid: TokenIdentifierSchema.describe('For native tokens, this may be empty.').optional(),
-  name: z.string().describe('The human-readable name of the token.'),
-  symbol: z.string().describe('The ticker symbol of the token.'),
-  isNative: z.boolean().describe('Whether this token is native to its chain.'),
-  decimals: z.number().int().describe('The number of decimal places the token uses.'),
-  iconUri: z.string().optional().describe('Optional URI for the token icon.'),
-  usdPrice: z
-    .string()
-    .optional()
-    .describe(
-      'Optional USD price as a string to avoid floating-point precision issues, e.g., "123.456789".'
-    ),
-  isVetted: z.boolean().describe('Whether the token has been vetted.'),
-});
-export type Token = z.infer<typeof TokenSchema>;
-
-export const GetPendleMarketsRequestSchema = z.object({});
-export type GetPendleMarketsRequestArgs = z.infer<typeof GetPendleMarketsRequestSchema>;
-
-export const YieldMarketSchema = z.object({
-  name: z.string().describe('The name of the yield market.'),
-  address: z.string().describe('The address of the yield market.'),
-  expiry: z.string().describe('The expiry identifier of the yield market.'),
-  pt: z.string().describe('The address of the PT (principal token).'),
-  yt: z.string().describe('The address of the YT (yield token).'),
-  sy: z.string().describe('The address of the SY (standardized yield token).'),
-  underlyingAsset: TokenSchema.describe('The underlying asset of the Pendle market.'),
-  chainId: z.string().describe('The chain ID on which this yield market exists.'),
-});
-export type YieldMarket = z.infer<typeof YieldMarketSchema>;
-
-export const GetYieldMarketsResponseSchema = z.object({
-  markets: z
-    .array(YieldMarketSchema)
-    .describe('List of yield markets matching the request criteria.'),
-});
-export type GetYieldMarketsResponse = z.infer<typeof GetYieldMarketsResponseSchema>;
-
-export const SwapTokensSchema = z.object({
-  fromTokenName: z.string().describe('The token to swap from.'),
-  toTokenName: z.string().describe('The token to swap to.'),
-  humanReadableAmount: z
-    .string()
-    .describe(
-      'The amount of the token to swap from. It will be in a human readable format, e.g. The amount "1.02 ETH" will be 1.02.'
-    ),
-  chainName: z
-    .string()
-    .optional()
-    .describe('Optional chain name for the swap. Both tokens must be on the same chain.'),
-});
-export type SwapTokensArgs = z.infer<typeof SwapTokensSchema>;
-
 type YieldToolSet = {
-  listMarkets: Tool<z.ZodObject<{}>, Awaited<Task>>;
+  listMarkets: Tool<z.ZodObject<Record<string, never>>, Awaited<Task>>;
   swapTokens: Tool<typeof SwapTokensSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
+  getWalletBalances: Tool<z.ZodObject<Record<string, never>>, Awaited<Task>>;
+  getTokenMarketData: Tool<z.ZodObject<{ tokenSymbol: z.ZodString; chain: z.ZodOptional<z.ZodString>; }>, Awaited<Task>>;
 };
+
+const CHAIN_MAPPINGS = [
+  { id: '1', names: ['ethereum', 'mainnet', 'eth'] },
+  { id: '42161', names: ['arbitrum', 'arbitrum one', 'arb'] },
+  { id: '10', names: ['optimism', 'op'] },
+  { id: '137', names: ['polygon', 'matic'] },
+  { id: '8453', names: ['base'] },
+];
+
+function selectTokenByChain(
+  tokenSymbol: string,
+  tokenList: Array<{ chainId: string; address: string }>,
+  chainName?: string
+): { chainId: string; address: string } {
+  if (chainName) {
+    const normalizedChain = chainName.toLowerCase();
+    const chainMapping = CHAIN_MAPPINGS.find(mapping => 
+      mapping.names.includes(normalizedChain)
+    );
+    
+    if (chainMapping) {
+      const tokenOnChain = tokenList.find(t => t.chainId === chainMapping.id);
+      if (tokenOnChain) {
+        return tokenOnChain;
+      } else {
+        const availableChains = tokenList.map(t => {
+          const mapping = CHAIN_MAPPINGS.find(m => m.id === t.chainId);
+          return mapping ? mapping.names[0] : t.chainId;
+        }).join(', ');
+        throw new Error(`Token ${tokenSymbol} not available on ${chainName}. Available on: ${availableChains}`);
+      }
+    } else {
+      throw new Error(`Chain ${chainName} not recognized. Supported chains: Ethereum, Arbitrum, Optimism, Polygon, Base`);
+    }
+  } else if (tokenList.length > 1) {
+    // If multiple tokens and no chain specified, throw error
+    const availableChains = tokenList.map(t => {
+      const mapping = CHAIN_MAPPINGS.find(m => m.id === t.chainId);
+      return mapping ? mapping.names[0] : t.chainId;
+    }).join(', ');
+    
+    throw new Error(`Multiple chains available for ${tokenSymbol}: ${availableChains}. Please specify a chain.`);
+  }
+
+  // Single token case - return it
+  return tokenList[0]!
+}
 
 export class Agent {
   private userAddress: Address | undefined;
@@ -150,7 +149,6 @@ export class Agent {
     markets.forEach(market => {
       const chainId = market.chainId;
       const baseSymbol = market.underlyingAsset?.symbol || market.name;
-      const baseName = market.underlyingAsset?.name || market.name;
 
       // Add PT token
       const ptSymbol = `${baseSymbol}_PT`;
@@ -212,7 +210,8 @@ About Pendle Protocol:
 You can:
 - List available Pendle markets using the listMarkets tool
 - Swap tokens to acquire PT or YT tokens using the swapTokens tool
-
+- Get wallet token balances using the getWalletBalances tool
+- Get live market data for any token 
 PT/YT Token Naming Convention:
 - PT tokens have a symbol suffix of _PT (e.g., wstETH_PT, USDC_PT)
 - YT tokens have a symbol suffix of _YT (e.g., wstETH_YT, USDC_YT)
@@ -250,16 +249,17 @@ Never respond in markdown, always use plain text. Never add links to your respon
         },
       });
 
-      const parsedResult = sharedParseMcpToolResponse(result);
-      // If result is a JSON string, parse it
-      const parsedTokens =
-        typeof parsedResult === 'string' ? JSON.parse(parsedResult) : parsedResult;
+      const parsedResult = parseMcpToolResponsePayload(result, GetTokensResponseSchema);
+      
+      const tokensArray = Array.isArray(parsedResult) 
+        ? parsedResult 
+        : (parsedResult.tokens || []);
 
-      if (parsedTokens && Array.isArray(parsedTokens)) {
+      if (tokensArray.length > 0) {
         this.tokenMap = {};
         this.availableTokens = [];
 
-        parsedTokens.forEach(token => {
+        tokensArray.forEach(token => {
           if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
             if (!this.tokenMap[token.symbol]) {
               this.tokenMap[token.symbol] = [];
@@ -294,27 +294,30 @@ Never respond in markdown, always use plain text. Never add links to your respon
     this.toolSet = {
       listMarkets: tool({
         description: 'List all available Pendle markets with their details.',
-        parameters: z.object({}),
+        parameters: GetPendleMarketsRequestSchema,
         execute: async () => {
           try {
-            const parts = this.yieldMarkets.map(market => ({
+            // First, create data artifacts for the full market data
+            const dataArtifacts = this.yieldMarkets.map(market => ({
               type: 'data' as const,
               data: market,
             }));
+
             const task: Task = {
               id: this.userAddress!,
               status: {
                 state: 'completed',
                 message: {
                   role: 'agent',
-                  parts: [{ type: 'text', text: 'Pendle markets fetched successfully.' }],
+                  parts: [],
                 },
               },
-              artifacts: [{ name: 'yield-markets', parts }],
+              artifacts: [{ name: 'yield-markets', parts: dataArtifacts }],
             };
             return task;
-          } catch (error: any) {
-            const msg = `Error listing Pendle markets: ${error.message}`;
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const msg = `Error listing Pendle markets: ${errorMessage}`;
             logError(msg);
             return {
               id: this.userAddress!,
@@ -328,15 +331,16 @@ Never respond in markdown, always use plain text. Never add links to your respon
       }),
       swapTokens: tool({
         description:
-          'Swap tokens or acquire Pendle PT/YT tokens. Requires fromToken, toToken, and amount.',
+          'Swap tokens or acquire Pendle PT/YT tokens.',
         parameters: SwapTokensSchema,
         execute: async args => {
           this.log('Executing swap tokens tool with args:', args);
           try {
             const result = await handleSwapTokens(args, this.getHandlerContext());
             return result;
-          } catch (error: any) {
-            logError(`Error during swapTokens: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during swapTokens: ${errorMessage}`);
             // Return a failed Task on error
             return {
               id: this.userAddress!,
@@ -344,7 +348,134 @@ Never respond in markdown, always use plain text. Never add links to your respon
                 state: 'failed',
                 message: {
                   role: 'agent',
-                  parts: [{ type: 'text', text: `Error swapping tokens: ${error.message}` }],
+                  parts: [{ type: 'text', text: `Error swapping tokens: ${errorMessage}` }],
+                },
+              },
+            };
+          }
+        },
+      }),
+      getWalletBalances: tool({
+        description: 'Get wallet token balances for the current user',
+        parameters: z.object({}), // No parameters needed since we use context address
+        execute: async () => {
+          this.log('Executing getWalletBalances tool for user:', this.userAddress);
+          try {
+            const result = await this.mcpClient.callTool({
+              name: 'getWalletBalances',
+              arguments: { walletAddress: this.userAddress! },
+            });
+            
+            const parsedData = parseMcpToolResponsePayload(result, GetWalletBalancesResponseSchema);
+            
+            // Create data artifacts for the wallet balances
+            const dataArtifacts = parsedData.balances.map(balance => ({
+              type: 'data' as const,
+              data: balance,
+            }));
+
+            const task: Task = {
+              id: this.userAddress!,
+              status: {
+                state: 'completed',
+                message: {
+                  role: 'agent',
+                  parts: [{ type: 'text', text: `Found ${parsedData.balances.length} token balances for wallet ${this.userAddress}` }],
+                },
+              },
+              artifacts: [{ name: 'wallet-balances', parts: dataArtifacts }],
+            };
+            return task;
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during getWalletBalances: ${errorMessage}`);
+            // Return a failed Task on error
+            return {
+              id: this.userAddress!,
+              status: {
+                state: 'failed',
+                message: {
+                  role: 'agent',
+                  parts: [{ type: 'text', text: `Error getting wallet balances: ${errorMessage}` }],
+                },
+              },
+            };
+          }
+        },
+      }),
+      getTokenMarketData: tool({
+        description: 'Get market data for a token by its symbol',
+        parameters: z.object({
+          tokenSymbol: z.string().describe('The token symbol (e.g., USDC, WETH, wstETH_PT)'),
+          chain: z.string().optional().describe('Optional chain name (e.g., Arbitrum, Ethereum, Base)'),
+        }),
+        execute: async args => {
+          this.log('Executing getTokenMarketData tool with args:', args);
+          try {
+            const tokenSymbol = args.tokenSymbol;
+            const chainName = args.chain;
+
+            // Find tokens case-insensitively
+            const tokens = Object.keys(this.tokenMap).find(key => 
+              key.toLowerCase() === tokenSymbol.toLowerCase()
+            );
+            
+            if (!tokens) {
+              const availableTokens = Object.keys(this.tokenMap).slice(0, 10).join(', ');
+              throw new Error(`Token ${tokenSymbol} not found. Available tokens include: ${availableTokens}...`);
+            }
+
+            const tokenList = this.tokenMap[tokens];
+            if (!tokenList || tokenList.length === 0) {
+              throw new Error(`No token data available for ${tokenSymbol}`);
+            }
+            
+            const selectedToken = selectTokenByChain(tokenSymbol, tokenList, chainName);
+
+            const result = await this.mcpClient.callTool({
+              name: 'getMarketData',
+              arguments: {
+                tokenAddress: selectedToken.address,
+                tokenChainId: selectedToken.chainId,
+              },
+            });
+            
+            const parsedData = parseMcpToolResponsePayload(result, GetMarketDataResponseSchema);
+            
+            // Create data artifacts for the market data
+            const dataArtifacts = [{
+              type: 'data' as const,
+              data: {
+                tokenSymbol: tokenSymbol,
+                tokenAddress: selectedToken.address,
+                chainId: selectedToken.chainId,
+                ...parsedData,
+              },
+            }];
+
+            const task: Task = {
+              id: this.userAddress!,
+              status: {
+                state: 'completed',
+                message: {
+                  role: 'agent',
+                  parts: [{ type: 'text', text: `Market data retrieved for ${tokenSymbol} (${selectedToken.address}) on chain ${selectedToken.chainId}` }],
+                },
+              },
+              artifacts: [{ name: 'token-market-data', parts: dataArtifacts }],
+            };
+            return task;
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during getTokenMarketData: ${errorMessage}`);
+            // Return a failed Task on error
+            return {
+              id: this.userAddress!,
+              status: {
+                state: 'failed',
+                message: {
+                  role: 'agent',
+                  parts: [{ type: 'text', text: `Error getting market data: ${errorMessage}` }],
                 },
               },
             };
@@ -445,8 +576,9 @@ Never respond in markdown, always use plain text. Never add links to your respon
       }
 
       throw new Error('Agent processing failed: no tool result and no final text response.');
-    } catch (error: any) {
-      const msg = `Error calling Vercel AI SDK generateText: ${error?.message ?? error}`;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const msg = `Error calling Vercel AI SDK generateText: ${errorMessage}`;
       logError(msg);
       throw error;
     }
@@ -465,27 +597,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
       name: 'getYieldMarkets',
       arguments: {},
     });
-
-    // Check if the response has the expected structure
-    if (!result.content || !Array.isArray(result.content) || result.content.length === 0) {
-      throw new Error('Invalid response format from getYieldMarkets tool');
-    }
-
-    const contentItem = result.content[0];
-    if (contentItem.type !== 'text' || typeof contentItem.text !== 'string') {
-      throw new Error('Invalid content format from getYieldMarkets tool');
-    }
-
-    // Parse the JSON string from the text field
-    const parsedData = JSON.parse(contentItem.text);
-
-    // Validate the parsed data with our schema
-    const validationResult = GetYieldMarketsResponseSchema.safeParse(parsedData);
-
-    if (!validationResult.success) {
-      throw new Error('Failed to validate Pendle markets data structure');
-    }
-
-    return validationResult.data;
+    this.log('GetYieldMarkets tool success.');
+    return parseMcpToolResponsePayload(result, GetYieldMarketsResponseSchema);
   }
 }
