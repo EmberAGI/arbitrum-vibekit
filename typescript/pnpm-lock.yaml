@@ -17,8 +17,8 @@ importers:
         version: 3.25.7
     devDependencies:
       '@emberai/sdk-typescript':
-        specifier: ^0.3.0-beta.10
-        version: 0.3.0-beta.10
+        specifier: ^0.3.0-beta.12
+        version: 0.3.0-beta.12
       '@eslint/js':
         specifier: ^9.0.0
         version: 9.27.0
@@ -542,8 +542,8 @@ importers:
   lib/mcp-tools/emberai-mcp:
     dependencies:
       '@emberai/sdk-typescript':
-        specifier: 0.3.0-beta.10
-        version: 0.3.0-beta.10
+        specifier: 0.3.0-beta.12
+        version: 0.3.0-beta.12
       '@grpc/grpc-js':
         specifier: ^1.13.2
         version: 1.13.3
@@ -667,8 +667,8 @@ packages:
   '@bufbuild/protobuf@2.4.0':
     resolution: {integrity: sha512-RN9M76x7N11QRihKovEglEjjVCQEA9PRBVnDgk9xw8JHLrcUrp4FpAVSPSH91cNbcTft3u2vpLN4GMbiKY9PJw==}
 
-  '@emberai/sdk-typescript@0.3.0-beta.10':
-    resolution: {integrity: sha512-00cH0oOL2byUbNL0vWQJPJxduKoVPxiNY57wla1NhMbHk+psDmlQaCrXbxmjsA0wmHXf7UZ0EuqYnw8PNmioWQ==}
+  '@emberai/sdk-typescript@0.3.0-beta.12':
+    resolution: {integrity: sha512-E1EmWSs5oN/bTSzXbMsiK1wyx/JLft1oC3nTJWyGRNGpMo7qgeEBFBtCdNo1Sp+Fjw3q5c8Reu8nNVYsykBujw==}
     engines: {node: '>=18.0.0'}
 
   '@esbuild/aix-ppc64@0.25.4':
@@ -3847,7 +3847,7 @@ snapshots:
 
   '@bufbuild/protobuf@2.4.0': {}
 
-  '@emberai/sdk-typescript@0.3.0-beta.10':
+  '@emberai/sdk-typescript@0.3.0-beta.12':
     dependencies:
       '@bufbuild/protobuf': 2.4.0
       '@openzeppelin/contracts': 5.3.0

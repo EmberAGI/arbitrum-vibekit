@@ -22,6 +22,7 @@ import {
   type GetYieldMarketsResponse,
   type TransactionPlan,
   GetWalletBalancesResponseSchema,
+  GetMarketDataResponseSchema,
 } from 'ember-schemas';
 import { type Address } from 'viem';
 import { z } from 'zod';
@@ -37,7 +38,55 @@ type YieldToolSet = {
   listMarkets: Tool<z.ZodObject<Record<string, never>>, Awaited<Task>>;
   swapTokens: Tool<typeof SwapTokensSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
   getWalletBalances: Tool<z.ZodObject<Record<string, never>>, Awaited<Task>>;
+  getTokenMarketData: Tool<z.ZodObject<{ tokenSymbol: z.ZodString; chain: z.ZodOptional<z.ZodString>; }>, Awaited<Task>>;
 };
+
+const CHAIN_MAPPINGS = [
+  { id: '1', names: ['ethereum', 'mainnet', 'eth'] },
+  { id: '42161', names: ['arbitrum', 'arbitrum one', 'arb'] },
+  { id: '10', names: ['optimism', 'op'] },
+  { id: '137', names: ['polygon', 'matic'] },
+  { id: '8453', names: ['base'] },
+];
+
+function selectTokenByChain(
+  tokenSymbol: string,
+  tokenList: Array<{ chainId: string; address: string }>,
+  chainName?: string
+): { chainId: string; address: string } {
+  if (chainName) {
+    const normalizedChain = chainName.toLowerCase();
+    const chainMapping = CHAIN_MAPPINGS.find(mapping => 
+      mapping.names.includes(normalizedChain)
+    );
+    
+    if (chainMapping) {
+      const tokenOnChain = tokenList.find(t => t.chainId === chainMapping.id);
+      if (tokenOnChain) {
+        return tokenOnChain;
+      } else {
+        const availableChains = tokenList.map(t => {
+          const mapping = CHAIN_MAPPINGS.find(m => m.id === t.chainId);
+          return mapping ? mapping.names[0] : t.chainId;
+        }).join(', ');
+        throw new Error(`Token ${tokenSymbol} not available on ${chainName}. Available on: ${availableChains}`);
+      }
+    } else {
+      throw new Error(`Chain ${chainName} not recognized. Supported chains: Ethereum, Arbitrum, Optimism, Polygon, Base`);
+    }
+  } else if (tokenList.length > 1) {
+    // If multiple tokens and no chain specified, throw error
+    const availableChains = tokenList.map(t => {
+      const mapping = CHAIN_MAPPINGS.find(m => m.id === t.chainId);
+      return mapping ? mapping.names[0] : t.chainId;
+    }).join(', ');
+    
+    throw new Error(`Multiple chains available for ${tokenSymbol}: ${availableChains}. Please specify a chain.`);
+  }
+
+  // Single token case - return it
+  return tokenList[0]!
+}
 
 export class Agent {
   private userAddress: Address | undefined;
@@ -162,7 +211,7 @@ You can:
 - List available Pendle markets using the listMarkets tool
 - Swap tokens to acquire PT or YT tokens using the swapTokens tool
 - Get wallet token balances using the getWalletBalances tool
-
+- Get live market data for any token 
 PT/YT Token Naming Convention:
 - PT tokens have a symbol suffix of _PT (e.g., wstETH_PT, USDC_PT)
 - YT tokens have a symbol suffix of _YT (e.g., wstETH_YT, USDC_YT)
@@ -348,6 +397,85 @@ Never respond in markdown, always use plain text. Never add links to your respon
                 message: {
                   role: 'agent',
                   parts: [{ type: 'text', text: `Error getting wallet balances: ${errorMessage}` }],
+                },
+              },
+            };
+          }
+        },
+      }),
+      getTokenMarketData: tool({
+        description: 'Get market data for a token by its symbol',
+        parameters: z.object({
+          tokenSymbol: z.string().describe('The token symbol (e.g., USDC, WETH, wstETH_PT)'),
+          chain: z.string().optional().describe('Optional chain name (e.g., Arbitrum, Ethereum, Base)'),
+        }),
+        execute: async args => {
+          this.log('Executing getTokenMarketData tool with args:', args);
+          try {
+            const tokenSymbol = args.tokenSymbol;
+            const chainName = args.chain;
+
+            // Find tokens case-insensitively
+            const tokens = Object.keys(this.tokenMap).find(key => 
+              key.toLowerCase() === tokenSymbol.toLowerCase()
+            );
+            
+            if (!tokens) {
+              const availableTokens = Object.keys(this.tokenMap).slice(0, 10).join(', ');
+              throw new Error(`Token ${tokenSymbol} not found. Available tokens include: ${availableTokens}...`);
+            }
+
+            const tokenList = this.tokenMap[tokens];
+            if (!tokenList || tokenList.length === 0) {
+              throw new Error(`No token data available for ${tokenSymbol}`);
+            }
+            
+            const selectedToken = selectTokenByChain(tokenSymbol, tokenList, chainName);
+
+            const result = await this.mcpClient.callTool({
+              name: 'getMarketData',
+              arguments: {
+                tokenAddress: selectedToken.address,
+                tokenChainId: selectedToken.chainId,
+              },
+            });
+            
+            const parsedData = parseMcpToolResponsePayload(result, GetMarketDataResponseSchema);
+            
+            // Create data artifacts for the market data
+            const dataArtifacts = [{
+              type: 'data' as const,
+              data: {
+                tokenSymbol: tokenSymbol,
+                tokenAddress: selectedToken.address,
+                chainId: selectedToken.chainId,
+                ...parsedData,
+              },
+            }];
+
+            const task: Task = {
+              id: this.userAddress!,
+              status: {
+                state: 'completed',
+                message: {
+                  role: 'agent',
+                  parts: [{ type: 'text', text: `Market data retrieved for ${tokenSymbol} (${selectedToken.address}) on chain ${selectedToken.chainId}` }],
+                },
+              },
+              artifacts: [{ name: 'token-market-data', parts: dataArtifacts }],
+            };
+            return task;
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during getTokenMarketData: ${errorMessage}`);
+            // Return a failed Task on error
+            return {
+              id: this.userAddress!,
+              status: {
+                state: 'failed',
+                message: {
+                  role: 'agent',
+                  parts: [{ type: 'text', text: `Error getting market data: ${errorMessage}` }],
                 },
               },
             };

@@ -175,6 +175,15 @@ const getWalletBalancesSchema = {
     .describe("The wallet address to fetch token balances for."),
 };
 
+const getMarketDataSchema = {
+  tokenAddress: z
+    .string()
+    .describe("The contract address of the token to get market data for."),
+  tokenChainId: z
+    .string()
+    .describe("The chain ID where the token contract resides."),
+};
+
 // Define types from schemas using z.object() on the raw schema definitions
 type SwapTokensParams = z.infer<ReturnType<typeof z.object<typeof swapTokensSchema>>>;
 type BorrowParams = z.infer<ReturnType<typeof z.object<typeof borrowSchema>>>;
@@ -190,6 +199,7 @@ type GetLiquidityPoolsParams = z.infer<ReturnType<typeof z.object<typeof getLiqu
 type GetUserLiquidityPositionsParams = z.infer<ReturnType<typeof z.object<typeof getUserLiquidityPositionsSchema>>>;
 type GetYieldMarketsParams = z.infer<ReturnType<typeof z.object<typeof getYieldMarketsSchema>>>;
 type GetWalletBalancesParams = z.infer<ReturnType<typeof z.object<typeof getWalletBalancesSchema>>>;
+type GetMarketDataParams = z.infer<ReturnType<typeof z.object<typeof getMarketDataSchema>>>;
 
 // --- Initialize the MCP server using the high-level McpServer API
 const server = new McpServer({
@@ -860,6 +870,40 @@ server.tool(
       };
     } catch (error) {
       console.error(`GetWalletBalances tool error:`, error);
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+      };
+    }
+  }
+);
+
+server.tool(
+  "getMarketData",
+  "Get live market data for a token using Ember On-chain Actions",
+  getMarketDataSchema,
+  async (params: GetMarketDataParams) => {
+    console.error(`Executing getMarketData tool with params:`, params);
+
+    try {
+      const response = await emberClient.getMarketData({
+        tokenUid: {
+          chainId: params.tokenChainId,
+          address: params.tokenAddress,
+        },
+      });
+
+      console.error(`GetMarketData tool success.`);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(response, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      console.error(`GetMarketData tool error:`, error);
       return {
         isError: true,
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],

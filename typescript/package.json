@@ -14,7 +14,7 @@
     "docker:compose:down": "docker compose down",
     "lint": "eslint --ext .ts,.tsx .",
     "lint:fix": "eslint --ext .ts,.tsx . --fix",
-    "test": "pnpm recursive run test",
+    "test": "pnpm recursive run --workspace-concurrency=1 test",
     "format": "pnpm recursive run format",
     "format:check": "pnpm recursive run format:check"
   },
@@ -22,7 +22,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@emberai/sdk-typescript": "^0.3.0-beta.10",
+    "@emberai/sdk-typescript": "^0.3.0-beta.12",
     "@eslint/js": "^9.0.0",
     "@types/chai": "^4.3.11",
     "@types/mocha": "^10.0.6",
