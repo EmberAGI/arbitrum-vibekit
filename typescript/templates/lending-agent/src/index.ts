@@ -26,13 +26,13 @@ async function main() {
 
   // Start the agent with custom context
   const tokenMap = await loadTokenMap();
-  await agent.start(3000, async () => ({
+  await agent.start(3006, async () => ({
     tokenMap,
     quicknodeSubdomain: process.env.QUICKNODE_SUBDOMAIN || '',
     quicknodeApiKey: process.env.QUICKNODE_API_KEY || '',
   }));
 
-  console.log('Lending agent framework started on port 3000');
+  console.log('Lending agent framework started on port 3006');
 }
 
 main().catch(console.error);
