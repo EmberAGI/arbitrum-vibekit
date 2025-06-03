@@ -151,7 +151,7 @@ After setting up your wallet, you can interact with the lending agent through th
 
 To integrate another example agent or a custom agent into the frontend, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/README.md#agent-configuration).
 
-### 5. Build Your Custom DeFi Agent:
+### 4. Build Your Custom DeFi Agent:
 
 Checkout the [examples/](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) directory to explore other agent templates and start building your own!
 
