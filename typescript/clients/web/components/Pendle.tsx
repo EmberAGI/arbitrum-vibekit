@@ -341,7 +341,7 @@ export function Pendle({
               <div className="flex gap-3">
                 {needsApproval && (
                   <button
-                    className="mt-4 bg-orange-500 text-white py-2 px-4 rounded-full disabled:bg-zinc-600 disabled:border-2 disabled:border-zinc-500 disabled:text-gray-400" // Adjusted disabled style
+                    className="mt-4 bg-cyan-700 text-white py-2 px-4 rounded-full disabled:bg-zinc-600 disabled:border-2 disabled:border-zinc-500 disabled:text-gray-400" // Adjusted disabled style
                     type="button"
                     onClick={approveNext} // Use approveNext from hook
                     disabled={!canApprove} // Use canApprove from hook
@@ -354,7 +354,7 @@ export function Pendle({
                   </button>
                 )}
                 <button
-                  className="mt-4 bg-orange-500 text-white py-2 px-4 rounded-full disabled:opacity-50"
+                  className="mt-4 bg-cyan-700 text-white py-2 px-4 rounded-full disabled:opacity-50"
                   type="button"
                   onClick={executeMain} // Use executeMain from hook
                   disabled={!canExecute} // Use canExecute from hook

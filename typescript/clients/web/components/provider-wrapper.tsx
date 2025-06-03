@@ -29,16 +29,14 @@ export function ProviderWrapper({ children }: { children: React.ReactNode }) {
     <>
       <WagmiProvider config={config} reconnectOnMount={true} initialState={initialState}>
         <QueryClientProvider client={queryClient}>
-          <RainbowKitSiweNextAuthProvider>
-            <RainbowKitProvider
-              theme={darkTheme({
-                accentColor: '#FF7224',
-                accentColorForeground: '#fff',
-              })}
-            >
-              {children}
-            </RainbowKitProvider>
-          </RainbowKitSiweNextAuthProvider>
+          <RainbowKitProvider
+            theme={darkTheme({
+              accentColor: "#4E76A9",
+              accentColorForeground: "#fff",
+            })}
+          >
+            {children}
+          </RainbowKitProvider>
         </QueryClientProvider>
       </WagmiProvider>
     </>

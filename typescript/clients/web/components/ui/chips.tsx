@@ -36,7 +36,7 @@ export function ChipToggle({
               border border-gray-200 
               ${
                 isSelected
-                  ? "bg-orange-500 text-white"
+                  ? "bg-cyan-700 text-white"
                   : " bg-gray-900 text-white hover:bg-gray-100"
               }
             `}
