@@ -9,9 +9,9 @@ import { auth } from './(auth)/auth';
 import { SessionProvider } from 'next-auth/react';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://questbook.emberai.xyz'),
-  title: 'Questbook Demo',
-  description: 'Conversational DeFi',
+  metadataBase: new URL('https://github.com/EmberAGI/arbitrum-vibekit'),
+  title: 'Arbitrum Vibekit',
+  description: 'Vibecode DeFi agents in minutes.',
 };
 
 export const viewport = {
