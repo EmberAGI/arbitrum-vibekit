@@ -20,64 +20,6 @@ importers:
         specifier: ^5.8.3
         version: 5.8.3
 
-  examples/lending-agent-framework:
-    dependencies:
-      '@google-a2a/types':
-        specifier: github:google-a2a/A2A#path:types
-        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/640b52154df6ccec06c9cce3a62262037e95dc34#path:types
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.5.0
-        version: 1.11.1
-      '@openrouter/ai-sdk-provider':
-        specifier: ^0.4.5
-        version: 0.4.5(zod@3.24.3)
-      '@openzeppelin/contracts':
-        specifier: ^5.3.0
-        version: 5.3.0
-      ai:
-        specifier: ^4.3.2
-        version: 4.3.9(react@19.1.0)(zod@3.24.3)
-      arbitrum-vibekit-core:
-        specifier: workspace:*
-        version: link:../../lib/arbitrum-vibekit-core
-      cors:
-        specifier: ^2.8.5
-        version: 2.8.5
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.5.0
-      ember-mcp-tool-server:
-        specifier: workspace:*
-        version: file:lib/mcp-tools/emberai-mcp
-      express:
-        specifier: ^4.21.2
-        version: 4.21.2
-      nanoid:
-        specifier: ^5.0.7
-        version: 5.1.5
-      viem:
-        specifier: ^2.26.3
-        version: 2.27.2(typescript@5.8.3)(zod@3.24.3)
-    devDependencies:
-      '@types/cors':
-        specifier: ^2.8.17
-        version: 2.8.17
-      '@types/express':
-        specifier: ^5.0.0
-        version: 5.0.2
-      '@types/node':
-        specifier: ^20.10.0
-        version: 20.17.30
-      cpx:
-        specifier: ^1.5.0
-        version: 1.5.0
-      prettier:
-        specifier: ^3.5.3
-        version: 3.5.3
-      tsx:
-        specifier: ^4.6.2
-        version: 4.19.4
-
   examples/lending-agent-no-wallet:
     dependencies:
       '@modelcontextprotocol/sdk':
@@ -91,13 +33,13 @@ importers:
         version: 5.3.0
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(zod@3.24.3)
+        version: file:lib/a2a(ws@8.18.1)(zod@3.24.3)
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
       arbitrum-vibekit-core:
         specifier: workspace:*
-        version: link:../../lib/arbitrum-vibekit-core
+        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.24.3)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -149,13 +91,13 @@ importers:
         version: 5.3.0
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(zod@3.24.3)
+        version: file:lib/a2a(ws@8.18.1)(zod@3.24.3)
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
       arbitrum-vibekit-core:
         specifier: workspace:*
-        version: link:../../lib/arbitrum-vibekit-core
+        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.24.3)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -204,13 +146,13 @@ importers:
         version: 0.4.5(zod@3.24.3)
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(zod@3.24.3)
+        version: file:lib/a2a(ws@8.18.1)(zod@3.24.3)
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
       arbitrum-vibekit-core:
         specifier: workspace:*
-        version: link:../../lib/arbitrum-vibekit-core
+        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.24.3)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -265,13 +207,13 @@ importers:
         version: 5.3.0
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(zod@3.24.3)
+        version: file:lib/a2a(ws@8.18.1)(zod@3.24.3)
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
       arbitrum-vibekit-core:
         specifier: workspace:*
-        version: link:../../lib/arbitrum-vibekit-core
+        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.24.3)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -326,13 +268,13 @@ importers:
         version: 5.3.0
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(zod@3.24.3)
+        version: file:lib/a2a(ws@8.18.1)(zod@3.24.3)
       ai:
         specifier: ^4.3.2
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
       arbitrum-vibekit-core:
         specifier: workspace:*
-        version: link:../../lib/arbitrum-vibekit-core
+        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.24.3)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -551,6 +493,64 @@ importers:
       typescript:
         specifier: ^5.8.2
         version: 5.8.3
+
+  templates/lending-agent:
+    dependencies:
+      '@google-a2a/types':
+        specifier: github:google-a2a/A2A#path:types
+        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/7bcfc0481108dc6827888985140f1d040de6b9cc#path:types
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.5.0
+        version: 1.11.1
+      '@openrouter/ai-sdk-provider':
+        specifier: ^0.4.5
+        version: 0.4.5(zod@3.24.3)
+      '@openzeppelin/contracts':
+        specifier: ^5.3.0
+        version: 5.3.0
+      ai:
+        specifier: ^4.3.2
+        version: 4.3.9(react@19.1.0)(zod@3.24.3)
+      arbitrum-vibekit-core:
+        specifier: workspace:*
+        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.24.3)
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.5
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
+      ember-mcp-tool-server:
+        specifier: workspace:*
+        version: file:lib/mcp-tools/emberai-mcp
+      express:
+        specifier: ^4.21.2
+        version: 4.21.2
+      nanoid:
+        specifier: ^5.0.7
+        version: 5.1.5
+      viem:
+        specifier: ^2.26.3
+        version: 2.27.2(typescript@5.8.3)(zod@3.24.3)
+    devDependencies:
+      '@types/cors':
+        specifier: ^2.8.17
+        version: 2.8.17
+      '@types/express':
+        specifier: ^5.0.0
+        version: 5.0.2
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.17.30
+      cpx:
+        specifier: ^1.5.0
+        version: 1.5.0
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      tsx:
+        specifier: ^4.6.2
+        version: 4.19.4
 
 packages:
 
@@ -1345,6 +1345,11 @@ packages:
   anymatch@3.1.3:
     resolution: {integrity: sha512-KMReFUr0B4t+D+OBkjR3KYqvocp2XaSzO55UcB6mgQMd3KbcE+mWTyvVV7D/zsdEbNnV6acZUutkiHQXvTr1Rw==}
     engines: {node: '>= 8'}
+
+  arbitrum-vibekit-core@file:lib/arbitrum-vibekit-core:
+    resolution: {directory: lib/arbitrum-vibekit-core, type: directory}
+    peerDependencies:
+      zod: ^3.24.3
 
   arg@4.1.3:
     resolution: {integrity: sha512-58S9QDqG0Xx27YwPSt9fJxivjYl432YCwfDMfZ+71RAqUrZef7LrKQZ3LHLOwCS4FLNBplP533Zx895SeOCHvA==}
@@ -3132,6 +3137,10 @@ packages:
     resolution: {path: types, tarball: https://codeload.github.com/google-a2a/A2A/tar.gz/640b52154df6ccec06c9cce3a62262037e95dc34}
     version: 1.0.0
 
+  types@https://codeload.github.com/google-a2a/A2A/tar.gz/7bcfc0481108dc6827888985140f1d040de6b9cc#path:types:
+    resolution: {path: types, tarball: https://codeload.github.com/google-a2a/A2A/tar.gz/7bcfc0481108dc6827888985140f1d040de6b9cc}
+    version: 1.0.0
+
   typescript-json-schema@0.65.1:
     resolution: {integrity: sha512-tuGH7ff2jPaUYi6as3lHyHcKpSmXIqN7/mu50x3HlYn0EHzLpmt3nplZ7EuhUkO0eqDRc9GqWNkfjgBPIS9kxg==}
     hasBin: true
@@ -4174,7 +4183,7 @@ snapshots:
 
   '@types/tough-cookie@4.0.5': {}
 
-  a2a-samples-js@file:lib/a2a(zod@3.24.3):
+  a2a-samples-js@file:lib/a2a(ws@8.18.1)(zod@3.24.3):
     dependencies:
       '@genkit-ai/googleai': 1.6.0(genkit@1.6.0)
       '@genkit-ai/vertexai': 1.6.0(genkit@1.6.0)(ws@8.18.1)(zod@3.24.3)
@@ -4275,6 +4284,23 @@ snapshots:
     dependencies:
       normalize-path: 3.0.0
       picomatch: 2.3.1
+
+  arbitrum-vibekit-core@file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.24.3):
+    dependencies:
+      '@google-a2a/types': types@https://codeload.github.com/google-a2a/A2A/tar.gz/7bcfc0481108dc6827888985140f1d040de6b9cc#path:types
+      '@modelcontextprotocol/sdk': 1.11.1
+      ai: 4.3.9(react@19.1.0)(zod@3.24.3)
+      cors: 2.8.5
+      ember-mcp-tool-server: file:lib/mcp-tools/emberai-mcp
+      escape-html: 1.0.3
+      express: 5.1.0
+      nanoid: 5.1.5
+      zod: 3.24.3
+    transitivePeerDependencies:
+      - '@swc/core'
+      - '@swc/wasm'
+      - react
+      - supports-color
 
   arg@4.1.3: {}
 
@@ -6366,6 +6392,13 @@ snapshots:
       mime-types: 3.0.1
 
   types@https://codeload.github.com/google-a2a/A2A/tar.gz/640b52154df6ccec06c9cce3a62262037e95dc34#path:types:
+    dependencies:
+      typescript-json-schema: 0.65.1
+    transitivePeerDependencies:
+      - '@swc/core'
+      - '@swc/wasm'
+
+  types@https://codeload.github.com/google-a2a/A2A/tar.gz/7bcfc0481108dc6827888985140f1d040de6b9cc#path:types:
     dependencies:
       typescript-json-schema: 0.65.1
     transitivePeerDependencies:
