@@ -41,3 +41,15 @@ Rules and best practices that apply to the entire pnpm workspace monorepo.
 > expect(response).to.exist;
 - Do not wrap blocks of code in try/catch only to add context to the error. simply propagate errors.
 - To lint the code, run `pnpm recursive run lint` in the `typescript/` folder.
+- Never use .passthrough() with zod schemas.
+- ALWAYS use pnpm
+- never use NPM
+- this project is a multi-package PNPM workspace with root in `./typescript/`
+- NEVER use relative file imports to import a package within the workspace
+- NEVER use `file:/` in package.json to refer to a package within the workspace - use `workspace:*` instead
+- Do not add trivial comments that simply state the meaning of next line. Only add comments that convey non-trivial information.
+- Never redefine existing interfaces. always import and reuse
+- NEVER produce mocks instead of real implementations
+- If you encounter a problem related to missing environment variables, do not try to mock them - simply stop and prompt the user to fill them.
+- Never create value or type aliases for compatibility - don't hesitate to update the call sites to use 'true' names.
+- When refactorings are done, update the import paths rather than maintaining compatibility with aliases
