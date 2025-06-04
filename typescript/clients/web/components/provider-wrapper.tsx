@@ -35,6 +35,7 @@ export function ProviderWrapper({ children }: { children: React.ReactNode }) {
                 accentColor: "#4E76A9",
                 accentColorForeground: "#fff",
               })}
+              initialChain={arbitrum}
             >
               {children}
             </RainbowKitProvider>
