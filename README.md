@@ -44,9 +44,12 @@ Vibekit/
 │       └── pendle-agent/
 │       └── swapping-agent-no-wallet/
 │       └── swapping-agent/
+│   └── templates/
+│       └── lending-agent/
+│       └── quickstart-agent/
 │----── lib/
 │       └── a2a/
-│       └── arbitrum-vibekit/
+│       └── arbitrum-vibekit-core/
 │       └── ember-schemas/
 │       └── mcp-tools/
 │           └── allora-mcp-server/
