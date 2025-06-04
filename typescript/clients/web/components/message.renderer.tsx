@@ -18,6 +18,7 @@ import { Pendle } from "./Pendle";
 import { Lending } from "./Lending";
 import { Liquidity } from "./Liquidity";
 import type { Dispatch } from "react";
+import { TemplateComponent } from "./TemplateComponent";
 
 interface MessageRendererProps {
   message: UIMessage;
@@ -144,7 +145,7 @@ export const MessageRenderer = ({
             markets={[]}
             isMarketList={false}
           />
-        ) : null}
+        ) : <TemplateComponent txPreview={null} txPlan={null} />}
       </div>
     );
   }
@@ -152,8 +153,9 @@ export const MessageRenderer = ({
   if (type === "tool-invocation" && part.toolInvocation.state === "result") {
     const { toolInvocation } = part;
     const { result, toolCallId, toolName } = toolInvocation;
+    const toolInvocationParsableString = result?.result?.content?.[0]?.text ? result?.result?.content?.[0]?.text : result?.result?.content?.[0]?.resource?.text;
     const toolInvocationResult = result?.result?.content?.[0]
-      ? JSON.parse(result?.result?.content?.[0]?.text)
+      ? JSON.parse(toolInvocationParsableString || "{Error: An error occurred while parsing the result}")
       : null;
     const getKeyFromResult = (key: string) =>
       toolInvocationResult?.artifacts?.[0]?.parts[0]?.data?.[key] || null;
@@ -215,7 +217,7 @@ export const MessageRenderer = ({
               isMarketList={getArtifact()?.name === "yield-markets"}
             />
           )
-        ) : null}
+        ) : <TemplateComponent txPreview={txPreview} txPlan={txPlan} jsonObject={toolInvocationResult} />}
       </div>
     );
   }
