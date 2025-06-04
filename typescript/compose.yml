@@ -58,7 +58,7 @@ services:
     container_name: vibekit-web-app
     build:
       context: clients/web/
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prod
     env_file:
       - .env
     environment:
@@ -67,10 +67,6 @@ services:
       PORT: 3000
     ports:
       - 3000:3000
-    volumes:
-      - ./clients/web:/app
-      - /app/node_modules
-      - /app/.next
     depends_on:
       - db
 
