@@ -10,6 +10,7 @@ export const getUserPositionsBase: VibkitToolDefinition<
   Task | Message,
   LendingAgentContext
 > = {
+  name: 'get-user-positions-base',
   description: 'Get a summary of your current lending and borrowing positions.',
   parameters: GetUserPositionsSchema,
   execute: async (args, context) => {

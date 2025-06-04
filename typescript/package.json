@@ -47,6 +47,13 @@
   "pnpm": {
     "overrides": {
       "zod": "^3.24.3"
-    }
+    },
+    "ignoredBuiltDependencies": [
+      "@firebase/util",
+      "core-js",
+      "esbuild",
+      "fsevents",
+      "protobufjs"
+    ]
   }
 }

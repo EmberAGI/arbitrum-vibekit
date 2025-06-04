@@ -41,6 +41,7 @@ export function withHooks<TParams extends z.ZodTypeAny, TResult, TContext = any,
   hooks: LendingHookConfig<z.infer<TParams>, TResult, TContext, TSkillInput>
 ): VibkitToolDefinition<TParams, Task | Message, TContext, TSkillInput> {
   return {
+    name: tool.name,
     description: tool.description,
     parameters: tool.parameters,
     execute: async (args, context) => {

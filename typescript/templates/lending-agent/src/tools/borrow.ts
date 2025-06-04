@@ -13,6 +13,7 @@ export const borrowBase: VibkitToolDefinition<
   any, // TResult is the raw MCP response
   LendingAgentContext
 > = {
+  name: 'borrow-base',
   description: '(Base) Borrows a token after validation. Expects resolvedToken in args.',
   parameters: BorrowRepaySupplyWithdrawSchema,
   execute: async (args, context) => {

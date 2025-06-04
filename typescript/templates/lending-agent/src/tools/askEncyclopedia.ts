@@ -9,6 +9,7 @@ export const askEncyclopediaBase: VibkitToolDefinition<
   Task | Message,
   LendingAgentContext
 > = {
+  name: 'ask-encyclopedia',
   description:
     'Ask a question about Aave to retrieve specific information about the protocol using embedded documentation.',
   parameters: AskEncyclopediaSchema,

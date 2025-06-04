@@ -8,10 +8,11 @@ import { createTaskId, findTokenInfo } from './utils.js';
 
 export const repayBase: VibkitToolDefinition<
   typeof BorrowRepaySupplyWithdrawSchema,
-  Task | Message,
+  any, // TResult is the raw MCP response
   LendingAgentContext
 > = {
-  description: 'Repay a borrowed token. Provide the token name and a human-readable amount.',
+  name: 'repay-base',
+  description: '(Base) Repays a borrowed token after validation. Expects resolvedToken in args.',
   parameters: BorrowRepaySupplyWithdrawSchema,
   execute: async (args, context) => {
     if (!context.mcpClients?.['ember-mcp-tool-server']) {

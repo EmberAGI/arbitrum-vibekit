@@ -9,11 +9,11 @@ import type { TransactionPlan } from 'ember-schemas';
 
 export const withdrawBase: VibkitToolDefinition<
   typeof BorrowRepaySupplyWithdrawSchema,
-  Task | Message,
+  any, // TResult is the raw MCP response
   LendingAgentContext
 > = {
-  description:
-    'Withdraw a previously supplied token. Provide the token name and a human-readable amount.',
+  name: 'withdraw-base',
+  description: '(Base) Withdraws a supplied token after validation. Expects resolvedToken in args.',
   parameters: BorrowRepaySupplyWithdrawSchema,
   execute: async (args, context) => {
     if (!context.mcpClients?.['ember-mcp-tool-server']) {
