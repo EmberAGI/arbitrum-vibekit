@@ -15,4 +15,7 @@ mcp-tools/
 # OS / Editor specific
 .DS_Store
 .vscode/
-.idea/ 
+.idea/
+
+# Cache directory
+.cache/ 

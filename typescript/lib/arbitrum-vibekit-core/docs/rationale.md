@@ -327,10 +327,10 @@ Based on the scratchpad vision, here are the key implementation details planned 
   export const toolManifest = defineTools({
     local: [supply, withdraw],
     remote: [
-      connectMcp("aave.server", {
+      connectMcp('aave.server', {
         adapt: {
           borrow: borrowAdapter,
-          "*": withLogging,
+          '*': withLogging,
         },
       }),
     ],
@@ -370,7 +370,7 @@ From scratchpad to release plan:
 - **Rationale:** Keeps v2 implementation simple and aligned with the working reference implementation (lending-agent-no-wallet). Avoids premature abstraction and reduces complexity for initial orchestration implementation.
 - **Implementation:**
   ```typescript
-  import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+  import { createOpenRouter } from '@openrouter/ai-sdk-provider';
   const openrouter = createOpenRouter({
     apiKey: process.env.OPENROUTER_API_KEY,
   });
@@ -697,6 +697,26 @@ From scratchpad to release plan:
   - Result wrapper pattern: Rejected as unnecessarily complex
   - Separate validation phase: Rejected as less flexible and composable
 - **Reference:** Lending agent hook implementations, A2A protocol requirements, user analysis of pattern benefits
+
+---
+
+## MCP Client Dependency Injection for Context Providers (v2.5)
+
+- **Decision:** Pass initialized MCP clients to context providers as a required `deps` parameter when a context provider is supplied to `agent.start()`.
+- **Rationale:**
+  - **Initialization Order**: Context providers often need data from MCP servers (e.g., token capabilities), but context loading happens before MCP client initialization in the original design
+  - **Framework Handles Complexity**: Aligns with the principle that "framework handles complexity, agents stay simple" - the framework manages MCP lifecycle and provides ready-to-use clients
+  - **Clear Contract**: When you provide a context provider, you always get deps - no ambiguity about availability
+  - **No Duplicate Connections**: Avoids the anti-pattern of creating temporary MCP clients just for context loading
+  - **Junior Developer Friendly**: Simple pattern - receive initialized clients, use them to fetch data
+  - **Active Development Advantage**: Since the framework is under active development, we can make clean API decisions without legacy concerns
+- **Implementation:**
+  - Modified `agent.start()` to initialize MCP clients before calling context provider
+  - Context provider signature: `(deps: { mcpClients: Record<string, Client> }) => Promise<TContext> | TContext`
+  - All MCP clients from all skills are aggregated into a single map for easy access
+  - The pattern naturally extends if we need to pass other framework-managed resources in the future
+- **Problem Solved:** Enables the lending agent to fetch token maps from MCP during startup without violating framework principles
+- **Reference:** User analysis of context loading problem, framework philosophy from lessons 6, 10, and 11
 
 ---
 
