@@ -18,6 +18,7 @@ import { Pendle } from "./Pendle";
 import { Lending } from "./Lending";
 import { Liquidity } from "./Liquidity";
 import type { Dispatch } from "react";
+import { TemplateComponent } from "./TemplateComponent";
 
 interface MessageRendererProps {
   message: UIMessage;
@@ -144,7 +145,7 @@ export const MessageRenderer = ({
             markets={[]}
             isMarketList={false}
           />
-        ) : null}
+        ) : <TemplateComponent txPreview={null} txPlan={null} />}
       </div>
     );
   }
@@ -215,7 +216,7 @@ export const MessageRenderer = ({
               isMarketList={getArtifact()?.name === "yield-markets"}
             />
           )
-        ) : null}
+        ) : <TemplateComponent txPreview={txPreview} txPlan={txPlan} jsonObject={toolInvocationResult} />}
       </div>
     );
   }

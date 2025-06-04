@@ -91,78 +91,76 @@ export function Pendle({
                   {formatPercentage(market.data?.volatileData?.aggregatedApy)}
                 </AccordionTrigger>
                 <AccordionContent>
-                <div
-                key={market.data?.address}
-                className="rounded-xl bg-zinc-700 p-4 flex flex-col gap-2 mb-4"
-              >
-                <span className="font-semibold text-md flex gap-3 w-full items-center text-sm pb-2">
-                  {market.data?.name}
-                  <span className="font-normal text-sm">
-                    - On chain {market.data?.chainId}
-                    {" - Exp. "}
-                    {market.data?.expiry?.split("T")[0]}
-                  </span>
-                </span>
-                <div className="font-semibold w-full ">                 
-                  <div className="font-normal grid grid-cols-2 gap-x-2 gap-y-0 ">
-                    <p className="font-normal bg-zinc-600 rounded-full p-2 px-4 mb-2">
-                      <span className="font-normal  text-xs flex gap-3">
-                        <span className="font-semibold">Liquidity: </span>{" "}
-                        ${market.data?.volatileData?.marketLiquidityUsd}
+                  <div
+                    key={market.data?.address}
+                    className="rounded-xl bg-zinc-700 p-4 flex flex-col gap-2 mb-4"
+                  >
+                    <span className="font-semibold text-md flex gap-3 w-full items-center text-sm pb-2">
+                      {market.data?.name}
+                      <span className="font-normal text-sm">
+                        - On chain {market.data?.chainId}
+                        {" - Exp. "}
+                        {market.data?.expiry?.split("T")[0]}
                       </span>
-                    </p>
-                    <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
-                      <span className="font-normal  text-xs flex gap-3">
-                        <span className="font-semibold">Volume: </span>{" "}
-                        {market.data?.volatileData?.tradingVolumeUsd}
-                      </span>
-                    </p>
-                    <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
-                      <span className="font-normal  text-xs flex gap-3">
-                        <span className="font-semibold">PT: </span>{" "}
-                        {market.data?.volatileData?.totalPt}
-                      </span>
-                    </p>
-                    <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
-                      <span className="font-normal  text-xs flex gap-3">
-                        <span className="font-semibold">Underlying APY: </span>{" "}
-                        {formatPercentage(market.data?.volatileData?.underlyingApy)}
-                      </span>
+                    </span>
+                    <div className="font-semibold w-full ">
+                      <div className="font-normal grid grid-cols-2 gap-x-2 gap-y-0 ">
+                        <p className="font-normal bg-zinc-600 rounded-full p-2 px-4 mb-2">
+                          <span className="font-normal  text-xs flex gap-3">
+                            <span className="font-semibold">Liquidity: </span>{" "}
+                            ${market.data?.volatileData?.marketLiquidityUsd}
+                          </span>
                         </p>
                         <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
-                      <span className="font-normal  text-xs flex gap-3">
-                        <span className="font-semibold">Implied APY: </span>{" "}
-                        {formatPercentage(market.data?.volatileData?.impliedApy)}
-                      </span>
+                          <span className="font-normal  text-xs flex gap-3">
+                            <span className="font-semibold">Volume: </span>{" "}
+                            {market.data?.volatileData?.tradingVolumeUsd}
+                          </span>
                         </p>
                         <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
-                      <span className="font-normal  text-xs flex gap-3">
-                        <span className="font-semibold">Aggregated APY: </span>{" "}
-                        {formatPercentage(market.data?.volatileData?.aggregatedApy)}
+                          <span className="font-normal  text-xs flex gap-3">
+                            <span className="font-semibold">PT: </span>{" "}
+                            {market.data?.volatileData?.totalPt}
+                          </span>
+                        </p>
+                        <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
+                          <span className="font-normal  text-xs flex gap-3">
+                            <span className="font-semibold">Underlying APY: </span>{" "}
+                            {formatPercentage(market.data?.volatileData?.underlyingApy)}
+                          </span>
+                        </p>
+                        <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
+                          <span className="font-normal  text-xs flex gap-3">
+                            <span className="font-semibold">Implied APY: </span>{" "}
+                            {formatPercentage(market.data?.volatileData?.impliedApy)}
+                          </span>
+                        </p>
+                        <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
+                          <span className="font-normal  text-xs flex gap-3">
+                            <span className="font-semibold">Aggregated APY: </span>{" "}
+                            {formatPercentage(market.data?.volatileData?.aggregatedApy)}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                    <span className="font-semibold pb-2 text-sm">
+                      <span>Underlying Asset: </span>
+                      <span className="font-normal  text-sm">
+                        {market.data?.underlyingAsset?.symbol}
+                      </span>
+                    </span>{" "}
+                    <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-4">
+                      <span className="font-normal  text-sm flex gap-2">
+                        <ShortAddress
+                          web3Address={
+                            market.data?.underlyingAsset?.tokenUid?.address
+                          }
+                        />{" "}
+                        {" on chain "}{" "}
+                        {market.data?.underlyingAsset?.tokenUid?.chainId}
                       </span>
                     </p>
                   </div>
-                </div>
-                <span className="font-semibold pb-2 text-sm">
-                  <span>Underlying Asset: </span>
-                  <span className="font-normal  text-sm">
-                    {market.data?.underlyingAsset?.symbol}
-                    {" - "}
-                    {market.data?.underlyingAsset?.name}
-                  </span>
-                </span>{" "}
-                <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-4">
-                  <span className="font-normal  text-sm flex gap-2">
-                    <ShortAddress
-                      web3Address={
-                        market.data?.underlyingAsset?.tokenUid?.address
-                      }
-                    />{" "}
-                    {" on chain "}{" "}
-                    {market.data?.underlyingAsset?.tokenUid?.chainId}
-                  </span>
-                </p>
-              </div>
                 </AccordionContent>
               </AccordionItem>
             ))}
@@ -313,9 +311,8 @@ export function Pendle({
               {needsApproval &&
                 isApprovalPending && ( // Approval pending
                   <p className=" p-2 rounded-2xl border-gray-400 bg-gray-200 w-full border-2 text-slate-800">
-                    {`Processing Approval ${
-                      approvalIndex + 1
-                    }/${totalApprovals}...`}
+                    {`Processing Approval ${approvalIndex + 1
+                      }/${totalApprovals}...`}
                   </p>
                 )}
               {needsApproval &&
@@ -349,8 +346,8 @@ export function Pendle({
                     {isApprovalPending // Use hook state
                       ? `Approving ${approvalIndex + 1}/${totalApprovals}...`
                       : isApprovalPhaseComplete // Use hook state
-                      ? "All Approved"
-                      : `Approve ${approvalIndex + 1}/${totalApprovals}`}
+                        ? "All Approved"
+                        : `Approve ${approvalIndex + 1}/${totalApprovals}`}
                   </button>
                 )}
                 <button
@@ -362,8 +359,8 @@ export function Pendle({
                   {isTxPending // Use hook state
                     ? "Executing..."
                     : needsApproval // Still relevant for button text
-                    ? "Execute Transaction"
-                    : "Sign Transaction"}
+                      ? "Execute Transaction"
+                      : "Sign Transaction"}
                 </button>
               </div>
             </>
