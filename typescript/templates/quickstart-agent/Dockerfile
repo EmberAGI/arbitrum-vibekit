@@ -12,6 +12,9 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
+# Install tsx globally for running TypeScript MCP servers
+RUN npm install -g tsx
+
 # ------------------------------
 # 1. Copy lockfile & workspace config that affect dependency graph cache
 # ------------------------------
@@ -25,7 +28,7 @@ COPY tsconfig.base.json ./
 # 2. Copy all workspace package.json files (to maximise Docker cache)
 # ------------------------------
 COPY lib/ lib/
-COPY examples/lending-agent-no-wallet/package.json ./examples/lending-agent-no-wallet/
+COPY templates/quickstart-agent/package.json ./templates/quickstart-agent/
 
 # ------------------------------
 # 3. Install deps based on the copied package.json set. Skip lifecycle scripts for now
@@ -39,8 +42,8 @@ RUN pnpm install --frozen-lockfile
 # ------------------------------
 COPY . .
 
-RUN pnpm --filter lending-agent-no-wallet... build
-WORKDIR /app/examples/lending-agent-no-wallet/dist
+RUN pnpm --filter quickstart-agent-template... build
+WORKDIR /app/templates/quickstart-agent/dist
 
 # Expose port for SSE MCP server
 EXPOSE 3001

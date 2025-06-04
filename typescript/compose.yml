@@ -21,15 +21,15 @@ services:
       - 3005:3005
     restart: unless-stopped
 
-  lending-agent-template:
+  quickstart-agent-template:
     build:
       context: ./
-      dockerfile: templates/lending-agent/Dockerfile
-    container_name: vibekit-lending-agent-template
+      dockerfile: templates/quickstart-agent/Dockerfile
+    container_name: vibekit-quickstart-agent-template
     env_file:
       - .env
     ports:
-      - 3006:3006
+      - 3030:3030
     restart: unless-stopped
 
   # liquidity-agent-no-wallet:

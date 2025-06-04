@@ -84,7 +84,7 @@ importers:
         version: 5.3.0
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(ws@8.18.2)(zod@3.25.49)
+        version: link:../../lib/a2a
       ai:
         specifier: ^4.3.2
         version: 4.3.16(react@19.1.0)(zod@3.25.49)
@@ -145,7 +145,7 @@ importers:
         version: 3.5.3
       test-utils:
         specifier: workspace:*
-        version: file:lib/test-utils(typescript@5.8.3)
+        version: file:lib/test-utils(typescript@5.8.3)(ws@8.18.2)
       tsx:
         specifier: ^4.6.2
         version: 4.19.4
@@ -224,7 +224,7 @@ importers:
         version: 3.5.3
       test-utils:
         specifier: workspace:*
-        version: file:lib/test-utils(typescript@5.8.3)
+        version: link:../../lib/test-utils
       tsx:
         specifier: ^4.6.2
         version: 4.19.4
@@ -300,7 +300,7 @@ importers:
         version: 3.5.3
       test-utils:
         specifier: workspace:*
-        version: file:lib/test-utils(typescript@5.8.3)
+        version: link:../../lib/test-utils
       tsx:
         specifier: ^4.6.2
         version: 4.19.4
@@ -640,7 +640,7 @@ importers:
     dependencies:
       a2a-samples-js:
         specifier: workspace:*
-        version: link:../a2a
+        version: file:lib/a2a(ws@8.18.2)(zod@3.25.49)
       ember-schemas:
         specifier: workspace:*
         version: link:../ember-schemas
@@ -722,7 +722,7 @@ importers:
         specifier: ^4.6.2
         version: 4.19.4
 
-  templates/quickstart:
+  templates/quickstart-agent:
     dependencies:
       '@google-a2a/types':
         specifier: github:google-a2a/A2A#path:types
@@ -8228,7 +8228,7 @@ snapshots:
       - encoding
       - supports-color
 
-  test-utils@file:lib/test-utils(typescript@5.8.3):
+  test-utils@file:lib/test-utils(typescript@5.8.3)(ws@8.18.2):
     dependencies:
       a2a-samples-js: file:lib/a2a(ws@8.18.2)(zod@3.25.49)
       ember-schemas: file:lib/ember-schemas
