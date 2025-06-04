@@ -14,13 +14,18 @@ This frontend is part of the Arbitrum Vibekit monorepo. It serves as the user in
 
 - **How it works:**
 
-  1. The frontend sends user input to the MCP agent backend.
-  2. The agent processes the request, possibly interacting with on-chain contracts or external services.
-  3. The response is streamed back and rendered in the frontend.
+  1. The user interacts with the web frontend.
+  2. User input is processed by an API within the frontend.
+  3. This API route, using an LLM (e.g., via OpenRouter), discovers available "tools" from backend MCP agent servers (e.g., Lending Agent, Swapping Agent). These tools represent agent capabilities.
+  4. The LLM uses the user's message and available tools to either respond directly or utilize agent tools, orchestrating the agents in this way.
+  5. If a tool is used, the frontend's API proxies the request to the appropriate MCP agent.
+  6. The MCP agent executes the action and returns the result.
+  7. The result is sent back to the LLM, which formulates a final response.
+  8. The response is streamed to the frontend UI.
 
 ## Model Providers
 
-This frontend uses [OpenRouter](https://openrouter.ai/) as the default LLM provider. However you can easily switch to other providers such as [OpenAI](https://openai.com), [Anthropic](https://anthropic.com), [Cohere](https://cohere.com/), and many more with just a few lines of code. Refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/docs/02-update-models.md) to update your model provider.
+This frontend uses [OpenRouter](https://openrouter.ai/) as the default LLM provider. However you can easily switch to other providers such as [OpenAI](https://openai.com), [Anthropic](https://anthropic.com), [Cohere](https://cohere.com/), and many more with just a few lines of code. Refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/docs/update-models.md) to update your model provider.
 
 ## Quickstart
 
@@ -33,12 +38,23 @@ This frontend uses [OpenRouter](https://openrouter.ai/) as the default LLM provi
 
 ### Running the Frontend
 
-**1. Clone the [Arbitrum Vibekit repository](https://github.com/EmberAGI/arbitrum-vibekit) if you haven't already:**
+**1. Get the Code:**
 
-```bash
+How you get the code depends on whether you want to simply run the project or contribute to its development. If you just want to run Vibekit locally or explore the codebase, you can clone the repository through command line or your preferred IDE:
+
+```
 git clone https://github.com/EmberAGI/arbitrum-vibekit.git &&
 cd arbitrum-vibekit
 ```
+
+If you plan to contribute changes to Vibekit, fork the repository on [Vibekit's Github page](https://github.com/EmberAGI/arbitrum-vibekit) and clone your fork locally. Replace `YOUR_USERNAME` with your GitHub username:
+
+```
+git clone https://github.com/YOUR_USERNAME/arbitrum-vibekit.git &&
+cd arbitrum-vibekit
+```
+
+For more detailed contribution steps, please see our [Contribution Guidelines](CONTRIBUTIONS.md).
 
 **2. Configure environment variables:**
 
