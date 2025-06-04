@@ -100,8 +100,7 @@ Let's run the lending agent. The lending agent is started by default when the fr
 
 #### Prerequisites
 
-1. [Docker](https://docs.docker.com/engine/install/)
-2. [Docker Compose](https://docs.docker.com/compose/install/)
+Make sure you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed on your system.
 
 **Note:** If your are on an M-series Mac, you need to install Docker using the [dmg package](https://docs.docker.com/desktop/setup/install/mac-install/) supplied officially by Docker rather than through Homebrew or other means to avoid build issues.
 
@@ -116,11 +115,7 @@ cd typescript &&
 cp .env.example .env
 ```
 
-Open the `.env` file and fill in the required values. This typically includes:
-
-- Your preferred LLM provider API key (e.g., `OPENROUTER_API_KEY`).
-- Generate a secure `AUTH_SECRET` (you can use https://generate-secret.vercel.app/32 or `openssl rand -base64 32`).
-- Set a `POSTGRES_PASSWORD`.
+Make sure to populate the `.env` with your API keys and configurations.
 
 **2. Start services with Docker Compose:**
 
