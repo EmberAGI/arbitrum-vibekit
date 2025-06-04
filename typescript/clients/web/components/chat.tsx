@@ -71,7 +71,7 @@ export function Chat({
   return (
     <>
       <div className="flex flex-col min-w-0 h-dvh bg-background">
-        {(!session || !session.user) && (
+        {(!session || !session?.user) && (
           <div className="fixed inset-0 backdrop-blur-sm bg-background/70 z-50 flex flex-col items-center justify-center gap-4">
             <h2 className="text-xl font-semibold">Connect Your Wallet</h2>
             <p className="text-muted-foreground mb-4">
