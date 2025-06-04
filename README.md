@@ -17,17 +17,13 @@
 
 Welcome to Vibekit, the polyglot toolkit for vibe coding smart, autonomous DeFi agents that vibe with the blockchain. Whether you're automating trades, managing liquidity, or integrating with on-chain and off-chain data, Vibekit makes it effortless and fun.
 
-At its core, Vibekit uses the Model Context Protocol (MCP) to standardize how agents connect with tools and data. It also includes built-in Agent2Agent (A2A) integration, so the agents can easily work together. Vibekit also works smoothly with popular frameworks like Eliza and LangGraph, just add our MCP tools to your existing agents and watch them level up with DeFi superpowers!
+At its core, Vibekit uses the Model Context Protocol (MCP) to standardize how agents connect with tools and data. It includes built-in Agent2Agent (A2A) integration, so the agents can easily work together. Vibekit also works smoothly with popular frameworks like Eliza and LangGraph, just add our MCP tools to your existing agents and watch them level up with DeFi superpowers!
 
 Here's an overview of how everything fits together:
 
 <p align="left">
   <img src="img/Flow Chart.png" width="800px" alt="FlowChart"/>
 </p>
-
-**_Development Status_:**
-
-Vibekit is growing fast and already gives you everything you need to start building. The docs and codebase are ready for you to use, and we're always improving things as we get closer to a full v1.0 launch. We'd love your feedback and contributions to help shape the future of Vibekit!
 
 ## 🧬 Repository Organization
 
@@ -80,14 +76,23 @@ node -v # Should be 22+
 pnpm -v # Check that pnpm is installed
 ```
 
-### 2. Clone the Repository:
+### 2. Get the Code:
 
-You can do so through the command line or through your preferred IDE. We recommend using [Cursor IDE](https://www.cursor.com/).
+How you get the code depends on whether you want to simply run the project or contribute to its development. If you just want to run Vibekit locally or explore the codebase, you can clone the repository through command line or your preferred IDE:
 
 ```
-git clone https://github.com/EmberAGI/arbitrum-vibekit.git
+git clone https://github.com/EmberAGI/arbitrum-vibekit.git &&
 cd arbitrum-vibekit
 ```
+
+If you plan to contribute changes to Vibekit, fork the repository on [Vibekit's Github page](https://github.com/EmberAGI/arbitrum-vibekit) and clone your fork locally. Replace `YOUR_USERNAME` with your GitHub username:
+
+```
+git clone https://github.com/YOUR_USERNAME/arbitrum-vibekit.git &&
+cd arbitrum-vibekit
+```
+
+For more detailed contribution steps, please see our [Contribution Guidelines](CONTRIBUTIONS.md).
 
 ### 3. Run Your DeFi Agent:
 
@@ -95,21 +100,13 @@ Let's run the lending agent. The lending agent is started by default when the fr
 
 #### Prerequisites
 
-1. [Docker](https://docs.docker.com/engine/install/)
-2. [Docker Compose](https://docs.docker.com/compose/install/)
+Make sure you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed on your system.
 
 **Note:** If your are on an M-series Mac, you need to install Docker using the [dmg package](https://docs.docker.com/desktop/setup/install/mac-install/) supplied officially by Docker rather than through Homebrew or other means to avoid build issues.
 
 #### Running the Frontend
 
-**1. Clone the [Arbitrum Vibekit repository](https://github.com/EmberAGI/arbitrum-vibekit) if you haven't already:**
-
-```bash
-git clone https://github.com/EmberAGI/arbitrum-vibekit.git &&
-cd arbitrum-vibekit
-```
-
-**2. Configure environment variables:**
+**1. Configure environment variables:**
 
 Navigate to the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory and create a `.env` file by copying the example template:
 
@@ -118,13 +115,9 @@ cd typescript &&
 cp .env.example .env
 ```
 
-Open the `.env` file and fill in the required values. This typically includes:
+Make sure to populate the `.env` with your API keys and configurations.
 
-- Your preferred LLM provider API key (e.g., `OPENROUTER_API_KEY`).
-- Generate a secure `AUTH_SECRET` (you can use https://generate-secret.vercel.app/32 or `openssl rand -base64 32`).
-- Set a `POSTGRES_PASSWORD`.
-
-**3. Start services with Docker Compose:**
+**2. Start services with Docker Compose:**
 
 From the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory, run the following command to build and start the frontend and its associated services (including the lending agent, and the database):
 
@@ -133,7 +126,7 @@ From the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typ
 docker compose up
 ```
 
-**4. Access Vibekit's web interface:**
+**3. Access Vibekit's web interface:**
 
 Open your web browser and navigate to http://localhost:3000. To be able to use the web interface, you need to connect your wallet first. Click on "Connect Wallet" to get started:
 
@@ -151,7 +144,7 @@ After setting up your wallet, you can interact with the lending agent through th
 
 To integrate another example agent or a custom agent into the frontend, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/README.md#agent-configuration).
 
-### 5. Build Your Custom DeFi Agent:
+### 4. Build Your Custom DeFi Agent:
 
 Checkout the [examples/](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) directory to explore other agent templates and start building your own!
 
@@ -242,6 +235,6 @@ You'll find a collection of ready-to-use MCP tools, along with step-by-step guid
 
 ## 💰 Contributions & Bounties
 
-We welcome contributions from the community! If you'd like to help improve Vibekit, please check out our [Contribution Guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md).
+We welcome contributions from the community! If you'd like to help improve Vibekit, please check out our [Contribution Guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md). These guidelines detail the process for forking the repository, making your changes, and submitting a pull request.
 
 To show our appreciation, we have launched an [incentive program](https://docs.google.com/forms/d/e/1FAIpQLSe-GF7UcUOuyEMsgnVpLFrG_W83RAchaPPqOCD83pZaZXskgw/viewform) that rewards [valuable contributions](https://github.com/orgs/EmberAGI/projects/13) to the Vibekit. Checkout our [blog post](https://www.emberai.xyz/blog) to learn more!

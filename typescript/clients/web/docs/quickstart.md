@@ -4,8 +4,7 @@ This guide explains how to quickly set up and run the Vibekit frontend that serv
 
 ### Prerequisites
 
-1. [Docker](https://docs.docker.com/engine/install/)
-2. [Docker Compose](https://docs.docker.com/compose/install/)
+Make sure you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed on your system.
 
 **Note:** If your are on an M-series Mac, you need to install Docker using the [dmg package](https://docs.docker.com/desktop/setup/install/mac-install/) supplied officially by Docker rather than through Homebrew or other means to avoid build issues.
 
