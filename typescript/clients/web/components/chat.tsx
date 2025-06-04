@@ -36,7 +36,6 @@ export function Chat({
   const { address } = useAccount();
   const { data: session } = useSession();
 
-
   const [selectedChatAgent, _setSelectedChatAgent] = useState(initialChatAgent);
 
   const { messages, setMessages, handleSubmit, input, setInput, append, status, stop, reload } =
@@ -71,32 +70,14 @@ export function Chat({
 
   return (
     <>
-
       <div className="flex flex-col min-w-0 h-dvh bg-background">
-        {((!session || !session?.user)) && (
-          <div className="fixed inset-0 backdrop-blur-sm bg-background/70 z-50 flex items-center justify-center">
-            <div className="bg-background border rounded-lg shadow-lg p-6 relative max-w-md w-full mx-4">
-              {session}
-              {session && (
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
-              )}
-              <div className="flex flex-col items-center gap-4">
-                <h2 className="text-xl font-semibold">Connect Your Wallet</h2>
-                <p className="text-muted-foreground text-center mb-4">
-                  Authentication required to chat with Ember Agents.
-                </p>
-                {JSON.stringify(session)}
-                <ConnectButton />
-              </div>
-            </div>
+        {(!session || !session?.user) && (
+          <div className="fixed inset-0 backdrop-blur-sm bg-background/70 z-50 flex flex-col items-center justify-center gap-4">
+            <h2 className="text-xl font-semibold">Connect Your Wallet</h2>
+            <p className="text-muted-foreground mb-4">
+              Authentication required to chat with Ember Agents
+            </p>
+            <ConnectButton />
           </div>
         )}
         <ChatHeader />
