@@ -124,6 +124,7 @@ export interface VibkitToolDefinition<
   TContext = any,
   TSkillInput = any,
 > {
+  name: string;
   description: string;
   parameters: TParams;
   execute: (
@@ -388,25 +389,36 @@ export class Agent<TSkillsArray extends SkillDefinition<z.ZodTypeAny, TContext>[
             : this.corsOptions;
       app.use(cors(options));
     }
-    app.get('/', (_req, res) => {
+
+    // Helper to join base path with route
+    const route = (path: string) => {
+      if (this.basePath === '/') return path;
+      return this.basePath.replace(/\/$/, '') + path;
+    };
+
+    app.get(route('/'), (_req, res) => {
       res.json({
         name: this.card.name,
         version: this.card.version,
         status: 'running',
+        mcpServer: `${this.card.name} MCP Server`,
         endpoints: {
-          '/': 'Server information (this response)',
-          '/sse': 'Server-Sent Events endpoint for MCP connection',
-          '/messages': 'POST endpoint for MCP messages',
+          [route('/')]: 'Server information (this response)',
+          [route('/sse')]: 'Server-Sent Events endpoint for MCP connection',
+          [route('/messages')]: 'POST endpoint for MCP messages',
         },
         tools: this.card.skills,
         skills: this.card.skills,
       });
     });
-    app.get('/.well-known/agent.json', (req: Request, res: Response) => {
-      res.json(this.card);
+    app.get(route('/.well-known/agent.json'), (req: Request, res: Response) => {
+      res.json({
+        ...this.card,
+        type: 'AgentCard',
+      });
     });
-    app.get('/sse', async (_req, res) => {
-      this.transport = new SSEServerTransport('/messages', res);
+    app.get(route('/sse'), async (_req, res) => {
+      this.transport = new SSEServerTransport(route('/messages'), res);
       await this.mcpServer.connect(this.transport);
       this.sseConnections.add(res);
       const keepaliveInterval = setInterval(() => {
@@ -428,7 +440,7 @@ export class Agent<TSkillsArray extends SkillDefinition<z.ZodTypeAny, TContext>[
         this.transport?.close?.();
       });
     });
-    app.post('/messages', async (req, res) => {
+    app.post(route('/messages'), async (req, res) => {
       await this.transport?.handlePostMessage(req, res);
     });
     this.httpServer = app.listen(port, () => {
@@ -439,16 +451,35 @@ export class Agent<TSkillsArray extends SkillDefinition<z.ZodTypeAny, TContext>[
 
   async stop(): Promise<void> {
     console.log('Stopping agent');
+
+    // Close all MCP clients first
+    for (const [skillName, clientsMap] of this.skillMcpClients) {
+      for (const [moduleName, client] of clientsMap) {
+        try {
+          console.log(`Closing MCP client for skill "${skillName}", server: ${moduleName}`);
+          await client.close();
+        } catch (error) {
+          console.error(`Error closing MCP client for skill "${skillName}":`, error);
+        }
+      }
+    }
+    this.skillMcpClients.clear();
+
+    // Close SSE connections
     for (const res of this.sseConnections) {
       if (!res.writableEnded) {
         res.end();
       }
     }
     this.sseConnections.clear();
+
+    // Close transport
     if (this.transport) {
       this.transport.close?.();
       this.transport = undefined;
     }
+
+    // Close HTTP server
     if (this.httpServer) {
       await new Promise<void>((resolve, reject) => {
         this.httpServer!.close(err => {
@@ -463,6 +494,7 @@ export class Agent<TSkillsArray extends SkillDefinition<z.ZodTypeAny, TContext>[
       });
       this.httpServer = undefined;
     }
+
     console.log('Agent stopped');
   }
 
@@ -478,15 +510,15 @@ export class Agent<TSkillsArray extends SkillDefinition<z.ZodTypeAny, TContext>[
       ];
       // Convert tools to Vercel AI SDK format with context injection
       const sdkTools = Object.fromEntries(
-        skill.tools.map((vibkitTool, idx) => [
-          vibkitTool.description || `tool${idx}`,
+        skill.tools.map(vibkitTool => [
+          vibkitTool.name,
           {
             description: vibkitTool.description,
             parameters: vibkitTool.parameters,
             execute: async (args: any) => {
               const skillMcpClients = this.skillMcpClients.get(skill.name);
               const context: AgentContext<TContext, typeof input> = {
-                custom: this.customContext!,
+                custom: this.customContext ?? ({} as TContext),
                 skillInput: input,
                 ...(skillMcpClients &&
                   skillMcpClients.size > 0 && {
@@ -539,10 +571,27 @@ export class Agent<TSkillsArray extends SkillDefinition<z.ZodTypeAny, TContext>[
   }
 
   private extractA2AResult(response: any, text: string, skillId: string): Task | Message {
-    // TODO: Implement robust extraction logic based on Vercel AI SDK response.
-    // This could involve checking if 'text' is a JSON string representing a valid Task/Message.
-    // For now, return a valid Message using the provided text.
+    // Check if any tool was called and returned a Task/Message
+    if (response.messages && Array.isArray(response.messages)) {
+      for (const message of response.messages) {
+        if (message.role === 'tool' && Array.isArray(message.content)) {
+          for (const part of message.content) {
+            if (
+              part.type === 'tool-result' &&
+              part.result &&
+              typeof part.result === 'object' &&
+              'id' in part.result
+            ) {
+              // Found a Task or Message returned by a tool
+              return part.result as Task | Message;
+            }
+          }
+        }
+      }
+    }
+
+    // No tool was called or no Task/Message found, return a text response
     const contextId = `${skillId}-llm-response-${Date.now()}-${nanoid(6)}`;
-    return createInfoMessage(text, 'agent', contextId);
+    return createInfoMessage(text || "I couldn't process that request.", 'agent', contextId);
   }
 }

@@ -5,12 +5,12 @@ import type {
   Message,
   Part,
   TaskState,
-} from "@google-a2a/types/src/types.js";
-import { z } from "zod";
-import { VibkitError } from "./error.js";
-import { nanoid } from "nanoid";
-import escapeHtml from "escape-html";
-import type { AgentContext, VibkitToolDefinition } from "./agent.js";
+} from '@google-a2a/types/src/types.js';
+import { z } from 'zod';
+import { VibkitError } from './error.js';
+import { nanoid } from 'nanoid';
+import escapeHtml from 'escape-html';
+import type { AgentContext, VibkitToolDefinition } from './agent.js';
 
 /**
  * Error thrown when trying to use an unsupported Zod schema type
@@ -20,7 +20,7 @@ export class UnsupportedSchemaError extends VibkitError {
     const message = skillName
       ? `Skill "${skillName}": ${schemaType} not supported`
       : `${schemaType} not supported`;
-    super("UnsupportedSchemaError", -32004, message); // Using UnsupportedOperationError code
+    super('UnsupportedSchemaError', -32004, message); // Using UnsupportedOperationError code
   }
 }
 
@@ -38,29 +38,29 @@ export function getInputMimeType(
   skillNameForErrorMessage?: string
 ): string {
   if (inputSchema instanceof z.ZodString) {
-    return "text/plain";
+    return 'text/plain';
   }
 
   if (inputSchema instanceof z.ZodObject || inputSchema instanceof z.ZodArray) {
-    return "application/json";
+    return 'application/json';
   }
 
   // Unsupported types
   if (inputSchema instanceof z.ZodBoolean) {
-    throw new UnsupportedSchemaError("ZodBoolean", skillNameForErrorMessage);
+    throw new UnsupportedSchemaError('ZodBoolean', skillNameForErrorMessage);
   }
   if (inputSchema instanceof z.ZodNumber) {
-    throw new UnsupportedSchemaError("ZodNumber", skillNameForErrorMessage);
+    throw new UnsupportedSchemaError('ZodNumber', skillNameForErrorMessage);
   }
   if (inputSchema instanceof z.ZodEnum) {
-    throw new UnsupportedSchemaError("ZodEnum", skillNameForErrorMessage);
+    throw new UnsupportedSchemaError('ZodEnum', skillNameForErrorMessage);
   }
   if (inputSchema instanceof z.ZodNativeEnum) {
-    throw new UnsupportedSchemaError("ZodNativeEnum", skillNameForErrorMessage);
+    throw new UnsupportedSchemaError('ZodNativeEnum', skillNameForErrorMessage);
   }
 
   throw new UnsupportedSchemaError(
-    inputSchema._def?.typeName || "Unknown",
+    inputSchema._def?.typeName || 'Unknown',
     skillNameForErrorMessage
   );
 }
@@ -79,22 +79,16 @@ export function getCurrentTimestamp(): string {
  * @returns True if the value is a plain object, false otherwise.
  */
 export function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
  * Type guard to check if an object is a TaskStatus update (lacks 'parts').
  * Used to differentiate yielded updates from the handler.
  */
-export function isTaskStatusUpdate(
-  update: unknown
-): update is Omit<TaskStatus, "timestamp"> {
+export function isTaskStatusUpdate(update: unknown): update is Omit<TaskStatus, 'timestamp'> {
   // Check if it has 'state' and NOT 'parts' (which Artifacts have)
-  return (
-    isObject(update) &&
-    "state" in update &&
-    !("parts" in (update as Record<string, unknown>))
-  );
+  return isObject(update) && 'state' in update && !('parts' in (update as Record<string, unknown>));
 }
 
 /**
@@ -103,7 +97,7 @@ export function isTaskStatusUpdate(
  */
 export function isArtifactUpdate(update: unknown): update is Artifact {
   // Check if it has 'parts'
-  return isObject(update) && "parts" in (update as Record<string, unknown>);
+  return isObject(update) && 'parts' in (update as Record<string, unknown>);
 }
 
 /**
@@ -141,16 +135,16 @@ export function createArtifact(
  */
 export function createInfoMessage(
   text: string,
-  role: "agent" | "user" = "agent",
+  role: 'agent' | 'user' = 'agent',
   contextId?: string,
   taskId?: string,
   metadata?: Record<string, unknown>,
   referenceTaskIds?: string[]
 ): Message {
   return {
-    kind: "message",
+    kind: 'message',
     role,
-    parts: [{ kind: "text", text }],
+    parts: [{ kind: 'text', text }],
     messageId: nanoid(),
     ...(contextId ? { contextId } : {}),
     ...(taskId ? { taskId } : {}),
@@ -170,16 +164,16 @@ export function createInfoMessage(
 export function createSuccessTask(
   skillName: string,
   artifacts?: Artifact[],
-  message: string = "Task completed successfully",
-  contextIdSuffix: string = "success"
+  message: string = 'Task completed successfully',
+  contextIdSuffix: string = 'success'
 ): Task {
   return {
     id: nanoid(),
     contextId: `${skillName}-${contextIdSuffix}-${Date.now()}-${nanoid(6)}`,
-    kind: "task",
+    kind: 'task',
     status: {
-      state: "completed" as TaskState,
-      message: createInfoMessage(message, "agent"),
+      state: 'completed' as TaskState,
+      message: createInfoMessage(message, 'agent'),
       timestamp: getCurrentTimestamp(),
     },
     ...(artifacts && artifacts.length > 0 ? { artifacts } : {}),
@@ -196,19 +190,19 @@ export function createSuccessTask(
 export function createErrorTask(
   skillName: string,
   error: VibkitError | Error,
-  contextIdSuffix: string = "error"
+  contextIdSuffix: string = 'error'
 ): Task {
   const errorDetails =
     error instanceof VibkitError
       ? { name: error.name, message: error.message, code: error.code }
-      : { name: error.name || "Error", message: error.message };
+      : { name: error.name || 'Error', message: error.message };
   return {
     id: nanoid(),
     contextId: `${skillName}-${contextIdSuffix}-${Date.now()}-${nanoid(6)}`,
-    kind: "task",
+    kind: 'task',
     status: {
-      state: "failed" as TaskState,
-      message: createInfoMessage(error.message, "agent"),
+      state: 'failed' as TaskState,
+      message: createInfoMessage(error.message, 'agent'),
       timestamp: getCurrentTimestamp(),
     },
     metadata: { error: errorDetails },
@@ -227,12 +221,10 @@ export function formatToolDescriptionWithTagsAndExamples(
   tags: string[],
   examples: string[]
 ): string {
-  const tagsXml = `<tags>${tags
-    .map((tag) => `<tag>${escapeHtml(tag)}</tag>`)
-    .join("")}</tags>`;
+  const tagsXml = `<tags>${tags.map(tag => `<tag>${escapeHtml(tag)}</tag>`).join('')}</tags>`;
   const examplesXml = `<examples>${examples
-    .map((ex) => `<example>${escapeHtml(ex)}</example>`)
-    .join("")}</examples>`;
+    .map(ex => `<example>${escapeHtml(ex)}</example>`)
+    .join('')}</examples>`;
   return `${description}\n\n${tagsXml}\n${examplesXml}`;
 }
 
@@ -261,16 +253,12 @@ export interface HookConfig<TArgs, TResult, TContext = any, TSkillInput = any> {
  * @param hooks Configuration object with optional before/after hooks
  * @returns A new VibkitToolDefinition with the hooks applied
  */
-export function withHooks<
-  TParams extends z.ZodTypeAny,
-  TResult,
-  TContext = any,
-  TSkillInput = any
->(
+export function withHooks<TParams extends z.ZodTypeAny, TResult, TContext = any, TSkillInput = any>(
   tool: VibkitToolDefinition<TParams, TResult, TContext, TSkillInput>,
   hooks: HookConfig<z.infer<TParams>, TResult, TContext, TSkillInput>
 ): VibkitToolDefinition<TParams, TResult, TContext, TSkillInput> {
   return {
+    name: tool.name,
     description: tool.description,
     parameters: tool.parameters,
     execute: async (args, context) => {
