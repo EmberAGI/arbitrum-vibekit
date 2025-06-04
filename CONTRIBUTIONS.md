@@ -4,11 +4,15 @@ Thanks for your interest in contributing to Vibetkit! This guide explains how to
 
 ## Getting Started
 
-Before you start your work, checkout [open issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) to see if someone is already working on the same topic. For big changes or new features, create an issue first to avoid duplicate work, though it’s not required for smaller updates.
+Before you start your work, checkout [open issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) to see if someone is already working on the same topic. For big changes or new features, create an issue first to avoid duplicate work, though it's not required for smaller updates.
 
 ## Development Steps
 
-**1. Fork the Repository:** Start by creating your own copy of the repository.
+**1. Fork & Clone the Repository:**
+
+- **Fork the Repository:** Start by creating your own copy of the [Vibekit repository](https://github.com/EmberAGI/arbitrum-vibekit) on GitHub. This allows you to make changes in your own version without directly affecting the main project.
+
+- **Clone Your Fork:** After forking, clone your forked repository to your local machine to begin development. You can do this by running `git clone https://github.com/YOUR_USERNAME/arbitrum-vibekit.git` (replace `YOUR_USERNAME` with your GitHub username).
 
 **2. Review MCP Tools Guidelines:** Checkout the [README.md](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools) file in the `mcp-tools` directory for guidance on developing MCP tools.
 
@@ -18,7 +22,7 @@ Before you start your work, checkout [open issues](https://github.com/EmberAGI/a
 
 **5. Create Example Agents:** Consider adding a demo agent to the [examples directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) to showcase your new features.
 
-**6. Update CHANGELOG:** Document your modifications in [CHANGELOG.md](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CHANGELOG.md) to keep the project’s history clear.
+**6. Update CHANGELOG:** Document your modifications in [CHANGELOG.md](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CHANGELOG.md) to keep the project's history clear.
 
 ## Submitting Your Work
 
@@ -26,13 +30,13 @@ When preparing your pull request (PR), be sure to link any relevant issues to pr
 
 ## Review Process
 
-After you submit your PR, we’ll acknowledge it within 2–3 days to let you know it’s being reviewed. You can expect initial feedback or requested changes from us within 5 days. Once all feedback is addressed and your PR is approved, your contribution will be merged.
+After you submit your PR, we'll acknowledge it within 2–3 days to let you know it's being reviewed. You can expect initial feedback or requested changes from us within 5 days. Once all feedback is addressed and your PR is approved, your contribution will be merged.
 
 ## Getting Support
 
 If you need assistance at any step of the contribution process:
 
 - Search [existing issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) for similar questions or problems.
-- If your concern isn’t already covered, create a new issue with detailed information.
+- If your concern isn't already covered, create a new issue with detailed information.
 - Reach out to our team for guidance.
 - Join our [support Discord](https://discord.com/invite/bgxWQ2fSBR) and connect with other builders.
