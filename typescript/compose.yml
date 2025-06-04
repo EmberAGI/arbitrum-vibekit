@@ -5,8 +5,10 @@ services:
       dockerfile: examples/lending-agent-no-wallet/Dockerfile
     container_name: vibekit-lending-agent-no-wallet
     env_file:
-      - .env
-      - examples/lending-agent-no-wallet/.env
+      - path: .env
+        required: true
+      - path: examples/lending-agent-no-wallet/.env
+        required: false
     ports:
       - 3001:3001
     restart: unless-stopped
@@ -17,8 +19,10 @@ services:
       dockerfile: examples/swapping-agent-no-wallet/Dockerfile
     container_name: vibekit-swapping-agent-no-wallet
     env_file:
-      - .env
-      - examples/swapping-agent-no-wallet/.env
+      - path: .env
+        required: true
+      - path: examples/swapping-agent-no-wallet/.env
+        required: false
     ports:
       - 3005:3005
     restart: unless-stopped
@@ -29,8 +33,10 @@ services:
       dockerfile: templates/quickstart-agent/Dockerfile
     container_name: vibekit-quickstart-agent-template
     env_file:
-      - .env
-      - templates/quickstart-agent/.env
+      - path: .env
+        required: true
+      - path: templates/quickstart-agent/.env
+        required: false
     ports:
       - 3030:3030
     restart: unless-stopped
@@ -41,8 +47,10 @@ services:
   #     dockerfile: examples/liquidity-agent-no-wallet/Dockerfile
   #   container_name: vibekit-liquidity-agent-no-wallet
   #   env_file:
-  #     - .env
-  #     - examples/liquidity-agent-no-wallet/.env
+  #     - path: .env
+  #       required: true
+  #     - path: examples/liquidity-agent-no-wallet/.env
+  #       required: false
   #   ports:
   #     - 3002:3002
   #   restart: unless-stopped
@@ -53,8 +61,10 @@ services:
   #     dockerfile: examples/pendle-agent/Dockerfile
   #   container_name: vibekit-pendle-agent
   #   env_file:
-  #     - .env
-  #     - examples/pendle-agent/.env
+  #     - path: .env
+  #       required: true
+  #     - path: examples/pendle-agent/.env
+  #       required: false
   #   ports:
   #     - 3003:3003
   #   restart: unless-stopped
@@ -65,8 +75,10 @@ services:
   #     dockerfile: examples/swapping-agent/Dockerfile
   #   container_name: vibekit-swapping-agent
   #   env_file:
-  #     - .env
-  #     - examples/swapping-agent/.env
+  #     - path: .env
+  #       required: true
+  #     - path: examples/swapping-agent/.env
+  #       required: false
   #   ports:
   #     - 3004:3004
   #   restart: unless-stopped
@@ -77,8 +89,10 @@ services:
       context: clients/web/
       dockerfile: Dockerfile.prod
     env_file:
-      - .env
-      - clients/web/.env
+      - path: .env
+        required: true
+      - path: clients/web/.env
+        required: false
     environment:
       POSTGRES_URL: postgresql://chatbot:changeme@db:5432/chatbot
       AUTH_URL: http://localhost:3000/api/auth
