@@ -6,6 +6,7 @@ services:
     container_name: vibekit-lending-agent-no-wallet
     env_file:
       - .env
+      - examples/lending-agent-no-wallet/.env
     ports:
       - 3001:3001
     restart: unless-stopped
@@ -17,6 +18,7 @@ services:
     container_name: vibekit-swapping-agent-no-wallet
     env_file:
       - .env
+      - examples/swapping-agent-no-wallet/.env
     ports:
       - 3005:3005
     restart: unless-stopped
@@ -28,6 +30,7 @@ services:
     container_name: vibekit-quickstart-agent-template
     env_file:
       - .env
+      - templates/quickstart-agent/.env
     ports:
       - 3030:3030
     restart: unless-stopped
@@ -39,6 +42,7 @@ services:
   #   container_name: vibekit-liquidity-agent-no-wallet
   #   env_file:
   #     - .env
+  #     - examples/liquidity-agent-no-wallet/.env
   #   ports:
   #     - 3002:3002
   #   restart: unless-stopped
@@ -50,6 +54,7 @@ services:
   #   container_name: vibekit-pendle-agent
   #   env_file:
   #     - .env
+  #     - examples/pendle-agent/.env
   #   ports:
   #     - 3003:3003
   #   restart: unless-stopped
@@ -61,6 +66,7 @@ services:
   #   container_name: vibekit-swapping-agent
   #   env_file:
   #     - .env
+  #     - examples/swapping-agent/.env
   #   ports:
   #     - 3004:3004
   #   restart: unless-stopped
@@ -72,6 +78,7 @@ services:
       dockerfile: Dockerfile.prod
     env_file:
       - .env
+      - clients/web/.env
     environment:
       POSTGRES_URL: postgresql://chatbot:changeme@db:5432/chatbot
       AUTH_URL: http://localhost:3000/api/auth
