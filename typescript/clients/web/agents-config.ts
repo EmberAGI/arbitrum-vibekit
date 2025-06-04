@@ -20,11 +20,11 @@ export const chatAgents = [
       {
         title: 'Swap USDC for ETH',
         label: 'on Arbitrum Network.',
-        action: 'Swap USDC for ETH tokens from Arbitrum to Arbitrum Network.',
+        action: 'Swap USDC for ETH tokens from Arbitrum to Arbitrum.',
       },
       {
         title: 'Buy ARB',
-        label: 'on Arbitrum Network.',
+        label: 'on Arbitrum.',
         action: 'Buy ARB token.',
       },
     ],
@@ -42,8 +42,8 @@ export const chatAgents = [
   //   suggestedActions: [
   //     {
   //       title: "Provide Liquidity",
-  //       label: "on Arbitrum Network.",
-  //       action: "Provide Liquidity on Arbitrum Network.",
+  //       label: "on Arbitrum.",
+  //       action: "Provide Liquidity on Arbitrum.",
   //     },
   //     {
   //       title: "Check",
