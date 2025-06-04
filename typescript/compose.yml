@@ -38,7 +38,7 @@ services:
       - path: templates/quickstart-agent/.env
         required: false
     ports:
-      - 3030:3030
+      - 3007:3007
     restart: unless-stopped
 
   # liquidity-agent-no-wallet:

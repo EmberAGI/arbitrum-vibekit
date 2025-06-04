@@ -42,11 +42,8 @@ RUN pnpm install --frozen-lockfile
 # ------------------------------
 COPY . .
 
-RUN pnpm --filter quickstart-agent-template... build
+RUN pnpm --filter quickstart-agent... build
 WORKDIR /app/templates/quickstart-agent/dist
-
-# Expose port for SSE MCP server
-EXPOSE 3001
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]

@@ -42,9 +42,6 @@ COPY . .
 RUN pnpm --filter lending-agent-template... build
 WORKDIR /app/templates/lending-agent/dist
 
-# Expose port for SSE MCP server
-EXPOSE 3001
-
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 

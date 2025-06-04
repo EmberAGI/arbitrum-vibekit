@@ -19,7 +19,7 @@ COPY tsconfig.base.json ./
 # 2. Copy all workspace package.json files (to maximise Docker cache)
 # ------------------------------
 COPY lib/ lib/
-COPY examples/quickstart-agent/package.json ./examples/quickstart-agent/
+COPY templates/quickstart-agent/package.json ./templates/quickstart-agent/
 
 # ------------------------------
 # 3. Install deps based on the copied package.json set. Skip lifecycle scripts for now
@@ -56,24 +56,21 @@ WORKDIR /app
 RUN npm install -g --prefer-frozen-lockfile -y pnpm@10.7.0
 
 # Copy only what we need from the builder stage
-COPY --from=builder /app/examples/quickstart-agent/dist /app/examples/quickstart-agent/dist
-COPY --from=builder /app/examples/quickstart-agent/package.json /app/examples/quickstart-agent/
-COPY --from=builder /app/examples/quickstart-agent/node_modules /app/examples/quickstart-agent/node_modules
+COPY --from=builder /app/templates/quickstart-agent/dist /app/templates/quickstart-agent/dist
+COPY --from=builder /app/templates/quickstart-agent/package.json /app/templates/quickstart-agent/
+COPY --from=builder /app/templates/quickstart-agent/node_modules /app/templates/quickstart-agent/node_modules
 COPY --from=builder /app/lib /app/lib
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/node_modules/.pnpm /app/node_modules/.pnpm
 
 # Set the working directory for the final image
-WORKDIR /app/examples/quickstart-agent/dist
+WORKDIR /app/templates/quickstart-agent/dist
 
 # Change ownership to non-root user
 RUN chown -R ember:ember /app
 
 # Switch to non-root user
 USER ember
-
-# Expose port for SSE MCP server
-EXPOSE 3001
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]

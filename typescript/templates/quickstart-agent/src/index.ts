@@ -45,7 +45,7 @@ const agent = Agent.create(agentConfig, {
 });
 
 // Start the agent
-const PORT = parseInt(process.env.PORT || '3002', 10);
+const PORT = parseInt(process.env.PORT || '3007', 10);
 
 agent
   .start(PORT, contextProvider)
