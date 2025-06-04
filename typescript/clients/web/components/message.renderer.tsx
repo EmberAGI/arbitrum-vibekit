@@ -1,34 +1,34 @@
-"use client";
+'use client';
 
-import type { UIMessage } from "ai";
-import cx from "classnames";
-import { DocumentToolCall, DocumentToolResult } from "./document";
-import { PencilEditIcon } from "./icons";
-import { Markdown } from "./markdown";
-import { Weather } from "./weather";
-import { cn } from "@/lib/utils";
-import { Button } from "./ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
-import { MessageEditor } from "./message-editor";
-import { DocumentPreview } from "./document-preview";
-import { MessageReasoning } from "./message-reasoning";
-import type { UseChatHelpers } from "@ai-sdk/react";
-import { Swaps } from "./Swaps";
-import { Pendle } from "./Pendle";
-import { Lending } from "./Lending";
-import { Liquidity } from "./Liquidity";
-import type { Dispatch } from "react";
-import { TemplateComponent } from "./TemplateComponent";
+import type { UIMessage } from 'ai';
+import cx from 'classnames';
+import { DocumentToolCall, DocumentToolResult } from './document';
+import { PencilEditIcon } from './icons';
+import { Markdown } from './markdown';
+import { Weather } from './weather';
+import { cn } from '@/lib/utils';
+import { Button } from './ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
+import { MessageEditor } from './message-editor';
+import { DocumentPreview } from './document-preview';
+import { MessageReasoning } from './message-reasoning';
+import type { UseChatHelpers } from '@ai-sdk/react';
+import { Swaps } from './Swaps';
+import { Pendle } from './Pendle';
+import { Lending } from './Lending';
+import { Liquidity } from './Liquidity';
+import type { Dispatch } from 'react';
+import { TemplateComponent } from './TemplateComponent';
 
 interface MessageRendererProps {
   message: UIMessage;
-  part: UIMessage["parts"][number];
+  part: UIMessage['parts'][number];
   isLoading: boolean;
-  mode: "view" | "edit";
-  setMode: Dispatch<React.SetStateAction<"view" | "edit">>;
+  mode: 'view' | 'edit';
+  setMode: Dispatch<React.SetStateAction<'view' | 'edit'>>;
   isReadonly: boolean;
-  setMessages: UseChatHelpers["setMessages"];
-  reload: UseChatHelpers["reload"];
+  setMessages: UseChatHelpers['setMessages'];
+  reload: UseChatHelpers['reload'];
 }
 
 export const MessageRenderer = ({
@@ -45,16 +45,14 @@ export const MessageRenderer = ({
   const { type } = part;
   console.log(part);
 
-  if (type === "reasoning") {
-    return (
-      <MessageReasoning isLoading={isLoading} reasoning={part.reasoning} />
-    );
+  if (type === 'reasoning') {
+    return <MessageReasoning isLoading={isLoading} reasoning={part.reasoning} />;
   }
 
-  if (type === "text" && mode === "view") {
+  if (type === 'text' && mode === 'view') {
     return (
       <div className="flex flex-row gap-2 items-start">
-        {role === "user" && !isReadonly && (
+        {role === 'user' && !isReadonly && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -62,7 +60,7 @@ export const MessageRenderer = ({
                 variant="ghost"
                 className="px-2 h-fit rounded-full text-muted-foreground opacity-0 group-hover/message:opacity-100"
                 onClick={() => {
-                  setMode("edit");
+                  setMode('edit');
                 }}
               >
                 <PencilEditIcon />
@@ -74,9 +72,8 @@ export const MessageRenderer = ({
 
         <div
           data-testid="message-content"
-          className={cn("flex flex-col gap-4", {
-            "bg-primary text-primary-foreground px-3 py-2 rounded-xl":
-              role === "user",
+          className={cn('flex flex-col gap-4', {
+            'bg-primary text-primary-foreground px-3 py-2 rounded-xl': role === 'user',
           })}
         >
           <Markdown>{part.text}</Markdown>
@@ -85,7 +82,7 @@ export const MessageRenderer = ({
     );
   }
 
-  if (type === "text" && mode === "edit") {
+  if (type === 'text' && mode === 'edit') {
     return (
       <div className="flex flex-row gap-2 items-start">
         <div className="size-8" />
@@ -101,123 +98,103 @@ export const MessageRenderer = ({
     );
   }
 
-  if (type === "tool-invocation" && part.toolInvocation.state === "call") {
+  if (type === 'tool-invocation' && part.toolInvocation.state === 'call') {
     const { toolInvocation } = part;
     const { toolName, toolCallId, args } = toolInvocation;
 
-    console.log("toolInvocation", toolInvocation);
+    console.log('toolInvocation', toolInvocation);
     return (
       <div
         key={toolCallId}
         className={cx({
-          skeleton:
-            ["getWeather"].includes(toolName) ||
-            ["askSwapAgent"].includes(toolName),
+          skeleton: ['getWeather'].includes(toolName) || ['askSwapAgent'].includes(toolName),
         })}
       >
-        {toolName.endsWith("getWeather") ? (
+        {toolName.endsWith('getWeather') ? (
           <Weather />
-        ) : toolName.endsWith("createDocument") ? (
+        ) : toolName.endsWith('createDocument') ? (
           <DocumentPreview isReadonly={isReadonly} args={args} />
-        ) : toolName === "updateDocument" ? (
+        ) : toolName === 'updateDocument' ? (
           <DocumentToolCall type="update" args={args} isReadonly={isReadonly} />
-        ) : toolName.endsWith("requestSuggestions") ? (
-          <DocumentToolCall
-            type="request-suggestions"
-            args={args}
-            isReadonly={isReadonly}
-          />
-        ) : toolName.endsWith("askSwapAgent") ? (
+        ) : toolName.endsWith('requestSuggestions') ? (
+          <DocumentToolCall type="request-suggestions" args={args} isReadonly={isReadonly} />
+        ) : toolName.endsWith('askSwapAgent') ? (
           <Swaps txPreview={null} txPlan={null} />
-        ) : toolName.endsWith("askLendingAgent") ? (
+        ) : toolName.endsWith('askLendingAgent') ? (
           <Lending txPreview={null} txPlan={null} />
-        ) : toolName.endsWith("askLiquidityAgent") ? (
-          <Liquidity
-            positions={null}
-            txPreview={null}
-            txPlan={null}
-            pools={null}
-          />
-        ) : toolName.endsWith("askYieldTokenizationAgent") ? (
-          <Pendle
-            txPreview={null}
-            txPlan={null}
-            markets={[]}
-            isMarketList={false}
-          />
-        ) : <TemplateComponent txPreview={null} txPlan={null} />}
+        ) : toolName.endsWith('askLiquidityAgent') ? (
+          <Liquidity positions={null} txPreview={null} txPlan={null} pools={null} />
+        ) : toolName.endsWith('askYieldTokenizationAgent') ? (
+          <Pendle txPreview={null} txPlan={null} markets={[]} isMarketList={false} />
+        ) : (
+          <TemplateComponent txPreview={null} txPlan={null} />
+        )}
       </div>
     );
   }
 
-  if (type === "tool-invocation" && part.toolInvocation.state === "result") {
+  if (type === 'tool-invocation' && part.toolInvocation.state === 'result') {
     const { toolInvocation } = part;
     const { result, toolCallId, toolName } = toolInvocation;
-    const toolInvocationParsableString = result?.result?.content?.[0]?.text ? result?.result?.content?.[0]?.text : result?.result?.content?.[0]?.resource?.text;
+    const toolInvocationParsableString = result?.result?.content?.[0]?.text
+      ? result?.result?.content?.[0]?.text
+      : result?.result?.content?.[0]?.resource?.text;
     const toolInvocationResult = result?.result?.content?.[0]
-      ? JSON.parse(toolInvocationParsableString || "{Error: An error occurred while parsing the result}")
+      ? JSON.parse(
+          toolInvocationParsableString || '{Error: An error occurred while parsing the result}'
+        )
       : null;
     const getKeyFromResult = (key: string) =>
       toolInvocationResult?.artifacts?.[0]?.parts[0]?.data?.[key] || null;
 
     // Default keys
-    const txPlan = getKeyFromResult("txPlan");
-    const txPreview = getKeyFromResult("txPreview");
+    const txPlan = getKeyFromResult('txPlan');
+    const txPreview = getKeyFromResult('txPreview');
 
     const getParts = () =>
-      toolInvocationResult?.artifacts
-        ? toolInvocationResult?.artifacts[0]?.parts
-        : null;
+      toolInvocationResult?.artifacts ? toolInvocationResult?.artifacts[0]?.parts : null;
     const getArtifact = () =>
-      toolInvocationResult?.artifacts
-        ? toolInvocationResult?.artifacts[0]
-        : null;
+      toolInvocationResult?.artifacts ? toolInvocationResult?.artifacts[0] : null;
 
     return (
       <div key={toolCallId}>
-        {toolName.endsWith("getWeather") ? (
+        {toolName.endsWith('getWeather') ? (
           <Weather weatherAtLocation={result} />
-        ) : toolName.endsWith("createDocument") ? (
+        ) : toolName.endsWith('createDocument') ? (
           <DocumentPreview isReadonly={isReadonly} result={result} />
-        ) : toolName.endsWith("updateDocument") ? (
-          <DocumentToolResult
-            type="update"
-            result={result}
-            isReadonly={isReadonly}
-          />
-        ) : toolName.endsWith("requestSuggestions") ? (
-          <DocumentToolResult
-            type="request-suggestions"
-            result={result}
-            isReadonly={isReadonly}
-          />
-        ) : toolName.endsWith("askSwapAgent") ? (
-          toolInvocationResult && (
-            <Swaps txPreview={txPreview} txPlan={txPlan} />
-          )
-        ) : toolName.endsWith("askLendingAgent") ? (
-          toolInvocationResult && (
-            <Lending txPreview={txPreview} txPlan={txPlan} />
-          )
-        ) : toolName.endsWith("askLiquidityAgent") ? (
+        ) : toolName.endsWith('updateDocument') ? (
+          <DocumentToolResult type="update" result={result} isReadonly={isReadonly} />
+        ) : toolName.endsWith('requestSuggestions') ? (
+          <DocumentToolResult type="request-suggestions" result={result} isReadonly={isReadonly} />
+        ) : toolName.endsWith('askSwapAgent') ? (
+          toolInvocationResult && <Swaps txPreview={txPreview} txPlan={txPlan} />
+        ) : toolName.endsWith('askLendingAgent') ? (
+          toolInvocationResult && <Lending txPreview={txPreview} txPlan={txPlan} />
+        ) : toolName.endsWith('askLiquidityAgent') ? (
           toolInvocationResult && (
             <Liquidity
-              positions={getKeyFromResult("positions")}
-              pools={getKeyFromResult("pools")}
+              positions={getKeyFromResult('positions')}
+              pools={getKeyFromResult('pools')}
               txPreview={txPreview}
               txPlan={txPlan}
             />
           )
-        ) : toolName.endsWith("askYieldTokenizationAgent") ? (
+        ) : toolName.endsWith('askYieldTokenizationAgent') ? (
           toolInvocationResult && (
             <Pendle
               txPreview={txPreview}
               txPlan={txPlan}
               markets={getParts()}
-              isMarketList={getArtifact()?.name === "yield-markets"}
+              isMarketList={getArtifact()?.name === 'yield-markets'}
             />
           )
-        ) : <TemplateComponent txPreview={txPreview} txPlan={txPlan} jsonObject={toolInvocationResult} />}
+        ) : (
+          <TemplateComponent
+            txPreview={txPreview}
+            txPlan={txPlan}
+            jsonObject={toolInvocationResult}
+          />
+        )}
       </div>
     );
   }
