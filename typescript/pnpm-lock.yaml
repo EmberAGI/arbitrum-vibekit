@@ -17,7 +17,7 @@ importers:
         version: 5.8.0
       zod:
         specifier: ^3.24.3
-        version: 3.25.49
+        version: 3.25.51
     devDependencies:
       '@emberai/sdk-typescript':
         specifier: ^0.3.0-beta.12
@@ -78,7 +78,7 @@ importers:
         version: 1.12.1
       '@openrouter/ai-sdk-provider':
         specifier: ^0.4.5
-        version: 0.4.6(zod@3.25.49)
+        version: 0.4.6(zod@3.25.51)
       '@openzeppelin/contracts':
         specifier: ^5.3.0
         version: 5.3.0
@@ -87,7 +87,7 @@ importers:
         version: link:../../lib/a2a
       ai:
         specifier: ^4.3.2
-        version: 4.3.16(react@19.1.0)(zod@3.25.49)
+        version: 4.3.16(react@19.1.0)(zod@3.25.51)
       arbitrum-vibekit-core:
         specifier: workspace:*
         version: link:../../lib/arbitrum-vibekit-core
@@ -108,10 +108,10 @@ importers:
         version: 4.21.2
       viem:
         specifier: ^2.26.3
-        version: 2.30.6(typescript@5.8.3)(zod@3.25.49)
+        version: 2.30.6(typescript@5.8.3)(zod@3.25.51)
       zod:
         specifier: ^3.24.3
-        version: 3.25.49
+        version: 3.25.51
     devDependencies:
       '@types/chai':
         specifier: ^4.3.20
@@ -157,16 +157,16 @@ importers:
         version: 1.12.1
       '@openrouter/ai-sdk-provider':
         specifier: ^0.4.5
-        version: 0.4.6(zod@3.25.49)
+        version: 0.4.6(zod@3.25.51)
       '@openzeppelin/contracts':
         specifier: ^5.3.0
         version: 5.3.0
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(ws@8.18.2)(zod@3.25.49)
+        version: file:lib/a2a(ws@8.18.2)(zod@3.25.51)
       ai:
         specifier: ^4.3.2
-        version: 4.3.16(react@19.1.0)(zod@3.25.49)
+        version: 4.3.16(react@19.1.0)(zod@3.25.51)
       arbitrum-vibekit-core:
         specifier: workspace:*
         version: link:../../lib/arbitrum-vibekit-core
@@ -187,10 +187,10 @@ importers:
         version: 4.21.2
       viem:
         specifier: ^2.26.3
-        version: 2.30.6(typescript@5.8.3)(zod@3.25.49)
+        version: 2.30.6(typescript@5.8.3)(zod@3.25.51)
       zod:
         specifier: ^3.24.3
-        version: 3.25.49
+        version: 3.25.51
     devDependencies:
       '@types/chai':
         specifier: ^4.3.20
@@ -236,13 +236,13 @@ importers:
         version: 1.12.1
       '@openrouter/ai-sdk-provider':
         specifier: ^0.4.5
-        version: 0.4.6(zod@3.25.49)
+        version: 0.4.6(zod@3.25.51)
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(ws@8.18.2)(zod@3.25.49)
+        version: file:lib/a2a(ws@8.18.2)(zod@3.25.51)
       ai:
         specifier: ^4.3.2
-        version: 4.3.16(react@19.1.0)(zod@3.25.49)
+        version: 4.3.16(react@19.1.0)(zod@3.25.51)
       arbitrum-vibekit-core:
         specifier: workspace:*
         version: link:../../lib/arbitrum-vibekit-core
@@ -263,10 +263,10 @@ importers:
         version: 4.21.2
       viem:
         specifier: ^2.26.3
-        version: 2.30.6(typescript@5.8.3)(zod@3.25.49)
+        version: 2.30.6(typescript@5.8.3)(zod@3.25.51)
       zod:
         specifier: ^3.24.3
-        version: 3.25.49
+        version: 3.25.51
     devDependencies:
       '@types/chai':
         specifier: ^4.3.20
@@ -315,16 +315,16 @@ importers:
         version: 1.12.1
       '@openrouter/ai-sdk-provider':
         specifier: ^0.4.5
-        version: 0.4.6(zod@3.25.49)
+        version: 0.4.6(zod@3.25.51)
       '@openzeppelin/contracts':
         specifier: ^5.3.0
         version: 5.3.0
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(ws@8.18.2)(zod@3.25.49)
+        version: file:lib/a2a(ws@8.18.2)(zod@3.25.51)
       ai:
         specifier: ^4.3.2
-        version: 4.3.16(react@19.1.0)(zod@3.25.49)
+        version: 4.3.16(react@19.1.0)(zod@3.25.51)
       arbitrum-vibekit-core:
         specifier: workspace:*
         version: link:../../lib/arbitrum-vibekit-core
@@ -345,10 +345,10 @@ importers:
         version: 4.21.2
       viem:
         specifier: ^2.26.3
-        version: 2.30.6(typescript@5.8.3)(zod@3.25.49)
+        version: 2.30.6(typescript@5.8.3)(zod@3.25.51)
       zod:
         specifier: ^3.24.3
-        version: 3.25.49
+        version: 3.25.51
     devDependencies:
       '@types/cors':
         specifier: ^2.8.17
@@ -379,16 +379,16 @@ importers:
         version: 1.12.1
       '@openrouter/ai-sdk-provider':
         specifier: ^0.4.5
-        version: 0.4.6(zod@3.25.49)
+        version: 0.4.6(zod@3.25.51)
       '@openzeppelin/contracts':
         specifier: ^5.3.0
         version: 5.3.0
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(ws@8.18.2)(zod@3.25.49)
+        version: file:lib/a2a(ws@8.18.2)(zod@3.25.51)
       ai:
         specifier: ^4.3.2
-        version: 4.3.16(react@19.1.0)(zod@3.25.49)
+        version: 4.3.16(react@19.1.0)(zod@3.25.51)
       arbitrum-vibekit-core:
         specifier: workspace:*
         version: link:../../lib/arbitrum-vibekit-core
@@ -409,10 +409,10 @@ importers:
         version: 4.21.2
       viem:
         specifier: ^2.26.3
-        version: 2.30.6(typescript@5.8.3)(zod@3.25.49)
+        version: 2.30.6(typescript@5.8.3)(zod@3.25.51)
       zod:
         specifier: ^3.24.3
-        version: 3.25.49
+        version: 3.25.51
     devDependencies:
       '@types/cors':
         specifier: ^2.8.17
@@ -440,7 +440,7 @@ importers:
         version: 1.11.1(genkit@1.11.1)
       '@genkit-ai/vertexai':
         specifier: ^1.4.0
-        version: 1.11.1(genkit@1.11.1)(ws@8.18.2)(zod@3.25.49)
+        version: 1.11.1(genkit@1.11.1)(ws@8.18.2)(zod@3.25.51)
       '@types/cors':
         specifier: ^2.8.17
         version: 2.8.18
@@ -471,13 +471,13 @@ importers:
     dependencies:
       '@google-a2a/types':
         specifier: github:google-a2a/A2A#path:types
-        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/bcf55ad3e775b0cf78402eec5c15018f4845e8b6#path:types
+        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/9c4b05ccdcdbae6ef1ae1b15df028ab57bb2d309#path:types
       '@modelcontextprotocol/sdk':
         specifier: ^1.11.1
         version: 1.12.1
       ai:
         specifier: ^4.3.2
-        version: 4.3.16(react@19.1.0)(zod@3.25.49)
+        version: 4.3.16(react@19.1.0)(zod@3.25.51)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -532,13 +532,13 @@ importers:
         version: 5.8.3
       zod:
         specifier: ^3.24.3
-        version: 3.25.49
+        version: 3.25.51
 
   lib/ember-schemas:
     dependencies:
       zod:
         specifier: ^3.24.3
-        version: 3.25.49
+        version: 3.25.51
     devDependencies:
       '@types/node':
         specifier: ^22.15.19
@@ -584,7 +584,7 @@ importers:
         version: 5.8.3
       zod:
         specifier: ^3.24.3
-        version: 3.25.49
+        version: 3.25.51
     devDependencies:
       tsx:
         specifier: ^4.19.4
@@ -606,7 +606,7 @@ importers:
         version: link:../../ember-schemas
       zod:
         specifier: ^3.24.3
-        version: 3.25.49
+        version: 3.25.51
     devDependencies:
       '@types/chai':
         specifier: ^5.2.1
@@ -640,16 +640,16 @@ importers:
     dependencies:
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(ws@8.18.2)(zod@3.25.49)
+        version: file:lib/a2a(ws@8.18.2)(zod@3.25.51)
       ember-schemas:
         specifier: workspace:*
         version: link:../ember-schemas
       viem:
         specifier: ^2.26.3
-        version: 2.30.6(typescript@5.8.3)(zod@3.25.49)
+        version: 2.30.6(typescript@5.8.3)(zod@3.25.51)
       zod:
         specifier: ^3.24.3
-        version: 3.25.49
+        version: 3.25.51
     devDependencies:
       '@types/node':
         specifier: ^22.15.19
@@ -665,19 +665,19 @@ importers:
     dependencies:
       '@google-a2a/types':
         specifier: github:google-a2a/A2A#path:types
-        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/bcf55ad3e775b0cf78402eec5c15018f4845e8b6#path:types
+        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/9c4b05ccdcdbae6ef1ae1b15df028ab57bb2d309#path:types
       '@modelcontextprotocol/sdk':
         specifier: ^1.5.0
         version: 1.12.1
       '@openrouter/ai-sdk-provider':
         specifier: ^0.4.5
-        version: 0.4.6(zod@3.25.49)
+        version: 0.4.6(zod@3.25.51)
       '@openzeppelin/contracts':
         specifier: ^5.3.0
         version: 5.3.0
       ai:
         specifier: ^4.3.2
-        version: 4.3.16(react@19.1.0)(zod@3.25.49)
+        version: 4.3.16(react@19.1.0)(zod@3.25.51)
       arbitrum-vibekit-core:
         specifier: workspace:*
         version: link:../../lib/arbitrum-vibekit-core
@@ -701,7 +701,7 @@ importers:
         version: 5.1.5
       viem:
         specifier: ^2.26.3
-        version: 2.30.6(typescript@5.8.3)(zod@3.25.49)
+        version: 2.30.6(typescript@5.8.3)(zod@3.25.51)
     devDependencies:
       '@types/cors':
         specifier: ^2.8.17
@@ -726,16 +726,16 @@ importers:
     dependencies:
       '@google-a2a/types':
         specifier: github:google-a2a/A2A#path:types
-        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/bcf55ad3e775b0cf78402eec5c15018f4845e8b6#path:types
+        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/9c4b05ccdcdbae6ef1ae1b15df028ab57bb2d309#path:types
       '@modelcontextprotocol/sdk':
         specifier: ^1.5.0
         version: 1.12.1
       '@openrouter/ai-sdk-provider':
         specifier: ^0.4.5
-        version: 0.4.6(zod@3.25.49)
+        version: 0.4.6(zod@3.25.51)
       ai:
         specifier: ^4.3.2
-        version: 4.3.16(react@19.1.0)(zod@3.25.49)
+        version: 4.3.16(react@19.1.0)(zod@3.25.51)
       arbitrum-vibekit-core:
         specifier: workspace:*
         version: link:../../lib/arbitrum-vibekit-core
@@ -753,7 +753,7 @@ importers:
         version: 5.1.5
       zod:
         specifier: ^3.24.3
-        version: 3.25.49
+        version: 3.25.51
     devDependencies:
       '@types/cors':
         specifier: ^2.8.17
@@ -4058,8 +4058,8 @@ packages:
     resolution: {integrity: sha512-OZs6gsjF4vMp32qrCbiVSkrFmXtG/AZhY3t0iAMrMBiAZyV9oALtXO8hsrHbMXF9x6L3grlFuwW2oAz7cav+Gw==}
     engines: {node: '>= 0.6'}
 
-  types@https://codeload.github.com/google-a2a/A2A/tar.gz/bcf55ad3e775b0cf78402eec5c15018f4845e8b6#path:types:
-    resolution: {path: types, tarball: https://codeload.github.com/google-a2a/A2A/tar.gz/bcf55ad3e775b0cf78402eec5c15018f4845e8b6}
+  types@https://codeload.github.com/google-a2a/A2A/tar.gz/9c4b05ccdcdbae6ef1ae1b15df028ab57bb2d309#path:types:
+    resolution: {path: types, tarball: https://codeload.github.com/google-a2a/A2A/tar.gz/9c4b05ccdcdbae6ef1ae1b15df028ab57bb2d309}
     version: 1.0.0
 
   typescript-eslint@8.33.1:
@@ -4364,28 +4364,28 @@ packages:
     peerDependencies:
       zod: ^3.24.3
 
-  zod@3.25.49:
-    resolution: {integrity: sha512-JMMPMy9ZBk3XFEdbM3iL1brx4NUSejd6xr3ELrrGEfGb355gjhiAWtG3K5o+AViV/3ZfkIrCzXsZn6SbLwTR8Q==}
+  zod@3.25.51:
+    resolution: {integrity: sha512-TQSnBldh+XSGL+opiSIq0575wvDPqu09AqWe1F7JhUMKY+M91/aGlK4MhpVNO7MgYfHcVCB1ffwAUTJzllKJqg==}
 
 snapshots:
 
   '@adraffy/ens-normalize@1.11.0': {}
 
-  '@ai-sdk/provider-utils@2.1.10(zod@3.25.49)':
+  '@ai-sdk/provider-utils@2.1.10(zod@3.25.51)':
     dependencies:
       '@ai-sdk/provider': 1.0.9
       eventsource-parser: 3.0.2
       nanoid: 3.3.11
       secure-json-parse: 2.7.0
     optionalDependencies:
-      zod: 3.25.49
+      zod: 3.25.51
 
-  '@ai-sdk/provider-utils@2.2.8(zod@3.25.49)':
+  '@ai-sdk/provider-utils@2.2.8(zod@3.25.51)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
       nanoid: 3.3.11
       secure-json-parse: 2.7.0
-      zod: 3.25.49
+      zod: 3.25.51
 
   '@ai-sdk/provider@1.0.9':
     dependencies:
@@ -4395,22 +4395,22 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
-  '@ai-sdk/react@1.2.12(react@19.1.0)(zod@3.25.49)':
+  '@ai-sdk/react@1.2.12(react@19.1.0)(zod@3.25.51)':
     dependencies:
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.49)
-      '@ai-sdk/ui-utils': 1.2.11(zod@3.25.49)
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.51)
+      '@ai-sdk/ui-utils': 1.2.11(zod@3.25.51)
       react: 19.1.0
       swr: 2.3.3(react@19.1.0)
       throttleit: 2.1.0
     optionalDependencies:
-      zod: 3.25.49
+      zod: 3.25.51
 
-  '@ai-sdk/ui-utils@1.2.11(zod@3.25.49)':
+  '@ai-sdk/ui-utils@1.2.11(zod@3.25.51)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.49)
-      zod: 3.25.49
-      zod-to-json-schema: 3.24.5(zod@3.25.49)
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.51)
+      zod: 3.25.51
+      zod-to-json-schema: 3.24.5(zod@3.25.51)
 
   '@alloralabs/allora-sdk@0.1.1':
     dependencies:
@@ -4912,8 +4912,8 @@ snapshots:
       express: 4.21.2
       get-port: 5.1.1
       json-schema: 0.4.0
-      zod: 3.25.49
-      zod-to-json-schema: 3.24.5(zod@3.25.49)
+      zod: 3.25.51
+      zod-to-json-schema: 3.24.5(zod@3.25.51)
     transitivePeerDependencies:
       - supports-color
 
@@ -4927,18 +4927,18 @@ snapshots:
       - encoding
       - supports-color
 
-  '@genkit-ai/vertexai@1.11.1(genkit@1.11.1)(ws@8.18.2)(zod@3.25.49)':
+  '@genkit-ai/vertexai@1.11.1(genkit@1.11.1)(ws@8.18.2)(zod@3.25.51)':
     dependencies:
       '@anthropic-ai/sdk': 0.24.3
       '@anthropic-ai/vertex-sdk': 0.4.3
       '@google-cloud/aiplatform': 3.35.0
       '@google-cloud/vertexai': 1.10.0
-      '@mistralai/mistralai-gcp': 1.5.0(zod@3.25.49)
+      '@mistralai/mistralai-gcp': 1.5.0(zod@3.25.51)
       genkit: 1.11.1
       google-auth-library: 9.15.1
       googleapis: 140.0.1
       node-fetch: 3.3.2
-      openai: 4.104.0(ws@8.18.2)(zod@3.25.49)
+      openai: 4.104.0(ws@8.18.2)(zod@3.25.51)
     optionalDependencies:
       '@google-cloud/bigquery': 7.9.4
       firebase-admin: 13.4.0
@@ -5093,10 +5093,10 @@ snapshots:
 
   '@js-sdsl/ordered-map@4.4.2': {}
 
-  '@mistralai/mistralai-gcp@1.5.0(zod@3.25.49)':
+  '@mistralai/mistralai-gcp@1.5.0(zod@3.25.51)':
     dependencies:
       google-auth-library: 9.15.1
-      zod: 3.25.49
+      zod: 3.25.51
     transitivePeerDependencies:
       - encoding
       - supports-color
@@ -5112,8 +5112,8 @@ snapshots:
       express-rate-limit: 7.5.0(express@5.1.0)
       pkce-challenge: 5.0.0
       raw-body: 3.0.0
-      zod: 3.25.49
-      zod-to-json-schema: 3.24.5(zod@3.25.49)
+      zod: 3.25.51
+      zod-to-json-schema: 3.24.5(zod@3.25.51)
     transitivePeerDependencies:
       - supports-color
 
@@ -5137,11 +5137,11 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.19.1
 
-  '@openrouter/ai-sdk-provider@0.4.6(zod@3.25.49)':
+  '@openrouter/ai-sdk-provider@0.4.6(zod@3.25.51)':
     dependencies:
       '@ai-sdk/provider': 1.0.9
-      '@ai-sdk/provider-utils': 2.1.10(zod@3.25.49)
-      zod: 3.25.49
+      '@ai-sdk/provider-utils': 2.1.10(zod@3.25.51)
+      zod: 3.25.51
 
   '@opentelemetry/api-logs@0.52.1':
     dependencies:
@@ -5719,10 +5719,10 @@ snapshots:
       loupe: 3.1.3
       tinyrainbow: 2.0.0
 
-  a2a-samples-js@file:lib/a2a(ws@8.18.2)(zod@3.25.49):
+  a2a-samples-js@file:lib/a2a(ws@8.18.2)(zod@3.25.51):
     dependencies:
       '@genkit-ai/googleai': 1.11.1(genkit@1.11.1)
-      '@genkit-ai/vertexai': 1.11.1(genkit@1.11.1)(ws@8.18.2)(zod@3.25.49)
+      '@genkit-ai/vertexai': 1.11.1(genkit@1.11.1)(ws@8.18.2)(zod@3.25.51)
       '@types/cors': 2.8.18
       '@types/express': 5.0.2
       body-parser: 2.2.0
@@ -5735,10 +5735,10 @@ snapshots:
       - ws
       - zod
 
-  abitype@1.0.8(typescript@5.8.3)(zod@3.25.49):
+  abitype@1.0.8(typescript@5.8.3)(zod@3.25.51):
     optionalDependencies:
       typescript: 5.8.3
-      zod: 3.25.49
+      zod: 3.25.51
 
   abort-controller@3.0.0:
     dependencies:
@@ -5782,15 +5782,15 @@ snapshots:
     dependencies:
       humanize-ms: 1.2.1
 
-  ai@4.3.16(react@19.1.0)(zod@3.25.49):
+  ai@4.3.16(react@19.1.0)(zod@3.25.51):
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.49)
-      '@ai-sdk/react': 1.2.12(react@19.1.0)(zod@3.25.49)
-      '@ai-sdk/ui-utils': 1.2.11(zod@3.25.49)
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.51)
+      '@ai-sdk/react': 1.2.12(react@19.1.0)(zod@3.25.51)
+      '@ai-sdk/ui-utils': 1.2.11(zod@3.25.51)
       '@opentelemetry/api': 1.9.0
       jsondiffpatch: 0.6.0
-      zod: 3.25.49
+      zod: 3.25.51
     optionalDependencies:
       react: 19.1.0
 
@@ -6284,7 +6284,7 @@ snapshots:
 
   ember-schemas@file:lib/ember-schemas:
     dependencies:
-      zod: 3.25.49
+      zod: 3.25.51
 
   emoji-regex@8.0.0: {}
 
@@ -7640,7 +7640,7 @@ snapshots:
     dependencies:
       wrappy: 1.0.2
 
-  openai@4.104.0(ws@8.18.2)(zod@3.25.49):
+  openai@4.104.0(ws@8.18.2)(zod@3.25.51):
     dependencies:
       '@types/node': 18.19.110
       '@types/node-fetch': 2.6.12
@@ -7651,7 +7651,7 @@ snapshots:
       node-fetch: 2.7.0
     optionalDependencies:
       ws: 8.18.2
-      zod: 3.25.49
+      zod: 3.25.51
     transitivePeerDependencies:
       - encoding
 
@@ -7664,7 +7664,7 @@ snapshots:
       type-check: 0.4.0
       word-wrap: 1.2.5
 
-  ox@0.7.1(typescript@5.8.3)(zod@3.25.49):
+  ox@0.7.1(typescript@5.8.3)(zod@3.25.51):
     dependencies:
       '@adraffy/ens-normalize': 1.11.0
       '@noble/ciphers': 1.3.0
@@ -7672,7 +7672,7 @@ snapshots:
       '@noble/hashes': 1.8.0
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
-      abitype: 1.0.8(typescript@5.8.3)(zod@3.25.49)
+      abitype: 1.0.8(typescript@5.8.3)(zod@3.25.51)
       eventemitter3: 5.0.1
     optionalDependencies:
       typescript: 5.8.3
@@ -8230,10 +8230,10 @@ snapshots:
 
   test-utils@file:lib/test-utils(typescript@5.8.3)(ws@8.18.2):
     dependencies:
-      a2a-samples-js: file:lib/a2a(ws@8.18.2)(zod@3.25.49)
+      a2a-samples-js: file:lib/a2a(ws@8.18.2)(zod@3.25.51)
       ember-schemas: file:lib/ember-schemas
-      viem: 2.30.6(typescript@5.8.3)(zod@3.25.49)
-      zod: 3.25.49
+      viem: 2.30.6(typescript@5.8.3)(zod@3.25.51)
+      zod: 3.25.51
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -8339,7 +8339,7 @@ snapshots:
       media-typer: 1.1.0
       mime-types: 3.0.1
 
-  types@https://codeload.github.com/google-a2a/A2A/tar.gz/bcf55ad3e775b0cf78402eec5c15018f4845e8b6#path:types:
+  types@https://codeload.github.com/google-a2a/A2A/tar.gz/9c4b05ccdcdbae6ef1ae1b15df028ab57bb2d309#path:types:
     dependencies:
       typescript-json-schema: 0.65.1
     transitivePeerDependencies:
@@ -8431,15 +8431,15 @@ snapshots:
 
   vary@1.1.2: {}
 
-  viem@2.30.6(typescript@5.8.3)(zod@3.25.49):
+  viem@2.30.6(typescript@5.8.3)(zod@3.25.51):
     dependencies:
       '@noble/curves': 1.9.1
       '@noble/hashes': 1.8.0
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
-      abitype: 1.0.8(typescript@5.8.3)(zod@3.25.49)
+      abitype: 1.0.8(typescript@5.8.3)(zod@3.25.51)
       isows: 1.0.7(ws@8.18.2)
-      ox: 0.7.1(typescript@5.8.3)(zod@3.25.49)
+      ox: 0.7.1(typescript@5.8.3)(zod@3.25.51)
       ws: 8.18.2
     optionalDependencies:
       typescript: 5.8.3
@@ -8620,8 +8620,8 @@ snapshots:
 
   yocto-queue@0.1.0: {}
 
-  zod-to-json-schema@3.24.5(zod@3.25.49):
+  zod-to-json-schema@3.24.5(zod@3.25.51):
     dependencies:
-      zod: 3.25.49
+      zod: 3.25.51
 
-  zod@3.25.49: {}
+  zod@3.25.51: {}

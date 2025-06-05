@@ -3,70 +3,48 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Install git and pnpm globally
+# Install dependencies
+# Note: We don't install TypeScript globally as it's already in project dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
-    npm install -g pnpm@10.7.0 typescript@5.8.3
+    npm install -g pnpm@10.7.0
 
-# ------------------------------
-# 1. Copy lockfile & workspace config that affect dependency graph cache
-# ------------------------------
-COPY pnpm-lock.yaml* pnpm-workspace.yaml .npmrc ./
-# Copy root package.json for pnpm workspace
-COPY package.json ./
-# Copy base TS configuration so that tsconfig.base.json can be resolved
-COPY tsconfig.base.json ./
-
-# ------------------------------
-# 2. Copy all workspace package.json files (to maximise Docker cache)
-# ------------------------------
-COPY lib/ lib/
-COPY examples/swapping-agent-no-wallet/package.json ./examples/swapping-agent-no-wallet/
-
-# ------------------------------
-# 3. Install deps based on the copied package.json set. This is cache-friendly and establishes workspace links.
-# ------------------------------
-RUN pnpm install --prefer-frozen-lockfile
-
-# ------------------------------
-# 4. Now copy the rest of the source code
-# ------------------------------
+# Copy everything
+# The build context is the entire typescript/ directory to support pnpm workspaces
 COPY . .
 
-# ------------------------------
-# 5. Build every workspace package that provides a build script (recursive build)
-# ------------------------------
+# Install all dependencies
+# This creates symlinks between workspace packages as pnpm normally does
+RUN pnpm install --frozen-lockfile
+
+# Build only the necessary workspace packages
+# The "..." suffix tells pnpm to build swapping-agent-no-wallet and all its dependencies
+# This is more efficient than building the entire monorepo
 RUN pnpm --filter swapping-agent-no-wallet... build
+
+# Deploy the specific package with its dependencies
+# pnpm deploy creates a production-ready bundle without symlinks, perfect for Docker
+# force-legacy-deploy is required because the root package.json has pnpm.overrides
+# which causes issues with the default deploy mode in monorepos
+RUN pnpm config set force-legacy-deploy true && \
+    pnpm --filter=swapping-agent-no-wallet deploy --prod deploy-output
 
 # Production stage
 FROM node:20-slim AS production
 
-# Copy pnpm config
-COPY --from=builder /app/.npmrc ./
-
-# Create a non-root user
+# Create a non-root user for security
 RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd -r ember && useradd -r -g ember ember
 
+# Copy the deployed application
+# The deploy-output directory contains a self-contained application with all dependencies
+# including workspace packages, properly resolved without symlinks
+COPY --from=builder /app/deploy-output /app
+
 WORKDIR /app
-
-# Install pnpm globally
-RUN npm install -g pnpm@10.7.0
-
-# Copy only what we need from the builder stage
-COPY --from=builder /app/examples/swapping-agent-no-wallet/dist /app/examples/swapping-agent-no-wallet/dist
-COPY --from=builder /app/examples/swapping-agent-no-wallet/encyclopedia /app/examples/swapping-agent-no-wallet/encyclopedia
-COPY --from=builder /app/examples/swapping-agent-no-wallet/package.json /app/examples/swapping-agent-no-wallet/
-COPY --from=builder /app/examples/swapping-agent-no-wallet/node_modules /app/examples/swapping-agent-no-wallet/node_modules
-COPY --from=builder /app/lib /app/lib
-COPY --from=builder /app/node_modules /app/node_modules
-COPY --from=builder /app/node_modules/.pnpm /app/node_modules/.pnpm
-
-# Set the working directory for the final image
-WORKDIR /app/examples/swapping-agent-no-wallet/dist
 
 # Change ownership to non-root user
 RUN chown -R ember:ember /app
@@ -80,5 +58,6 @@ EXPOSE 3001
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the Swapping agent (path is relative to the WORKDIR set above)
-CMD ["node", "index.js"]
+# Start the Swapping agent
+# The deployed bundle has the same structure as the original package
+CMD ["node", "dist/index.js"]
