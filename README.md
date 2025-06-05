@@ -152,7 +152,7 @@ After setting up your wallet, you can interact with the lending agent through th
   <img src="img/frontend.png" width="900px" alt="frontend"/>
 </p>
 
-#### Adding a Custom Agent
+### 4. Adding a Custom Agent
 
 **1. Uncomment the Quickstart Agent in `typescript/clients/web/agents-config.ts`:**
 
@@ -202,7 +202,7 @@ docker compose build web --no-cache && docker compose up
 > [!NOTE]
 > For more details, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/README.md#agent-configuration).
 
-### 4. Build Your Custom DeFi Agent:
+### 5. Build Your Custom DeFi Agent:
 
 Checkout the [templates/](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates) directory to explore other agent templates and start building your own!
 
