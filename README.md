@@ -34,15 +34,15 @@ Vibekit/
 ├── typescript/
 |   └── clients/
 |       └── web/
+│   └── templates/
+│       └── lending-agent/
+│       └── quickstart-agent/
 │   └── examples/
 │       └── lending-agent-no-wallet/
 │       └── liquidity-agent-no-wallet/
 │       └── pendle-agent/
 │       └── swapping-agent-no-wallet/
 │       └── swapping-agent/
-│   └── templates/
-│       └── lending-agent/
-│       └── quickstart-agent/
 │----── lib/
 │       └── a2a/
 │       └── arbitrum-vibekit-core/
