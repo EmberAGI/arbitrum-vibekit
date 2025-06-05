@@ -165,6 +165,10 @@ After setting up your wallet, you can interact with the lending agent through th
   },
 ```
 
+```
+  ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
+```
+
 **2. Uncomment the Quickstart Agent in `typescript/compose.yml`:**
 
 ```
