@@ -7,7 +7,7 @@ const tsProjectPaths = [
   "./tsconfig.base.json",
   "./lib/test-utils/tsconfig.json",
   "./lib/ember-schemas/tsconfig.json",
-  "./lib/arbitrum-vibekit/tsconfig.json",
+  "./lib/arbitrum-vibekit-core/tsconfig.json",
   "./examples/pendle-agent/tsconfig.json",
   "./lib/mcp-tools/emberai-mcp/tsconfig.json",
   "./examples/lending-agent-no-wallet/tsconfig.json",

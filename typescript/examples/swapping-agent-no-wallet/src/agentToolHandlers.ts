@@ -3,10 +3,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
 import type { Task } from 'a2a-samples-js';
 import { streamText } from 'ai';
-import {
-  type TransactionArtifact,
-  parseMcpToolResponsePayload,
-} from 'arbitrum-vibekit';
+import { type TransactionArtifact, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import {
   SwapResponseSchema,
   TransactionPlansSchema,

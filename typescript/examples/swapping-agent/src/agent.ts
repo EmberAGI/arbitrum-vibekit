@@ -16,7 +16,7 @@ import {
   type CoreAssistantMessage,
   type StepResult,
 } from 'ai';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import {
   type Address,
   type Hex,
@@ -33,7 +33,6 @@ import {
 import { z } from 'zod';
 import { handleSwapTokens } from './agentToolHandlers.js';
 
-
 import type { HandlerContext } from './agentToolHandlers.js';
 
 import {
@@ -43,10 +42,8 @@ import {
   type McpGetCapabilitiesResponse,
 } from 'ember-schemas';
 
-
 import { mainnet, arbitrum, optimism, polygon, base } from 'viem/chains';
 import type { Chain } from 'viem/chains';
-
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,

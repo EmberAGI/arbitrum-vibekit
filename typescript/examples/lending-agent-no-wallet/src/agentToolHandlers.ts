@@ -11,9 +11,7 @@ import {
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { streamText } from 'ai';
-import {
-  parseMcpToolResponsePayload,
-} from 'arbitrum-vibekit';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import {
   SupplyResponseSchema,
   WithdrawResponseSchema,

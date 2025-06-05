@@ -12,7 +12,7 @@ import {
   type ToolResultPart,
   type StepResult,
 } from 'ai';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import {
   GetPendleMarketsRequestSchema,
   GetYieldMarketsResponseSchema,
@@ -38,7 +38,10 @@ type YieldToolSet = {
   listMarkets: Tool<z.ZodObject<Record<string, never>>, Awaited<Task>>;
   swapTokens: Tool<typeof SwapTokensSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
   getWalletBalances: Tool<z.ZodObject<Record<string, never>>, Awaited<Task>>;
-  getTokenMarketData: Tool<z.ZodObject<{ tokenSymbol: z.ZodString; chain: z.ZodOptional<z.ZodString>; }>, Awaited<Task>>;
+  getTokenMarketData: Tool<
+    z.ZodObject<{ tokenSymbol: z.ZodString; chain: z.ZodOptional<z.ZodString> }>,
+    Awaited<Task>
+  >;
 };
 
 const CHAIN_MAPPINGS = [
@@ -56,36 +59,44 @@ function selectTokenByChain(
 ): { chainId: string; address: string } {
   if (chainName) {
     const normalizedChain = chainName.toLowerCase();
-    const chainMapping = CHAIN_MAPPINGS.find(mapping => 
-      mapping.names.includes(normalizedChain)
-    );
-    
+    const chainMapping = CHAIN_MAPPINGS.find(mapping => mapping.names.includes(normalizedChain));
+
     if (chainMapping) {
       const tokenOnChain = tokenList.find(t => t.chainId === chainMapping.id);
       if (tokenOnChain) {
         return tokenOnChain;
       } else {
-        const availableChains = tokenList.map(t => {
-          const mapping = CHAIN_MAPPINGS.find(m => m.id === t.chainId);
-          return mapping ? mapping.names[0] : t.chainId;
-        }).join(', ');
-        throw new Error(`Token ${tokenSymbol} not available on ${chainName}. Available on: ${availableChains}`);
+        const availableChains = tokenList
+          .map(t => {
+            const mapping = CHAIN_MAPPINGS.find(m => m.id === t.chainId);
+            return mapping ? mapping.names[0] : t.chainId;
+          })
+          .join(', ');
+        throw new Error(
+          `Token ${tokenSymbol} not available on ${chainName}. Available on: ${availableChains}`
+        );
       }
     } else {
-      throw new Error(`Chain ${chainName} not recognized. Supported chains: Ethereum, Arbitrum, Optimism, Polygon, Base`);
+      throw new Error(
+        `Chain ${chainName} not recognized. Supported chains: Ethereum, Arbitrum, Optimism, Polygon, Base`
+      );
     }
   } else if (tokenList.length > 1) {
     // If multiple tokens and no chain specified, throw error
-    const availableChains = tokenList.map(t => {
-      const mapping = CHAIN_MAPPINGS.find(m => m.id === t.chainId);
-      return mapping ? mapping.names[0] : t.chainId;
-    }).join(', ');
-    
-    throw new Error(`Multiple chains available for ${tokenSymbol}: ${availableChains}. Please specify a chain.`);
+    const availableChains = tokenList
+      .map(t => {
+        const mapping = CHAIN_MAPPINGS.find(m => m.id === t.chainId);
+        return mapping ? mapping.names[0] : t.chainId;
+      })
+      .join(', ');
+
+    throw new Error(
+      `Multiple chains available for ${tokenSymbol}: ${availableChains}. Please specify a chain.`
+    );
   }
 
   // Single token case - return it
-  return tokenList[0]!
+  return tokenList[0]!;
 }
 
 export class Agent {
@@ -250,10 +261,8 @@ Never respond in markdown, always use plain text. Never add links to your respon
       });
 
       const parsedResult = parseMcpToolResponsePayload(result, GetTokensResponseSchema);
-      
-      const tokensArray = Array.isArray(parsedResult) 
-        ? parsedResult 
-        : (parsedResult.tokens || []);
+
+      const tokensArray = Array.isArray(parsedResult) ? parsedResult : parsedResult.tokens || [];
 
       if (tokensArray.length > 0) {
         this.tokenMap = {};
@@ -330,8 +339,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
         },
       }),
       swapTokens: tool({
-        description:
-          'Swap tokens or acquire Pendle PT/YT tokens.',
+        description: 'Swap tokens or acquire Pendle PT/YT tokens.',
         parameters: SwapTokensSchema,
         execute: async args => {
           this.log('Executing swap tokens tool with args:', args);
@@ -365,9 +373,9 @@ Never respond in markdown, always use plain text. Never add links to your respon
               name: 'getWalletBalances',
               arguments: { walletAddress: this.userAddress! },
             });
-            
+
             const parsedData = parseMcpToolResponsePayload(result, GetWalletBalancesResponseSchema);
-            
+
             // Create data artifacts for the wallet balances
             const dataArtifacts = parsedData.balances.map(balance => ({
               type: 'data' as const,
@@ -380,7 +388,12 @@ Never respond in markdown, always use plain text. Never add links to your respon
                 state: 'completed',
                 message: {
                   role: 'agent',
-                  parts: [{ type: 'text', text: `Found ${parsedData.balances.length} token balances for wallet ${this.userAddress}` }],
+                  parts: [
+                    {
+                      type: 'text',
+                      text: `Found ${parsedData.balances.length} token balances for wallet ${this.userAddress}`,
+                    },
+                  ],
                 },
               },
               artifacts: [{ name: 'wallet-balances', parts: dataArtifacts }],
@@ -407,7 +420,10 @@ Never respond in markdown, always use plain text. Never add links to your respon
         description: 'Get market data for a token by its symbol',
         parameters: z.object({
           tokenSymbol: z.string().describe('The token symbol (e.g., USDC, WETH, wstETH_PT)'),
-          chain: z.string().optional().describe('Optional chain name (e.g., Arbitrum, Ethereum, Base)'),
+          chain: z
+            .string()
+            .optional()
+            .describe('Optional chain name (e.g., Arbitrum, Ethereum, Base)'),
         }),
         execute: async args => {
           this.log('Executing getTokenMarketData tool with args:', args);
@@ -416,20 +432,22 @@ Never respond in markdown, always use plain text. Never add links to your respon
             const chainName = args.chain;
 
             // Find tokens case-insensitively
-            const tokens = Object.keys(this.tokenMap).find(key => 
-              key.toLowerCase() === tokenSymbol.toLowerCase()
+            const tokens = Object.keys(this.tokenMap).find(
+              key => key.toLowerCase() === tokenSymbol.toLowerCase()
             );
-            
+
             if (!tokens) {
               const availableTokens = Object.keys(this.tokenMap).slice(0, 10).join(', ');
-              throw new Error(`Token ${tokenSymbol} not found. Available tokens include: ${availableTokens}...`);
+              throw new Error(
+                `Token ${tokenSymbol} not found. Available tokens include: ${availableTokens}...`
+              );
             }
 
             const tokenList = this.tokenMap[tokens];
             if (!tokenList || tokenList.length === 0) {
               throw new Error(`No token data available for ${tokenSymbol}`);
             }
-            
+
             const selectedToken = selectTokenByChain(tokenSymbol, tokenList, chainName);
 
             const result = await this.mcpClient.callTool({
@@ -439,19 +457,21 @@ Never respond in markdown, always use plain text. Never add links to your respon
                 tokenChainId: selectedToken.chainId,
               },
             });
-            
+
             const parsedData = parseMcpToolResponsePayload(result, GetMarketDataResponseSchema);
-            
+
             // Create data artifacts for the market data
-            const dataArtifacts = [{
-              type: 'data' as const,
-              data: {
-                tokenSymbol: tokenSymbol,
-                tokenAddress: selectedToken.address,
-                chainId: selectedToken.chainId,
-                ...parsedData,
+            const dataArtifacts = [
+              {
+                type: 'data' as const,
+                data: {
+                  tokenSymbol: tokenSymbol,
+                  tokenAddress: selectedToken.address,
+                  chainId: selectedToken.chainId,
+                  ...parsedData,
+                },
               },
-            }];
+            ];
 
             const task: Task = {
               id: this.userAddress!,
@@ -459,7 +479,12 @@ Never respond in markdown, always use plain text. Never add links to your respon
                 state: 'completed',
                 message: {
                   role: 'agent',
-                  parts: [{ type: 'text', text: `Market data retrieved for ${tokenSymbol} (${selectedToken.address}) on chain ${selectedToken.chainId}` }],
+                  parts: [
+                    {
+                      type: 'text',
+                      text: `Market data retrieved for ${tokenSymbol} (${selectedToken.address}) on chain ${selectedToken.chainId}`,
+                    },
+                  ],
                 },
               },
               artifacts: [{ name: 'token-market-data', parts: dataArtifacts }],

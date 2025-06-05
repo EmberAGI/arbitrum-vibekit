@@ -13,22 +13,28 @@ export const chatAgents = [
     ],
   },
   {
-    id: "ember-camelot" as const,
-    name: "Trading",
-    description: "Camelot Swapping agent",
+    id: 'ember-camelot' as const,
+    name: 'Trading',
+    description: 'Camelot Swapping agent',
     suggestedActions: [
       {
-        title: "Swap USDC for ETH",
-        label: "on Arbitrum Network.",
-        action: "Swap USDC for ETH tokens from Arbitrum to Arbitrum Network.",
+        title: 'Swap USDC for ETH',
+        label: 'on Arbitrum Network.',
+        action: 'Swap USDC for ETH tokens from Arbitrum to Arbitrum.',
       },
       {
-        title: "Buy ARB",
-        label: "on Arbitrum Network.",
-        action: "Buy ARB token.",
+        title: 'Buy ARB',
+        label: 'on Arbitrum.',
+        action: 'Buy ARB token.',
       },
     ],
   },
+  // {
+  //   id: 'quickstart-agent-template' as const,
+  //   name: 'Quickstart',
+  //   description: 'Quickstart agent',
+  //   suggestedActions: [],
+  // },
   // {
   //   id: "ember-lp" as const,
   //   name: "LPing",
@@ -36,8 +42,8 @@ export const chatAgents = [
   //   suggestedActions: [
   //     {
   //       title: "Provide Liquidity",
-  //       label: "on Arbitrum Network.",
-  //       action: "Provide Liquidity on Arbitrum Network.",
+  //       label: "on Arbitrum.",
+  //       action: "Provide Liquidity on Arbitrum.",
   //     },
   //     {
   //       title: "Check",
@@ -84,7 +90,8 @@ export const chatAgents = [
 
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
-  ["ember-camelot", "http://swapping-agent-no-wallet:3005/sse"],
+  ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
+  // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
   // ["ember-lp", "http://liquidity-agent-no-wallet:3002/sse"],
   // ["ember-pendle", "http://pendle-agent:3003/sse"],
 ]);

@@ -1,7 +1,7 @@
 # Build stage - Context should be the typescript/ directory
 FROM node:23-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
+RUN apt-get update && apt-get install -y --no-install-recommends dumb-init git ca-certificates && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

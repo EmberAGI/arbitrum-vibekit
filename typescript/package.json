@@ -43,5 +43,17 @@
   "dependencies": {
     "ethers": "^5.7.2",
     "zod": "^3.25.7"
+  },
+  "pnpm": {
+    "overrides": {
+      "zod": "^3.24.3"
+    },
+    "ignoredBuiltDependencies": [
+      "@firebase/util",
+      "core-js",
+      "esbuild",
+      "fsevents",
+      "protobufjs"
+    ]
   }
 }

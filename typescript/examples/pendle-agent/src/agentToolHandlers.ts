@@ -1,11 +1,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { type Task, type Artifact, type DataPart } from 'a2a-samples-js';
+import { parseMcpToolResponsePayload, type TransactionArtifact } from 'arbitrum-vibekit-core';
+import { TransactionPlansSchema } from 'ember-schemas';
 import {
-  parseMcpToolResponsePayload,
-  type TransactionArtifact,
-} from 'arbitrum-vibekit';
-import { TransactionPlansSchema} from 'ember-schemas';
-import { 
   type SwapTokensArgs,
   type SwapTokensParams,
   type PendleSwapPreview,
@@ -125,7 +122,15 @@ export async function handleSwapTokens(
       id: context.userAddress,
       status: {
         state: 'failed',
-        message: { role: 'agent', parts: [{ type: 'text', text: 'Pendle swaps must occur on a single chain. fromChain and toChain must match if both are provided.' }] },
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              type: 'text',
+              text: 'Pendle swaps must occur on a single chain. fromChain and toChain must match if both are provided.',
+            },
+          ],
+        },
       },
       artifacts: [],
     };
@@ -138,13 +143,20 @@ export async function handleSwapTokens(
   if (typeof fromTokenResult === 'string') {
     return {
       id: context.userAddress,
-      status: { state: 'failed', message: { role: 'agent', parts: [{ type: 'text', text: fromTokenResult }] } },
+      status: {
+        state: 'failed',
+        message: { role: 'agent', parts: [{ type: 'text', text: fromTokenResult }] },
+      },
       artifacts: [],
     };
   }
 
   const toTokenChainName = toChain || mapChainIdToName(fromTokenResult.chainId);
-  if (effectiveChainName && toTokenChainName.toLowerCase() !== effectiveChainName.toLowerCase() && toChain) {
+  if (
+    effectiveChainName &&
+    toTokenChainName.toLowerCase() !== effectiveChainName.toLowerCase() &&
+    toChain
+  ) {
     // Chain mismatch detected but this is handled later in the cross-chain validation
     // No immediate action needed here
   } else if (!effectiveChainName) {
@@ -155,7 +167,10 @@ export async function handleSwapTokens(
   if (typeof toTokenResult === 'string') {
     return {
       id: context.userAddress,
-      status: { state: 'failed', message: { role: 'agent', parts: [{ type: 'text', text: toTokenResult }] } },
+      status: {
+        state: 'failed',
+        message: { role: 'agent', parts: [{ type: 'text', text: toTokenResult }] },
+      },
       artifacts: [],
     };
   }

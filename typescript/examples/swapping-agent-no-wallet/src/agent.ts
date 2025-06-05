@@ -16,7 +16,7 @@ import {
   type CoreAssistantMessage,
   type StepResult,
 } from 'ai';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import { type Address } from 'viem';
 import { z } from 'zod';
 import type { HandlerContext } from './agentToolHandlers.js';
