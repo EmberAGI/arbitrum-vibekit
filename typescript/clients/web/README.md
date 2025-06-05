@@ -8,19 +8,27 @@ This frontend is part of the Arbitrum Vibekit monorepo. It serves as the user in
 
 - **Monorepo Structure:**
 
-  - `typescript/clients/web/` – This frontend
-  - `typescript/examples/` – Example agents
-  - `typescript/lib/` – Supporting libraries and MCP tools
+  - `typescript/clients/web/` : This frontend
+  - `typescript/templates/` : Framework agents to use as a starting template
+  - `typescript/examples/` : Example agents
+  - `typescript/lib/` : Supporting libraries and MCP tools
 
 - **How it works:**
 
   1. The user interacts with the web frontend.
+
   2. User input is processed by an API within the frontend.
+
   3. This API route, using an LLM (e.g., via OpenRouter), discovers available "tools" from backend MCP agent servers (e.g., Lending Agent, Swapping Agent). These tools represent agent capabilities.
+
   4. The LLM uses the user's message and available tools to either respond directly or utilize agent tools, orchestrating the agents in this way.
+
   5. If a tool is used, the frontend's API proxies the request to the appropriate MCP agent.
+
   6. The MCP agent executes the action and returns the result.
+
   7. The result is sent back to the LLM, which formulates a final response.
+
   8. The response is streamed to the frontend UI.
 
 ## Model Providers
@@ -29,13 +37,12 @@ This frontend uses [OpenRouter](https://openrouter.ai/) as the default LLM provi
 
 ## Quickstart
 
-### Prerequisites
+- **Prerequisites:**
 
-Make sure you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed on your system.
+Make sure you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) with Docker Compose v2.24 or greater installed on your system.
 
-**Note:** If your are on an M-series Mac, you need to install Docker using the [dmg package](https://docs.docker.com/desktop/setup/install/mac-install/) supplied officially by Docker rather than through Homebrew or other means to avoid build issues.
-
-### Running the Frontend
+> [!NOTE]  
+> If your are on an M-series Mac, you need to install Docker using the [dmg package](https://docs.docker.com/desktop/setup/install/mac-install/) supplied officially by Docker rather than through Homebrew or other means to avoid build issues.
 
 **1. Get the Code:**
 
@@ -55,7 +62,7 @@ cd arbitrum-vibekit
 
 For more detailed contribution steps, please see our [Contribution Guidelines](CONTRIBUTIONS.md).
 
-**2. Configure environment variables:**
+**2. Configure Environment Variables:**
 
 Navigate to the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory and create a `.env` file by copying the example template:
 
@@ -70,30 +77,40 @@ Open the `.env` file and fill in the required values. This typically includes:
 - Generate a secure `AUTH_SECRET` (you can use https://generate-secret.vercel.app/32 or `openssl rand -base64 32`).
 - Set a `POSTGRES_PASSWORD`.
 
-**3. Start services with Docker Compose:**
+**3. Start Services with Docker Compose:**
 
-From the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory, run the following command to build and start the frontend and its associated services (including the lending agent, and the database):
+From the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory, run the following command to build and start the frontend and its associated services (including the lending agent, the swapping agent and the database):
 
 ```bash
 # Ensure you are in the typescript/ directory
 docker compose up
 ```
 
-**Note**: If you get a `permission denied error`, try running the above command with `sudo`:
+> [!NOTE]  
+> If you get a `permission denied error`, try running the above command with `sudo`:
+>
+> ```bash
+> sudo docker compose up
+> ```
 
-```
-sudo  docker compose up
-```
+> [!WARNING]
+> If you previously ran `docker compose up` with an older version of this repository and encounter frontend errors or database-related errors in the `docker service logs`, follow these steps:
+>
+> 1. Clear your browser cache.
+> 2. Run the following command in your terminal:
+>    ```bash
+>    docker compose down && docker volume rm typescript_db_data && docker compose build web --no-cache && docker compose up
+>    ```
 
-**4. Access Vibekit's web interface:**
+**4. Access Vibekit's Web Interface:**
 
-Open your web browser and navigate to http://localhost:3000. To be able to use the web interface, you need to connect your wallet first. Click on "Connect Wallet" to get started:
+Open your web browser and navigate to http://localhost:3000. To be able to chat with the agents, you need to connect your wallet first. Click on "Connect Wallet" to get started:
 
 <p align="left">
   <img src="../../../img/wallet.png" width="700px" alt="wallet"/>
 </p>
 
-After setting up your wallet, you can interact with the lending agent through the chat interface:
+After setting up your wallet, you can interact with the lending and swapping agents through the chat interface:
 
 <p align="left">
   <img src="../../../img/frontend.png" width="700px" alt="frontend"/>
@@ -126,7 +143,8 @@ export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
 ]);
 ```
 
-**Note:** The web application only starts the lending agent (`ember-aave`) and the swapping agent (`ember-camelot`). Other agents like `ember-pendle` or `ember-lp` must be started and run as separate server processes via the [docker compose](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/compose.yml) file. The frontend then connects to these active servers using the specified URLs. To run these example agents, or any other custom agents refer to the next section.
+> [!NOTE]  
+> The web application only starts the lending agent (`ember-aave`) and the swapping agent (`ember-camelot`). Other agents like `ember-pendle` or `ember-lp` must be started and run as separate server processes via the [docker compose](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/compose.yml) file. The frontend then connects to these active servers using the specified URLs. To run these example agents, or any other custom agents refer to the next section.
 
 ### Integrating a Custom Agent
 
@@ -167,10 +185,11 @@ services:
   #   restart: unless-stopped
 ```
 
-If you're integrating a custom agent, ensure your agent's server runs and is accessible via a URL first. Then add its server configurations in this file.
+If you're integrating a custom agent, ensure your agent's server runs and is accessible via a URL first, and then add its server configurations to this file. We recommend using our [Quickstart Agent template](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/quickstart-agent) to create custom agents, it provides all the necessary boilerplate code so you can start building right away.
 
-**Note:** Each agent server must use a unique port number. If two agents are assigned the same port in your Docker Compose or server configurations, they will fail to start due to a port conflict (`port already in use` error).
-To avoid this, assign a different port to each agent and update both your Docker Compose file and the corresponding URLs in `agents-config.ts` so the frontend can connect to each agent correctly.
+> [!NOTE]  
+> Each agent server must use a unique port number. If two agents are assigned the same port in your Docker Compose or server configurations, they will fail to start due to a port conflict (`port already in use` error).
+> To avoid this, assign a different port to each agent and update both your Docker Compose file and the corresponding URLs in `agents-config.ts` so the frontend can connect to each agent correctly.
 
 **2. Add a new entry to the `chatAgents` array in [agents-config.ts](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/agents-config.ts) file with the new agent's `id`, `name`, `description`, and any `suggestedActions`.**
 
@@ -228,7 +247,7 @@ export const chatAgents = [
   //     },
   //   ],
   // },
-
+]
 ```
 
 **3. Add a corresponding entry to the `DEFAULT_SERVER_URLS` map in [`agents-config.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/agents-config.ts), mapping the new agent's `id` to its running server URL.**
@@ -244,12 +263,12 @@ export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
 ]);
 ```
 
-**Note:** If you have already started the web app, make sure to stop it and rebuild it to reflect the changes you made:
-
-```bash
-  docker compose down &&
-  docker compose up --build
-```
+> [!NOTE]  
+>  If you have already started the web app, make sure to stop it and rebuild it to reflect the changes you made:
+>
+> ```bash
+> docker compose down && docker compose up --build
+> ```
 
 This configuration allows the frontend to dynamically discover, list, and connect to the various agents you set up.
 
@@ -257,4 +276,4 @@ This configuration allows the frontend to dynamically discover, list, and connec
 
 We welcome contributions from the community! If you'd like to help improve Vibekit, please check out our [Contribution Guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md).
 
-To show our appreciation, we have launched an [incentive program](https://docs.google.com/forms/d/e/1FAIpQLSe-GF7UcUOuyEMsgnVpLFrG_W83RAchaPPqOCD83pZaZXskgw/viewform) that rewards [valuable contributions](https://github.com/orgs/EmberAGI/projects/13) to the Vibekit. Checkout our [blog post](https://www.emberai.xyz/blog) to learn more!
+To show our appreciation, we have launched an [incentive program](https://docs.google.com/forms/d/e/1FAIpQLSe-GF7UcUOuyEMsgnVpLFrG_W83RAchaPPqOCD83pZaZXskgw/viewform) that rewards [valuable contributions](https://github.com/orgs/EmberAGI/projects/13) to the Vibekit. Checkout our [blog post](https://www.emberai.xyz/blog/introducing-arbitrum-vibekit-and-the-trailblazer-fund-2-0) to learn more!
