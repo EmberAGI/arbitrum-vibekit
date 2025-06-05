@@ -113,8 +113,8 @@ docker compose up
 
 > [!NOTE]  
 > If you get a `permission denied error`, try running the above command with `sudo`:
-
-> ```
+>
+> ```bash
 > sudo docker compose up
 > ```
 
@@ -209,9 +209,7 @@ docker compose build web --no-cache && docker compose up
 ```
 
 > [!TIP]
-> To learn more about Vibekit's agent configurations, refer to [this guide](https://
-> github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/
-> web#agent-configuration)
+> To learn more about Vibekit's agent configurations, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web#agent-configuration).
 
 ## 🎧 Vibe Coding Guide
 
