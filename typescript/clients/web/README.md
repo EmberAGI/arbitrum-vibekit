@@ -17,19 +17,13 @@ This frontend is part of the Arbitrum Vibekit monorepo. It serves as the user in
 
   1. The user interacts with the web frontend.
 
-  2. User input is processed by an API within the frontend.
+  2. User input is processed using an LLM (e.g., via OpenRouter) that discovers available "tools" from backend MCP agent servers (e.g., Lending Agent, Swapping Agent). These tools represent agent capabilities.
 
-  3. This API route, using an LLM (e.g., via OpenRouter), discovers available "tools" from backend MCP agent servers (e.g., Lending Agent, Swapping Agent). These tools represent agent capabilities.
+  3. The LLM uses the user's message and available tools to either respond directly or utilize agent tools, orchestrating the agents in this way.
 
-  4. The LLM uses the user's message and available tools to either respond directly or utilize agent tools, orchestrating the agents in this way.
+  4. The MCP agent executes the action and returns the result.
 
-  5. If a tool is used, the frontend's API proxies the request to the appropriate MCP agent.
-
-  6. The MCP agent executes the action and returns the result.
-
-  7. The result is sent back to the LLM, which formulates a final response.
-
-  8. The response is streamed to the frontend UI.
+  5. The result is sent back to the LLM, which formulates a final response to the frontend UI.
 
 ## Model Providers
 
@@ -37,7 +31,7 @@ This frontend uses [OpenRouter](https://openrouter.ai/) as the default LLM provi
 
 ## Quickstart
 
-- **Prerequisites:**
+**Prerequisites:**
 
 Make sure you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) with Docker Compose v2.24 or greater installed on your system.
 
