@@ -35,21 +35,12 @@ Vibekit/
 |   └── clients/
 |       └── web/
 │   └── templates/
-│       └── lending-agent/
-│       └── quickstart-agent/
 │   └── examples/
-│       └── lending-agent-no-wallet/
-│       └── liquidity-agent-no-wallet/
-│       └── pendle-agent/
-│       └── swapping-agent-no-wallet/
-│       └── swapping-agent/
 │----── lib/
 │       └── a2a/
 │       └── arbitrum-vibekit-core/
 │       └── ember-schemas/
 │       └── mcp-tools/
-│           └── allora-mcp-server/
-│           └── emberai-mcp/
 │       └── test-utils/
 │----── test/
 ├── CHANGELOG.md
@@ -62,7 +53,7 @@ Vibekit/
 
 - `templates/`: Vibekit framework agents to use as a starting template to build your own agent.
 
-- `examples/`: Agent examples that demonstrate the use of Ember AI.
+- `examples/`: Agent examples that demonstrate the use of Ember AI's MCP tools.
 
 - `lib/`: Core libraries and tools.
 
@@ -72,16 +63,7 @@ Vibekit/
 
 Follow these steps to build and run a DeFi agent:
 
-### 1. Set Up Your Local Environment (optional):
-
-Ensure that `Node.js` 22+ and `pnpm` are installed.
-
-```
-node -v # Should be 22+
-pnpm -v # Check that pnpm is installed
-```
-
-### 2. Get the Code:
+### 1. Get the Code
 
 How you get the code depends on whether you want to simply run the project or contribute to its development. If you just want to run Vibekit locally or explore the codebase, you can clone the repository through command line or your preferred IDE:
 
@@ -90,7 +72,7 @@ git clone https://github.com/EmberAGI/arbitrum-vibekit.git &&
 cd arbitrum-vibekit
 ```
 
-If you plan to contribute changes to Vibekit, fork the repository on [Vibekit's Github page](https://github.com/EmberAGI/arbitrum-vibekit) and clone your fork locally. Replace `YOUR_USERNAME` with your GitHub username:
+If you plan to contribute changes to Vibekit, fork the repository on the Github page and clone your fork locally. Replace `YOUR_USERNAME` with your GitHub username:
 
 ```
 git clone https://github.com/YOUR_USERNAME/arbitrum-vibekit.git &&
@@ -99,19 +81,18 @@ cd arbitrum-vibekit
 
 For more detailed contribution steps, please see our [Contribution Guidelines](CONTRIBUTIONS.md).
 
-### 3. Run Your DeFi Agent:
+### 2. Run DeFi Agents
 
 Let's run the swapping and lending agents. These agents are started by default when the frontend is started. Follow this guide to launch the frontend:
 
-#### Prerequisites
+- **Prerequisites:**
 
-Make sure you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) (with Docker Compose v2.24 or greater) installed on your system.
+Make sure you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) with Docker Compose v2.24 or greater installed on your system.
 
-**Note:** If your are on an M-series Mac, you need to install Docker using the [dmg package](https://docs.docker.com/desktop/setup/install/mac-install/) supplied officially by Docker rather than through Homebrew or other means to avoid build issues.
+> [!NOTE]  
+> If your are on an M-series Mac, you need to install Docker using the [dmg package](https://docs.docker.com/desktop/setup/install/mac-install/) supplied officially by Docker rather than through Homebrew or other means to avoid build issues.
 
-#### Running the Frontend
-
-**1. Configure environment variables:**
+- **Configure Environment Variables:**
 
 Navigate to the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory and create a `.env` file by copying the example template:
 
@@ -120,95 +101,117 @@ cd typescript &&
 cp .env.example .env
 ```
 
-Make sure to populate the `typescript/.env` with your API keys and configurations.
+Make sure to populate the `typescript/.env` file with your API keys and configurations.
 
-**2. Start services with Docker Compose:**
+- **Start Services with Docker Compose:**
 
-From the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory, run the following command to build and start the frontend and its associated services (including the lending agent, and the database):
-
-Ensure you are in the `typescript/` directory
+From the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory, run the following command to build and start the frontend and its associated services (including the lending agent, the swapping agent and the database):
 
 ```bash
 docker compose up
 ```
 
+> [!NOTE]  
+> If you get a `permission denied error`, try running the above command with `sudo`:
+
+> ```
+> sudo docker compose up
+> ```
+
 > [!WARNING]
-> If you have previously launched `docker compose up` with an older version of this repo and receive an error on the frontend along with an error in the docker service logs regarding the database, then you must do two things.
+> If you previously ran `docker compose up` with an older version of this repository and encounter frontend errors or database-related errors in the `docker service logs`, follow these steps:
 >
-> 1. Clear your browser cache
-> 2. Run the following command `docker compose down && docker volume rm typescript_db_data && docker compose build web --no-cache && docker compose up`
+> 1. Clear your browser cache.
+> 2. Run the following command in your terminal:
+>    ```bash
+>    docker compose down && docker volume rm typescript_db_data && docker compose build web --no-cache && docker compose up
+>    ```
 
-**3. Access Vibekit's web interface:**
+- **Access Vibekit's Web Interface:**
 
-Open your web browser and navigate to http://localhost:3000. To be able to use the web interface, you need to connect your wallet first. Click on "Connect Wallet" to get started:
+Open your web browser and navigate to http://localhost:3000. To be able to chat with the agents, you need to connect your wallet first. Click on "Connect Wallet" to get started:
 
 <p align="left">
   <img src="img/wallet.png" width="900px" alt="wallet"/>
 </p>
 
-After setting up your wallet, you can interact with the lending agent through the chat interface:
+After setting up your wallet, you can interact with the lending and swapping agents through the chat interface:
 
 <p align="left">
   <img src="img/frontend.png" width="900px" alt="frontend"/>
 </p>
 
-### 4. Adding a Custom Agent
+- **Integrate Other Agents:**
 
-**1. Uncomment the Quickstart Agent in `typescript/clients/web/agents-config.ts`:**
+  Checkout the [examples/](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) directory to explore other Vibekit agents. To integrate any other example agents into the frontend, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web#agent-configuration).
 
-```
+### 3. Build Your Custom DeFi Agent
+
+To build your own agent, we recommend using our [Quickstart Agent template](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/quickstart-agent). It provides all the necessary boilerplate code so you can start building right away. Follow these steps to integrate and run the Quickstart Agent:
+
+- **Enable the Quickstart Agent in the Frontend:**
+
+In the [agents-config.ts](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/agents-config.ts) file, uncomment the agent's configuration in two places:
+
+```typescript
+...
   {
     id: 'quickstart-agent-template' as const,
     name: 'Quickstart',
     description: 'Quickstart agent',
     suggestedActions: [],
   },
+...
 ```
 
-```
+```typescript
+...
   ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
+...
 ```
 
-**2. Uncomment the Quickstart Agent in `typescript/compose.yml`:**
+- **Add the Agent to Docker Compose:**
 
+In the [docker compose](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/compose.yml) file, uncomment the service definition for the quickstart agent:
+
+```yaml
+---
+quickstart-agent-template:
+  build:
+    context: ./
+    dockerfile: templates/quickstart-agent/Dockerfile
+  container_name: vibekit-quickstart-agent-template
+  env_file:
+    - path: .env
+      required: true
+    - path: templates/quickstart-agent/.env
+      required: false
+  ports:
+    - 3007:3007
+  restart: unless-stopped
 ```
-  quickstart-agent-template:
-    build:
-      context: ./
-      dockerfile: templates/quickstart-agent/Dockerfile
-    container_name: vibekit-quickstart-agent-template
-    env_file:
-      - path: .env
-        required: true
-      - path: templates/quickstart-agent/.env
-        required: false
-    ports:
-      - 3007:3007
-    restart: unless-stopped
-```
 
-**3. Configure Quickstart Agent:**
+- **Configure the Agent's Environment:**
 
-Within the `typescript/templates/quickstart-agent` directory run
+Navigate to the agent's directory and create a local `.env` file from the example. Make sure to populate this file with your API keys and configurations:
 
 ```bash
-cp .env.example .env
+cd typescript/templates/quickstart-agent && cp .env.example .env
 ```
 
-**4. Rebuild & restart the web app:**
+- **Rebuild and Restart Services:**
 
-Within the `typescript` directory run
+Navigate to the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory, rebuild the web application and restart all services to apply the changes:
 
 ```bash
+cd ../.. &&
 docker compose build web --no-cache && docker compose up
 ```
 
-> [!NOTE]
-> For more details, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/README.md#agent-configuration).
-
-### 5. Build Your Custom DeFi Agent:
-
-Checkout the [templates/](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates) directory to explore other agent templates and start building your own!
+> [!TIP]
+> To learn more about Vibekit's agent configurations, refer to [this guide](https://
+> github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/
+> web#agent-configuration)
 
 ## 🎧 Vibe Coding Guide
 
@@ -299,4 +302,4 @@ You'll find a collection of ready-to-use MCP tools, along with step-by-step guid
 
 We welcome contributions from the community! If you'd like to help improve Vibekit, please check out our [Contribution Guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md). These guidelines detail the process for forking the repository, making your changes, and submitting a pull request.
 
-To show our appreciation, we have launched an [incentive program](https://docs.google.com/forms/d/e/1FAIpQLSe-GF7UcUOuyEMsgnVpLFrG_W83RAchaPPqOCD83pZaZXskgw/viewform) that rewards [valuable contributions](https://github.com/orgs/EmberAGI/projects/13) to the Vibekit. Checkout our [blog post](https://www.emberai.xyz/blog) to learn more!
+To show our appreciation, we have launched an [incentive program](https://docs.google.com/forms/d/e/1FAIpQLSe-GF7UcUOuyEMsgnVpLFrG_W83RAchaPPqOCD83pZaZXskgw/viewform) that rewards [valuable contributions](https://github.com/orgs/EmberAGI/projects/13) to the Vibekit. Checkout our [blog post](https://www.emberai.xyz/blog/introducing-arbitrum-vibekit-and-the-trailblazer-fund-2-0) to learn more!
