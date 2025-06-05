@@ -126,8 +126,9 @@ Make sure to populate the `typescript/.env` with your API keys and configuration
 
 From the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory, run the following command to build and start the frontend and its associated services (including the lending agent, and the database):
 
+Ensure you are in the `typescript/` directory
+
 ```bash
-# Ensure you are in the typescript/ directory
 docker compose up
 ```
 
