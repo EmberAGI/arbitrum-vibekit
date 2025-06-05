@@ -6,24 +6,24 @@ A dockerized web frontend for interacting with Vibekit's AI agents via the Model
 
 This frontend is part of the Arbitrum Vibekit monorepo. It serves as the user interface for communicating with the AI agents, which are implemented as MCP servers.
 
-- **Monorepo Structure:**
+**Monorepo Structure:**
 
-  - `typescript/clients/web/` : This frontend
-  - `typescript/templates/` : Framework agents to use as a starting template
-  - `typescript/examples/` : Example agents
-  - `typescript/lib/` : Supporting libraries and MCP tools
+- `typescript/clients/web/` : This frontend
+- `typescript/templates/` : Framework agents to use as a starting template
+- `typescript/examples/` : Example agents
+- `typescript/lib/` : Supporting libraries and MCP tools
 
-- **How it works:**
+**How it works:**
 
-  1. The user interacts with the web frontend.
+1. The user interacts with the web frontend.
 
-  2. User input is processed using an LLM (e.g., via OpenRouter) that discovers available "tools" from backend MCP agent servers (e.g., Lending Agent, Swapping Agent). These tools represent agent capabilities.
+2. User input is processed using an LLM (e.g., via OpenRouter) that discovers available "tools" from backend MCP agent servers (e.g., Lending Agent, Swapping Agent). These tools represent agent capabilities.
 
-  3. The LLM uses the user's message and available tools to either respond directly or utilize agent tools, orchestrating the agents in this way.
+3. The LLM uses the user's message and available tools to either respond directly or utilize agent tools, orchestrating the agents in this way.
 
-  4. The MCP agent executes the action and returns the result.
+4. The MCP agent executes the action and returns the result.
 
-  5. The result is sent back to the LLM, which formulates a final response to the frontend UI.
+5. The result is sent back to the LLM, which formulates a final response to the frontend UI.
 
 ## Model Providers
 
