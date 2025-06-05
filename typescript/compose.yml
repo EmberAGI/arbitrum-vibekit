@@ -27,19 +27,19 @@ services:
       - 3005:3005
     restart: unless-stopped
 
-  quickstart-agent-template:
-    build:
-      context: ./
-      dockerfile: templates/quickstart-agent/Dockerfile
-    container_name: vibekit-quickstart-agent-template
-    env_file:
-      - path: .env
-        required: true
-      - path: templates/quickstart-agent/.env
-        required: false
-    ports:
-      - 3007:3007
-    restart: unless-stopped
+  # quickstart-agent-template:
+  #   build:
+  #     context: ./
+  #     dockerfile: templates/quickstart-agent/Dockerfile
+  #   container_name: vibekit-quickstart-agent-template
+  #   env_file:
+  #     - path: .env
+  #       required: true
+  #     - path: templates/quickstart-agent/.env
+  #       required: false
+  #   ports:
+  #     - 3007:3007
+  #   restart: unless-stopped
 
   # liquidity-agent-no-wallet:
   #   build:

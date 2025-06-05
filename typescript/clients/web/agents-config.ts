@@ -29,12 +29,12 @@ export const chatAgents = [
       },
     ],
   },
-  {
-    id: 'quickstart-agent-template' as const,
-    name: 'Quickstart',
-    description: 'Quickstart agent',
-    suggestedActions: [],
-  },
+  // {
+  //   id: 'quickstart-agent-template' as const,
+  //   name: 'Quickstart',
+  //   description: 'Quickstart agent',
+  //   suggestedActions: [],
+  // },
   // {
   //   id: "ember-lp" as const,
   //   name: "LPing",
@@ -91,7 +91,7 @@ export const chatAgents = [
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
   ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
-  ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
+  // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
   // ["ember-lp", "http://liquidity-agent-no-wallet:3002/sse"],
   // ["ember-pendle", "http://pendle-agent:3003/sse"],
 ]);
