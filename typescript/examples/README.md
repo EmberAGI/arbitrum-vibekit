@@ -32,7 +32,14 @@ Once cloned, Cursor will automatically detect the `.cursor/rules` folder and set
 
 ### 2. Set Up Your Environment
 
-Navigate to the desired agent's directory and create an `.env` file. Copy the contents of `.env.example` into the `.env` file and fill in any required secrets or configuration variables.
+Ensure that Node.js 22+ and pnpm are installed.
+
+```
+node -v # Should be 22+
+pnpm -v # Check that pnpm is installed
+```
+
+Next, navigate to the desired agent's directory and create an `.env` file. Copy the contents of `.env.example` into the `.env` file and fill in any required secrets or configuration variables.
 
 Next, navigate to the `typescript` directory and install the necessary packages.
 

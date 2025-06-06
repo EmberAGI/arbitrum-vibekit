@@ -32,17 +32,24 @@ Once cloned, Cursor will automatically detect the `.cursor/rules` folder and set
 
 If you'd like to speed up the setup process, consider using [FastMCP](https://github.com/punkpeye/fastmcp/) or [AI Tool Maker](https://github.com/nihaocami/ai-tool-maker). These tools can automatically generate the boilerplate code and folder structure for your MCP tool, allowing you to focus on your tool's unique logic. If you prefer a more hands-on approach or need a custom setup, follow the manual steps outlined below to build your MCP tool from scratch.
 
-1. Inside the `mcp-tools` directory, create a new directory for your project.
+1. Ensure that Node.js 22+ and pnpm are installed:
 
-2. Within this directory, add a `src` folder and create an `index.ts` file inside for your tool definitions. For reference, [`emberai-mcp/src/index.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/mcp-tools/emberai-mcp/src/index.ts) is a template file that demonstrates the folder structure.
+    ```
+    node -v # Should be 22+
+    pnpm -v # Check that pnpm is installed
+    ```
 
-3. Create a `.env.example` file containing the configuration variables needed for your project.
+2. Inside the `mcp-tools` directory, create a new directory for your project.
 
-4. Create a `package.json` file for your project to define your project's specifications and dependencies.
+3. Within this directory, add a `src` folder and create an `index.ts` file inside for your tool definitions. For reference, [`emberai-mcp/src/index.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/mcp-tools/emberai-mcp/src/index.ts) is a template file that demonstrates the folder structure.
 
-5. Optional: Create a `tsconfig.json` file to configure the TypeScript compiler for your project.
+4. Create a `.env.example` file containing the configuration variables needed for your project.
 
-6. Install the necessary packages. This command depends on the package manager defined in your `package.json` file. Use the appropriate command from the options below:
+5. Create a `package.json` file for your project to define your project's specifications and dependencies.
+
+6. Optional: Create a `tsconfig.json` file to configure the TypeScript compiler for your project.
+
+7. Install the necessary packages. This command depends on the package manager defined in your `package.json` file.
 
    **pnpm** (recommended)
 
@@ -50,17 +57,6 @@ If you'd like to speed up the setup process, consider using [FastMCP](https://gi
    pnpm install
    ```
 
-   **npm**
-
-   ```bash
-   npm install
-   ```
-
-   **yarn**
-
-   ```bash
-   yarn install
-   ```
 
 ### 3. Define Your Tools:
 

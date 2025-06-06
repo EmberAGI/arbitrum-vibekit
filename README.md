@@ -172,7 +172,7 @@ In the [agents-config.ts](https://github.com/EmberAGI/arbitrum-vibekit/blob/main
 
 - **Add the Agent to Docker Compose:**
 
-In the [docker compose](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/compose.yml) file, uncomment the service definition for the quickstart agent:
+In the [docker compose](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/compose.yml) file, uncomment the service definition for the Quickstart Agent:
 
 ```yaml
 ---
@@ -193,7 +193,7 @@ quickstart-agent-template:
 
 - **Configure the Agent's Environment:**
 
-Navigate to the agent's directory and create a local `.env` file from the example. Make sure to populate this file with your API keys and configurations:
+Navigate to the agent's directory and create a local `.env` by copying the`.env.example` file. Make sure to populate the `.env` file with your API keys and configurations:
 
 ```bash
 cd typescript/templates/quickstart-agent && cp .env.example .env
