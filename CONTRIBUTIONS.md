@@ -6,11 +6,23 @@ Thanks for your interest in contributing to Vibetkit! This guide explains how to
 
 Before you start your work, checkout [open issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) to see if someone is already working on the same topic. For big changes or new features, create an issue first to avoid duplicate work, though it's not required for smaller updates.
 
+## Expanding Protocol Support (Integrating New Plugins)
+
+Vibekit primarily interacts with DeFi protocols through the MCP server powered by [EmberAI](https://www.emberai.xyz/), which supports a specific set of protocols at launch. Vibekit and Ember are designed for extensibility, and we highly encourage contributions that integrate support for additional protocols via new plugins.
+
+If you're looking to add support for a new protocol:
+
+1.  **Identify Protocol & Similar Integrations:**
+    Begin by identifying the protocol you wish to integrate. Look for the most similar existing integration within Vibekit. This can serve as a valuable reference for design patterns and shared abstractions. For instance, if you're aiming to integrate a DEX similar to Uniswap, the Camelot integration could be a good starting point.
+
+2.  **Create an Issue:**
+    Navigate to the [Vibekit issues board](https://github.com/EmberAGI/arbitrum-vibekit/issues) to create a new issue detailing the protocol you intend to integrate. Describe the protocol, highlight its similarities to any existing integrations, and outline your proposed integration plan. This helps in tracking progress and discussing the approach.
+
 ## Development Steps
 
 **1. Fork & Clone the Repository:**
 
-- **Fork the Repository:** Start by creating your own copy of the [Vibekit repository](https://github.com/EmberAGI/arbitrum-vibekit) on GitHub. This allows you to make changes in your own version without directly affecting the main project.
+- **Fork the Repository:** Start by creating your own copy of the [Vibekit repository](https://github.com/EmberAGI/arbitrum-vibekit) on GitHub.
 
 - **Clone Your Fork:** After forking, clone your forked repository to your local machine to begin development. You can do this by running `git clone https://github.com/YOUR_USERNAME/arbitrum-vibekit.git` (replace `YOUR_USERNAME` with your GitHub username).
 
@@ -23,36 +35,6 @@ Before you start your work, checkout [open issues](https://github.com/EmberAGI/a
 **5. Create Example Agents:** Consider adding a demo agent to the [examples directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) to showcase your new features.
 
 **6. Update CHANGELOG:** Document your modifications in [CHANGELOG.md](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CHANGELOG.md) to keep the project's history clear.
-
-## Expanding Protocol Support (Integrating New Plugins)
-
-Vibekit primarily interacts with DeFi protocols through the MCP server powered by EmberAI, which supports a specific set of protocols at launch. Vibekit and Ember are designed for extensibility, and we highly encourage contributions that integrate support for additional protocols via new plugins.
-
-If you're looking to add support for a new protocol:
-
-1.  **Identify Protocol & Similar Integrations:**
-    Begin by identifying the protocol you wish to integrate. Look for the most similar existing integration within Vibekit. This can serve as a valuable reference for design patterns and shared abstractions. For instance, if you're aiming to integrate a DEX similar to Uniswap, the Camelot integration could be a good starting point.
-
-2.  **Create an Issue:**
-    Navigate to the [Vibekit issues board](https://github.com/EmberAGI/arbitrum-vibekit/issues) to create a new issue detailing the protocol you intend to integrate. Describe the protocol, highlight its similarities to any existing integrations, and outline your proposed integration plan. This helps in tracking progress and discussing the approach.
-
-3.  **Develop the Plugin:**
-
-    - **Fork & Clone:** Fork the [Vibekit repository](https://github.com/EmberAGI/arbitrum-vibekit) to your GitHub account and clone it to your local machine.
-    - **Implement:** Develop the new plugin. Adhere to the coding standards and architectural patterns found in existing Vibekit integrations. Ensure your plugin interacts correctly with the MCP server if applicable.
-
-4.  **Document Your Plugin:**
-    Create a comprehensive `README.md` file within your new plugin's directory. This documentation is crucial for other developers and users. It should clearly explain:
-
-    - The protocol it integrates.
-    - The tools and functionalities your plugin provides (including their parameters, expected inputs, and outputs).
-    - Detailed setup instructions (e.g., necessary environment variables, authentication methods, or any other configuration steps).
-
-5.  **Develop Example Agents:**
-    To showcase the capabilities and usage of your new protocol plugin, add one or more example agents to the [examples directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples). These examples should provide clear demonstrations of how to use the tools provided by your new integration in practical scenarios.
-
-6.  **Test Thoroughly:**
-    Ensure your new integration is robust and reliable by writing comprehensive tests. Include unit tests for individual components and integration tests to verify the plugin's interaction with other parts of Vibekit and the target protocol.
 
 ## Submitting Your Work
 
