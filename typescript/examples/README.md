@@ -5,8 +5,8 @@ This directory contains ready-to-roll DeFi agents built with the Vibekit. These 
 Many of the tools and operations these agents use are defined in [`mcp-tools`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools). If you're building a new agent or want to extend functionality, the `mcp-tools` directory is the place to define your tool logic and add new capabilities for your agents to use.
 
 Follow this guide to 
-- [Run existing Vibekit agents](#️-running-existing-agents) 
-- [Build your own custom agents](#️-building-your-own-agent)
+- [Run existing Vibekit agents](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples#-run-existing-agents) 
+- [Build your own custom agents](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples#%EF%B8%8F-build-your-own-agent)
 
 ## 🚀 Run Existing Agents
 
@@ -16,7 +16,7 @@ To get started, we recommend installing [Cursor IDE](https://www.cursor.com/). C
 
 With Cursor, you can:
 
-- Define your project's context using simple [rule files]((https://docs.cursor.com/context/rules)) located in `.cursor/rules `folder.
+- Define your project's context using simple [rule files](https://docs.cursor.com/context/rules)located in `.cursor/rules `folder.
 
 - Run Vibekit's AI agents locally or remotely within your development environment.
 
@@ -32,7 +32,7 @@ To clone Vibekit in Cursor:
   <img src="../../img/cursor.png" width="900px" alt="cursor"/>
 </p>
 
-Once cloned, Cursor will automatically detect Vibekit's [`.cursor/rules` directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/.cursor/rules) and set up the AI context.
+Once cloned, Cursor will automatically detect Vibekit's [`.cursor/rules`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/.cursor/rules) directory and set up the AI context.
 
 ### 2. Set Up Your Environment
 
@@ -120,7 +120,7 @@ Run the following `pnpm` commands in the [`typescript`](https://github.com/Ember
 pnpm build && pnpm --filter "agent-name" dev
 ```
 
-### 4. Interact with Agent
+### 5. Interact with Agent
 
 Once the agent is up and running, you have two ways of interacting with it:
 
