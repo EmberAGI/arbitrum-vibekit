@@ -59,12 +59,36 @@ export async function saveChat({
   id,
   userId,
   title,
+  address,
 }: {
   id: string;
   userId: string;
   title: string;
+  address: string;
 }) {
   try {
+    // Check if user exists
+    try {
+      const [existingUser] = await db
+        .select()
+        .from(user)
+        .where(eq(user.id, userId));
+      console.log('existingUser', existingUser);
+      
+      if (!existingUser) {
+        console.log('creating new user');
+        // Create new user with the provided userId and address
+        await db
+          .insert(user)
+          .values({ address, id: userId });
+
+        console.log('actualUserId');
+      }
+    } catch (error) {
+      console.error('Failed to get user from database or create user + ', error);
+      throw error;
+    }
+
     return await db.insert(chat).values({
       id,
       createdAt: new Date(),

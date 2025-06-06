@@ -50,11 +50,15 @@ export async function POST(request: Request) {
       messages: Array<UIMessage>;
       selectedChatModel: string;
       context: Context;
-    } = await request.json();
+      } = await request.json();
 
     const session: Session | null = await auth();
 
+    console.log('session', session);
+
     const validationResult = ContextSchema.safeParse(context);
+
+    console.log('validationResult', validationResult);
 
     if (!validationResult.success) {
       return new Response(JSON.stringify(validationResult.error.errors), {
@@ -84,7 +88,7 @@ export async function POST(request: Request) {
         message: userMessage,
       });
 
-      await saveChat({ id, userId: session.user.id, title });
+      await saveChat({ id, userId: session.user.id, title, address: validatedContext.walletAddress || "" });
     } else {
       if (chat.userId !== session.user.id) {
         return new Response('Unauthorized', { status: 401 });
