@@ -16,9 +16,13 @@ export interface HelloContext {
   // When the context was loaded
   loadedAt: Date;
 
+  // Available Allora prediction topics
+  availableTopics: any[];
+
   // Additional metadata
   metadata: {
     mcpServersConnected: number;
     environment: string;
+    hasAlloraConnection: boolean;
   };
 }

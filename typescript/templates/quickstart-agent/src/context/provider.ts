@@ -10,18 +10,18 @@ export async function contextProvider(deps: { mcpClients: Record<string, Client>
   console.error('[Context] Loading context from MCP servers...');
 
   const { mcpClients } = deps;
-  let supportedLanguages: string[] = ['en']; // Default fallback
+  let availableTopics: any[] = [];
 
-  // Try to load supported languages from the language MCP server
+  // Try to load available topics from the Allora MCP server
   try {
-    // Look for the language MCP client
-    const languageClient = Object.entries(mcpClients).find(([name]) => name.includes('language'))?.[1];
+    // Look for the Allora MCP client
+    const alloraClient = Object.entries(mcpClients).find(([name]) => name.includes('allora'))?.[1];
 
-    if (languageClient) {
-      console.error('[Context] Found language MCP client, fetching supported languages...');
+    if (alloraClient) {
+      console.error('[Context] Found Allora MCP client, fetching available topics...');
 
-      const response = await languageClient.callTool({
-        name: 'getSupportedLanguages',
+      const response = await alloraClient.callTool({
+        name: 'list_all_topics',
         arguments: {},
       });
 
@@ -30,33 +30,35 @@ export async function contextProvider(deps: { mcpClients: Record<string, Client>
         const firstContent = response.content[0];
         if (firstContent && 'type' in firstContent && firstContent.type === 'text' && 'text' in firstContent) {
           const data = JSON.parse(firstContent.text);
-          supportedLanguages = data.languages.map((lang: any) => lang.code);
-          console.error(`[Context] Loaded ${supportedLanguages.length} supported languages`);
+          availableTopics = data;
+          console.error(`[Context] Loaded ${availableTopics.length} prediction topics`);
         }
       }
     } else {
-      console.error('[Context] No language MCP client found, using defaults');
+      console.error('[Context] No Allora MCP client found, continuing without topics');
     }
   } catch (error) {
-    console.error('[Context] Error loading languages from MCP:', error);
-    // Continue with defaults
+    console.error('[Context] Error loading topics from Allora MCP:', error);
+    // Continue without topics
   }
 
   // Create the context
   const context: HelloContext = {
     defaultLanguage: 'en',
-    supportedLanguages,
+    supportedLanguages: ['en'], // Keep for backward compatibility
     greetingPrefix: '👋',
     loadedAt: new Date(),
+    availableTopics, // Add Allora topics
     metadata: {
       mcpServersConnected: Object.keys(mcpClients).length,
       environment: process.env.NODE_ENV || 'development',
+      hasAlloraConnection: availableTopics.length > 0,
     },
   };
 
   console.error('[Context] Context loaded successfully:', {
     defaultLanguage: context.defaultLanguage,
-    supportedLanguages: context.supportedLanguages.length,
+    availableTopics: context.availableTopics.length,
     mcpServersConnected: context.metadata.mcpServersConnected,
   });
 

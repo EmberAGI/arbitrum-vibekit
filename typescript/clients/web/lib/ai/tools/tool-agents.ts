@@ -41,14 +41,25 @@ const convertToZodSchema = (schema: any): z.ZodSchema => {
             zodProperties[key] = z.string();
             break;
           case "number":
-            zodProperties[key] = z.number();
+          case "integer":  // Handle both number and integer types
+            // Use coerce to automatically convert string numbers to numbers
+            zodProperties[key] = z.coerce.number();
+            if (propSchema.type === "integer") {
+              // Ensure it's an integer
+              zodProperties[key] = z.coerce.number().int();
+            }
             break;
           case "boolean":
-            zodProperties[key] = z.boolean();
+            zodProperties[key] = z.coerce.boolean();
             break;
           default:
             // Default to any for complex types
             zodProperties[key] = z.any();
+        }
+        
+        // Add description if available
+        if (propSchema.description && zodProperties[key].describe) {
+          zodProperties[key] = zodProperties[key].describe(propSchema.description);
         }
       }
     );
@@ -94,17 +105,44 @@ async function getTool(serverUrl: string) {
 
   // Use reduce to create an object mapping tool names to AI tools
   const toolObject = toolsResponse.tools.reduce((acc, mcptool) => {
+    console.log(`Processing tool: ${mcptool.name}`);
+    console.log(`Input schema:`, JSON.stringify(mcptool.inputSchema, null, 2));
+    
     // Convert MCP tool schema to Zod schema
+    const zodSchema = convertToZodSchema(mcptool.inputSchema);
     const aiTool = tool({
       description: mcptool.description,
-      parameters: convertToZodSchema(mcptool.inputSchema),
+      parameters: zodSchema,
       execute: async (args) => {
         console.log("Executing tool:", mcptool.name);
         console.log("Arguments:", args);
+        console.log("Arguments type:", typeof args.topicID);
         console.log("MCP Client:", mcpClient);
+        
+        // Parse and validate arguments using the Zod schema
+        // This will apply any coercions (like string to number)
+        const parseResult = zodSchema.safeParse(args);
+        
+        if (!parseResult.success) {
+          console.error("Zod parsing failed:", parseResult.error);
+          console.error("Original args:", args);
+          throw new Error(`Invalid arguments for tool ${mcptool.name}: ${parseResult.error.message}`);
+        }
+        
+        const parsedArgs = parseResult.data;
+        console.log("Parsed arguments:", parsedArgs);
+        console.log("Parsed topicID type:", typeof parsedArgs.topicID);
+        
+        // Manual type conversion as a fallback for specific known issues
+        const finalArgs = { ...parsedArgs };
+        if (mcptool.name === 'get_inference_by_topic_id' && typeof finalArgs.topicID === 'string') {
+          finalArgs.topicID = parseInt(finalArgs.topicID, 10);
+          console.log("Manually converted topicID to number:", finalArgs.topicID);
+        }
+        
         const result = await mcpClient.callTool({
           name: mcptool.name,
-          arguments: args,
+          arguments: finalArgs,
         });
         //const result = 'chat lending USDC successfully';
         console.log("RUNNING TOOL:", mcptool.name);

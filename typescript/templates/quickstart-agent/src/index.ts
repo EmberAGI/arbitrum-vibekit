@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
  * Hello Quickstart Agent
- * Demonstrates ALL v2 framework features
+ * Demonstrates ALL v2 framework features with Allora integration
  */
 
 import 'dotenv/config';
 import { Agent, type AgentConfig } from 'arbitrum-vibekit-core';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { greetSkill } from './skills/greet.js';
+import { predictionSkill } from './skills/prediction.js';
 import { getTimeSkill } from './skills/getTime.js';
 import { echoSkill } from './skills/echo.js';
 import { contextProvider } from './context/provider.js';
@@ -22,8 +22,8 @@ const openrouter = createOpenRouter({
 export const agentConfig: AgentConfig = {
   name: process.env.AGENT_NAME || 'Hello Quickstart Agent',
   version: process.env.AGENT_VERSION || '1.0.0',
-  description: process.env.AGENT_DESCRIPTION || 'A comprehensive example demonstrating all v2 framework features',
-  skills: [greetSkill, getTimeSkill, echoSkill],
+  description: process.env.AGENT_DESCRIPTION || 'A comprehensive example demonstrating all v2 framework features with Allora predictions',
+  skills: [predictionSkill, getTimeSkill, echoSkill],
   url: 'localhost',
   capabilities: {
     streaming: false,
@@ -54,11 +54,11 @@ agent
     console.log(`📍 Base URL: http://localhost:${PORT}`);
     console.log(`🤖 Agent Card: http://localhost:${PORT}/.well-known/agent.json`);
     console.log(`🔌 MCP SSE: http://localhost:${PORT}/sse`);
-    console.log('\n✨ Testing all Vibekitfeatures:');
-    console.log('  - LLM orchestration (greet skill)');
+    console.log('\n✨ Testing all Vibekit features:');
+    console.log('  - LLM orchestration (prediction skill with Allora)');
     console.log('  - Manual handlers (getTime, echo skills)');
     console.log('  - Context-aware tools');
-    console.log('  - Multiple MCP servers');
+    console.log('  - Real MCP server integration (Allora)');
     console.log('  - Hook system (withHooks)');
     console.log('  - Error handling & artifacts');
   })
