@@ -12,9 +12,9 @@ export function ProviderWrapper({ children }: { children: React.ReactNode }) {
   const config = useMemo(
     () =>
       getDefaultConfig({
-        appName: 'My RainbowKit App',
+        appName: 'Arbitrum VibeKit',
         projectId: '4b49e5e63b9f6253943b470873b47208',
-        chains: [mainnet, arbitrum],
+        chains: [arbitrum, mainnet],
         ssr: true, // If your dApp uses server side rendering (SSR)
         storage: createStorage({ storage: cookieStorage }),
       }),
