@@ -14,7 +14,7 @@ export function ProviderWrapper({ children }: { children: React.ReactNode }) {
       getDefaultConfig({
         appName: 'My RainbowKit App',
         projectId: '4b49e5e63b9f6253943b470873b47208',
-        chains: [mainnet, polygon, optimism, arbitrum, base],
+        chains: [mainnet, arbitrum],
         ssr: true, // If your dApp uses server side rendering (SSR)
         storage: createStorage({ storage: cookieStorage }),
       }),
