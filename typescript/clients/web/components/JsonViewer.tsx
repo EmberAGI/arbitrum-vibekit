@@ -40,7 +40,6 @@ interface JsonNodeProps {
 
 function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArrayItem, arrayIndex }: JsonNodeProps) {
   const [isExpanded, setIsExpanded] = useState(depth < 3);
-  const indent = depth * 8; // Very minimal indentation
 
   // Handle primitive values
   if (data === null || data === undefined || typeof data === 'boolean' || typeof data === 'number' || typeof data === 'string') {
@@ -60,7 +59,7 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
     // If this is an array item
     if (isArrayItem && arrayIndex !== undefined) {
       return (
-        <div className="group flex items-center justify-between py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150" style={{ marginLeft: `${indent}px` }}>
+        <div className="group flex items-center justify-between py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150">
           <div className="flex items-center gap-2 text-xs">
             <span className="bg-zinc-600/50 text-zinc-400 px-1.5 py-0.5 rounded text-[10px] font-mono min-w-[1.5rem] text-center">
               {arrayIndex}
@@ -86,7 +85,7 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
     // If this is part of an object property
     if (parentKey) {
       return (
-        <div className="group flex items-center justify-between py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150" style={{ marginLeft: `${indent}px` }}>
+        <div className="group flex items-center justify-between py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150">
           <div className="flex items-center gap-2 text-xs">
             <span className="text-zinc-300">{parentKey}:</span>
             <span className={`${colorClass}`}>{displayValue}</span>
@@ -109,7 +108,7 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
 
     // Root level primitive
     return (
-      <div className="py-1 px-2 bg-zinc-600/20 rounded text-xs" style={{ marginLeft: `${indent}px` }}>
+      <div className="py-1 px-2 bg-zinc-600/20 rounded text-xs">
         <span className={`${colorClass}`}>{displayValue}</span>
       </div>
     );
@@ -121,7 +120,7 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
     if (data.length === 0) {
       if (parentKey) {
         return (
-          <div className="py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150" style={{ marginLeft: `${indent}px` }}>
+          <div className="py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150">
             <div className="flex items-center gap-2 text-xs">
               <span className="text-zinc-300">{parentKey}:</span>
               <span className="text-zinc-500 bg-zinc-600/30 px-1.5 py-0.5 rounded text-[10px]">Empty Array</span>
@@ -131,7 +130,7 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
       }
       if (isArrayItem && arrayIndex !== undefined) {
         return (
-          <div className="py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150" style={{ marginLeft: `${indent}px` }}>
+          <div className="py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150">
             <div className="flex items-center gap-2 text-xs">
               <span className="bg-zinc-600/50 text-zinc-400 px-1.5 py-0.5 rounded text-[10px] font-mono min-w-[1.5rem] text-center">
                 {arrayIndex}
@@ -142,7 +141,7 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
         );
       }
       return (
-        <div className="py-1 px-2 bg-zinc-600/20 rounded text-xs" style={{ marginLeft: `${indent}px` }}>
+        <div className="py-1 px-2 bg-zinc-600/20 rounded text-xs">
           <span className="text-zinc-500">Empty Array</span>
         </div>
       );
@@ -152,7 +151,7 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
     const displayKey = isArrayItem && arrayIndex !== undefined ? `[${arrayIndex}]` : parentKey;
 
     return (
-      <div style={{ marginLeft: `${indent}px` }}>
+      <div>
         <div className="bg-zinc-500/10 border border-zinc-500/30 rounded">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -180,7 +179,7 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
           </button>
         </div>
         {isExpanded && (
-          <div className="border-l border-zinc-500/30 ml-1.5 mt-0.5">
+          <div className="border-l border-zinc-500/30 ml-3 pl-3 mt-0.5">
             {data.map((item, index) => (
               <JsonNode
                 key={index}
@@ -207,7 +206,7 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
     if (keys.length === 0) {
       if (parentKey) {
         return (
-          <div className="py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150" style={{ marginLeft: `${indent}px` }}>
+          <div className="py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150">
             <div className="flex items-center gap-2 text-xs">
               <span className="text-zinc-300">{parentKey}:</span>
               <span className="text-zinc-500 bg-zinc-600/30 px-1.5 py-0.5 rounded text-[10px]">Empty Object</span>
@@ -217,7 +216,7 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
       }
       if (isArrayItem && arrayIndex !== undefined) {
         return (
-          <div className="py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150" style={{ marginLeft: `${indent}px` }}>
+          <div className="py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150">
             <div className="flex items-center gap-2 text-xs">
               <span className="bg-zinc-600/50 text-zinc-400 px-1.5 py-0.5 rounded text-[10px] font-mono min-w-[1.5rem] text-center">
                 {arrayIndex}
@@ -228,7 +227,7 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
         );
       }
       return (
-        <div className="py-1 px-2 bg-zinc-600/20 rounded text-xs" style={{ marginLeft: `${indent}px` }}>
+        <div className="py-1 px-2 bg-zinc-600/20 rounded text-xs">
           <span className="text-zinc-500">Empty Object</span>
         </div>
       );
@@ -238,7 +237,7 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
     const displayKey = isArrayItem && arrayIndex !== undefined ? `[${arrayIndex}]` : parentKey;
 
     return (
-      <div style={{ marginLeft: `${indent}px` }}>
+      <div>
         <div className="bg-zinc-600/10 border border-zinc-600/30 rounded">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -266,7 +265,7 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
           </button>
         </div>
         {isExpanded && (
-          <div className="border-l border-zinc-600/30 ml-1.5 mt-0.5">
+          <div className="border-l border-zinc-600/30 ml-3 pl-3 mt-0.5">
             {keys.map(key => {
               const currentPath = path ? `${path}.${key}` : key;
               const value = data[key];
@@ -291,7 +290,7 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
 
   // Fallback for any other type
   return (
-    <div className="py-1 px-2 bg-red-500/10 border border-red-500/20 rounded text-xs" style={{ marginLeft: `${indent}px` }}>
+    <div className="py-1 px-2 bg-red-500/10 border border-red-500/20 rounded text-xs">
       <span className="text-red-400 text-[10px]">Unknown type: {JSON.stringify(data)}</span>
     </div>
   );
