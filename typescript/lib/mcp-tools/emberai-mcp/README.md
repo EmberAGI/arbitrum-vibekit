@@ -35,25 +35,25 @@ Ember's declarative DeFi layer enables AI agents to interpret and execute user i
    pnpm start
    ```
 
-Clients can now connect via STDIO transport to invoke the MCP tools. For instance, you can use the Inspector to interact with Ember's MCP tools. In a new terminal, run the following to launch the inspector:
+      Clients can now connect via STDIO transport to invoke the MCP tools. For instance, you can use the Inspector to interact with Ember's MCP tools. In a new terminal, run the following to launch the inspector:
 
-```bash
-npx -y @modelcontextprotocol/inspector
-```
+      ```bash
+      npx -y @modelcontextprotocol/inspector
+      ```
 
-Navigate to http://127.0.0.1:6274 in your browser to access the interface and click on "Connect" to establish a connection with your local server:
+      Navigate to http://127.0.0.1:6274 in your browser to access the interface and click on "Connect" to establish a connection with your local server:
 
-<p align="left">
-  <img src="../../../../img/Ember_Inspector_1.png" width="700px" alt="Inspector1"/>
-</p>
+      <p align="left">
+      <img src="../../../../img/Ember_Inspector_1.png" width="700px" alt="Inspector1"/>
+      </p>
 
-Next, click on "List Tools" to get a list of Ember's MCP tools:
+      Next, click on "List Tools" to get a list of Ember's MCP tools:
 
-<p align="left">
-  <img src="../../../../img/Ember_Inspector_2.png" width="700px" alt="Inspector2"/>
-</p>
+      <p align="left">
+      <img src="../../../../img/Ember_Inspector_2.png" width="700px" alt="Inspector2"/>
+      </p>
 
-Next, simply click on the desired tool to start interacting with it.
+      Next, simply click on the desired tool to start interacting with it.
 
 ## Available Tools
 
