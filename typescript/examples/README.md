@@ -36,7 +36,7 @@ Once cloned, Cursor will automatically detect Vibekit's [`.cursor/rules`](https:
 
 ### 2. Set Up Your Environment
 
-First, ensure that `Node.js 22+` and `pnpm` are installed on your system.
+First, ensure that [`Node.js 22+`](https://nodejs.org/) and [`pnpm`](https://pnpm.io/)  are installed on your system.
 
 ```bash
 node -v # Should be 22+
