@@ -211,7 +211,7 @@ docker compose build web --no-cache && docker compose up
 The Quickstart Agent is now accessible through the web frontend:
 
 <p align="left">
-  <img src="/img/quickstart-agent.png" width="600px" alt="quickstart-agent"/>
+  <img src="/img/quickstart-agent.png" width="900px" alt="quickstart-agent"/>
 </p>
 
 > [!TIP]

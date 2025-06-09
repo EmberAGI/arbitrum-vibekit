@@ -14,13 +14,14 @@ This is a Model Context Protocol (MCP) agent example that demonstrates how to us
 
 ## Getting Started
 
-The lending agent is automatically started when the frontend spins up. To start and interact with the lending agent through the frontend, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web#quickstart). If you prefer to locally start the agent, follow these steps:
+The lending agent is automatically started when the frontend spins up. To start and interact with the lending agent through the frontend, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web#quickstart). If you prefer to start the agent manually, follow these steps:
 
 ### Prerequisites
 
 - [Node.js 22+](https://nodejs.org/)
 - [pnpm](https://pnpm.io/) (npm install -g pnpm)
 - QuickNode API access for blockchain interactions
+- OpenRouter API key for LLM access
 
 ### Set Up Your Environment
 
@@ -40,7 +41,7 @@ cp .env.example .env
 
 Make sure to fill in the API keys and configuration variables.
 
-3. Install dependencies:
+3. Install dependencies and build:
 
 ```bash
 pnpm install
@@ -49,7 +50,7 @@ pnpm build
 
 ### Start the Agent
 
-Run the following command to build and start the agent in development mode:
+Run the following command to start the agent:
 
 ```bash
 pnpm start
