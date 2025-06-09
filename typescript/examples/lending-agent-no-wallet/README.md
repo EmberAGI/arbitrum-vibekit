@@ -1,9 +1,6 @@
 # Lending Agent No Wallet
 
-This is a Model Context Protocol (MCP) agent example that demonstrates how to use the Ember API for:
-
-- Lending related tokens on Arbitrum via AAVE
-- The agent returns transaction data to be signed by a connected user wallet
+This is a Model Context Protocol (MCP) agent example that demonstrates how to use the EmberAI MCP server for lending related tokens on Arbitrum via AAVE. The agent then returns transaction data to be signed by a connected user wallet.
 
 ## Features
 
@@ -17,76 +14,48 @@ This is a Model Context Protocol (MCP) agent example that demonstrates how to us
 
 ## Getting Started
 
+The lending agent is automatically started when the frontend spins up. To start and interact with the lending agent through the frontend, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web#quickstart). If you prefer to locally start the agent, follow these steps:
+
 ### Prerequisites
 
-- [Node.js 20+](https://nodejs.org/)
+- [Node.js 22+](https://nodejs.org/)
 - [pnpm](https://pnpm.io/) (npm install -g pnpm)
-- Access to Ember API (get API access from EmberAGI)
 - QuickNode API access for blockchain interactions
 
-### Installation
+### Set Up Your Environment
 
-1. Clone the repository:
+1. Clone the repository and navigate to the lending agent's directory:
 
 ```bash
-git clone https://github.com/EmberAGI/arbitrum-vibekit.git
+git clone https://github.com/EmberAGI/arbitrum-vibekit.git &&
 cd arbitrum-vibekit/typescript/examples/lending-agent-no-wallet
+
 ```
 
-2. Install dependencies:
-
-```bash
-pnpm install
-```
-
-3. Create a `.env` file based on `.env.example`:
+2. Create a `.env` file based on `.env.example`:
 
 ```bash
 cp .env.example .env
 ```
 
-4. Fill in your environment variables in `.env`:
+Make sure to fill in the API keys and configuration variables.
 
-```
-OPENAI_API_KEY=your_openai_key
-QUICKNODE_SUBDOMAIN=your_quicknode_subdomain
-QUICKNODE_API_KEY=your_quicknode_api_key
-AGENT_CACHE_TOKENS=true  # Enable token caching
-```
-
-### Development
+3. Install dependencies:
 
 ```bash
-pnpm dev
-```
-
-This will build and start the agent in development mode.
-
-### Testing
-
-The agent includes comprehensive test suite:
-
-```bash
-# Run all tests
-pnpm test
-
-# Run just MCP connection test
-pnpm test:mcp
-
-# Run transaction validation tests
-pnpm test:transactions
-```
-
-### Production Build
-
-```bash
+pnpm install
 pnpm build
+```
+
+### Start the Agent
+
+Run the following command to build and start the agent in development mode:
+
+```bash
 pnpm start
 ```
 
-### Docker
-
-Build and run with Docker:
+Alternatively you can use Docker to run the agent:
 
 ```bash
 pnpm docker:build
@@ -99,7 +68,7 @@ Or with Docker Compose:
 pnpm docker:compose:up
 ```
 
-## Usage
+## Agent Capabilities
 
 The agent exposes an MCP-compatible interface with the following capabilities:
 
@@ -108,36 +77,7 @@ The agent exposes an MCP-compatible interface with the following capabilities:
 - `supply`: Supply a token as collateral (e.g., "Supply 0.5 ETH")
 - `withdraw`: Withdraw a previously supplied token (e.g., "Withdraw 1000 USDC")
 - `getUserPositions`: Get all user positions (e.g., "Show my positions")
-- `listTokens`: List all available tokens (e.g., "What tokens are available?")
+- `askEncyclopedia`: Ask protocol-specific questions about Aave or lending (e.g., "What is the liquidation threshold for WETH on Aave?")
 
-## Integration
-
-To integrate this agent into a frontend, connect to it using the MCP client and call the `askLendingAgent` tool with:
-
-- `instruction`: A natural language instruction (e.g., "Borrow 100 USDC")
-- `userAddress`: The user's wallet address
-
-The agent will return transaction data in the format:
-
-```json
-{
-  "txPreview": {
-    "tokenName": "USDC",
-    "amount": "100",
-    "action": "borrow",
-    "chainId": "42161"
-  },
-  "txPlan": [
-    {
-      "to": "0x794a61358D6845594F94dc1DB02A252b5b4814aD",
-      "data": "0x...",
-      "value": "0x0",
-      "chainId": "42161"
-    }
-  ]
-}
-```
-
-## License
-
-This project is licensed under the MIT License. 
+> [!NOTE]
+> While there is no dedicated `listTokens` tool, the agent maintains an internal list of available tokens and can answer questions about supported tokens via natural language queries (e.g., "What tokens are available?").
