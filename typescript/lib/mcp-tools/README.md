@@ -8,7 +8,7 @@ By contributing new MCP tools, you're expanding the possibilities for all Vibeki
 
 ### 1. Set Up Your IDE
 
-To get started, we recommend installing [Cursor IDE](https://www.cursor.com/). Cursor offers an AI-powered development environment that is designed for smooth collaboration between you and your AI assistant. 
+To get started, we recommend installing [Cursor IDE](https://www.cursor.com/). Cursor offers an AI-powered development environment that is designed for smooth collaboration between you and your AI assistant.
 
 With Cursor, you can:
 
@@ -21,7 +21,7 @@ With Cursor, you can:
 To clone Vibekit in Cursor:
 
 1. Open Cursor and click "Clone repo" in the welcome screen.
-2. Paste the repository URL: `https://github.com/EmberAGI/arbitrum-vibekit.git`.
+2. Paste the repository URL: https://github.com/EmberAGI/arbitrum-vibekit.git.
 3. Choose your local directory and click "Clone".
 
 <p align="left">
@@ -34,34 +34,33 @@ Once cloned, Cursor will automatically detect Vibekit's [`.cursor/rules`](https:
 
 If you'd like to speed up the setup process, consider using [FastMCP](https://github.com/punkpeye/fastmcp/) or [AI Tool Maker](https://github.com/nihaocami/ai-tool-maker). These tools can automatically generate the boilerplate code and folder structure for your MCP tool, allowing you to focus on your tool's unique logic. If you prefer a more hands-on approach or need a custom setup, follow the manual steps outlined below to build your MCP tool from scratch.
 
-1.  **Create a Project Directory**: 
+1.  **Create a Project Directory**:
 
-    Inside the [`mcp-tools`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools) directory, create a new directory for your project. 
+    Inside the [`mcp-tools`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools) directory, create a new directory for your project.
 
-2.  **Set Up the File Structure**: 
+2.  **Set Up the File Structure**:
 
     Create a `src` folder with an `index.ts` file inside. This will be the main entry point for your tool server. You can look at [`emberai-mcp/src/index.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/mcp-tools/emberai-mcp/src/index.ts) as a reference implementation.
 
-3.  **Define Configuration**: 
+3.  **Define Configuration**:
 
     Create a `.env.example` file to list the environment variables your tool needs. Users will copy this to a `.env` file and provide their own values.
 
-
 4.  **Add Project Metadata**:
-    
+
     Create a `package.json` file to manage your project's dependencies and scripts.
-    
+
     Optionally, add a `tsconfig.json` for TypeScript compiler settings.
 
-5.  **Install Dependencies**: 
+5.  **Install Dependencies**:
 
     Once your `package.json` is set up, run `pnpm install` to install dependencies. This command depends on the package manager defined in your `package.json` file.
 
     **pnpm** (recommended)
+
     ```bash
     pnpm install
     ```
-
 
 ### 3. Define Your Tools
 
@@ -152,7 +151,6 @@ async function main() {
 
     process.on('SIGINT', cleanup);
     process.on('SIGTERM', cleanup);
-
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);
@@ -181,5 +179,3 @@ pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js
 ### 8. Showcase Your Tool with a Demo Agent
 
 Consider showcasing your new MCP tool by building a demo agent in the [examples](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) directory. Creating a simple agent that uses your tool is a great way to demonstrate its functionality and help others understand how to integrate it into their own projects.
-
-
