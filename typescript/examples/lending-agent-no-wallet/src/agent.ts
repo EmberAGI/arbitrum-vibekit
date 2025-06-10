@@ -14,6 +14,7 @@ import {
   type CoreUserMessage,
   type CoreAssistantMessage,
   type StepResult,
+  type LanguageModelV1,
 } from 'ai';
 import {
   LendingGetCapabilitiesResponseSchema,
@@ -39,14 +40,19 @@ import {
   handleAskEncyclopedia,
   type HandlerContext,
 } from './agentToolHandlers.js';
+import { createProviderSelector } from 'arbitrum-vibekit-core';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const CACHE_FILE_PATH = path.join(__dirname, '.cache', 'lending_capabilities.json');
 
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
+const providers = createProviderSelector({
+  openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  xaiApiKey: process.env.XAI_API_KEY,
+  hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
 });
+
+const model = providers.openrouter!('google/gemini-flash-1.5');
 
 function logError(...args: unknown[]) {
   console.error(...args);
@@ -116,14 +122,16 @@ export class Agent {
   public conversationHistory: CoreMessage[] = [];
   private userAddress?: string;
   private aaveContextContent: string = '';
+  private model: LanguageModelV1;
 
   constructor(quicknodeSubdomain: string, quicknodeApiKey: string) {
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
 
-    if (!process.env.OPENROUTER_API_KEY) {
+    if (!providers.openrouter) {
       throw new Error('OPENROUTER_API_KEY not set!');
     }
+    this.model = model;
   }
 
   async init(): Promise<void> {
@@ -523,10 +531,16 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
     try {
       console.error('Calling generateText with Vercel AI SDK...');
-      const { response, text, finishReason } = await generateText({
-        model: openrouter('google/gemini-2.5-flash-preview'),
-        messages: this.conversationHistory,
-        tools: this.toolSet,
+      const { text, toolResults, finishReason, roundtrips } = await generateText({
+        model: this.model,
+        system: this.conversationHistory.find(m => m.role === 'system')?.content as string,
+        messages: this.conversationHistory.filter(m => m.role !== 'system') as (
+          | CoreUserMessage
+          | CoreAssistantMessage
+        )[],
+        tools: this.toolSet as {
+          [key: string]: Tool<any, any>;
+        },
         maxSteps: 5,
         onStepFinish: async (stepResult: StepResult<typeof this.toolSet>) => {
           console.error(`Step finished. Reason: ${stepResult.finishReason}`);
@@ -535,10 +549,10 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       console.error(`generateText finished. Reason: ${finishReason}`);
       console.error(`LLM response text: ${text}`);
 
-      this.conversationHistory.push(...response.messages);
+      this.conversationHistory.push(...roundtrips);
 
       let finalTask: Task | null = null;
-      for (const message of response.messages) {
+      for (const message of roundtrips) {
         if (message.role === 'tool' && Array.isArray(message.content)) {
           for (const part of message.content) {
             if (

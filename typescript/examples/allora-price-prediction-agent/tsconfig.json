@@ -1,6 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "lib": ["esnext"],
+    "module": "NodeNext",
+    "types": ["node"],
     "rootDir": "src",
     "outDir": "dist",
     "verbatimModuleSyntax": false,

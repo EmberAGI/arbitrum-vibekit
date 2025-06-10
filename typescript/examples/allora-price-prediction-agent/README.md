@@ -61,10 +61,18 @@ The price prediction tool uses a hook-based approach:
 
 2. **Set up environment**:
 
+   Create a `.env` file in this directory. The agent uses the `createProviderSelector` from `@arbitrum/vibekit-core` to manage language model providers. You only need to provide the API key for the provider you wish to use.
+
    ```bash
-   # Create .env file with:
-   OPENROUTER_API_KEY=your_api_key_here
-   ALLORA_API_KEY=your_allora_api_key_here  # Optional, uses default if not set
+   # Example .env file - pick one provider
+   OPENROUTER_API_KEY=your_openrouter_api_key
+   # or
+   GROQ_API_KEY=your_groq_api_key
+   # or
+   XAI_API_KEY=your_xai_api_key
+
+   # Allora API key is also required
+   ALLORA_API_KEY=your_allora_api_key_here
    ```
 
 3. **Build the agent**:
@@ -88,6 +96,22 @@ Once the agent is running, you can interact with it through the MCP interface:
 "Show me the price prediction for Bitcoin"
 "What will be the price of Ethereum?"
 ```
+
+## Language Model Configuration
+
+This agent utilizes the `createProviderSelector` from `@arbitrum/vibekit-core` for flexible language model configuration. By default, it uses **OpenRouter**, but it can be easily configured to use other providers like Groq, XAI, or OpenAI.
+
+The provider is selected in `src/index.ts`. To change the provider, modify this line:
+
+```typescript
+// src/index.ts
+const model = createProviderSelector({
+  // Optional: override the default provider
+  // defaultProvider: 'groq'
+}).select(); // Selects the default provider (or the override)
+```
+
+The agent will automatically load the corresponding API key from your `.env` file based on the selected provider.
 
 ## Project Structure
 
@@ -113,6 +137,7 @@ allora-price-prediction-agent/
 | `ALLORA_API_KEY`     | Allora API key for predictions                            | No (uses default) |
 | `PORT`               | Server port (default: 3008)                               | No                |
 | `LLM_MODEL`          | LLM model name (default: google/gemini-2.5-flash-preview) | No                |
+| `LLM_PROVIDER`       | LLM provider (default: openrouter)                        | No                |
 | `ALLORA_MCP_PORT`    | Port for STDIO-spawned Allora MCP server (default: 3009)  | No                |
 
 ### Port Configuration Note
@@ -128,7 +153,7 @@ Always connect to your agent's port (default 3008) to access the price predictio
 ## Technical Details
 
 - **Framework**: Arbitrum Vibekit Core
-- **LLM Provider**: OpenRouter
+- **LLM Provider**: Vercel AI SDK (`createProviderSelector`)
 - **MCP Integration**: Allora MCP server via STDIO
 - **Language**: TypeScript
 - **Runtime**: Node.js 18+
