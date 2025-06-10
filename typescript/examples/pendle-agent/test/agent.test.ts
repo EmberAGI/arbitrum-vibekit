@@ -145,10 +145,13 @@ describe('Pendle Agent Integration Tests', function () {
             multiChainSigner.wallet.address as Address
           );
 
+          console.log('Response:', response);
+
           expect(response.status?.state).to.not.equal('failed', 'Market data operation failed');
 
           // Use the utility function to extract market data
           const marketData = extractTokenMarketData(response);
+          console.log('Market data:', marketData);
 
           // Verify that we get some market data fields from the schema
           const hasMarketDataFields = ['price', 'marketCap', 'volume24h', 'priceChange24h'].some(
