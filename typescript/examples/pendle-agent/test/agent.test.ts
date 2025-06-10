@@ -151,7 +151,7 @@ describe('Pendle Agent Integration Tests', function () {
 
           // Use the utility function to extract market data
           const marketData = extractTokenMarketData(response);
-          console.log('Market data:', marketData);
+          console.error('Market data:', JSON.stringify(marketData, null, 2));
 
           // Verify that we get some market data fields from the schema
           const hasMarketDataFields = ['price', 'marketCap', 'volume24h', 'priceChange24h'].some(
