@@ -140,7 +140,7 @@ describe('Price Prediction Hooks', () => {
       const mockResult = {
         status: {
           message: {
-            parts: [{ text: 'Price prediction for BTC: $50000' }],
+            parts: [{ text: 'Price prediction for BTC (24 hours): 50000' }],
           },
         },
       };
@@ -148,37 +148,36 @@ describe('Price Prediction Hooks', () => {
       const mockContext = {
         custom: {},
         skillInput: {
-          token: 'BTC',
-          timeframe: '24 hours',
+          message: 'What is the BTC price prediction for 24 hours?',
         },
       };
 
       const result = await formatResponseHook(mockResult, mockContext);
 
       expect(result.status.message.parts[0].text).toContain('📊 **Price Prediction Results**');
-      expect(result.status.message.parts[0].text).toContain('🪙 **Token**: BTC');
-      expect(result.status.message.parts[0].text).toContain('⏰ **Timeframe**: 24 hours');
-      expect(result.status.message.parts[0].text).toContain('📈 **Prediction**: Price prediction for BTC: $50000');
+      expect(result.status.message.parts[0].text).toContain('Price prediction for BTC (24 hours): 50000');
       expect(result.status.message.parts[0].text).toContain('_Data provided by Allora prediction markets_');
     });
 
-    test('should handle missing skillInput gracefully', async () => {
+    test('should handle message without timeframe', async () => {
       const mockResult = {
         status: {
           message: {
-            parts: [{ text: 'Some prediction' }],
+            parts: [{ text: 'Price prediction for ETH: 2500' }],
           },
         },
       };
 
       const mockContext = {
         custom: {},
+        skillInput: {
+          message: 'What is ETH price?',
+        },
       };
 
       const result = await formatResponseHook(mockResult, mockContext);
 
-      expect(result.status.message.parts[0].text).toContain('🪙 **Token**: Unknown');
-      expect(result.status.message.parts[0].text).toContain('⏰ **Timeframe**: current');
+      expect(result.status.message.parts[0].text).toContain('Price prediction for ETH: 2500');
     });
 
     test('should return original result if formatting fails', async () => {
@@ -198,8 +197,7 @@ describe('Price Prediction Hooks', () => {
       const mockContext = {
         custom: {},
         skillInput: {
-          token: 'ETH',
-          timeframe: '8 hours',
+          message: 'Get ETH price for 8 hours',
         },
       };
 

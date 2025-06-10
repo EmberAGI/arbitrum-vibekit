@@ -29,8 +29,7 @@ describe('getPricePrediction Tool', () => {
         '@alloralabs/mcp-server': mockMcpClient,
       },
       skillInput: {
-        token: 'BTC',
-        timeframe: '24 hours',
+        message: 'Get BTC price prediction for 24 hours',
       },
     };
   });
@@ -84,9 +83,8 @@ describe('getPricePrediction Tool', () => {
     // The post-hook should have formatted the message
     const messageText = result.status.message.parts[0].text;
     expect(messageText).toContain('📊 **Price Prediction Results**');
-    expect(messageText).toContain('BTC');
-    expect(messageText).toContain('24 hours');
-    expect(messageText).toContain('50000.123456');
+    expect(messageText).toContain('Price prediction for BTC (24 hours): 50000.123456');
+    expect(messageText).toContain('_Data provided by Allora prediction markets_');
   });
 
   test('should handle unknown token error', async () => {
@@ -109,7 +107,7 @@ describe('getPricePrediction Tool', () => {
     const contextWithoutClient = {
       custom: {},
       mcpClients: {},
-      skillInput: { token: 'BTC' },
+      skillInput: { message: 'What is BTC price?' },
     };
 
     const args = { token: 'BTC' };
@@ -176,15 +174,15 @@ describe('getPricePrediction Tool', () => {
         content: [{ text: JSON.stringify(mockInference) }],
       });
 
-    // Update context to not have timeframe
-    mockContext.skillInput = { token: 'BTC' };
+    // Update context to not have timeframe in message
+    mockContext.skillInput = { message: 'What is BTC price?' };
 
     const args = { token: 'BTC' };
     const result = await getPricePredictionTool.execute(args, mockContext);
 
     expect(result.status.state).toBe('completed');
     const messageText = result.status.message.parts[0].text;
-    expect(messageText).toContain('⏰ **Timeframe**: current');
-    expect(messageText).toContain('50000.789');
+    expect(messageText).toContain('Price prediction for BTC: 50000.789');
+    expect(messageText).not.toContain('('); // No timeframe in parentheses
   });
 });

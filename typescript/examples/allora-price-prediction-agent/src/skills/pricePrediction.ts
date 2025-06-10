@@ -7,17 +7,16 @@ import { z } from 'zod';
 import { defineSkill } from 'arbitrum-vibekit-core';
 import { getPricePredictionTool } from '../tools/getPricePrediction.js';
 
-// Input schema for the price prediction skill
+// Input schema for the price prediction skill - only accepts user message
 const PricePredictionInputSchema = z.object({
-  token: z.string().describe('Token symbol to get price prediction for (e.g., "BTC", "ETH")'),
-  timeframe: z.string().optional().describe('Optional timeframe for prediction (e.g., "8 hours", "24 hours")'),
+  message: z.string().describe('User request message for price prediction'),
 });
 
 export const pricePredictionSkill = defineSkill({
   // Skill metadata
-  id: 'price-prediction',
-  name: 'pricePrediction',
-  description: 'Get price predictions and market data from Allora prediction markets',
+  id: 'predict-price',
+  name: 'Predict Price',
+  description: 'Get price predictions for a given token from Allora prediction markets',
 
   // Required tags and examples
   tags: ['prediction', 'price', 'market-data', 'allora'],

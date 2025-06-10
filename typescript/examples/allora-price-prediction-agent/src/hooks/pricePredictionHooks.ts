@@ -69,19 +69,13 @@ export const formatResponseHook: HookFunction<any, any, any, any> = async (resul
 
   try {
     // The result from createSuccessTask is a Task object
-    // We need to enhance the message with better formatting
-    const token = context.skillInput?.token || 'Unknown';
-    const timeframe = context.skillInput?.timeframe || 'current';
+    // The tool already created a message with the prediction, just enhance it with better formatting
+    const originalMessage = result.status?.message?.parts?.[0]?.text || '';
 
-    // Extract the original message
-    const originalMessage = result.status?.message?.parts?.[0]?.text || result;
-
-    // Create a more detailed formatted response
+    // Simply add formatting around the existing message
     let formattedResponse = `📊 **Price Prediction Results**\n\n`;
-    formattedResponse += `🪙 **Token**: ${token}\n`;
-    formattedResponse += `⏰ **Timeframe**: ${timeframe}\n`;
-    formattedResponse += `📈 **Prediction**: ${originalMessage}\n`;
-    formattedResponse += `\n_Data provided by Allora prediction markets_`;
+    formattedResponse += originalMessage;
+    formattedResponse += `\n\n_Data provided by Allora prediction markets_`;
 
     // Return the result with enhanced message
     if (result.status && result.status.message && result.status.message.parts) {

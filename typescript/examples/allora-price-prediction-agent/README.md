@@ -26,8 +26,8 @@ The Allora Price Prediction Agent leverages the Arbitrum Vibekit framework to cr
 The agent has one main skill:
 
 - **pricePrediction**: Get price predictions for tokens from Allora markets
-  - Input: Token symbol (e.g., "BTC", "ETH") and optional timeframe
-  - Process: Maps token to topic ID, fetches prediction, formats response
+  - Input: Natural language message requesting price prediction
+  - Process: LLM extracts token and timeframe, maps token to topic ID, fetches prediction, formats response
   - Output: Formatted price prediction with metadata
 
 ### Tool Design

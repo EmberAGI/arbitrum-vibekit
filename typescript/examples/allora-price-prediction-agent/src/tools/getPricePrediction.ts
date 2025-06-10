@@ -26,7 +26,7 @@ const basePricePredictionTool: VibkitToolDefinition<typeof GetPricePredictionPar
     // The topicId should have been added by the pre-hook
     if (!args.topicId) {
       return createErrorTask(
-        'price-prediction',
+        'predict-price',
         new VibkitError('TopicDiscoveryError', -32603, 'No topic ID provided. Topic discovery may have failed.'),
       );
     }
@@ -34,7 +34,7 @@ const basePricePredictionTool: VibkitToolDefinition<typeof GetPricePredictionPar
     const alloraClient = context.mcpClients?.['@alloralabs/mcp-server'];
     if (!alloraClient) {
       return createErrorTask(
-        'price-prediction',
+        'predict-price',
         new VibkitError('ClientError', -32603, 'Allora MCP client not available'),
       );
     }
@@ -61,17 +61,18 @@ const basePricePredictionTool: VibkitToolDefinition<typeof GetPricePredictionPar
         'N/A';
 
       // Create a formatted message with the prediction
-      const predictionMessage = `Price prediction for ${args.token}: ${predictionValue}`;
+      const timeframeInfo = args.timeframe ? ` (${args.timeframe})` : '';
+      const predictionMessage = `Price prediction for ${args.token}${timeframeInfo}: ${predictionValue}`;
 
       return createSuccessTask(
-        'price-prediction',
+        'predict-price',
         undefined, // no artifacts
         predictionMessage,
       );
     } catch (error) {
       console.error('[GetPricePrediction] Error:', error);
       return createErrorTask(
-        'price-prediction',
+        'predict-price',
         new VibkitError(
           'PredictionError',
           -32603,
