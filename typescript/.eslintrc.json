@@ -1,0 +1,69 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": 2020,
+    "sourceType": "module",
+    "project": [
+      "./tsconfig.base.json",
+      "./lib/test-utils/tsconfig.json",
+      "./lib/ember-schemas/tsconfig.json",
+      "./lib/arbitrum-vibekit-core/tsconfig.json",
+      "./examples/pendle-agent/tsconfig.json",
+      "./lib/mcp-tools/emberai-mcp/tsconfig.json",
+      "./examples/lending-agent-no-wallet/tsconfig.json",
+      "./examples/swapping-agent-no-wallet/tsconfig.json",
+      "./examples/liquidity-agent-no-wallet/tsconfig.json",
+      "./lib/a2a/tsconfig.json",
+      "./lib/mcp-tools/allora-mcp-server/tsconfig.json",
+      "./examples/swapping-agent/tsconfig.json"
+    ]
+  },
+  "plugins": [
+    "@typescript-eslint",
+    "import"
+  ],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:import/errors",
+    "plugin:import/warnings",
+    "plugin:import/typescript",
+    "prettier"
+  ],
+  "rules": {
+    "@typescript-eslint/explicit-module-boundary-types": "off",
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+    "import/order": [
+      "error",
+      {
+        "groups": ["builtin", "external", "internal", ["parent", "sibling"], "index"],
+        "newlines-between": "always",
+        "alphabetize": { "order": "asc", "caseInsensitive": true }
+      }
+    ]
+  },
+  "settings": {
+    "import/resolver": {
+      "typescript": {
+        "alwaysTryTypes": true,
+        "project": [
+          "./tsconfig.base.json",
+          "./lib/test-utils/tsconfig.json",
+          "./lib/ember-schemas/tsconfig.json",
+          "./lib/arbitrum-vibekit-core/tsconfig.json",
+          "./examples/pendle-agent/tsconfig.json",
+          "./lib/mcp-tools/emberai-mcp/tsconfig.json",
+          "./examples/lending-agent-no-wallet/tsconfig.json",
+          "./examples/swapping-agent-no-wallet/tsconfig.json",
+          "./examples/liquidity-agent-no-wallet/tsconfig.json",
+          "./lib/a2a/tsconfig.json",
+          "./lib/mcp-tools/allora-mcp-server/tsconfig.json",
+          "./examples/swapping-agent/tsconfig.json"
+        ]
+      }
+    }
+  },
+  "ignorePatterns": ["**/node_modules/**", "**/dist/**", "**/*.d.ts"]
+} 

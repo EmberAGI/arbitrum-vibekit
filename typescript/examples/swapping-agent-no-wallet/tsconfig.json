@@ -5,9 +5,10 @@
     "outDir": "dist",
     "composite": true,
     "moduleResolution": "NodeNext",
-    "types": ["node"]
+    "types": ["node"],
+    "verbatimModuleSyntax": false
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"],
-  "references": [{ "path": "../../lib/a2a" }]
+  "references": [{ "path": "../../lib/a2a" }, { "path": "../../lib/ember-schemas" }]
 }

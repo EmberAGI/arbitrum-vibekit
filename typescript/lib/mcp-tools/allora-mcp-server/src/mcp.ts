@@ -1,6 +1,6 @@
-import { z } from 'zod'
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { AlloraAPIClient } from '@alloralabs/allora-sdk'
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { z } from 'zod'
 
 export async function createServer(alloraClient: AlloraAPIClient) {
     const server = new McpServer({
@@ -18,7 +18,7 @@ export async function createServer(alloraClient: AlloraAPIClient) {
         'list_all_topics',
         'List the full set of predictions and inferences about the future that can be obtained, which will be provided by the Allora network',
         GetAllTopicsSchema.shape,
-        async ({}) => {
+        async (_args) => {
             try {
                 const topics = await alloraClient.getAllTopics()
                 return {

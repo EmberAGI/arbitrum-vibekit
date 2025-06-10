@@ -1,14 +1,11 @@
-import { z } from 'zod';
-import { type Address } from 'viem';
-import type { HandlerContext } from './agentToolHandlers.js';
-import {
-  handleSwapTokens,
-  parseMcpToolResponse,
-  handleAskEncyclopedia,
-} from './agentToolHandlers.js';
 import { promises as fs } from 'fs';
+import { createRequire } from 'module';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import {
   generateText,
   tool,
@@ -19,13 +16,21 @@ import {
   type CoreAssistantMessage,
   type StepResult,
 } from 'ai';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
+import { type Address } from 'viem';
+import { z } from 'zod';
+import type { HandlerContext } from './agentToolHandlers.js';
+import { handleSwapTokens, handleAskEncyclopedia } from './agentToolHandlers.js';
+
 import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
-import type { Task } from 'a2a-samples-js/schema';
-import { createRequire } from 'module';
+import type { Task } from 'a2a-samples-js';
+import {
+  AskEncyclopediaSchema,
+  McpGetCapabilitiesResponseSchema,
+  type McpGetCapabilitiesResponse,
+  SwapTokensSchema,
+} from 'ember-schemas';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -35,71 +40,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const CACHE_FILE_PATH = path.join(__dirname, '.cache', 'swap_capabilities.json');
 
-const SwapTokensSchema = z.object({
-  fromToken: z
-    .string()
-    .describe(
-      'The symbol of the token to swap from (source token). It may be lowercase or uppercase.'
-    ),
-  toToken: z
-    .string()
-    .describe(
-      'The symbol of the token to swap to (destination token). It may be lowercase or uppercase.'
-    ),
-  amount: z
-    .string()
-    .describe(
-      'The amount of the token to swap from. It will be in a human readable format, e.g. The amount \"1.02 ETH\" will be 1.02.'
-    ),
-  fromChain: z.string().optional().describe('Optional chain name for the source token.'),
-  toChain: z.string().optional().describe('Optional chain name for the destination token.'),
-});
-type SwapTokensArgs = z.infer<typeof SwapTokensSchema>;
-
-const AskEncyclopediaSchema = z.object({
-  question: z.string().describe('The question to ask the Camelot DEX expert.'),
-});
-
-const McpCapabilityTokenSchema = z
-  .object({
-    symbol: z.string().optional(),
-    name: z.string().optional(),
-    decimals: z.number().optional(),
-    tokenUid: z
-      .object({
-        chainId: z.string().optional(),
-        address: z.string().optional(),
-      })
-      .optional(),
-  })
-  .passthrough();
-
-const McpCapabilitySchema = z
-  .object({
-    protocol: z.string().optional(),
-    capabilityId: z.string().optional(),
-    supportedTokens: z.array(McpCapabilityTokenSchema).optional(),
-  })
-  .passthrough();
-
-const McpSingleCapabilityEntrySchema = z
-  .object({
-    swapCapability: McpCapabilitySchema.optional(),
-  })
-  .passthrough();
-
-const McpGetCapabilitiesResponseSchema = z.object({
-  capabilities: z.array(McpSingleCapabilityEntrySchema),
-});
-
-type McpGetCapabilitiesResponse = z.infer<typeof McpGetCapabilitiesResponseSchema>;
-
 function logError(...args: unknown[]) {
   console.error(...args);
 }
 
 type SwappingToolSet = {
-  swapTokens: Tool<typeof SwapTokensSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
+  swapTokens: Tool<typeof SwapTokensSchema, Task>;
   askEncyclopedia: Tool<
     typeof AskEncyclopediaSchema,
     Awaited<ReturnType<typeof handleAskEncyclopedia>>
@@ -201,8 +147,8 @@ export class Agent {
         role: 'system',
         content: `You are an AI agent that provides access to blockchain swapping functionalities via Ember AI On-chain Actions. You use the tool "swapTokens" to swap or convert tokens. You can also answer questions about Camelot DEX using the "askEncyclopedia" tool.
 
-Available actions: 
-- swapTokens: Only use if the user has provided the required parameters. 
+Available actions:
+- swapTokens: Only use if the user has provided the required parameters.
 - askEncyclopedia: Use when the user asks questions about Camelot DEX.
 
 <examples>
@@ -357,13 +303,14 @@ Use relavant conversation history to obtain required tool parameters. Present th
 
       this.toolSet = {
         swapTokens: tool({
-          description: 'Swap or convert tokens. Requires the fromToken, toToken, and amount.',
+          description: 'Swap or convert tokens.',
           parameters: SwapTokensSchema,
           execute: async args => {
             try {
               return await handleSwapTokens(args, this.getHandlerContext());
-            } catch (error: any) {
-              logError(`Error during swapTokens via toolSet: ${error.message}`);
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              logError(`Error during swapTokens via toolSet: ${errorMessage}`);
               throw error;
             }
           },
@@ -375,8 +322,9 @@ Use relavant conversation history to obtain required tool parameters. Present th
           execute: async args => {
             try {
               return await handleAskEncyclopedia(args, this.getHandlerContext());
-            } catch (error: any) {
-              logError(`Error during askEncyclopedia via toolSet: ${error.message}`);
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              logError(`Error during askEncyclopedia via toolSet: ${errorMessage}`);
               throw error;
             }
           },
@@ -564,11 +512,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
 
       this.log('Raw capabilitiesResult received from MCP.');
 
-      const dataToValidate = parseMcpToolResponse(
-        capabilitiesResult,
-        this.getHandlerContext(),
-        'getCapabilities'
-      );
+      const dataToValidate = parseMcpToolResponsePayload(capabilitiesResult, z.any());
 
       const validationResult = McpGetCapabilitiesResponseSchema.safeParse(dataToValidate);
 
@@ -610,7 +554,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
   private async _loadCamelotDocumentation(): Promise<void> {
     const defaultDocsPath = path.resolve(__dirname, '../encyclopedia');
     const docsPath = defaultDocsPath;
-    const filePaths = [path.join(docsPath, 'camelot-01.md'), path.join(docsPath, 'camelot-02.md')];
+    const filePaths = [path.join(docsPath, 'camelot-01.md')];
     let combinedContent = '';
 
     this.log(`Loading Camelot documentation from: ${docsPath}`);

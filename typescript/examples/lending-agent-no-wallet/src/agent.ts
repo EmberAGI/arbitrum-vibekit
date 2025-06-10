@@ -1,5 +1,35 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { z } from 'zod';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import type { Task } from 'a2a-samples-js';
+import { promises as fs } from 'fs';
+import { createRequire } from 'module';
+import path, { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+import {
+  generateText,
+  tool,
+  type Tool,
+  type CoreMessage,
+  type CoreUserMessage,
+  type CoreAssistantMessage,
+  type StepResult,
+} from 'ai';
+import {
+  LendingGetCapabilitiesResponseSchema,
+  McpTextWrapperSchema,
+  BorrowRepaySupplyWithdrawSchema,
+  GetUserPositionsSchema,
+  LendingAskEncyclopediaSchema,
+  type LendingGetCapabilitiesResponse,
+  type McpTextWrapper,
+  type TokenInfo,
+  type UserReserve,
+  UserReserveSchema,
+  type GetWalletPositionsResponse,
+} from 'ember-schemas';
+import * as chains from 'viem/chains';
+import type { Chain } from 'viem/chains';
 import {
   handleBorrow,
   handleRepay,
@@ -8,27 +38,7 @@ import {
   handleGetUserPositions,
   handleAskEncyclopedia,
   type HandlerContext,
-  type TokenInfo,
 } from './agentToolHandlers.js';
-import type { Task } from 'a2a-samples-js/schema';
-import { promises as fs } from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import {
-  generateText,
-  tool,
-  type Tool,
-  type CoreMessage,
-  type ToolResultPart,
-  type CoreUserMessage,
-  type CoreAssistantMessage,
-  type StepResult,
-} from 'ai';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createRequire } from 'module';
-import * as chains from 'viem/chains';
-import type { Chain } from 'viem/chains';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,79 +46,6 @@ const CACHE_FILE_PATH = path.join(__dirname, '.cache', 'lending_capabilities.jso
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
-});
-
-const ZodTokenUidSchema = z.object({
-  chainId: z.string().optional(),
-  address: z.string().optional(),
-});
-
-const ZodTokenSchema = z
-  .object({
-    symbol: z.string().optional(),
-    name: z.string().optional(),
-    decimals: z.number().optional(),
-    tokenUid: ZodTokenUidSchema.optional(),
-  })
-  .passthrough();
-
-const ZodLendingCapabilitySchema = z
-  .object({
-    capabilityId: z.string().optional(),
-    currentSupplyApy: z.string().optional(),
-    currentBorrowApy: z.string().optional(),
-    underlyingToken: ZodTokenSchema.optional(),
-    maxLtv: z.string().optional(),
-    liquidationThreshold: z.string().optional(),
-  })
-  .passthrough();
-
-const ZodCapabilitySchema = z
-  .object({
-    lendingCapability: ZodLendingCapabilitySchema.optional(),
-  })
-  .passthrough();
-
-const ZodGetCapabilitiesResponseSchema = z
-  .object({
-    capabilities: z.array(ZodCapabilitySchema),
-  })
-  .passthrough();
-
-type McpGetCapabilitiesResponse = z.infer<typeof ZodGetCapabilitiesResponseSchema>;
-
-const ZodMcpTextWrapperSchema = z.object({
-  content: z
-    .array(
-      z.object({
-        type: z.literal('text'),
-        text: z.string(),
-      })
-    )
-    .min(1),
-});
-
-const TokenInfoSchema = z.object({
-  chainId: z.string(),
-  address: z.string(),
-  decimals: z.number(),
-});
-
-const BorrowRepaySupplyWithdrawSchema = z.object({
-  tokenName: z
-    .string()
-    .describe(
-      "The symbol of the token (e.g., 'USDC', 'WETH'). Must be one of the available tokens."
-    ),
-  amount: z
-    .string()
-    .describe('The amount of the token to use, as a string representation of a number.'),
-});
-
-const GetUserPositionsSchema = z.object({});
-
-const AskEncyclopediaSchema = z.object({
-  question: z.string().describe('The question to ask the Aave encyclopedia.'),
 });
 
 function logError(...args: unknown[]) {
@@ -126,7 +63,7 @@ type LendingToolSet = {
   supply: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
   withdraw: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
   getUserPositions: Tool<typeof GetUserPositionsSchema, Task>;
-  askEncyclopedia: Tool<typeof AskEncyclopediaSchema, Task>;
+  askEncyclopedia: Tool<typeof LendingAskEncyclopediaSchema, Task>;
 };
 
 interface ChainConfig {
@@ -223,56 +160,57 @@ export class Agent {
 
     this.toolSet = {
       borrow: tool({
-        description:
-          'Borrow a token. Provide the token name (e.g., USDC, WETH) and a human-readable amount.',
+        description: 'Borrow a token.',
         parameters: BorrowRepaySupplyWithdrawSchema,
         execute: async args => {
           console.error('Vercel AI SDK calling handler: borrow', args);
           try {
             return await handleBorrow(args, this.getHandlerContext());
-          } catch (error: any) {
-            logError(`Error during borrow via toolSet: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during borrow via toolSet: ${errorMessage}`);
             throw error;
           }
         },
       }),
       repay: tool({
-        description: 'Repay a borrowed token. Provide the token name and a human-readable amount.',
+        description: 'Repay a borrowed token.',
         parameters: BorrowRepaySupplyWithdrawSchema,
         execute: async args => {
           console.error('Vercel AI SDK calling handler: repay', args);
           try {
             return await handleRepay(args, this.getHandlerContext());
-          } catch (error: any) {
-            logError(`Error during repay via toolSet: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during repay via toolSet: ${errorMessage}`);
             throw error;
           }
         },
       }),
       supply: tool({
-        description:
-          'Supply (deposit) a token. Provide the token name and a human-readable amount.',
+        description: 'Supply (deposit) a token.',
         parameters: BorrowRepaySupplyWithdrawSchema,
         execute: async args => {
           console.error('Vercel AI SDK calling handler: supply', args);
           try {
             return await handleSupply(args, this.getHandlerContext());
-          } catch (error: any) {
-            logError(`Error during supply via toolSet: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during supply via toolSet: ${errorMessage}`);
             throw error;
           }
         },
       }),
       withdraw: tool({
-        description:
-          'Withdraw a previously supplied token. Provide the token name and a human-readable amount.',
+        description: 'Withdraw a previously supplied token.',
         parameters: BorrowRepaySupplyWithdrawSchema,
         execute: async args => {
           console.error('Vercel AI SDK calling handler: withdraw', args);
           try {
             return await handleWithdraw(args, this.getHandlerContext());
-          } catch (error: any) {
-            logError(`Error during withdraw via toolSet: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during withdraw via toolSet: ${errorMessage}`);
             throw error;
           }
         },
@@ -284,8 +222,9 @@ export class Agent {
           console.error('Vercel AI SDK calling handler: getUserPositions', args);
           try {
             return await handleGetUserPositions(args, this.getHandlerContext());
-          } catch (error: any) {
-            logError(`Error during getUserPositions via toolSet: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during getUserPositions via toolSet: ${errorMessage}`);
             throw error;
           }
         },
@@ -293,13 +232,14 @@ export class Agent {
       askEncyclopedia: tool({
         description:
           'Ask a question about Aave to retrieve specific information about the protocol using embedded documentation.',
-        parameters: AskEncyclopediaSchema,
+        parameters: LendingAskEncyclopediaSchema,
         execute: async args => {
           console.error('Vercel AI SDK calling handler: askEncyclopedia', args);
           try {
             return await handleAskEncyclopedia(args, this.getHandlerContext());
-          } catch (error: any) {
-            logError(`Error during askEncyclopedia via toolSet: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logError(`Error during askEncyclopedia via toolSet: ${errorMessage}`);
             throw error;
           }
         },
@@ -313,12 +253,10 @@ export class Agent {
 
 Available actions: borrow, repay, supply, withdraw, getUserPositions, askEncyclopedia.
 
-Only use tools if the user explicitly asks to perform an action and provides the necessary parameters.
-- borrow, repay, supply, withdraw require: tokenName, amount.
-- getUserPositions requires no parameters.
-- askEncyclopedia requires a question about Aave.
-
+Only use tools if the user explicitly asks to perform an action. Ensure all required parameters for a tool are available from the user's request or conversation history before calling the tool.
 If parameters are missing, ask the user to provide them. Do not assume parameters.
+
+IMPORTANT: Always call the appropriate tool with the exact parameters provided by the user. Do not make assumptions about minimum amounts, protocol limitations, or other restrictions. Let the tool handle all validation. Never refuse to call a tool based on the amount value - always pass it through to the tool.
 
 <examples>
 <example1 - Borrow>
@@ -350,6 +288,11 @@ If parameters are missing, ask the user to provide them. Do not assume parameter
 <user>What is the liquidation threshold for WETH on Aave Arbitrum?</user>
 <tool_call> {"toolName": "askEncyclopedia", "args": { "question": "What is the liquidation threshold for WETH on Aave Arbitrum?" }} </tool_call>
 </example6>
+
+<example7 - Small Amount Borrow>
+<user>Borrow 0.001 USDC</user>
+<tool_call> {"toolName": "borrow", "args": { "tokenName": "USDC", "amount": "0.001" }} </tool_call>
+</example7>
 </examples>
 
 Always use plain text. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason. Present the user with a list of tokens/chains if clarification is needed (as handled by the tool).`,
@@ -365,7 +308,13 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
     console.error('Agent started.');
   }
 
-  private async fetchAndCacheCapabilities(): Promise<McpGetCapabilitiesResponse> {
+  async stop(): Promise<void> {
+    if (this.mcpClient) {
+      await this.mcpClient.close();
+    }
+  }
+
+  private async fetchAndCacheCapabilities(): Promise<LendingGetCapabilitiesResponse> {
     if (!this.mcpClient) {
       throw new Error('MCP Client not initialized. Cannot fetch capabilities.');
     }
@@ -378,7 +327,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       const capabilitiesResult = await this.mcpClient.callTool(
         {
           name: 'getCapabilities',
-          arguments: { type: 'LENDING' },
+          arguments: { type: 'LENDING_MARKET' },
         },
         undefined,
         { timeout: mcpTimeoutMs }
@@ -386,7 +335,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
       console.error('Raw capabilitiesResult received from MCP tool call.');
 
-      const wrapperValidationResult = ZodMcpTextWrapperSchema.safeParse(capabilitiesResult);
+      const wrapperValidationResult = McpTextWrapperSchema.safeParse(capabilitiesResult);
 
       if (!wrapperValidationResult.success) {
         logError(
@@ -399,8 +348,8 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
         );
       }
 
-      const jsonString = wrapperValidationResult.data.content[0].text;
-      let parsedData: any;
+      const jsonString = (wrapperValidationResult.data as McpTextWrapper).content[0]!.text;
+      let parsedData: unknown;
       try {
         console.error('Attempting to parse JSON string from content[0].text...');
         parsedData = JSON.parse(jsonString);
@@ -427,7 +376,8 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
         );
       }
 
-      const capabilitiesValidationResult = ZodGetCapabilitiesResponseSchema.safeParse(parsedData);
+      const capabilitiesValidationResult =
+        LendingGetCapabilitiesResponseSchema.safeParse(parsedData);
 
       if (!capabilitiesValidationResult.success) {
         logError(
@@ -461,7 +411,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
   }
 
   private async setupTokenMap(): Promise<void> {
-    let capabilitiesResponse: McpGetCapabilitiesResponse | undefined;
+    let capabilitiesResponse: LendingGetCapabilitiesResponse | undefined;
     const useCache = process.env.AGENT_CACHE_TOKENS === 'true';
 
     if (useCache) {
@@ -470,7 +420,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
         console.error('Loading lending capabilities from cache...');
         const cachedData = await fs.readFile(CACHE_FILE_PATH, 'utf-8');
         const parsedJson = JSON.parse(cachedData);
-        const validationResult = ZodGetCapabilitiesResponseSchema.safeParse(parsedJson);
+        const validationResult = LendingGetCapabilitiesResponseSchema.safeParse(parsedJson);
         if (validationResult.success) {
           capabilitiesResponse = validationResult.data;
           console.error('Cached capabilities loaded and validated successfully.');
@@ -512,7 +462,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       console.error(
         `Processing ${capabilitiesResponse.capabilities.length} capabilities entries...`
       );
-      capabilitiesResponse.capabilities.forEach((capabilityEntry, index) => {
+      capabilitiesResponse.capabilities.forEach((capabilityEntry, _index) => {
         if (capabilityEntry.lendingCapability) {
           processedCapabilityCount++;
           const lendingCap = capabilityEntry.lendingCapability;
@@ -585,26 +535,6 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       console.error(`generateText finished. Reason: ${finishReason}`);
       console.error(`LLM response text: ${text}`);
 
-      response.messages.forEach((msg, index) => {
-        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-          msg.content.forEach(part => {
-            if (part.type === 'tool-call') {
-              console.error(
-                `[LLM Request ${index}]: Tool Call - ${part.toolName} with args ${JSON.stringify(part.args)}`
-              );
-            }
-          });
-        } else if (msg.role === 'tool') {
-          if (Array.isArray(msg.content)) {
-            msg.content.forEach((toolResult: ToolResultPart) => {
-              console.error(`[Tool Result ${index} for ${toolResult.toolName} received]`);
-            });
-          }
-        } else if (msg.role === 'assistant') {
-          console.error(`[LLM Response ${index}]: ${msg.content}`);
-        }
-      });
-
       this.conversationHistory.push(...response.messages);
 
       let finalTask: Task | null = null;
@@ -617,13 +547,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
               typeof part.result === 'object' &&
               'id' in part.result
             ) {
-              console.error(`Processing tool result for ${part.toolName} from response.messages`);
               finalTask = part.result as Task;
-              console.error(`Task Result State: ${finalTask?.status?.state ?? 'N/A'}`);
-              const firstPart = finalTask?.status?.message?.parts[0];
-              const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';
-              console.error(`Task Result Message: ${messageText}`);
-              break;
             }
           }
         }
@@ -632,9 +556,6 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
       if (finalTask) {
         if (['completed', 'failed', 'canceled'].includes(finalTask.status.state)) {
-          console.error(
-            `Task finished with state ${finalTask.status.state}. Clearing conversation history.`
-          );
           this.conversationHistory = [];
         }
         return finalTask;
@@ -642,7 +563,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
       console.error('No tool called or task found, returning text response.');
       return {
-        id: this.userAddress,
+        id: this.userAddress!,
         status: {
           state: 'completed',
           message: {
@@ -660,7 +581,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       };
       this.conversationHistory.push(errorAssistantMessage);
       return {
-        id: this.userAddress ?? 'unknown',
+        id: this.userAddress!,
         status: {
           state: 'failed',
           message: {
@@ -685,34 +606,11 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
     };
   }
 
-  private formatNumeric(
-    value: string | number | undefined,
-    minDecimals = 2,
-    maxDecimals = 2
-  ): string {
-    if (value === undefined) return 'N/A';
-    try {
-      const num = typeof value === 'string' ? parseFloat(value) : value;
-      if (isNaN(num)) return 'N/A';
-
-      if (Math.abs(num) < 1e-6 && num !== 0) {
-        return num.toExponential(maxDecimals);
-      }
-
-      return num.toLocaleString(undefined, {
-        minimumFractionDigits: minDecimals,
-        maximumFractionDigits: maxDecimals,
-      });
-    } catch (e) {
-      console.error(`Error formatting numeric value: ${value}`, e);
-      return 'N/A';
-    }
-  }
-
   private async _loadAaveDocumentation(): Promise<void> {
-    const defaultDocsPath = path.resolve(__dirname, '../encyclopedia');
-    const docsPath = defaultDocsPath;
-    const filePaths = [path.join(docsPath, 'aave-01.md'), path.join(docsPath, 'aave-02.md')];
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const docsPath = join(__dirname, '../encyclopedia');
+    const filePaths = [join(docsPath, 'aave-01.md'), join(docsPath, 'aave-02.md')];
     let combinedContent = '';
 
     console.error(`Loading Aave documentation from: ${docsPath}`);
@@ -731,5 +629,73 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
     if (!this.aaveContextContent.trim()) {
       logError('Warning: Aave documentation context is empty after loading attempts.');
     }
+  }
+
+  /**
+   * Extract positions data from response
+   */
+  private extractPositionsData(response: Task): GetWalletPositionsResponse {
+    if (!response.artifacts) {
+      throw new Error(
+        `No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`
+      );
+    }
+
+    // Look for positions artifact (support both legacy and new names)
+    for (const artifact of response.artifacts) {
+      if (artifact.name === 'positions' || artifact.name === 'wallet-positions') {
+        for (const part of artifact.parts || []) {
+          if (part.type === 'data' && part.data?.positions) {
+            return part.data as GetWalletPositionsResponse;
+          }
+        }
+      }
+    }
+
+    throw new Error(
+      `No positions data found in artifacts. Response: ${JSON.stringify(response, null, 2)}`
+    );
+  }
+
+  /**
+   * Finds the reserve information for a given token symbol or name within the positions response.
+   */
+  private getReserveForToken(
+    response: GetWalletPositionsResponse,
+    tokenNameOrSymbol: string
+  ): UserReserve {
+    for (const position of response.positions) {
+      if (!position.lendingPosition) continue;
+
+      for (const reserve of position.lendingPosition.userReserves) {
+        const name = reserve.token!.name;
+        const symbol = reserve.token!.symbol;
+
+        if (name === tokenNameOrSymbol || symbol === tokenNameOrSymbol) {
+          try {
+            return UserReserveSchema.parse(reserve);
+          } catch (error) {
+            console.error('Failed to parse UserReserve:', error);
+            console.error('Reserve object that failed parsing:', reserve);
+            throw new Error(
+              `Failed to parse reserve data for token ${tokenNameOrSymbol}. Ensure the SDK response matches UserReserveSchema. Reserve: ${JSON.stringify(reserve, null, 2)}`
+            );
+          }
+        }
+      }
+    }
+
+    throw new Error(
+      `No reserve found for token ${tokenNameOrSymbol}. Response: ${JSON.stringify(response, null, 2)}`
+    );
+  }
+
+  /**
+   * Helper to get reserve for a token
+   */
+  async getTokenReserve(userAddress: string, tokenName: string): Promise<UserReserve> {
+    const response = await this.processUserInput('show my positions', userAddress);
+    const positionsData = this.extractPositionsData(response);
+    return this.getReserveForToken(positionsData, tokenName);
   }
 }

@@ -1,21 +1,59 @@
 {
-  "name": "arbitrum-vibekit",
+  "name": "monorepo-root",
   "version": "1.0.0",
+  "type": "module",
   "private": true,
   "packageManager": "pnpm@10.7.0",
   "description": "Root for the TypeScript pnpm workspace",
   "scripts": {
-    "clean": "rm -rf .pnpm && find . -name tsconfig.tsbuildinfo -type f -exec rm -f {} + && find . -name node_modules -type d -prune -exec rm -rf {} + && find . -name dist -type d -prune -exec rm -rf {} + && echo \"Workspace cleaned.\"",
-    "build": "pnpm recursive run build"
+    "clean": "rm -rf .pnpm && find . -name tsconfig.tsbuildinfo -type f -exec rm -f {} + && find . -name node_modules -type d -prune -exec rm -rf {} + && find . -name dist -type d -prune -exec rm -rf {} + && find . -name dist-test -type d -prune -exec rm -rf {} + && echo \"Workspace cleaned.\"",
+    "build": "pnpm recursive run build",
+    "build:sequential": "pnpm recursive run --sort --workspace-concurrency=1 build",
+    "docker:compose:up": "docker compose up --build --no-log-prefix",
+    "docker:compose:build": "docker compose build --no-cache",
+    "docker:compose:down": "docker compose down",
+    "lint": "eslint --ext .ts,.tsx .",
+    "lint:fix": "eslint --ext .ts,.tsx . --fix",
+    "test": "pnpm recursive run --workspace-concurrency=1 test",
+    "format": "pnpm recursive run format",
+    "format:check": "pnpm recursive run format:check"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "@emberai/sdk-typescript": "^0.3.0-beta.12",
+    "@eslint/js": "^9.0.0",
+    "@types/chai": "^4.3.11",
+    "@types/mocha": "^10.0.6",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "chai": "^4.3.10",
+    "dotenv": "^16.3.1",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^16.1.0",
+    "mocha": "^10.2.0",
+    "mocha-suppress-logs": "^0.5.1",
+    "prettier": "^3.5.3",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.32.1"
   },
   "dependencies": {
-    "a2a-samples-js": "workspace:*",
-    "ember-mcp-tool-server": "workspace:*"
+    "ethers": "^5.7.2",
+    "zod": "^3.25.7"
+  },
+  "pnpm": {
+    "overrides": {
+      "zod": "^3.24.3"
+    },
+    "ignoredBuiltDependencies": [
+      "@firebase/util",
+      "core-js",
+      "esbuild",
+      "fsevents",
+      "protobufjs"
+    ]
   }
 }

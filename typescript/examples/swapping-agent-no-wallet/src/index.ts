@@ -1,13 +1,13 @@
-import { Agent } from './agent.js';
-import { type Address, isAddress } from 'viem';
-import { mnemonicToAccount } from 'viem/accounts';
-import * as dotenv from 'dotenv';
-import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import type { Task } from 'a2a-samples-js';
 import cors from 'cors';
+import * as dotenv from 'dotenv';
+import express from 'express';
+import { isAddress } from 'viem';
 import { z } from 'zod';
-import type { Task } from 'a2a-samples-js/schema';
+
+import { Agent } from './agent.js';
 
 const SwapAgentSchema = z.object({
   instruction: z
@@ -28,25 +28,14 @@ const server = new McpServer({
   version: '1.0.0',
 });
 
-const rpc = process.env.RPC_URL || 'https://arbitrum.llamarpc.com';
-
 let agent: Agent;
 
 const initializeAgent = async (): Promise<void> => {
-  const mnemonic = process.env.MNEMONIC;
-  if (!mnemonic) {
-    throw new Error('MNEMONIC not found in the .env file.');
-  }
-
   const quicknodeSubdomain = process.env.QUICKNODE_SUBDOMAIN;
   const apiKey = process.env.QUICKNODE_API_KEY;
   if (!quicknodeSubdomain || !apiKey) {
     throw new Error('QUICKNODE_SUBDOMAIN and QUICKNODE_API_KEY must be set in the .env file.');
   }
-
-  const account = mnemonicToAccount(mnemonic);
-  const userAddress: Address = account.address;
-  console.error(`Using wallet ${userAddress}`);
 
   agent = new Agent(quicknodeSubdomain, apiKey);
   await agent.init();
@@ -148,7 +137,7 @@ app.post('/messages', async (req, res) => {
   await transport.handlePostMessage(req, res);
 });
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
+const PORT = 3005;
 const main = async () => {
   try {
     await initializeAgent();

@@ -9,6 +9,9 @@
     "moduleDetection": "force",
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
 
     /* Strictness */
     "strict": true,
@@ -22,10 +25,12 @@
 
     /* If transpiling with TypeScript */
     "module": "NodeNext",
-    "outDir": "dist",
     "sourceMap": true,
     /* Path resolution */
     "baseUrl": "./",
+    
+    /* Output directories */
+    "outDir": "dist",
 
     /* Lib */
     "lib": [

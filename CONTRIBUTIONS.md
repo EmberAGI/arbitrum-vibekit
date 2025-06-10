@@ -1,44 +1,54 @@
-# Contributing to Vibekit
+## Contributing to Vibekit
 
-Thank you for your interest in contributing to Vibetkit! This guide explains how you can make valuable contributions to the project.
+Thanks for your interest in contributing to Vibetkit! This guide explains how to make valuable contributions to the project.
 
-## 1. Preliminary Steps
+## Getting Started
 
-- **Open an Issue (Optional):** For major changes or feature requests, consider creating an issue first. This step is not required for minor updates but helps avoid duplicate efforts.
-- **Check Existing Issues:** Before starting your work, review open issues to see if the topic has already been addressed.
+Before you start your work, checkout [open issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) to see if someone is already working on the same topic. For big changes or new features, create an issue first to avoid duplicate work, though it's not required for smaller updates.
 
-## 2. Development Guidelines
+## Expanding Protocol Support (Integrating New Plugins)
 
-To contribute effectively:
+Vibekit primarily interacts with DeFi protocols through the MCP server powered by [EmberAI](https://www.emberai.xyz/), which supports a specific set of protocols at launch. Vibekit and Ember are designed for extensibility, and we highly encourage contributions that integrate support for additional protocols via new plugins.
 
-1. **Fork the Repository:** Begin by creating your own copy of the repository.
-2. **Review mcp-tools README:** Consult the `README.md` in `mcp-tools` for guidance on developing MCP tools.
-3. **Implement Changes:** Add new tools or enhance existing ones.
-4. **Create Example Agents:** Consider contributing example agents that demonstrate your new functionality.
-5. **Update Documentation:** Document your modifications in the `CHANGELOG.md` to keep the project’s history transparent.
-6. **Document Required Environment Variables:** If your changes require new or updated environment variables, add clear setup instructions so others can replicate your environment.
-7. **Provide Thorough Error Handling:** Include clear mechanisms for detecting and reporting errors in any newly introduced features or tools.
+If you're looking to add support for a new protocol:
 
-## 3. Submitting Your Work
+1.  **Identify Protocol & Similar Integrations:**
+    Begin by identifying the protocol you wish to integrate. Look for the most similar existing integration within Vibekit. This can serve as a valuable reference for design patterns and shared abstractions. For instance, if you're aiming to integrate a DEX similar to Uniswap, the Camelot integration could be a good starting point.
 
-When preparing your pull request (PR):
+2.  **Create an Issue:**
+    Navigate to the [Vibekit issues board](https://github.com/EmberAGI/arbitrum-vibekit/issues) to create a new issue detailing the protocol you intend to integrate. Describe the protocol, highlight its similarities to any existing integrations, and outline your proposed integration plan. This helps in tracking progress and discussing the approach.
 
-- **Reference Related Issues:** Link any relevant issues to provide context.
-- **Pass Continuous Integration Checks:** Make sure your code meets all testing and linting requirements.
-- **Provide Clear Documentation:** Include concise explanations of your changes and any necessary usage details.
+## Development Steps
 
-## 4. Review Process
+**1. Fork & Clone the Repository:**
 
-After submitting your PR:
+- **Fork the Repository:** Start by creating your own copy of the [Vibekit repository](https://github.com/EmberAGI/arbitrum-vibekit) on GitHub.
 
-- **Acknowledgment Within 2–3 Days:** We’ll let you know we’re reviewing your work.
-- **Initial Review Within 5 Days:** A maintainer will provide feedback or request changes.
-- **Merging:** Once all feedback is addressed and the PR is approved, your contribution will be merged.
+- **Clone Your Fork:** After forking, clone your forked repository to your local machine to begin development. You can do this by running `git clone https://github.com/YOUR_USERNAME/arbitrum-vibekit.git` (replace `YOUR_USERNAME` with your GitHub username).
+
+**2. Review MCP Tools Guidelines:** Checkout the [README.md](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools) file in the `mcp-tools` directory for guidance on developing MCP tools.
+
+**3. Implement Changes:** Add new tools or improve existing ones.
+
+**4. Create Documentation:** Create a `README` file for your new MCP tool that clearly explains its functionality and setup process.
+
+**5. Create Example Agents:** Consider adding a demo agent to the [examples directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) to showcase your new features.
+
+**6. Update CHANGELOG:** Document your modifications in [CHANGELOG.md](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CHANGELOG.md) to keep the project's history clear.
+
+## Submitting Your Work
+
+When preparing your pull request (PR), be sure to link any relevant issues to provide context. Make sure your code passes all testing and linting requirements as well.
+
+## Review Process
+
+After you submit your PR, we'll acknowledge it within 2–3 days to let you know it's being reviewed. You can expect initial feedback or requested changes from us within 5 days. Once all feedback is addressed and your PR is approved, your contribution will be merged.
 
 ## Getting Support
 
-If you need assistance:
+If you need assistance at any step of the contribution process:
 
-- **Search Existing Issues:** Check for similar questions or problems.
-- **Contact the Arbitrum Vibekit Team:** Reach out for guidance if needed.
-- **Open a New Issue:** If your concern isn’t already covered, create a new issue with detailed information.
+- Search [existing issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) for similar questions or problems.
+- If your concern isn't already covered, create a new issue with detailed information.
+- Reach out to our team for guidance.
+- Join our [support Discord](https://discord.com/invite/bgxWQ2fSBR) and connect with other builders.

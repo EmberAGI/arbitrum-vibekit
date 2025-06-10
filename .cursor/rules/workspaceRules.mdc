@@ -1,0 +1,56 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Monorepo Workspace Guidelines
+
+Rules and best practices that apply to the entire pnpm workspace monorepo.
+
+## PNPM Workspace Setup
+- Bootstrap all dependencies: run `pnpm install` at the repository root.
+- Build all packages: run `pnpm build` at root (executes each package's TypeScript compiler).
+
+## Running in Development
+- Prefer `tsx` for ESM TypeScript entrypoints:
+  - Install as a dev dependency at root: `pnpm add -Dw tsx`
+  - In each package's `package.json`, configure:
+    ```json
+    "scripts": {
+      "dev": "tsx src/index.ts"
+    }
+    ```
+- To start a single package in dev mode: `pnpm dev -F <package-name>`.
+
+## Module Resolution & Transpilation
+- Use `NodeNext` module resolution and ES2022 target in all `tsconfig.json` files.
+- Avoid using `ts-node` without `--esm`; rely on `tsx` for local ESM TypeScript execution.
+
+## CI/CD & Non-interactive Flags
+- Use non-interactive flags for automation (e.g., `pnpm install --frozen-lockfile`, `pnpm test -- --ci`).
+- Always run scripts via `pnpm run <script>` to ensure consistency.
+
+## Version Control & Force Flags
+- Do not use any `--force` flags (e.g., `git push --force`, `pnpm install --force`) without explicit approval.
+
+## General Best Practices
+- Maintain consistent dependency versions across packages; leverage `pnpm` overrides in root `package.json` if necessary.
+- Use pnpm filters (`-r`, `-F`) or `pnpm recursive` for efficient cross-package commands.
+- Document any new workspace-level tool or script additions in this file.
+- Never add depenencies directly to `package.json` files. Instead use `pnpm add` or `pnpm add -D` commands to add new dependencies. This ensures you have the latest versions.
+- Do not add trivial assertions like this:
+> expect(response).to.exist;
+- Do not wrap blocks of code in try/catch only to add context to the error. simply propagate errors.
+- To lint the code, run `pnpm recursive run lint` in the `typescript/` folder.
+- Never use .passthrough() with zod schemas.
+- ALWAYS use pnpm
+- never use NPM
+- this project is a multi-package PNPM workspace with root in `./typescript/`
+- NEVER use relative file imports to import a package within the workspace
+- NEVER use `file:/` in package.json to refer to a package within the workspace - use `workspace:*` instead
+- Do not add trivial comments that simply state the meaning of next line. Only add comments that convey non-trivial information.
+- Never redefine existing interfaces. always import and reuse
+- NEVER produce mocks instead of real implementations
+- If you encounter a problem related to missing environment variables, do not try to mock them - simply stop and prompt the user to fill them.
+- Never create value or type aliases for compatibility - don't hesitate to update the call sites to use 'true' names.
+- When refactorings are done, update the import paths rather than maintaining compatibility with aliases

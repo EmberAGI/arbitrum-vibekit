@@ -1,17 +1,16 @@
 {
+  "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "Node16",
     "moduleResolution": "Node16",
     "outDir": "dist",
     "rootDir": "./src",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "sourceMap": true
+    "composite": true,
+    "paths": {
+      "ember-schemas": ["../../ember-schemas/src/index.js"],
+      "ember-schemas/*": ["../../ember-schemas/src/*"]
+    }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
-} 
+  "exclude": ["node_modules", "dist"],
+  "references": [{ "path": "../../ember-schemas" }]
+}

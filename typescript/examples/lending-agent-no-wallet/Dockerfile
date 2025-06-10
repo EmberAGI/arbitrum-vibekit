@@ -1,10 +1,16 @@
 # Build stage - Context should be the typescript/ directory
-FROM node:20-slim AS builder
+FROM node:23-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends dumb-init git ca-certificates && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Install pnpm globally
-RUN npm install -g pnpm@10.7.0 typescript@5.8.3
+# Enable PNPM
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
 
 # ------------------------------
 # 1. Copy lockfile & workspace config that affect dependency graph cache
@@ -18,65 +24,23 @@ COPY tsconfig.base.json ./
 # ------------------------------
 # 2. Copy all workspace package.json files (to maximise Docker cache)
 # ------------------------------
-COPY lib/a2a/package.json ./lib/a2a/
-COPY lib/mcp-tools/emberai-mcp/package.json ./lib/mcp-tools/emberai-mcp/
-COPY lib/mcp-tools/allora-mcp-server/package.json ./lib/mcp-tools/allora-mcp-server/
+COPY lib/ lib/
 COPY examples/lending-agent-no-wallet/package.json ./examples/lending-agent-no-wallet/
 
 # ------------------------------
-# 3. Install deps based on the copied package.json set. This is cache-friendly and establishes workspace links.
+# 3. Install deps based on the copied package.json set. Skip lifecycle scripts for now
+#    because source files are not yet in the build context (they are copied in step 4).
+#    This keeps the layer cache-friendly while avoiding prepare/postinstall failures.
 # ------------------------------
-RUN pnpm install --prefer-frozen-lockfile
+RUN pnpm install --frozen-lockfile
 
 # ------------------------------
 # 4. Now copy the rest of the source code
 # ------------------------------
 COPY . .
 
-# ------------------------------
-# 5. Build every workspace package that provides a build script (recursive build)
-# ------------------------------
-RUN pnpm -r --if-present build
-
-# Production stage
-FROM node:20-slim AS production
-
-# Copy pnpm config
-COPY --from=builder /app/.npmrc ./
-
-# Create a non-root user
-RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    groupadd -r ember && useradd -r -g ember ember
-
-WORKDIR /app
-
-# Install pnpm globally
-RUN npm install -g pnpm@10.7.0
-
-# Copy only what we need from the builder stage
-COPY --from=builder /app/examples/lending-agent-no-wallet/dist /app/examples/lending-agent-no-wallet/dist
-COPY --from=builder /app/examples/lending-agent-no-wallet/package.json /app/examples/lending-agent-no-wallet/
-COPY --from=builder /app/lib/a2a/dist /app/lib/a2a/dist
-COPY --from=builder /app/lib/a2a/package.json /app/lib/a2a/
-COPY --from=builder /app/lib/mcp-tools/emberai-mcp/dist /app/lib/mcp-tools/emberai-mcp/dist
-COPY --from=builder /app/lib/mcp-tools/emberai-mcp/package.json /app/lib/mcp-tools/emberai-mcp/
-COPY --from=builder /app/node_modules /app/node_modules
-COPY --from=builder /app/node_modules/.pnpm /app/node_modules/.pnpm
-# Also copy the example package's direct node_modules folder to preserve local symlinks
-COPY --from=builder /app/examples/lending-agent-no-wallet/node_modules /app/examples/lending-agent-no-wallet/node_modules
-# Also copy the mcp-tool package's node_modules folder
-COPY --from=builder /app/lib/mcp-tools/emberai-mcp/node_modules /app/lib/mcp-tools/emberai-mcp/node_modules
-
-# Set the working directory for the final image
+RUN pnpm --filter lending-agent-no-wallet... build
 WORKDIR /app/examples/lending-agent-no-wallet/dist
-
-# Change ownership to non-root user
-RUN chown -R ember:ember /app
-
-# Switch to non-root user
-USER ember
 
 # Expose port for SSE MCP server
 EXPOSE 3001
@@ -85,4 +49,4 @@ EXPOSE 3001
 ENTRYPOINT ["dumb-init", "--"]
 
 # Start the Lending agent (path is relative to the WORKDIR set above)
-CMD ["node", "index.js"] 
+CMD ["node", "index.js"]
