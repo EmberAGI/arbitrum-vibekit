@@ -138,25 +138,25 @@ describe('Pendle Agent Integration Tests', function () {
         });
       });
 
-      // describe('Market Data', function () {
-      //   it('should fetch market data for tokens by symbol', async function () {
-      //     const response = await agent.processUserInput(
-      //       'What is the current price of USDC on Arbitrum?',
-      //       multiChainSigner.wallet.address as Address
-      //     );
+      describe('Market Data', function () {
+        it('should fetch market data for tokens by symbol', async function () {
+          const response = await agent.processUserInput(
+            'What is the current price of USDC on Arbitrum?',
+            multiChainSigner.wallet.address as Address
+          );
 
-      //     expect(response.status?.state).to.not.equal('failed', 'Market data operation failed');
+          expect(response.status?.state).to.not.equal('failed', 'Market data operation failed');
 
-      //     // Use the utility function to extract market data
-      //     const marketData = extractTokenMarketData(response);
+          // Use the utility function to extract market data
+          const marketData = extractTokenMarketData(response);
 
-      //     // Verify that we get some market data fields from the schema
-      //     const hasMarketDataFields = ['price', 'marketCap', 'volume24h', 'priceChange24h'].some(
-      //       field => marketData[field] !== undefined
-      //     );
-      //     expect(hasMarketDataFields).to.be.true;
-      //   });
-      // });
+          // Verify that we get some market data fields from the schema
+          const hasMarketDataFields = ['price', 'marketCap', 'volume24h', 'priceChange24h'].some(
+            field => marketData[field] !== undefined
+          );
+          expect(hasMarketDataFields).to.be.true;
+        });
+      });
     });
   }
 });
