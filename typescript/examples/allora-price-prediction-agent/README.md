@@ -61,17 +61,11 @@ The price prediction tool uses a hook-based approach:
 
 2. **Set up environment**:
 
-   Create a `.env` file in this directory. The agent uses the `createProviderSelector` from `@arbitrum/vibekit-core` to manage language model providers. You only need to provide the API key for the provider you wish to use.
+   Create a `.env` file in this directory with your API keys:
 
    ```bash
-   # Example .env file - pick one provider
+   # .env
    OPENROUTER_API_KEY=your_openrouter_api_key
-   # or
-   GROQ_API_KEY=your_groq_api_key
-   # or
-   XAI_API_KEY=your_xai_api_key
-
-   # Allora API key is also required
    ALLORA_API_KEY=your_allora_api_key_here
    ```
 
@@ -99,19 +93,18 @@ Once the agent is running, you can interact with it through the MCP interface:
 
 ## Language Model Configuration
 
-This agent utilizes the `createProviderSelector` from `@arbitrum/vibekit-core` for flexible language model configuration. By default, it uses **OpenRouter**, but it can be easily configured to use other providers like Groq, XAI, or OpenAI.
+This agent is configured to use **OpenRouter** as its exclusive LLM provider. The integration is managed via `createProviderSelector` from `@arbitrum/vibekit-core` in `src/index.ts`.
 
-The provider is selected in `src/index.ts`. To change the provider, modify this line:
+The provider is initialized as follows:
 
 ```typescript
 // src/index.ts
-const model = createProviderSelector({
-  // Optional: override the default provider
-  // defaultProvider: 'groq'
-}).select(); // Selects the default provider (or the override)
+const providers = createProviderSelector({
+  openRouterApiKey: process.env.OPENROUTER_API_KEY,
+});
 ```
 
-The agent will automatically load the corresponding API key from your `.env` file based on the selected provider.
+To use the agent, you must provide an `OPENROUTER_API_KEY` in your `.env` file. The agent will use this key to create the model instance for LLM-based orchestration.
 
 ## Project Structure
 
@@ -131,14 +124,13 @@ allora-price-prediction-agent/
 
 ## Environment Variables
 
-| Variable             | Description                                               | Required          |
-| -------------------- | --------------------------------------------------------- | ----------------- |
-| `OPENROUTER_API_KEY` | OpenRouter API key for LLM                                | Yes               |
-| `ALLORA_API_KEY`     | Allora API key for predictions                            | No (uses default) |
-| `PORT`               | Server port (default: 3008)                               | No                |
-| `LLM_MODEL`          | LLM model name (default: google/gemini-2.5-flash-preview) | No                |
-| `LLM_PROVIDER`       | LLM provider (default: openrouter)                        | No                |
-| `ALLORA_MCP_PORT`    | Port for STDIO-spawned Allora MCP server (default: 3009)  | No                |
+| Variable             | Description                                               | Required |
+| -------------------- | --------------------------------------------------------- | -------- |
+| `OPENROUTER_API_KEY` | Your API key for the OpenRouter service.                  | Yes      |
+| `ALLORA_API_KEY`     | Your API key for the Allora service.                      | Yes      |
+| `PORT`               | Server port for the agent (default: 3008).                | No       |
+| `LLM_MODEL`          | LLM model name (default: google/gemini-flash-1.5).        | No       |
+| `ALLORA_MCP_PORT`    | Port for the spawned Allora MCP server (default: 3009).   | No       |
 
 ### Port Configuration Note
 
@@ -156,7 +148,7 @@ Always connect to your agent's port (default 3008) to access the price predictio
 - **LLM Provider**: Vercel AI SDK (`createProviderSelector`)
 - **MCP Integration**: Allora MCP server via STDIO
 - **Language**: TypeScript
-- **Runtime**: Node.js 18+
+- **Runtime**: Node.js 20+
 
 ## Development
 

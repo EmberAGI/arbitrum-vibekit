@@ -33,7 +33,7 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
 
     agent = Agent.create(agentConfig, {
       llm: {
-        model: providers.openrouter!('anthropic/claude-3.5-sonnet'),
+        model: providers.openrouter!('google/gemini-2.5-flash-preview'),
       },
       cors: true,
       basePath: '/api/v1',

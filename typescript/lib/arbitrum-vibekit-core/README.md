@@ -9,6 +9,25 @@ The `arbitrum-vibekit-core` package is the foundational library for building AI 
 - **MCP Integration**: Seamless communication with MCP (Model Context Protocol) servers for accessing external tools and services.
 - **Flexible Provider Selector**: A powerful utility for managing and selecting different language model providers.
 
+## Testing
+
+This package uses Vitest for testing. To run tests that require environment variables:
+
+1. Copy `.env.test.example` to `.env.test`:
+
+   ```bash
+   cp .env.test.example .env.test
+   ```
+
+2. Fill in your actual API keys in `.env.test`
+
+3. Run tests:
+   ```bash
+   pnpm test
+   ```
+
+The test setup automatically loads environment variables from `.env.test`.
+
 ## Provider Selector
 
 The `createProviderSelector` function is a key feature of this package. It allows agents to easily switch between and utilize multiple Vercel AI SDK compatible providers, such as OpenRouter, Groq, Xai, and more.
@@ -19,13 +38,7 @@ In a dynamic environment, you may want to use different models for different tas
 
 ### Usage
 
-First, ensure you have the necessary provider packages installed:
-
-```bash
-pnpm add @openrouter/ai-sdk-provider @ai-sdk/openai @ai-sdk/groq @ai-sdk/xai
-```
-
-Then, you can use `createProviderSelector` to get a specific provider's `LanguageModelV1` instance. The selector will automatically use the correct API key from your environment variables.
+You can use `createProviderSelector` to get a specific provider's `LanguageModelV1` instance. The selector will automatically use the correct API key from your environment variables.
 
 ```typescript
 import { createProviderSelector } from '@arbitrum/vibekit-core';
@@ -33,31 +46,47 @@ import 'dotenv/config';
 
 // Your .env file should contain the API keys:
 // OPENROUTER_API_KEY=...
-// GROQ_API_KEY=...
 // XAI_API_KEY=...
+// HYPERBOLIC_API_KEY=...
 
-// Get the OpenRouter provider
-const openrouter = createProviderSelector().select('openrouter');
+// Create a provider selector with your API keys
+const providers = createProviderSelector({
+  openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  xaiApiKey: process.env.XAI_API_KEY,
+  hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
+});
 
-// Get the Groq provider
-const groq = createProviderSelector().select('groq');
+// To get a model, you access the provider directly
+// and pass in the model name.
 
-// Get the Xai provider
-const xai = createProviderSelector().select('xai');
+// Get the OpenRouter model for Gemini Flash
+if (providers.openrouter) {
+  const model = providers.openrouter('google/gemini-2.5-flash-preview');
+  // now you can use the model...
+}
+
+// Get the Groq model for Llama 3
+if (providers.grok) {
+  const grokModel = providers.grok('llama3-8b-8192');
+  // now you can use the model...
+}
 
 // You can now use these model instances with the Vercel AI SDK
 // For example, using it in an agent:
-const agent = new Agent({
-  // ... other agent config
-  model: openrouter, // or groq, or xai
-});
+if (providers.openrouter) {
+  const agent = new Agent({
+    // ... other agent config
+    model: providers.openrouter('google/gemini-2.5-flash-preview'),
+  });
+}
 ```
+
+> **Note**: All API keys are optional. You only need to provide a key for the provider you intend to use. The `createProviderSelector` will only enable providers for which an API key has been supplied.
 
 The selector uses the following environment variables for API keys:
 
 - **OpenRouter**: `OPENROUTER_API_KEY`
-- **Groq**: `GROQ_API_KEY`
-- **XAI**: `XAI_API_KEY`
-- **OpenAI**: `OPENAI_API_KEY`
+- **xAI/Grok**: `XAI_API_KEY`
+- **Hyperbolic**: `HYPERBOLIC_API_KEY`
 
 This utility simplifies multi-provider setups and makes your agent's model configuration more flexible and maintainable.

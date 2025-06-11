@@ -8,9 +8,9 @@ The `lib` directory contains the core libraries and tool packages that power the
 
 Developed by Google, this package provides agent-to-agent (A2A) communication samples and schemas. It is useful for building and testing multi-agent workflows or integrating with other A2A-compliant systems.
 
-#### 2. `arbitrum-vibekit/`
+#### 2. `arbitrum-vibekit-core/`
 
-This is the main shared library for Arbitrum Vibekit agents, and provides TypeScript utilities, schemas, and other core agent logic. This package is imported by all agents to ensure consistent transaction artifact handling and MCP integration.
+This is the Arbitrum Vibekit framework. It's the main shared library for Arbitrum Vibekit agents that provides TypeScript utilities, schemas, and other core agent logic. This package is imported by all agents to ensure consistent transaction artifact handling and MCP integration.
 
 #### 3. `ember-schemas/`
 

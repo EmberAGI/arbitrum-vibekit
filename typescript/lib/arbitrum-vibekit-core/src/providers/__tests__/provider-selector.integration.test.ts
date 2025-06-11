@@ -1,12 +1,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createProviderSelector, getAvailableProviders } from '../provider-selector.js';
 import type { LanguageModelV1 } from 'ai';
-import dotenv from 'dotenv';
-
-// Load environment variables from .env file
-dotenv.config();
 
 // Get API keys from environment
+// Vitest will automatically load .env.test based on the config
 const API_KEYS = {
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
   xaiApiKey: process.env.XAI_API_KEY,
