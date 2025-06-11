@@ -208,6 +208,12 @@ cd ../.. &&
 docker compose build web --no-cache && docker compose up
 ```
 
+The Quickstart Agent is now accessible through the web frontend:
+
+<p align="left">
+  <img src="/img/quickstart-agent.png" width="900px" alt="quickstart-agent"/>
+</p>
+
 > [!TIP]
 > To learn more about Vibekit's agent configurations, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web#agent-configuration).
 
