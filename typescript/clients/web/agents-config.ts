@@ -36,6 +36,28 @@ export const chatAgents = [
   //   suggestedActions: [],
   // },
   // {
+  //   id: 'allora-price-prediction-agent' as const,
+  //   name: 'Price Prediction',
+  //   description: 'Allora price prediction agent',
+  //   suggestedActions: [
+  //     {
+  //       title: 'Get BTC',
+  //       label: 'price prediction',
+  //       action: 'What is the price prediction for BTC?',
+  //     },
+  //     {
+  //       title: 'Get ETH',
+  //       label: 'price prediction',
+  //       action: 'What is the price prediction for ETH?',
+  //     },
+  //     {
+  //       title: 'Compare BTC and ETH',
+  //       label: 'predictions',
+  //       action: 'Get price predictions for both BTC and ETH',
+  //     },
+  //   ],
+  // },
+  // {
   //   id: "ember-lp" as const,
   //   name: "LPing",
   //   description: "Camelot Liquidity Provisioning agent",
@@ -92,6 +114,7 @@ export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
   ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
   // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
+  // ['allora-price-prediction-agent', 'http://allora-price-prediction-agent:3008/sse'],
   // ["ember-lp", "http://liquidity-agent-no-wallet:3002/sse"],
   // ["ember-pendle", "http://pendle-agent:3003/sse"],
 ]);

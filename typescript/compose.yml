@@ -41,6 +41,20 @@ services:
   #     - 3007:3007
   #   restart: unless-stopped
 
+  # allora-price-prediction-agent:
+  #   build:
+  #     context: ./
+  #     dockerfile: templates/allora-price-prediction-agent/Dockerfile
+  #   container_name: vibekit-allora-price-prediction-agent
+  #   env_file:
+  #     - path: .env
+  #       required: true
+  #     - path: templates/allora-price-prediction-agent/.env
+  #       required: false
+  #   ports:
+  #     - 3008:3008
+  #   restart: unless-stopped
+
   # liquidity-agent-no-wallet:
   #   build:
   #     context: ./
