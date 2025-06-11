@@ -5,14 +5,18 @@
  */
 
 import 'dotenv/config';
-import { Agent, type AgentConfig } from 'arbitrum-vibekit-core';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { Agent, type AgentConfig, createProviderSelector } from 'arbitrum-vibekit-core';
 import { pricePredictionSkill } from './skills/pricePrediction.js';
 
-// Create OpenRouter instance for LLM
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
+// Create provider selector
+const providers = createProviderSelector({
+  openRouterApiKey: process.env.OPENROUTER_API_KEY,
 });
+
+// Check if OpenRouter is available
+if (!providers.openrouter) {
+  throw new Error('OpenRouter provider is not available. Please check your OPENROUTER_API_KEY.');
+}
 
 // Export agent configuration for testing
 export const agentConfig: AgentConfig = {
@@ -37,7 +41,7 @@ const agent = Agent.create(agentConfig, {
   cors: process.env.ENABLE_CORS !== 'false',
   basePath: process.env.BASE_PATH || undefined,
   llm: {
-    model: openrouter(process.env.LLM_MODEL || 'google/gemini-2.5-flash-preview'),
+    model: providers.openrouter(process.env.LLM_MODEL || 'google/gemini-2.5-flash-preview'),
   },
 });
 

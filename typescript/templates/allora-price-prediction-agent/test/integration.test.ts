@@ -5,8 +5,7 @@
 import { describe, test, expect, beforeAll, afterAll, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import { Agent } from 'arbitrum-vibekit-core';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { Agent, createProviderSelector } from 'arbitrum-vibekit-core';
 import { agentConfig } from '../src/index.js';
 
 describe('Allora Price Prediction Agent - Integration Tests', () => {
@@ -27,14 +26,14 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
     console.log('Environment AGENT_NAME:', process.env.AGENT_NAME);
     console.log('Agent config name:', agentConfig.name);
 
-    // Create the agent with test configuration
-    const openrouter = createOpenRouter({
-      apiKey: process.env.OPENROUTER_API_KEY || 'test-api-key',
+    // Create the agent with the provider selector
+    const providers = createProviderSelector({
+      openRouterApiKey: process.env.OPENROUTER_API_KEY || 'test-api-key',
     });
 
     agent = Agent.create(agentConfig, {
       llm: {
-        model: openrouter('anthropic/claude-3.5-sonnet'),
+        model: providers.openrouter!('google/gemini-2.5-flash-preview'),
       },
       cors: true,
       basePath: '/api/v1',
@@ -79,7 +78,14 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
     }
   }, 15000);
 
-  describe('Agent Configuration', () => {
+  describe('Agent Configuration and Initialization', () => {
+    test('Agent should be initialized with an LLM model', () => {
+      // This test confirms the agent instance has the llm property correctly set up.
+      // Note: This inspects the internal state for testing purposes.
+      expect((agent as any).model).toBeDefined();
+      expect((agent as any).model.provider).toContain('openrouter');
+    });
+
     test('GET /.well-known/agent.json returns correct AgentCard', async () => {
       const response = await fetch(`${baseUrl}/api/v1/.well-known/agent.json`);
       expect(response.status).toBe(200);
@@ -229,7 +235,7 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
       expect(response.kind).toBe('message');
       expect(response.role).toBe('agent');
       // The agent should ask for clarification
-      expect(response.parts[0].text).toMatch(/which token|please|specify|BTC|ETH/i);
+      expect(response.parts[0].text).toMatch(/what token would you like|which token|please|specify/i);
 
       // Test with missing message - this should throw an MCP error
       await expect(

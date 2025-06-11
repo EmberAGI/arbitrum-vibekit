@@ -61,10 +61,12 @@ The price prediction tool uses a hook-based approach:
 
 2. **Set up environment**:
 
+   Create a `.env` file in this directory with your API keys:
+
    ```bash
-   # Create .env file with:
-   OPENROUTER_API_KEY=your_api_key_here
-   ALLORA_API_KEY=your_allora_api_key_here  # Optional, uses default if not set
+   # .env
+   OPENROUTER_API_KEY=your_openrouter_api_key
+   ALLORA_API_KEY=your_allora_api_key_here
    ```
 
 3. **Build the agent**:
@@ -89,6 +91,21 @@ Once the agent is running, you can interact with it through the MCP interface:
 "What will be the price of Ethereum?"
 ```
 
+## Language Model Configuration
+
+This agent is configured to use **OpenRouter** as its exclusive LLM provider. The integration is managed via `createProviderSelector` from `@arbitrum/vibekit-core` in `src/index.ts`.
+
+The provider is initialized as follows:
+
+```typescript
+// src/index.ts
+const providers = createProviderSelector({
+  openRouterApiKey: process.env.OPENROUTER_API_KEY,
+});
+```
+
+To use the agent, you must provide an `OPENROUTER_API_KEY` in your `.env` file. The agent will use this key to create the model instance for LLM-based orchestration.
+
 ## Project Structure
 
 ```
@@ -107,13 +124,13 @@ allora-price-prediction-agent/
 
 ## Environment Variables
 
-| Variable             | Description                                               | Required          |
-| -------------------- | --------------------------------------------------------- | ----------------- |
-| `OPENROUTER_API_KEY` | OpenRouter API key for LLM                                | Yes               |
-| `ALLORA_API_KEY`     | Allora API key for predictions                            | No (uses default) |
-| `PORT`               | Server port (default: 3008)                               | No                |
-| `LLM_MODEL`          | LLM model name (default: google/gemini-2.5-flash-preview) | No                |
-| `ALLORA_MCP_PORT`    | Port for STDIO-spawned Allora MCP server (default: 3009)  | No                |
+| Variable             | Description                                               | Required |
+| -------------------- | --------------------------------------------------------- | -------- |
+| `OPENROUTER_API_KEY` | Your API key for the OpenRouter service.                  | Yes      |
+| `ALLORA_API_KEY`     | Your API key for the Allora service.                      | Yes      |
+| `PORT`               | Server port for the agent (default: 3008).                | No       |
+| `LLM_MODEL`          | LLM model name (default: google/gemini-flash-1.5).        | No       |
+| `ALLORA_MCP_PORT`    | Port for the spawned Allora MCP server (default: 3009).   | No       |
 
 ### Port Configuration Note
 
@@ -128,10 +145,10 @@ Always connect to your agent's port (default 3008) to access the price predictio
 ## Technical Details
 
 - **Framework**: Arbitrum Vibekit Core
-- **LLM Provider**: OpenRouter
+- **LLM Provider**: Vercel AI SDK (`createProviderSelector`)
 - **MCP Integration**: Allora MCP server via STDIO
 - **Language**: TypeScript
-- **Runtime**: Node.js 18+
+- **Runtime**: Node.js 20+
 
 ## Development
 

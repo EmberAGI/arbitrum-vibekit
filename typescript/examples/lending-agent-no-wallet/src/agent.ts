@@ -1,6 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { Task } from 'a2a-samples-js';
 import { promises as fs } from 'fs';
 import { createRequire } from 'module';
@@ -14,6 +13,7 @@ import {
   type CoreUserMessage,
   type CoreAssistantMessage,
   type StepResult,
+  type LanguageModelV1,
 } from 'ai';
 import {
   LendingGetCapabilitiesResponseSchema,
@@ -39,14 +39,17 @@ import {
   handleAskEncyclopedia,
   type HandlerContext,
 } from './agentToolHandlers.js';
+import { createProviderSelector } from 'arbitrum-vibekit-core';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const CACHE_FILE_PATH = path.join(__dirname, '.cache', 'lending_capabilities.json');
 
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
+const providers = createProviderSelector({
+  openRouterApiKey: process.env.OPENROUTER_API_KEY,
 });
+
+const model = providers.openrouter!('google/gemini-2.5-flash-preview');
 
 function logError(...args: unknown[]) {
   console.error(...args);
@@ -116,14 +119,16 @@ export class Agent {
   public conversationHistory: CoreMessage[] = [];
   private userAddress?: string;
   private aaveContextContent: string = '';
+  private model: LanguageModelV1;
 
   constructor(quicknodeSubdomain: string, quicknodeApiKey: string) {
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
 
-    if (!process.env.OPENROUTER_API_KEY) {
+    if (!providers.openrouter) {
       throw new Error('OPENROUTER_API_KEY not set!');
     }
+    this.model = model;
   }
 
   async init(): Promise<void> {
@@ -523,10 +528,16 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
     try {
       console.error('Calling generateText with Vercel AI SDK...');
-      const { response, text, finishReason } = await generateText({
-        model: openrouter('google/gemini-2.5-flash-preview'),
-        messages: this.conversationHistory,
-        tools: this.toolSet,
+      const { text, toolResults, finishReason, response } = await generateText({
+        model: this.model,
+        system: this.conversationHistory.find(m => m.role === 'system')?.content as string,
+        messages: this.conversationHistory.filter(m => m.role !== 'system') as (
+          | CoreUserMessage
+          | CoreAssistantMessage
+        )[],
+        tools: this.toolSet as {
+          [key: string]: Tool<any, any>;
+        },
         maxSteps: 5,
         onStepFinish: async (stepResult: StepResult<typeof this.toolSet>) => {
           console.error(`Step finished. Reason: ${stepResult.finishReason}`);
@@ -535,23 +546,29 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       console.error(`generateText finished. Reason: ${finishReason}`);
       console.error(`LLM response text: ${text}`);
 
-      this.conversationHistory.push(...response.messages);
+      // Add messages from the response to conversation history
+      if (response.messages && Array.isArray(response.messages)) {
+        this.conversationHistory.push(...response.messages);
+      }
 
       let finalTask: Task | null = null;
-      for (const message of response.messages) {
-        if (message.role === 'tool' && Array.isArray(message.content)) {
-          for (const part of message.content) {
-            if (
-              part.type === 'tool-result' &&
-              part.result &&
-              typeof part.result === 'object' &&
-              'id' in part.result
-            ) {
-              finalTask = part.result as Task;
+      // Process messages from the response
+      if (response.messages && Array.isArray(response.messages)) {
+        for (const message of response.messages) {
+          if (message.role === 'tool' && Array.isArray(message.content)) {
+            for (const part of message.content) {
+              if (
+                part.type === 'tool-result' &&
+                part.result &&
+                typeof part.result === 'object' &&
+                'id' in part.result
+              ) {
+                finalTask = part.result as Task;
+              }
             }
           }
+          if (finalTask) break;
         }
-        if (finalTask) break;
       }
 
       if (finalTask) {
