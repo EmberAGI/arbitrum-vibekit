@@ -44,12 +44,12 @@ services:
   # allora-price-prediction-agent:
   #   build:
   #     context: ./
-  #     dockerfile: examples/allora-price-prediction-agent/Dockerfile
+  #     dockerfile: templates/allora-price-prediction-agent/Dockerfile
   #   container_name: vibekit-allora-price-prediction-agent
   #   env_file:
   #     - path: .env
   #       required: true
-  #     - path: examples/allora-price-prediction-agent/.env
+  #     - path: templates/allora-price-prediction-agent/.env
   #       required: false
   #   ports:
   #     - 3008:3008
