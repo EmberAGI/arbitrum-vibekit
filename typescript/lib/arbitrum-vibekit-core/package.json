@@ -6,6 +6,7 @@
   "types": "dist/src/index.d.ts",
   "scripts": {
     "build": "tsc -b",
+    "prepare": "pnpm build",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:mocha": "mocha 'dist/test/**/*.test.js' --reporter spec"
