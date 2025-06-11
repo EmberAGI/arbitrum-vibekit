@@ -1,41 +1,78 @@
-## Introduction
+# Swapping Agent No Wallet
 
-This directory provides a reference implementation of a swapping agent using Arbitrum Vibekit and Ember AI's MCP server. It demonstrates how to set up a server, define agent functionalities, and process swapping operations via MCP tools. You can expand or modify this template by adding new tools or incorporating additional MCP-compatible functionalities to suit your project’s requirements.
+This is a Model Context Protocol (MCP) agent example that demonstrates how to use the EmberAI MCP server for swapping tokens across multiple EVM chains. The agent returns transaction data to be signed by a connected user wallet since no integrated wallet is included.
 
-## File Overview
+## Features
 
-1. **`index.ts`**
+- No integrated wallet: transaction data is returned for user signing
+- Supports swapping tokens across Arbitrum, Ethereum, Optimism, Polygon, and Base
+- Natural language interface for all swap and protocol questions
+- Token caching for improved performance
+- Enhanced intent detection for swap operations
+- Protocol encyclopedia integration for Camelot DEX
 
-   Creates a Node.js server that provides real-time (SSE-based) interactions with an on-chain swapping agent. Key Components are:
+## Getting Started
 
-- Agent Initialization with ethers (for blockchain) and environment variables.
+The swapping agent is automatically started when the frontend spins up. To start and interact with the swapping agent through the frontend, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web#quickstart). If you prefer to start the agent manually, follow these steps:
 
-- MCP Server with a “chat” tool for handling user inputs.
+### Prerequisites
 
-- Express App for HTTP routes and SSE streaming.
+- [Node.js 22+](https://nodejs.org/)
+- [pnpm](https://pnpm.io/) (npm install -g pnpm)
+- QuickNode API access for blockchain interactions
+- OpenRouter API key for LLM access
 
-2. **`agent.ts`**
+### Set Up Your Environment
 
-   Defines and manages an AI-powered, on-chain swapping agent. Key Components are:
+1. Clone the repository and navigate to the swapping agent's directory:
 
-- Agent that interacts with blockchain swapping protocols (Ember On-chain Actions) to handle user inputs and execute on-chain operations.
+```bash
+git clone https://github.com/EmberAGI/arbitrum-vibekit.git &&
+cd arbitrum-vibekit/typescript/examples/swapping-agent-no-wallet
+```
 
-- MCP client that queries capabilities and generates transaction sets.
+2. Create a `.env` file based on `.env.example`:
 
-3. **`agentToolHandlers.ts`**
+```bash
+cp .env.example .env
+```
 
-   Contains handler functions for MCP tools and Validates tool output before passing it to the agent for on-chain execution.
+Make sure to fill in the API keys and configuration variables.
 
-## Example Capabilities
+3. Install dependencies and build:
 
-Below are some example user inputs that showcase the swapping agent's capabilities:
+```bash
+pnpm install
+pnpm build
+```
 
-"Swap 1 ETH for USDC"
+### Start the Agent
 
-"Convert 100 USDT to ARB"
+Run the following command to start the agent:
 
-"Trade OP on Optimism for ARB on Arbitrum"
+```bash
+pnpm start
+```
 
-## Run Agent
+Alternatively you can use Docker to run the agent:
 
-To run and interact with the agent, follow the instructions in the [`examples/README.md`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/examples/README.md) file.
+```bash
+pnpm docker:build
+pnpm docker:run
+```
+
+Or with Docker Compose:
+
+```bash
+pnpm docker:compose:up
+```
+
+## Agent Capabilities
+
+The agent exposes an MCP-compatible interface with the following capabilities:
+
+- `swap` / `convert`: Swap one token for another, including cross-chain swaps (e.g., "Swap 1 ETH for USDC on Arbitrum", "Convert 100 USDT to ARB on Polygon")
+- `askEncyclopedia`: Ask protocol-specific questions about Camelot DEX (e.g., "What is slippage?", "How does Camelot's liquidity mining work?")
+
+> [!NOTE]
+> The agent maintains an internal list of available tokens and can answer questions about supported tokens via natural language queries (e.g., "What tokens are available?").

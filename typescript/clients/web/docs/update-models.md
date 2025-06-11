@@ -1,10 +1,10 @@
 # Update Models and LLM Providers
 
-The Vibekit Web Frontend allows users to select different Large Language Models (LLMs) for various tasks. This document explains how models are defined for the frontend UI and how to configure different LLM providers.
+Vibekit's web frontend allows users to select different Large Language Models (LLMs) for various tasks. This document explains how models are defined for the frontend UI and how to configure different LLM providers.
 
 ## Understanding the Model Configuration Layers
 
-Model configuration in Vibekit involves two main parts:
+Vibekit's model configuration involves two main parts:
 
 1.  **Frontend Model Definitions in [`models.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/lib/ai/models.ts):**
 
@@ -12,9 +12,11 @@ Model configuration in Vibekit involves two main parts:
     - It also sets a `DEFAULT_CHAT_MODEL`.
     - Note that this file does not handle the actual connection to LLM providers or API keys.
 
-2.  **Web Client's LLM Orchestration and Provider Configuration:**
-    - The web client's server-side logic (acting as the primary orchestrator) is responsible for taking the `id` of the model selected in the frontend UI and then making the actual call to the chosen LLM provider using the configurations described in this document.
-    - The model and provider settings (in [`models.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/lib/ai/models.ts) and [`providers.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/lib/ai/providers.ts)) are for the LLM directly utilized by the web client to process user chat, generate responses, and orchestrate tools.
+2.  **Backend LLM Orchestration:**
+    - The web client's backend orchestrates the process by using an LLM to manage tasks. It uses the `id` of the model selected in the UI to call the appropriate LLM provider.
+    - The orchestrating LLM relies on configurations in [`models.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/lib/ai/models.ts) and [`providers.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/lib/ai/providers.ts) to route requests for chat, response generation, and tool use.
+
+For more information on frontend's architecture and how it works, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/README.md).
 
 ## Configuring Frontend Model Options
 
@@ -49,13 +51,13 @@ export const chatModels: Array<ChatModel> = [
 ];
 ```
 
-If you want this new model to be the default selection in the UI, update the `DEFAULT_CHAT_MODEL` constant:
+Make sure to set the `DEFAULT_CHAT_MODEL` constant to your new model to be able to interact with it through the UI:
 
 ```ts
 export const DEFAULT_CHAT_MODEL: string = 'anthropic-direct-sonnet';
 ```
 
-**Note:** Adding a model here only makes it appear in the UI. You must also configure your the web client to handle the new `id` (e.g., `'anthropic-direct-sonnet'`). To do so, update [`providers.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/lib/ai/providers.ts) to add the new model ID in the `languageModels` map of your chosen provider (e.g., `openRouterProvider` or `grokProvider`) so the web client knows how to instantiate and call your new model:
+Note that adding a model here only makes it appear in the UI. You must also configure your the web client to handle the new `id` (e.g., `'anthropic-direct-sonnet'`). To do so, update [`providers.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/lib/ai/providers.ts) to add the new model ID in the `languageModels` map of your chosen provider (e.g., `openRouterProvider` or `grokProvider`):
 
 ```ts
 // ...
@@ -91,24 +93,35 @@ export const openRouterProvider = isTestEnvironment
 // ...
 ```
 
-## Switching the Default Provider from OpenRouter to Hyperbolic
+You can now [run the frontend](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/README.md#quickstart) and start interacting with your newly added chat model. Note that if you have already started the frontend, you need to rebuild it to reflect the changes:
 
-The default configuration in [`providers.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/lib/ai/providers.ts) primarily uses `OpenRouter`. If you wish to use `Hyperbolic` (from `HyperbolicLabs`) as your main LLM provider for the frontend UI, you'll need to modify this configuration file.
+```bash
+docker compose down && docker volume rm typescript_db_data && docker compose build web --no-cache && docker compose up
+```
+
+## Switching the Default Provider (OpenRouter)
+
+The default configuration in [`providers.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/lib/ai/providers.ts) primarily uses `OpenRouter`. You can also use `Hyperbolic` (from `HyperbolicLabs`) as your main LLM provider for the frontend UI. To do so, you'll need to modify `providers.ts`.
 
 **1. Install the Hyperbolic AI SDK Provider:**
 
-First, add the Hyperbolic AI SDK provider package to your web client's dependencies.Open your terminal, navigate to the web client directory, and run:
+First, add the Hyperbolic AI SDK provider package to your web client's dependencies. Open your terminal, navigate to the[ web client directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web), and run:
 
 ```bash
 cd typescript/clients/web &&
 pnpm add @hyperbolic/ai-sdk-provider
 ```
 
-After adding the package, navigate back to the `typescript` root directory and run `pnpm install` to update dependencies, followed by `pnpm build` if necessary.
+After adding the package, navigate back to the `typescript` root directory and update the dependencies:
+
+```bash
+cd ../.. &&
+pnpm install
+```
 
 **2. Update Environment Variables:**
 
-Ensure your `Hyperbolic` API key is set in your `.env` file.
+Ensure your Hyperbolic API key is set in your `.env` file in the `typescript` root directory.
 
 ```env
 # Add your Hyperbolic API Key
@@ -128,11 +141,8 @@ c. Update the `languageModels` map within the `customProvider` configuration to 
 Below is an example of how `providers.ts` might be modified:
 
 ```typescript
-import { customProvider, extractReasoningMiddleware, wrapLanguageModel } from 'ai';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-s;
-import { createHyperbolic } from '@hyperbolic/ai-sdk-provider'; // Import Hyperbolic
 // ...
+import { createHyperbolic } from '@hyperbolic/ai-sdk-provider'; // Import Hyperbolic
 
 // Initialize Hyperbolic provider
 const hyperbolic = createHyperbolic({
@@ -151,17 +161,27 @@ export const openRouterProvider = isTestEnvironment
   : customProvider({
       languageModels: {
         // Update model definitions to use Hyperbolic and its model IDs.
-        // Replace with actual Hyperbolic model ID
-        'chat-model': hyperbolic('hyperbolic-main-chat-model-id'),
-        'chat-model-medium': hyperbolic('hyperbolic-medium-model-id'),
-        'title-model': hyperbolic('hyperbolic-title-generation-model-id'),
-        'artifact-model': hyperbolic('hyperbolic-artifact-model-id'),
+        'chat-model': hyperbolic('DeepSeek-R1'),
+        'chat-model-medium': hyperbolic('Llama-3.1-70B'),
+        'title-model': hyperbolic('Llama-3.1-8B'),
+        'artifact-model': hyperbolic('Qwen2.5-Coder-32B'),
       },
     });
 
 // ...
 ```
 
+> [!TIP]
+> After switching to Hyperbolic, you should remove any OpenRouter-related code and references from your project. Additionally, for clarity and to avoid confusion, rename all instances of `openRouterProvider` to `hyperbolicProvider` in your codebase.
+
 **4. Update `models.ts`:**
 
-After configuring Hyperbolic in [`providers.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/lib/ai/providers.ts), review [`models.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/lib/ai/models.ts). You might need to update the `name` and `description` for your model IDs to accurately reflect that they are now served via Hyperbolic.
+After configuring Hyperbolic in [`providers.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/lib/ai/providers.ts), review [`models.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/lib/ai/models.ts). You might need to update the `name` and `description` for your model IDs to match the ones defined in `providers.ts`.
+
+**5. Run Frontend:**
+
+You can now [run the frontend](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/README.md#quickstart) with the updated Hyperbolic provider. Note that if you have already started the frontend, you need to rebuild it to reflect the changes:
+
+```bash
+docker compose down && docker volume rm typescript_db_data && docker compose build web --no-cache && docker compose up
+```
