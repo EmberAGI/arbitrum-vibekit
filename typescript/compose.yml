@@ -1,31 +1,31 @@
 services:
-  # lending-agent-no-wallet:
-  #   build:
-  #     context: ./
-  #     dockerfile: examples/lending-agent-no-wallet/Dockerfile
-  #   container_name: vibekit-lending-agent-no-wallet
-  #   env_file:
-  #     - path: .env
-  #       required: true
-  #     - path: examples/lending-agent-no-wallet/.env
-  #       required: false
-  #   ports:
-  #     - 3001:3001
-  #   restart: unless-stopped
+  lending-agent-no-wallet:
+    build:
+      context: ./
+      dockerfile: examples/lending-agent-no-wallet/Dockerfile
+    container_name: vibekit-lending-agent-no-wallet
+    env_file:
+      - path: .env
+        required: true
+      - path: examples/lending-agent-no-wallet/.env
+        required: false
+    ports:
+      - 3001:3001
+    restart: unless-stopped
 
-  # swapping-agent-no-wallet:
-  #   build:
-  #     context: ./
-  #     dockerfile: examples/swapping-agent-no-wallet/Dockerfile
-  #   container_name: vibekit-swapping-agent-no-wallet
-  #   env_file:
-  #     - path: .env
-  #       required: true
-  #     - path: examples/swapping-agent-no-wallet/.env
-  #       required: false
-  #   ports:
-  #     - 3005:3005
-  #   restart: unless-stopped
+  swapping-agent-no-wallet:
+    build:
+      context: ./
+      dockerfile: examples/swapping-agent-no-wallet/Dockerfile
+    container_name: vibekit-swapping-agent-no-wallet
+    env_file:
+      - path: .env
+        required: true
+      - path: examples/swapping-agent-no-wallet/.env
+        required: false
+    ports:
+      - 3005:3005
+    restart: unless-stopped
 
   # quickstart-agent-template:
   #   build:
@@ -41,19 +41,19 @@ services:
   #     - 3007:3007
   #   restart: unless-stopped
 
-  allora-price-prediction-agent:
-    build:
-      context: ./
-      dockerfile: examples/allora-price-prediction-agent/Dockerfile
-    container_name: vibekit-allora-price-prediction-agent
-    env_file:
-      - path: .env
-        required: true
-      - path: examples/allora-price-prediction-agent/.env
-        required: false
-    ports:
-      - 3008:3008
-    restart: unless-stopped
+  # allora-price-prediction-agent:
+  #   build:
+  #     context: ./
+  #     dockerfile: examples/allora-price-prediction-agent/Dockerfile
+  #   container_name: vibekit-allora-price-prediction-agent
+  #   env_file:
+  #     - path: .env
+  #       required: true
+  #     - path: examples/allora-price-prediction-agent/.env
+  #       required: false
+  #   ports:
+  #     - 3008:3008
+  #   restart: unless-stopped
 
   # liquidity-agent-no-wallet:
   #   build:

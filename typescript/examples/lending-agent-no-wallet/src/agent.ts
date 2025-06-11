@@ -1,6 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { Task } from 'a2a-samples-js';
 import { promises as fs } from 'fs';
 import { createRequire } from 'module';
@@ -48,11 +47,9 @@ const CACHE_FILE_PATH = path.join(__dirname, '.cache', 'lending_capabilities.jso
 
 const providers = createProviderSelector({
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
-  xaiApiKey: process.env.XAI_API_KEY,
-  hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
 });
 
-const model = providers.openrouter!('google/gemini-flash-1.5');
+const model = providers.openrouter!('google/gemini-2.5-flash-preview');
 
 function logError(...args: unknown[]) {
   console.error(...args);
@@ -531,7 +528,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
     try {
       console.error('Calling generateText with Vercel AI SDK...');
-      const { text, toolResults, finishReason, roundtrips } = await generateText({
+      const { text, toolResults, finishReason, response } = await generateText({
         model: this.model,
         system: this.conversationHistory.find(m => m.role === 'system')?.content as string,
         messages: this.conversationHistory.filter(m => m.role !== 'system') as (
@@ -549,23 +546,29 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       console.error(`generateText finished. Reason: ${finishReason}`);
       console.error(`LLM response text: ${text}`);
 
-      this.conversationHistory.push(...roundtrips);
+      // Add messages from the response to conversation history
+      if (response.messages && Array.isArray(response.messages)) {
+        this.conversationHistory.push(...response.messages);
+      }
 
       let finalTask: Task | null = null;
-      for (const message of roundtrips) {
-        if (message.role === 'tool' && Array.isArray(message.content)) {
-          for (const part of message.content) {
-            if (
-              part.type === 'tool-result' &&
-              part.result &&
-              typeof part.result === 'object' &&
-              'id' in part.result
-            ) {
-              finalTask = part.result as Task;
+      // Process messages from the response
+      if (response.messages && Array.isArray(response.messages)) {
+        for (const message of response.messages) {
+          if (message.role === 'tool' && Array.isArray(message.content)) {
+            for (const part of message.content) {
+              if (
+                part.type === 'tool-result' &&
+                part.result &&
+                typeof part.result === 'object' &&
+                'id' in part.result
+              ) {
+                finalTask = part.result as Task;
+              }
             }
           }
+          if (finalTask) break;
         }
-        if (finalTask) break;
       }
 
       if (finalTask) {
