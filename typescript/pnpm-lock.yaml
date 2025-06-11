@@ -71,64 +71,6 @@ importers:
         specifier: ^8.32.1
         version: 8.33.1(eslint@9.28.0)(typescript@5.8.3)
 
-  examples/allora-price-prediction-agent:
-    dependencies:
-      '@alloralabs/mcp-server':
-        specifier: workspace:*
-        version: link:../../lib/mcp-tools/allora-mcp-server
-      '@google-a2a/types':
-        specifier: github:google-a2a/A2A#path:types
-        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/968c650cfe10d90e5639b7469be5e6f732392f6a#path:types
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.5.0
-        version: 1.12.1
-      '@openrouter/ai-sdk-provider':
-        specifier: ^0.4.5
-        version: 0.4.6(zod@3.25.51)
-      ai:
-        specifier: ^4.3.2
-        version: 4.3.16(react@19.1.0)(zod@3.25.51)
-      arbitrum-vibekit-core:
-        specifier: workspace:*
-        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.25.51)
-      cors:
-        specifier: ^2.8.5
-        version: 2.8.5
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.5.0
-      express:
-        specifier: ^4.21.2
-        version: 4.21.2
-      nanoid:
-        specifier: ^5.0.7
-        version: 5.1.5
-      zod:
-        specifier: ^3.24.3
-        version: 3.25.51
-    devDependencies:
-      '@types/cors':
-        specifier: ^2.8.17
-        version: 2.8.18
-      '@types/express':
-        specifier: ^5.0.0
-        version: 5.0.2
-      '@types/node':
-        specifier: ^20.10.0
-        version: 20.17.57
-      prettier:
-        specifier: ^3.5.3
-        version: 3.5.3
-      tsx:
-        specifier: ^4.6.2
-        version: 4.19.4
-      typescript:
-        specifier: ^5.3.0
-        version: 5.8.3
-      vitest:
-        specifier: ^3.2.1
-        version: 3.2.1(@types/node@20.17.57)(tsx@4.19.4)(yaml@2.8.0)
-
   examples/lending-agent-no-wallet:
     dependencies:
       '@modelcontextprotocol/sdk':
@@ -718,6 +660,64 @@ importers:
       typescript:
         specifier: ^5.4.2
         version: 5.8.3
+
+  templates/allora-price-prediction-agent:
+    dependencies:
+      '@alloralabs/mcp-server':
+        specifier: workspace:*
+        version: link:../../lib/mcp-tools/allora-mcp-server
+      '@google-a2a/types':
+        specifier: github:google-a2a/A2A#path:types
+        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/ee0931a1a0f22209e70127a3fde6b70887e545e3#path:types
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.5.0
+        version: 1.12.1
+      '@openrouter/ai-sdk-provider':
+        specifier: ^0.4.5
+        version: 0.4.6(zod@3.25.51)
+      ai:
+        specifier: ^4.3.2
+        version: 4.3.16(react@19.1.0)(zod@3.25.51)
+      arbitrum-vibekit-core:
+        specifier: workspace:*
+        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.25.51)
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.5
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
+      express:
+        specifier: ^4.21.2
+        version: 4.21.2
+      nanoid:
+        specifier: ^5.0.7
+        version: 5.1.5
+      zod:
+        specifier: ^3.24.3
+        version: 3.25.51
+    devDependencies:
+      '@types/cors':
+        specifier: ^2.8.17
+        version: 2.8.18
+      '@types/express':
+        specifier: ^5.0.0
+        version: 5.0.2
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.17.57
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      tsx:
+        specifier: ^4.6.2
+        version: 4.19.4
+      typescript:
+        specifier: ^5.3.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.1
+        version: 3.2.1(@types/node@20.17.57)(tsx@4.19.4)(yaml@2.8.0)
 
   templates/lending-agent:
     dependencies:
@@ -4125,6 +4125,10 @@ packages:
 
   types@https://codeload.github.com/google-a2a/A2A/tar.gz/9c4b05ccdcdbae6ef1ae1b15df028ab57bb2d309#path:types:
     resolution: {path: types, tarball: https://codeload.github.com/google-a2a/A2A/tar.gz/9c4b05ccdcdbae6ef1ae1b15df028ab57bb2d309}
+    version: 1.0.0
+
+  types@https://codeload.github.com/google-a2a/A2A/tar.gz/ee0931a1a0f22209e70127a3fde6b70887e545e3#path:types:
+    resolution: {path: types, tarball: https://codeload.github.com/google-a2a/A2A/tar.gz/ee0931a1a0f22209e70127a3fde6b70887e545e3}
     version: 1.0.0
 
   typescript-eslint@8.33.1:
@@ -8414,6 +8418,13 @@ snapshots:
       - '@swc/wasm'
 
   types@https://codeload.github.com/google-a2a/A2A/tar.gz/9c4b05ccdcdbae6ef1ae1b15df028ab57bb2d309#path:types:
+    dependencies:
+      typescript-json-schema: 0.65.1
+    transitivePeerDependencies:
+      - '@swc/core'
+      - '@swc/wasm'
+
+  types@https://codeload.github.com/google-a2a/A2A/tar.gz/ee0931a1a0f22209e70127a3fde6b70887e545e3#path:types:
     dependencies:
       typescript-json-schema: 0.65.1
     transitivePeerDependencies:

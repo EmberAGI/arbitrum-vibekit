@@ -28,7 +28,7 @@ COPY tsconfig.base.json ./
 # 2. Copy all workspace package.json files (to maximise Docker cache)
 # ------------------------------
 COPY lib/ lib/
-COPY examples/allora-price-prediction-agent/package.json ./examples/allora-price-prediction-agent/
+COPY templates/allora-price-prediction-agent/package.json ./templates/allora-price-prediction-agent/
 
 # ------------------------------
 # 3. Install deps based on the copied package.json set. Skip lifecycle scripts for now
@@ -43,7 +43,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 
 RUN pnpm --filter allora-price-prediction-agent... build
-WORKDIR /app/examples/allora-price-prediction-agent/dist
+WORKDIR /app/templates/allora-price-prediction-agent/dist
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]

@@ -19,7 +19,7 @@ COPY tsconfig.base.json ./
 # 2. Copy all workspace package.json files (to maximise Docker cache)
 # ------------------------------
 COPY lib/ lib/
-COPY examples/allora-price-prediction-agent/package.json ./examples/allora-price-prediction-agent/
+COPY templates/allora-price-prediction-agent/package.json ./templates/allora-price-prediction-agent/
 
 # ------------------------------
 # 3. Install deps based on the copied package.json set. Skip lifecycle scripts for now
@@ -56,15 +56,15 @@ WORKDIR /app
 RUN npm install -g --prefer-frozen-lockfile -y pnpm@10.7.0
 
 # Copy only what we need from the builder stage
-COPY --from=builder /app/examples/allora-price-prediction-agent/dist /app/examples/allora-price-prediction-agent/dist
-COPY --from=builder /app/examples/allora-price-prediction-agent/package.json /app/examples/allora-price-prediction-agent/
-COPY --from=builder /app/examples/allora-price-prediction-agent/node_modules /app/examples/allora-price-prediction-agent/node_modules
+COPY --from=builder /app/templates/allora-price-prediction-agent/dist /app/templates/allora-price-prediction-agent/dist
+COPY --from=builder /app/templates/allora-price-prediction-agent/package.json /app/templates/allora-price-prediction-agent/
+COPY --from=builder /app/templates/allora-price-prediction-agent/node_modules /app/templates/allora-price-prediction-agent/node_modules
 COPY --from=builder /app/lib /app/lib
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/node_modules/.pnpm /app/node_modules/.pnpm
 
 # Set the working directory for the final image
-WORKDIR /app/examples/allora-price-prediction-agent/dist
+WORKDIR /app/templates/allora-price-prediction-agent/dist
 
 # Change ownership to non-root user
 RUN chown -R ember:ember /app
