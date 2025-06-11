@@ -235,7 +235,7 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
       expect(response.kind).toBe('message');
       expect(response.role).toBe('agent');
       // The agent should ask for clarification
-      expect(response.parts[0].text).toMatch(/which token|please|specify|BTC|ETH/i);
+      expect(response.parts[0].text).toMatch(/what token would you like|which token|please|specify/i);
 
       // Test with missing message - this should throw an MCP error
       await expect(
