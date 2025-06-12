@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
-import { TokenIdentifierSchema } from './common.js';
-import { TokenSchema } from './token.js';
+import { TokenIdentifierSchema, TokenSchema } from './core.js';
 
 export const SwapTokensParamsSchema = z.object({
   fromTokenAddress: z.string().describe('The contract address of the token to swap from.'),

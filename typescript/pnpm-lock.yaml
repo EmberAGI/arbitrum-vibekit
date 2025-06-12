@@ -12,6 +12,9 @@ importers:
 
   .:
     dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.12.1
+        version: 1.12.1
       ethers:
         specifier: ^5.7.2
         version: 5.8.0
@@ -145,7 +148,7 @@ importers:
         version: 3.5.3
       test-utils:
         specifier: workspace:*
-        version: link:../../lib/test-utils
+        version: file:lib/test-utils(typescript@5.8.3)
       tsx:
         specifier: ^4.6.2
         version: 4.20.1
@@ -224,7 +227,7 @@ importers:
         version: 3.5.3
       test-utils:
         specifier: workspace:*
-        version: link:../../lib/test-utils
+        version: file:lib/test-utils(typescript@5.8.3)
       tsx:
         specifier: ^4.6.2
         version: 4.20.1
@@ -239,7 +242,7 @@ importers:
         version: 0.4.6(zod@3.25.61)
       a2a-samples-js:
         specifier: workspace:*
-        version: link:../../lib/a2a
+        version: file:lib/a2a(ws@8.18.2)(zod@3.25.61)
       ai:
         specifier: ^4.3.2
         version: 4.3.16(react@19.1.0)(zod@3.25.61)
@@ -300,7 +303,7 @@ importers:
         version: 3.5.3
       test-utils:
         specifier: workspace:*
-        version: file:lib/test-utils(typescript@5.8.3)(ws@8.18.2)
+        version: file:lib/test-utils(typescript@5.8.3)
       tsx:
         specifier: ^4.6.2
         version: 4.20.1
@@ -704,7 +707,7 @@ importers:
     dependencies:
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(ws@8.18.2)(zod@3.25.61)
+        version: link:../a2a
       ember-schemas:
         specifier: workspace:*
         version: link:../ember-schemas
@@ -8503,7 +8506,7 @@ snapshots:
       - encoding
       - supports-color
 
-  test-utils@file:lib/test-utils(typescript@5.8.3)(ws@8.18.2):
+  test-utils@file:lib/test-utils(typescript@5.8.3):
     dependencies:
       a2a-samples-js: file:lib/a2a(ws@8.18.2)(zod@3.25.61)
       ember-schemas: file:lib/ember-schemas

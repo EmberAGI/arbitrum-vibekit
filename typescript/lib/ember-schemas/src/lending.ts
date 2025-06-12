@@ -1,22 +1,106 @@
-import { z } from 'zod';
-
+import { z } from "zod";
 import {
-  TransactionPlanSchema,
-  type TransactionArtifact,
-  createTransactionArtifactSchema,
-  AskEncyclopediaSchema,
-  type AskEncyclopediaArgs,
   TokenIdentifierSchema,
-  type TokenIdentifier
-} from './common.js';
-import { TokenSchema } from './token.js';
+  FeeBreakdownSchema,
+  TransactionPlanSchema,
+  TransactionPlanErrorSchema,
+  TokenSchema,
+} from "./core.js";
 
-//
-// Position and Reserve Schemas
-//
+export const BorrowTokensRequestSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  amount: z.string(),
+  borrowerWalletAddress: z.string(),
+});
+export type BorrowTokensRequest = z.infer<typeof BorrowTokensRequestSchema>;
 
-// Schema for the position information
-export const UserReserveSchema = z.object({
+export const BorrowTokensResponseSchema = z.object({
+  currentBorrowApy: z.string(),
+  liquidationThreshold: z.string(),
+  feeBreakdown: FeeBreakdownSchema.optional(),
+  transactions: z.array(TransactionPlanSchema),
+  error: TransactionPlanErrorSchema.optional(),
+  chainId: z.string(),
+});
+export type BorrowTokensResponse = z.infer<typeof BorrowTokensResponseSchema>;
+
+export const RepayTokensRequestSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  amount: z.string(),
+  borrowerWalletAddress: z.string(),
+});
+export type RepayTokensRequest = z.infer<typeof RepayTokensRequestSchema>;
+
+export const RepayTokensResponseSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  amount: z.string(),
+  borrowerWalletAddress: z.string(),
+  feeBreakdown: FeeBreakdownSchema.optional(),
+  transactions: z.array(TransactionPlanSchema),
+  error: TransactionPlanErrorSchema.optional(),
+  chainId: z.string(),
+});
+export type RepayTokensResponse = z.infer<typeof RepayTokensResponseSchema>;
+
+export const SupplyTokensRequestSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  amount: z.string(),
+  supplierWalletAddress: z.string(),
+});
+export type SupplyTokensRequest = z.infer<typeof SupplyTokensRequestSchema>;
+
+export const SupplyTokensResponseSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  amount: z.string(),
+  supplierWalletAddress: z.string(),
+  feeBreakdown: FeeBreakdownSchema.optional(),
+  transactions: z.array(TransactionPlanSchema),
+  error: TransactionPlanErrorSchema.optional(),
+  chainId: z.string(),
+});
+export type SupplyTokensResponse = z.infer<typeof SupplyTokensResponseSchema>;
+
+export const WithdrawTokensRequestSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  amount: z.string(),
+  lenderWalletAddress: z.string(),
+});
+export type WithdrawTokensRequest = z.infer<typeof WithdrawTokensRequestSchema>;
+
+export const WithdrawTokensResponseSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  amount: z.string(),
+  lenderWalletAddress: z.string(),
+  feeBreakdown: FeeBreakdownSchema.optional(),
+  transactions: z.array(TransactionPlanSchema),
+  error: TransactionPlanErrorSchema.optional(),
+  chainId: z.string(),
+});
+export type WithdrawTokensResponse = z.infer<
+  typeof WithdrawTokensResponseSchema
+>;
+
+export const TokenPositionSchema = z.object({
+  underlyingToken: TokenSchema,
+  borrowRate: z.string(),
+  supplyBalance: z.string(),
+  borrowBalance: z.string(),
+  valueUsd: z.string(),
+});
+export type TokenPosition = z.infer<typeof TokenPositionSchema>;
+
+export const BorrowPositionSchema = z.object({
+  borrowerWalletAddress: z.string(),
+  totalLiquidityUsd: z.string(),
+  totalCollateralUsd: z.string(),
+  totalBorrowsUsd: z.string(),
+  netWorthUsd: z.string(),
+  healthFactor: z.string(),
+  positions: z.array(TokenPositionSchema),
+});
+export type BorrowPosition = z.infer<typeof BorrowPositionSchema>;
+
+export const LendTokenDetailSchema = z.object({
   token: TokenSchema,
   underlyingBalance: z.string(),
   underlyingBalanceUsd: z.string(),
@@ -25,10 +109,10 @@ export const UserReserveSchema = z.object({
   totalBorrows: z.string(),
   totalBorrowsUsd: z.string(),
 });
-export type UserReserve = z.infer<typeof UserReserveSchema>;
+export type LendTokenDetail = z.infer<typeof LendTokenDetailSchema>;
 
 export const LendingPositionSchema = z.object({
-  userReserves: z.array(UserReserveSchema),
+  userReserves: z.array(LendTokenDetailSchema),
   totalLiquidityUsd: z.string(),
   totalCollateralUsd: z.string(),
   totalBorrowsUsd: z.string(),
@@ -40,115 +124,30 @@ export const LendingPositionSchema = z.object({
 });
 export type LendingPosition = z.infer<typeof LendingPositionSchema>;
 
-export const PositionSchema = z.object({
-  lendingPosition: LendingPositionSchema,
-});
-export type Position = z.infer<typeof PositionSchema>;
-
-export const GetWalletPositionsResponseSchema = z.object({
-  positions: z.array(PositionSchema),
-});
-export type GetWalletPositionsResponse = z.infer<typeof GetWalletPositionsResponseSchema>;
-
-//
-// Tool Response Schemas
-//
-
-// Schema for the supply tool's nested JSON response
-export const SupplyResponseSchema = z.object({
+export const LendingReserveSchema = z.object({
   tokenUid: TokenIdentifierSchema,
-  amount: z.string(),
-  supplierWalletAddress: z.string(),
-  transactions: z.array(TransactionPlanSchema),
-  chainId: z.string(),
+  symbol: z.string(),
+  decimals: z.number().int(),
+  supplyRate: z.string(),
+  borrowRate: z.string(),
+  reserveFactor: z.string(),
+  reserveLiquidationThreshold: z.string(),
 });
-export type SupplyResponse = z.infer<typeof SupplyResponseSchema>;
+export type LendingReserve = z.infer<typeof LendingReserveSchema>;
 
-// Schema for the withdraw tool's nested JSON response
-export const WithdrawResponseSchema = z.object({
-  tokenUid: TokenIdentifierSchema,
-  amount: z.string(),
-  lenderWalletAddress: z.string(),
-  transactions: z.array(TransactionPlanSchema),
-  chainId: z.string(),
+export const GetLendingUserSummaryRequestSchema = z.object({
+  userAddress: z.string(),
 });
-export type WithdrawResponse = z.infer<typeof WithdrawResponseSchema>;
+export type GetLendingUserSummaryRequest = z.infer<
+  typeof GetLendingUserSummaryRequestSchema
+>;
 
-// Schema for the borrow tool's nested JSON response
-export const BorrowResponseSchema = z.object({
-  currentBorrowApy: z.string(),
-  liquidationThreshold: z.string(),
-  transactions: z.array(TransactionPlanSchema),
-  chainId: z.string(),
+export const GetLendingReservesResponseSchema = z.object({
+  reserves: z.array(LendingReserveSchema),
 });
-export type BorrowResponse = z.infer<typeof BorrowResponseSchema>;
-
-// Schema for the repay tool's nested JSON response
-export const RepayResponseSchema = z.object({
-  tokenUid: TokenIdentifierSchema,
-  amount: z.string(),
-  borrowerWalletAddress: z.string(),
-  transactions: z.array(TransactionPlanSchema),
-  chainId: z.string(),
-});
-export type RepayResponse = z.infer<typeof RepayResponseSchema>;
-
-// Preview schema for lending transactions
-export const LendingPreviewSchema = z.object({
-  tokenName: z.string(),
-  amount: z.string(),
-  action: z.enum(['borrow', 'repay', 'supply', 'withdraw']),
-  chainId: z.string(),
-  // Additional fields used by borrow operation
-  currentBorrowApy: z.string().optional(),
-  liquidationThreshold: z.string().optional(),
-});
-export type LendingPreview = z.infer<typeof LendingPreviewSchema>;
-
-// Define shared artifact schema for lending transactions
-export const LendingTransactionArtifactSchema =
-  createTransactionArtifactSchema(LendingPreviewSchema);
-export type LendingTransactionArtifact = TransactionArtifact<LendingPreview>;
-
-//
-// Agent Capability Schemas
-//
-
-export const LendingCapabilitySchema = z.object({
-  capabilityId: z.string().optional(),
-  currentSupplyApy: z.string().optional(),
-  currentBorrowApy: z.string().optional(),
-  underlyingToken: TokenSchema.optional(),
-  maxLtv: z.string().optional(),
-  liquidationThreshold: z.string().optional(),
-});
-export type LendingCapability = z.infer<typeof LendingCapabilitySchema>;
-
-export const LendingAgentCapabilitySchema = z.object({
-  lendingCapability: LendingCapabilitySchema.optional(),
-});
-export type LendingAgentCapability = z.infer<typeof LendingAgentCapabilitySchema>;
-
-export const LendingGetCapabilitiesResponseSchema = z.object({
-  capabilities: z.array(LendingAgentCapabilitySchema),
-});
-export type LendingGetCapabilitiesResponse = z.infer<typeof LendingGetCapabilitiesResponseSchema>;
-
-export const McpTextWrapperSchema = z.object({
-  content: z
-    .array(
-      z.object({
-        type: z.literal('text'),
-        text: z.string(),
-      })
-    )
-    .min(1),
-});
-export type McpTextWrapper = z.infer<typeof McpTextWrapperSchema>;
-
-//
-// Agent Tool Schemas
-//
+export type GetLendingReservesResponse = z.infer<
+  typeof GetLendingReservesResponseSchema
+>;
 
 export const BorrowRepaySupplyWithdrawSchema = z.object({
   tokenName: z
@@ -163,13 +162,4 @@ export const BorrowRepaySupplyWithdrawSchema = z.object({
 export type BorrowRepaySupplyWithdrawArgs = z.infer<typeof BorrowRepaySupplyWithdrawSchema>;
 
 export const GetUserPositionsSchema = z.object({});
-export type GetUserPositionsArgs = z.infer<typeof GetUserPositionsSchema>;
-
-// Define an alias for the lending interface
-export { AskEncyclopediaSchema as LendingAskEncyclopediaSchema };
-export type LendingAskEncyclopediaArgs = AskEncyclopediaArgs;
-
-// Additional lending-related types
-export interface TokenInfo extends TokenIdentifier {
-  decimals: number;
-} 
+export type GetUserPositionsArgs = z.infer<typeof GetUserPositionsSchema>; 
