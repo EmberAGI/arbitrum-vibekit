@@ -1,10 +1,5 @@
 import { z } from 'zod';
-
-import { 
-  createTransactionArtifactSchema, 
-  type TransactionArtifact,
-  TokenIdentifierSchema,
-} from './common.js';
+import { TokenIdentifierSchema } from './core.js';
 
 export const LiquidityPoolSchema = z.object({
   symbol0: z.string(),
@@ -23,34 +18,20 @@ export type GetLiquidityPoolsAgentResponse = z.infer<typeof GetLiquidityPoolsAge
 
 // Schemas for agent tool parameters
 export const SupplyLiquiditySchema = z.object({
-  pair: z
-    .string()
-    .describe(
-      'The handle for the liquidity pair (e.g., WETH/USDC). Enum will be populated dynamically.'
-    ),
+  pair: z.string().describe('The handle for the liquidity pair (e.g., WETH/USDC). Enum will be populated dynamically.'),
   amount0: z.string().describe('The amount of the first token to supply (human-readable format).'),
   amount1: z.string().describe('The amount of the second token to supply (human-readable format).'),
-  priceFrom: z
-    .string()
-    .describe('The lower bound price for the liquidity range (human-readable format).'),
-  priceTo: z
-    .string()
-    .describe('The upper bound price for the liquidity range (human-readable format).'),
+  priceFrom: z.string().describe('The lower bound price for the liquidity range (human-readable format).'),
+  priceTo: z.string().describe('The upper bound price for the liquidity range (human-readable format).'),
 });
 export type SupplyLiquidityArgs = z.infer<typeof SupplyLiquiditySchema>;
 
 export const WithdrawLiquiditySchema = z.object({
-  positionNumber: z
-    .number()
-    .int()
-    .positive()
-    .describe(
-      'The index number (starting from 1) of the liquidity position to withdraw, as listed by getUserLiquidityPositions.'
-    ),
+  positionNumber: z.number().int().positive().describe('The index number (starting from 1) of the liquidity position to withdraw, as listed by getUserLiquidityPositions.'),
 });
 export type WithdrawLiquidityArgs = z.infer<typeof WithdrawLiquiditySchema>;
 
-export const GetLiquidityPoolsSchema = z.object({}); 
+export const GetLiquidityPoolsSchema = z.object({});
 export type GetLiquidityPoolsArgs = z.infer<typeof GetLiquidityPoolsSchema>;
 
 export const GetUserLiquidityPositionsSchema = z.object({});
@@ -73,8 +54,8 @@ export const LiquidityPreviewSchema = z.object({
 });
 export type LiquidityPreview = z.infer<typeof LiquidityPreviewSchema>;
 
-export const LiquidityArtifactSchema = createTransactionArtifactSchema(LiquidityPreviewSchema);
-export type LiquidityTransactionArtifact = TransactionArtifact<LiquidityPreview>;
+export const LiquidityArtifactSchema = z.object({});
+export type LiquidityTransactionArtifact = z.infer<typeof LiquidityArtifactSchema>;
 
 export const LiquidityPairArtifactSchema = z.object({
   handle: z.string(),

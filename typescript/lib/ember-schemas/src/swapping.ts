@@ -1,11 +1,6 @@
 import { z } from 'zod';
 
-import { TokenIdentifierSchema } from './common.js';
-import {
-  TransactionPlanSchema,
-  AskEncyclopediaSchema,
-  type AskEncyclopediaArgs
-} from './common.js';
+import { TokenIdentifierSchema, TransactionPlanSchema, AskEncyclopediaSchema, type AskEncyclopediaArgs } from './core.js';
 
 //
 // Swapping Tool Schemas

@@ -13,17 +13,21 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { streamText } from 'ai';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import {
-  SupplyResponseSchema,
-  WithdrawResponseSchema,
-  BorrowResponseSchema,
-  RepayResponseSchema,
+  SupplyTokensResponseSchema,
+  type SupplyTokensResponse,
+  WithdrawTokensResponseSchema,
+  type WithdrawTokensResponse,
+  BorrowTokensResponseSchema,
+  type BorrowTokensResponse,
+  RepayTokensResponseSchema,
+  type RepayTokensResponse,
   GetWalletPositionsResponseSchema,
+  type GetWalletPositionsResponse,
+  TokenSchema as EmberTokenSchema,
   type TransactionPlan,
-  type TokenInfo,
-  type LendingPreview,
-  type LendingTransactionArtifact,
 } from 'ember-schemas';
 import { getChainConfigById } from './agent.js';
+import { z } from 'zod';
 
 export interface HandlerContext {
   mcpClient: Client;
@@ -35,6 +39,8 @@ export interface HandlerContext {
   openRouterApiKey: string;
   aaveContextContent: string;
 }
+
+export type TokenInfo = z.infer<typeof EmberTokenSchema>;
 
 export type FindTokenResult =
   | { type: 'found'; token: TokenInfo }
@@ -89,7 +95,7 @@ export async function handleBorrow(
     case 'clarificationNeeded': {
       context.log(`Borrow requires clarification for token ${rawTokenName}.`);
       const optionsText = findResult.options
-        .map(opt => `- ${rawTokenName} on chain ${opt.chainId}`)
+        .map(opt => `- ${rawTokenName} on chain ${opt.tokenUid.chainId}`)
         .join('\n');
       return {
         id: context.userAddress,
@@ -111,30 +117,35 @@ export async function handleBorrow(
     case 'found': {
       const tokenDetail = findResult.token;
       context.log(
-        `Preparing borrow transaction: ${rawTokenName} (Chain: ${tokenDetail.chainId}, Addr: ${tokenDetail.address}), amount: ${amount}`
+        `Preparing borrow transaction: ${amount} ${tokenDetail.name} on chain ${tokenDetail.tokenUid.chainId}`
       );
 
       try {
         const rawResult = await context.mcpClient.callTool({
           name: 'borrow',
           arguments: {
-            tokenAddress: tokenDetail.address,
-            tokenChainId: tokenDetail.chainId,
+            tokenUid: {
+              address: tokenDetail.tokenUid.address,
+              chainId: tokenDetail.tokenUid.chainId,
+            },
             amount,
-            userAddress: context.userAddress,
+            borrowerWalletAddress: context.userAddress,
           },
         });
 
-        const borrowResp = parseMcpToolResponsePayload(rawResult, BorrowResponseSchema);
+        const borrowResp = parseMcpToolResponsePayload(
+          rawResult,
+          BorrowTokensResponseSchema
+        ) as BorrowTokensResponse;
         const { transactions, currentBorrowApy, liquidationThreshold } = borrowResp;
 
         // Build artifact using shared generic schema
-        const txArtifact: LendingTransactionArtifact = {
+        const txArtifact = {
           txPreview: {
             tokenName,
             amount,
             action: 'borrow',
-            chainId: tokenDetail.chainId,
+            chainId: tokenDetail.tokenUid.chainId,
             currentBorrowApy,
             liquidationThreshold,
           },
@@ -161,7 +172,7 @@ export async function handleBorrow(
           ],
         };
       } catch (error) {
-        context.log(`Error during borrow execution for ${rawTokenName}:`, error);
+        context.log(`Error during borrow execution for ${rawTokenName}:`, JSON.stringify(error, null, 2));
         return {
           id: context.userAddress,
           status: {
@@ -205,7 +216,7 @@ export async function handleRepay(
 
     case 'clarificationNeeded': {
       const chainList = findResult.options
-        .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.chainId}`)
+        .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.tokenUid.chainId}`)
         .join('\n');
       return {
         id: context.userAddress,
@@ -227,8 +238,8 @@ export async function handleRepay(
     case 'found': {
       const tokenInfo = findResult.token;
       const userAddress = context.userAddress as Address;
-      const tokenAddress = tokenInfo.address as Address;
-      const txChainId = tokenInfo.chainId;
+      const tokenAddress = tokenInfo.tokenUid.address as Address;
+      const txChainId = tokenInfo.tokenUid.chainId;
       let atomicAmount: bigint;
       try {
         atomicAmount = parseUnits(amount, tokenInfo.decimals);
@@ -266,7 +277,7 @@ export async function handleRepay(
         });
         context.log(`Public client created for chain ${txChainId}`);
       } catch (chainError) {
-        context.log(`Failed to create public client for chain ${txChainId}:`, chainError);
+        context.log(`Failed to create public client for chain ${txChainId}:`, JSON.stringify(chainError, null, 2));
         return {
           id: userAddress,
           status: {
@@ -314,7 +325,7 @@ export async function handleRepay(
         context.log(`Sufficient balance confirmed.`);
       } catch (readError) {
         context.log(
-          `Warning: Failed to read token balance. Error: ${(readError as Error).message}`
+          `Warning: Failed to read token balance. Error:`, JSON.stringify(readError, null, 2)
         );
         return {
           id: userAddress,
@@ -337,28 +348,33 @@ export async function handleRepay(
       const toolResult = await context.mcpClient.callTool({
         name: 'repay',
         arguments: {
-          tokenAddress: tokenInfo.address,
-          tokenChainId: tokenInfo.chainId,
+          tokenUid: {
+            address: tokenInfo.tokenUid.address,
+            chainId: tokenInfo.tokenUid.chainId,
+          },
           amount,
-          userAddress: context.userAddress!,
+          borrowerWalletAddress: context.userAddress!,
         },
       });
 
-      context.log('MCP repay tool response:', toolResult);
+      context.log('MCP repay tool response:', JSON.stringify(toolResult, null, 2));
 
       // Parse and validate the MCP repay tool response using the new ZodRepayResponseSchema
-      const repayResp = parseMcpToolResponsePayload(toolResult, RepayResponseSchema);
+      const repayResp = parseMcpToolResponsePayload(
+        toolResult,
+        RepayTokensResponseSchema
+      ) as RepayTokensResponse;
       const { transactions } = repayResp;
       context.log(`Processed and validated ${transactions.length} transactions for repay.`);
 
       // Build preview and artifact
-      const txPreview: LendingPreview = {
+      const txPreview = {
         tokenName,
         amount,
         action: 'repay',
-        chainId: tokenInfo.chainId,
+        chainId: tokenInfo.tokenUid.chainId,
       };
-      const artifactContent: LendingTransactionArtifact = { txPreview, txPlan: transactions };
+      const artifactContent = { txPreview, txPlan: transactions };
       const dataPart: DataPart = { type: 'data', data: artifactContent };
 
       // Return Task with standard artifact
@@ -407,7 +423,7 @@ export async function handleSupply(
 
     case 'clarificationNeeded': {
       const chainList = findResult.options
-        .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.chainId}`)
+        .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.tokenUid.chainId}`)
         .join('\n');
       return {
         id: context.userAddress,
@@ -429,8 +445,8 @@ export async function handleSupply(
     case 'found': {
       const tokenInfo = findResult.token;
       const userAddress = context.userAddress as Address;
-      const tokenAddress = tokenInfo.address as Address;
-      const txChainId = tokenInfo.chainId;
+      const tokenAddress = tokenInfo.tokenUid.address as Address;
+      const txChainId = tokenInfo.tokenUid.chainId;
       let atomicAmount: bigint;
       try {
         atomicAmount = parseUnits(amount, tokenInfo.decimals);
@@ -468,7 +484,7 @@ export async function handleSupply(
         });
         context.log(`Public client created for chain ${txChainId}`);
       } catch (chainError) {
-        context.log(`Failed to create public client for chain ${txChainId}:`, chainError);
+        context.log(`Failed to create public client for chain ${txChainId}:`, JSON.stringify(chainError, null, 2));
         return {
           id: userAddress,
           status: {
@@ -515,7 +531,7 @@ export async function handleSupply(
         context.log(`Sufficient balance confirmed.`);
       } catch (readError) {
         context.log(
-          `Warning: Failed to read token balance. Error: ${(readError as Error).message}`
+          `Warning: Failed to read token balance. Error:`, JSON.stringify(readError, null, 2)
         );
         return {
           id: userAddress,
@@ -538,18 +554,23 @@ export async function handleSupply(
       const toolResult = await context.mcpClient.callTool({
         name: 'supply',
         arguments: {
-          tokenAddress: tokenInfo.address,
-          tokenChainId: tokenInfo.chainId,
+          tokenUid: {
+            address: tokenInfo.tokenUid.address,
+            chainId: tokenInfo.tokenUid.chainId,
+          },
           amount: amount,
-          userAddress: context.userAddress,
+          supplierWalletAddress: context.userAddress,
         },
       });
 
-      context.log('MCP supply tool response:', toolResult);
+      context.log('MCP supply tool response:', JSON.stringify(toolResult, null, 2));
 
       let finalTxPlan: TransactionPlan[] = [];
       try {
-        const supplyResp = parseMcpToolResponsePayload(toolResult, SupplyResponseSchema);
+        const supplyResp = parseMcpToolResponsePayload(
+          toolResult,
+          SupplyTokensResponseSchema
+        ) as SupplyTokensResponse;
         finalTxPlan = supplyResp.transactions;
         context.log(
           `Processed and validated ${finalTxPlan.length} transactions from MCP for supply.`
@@ -558,7 +579,7 @@ export async function handleSupply(
           throw new Error('MCP tool returned an empty transaction plan.');
         }
       } catch (error) {
-        context.log(`Error processing MCP supply response:`, error);
+        context.log(`Error processing MCP supply response:`, JSON.stringify(error, null, 2));
         return {
           id: userAddress,
           status: {
@@ -576,7 +597,7 @@ export async function handleSupply(
         };
       }
 
-      const txPreview: LendingPreview = {
+      const txPreview = {
         tokenName: tokenName,
         amount: amount,
         action: 'supply',
@@ -584,7 +605,7 @@ export async function handleSupply(
       };
 
       try {
-        context.log('Supply transaction plan prepared:', finalTxPlan);
+        context.log('Supply transaction plan prepared:', JSON.stringify(finalTxPlan, null, 2));
 
         return {
           id: userAddress,
@@ -606,14 +627,14 @@ export async function handleSupply(
               parts: [
                 {
                   type: 'data',
-                  data: { txPreview, txPlan: finalTxPlan } as Record<string, unknown>,
+                  data: { txPreview, txPlan: finalTxPlan },
                 },
               ],
             },
           ],
         };
       } catch (error) {
-        context.log(`Error during supply action execution:`, error);
+        context.log(`Error during supply action execution:`, JSON.stringify(error, null, 2));
         return {
           id: userAddress,
           status: {
@@ -664,7 +685,7 @@ export async function handleWithdraw(
 
     case 'clarificationNeeded': {
       const chainList = findResult.options
-        .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.chainId}`)
+        .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.tokenUid.chainId}`)
         .join('\n');
       return {
         id: context.userAddress,
@@ -686,31 +707,36 @@ export async function handleWithdraw(
     case 'found': {
       const tokenDetail = findResult.token;
       context.log(
-        `Preparing withdraw transaction: ${amount} ${tokenName} (${tokenDetail.address} on chain ${tokenDetail.chainId})`
+        `Preparing withdraw transaction: ${amount} ${tokenName} (${tokenDetail.tokenUid.address} on chain ${tokenDetail.tokenUid.chainId})`
       );
 
       const toolResult = await context.mcpClient.callTool({
         name: 'withdraw',
         arguments: {
-          tokenAddress: tokenDetail.address,
-          tokenChainId: tokenDetail.chainId,
+          tokenUid: {
+            address: tokenDetail.tokenUid.address,
+            chainId: tokenDetail.tokenUid.chainId,
+          },
           amount: amount,
-          userAddress: context.userAddress,
+          lenderWalletAddress: context.userAddress,
         },
       });
 
-      context.log('MCP withdraw tool response:', toolResult);
+      context.log('MCP withdraw tool response:', JSON.stringify(toolResult, null, 2));
 
       try {
-        const withdrawResp = parseMcpToolResponsePayload(toolResult, WithdrawResponseSchema);
+        const withdrawResp = parseMcpToolResponsePayload(
+          toolResult,
+          WithdrawTokensResponseSchema
+        ) as WithdrawTokensResponse;
         const validatedTxPlan: TransactionPlan[] = withdrawResp.transactions;
-        context.log('Withdraw transaction plan validated:', validatedTxPlan);
+        context.log('Withdraw transaction plan validated:', JSON.stringify(validatedTxPlan, null, 2));
 
-        const txPreview: LendingPreview = {
+        const txPreview = {
           tokenName: tokenName,
           amount: amount,
           action: 'withdraw',
-          chainId: tokenDetail.chainId,
+          chainId: tokenDetail.tokenUid.chainId,
         };
 
         return {
@@ -733,14 +759,14 @@ export async function handleWithdraw(
               parts: [
                 {
                   type: 'data',
-                  data: { txPreview, txPlan: validatedTxPlan } as Record<string, unknown>,
+                  data: { txPreview, txPlan: validatedTxPlan },
                 },
               ],
             },
           ],
         };
       } catch (error) {
-        context.log(`Error during withdraw action validation/execution:`, error);
+        context.log(`Error during withdraw action validation/execution:`, JSON.stringify(error, null, 2));
         return {
           id: context.userAddress,
           status: {
@@ -773,16 +799,16 @@ export async function handleGetUserPositions(
     const rawResult = await context.mcpClient.callTool({
       name: 'getUserPositions',
       arguments: {
-        userAddress: context.userAddress,
+        walletAddress: context.userAddress,
       },
     });
 
-    console.log('rawResult', rawResult);
+    console.log('rawResult', JSON.stringify(rawResult, null, 2));
 
     const validatedPositions = parseMcpToolResponsePayload(
       rawResult,
       GetWalletPositionsResponseSchema
-    );
+    ) as GetWalletPositionsResponse;
 
     return {
       id: context.userAddress,
@@ -877,7 +903,7 @@ If you don't know something, simply say "I don't know" or "I don't have informat
 
 ${aaveContextContent}`;
 
-    log('Calling OpenRouter model...');
+    log(`Calling OpenRouter model...`);
     const { textStream } = await streamText({
       model: openrouter('google/gemini-2.5-flash-preview'),
       system: systemPrompt,
@@ -902,7 +928,7 @@ ${aaveContextContent}`;
       },
     };
   } catch (error: unknown) {
-    log(`Error during askEncyclopedia execution:`, error);
+    log(`Error during askEncyclopedia execution:`, JSON.stringify(error, null, 2));
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return {
       id: userAddress,
@@ -915,4 +941,4 @@ ${aaveContextContent}`;
       },
     };
   }
-}
+} 
