@@ -145,10 +145,7 @@ describe('Pendle Agent Integration Tests', function () {
             multiChainSigner.wallet.address as Address
           );
 
-          // console.error('Response:', response);
-          if (response.artifacts && response.artifacts.length > 0) {
-            console.error('Artifact parts:', JSON.stringify(response.artifacts[0].parts, null, 2));
-          }
+          console.error('Response:', JSON.stringify(response, null, 2));
 
           expect(response.status?.state).to.not.equal('failed', 'Market data operation failed');
 
