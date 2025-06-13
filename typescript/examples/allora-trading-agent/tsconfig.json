@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "rootDir": "src",
+    "outDir": "dist",
+    "verbatimModuleSyntax": false,
+    "moduleResolution": "NodeNext"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"],
+  "references": [
+    { "path": "../../lib/arbitrum-vibekit-core" },
+    { "path": "../../lib/mcp-tools/allora-mcp-server" },
+    { "path": "../../lib/mcp-tools/emberai-mcp" }
+  ]
+}

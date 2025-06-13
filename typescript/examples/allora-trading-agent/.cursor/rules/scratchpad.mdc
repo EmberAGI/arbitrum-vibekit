@@ -1,0 +1,67 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Scratchpad: Allora Trading Agent
+
+## Background and Motivation
+
+The goal is to create a new AI agent, the "Allora Trading Agent," by integrating the predictive capabilities of the `allora-price-prediction-agent` with the on-chain action capabilities of the `emberai-mcp` server. This new agent will be able to autonomously make trading decisions (buy/sell) on Arbitrum based on price forecasts from the Allora network.
+
+This project will demonstrate a powerful pattern: combining a data-providing AI agent with an action-taking AI agent to create a more sophisticated and autonomous system.
+
+## Key Challenges and Analysis
+
+1.  **Dual MCP Integration**: The agent must launch and manage two MCP servers concurrently: `@alloralabs/mcp-server` (for price-prediction data) and `ember-mcp-tool-server` (for on-chain DeFi execution). Both will be spawned via STDIO inside the skill definition, so no extra network ports are needed.
+2.  **Trading Logic**: The core logic for deciding *when* to trade and *what* to trade needs to be defined. This will be orchestrated by a new "trading skill" that uses an LLM to interpret prediction data and make a final buy/sell/hold decision.
+3.  **On-Chain Security**: Executing trades requires a private key. The agent needs a secure way to access this, which will be handled via environment variables. The `README.md` must clearly document the security implications.
+4.  **Tool Orchestration**: The agent needs to chain a sequence of tool calls: first, get a prediction from the Allora tool, then pass it to a new "decision" tool, and finally execute a trade with an Ember tool. This multi-step process will be managed within a single skill.
+
+## High-level Task Breakdown
+
+This plan outlines the steps to create the `allora-trading-agent`.
+
+### Phase 1: Project Setup & Configuration
+-   [ ] **Task 1: Create the Agent Directory**: Copy the `allora-price-prediction-agent` template to a new directory: `typescript/examples/allora-trading-agent`.
+-   [ ] **Task 2: Update `package.json`**: Modify the `package.json` in the new directory.
+    -   Set the `name` to `@agent/allora-trading-agent`.
+    -   Add `emberai-mcp` as a dependency.
+-   [ ] **Task 3: Update `tsconfig.json`**: Ensure path aliases and references are correct for the new location.
+
+### Phase 2: Integrate Ember MCP Server
+-   [ ] **Task 4: Update Agent Entrypoint (`src/index.ts`)**:
+    -   Import and initialize the `emberai-mcp` server.
+    -   Modify the agent's startup logic to manage both the Allora and Ember MCP clients.
+-   [ ] **Task 5: Add Ember Tools**: Expose trading functionality by either (a) wiring the `swapTokens` tool directly, or (b) creating thin wrapper tools `buyToken` / `sellToken` that delegate to `swapTokens` with the correct token order. Add whichever variant is simpler during implementation.
+
+### Phase 3: Develop the Core Trading Logic
+-   [ ] **Task 6: Create the Trading Skill**: Create a new file for a `tradingSkill` that will orchestrate the entire trading process.
+-   [ ] **Task 7: Develop the Decision-Making Tool**: Inside the trading skill, create a new tool, `makeTradeDecision`, which will use an LLM to analyze the prediction data from Allora and decide whether to "BUY", "SELL", or "HOLD".
+-   [ ] **Task 8: Implement the Orchestration Flow**: Within the `tradingSkill` handler, implement the logic to:
+    1.  Call the `getPricePrediction` tool.
+    2.  Pass the prediction to the `makeTradeDecision` tool.
+    3.  If the decision is "BUY" or "SELL", call the corresponding Ember tool (`buy` or `sell`).
+
+### Phase 4: Documentation and Finalization
+-   [ ] **Task 9: Update `README.md`**:
+    -   Change the title and description to reflect the new agent's capabilities.
+    -   Document the new `PRIVATE_KEY` environment variable required for trading.
+    -   Provide clear examples of how to interact with the new `tradingSkill`.
+-   [ ] **Task 10: Run and Test**:
+    -   Install dependencies (`pnpm install`).
+    -   Build the agent (`pnpm build`).
+    -   Run the agent (`pnpm dev`) and manually test the end-to-end trading flow.
+
+## Project Status Board
+
+- [ ] **Phase 1: Project Setup & Configuration**
+- [ ] **Phase 2: Integrate Ember MCP Server**
+- [ ] **Phase 3: Develop the Core Trading Logic**
+- [ ] **Phase 4: Documentation and Finalization**
+
+## Executor's Feedback or Assistance Requests
+*Awaiting start of execution phase.*
+
+## Lessons
+*No lessons learned yet.*
