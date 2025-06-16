@@ -235,7 +235,7 @@ To make the most of vibe coding, it's important to provide your AI assistant wit
 
 Vibekit's rules files are located in the project's [`arbitrum-vibekit/.cursor/rules`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/.cursor/rules) directory. These files define best practices, workflows, and workspace conventions for building and maintaining agents:
 
-- **createAgent.mdc**
+- **createVibekitAgent.mdc**
 
   A guide for creating and configuring new agents, including best practices, required dependencies, and setup instructions.
 
@@ -256,7 +256,7 @@ Here's a guidelines for adding or editing rules:
   Create a new `.mdc` file in `.cursor/rules` if you want to introduce a new agent type, workflow, or set of best practices. Follow the structure of the existing files for consistency.
 
 - **Update Existing Rules:**
-  - Edit `createAgent.mdc` to add new agent configuration options, initialization parameters, or tool integrations.
+  - Edit `createVibekitAgent.mdc` to add new agent configuration options, initialization parameters, or tool integrations.
   - Update `vibeCodingWorkflow.mdc` to refine development workflows, add new patterns, or document troubleshooting steps.
   - Revise `workspaceRules.mdc` to keep workspace-wide practices and scripts up to date.
 

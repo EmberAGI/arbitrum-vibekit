@@ -720,4 +720,87 @@ From scratchpad to release plan:
 
 ---
 
+## Tools Enable Intent Routing and Orchestration, But Not Workflow Decomposition (v2.5)
+
+- **Decision:** Multiple tools within a skill enable the LLM to perform intent routing AND orchestration, but workflows should be encapsulated as single tools rather than decomposed into separate tool steps.
+- **Rationale:**
+  - **Dual Purpose**: Tools serve two purposes - (1) intent routing to select the right action, and (2) orchestration to coordinate multiple actions
+  - **Workflow Encapsulation**: Multi-step workflows that always execute together should be a single tool, not broken into parts
+  - **User Flexibility**: Separate tools for actions users might request independently (supply, borrow, repay, withdraw)
+  - **Composability**: Each tool represents an atomic, user-facing action that has value on its own
+  - **LLM Power**: The LLM can orchestrate multiple tools, make conditional decisions, and aggregate results - but shouldn't orchestrate workflow internals
+  - **Prevents Anti-Patterns**: Avoids creating tools for internal steps that users would never directly request
+- **Example:** A lending skill has separate tools for supply, borrow, repay, and withdraw because users might want any individual action, and the LLM can orchestrate multiple operations (e.g., "supply ETH then borrow USDC")
+- **Counter-Example:** Quote, approve, and swap steps should be a single `executeSwapWorkflow` tool, not three separate tools - the LLM shouldn't orchestrate internal workflow steps
+- **Reference:** User clarification on intent routing AND orchestration, workflow encapsulation principles
+
+---
+
+## Single-Tool Skills Default to Tools Pattern (v2.5)
+
+- **Decision:** Skills with only one tool should still use the tool pattern rather than manual handlers, unless the skill is truly deterministic and will never evolve.
+- **Rationale:**
+  - **Future Flexibility**: Easy to add more tools later without refactoring the entire skill
+  - **Consistent Pattern**: All skills follow the same structure, reducing cognitive load
+  - **Anticipate Growth**: Most skills that start simple eventually need additional capabilities
+  - **Low Overhead**: The LLM pass-through for single-tool skills has minimal cost
+  - **Clear Upgrade Path**: Going from 1 tool to N tools requires no structural changes
+- **Implementation:** Developers create single-tool skills the same way as multi-tool skills
+- **Manual Handler Exception**: Only use manual handlers for pure computations that will never need routing
+- **Reference:** User feedback on maintaining flexibility, framework evolution patterns
+
+---
+
+## Tool Orchestration Encompasses Full LLM Capabilities (v2.5)
+
+- **Decision:** The LLM's orchestration role extends beyond intent routing to include planning, sequential execution, conditional logic, and result aggregation.
+- **Rationale:**
+  - **Complete Picture**: Developers need to understand the full power of LLM orchestration, not just routing
+  - **Real-World Complexity**: Most production skills require more than simple tool selection
+  - **LLM Capabilities**: Modern LLMs can plan multi-step processes, use tool results to inform next steps, and synthesize outputs
+  - **Avoid Underutilization**: Without understanding full orchestration, developers might create overly complex manual handlers
+- **Orchestration Types:**
+  1. **Intent Routing**: Selecting tools based on user intent
+  2. **Sequential Execution**: Planning and executing multiple tools in order
+  3. **Conditional Logic**: Using results to decide next actions
+  4. **Result Aggregation**: Combining outputs into cohesive responses
+- **Reference:** Industry best practices, GPT-4 and Claude capabilities, user clarification on orchestration
+
+---
+
+## One Skill = One Capability (A2A Protocol Alignment) (v2.5)
+
+- **Decision:** Each skill must represent exactly one cohesive capability, following the A2A protocol's design philosophy.
+- **Rationale:**
+  - **Protocol Compliance**: A2A defines skills as high-level capabilities with clear boundaries
+  - **Mental Model**: Users and other agents can easily understand what a skill does
+  - **Maintainability**: Single-capability skills are easier to test, document, and evolve
+  - **Prevents Bloat**: Avoids kitchen-sink skills that try to do everything
+  - **Clear Contracts**: Each skill has a focused purpose that can be described in one sentence
+- **Examples:**
+  - ✓ "Lending Operations" - one capability with multiple related actions
+  - ✓ "Token Swapping" - one capability for exchanging tokens
+  - ✗ "DeFi Everything" - too broad, should be split into lending, swapping, staking skills
+- **Reference:** A2A protocol specification, AgentSkill interface design
+
+---
+
+## Framework Designed for Junior Developer Accessibility (v2.5)
+
+- **Decision:** The skill-tool pattern and overall framework design prioritize accessibility for junior developers while remaining powerful for advanced use cases.
+- **Rationale:**
+  - **Low Barrier to Entry**: Clear patterns help developers start building immediately
+  - **Pit of Success**: The default patterns guide developers toward good practices
+  - **Progressive Complexity**: Simple skills are simple to build, complex skills are possible
+  - **Self-Documenting**: Required metadata (tags, examples) ensures good documentation practices
+  - **Error Prevention**: Framework validation catches common mistakes early
+- **Design Choices:**
+  - Required tools array prevents empty skills
+  - Clear separation of skills (external) and tools (internal)
+  - Validation of schemas and metadata
+  - Single defineSkill function for all skill types
+- **Reference:** Framework philosophy, user emphasis on junior developer experience
+
+---
+
 _This document is a living log. Please append new rationale entries as further decisions are made._
