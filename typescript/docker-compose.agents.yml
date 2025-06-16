@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  price-prediction-agent:
+    build:
+      context: .
+      dockerfile: ./templates/allora-price-prediction-agent/Dockerfile
+    container_name: price-prediction-agent
+    ports:
+      - '3008:3008'
+    env_file:
+      - ./templates/allora-price-prediction-agent/.env
+    networks:
+      - vibekit_network
+
+  trading-agent:
+    build:
+      context: .
+      dockerfile: ./examples/allora-trading-agent/Dockerfile
+    container_name: trading-agent
+    ports:
+      - '3009:3009'
+    env_file:
+      - ./examples/allora-trading-agent/.env
+    depends_on:
+      - price-prediction-agent
+    networks:
+      - vibekit_network
+
+networks:
+  vibekit_network:
+    driver: bridge
