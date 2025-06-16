@@ -2,7 +2,7 @@
  * Lending-specific test utilities
  */
 
-import type { GetWalletPositionsResponse } from '@emberai/sdk-typescript';
+import type { GetWalletPositionsResponse } from 'ember-api';
 import type { Task } from 'a2a-samples-js';
 import { type UserReserve, UserReserveSchema } from 'ember-schemas';
 

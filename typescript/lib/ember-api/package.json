@@ -2,8 +2,8 @@
   "name": "ember-api",
   "version": "1.0.0",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
   "scripts": {
     "prepare": "pnpm build",
     "build": "tsc -b",
@@ -17,6 +17,8 @@
     "typescript": "^5.4.2"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.11.1",
+    "ember-schemas": "workspace:*",
     "zod": "^3.22.4"
   }
 } 

@@ -1,11 +1,11 @@
-import EmberGrpcClient, {
-  CapabilityType,
-  OrderType,
+import { EmberMcpClient } from "ember-api";
+import { CapabilityTypes, OrderTypes } from "ember-api";
+import type {
   TokenIdentifier,
   GetLiquidityPoolsResponse,
   GetUserLiquidityPositionsResponse,
   SwapTokensRequest,
-} from "@emberai/sdk-typescript";
+} from "ember-api";
 // Use the high-level McpServer API
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -13,7 +13,7 @@ import { z } from "zod";
 import "dotenv/config";
 
 // CapabilityType is a runtime enum (value), so export it normally
-export { CapabilityType } from "@emberai/sdk-typescript";
+export { CapabilityTypes as CapabilityType } from "ember-api";
 
 // --- Define Zod Schemas ---
 // Convert our Zod objects to schema objects for MCP
@@ -91,7 +91,7 @@ const withdrawSchema = {
 
 const getCapabilitiesSchema = {
   type: z
-    .nativeEnum(CapabilityType)
+    .nativeEnum(CapabilityTypes)
     .describe("The type of capabilities to get."),
 };
 
@@ -221,7 +221,7 @@ if (emberEndpoint === defaultEndpoint) {
   );
 }
 
-const emberClient = new EmberGrpcClient(emberEndpoint);
+const emberClient = new EmberMcpClient(emberEndpoint);
 // --- Register Tools ---
 // Pass the raw schema (e.g., swapTokensSchema) instead of the validator instance
 server.tool(
@@ -230,7 +230,7 @@ server.tool(
   swapTokensSchema,
   async (params: SwapTokensParams) => {
     const swapRequest: SwapTokensRequest = {
-      orderType: OrderType.MARKET_SELL,
+      orderType: OrderTypes.MARKET_SELL,
       baseToken: {
         chainId: params.fromTokenChainId,
         address: params.fromTokenAddress,
@@ -246,31 +246,15 @@ server.tool(
 
     try {
       const response = await emberClient.swapTokens(swapRequest);
-      if (
-        response.error ||
-        !response.transactions ||
-        !response.transactions.length
-      ) {
-        throw new Error(
-          response.error?.message || "No transaction plan returned for swap"
-        );
+      if (!response.transactions || !response.transactions.length) {
+        throw new Error("No transaction plan returned for swap");
       }
 
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(
-              {
-                ...response,
-                transactions: response.transactions.map((tx) => ({
-                  ...tx,
-                  chainId: response.chainId,
-                })),
-              },
-              null,
-              2
-            ),
+            text: JSON.stringify(response, null, 2),
           },
         ],
       };
@@ -740,9 +724,9 @@ server.tool(
   async (params: GetLiquidityPoolsParams) => {
     console.error(`Executing getLiquidityPools tool with params:`, params);
     try {
-      // Pass undefined if no args/metadata needed
+      // No arguments needed for getLiquidityPools
       const response: GetLiquidityPoolsResponse =
-        await emberClient.getLiquidityPools(undefined);
+        await emberClient.getLiquidityPools();
 
       // Check for expected data instead of response.error
       if (!response.liquidityPools) {
@@ -920,6 +904,11 @@ async function main() {
   try {
     // Add log message to monitor transport communication
     console.error("Initializing transport...");
+
+    // Connect the ember client first
+    console.error("Connecting ember client...");
+    await emberClient.connect();
+    console.error("Ember client connected successfully.");
 
     // Connect the server to the transport
     await server.connect(transport);
