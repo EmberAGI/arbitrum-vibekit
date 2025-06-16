@@ -10,6 +10,7 @@ import {
   type SwapResponse,
   type SwapPreview,
   type TransactionPlan,
+  type TokenIdentifier,
 } from 'ember-schemas';
 import {
   parseUnits,
@@ -23,27 +24,54 @@ import {
 
 import { getChainConfigById } from './agent.js';
 
-export type TokenInfo = {
-  chainId: string;
-  address: string;
-  decimals: number;
-};
-
 export interface HandlerContext {
   mcpClient: Client;
-  tokenMap: Record<string, TokenInfo[]>;
+  tokenMap: Record<string, TokenIdentifier[]>;
   userAddress: string | undefined;
   log: (...args: unknown[]) => void;
   quicknodeSubdomain: string;
   quicknodeApiKey: string;
-  openRouterApiKey?: string;
-  camelotContextContent: string;
+  openRouterApiKey: string;
+  swappingContextContent: string;
+}
+
+async function getTokenDecimals(
+  tokenAddress: Address,
+  chainId: string,
+  context: HandlerContext
+): Promise<number> {
+  try {
+    const chainConfig = getChainConfigById(chainId);
+    const networkSegment = chainConfig.quicknodeSegment;
+    let dynamicRpcUrl: string;
+    if (networkSegment === '') {
+      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.quiknode.pro/${context.quicknodeApiKey}`;
+    } else {
+      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.${networkSegment}.quiknode.pro/${context.quicknodeApiKey}`;
+    }
+    
+    const publicClient = createPublicClient({
+      chain: chainConfig.viemChain,
+      transport: http(dynamicRpcUrl),
+    });
+
+    const decimals = (await publicClient.readContract({
+      address: tokenAddress,
+      abi: Erc20Abi.abi,
+      functionName: 'decimals',
+    })) as number;
+
+    return decimals;
+  } catch (error) {
+    context.log(`Failed to fetch decimals for token ${tokenAddress} on chain ${chainId}. Error: ${(error as Error).message}`);
+    throw new Error(`Could not fetch decimals for token ${tokenAddress} on chain ${chainId}: ${(error as Error).message}`);
+  }
 }
 
 function findTokensCaseInsensitive(
-  tokenMap: Record<string, TokenInfo[]>,
+  tokenMap: Record<string, TokenIdentifier[]>,
   tokenName: string
-): TokenInfo[] | undefined {
+): TokenIdentifier[] | undefined {
   const lowerCaseTokenName = tokenName.toLowerCase();
   for (const key in tokenMap) {
     if (key.toLowerCase() === lowerCaseTokenName) {
@@ -69,33 +97,31 @@ function mapChainNameToId(chainName: string): string | undefined {
   return found?.id;
 }
 
-function mapChainIdToName(chainId: string): string {
-  const found = chainMappings.find(mapping => mapping.id === chainId);
-  return found?.name || chainId;
-}
-
 function findTokenDetail(
   tokenName: string,
   optionalChainName: string | undefined,
-  tokenMap: Record<string, TokenInfo[]>,
-  direction: 'from' | 'to'
-): TokenInfo | string {
+  tokenMap: Record<string, TokenIdentifier[]>,
+  _direction: 'from' | 'to'
+): TokenIdentifier | string {
   const tokens = findTokensCaseInsensitive(tokenMap, tokenName);
   if (tokens === undefined) {
     throw new Error(`Token ${tokenName} not supported.`);
   }
 
-  let tokenDetail: TokenInfo | undefined;
+  let tokenIdentifier: TokenIdentifier | undefined;
 
   if (optionalChainName) {
     const chainId = mapChainNameToId(optionalChainName);
     if (!chainId) {
       throw new Error(`Chain name ${optionalChainName} is not recognized.`);
     }
-    tokenDetail = tokens?.find(token => token.chainId === chainId);
-    if (!tokenDetail) {
+    tokenIdentifier = tokens?.find(token => token.chainId === chainId);
+    if (!tokenIdentifier) {
+      const chainList = tokens
+        .map((t, idx) => `${idx + 1}. Chain ${t.chainId}`)
+        .join(', ');
       throw new Error(
-        `Token ${tokenName} not supported on chain ${optionalChainName}. Available chains: ${tokens?.map(t => mapChainIdToName(t.chainId)).join(', ')}`
+        `Token ${tokenName} not supported on chain ${optionalChainName} (chainId: ${chainId}). Available chains: ${chainList}`
       );
     }
   } else {
@@ -104,20 +130,18 @@ function findTokenDetail(
     }
     if (tokens.length > 1) {
       const chainList = tokens
-        .map((t, idx) => `${idx + 1}. ${mapChainIdToName(t.chainId)}`)
-        .join('\n');
-      return `Multiple chains supported for ${tokenName}:\n${chainList}\nPlease specify the '${direction}Chain'.`;
+        .map((t, idx) => `${idx + 1}. Chain ${t.chainId}`)
+        .join(', ');
+      return `Multiple chains available for ${tokenName}. Please specify: ${chainList}`;
     }
-    tokenDetail = tokens[0];
+    tokenIdentifier = tokens[0];
   }
 
-  if (!tokenDetail) {
-    throw new Error(
-      `Could not resolve token details for ${tokenName}${optionalChainName ? ' on chain ' + optionalChainName : ''}.`
-    );
+  if (!tokenIdentifier) {
+    throw new Error(`Token ${tokenName} not found.`);
   }
 
-  return tokenDetail;
+  return tokenIdentifier;
 }
 
 export async function handleSwapTokens(
@@ -148,7 +172,7 @@ export async function handleSwapTokens(
       },
     };
   }
-  const fromTokenDetail = fromTokenResult;
+  const fromTokenIdentifier = fromTokenResult;
 
   const toTokenResult = findTokenDetail(rawToToken, toChain, context.tokenMap, 'to');
   if (typeof toTokenResult === 'string') {
@@ -160,15 +184,16 @@ export async function handleSwapTokens(
       },
     };
   }
-  const toTokenDetail = toTokenResult;
+  const toTokenIdentifier = toTokenResult;
 
-  const atomicAmount = parseUnits(amount, fromTokenDetail.decimals);
-  const txChainId = fromTokenDetail.chainId;
-  const fromTokenAddress = fromTokenDetail.address as Address;
+  const fromTokenDecimals = await getTokenDecimals(fromTokenIdentifier.address as Address, fromTokenIdentifier.chainId, context);
+  const atomicAmount = parseUnits(amount, fromTokenDecimals);
+  const txChainId = fromTokenIdentifier.chainId;
+  const fromTokenAddress = fromTokenIdentifier.address as Address;
   const userAddress = context.userAddress as Address;
 
   context.log(
-    `Preparing swap: ${rawFromToken} (${fromTokenAddress} on chain ${txChainId}) to ${rawToToken} (${toTokenDetail.address} on chain ${toTokenDetail.chainId}), Amount: ${amount} (${atomicAmount}), User: ${userAddress}`
+    `Preparing swap: ${rawFromToken} (${fromTokenAddress} on chain ${txChainId}) to ${rawToToken} (${toTokenIdentifier.address} on chain ${toTokenIdentifier.chainId}), Amount: ${amount} (${atomicAmount}), User: ${userAddress}`
   );
 
   let publicClient: PublicClient;
@@ -212,7 +237,7 @@ export async function handleSwapTokens(
     context.log(`User balance check: Has ${currentBalance}, needs ${atomicAmount} of ${fromToken}`);
 
     if (currentBalance < atomicAmount) {
-      const formattedBalance = formatUnits(currentBalance, fromTokenDetail.decimals);
+      const formattedBalance = formatUnits(currentBalance, fromTokenDecimals);
       context.log(`Insufficient balance for the swap. Needs ${amount}, has ${formattedBalance}`);
       return {
         id: userAddress,
@@ -251,16 +276,16 @@ export async function handleSwapTokens(
   }
 
   context.log(
-    `Executing swap via MCP: ${fromToken} (address: ${fromTokenDetail.address}, chain: ${fromTokenDetail.chainId}) to ${toToken} (address: ${toTokenDetail.address}, chain: ${toTokenDetail.chainId}), amount: ${amount}, atomicAmount: ${atomicAmount}, userAddress: ${context.userAddress}`
+    `Executing swap via MCP: ${fromToken} (address: ${fromTokenIdentifier.address}, chain: ${fromTokenIdentifier.chainId}) to ${toToken} (address: ${toTokenIdentifier.address}, chain: ${toTokenIdentifier.chainId}), amount: ${amount}, atomicAmount: ${atomicAmount}, userAddress: ${context.userAddress}`
   );
 
   const swapResponseRaw = await context.mcpClient.callTool({
     name: 'swapTokens',
     arguments: {
-      fromTokenAddress: fromTokenDetail.address,
-      fromTokenChainId: fromTokenDetail.chainId,
-      toTokenAddress: toTokenDetail.address,
-      toTokenChainId: toTokenDetail.chainId,
+      fromTokenAddress: fromTokenIdentifier.address,
+      fromTokenChainId: fromTokenIdentifier.chainId,
+      toTokenAddress: toTokenIdentifier.address,
+      toTokenChainId: toTokenIdentifier.chainId,
       amount: atomicAmount.toString(),
       userAddress: context.userAddress,
     },
@@ -345,6 +370,7 @@ export async function handleSwapTokens(
       `Insufficient allowance or check failed. Need ${atomicAmount}, have ${currentAllowance}. Preparing approval transaction...`
     );
     approveTxResponse = {
+      type: 'approval' as const,
       to: fromTokenAddress,
       data: encodeFunctionData({
         abi: Erc20Abi.abi,
@@ -352,7 +378,6 @@ export async function handleSwapTokens(
         args: [spenderAddress, BigInt(2) ** BigInt(256) - BigInt(1)],
       }),
       value: '0',
-      chainId: txChainId,
     };
   } else {
     context.log('Sufficient allowance already exists.');
@@ -417,7 +442,7 @@ export async function handleAskEncyclopedia(
   context: HandlerContext
 ): Promise<Task> {
   const { question } = params;
-  const { userAddress, openRouterApiKey, log, camelotContextContent } = context;
+  const { userAddress, openRouterApiKey, log, swappingContextContent } = context;
 
   if (!userAddress) {
     throw new Error('User address not set!');
@@ -444,7 +469,7 @@ export async function handleAskEncyclopedia(
   log(`Handling askEncyclopedia for user ${userAddress} with question: "${question}"`);
 
   try {
-    if (!camelotContextContent.trim()) {
+    if (!swappingContextContent.trim()) {
       log('Error: Camelot context documentation provided by the agent is empty.');
       return {
         id: userAddress,
@@ -473,7 +498,7 @@ Do not say phrases like "Based on my knowledge" or "According to the information
 
 If you don't know something, simply say "I don't know" or "I don't have information about that" without apologizing or referring to limited information.
 
-${camelotContextContent}`;
+${swappingContextContent}`;
 
     log('Calling OpenRouter model...');
     const { textStream } = await streamText({

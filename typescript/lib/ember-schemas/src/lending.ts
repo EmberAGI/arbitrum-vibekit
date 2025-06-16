@@ -162,4 +162,25 @@ export const BorrowRepaySupplyWithdrawSchema = z.object({
 export type BorrowRepaySupplyWithdrawArgs = z.infer<typeof BorrowRepaySupplyWithdrawSchema>;
 
 export const GetUserPositionsSchema = z.object({});
-export type GetUserPositionsArgs = z.infer<typeof GetUserPositionsSchema>; 
+export type GetUserPositionsArgs = z.infer<typeof GetUserPositionsSchema>;
+
+// Lending capabilities schemas
+export const LendingCapabilitySchema = z.object({
+  underlyingToken: TokenSchema.optional(),
+  supplyRate: z.string().optional(),
+  borrowRate: z.string().optional(),
+  liquidationThreshold: z.string().optional(),
+  maxSupply: z.string().optional(),
+  maxBorrow: z.string().optional(),
+});
+export type LendingCapability = z.infer<typeof LendingCapabilitySchema>;
+
+export const LendingAgentCapabilitySchema = z.object({
+  lendingCapability: LendingCapabilitySchema.optional(),
+});
+export type LendingAgentCapability = z.infer<typeof LendingAgentCapabilitySchema>;
+
+export const LendingGetCapabilitiesResponseSchema = z.object({
+  capabilities: z.array(LendingAgentCapabilitySchema),
+});
+export type LendingGetCapabilitiesResponse = z.infer<typeof LendingGetCapabilitiesResponseSchema>; 

@@ -23,7 +23,7 @@ import {
   type RepayTokensResponse,
   GetWalletPositionsResponseSchema,
   type GetWalletPositionsResponse,
-  TokenSchema as EmberTokenSchema,
+  type TokenIdentifier,
   type TransactionPlan,
 } from 'ember-schemas';
 import { getChainConfigById } from './agent.js';
@@ -31,7 +31,7 @@ import { z } from 'zod';
 
 export interface HandlerContext {
   mcpClient: Client;
-  tokenMap: Record<string, Array<TokenInfo>>;
+  tokenMap: Record<string, Array<TokenIdentifier>>;
   userAddress: string | undefined;
   log: (...args: unknown[]) => void;
   quicknodeSubdomain: string;
@@ -40,15 +40,46 @@ export interface HandlerContext {
   aaveContextContent: string;
 }
 
-export type TokenInfo = z.infer<typeof EmberTokenSchema>;
+async function getTokenDecimals(
+  tokenAddress: Address,
+  chainId: string,
+  context: HandlerContext
+): Promise<number> {
+  try {
+    const chainConfig = getChainConfigById(chainId);
+    const networkSegment = chainConfig.quicknodeSegment;
+    let dynamicRpcUrl: string;
+    if (networkSegment === '') {
+      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.quiknode.pro/${context.quicknodeApiKey}`;
+    } else {
+      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.${networkSegment}.quiknode.pro/${context.quicknodeApiKey}`;
+    }
+    
+    const publicClient = createPublicClient({
+      chain: chainConfig.viemChain,
+      transport: http(dynamicRpcUrl),
+    });
+
+    const decimals = (await publicClient.readContract({
+      address: tokenAddress,
+      abi: Erc20Abi.abi,
+      functionName: 'decimals',
+    })) as number;
+
+    return decimals;
+  } catch (error) {
+    context.log(`Failed to fetch decimals for token ${tokenAddress} on chain ${chainId}. Error: ${(error as Error).message}`);
+    throw new Error(`Could not fetch decimals for token ${tokenAddress} on chain ${chainId}: ${(error as Error).message}`);
+  }
+}
 
 export type FindTokenResult =
-  | { type: 'found'; token: TokenInfo }
+  | { type: 'found'; token: TokenIdentifier }
   | { type: 'notFound' }
-  | { type: 'clarificationNeeded'; options: TokenInfo[] };
+  | { type: 'clarificationNeeded'; options: TokenIdentifier[] };
 
 function findTokenInfo(
-  tokenMap: Record<string, Array<TokenInfo>>,
+  tokenMap: Record<string, Array<TokenIdentifier>>,
   tokenName: string
 ): FindTokenResult {
   const upperTokenName = tokenName.toUpperCase();
@@ -95,7 +126,7 @@ export async function handleBorrow(
     case 'clarificationNeeded': {
       context.log(`Borrow requires clarification for token ${rawTokenName}.`);
       const optionsText = findResult.options
-        .map(opt => `- ${rawTokenName} on chain ${opt.tokenUid.chainId}`)
+        .map(opt => `- ${rawTokenName} on chain ${opt.chainId}`)
         .join('\n');
       return {
         id: context.userAddress,
@@ -115,9 +146,9 @@ export async function handleBorrow(
     }
 
     case 'found': {
-      const tokenDetail = findResult.token;
+      const tokenIdentifier = findResult.token;
       context.log(
-        `Preparing borrow transaction: ${amount} ${tokenDetail.name} on chain ${tokenDetail.tokenUid.chainId}`
+        `Preparing borrow transaction: ${amount} ${rawTokenName} on chain ${tokenIdentifier.chainId}`
       );
 
       try {
@@ -125,8 +156,8 @@ export async function handleBorrow(
           name: 'borrow',
           arguments: {
             tokenUid: {
-              address: tokenDetail.tokenUid.address,
-              chainId: tokenDetail.tokenUid.chainId,
+              address: tokenIdentifier.address,
+              chainId: tokenIdentifier.chainId,
             },
             amount,
             borrowerWalletAddress: context.userAddress,
@@ -145,7 +176,7 @@ export async function handleBorrow(
             tokenName,
             amount,
             action: 'borrow',
-            chainId: tokenDetail.tokenUid.chainId,
+            chainId: tokenIdentifier.chainId,
             currentBorrowApy,
             liquidationThreshold,
           },
@@ -216,7 +247,7 @@ export async function handleRepay(
 
     case 'clarificationNeeded': {
       const chainList = findResult.options
-        .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.tokenUid.chainId}`)
+        .map((t: TokenIdentifier, idx: number) => `${idx + 1}. Chain ID: ${t.chainId}`)
         .join('\n');
       return {
         id: context.userAddress,
@@ -238,11 +269,14 @@ export async function handleRepay(
     case 'found': {
       const tokenInfo = findResult.token;
       const userAddress = context.userAddress as Address;
-      const tokenAddress = tokenInfo.tokenUid.address as Address;
-      const txChainId = tokenInfo.tokenUid.chainId;
+      const tokenAddress = tokenInfo.address as Address;
+      const txChainId = tokenInfo.chainId;
+      
+      // Get decimals for the token on demand
+      const tokenDecimals = await getTokenDecimals(tokenAddress, txChainId, context);
       let atomicAmount: bigint;
       try {
-        atomicAmount = parseUnits(amount, tokenInfo.decimals);
+        atomicAmount = parseUnits(amount, tokenDecimals);
       } catch (_e) {
         return {
           id: userAddress,
@@ -304,7 +338,7 @@ export async function handleRepay(
         );
 
         if (currentBalance < atomicAmount) {
-          const formattedBalance = formatUnits(currentBalance, tokenInfo.decimals);
+          const formattedBalance = formatUnits(currentBalance, tokenDecimals);
           context.log(`Insufficient balance for repay. Needs ${amount}, has ${formattedBalance}`);
           return {
             id: userAddress,
@@ -349,8 +383,8 @@ export async function handleRepay(
         name: 'repay',
         arguments: {
           tokenUid: {
-            address: tokenInfo.tokenUid.address,
-            chainId: tokenInfo.tokenUid.chainId,
+            address: tokenInfo.address,
+            chainId: tokenInfo.chainId,
           },
           amount,
           borrowerWalletAddress: context.userAddress!,
@@ -372,7 +406,7 @@ export async function handleRepay(
         tokenName,
         amount,
         action: 'repay',
-        chainId: tokenInfo.tokenUid.chainId,
+        chainId: tokenInfo.chainId,
       };
       const artifactContent = { txPreview, txPlan: transactions };
       const dataPart: DataPart = { type: 'data', data: artifactContent };
@@ -423,7 +457,7 @@ export async function handleSupply(
 
     case 'clarificationNeeded': {
       const chainList = findResult.options
-        .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.tokenUid.chainId}`)
+        .map((t: TokenIdentifier, idx: number) => `${idx + 1}. Chain ID: ${t.chainId}`)
         .join('\n');
       return {
         id: context.userAddress,
@@ -445,11 +479,14 @@ export async function handleSupply(
     case 'found': {
       const tokenInfo = findResult.token;
       const userAddress = context.userAddress as Address;
-      const tokenAddress = tokenInfo.tokenUid.address as Address;
-      const txChainId = tokenInfo.tokenUid.chainId;
+      const tokenAddress = tokenInfo.address as Address;
+      const txChainId = tokenInfo.chainId;
+      
+      // Get decimals for the token on demand
+      const tokenDecimals = await getTokenDecimals(tokenAddress, txChainId, context);
       let atomicAmount: bigint;
       try {
-        atomicAmount = parseUnits(amount, tokenInfo.decimals);
+        atomicAmount = parseUnits(amount, tokenDecimals);
       } catch (_e) {
         return {
           id: userAddress,
@@ -510,7 +547,7 @@ export async function handleSupply(
           `User balance check: Has ${currentBalance}, needs ${atomicAmount} of ${tokenName}`
         );
         if (currentBalance < atomicAmount) {
-          const formattedBalance = formatUnits(currentBalance, tokenInfo.decimals);
+          const formattedBalance = formatUnits(currentBalance, tokenDecimals);
           context.log(`Insufficient balance for supply. Needs ${amount}, has ${formattedBalance}`);
           return {
             id: userAddress,
@@ -555,8 +592,8 @@ export async function handleSupply(
         name: 'supply',
         arguments: {
           tokenUid: {
-            address: tokenInfo.tokenUid.address,
-            chainId: tokenInfo.tokenUid.chainId,
+            address: tokenInfo.address,
+            chainId: tokenInfo.chainId,
           },
           amount: amount,
           supplierWalletAddress: context.userAddress,
@@ -685,7 +722,7 @@ export async function handleWithdraw(
 
     case 'clarificationNeeded': {
       const chainList = findResult.options
-        .map((t: TokenInfo, idx: number) => `${idx + 1}. Chain ID: ${t.tokenUid.chainId}`)
+        .map((t: TokenIdentifier, idx: number) => `${idx + 1}. Chain ID: ${t.chainId}`)
         .join('\n');
       return {
         id: context.userAddress,
@@ -705,18 +742,15 @@ export async function handleWithdraw(
     }
 
     case 'found': {
-      const tokenDetail = findResult.token;
+      const tokenIdentifier = findResult.token;
       context.log(
-        `Preparing withdraw transaction: ${amount} ${tokenName} (${tokenDetail.tokenUid.address} on chain ${tokenDetail.tokenUid.chainId})`
+        `Preparing withdraw transaction: ${amount} ${tokenName} (${tokenIdentifier.address} on chain ${tokenIdentifier.chainId})`
       );
 
       const toolResult = await context.mcpClient.callTool({
         name: 'withdraw',
         arguments: {
-          tokenUid: {
-            address: tokenDetail.tokenUid.address,
-            chainId: tokenDetail.tokenUid.chainId,
-          },
+          tokenAddress: tokenIdentifier.address,
           amount: amount,
           lenderWalletAddress: context.userAddress,
         },
@@ -736,7 +770,7 @@ export async function handleWithdraw(
           tokenName: tokenName,
           amount: amount,
           action: 'withdraw',
-          chainId: tokenDetail.tokenUid.chainId,
+          chainId: tokenIdentifier.chainId,
         };
 
         return {
@@ -903,7 +937,7 @@ If you don't know something, simply say "I don't know" or "I don't have informat
 
 ${aaveContextContent}`;
 
-    log(`Calling OpenRouter model...`);
+    log('Calling OpenRouter model...');
     const { textStream } = await streamText({
       model: openrouter('google/gemini-2.5-flash-preview'),
       system: systemPrompt,

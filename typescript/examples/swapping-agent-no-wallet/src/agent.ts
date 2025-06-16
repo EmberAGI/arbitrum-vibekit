@@ -27,9 +27,10 @@ import type { Chain } from 'viem/chains';
 import type { Task } from 'a2a-samples-js';
 import {
   AskEncyclopediaSchema,
-  McpGetCapabilitiesResponseSchema,
-  type McpGetCapabilitiesResponse,
+  GetCapabilitiesResponseSchema,
+  type GetCapabilitiesResponse,
   SwapTokensSchema,
+  type TokenIdentifier,
 } from 'ember-schemas';
 
 const openrouter = createOpenRouter({
@@ -96,14 +97,7 @@ export class Agent {
   private userAddress: Address | undefined;
   private quicknodeSubdomain: string;
   private quicknodeApiKey: string;
-  private tokenMap: Record<
-    string,
-    Array<{
-      chainId: string;
-      address: string;
-      decimals: number;
-    }>
-  > = {};
+  private tokenMap: Record<string, TokenIdentifier[]> = {};
   private availableTokens: string[] = [];
   public conversationHistory: CoreMessage[] = [];
   private mcpClient: Client | null = null;
@@ -128,6 +122,10 @@ export class Agent {
       throw new Error('MCP Client not initialized!');
     }
 
+    if (!process.env.OPENROUTER_API_KEY) {
+      throw new Error('OPENROUTER_API_KEY not set!');
+    }
+
     const context: HandlerContext = {
       mcpClient: this.mcpClient,
       tokenMap: this.tokenMap,
@@ -136,7 +134,7 @@ export class Agent {
       quicknodeSubdomain: this.quicknodeSubdomain,
       quicknodeApiKey: this.quicknodeApiKey,
       openRouterApiKey: process.env.OPENROUTER_API_KEY,
-      camelotContextContent: this.camelotContextContent,
+      swappingContextContent: this.camelotContextContent,
     };
     return context;
   }
@@ -201,7 +199,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
       },
     ];
 
-    let swapCapabilities: McpGetCapabilitiesResponse | undefined;
+    let swapCapabilities: GetCapabilitiesResponse | undefined;
     const useCache = process.env.AGENT_DEBUG === 'true';
 
     this.log('Initializing MCP client via stdio...');
@@ -234,7 +232,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
           this.log('Loading swap capabilities from cache...');
           const cachedData = await fs.readFile(CACHE_FILE_PATH, 'utf-8');
           const parsedJson = JSON.parse(cachedData);
-          const validationResult = McpGetCapabilitiesResponseSchema.safeParse(parsedJson);
+          const validationResult = GetCapabilitiesResponseSchema.safeParse(parsedJson);
           if (validationResult.success) {
             swapCapabilities = validationResult.data;
             this.log('Cached capabilities loaded and validated successfully.');
@@ -284,7 +282,6 @@ Use relavant conversation history to obtain required tool parameters. Present th
                 tokenList.push({
                   chainId: token.tokenUid.chainId,
                   address: token.tokenUid.address,
-                  decimals: token.decimals ?? 18,
                 });
               }
             });
@@ -491,7 +488,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
     }
   }
 
-  private async fetchAndCacheCapabilities(): Promise<McpGetCapabilitiesResponse> {
+  private async fetchAndCacheCapabilities(): Promise<GetCapabilitiesResponse> {
     this.log('Fetching swap capabilities via MCP...');
     if (!this.mcpClient) {
       throw new Error('MCP Client not initialized. Cannot fetch capabilities.');
@@ -514,7 +511,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
 
       const dataToValidate = parseMcpToolResponsePayload(capabilitiesResult, z.any());
 
-      const validationResult = McpGetCapabilitiesResponseSchema.safeParse(dataToValidate);
+      const validationResult = GetCapabilitiesResponseSchema.safeParse(dataToValidate);
 
       this.log('Validation performed on potentially parsed data.');
       const validationResultString = JSON.stringify(validationResult, null, 2);

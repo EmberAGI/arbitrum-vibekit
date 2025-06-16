@@ -36,10 +36,12 @@ import { handleSwapTokens } from './agentToolHandlers.js';
 import type { HandlerContext } from './agentToolHandlers.js';
 
 import {
+  AskEncyclopediaSchema,
+  GetCapabilitiesResponseSchema,
+  type GetCapabilitiesResponse,
   SwapTokensSchema,
-  McpGetCapabilitiesResponseSchema,
+  type TokenIdentifier,
   type TransactionPlan,
-  type McpGetCapabilitiesResponse,
 } from 'ember-schemas';
 
 import { mainnet, arbitrum, optimism, polygon, base } from 'viem/chains';
@@ -87,14 +89,7 @@ export class Agent {
   private userAddress: Address;
   private quicknodeSubdomain: string;
   private quicknodeApiKey: string;
-  private tokenMap: Record<
-    string,
-    Array<{
-      chainId: string;
-      address: string;
-      decimals: number;
-    }>
-  > = {};
+  private tokenMap: Record<string, Array<TokenIdentifier>> = {};
   private availableTokens: string[] = [];
   public conversationHistory: CoreMessage[] = [];
   private mcpClient: Client | null = null;
@@ -187,7 +182,7 @@ Present the user with a list of tokens and chains they can swap from and to if p
       },
     ];
 
-    let swapCapabilities: McpGetCapabilitiesResponse | undefined;
+    let swapCapabilities: GetCapabilitiesResponse | undefined;
     const useCache = process.env.AGENT_DEBUG === 'true';
 
     this.log('Initializing MCP client via stdio...');
@@ -218,7 +213,7 @@ Present the user with a list of tokens and chains they can swap from and to if p
           this.log('Loading swap capabilities from cache...');
           const cachedData = await fs.readFile(CACHE_FILE_PATH, 'utf-8');
           const parsedJson = JSON.parse(cachedData);
-          const validationResult = McpGetCapabilitiesResponseSchema.safeParse(parsedJson);
+          const validationResult = GetCapabilitiesResponseSchema.safeParse(parsedJson);
           if (validationResult.success) {
             swapCapabilities = validationResult.data;
             this.log('Cached capabilities loaded and validated successfully.');
@@ -255,14 +250,19 @@ Present the user with a list of tokens and chains they can swap from and to if p
             const swapCap = capabilityEntry.swapCapability;
             swapCap.supportedTokens?.forEach(token => {
               if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
-                if (!this.tokenMap[token.symbol]) {
-                  this.tokenMap[token.symbol] = [];
-                  this.availableTokens.push(token.symbol);
+                const symbol = token.symbol;
+
+                let tokenList = this.tokenMap[symbol];
+
+                if (!tokenList) {
+                  tokenList = [];
+                  this.tokenMap[symbol] = tokenList;
+                  this.availableTokens.push(symbol);
                 }
-                this.tokenMap[token.symbol]!.push({
-                  chainId: token.tokenUid!.chainId,
-                  address: token.tokenUid!.address,
-                  decimals: token.decimals ?? 18,
+
+                tokenList.push({
+                  chainId: token.tokenUid.chainId,
+                  address: token.tokenUid.address,
                 });
               }
             });
@@ -386,7 +386,7 @@ Present the user with a list of tokens and chains they can swap from and to if p
     return responseMessage;
   }
 
-  async executeAction(actionName: string, transactions: TransactionPlan[]): Promise<string> {
+  async executeAction(actionName: string, transactions: TransactionPlan[], chainId: string): Promise<string> {
     if (!transactions || transactions.length === 0) {
       this.log(`${actionName}: No transactions required.`);
       return `${actionName.charAt(0).toUpperCase() + actionName.slice(1)}: No on-chain transactions required.`;
@@ -395,7 +395,7 @@ Present the user with a list of tokens and chains they can swap from and to if p
       this.log(`Executing ${transactions.length} transaction(s) for ${actionName}...`);
       const txHashes: string[] = [];
       for (const transaction of transactions) {
-        const txHash = await this.signAndSendTransaction(transaction);
+        const txHash = await this.signAndSendTransaction(transaction, chainId);
         this.log(`${actionName} transaction sent: ${txHash}`);
         txHashes.push(txHash);
       }
@@ -407,16 +407,10 @@ Present the user with a list of tokens and chains they can swap from and to if p
     }
   }
 
-  async signAndSendTransaction(tx: TransactionPlan): Promise<string> {
-    if (!tx.chainId) {
-      const errorMsg = `Transaction object missing required 'chainId' field`;
-      logError(errorMsg, tx);
-      throw new Error(errorMsg);
-    }
-
+  async signAndSendTransaction(tx: TransactionPlan, chainId: string): Promise<string> {
     let chainConfig: ChainConfig;
     try {
-      chainConfig = getChainConfigById(tx.chainId);
+      chainConfig = getChainConfigById(chainId);
     } catch (chainError) {
       logError((chainError as Error).message, tx);
       throw chainError;
@@ -530,7 +524,7 @@ Present the user with a list of tokens and chains they can swap from and to if p
     }
   }
 
-  private async fetchAndCacheCapabilities(): Promise<McpGetCapabilitiesResponse> {
+  private async fetchAndCacheCapabilities(): Promise<GetCapabilitiesResponse> {
     this.log('Fetching swap capabilities via MCP...');
     if (!this.mcpClient) {
       throw new Error('MCP Client not initialized. Cannot fetch capabilities.');
@@ -554,7 +548,7 @@ Present the user with a list of tokens and chains they can swap from and to if p
 
       const dataToValidate = parseMcpToolResponsePayload(capabilitiesResult, z.any());
 
-      const validationResult = McpGetCapabilitiesResponseSchema.safeParse(dataToValidate);
+      const validationResult = GetCapabilitiesResponseSchema.safeParse(dataToValidate);
 
       this.log('Validation performed on potentially parsed data.');
       const validationResultString = JSON.stringify(validationResult, null, 2);

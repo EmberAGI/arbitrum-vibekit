@@ -2,8 +2,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import {
   LendingGetCapabilitiesResponseSchema,
   type LendingGetCapabilitiesResponse,
-  McpTextWrapperSchema,
-  type TokenInfo,
+  TextWrapperSchema,
+  type TokenIdentifier,
   type LendingAgentCapability,
 } from 'ember-schemas';
 import * as fs from 'fs/promises';
@@ -13,7 +13,7 @@ const CACHE_FILE_PATH = '.cache/lending-capabilities.json';
 
 export async function loadTokenMapFromMcp(
   mcpClient: Client
-): Promise<Record<string, Array<TokenInfo>>> {
+): Promise<Record<string, Array<TokenIdentifier>>> {
   const useCache = process.env.AGENT_CACHE_TOKENS === 'true';
   let capabilitiesResponse: LendingGetCapabilitiesResponse | undefined;
 
@@ -60,7 +60,7 @@ export async function loadTokenMapFromMcp(
       console.log('Raw capabilitiesResult received from MCP tool call.');
 
       // Validate the MCP wrapper format
-      const wrapperValidationResult = McpTextWrapperSchema.safeParse(capabilitiesResult);
+      const wrapperValidationResult = TextWrapperSchema.safeParse(capabilitiesResult);
       if (!wrapperValidationResult.success) {
         console.error(
           'MCP getCapabilities tool returned an unexpected structure:',
@@ -112,7 +112,7 @@ export async function loadTokenMapFromMcp(
   }
 
   // Build the token map from capabilities
-  const tokenMap: Record<string, Array<TokenInfo>> = {};
+  const tokenMap: Record<string, Array<TokenIdentifier>> = {};
   let loadedTokenCount = 0;
 
   if (capabilitiesResponse?.capabilities) {
@@ -125,10 +125,9 @@ export async function loadTokenMapFromMcp(
 
         if (token && token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
           const symbol = token.symbol.toUpperCase(); // Normalize to uppercase
-          const tokenInfo: TokenInfo = {
+          const tokenInfo: TokenIdentifier = {
             chainId: token.tokenUid.chainId,
             address: token.tokenUid.address,
-            decimals: token.decimals ?? 18,
           };
 
           if (!tokenMap[symbol]) {

@@ -29,41 +29,34 @@ export type { AskEncyclopediaArgs };
 // Swapping Capability Schemas
 //
 
-export const McpCapabilityTokenSchema = z.object({
+export const CapabilityTokenSchema = z.object({
   symbol: z.string().optional(),
   name: z.string().optional(),
   decimals: z.number().optional(),
   tokenUid: TokenIdentifierSchema.optional(),
 });
-export type McpCapabilityToken = z.infer<typeof McpCapabilityTokenSchema>;
+export type CapabilityToken = z.infer<typeof CapabilityTokenSchema>;
 
-export const McpCapabilitySchema = z.object({
+export const CapabilitySchema = z.object({
   protocol: z.string().optional(),
   capabilityId: z.string().optional(),
-  supportedTokens: z.array(McpCapabilityTokenSchema).optional(),
+  supportedTokens: z.array(CapabilityTokenSchema).optional(),
 });
-export type McpCapability = z.infer<typeof McpCapabilitySchema>;
+export type Capability = z.infer<typeof CapabilitySchema>;
 
-export const McpSingleCapabilityEntrySchema = z.object({
-  swapCapability: McpCapabilitySchema.optional(),
+export const SingleCapabilityEntrySchema = z.object({
+  swapCapability: CapabilitySchema.optional(),
 });
-export type McpSingleCapabilityEntry = z.infer<typeof McpSingleCapabilityEntrySchema>;
+export type SingleCapabilityEntry = z.infer<typeof SingleCapabilityEntrySchema>;
 
-export const McpGetCapabilitiesResponseSchema = z.object({
-  capabilities: z.array(McpSingleCapabilityEntrySchema),
+export const GetCapabilitiesResponseSchema = z.object({
+  capabilities: z.array(SingleCapabilityEntrySchema),
 });
-export type McpGetCapabilitiesResponse = z.infer<typeof McpGetCapabilitiesResponseSchema>;
+export type GetCapabilitiesResponse = z.infer<typeof GetCapabilitiesResponseSchema>;
 
 //
 // Swapping Transaction Schemas
 //
-
-// From swapping-agent-no-wallet
-export const TokenDetailSchema = z.object({
-  address: z.string(),
-  chainId: z.string(),
-});
-export type TokenDetail = z.infer<typeof TokenDetailSchema>;
 
 export const EstimationSchema = z.object({
   effectivePrice: z.string(),
@@ -82,8 +75,8 @@ export const ProviderTrackingSchema = z.object({
 export type ProviderTracking = z.infer<typeof ProviderTrackingSchema>;
 
 export const SwapResponseSchema = z.object({
-  baseToken: TokenDetailSchema,
-  quoteToken: TokenDetailSchema,
+  baseToken: TokenIdentifierSchema,
+  quoteToken: TokenIdentifierSchema,
   estimation: EstimationSchema,
   providerTracking: ProviderTrackingSchema,
   transactions: z.array(TransactionPlanSchema),

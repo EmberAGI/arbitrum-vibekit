@@ -20,7 +20,7 @@ import {
   GetUserPositionsSchema,
   AskEncyclopediaSchema,
   type GetLendingReservesResponse,
-  type Token,
+  type TokenIdentifier,
   type LendTokenDetail,
   LendTokenDetailSchema,
   type GetWalletPositionsResponse,
@@ -37,6 +37,9 @@ import {
   type HandlerContext,
 } from './agentToolHandlers.js';
 import { createProviderSelector } from 'arbitrum-vibekit-core';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
+import { createPublicClient, http, type Address } from 'viem';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -108,7 +111,7 @@ export function getChainConfigById(chainId: string): ChainConfig {
 
 export class Agent {
   private mcpClient: Client | null = null;
-  private tokenMap: Record<string, Array<Token>> = {};
+  private tokenMap: Record<string, Array<TokenIdentifier>> = {};
   private quicknodeSubdomain: string;
   private quicknodeApiKey: string;
   private availableTokens: string[] = [];
@@ -119,11 +122,9 @@ export class Agent {
   constructor(quicknodeSubdomain: string, quicknodeApiKey: string) {
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
-
-    if (!providers.openrouter) {
-      throw new Error('OPENROUTER_API_KEY not set!');
-    }
-    this.model = model;
+    this.model = createOpenRouter({
+      apiKey: process.env.OPENROUTER_API_KEY,
+    })('google/gemini-2.5-flash-preview');
   }
 
   async init(): Promise<void> {
@@ -206,17 +207,14 @@ export class Agent {
   private async setupTokenMap(): Promise<void> {
     try {
       const capabilities = await this.fetchAndCacheCapabilities();
+      console.error('setting up token map with capabilities:', capabilities);
       this.availableTokens = capabilities.reserves.map(reserve => reserve.symbol);
 
-      const tokenMap: Record<string, Array<Token>> = {};
+      const tokenMap: Record<string, Array<TokenIdentifier>> = {};
       for (const reserve of capabilities.reserves) {
-        const token: Token = {
-          tokenUid: reserve.tokenUid,
-          name: reserve.symbol,
-          symbol: reserve.symbol,
-          decimals: reserve.decimals,
-          isNative: false, // This should be updated if the data is available
-          isVetted: true, // Assuming vetted
+        const token: TokenIdentifier = {
+          address: reserve.tokenUid.address,
+          chainId: reserve.tokenUid.chainId,
         };
 
         const upperSymbol = reserve.symbol.toUpperCase();

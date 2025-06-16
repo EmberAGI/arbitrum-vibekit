@@ -91,4 +91,15 @@ export type Balance = z.infer<typeof BalanceSchema>;
 export const AskEncyclopediaSchema = z.object({
   question: z.string().describe('The question to ask the encyclopedia or informational tool.'),
 });
-export type AskEncyclopediaArgs = z.infer<typeof AskEncyclopediaSchema>; 
+export type AskEncyclopediaArgs = z.infer<typeof AskEncyclopediaSchema>;
+
+export const TransactionPlansSchema = z.array(TransactionPlanSchema);
+export type TransactionPlans = z.infer<typeof TransactionPlansSchema>;
+
+export const TextWrapperSchema = z.object({
+  content: z.array(z.object({
+    type: z.literal('text'),
+    text: z.string(),
+  })),
+});
+export type TextWrapper = z.infer<typeof TextWrapperSchema>; 

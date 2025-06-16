@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
-import { TransactionPlanSchema, type TransactionPlan } from 'ember-schemas';
+import { TransactionPlanSchema, type TransactionPlan, type TokenIdentifier } from 'ember-schemas';
+import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
 import {
   parseUnits,
   createPublicClient,
@@ -13,26 +14,53 @@ import { z } from 'zod';
 
 import { getChainConfigById } from './agent.js';
 
-export type TokenInfo = {
-  chainId: string;
-  address: string;
-  decimals: number;
-};
-
 export interface HandlerContext {
   mcpClient: Client;
-  tokenMap: Record<string, TokenInfo[]>;
+  tokenMap: Record<string, TokenIdentifier[]>;
   userAddress: string;
-  executeAction: (actionName: string, transactions: TransactionPlan[]) => Promise<string>;
+  executeAction: (actionName: string, transactions: TransactionPlan[], chainId: string) => Promise<string>;
   log: (...args: unknown[]) => void;
   quicknodeSubdomain: string;
   quicknodeApiKey: string;
 }
 
+async function getTokenDecimals(
+  tokenAddress: Address,
+  chainId: string,
+  context: HandlerContext
+): Promise<number> {
+  try {
+    const chainConfig = getChainConfigById(chainId);
+    const networkSegment = chainConfig.quicknodeSegment;
+    let dynamicRpcUrl: string;
+    if (networkSegment === '') {
+      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.quiknode.pro/${context.quicknodeApiKey}`;
+    } else {
+      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.${networkSegment}.quiknode.pro/${context.quicknodeApiKey}`;
+    }
+    
+    const publicClient = createPublicClient({
+      chain: chainConfig.viemChain,
+      transport: http(dynamicRpcUrl),
+    });
+
+    const decimals = (await publicClient.readContract({
+      address: tokenAddress,
+      abi: Erc20Abi.abi,
+      functionName: 'decimals',
+    })) as number;
+
+    return decimals;
+  } catch (error) {
+    context.log(`Failed to fetch decimals for token ${tokenAddress} on chain ${chainId}. Error: ${(error as Error).message}`);
+    throw new Error(`Could not fetch decimals for token ${tokenAddress} on chain ${chainId}: ${(error as Error).message}`);
+  }
+}
+
 function findTokensCaseInsensitive(
-  tokenMap: Record<string, TokenInfo[]>,
+  tokenMap: Record<string, TokenIdentifier[]>,
   tokenName: string
-): TokenInfo[] {
+): TokenIdentifier[] {
   const lowerCaseTokenName = tokenName.toLowerCase();
   for (const key in tokenMap) {
     if (key.toLowerCase() === lowerCaseTokenName) {
@@ -66,15 +94,15 @@ function mapChainIdToName(chainId: string): string {
 function findTokenDetail(
   tokenName: string,
   optionalChainName: string | undefined,
-  tokenMap: Record<string, TokenInfo[]>,
+  tokenMap: Record<string, TokenIdentifier[]>,
   direction: 'from' | 'to'
-): TokenInfo | string {
+): TokenIdentifier | string {
   const tokens = findTokensCaseInsensitive(tokenMap, tokenName);
   if (tokens.length === 0) {
     throw new Error(`Token ${tokenName} not supported.`);
   }
 
-  let tokenDetail: TokenInfo | undefined;
+  let tokenDetail: TokenIdentifier | undefined;
 
   if (optionalChainName) {
     const chainId = mapChainNameToId(optionalChainName);
@@ -109,6 +137,7 @@ function findTokenDetail(
 async function validateAndExecuteAction(
   actionName: string,
   rawTransactions: unknown,
+  chainId: string,
   context: HandlerContext
 ): Promise<string> {
   const validationResult = z.array(TransactionPlanSchema).safeParse(rawTransactions);
@@ -117,7 +146,7 @@ async function validateAndExecuteAction(
     context.log('Validation Error:', errorMsg, validationResult.error);
     throw new Error(errorMsg);
   }
-  return await context.executeAction(actionName, validationResult.data);
+  return await context.executeAction(actionName, validationResult.data, chainId);
 }
 
 const minimalErc20Abi = [
@@ -171,7 +200,9 @@ export async function handleSwapTokens(
   }
   const toTokenDetail = toTokenResult;
 
-  const atomicAmount = parseUnits(amount, fromTokenDetail.decimals);
+  // Get decimals for the from token on demand
+  const fromTokenDecimals = await getTokenDecimals(fromTokenDetail.address as Address, fromTokenDetail.chainId, context);
+  const atomicAmount = parseUnits(amount, fromTokenDecimals);
 
   context.log(
     `Executing swap via MCP: ${fromToken} (address: ${fromTokenDetail.address}, chain: ${fromTokenDetail.chainId}) to ${toToken} (address: ${toTokenDetail.address}, chain: ${toTokenDetail.chainId}), amount: ${amount}, atomicAmount: ${atomicAmount}, userAddress: ${context.userAddress}`
@@ -260,6 +291,7 @@ export async function handleSwapTokens(
       `Insufficient allowance or check failed. Need ${atomicAmount}, have ${currentAllowance}. Creating approval transaction...`
     );
     const approveTx: TransactionPlan = {
+      type: 'EVM_TX',
       to: fromTokenAddress,
       data: encodeFunctionData({
         abi: minimalErc20Abi,
@@ -267,14 +299,13 @@ export async function handleSwapTokens(
         args: [spenderAddress, BigInt(2) ** BigInt(256) - BigInt(1)],
       }),
       value: '0',
-      chainId: txChainId,
     };
 
     try {
       context.log(
         `Executing approval transaction for ${params.fromToken} to spender ${spenderAddress}...`
       );
-      const approvalResult = await context.executeAction('approve', [approveTx]);
+      const approvalResult = await context.executeAction('approve', [approveTx], txChainId);
       context.log(
         `Approval transaction sent: ${approvalResult}. Note: Ensure confirmation before proceeding if needed.`
       );
@@ -290,13 +321,5 @@ export async function handleSwapTokens(
 
   context.log('Proceeding to execute the swap transaction received from MCP tool...');
 
-  if (Array.isArray(dataToValidate) && dataToValidate.length > 0) {
-    const swapTxPlan = dataToValidate[0] as Partial<TransactionPlan>;
-    if (swapTxPlan && typeof swapTxPlan === 'object' && !swapTxPlan.chainId) {
-      context.log(`Adding missing chainId (${txChainId}) to swap transaction plan.`);
-      swapTxPlan.chainId = txChainId;
-    }
-  }
-
-  return await validateAndExecuteAction('swapTokens', dataToValidate, context);
+  return await validateAndExecuteAction('swapTokens', dataToValidate, txChainId, context);
 }
