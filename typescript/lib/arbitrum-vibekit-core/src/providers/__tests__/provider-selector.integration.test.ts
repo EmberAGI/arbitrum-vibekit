@@ -67,7 +67,7 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
 
   it.skipIf(!hasOpenRouter)('should create a valid OpenRouter model instance', () => {
     const selector = createProviderSelector({ openRouterApiKey: API_KEYS.openRouterApiKey! });
-    const model = selector.openrouter!('openai/gpt-3.5-turbo');
+    const model = selector.openrouter!('openai/gpt-4.1-nano');
 
     // Verify it's a valid LanguageModelV1 instance
     expect(model).toBeDefined();
@@ -76,13 +76,13 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
     expect(model).toHaveProperty('doGenerate');
 
     // Check specific properties
-    expect(model.modelId).toBe('openai/gpt-3.5-turbo');
+    expect(model.modelId).toBe('openai/gpt-4.1-nano');
     expect(model.provider).toBe('openrouter.chat');
   });
 
   it.skipIf(!hasOpenAI)('should create a valid OpenAI model instance', () => {
     const selector = createProviderSelector({ openaiApiKey: API_KEYS.openaiApiKey! });
-    const model = selector.openai!('gpt-3.5-turbo');
+    const model = selector.openai!('gpt-4.1-nano');
 
     // Verify it's a valid LanguageModelV1 instance
     expect(model).toBeDefined();
@@ -91,13 +91,13 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
     expect(model).toHaveProperty('doGenerate');
 
     // Check specific properties
-    expect(model.modelId).toBe('gpt-3.5-turbo');
+    expect(model.modelId).toBe('gpt-4.1-nano');
     expect(model.provider).toBe('openai.chat');
   });
 
   it.skipIf(!hasXai)('should create a valid xAI/Grok model instance', () => {
     const selector = createProviderSelector({ xaiApiKey: API_KEYS.xaiApiKey! });
-    const model = selector.grok!('grok-beta');
+    const model = selector.grok!('grok-3-mini');
 
     // Verify it's a valid LanguageModelV1 instance
     expect(model).toBeDefined();
@@ -106,7 +106,7 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
     expect(model).toHaveProperty('doGenerate');
 
     // Check specific properties
-    expect(model.modelId).toBe('grok-beta');
+    expect(model.modelId).toBe('grok-3-mini');
     expect(model.provider).toBe('xai.chat');
   });
 
@@ -156,7 +156,7 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
     'should successfully call OpenRouter API',
     async () => {
       const selector = createProviderSelector({ openRouterApiKey: API_KEYS.openRouterApiKey! });
-      const model = selector.openrouter!('openai/gpt-3.5-turbo');
+      const model = selector.openrouter!('openai/gpt-4.1-nano');
 
       // Make a minimal API call
       const result = await model.doGenerate({
@@ -177,7 +177,7 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
     'should successfully call OpenAI API',
     async () => {
       const selector = createProviderSelector({ openaiApiKey: API_KEYS.openaiApiKey! });
-      const model = selector.openai!('gpt-3.5-turbo');
+      const model = selector.openai!('gpt-4.1-nano');
 
       // Make a minimal API call
       const result = await model.doGenerate({
@@ -198,7 +198,7 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
     'should successfully call xAI API',
     async () => {
       const selector = createProviderSelector({ xaiApiKey: API_KEYS.xaiApiKey! });
-      const model = selector.grok!('grok-beta');
+      const model = selector.grok!('grok-3-mini');
 
       // Make a minimal API call
       const result = await model.doGenerate({
