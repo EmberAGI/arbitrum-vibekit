@@ -10,6 +10,7 @@ describe("Agent.create()", () => {
     typeof minimalToolParametersSchema,
     Task
   > = {
+    name: "minimal-test-tool",
     description: "A test tool",
     parameters: minimalToolParametersSchema,
     execute: async (args, context) => ({
