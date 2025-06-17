@@ -1,7 +1,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
-import type { Task } from 'a2a-samples-js';
+import type { Task } from '@google-a2a/types/src/types.js';
+import { TaskState } from '@google-a2a/types/src/types.js';
 import { streamText } from 'ai';
 import { type TransactionArtifact, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import {
@@ -142,9 +143,16 @@ export async function handleSwapTokens(
   if (typeof fromTokenResult === 'string') {
     return {
       id: context.userAddress,
+      contextId: `swap-from-token-clarification-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'input-required',
-        message: { role: 'agent', parts: [{ type: 'text', text: fromTokenResult }] },
+        state: TaskState.InputRequired,
+        message: {
+          role: 'agent',
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: fromTokenResult }],
+        },
       },
     };
   }
@@ -154,9 +162,16 @@ export async function handleSwapTokens(
   if (typeof toTokenResult === 'string') {
     return {
       id: context.userAddress,
+      contextId: `swap-to-token-clarification-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'input-required',
-        message: { role: 'agent', parts: [{ type: 'text', text: toTokenResult }] },
+        state: TaskState.InputRequired,
+        message: {
+          role: 'agent',
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: toTokenResult }],
+        },
       },
     };
   }
@@ -191,11 +206,15 @@ export async function handleSwapTokens(
     context.log(`Failed to create public client for chain ${txChainId}:`, chainError);
     return {
       id: userAddress,
+      contextId: `swap-chain-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
+        state: TaskState.Failed,
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: `Network configuration error for chain ${txChainId}.` }],
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: `Network configuration error for chain ${txChainId}.` }],
         },
       },
     };
@@ -216,13 +235,17 @@ export async function handleSwapTokens(
       context.log(`Insufficient balance for the swap. Needs ${amount}, has ${formattedBalance}`);
       return {
         id: userAddress,
+        contextId: `swap-insufficient-balance-${Date.now()}`,
+        kind: 'task',
         status: {
-          state: 'failed',
+          state: TaskState.Failed,
           message: {
             role: 'agent',
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
             parts: [
               {
-                type: 'text',
+                kind: 'text',
                 text: `Insufficient ${fromToken} balance. You need ${amount} but only have ${formattedBalance}.`,
               },
             ],
@@ -235,13 +258,17 @@ export async function handleSwapTokens(
     context.log(`Warning: Failed to read token balance. Error: ${(readError as Error).message}`);
     return {
       id: userAddress,
+      contextId: `swap-balance-check-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
+        state: TaskState.Failed,
         message: {
           role: 'agent',
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
           parts: [
             {
-              type: 'text',
+              kind: 'text',
               text: `Could not verify your ${fromToken} balance due to a network error. Please try again.`,
             },
           ],
@@ -273,11 +300,15 @@ export async function handleSwapTokens(
     context.log('MCP tool swapTokens returned invalid data structure:', error);
     return {
       id: userAddress,
+      contextId: `swap-mcp-parse-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
+        state: TaskState.Failed,
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: (error as Error).message }],
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: (error as Error).message }],
         },
       },
     };
@@ -288,11 +319,15 @@ export async function handleSwapTokens(
     context.log('Invalid or empty transaction plan received from MCP tool:', rawSwapTransactions);
     return {
       id: userAddress,
+      contextId: `swap-empty-plan-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
+        state: TaskState.Failed,
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: 'Swap service returned an empty transaction plan.' }],
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: 'Swap service returned an empty transaction plan.' }],
         },
       },
     };
@@ -303,13 +338,17 @@ export async function handleSwapTokens(
     context.log('Invalid swap transaction object received from MCP:', firstSwapTx);
     return {
       id: userAddress,
+      contextId: `swap-invalid-tx-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
+        state: TaskState.Failed,
         message: {
           role: 'agent',
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
           parts: [
             {
-              type: 'text',
+              kind: 'text',
               text: 'Swap service returned an invalid transaction structure.',
             },
           ],
@@ -386,13 +425,17 @@ export async function handleSwapTokens(
 
   return {
     id: context.userAddress,
+    contextId: `swap-success-${Date.now()}`,
+    kind: 'task',
     status: {
-      state: 'completed',
+      state: TaskState.Completed,
       message: {
         role: 'agent',
+        messageId: `msg-${Date.now()}`,
+        kind: 'message',
         parts: [
           {
-            type: 'text',
+            kind: 'text',
             text: `Transaction plan created for swapping ${amount} ${fromToken} to ${toToken}. Ready to sign.`,
           },
         ],
@@ -400,10 +443,11 @@ export async function handleSwapTokens(
     },
     artifacts: [
       {
+        artifactId: `swap-transaction-${Date.now()}`,
         name: 'transaction-plan',
         parts: [
           {
-            type: 'data',
+            kind: 'data',
             data: { ...txArtifact },
           },
         ],
@@ -426,13 +470,17 @@ export async function handleAskEncyclopedia(
     log('Error: OpenRouter API key is not configured in HandlerContext.');
     return {
       id: userAddress,
+      contextId: `encyclopedia-config-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
+        state: TaskState.Failed,
         message: {
           role: 'agent',
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
           parts: [
             {
-              type: 'text',
+              kind: 'text',
               text: 'The Camelot expert tool is not configured correctly (Missing API Key). Please contact support.',
             },
           ],
@@ -448,13 +496,17 @@ export async function handleAskEncyclopedia(
       log('Error: Camelot context documentation provided by the agent is empty.');
       return {
         id: userAddress,
+        contextId: `encyclopedia-content-error-${Date.now()}`,
+        kind: 'task',
         status: {
-          state: 'failed',
+          state: TaskState.Failed,
           message: {
             role: 'agent',
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
             parts: [
               {
-                type: 'text',
+                kind: 'text',
                 text: 'Could not load the necessary Camelot documentation to answer your question.',
               },
             ],
@@ -491,11 +543,15 @@ ${camelotContextContent}`;
 
     return {
       id: userAddress,
+      contextId: `encyclopedia-success-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'completed',
+        state: TaskState.Completed,
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: responseText }],
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: responseText }],
         },
       },
     };
@@ -504,11 +560,15 @@ ${camelotContextContent}`;
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return {
       id: userAddress,
+      contextId: `encyclopedia-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
+        state: TaskState.Failed,
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: `Error asking Camelot expert: ${errorMessage}` }],
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: `Error asking Camelot expert: ${errorMessage}` }],
         },
       },
     };

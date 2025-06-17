@@ -1,5 +1,6 @@
 import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
-import type { Task, Message, TaskState } from '@google-a2a/types/src/types.js';
+import type { Task, Message } from '@google-a2a/types/src/types.js';
+import { TaskState } from '@google-a2a/types/src/types.js';
 import type { LendingAgentContext } from '../agent.js';
 import { AskEncyclopediaSchema } from './schemas.js';
 import { createTaskId } from './utils.js';
@@ -24,7 +25,7 @@ export const askEncyclopediaBase: VibkitToolDefinition<
       contextId: `encyclopedia-${Date.now()}`,
       kind: 'task' as const,
       status: {
-        state: 'completed' as TaskState,
+        state: TaskState.Completed,
         message: {
           role: 'agent',
           parts: [

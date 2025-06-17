@@ -8,6 +8,5 @@
     "verbatimModuleSyntax": false
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"],
-  "references": [{ "path": "../../lib/a2a" }]
+  "exclude": ["node_modules", "dist"]
 }

@@ -22,32 +22,33 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\" \"test/**/*.{ts,tsx,js,jsx}\""
   },
   "dependencies": {
-    "a2a-samples-js": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.10.0",
-    "ember-mcp-tool-server": "workspace:*",
-    "arbitrum-vibekit-core": "workspace:*",
-    "ember-schemas": "workspace:*",
+    "@google-a2a/types": "github:google-a2a/A2A#path:types",
+    "@modelcontextprotocol/sdk": "^1.5.0",
     "@openrouter/ai-sdk-provider": "^0.4.5",
+    "@openzeppelin/contracts": "^5.3.0",
     "ai": "^4.3.2",
+    "arbitrum-vibekit-core": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
+    "ember-mcp-tool-server": "workspace:*",
+    "ember-schemas": "workspace:*",
     "express": "^4.21.2",
     "viem": "^2.26.3",
     "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
     "@types/chai": "^4.3.20",
-    "@types/mocha": "^10.0.10",
-    "prettier": "^3.5.3",
-    "typescript": "^5.3.2",
-    "tsx": "^4.6.2",
-    "cpx": "^1.5.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.10.0",
     "chai": "^4.5.0",
+    "cpx": "^1.5.0",
     "mocha": "^10.8.2",
     "mocha-suppress-logs": "^0.3.1",
-    "test-utils": "workspace:*"
+    "prettier": "^3.5.3",
+    "test-utils": "workspace:*",
+    "tsx": "^4.6.2",
+    "typescript": "^5.3.2"
   }
 }

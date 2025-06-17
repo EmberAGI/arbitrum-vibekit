@@ -1,10 +1,12 @@
+import {
+  TaskState
+} from '@google-a2a/types/src/types.js';
 import type {
   Artifact,
   TaskStatus,
   Task,
   Message,
   Part,
-  TaskState,
 } from '@google-a2a/types/src/types.js';
 import { z } from 'zod';
 import { VibkitError } from './error.js';
@@ -172,7 +174,7 @@ export function createSuccessTask(
     contextId: `${skillName}-${contextIdSuffix}-${Date.now()}-${nanoid(6)}`,
     kind: 'task',
     status: {
-      state: 'completed' as TaskState,
+      state: TaskState.Completed,
       message: createInfoMessage(message, 'agent'),
       timestamp: getCurrentTimestamp(),
     },
@@ -201,7 +203,7 @@ export function createErrorTask(
     contextId: `${skillName}-${contextIdSuffix}-${Date.now()}-${nanoid(6)}`,
     kind: 'task',
     status: {
-      state: 'failed' as TaskState,
+      state: TaskState.Failed,
       message: createInfoMessage(error.message, 'agent'),
       timestamp: getCurrentTimestamp(),
     },

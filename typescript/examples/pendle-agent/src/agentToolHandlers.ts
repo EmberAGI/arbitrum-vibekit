@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { type Task, type Artifact, type DataPart } from 'a2a-samples-js';
+import type { Task } from '@google-a2a/types/src/types.js';
+import { TaskState } from '@google-a2a/types/src/types.js';
 import { parseMcpToolResponsePayload, type TransactionArtifact } from 'arbitrum-vibekit-core';
 import { TransactionPlansSchema } from 'ember-schemas';
 import {
@@ -120,13 +121,17 @@ export async function handleSwapTokens(
   if (fromChain && toChain && fromChain !== toChain) {
     return {
       id: context.userAddress,
+      contextId: `swap-chain-mismatch-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
+        state: TaskState.Failed,
         message: {
           role: 'agent',
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
           parts: [
             {
-              type: 'text',
+              kind: 'text',
               text: 'Pendle swaps must occur on a single chain. fromChain and toChain must match if both are provided.',
             },
           ],
@@ -143,9 +148,16 @@ export async function handleSwapTokens(
   if (typeof fromTokenResult === 'string') {
     return {
       id: context.userAddress,
+      contextId: `swap-from-token-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
-        message: { role: 'agent', parts: [{ type: 'text', text: fromTokenResult }] },
+        state: TaskState.Failed,
+        message: { 
+          role: 'agent', 
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: fromTokenResult }] 
+        },
       },
       artifacts: [],
     };
@@ -167,9 +179,16 @@ export async function handleSwapTokens(
   if (typeof toTokenResult === 'string') {
     return {
       id: context.userAddress,
+      contextId: `swap-to-token-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
-        message: { role: 'agent', parts: [{ type: 'text', text: toTokenResult }] },
+        state: TaskState.Failed,
+        message: { 
+          role: 'agent', 
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: toTokenResult }] 
+        },
       },
       artifacts: [],
     };
@@ -178,13 +197,17 @@ export async function handleSwapTokens(
   if (fromTokenResult.chainId !== toTokenResult.chainId) {
     return {
       id: context.userAddress,
+      contextId: `swap-cross-chain-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
+        state: TaskState.Failed,
         message: {
           role: 'agent',
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
           parts: [
             {
-              type: 'text',
+              kind: 'text',
               text: `Cannot swap tokens across different chains. From token chain: ${mapChainIdToName(fromTokenResult.chainId)}, To token chain: ${mapChainIdToName(toTokenResult.chainId)}.`,
             },
           ],
@@ -225,25 +248,30 @@ export async function handleSwapTokens(
     txPreview: preview,
   };
 
-  const dataPart: DataPart = {
-    type: 'data',
-    data: { ...artifactContent },
-  };
-
-  const artifact: Artifact = {
+  const artifact = {
+    artifactId: `swap-transaction-${Date.now()}`,
     name: 'swap-transaction-plan',
-    parts: [dataPart],
+    parts: [
+      {
+        kind: 'data' as const,
+        data: { ...artifactContent },
+      },
+    ],
   };
 
   return {
     id: context.userAddress,
+    contextId: `swap-success-${Date.now()}`,
+    kind: 'task',
     status: {
-      state: 'completed',
+      state: TaskState.Completed,
       message: {
         role: 'agent',
+        messageId: `msg-${Date.now()}`,
+        kind: 'message',
         parts: [
           {
-            type: 'text',
+            kind: 'text',
             text: `Swap transaction plan prepared (${transactions.length} txs). Please review and execute.`,
           },
         ],

@@ -1,6 +1,6 @@
 /// <reference types="mocha" />
 import { expect } from 'chai';
-import type { Task } from 'a2a-samples-js';
+import type { Task } from 'arbitrum-vibekit-core';
 
 import 'dotenv/config';
 import * as ethers from 'ethers';

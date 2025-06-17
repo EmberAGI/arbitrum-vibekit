@@ -1,7 +1,8 @@
 import { expect } from "chai";
 import { z } from "zod";
 import { Agent, defineSkill, VibkitToolDefinition } from "../src/agent.js";
-import type { Task, TaskState } from "../src/index.js";
+import type { Task } from "@google-a2a/types/src/types.js";
+import { TaskState } from "@google-a2a/types/src/types.js";
 
 describe("Agent.create()", () => {
   const minimalToolParametersSchema = z.object({ param: z.string() });
@@ -16,7 +17,7 @@ describe("Agent.create()", () => {
       contextId: "test-context",
       kind: "task",
       status: {
-        state: "completed" as TaskState,
+        state: TaskState.Completed,
         message: {
           kind: "message",
           role: "agent",
