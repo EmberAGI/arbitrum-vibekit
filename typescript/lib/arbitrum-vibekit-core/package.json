@@ -13,6 +13,7 @@
   },
   "packageManager": "pnpm@10.7.0",
   "dependencies": {
+    "@ai-sdk/openai": "^1.3.22",
     "@ai-sdk/xai": "^1.2.16",
     "@google-a2a/types": "github:google-a2a/A2A#path:types",
     "@hyperbolic/ai-sdk-provider": "^0.1.3",

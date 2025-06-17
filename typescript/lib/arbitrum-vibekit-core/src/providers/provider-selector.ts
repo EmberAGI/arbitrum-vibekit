@@ -1,16 +1,19 @@
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { createOpenAI } from '@ai-sdk/openai';
 import { createXai } from '@ai-sdk/xai';
 import { createHyperbolic } from '@hyperbolic/ai-sdk-provider';
 import type { LanguageModelV1 } from 'ai';
 
 export interface ProviderSelectorConfig {
   openRouterApiKey?: string;
+  openaiApiKey?: string;
   xaiApiKey?: string;
   hyperbolicApiKey?: string;
 }
 
 export interface ProviderSelector {
   openrouter?: (model: string) => LanguageModelV1;
+  openai?: (model: string) => LanguageModelV1;
   grok?: (model: string) => LanguageModelV1;
   hyperbolic?: (model: string) => LanguageModelV1;
 }
@@ -22,6 +25,12 @@ export function createProviderSelector(config: ProviderSelectorConfig): Provider
   if (config.openRouterApiKey) {
     const openRouterInstance = createOpenRouter({ apiKey: config.openRouterApiKey });
     selector.openrouter = (model: string) => openRouterInstance(model);
+  }
+
+  // Only add OpenAI if API key is provided
+  if (config.openaiApiKey) {
+    const openaiInstance = createOpenAI({ apiKey: config.openaiApiKey });
+    selector.openai = (model: string) => openaiInstance(model);
   }
 
   // Only add Grok if API key is provided
