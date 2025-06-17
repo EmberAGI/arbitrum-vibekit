@@ -108,7 +108,7 @@ importers:
         version: 4.21.2
       viem:
         specifier: ^2.26.3
-        version: 2.31.0(typescript@5.8.3)(zod@3.25.61)
+        version: 2.31.0(typescript@5.5.4)(zod@3.25.61)
       zod:
         specifier: ^3.24.3
         version: 3.25.61
@@ -145,7 +145,7 @@ importers:
         version: 3.5.3
       test-utils:
         specifier: workspace:*
-        version: link:../../lib/test-utils
+        version: file:lib/test-utils(react@19.1.0)(typescript@5.5.4)
       tsx:
         specifier: ^4.6.2
         version: 4.20.1
@@ -577,7 +577,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.1
-        version: 3.2.3(@types/node@18.19.111)(@vitest/ui@3.2.3)(tsx@4.20.1)(yaml@2.8.0)
+        version: 3.2.3(@types/node@22.15.31)(@vitest/ui@3.2.3)(tsx@4.20.1)(yaml@2.8.0)
       zod:
         specifier: ^3.24.3
         version: 3.25.61
@@ -1812,6 +1812,11 @@ packages:
     resolution: {integrity: sha512-KMReFUr0B4t+D+OBkjR3KYqvocp2XaSzO55UcB6mgQMd3KbcE+mWTyvVV7D/zsdEbNnV6acZUutkiHQXvTr1Rw==}
     engines: {node: '>= 8'}
 
+  arbitrum-vibekit-core@file:lib/arbitrum-vibekit-core:
+    resolution: {directory: lib/arbitrum-vibekit-core, type: directory}
+    peerDependencies:
+      zod: ^3.24.3
+
   arg@4.1.3:
     resolution: {integrity: sha512-58S9QDqG0Xx27YwPSt9fJxivjYl432YCwfDMfZ+71RAqUrZef7LrKQZ3LHLOwCS4FLNBplP533Zx895SeOCHvA==}
 
@@ -2201,6 +2206,13 @@ packages:
 
   elliptic@6.6.1:
     resolution: {integrity: sha512-RaddvvMatK2LJHqFJ+YA4WysVN5Ita9E35botqIYspQ4TkRAlCicdzKOjlyv/1Za5RyTNn7di//eEV0uTAfe3g==}
+
+  ember-mcp-tool-server@file:lib/mcp-tools/emberai-mcp:
+    resolution: {directory: lib/mcp-tools/emberai-mcp, type: directory}
+    hasBin: true
+
+  ember-schemas@file:lib/ember-schemas:
+    resolution: {directory: lib/ember-schemas, type: directory}
 
   emoji-regex@8.0.0:
     resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==}
@@ -3680,6 +3692,9 @@ packages:
   tee@0.2.0:
     resolution: {integrity: sha512-aL+Ct+AkoryaVDFxc2bjk2J7xe1LSsqnQHCoNdgL+AcAOGaBjVnTYFCSNgvjqwzAh7NgqKhNssFqpKvoVt3WAg==}
 
+  test-utils@file:lib/test-utils:
+    resolution: {directory: lib/test-utils, type: directory}
+
   thread-stream@3.1.0:
     resolution: {integrity: sha512-OqyPZ9u96VohAyMfJykzmivOrY2wfMSf3C5TtFJVgN+Hm6aj+voFhlK+kZEIv2FBh1X6Xp3DlnCOfEQ3B2J86A==}
 
@@ -4968,14 +4983,6 @@ snapshots:
       chai: 5.2.0
       tinyrainbow: 2.0.0
 
-  '@vitest/mocker@3.2.3(vite@6.3.5(@types/node@18.19.111)(tsx@4.20.1)(yaml@2.8.0))':
-    dependencies:
-      '@vitest/spy': 3.2.3
-      estree-walker: 3.0.3
-      magic-string: 0.30.17
-    optionalDependencies:
-      vite: 6.3.5(@types/node@18.19.111)(tsx@4.20.1)(yaml@2.8.0)
-
   '@vitest/mocker@3.2.3(vite@6.3.5(@types/node@20.19.0)(tsx@4.20.1)(yaml@2.8.0))':
     dependencies:
       '@vitest/spy': 3.2.3
@@ -4983,6 +4990,14 @@ snapshots:
       magic-string: 0.30.17
     optionalDependencies:
       vite: 6.3.5(@types/node@20.19.0)(tsx@4.20.1)(yaml@2.8.0)
+
+  '@vitest/mocker@3.2.3(vite@6.3.5(@types/node@22.15.31)(tsx@4.20.1)(yaml@2.8.0))':
+    dependencies:
+      '@vitest/spy': 3.2.3
+      estree-walker: 3.0.3
+      magic-string: 0.30.17
+    optionalDependencies:
+      vite: 6.3.5(@types/node@22.15.31)(tsx@4.20.1)(yaml@2.8.0)
 
   '@vitest/pretty-format@3.2.3':
     dependencies:
@@ -5013,13 +5028,18 @@ snapshots:
       sirv: 3.0.1
       tinyglobby: 0.2.14
       tinyrainbow: 2.0.0
-      vitest: 3.2.3(@types/node@20.19.0)(@vitest/ui@3.2.3)(tsx@4.20.1)(yaml@2.8.0)
+      vitest: 3.2.3(@types/node@22.15.31)(@vitest/ui@3.2.3)(tsx@4.20.1)(yaml@2.8.0)
 
   '@vitest/utils@3.2.3':
     dependencies:
       '@vitest/pretty-format': 3.2.3
       loupe: 3.1.3
       tinyrainbow: 2.0.0
+
+  abitype@1.0.8(typescript@5.5.4)(zod@3.25.61):
+    optionalDependencies:
+      typescript: 5.5.4
+      zod: 3.25.61
 
   abitype@1.0.8(typescript@5.8.3)(zod@3.25.61):
     optionalDependencies:
@@ -5109,6 +5129,27 @@ snapshots:
     dependencies:
       normalize-path: 3.0.0
       picomatch: 2.3.1
+
+  arbitrum-vibekit-core@file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.25.61):
+    dependencies:
+      '@ai-sdk/xai': 1.2.16(zod@3.25.61)
+      '@google-a2a/types': types@https://codeload.github.com/google-a2a/A2A/tar.gz/4a5e970ec2c4d92439536e01ea649082b177b8b7#path:types
+      '@hyperbolic/ai-sdk-provider': 0.1.3(react@19.1.0)
+      '@modelcontextprotocol/sdk': 1.12.1
+      '@openrouter/ai-sdk-provider': 0.4.6(zod@3.25.61)
+      ai: 4.3.16(react@19.1.0)(zod@3.25.61)
+      cors: 2.8.5
+      ember-mcp-tool-server: file:lib/mcp-tools/emberai-mcp
+      ember-schemas: file:lib/ember-schemas
+      escape-html: 1.0.3
+      express: 5.1.0
+      nanoid: 5.1.5
+      zod: 3.25.61
+    transitivePeerDependencies:
+      - '@swc/core'
+      - '@swc/wasm'
+      - react
+      - supports-color
 
   arg@4.1.3: {}
 
@@ -5536,6 +5577,20 @@ snapshots:
       inherits: 2.0.4
       minimalistic-assert: 1.0.1
       minimalistic-crypto-utils: 1.0.1
+
+  ember-mcp-tool-server@file:lib/mcp-tools/emberai-mcp:
+    dependencies:
+      '@emberai/sdk-typescript': 0.3.0-beta.12
+      '@grpc/grpc-js': 1.13.4
+      '@modelcontextprotocol/sdk': 1.12.1
+      ember-schemas: file:lib/ember-schemas
+      zod: 3.25.61
+    transitivePeerDependencies:
+      - supports-color
+
+  ember-schemas@file:lib/ember-schemas:
+    dependencies:
+      zod: 3.25.61
 
   emoji-regex@8.0.0: {}
 
@@ -6679,6 +6734,21 @@ snapshots:
       type-check: 0.4.0
       word-wrap: 1.2.5
 
+  ox@0.7.1(typescript@5.5.4)(zod@3.25.61):
+    dependencies:
+      '@adraffy/ens-normalize': 1.11.0
+      '@noble/ciphers': 1.3.0
+      '@noble/curves': 1.9.1
+      '@noble/hashes': 1.8.0
+      '@scure/bip32': 1.7.0
+      '@scure/bip39': 1.6.0
+      abitype: 1.0.8(typescript@5.5.4)(zod@3.25.61)
+      eventemitter3: 5.0.1
+    optionalDependencies:
+      typescript: 5.5.4
+    transitivePeerDependencies:
+      - zod
+
   ox@0.7.1(typescript@5.8.3)(zod@3.25.61):
     dependencies:
       '@adraffy/ens-normalize': 1.11.0
@@ -7244,6 +7314,29 @@ snapshots:
     dependencies:
       through: 1.1.2
 
+  test-utils@file:lib/test-utils(react@19.1.0)(typescript@5.5.4):
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.12.1
+      '@openrouter/ai-sdk-provider': 0.4.6(zod@3.25.61)
+      '@openzeppelin/contracts': 5.3.0
+      ai: 4.3.16(react@19.1.0)(zod@3.25.61)
+      arbitrum-vibekit-core: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.25.61)
+      cors: 2.8.5
+      dotenv: 16.5.0
+      ember-mcp-tool-server: file:lib/mcp-tools/emberai-mcp
+      ember-schemas: file:lib/ember-schemas
+      express: 4.21.2
+      viem: 2.31.0(typescript@5.5.4)(zod@3.25.61)
+      zod: 3.25.61
+    transitivePeerDependencies:
+      - '@swc/core'
+      - '@swc/wasm'
+      - bufferutil
+      - react
+      - supports-color
+      - typescript
+      - utf-8-validate
+
   thread-stream@3.1.0:
     dependencies:
       real-require: 0.2.0
@@ -7422,6 +7515,23 @@ snapshots:
 
   vary@1.1.2: {}
 
+  viem@2.31.0(typescript@5.5.4)(zod@3.25.61):
+    dependencies:
+      '@noble/curves': 1.9.1
+      '@noble/hashes': 1.8.0
+      '@scure/bip32': 1.7.0
+      '@scure/bip39': 1.6.0
+      abitype: 1.0.8(typescript@5.5.4)(zod@3.25.61)
+      isows: 1.0.7(ws@8.18.2)
+      ox: 0.7.1(typescript@5.5.4)(zod@3.25.61)
+      ws: 8.18.2
+    optionalDependencies:
+      typescript: 5.5.4
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+      - zod
+
   viem@2.31.0(typescript@5.8.3)(zod@3.25.61):
     dependencies:
       '@noble/curves': 1.9.1
@@ -7438,27 +7548,6 @@ snapshots:
       - bufferutil
       - utf-8-validate
       - zod
-
-  vite-node@3.2.3(@types/node@18.19.111)(tsx@4.20.1)(yaml@2.8.0):
-    dependencies:
-      cac: 6.7.14
-      debug: 4.4.1
-      es-module-lexer: 1.7.0
-      pathe: 2.0.3
-      vite: 6.3.5(@types/node@18.19.111)(tsx@4.20.1)(yaml@2.8.0)
-    transitivePeerDependencies:
-      - '@types/node'
-      - jiti
-      - less
-      - lightningcss
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - supports-color
-      - terser
-      - tsx
-      - yaml
 
   vite-node@3.2.3(@types/node@20.19.0)(tsx@4.20.1)(yaml@2.8.0):
     dependencies:
@@ -7481,19 +7570,26 @@ snapshots:
       - tsx
       - yaml
 
-  vite@6.3.5(@types/node@18.19.111)(tsx@4.20.1)(yaml@2.8.0):
+  vite-node@3.2.3(@types/node@22.15.31)(tsx@4.20.1)(yaml@2.8.0):
     dependencies:
-      esbuild: 0.25.5
-      fdir: 6.4.6(picomatch@4.0.2)
-      picomatch: 4.0.2
-      postcss: 8.5.4
-      rollup: 4.43.0
-      tinyglobby: 0.2.14
-    optionalDependencies:
-      '@types/node': 18.19.111
-      fsevents: 2.3.3
-      tsx: 4.20.1
-      yaml: 2.8.0
+      cac: 6.7.14
+      debug: 4.4.1
+      es-module-lexer: 1.7.0
+      pathe: 2.0.3
+      vite: 6.3.5(@types/node@22.15.31)(tsx@4.20.1)(yaml@2.8.0)
+    transitivePeerDependencies:
+      - '@types/node'
+      - jiti
+      - less
+      - lightningcss
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+      - tsx
+      - yaml
 
   vite@6.3.5(@types/node@20.19.0)(tsx@4.20.1)(yaml@2.8.0):
     dependencies:
@@ -7509,47 +7605,19 @@ snapshots:
       tsx: 4.20.1
       yaml: 2.8.0
 
-  vitest@3.2.3(@types/node@18.19.111)(@vitest/ui@3.2.3)(tsx@4.20.1)(yaml@2.8.0):
+  vite@6.3.5(@types/node@22.15.31)(tsx@4.20.1)(yaml@2.8.0):
     dependencies:
-      '@types/chai': 5.2.2
-      '@vitest/expect': 3.2.3
-      '@vitest/mocker': 3.2.3(vite@6.3.5(@types/node@18.19.111)(tsx@4.20.1)(yaml@2.8.0))
-      '@vitest/pretty-format': 3.2.3
-      '@vitest/runner': 3.2.3
-      '@vitest/snapshot': 3.2.3
-      '@vitest/spy': 3.2.3
-      '@vitest/utils': 3.2.3
-      chai: 5.2.0
-      debug: 4.4.1
-      expect-type: 1.2.1
-      magic-string: 0.30.17
-      pathe: 2.0.3
+      esbuild: 0.25.5
+      fdir: 6.4.6(picomatch@4.0.2)
       picomatch: 4.0.2
-      std-env: 3.9.0
-      tinybench: 2.9.0
-      tinyexec: 0.3.2
+      postcss: 8.5.4
+      rollup: 4.43.0
       tinyglobby: 0.2.14
-      tinypool: 1.1.0
-      tinyrainbow: 2.0.0
-      vite: 6.3.5(@types/node@18.19.111)(tsx@4.20.1)(yaml@2.8.0)
-      vite-node: 3.2.3(@types/node@18.19.111)(tsx@4.20.1)(yaml@2.8.0)
-      why-is-node-running: 2.3.0
     optionalDependencies:
-      '@types/node': 18.19.111
-      '@vitest/ui': 3.2.3(vitest@3.2.3)
-    transitivePeerDependencies:
-      - jiti
-      - less
-      - lightningcss
-      - msw
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - supports-color
-      - terser
-      - tsx
-      - yaml
+      '@types/node': 22.15.31
+      fsevents: 2.3.3
+      tsx: 4.20.1
+      yaml: 2.8.0
 
   vitest@3.2.3(@types/node@20.19.0)(@vitest/ui@3.2.3)(tsx@4.20.1)(yaml@2.8.0):
     dependencies:
@@ -7578,6 +7646,48 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 20.19.0
+      '@vitest/ui': 3.2.3(vitest@3.2.3)
+    transitivePeerDependencies:
+      - jiti
+      - less
+      - lightningcss
+      - msw
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+      - tsx
+      - yaml
+
+  vitest@3.2.3(@types/node@22.15.31)(@vitest/ui@3.2.3)(tsx@4.20.1)(yaml@2.8.0):
+    dependencies:
+      '@types/chai': 5.2.2
+      '@vitest/expect': 3.2.3
+      '@vitest/mocker': 3.2.3(vite@6.3.5(@types/node@22.15.31)(tsx@4.20.1)(yaml@2.8.0))
+      '@vitest/pretty-format': 3.2.3
+      '@vitest/runner': 3.2.3
+      '@vitest/snapshot': 3.2.3
+      '@vitest/spy': 3.2.3
+      '@vitest/utils': 3.2.3
+      chai: 5.2.0
+      debug: 4.4.1
+      expect-type: 1.2.1
+      magic-string: 0.30.17
+      pathe: 2.0.3
+      picomatch: 4.0.2
+      std-env: 3.9.0
+      tinybench: 2.9.0
+      tinyexec: 0.3.2
+      tinyglobby: 0.2.14
+      tinypool: 1.1.0
+      tinyrainbow: 2.0.0
+      vite: 6.3.5(@types/node@22.15.31)(tsx@4.20.1)(yaml@2.8.0)
+      vite-node: 3.2.3(@types/node@22.15.31)(tsx@4.20.1)(yaml@2.8.0)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 22.15.31
       '@vitest/ui': 3.2.3(vitest@3.2.3)
     transitivePeerDependencies:
       - jiti
