@@ -535,6 +535,9 @@ importers:
       nanoid:
         specifier: ^5.0.7
         version: 5.1.5
+      zod:
+        specifier: ^3.24.3
+        version: 3.25.61
     devDependencies:
       '@types/chai':
         specifier: ^5.2.1
@@ -578,9 +581,6 @@ importers:
       vitest:
         specifier: ^3.2.1
         version: 3.2.3(@types/node@22.15.31)(@vitest/ui@3.2.3)(tsx@4.20.1)(yaml@2.8.0)
-      zod:
-        specifier: ^3.24.3
-        version: 3.25.61
 
   lib/ember-schemas:
     dependencies:
@@ -1814,8 +1814,6 @@ packages:
 
   arbitrum-vibekit-core@file:lib/arbitrum-vibekit-core:
     resolution: {directory: lib/arbitrum-vibekit-core, type: directory}
-    peerDependencies:
-      zod: ^3.24.3
 
   arg@4.1.3:
     resolution: {integrity: sha512-58S9QDqG0Xx27YwPSt9fJxivjYl432YCwfDMfZ+71RAqUrZef7LrKQZ3LHLOwCS4FLNBplP533Zx895SeOCHvA==}
@@ -5130,7 +5128,7 @@ snapshots:
       normalize-path: 3.0.0
       picomatch: 2.3.1
 
-  arbitrum-vibekit-core@file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.25.61):
+  arbitrum-vibekit-core@file:lib/arbitrum-vibekit-core(react@19.1.0):
     dependencies:
       '@ai-sdk/xai': 1.2.16(zod@3.25.61)
       '@google-a2a/types': types@https://codeload.github.com/google-a2a/A2A/tar.gz/4a5e970ec2c4d92439536e01ea649082b177b8b7#path:types
@@ -7320,7 +7318,7 @@ snapshots:
       '@openrouter/ai-sdk-provider': 0.4.6(zod@3.25.61)
       '@openzeppelin/contracts': 5.3.0
       ai: 4.3.16(react@19.1.0)(zod@3.25.61)
-      arbitrum-vibekit-core: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.25.61)
+      arbitrum-vibekit-core: file:lib/arbitrum-vibekit-core(react@19.1.0)
       cors: 2.8.5
       dotenv: 16.5.0
       ember-mcp-tool-server: file:lib/mcp-tools/emberai-mcp
