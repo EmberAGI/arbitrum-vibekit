@@ -12,6 +12,9 @@ importers:
 
   .:
     dependencies:
+      '@google-a2a/types':
+        specifier: github:google-a2a/A2A#path:types
+        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/4a5e970ec2c4d92439536e01ea649082b177b8b7#path:types
       ethers:
         specifier: ^5.7.2
         version: 5.8.0
@@ -108,7 +111,7 @@ importers:
         version: 4.21.2
       viem:
         specifier: ^2.26.3
-        version: 2.31.0(typescript@5.5.4)(zod@3.25.61)
+        version: 2.31.0(typescript@5.8.3)(zod@3.25.61)
       zod:
         specifier: ^3.24.3
         version: 3.25.61
@@ -145,7 +148,7 @@ importers:
         version: 3.5.3
       test-utils:
         specifier: workspace:*
-        version: file:lib/test-utils(react@19.1.0)(typescript@5.5.4)
+        version: link:../../lib/test-utils
       tsx:
         specifier: ^4.6.2
         version: 4.20.1
@@ -1812,9 +1815,6 @@ packages:
     resolution: {integrity: sha512-KMReFUr0B4t+D+OBkjR3KYqvocp2XaSzO55UcB6mgQMd3KbcE+mWTyvVV7D/zsdEbNnV6acZUutkiHQXvTr1Rw==}
     engines: {node: '>= 8'}
 
-  arbitrum-vibekit-core@file:lib/arbitrum-vibekit-core:
-    resolution: {directory: lib/arbitrum-vibekit-core, type: directory}
-
   arg@4.1.3:
     resolution: {integrity: sha512-58S9QDqG0Xx27YwPSt9fJxivjYl432YCwfDMfZ+71RAqUrZef7LrKQZ3LHLOwCS4FLNBplP533Zx895SeOCHvA==}
 
@@ -2204,13 +2204,6 @@ packages:
 
   elliptic@6.6.1:
     resolution: {integrity: sha512-RaddvvMatK2LJHqFJ+YA4WysVN5Ita9E35botqIYspQ4TkRAlCicdzKOjlyv/1Za5RyTNn7di//eEV0uTAfe3g==}
-
-  ember-mcp-tool-server@file:lib/mcp-tools/emberai-mcp:
-    resolution: {directory: lib/mcp-tools/emberai-mcp, type: directory}
-    hasBin: true
-
-  ember-schemas@file:lib/ember-schemas:
-    resolution: {directory: lib/ember-schemas, type: directory}
 
   emoji-regex@8.0.0:
     resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==}
@@ -3690,9 +3683,6 @@ packages:
   tee@0.2.0:
     resolution: {integrity: sha512-aL+Ct+AkoryaVDFxc2bjk2J7xe1LSsqnQHCoNdgL+AcAOGaBjVnTYFCSNgvjqwzAh7NgqKhNssFqpKvoVt3WAg==}
 
-  test-utils@file:lib/test-utils:
-    resolution: {directory: lib/test-utils, type: directory}
-
   thread-stream@3.1.0:
     resolution: {integrity: sha512-OqyPZ9u96VohAyMfJykzmivOrY2wfMSf3C5TtFJVgN+Hm6aj+voFhlK+kZEIv2FBh1X6Xp3DlnCOfEQ3B2J86A==}
 
@@ -5034,11 +5024,6 @@ snapshots:
       loupe: 3.1.3
       tinyrainbow: 2.0.0
 
-  abitype@1.0.8(typescript@5.5.4)(zod@3.25.61):
-    optionalDependencies:
-      typescript: 5.5.4
-      zod: 3.25.61
-
   abitype@1.0.8(typescript@5.8.3)(zod@3.25.61):
     optionalDependencies:
       typescript: 5.8.3
@@ -5127,27 +5112,6 @@ snapshots:
     dependencies:
       normalize-path: 3.0.0
       picomatch: 2.3.1
-
-  arbitrum-vibekit-core@file:lib/arbitrum-vibekit-core(react@19.1.0):
-    dependencies:
-      '@ai-sdk/xai': 1.2.16(zod@3.25.61)
-      '@google-a2a/types': types@https://codeload.github.com/google-a2a/A2A/tar.gz/4a5e970ec2c4d92439536e01ea649082b177b8b7#path:types
-      '@hyperbolic/ai-sdk-provider': 0.1.3(react@19.1.0)
-      '@modelcontextprotocol/sdk': 1.12.1
-      '@openrouter/ai-sdk-provider': 0.4.6(zod@3.25.61)
-      ai: 4.3.16(react@19.1.0)(zod@3.25.61)
-      cors: 2.8.5
-      ember-mcp-tool-server: file:lib/mcp-tools/emberai-mcp
-      ember-schemas: file:lib/ember-schemas
-      escape-html: 1.0.3
-      express: 5.1.0
-      nanoid: 5.1.5
-      zod: 3.25.61
-    transitivePeerDependencies:
-      - '@swc/core'
-      - '@swc/wasm'
-      - react
-      - supports-color
 
   arg@4.1.3: {}
 
@@ -5575,20 +5539,6 @@ snapshots:
       inherits: 2.0.4
       minimalistic-assert: 1.0.1
       minimalistic-crypto-utils: 1.0.1
-
-  ember-mcp-tool-server@file:lib/mcp-tools/emberai-mcp:
-    dependencies:
-      '@emberai/sdk-typescript': 0.3.0-beta.12
-      '@grpc/grpc-js': 1.13.4
-      '@modelcontextprotocol/sdk': 1.12.1
-      ember-schemas: file:lib/ember-schemas
-      zod: 3.25.61
-    transitivePeerDependencies:
-      - supports-color
-
-  ember-schemas@file:lib/ember-schemas:
-    dependencies:
-      zod: 3.25.61
 
   emoji-regex@8.0.0: {}
 
@@ -6732,21 +6682,6 @@ snapshots:
       type-check: 0.4.0
       word-wrap: 1.2.5
 
-  ox@0.7.1(typescript@5.5.4)(zod@3.25.61):
-    dependencies:
-      '@adraffy/ens-normalize': 1.11.0
-      '@noble/ciphers': 1.3.0
-      '@noble/curves': 1.9.1
-      '@noble/hashes': 1.8.0
-      '@scure/bip32': 1.7.0
-      '@scure/bip39': 1.6.0
-      abitype: 1.0.8(typescript@5.5.4)(zod@3.25.61)
-      eventemitter3: 5.0.1
-    optionalDependencies:
-      typescript: 5.5.4
-    transitivePeerDependencies:
-      - zod
-
   ox@0.7.1(typescript@5.8.3)(zod@3.25.61):
     dependencies:
       '@adraffy/ens-normalize': 1.11.0
@@ -7312,29 +7247,6 @@ snapshots:
     dependencies:
       through: 1.1.2
 
-  test-utils@file:lib/test-utils(react@19.1.0)(typescript@5.5.4):
-    dependencies:
-      '@modelcontextprotocol/sdk': 1.12.1
-      '@openrouter/ai-sdk-provider': 0.4.6(zod@3.25.61)
-      '@openzeppelin/contracts': 5.3.0
-      ai: 4.3.16(react@19.1.0)(zod@3.25.61)
-      arbitrum-vibekit-core: file:lib/arbitrum-vibekit-core(react@19.1.0)
-      cors: 2.8.5
-      dotenv: 16.5.0
-      ember-mcp-tool-server: file:lib/mcp-tools/emberai-mcp
-      ember-schemas: file:lib/ember-schemas
-      express: 4.21.2
-      viem: 2.31.0(typescript@5.5.4)(zod@3.25.61)
-      zod: 3.25.61
-    transitivePeerDependencies:
-      - '@swc/core'
-      - '@swc/wasm'
-      - bufferutil
-      - react
-      - supports-color
-      - typescript
-      - utf-8-validate
-
   thread-stream@3.1.0:
     dependencies:
       real-require: 0.2.0
@@ -7512,23 +7424,6 @@ snapshots:
   v8-compile-cache-lib@3.0.1: {}
 
   vary@1.1.2: {}
-
-  viem@2.31.0(typescript@5.5.4)(zod@3.25.61):
-    dependencies:
-      '@noble/curves': 1.9.1
-      '@noble/hashes': 1.8.0
-      '@scure/bip32': 1.7.0
-      '@scure/bip39': 1.6.0
-      abitype: 1.0.8(typescript@5.5.4)(zod@3.25.61)
-      isows: 1.0.7(ws@8.18.2)
-      ox: 0.7.1(typescript@5.5.4)(zod@3.25.61)
-      ws: 8.18.2
-    optionalDependencies:
-      typescript: 5.5.4
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-      - zod
 
   viem@2.31.0(typescript@5.8.3)(zod@3.25.61):
     dependencies:
