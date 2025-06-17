@@ -109,30 +109,30 @@ describe('createProviderSelector', () => {
     });
 
     // Test OpenRouter
-    const openRouterModel = selector.openrouter!('gpt-4');
+    const openRouterModel = selector.openrouter!('openai/gpt-4.1-nano');
     expect(openRouterModel).toMatchObject({
-      modelId: 'openrouter:gpt-4',
+      modelId: 'openrouter:openai/gpt-4.1-nano',
       provider: 'openrouter',
     });
 
     // Test OpenAI
-    const openAiModel = selector.openai!('gpt-4');
+    const openAiModel = selector.openai!('gpt-4.1-nano');
     expect(openAiModel).toMatchObject({
-      modelId: 'openai:gpt-4',
+      modelId: 'openai:gpt-4.1-nano',
       provider: 'openai',
     });
 
     // Test Grok (xAI)
-    const grokModel = selector.grok!('grok-2');
+    const grokModel = selector.grok!('grok-3-mini');
     expect(grokModel).toMatchObject({
-      modelId: 'xai:grok-2',
+      modelId: 'xai:grok-3-mini',
       provider: 'xai',
     });
 
     // Test Hyperbolic
-    const hyperbolicModel = selector.hyperbolic!('llama-3.1-70b');
+    const hyperbolicModel = selector.hyperbolic!('meta-llama/Llama-3.2-3B-Instruct');
     expect(hyperbolicModel).toMatchObject({
-      modelId: 'hyperbolic:llama-3.1-70b',
+      modelId: 'hyperbolic:meta-llama/Llama-3.2-3B-Instruct',
       provider: 'hyperbolic',
     });
   });
