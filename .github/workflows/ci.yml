@@ -28,7 +28,7 @@ jobs:
 
       - name: Install dependencies in project
         working-directory: ./typescript
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: Run linter
         working-directory: ./typescript
