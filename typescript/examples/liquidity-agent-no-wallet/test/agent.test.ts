@@ -170,7 +170,7 @@ describe('Liquidity Agent Integration Tests', function () {
 
           // Deposit liquidity
           const response = await agent.processUserInput(
-            `Deposit ${targetUSDCAmount} USDC and ${wethAmount} WETH to the WETH/USDC pool within the range from ${(price * 0.8).toFixed(2)} to ${(price * 1.2).toFixed(2)}`,
+            `Deposit ${wethAmount} WETH and ${targetUSDCAmount} USDC to the WETH/USDC pool within the range from ${(price * 0.8).toFixed(2)} to ${(price * 1.2).toFixed(2)}`,
             walletAddress
           );
           
