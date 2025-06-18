@@ -234,8 +234,8 @@ function extractPools(response: Task): Array<{
   for (const artifact of response.artifacts) {
     if (artifact.name === 'available-liquidity-pools') {
       for (const part of artifact.parts) {
-        if (part.type === 'data' && part.data.pools) {
-          const pools = part.data.pools;
+        if ((part as any).kind === 'data' && (part as any).data.pools) {
+          const pools = (part as any).data.pools;
           if (Array.isArray(pools)) {
             return pools;
           }

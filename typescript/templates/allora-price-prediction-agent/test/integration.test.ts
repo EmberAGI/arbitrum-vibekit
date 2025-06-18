@@ -2,7 +2,8 @@
  * Integration tests for Allora Price Prediction Agent
  */
 
-import { describe, test, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, before, after } from 'mocha';
+import { expect } from 'chai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { Agent, createProviderSelector } from 'arbitrum-vibekit-core';
@@ -14,7 +15,8 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
   let baseUrl: string;
   const port = 3458; // Use a different port to avoid conflicts
 
-  beforeAll(async () => {
+  before(async function() {
+    this.timeout(30000);
     console.log('🚀 Starting Allora Price Prediction Agent for integration testing...');
 
     // Mock environment variable if not set
@@ -63,7 +65,8 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
     await mcpClient.connect(transport);
   });
 
-  afterAll(async () => {
+  after(async function() {
+    this.timeout(15000);
     console.log('🛑 Shutting down test agent...');
     try {
       if (mcpClient) {
@@ -76,19 +79,19 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
     } catch (error) {
       console.error('Error during test cleanup:', error);
     }
-  }, 15000);
+  });
 
   describe('Agent Configuration and Initialization', () => {
-    test('Agent should be initialized with an LLM model', () => {
+    it('Agent should be initialized with an LLM model', () => {
       // This test confirms the agent instance has the llm property correctly set up.
       // Note: This inspects the internal state for testing purposes.
-      expect((agent as any).model).toBeDefined();
-      expect((agent as any).model.provider).toContain('openrouter');
+      expect((agent as any).model).to.exist;
+      expect((agent as any).model.provider).to.contain('openrouter');
     });
 
-    test('GET /.well-known/agent.json returns correct AgentCard', async () => {
+    it('GET /.well-known/agent.json returns correct AgentCard', async () => {
       const response = await fetch(`${baseUrl}/api/v1/.well-known/agent.json`);
-      expect(response.status).toBe(200);
+      expect(response.status).to.equal(200);
       const agentCard = await response.json();
 
       // Debug output
@@ -96,24 +99,24 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
       console.log('Expected name:', 'Allora Price Prediction Agent');
       console.log('Actual name:', agentCard.name);
 
-      expect(agentCard).toHaveProperty('type', 'AgentCard');
-      expect(agentCard).toHaveProperty('name', 'Allora Price Prediction Agent');
-      expect(agentCard).toHaveProperty('version', '1.0.0');
-      expect(agentCard).toHaveProperty('skills');
-      expect(agentCard.skills).toHaveLength(1);
-      expect(agentCard.skills[0].id).toBe('predict-price');
+      expect(agentCard).to.have.property('type', 'AgentCard');
+      expect(agentCard).to.have.property('name', 'Allora Price Prediction Agent');
+      expect(agentCard).to.have.property('version', '1.0.0');
+      expect(agentCard).to.have.property('skills');
+      expect(agentCard.skills).to.have.lengthOf(1);
+      expect(agentCard.skills[0].id).to.equal('predict-price');
     });
 
-    test('MCP client can list tools', async () => {
+    it('MCP client can list tools', async () => {
       const tools = await mcpClient.listTools();
-      expect(tools.tools).toHaveLength(1);
-      expect(tools.tools[0].name).toBe('predict-price');
-      expect(tools.tools[0].description).toContain('price predictions');
+      expect(tools.tools).to.have.lengthOf(1);
+      expect(tools.tools[0].name).to.equal('predict-price');
+      expect(tools.tools[0].description).to.contain('price predictions');
     });
   });
 
   describe('Price Prediction Skill', () => {
-    test('should handle price prediction request (mocked)', async () => {
+    it('should handle price prediction request (mocked)', async () => {
       // Since we're using a test API key, we'll mock the MCP server responses
       // In a real integration test with a valid API key, this would make actual calls
 
@@ -121,12 +124,13 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
       const tools = await mcpClient.listTools();
       const pricePredictionTool = tools.tools.find((t) => t.name === 'predict-price');
 
-      expect(pricePredictionTool).toBeDefined();
-      expect(pricePredictionTool?.inputSchema).toHaveProperty('properties');
-      expect(pricePredictionTool?.inputSchema.properties).toHaveProperty('message');
+      expect(pricePredictionTool).to.exist;
+      expect(pricePredictionTool?.inputSchema).to.have.property('properties');
+      expect(pricePredictionTool?.inputSchema.properties).to.have.property('message');
     });
 
-    test('should get BTC price prediction', async () => {
+    it('should get BTC price prediction', async function() {
+      this.timeout(30000); // 30 second timeout for this test
       const result = await mcpClient.callTool({
         name: 'predict-price',
         arguments: {
@@ -135,24 +139,25 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
       });
 
       const content = result.content as any[];
-      expect(content).toHaveLength(1);
-      expect(content[0].type).toBe('resource');
+      expect(content).to.have.lengthOf(1);
+      expect(content[0].type).to.equal('resource');
 
       const task = JSON.parse(content[0].resource.text);
 
       // The task should succeed
-      expect(task.kind).toBe('task');
-      expect(task.status.state).toBe('completed');
+      expect(task.kind).to.equal('task');
+      expect(task.status.state).to.equal('completed');
 
       // Verify the formatted response contains all expected elements
       const responseText = task.status.message.parts[0].text;
-      expect(responseText).toContain('📊 **Price Prediction Results**');
-      expect(responseText).toContain('Price prediction for BTC');
-      expect(responseText).toMatch(/\d+(\.\d+)?/); // Should contain a numeric value
-      expect(responseText).toContain('_Data provided by Allora prediction markets_');
+      expect(responseText).to.contain('📊 **Price Prediction Results**');
+      expect(responseText).to.contain('Price prediction for BTC');
+      expect(responseText).to.match(/\d+(\.\d+)?/); // Should contain a numeric value
+      expect(responseText).to.contain('_Data provided by Allora prediction markets_');
     });
 
-    test('should handle unknown token gracefully', async () => {
+    it('should handle unknown token gracefully', async function() {
+      this.timeout(30000); // 30 second timeout for this test
       const result = await mcpClient.callTool({
         name: 'predict-price',
         arguments: {
@@ -161,8 +166,8 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
       });
 
       const content = result.content as any[];
-      expect(content).toHaveLength(1);
-      expect(content[0].type).toBe('resource');
+      expect(content).to.have.lengthOf(1);
+      expect(content[0].type).to.equal('resource');
 
       if (content[0].type === 'resource') {
         const resource = content[0].resource;
@@ -173,26 +178,27 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
 
           if (task.kind === 'task') {
             // Task response
-            expect(task.status.state).toBe('failed');
-            expect(task.metadata.error).toBeDefined();
-            expect(['AI_ToolExecutionError', 'PredictionError', 'TopicDiscoveryError']).toContain(
+            expect(task.status.state).to.equal('failed');
+            expect(task.metadata.error).to.exist;
+            expect(['AI_ToolExecutionError', 'PredictionError', 'TopicDiscoveryError']).to.contain(
               task.metadata.error.name,
             );
             // The error message should indicate no topic found
-            expect(task.metadata.error.message).toMatch(/no prediction topic found|failed to get price prediction/i);
+            expect(task.metadata.error.message).to.match(/no prediction topic found|failed to get price prediction/i);
           } else if (task.kind === 'message') {
             // Message response (agent might ask for clarification)
-            expect(task.role).toBe('agent');
-            expect(task.parts[0].text).toBeDefined();
+            expect(task.role).to.equal('agent');
+            expect(task.parts[0].text).to.exist;
           }
         } catch (e) {
           // If parsing fails, it might be a plain text response
-          expect(resource.text).toBeDefined();
+          expect(resource.text).to.exist;
         }
       }
     });
 
-    test('should work without timeframe parameter', async () => {
+    it('should work without timeframe parameter', async function() {
+      this.timeout(30000); // 30 second timeout for this test
       const result = await mcpClient.callTool({
         name: 'predict-price',
         arguments: {
@@ -201,24 +207,24 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
       });
 
       const content = result.content as any[];
-      expect(content).toHaveLength(1);
-      expect(content[0].type).toBe('resource');
+      expect(content).to.have.lengthOf(1);
+      expect(content[0].type).to.equal('resource');
 
       const task = JSON.parse(content[0].resource.text);
 
       // The task should succeed
-      expect(task.kind).toBe('task');
-      expect(task.status.state).toBe('completed');
+      expect(task.kind).to.equal('task');
+      expect(task.status.state).to.equal('completed');
 
       // Verify the formatted response
       const responseText = task.status.message.parts[0].text;
-      expect(responseText).toContain('📊 **Price Prediction Results**');
-      expect(responseText).toContain('Price prediction for ETH');
-      expect(responseText).toMatch(/\d+(\.\d+)?/); // Should contain a numeric value
-      expect(responseText).toContain('_Data provided by Allora prediction markets_');
+      expect(responseText).to.contain('📊 **Price Prediction Results**');
+      expect(responseText).to.contain('Price prediction for ETH');
+      expect(responseText).to.match(/\d+(\.\d+)?/); // Should contain a numeric value
+      expect(responseText).to.contain('_Data provided by Allora prediction markets_');
     });
 
-    test('should validate input parameters', async () => {
+    it('should validate input parameters', async () => {
       // Test with empty message - agent should ask for clarification
       const result = await mcpClient.callTool({
         name: 'predict-price',
@@ -228,22 +234,25 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
       });
 
       const content = result.content as any[];
-      expect(content).toHaveLength(1);
-      expect(content[0].type).toBe('resource');
+      expect(content).to.have.lengthOf(1);
+      expect(content[0].type).to.equal('resource');
 
       const response = JSON.parse(content[0].resource.text);
-      expect(response.kind).toBe('message');
-      expect(response.role).toBe('agent');
+      expect(response.kind).to.equal('message');
+      expect(response.role).to.equal('agent');
       // The agent should ask for clarification
-      expect(response.parts[0].text).toMatch(/what token would you like|which token|please|specify/i);
+      expect(response.parts[0].text).to.match(/what token would you like|which token|please|specify/i);
 
       // Test with missing message - this should throw an MCP error
-      await expect(
-        mcpClient.callTool({
+      try {
+        await mcpClient.callTool({
           name: 'predict-price',
           arguments: {} as any, // Type assertion to bypass TypeScript check
-        }),
-      ).rejects.toThrow('Invalid arguments');
+        });
+        expect.fail('Expected error to be thrown');
+      } catch (error: any) {
+        expect(error.message).to.contain('Invalid arguments');
+      }
     });
   });
 });

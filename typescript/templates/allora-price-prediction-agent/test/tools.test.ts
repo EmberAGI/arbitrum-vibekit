@@ -2,7 +2,9 @@
  * Unit tests for Price Prediction Tool
  */
 
-import { describe, test, expect, vi, beforeEach } from 'vitest';
+import { describe, it, beforeEach } from 'mocha';
+import { expect } from 'chai';
+import sinon from 'sinon';
 import { getPricePredictionTool } from '../src/tools/getPricePrediction.js';
 import { VibkitError } from 'arbitrum-vibekit-core';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -15,11 +17,11 @@ describe('getPricePrediction Tool', () => {
   let mockContext: any;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    sinon.restore();
 
     // Create mock MCP client
     mockMcpClient = {
-      callTool: vi.fn(),
+      callTool: sinon.stub(),
     } as any;
 
     // Create mock context
@@ -34,7 +36,7 @@ describe('getPricePrediction Tool', () => {
     };
   });
 
-  test('should successfully get price prediction for BTC', async () => {
+  it('should successfully get price prediction for BTC', async () => {
     // Mock list_all_topics response (for pre-hook)
     const mockTopics = [
       { topic_id: 1, topic_name: 'BTC/USD Price Prediction', description: 'Bitcoin price' },
@@ -49,11 +51,13 @@ describe('getPricePrediction Tool', () => {
     };
 
     // Set up mock responses in order
-    (mockMcpClient.callTool as any)
-      .mockResolvedValueOnce({
+    (mockMcpClient.callTool as sinon.SinonStub)
+      .onFirstCall()
+      .resolves({
         content: [{ text: JSON.stringify(mockTopics) }],
       })
-      .mockResolvedValueOnce({
+      .onSecondCall()
+      .resolves({
         content: [{ text: JSON.stringify(mockInference) }],
       });
 
@@ -61,49 +65,52 @@ describe('getPricePrediction Tool', () => {
     const result = await getPricePredictionTool.execute(args, mockContext);
 
     // Verify the tool was called twice (list_all_topics and get_inference_by_topic_id)
-    expect(mockMcpClient.callTool).toHaveBeenCalledTimes(2);
+    expect((mockMcpClient.callTool as sinon.SinonStub).callCount).to.equal(2);
 
     // Verify first call was to list_all_topics
-    expect(mockMcpClient.callTool).toHaveBeenNthCalledWith(1, {
+    expect((mockMcpClient.callTool as sinon.SinonStub).getCall(0).calledWith({
       name: 'list_all_topics',
       arguments: {},
-    });
+    })).to.be.true;
 
     // Verify second call was to get_inference_by_topic_id with correct topic ID
-    expect(mockMcpClient.callTool).toHaveBeenNthCalledWith(2, {
+    expect((mockMcpClient.callTool as sinon.SinonStub).getCall(1).calledWith({
       name: 'get_inference_by_topic_id',
       arguments: { topicID: 1 },
-    });
+    })).to.be.true;
 
     // Verify result structure
-    expect(result).toHaveProperty('id');
-    expect(result).toHaveProperty('status');
-    expect(result.status.state).toBe('completed');
+    expect(result).to.have.property('id');
+    expect(result).to.have.property('status');
+    expect(result.status.state).to.equal('completed');
 
     // The post-hook should have formatted the message
     const messageText = result.status.message.parts[0].text;
-    expect(messageText).toContain('📊 **Price Prediction Results**');
-    expect(messageText).toContain('Price prediction for BTC (24 hours): 50000.123456');
-    expect(messageText).toContain('_Data provided by Allora prediction markets_');
+    expect(messageText).to.contain('📊 **Price Prediction Results**');
+    expect(messageText).to.contain('Price prediction for BTC (24 hours): 50000.123456');
+    expect(messageText).to.contain('_Data provided by Allora prediction markets_');
   });
 
-  test('should handle unknown token error', async () => {
+  it('should handle unknown token error', async () => {
     // Mock list_all_topics response with no matching token
     const mockTopics = [{ topic_id: 1, topic_name: 'BTC/USD Price Prediction', description: 'Bitcoin price' }];
 
-    (mockMcpClient.callTool as any).mockResolvedValueOnce({
+    (mockMcpClient.callTool as sinon.SinonStub).resolves({
       content: [{ text: JSON.stringify(mockTopics) }],
     });
 
     const args = { token: 'UNKNOWN' };
 
     // The pre-hook should throw an error for unknown token
-    await expect(getPricePredictionTool.execute(args, mockContext)).rejects.toThrow(
-      'No prediction topic found for token: UNKNOWN',
-    );
+    try {
+      await getPricePredictionTool.execute(args, mockContext);
+      expect.fail('Expected error to be thrown');
+    } catch (error: any) {
+      expect(error.message).to.contain('No prediction topic found for token: UNKNOWN');
+    }
   });
 
-  test('should handle missing MCP client', async () => {
+  it('should handle missing MCP client', async () => {
     const contextWithoutClient = {
       custom: {},
       mcpClients: {},
@@ -112,52 +119,59 @@ describe('getPricePrediction Tool', () => {
 
     const args = { token: 'BTC' };
 
-    await expect(getPricePredictionTool.execute(args, contextWithoutClient)).rejects.toThrow(
-      'Allora MCP client not available',
-    );
+    try {
+      await getPricePredictionTool.execute(args, contextWithoutClient);
+      expect.fail('Expected error to be thrown');
+    } catch (error: any) {
+      expect(error.message).to.contain('Allora MCP client not available');
+    }
   });
 
-  test('should handle inference API error', async () => {
+  it('should handle inference API error', async () => {
     // Mock successful topic discovery
     const mockTopics = [{ topic_id: 1, topic_name: 'BTC/USD Price Prediction', description: 'Bitcoin price' }];
 
-    (mockMcpClient.callTool as any)
-      .mockResolvedValueOnce({
+    (mockMcpClient.callTool as sinon.SinonStub)
+      .onFirstCall()
+      .resolves({
         content: [{ text: JSON.stringify(mockTopics) }],
       })
-      .mockRejectedValueOnce(new Error('API Error'));
+      .onSecondCall()
+      .rejects(new Error('API Error'));
 
     const args = { token: 'BTC' };
     const result = await getPricePredictionTool.execute(args, mockContext);
 
     // Should return an error task
-    expect(result).toHaveProperty('id');
-    expect(result.status.state).toBe('failed');
-    expect(result.metadata.error).toBeDefined();
-    expect(result.metadata.error.name).toBe('PredictionError');
-    expect(result.metadata.error.message).toContain('Failed to get price prediction');
+    expect(result).to.have.property('id');
+    expect(result.status.state).to.equal('failed');
+    expect(result.metadata.error).to.exist;
+    expect(result.metadata.error.name).to.equal('PredictionError');
+    expect(result.metadata.error.message).to.contain('Failed to get price prediction');
   });
 
-  test('should handle empty inference response', async () => {
+  it('should handle empty inference response', async () => {
     const mockTopics = [{ topic_id: 1, topic_name: 'BTC/USD Price Prediction', description: 'Bitcoin price' }];
 
-    (mockMcpClient.callTool as any)
-      .mockResolvedValueOnce({
+    (mockMcpClient.callTool as sinon.SinonStub)
+      .onFirstCall()
+      .resolves({
         content: [{ text: JSON.stringify(mockTopics) }],
       })
-      .mockResolvedValueOnce({
+      .onSecondCall()
+      .resolves({
         content: [],
       });
 
     const args = { token: 'BTC' };
     const result = await getPricePredictionTool.execute(args, mockContext);
 
-    expect(result.status.state).toBe('completed');
+    expect(result.status.state).to.equal('completed');
     // Should show N/A for missing value
-    expect(result.status.message.parts[0].text).toContain('N/A');
+    expect(result.status.message.parts[0].text).to.contain('N/A');
   });
 
-  test('should work without timeframe parameter', async () => {
+  it('should work without timeframe parameter', async () => {
     const mockTopics = [{ topic_id: 1, topic_name: 'BTC/USD Price Prediction', description: 'Bitcoin price' }];
 
     const mockInference = {
@@ -166,11 +180,13 @@ describe('getPricePrediction Tool', () => {
       },
     };
 
-    (mockMcpClient.callTool as any)
-      .mockResolvedValueOnce({
+    (mockMcpClient.callTool as sinon.SinonStub)
+      .onFirstCall()
+      .resolves({
         content: [{ text: JSON.stringify(mockTopics) }],
       })
-      .mockResolvedValueOnce({
+      .onSecondCall()
+      .resolves({
         content: [{ text: JSON.stringify(mockInference) }],
       });
 
@@ -180,9 +196,9 @@ describe('getPricePrediction Tool', () => {
     const args = { token: 'BTC' };
     const result = await getPricePredictionTool.execute(args, mockContext);
 
-    expect(result.status.state).toBe('completed');
+    expect(result.status.state).to.equal('completed');
     const messageText = result.status.message.parts[0].text;
-    expect(messageText).toContain('Price prediction for BTC: 50000.789');
-    expect(messageText).not.toContain('('); // No timeframe in parentheses
+    expect(messageText).to.contain('Price prediction for BTC: 50000.789');
+    expect(messageText).to.not.contain('('); // No timeframe in parentheses
   });
 });
