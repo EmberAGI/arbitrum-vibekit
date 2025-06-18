@@ -1,6 +1,6 @@
 /// <reference types="mocha" />
 import { expect } from 'chai';
-import type { Task } from 'arbitrum-vibekit-core';
+import type { Task } from '@google-a2a/types/src/types.js';
 
 import 'dotenv/config';
 import * as ethers from 'ethers';
@@ -226,23 +226,41 @@ function extractPools(response: Task): Array<{
   token1: { chainId: string; address: string };
   price: string;
 }> {
+  console.log('🔍 DEBUG: extractPools called with response:', JSON.stringify(response, null, 2));
+  
   if (!response.artifacts) {
+    console.log('❌ DEBUG: No artifacts found in response');
     return [];
   }
+  
+  console.log(`🔍 DEBUG: Found ${response.artifacts.length} artifacts`);
 
   // Look for available-liquidity-pools artifact
   for (const artifact of response.artifacts) {
+    console.log(`🔍 DEBUG: Checking artifact: ${artifact.name}`);
     if (artifact.name === 'available-liquidity-pools') {
+      console.log('✅ DEBUG: Found available-liquidity-pools artifact');
       for (const part of artifact.parts) {
+        console.log(`🔍 DEBUG: Checking part kind: ${(part as any).kind}`);
         if ((part as any).kind === 'data' && (part as any).data.pools) {
           const pools = (part as any).data.pools;
+          console.log(`🔍 DEBUG: Found pools data:`, JSON.stringify(pools, null, 2));
           if (Array.isArray(pools)) {
+            console.log(`✅ DEBUG: Returning ${pools.length} pools`);
             return pools;
+          } else {
+            console.log('❌ DEBUG: pools is not an array:', typeof pools);
+          }
+        } else {
+          console.log(`❌ DEBUG: Part not matching - kind: ${(part as any).kind}, has pools: ${!!(part as any).data?.pools}`);
+          if ((part as any).kind === 'data') {
+            console.log('🔍 DEBUG: Data part structure:', JSON.stringify((part as any).data, null, 2));
           }
         }
       }
     }
   }
 
+  console.log('❌ DEBUG: No pools found, returning empty array');
   return [];
 }

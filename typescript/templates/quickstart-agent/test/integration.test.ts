@@ -161,7 +161,8 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
   });
 
   describe('Skill Testing - LLM Orchestration', () => {
-    it('greet skill with formal style (LLM chooses formal tool)', async () => {
+    it('greet skill with formal style (LLM chooses formal tool)', async function() {
+      this.timeout(50000); // 50 second timeout for LLM operations
       const result = await mcpClient.callTool({
         name: 'greet-skill',
         arguments: {
@@ -182,7 +183,8 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
       }
     });
 
-    it('greet skill with casual style (LLM chooses casual tool)', async () => {
+    it('greet skill with casual style (LLM chooses casual tool)', async function() {
+      this.timeout(50000); // 50 second timeout for LLM operations
       const result = await mcpClient.callTool({
         name: 'greet-skill',
         arguments: {
@@ -202,7 +204,8 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
       }
     });
 
-    it('greet skill with localized style (tests hooks)', async () => {
+    it('greet skill with localized style (tests hooks)', async function() {
+      this.timeout(50000); // 50 second timeout for LLM operations
       const result = await mcpClient.callTool({
         name: 'greet-skill',
         arguments: {
