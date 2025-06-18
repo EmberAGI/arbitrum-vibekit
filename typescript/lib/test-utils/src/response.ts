@@ -1,4 +1,4 @@
-import type { Task } from 'a2a-samples-js';
+import type { Task } from '@google-a2a/types/src/types.js';
 import { GetMarketDataResponseSchema, type GetMarketDataResponse } from 'ember-schemas';
 
 /**
@@ -26,7 +26,7 @@ export function parseFunctionCallArgs(functionCall: {
 export function extractMessageText(response: Task): string {
   if (response?.status?.message?.parts) {
     for (const part of response.status.message.parts) {
-      if (part.type === 'text') {
+      if (part.kind === 'text') {
         return part.text || '';
       }
     }
@@ -43,7 +43,7 @@ export function extractTokenMarketData(response: Task): GetMarketDataResponse {
   for (const artifact of response.artifacts) {
     if (artifact.name === 'token-market-data') {
       for (const part of artifact.parts) {
-        if (part.type === 'data' && part.data) {
+        if (part.kind === 'data' && part.data) {
           const parseResult = GetMarketDataResponseSchema.safeParse(part.data);
           
           if (!parseResult.success) {

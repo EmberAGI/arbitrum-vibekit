@@ -7,7 +7,8 @@ import { isAddress } from 'viem';
 import { Agent } from './agent.js';
 import cors from 'cors';
 import { z } from 'zod';
-import type { Task } from 'a2a-samples-js';
+import type { Task } from '@google-a2a/types/src/types.js';
+import { TaskState } from '@google-a2a/types/src/types.js';
 
 const LendingAgentSchema = z.object({
   instruction: z
@@ -66,11 +67,15 @@ server.tool(
       const err = error as Error;
       const errorTask: Task = {
         id: userAddress,
+        contextId: `error-${Date.now()}`,
+        kind: 'task',
         status: {
-          state: 'failed',
+          state: TaskState.Failed,
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: `Error: ${err.message}` }],
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
+            parts: [{ kind: 'text', text: `Error: ${err.message}` }],
           },
         },
       };

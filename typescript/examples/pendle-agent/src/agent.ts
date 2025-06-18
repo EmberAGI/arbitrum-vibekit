@@ -3,7 +3,6 @@ import { createRequire } from 'module';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { type Task } from 'a2a-samples-js';
 import {
   generateText,
   tool,
@@ -12,6 +11,8 @@ import {
   type ToolResultPart,
   type StepResult,
 } from 'ai';
+import type { Task } from '@google-a2a/types/src/types.js';
+import { TaskState } from '@google-a2a/types/src/types.js';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import {
   GetPendleMarketsRequestSchema,
@@ -308,20 +309,24 @@ Never respond in markdown, always use plain text. Never add links to your respon
           try {
             // First, create data artifacts for the full market data
             const dataArtifacts = this.yieldMarkets.map(market => ({
-              type: 'data' as const,
+              kind: 'data' as const,
               data: market,
             }));
 
             const task: Task = {
               id: this.userAddress!,
+              contextId: `list-markets-${Date.now()}`,
+              kind: 'task',
               status: {
-                state: 'completed',
+                state: TaskState.Completed,
                 message: {
                   role: 'agent',
+                  messageId: `msg-${Date.now()}`,
+                  kind: 'message',
                   parts: [],
                 },
               },
-              artifacts: [{ name: 'yield-markets', parts: dataArtifacts }],
+              artifacts: [{ artifactId: `yield-markets-${Date.now()}`, name: 'yield-markets', parts: dataArtifacts }],
             };
             return task;
           } catch (error: unknown) {
@@ -330,9 +335,16 @@ Never respond in markdown, always use plain text. Never add links to your respon
             logError(msg);
             return {
               id: this.userAddress!,
+              contextId: `list-markets-error-${Date.now()}`,
+              kind: 'task',
               status: {
-                state: 'failed',
-                message: { role: 'agent', parts: [{ type: 'text', text: msg }] },
+                state: TaskState.Failed,
+                message: { 
+                  role: 'agent', 
+                  messageId: `msg-${Date.now()}`,
+                  kind: 'message',
+                  parts: [{ kind: 'text', text: msg }] 
+                },
               },
             };
           }
@@ -352,11 +364,15 @@ Never respond in markdown, always use plain text. Never add links to your respon
             // Return a failed Task on error
             return {
               id: this.userAddress!,
+              contextId: `swap-error-${Date.now()}`,
+              kind: 'task',
               status: {
-                state: 'failed',
+                state: TaskState.Failed,
                 message: {
                   role: 'agent',
-                  parts: [{ type: 'text', text: `Error swapping tokens: ${errorMessage}` }],
+                  messageId: `msg-${Date.now()}`,
+                  kind: 'message',
+                  parts: [{ kind: 'text', text: `Error swapping tokens: ${errorMessage}` }],
                 },
               },
             };
@@ -378,25 +394,29 @@ Never respond in markdown, always use plain text. Never add links to your respon
 
             // Create data artifacts for the wallet balances
             const dataArtifacts = parsedData.balances.map(balance => ({
-              type: 'data' as const,
+              kind: 'data' as const,
               data: balance,
             }));
 
             const task: Task = {
               id: this.userAddress!,
+              contextId: `wallet-balances-${Date.now()}`,
+              kind: 'task',
               status: {
-                state: 'completed',
+                state: TaskState.Completed,
                 message: {
                   role: 'agent',
+                  messageId: `msg-${Date.now()}`,
+                  kind: 'message',
                   parts: [
                     {
-                      type: 'text',
+                      kind: 'text',
                       text: `Found ${parsedData.balances.length} token balances for wallet ${this.userAddress}`,
                     },
                   ],
                 },
               },
-              artifacts: [{ name: 'wallet-balances', parts: dataArtifacts }],
+              artifacts: [{ artifactId: `wallet-balances-${Date.now()}`, name: 'wallet-balances', parts: dataArtifacts }],
             };
             return task;
           } catch (error: unknown) {
@@ -405,11 +425,15 @@ Never respond in markdown, always use plain text. Never add links to your respon
             // Return a failed Task on error
             return {
               id: this.userAddress!,
+              contextId: `wallet-balances-error-${Date.now()}`,
+              kind: 'task',
               status: {
-                state: 'failed',
+                state: TaskState.Failed,
                 message: {
                   role: 'agent',
-                  parts: [{ type: 'text', text: `Error getting wallet balances: ${errorMessage}` }],
+                  messageId: `msg-${Date.now()}`,
+                  kind: 'message',
+                  parts: [{ kind: 'text', text: `Error getting wallet balances: ${errorMessage}` }],
                 },
               },
             };
@@ -463,7 +487,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
             // Create data artifacts for the market data
             const dataArtifacts = [
               {
-                type: 'data' as const,
+                kind: 'data' as const,
                 data: {
                   tokenSymbol: tokenSymbol,
                   tokenAddress: selectedToken.address,
@@ -475,19 +499,23 @@ Never respond in markdown, always use plain text. Never add links to your respon
 
             const task: Task = {
               id: this.userAddress!,
+              contextId: `market-data-${Date.now()}`,
+              kind: 'task',
               status: {
-                state: 'completed',
+                state: TaskState.Completed,
                 message: {
                   role: 'agent',
+                  messageId: `msg-${Date.now()}`,
+                  kind: 'message',
                   parts: [
                     {
-                      type: 'text',
+                      kind: 'text',
                       text: `Market data retrieved for ${tokenSymbol} (${selectedToken.address}) on chain ${selectedToken.chainId}`,
                     },
                   ],
                 },
               },
-              artifacts: [{ name: 'token-market-data', parts: dataArtifacts }],
+              artifacts: [{ artifactId: `token-market-data-${Date.now()}`, name: 'token-market-data', parts: dataArtifacts }],
             };
             return task;
           } catch (error: unknown) {
@@ -496,11 +524,15 @@ Never respond in markdown, always use plain text. Never add links to your respon
             // Return a failed Task on error
             return {
               id: this.userAddress!,
+              contextId: `market-data-error-${Date.now()}`,
+              kind: 'task',
               status: {
-                state: 'failed',
+                state: TaskState.Failed,
                 message: {
                   role: 'agent',
-                  parts: [{ type: 'text', text: `Error getting market data: ${errorMessage}` }],
+                  messageId: `msg-${Date.now()}`,
+                  kind: 'message',
+                  parts: [{ kind: 'text', text: `Error getting market data: ${errorMessage}` }],
                 },
               },
             };
@@ -593,9 +625,16 @@ Never respond in markdown, always use plain text. Never add links to your respon
       if (text) {
         return {
           id: this.userAddress!,
+          contextId: `text-response-${Date.now()}`,
+          kind: 'task',
           status: {
-            state: 'completed',
-            message: { role: 'agent', parts: [{ type: 'text', text }] },
+            state: TaskState.Completed,
+            message: { 
+              role: 'agent',
+              messageId: `msg-${Date.now()}`,
+              kind: 'message',
+              parts: [{ kind: 'text', text }] 
+            },
           },
         };
       }

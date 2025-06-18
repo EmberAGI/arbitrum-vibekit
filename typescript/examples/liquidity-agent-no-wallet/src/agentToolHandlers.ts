@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Task, DataPart } from 'a2a-samples-js';
+import type { Task } from '@google-a2a/types/src/types.js';
+import { TaskState } from '@google-a2a/types/src/types.js';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
 import { parseMcpToolResponsePayload, type TransactionArtifact } from 'arbitrum-vibekit-core';
 import {
@@ -45,15 +46,22 @@ export interface HandlerContext {
 
 function createTaskResult(
   id: string | undefined,
-  state: Task['status']['state'],
+  state: TaskState,
   message: string
 ): Task {
   // Simple version without artifacts
   return {
-    id: id || 'liquidity-agent-task',
+    id: id || 'unknown',
+    contextId: `task-${Date.now()}`,
+    kind: 'task',
     status: {
-      state: state,
-      message: { role: 'agent', parts: [{ type: 'text', text: message }] },
+      state,
+      message: {
+        role: 'agent',
+        messageId: `msg-${Date.now()}`,
+        kind: 'message',
+        parts: [{ kind: 'text', text: message }],
+      },
     },
   };
 }
@@ -70,17 +78,22 @@ export async function handleGetLiquidityPools(
       // No liquidity pools available: return an empty artifact
       return {
         id: context.userAddress || 'liquidity-agent-task',
+        contextId: `pools-empty-${Date.now()}`,
+        kind: 'task',
         status: {
-          state: 'completed',
+          state: TaskState.Completed,
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: 'No liquidity pools available.' }],
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
+            parts: [{ kind: 'text', text: 'No liquidity pools available.' }],
           },
         },
         artifacts: [
           {
+            artifactId: `pools-empty-${Date.now()}`,
             name: 'available-liquidity-pools',
-            parts: [{ type: 'data', data: { pools: [] } as LiquidityPoolsArtifact }],
+            parts: [{ kind: 'data', data: { pools: [] } as LiquidityPoolsArtifact }],
           },
         ],
       };
@@ -96,21 +109,29 @@ export async function handleGetLiquidityPools(
 
     return {
       id: context.userAddress || 'liquidity-agent-task',
+      contextId: `pools-success-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'completed',
-        message: { role: 'agent', parts: [{ type: 'text', text: responseText }] },
+        state: TaskState.Completed,
+        message: { 
+          role: 'agent', 
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: responseText }] 
+        },
       },
       artifacts: [
         {
+          artifactId: `pools-${Date.now()}`,
           name: 'available-liquidity-pools',
-          parts: [{ type: 'data', data: poolsArtifact }],
+          parts: [{ kind: 'data', data: poolsArtifact }],
         },
       ],
     };
   } catch (error) {
     const errorMsg = `Error in handleGetLiquidityPools: ${error instanceof Error ? error.message : String(error)}`;
     context.log(errorMsg);
-    return createTaskResult(context.userAddress, 'failed', errorMsg);
+    return createTaskResult(context.userAddress, TaskState.Failed, errorMsg);
   }
 }
 
@@ -120,7 +141,7 @@ export async function handleGetUserLiquidityPositions(
 ): Promise<Task> {
   context.log('Handling getUserLiquidityPositions...');
   if (!context.userAddress) {
-    return createTaskResult(undefined, 'failed', 'User address not available in context.');
+    return createTaskResult(undefined, TaskState.Failed, 'User address not available in context.');
   }
 
   try {
@@ -145,17 +166,22 @@ export async function handleGetUserLiquidityPositions(
       // No liquidity positions found: return an empty artifact
       return {
         id: context.userAddress || 'liquidity-agent-task',
+        contextId: `positions-empty-${Date.now()}`,
+        kind: 'task',
         status: {
-          state: 'completed',
+          state: TaskState.Completed,
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: 'No liquidity positions found.' }],
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
+            parts: [{ kind: 'text', text: 'No liquidity positions found.' }],
           },
         },
         artifacts: [
           {
+            artifactId: `positions-empty-${Date.now()}`,
             name: 'user-liquidity-positions',
-            parts: [{ type: 'data', data: { positions: [] } as UserPositionsArtifact }],
+            parts: [{ kind: 'data', data: { positions: [] } as UserPositionsArtifact }],
           },
         ],
       };
@@ -179,21 +205,29 @@ export async function handleGetUserLiquidityPositions(
 
     return {
       id: context.userAddress || 'liquidity-agent-task',
+      contextId: `positions-success-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'completed',
-        message: { role: 'agent', parts: [{ type: 'text', text: responseText }] },
+        state: TaskState.Completed,
+        message: { 
+          role: 'agent', 
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: responseText }] 
+        },
       },
       artifacts: [
         {
+          artifactId: `positions-${Date.now()}`,
           name: 'user-liquidity-positions',
-          parts: [{ type: 'data', data: positionsArtifact }],
+          parts: [{ kind: 'data', data: positionsArtifact }],
         },
       ],
     };
   } catch (error) {
     const errorMsg = `Error in handleGetUserLiquidityPositions: ${error instanceof Error ? error.message : String(error)}`;
     context.log(errorMsg);
-    return createTaskResult(context.userAddress, 'failed', errorMsg);
+    return createTaskResult(context.userAddress, TaskState.Failed, errorMsg);
   }
 }
 
@@ -204,7 +238,7 @@ export async function handleSupplyLiquidity(
   context.log('Handling supplyLiquidity with params:', params);
   const userAddress = context.userAddress;
   if (!userAddress) {
-    return createTaskResult(undefined, 'failed', 'User address not available in context.');
+    return createTaskResult(undefined, TaskState.Failed, 'User address not available in context.');
   }
 
   try {
@@ -214,7 +248,7 @@ export async function handleSupplyLiquidity(
     if (!selectedPair) {
       return createTaskResult(
         userAddress,
-        'failed',
+        TaskState.Failed,
         `Liquidity pair handle "${params.pair}" not found or not supported.`
       );
     }
@@ -253,7 +287,7 @@ export async function handleSupplyLiquidity(
     } catch (chainError) {
       const errorMsg = `Network configuration error: ${(chainError as Error).message}`;
       context.log(errorMsg);
-      return createTaskResult(userAddress, 'failed', errorMsg);
+      return createTaskResult(userAddress, TaskState.Failed, errorMsg);
     }
 
     // Fetch Decimals
@@ -289,7 +323,7 @@ export async function handleSupplyLiquidity(
       const errorMsg = `Could not fetch token decimals: ${(fetchError as Error).message}`;
       context.log('Error:', errorMsg);
       // Add which token failed if possible
-      return createTaskResult(userAddress, 'failed', errorMsg);
+      return createTaskResult(userAddress, TaskState.Failed, errorMsg);
     }
 
     // Prepare amounts using fetched decimals
@@ -301,7 +335,7 @@ export async function handleSupplyLiquidity(
     } catch (parseError) {
       const errorMsg = `Invalid amount format: ${(parseError as Error).message}`;
       context.log(errorMsg);
-      return createTaskResult(userAddress, 'failed', errorMsg);
+      return createTaskResult(userAddress, TaskState.Failed, errorMsg);
     }
 
     // Check balances using fetched decimals
@@ -318,7 +352,7 @@ export async function handleSupplyLiquidity(
         const formattedBalance = formatUnits(balance0, decimals0);
         const errorMsg = `Insufficient ${token0.symbol || 'Token0'} balance. You need ${params.amount0} but only have ${formattedBalance}.`;
         context.log(errorMsg);
-        return createTaskResult(userAddress, 'failed', errorMsg);
+        return createTaskResult(userAddress, TaskState.Failed, errorMsg);
       }
 
       const balance1 = (await client1.readContract({
@@ -333,14 +367,14 @@ export async function handleSupplyLiquidity(
         const formattedBalance = formatUnits(balance1, decimals1);
         const errorMsg = `Insufficient ${token1.symbol || 'Token1'} balance. You need ${params.amount1} but only have ${formattedBalance}.`;
         context.log(errorMsg);
-        return createTaskResult(userAddress, 'failed', errorMsg);
+        return createTaskResult(userAddress, TaskState.Failed, errorMsg);
       }
 
       context.log('Sufficient balances confirmed for both tokens.');
     } catch (readError) {
       const errorMsg = `Could not verify token balance due to a network error: ${(readError as Error).message}`;
       context.log(`Warning: Failed to read token balance.`, readError);
-      return createTaskResult(userAddress, 'failed', errorMsg);
+      return createTaskResult(userAddress, TaskState.Failed, errorMsg);
     }
     // --- Balance Check End is implicitly here ---
 
@@ -384,31 +418,35 @@ export async function handleSupplyLiquidity(
       priceTo: params.priceTo,
     };
     const artifactContent: TransactionArtifact<typeof preview> = { txPlan, txPreview: preview };
-    const dataPart: DataPart = {
-      type: 'data',
-      data: { ...artifactContent },
-    };
 
     return {
       id: context.userAddress || 'liquidity-agent-task',
+      contextId: `supply-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'completed',
+        state: TaskState.Completed,
         message: {
           role: 'agent',
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
           parts: [
             {
-              type: 'text',
+              kind: 'text',
               text: `Supply liquidity transaction plan prepared (${txPlan.length} txs). Please review and execute.`,
             },
           ],
         },
       },
-      artifacts: [{ name: 'liquidity-transaction', parts: [dataPart] }],
+      artifacts: [{ 
+        artifactId: `supply-transaction-${Date.now()}`,
+        name: 'liquidity-transaction', 
+        parts: [{ kind: 'data', data: { ...artifactContent } }] 
+      }],
     };
   } catch (error) {
     const errorMsg = `Error in handleSupplyLiquidity: ${error instanceof Error ? error.message : String(error)}`;
     context.log(errorMsg);
-    return createTaskResult(context.userAddress, 'failed', errorMsg);
+    return createTaskResult(context.userAddress, TaskState.Failed, errorMsg);
   }
 }
 
@@ -418,7 +456,7 @@ export async function handleWithdrawLiquidity(
 ): Promise<Task> {
   context.log('Handling withdrawLiquidity with params:', params);
   if (!context.userAddress) {
-    return createTaskResult(undefined, 'failed', 'User address not available in context.');
+    return createTaskResult(undefined, TaskState.Failed, 'User address not available in context.');
   }
 
   try {
@@ -428,7 +466,7 @@ export async function handleWithdrawLiquidity(
     if (positionIndex < 0 || positionIndex >= positions.length) {
       return createTaskResult(
         context.userAddress,
-        'failed',
+        TaskState.Failed,
         `Invalid position number: ${params.positionNumber}. Please choose from 1 to ${positions.length}.`
       );
     }
@@ -436,7 +474,7 @@ export async function handleWithdrawLiquidity(
     if (!selectedPosition) {
       return createTaskResult(
         context.userAddress,
-        'failed',
+        TaskState.Failed,
         `Internal error: Position at index ${positionIndex} is unexpectedly undefined.`
       );
     }
@@ -476,30 +514,34 @@ export async function handleWithdrawLiquidity(
       token1Amount: selectedPosition.amount1,
     };
     const artifactContentW: TransactionArtifact<typeof previewW> = { txPlan, txPreview: previewW };
-    const dataPartW: DataPart = {
-      type: 'data',
-      data: { ...artifactContentW },
-    };
 
     return {
       id: context.userAddress || 'liquidity-agent-task',
+      contextId: `withdraw-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'completed',
+        state: TaskState.Completed,
         message: {
           role: 'agent',
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
           parts: [
             {
-              type: 'text',
+              kind: 'text',
               text: 'Withdraw liquidity transaction plan prepared. Please review and execute.',
             },
           ],
         },
       },
-      artifacts: [{ name: 'liquidity-transaction', parts: [dataPartW] }],
+      artifacts: [{ 
+        artifactId: `withdraw-transaction-${Date.now()}`,
+        name: 'liquidity-transaction', 
+        parts: [{ kind: 'data', data: { ...artifactContentW } }] 
+      }],
     };
   } catch (error) {
     const errorMsg = `Error in handleWithdrawLiquidity: ${error instanceof Error ? error.message : String(error)}`;
     context.log(errorMsg);
-    return createTaskResult(context.userAddress, 'failed', errorMsg);
+    return createTaskResult(context.userAddress, TaskState.Failed, errorMsg);
   }
 }

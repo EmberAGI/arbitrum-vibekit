@@ -126,16 +126,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // Try to find the text in source translations
     let translationKey: string | undefined;
-    for (const [key, value] of Object.entries(sourceTrans)) {
-      if (value.toLowerCase() === text.toLowerCase()) {
-        translationKey = key;
-        break;
+    if (sourceTrans) {
+      for (const [key, value] of Object.entries(sourceTrans)) {
+        if (value.toLowerCase() === text.toLowerCase()) {
+          translationKey = key;
+          break;
+        }
       }
     }
 
     let translatedText: string;
     if (translationKey && targetTrans[translationKey]) {
-      translatedText = targetTrans[translationKey];
+      translatedText = targetTrans[translationKey]!;
     } else {
       // Fallback: just add language prefix for demo
       translatedText = `[${targetLanguage}] ${text}`;

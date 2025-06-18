@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import type { Task } from 'a2a-samples-js';
+import type { Task } from '@google-a2a/types/src/types.js';
+import { TaskState } from '@google-a2a/types/src/types.js';
 import cors from 'cors';
 import * as dotenv from 'dotenv';
 import express from 'express';
@@ -66,12 +67,15 @@ server.tool(
       const err = error as Error;
       const errorTask: Task = {
         id: userAddress,
-        //sessionId: 'c295ea44-7543-4f78-b524-7a38915ad6e4',
+        contextId: `error-${Date.now()}`,
+        kind: 'task',
         status: {
-          state: 'failed',
+          state: TaskState.Failed,
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: `Error: ${err.message}` }],
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
+            parts: [{ kind: 'text', text: `Error: ${err.message}` }],
           },
         },
       };

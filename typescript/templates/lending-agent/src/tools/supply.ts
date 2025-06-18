@@ -1,6 +1,7 @@
 import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
-import type { Task, Message, DataPart, TaskState } from '@google-a2a/types/src/types.js';
+import type { Task, Message, DataPart } from '@google-a2a/types/src/types.js';
+import { TaskState } from '@google-a2a/types/src/types.js';
 import type { LendingAgentContext } from '../agent.js';
 import { BorrowRepaySupplyWithdrawSchema, ZodSupplyResponseSchema } from './schemas.js';
 import type { LendingTransactionArtifact, LendingPreview, TokenInfo } from './types.js';
@@ -32,7 +33,7 @@ export const supplyBase: VibkitToolDefinition<
           contextId: `${rawTokenName}-not-found-${Date.now()}`,
           kind: 'task' as const,
           status: {
-            state: 'failed' as TaskState,
+            state: TaskState.Failed,
             message: {
               role: 'agent',
               parts: [{ type: 'text', text: `Token '${rawTokenName}' not supported.` }],
@@ -49,7 +50,7 @@ export const supplyBase: VibkitToolDefinition<
           contextId: `${rawTokenName}-clarification-${Date.now()}`,
           kind: 'task' as const,
           status: {
-            state: 'input-required' as TaskState,
+            state: TaskState.InputRequired,
             message: {
               role: 'agent',
               parts: [
@@ -98,7 +99,7 @@ export const supplyBase: VibkitToolDefinition<
             contextId: `supply-${tokenName}-${Date.now()}`,
             kind: 'task' as const,
             status: {
-              state: 'completed' as TaskState,
+              state: TaskState.Completed,
               message: {
                 role: 'agent',
                 parts: [
@@ -127,7 +128,7 @@ export const supplyBase: VibkitToolDefinition<
             contextId: `supply-error-${Date.now()}`,
             kind: 'task' as const,
             status: {
-              state: 'failed' as TaskState,
+              state: TaskState.Failed,
               message: {
                 role: 'agent',
                 parts: [

@@ -10,5 +10,5 @@
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"],
-  "references": [{ "path": "../../lib/a2a" }, { "path": "../../lib/ember-schemas" }]
+  "references": [{ "path": "../../lib/ember-schemas" }]
 }

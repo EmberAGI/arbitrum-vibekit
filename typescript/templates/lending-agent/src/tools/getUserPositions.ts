@@ -1,6 +1,7 @@
 import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
-import type { Task, Message, TaskState } from '@google-a2a/types/src/types.js';
+import type { Task, Message, DataPart } from '@google-a2a/types/src/types.js';
+import { TaskState } from '@google-a2a/types/src/types.js';
 import type { LendingAgentContext } from '../agent.js';
 import { GetUserPositionsSchema, ZodGetWalletPositionsResponseSchema } from './schemas.js';
 import { createTaskId } from './utils.js';
@@ -37,10 +38,15 @@ export const getUserPositionsBase: VibkitToolDefinition<
         contextId: `user-positions-${Date.now()}`,
         kind: 'task' as const,
         status: {
-          state: 'completed' as TaskState,
+          state: TaskState.Completed,
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: 'Positions fetched successfully.' }],
+            parts: [
+              {
+                type: 'text',
+                text: `User positions retrieved successfully`,
+              },
+            ],
           },
         },
         artifacts: [
@@ -56,11 +62,14 @@ export const getUserPositionsBase: VibkitToolDefinition<
         contextId: `user-positions-error-${Date.now()}`,
         kind: 'task' as const,
         status: {
-          state: 'failed' as TaskState,
+          state: TaskState.Failed,
           message: {
             role: 'agent',
             parts: [
-              { type: 'text', text: `Error fetching positions: ${(error as Error).message}` },
+              {
+                type: 'text',
+                text: `Failed to get user positions: ${(error as Error).message}`,
+              },
             ],
           },
         },

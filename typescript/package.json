@@ -41,6 +41,7 @@
     "typescript-eslint": "^8.32.1"
   },
   "dependencies": {
+    "@google-a2a/types": "github:google-a2a/A2A#path:types",
     "ethers": "^5.7.2",
     "zod": "^3.25.7"
   },

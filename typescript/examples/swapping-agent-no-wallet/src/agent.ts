@@ -24,7 +24,8 @@ import { handleSwapTokens, handleAskEncyclopedia } from './agentToolHandlers.js'
 
 import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
-import type { Task } from 'a2a-samples-js';
+import type { Task } from '@google-a2a/types/src/types.js';
+import { TaskState } from '@google-a2a/types/src/types.js';
 import {
   AskEncyclopediaSchema,
   McpGetCapabilitiesResponseSchema,
@@ -416,7 +417,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
             processedToolResult = toolResultPart.result as Task;
             this.log(`Tool Result State: ${processedToolResult?.status?.state ?? 'N/A'}`);
             const firstPart = processedToolResult?.status?.message?.parts[0];
-            const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';
+            const messageText = firstPart && firstPart.kind === 'text' ? firstPart.text : 'N/A';
             this.log(`Tool Result Message: ${messageText}`);
           } else {
             this.log('Tool result part content is null or undefined.');
@@ -447,13 +448,17 @@ Use relavant conversation history to obtain required tool parameters. Present th
             this.log(`Unexpected task state: ${processedToolResult.status.state}`);
             return {
               id: this.userAddress || 'unknown-user',
+              contextId: `unknown-${Date.now()}`,
+              kind: 'task',
               status: {
-                state: 'failed',
+                state: TaskState.Failed,
                 message: {
                   role: 'agent',
+                  messageId: `msg-${Date.now()}`,
+                  kind: 'message',
                   parts: [
                     {
-                      type: 'text',
+                      kind: 'text',
                       text: `Agent encountered unexpected task state: ${processedToolResult.status.state}`,
                     },
                   ],
@@ -468,10 +473,17 @@ Use relavant conversation history to obtain required tool parameters. Present th
           'No specific tool task processed or returned. Returning final text response as completed task.'
         );
         return {
-          id: this.userAddress,
+          id: this.userAddress || 'unknown-user',
+          contextId: `text-response-${Date.now()}`,
+          kind: 'task',
           status: {
-            state: 'completed',
-            message: { role: 'agent', parts: [{ type: 'text', text: text }] },
+            state: TaskState.Completed,
+            message: { 
+              role: 'agent', 
+              messageId: `msg-${Date.now()}`,
+              kind: 'message',
+              parts: [{ kind: 'text', text: text }] 
+            },
           },
         };
       }
