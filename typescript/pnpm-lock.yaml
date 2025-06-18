@@ -90,7 +90,7 @@ importers:
         version: 4.3.16(react@19.1.0)(zod@3.25.61)
       arbitrum-vibekit-core:
         specifier: workspace:*
-        version: link:../../lib/arbitrum-vibekit-core
+        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.25.61)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -99,7 +99,7 @@ importers:
         version: 16.5.0
       ember-mcp-tool-server:
         specifier: workspace:*
-        version: link:../../lib/mcp-tools/emberai-mcp
+        version: file:lib/mcp-tools/emberai-mcp
       ember-schemas:
         specifier: workspace:*
         version: link:../../lib/ember-schemas
@@ -145,7 +145,7 @@ importers:
         version: 3.5.3
       test-utils:
         specifier: workspace:*
-        version: link:../../lib/test-utils
+        version: file:lib/test-utils(typescript@5.8.3)
       tsx:
         specifier: ^4.6.2
         version: 4.20.1
@@ -169,7 +169,7 @@ importers:
         version: 4.3.16(react@19.1.0)(zod@3.25.61)
       arbitrum-vibekit-core:
         specifier: workspace:*
-        version: link:../../lib/arbitrum-vibekit-core
+        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.25.61)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -178,7 +178,7 @@ importers:
         version: 16.5.0
       ember-mcp-tool-server:
         specifier: workspace:*
-        version: link:../../lib/mcp-tools/emberai-mcp
+        version: file:lib/mcp-tools/emberai-mcp
       ember-schemas:
         specifier: workspace:*
         version: link:../../lib/ember-schemas
@@ -224,7 +224,7 @@ importers:
         version: 3.5.3
       test-utils:
         specifier: workspace:*
-        version: link:../../lib/test-utils
+        version: file:lib/test-utils(typescript@5.8.3)
       tsx:
         specifier: ^4.6.2
         version: 4.20.1
@@ -239,13 +239,13 @@ importers:
         version: 0.4.6(zod@3.25.61)
       a2a-samples-js:
         specifier: workspace:*
-        version: link:../../lib/a2a
+        version: file:lib/a2a(ws@8.18.2)(zod@3.25.61)
       ai:
         specifier: ^4.3.2
         version: 4.3.16(react@19.1.0)(zod@3.25.61)
       arbitrum-vibekit-core:
         specifier: workspace:*
-        version: link:../../lib/arbitrum-vibekit-core
+        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.25.61)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -254,7 +254,7 @@ importers:
         version: 16.5.0
       ember-mcp-tool-server:
         specifier: workspace:*
-        version: link:../../lib/mcp-tools/emberai-mcp
+        version: file:lib/mcp-tools/emberai-mcp
       ember-schemas:
         specifier: workspace:*
         version: link:../../lib/ember-schemas
@@ -300,7 +300,7 @@ importers:
         version: 3.5.3
       test-utils:
         specifier: workspace:*
-        version: file:lib/test-utils(typescript@5.8.3)(ws@8.18.2)
+        version: file:lib/test-utils(typescript@5.8.3)
       tsx:
         specifier: ^4.6.2
         version: 4.20.1
@@ -327,7 +327,7 @@ importers:
         version: 4.3.16(react@19.1.0)(zod@3.25.61)
       arbitrum-vibekit-core:
         specifier: workspace:*
-        version: link:../../lib/arbitrum-vibekit-core
+        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.25.61)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -336,7 +336,7 @@ importers:
         version: 16.5.0
       ember-mcp-tool-server:
         specifier: workspace:*
-        version: link:../../lib/mcp-tools/emberai-mcp
+        version: file:lib/mcp-tools/emberai-mcp
       ember-schemas:
         specifier: workspace:*
         version: link:../../lib/ember-schemas
@@ -391,7 +391,7 @@ importers:
         version: 4.3.16(react@19.1.0)(zod@3.25.61)
       arbitrum-vibekit-core:
         specifier: workspace:*
-        version: link:../../lib/arbitrum-vibekit-core
+        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.25.61)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -400,7 +400,7 @@ importers:
         version: 16.5.0
       ember-mcp-tool-server:
         specifier: workspace:*
-        version: link:../../lib/mcp-tools/emberai-mcp
+        version: file:lib/mcp-tools/emberai-mcp
       ember-schemas:
         specifier: workspace:*
         version: link:../../lib/ember-schemas
@@ -515,12 +515,15 @@ importers:
 
   lib/arbitrum-vibekit-core:
     dependencies:
+      '@ai-sdk/openai':
+        specifier: ^1.3.22
+        version: 1.3.22(zod@3.25.61)
       '@ai-sdk/xai':
         specifier: ^1.2.16
         version: 1.2.16(zod@3.25.61)
       '@google-a2a/types':
         specifier: github:google-a2a/A2A#path:types
-        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/ee0931a1a0f22209e70127a3fde6b70887e545e3#path:types
+        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/c2dbd58e677b68d143ad7b0dff1121f8681a076e#path:types
       '@hyperbolic/ai-sdk-provider':
         specifier: ^0.1.3
         version: 0.1.3(react@19.1.0)
@@ -538,7 +541,7 @@ importers:
         version: 2.8.5
       ember-mcp-tool-server:
         specifier: workspace:*
-        version: link:../mcp-tools/emberai-mcp
+        version: file:lib/mcp-tools/emberai-mcp
       ember-schemas:
         specifier: workspace:*
         version: link:../ember-schemas
@@ -704,7 +707,7 @@ importers:
     dependencies:
       a2a-samples-js:
         specifier: workspace:*
-        version: file:lib/a2a(ws@8.18.2)(zod@3.25.61)
+        version: link:../a2a
       ember-schemas:
         specifier: workspace:*
         version: link:../ember-schemas
@@ -729,10 +732,10 @@ importers:
     dependencies:
       '@alloralabs/mcp-server':
         specifier: workspace:*
-        version: link:../../lib/mcp-tools/allora-mcp-server
+        version: file:lib/mcp-tools/allora-mcp-server
       '@google-a2a/types':
         specifier: github:google-a2a/A2A#path:types
-        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/ee0931a1a0f22209e70127a3fde6b70887e545e3#path:types
+        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/c2dbd58e677b68d143ad7b0dff1121f8681a076e#path:types
       '@modelcontextprotocol/sdk':
         specifier: ^1.5.0
         version: 1.12.1
@@ -744,7 +747,7 @@ importers:
         version: 4.3.16(react@19.1.0)(zod@3.25.61)
       arbitrum-vibekit-core:
         specifier: workspace:*
-        version: link:../../lib/arbitrum-vibekit-core
+        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.25.61)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -783,11 +786,57 @@ importers:
         specifier: ^3.2.1
         version: 3.2.3(@types/node@20.19.0)(@vitest/ui@3.2.3)(tsx@4.20.1)(yaml@2.8.0)
 
+  templates/langgraph-workflow-agent:
+    dependencies:
+      '@google-a2a/types':
+        specifier: github:google-a2a/A2A#path:types
+        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/c2dbd58e677b68d143ad7b0dff1121f8681a076e#path:types
+      '@langchain/core':
+        specifier: ^0.3.59
+        version: 0.3.59(openai@4.104.0(ws@8.18.2)(zod@3.25.61))
+      '@langchain/langgraph':
+        specifier: ^0.3.3
+        version: 0.3.3(@langchain/core@0.3.59(openai@4.104.0(ws@8.18.2)(zod@3.25.61)))(react@19.1.0)(zod-to-json-schema@3.24.5(zod@3.25.61))
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.12.3
+        version: 1.12.3
+      '@openrouter/ai-sdk-provider':
+        specifier: ^0.4.5
+        version: 0.4.6(zod@3.25.61)
+      ai:
+        specifier: ^4.3.2
+        version: 4.3.16(react@19.1.0)(zod@3.25.61)
+      arbitrum-vibekit-core:
+        specifier: workspace:^
+        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.25.61)
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
+      zod:
+        specifier: ^3.24.3
+        version: 3.25.61
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.3
+        version: 24.0.3
+      '@vitest/ui':
+        specifier: ^3.2.3
+        version: 3.2.3(vitest@3.2.3)
+      tsx:
+        specifier: ^4.20.3
+        version: 4.20.3
+      typescript:
+        specifier: ^5.8.3
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.1
+        version: 3.2.3(@types/node@24.0.3)(@vitest/ui@3.2.3)(tsx@4.20.3)(yaml@2.8.0)
+
   templates/lending-agent:
     dependencies:
       '@google-a2a/types':
         specifier: github:google-a2a/A2A#path:types
-        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/ee0931a1a0f22209e70127a3fde6b70887e545e3#path:types
+        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/c2dbd58e677b68d143ad7b0dff1121f8681a076e#path:types
       '@modelcontextprotocol/sdk':
         specifier: ^1.5.0
         version: 1.12.1
@@ -802,7 +851,7 @@ importers:
         version: 4.3.16(react@19.1.0)(zod@3.25.61)
       arbitrum-vibekit-core:
         specifier: workspace:*
-        version: link:../../lib/arbitrum-vibekit-core
+        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.25.61)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -811,7 +860,7 @@ importers:
         version: 16.5.0
       ember-mcp-tool-server:
         specifier: workspace:*
-        version: link:../../lib/mcp-tools/emberai-mcp
+        version: file:lib/mcp-tools/emberai-mcp
       ember-schemas:
         specifier: workspace:*
         version: link:../../lib/ember-schemas
@@ -848,7 +897,7 @@ importers:
     dependencies:
       '@google-a2a/types':
         specifier: github:google-a2a/A2A#path:types
-        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/ee0931a1a0f22209e70127a3fde6b70887e545e3#path:types
+        version: types@https://codeload.github.com/google-a2a/A2A/tar.gz/c2dbd58e677b68d143ad7b0dff1121f8681a076e#path:types
       '@modelcontextprotocol/sdk':
         specifier: ^1.5.0
         version: 1.12.1
@@ -860,7 +909,7 @@ importers:
         version: 4.3.16(react@19.1.0)(zod@3.25.61)
       arbitrum-vibekit-core:
         specifier: workspace:*
-        version: link:../../lib/arbitrum-vibekit-core
+        version: file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.25.61)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -906,6 +955,12 @@ packages:
 
   '@ai-sdk/openai-compatible@0.2.14':
     resolution: {integrity: sha512-icjObfMCHKSIbywijaoLdZ1nSnuRnWgMEMLgwoxPJgxsUHMx0aVORnsLUid4SPtdhHI3X2masrt6iaEQLvOSFw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.24.3
+
+  '@ai-sdk/openai@1.3.22':
+    resolution: {integrity: sha512-QwA+2EkG0QyjVR+7h6FE7iOu2ivNqAVMm9UJZkVxxTk5OIq5fFJDTEI/zICEMuHImTTXR2JjsL6EirJ28Jc4cw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.24.3
@@ -959,6 +1014,11 @@ packages:
     resolution: {integrity: sha512-43+Psr16UY+xh7MWn/lZyHTQiOkn0GlKtsfj9IynfCFW3jac8R3WoP6GaIqyErmeTIBq48rURZ7KFfSiRrmNTA==}
     engines: {node: '>=18'}
 
+  '@alloralabs/mcp-server@file:lib/mcp-tools/allora-mcp-server':
+    resolution: {directory: lib/mcp-tools/allora-mcp-server, type: directory}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
   '@anthropic-ai/sdk@0.24.3':
     resolution: {integrity: sha512-916wJXO6T6k8R6BAAcLhLPv/pnLGy7YSEBZXZ1XTFbLcTZE8oTy3oDW9WJf9KKZwMvVcePIfoTSvzXHRcGxkQQ==}
 
@@ -967,6 +1027,9 @@ packages:
 
   '@bufbuild/protobuf@2.5.2':
     resolution: {integrity: sha512-foZ7qr0IsUBjzWIq+SuBLfdQCpJ1j8cTuNNT4owngTHoN5KsJb8L9t65fzz7SCeSWzescoOil/0ldqiL041ABg==}
+
+  '@cfworker/json-schema@4.1.1':
+    resolution: {integrity: sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og==}
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -1398,6 +1461,37 @@ packages:
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
 
+  '@langchain/core@0.3.59':
+    resolution: {integrity: sha512-YAvnx0z3A8z5MvyjZzjC9ZxXZYM20ivFdUeLzANSPCoPCNIQ1/EppWP82RI24PcmWkNtuXsFVaj5juWiIpZvxg==}
+    engines: {node: '>=18'}
+
+  '@langchain/langgraph-checkpoint@0.0.18':
+    resolution: {integrity: sha512-IS7zJj36VgY+4pf8ZjsVuUWef7oTwt1y9ylvwu0aLuOn1d0fg05Om9DLm3v2GZ2Df6bhLV1kfWAM0IAl9O5rQQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@langchain/core': '>=0.2.31 <0.4.0'
+
+  '@langchain/langgraph-sdk@0.0.84':
+    resolution: {integrity: sha512-l0PFQyJ+6m6aclORNPPWlcRwgKcXVXsPaJCbCUYFABR3yf4cOpsjhUNR0cJ7+2cS400oieHjGRdGGyO/hbSjhg==}
+    peerDependencies:
+      '@langchain/core': '>=0.2.31 <0.4.0'
+      react: ^18 || ^19
+    peerDependenciesMeta:
+      '@langchain/core':
+        optional: true
+      react:
+        optional: true
+
+  '@langchain/langgraph@0.3.3':
+    resolution: {integrity: sha512-dB1HFTe2sY96ep8eHilEo7EH+j+9Zn/X2juZK5NyPWEJLoG1+t2N6MzKo1bkwwzRHaGpbMNDJUWpR2bZ9nWUcA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@langchain/core': '>=0.3.58 < 0.4.0'
+      zod-to-json-schema: ^3.x
+    peerDependenciesMeta:
+      zod-to-json-schema:
+        optional: true
+
   '@mistralai/mistralai-gcp@1.5.0':
     resolution: {integrity: sha512-KUv4GziIN8do4gmPe7T85gpYW1o2Q89e0hs8PQfZhFRMYz7uYPwxHyVI5UaxWlHFcmAvyxfaOAH0OuCC38Hb6g==}
     peerDependencies:
@@ -1405,6 +1499,10 @@ packages:
 
   '@modelcontextprotocol/sdk@1.12.1':
     resolution: {integrity: sha512-KG1CZhZfWg+u8pxeM/mByJDScJSrjjxLc8fwQqbsS8xCjBmQfMNEBTotYdNanKekepnfRI85GtgQlctLFpcYPw==}
+    engines: {node: '>=18'}
+
+  '@modelcontextprotocol/sdk@1.12.3':
+    resolution: {integrity: sha512-DyVYSOafBvk3/j1Oka4z5BWT8o4AFmoNyZY9pALOm7Lh3GZglR71Co4r4dEUoqDWdDazIZQHBe7J2Nwkg6gHgQ==}
     engines: {node: '>=18'}
 
   '@noble/ciphers@1.3.0':
@@ -1847,6 +1945,9 @@ packages:
   '@types/node@22.15.31':
     resolution: {integrity: sha512-jnVe5ULKl6tijxUhvQeNbQG/84fHfg+yMak02cT8QVhBx/F05rAVxCGBYYTh2EKz22D6JF5ktXuNwdx7b9iEGw==}
 
+  '@types/node@24.0.3':
+    resolution: {integrity: sha512-R4I/kzCYAdRLzfiCabn9hxWfbuHS573x+r0dJMkkzThEa7pbrcDWK+9zu3e7aBOouf+rQAciqPFMnxwr0aWgKg==}
+
   '@types/node@6.14.13':
     resolution: {integrity: sha512-J1F0XJ/9zxlZel5ZlbeSuHW2OpabrUAqpFuC2sm2I3by8sERQ8+KCjNKUcq8QHuzpGMWiJpo9ZxeHrqrP2KzQw==}
 
@@ -1858,6 +1959,9 @@ packages:
 
   '@types/request@2.48.12':
     resolution: {integrity: sha512-G3sY+NpsA9jnwm0ixhAFQSJ3Q9JkpLZpJbI3GMv0mIAT0y3mRabYeINzal5WOChIiaTEGQYlHOKgkaM9EisWHw==}
+
+  '@types/retry@0.12.0':
+    resolution: {integrity: sha512-wWKOClTTiizcZhXnPY4wikVAwmdYHp8q6DmC+EJUzAMsycb7HB32Kh9RN4+0gExjmPmZSAQjgURXIGATPegAvA==}
 
   '@types/retry@0.12.2':
     resolution: {integrity: sha512-XISRgDJ2Tc5q4TRqvgJtzsRkFYNJzZrhTdtMoGVBttwzzQJkPnS3WWTFc7kuDRoPtPakl+T+OfdEUjYJj7Jbow==}
@@ -1879,6 +1983,9 @@ packages:
 
   '@types/tough-cookie@4.0.5':
     resolution: {integrity: sha512-/Ad8+nIOV7Rl++6f1BdKxFSMgmoqEoYbHRpPcx3JEfv8VRsQe9Z4mCXeJBzxs7mbHY/XOZZuXlRNfhpVPbs6ZA==}
+
+  '@types/uuid@10.0.0':
+    resolution: {integrity: sha512-7gqG38EyHgyP1S+7+xomFtL+ZNHcKv6DwNaCZmJmo1vgMugyF3TCnXVg4t1uk89mLNwnLtnY3TpOpCOyp1/xHQ==}
 
   '@typescript-eslint/eslint-plugin@8.34.0':
     resolution: {integrity: sha512-QXwAlHlbcAwNlEEMKQS2RCgJsgXrTJdjXT08xEgbPFa2yYQgVjBymxP5DrfrE7X7iodSzd9qBUHUycdyVJTW1w==}
@@ -2073,6 +2180,10 @@ packages:
     resolution: {integrity: sha512-zbB9rCJAT1rbjiVDb2hqKFHNYLxgtk8NURxZ3IZwD3F6NtxbXZQCnnSi1Lkx+IDohdPlFp222wVALIheZJQSEg==}
     engines: {node: '>=8'}
 
+  ansi-styles@5.2.0:
+    resolution: {integrity: sha512-Cxwpt2SfTzTtXcfOlzGEee8O+c+MmUgGrNiBcXnuWxuFJHe6a5Hz7qwhwe5OgaSYI0IJvkLqWX1ASG+cJOkEiA==}
+    engines: {node: '>=10'}
+
   ansi-styles@6.2.1:
     resolution: {integrity: sha512-bN798gFfQX+viw3R7yrGWRqnrN2oRkEkUjjl4JNn4E8GxxbjtG3FbrEIIY3l8/hrwUwIeCZvi4QuOTP4MErVug==}
     engines: {node: '>=12'}
@@ -2083,6 +2194,11 @@ packages:
   anymatch@3.1.3:
     resolution: {integrity: sha512-KMReFUr0B4t+D+OBkjR3KYqvocp2XaSzO55UcB6mgQMd3KbcE+mWTyvVV7D/zsdEbNnV6acZUutkiHQXvTr1Rw==}
     engines: {node: '>= 8'}
+
+  arbitrum-vibekit-core@file:lib/arbitrum-vibekit-core:
+    resolution: {directory: lib/arbitrum-vibekit-core, type: directory}
+    peerDependencies:
+      zod: ^3.24.3
 
   arg@4.1.3:
     resolution: {integrity: sha512-58S9QDqG0Xx27YwPSt9fJxivjYl432YCwfDMfZ+71RAqUrZef7LrKQZ3LHLOwCS4FLNBplP533Zx895SeOCHvA==}
@@ -2335,6 +2451,9 @@ packages:
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
 
+  console-table-printer@2.14.3:
+    resolution: {integrity: sha512-X5OCFnjYlXzRuC8ac5hPA2QflRjJvNKJocMhlnqK/Ap7q3DHXr0NJ0TGzwmEKOiOdJrjsSwEd0m+a32JAYPrKQ==}
+
   content-disposition@0.5.4:
     resolution: {integrity: sha512-FveZTNuGw04cxlAiWbzi6zTAL/lhehaWbTtgluJh4/E95DqMwTmha3KZN1aAWA8cFIhHzMZUvLevkw5Rqk+tSQ==}
     engines: {node: '>= 0.6'}
@@ -2408,6 +2527,10 @@ packages:
     peerDependenciesMeta:
       supports-color:
         optional: true
+
+  decamelize@1.2.0:
+    resolution: {integrity: sha512-z2S+W9X73hAUUki+N+9Za2lBlun89zigOyGrsax+KUQ6wKW4ZoWpEYBkGhQjwAjjDCkWxhY0VKEhk8wzY7F5cA==}
+    engines: {node: '>=0.10.0'}
 
   decamelize@4.0.0:
     resolution: {integrity: sha512-9iE1PgSik9HeIIw2JO94IidnE3eBoQrFJ3w7sFuzSX4DpmZ3v5sZpUiV5Swcf6mQEF+Y0ru8Neo+p+nyh2J+hQ==}
@@ -2499,6 +2622,10 @@ packages:
 
   elliptic@6.6.1:
     resolution: {integrity: sha512-RaddvvMatK2LJHqFJ+YA4WysVN5Ita9E35botqIYspQ4TkRAlCicdzKOjlyv/1Za5RyTNn7di//eEV0uTAfe3g==}
+
+  ember-mcp-tool-server@file:lib/mcp-tools/emberai-mcp:
+    resolution: {directory: lib/mcp-tools/emberai-mcp, type: directory}
+    hasBin: true
 
   ember-schemas@file:lib/ember-schemas:
     resolution: {directory: lib/ember-schemas, type: directory}
@@ -2616,6 +2743,9 @@ packages:
   event-target-shim@5.0.1:
     resolution: {integrity: sha512-i/2XbnSz/uxRCU6+NdVJgKWDTM427+MqYbkQzD321DuCQJUqOuJKIA0IM2+W2xtYHdKOmZ4dR6fExsd4SXL+WQ==}
     engines: {node: '>=6'}
+
+  eventemitter3@4.0.7:
+    resolution: {integrity: sha512-8guHBZCwKnFhYdHr2ysuRWErTwhoN2X8XELRlrRwpmfeY2jjuUN4taQMsULKUVo1K4DvZl+0pgfyoysHxvmvEw==}
 
   eventemitter3@5.0.1:
     resolution: {integrity: sha512-GWkBvjiSZK87ELrYOSESUYeVIc9mvLLf/nXalMOS5dYrgZq9o5OVkbZAVM06CVxYsCwH9BDZFPlQTlPA1j4ahA==}
@@ -3229,6 +3359,9 @@ packages:
   js-sha3@0.8.0:
     resolution: {integrity: sha512-gF1cRrHhIzNfToc802P800N8PpXS+evLLXfsVpowqmAFR9uwbi89WvXg2QspOmXL8QL86J4T1EpFu+yUkwJY3Q==}
 
+  js-tiktoken@1.0.20:
+    resolution: {integrity: sha512-Xlaqhhs8VfCd6Sh7a1cFkZHQbYTLCwVJJWiHVxBYzLPxW0XsoxBy1hitmjkdIjD3Aon5BXLHFwU5O8WUx6HH+A==}
+
   js-tokens@9.0.1:
     resolution: {integrity: sha512-mxa9E9ITFOt0ban3j6L5MpjwegGz6lBQmM1IJkWeBZGcMxto50+eWdjC/52xDbS2vy0k7vIMK0Fe2wfL9OQSpQ==}
 
@@ -3298,6 +3431,14 @@ packages:
   kind-of@6.0.3:
     resolution: {integrity: sha512-dcS1ul+9tmeD95T+x28/ehLgd9mENa3LsvDTtzm3vyBEO7RPptvAD+t44WVXaUjTBRcrpFeFlC8WCruUR456hw==}
     engines: {node: '>=0.10.0'}
+
+  langsmith@0.3.33:
+    resolution: {integrity: sha512-imNIaBL6+ElE5eMzNHYwFxo6W/6rHlqcaUjCYoIeGdCYWlARxE3CTGKul5DJnaUgGP2CTLFeNXyvRx5HWC/4KQ==}
+    peerDependencies:
+      openai: '*'
+    peerDependenciesMeta:
+      openai:
+        optional: true
 
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
@@ -3514,6 +3655,10 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
+  mustache@4.2.0:
+    resolution: {integrity: sha512-71ippSywq5Yb7/tVYyGbkBggbU8H3u5Rz56fH60jGFgr8uHwxs+aSKeqmluIVzM0m0kB7xQjKS6qPfd0b2ZoqQ==}
+    hasBin: true
+
   nan@2.22.2:
     resolution: {integrity: sha512-DANghxFkS1plDdRsX0X9pm0Z6SJNN6gBdtXfanwoZ8hooC5gosGFSBGRYHUVPz1asKA/kMRqDRdHrluZ61SpBQ==}
 
@@ -3639,6 +3784,10 @@ packages:
       typescript:
         optional: true
 
+  p-finally@1.0.0:
+    resolution: {integrity: sha512-LICb2p9CB7FS+0eR1oqWnHhp0FljGLZCWBE9aix0Uye9W8LTQPwMTYVGWQWIw9RdQiDg4+epXQODwIYJtSJaow==}
+    engines: {node: '>=4'}
+
   p-limit@3.1.0:
     resolution: {integrity: sha512-TYOanM3wGwNGsZN2cVTYPArw454xnXj5qmWF1bEoAc4+cU/ol7GVh7odevjp1FNHduHc3KZMcFduxU5Xc6uJRQ==}
     engines: {node: '>=10'}
@@ -3647,9 +3796,21 @@ packages:
     resolution: {integrity: sha512-LaNjtRWUBY++zB5nE/NwcaoMylSPk+S+ZHNB1TzdbMJMny6dynpAGt7X/tl/QYq3TIeE6nxHppbo2LGymrG5Pw==}
     engines: {node: '>=10'}
 
+  p-queue@6.6.2:
+    resolution: {integrity: sha512-RwFpb72c/BhQLEXIZ5K2e+AhgNVmIejGlTgiB9MzZ0e93GRvqZ7uSi0dvRF7/XIXDeNkra2fNHBxTyPDGySpjQ==}
+    engines: {node: '>=8'}
+
+  p-retry@4.6.2:
+    resolution: {integrity: sha512-312Id396EbJdvRONlngUx0NydfrIQ5lsYu0znKVUzVvArzEIt08V1qhtyESbGVd1FGX7UKtiFp5uwKZdM8wIuQ==}
+    engines: {node: '>=8'}
+
   p-retry@6.2.1:
     resolution: {integrity: sha512-hEt02O4hUct5wtwg4H4KcWgDdm+l1bOaEy/hWzd8xtXB9BqxTWBBhb+2ImAtH4Cv4rPjV76xN3Zumqk3k3AhhQ==}
     engines: {node: '>=16.17'}
+
+  p-timeout@3.2.0:
+    resolution: {integrity: sha512-rhIwUycgwwKcP9yTOOFK/AKsAopjjCakVqLHePO3CC6Mir1Z99xT+R63jZxAT5lFZLa2inS5h+ZS2GvR99/FBg==}
+    engines: {node: '>=8'}
 
   package-json-from-dist@1.0.1:
     resolution: {integrity: sha512-UEZIS3/by4OC8vL3P2dTXRETpebLI2NiI5vIrjaD/5UtrkFX/tNbwjTSRAGC/+7CAo2pIcBaRgWmcBBHcsaCIw==}
@@ -4002,6 +4163,9 @@ packages:
     resolution: {integrity: sha512-a2B9Y0KlNXl9u/vsW6sTIu9vGEpfKu2wRV6l1H3XEas/0gUIzGzBoP/IouTcUQbm9JWZLH3COxyn03TYlFax6w==}
     engines: {node: '>=10'}
 
+  simple-wcswidth@1.1.1:
+    resolution: {integrity: sha512-R3q3/eoeNBp24CNTASEUrffXi0j9TwPIEvSStlvSrsFimM17sV5EHcMOc86j3K+UWZyLYvH0hRmYGCpCoaJ4vw==}
+
   sinon@20.0.0:
     resolution: {integrity: sha512-+FXOAbdnj94AQIxH0w1v8gzNxkawVvNqE3jUzRLptR71Oykeu2RrQXXl/VQjKay+Qnh73fDt/oDfMo6xMeDQbQ==}
 
@@ -4232,6 +4396,11 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
+  tsx@4.20.3:
+    resolution: {integrity: sha512-qjbnuR9Tr+FJOMBqJCW5ehvIo/buZq7vH7qD7JziU98h6l3qGy0a/yPFjwO+y0/T7GFpNgNAvEcPPVfyT8rrPQ==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
   type-check@0.4.0:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
     engines: {node: '>= 0.8.0'}
@@ -4252,8 +4421,8 @@ packages:
     resolution: {integrity: sha512-OZs6gsjF4vMp32qrCbiVSkrFmXtG/AZhY3t0iAMrMBiAZyV9oALtXO8hsrHbMXF9x6L3grlFuwW2oAz7cav+Gw==}
     engines: {node: '>= 0.6'}
 
-  types@https://codeload.github.com/google-a2a/A2A/tar.gz/ee0931a1a0f22209e70127a3fde6b70887e545e3#path:types:
-    resolution: {path: types, tarball: https://codeload.github.com/google-a2a/A2A/tar.gz/ee0931a1a0f22209e70127a3fde6b70887e545e3}
+  types@https://codeload.github.com/google-a2a/A2A/tar.gz/c2dbd58e677b68d143ad7b0dff1121f8681a076e#path:types:
+    resolution: {path: types, tarball: https://codeload.github.com/google-a2a/A2A/tar.gz/c2dbd58e677b68d143ad7b0dff1121f8681a076e}
     version: 1.0.0
 
   typescript-eslint@8.34.0:
@@ -4290,6 +4459,9 @@ packages:
 
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
+
+  undici-types@7.8.0:
+    resolution: {integrity: sha512-9UJ2xGDvQ43tYyVMpuHlsgApydB8ZKfVYTsLDhXkFL/6gfkp+U8xTGdh8pMJv1SpZna0zxG1DwsKZsreLbXBxw==}
 
   union-value@1.0.1:
     resolution: {integrity: sha512-tJfXmxMeWYnczCVs7XAEvIV7ieppALdyepWMkHkwciRpZraG/xwT+s2JN8+pr1+8jCRf80FFzvr+MpQeeoF4Xg==}
@@ -4571,6 +4743,12 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.61)
       zod: 3.25.61
 
+  '@ai-sdk/openai@1.3.22(zod@3.25.61)':
+    dependencies:
+      '@ai-sdk/provider': 1.1.3
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.61)
+      zod: 3.25.61
+
   '@ai-sdk/provider-utils@2.1.10(zod@3.25.61)':
     dependencies:
       '@ai-sdk/provider': 1.0.9
@@ -4624,6 +4802,22 @@ snapshots:
       '@types/node': 22.15.31
       typescript: 5.8.3
 
+  '@alloralabs/mcp-server@file:lib/mcp-tools/allora-mcp-server':
+    dependencies:
+      '@alloralabs/allora-sdk': 0.1.1
+      '@modelcontextprotocol/sdk': 1.12.3
+      '@types/express': 5.0.3
+      '@types/node': 22.15.31
+      dotenv: 16.5.0
+      express: 5.1.0
+      nodemon: 3.1.10
+      raw-body: 3.0.0
+      tee: 0.2.0
+      typescript: 5.8.3
+      zod: 3.25.61
+    transitivePeerDependencies:
+      - supports-color
+
   '@anthropic-ai/sdk@0.24.3':
     dependencies:
       '@types/node': 18.19.111
@@ -4646,6 +4840,8 @@ snapshots:
       - supports-color
 
   '@bufbuild/protobuf@2.5.2': {}
+
+  '@cfworker/json-schema@4.1.1': {}
 
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
@@ -5309,6 +5505,50 @@ snapshots:
 
   '@js-sdsl/ordered-map@4.4.2': {}
 
+  '@langchain/core@0.3.59(openai@4.104.0(ws@8.18.2)(zod@3.25.61))':
+    dependencies:
+      '@cfworker/json-schema': 4.1.1
+      ansi-styles: 5.2.0
+      camelcase: 6.3.0
+      decamelize: 1.2.0
+      js-tiktoken: 1.0.20
+      langsmith: 0.3.33(openai@4.104.0(ws@8.18.2)(zod@3.25.61))
+      mustache: 4.2.0
+      p-queue: 6.6.2
+      p-retry: 4.6.2
+      uuid: 10.0.0
+      zod: 3.25.61
+      zod-to-json-schema: 3.24.5(zod@3.25.61)
+    transitivePeerDependencies:
+      - openai
+
+  '@langchain/langgraph-checkpoint@0.0.18(@langchain/core@0.3.59(openai@4.104.0(ws@8.18.2)(zod@3.25.61)))':
+    dependencies:
+      '@langchain/core': 0.3.59(openai@4.104.0(ws@8.18.2)(zod@3.25.61))
+      uuid: 10.0.0
+
+  '@langchain/langgraph-sdk@0.0.84(@langchain/core@0.3.59(openai@4.104.0(ws@8.18.2)(zod@3.25.61)))(react@19.1.0)':
+    dependencies:
+      '@types/json-schema': 7.0.15
+      p-queue: 6.6.2
+      p-retry: 4.6.2
+      uuid: 9.0.1
+    optionalDependencies:
+      '@langchain/core': 0.3.59(openai@4.104.0(ws@8.18.2)(zod@3.25.61))
+      react: 19.1.0
+
+  '@langchain/langgraph@0.3.3(@langchain/core@0.3.59(openai@4.104.0(ws@8.18.2)(zod@3.25.61)))(react@19.1.0)(zod-to-json-schema@3.24.5(zod@3.25.61))':
+    dependencies:
+      '@langchain/core': 0.3.59(openai@4.104.0(ws@8.18.2)(zod@3.25.61))
+      '@langchain/langgraph-checkpoint': 0.0.18(@langchain/core@0.3.59(openai@4.104.0(ws@8.18.2)(zod@3.25.61)))
+      '@langchain/langgraph-sdk': 0.0.84(@langchain/core@0.3.59(openai@4.104.0(ws@8.18.2)(zod@3.25.61)))(react@19.1.0)
+      uuid: 10.0.0
+      zod: 3.25.61
+    optionalDependencies:
+      zod-to-json-schema: 3.24.5(zod@3.25.61)
+    transitivePeerDependencies:
+      - react
+
   '@mistralai/mistralai-gcp@1.5.0(zod@3.25.61)':
     dependencies:
       google-auth-library: 9.15.1
@@ -5318,6 +5558,22 @@ snapshots:
       - supports-color
 
   '@modelcontextprotocol/sdk@1.12.1':
+    dependencies:
+      ajv: 6.12.6
+      content-type: 1.0.5
+      cors: 2.8.5
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      express: 5.1.0
+      express-rate-limit: 7.5.0(express@5.1.0)
+      pkce-challenge: 5.0.0
+      raw-body: 3.0.0
+      zod: 3.25.61
+      zod-to-json-schema: 3.24.5(zod@3.25.61)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/sdk@1.12.3':
     dependencies:
       ajv: 6.12.6
       content-type: 1.0.5
@@ -5770,6 +6026,10 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
+  '@types/node@24.0.3':
+    dependencies:
+      undici-types: 7.8.0
+
   '@types/node@6.14.13': {}
 
   '@types/qs@6.14.0': {}
@@ -5782,6 +6042,8 @@ snapshots:
       '@types/node': 22.15.31
       '@types/tough-cookie': 4.0.5
       form-data: 2.5.3
+
+  '@types/retry@0.12.0': {}
 
   '@types/retry@0.12.2': {}
 
@@ -5805,6 +6067,8 @@ snapshots:
   '@types/sinonjs__fake-timers@8.1.5': {}
 
   '@types/tough-cookie@4.0.5': {}
+
+  '@types/uuid@10.0.0': {}
 
   '@typescript-eslint/eslint-plugin@8.34.0(@typescript-eslint/parser@8.34.0(eslint@9.28.0)(typescript@5.8.3))(eslint@9.28.0)(typescript@5.8.3)':
     dependencies:
@@ -5922,6 +6186,14 @@ snapshots:
     optionalDependencies:
       vite: 6.3.5(@types/node@20.19.0)(tsx@4.20.1)(yaml@2.8.0)
 
+  '@vitest/mocker@3.2.3(vite@6.3.5(@types/node@24.0.3)(tsx@4.20.3)(yaml@2.8.0))':
+    dependencies:
+      '@vitest/spy': 3.2.3
+      estree-walker: 3.0.3
+      magic-string: 0.30.17
+    optionalDependencies:
+      vite: 6.3.5(@types/node@24.0.3)(tsx@4.20.3)(yaml@2.8.0)
+
   '@vitest/pretty-format@3.2.3':
     dependencies:
       tinyrainbow: 2.0.0
@@ -5951,7 +6223,7 @@ snapshots:
       sirv: 3.0.1
       tinyglobby: 0.2.14
       tinyrainbow: 2.0.0
-      vitest: 3.2.3(@types/node@18.19.111)(@vitest/ui@3.2.3)(tsx@4.20.1)(yaml@2.8.0)
+      vitest: 3.2.3(@types/node@24.0.3)(@vitest/ui@3.2.3)(tsx@4.20.3)(yaml@2.8.0)
 
   '@vitest/utils@3.2.3':
     dependencies:
@@ -6062,6 +6334,8 @@ snapshots:
     dependencies:
       color-convert: 2.0.1
 
+  ansi-styles@5.2.0: {}
+
   ansi-styles@6.2.1: {}
 
   anymatch@1.3.2:
@@ -6073,6 +6347,28 @@ snapshots:
     dependencies:
       normalize-path: 3.0.0
       picomatch: 2.3.1
+
+  arbitrum-vibekit-core@file:lib/arbitrum-vibekit-core(react@19.1.0)(zod@3.25.61):
+    dependencies:
+      '@ai-sdk/openai': 1.3.22(zod@3.25.61)
+      '@ai-sdk/xai': 1.2.16(zod@3.25.61)
+      '@google-a2a/types': types@https://codeload.github.com/google-a2a/A2A/tar.gz/c2dbd58e677b68d143ad7b0dff1121f8681a076e#path:types
+      '@hyperbolic/ai-sdk-provider': 0.1.3(react@19.1.0)
+      '@modelcontextprotocol/sdk': 1.12.3
+      '@openrouter/ai-sdk-provider': 0.4.6(zod@3.25.61)
+      ai: 4.3.16(react@19.1.0)(zod@3.25.61)
+      cors: 2.8.5
+      ember-mcp-tool-server: file:lib/mcp-tools/emberai-mcp
+      ember-schemas: file:lib/ember-schemas
+      escape-html: 1.0.3
+      express: 5.1.0
+      nanoid: 5.1.5
+      zod: 3.25.61
+    transitivePeerDependencies:
+      - '@swc/core'
+      - '@swc/wasm'
+      - react
+      - supports-color
 
   arg@4.1.3: {}
 
@@ -6377,6 +6673,10 @@ snapshots:
 
   concat-map@0.0.1: {}
 
+  console-table-printer@2.14.3:
+    dependencies:
+      simple-wcswidth: 1.1.1
+
   content-disposition@0.5.4:
     dependencies:
       safe-buffer: 5.2.1
@@ -6447,6 +6747,8 @@ snapshots:
       ms: 2.1.3
     optionalDependencies:
       supports-color: 8.1.1
+
+  decamelize@1.2.0: {}
 
   decamelize@4.0.0: {}
 
@@ -6529,6 +6831,16 @@ snapshots:
       inherits: 2.0.4
       minimalistic-assert: 1.0.1
       minimalistic-crypto-utils: 1.0.1
+
+  ember-mcp-tool-server@file:lib/mcp-tools/emberai-mcp:
+    dependencies:
+      '@emberai/sdk-typescript': 0.3.0-beta.12
+      '@grpc/grpc-js': 1.13.4
+      '@modelcontextprotocol/sdk': 1.12.3
+      ember-schemas: file:lib/ember-schemas
+      zod: 3.25.61
+    transitivePeerDependencies:
+      - supports-color
 
   ember-schemas@file:lib/ember-schemas:
     dependencies:
@@ -6711,6 +7023,8 @@ snapshots:
       - utf-8-validate
 
   event-target-shim@5.0.1: {}
+
+  eventemitter3@4.0.7: {}
 
   eventemitter3@5.0.1: {}
 
@@ -7464,6 +7778,10 @@ snapshots:
 
   js-sha3@0.8.0: {}
 
+  js-tiktoken@1.0.20:
+    dependencies:
+      base64-js: 1.5.1
+
   js-tokens@9.0.1: {}
 
   js-yaml@4.1.0:
@@ -7555,6 +7873,18 @@ snapshots:
       is-buffer: 1.1.6
 
   kind-of@6.0.3: {}
+
+  langsmith@0.3.33(openai@4.104.0(ws@8.18.2)(zod@3.25.61)):
+    dependencies:
+      '@types/uuid': 10.0.0
+      chalk: 4.1.2
+      console-table-printer: 2.14.3
+      p-queue: 6.6.2
+      p-retry: 4.6.2
+      semver: 7.7.2
+      uuid: 10.0.0
+    optionalDependencies:
+      openai: 4.104.0(ws@8.18.2)(zod@3.25.61)
 
   levn@0.4.1:
     dependencies:
@@ -7799,6 +8129,8 @@ snapshots:
 
   ms@2.1.3: {}
 
+  mustache@4.2.0: {}
+
   nan@2.22.2:
     optional: true
 
@@ -7936,6 +8268,8 @@ snapshots:
     transitivePeerDependencies:
       - zod
 
+  p-finally@1.0.0: {}
+
   p-limit@3.1.0:
     dependencies:
       yocto-queue: 0.1.0
@@ -7944,11 +8278,25 @@ snapshots:
     dependencies:
       p-limit: 3.1.0
 
+  p-queue@6.6.2:
+    dependencies:
+      eventemitter3: 4.0.7
+      p-timeout: 3.2.0
+
+  p-retry@4.6.2:
+    dependencies:
+      '@types/retry': 0.12.0
+      retry: 0.13.1
+
   p-retry@6.2.1:
     dependencies:
       '@types/retry': 0.12.2
       is-network-error: 1.1.0
       retry: 0.13.1
+
+  p-timeout@3.2.0:
+    dependencies:
+      p-finally: 1.0.0
 
   package-json-from-dist@1.0.1: {}
 
@@ -8345,6 +8693,8 @@ snapshots:
     dependencies:
       semver: 7.7.2
 
+  simple-wcswidth@1.1.1: {}
+
   sinon@20.0.0:
     dependencies:
       '@sinonjs/commons': 3.0.1
@@ -8503,7 +8853,7 @@ snapshots:
       - encoding
       - supports-color
 
-  test-utils@file:lib/test-utils(typescript@5.8.3)(ws@8.18.2):
+  test-utils@file:lib/test-utils(typescript@5.8.3):
     dependencies:
       a2a-samples-js: file:lib/a2a(ws@8.18.2)(zod@3.25.61)
       ember-schemas: file:lib/ember-schemas
@@ -8597,6 +8947,13 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
 
+  tsx@4.20.3:
+    dependencies:
+      esbuild: 0.25.5
+      get-tsconfig: 4.10.1
+    optionalDependencies:
+      fsevents: 2.3.3
+
   type-check@0.4.0:
     dependencies:
       prelude-ls: 1.2.1
@@ -8616,7 +8973,7 @@ snapshots:
       media-typer: 1.1.0
       mime-types: 3.0.1
 
-  types@https://codeload.github.com/google-a2a/A2A/tar.gz/ee0931a1a0f22209e70127a3fde6b70887e545e3#path:types:
+  types@https://codeload.github.com/google-a2a/A2A/tar.gz/c2dbd58e677b68d143ad7b0dff1121f8681a076e#path:types:
     dependencies:
       typescript-json-schema: 0.65.1
     transitivePeerDependencies:
@@ -8659,6 +9016,8 @@ snapshots:
   undici-types@5.26.5: {}
 
   undici-types@6.21.0: {}
+
+  undici-types@7.8.0: {}
 
   union-value@1.0.1:
     dependencies:
@@ -8765,6 +9124,27 @@ snapshots:
       - tsx
       - yaml
 
+  vite-node@3.2.3(@types/node@24.0.3)(tsx@4.20.3)(yaml@2.8.0):
+    dependencies:
+      cac: 6.7.14
+      debug: 4.4.1(supports-color@5.5.0)
+      es-module-lexer: 1.7.0
+      pathe: 2.0.3
+      vite: 6.3.5(@types/node@24.0.3)(tsx@4.20.3)(yaml@2.8.0)
+    transitivePeerDependencies:
+      - '@types/node'
+      - jiti
+      - less
+      - lightningcss
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+      - tsx
+      - yaml
+
   vite@6.3.5(@types/node@18.19.111)(tsx@4.20.1)(yaml@2.8.0):
     dependencies:
       esbuild: 0.25.5
@@ -8791,6 +9171,20 @@ snapshots:
       '@types/node': 20.19.0
       fsevents: 2.3.3
       tsx: 4.20.1
+      yaml: 2.8.0
+
+  vite@6.3.5(@types/node@24.0.3)(tsx@4.20.3)(yaml@2.8.0):
+    dependencies:
+      esbuild: 0.25.5
+      fdir: 6.4.6(picomatch@4.0.2)
+      picomatch: 4.0.2
+      postcss: 8.5.4
+      rollup: 4.43.0
+      tinyglobby: 0.2.14
+    optionalDependencies:
+      '@types/node': 24.0.3
+      fsevents: 2.3.3
+      tsx: 4.20.3
       yaml: 2.8.0
 
   vitest@3.2.3(@types/node@18.19.111)(@vitest/ui@3.2.3)(tsx@4.20.1)(yaml@2.8.0):
@@ -8862,6 +9256,48 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 20.19.0
+      '@vitest/ui': 3.2.3(vitest@3.2.3)
+    transitivePeerDependencies:
+      - jiti
+      - less
+      - lightningcss
+      - msw
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+      - tsx
+      - yaml
+
+  vitest@3.2.3(@types/node@24.0.3)(@vitest/ui@3.2.3)(tsx@4.20.3)(yaml@2.8.0):
+    dependencies:
+      '@types/chai': 5.2.2
+      '@vitest/expect': 3.2.3
+      '@vitest/mocker': 3.2.3(vite@6.3.5(@types/node@24.0.3)(tsx@4.20.3)(yaml@2.8.0))
+      '@vitest/pretty-format': 3.2.3
+      '@vitest/runner': 3.2.3
+      '@vitest/snapshot': 3.2.3
+      '@vitest/spy': 3.2.3
+      '@vitest/utils': 3.2.3
+      chai: 5.2.0
+      debug: 4.4.1(supports-color@5.5.0)
+      expect-type: 1.2.1
+      magic-string: 0.30.17
+      pathe: 2.0.3
+      picomatch: 4.0.2
+      std-env: 3.9.0
+      tinybench: 2.9.0
+      tinyexec: 0.3.2
+      tinyglobby: 0.2.14
+      tinypool: 1.1.0
+      tinyrainbow: 2.0.0
+      vite: 6.3.5(@types/node@24.0.3)(tsx@4.20.3)(yaml@2.8.0)
+      vite-node: 3.2.3(@types/node@24.0.3)(tsx@4.20.3)(yaml@2.8.0)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 24.0.3
       '@vitest/ui': 3.2.3(vitest@3.2.3)
     transitivePeerDependencies:
       - jiti
