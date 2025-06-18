@@ -111,6 +111,7 @@ jobs:
         working-directory: ./typescript
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ALLORA_API_KEY: ${{ secrets.ALLORA_API_KEY }}
           QUICKNODE_API_KEY: ${{ secrets.QUICKNODE_API_KEY }}
           QUICKNODE_SUBDOMAIN: ${{ secrets.QUICKNODE_SUBDOMAIN }}
           MNEMONIC: ${{ secrets.MNEMONIC }}
