@@ -11,7 +11,8 @@ import {
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import type { Task } from 'a2a-samples-js';
+import type { Task } from '@google-a2a/types/src/types.js';
+import { TaskState } from '@google-a2a/types/src/types.js';
 import { createRequire } from 'module';
 import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
@@ -197,6 +198,8 @@ Rules:
 - For information requests like listing pools or positions, format the data clearly for the user.
 - If required parameters for a tool are missing, ask the user for clarification before attempting the tool call.
 - Use the userAddress provided implicitly for all actions that require it.
+- When users specify token amounts and names clearly, proceed directly with the transaction without asking for confirmation.
+- Do not ask users to clarify ordering in a pair (e.g. WETH/USDC vs USDC/WETH)
 
 <Supply Liquidity Example>
 <user>Supply 1 WETH and 2000 USDC to the WETH/USDC pool between price 1800 and 2200</user>
@@ -425,7 +428,7 @@ Rules:
             processedToolResult = toolResultPart.result as Task;
             this.log(`Tool Result State: ${processedToolResult?.status?.state ?? 'N/A'}`);
             const firstPart = processedToolResult?.status?.message?.parts[0];
-            const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';
+            const messageText = firstPart && firstPart.kind === 'text' ? firstPart.text : 'N/A';
             this.log(`Tool Result Message: ${messageText}`);
           } else {
             this.log('Tool result part content is null or undefined.');
@@ -456,13 +459,17 @@ Rules:
             this.log(`Unexpected task state: ${processedToolResult.status.state}`);
             return {
               id: this.userAddress || 'unknown-user',
+              contextId: `unexpected-state-${Date.now()}`,
+              kind: 'task',
               status: {
-                state: 'failed',
+                state: TaskState.Failed,
                 message: {
                   role: 'agent',
+                  messageId: `msg-${Date.now()}`,
+                  kind: 'message',
                   parts: [
                     {
-                      type: 'text',
+                      kind: 'text',
                       text: `Agent encountered unexpected task state: ${processedToolResult.status.state}`,
                     },
                   ],
@@ -478,9 +485,16 @@ Rules:
         );
         return {
           id: this.userAddress,
+          contextId: `text-response-${Date.now()}`,
+          kind: 'task',
           status: {
-            state: 'completed',
-            message: { role: 'agent', parts: [{ type: 'text', text: text }] },
+            state: TaskState.Completed,
+            message: { 
+              role: 'agent',
+              messageId: `msg-${Date.now()}`,
+              kind: 'message',
+              parts: [{ kind: 'text', text: text }] 
+            },
           },
         };
       }

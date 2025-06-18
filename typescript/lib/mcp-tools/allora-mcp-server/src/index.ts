@@ -19,7 +19,7 @@ async function main() {
     next();
   });
 
-  const apiKey = process.env.ALLORA_API_KEY || "UP-86455f53320d4ee48a958cc0";
+  const apiKey = process.env.ALLORA_API_KEY;
   if (!apiKey) {
     console.error("Error: ALLORA_API_KEY environment variable is required");
     process.exit(1);

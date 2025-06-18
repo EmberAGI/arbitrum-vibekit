@@ -3,7 +3,7 @@
  */
 
 import type { GetWalletPositionsResponse } from 'ember-api';
-import type { Task } from 'a2a-samples-js';
+import type { Task } from '@google-a2a/types/src/types.js';
 import { type UserReserve, UserReserveSchema } from 'ember-schemas';
 
 import type { TransactionPlan } from './transactions.js';
@@ -20,7 +20,7 @@ export function extractLendingTransactionPlan(response: Task): Array<Transaction
   for (const artifact of response.artifacts) {
     if (artifact.name === 'transaction-plan') {
       for (const part of artifact.parts) {
-        if (part.type === 'data' && part.data.txPlan) {
+        if (part.kind === 'data' && part.data.txPlan) {
           return part.data.txPlan as Array<TransactionPlan>;
         }
       }
@@ -42,7 +42,7 @@ export function extractPositionsData(response: Task): GetWalletPositionsResponse
   for (const artifact of response.artifacts) {
     if (artifact.name === 'positions' || artifact.name === 'wallet-positions') {
       for (const part of artifact.parts) {
-        if (part.type === 'data' && part.data.positions) {
+        if (part.kind === 'data' && part.data?.positions) {
           return part.data as unknown as GetWalletPositionsResponse;
         }
       }
@@ -51,7 +51,7 @@ export function extractPositionsData(response: Task): GetWalletPositionsResponse
 
   // Debug: log available artifact names before throwing an error
   try {
-    const names = response.artifacts.map((a) => a.name).join(', ');
+    const names = response.artifacts.map(a => a.name).join(', ');
      
     console.log(`[extractPositionsData] Available artifact names: ${names}`);
   } catch (_) {

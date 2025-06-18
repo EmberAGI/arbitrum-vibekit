@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import type { Task } from 'a2a-samples-js';
+import type { Task } from '@google-a2a/types/src/types.js';
+import { TaskState } from '@google-a2a/types/src/types.js';
 import { promises as fs } from 'fs';
 import { createRequire } from 'module';
 import path, { dirname, join } from 'path';
@@ -528,16 +529,14 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
     try {
       console.error('Calling generateText with Vercel AI SDK...');
-      const { text, toolResults, finishReason, response } = await generateText({
+      const { text, toolResults: _toolResults, finishReason, response } = await generateText({
         model: this.model,
         system: this.conversationHistory.find(m => m.role === 'system')?.content as string,
         messages: this.conversationHistory.filter(m => m.role !== 'system') as (
           | CoreUserMessage
           | CoreAssistantMessage
         )[],
-        tools: this.toolSet as {
-          [key: string]: Tool<any, any>;
-        },
+        tools: this.toolSet,
         maxSteps: 5,
         onStepFinish: async (stepResult: StepResult<typeof this.toolSet>) => {
           console.error(`Step finished. Reason: ${stepResult.finishReason}`);
@@ -581,11 +580,15 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       console.error('No tool called or task found, returning text response.');
       return {
         id: this.userAddress!,
+        contextId: `text-response-${Date.now()}`,
+        kind: 'task',
         status: {
-          state: 'completed',
+          state: TaskState.Completed,
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: text || "I'm sorry, I couldn't process that request." }],
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
+            parts: [{ kind: 'text', text: text || "I'm sorry, I couldn't process that request." }],
           },
         },
       };
@@ -599,11 +602,15 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       this.conversationHistory.push(errorAssistantMessage);
       return {
         id: this.userAddress!,
+        contextId: `error-${Date.now()}`,
+        kind: 'task',
         status: {
-          state: 'failed',
+          state: TaskState.Failed,
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: `An error occurred: ${String(error)}` }],
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
+            parts: [{ kind: 'text', text: `An error occurred: ${String(error)}` }],
           },
         },
       };
@@ -662,7 +669,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
     for (const artifact of response.artifacts) {
       if (artifact.name === 'positions' || artifact.name === 'wallet-positions') {
         for (const part of artifact.parts || []) {
-          if (part.type === 'data' && part.data?.positions) {
+          if (part.kind === 'data' && part.data?.positions) {
             return part.data as GetWalletPositionsResponse;
           }
         }
