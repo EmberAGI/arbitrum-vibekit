@@ -146,7 +146,7 @@ describe('Pendle Agent Integration Tests', function () {
           const hasMarketDataFields = ['price', 'marketCap', 'volume24h', 'priceChange24h'].some(
             field => marketData[field] !== undefined
           );
-          expect(hasMarketDataFields).to.be.true;
+          expect(hasMarketDataFields).to.be.true("No market data fields found: " + JSON.stringify(response, null, 2));
         });
       });
     });
