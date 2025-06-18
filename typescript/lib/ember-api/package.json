@@ -1,12 +1,9 @@
 {
-  "name": "test-utils",
+  "name": "ember-api",
   "version": "1.0.0",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
   "scripts": {
     "prepare": "pnpm build",
     "build": "tsc -b",
@@ -20,10 +17,8 @@
     "typescript": "^5.4.2"
   },
   "dependencies": {
-    "a2a-samples-js": "workspace:*",
-    "ember-api": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.11.1",
     "ember-schemas": "workspace:*",
-    "viem": "^2.26.3",
     "zod": "^3.22.4"
   }
-}
+} 
