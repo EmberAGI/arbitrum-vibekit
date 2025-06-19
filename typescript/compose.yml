@@ -27,6 +27,20 @@ services:
       - 3005:3005
     restart: unless-stopped
 
+  allora-trading-agent:
+    build:
+      context: ./
+      dockerfile: examples/allora-trading-agent/Dockerfile
+    container_name: vibekit-allora-trading-agent
+    env_file:
+      - path: .env
+        required: true
+      - path: examples/allora-trading-agent/.env
+        required: false
+    ports:
+      - 3008:3008
+    restart: unless-stopped
+
   # quickstart-agent-template:
   #   build:
   #     context: ./

@@ -29,6 +29,33 @@ export const chatAgents = [
       },
     ],
   },
+  {
+    id: 'allora-trading-agent' as const,
+    name: 'Allora Trading',
+    description: 'AI-powered trading with Allora predictions and Ember execution',
+    suggestedActions: [
+      {
+        title: 'Get ETH forecast',
+        label: 'and trade accordingly',
+        action: 'Get the latest ETH forecast and trade accordingly',
+      },
+      {
+        title: 'Should I buy',
+        label: 'BTC?',
+        action: 'What is the BTC price prediction? Should I buy?',
+      },
+      {
+        title: 'Analyze ARB',
+        label: 'trading opportunity',
+        action: 'Analyze ARB trading opportunity with $100',
+      },
+      {
+        title: 'Execute recommended',
+        label: 'ETH trade',
+        action: 'Get ETH prediction, analyze, and execute trade if profitable. My address is 0x...',
+      },
+    ],
+  },
   // {
   //   id: 'quickstart-agent-template' as const,
   //   name: 'Quickstart',
@@ -113,6 +140,7 @@ export const chatAgents = [
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
   ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
+  ['allora-trading-agent', 'http://allora-trading-agent:3008/sse'],
   // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
   // ['allora-price-prediction-agent', 'http://allora-price-prediction-agent:3008/sse'],
   // ["ember-lp", "http://liquidity-agent-no-wallet:3002/sse"],
