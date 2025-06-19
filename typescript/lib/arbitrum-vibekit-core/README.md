@@ -30,7 +30,7 @@ The test setup automatically loads environment variables from `.env.test`.
 
 ## Provider Selector
 
-The `createProviderSelector` function is a key feature of this package. It allows agents to easily switch between and utilize multiple Vercel AI SDK compatible providers, such as OpenRouter, Groq, Xai, and more.
+The `createProviderSelector` function is a key feature of this package. It allows agents to easily switch between and utilize multiple Vercel AI SDK compatible providers, such as OpenRouter, OpenAI, Groq, Xai, and more.
 
 ### Purpose
 
@@ -46,14 +46,16 @@ import 'dotenv/config';
 
 // Your .env file should contain the API keys:
 // OPENROUTER_API_KEY=...
-// XAI_API_KEY=...
 // HYPERBOLIC_API_KEY=...
+// OPENAI_API_KEY=...
+// XAI_API_KEY=...
 
 // Create a provider selector with your API keys
 const providers = createProviderSelector({
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
-  xaiApiKey: process.env.XAI_API_KEY,
   hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  xaiApiKey: process.env.XAI_API_KEY,
 });
 
 // To get a model, you access the provider directly
@@ -61,24 +63,47 @@ const providers = createProviderSelector({
 
 // Get the OpenRouter model for Gemini Flash
 if (providers.openrouter) {
-  const model = providers.openrouter('google/gemini-2.5-flash-preview');
+  const model = providers.openrouter('google/gemini-2.5-flash');
+  // now you can use the model...
+}
+
+// Get a Hyperbolic model (e.g., Mistral 7B Instruct)
+if (providers.hyperbolic) {
+  const hyperModel = providers.hyperbolic('deepseek-ai/DeepSeek-R1-0528');
+  // now you can use the model...
+}
+
+// Get the OpenAI model for GPT-4o (as an example)
+if (providers.openai) {
+  const openAiModel = providers.openai('gpt-4o');
   // now you can use the model...
 }
 
 // Get the Groq model for Llama 3
 if (providers.grok) {
-  const grokModel = providers.grok('llama3-8b-8192');
+  const grokModel = providers.grok('grok-3');
   // now you can use the model...
 }
 
-// You can now use these model instances with the Vercel AI SDK
-// For example, using it in an agent:
-if (providers.openrouter) {
-  const agent = new Agent({
-    // ... other agent config
-    model: providers.openrouter('google/gemini-2.5-flash-preview'),
-  });
-}
+// You can now use these model instances with the Vibekit Framework
+// For example, using them in a Vibekit agent:
+
+import { Agent } from '@arbitrum/vibekit-core';
+
+// Minimal agent manifest (must include at least one skill in real usage)
+const myAgentConfig = {
+  name: 'My Vibekit Agent',
+  version: '0.1.0',
+  description: 'Demo agent showing provider selector usage',
+  skills: [], // add your skills here
+};
+
+// Create the agent with runtime options
+const agent = Agent.create(myAgentConfig, {
+  llm: {
+    model: providers.openrouter('google/gemini-2.5-pro'),
+  },
+});
 ```
 
 > **Note**: All API keys are optional. You only need to provide a key for the provider you intend to use. The `createProviderSelector` will only enable providers for which an API key has been supplied.
@@ -86,7 +111,8 @@ if (providers.openrouter) {
 The selector uses the following environment variables for API keys:
 
 - **OpenRouter**: `OPENROUTER_API_KEY`
-- **xAI/Grok**: `XAI_API_KEY`
 - **Hyperbolic**: `HYPERBOLIC_API_KEY`
+- **OpenAI**: `OPENAI_API_KEY`
+- **xAI/Grok**: `XAI_API_KEY`
 
 This utility simplifies multi-provider setups and makes your agent's model configuration more flexible and maintainable.
