@@ -3,7 +3,7 @@ import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import type { Task, Message, DataPart } from '@google-a2a/types/src/types.js';
 import { TaskState } from '@google-a2a/types/src/types.js';
 import type { LendingAgentContext } from '../agent.js';
-import { BorrowRepaySupplyWithdrawSchema, ZodWithdrawResponseSchema } from './schemas.js';
+import { BorrowRepaySupplyWithdrawSchema, WithdrawResponseSchema } from 'ember-schemas';
 import type { LendingTransactionArtifact, LendingPreview, TokenInfo } from './types.js';
 import { createTaskId, findTokenInfo } from './utils.js';
 import type { TransactionPlan } from 'ember-schemas';
@@ -79,7 +79,7 @@ export const withdrawBase: VibkitToolDefinition<
           });
 
           // Parse and validate the MCP response
-          const withdrawResp = parseMcpToolResponsePayload(toolResult, ZodWithdrawResponseSchema);
+          const withdrawResp = parseMcpToolResponsePayload(toolResult, WithdrawResponseSchema);
           const validatedTxPlan: TransactionPlan[] = withdrawResp.transactions;
 
           const txPreview: LendingPreview = {

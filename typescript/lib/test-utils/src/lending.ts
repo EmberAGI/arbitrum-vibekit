@@ -2,7 +2,7 @@
  * Lending-specific test utilities
  */
 
-import type { GetWalletPositionsResponse } from 'ember-api';
+import type { GetWalletLendingPositionsResponse } from 'ember-api';
 import type { Task } from '@google-a2a/types/src/types.js';
 import { type UserReserve, UserReserveSchema } from 'ember-schemas';
 
@@ -33,7 +33,7 @@ export function extractLendingTransactionPlan(response: Task): Array<Transaction
 /**
  * Extract positions data from response
  */
-export function extractPositionsData(response: Task): GetWalletPositionsResponse {
+export function extractPositionsData(response: Task): GetWalletLendingPositionsResponse {
   if (!response.artifacts) {
     throw new Error(`No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`);
   }
@@ -43,7 +43,7 @@ export function extractPositionsData(response: Task): GetWalletPositionsResponse
     if (artifact.name === 'positions' || artifact.name === 'wallet-positions') {
       for (const part of artifact.parts) {
         if (part.kind === 'data' && part.data?.positions) {
-          return part.data as unknown as GetWalletPositionsResponse;
+          return part.data as unknown as GetWalletLendingPositionsResponse;
         }
       }
     }
@@ -65,13 +65,11 @@ export function extractPositionsData(response: Task): GetWalletPositionsResponse
  * Finds the reserve information for a given token symbol or name within the positions response.
  */
 export function getReserveForToken(
-  response: GetWalletPositionsResponse,
+  response: GetWalletLendingPositionsResponse,
   tokenNameOrSymbol: string
 ): UserReserve {
   for (const position of response.positions) {
-    if (!position.lendingPosition) continue;
-
-    for (const reserve of position.lendingPosition.userReserves) {
+    for (const reserve of position.userReserves) {
       const name = reserve.token!.name;
       const symbol = reserve.token!.symbol;
 

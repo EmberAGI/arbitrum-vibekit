@@ -1,8 +1,8 @@
 import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
-import type { Task, Message } from '@google-a2a/types/src/types.js';
+import type { Task, Message, DataPart } from '@google-a2a/types/src/types.js';
 import { TaskState } from '@google-a2a/types/src/types.js';
+import { AskEncyclopediaSchema } from 'ember-schemas';
 import type { LendingAgentContext } from '../agent.js';
-import { AskEncyclopediaSchema } from './schemas.js';
 import { createTaskId } from './utils.js';
 
 export const askEncyclopediaBase: VibkitToolDefinition<

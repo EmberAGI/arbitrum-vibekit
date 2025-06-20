@@ -5,10 +5,10 @@ import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with {
 import { parseMcpToolResponsePayload, type TransactionArtifact } from 'arbitrum-vibekit-core';
 import {
   GetLiquidityPoolsSchema,
-  GetUserLiquidityPositionsSchema,
+  GetWalletLiquidityPositionsSchema,
   SupplyLiquiditySchema,
   WithdrawLiquiditySchema,
-  GetUserLiquidityPositionsResponseSchema,
+  GetWalletLiquidityPositionsResponseSchema,
   TransactionPlanSchema,
   type LiquidityPoolsArtifact,
   type UserPositionsArtifact,
@@ -135,11 +135,11 @@ export async function handleGetLiquidityPools(
   }
 }
 
-export async function handleGetUserLiquidityPositions(
-  _params: z.infer<typeof GetUserLiquidityPositionsSchema>,
+export async function handleGetWalletLiquidityPositions(
+  _params: z.infer<typeof GetWalletLiquidityPositionsSchema>,
   context: HandlerContext
 ): Promise<Task> {
-  context.log('Handling getUserLiquidityPositions...');
+  context.log('Handling getWalletLiquidityPositions...');
   if (!context.userAddress) {
     return createTaskResult(undefined, TaskState.Failed, 'User address not available in context.');
   }
@@ -148,13 +148,13 @@ export async function handleGetUserLiquidityPositions(
     const mcpArgs = { userAddress: context.userAddress };
     // Explicitly cast arguments for callTool to satisfy linter
     const mcpResponse = await context.mcpClient.callTool({
-      name: 'getUserLiquidityPositions',
+      name: 'getWalletLiquidityPositions',
       arguments: mcpArgs,
     });
 
     const validatedData = parseMcpToolResponsePayload(
       mcpResponse,
-      GetUserLiquidityPositionsResponseSchema
+      GetWalletLiquidityPositionsResponseSchema
     );
 
     // Use the validatedData.positions array directly, as it matches the new schema
@@ -225,7 +225,7 @@ export async function handleGetUserLiquidityPositions(
       ],
     };
   } catch (error) {
-    const errorMsg = `Error in handleGetUserLiquidityPositions: ${error instanceof Error ? error.message : String(error)}`;
+    const errorMsg = `Error in handleGetWalletLiquidityPositions: ${error instanceof Error ? error.message : String(error)}`;
     context.log(errorMsg);
     return createTaskResult(context.userAddress, TaskState.Failed, errorMsg);
   }

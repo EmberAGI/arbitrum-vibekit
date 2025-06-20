@@ -45,10 +45,10 @@ export const PositionSchema = z.object({
 });
 export type Position = z.infer<typeof PositionSchema>;
 
-export const GetWalletPositionsResponseSchema = z.object({
-  positions: z.array(PositionSchema),
+export const GetWalletLendingPositionsResponseSchema = z.object({
+  positions: z.array(LendingPositionSchema),
 });
-export type GetWalletPositionsResponse = z.infer<typeof GetWalletPositionsResponseSchema>;
+export type GetWalletLendingPositionsResponse = z.infer<typeof GetWalletLendingPositionsResponseSchema>;
 
 //
 // Tool Response Schemas
@@ -162,8 +162,8 @@ export const BorrowRepaySupplyWithdrawSchema = z.object({
 });
 export type BorrowRepaySupplyWithdrawArgs = z.infer<typeof BorrowRepaySupplyWithdrawSchema>;
 
-export const GetUserPositionsSchema = z.object({});
-export type GetUserPositionsArgs = z.infer<typeof GetUserPositionsSchema>;
+export const GetWalletLendingPositionsSchema = z.object({});
+export type GetWalletLendingPositionsArgs = z.infer<typeof GetWalletLendingPositionsSchema>;
 
 // Define an alias for the lending interface
 export { AskEncyclopediaSchema as LendingAskEncyclopediaSchema };

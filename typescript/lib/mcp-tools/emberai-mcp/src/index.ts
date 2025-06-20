@@ -3,7 +3,7 @@ import { CapabilityTypes, OrderTypes } from "ember-api";
 import type {
   TokenIdentifier,
   GetLiquidityPoolsResponse,
-  GetUserLiquidityPositionsResponse,
+  GetWalletLiquidityPositionsResponse,
   SwapTokensRequest,
 } from "ember-api";
 // Use the high-level McpServer API
@@ -95,7 +95,7 @@ const getCapabilitiesSchema = {
     .describe("The type of capabilities to get."),
 };
 
-const getUserPositionsSchema = {
+const getWalletLendingPositionsSchema = {
   userAddress: z
     .string()
     .describe("The wallet address to fetch positions for."),
@@ -149,7 +149,7 @@ const withdrawLiquiditySchema = {
   providerId: z
     .string()
     .describe(
-      "The ID of the liquidity provider protocol (e.g., 'uniswap_v3'). Usually obtained from the getUserLiquidityPositions tool."
+      "The ID of the liquidity provider protocol (e.g., 'uniswap_v3'). Usually obtained from the getWalletLiquidityPositions tool."
     ),
   userAddress: z
     .string()
@@ -160,7 +160,7 @@ const getLiquidityPoolsSchema = {
   // No parameters currently needed, but could add filters later (e.g., chainId)
 };
 
-const getUserLiquidityPositionsSchema = {
+const getWalletLiquidityPositionsSchema = {
   userAddress: z
     .string()
     .describe("The wallet address to fetch liquidity positions for."),
@@ -191,12 +191,12 @@ type RepayParams = z.infer<ReturnType<typeof z.object<typeof repaySchema>>>;
 type SupplyParams = z.infer<ReturnType<typeof z.object<typeof supplySchema>>>;
 type WithdrawParams = z.infer<ReturnType<typeof z.object<typeof withdrawSchema>>>;
 type GetCapabilitiesParams = z.infer<ReturnType<typeof z.object<typeof getCapabilitiesSchema>>>;
-type GetUserPositionsParams = z.infer<ReturnType<typeof z.object<typeof getUserPositionsSchema>>>;
+type GetWalletLendingPositionsParams = z.infer<ReturnType<typeof z.object<typeof getWalletLendingPositionsSchema>>>;
 type GetTokensParams = z.infer<ReturnType<typeof z.object<typeof getTokensSchema>>>;
 type SupplyLiquidityParams = z.infer<ReturnType<typeof z.object<typeof supplyLiquiditySchema>>>;
 type WithdrawLiquidityParams = z.infer<ReturnType<typeof z.object<typeof withdrawLiquiditySchema>>>;
 type GetLiquidityPoolsParams = z.infer<ReturnType<typeof z.object<typeof getLiquidityPoolsSchema>>>;
-type GetUserLiquidityPositionsParams = z.infer<ReturnType<typeof z.object<typeof getUserLiquidityPositionsSchema>>>;
+type GetWalletLiquidityPositionsParams = z.infer<ReturnType<typeof z.object<typeof getWalletLiquidityPositionsSchema>>>;
 type GetYieldMarketsParams = z.infer<ReturnType<typeof z.object<typeof getYieldMarketsSchema>>>;
 type GetWalletBalancesParams = z.infer<ReturnType<typeof z.object<typeof getWalletBalancesSchema>>>;
 type GetMarketDataParams = z.infer<ReturnType<typeof z.object<typeof getMarketDataSchema>>>;
@@ -269,14 +269,14 @@ server.tool(
 );
 
 server.tool(
-  "borrow",
+  "lendingBorrow",
   "Borrow tokens using Ember On-chain Actions",
   borrowSchema,
   async (params: BorrowParams) => {
-    console.error(`Executing borrow tool with params:`, params);
+    console.error(`Executing lendingBorrow tool with params:`, params);
 
     try {
-      const response = await emberClient.borrowTokens({
+      const response = await emberClient.lendingBorrow({
         tokenUid: {
           chainId: params.tokenChainId,
           address: params.tokenAddress,
@@ -325,14 +325,14 @@ server.tool(
 );
 
 server.tool(
-  "repay",
+  "lendingRepay",
   "Repay borrowed tokens using Ember On-chain Actions",
   repaySchema,
   async (params: RepayParams) => {
-    console.error(`Executing repay tool with params:`, params);
+    console.error(`Executing lendingRepay tool with params:`, params);
 
     try {
-      const response = await emberClient.repayTokens({
+      const response = await emberClient.lendingRepay({
         tokenUid: {
           chainId: params.tokenChainId,
           address: params.tokenAddress,
@@ -378,14 +378,14 @@ server.tool(
 );
 
 server.tool(
-  "supply",
+  "lendingSupply",
   "Supply tokens using Ember On-chain Actions",
   supplySchema,
   async (params: SupplyParams) => {
-    console.error(`Executing supply tool with params:`, params);
+    console.error(`Executing lendingSupply tool with params:`, params);
 
     try {
-      const response = await emberClient.supplyTokens({
+      const response = await emberClient.lendingSupply({
         tokenUid: {
           chainId: params.tokenChainId,
           address: params.tokenAddress,
@@ -434,14 +434,14 @@ server.tool(
 );
 
 server.tool(
-  "withdraw",
+  "lendingWithdraw",
   "Withdraw tokens using Ember On-chain Actions",
   withdrawSchema,
   async (params: WithdrawParams) => {
-    console.error(`Executing withdraw tool with params:`, params);
+    console.error(`Executing lendingWithdraw tool with params:`, params);
 
     try {
-      const response = await emberClient.withdrawTokens({
+      const response = await emberClient.lendingWithdraw({
         tokenUid: {
           chainId: params.tokenChainId,
           address: params.tokenAddress,
@@ -525,18 +525,18 @@ server.tool(
 );
 
 server.tool(
-  "getUserPositions",
-  "Get user wallet positions using Ember On-chain Actions",
-  getUserPositionsSchema,
-  async (params: GetUserPositionsParams) => {
-    console.error(`Executing getUserPositions tool with params:`, params);
+  "getWalletLendingPositions",
+  "Get user's DeFi lending positions across various protocols using Ember API",
+  getWalletLendingPositionsSchema,
+  async (params: GetWalletLendingPositionsParams) => {
+    console.error(`Executing getWalletLendingPositions tool with params:`, params);
 
     try {
-      const response = await emberClient.getWalletPositions({
+      const response = await emberClient.getWalletLendingPositions({
         walletAddress: params.userAddress,
       });
 
-      console.error(`GetUserPositions tool success.`);
+      console.error(`GetWalletLendingPositions tool success.`);
 
       return {
         content: [
@@ -547,7 +547,7 @@ server.tool(
         ],
       };
     } catch (error) {
-      console.error(`GetUserPositions tool error:`, error);
+      console.error(`GetWalletLendingPositions tool error:`, error);
       return {
         isError: true,
         content: [
@@ -754,19 +754,19 @@ server.tool(
 );
 
 server.tool(
-  "getUserLiquidityPositions",
+  "getWalletLiquidityPositions",
   "Get user's liquidity positions using Ember On-chain Actions.",
-  getUserLiquidityPositionsSchema,
-  async (params: GetUserLiquidityPositionsParams) => {
+  getWalletLiquidityPositionsSchema,
+  async (params: GetWalletLiquidityPositionsParams) => {
     console.error(
-      `Executing getUserLiquidityPositions tool with params:`,
+      `Executing getWalletLiquidityPositions tool with params:`,
       params
     );
 
     try {
       // Use correct argument name: supplierAddress
-      const response: GetUserLiquidityPositionsResponse =
-        await emberClient.getUserLiquidityPositions({
+      const response: GetWalletLiquidityPositionsResponse =
+        await emberClient.getWalletLiquidityPositions({
           supplierAddress: params.userAddress,
         });
 
@@ -775,7 +775,7 @@ server.tool(
         throw new Error("No user liquidity positions data returned.");
       }
 
-      console.error(`getUserLiquidityPositions tool success.`);
+      console.error(`getWalletLiquidityPositions tool success.`);
       return {
         content: [
           {
@@ -786,7 +786,7 @@ server.tool(
         ],
       };
     } catch (error) {
-      console.error(`getUserLiquidityPositions tool error:`, error);
+      console.error(`getWalletLiquidityPositions tool error:`, error);
       return {
         isError: true,
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
@@ -863,21 +863,21 @@ server.tool(
 );
 
 server.tool(
-  "getMarketData",
+  "getTokenMarketData",
   "Get live market data for a token using Ember On-chain Actions",
   getMarketDataSchema,
   async (params: GetMarketDataParams) => {
-    console.error(`Executing getMarketData tool with params:`, params);
+    console.error(`Executing getTokenMarketData tool with params:`, params);
 
     try {
-      const response = await emberClient.getMarketData({
+      const response = await emberClient.getTokenMarketData({
         tokenUid: {
           chainId: params.tokenChainId,
           address: params.tokenAddress,
         },
       });
 
-      console.error(`GetMarketData tool success.`);
+      console.error(`GetTokenMarketData tool success.`);
       return {
         content: [
           {
@@ -887,7 +887,7 @@ server.tool(
         ],
       };
     } catch (error) {
-      console.error(`GetMarketData tool error:`, error);
+      console.error(`GetTokenMarketData tool error:`, error);
       return {
         isError: true,
         content: [{ type: "text", text: `Error: ${(error as Error).message}` }],

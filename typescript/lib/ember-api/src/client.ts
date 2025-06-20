@@ -1,5 +1,5 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { parseMcpToolResponse } from "ember-schemas";
 import type { z } from "zod";
@@ -15,8 +15,8 @@ import {
   WithdrawTokensResponseSchema,
   SupplyLiquidityResponseSchema,
   WithdrawLiquidityResponseSchema,
-  GetWalletPositionsResponseSchema,
-  GetUserLiquidityPositionsResponseSchema,
+  GetWalletLendingPositionsResponseSchema,
+  GetWalletLiquidityPositionsResponseSchema,
   GetWalletBalancesResponseSchema,
   GetYieldMarketsResponseSchema,
   GetLiquidityPoolsResponseSchema,
@@ -44,10 +44,10 @@ import type {
   SupplyLiquidityResponse,
   WithdrawLiquidityRequest,
   WithdrawLiquidityResponse,
-  GetWalletPositionsRequest,
-  GetWalletPositionsResponse,
-  GetUserLiquidityPositionsRequest,
-  GetUserLiquidityPositionsResponse,
+  GetWalletLendingPositionsRequest,
+  GetWalletLendingPositionsResponse,
+  GetWalletLiquidityPositionsRequest,
+  GetWalletLiquidityPositionsResponse,
   GetWalletBalancesRequest,
   GetWalletBalancesResponse,
   GetYieldMarketsRequest,
@@ -59,45 +59,37 @@ import type {
   GetMarketDataResponse,
 } from "./schemas/index.js";
 
-export interface ClientOptions {
-  timeout?: number;
-  requestTimeout?: number;
-}
-
 export interface EmberClient {
   close(): void;
   getChains(request: GetChainsRequest): Promise<GetChainsResponse>;
   getTokens(request: GetTokensRequest): Promise<GetTokensResponse>;
   getCapabilities(request: GetCapabilitiesRequest): Promise<GetCapabilitiesResponse>;
   getYieldMarkets(request: GetYieldMarketsRequest): Promise<GetYieldMarketsResponse>;
-  /** @deprecated Use getYieldMarkets instead */
-  getPendleMarkets(request: GetYieldMarketsRequest): Promise<GetYieldMarketsResponse>;
-  getWalletPositions(request: GetWalletPositionsRequest): Promise<GetWalletPositionsResponse>;
-  getUserLiquidityPositions(request: GetUserLiquidityPositionsRequest): Promise<GetUserLiquidityPositionsResponse>;
+  getWalletLendingPositions(request: GetWalletLendingPositionsRequest): Promise<GetWalletLendingPositionsResponse>;
+  getWalletLiquidityPositions(request: GetWalletLiquidityPositionsRequest): Promise<GetWalletLiquidityPositionsResponse>;
   getWalletBalances(request: GetWalletBalancesRequest): Promise<GetWalletBalancesResponse>;
   swapTokens(request: SwapTokensRequest): Promise<SwapTokensResponse>;
-  borrowTokens(request: BorrowTokensRequest): Promise<BorrowTokensResponse>;
-  repayTokens(request: RepayTokensRequest): Promise<RepayTokensResponse>;
-  supplyTokens(request: SupplyTokensRequest): Promise<SupplyTokensResponse>;
-  withdrawTokens(request: WithdrawTokensRequest): Promise<WithdrawTokensResponse>;
+  lendingBorrow(request: BorrowTokensRequest): Promise<BorrowTokensResponse>;
+  lendingRepay(request: RepayTokensRequest): Promise<RepayTokensResponse>;
+  lendingSupply(request: SupplyTokensRequest): Promise<SupplyTokensResponse>;
+  lendingWithdraw(request: WithdrawTokensRequest): Promise<WithdrawTokensResponse>;
   supplyLiquidity(request: SupplyLiquidityRequest): Promise<SupplyLiquidityResponse>;
   withdrawLiquidity(request: WithdrawLiquidityRequest): Promise<WithdrawLiquidityResponse>;
   getLiquidityPools(): Promise<GetLiquidityPoolsResponse>;
   getProviderTrackingStatus(request: GetProviderTrackingStatusRequest): Promise<GetProviderTrackingStatusResponse>;
-  getMarketData(request: GetMarketDataRequest): Promise<GetMarketDataResponse>;
+  getTokenMarketData(request: GetMarketDataRequest): Promise<GetMarketDataResponse>;
 }
 
 export class EmberMcpClient implements EmberClient {
   private client: Client;
-  private transport: SSEClientTransport | StdioClientTransport;
+  private transport: StreamableHTTPClientTransport | StdioClientTransport;
 
   constructor(
-    address: string,
-    options?: Partial<ClientOptions>
+    address: string
   ) {
     // Determine transport type based on address
     if (address.startsWith("http://") || address.startsWith("https://")) {
-      this.transport = new SSEClientTransport(new URL(address));
+      this.transport = new StreamableHTTPClientTransport(new URL(address));
     } else {
       // Assume stdio transport for local file paths or commands
       this.transport = new StdioClientTransport({
@@ -145,75 +137,70 @@ export class EmberMcpClient implements EmberClient {
   }
 
   async getChains(request: GetChainsRequest): Promise<GetChainsResponse> {
-    return this.callTool("get_chains", request, GetChainsResponseSchema);
+    return this.callTool("getChains", request, GetChainsResponseSchema);
   }
 
   async getTokens(request: GetTokensRequest): Promise<GetTokensResponse> {
-    return this.callTool("get_tokens", request, GetTokensResponseSchema);
+    return this.callTool("getTokens", request, GetTokensResponseSchema);
   }
 
   async getCapabilities(request: GetCapabilitiesRequest): Promise<GetCapabilitiesResponse> {
-    return this.callTool("get_capabilities", request, GetCapabilitiesResponseSchema);
+    return this.callTool("getCapabilities", request, GetCapabilitiesResponseSchema);
   }
 
   async getYieldMarkets(request: GetYieldMarketsRequest): Promise<GetYieldMarketsResponse> {
-    return this.callTool("get_yield_markets", request, GetYieldMarketsResponseSchema);
+    return this.callTool("getYieldMarkets", request, GetYieldMarketsResponseSchema);
   }
 
-  /** @deprecated Use getYieldMarkets instead */
-  async getPendleMarkets(request: GetYieldMarketsRequest): Promise<GetYieldMarketsResponse> {
-    return this.getYieldMarkets(request);
+  async getWalletLendingPositions(request: GetWalletLendingPositionsRequest): Promise<GetWalletLendingPositionsResponse> {
+    return this.callTool("getWalletLendingPositions", request, GetWalletLendingPositionsResponseSchema);
   }
 
-  async getWalletPositions(request: GetWalletPositionsRequest): Promise<GetWalletPositionsResponse> {
-    return this.callTool("get_wallet_positions", request, GetWalletPositionsResponseSchema);
-  }
-
-  async getUserLiquidityPositions(request: GetUserLiquidityPositionsRequest): Promise<GetUserLiquidityPositionsResponse> {
-    return this.callTool("get_user_liquidity_positions", request, GetUserLiquidityPositionsResponseSchema);
+  async getWalletLiquidityPositions(request: GetWalletLiquidityPositionsRequest): Promise<GetWalletLiquidityPositionsResponse> {
+    return this.callTool("getWalletLiquidityPositions", request, GetWalletLiquidityPositionsResponseSchema);
   }
 
   async getWalletBalances(request: GetWalletBalancesRequest): Promise<GetWalletBalancesResponse> {
-    return this.callTool("get_wallet_balances", request, GetWalletBalancesResponseSchema);
+    return this.callTool("getWalletBalances", request, GetWalletBalancesResponseSchema);
   }
 
   async swapTokens(request: SwapTokensRequest): Promise<SwapTokensResponse> {
-    return this.callTool("swap_tokens", request, SwapTokensResponseSchema);
+    return this.callTool("swapTokens", request, SwapTokensResponseSchema);
   }
 
-  async borrowTokens(request: BorrowTokensRequest): Promise<BorrowTokensResponse> {
-    return this.callTool("borrow_tokens", request, BorrowTokensResponseSchema);
+  async lendingBorrow(request: BorrowTokensRequest): Promise<BorrowTokensResponse> {
+    return this.callTool("lendingBorrow", request, BorrowTokensResponseSchema);
   }
 
-  async repayTokens(request: RepayTokensRequest): Promise<RepayTokensResponse> {
-    return this.callTool("repay_tokens", request, RepayTokensResponseSchema);
+  async lendingRepay(request: RepayTokensRequest): Promise<RepayTokensResponse> {
+    return this.callTool("lendingRepay", request, RepayTokensResponseSchema);
   }
 
-  async supplyTokens(request: SupplyTokensRequest): Promise<SupplyTokensResponse> {
-    return this.callTool("supply_tokens", request, SupplyTokensResponseSchema);
+  async lendingSupply(request: SupplyTokensRequest): Promise<SupplyTokensResponse> {
+    return this.callTool("lendingSupply", request, SupplyTokensResponseSchema);
   }
 
-  async withdrawTokens(request: WithdrawTokensRequest): Promise<WithdrawTokensResponse> {
-    return this.callTool("withdraw_tokens", request, WithdrawTokensResponseSchema);
+  async lendingWithdraw(request: WithdrawTokensRequest): Promise<WithdrawTokensResponse> {
+    return this.callTool("lendingWithdraw", request, WithdrawTokensResponseSchema);
   }
 
   async supplyLiquidity(request: SupplyLiquidityRequest): Promise<SupplyLiquidityResponse> {
-    return this.callTool("supply_liquidity", request, SupplyLiquidityResponseSchema);
+    return this.callTool("supplyLiquidity", request, SupplyLiquidityResponseSchema);
   }
 
   async withdrawLiquidity(request: WithdrawLiquidityRequest): Promise<WithdrawLiquidityResponse> {
-    return this.callTool("withdraw_liquidity", request, WithdrawLiquidityResponseSchema);
+    return this.callTool("withdrawLiquidity", request, WithdrawLiquidityResponseSchema);
   }
 
   async getLiquidityPools(): Promise<GetLiquidityPoolsResponse> {
-    return this.callTool("get_liquidity_pools", {}, GetLiquidityPoolsResponseSchema);
+    return this.callTool("getLiquidityPools", {}, GetLiquidityPoolsResponseSchema);
   }
 
   async getProviderTrackingStatus(request: GetProviderTrackingStatusRequest): Promise<GetProviderTrackingStatusResponse> {
-    return this.callTool("get_provider_tracking_status", request, GetProviderTrackingStatusResponseSchema);
+    return this.callTool("getProviderTrackingStatus", request, GetProviderTrackingStatusResponseSchema);
   }
 
-  async getMarketData(request: GetMarketDataRequest): Promise<GetMarketDataResponse> {
-    return this.callTool("get_market_data", request, GetMarketDataResponseSchema);
+  async getTokenMarketData(request: GetMarketDataRequest): Promise<GetMarketDataResponse> {
+    return this.callTool("getTokenMarketData", request, GetMarketDataResponseSchema);
   }
 } 

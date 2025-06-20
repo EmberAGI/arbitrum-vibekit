@@ -22,4 +22,4 @@ export {
   BorrowRepaySupplyWithdrawSchema,
   GetUserPositionsSchema,
   AskEncyclopediaSchema,
-} from './schemas.js';
+} from 'ember-schemas';

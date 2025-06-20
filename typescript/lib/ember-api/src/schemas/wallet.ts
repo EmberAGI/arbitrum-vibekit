@@ -2,26 +2,19 @@ import { z } from "zod";
 import { BalanceSchema, TokenSchema } from "./core.js";
 import { LendingPositionSchema } from "./lending.js";
 
-export const WalletPositionSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("lending"),
-    lendingPosition: LendingPositionSchema,
-  }),
-]);
-export type WalletPosition = z.infer<typeof WalletPositionSchema>;
-
-export const GetWalletPositionsRequestSchema = z.object({
+export const GetWalletLendingPositionsRequestSchema = z.object({
   walletAddress: z.string(),
 });
-export type GetWalletPositionsRequest = z.infer<
-  typeof GetWalletPositionsRequestSchema
+export type GetWalletLendingPositionsRequest = z.infer<
+  typeof GetWalletLendingPositionsRequestSchema
 >;
 
-export const GetWalletPositionsResponseSchema = z.object({
-  positions: z.array(WalletPositionSchema),
+export const GetWalletLendingPositionsResponseSchema = z.object({
+  positions: z.array(LendingPositionSchema),
 });
-export type GetWalletPositionsResponse = z.infer<
-  typeof GetWalletPositionsResponseSchema
+
+export type GetWalletLendingPositionsResponse = z.infer<
+  typeof GetWalletLendingPositionsResponseSchema
 >;
 
 export const GetWalletBalancesRequestSchema = z.object({

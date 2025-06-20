@@ -3,7 +3,7 @@ import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import type { Task, Message, DataPart } from '@google-a2a/types/src/types.js';
 import { TaskState } from '@google-a2a/types/src/types.js';
 import type { LendingAgentContext } from '../agent.js';
-import { BorrowRepaySupplyWithdrawSchema, ZodRepayResponseSchema } from './schemas.js';
+import { BorrowRepaySupplyWithdrawSchema, RepayResponseSchema } from 'ember-schemas';
 import type { LendingTransactionArtifact, LendingPreview, TokenInfo } from './types.js';
 import { createTaskId, findTokenInfo } from './utils.js';
 
@@ -80,7 +80,7 @@ export const repayBase: VibkitToolDefinition<
           });
 
           // Parse and validate the MCP response
-          const repayResp = parseMcpToolResponsePayload(toolResult, ZodRepayResponseSchema);
+          const repayResp = parseMcpToolResponsePayload(toolResult, RepayResponseSchema);
           const { transactions } = repayResp;
 
           // Build artifact

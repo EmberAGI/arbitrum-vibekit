@@ -21,7 +21,7 @@ import {
   SupplyLiquiditySchema,
   WithdrawLiquiditySchema,
   GetLiquidityPoolsSchema,
-  GetUserLiquidityPositionsSchema,
+  GetWalletLiquidityPositionsSchema,
 } from 'ember-schemas';
 import { type Address } from 'viem';
 import { z } from 'zod';
@@ -29,7 +29,7 @@ import {
   handleSupplyLiquidity,
   handleWithdrawLiquidity,
   handleGetLiquidityPools,
-  handleGetUserLiquidityPositions,
+  handleGetWalletLiquidityPositions,
   type HandlerContext,
 } from './agentToolHandlers.js';
 
@@ -128,7 +128,7 @@ type LiquidityToolSet = {
   supplyLiquidity: Tool<SupplyLiquidityExtendedSchema, Task>;
   withdrawLiquidity: Tool<typeof WithdrawLiquiditySchema, Task>;
   getLiquidityPools: Tool<typeof GetLiquidityPoolsSchema, Task>;
-  getUserLiquidityPositions: Tool<typeof GetUserLiquidityPositionsSchema, Task>;
+  getUserLiquidityPositions: Tool<typeof GetWalletLiquidityPositionsSchema, Task>;
 };
 
 export class Agent {
@@ -334,8 +334,8 @@ Rules:
         }),
         getUserLiquidityPositions: tool({
           description: 'List your current liquidity positions.',
-          parameters: GetUserLiquidityPositionsSchema,
-          execute: async () => handleGetUserLiquidityPositions({}, this.getHandlerContext()),
+          parameters: GetWalletLiquidityPositionsSchema,
+          execute: async () => handleGetWalletLiquidityPositions({}, this.getHandlerContext()),
         }),
       };
       this.log('Toolset defined with liquidity tools.');

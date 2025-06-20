@@ -3,7 +3,7 @@ import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import type { Task, Message, DataPart } from '@google-a2a/types/src/types.js';
 import { TaskState } from '@google-a2a/types/src/types.js';
 import type { LendingAgentContext } from '../agent.js';
-import { GetUserPositionsSchema, ZodGetWalletPositionsResponseSchema } from './schemas.js';
+import { GetUserPositionsSchema, GetWalletLendingPositionsResponseSchema, type LendingPosition } from 'ember-schemas';
 import { createTaskId } from './utils.js';
 
 export const getUserPositionsBase: VibkitToolDefinition<
@@ -30,7 +30,7 @@ export const getUserPositionsBase: VibkitToolDefinition<
       // Parse and validate the MCP response
       const validatedPositions = parseMcpToolResponsePayload(
         rawResult,
-        ZodGetWalletPositionsResponseSchema
+        GetWalletLendingPositionsResponseSchema
       );
 
       return {

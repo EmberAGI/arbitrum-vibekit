@@ -83,18 +83,18 @@ export type WithdrawLiquidityResponse = z.infer<
   typeof WithdrawLiquidityResponseSchema
 >;
 
-export const GetUserLiquidityPositionsRequestSchema = z.object({
+export const GetWalletLiquidityPositionsRequestSchema = z.object({
   supplierAddress: z.string(),
 });
-export type GetUserLiquidityPositionsRequest = z.infer<
-  typeof GetUserLiquidityPositionsRequestSchema
+export type GetWalletLiquidityPositionsRequest = z.infer<
+  typeof GetWalletLiquidityPositionsRequestSchema
 >;
 
-export const GetUserLiquidityPositionsResponseSchema = z.object({
+export const GetWalletLiquidityPositionsResponseSchema = z.object({
   positions: z.array(LiquidityPositionSchema),
 });
-export type GetUserLiquidityPositionsResponse = z.infer<
-  typeof GetUserLiquidityPositionsResponseSchema
+export type GetWalletLiquidityPositionsResponse = z.infer<
+  typeof GetWalletLiquidityPositionsResponseSchema
 >;
 
 export const GetLiquidityPoolsResponseSchema = z.object({

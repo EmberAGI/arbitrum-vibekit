@@ -9,7 +9,7 @@ import {
   WithdrawResponseSchema,
   BorrowResponseSchema,
   RepayResponseSchema,
-  GetWalletPositionsResponseSchema,
+  GetWalletLendingPositionsResponseSchema,
   type TokenInfo,
   type LendingTransactionArtifact,
 } from 'ember-schemas';
@@ -572,7 +572,7 @@ export async function handleWithdraw(
   }
 }
 
-export async function handleGetUserPositions(
+export async function handleGetWalletLendingPositions(
   _params: Record<string, never>,
   context: HandlerContext
 ): Promise<Task> {
@@ -582,7 +582,7 @@ export async function handleGetUserPositions(
 
   try {
     const rawResult = await context.mcpClient.callTool({
-      name: 'getUserPositions',
+      name: 'getWalletLendingPositions',
       arguments: {
         userAddress: context.userAddress,
       },
@@ -592,7 +592,7 @@ export async function handleGetUserPositions(
 
     const validatedPositions = parseMcpToolResponsePayload(
       rawResult,
-      GetWalletPositionsResponseSchema
+      GetWalletLendingPositionsResponseSchema
     );
 
     return {

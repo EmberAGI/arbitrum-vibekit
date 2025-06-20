@@ -1,33 +1,32 @@
+import { fileURLToPath } from 'url';
+import path from 'path';
+import { createRequire } from 'module';
+import type { CoreMessage, LanguageModelV1, Tool } from 'ai';
+import { tool } from 'ai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { Task } from '@google-a2a/types/src/types.js';
 import { TaskState } from '@google-a2a/types/src/types.js';
 import { promises as fs } from 'fs';
-import { createRequire } from 'module';
-import path, { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
 import {
   generateText,
-  tool,
-  type Tool,
-  type CoreMessage,
   type CoreUserMessage,
   type CoreAssistantMessage,
   type StepResult,
-  type LanguageModelV1,
 } from 'ai';
 import {
   LendingGetCapabilitiesResponseSchema,
   McpTextWrapperSchema,
   BorrowRepaySupplyWithdrawSchema,
-  GetUserPositionsSchema,
+  GetWalletLendingPositionsSchema,
   LendingAskEncyclopediaSchema,
   type LendingGetCapabilitiesResponse,
   type McpTextWrapper,
   type TokenInfo,
   type UserReserve,
   UserReserveSchema,
-  type GetWalletPositionsResponse,
+  type LendingPosition,
+  type GetWalletLendingPositionsResponse,
 } from 'ember-schemas';
 import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
@@ -36,7 +35,7 @@ import {
   handleRepay,
   handleSupply,
   handleWithdraw,
-  handleGetUserPositions,
+  handleGetWalletLendingPositions,
   handleAskEncyclopedia,
   type HandlerContext,
 } from './agentToolHandlers.js';
@@ -66,7 +65,7 @@ type LendingToolSet = {
   repay: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
   supply: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
   withdraw: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
-  getUserPositions: Tool<typeof GetUserPositionsSchema, Task>;
+  getUserPositions: Tool<typeof GetWalletLendingPositionsSchema, Task>;
   askEncyclopedia: Tool<typeof LendingAskEncyclopediaSchema, Task>;
 };
 
@@ -223,11 +222,11 @@ export class Agent {
       }),
       getUserPositions: tool({
         description: 'Get a summary of your current lending and borrowing positions.',
-        parameters: GetUserPositionsSchema,
+        parameters: GetWalletLendingPositionsSchema,
         execute: async args => {
           console.error('Vercel AI SDK calling handler: getUserPositions', args);
           try {
-            return await handleGetUserPositions(args, this.getHandlerContext());
+            return await handleGetWalletLendingPositions(args, this.getHandlerContext());
           } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             logError(`Error during getUserPositions via toolSet: ${errorMessage}`);
@@ -632,9 +631,9 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
   private async _loadAaveDocumentation(): Promise<void> {
     const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    const docsPath = join(__dirname, '../encyclopedia');
-    const filePaths = [join(docsPath, 'aave-01.md'), join(docsPath, 'aave-02.md')];
+    const __dirname = path.dirname(__filename);
+    const docsPath = path.join(__dirname, '../encyclopedia');
+    const filePaths = [path.join(docsPath, 'aave-01.md'), path.join(docsPath, 'aave-02.md')];
     let combinedContent = '';
 
     console.error(`Loading Aave documentation from: ${docsPath}`);
@@ -658,40 +657,34 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
   /**
    * Extract positions data from response
    */
-  private extractPositionsData(response: Task): GetWalletPositionsResponse {
+  private extractPositionsData(response: Task): GetWalletLendingPositionsResponse {
     if (!response.artifacts) {
-      throw new Error(
-        `No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`
-      );
+      throw new Error(`No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`);
     }
 
     // Look for positions artifact (support both legacy and new names)
     for (const artifact of response.artifacts) {
       if (artifact.name === 'positions' || artifact.name === 'wallet-positions') {
-        for (const part of artifact.parts || []) {
+        for (const part of artifact.parts) {
           if (part.kind === 'data' && part.data?.positions) {
-            return part.data as GetWalletPositionsResponse;
+            return part.data as GetWalletLendingPositionsResponse;
           }
         }
       }
     }
 
-    throw new Error(
-      `No positions data found in artifacts. Response: ${JSON.stringify(response, null, 2)}`
-    );
+    throw new Error(`No positions data found in artifacts. Response: ${JSON.stringify(response, null, 2)}`);
   }
 
   /**
    * Finds the reserve information for a given token symbol or name within the positions response.
    */
   private getReserveForToken(
-    response: GetWalletPositionsResponse,
+    response: GetWalletLendingPositionsResponse,
     tokenNameOrSymbol: string
   ): UserReserve {
     for (const position of response.positions) {
-      if (!position.lendingPosition) continue;
-
-      for (const reserve of position.lendingPosition.userReserves) {
+      for (const reserve of position.userReserves) {
         const name = reserve.token!.name;
         const symbol = reserve.token!.symbol;
 
@@ -701,17 +694,13 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
           } catch (error) {
             console.error('Failed to parse UserReserve:', error);
             console.error('Reserve object that failed parsing:', reserve);
-            throw new Error(
-              `Failed to parse reserve data for token ${tokenNameOrSymbol}. Ensure the SDK response matches UserReserveSchema. Reserve: ${JSON.stringify(reserve, null, 2)}`
-            );
+            throw new Error(`Failed to parse reserve data for token ${tokenNameOrSymbol}. Ensure the SDK response matches UserReserveSchema. Reserve: ${JSON.stringify(reserve, null, 2)}`);
           }
         }
       }
     }
 
-    throw new Error(
-      `No reserve found for token ${tokenNameOrSymbol}. Response: ${JSON.stringify(response, null, 2)}`
-    );
+    throw new Error(`No reserve found for token ${tokenNameOrSymbol}. Response: ${JSON.stringify(response, null, 2)}`);
   }
 
   /**
