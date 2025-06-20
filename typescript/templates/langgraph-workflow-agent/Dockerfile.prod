@@ -1,0 +1,82 @@
+# Build stage - Context should be the typescript/ directory
+FROM node:20-slim AS builder
+
+WORKDIR /app
+
+# Install pnpm globally
+RUN npm install -g pnpm@10.7.0 typescript@5.8.3
+
+# ------------------------------
+# 1. Copy lockfile & workspace config that affect dependency graph cache
+# ------------------------------
+COPY pnpm-lock.yaml* pnpm-workspace.yaml .npmrc ./
+# Copy root package.json for pnpm workspace
+COPY package.json ./
+# Copy base TS configuration so that tsconfig.base.json can be resolved
+COPY tsconfig.base.json ./
+
+# ------------------------------
+# 2. Copy all workspace package.json files (to maximise Docker cache)
+# ------------------------------
+COPY lib/ lib/
+COPY templates/langgraph-workflow-agent/package.json ./templates/langgraph-workflow-agent/
+
+# ------------------------------
+# 3. Install deps based on the copied package.json set. Skip lifecycle scripts for now
+#    because source files are not yet in the build context (they are copied in step 4).
+#    This keeps the layer cache-friendly while avoiding prepare/postinstall failures.
+# ------------------------------
+RUN pnpm install --prefer-frozen-lockfile
+
+# ------------------------------
+# 4. Now copy the rest of the source code
+# ------------------------------
+COPY . .
+
+# ------------------------------
+# 5. Build every workspace package that provides a build script (recursive build)
+# ------------------------------
+RUN pnpm --filter langgraph-workflow-agent... build
+
+# Production stage
+FROM node:20-slim AS production
+
+# Copy pnpm config
+COPY --from=builder /app/.npmrc ./
+
+# Create a non-root user
+RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd -r ember && useradd -r -g ember ember
+
+WORKDIR /app
+
+# Install pnpm globally
+RUN npm install -g --prefer-frozen-lockfile -y pnpm@10.7.0
+
+# Copy only what we need from the builder stage
+COPY --from=builder /app/templates/langgraph-workflow-agent/dist /app/templates/langgraph-workflow-agent/dist
+COPY --from=builder /app/templates/langgraph-workflow-agent/package.json /app/templates/langgraph-workflow-agent/
+COPY --from=builder /app/templates/langgraph-workflow-agent/node_modules /app/templates/langgraph-workflow-agent/node_modules
+COPY --from=builder /app/lib /app/lib
+COPY --from=builder /app/node_modules /app/node_modules
+COPY --from=builder /app/node_modules/.pnpm /app/node_modules/.pnpm
+
+# Set the working directory for the final image
+WORKDIR /app/templates/langgraph-workflow-agent/dist
+
+# Change ownership to non-root user
+RUN chown -R ember:ember /app
+
+# Switch to non-root user
+USER ember
+
+# Set the port for the agent
+ENV PORT=3009
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start the LangGraph workflow agent (path is relative to the WORKDIR set above)
+CMD ["node", "index.js"] 
