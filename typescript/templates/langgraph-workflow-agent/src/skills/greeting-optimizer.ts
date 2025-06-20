@@ -14,7 +14,7 @@ export const greetingOptimizerSkill = defineSkill({
   description:
     'Optimizes greetings to be more friendly and engaging using an evaluator-optimizer workflow',
   tags: ['greeting', 'optimization', 'langgraph', 'workflow'],
-  examples: ['hello', 'hi', 'hey there', 'good morning'],
+  examples: ['hello', 'hi', 'yo', 'good morning'],
   inputSchema,
   tools: [optimizeGreetingTool], // Single tool that runs the entire workflow
 });
