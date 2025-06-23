@@ -1,19 +1,38 @@
-import { Agent, createProviderSelector } from 'arbitrum-vibekit-core';
+import { Agent, createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
 import { greetingOptimizerSkill } from './skills/greeting-optimizer.js';
 import dotenv from 'dotenv';
 
 // Load environment variables
 dotenv.config();
 
-// Create provider selector for model access
+// Initialize provider selector with all supported API keys
 const providers = createProviderSelector({
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  xaiApiKey: process.env.XAI_API_KEY,
+  hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
 });
 
-if (!providers.openrouter) {
-  console.error('OpenRouter API key is required. Set OPENROUTER_API_KEY environment variable.');
+// Determine available providers
+const availableProviders = getAvailableProviders(providers);
+
+if (availableProviders.length === 0) {
+  console.error('No AI providers configured. Set at least one provider API key.');
   process.exit(1);
 }
+
+// Choose provider based on env or fallback
+const preferredProvider = process.env.AI_PROVIDER || availableProviders[0]!;
+const selectedProvider = providers[preferredProvider as keyof typeof providers];
+
+if (!selectedProvider) {
+  console.error(
+    `Preferred provider '${preferredProvider}' not available. Available providers: ${availableProviders.join(', ')}`
+  );
+  process.exit(1);
+}
+
+const modelOverride = process.env.AI_MODEL;
 
 // Agent configuration
 const agentConfig = {
@@ -35,13 +54,21 @@ const agentConfig = {
 // Create the agent with LLM configuration
 const agent = Agent.create(agentConfig, {
   llm: {
-    model: providers.openrouter!('openai/gpt-4o'),
+    model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
   },
 });
 
 // Start the agent with context provider for the model
 async function main() {
-  const port = process.env.PORT ? parseInt(process.env.PORT) : 41241;
+  const portStr = process.env.PORT || '41241';
+  const port = parseInt(portStr, 10);
+
+  if (isNaN(port) || port < 1 || port > 65535) {
+    console.error(
+      `Invalid PORT value: "${process.env.PORT}". Must be a number between 1 and 65535.`
+    );
+    process.exit(1);
+  }
 
   console.log('Starting LangGraph Workflow Agent...');
 
@@ -50,7 +77,7 @@ async function main() {
     await agent.start(port, async () => {
       // Return context with the model
       return {
-        model: providers.openrouter!('openai/gpt-4o'),
+        model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
       };
     });
 
@@ -68,21 +95,16 @@ async function main() {
   }
 }
 
-// Handle graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('\n🛑 Shutting down agent...');
+// Graceful shutdown
+const shutdown = async (signal: string) => {
+  console.log(`\n🛑 Received ${signal}. Shutting down agent...`);
   await agent.stop();
   process.exit(0);
-});
+};
 
-process.on('SIGTERM', async () => {
-  console.log('\n🛑 Shutting down agent...');
-  await agent.stop();
-  process.exit(0);
+['SIGINT', 'SIGTERM'].forEach(sig => {
+  process.on(sig, () => shutdown(sig));
 });
 
 // Run the main function
-main().catch(error => {
-  console.error('Fatal error:', error);
-  process.exit(1);
-});
+main();

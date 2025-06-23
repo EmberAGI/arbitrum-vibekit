@@ -2,7 +2,7 @@ import { createRequire } from 'module';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
 import { type Task } from 'a2a-samples-js';
 import {
   generateText,
@@ -30,9 +30,43 @@ import { z } from 'zod';
 import { type HandlerContext, handleSwapTokens } from './agentToolHandlers.js';
 import { logError } from './utils.js';
 
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
+// Initialize AI provider selector using environment variables for flexibility
+const providerSelector = createProviderSelector({
+  openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  xaiApiKey: process.env.XAI_API_KEY,
+  hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
 });
+
+// Get available providers
+const availableProviders = getAvailableProviders(providerSelector);
+
+if (availableProviders.length === 0) {
+  throw new Error(
+    'No AI providers configured. Please set at least one of: OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or HYPERBOLIC_API_KEY'
+  );
+}
+
+// Select provider based on preference or availability
+const preferredProvider = process.env.AI_PROVIDER || availableProviders[0];
+const selectedProvider = providerSelector[preferredProvider as keyof typeof providerSelector];
+
+if (!selectedProvider) {
+  throw new Error(
+    `Preferred provider '${preferredProvider}' is not available. Available providers: ${availableProviders.join(', ')}`
+  );
+}
+
+// Log which provider is being used
+console.log(
+  `Using AI provider: ${preferredProvider} (available: ${availableProviders.join(', ')})`
+);
+
+// Model can be specified via environment variable
+const modelOverride = process.env.AI_MODEL;
+if (modelOverride) {
+  console.log(`Using model: ${modelOverride}`);
+}
 
 type YieldToolSet = {
   listMarkets: Tool<z.ZodObject<Record<string, never>>, Awaited<Task>>;
@@ -124,10 +158,6 @@ export class Agent {
       { name: 'PendleAgent', version: '1.0.0' },
       { capabilities: { tools: {}, resources: {}, prompts: {} } }
     );
-
-    if (!process.env.OPENROUTER_API_KEY) {
-      throw new Error('OPENROUTER_API_KEY not set!');
-    }
   }
 
   async log(...args: unknown[]) {
@@ -537,7 +567,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
-        model: openrouter('google/gemini-2.5-flash-preview'),
+        model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
         messages: this.conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,

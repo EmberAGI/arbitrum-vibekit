@@ -21,7 +21,7 @@ The lending agent is automatically started when the frontend spins up. To start 
 - [Node.js 22+](https://nodejs.org/)
 - [pnpm](https://pnpm.io/) (npm install -g pnpm)
 - QuickNode API access for blockchain interactions
-- OpenRouter API key for LLM access
+- At least one AI provider API key (OpenRouter, OpenAI, Grok/xAI, or Hyperbolic)
 
 ### Set Up Your Environment
 
@@ -68,6 +68,41 @@ Or with Docker Compose:
 ```bash
 pnpm docker:compose:up
 ```
+
+### AI Provider Setup
+
+This agent supports multiple AI providers. Configure at least one by setting the appropriate environment variable:
+
+```bash
+# Option 1: OpenRouter (supports many models)
+OPENROUTER_API_KEY=your-openrouter-api-key
+
+# Option 2: OpenAI
+OPENAI_API_KEY=your-openai-api-key
+
+# Option 3: Grok (xAI)
+XAI_API_KEY=your-xai-api-key
+
+# Option 4: Hyperbolic
+HYPERBOLIC_API_KEY=your-hyperbolic-api-key
+```
+
+When multiple providers are configured, you can specify which one to use:
+
+```bash
+# Optional: Choose provider (defaults to first available)
+AI_PROVIDER=openrouter  # openrouter | openai | grok | hyperbolic
+
+# Optional: Specify model (defaults to provider-specific model)
+AI_MODEL=google/gemini-2.5-flash
+```
+
+Default models by provider:
+
+- OpenRouter: `google/gemini-2.5-flash`
+- OpenAI: `gpt-4o`
+- Grok: `grok-3`
+- Hyperbolic: `meta-llama/Llama-3.3-70B-Instruct`
 
 ## Agent Capabilities
 

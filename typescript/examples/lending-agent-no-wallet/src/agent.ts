@@ -39,17 +39,42 @@ import {
   handleAskEncyclopedia,
   type HandlerContext,
 } from './agentToolHandlers.js';
-import { createProviderSelector } from 'arbitrum-vibekit-core';
+import { createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const CACHE_FILE_PATH = path.join(__dirname, '.cache', 'lending_capabilities.json');
 
-const providers = createProviderSelector({
+// Initialize AI provider selector using environment variables for flexibility
+const providerSelector = createProviderSelector({
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  xaiApiKey: process.env.XAI_API_KEY,
+  hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
 });
 
-const model = providers.openrouter!('google/gemini-2.5-flash-preview');
+// Determine which providers are currently configured (based on provided API keys)
+const availableProviders = getAvailableProviders(providerSelector);
+
+if (availableProviders.length === 0) {
+  throw new Error(
+    'No AI providers configured. Please set at least one of: OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or HYPERBOLIC_API_KEY'
+  );
+}
+
+// Allow users to specify preferred provider via AI_PROVIDER env var; otherwise use first available
+const preferredProvider = process.env.AI_PROVIDER || availableProviders[0];
+// Retrieve the provider factory
+const selectedProvider = providerSelector[preferredProvider as keyof typeof providerSelector];
+
+if (!selectedProvider) {
+  throw new Error(
+    `Preferred provider "${preferredProvider}" is not available. Available providers: ${availableProviders.join(', ')}`
+  );
+}
+
+// Optionally override model via AI_MODEL env var
+const modelOverride = process.env.AI_MODEL;
 
 function logError(...args: unknown[]) {
   console.error(...args);
@@ -119,16 +144,10 @@ export class Agent {
   public conversationHistory: CoreMessage[] = [];
   private userAddress?: string;
   private aaveContextContent: string = '';
-  private model: LanguageModelV1;
 
   constructor(quicknodeSubdomain: string, quicknodeApiKey: string) {
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
-
-    if (!providers.openrouter) {
-      throw new Error('OPENROUTER_API_KEY not set!');
-    }
-    this.model = model;
   }
 
   async init(): Promise<void> {
@@ -529,7 +548,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
     try {
       console.error('Calling generateText with Vercel AI SDK...');
       const { text, toolResults, finishReason, response } = await generateText({
-        model: this.model,
+        model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
         system: this.conversationHistory.find(m => m.role === 'system')?.content as string,
         messages: this.conversationHistory.filter(m => m.role !== 'system') as (
           | CoreUserMessage

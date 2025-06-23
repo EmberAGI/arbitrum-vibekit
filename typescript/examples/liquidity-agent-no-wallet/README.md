@@ -26,6 +26,41 @@ This directory provides a reference implementation of a liquidity management age
 
    Contains handler functions for MCP tools and Validates tool output before passing it to the agent for on-chain execution.
 
+## AI Provider Setup
+
+This agent supports multiple AI providers. Configure at least one by setting the appropriate environment variable:
+
+```bash
+# Option 1: OpenRouter (supports many models)
+OPENROUTER_API_KEY=your-openrouter-api-key
+
+# Option 2: OpenAI
+OPENAI_API_KEY=your-openai-api-key
+
+# Option 3: Grok (xAI)
+XAI_API_KEY=your-xai-api-key
+
+# Option 4: Hyperbolic
+HYPERBOLIC_API_KEY=your-hyperbolic-api-key
+```
+
+When multiple providers are configured, you can specify which one to use:
+
+```bash
+# Optional: Choose provider (defaults to first available)
+AI_PROVIDER=openrouter  # openrouter | openai | grok | hyperbolic
+
+# Optional: Specify model (defaults to provider-specific model)
+AI_MODEL=google/gemini-2.5-flash
+```
+
+Default models by provider:
+
+- OpenRouter: `google/gemini-2.5-flash`
+- OpenAI: `gpt-4o`
+- Grok: `grok-3`
+- Hyperbolic: `meta-llama/Llama-3.3-70B-Instruct`
+
 ## Example Capabilities
 
 Below are some example user inputs that showcase the liquidity agent's capabilities:

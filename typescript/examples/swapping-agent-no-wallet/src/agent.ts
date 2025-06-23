@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
 import {
   generateText,
   tool,
@@ -32,9 +32,37 @@ import {
   SwapTokensSchema,
 } from 'ember-schemas';
 
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
+const providerSelector = createProviderSelector({
+  openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  xaiApiKey: process.env.XAI_API_KEY,
+  hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
 });
+
+const availableProviders = getAvailableProviders(providerSelector);
+
+if (availableProviders.length === 0) {
+  throw new Error(
+    'No AI providers configured. Please set at least one provider API key (OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or HYPERBOLIC_API_KEY).'
+  );
+}
+
+const preferredProvider = process.env.AI_PROVIDER || availableProviders[0]!;
+
+const selectedProvider = providerSelector[preferredProvider as keyof typeof providerSelector];
+
+if (!selectedProvider) {
+  throw new Error(
+    `Preferred provider '${preferredProvider}' is not available. Available providers: ${availableProviders.join(', ')}`
+  );
+}
+
+const modelOverride = process.env.AI_MODEL;
+
+console.log(
+  `Swapping Agent using provider: ${preferredProvider}` +
+    (modelOverride ? ` (model: ${modelOverride})` : '')
+);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -114,9 +142,7 @@ export class Agent {
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
 
-    if (!process.env.OPENROUTER_API_KEY) {
-      throw new Error('OPENROUTER_API_KEY not set!');
-    }
+    // provider availability validated at module load time.
   }
 
   async log(...args: unknown[]) {
@@ -366,7 +392,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
-        model: openrouter('google/gemini-2.5-flash-preview'),
+        model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
         messages: this.conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,

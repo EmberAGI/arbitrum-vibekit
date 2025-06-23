@@ -10,7 +10,7 @@ import {
 } from 'ai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
 import type { Task } from 'a2a-samples-js';
 import { createRequire } from 'module';
 import * as chains from 'viem/chains';
@@ -31,10 +31,6 @@ import {
   handleGetUserLiquidityPositions,
   type HandlerContext,
 } from './agentToolHandlers.js';
-
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
-});
 
 function logError(...args: unknown[]) {
   console.error(...args);
@@ -130,6 +126,38 @@ type LiquidityToolSet = {
   getUserLiquidityPositions: Tool<typeof GetUserLiquidityPositionsSchema, Task>;
 };
 
+const providerSelector = createProviderSelector({
+  openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  xaiApiKey: process.env.XAI_API_KEY,
+  hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
+});
+
+const availableProviders = getAvailableProviders(providerSelector);
+
+if (availableProviders.length === 0) {
+  throw new Error(
+    'No AI providers configured. Please set at least one of: OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or HYPERBOLIC_API_KEY.'
+  );
+}
+
+const preferredProvider = process.env.AI_PROVIDER || availableProviders[0]!;
+
+const selectedProvider = providerSelector[preferredProvider as keyof typeof providerSelector];
+
+if (!selectedProvider) {
+  throw new Error(
+    `Preferred provider '${preferredProvider}' is not available. Available providers: ${availableProviders.join(', ')}`
+  );
+}
+
+const modelOverride = process.env.AI_MODEL;
+
+console.log(
+  `Using AI provider: ${preferredProvider} (available: ${availableProviders.join(', ')})` +
+    (modelOverride ? ` with model: ${modelOverride}` : '')
+);
+
 export class Agent {
   private userAddress: Address | undefined;
   public conversationHistory: CoreMessage[] = [];
@@ -142,9 +170,6 @@ export class Agent {
   private positions: LiquidityPosition[] = [];
 
   constructor(quicknodeSubdomain: string, quicknodeApiKey: string) {
-    if (!process.env.OPENROUTER_API_KEY) {
-      throw new Error('OPENROUTER_API_KEY not set!');
-    }
     if (!quicknodeSubdomain) {
       throw new Error('quicknodeSubdomain is required!');
     }
@@ -375,7 +400,7 @@ Rules:
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
-        model: openrouter('google/gemini-2.5-flash-preview'),
+        model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
         messages: this.conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,
