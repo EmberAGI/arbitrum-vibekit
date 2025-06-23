@@ -258,10 +258,10 @@ export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
 ```
 
 > [!NOTE]  
->  If you have already started the web app, make sure to stop it and rebuild it to reflect the changes you made:
+>  If you have already started the web app, make sure to stop it, delete the cash, and rebuild the app to reflect your changes:
 >
 > ```bash
-> docker compose down && docker compose up --build
+> docker compose down && docker volume rm typescript_db_data && docker compose build web --no-cache && docker compose up
 > ```
 
 This configuration allows the frontend to dynamically discover, list, and connect to the various agents you set up.
