@@ -45,12 +45,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const CACHE_FILE_PATH = path.join(__dirname, '.cache', 'lending_capabilities.json');
 
-const providers = createProviderSelector({
-  openRouterApiKey: process.env.OPENROUTER_API_KEY,
-});
-
-const model = providers.openrouter!('google/gemini-2.5-flash-preview');
-
 function logError(...args: unknown[]) {
   console.error(...args);
 }
@@ -125,10 +119,15 @@ export class Agent {
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
 
+    // Create providers with environment variables
+    const providers = createProviderSelector({
+      openRouterApiKey: process.env.OPENROUTER_API_KEY,
+    });
+
     if (!providers.openrouter) {
       throw new Error('OPENROUTER_API_KEY not set!');
     }
-    this.model = model;
+    this.model = providers.openrouter('google/gemini-2.5-flash-preview');
   }
 
   async init(): Promise<void> {
