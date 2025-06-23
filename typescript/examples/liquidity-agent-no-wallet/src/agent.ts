@@ -234,6 +234,16 @@ export class Agent {
     };
   }
 
+  async start() {
+    await this.init();
+  }
+
+  async stop(): Promise<void> {
+    if (this.mcpClient) {
+      await this.mcpClient.close();
+    }
+  }
+
   private setupMCPClient(): void {
     this.mcpClient = new Client({
       name: 'liquidity-agent-client',
@@ -356,28 +366,28 @@ Rules:
       const errorMessage = error instanceof Error ? error.message : String(error);
       logError(`Error during processUserInput: ${errorMessage}`);
 
-      return {
+            return {
         id: userAddress,
         contextId: `error-${Date.now()}`,
-        kind: 'task',
-        status: {
-          state: TaskState.Failed,
-          message: {
-            role: 'agent',
-            messageId: `msg-${Date.now()}`,
-            kind: 'message',
+              kind: 'task',
+              status: {
+                state: TaskState.Failed,
+                message: {
+                  role: 'agent',
+                  messageId: `msg-${Date.now()}`,
+                  kind: 'message',
             parts: [{ kind: 'text', text: `Error: ${errorMessage}` }],
-          },
-        },
-      };
-    }
-  }
+                },
+              },
+            };
+        }
+      }
 
   private getHandlerContext(): HandlerContext {
     if (!this.mcpClient) {
       throw new Error('MCP client not initialized');
     }
-    return {
+        return {
       mcpClient: this.mcpClient,
       userAddress: this.userAddress,
       quicknodeSubdomain: this.quicknodeSubdomain,
