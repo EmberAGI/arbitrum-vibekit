@@ -52,7 +52,7 @@ export const SupplyLiquidityRequestSchema = z.object({
   amount1: z.string(),
   fullRange: z.boolean().optional(),
   limitedRange: LimitedLiquidityProvisionRangeSchema.optional(),
-  supplierAddress: z.string(),
+  walletAddress: z.string(),
 });
 export type SupplyLiquidityRequest = z.infer<
   typeof SupplyLiquidityRequestSchema
@@ -69,7 +69,7 @@ export type SupplyLiquidityResponse = z.infer<
 export const WithdrawLiquidityRequestSchema = z.object({
   tokenId: z.string(),
   providerId: z.string(),
-  supplierAddress: z.string(),
+  walletAddress: z.string(),
 });
 export type WithdrawLiquidityRequest = z.infer<
   typeof WithdrawLiquidityRequestSchema
@@ -84,7 +84,7 @@ export type WithdrawLiquidityResponse = z.infer<
 >;
 
 export const GetWalletLiquidityPositionsRequestSchema = z.object({
-  supplierAddress: z.string(),
+  walletAddress: z.string(),
 });
 export type GetWalletLiquidityPositionsRequest = z.infer<
   typeof GetWalletLiquidityPositionsRequestSchema

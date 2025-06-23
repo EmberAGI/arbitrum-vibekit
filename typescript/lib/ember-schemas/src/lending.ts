@@ -58,7 +58,7 @@ export type GetWalletLendingPositionsResponse = z.infer<typeof GetWalletLendingP
 export const SupplyResponseSchema = z.object({
   tokenUid: TokenIdentifierSchema,
   amount: z.string(),
-  supplierWalletAddress: z.string(),
+  walletAddress: z.string(),
   transactions: z.array(TransactionPlanSchema),
   chainId: z.string(),
 });
@@ -68,7 +68,7 @@ export type SupplyResponse = z.infer<typeof SupplyResponseSchema>;
 export const WithdrawResponseSchema = z.object({
   tokenUid: TokenIdentifierSchema,
   amount: z.string(),
-  lenderWalletAddress: z.string(),
+  walletAddress: z.string(),
   transactions: z.array(TransactionPlanSchema),
   chainId: z.string(),
 });
@@ -87,7 +87,7 @@ export type BorrowResponse = z.infer<typeof BorrowResponseSchema>;
 export const RepayResponseSchema = z.object({
   tokenUid: TokenIdentifierSchema,
   amount: z.string(),
-  borrowerWalletAddress: z.string(),
+  walletAddress: z.string(),
   transactions: z.array(TransactionPlanSchema),
   chainId: z.string(),
 });
@@ -133,18 +133,6 @@ export const LendingGetCapabilitiesResponseSchema = z.object({
   capabilities: z.array(LendingAgentCapabilitySchema),
 });
 export type LendingGetCapabilitiesResponse = z.infer<typeof LendingGetCapabilitiesResponseSchema>;
-
-export const McpTextWrapperSchema = z.object({
-  content: z
-    .array(
-      z.object({
-        type: z.literal('text'),
-        text: z.string(),
-      })
-    )
-    .min(1),
-});
-export type McpTextWrapper = z.infer<typeof McpTextWrapperSchema>;
 
 //
 // Agent Tool Schemas

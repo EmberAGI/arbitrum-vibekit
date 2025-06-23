@@ -113,12 +113,14 @@ export async function handleBorrow(
 
       try {
         const rawResult = await context.mcpClient.callTool({
-          name: 'borrow',
+          name: 'lendingBorrow',
           arguments: {
-            tokenAddress: tokenDetail.address,
-            tokenChainId: tokenDetail.chainId,
+            tokenUid: {
+              chainId: tokenDetail.chainId,
+              address: tokenDetail.address,
+            },
             amount,
-            userAddress: context.userAddress,
+            walletAddress: context.userAddress,
           },
         });
 
@@ -245,12 +247,14 @@ export async function handleRepay(
 
       try {
         const rawResult = await context.mcpClient.callTool({
-          name: 'repay',
+          name: 'lendingRepay',
           arguments: {
-            tokenAddress: tokenDetail.address,
-            tokenChainId: tokenDetail.chainId,
+            tokenUid: {
+              chainId: tokenDetail.chainId,
+              address: tokenDetail.address,
+            },
             amount,
-            userAddress: context.userAddress,
+            walletAddress: context.userAddress,
           },
         });
 
@@ -375,12 +379,14 @@ export async function handleSupply(
 
       try {
         const rawResult = await context.mcpClient.callTool({
-          name: 'supply',
+          name: 'lendingSupply',
           arguments: {
-            tokenAddress: tokenDetail.address,
-            tokenChainId: tokenDetail.chainId,
+            tokenUid: {
+              chainId: tokenDetail.chainId,
+              address: tokenDetail.address,
+            },
             amount,
-            userAddress: context.userAddress,
+            walletAddress: context.userAddress,
           },
         });
 
@@ -505,12 +511,14 @@ export async function handleWithdraw(
 
       try {
         const rawResult = await context.mcpClient.callTool({
-          name: 'withdraw',
+          name: 'lendingWithdraw',
           arguments: {
-            tokenAddress: tokenDetail.address,
-            tokenChainId: tokenDetail.chainId,
+            tokenUid: {
+              chainId: tokenDetail.chainId,
+              address: tokenDetail.address,
+            },
             amount,
-            userAddress: context.userAddress,
+            walletAddress: context.userAddress,
           },
         });
 
@@ -584,7 +592,7 @@ export async function handleGetWalletLendingPositions(
     const rawResult = await context.mcpClient.callTool({
       name: 'getWalletLendingPositions',
       arguments: {
-        userAddress: context.userAddress,
+        walletAddress: context.userAddress,
       },
     });
 
