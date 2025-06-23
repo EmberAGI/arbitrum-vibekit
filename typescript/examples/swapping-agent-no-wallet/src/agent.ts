@@ -38,7 +38,7 @@ const openrouter = createOpenRouter({
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const CACHE_FILE_PATH = path.join(__dirname, '.cache', 'swap_capabilities.json');
+const CACHE_FILE_PATH = path.join(__dirname, '..', '.cache', 'swap_capabilities.json');
 
 function logError(...args: unknown[]) {
   console.error(...args);

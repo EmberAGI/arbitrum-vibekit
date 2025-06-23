@@ -1,2 +1,3 @@
 # Local dependencies copied for build
 mcp-tools/ 
+!.cache/
