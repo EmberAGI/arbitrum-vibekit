@@ -1,5 +1,5 @@
 import type { Task } from '@google-a2a/types/src/types.js';
-import { GetMarketDataResponseSchema, type GetMarketDataResponse } from 'ember-schemas';
+import { GetMarketDataResponseSchema, type GetMarketDataResponse } from 'ember-api';
 
 /**
  * Parse data from an agent's function call response

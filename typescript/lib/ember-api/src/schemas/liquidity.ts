@@ -9,6 +9,18 @@ export type LimitedLiquidityProvisionRange = z.infer<
   typeof LimitedLiquidityProvisionRangeSchema
 >;
 
+export const LiquidityProvisionRangeSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("full"),
+  }),
+  z.object({
+    type: z.literal("limited"),
+    minPrice: z.string(),
+    maxPrice: z.string(),
+  }),
+]);
+export type LiquidityProvisionRange = z.infer<typeof LiquidityProvisionRangeSchema>;
+
 export const LiquidityPositionRangeSchema = z.object({
   fromPrice: z.string(),
   toPrice: z.string(),
@@ -50,8 +62,7 @@ export const SupplyLiquidityRequestSchema = z.object({
   token1: TokenIdentifierSchema,
   amount0: z.string(),
   amount1: z.string(),
-  fullRange: z.boolean().optional(),
-  limitedRange: LimitedLiquidityProvisionRangeSchema.optional(),
+  range: LiquidityProvisionRangeSchema,
   walletAddress: z.string(),
 });
 export type SupplyLiquidityRequest = z.infer<

@@ -2,9 +2,8 @@
  * Lending-specific test utilities
  */
 
-import type { GetWalletLendingPositionsResponse } from 'ember-api';
+import type { GetWalletLendingPositionsResponse, LendTokenDetail } from 'ember-api';
 import type { Task } from '@google-a2a/types/src/types.js';
-import { type UserReserve, UserReserveSchema } from 'ember-schemas';
 
 import type { TransactionPlan } from './transactions.js';
 
@@ -67,7 +66,7 @@ export function extractPositionsData(response: Task): GetWalletLendingPositionsR
 export function getReserveForToken(
   response: GetWalletLendingPositionsResponse,
   tokenNameOrSymbol: string
-): UserReserve {
+): LendTokenDetail {
   for (const position of response.positions) {
     for (const reserve of position.userReserves) {
       const name = reserve.token!.name;
@@ -75,11 +74,11 @@ export function getReserveForToken(
 
       if (name === tokenNameOrSymbol || symbol === tokenNameOrSymbol) {
         try {
-          return UserReserveSchema.parse(reserve);
+          return reserve;
         } catch (error) {
-          console.error('Failed to parse UserReserve:', error);
+          console.error('Failed to parse LendTokenDetail:', error);
           console.error('Reserve object that failed parsing:', reserve);
-          throw new Error(`Failed to parse reserve data for token ${tokenNameOrSymbol}. Ensure the SDK response matches UserReserveSchema. Reserve: ${JSON.stringify(reserve, null, 2)}`);
+          throw new Error(`Failed to parse reserve data for token ${tokenNameOrSymbol}. Reserve: ${JSON.stringify(reserve, null, 2)}`);
         }
       }
     }
@@ -97,7 +96,7 @@ export async function getTokenReserve(
   },
   userAddress: string,
   tokenName: string
-): Promise<UserReserve> {
+): Promise<LendTokenDetail> {
   const response = await agent.processUserInput('show my positions', userAddress);
   const positionsData = extractPositionsData(response);
   return getReserveForToken(positionsData, tokenName);

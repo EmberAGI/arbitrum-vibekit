@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { parseMcpToolResponse } from "ember-schemas";
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import type { z } from "zod";
 import {
   // Import response schemas for validation (as values)
@@ -128,7 +128,7 @@ export class EmberMcpClient implements EmberClient {
     });
 
     try {
-      return parseMcpToolResponse(result, responseSchema);
+      return parseMcpToolResponsePayload(result, responseSchema);
     } catch (error) {
       // Enhanced error message with formatted JSON
       const formattedError = `Tool call '${toolName}' failed: ${(error as Error).message}\n\nFull MCP response:\n${JSON.stringify(result, null, 2)}`;

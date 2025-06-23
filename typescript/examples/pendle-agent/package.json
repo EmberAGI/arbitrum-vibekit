@@ -30,7 +30,6 @@
     "arbitrum-vibekit-core": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "ember-mcp-tool-server": "workspace:*",
     "ember-schemas": "workspace:*",
     "express": "^4.21.2",
     "viem": "^2.26.3",

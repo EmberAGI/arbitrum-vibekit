@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.11.1",
-    "ember-schemas": "workspace:*",
+    "arbitrum-vibekit-core": "workspace:*",
     "zod": "^3.22.4"
   }
 } 

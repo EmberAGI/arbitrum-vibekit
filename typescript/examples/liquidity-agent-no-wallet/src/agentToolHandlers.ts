@@ -1,57 +1,62 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Task } from '@google-a2a/types/src/types.js';
-import { TaskState } from '@google-a2a/types/src/types.js';
+import { type Address } from 'viem';
+import { formatUnits, parseUnits, createPublicClient, http, PublicClient } from 'viem';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
-import { parseMcpToolResponsePayload, type TransactionArtifact } from 'arbitrum-vibekit-core';
-import {
-  GetLiquidityPoolsSchema,
-  GetWalletLiquidityPositionsSchema,
-  SupplyLiquiditySchema,
-  WithdrawLiquiditySchema,
-  GetWalletLiquidityPositionsResponseSchema,
-  TransactionPlanSchema,
-  type LiquidityPoolsArtifact,
-  type UserPositionsArtifact,
-  type TransactionPlan,
-} from 'ember-schemas';
-import {
-  parseUnits,
-  createPublicClient,
-  http,
-  type Address,
-  type PublicClient,
-  formatUnits,
-} from 'viem';
+
+import { Task, TaskState } from '@google-a2a/types/src/types.js';
+import { LiquidityPosition, LiquidityPair, getChainConfigById } from './agent.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { z } from 'zod';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 
-import type { LiquidityPair, LiquidityPosition } from './agent.js';
-import { getChainConfigById } from './agent.js';
+// Response schemas for MCP tools
+const GetLiquidityPoolsResponseSchema = z.object({
+  liquidityPools: z.array(z.object({
+    symbol0: z.string(),
+    symbol1: z.string(),
+    price: z.string(),
+    token0: z.object({
+      chainId: z.string(),
+      address: z.string(),
+    }),
+    token1: z.object({
+      chainId: z.string(),
+      address: z.string(),
+    }),
+  })),
+});
 
-export type TokenInfo = {
-  chainId: string;
-  address: string;
-  decimals: number;
-};
+const GetWalletLiquidityPositionsResponseSchema = z.object({
+  positions: z.array(z.any()), // Using any for now since we have the LiquidityPosition interface
+});
+
+const SupplyLiquidityResponseSchema = z.object({
+  transactions: z.array(z.any()),
+});
+
+const WithdrawLiquidityResponseSchema = z.object({
+  transactions: z.array(z.any()),
+});
 
 export interface HandlerContext {
   mcpClient: Client;
-  userAddress: Address | undefined;
-  log: (...args: unknown[]) => void;
-  getPairs: () => LiquidityPair[];
-  getPositions: () => LiquidityPosition[];
-  updatePositions: (positions: LiquidityPosition[]) => void;
+  userAddress: string | undefined;
   quicknodeSubdomain: string;
   quicknodeApiKey: string;
+  log: (...args: unknown[]) => void;
+  getPairs: () => LiquidityPair[];
+  updatePairs: (pairs: LiquidityPair[]) => void;
+  getPositions: () => LiquidityPosition[];
+  updatePositions: (positions: LiquidityPosition[]) => void;
 }
 
 function createTaskResult(
   id: string | undefined,
   state: TaskState,
-  message: string
+  message: string,
+  artifacts?: any[]
 ): Task {
-  // Simple version without artifacts
   return {
-    id: id || 'unknown',
+    id: id || 'liquidity-agent-task',
     contextId: `task-${Date.now()}`,
     kind: 'task',
     status: {
@@ -63,71 +68,50 @@ function createTaskResult(
         parts: [{ kind: 'text', text: message }],
       },
     },
+    artifacts: artifacts || [],
   };
 }
-
 export async function handleGetLiquidityPools(
-  _params: z.infer<typeof GetLiquidityPoolsSchema>,
+  _params: Record<string, never>,
   context: HandlerContext
 ): Promise<Task> {
   context.log('Handling getLiquidityPools...');
   try {
-    const pairs = context.getPairs();
+    const rawResult = await context.mcpClient.callTool({
+      name: 'getLiquidityPools',
+      arguments: {},
+    });
 
-    if (pairs.length === 0) {
-      // No liquidity pools available: return an empty artifact
-      return {
-        id: context.userAddress || 'liquidity-agent-task',
-        contextId: `pools-empty-${Date.now()}`,
-        kind: 'task',
-        status: {
-          state: TaskState.Completed,
-          message: {
-            role: 'agent',
-            messageId: `msg-${Date.now()}`,
-            kind: 'message',
-            parts: [{ kind: 'text', text: 'No liquidity pools available.' }],
-          },
-        },
-        artifacts: [
-          {
-            artifactId: `pools-empty-${Date.now()}`,
-            name: 'available-liquidity-pools',
-            parts: [{ kind: 'data', data: { pools: [] } as LiquidityPoolsArtifact }],
-          },
-        ],
-      };
+    const response = parseMcpToolResponsePayload(rawResult, GetLiquidityPoolsResponseSchema);
+    const liquidityPools = response.liquidityPools || [];
+    
+    // Update internal pairs state
+    const pairs: LiquidityPair[] = liquidityPools.map((pool: any) => ({
+      handle: `${pool.symbol0}/${pool.symbol1}`,
+      token0: {
+        chainId: pool.token0.chainId,
+        address: pool.token0.address,
+        symbol: pool.symbol0,
+      },
+      token1: {
+        chainId: pool.token1.chainId,
+        address: pool.token1.address,
+        symbol: pool.symbol1,
+      },
+    }));
+    
+    context.updatePairs(pairs);
+
+    if (liquidityPools.length === 0) {
+      return createTaskResult(context.userAddress, TaskState.Completed, 'No liquidity pools available.');
     }
 
     let responseText = 'Available Liquidity Pools:\n';
-    pairs.forEach(pair => {
-      responseText += `- ${pair.handle}\n`;
+    liquidityPools.forEach((pool: any) => {
+      responseText += `- ${pool.symbol0}/${pool.symbol1} (Price: ${pool.price})\n`;
     });
 
-    // Construct artifact directly in Task structure
-    const poolsArtifact: LiquidityPoolsArtifact = { pools: pairs };
-
-    return {
-      id: context.userAddress || 'liquidity-agent-task',
-      contextId: `pools-success-${Date.now()}`,
-      kind: 'task',
-      status: {
-        state: TaskState.Completed,
-        message: { 
-          role: 'agent', 
-          messageId: `msg-${Date.now()}`,
-          kind: 'message',
-          parts: [{ kind: 'text', text: responseText }] 
-        },
-      },
-      artifacts: [
-        {
-          artifactId: `pools-${Date.now()}`,
-          name: 'available-liquidity-pools',
-          parts: [{ kind: 'data', data: poolsArtifact }],
-        },
-      ],
-    };
+    return createTaskResult(context.userAddress, TaskState.Completed, responseText);
   } catch (error) {
     const errorMsg = `Error in handleGetLiquidityPools: ${error instanceof Error ? error.message : String(error)}`;
     context.log(errorMsg);
@@ -136,7 +120,7 @@ export async function handleGetLiquidityPools(
 }
 
 export async function handleGetWalletLiquidityPositions(
-  _params: z.infer<typeof GetWalletLiquidityPositionsSchema>,
+  _params: Record<string, never>,
   context: HandlerContext
 ): Promise<Task> {
   context.log('Handling getWalletLiquidityPositions...');
@@ -145,46 +129,20 @@ export async function handleGetWalletLiquidityPositions(
   }
 
   try {
-    const mcpArgs = { userAddress: context.userAddress };
-    // Explicitly cast arguments for callTool to satisfy linter
-    const mcpResponse = await context.mcpClient.callTool({
+    const rawResult = await context.mcpClient.callTool({
       name: 'getWalletLiquidityPositions',
-      arguments: mcpArgs,
+      arguments: {
+        walletAddress: context.userAddress,
+      },
     });
 
-    const validatedData = parseMcpToolResponsePayload(
-      mcpResponse,
-      GetWalletLiquidityPositionsResponseSchema
-    );
-
-    // Use the validatedData.positions array directly, as it matches the new schema
-    const positions = validatedData.positions;
+    const response = parseMcpToolResponsePayload(rawResult, GetWalletLiquidityPositionsResponseSchema);
+    const positions = response.positions || [];
     context.updatePositions(positions);
     context.log(`Updated internal state with ${positions.length} positions.`);
 
     if (positions.length === 0) {
-      // No liquidity positions found: return an empty artifact
-      return {
-        id: context.userAddress || 'liquidity-agent-task',
-        contextId: `positions-empty-${Date.now()}`,
-        kind: 'task',
-        status: {
-          state: TaskState.Completed,
-          message: {
-            role: 'agent',
-            messageId: `msg-${Date.now()}`,
-            kind: 'message',
-            parts: [{ kind: 'text', text: 'No liquidity positions found.' }],
-          },
-        },
-        artifacts: [
-          {
-            artifactId: `positions-empty-${Date.now()}`,
-            name: 'user-liquidity-positions',
-            parts: [{ kind: 'data', data: { positions: [] } as UserPositionsArtifact }],
-          },
-        ],
-      };
+      return createTaskResult(context.userAddress, TaskState.Completed, 'No liquidity positions found.');
     }
 
     let responseText = 'Your Liquidity Positions:\n\n';
@@ -197,33 +155,10 @@ export async function handleGetWalletLiquidityPositions(
         pos.positionRange
           ? pos.positionRange.fromPrice + ' to ' + pos.positionRange.toPrice
           : '0 to ∞'
-      }\n`;
+      }\n\n`;
     });
 
-    // Construct artifact
-    const positionsArtifact: UserPositionsArtifact = { positions };
-
-    return {
-      id: context.userAddress || 'liquidity-agent-task',
-      contextId: `positions-success-${Date.now()}`,
-      kind: 'task',
-      status: {
-        state: TaskState.Completed,
-        message: { 
-          role: 'agent', 
-          messageId: `msg-${Date.now()}`,
-          kind: 'message',
-          parts: [{ kind: 'text', text: responseText }] 
-        },
-      },
-      artifacts: [
-        {
-          artifactId: `positions-${Date.now()}`,
-          name: 'user-liquidity-positions',
-          parts: [{ kind: 'data', data: positionsArtifact }],
-        },
-      ],
-    };
+    return createTaskResult(context.userAddress, TaskState.Completed, responseText);
   } catch (error) {
     const errorMsg = `Error in handleGetWalletLiquidityPositions: ${error instanceof Error ? error.message : String(error)}`;
     context.log(errorMsg);
@@ -232,7 +167,13 @@ export async function handleGetWalletLiquidityPositions(
 }
 
 export async function handleSupplyLiquidity(
-  params: z.infer<typeof SupplyLiquiditySchema>,
+  params: {
+    pair: string;
+    amount0: string;
+    amount1: string;
+    priceFrom: string;
+    priceTo: string;
+  },
   context: HandlerContext
 ): Promise<Task> {
   context.log('Handling supplyLiquidity with params:', params);
@@ -243,7 +184,14 @@ export async function handleSupplyLiquidity(
 
   try {
     const pairs = context.getPairs();
-    const selectedPair = pairs.find(p => p.handle === params.pair);
+    let selectedPair = pairs.find(p => p.handle === params.pair);
+
+    // If pair not found in cache, try to fetch pools first
+    if (!selectedPair) {
+      await handleGetLiquidityPools({}, context);
+      const updatedPairs = context.getPairs();
+      selectedPair = updatedPairs.find(p => p.handle === params.pair);
+    }
 
     if (!selectedPair) {
       return createTaskResult(
@@ -253,14 +201,12 @@ export async function handleSupplyLiquidity(
       );
     }
 
-    // --- Fetch Decimals & Balance/Allowance Check Start ---
-    context.log(
-      `Fetching info and checking balances/allowances for user ${userAddress} for pair ${selectedPair.handle}`
-    );
+    // --- Basic Balance Check (Optional) ---
+    context.log(`Checking balances for user ${userAddress} for pair ${selectedPair.handle}`);
     const { token0, token1 } = selectedPair;
     const { quicknodeSubdomain, quicknodeApiKey } = context;
 
-    // Function to create client (avoids duplicated code)
+    // Function to create client
     const createClient = (chainId: string): PublicClient => {
       const chainConfig = getChainConfigById(chainId);
       const networkSegment = chainConfig.quicknodeSegment;
@@ -277,83 +223,37 @@ export async function handleSupplyLiquidity(
       });
     };
 
-    // Create clients for both token chains
-    let client0: PublicClient;
-    let client1: PublicClient;
     try {
-      client0 = createClient(token0.chainId);
-      client1 = token0.chainId === token1.chainId ? client0 : createClient(token1.chainId);
-      context.log(`Public clients created for chains ${token0.chainId} and ${token1.chainId}.`);
-    } catch (chainError) {
-      const errorMsg = `Network configuration error: ${(chainError as Error).message}`;
-      context.log(errorMsg);
-      return createTaskResult(userAddress, TaskState.Failed, errorMsg);
-    }
+      const client0 = createClient(token0.chainId);
+      const client1 = token0.chainId === token1.chainId ? client0 : createClient(token1.chainId);
 
-    // Fetch Decimals
-    let decimals0: number;
-    let decimals1: number;
-    try {
-      context.log(`Fetching decimals for ${token0.symbol || token0.address}...`);
-      decimals0 = (await client0.readContract({
+      // Get decimals
+      const decimals0 = (await client0.readContract({
         address: token0.address as Address,
         abi: Erc20Abi.abi,
         functionName: 'decimals',
         args: [],
       })) as number;
-      context.log(`Decimals for ${token0.symbol || token0.address}: ${decimals0}`);
 
-      context.log(`Fetching decimals for ${token1.symbol || token1.address}...`);
-      decimals1 =
-        token0.address === token1.address && token0.chainId === token1.chainId
-          ? decimals0 // Avoid refetching if same token/chain
-          : ((await client1.readContract({
-              address: token1.address as Address,
-              abi: Erc20Abi.abi,
-              functionName: 'decimals',
-              args: [],
-            })) as number);
-      context.log(`Decimals for ${token1.symbol || token1.address}: ${decimals1}`);
+      const decimals1 = token0.address === token1.address && token0.chainId === token1.chainId
+        ? decimals0
+        : ((await client1.readContract({
+            address: token1.address as Address,
+            abi: Erc20Abi.abi,
+            functionName: 'decimals',
+            args: [],
+          })) as number);
 
-      // Basic validation
-      if (typeof decimals0 !== 'number' || typeof decimals1 !== 'number') {
-        throw new Error('Failed to retrieve valid decimal numbers for tokens.');
-      }
-    } catch (fetchError) {
-      const errorMsg = `Could not fetch token decimals: ${(fetchError as Error).message}`;
-      context.log('Error:', errorMsg);
-      // Add which token failed if possible
-      return createTaskResult(userAddress, TaskState.Failed, errorMsg);
-    }
+      // Parse amounts and check balances
+      const amount0Atomic = parseUnits(params.amount0, decimals0);
+      const amount1Atomic = parseUnits(params.amount1, decimals1);
 
-    // Prepare amounts using fetched decimals
-    let amount0Atomic: bigint;
-    let amount1Atomic: bigint;
-    try {
-      amount0Atomic = parseUnits(params.amount0, decimals0);
-      amount1Atomic = parseUnits(params.amount1, decimals1);
-    } catch (parseError) {
-      const errorMsg = `Invalid amount format: ${(parseError as Error).message}`;
-      context.log(errorMsg);
-      return createTaskResult(userAddress, TaskState.Failed, errorMsg);
-    }
-
-    // Check balances using fetched decimals
-    try {
       const balance0 = (await client0.readContract({
         address: token0.address as Address,
         abi: Erc20Abi.abi,
         functionName: 'balanceOf',
         args: [userAddress],
       })) as bigint;
-      context.log(`Balance check ${token0.symbol}: Has ${balance0}, needs ${amount0Atomic}`);
-
-      if (balance0 < amount0Atomic) {
-        const formattedBalance = formatUnits(balance0, decimals0);
-        const errorMsg = `Insufficient ${token0.symbol || 'Token0'} balance. You need ${params.amount0} but only have ${formattedBalance}.`;
-        context.log(errorMsg);
-        return createTaskResult(userAddress, TaskState.Failed, errorMsg);
-      }
 
       const balance1 = (await client1.readContract({
         address: token1.address as Address,
@@ -361,66 +261,56 @@ export async function handleSupplyLiquidity(
         functionName: 'balanceOf',
         args: [userAddress],
       })) as bigint;
-      context.log(`Balance check ${token1.symbol}: Has ${balance1}, needs ${amount1Atomic}`);
+
+      if (balance0 < amount0Atomic) {
+        const formattedBalance = formatUnits(balance0, decimals0);
+        return createTaskResult(userAddress, TaskState.Failed, 
+          `Insufficient ${token0.symbol} balance. You need ${params.amount0} but only have ${formattedBalance}.`);
+      }
 
       if (balance1 < amount1Atomic) {
         const formattedBalance = formatUnits(balance1, decimals1);
-        const errorMsg = `Insufficient ${token1.symbol || 'Token1'} balance. You need ${params.amount1} but only have ${formattedBalance}.`;
-        context.log(errorMsg);
-        return createTaskResult(userAddress, TaskState.Failed, errorMsg);
+        return createTaskResult(userAddress, TaskState.Failed, 
+          `Insufficient ${token1.symbol} balance. You need ${params.amount1} but only have ${formattedBalance}.`);
       }
 
       context.log('Sufficient balances confirmed for both tokens.');
-    } catch (readError) {
-      const errorMsg = `Could not verify token balance due to a network error: ${(readError as Error).message}`;
-      context.log(`Warning: Failed to read token balance.`, readError);
-      return createTaskResult(userAddress, TaskState.Failed, errorMsg);
+    } catch (balanceError) {
+      context.log('Warning: Failed to check balances:', balanceError);
+      // Continue anyway - the onchain-actions will do the final validation
     }
-    // --- Balance Check End is implicitly here ---
 
-    const mcpArgs = {
-      token0Address: selectedPair.token0.address,
-      token0ChainId: selectedPair.token0.chainId,
-      token1Address: selectedPair.token1.address,
-      token1ChainId: selectedPair.token1.chainId,
+    // Call the MCP tool
+    const supplyRequest = {
+      token0: {
+        chainId: token0.chainId,
+        address: token0.address,
+      },
+      token1: {
+        chainId: token1.chainId,
+        address: token1.address,
+      },
       amount0: params.amount0,
       amount1: params.amount1,
-      priceFrom: params.priceFrom,
-      priceTo: params.priceTo,
-      userAddress: context.userAddress,
+      range: {
+        type: "limited",
+        minPrice: params.priceFrom,
+        maxPrice: params.priceTo,
+      },
+      walletAddress: userAddress,
     };
-    context.log('Calling supplyLiquidity MCP tool with args:', mcpArgs);
 
-    // Explicitly cast arguments for callTool
-    const mcpResponse = await context.mcpClient.callTool({
+    context.log('Calling supplyLiquidity with args:', supplyRequest);
+    const rawResult = await context.mcpClient.callTool({
       name: 'supplyLiquidity',
-      arguments: mcpArgs,
+      arguments: supplyRequest,
     });
 
-    const parsed = parseMcpToolResponsePayload(
-      mcpResponse,
-      z.object({
-        chainId: z.string(),
-        transactions: z.array(TransactionPlanSchema),
-      })
-    );
-    const txPlan: TransactionPlan[] = parsed.transactions;
+    const response = parseMcpToolResponsePayload(rawResult, SupplyLiquidityResponseSchema);
 
-    // --- Construct Artifact Start ---
-    const preview = {
-      action: 'supply',
-      pairHandle: selectedPair.handle,
-      token0Symbol: selectedPair.symbol0,
-      token0Amount: params.amount0,
-      token1Symbol: selectedPair.symbol1,
-      token1Amount: params.amount1,
-      priceFrom: params.priceFrom,
-      priceTo: params.priceTo,
-    };
-    const artifactContent: TransactionArtifact<typeof preview> = { txPlan, txPreview: preview };
-
+    // Create task response with transaction plan
     return {
-      id: context.userAddress || 'liquidity-agent-task',
+      id: userAddress,
       contextId: `supply-${Date.now()}`,
       kind: 'task',
       status: {
@@ -432,7 +322,7 @@ export async function handleSupplyLiquidity(
           parts: [
             {
               kind: 'text',
-              text: `Supply liquidity transaction plan prepared (${txPlan.length} txs). Please review and execute.`,
+              text: `Supply liquidity transaction plan prepared (${response.transactions?.length || 0} txs).`,
             },
           ],
         },
@@ -440,7 +330,7 @@ export async function handleSupplyLiquidity(
       artifacts: [{ 
         artifactId: `supply-transaction-${Date.now()}`,
         name: 'liquidity-transaction', 
-        parts: [{ kind: 'data', data: { ...artifactContent } }] 
+        parts: [{ kind: 'data', data: response }] 
       }],
     };
   } catch (error) {
@@ -451,7 +341,9 @@ export async function handleSupplyLiquidity(
 }
 
 export async function handleWithdrawLiquidity(
-  params: z.infer<typeof WithdrawLiquiditySchema>,
+  params: {
+    positionNumber: number;
+  },
   context: HandlerContext
 ): Promise<Task> {
   context.log('Handling withdrawLiquidity with params:', params);
@@ -460,7 +352,14 @@ export async function handleWithdrawLiquidity(
   }
 
   try {
-    const positions = context.getPositions();
+    let positions = context.getPositions();
+    
+    // If no positions in cache, fetch them first
+    if (positions.length === 0) {
+      await handleGetWalletLiquidityPositions({}, context);
+      positions = context.getPositions();
+    }
+
     const positionIndex = params.positionNumber - 1;
 
     if (positionIndex < 0 || positionIndex >= positions.length) {
@@ -470,6 +369,7 @@ export async function handleWithdrawLiquidity(
         `Invalid position number: ${params.positionNumber}. Please choose from 1 to ${positions.length}.`
       );
     }
+
     const selectedPosition = positions[positionIndex];
     if (!selectedPosition) {
       return createTaskResult(
@@ -479,44 +379,23 @@ export async function handleWithdrawLiquidity(
       );
     }
 
-    const mcpArgs = {
+    const withdrawRequest = {
       tokenId: selectedPosition.tokenId,
       providerId: selectedPosition.providerId,
-      userAddress: context.userAddress,
+      walletAddress: context.userAddress,
     };
-    context.log('Calling withdrawLiquidity MCP tool with args:', mcpArgs);
 
-    // Explicitly cast arguments for callTool
-    const mcpResponse = await context.mcpClient.callTool({
+    context.log('Calling withdrawLiquidity with args:', withdrawRequest);
+    const rawResult = await context.mcpClient.callTool({
       name: 'withdrawLiquidity',
-      arguments: mcpArgs,
+      arguments: withdrawRequest,
     });
 
-    // Parse without chainId first
-    const txPlan = parseMcpToolResponsePayload(
-      mcpResponse,
-      z.object({
-        chainId: z.string(),
-        transactions: z.array(TransactionPlanSchema),
-      })
-    ).transactions;
+    const response = parseMcpToolResponsePayload(rawResult, WithdrawLiquidityResponseSchema);
 
-    context.log('Transaction plan for withdrawLiquidity:', txPlan);
-
-    // --- Construct Artifact Start ---
-    const previewW = {
-      action: 'withdraw',
-      positionNumber: params.positionNumber,
-      pairHandle: selectedPosition.symbol0 + '/' + selectedPosition.symbol1,
-      token0Symbol: selectedPosition.symbol0,
-      token0Amount: selectedPosition.amount0,
-      token1Symbol: selectedPosition.symbol1,
-      token1Amount: selectedPosition.amount1,
-    };
-    const artifactContentW: TransactionArtifact<typeof previewW> = { txPlan, txPreview: previewW };
-
+    // Create task response with transaction plan
     return {
-      id: context.userAddress || 'liquidity-agent-task',
+      id: context.userAddress,
       contextId: `withdraw-${Date.now()}`,
       kind: 'task',
       status: {
@@ -528,7 +407,7 @@ export async function handleWithdrawLiquidity(
           parts: [
             {
               kind: 'text',
-              text: 'Withdraw liquidity transaction plan prepared. Please review and execute.',
+              text: `Withdraw liquidity transaction plan prepared (${response.transactions?.length || 0} txs).`,
             },
           ],
         },
@@ -536,7 +415,7 @@ export async function handleWithdrawLiquidity(
       artifacts: [{ 
         artifactId: `withdraw-transaction-${Date.now()}`,
         name: 'liquidity-transaction', 
-        parts: [{ kind: 'data', data: { ...artifactContentW } }] 
+        parts: [{ kind: 'data', data: response }] 
       }],
     };
   } catch (error) {
