@@ -27,6 +27,20 @@ services:
       - 3005:3005
     restart: unless-stopped
 
+  # langgraph-workflow-agent:
+  #   build:
+  #     context: ./
+  #     dockerfile: templates/langgraph-workflow-agent/Dockerfile
+  #   container_name: vibekit-langgraph-workflow-agent
+  #   env_file:
+  #     - path: .env
+  #       required: true
+  #     - path: templates/langgraph-workflow-agent/.env
+  #       required: false
+  #   ports:
+  #     - 3009:3009
+  #   restart: unless-stopped
+
   # quickstart-agent-template:
   #   build:
   #     context: ./

@@ -17,7 +17,7 @@
     "typescript": "^5.4.2"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.11.1",
+    "@modelcontextprotocol/sdk": "^1.13.1",
     "arbitrum-vibekit-core": "workspace:*",
     "zod": "^3.22.4"
   }

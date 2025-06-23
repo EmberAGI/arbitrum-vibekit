@@ -3,17 +3,17 @@ import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import type { Task, Message, DataPart } from '@google-a2a/types/src/types.js';
 import { TaskState } from '@google-a2a/types/src/types.js';
 import type { LendingAgentContext } from '../agent.js';
-import { GetUserPositionsSchema, GetWalletLendingPositionsResponseSchema, type LendingPosition } from 'ember-schemas';
+import { GetWalletLendingPositionsSchema, GetWalletLendingPositionsResponseSchema, type LendingPosition } from 'ember-schemas';
 import { createTaskId } from './utils.js';
 
 export const getUserPositionsBase: VibkitToolDefinition<
-  typeof GetUserPositionsSchema,
+  typeof GetWalletLendingPositionsSchema,
   Task | Message,
   LendingAgentContext
 > = {
   name: 'get-user-positions-base',
   description: 'Get a summary of your current lending and borrowing positions.',
-  parameters: GetUserPositionsSchema,
+  parameters: GetWalletLendingPositionsSchema,
   execute: async (args, context) => {
     if (!context.mcpClients?.['ember-mcp-tool-server']) {
       throw new Error('MCP client not available');

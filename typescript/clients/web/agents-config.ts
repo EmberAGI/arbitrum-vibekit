@@ -30,6 +30,28 @@ export const chatAgents = [
     ],
   },
   // {
+  //   id: 'langgraph-workflow' as const,
+  //   name: 'Greeting Optimizer',
+  //   description: 'LangGraph workflow agent that optimizes greetings',
+  //   suggestedActions: [
+  //     {
+  //       title: 'Optimize',
+  //       label: 'hello',
+  //       action: 'Optimize: hello',
+  //     },
+  //     {
+  //       title: 'Make',
+  //       label: 'hi better',
+  //       action: 'Make this greeting better: hi',
+  //     },
+  //     {
+  //       title: 'Improve',
+  //       label: 'good morning',
+  //       action: 'Optimize: good morning',
+  //     },
+  //   ],
+  // },
+  // {
   //   id: 'quickstart-agent-template' as const,
   //   name: 'Quickstart',
   //   description: 'Quickstart agent',
@@ -113,6 +135,7 @@ export const chatAgents = [
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
   ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
+  // ['langgraph-workflow', 'http://langgraph-workflow-agent:3009/sse'],
   // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
   // ['allora-price-prediction-agent', 'http://allora-price-prediction-agent:3008/sse'],
   // ["ember-lp", "http://liquidity-agent-no-wallet:3002/sse"],

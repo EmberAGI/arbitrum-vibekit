@@ -16,6 +16,19 @@ vi.mock('@openrouter/ai-sdk-provider', () => ({
   }),
 }));
 
+vi.mock('@ai-sdk/openai', () => ({
+  createOpenAI: vi.fn(() => {
+    const mockProvider = vi.fn(
+      (model: string) =>
+        ({
+          modelId: `openai:${model}`,
+          provider: 'openai',
+        }) as unknown as LanguageModelV1
+    );
+    return mockProvider;
+  }),
+}));
+
 vi.mock('@ai-sdk/xai', () => ({
   createXai: vi.fn(() => {
     const mockProvider = vi.fn(
@@ -52,11 +65,13 @@ describe('createProviderSelector', () => {
   it('should create a selector with all providers when all API keys are provided', () => {
     const selector = createProviderSelector({
       openRouterApiKey: 'test-openrouter-key',
+      openaiApiKey: 'test-openai-key',
       xaiApiKey: 'test-xai-key',
       hyperbolicApiKey: 'test-hyperbolic-key',
     });
 
     expect(selector.openrouter).toBeDefined();
+    expect(selector.openai).toBeDefined();
     expect(selector.grok).toBeDefined();
     expect(selector.hyperbolic).toBeDefined();
   });
@@ -64,12 +79,14 @@ describe('createProviderSelector', () => {
   it('should only include providers with API keys', () => {
     const selector = createProviderSelector({
       openRouterApiKey: 'test-openrouter-key',
-      // xaiApiKey not provided
+      // openaiApiKey not provided
+      xaiApiKey: 'test-xai-key',
       hyperbolicApiKey: 'test-hyperbolic-key',
     });
 
     expect(selector.openrouter).toBeDefined();
-    expect(selector.grok).toBeUndefined();
+    expect(selector.openai).toBeUndefined();
+    expect(selector.grok).toBeDefined();
     expect(selector.hyperbolic).toBeDefined();
   });
 
@@ -86,28 +103,36 @@ describe('createProviderSelector', () => {
   it('should create working provider functions', () => {
     const selector = createProviderSelector({
       openRouterApiKey: 'test-openrouter-key',
+      openaiApiKey: 'test-openai-key',
       xaiApiKey: 'test-xai-key',
       hyperbolicApiKey: 'test-hyperbolic-key',
     });
 
     // Test OpenRouter
-    const openRouterModel = selector.openrouter!('gpt-4');
+    const openRouterModel = selector.openrouter!('openai/gpt-4.1-nano');
     expect(openRouterModel).toMatchObject({
-      modelId: 'openrouter:gpt-4',
+      modelId: 'openrouter:openai/gpt-4.1-nano',
       provider: 'openrouter',
     });
 
+    // Test OpenAI
+    const openAiModel = selector.openai!('gpt-4.1-nano');
+    expect(openAiModel).toMatchObject({
+      modelId: 'openai:gpt-4.1-nano',
+      provider: 'openai',
+    });
+
     // Test Grok (xAI)
-    const grokModel = selector.grok!('grok-2');
+    const grokModel = selector.grok!('grok-3-mini');
     expect(grokModel).toMatchObject({
-      modelId: 'xai:grok-2',
+      modelId: 'xai:grok-3-mini',
       provider: 'xai',
     });
 
     // Test Hyperbolic
-    const hyperbolicModel = selector.hyperbolic!('llama-3.1-70b');
+    const hyperbolicModel = selector.hyperbolic!('meta-llama/Llama-3.2-3B-Instruct');
     expect(hyperbolicModel).toMatchObject({
-      modelId: 'hyperbolic:llama-3.1-70b',
+      modelId: 'hyperbolic:meta-llama/Llama-3.2-3B-Instruct',
       provider: 'hyperbolic',
     });
   });
@@ -117,22 +142,33 @@ describe('createProviderSelector', () => {
       openRouterApiKey: 'test-key',
     });
     expect(selector1.openrouter).toBeDefined();
+    expect(selector1.openai).toBeUndefined();
     expect(selector1.grok).toBeUndefined();
     expect(selector1.hyperbolic).toBeUndefined();
 
     const selector2 = createProviderSelector({
-      xaiApiKey: 'test-key',
+      openaiApiKey: 'test-key',
     });
     expect(selector2.openrouter).toBeUndefined();
-    expect(selector2.grok).toBeDefined();
+    expect(selector2.openai).toBeDefined();
+    expect(selector2.grok).toBeUndefined();
     expect(selector2.hyperbolic).toBeUndefined();
 
     const selector3 = createProviderSelector({
-      hyperbolicApiKey: 'test-key',
+      xaiApiKey: 'test-key',
     });
     expect(selector3.openrouter).toBeUndefined();
-    expect(selector3.grok).toBeUndefined();
-    expect(selector3.hyperbolic).toBeDefined();
+    expect(selector3.openai).toBeUndefined();
+    expect(selector3.grok).toBeDefined();
+    expect(selector3.hyperbolic).toBeUndefined();
+
+    const selector4 = createProviderSelector({
+      hyperbolicApiKey: 'test-key',
+    });
+    expect(selector4.openrouter).toBeUndefined();
+    expect(selector4.openai).toBeUndefined();
+    expect(selector4.grok).toBeUndefined();
+    expect(selector4.hyperbolic).toBeDefined();
   });
 });
 
@@ -140,23 +176,25 @@ describe('getAvailableProviders', () => {
   it('should return all available providers', () => {
     const selector = createProviderSelector({
       openRouterApiKey: 'test-openrouter-key',
+      openaiApiKey: 'test-openai-key',
+      xaiApiKey: 'test-xai-key',
+      hyperbolicApiKey: 'test-hyperbolic-key',
+    });
+
+    const available = getAvailableProviders(selector);
+    expect(available).toEqual(['openrouter', 'openai', 'grok', 'hyperbolic']);
+  });
+
+  it('should return only providers with API keys', () => {
+    const selector = createProviderSelector({
+      openRouterApiKey: 'test-openrouter-key',
+      // openaiApiKey not provided
       xaiApiKey: 'test-xai-key',
       hyperbolicApiKey: 'test-hyperbolic-key',
     });
 
     const available = getAvailableProviders(selector);
     expect(available).toEqual(['openrouter', 'grok', 'hyperbolic']);
-  });
-
-  it('should return only providers with API keys', () => {
-    const selector = createProviderSelector({
-      openRouterApiKey: 'test-openrouter-key',
-      // xaiApiKey not provided
-      hyperbolicApiKey: 'test-hyperbolic-key',
-    });
-
-    const available = getAvailableProviders(selector);
-    expect(available).toEqual(['openrouter', 'hyperbolic']);
   });
 
   it('should return empty array when no providers are available', () => {
@@ -173,13 +211,18 @@ describe('getAvailableProviders', () => {
     expect(getAvailableProviders(selector1)).toEqual(['openrouter']);
 
     const selector2 = createProviderSelector({
-      xaiApiKey: 'test-key',
+      openaiApiKey: 'test-key',
     });
-    expect(getAvailableProviders(selector2)).toEqual(['grok']);
+    expect(getAvailableProviders(selector2)).toEqual(['openai']);
 
     const selector3 = createProviderSelector({
+      xaiApiKey: 'test-key',
+    });
+    expect(getAvailableProviders(selector3)).toEqual(['grok']);
+
+    const selector4 = createProviderSelector({
       hyperbolicApiKey: 'test-key',
     });
-    expect(getAvailableProviders(selector3)).toEqual(['hyperbolic']);
+    expect(getAvailableProviders(selector4)).toEqual(['hyperbolic']);
   });
 });
