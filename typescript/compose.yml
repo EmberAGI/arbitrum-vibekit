@@ -115,7 +115,7 @@ services:
     container_name: vibekit-web-app
     build:
       context: clients/web/
-      dockerfile: Dockerfile.prod
+      dockerfile: Dockerfile
     env_file:
       - path: .env
         required: true
@@ -129,6 +129,10 @@ services:
       - 3000:3000
     depends_on:
       - db
+    volumes:
+      - ./clients/web:/app
+      - /app/node_modules
+      - /app/.next
 
   db:
     image: postgres:17

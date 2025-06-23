@@ -68,9 +68,8 @@ function PureMultimodalInput({
   const adjustHeight = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${
-        textareaRef.current.scrollHeight + 2
-      }px`;
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight + 2
+        }px`;
     }
   };
 
@@ -186,6 +185,30 @@ function PureMultimodalInput({
     [setAttachments]
   );
 
+  // Handle keyboard shortcuts for submit
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (
+        event.key === "Enter" &&
+        !event.shiftKey &&
+        !event.nativeEvent.isComposing
+      ) {
+        event.preventDefault();
+
+        if (status !== "ready") {
+          toast.error("Please wait for the model to finish its response!");
+        } else {
+          submitForm();
+        }
+      }
+    },
+    [status, submitForm]
+  );
+
+  const handleAutocompleteAccept = useCallback((newValue: string) => {
+    adjustHeight();
+  }, []);
+
   return (
     <div className="relative w-full flex flex-col gap-4">
       {messages.length === 0 &&
@@ -230,53 +253,43 @@ function PureMultimodalInput({
         </div>
       )}
 
-      <Textarea
-        data-testid="multimodal-input"
-        ref={textareaRef}
-        placeholder="Send a message..."
-        value={input}
-        onChange={handleInput}
-        className={cx(
-          "min-h-[24px] max-h-[calc(75dvh)] overflow-hidden resize-none rounded-2xl !text-base bg-muted pb-10 dark:border-zinc-700",
-          className
-        )}
-        rows={2}
-        autoFocus
-        onKeyDown={(event) => {
-          if (
-            event.key === "Enter" &&
-            !event.shiftKey &&
-            !event.nativeEvent.isComposing
-          ) {
-            event.preventDefault();
+      <div className="relative">
+        <Textarea
+          data-testid="multimodal-input"
+          ref={textareaRef}
+          placeholder="Send a message..."
+          value={input}
+          onChange={handleInput}
+          onKeyDown={handleKeyDown}
+          enableAutocomplete={true}
+          onAutocompleteAccept={handleAutocompleteAccept}
+          className={cx(
+            "min-h-[24px] max-h-[calc(75dvh)] overflow-hidden resize-none rounded-2xl !text-base bg-muted pb-10 dark:border-zinc-700",
+            className
+          )}
+          rows={2}
+          autoFocus
+        />
 
-            if (status !== "ready") {
-              toast.error("Please wait for the model to finish its response!");
-            } else {
-              submitForm();
-            }
-          }
-        }}
-      />
+        <div className="absolute bottom-0 p-2 w-fit flex flex-row justify-start">
+          <AttachmentsButton fileInputRef={fileInputRef} status={"error"} />
+          <AgentSelector
+            selectedAgentId={selectedAgentId}
+            onAgentChange={onAgentChange}
+          ></AgentSelector>
+        </div>
 
-      <div className="absolute bottom-0 p-2 w-fit flex flex-row justify-start">
-        <AttachmentsButton fileInputRef={fileInputRef} status={"error"} />
-        <AgentSelector
-          selectedAgentId={selectedAgentId}
-          onAgentChange={onAgentChange}
-        ></AgentSelector>
-      </div>
-
-      <div className="absolute bottom-0 right-0 p-2 w-fit flex flex-row justify-end">
-        {status === "submitted" ? (
-          <StopButton stop={stop} setMessages={setMessages} />
-        ) : (
-          <SendButton
-            input={input}
-            submitForm={submitForm}
-            uploadQueue={uploadQueue}
-          />
-        )}
+        <div className="absolute bottom-0 right-0 p-2 w-fit flex flex-row justify-end">
+          {status === "submitted" ? (
+            <StopButton stop={stop} setMessages={setMessages} />
+          ) : (
+            <SendButton
+              input={input}
+              submitForm={submitForm}
+              uploadQueue={uploadQueue}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
