@@ -2,6 +2,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createXai } from '@ai-sdk/xai';
 import { createHyperbolic } from '@hyperbolic/ai-sdk-provider';
+import { createOllama } from 'ollama-ai-provider';
 import type { LanguageModelV1 } from 'ai';
 
 export interface ProviderSelectorConfig {
@@ -9,6 +10,8 @@ export interface ProviderSelectorConfig {
   openaiApiKey?: string;
   xaiApiKey?: string;
   hyperbolicApiKey?: string;
+  secretaiApiKey?: string;
+  secretaiUrl?: string;
 }
 
 export interface ProviderSelector {
@@ -16,6 +19,7 @@ export interface ProviderSelector {
   openai?: (model: string) => LanguageModelV1;
   grok?: (model: string) => LanguageModelV1;
   hyperbolic?: (model: string) => LanguageModelV1;
+  secretai?: (model: string) => LanguageModelV1;
 }
 
 export function createProviderSelector(config: ProviderSelectorConfig): ProviderSelector {
@@ -43,6 +47,17 @@ export function createProviderSelector(config: ProviderSelectorConfig): Provider
   if (config.hyperbolicApiKey) {
     const hyperbolicInstance = createHyperbolic({ apiKey: config.hyperbolicApiKey });
     selector.hyperbolic = (model: string) => hyperbolicInstance(model);
+  }
+
+  // Only add SecretAI if API key is provided
+  if (config.secretaiApiKey) {
+    const secretaiInstance = createOllama({
+      baseURL: (config.secretaiUrl ?? 'https://secretai-rytn.scrtlabs.com:21434') + '/api',
+      headers: {
+        Authorization: `Bearer ${config.secretaiApiKey}`,
+      }
+    });
+    selector.secretai = (model: string) => secretaiInstance(model);
   }
 
   // Warn if no providers are configured

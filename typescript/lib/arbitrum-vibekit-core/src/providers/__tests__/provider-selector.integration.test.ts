@@ -9,6 +9,8 @@ const API_KEYS = {
   openaiApiKey: process.env.OPENAI_API_KEY,
   xaiApiKey: process.env.XAI_API_KEY,
   hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
+  secretaiApiKey: process.env.SECRETAI_API_KEY,
+  secretaiUrl: process.env.SECRETAI_URL ?? "https://secretai-rytn.scrtlabs.com:21434",
 };
 
 // Check which providers we can test
@@ -16,14 +18,15 @@ const hasOpenRouter = !!API_KEYS.openRouterApiKey;
 const hasOpenAI = !!API_KEYS.openaiApiKey;
 const hasXai = !!API_KEYS.xaiApiKey;
 const hasHyperbolic = !!API_KEYS.hyperbolicApiKey;
-const hasAnyKey = hasOpenRouter || hasOpenAI || hasXai || hasHyperbolic;
+const hasSecretai = !!API_KEYS.secretaiApiKey;
+const hasAnyKey = hasOpenRouter || hasOpenAI || hasXai || hasHyperbolic || hasSecretai;
 
 // Skip all integration tests if no API keys are available
 describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
   beforeAll(() => {
     if (!hasAnyKey) {
       console.log(
-        'No API keys found. Set OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or HYPERBOLIC_API_KEY to run integration tests.'
+        'No API keys found. Set OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY, SECRETAI_API_KEY or HYPERBOLIC_API_KEY to run integration tests.'
       );
     }
   });
@@ -49,6 +52,10 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
       expect(available).toContain('hyperbolic');
       expect(selector.hyperbolic).toBeDefined();
     }
+    if (hasSecretai) {
+      expect(available).toContain('secretai');
+      expect(selector.secretai).toBeDefined();
+    }
 
     // Ensure we don't have providers without API keys
     if (!hasOpenRouter) {
@@ -62,6 +69,9 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
     }
     if (!hasHyperbolic) {
       expect(selector.hyperbolic).toBeUndefined();
+    }
+    if (!hasSecretai) {
+      expect(selector.secretai).toBeUndefined();
     }
   });
 
@@ -125,6 +135,21 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
     expect(model.provider).toBe('hyperbolic.chat');
   });
 
+  it.skipIf(!hasSecretai)('should create a valid SecretAI model instance', () => {
+    const selector = createProviderSelector({ secretaiApiKey: API_KEYS.secretaiApiKey!, secretaiUrl: API_KEYS.secretaiUrl! });
+    const model = selector.secretai!('gemma3:4b');
+
+    // Verify it's a valid LanguageModelV1 instance
+    expect(model).toBeDefined();
+    expect(model).toHaveProperty('modelId');
+    expect(model).toHaveProperty('provider');
+    expect(model).toHaveProperty('doGenerate');
+
+    // Check specific properties
+    expect(model.modelId).toBe('gemma3:4b');
+    expect(model.provider).toBe('ollama.chat');
+  });
+
   it('should handle mixed valid and invalid API keys', () => {
     // Create selector with at least one valid key and one invalid
     const mixedKeys = {
@@ -132,6 +157,8 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
       openaiApiKey: hasOpenAI ? API_KEYS.openaiApiKey : undefined,
       xaiApiKey: hasXai ? API_KEYS.xaiApiKey : undefined,
       hyperbolicApiKey: hasHyperbolic ? API_KEYS.hyperbolicApiKey : undefined,
+      secretaiApiKey: hasSecretai ? API_KEYS.secretaiApiKey : undefined,
+      secretaiUrl: hasSecretai ? API_KEYS.secretaiUrl : undefined,
     };
 
     const selector = createProviderSelector(mixedKeys);
@@ -149,6 +176,9 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
     }
     if (hasHyperbolic) {
       expect(available).toContain('hyperbolic');
+    }
+    if (hasSecretai) {
+      expect(available).toContain('secretai');
     }
   });
 
@@ -220,6 +250,27 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
     async () => {
       const selector = createProviderSelector({ hyperbolicApiKey: API_KEYS.hyperbolicApiKey! });
       const model = selector.hyperbolic!('meta-llama/Llama-3.2-3B-Instruct');
+
+      // Make a minimal API call
+      const result = await model.doGenerate({
+        inputFormat: 'messages',
+        mode: { type: 'regular' },
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'Say "test"' }] }],
+        maxTokens: 5,
+      });
+
+      expect(result).toBeDefined();
+      expect(result.text).toBeDefined();
+      expect(typeof result.text).toBe('string');
+    },
+    30000
+  );
+
+  it.skipIf(!hasSecretai)(
+    'should successfully call SecretAI API',
+    async () => {
+      const selector = createProviderSelector({ secretaiApiKey: API_KEYS.secretaiApiKey!, secretaiUrl: API_KEYS.secretaiUrl! });
+      const model = selector.secretai!('gemma3:4b');
 
       // Make a minimal API call
       const result = await model.doGenerate({
