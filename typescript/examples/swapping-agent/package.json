@@ -12,12 +12,13 @@
     "start": "node dist/index.js",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
     "docker:build": "docker build -t swapping-agent ../../",
-    "docker:run": "docker run --env-file .env -p 3001:3001 swapping-agent",
+    "docker:run": "docker run --env-file ../../.env --env-file .env -p 3001:3001 swapping-agent",
     "docker:compose:build": "docker compose build --no-cache",
     "docker:compose:up": "docker compose up --build --no-log-prefix",
     "docker:compose:down": "docker compose down",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\"",
+    "setup": "pnpm install && pnpm build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.5.0",

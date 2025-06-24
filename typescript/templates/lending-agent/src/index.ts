@@ -3,6 +3,18 @@ import type { AgentRuntimeOptions } from 'arbitrum-vibekit-core';
 import { agentConfig } from './agent.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { loadTokenMapFromMcp } from './tokenMap.js';
+import * as dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Load environment variables from the main typescript/.env file
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const envPath = path.resolve(__dirname, '../../../.env');
+dotenv.config({ path: envPath });
+
+// Also try to load agent-specific .env if it exists
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const openRouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,

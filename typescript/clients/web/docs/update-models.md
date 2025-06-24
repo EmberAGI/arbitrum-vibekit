@@ -59,6 +59,9 @@ export const DEFAULT_CHAT_MODEL: string = 'anthropic-direct-sonnet';
 
 Note that adding a model here only makes it appear in the UI. You must also configure your the web client to handle the new `id` (e.g., `'anthropic-direct-sonnet'`). To do so, update [`providers.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/lib/ai/providers.ts) to add the new model ID in the `languageModels` map of your chosen provider (e.g., `openRouterProvider` or `grokProvider`):
 
+> [!NOTE]
+> You can find a list of OpenRouter's free chat models on [this page](https://openrouter.ai/models?max_price=0&fmt=table). Note that while OpenRouter offers both free and paid models, free models typically have limitations and may not perform as well as premium models. The default Vibekit configuration uses premium Google Gemini models which require payment through OpenRouter credits.
+
 ```ts
 // ...
 
