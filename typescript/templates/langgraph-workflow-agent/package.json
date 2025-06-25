@@ -17,7 +17,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@google-a2a/types": "github:google-a2a/A2A#path:types",
+    "@google-a2a/types": "workspace:*",
     "@langchain/core": "^0.3.59",
     "@langchain/langgraph": "^0.3.3",
     "@modelcontextprotocol/sdk": "^1.13.1",

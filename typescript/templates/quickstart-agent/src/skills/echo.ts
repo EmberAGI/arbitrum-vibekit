@@ -5,7 +5,7 @@
 
 import { z } from 'zod';
 import { defineSkill, createSuccessTask, createErrorTask, createArtifact, VibkitError } from 'arbitrum-vibekit-core';
-import type { Task } from '@google-a2a/types/src/types.js';
+import type { Task } from '@google-a2a/types';
 
 // Input schema
 const EchoInputSchema = z.object({

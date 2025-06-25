@@ -1,8 +1,8 @@
 import { expect } from "chai";
 import { z } from "zod";
 import { Agent, defineSkill, VibkitToolDefinition } from "../src/agent.js";
-import type { Task } from "@google-a2a/types/src/types.js";
-import { TaskState } from "@google-a2a/types/src/types.js";
+import type { Task } from "@google-a2a/types";
+import { TaskState } from "@google-a2a/types";
 
 describe("Agent.create()", () => {
   const minimalToolParametersSchema = z.object({ param: z.string() });

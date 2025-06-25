@@ -7,8 +7,8 @@ import { isAddress } from 'viem';
 import { Agent } from './agent.js';
 import cors from 'cors';
 import { z } from 'zod';
-import type { Task } from '@google-a2a/types/src/types.js';
-import { TaskState } from '@google-a2a/types/src/types.js';
+import type { Task } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
 
 const SwappingAgentSchema = z.object({
   instruction: z

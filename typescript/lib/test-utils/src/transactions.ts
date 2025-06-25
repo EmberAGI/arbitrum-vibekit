@@ -1,5 +1,5 @@
 import * as ethers from 'ethers';
-import type { Task } from '@google-a2a/types/src/types.js';
+import type { Task } from '@google-a2a/types';
 
 import { extractLendingTransactionPlan } from './lending.js';
 import { MultiChainSigner } from './multi-chain-signer.js';

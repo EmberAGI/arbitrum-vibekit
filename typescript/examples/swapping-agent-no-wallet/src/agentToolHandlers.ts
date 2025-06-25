@@ -1,8 +1,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
-import type { Task } from '@google-a2a/types/src/types.js';
-import { TaskState } from '@google-a2a/types/src/types.js';
+import type { Task } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
 import { streamText } from 'ai';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import {

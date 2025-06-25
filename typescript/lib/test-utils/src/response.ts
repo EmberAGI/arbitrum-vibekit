@@ -1,4 +1,4 @@
-import type { Task } from '@google-a2a/types/src/types.js';
+import type { Task } from '@google-a2a/types';
 import { GetMarketDataResponseSchema, type GetMarketDataResponse } from 'ember-api';
 
 /**

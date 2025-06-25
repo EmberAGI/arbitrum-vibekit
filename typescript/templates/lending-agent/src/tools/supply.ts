@@ -1,7 +1,7 @@
 import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
-import type { Task, Message, DataPart } from '@google-a2a/types/src/types.js';
-import { TaskState } from '@google-a2a/types/src/types.js';
+import type { Task, Message, DataPart } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
 import type { LendingAgentContext } from '../agent.js';
 import { BorrowRepaySupplyWithdrawSchema, SupplyResponseSchema } from 'ember-schemas';
 import type { LendingTransactionArtifact, LendingPreview, TokenInfo } from './types.js';

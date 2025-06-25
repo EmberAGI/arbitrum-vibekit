@@ -1,6 +1,6 @@
 /// <reference types="mocha" />
 import { expect } from 'chai';
-import type { Task } from '@google-a2a/types/src/types.js';
+import type { Task } from '@google-a2a/types';
 
 import 'dotenv/config';
 import * as ethers from 'ethers';

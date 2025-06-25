@@ -14,8 +14,8 @@ import type {
   SkillDefinition,
   AgentConfig,
 } from "../src/index.js";
-import type { Task, Message } from "@google-a2a/types/src/types.js";
-import { TaskState } from "@google-a2a/types/src/types.js";
+import type { Task, Message } from "@google-a2a/types";
+import { TaskState } from "@google-a2a/types";
 
 const dummyTool: VibkitToolDefinition<z.ZodObject<{}>, Task> = {
   name: "dummy-tool",

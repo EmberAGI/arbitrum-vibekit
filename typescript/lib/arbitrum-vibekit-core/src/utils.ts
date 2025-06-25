@@ -9,8 +9,8 @@ import type {
   Task,
   Message,
   Part,
-} from '@google-a2a/types/src/types.js';
-import { TaskState } from '@google-a2a/types/src/types.js';
+} from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
 
 /**
  * Error thrown when trying to use an unsupported Zod schema type

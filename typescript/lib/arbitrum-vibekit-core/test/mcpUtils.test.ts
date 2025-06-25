@@ -5,8 +5,8 @@ import {
   createMcpErrorResponse,
   createMcpTextResponse,
 } from "../src/mcpUtils.js";
-import type { Task, Message } from "@google-a2a/types/src/types.js";
-import { TaskState } from "@google-a2a/types/src/types.js";
+import type { Task, Message } from "@google-a2a/types";
+import { TaskState } from "@google-a2a/types";
 
 describe("MCP Utils", () => {
   describe("createMcpA2AResponse", () => {

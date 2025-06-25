@@ -9,8 +9,8 @@ import {
   type ToolResultPart,
   type StepResult,
 } from 'ai';
-import type { Task } from '@google-a2a/types/src/types.js';
-import { TaskState } from '@google-a2a/types/src/types.js';
+import type { Task } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import {
   GetYieldMarketsResponseSchema,

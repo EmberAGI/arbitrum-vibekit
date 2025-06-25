@@ -18,7 +18,7 @@ import {
   WithdrawResponseSchema,
 } from 'ember-schemas';
 import type { AgentContext } from 'arbitrum-vibekit-core';
-import type { Task, Message } from '@google-a2a/types/src/types.js';
+import type { Task, Message } from '@google-a2a/types';
 import type { LendingAgentContext } from '../agent.js';
 import type { TokenInfo } from './types.js';
 

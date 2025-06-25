@@ -1,6 +1,6 @@
 import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
-import type { Task, Message, DataPart } from '@google-a2a/types/src/types.js';
-import { TaskState } from '@google-a2a/types/src/types.js';
+import type { Task, Message, DataPart } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
 import {
   createPublicClient,
   http,

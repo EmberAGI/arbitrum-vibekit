@@ -3,8 +3,8 @@ import path from 'path';
 import type { CoreMessage, LanguageModelV1, Tool } from 'ai';
 import { tool } from 'ai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Task } from '@google-a2a/types/src/types.js';
-import { TaskState } from '@google-a2a/types/src/types.js';
+import type { Task } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
 import { promises as fs } from 'fs';
 import {
   generateText,

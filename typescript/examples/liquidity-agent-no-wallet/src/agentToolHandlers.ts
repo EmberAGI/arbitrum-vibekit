@@ -2,7 +2,7 @@ import { type Address } from 'viem';
 import { formatUnits, parseUnits, createPublicClient, http, PublicClient } from 'viem';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
 
-import { Task, TaskState, Artifact } from '@google-a2a/types/src/types.js';
+import { Task, TaskState, Artifact } from '@google-a2a/types';
 import { LiquidityPosition, LiquidityPair, getChainConfigById } from './agent.js';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import { 
