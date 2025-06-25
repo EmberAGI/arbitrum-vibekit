@@ -4,7 +4,7 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "mcp-server": "./dist/index.js"
+    "allora-mcp-server": "./dist/index.js"
   },
   "scripts": {
     "prepare": "pnpm build",
