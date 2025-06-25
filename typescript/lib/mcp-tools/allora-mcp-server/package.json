@@ -4,10 +4,11 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "@alloralabs/mcp-server": "./dist/index.js"
+    "mcp-server": "./dist/index.js"
   },
   "scripts": {
     "prepare": "pnpm build",
+    "prepublishOnly": "pnpm build",
     "build": "tsc",
     "lint": "eslint --ext .ts,.tsx src",
     "lint:fix": "eslint --ext .ts,.tsx src --fix",
