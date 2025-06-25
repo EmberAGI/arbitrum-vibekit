@@ -1,7 +1,5 @@
-import { createRequire } from 'module';
-
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import {
   generateText,
@@ -15,20 +13,20 @@ import type { Task } from '@google-a2a/types/src/types.js';
 import { TaskState } from '@google-a2a/types/src/types.js';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import {
-  GetPendleMarketsRequestSchema,
   GetYieldMarketsResponseSchema,
-  SwapTokensSchema,
   GetTokensResponseSchema,
   type YieldMarket,
   type GetYieldMarketsResponse,
   type TransactionPlan,
   GetWalletBalancesResponseSchema,
   GetMarketDataResponseSchema,
-} from 'ember-schemas';
+  type Token,
+  type Balance,
+} from 'ember-api';
 import { type Address } from 'viem';
 import { z } from 'zod';
 
-import { type HandlerContext, handleSwapTokens } from './agentToolHandlers.js';
+import { type HandlerContext, handleSwapTokens, SwapTokensArgsSchema } from './agentToolHandlers.js';
 import { logError } from './utils.js';
 
 const openrouter = createOpenRouter({
@@ -37,7 +35,7 @@ const openrouter = createOpenRouter({
 
 type YieldToolSet = {
   listMarkets: Tool<z.ZodObject<Record<string, never>>, Awaited<Task>>;
-  swapTokens: Tool<typeof SwapTokensSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
+  swapTokens: Tool<typeof SwapTokensArgsSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
   getWalletBalances: Tool<z.ZodObject<Record<string, never>>, Awaited<Task>>;
   getTokenMarketData: Tool<
     z.ZodObject<{ tokenSymbol: z.ZodString; chain: z.ZodOptional<z.ZodString> }>,
@@ -55,22 +53,22 @@ const CHAIN_MAPPINGS = [
 
 function selectTokenByChain(
   tokenSymbol: string,
-  tokenList: Array<{ chainId: string; address: string }>,
+  tokenList: Array<Token>,
   chainName?: string
-): { chainId: string; address: string } {
+): Token {
   if (chainName) {
     const normalizedChain = chainName.toLowerCase();
     const chainMapping = CHAIN_MAPPINGS.find(mapping => mapping.names.includes(normalizedChain));
 
     if (chainMapping) {
-      const tokenOnChain = tokenList.find(t => t.chainId === chainMapping.id);
+      const tokenOnChain = tokenList.find(t => t.tokenUid.chainId === chainMapping.id);
       if (tokenOnChain) {
         return tokenOnChain;
       } else {
         const availableChains = tokenList
           .map(t => {
-            const mapping = CHAIN_MAPPINGS.find(m => m.id === t.chainId);
-            return mapping ? mapping.names[0] : t.chainId;
+            const mapping = CHAIN_MAPPINGS.find(m => m.id === t.tokenUid.chainId);
+            return mapping ? mapping.names[0] : t.tokenUid.chainId;
           })
           .join(', ');
         throw new Error(
@@ -86,8 +84,8 @@ function selectTokenByChain(
     // If multiple tokens and no chain specified, throw error
     const availableChains = tokenList
       .map(t => {
-        const mapping = CHAIN_MAPPINGS.find(m => m.id === t.chainId);
-        return mapping ? mapping.names[0] : t.chainId;
+        const mapping = CHAIN_MAPPINGS.find(m => m.id === t.tokenUid.chainId);
+        return mapping ? mapping.names[0] : t.tokenUid.chainId;
       })
       .join(', ');
 
@@ -104,13 +102,7 @@ export class Agent {
   private userAddress: Address | undefined;
   private quicknodeSubdomain: string;
   private quicknodeApiKey: string;
-  private tokenMap: Record<
-    string,
-    Array<{
-      chainId: string;
-      address: string;
-    }>
-  > = {};
+  private tokenMap: Record<string, Array<Token>> = {};
   private availableTokens: string[] = [];
   public conversationHistory: CoreMessage[] = [];
   private mcpClient: Client;
@@ -155,15 +147,37 @@ export class Agent {
     }
 
     this.log(`Processing ${markets.length} yield markets to extract PT and YT tokens...`);
+    this.log('First market example:', JSON.stringify(markets[0], null, 2));
     let ptTokensAdded = 0;
     let ytTokensAdded = 0;
+    let underlyingTokensAdded = 0;
 
     markets.forEach(market => {
       const chainId = market.chainId;
       const baseSymbol = market.underlyingAsset?.symbol || market.name;
+      this.log(`Processing market: ${market.name}, chainId: ${chainId}, baseSymbol: ${baseSymbol}`);
+
+      // Add underlying asset token itself (e.g., wstETH)
+      const underlying = market.underlyingAsset;
+      if (underlying) {
+        this.log(`Adding underlying token: ${underlying.symbol}`);
+        if (!this.tokenMap[underlying.symbol]) {
+          this.tokenMap[underlying.symbol] = [];
+          this.availableTokens.push(underlying.symbol);
+        }
+
+        const existingUnderlying = this.tokenMap[underlying.symbol]!.find(
+          t => t.tokenUid.chainId === chainId
+        );
+        if (!existingUnderlying) {
+          this.tokenMap[underlying.symbol]!.push(underlying);
+          underlyingTokensAdded++;
+        }
+      }
 
       // Add PT token
       const ptSymbol = `${baseSymbol}_PT`;
+      this.log(`Adding PT token: ${ptSymbol}`);
 
       if (!this.tokenMap[ptSymbol]) {
         this.tokenMap[ptSymbol] = [];
@@ -171,17 +185,15 @@ export class Agent {
       }
 
       // Check if this PT token for this chain is already added
-      const existingPtForChain = this.tokenMap[ptSymbol].find(token => token.chainId === chainId);
+      const existingPtForChain = this.tokenMap[ptSymbol] ? this.tokenMap[ptSymbol].find(token => token.tokenUid.chainId === chainId) : undefined;
       if (!existingPtForChain) {
-        this.tokenMap[ptSymbol].push({
-          chainId,
-          address: market.pt,
-        });
+        this.tokenMap[ptSymbol]!.push(market.pt);
         ptTokensAdded++;
       }
 
       // Add YT token
       const ytSymbol = `${baseSymbol}_YT`;
+      this.log(`Adding YT token: ${ytSymbol}`);
 
       if (!this.tokenMap[ytSymbol]) {
         this.tokenMap[ytSymbol] = [];
@@ -189,19 +201,51 @@ export class Agent {
       }
 
       // Check if this YT token for this chain is already added
-      const existingYtForChain = this.tokenMap[ytSymbol].find(token => token.chainId === chainId);
+      const existingYtForChain = this.tokenMap[ytSymbol] ? this.tokenMap[ytSymbol].find(token => token.tokenUid.chainId === chainId) : undefined;
       if (!existingYtForChain) {
-        this.tokenMap[ytSymbol].push({
-          chainId,
-          address: market.yt,
-        });
+        this.tokenMap[ytSymbol]!.push(market.yt);
         ytTokensAdded++;
       }
     });
 
     this.log(
-      `Added ${ptTokensAdded} PT tokens and ${ytTokensAdded} YT tokens to the token map. Total tokens: ${this.availableTokens.length}`
+      `Added ${ptTokensAdded} PT tokens, ${ytTokensAdded} YT tokens and ${underlyingTokensAdded} base tokens to the token map. Total tokens: ${this.availableTokens.length}`
     );
+  }
+
+  /**
+   * Populate the internal tokenMap with generic tokens returned by the onchain-actions getTokens tool.
+   * This complements populatePendleTokens which only adds PT/YT/underlying tokens that exist in Pendle markets.
+   *
+   * Duplicates (based on symbol + chainId) are ignored.
+   */
+  private populateGenericTokens(tokens: Token[]) {
+    if (!tokens || tokens.length === 0) {
+      this.log('No generic tokens provided to populateGenericTokens');
+      return;
+    }
+
+    let addedCount = 0;
+
+    tokens.forEach(token => {
+      const symbol = token.symbol;
+
+      if (!this.tokenMap[symbol]) {
+        this.tokenMap[symbol] = [];
+        this.availableTokens.push(symbol);
+      }
+
+      const existsOnChain = this.tokenMap[symbol]!.some(
+        t => t.tokenUid.chainId === token.tokenUid.chainId,
+      );
+
+      if (!existsOnChain) {
+        this.tokenMap[symbol]!.push(token);
+        addedCount++;
+      }
+    });
+
+    this.log(`Added ${addedCount} generic tokens to the token map. Total tokens: ${this.availableTokens.length}`);
   }
 
   async init() {
@@ -236,57 +280,14 @@ Never respond in markdown, always use plain text. Never add links to your respon
       },
     ];
 
-    const require = createRequire(import.meta.url);
-    const mcpToolPath = require.resolve('ember-mcp-tool-server');
-    const transport = new StdioClientTransport({
-      command: 'node',
-      args: [mcpToolPath],
-      env: {
-        ...process.env, // Inherit existing environment variables
-        EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'grpc.api.emberai.xyz:50051',
-      },
-    });
+    if (!process.env.EMBER_ENDPOINT) {
+      throw new Error('EMBER_ENDPOINT environment variable is required');
+    }
+
+    const transport = new StreamableHTTPClientTransport(new URL(process.env.EMBER_ENDPOINT));
 
     await this.mcpClient.connect(transport);
     this.log('MCP client initialized successfully.');
-
-    // Initialize available tokens from MCP capabilities
-    try {
-      this.log('Fetching available tokens...');
-      const result = await this.mcpClient.callTool({
-        name: 'getTokens',
-        arguments: {
-          chainId: '',
-          filter: '',
-        },
-      });
-
-      const parsedResult = parseMcpToolResponsePayload(result, GetTokensResponseSchema);
-
-      const tokensArray = Array.isArray(parsedResult) ? parsedResult : parsedResult.tokens || [];
-
-      if (tokensArray.length > 0) {
-        this.tokenMap = {};
-        this.availableTokens = [];
-
-        tokensArray.forEach(token => {
-          if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
-            if (!this.tokenMap[token.symbol]) {
-              this.tokenMap[token.symbol] = [];
-              this.availableTokens.push(token.symbol);
-            }
-            (this.tokenMap[token.symbol] as { chainId: string; address: string }[]).push({
-              chainId: token.tokenUid.chainId,
-              address: token.tokenUid.address,
-            });
-          }
-        });
-
-        this.log(`Loaded ${this.availableTokens.length} available tokens`);
-      }
-    } catch (error) {
-      this.log('Error fetching tokens:', error);
-    }
 
     // Fetch yield markets during initialization
     try {
@@ -301,10 +302,27 @@ Never respond in markdown, always use plain text. Never add links to your respon
       this.log('Error fetching Pendle markets during initialization:', error);
     }
 
+    try {
+      this.log('Fetching supported tokens via MCP getTokens...');
+
+      const chainIds = CHAIN_MAPPINGS.map(mapping => mapping.id);
+      const getTokensArgs = chainIds.length > 0 ? { chainIds } : {};
+
+      const tokensResult = await this.mcpClient.callTool({
+        name: 'getTokens',
+        arguments: getTokensArgs,
+      });
+
+      const tokensResponse = parseMcpToolResponsePayload(tokensResult, GetTokensResponseSchema);
+      this.populateGenericTokens(tokensResponse.tokens);
+    } catch (err) {
+      this.log('Failed to fetch generic tokens via getTokens:', err);
+    }
+
     this.toolSet = {
       listMarkets: tool({
         description: 'List all available Pendle markets with their details.',
-        parameters: GetPendleMarketsRequestSchema,
+        parameters: z.object({}),
         execute: async () => {
           try {
             // First, create data artifacts for the full market data
@@ -352,7 +370,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
       }),
       swapTokens: tool({
         description: 'Swap tokens or acquire Pendle PT/YT tokens.',
-        parameters: SwapTokensSchema,
+        parameters: SwapTokensArgsSchema,
         execute: async args => {
           this.log('Executing swap tokens tool with args:', args);
           try {
@@ -393,7 +411,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
             const parsedData = parseMcpToolResponsePayload(result, GetWalletBalancesResponseSchema);
 
             // Create data artifacts for the wallet balances
-            const dataArtifacts = parsedData.balances.map(balance => ({
+            const dataArtifacts = parsedData.balances.map((balance: Balance) => ({
               kind: 'data' as const,
               data: balance,
             }));
@@ -477,8 +495,8 @@ Never respond in markdown, always use plain text. Never add links to your respon
             const result = await this.mcpClient.callTool({
               name: 'getMarketData',
               arguments: {
-                tokenAddress: selectedToken.address,
-                tokenChainId: selectedToken.chainId,
+                tokenAddress: selectedToken.tokenUid.address,
+                tokenChainId: selectedToken.tokenUid.chainId,
               },
             });
 
@@ -490,8 +508,8 @@ Never respond in markdown, always use plain text. Never add links to your respon
                 kind: 'data' as const,
                 data: {
                   tokenSymbol: tokenSymbol,
-                  tokenAddress: selectedToken.address,
-                  chainId: selectedToken.chainId,
+                  tokenAddress: selectedToken.tokenUid.address,
+                  chainId: selectedToken.tokenUid.chainId,
                   ...parsedData,
                 },
               },
@@ -510,7 +528,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
                   parts: [
                     {
                       kind: 'text',
-                      text: `Market data retrieved for ${tokenSymbol} (${selectedToken.address}) on chain ${selectedToken.chainId}`,
+                      text: `Market data retrieved for ${tokenSymbol} (${selectedToken.tokenUid.address}) on chain ${selectedToken.tokenUid.chainId}`,
                     },
                   ],
                 },
@@ -657,9 +675,11 @@ Never respond in markdown, always use plain text. Never add links to your respon
   public async fetchMarkets(): Promise<GetYieldMarketsResponse> {
     this.log('Fetching pendle markets via MCP...');
 
+    const chainIds = CHAIN_MAPPINGS.map(m => m.id);
+
     const result = await this.mcpClient.callTool({
       name: 'getYieldMarkets',
-      arguments: {},
+      arguments: { chainIds },
     });
     this.log('GetYieldMarkets tool success.');
     return parseMcpToolResponsePayload(result, GetYieldMarketsResponseSchema);

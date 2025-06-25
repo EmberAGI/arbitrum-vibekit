@@ -42,6 +42,7 @@ export const TransactionPlanSchema = z.object({
   to: z.string(),
   data: z.string(),
   value: z.string(),
+  chainId: z.string(),
 });
 export type TransactionPlan = z.infer<typeof TransactionPlanSchema>;
 

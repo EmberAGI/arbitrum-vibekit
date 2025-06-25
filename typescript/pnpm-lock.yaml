@@ -252,9 +252,9 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
-      ember-schemas:
+      ember-api:
         specifier: workspace:*
-        version: link:../../lib/ember-schemas
+        version: link:../../lib/ember-api
       express:
         specifier: ^4.21.2
         version: 4.21.2

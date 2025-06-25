@@ -14,8 +14,7 @@ export const GetChainsResponseSchema = z.object({
 export type GetChainsResponse = z.infer<typeof GetChainsResponseSchema>;
 
 export const GetTokensRequestSchema = z.object({
-  chainId: z.string(),
-  filter: z.string(),
+  chainIds: z.array(z.string()).optional(),
 });
 export type GetTokensRequest = z.infer<typeof GetTokensRequestSchema>;
 

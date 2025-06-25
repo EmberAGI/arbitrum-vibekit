@@ -19,7 +19,9 @@ export const LiquidityProvisionRangeSchema = z.discriminatedUnion("type", [
     maxPrice: z.string(),
   }),
 ]);
-export type LiquidityProvisionRange = z.infer<typeof LiquidityProvisionRangeSchema>;
+export type LiquidityProvisionRange = z.infer<
+  typeof LiquidityProvisionRangeSchema
+>;
 
 export const LiquidityPositionRangeSchema = z.object({
   fromPrice: z.string(),
