@@ -15,6 +15,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Clone EmberAGI SDK repository
+        uses: actions/checkout@v4
+        with:
+          repository: EmberAGI/ember-sdk-typescript
+          path: ember-sdk-typescript
+          token: ${{ secrets.GH_PAT }}
+          submodules: recursive
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -37,14 +45,6 @@ jobs:
       - name: Build project
         working-directory: ./typescript
         run: pnpm run build || true
-
-      - name: Clone EmberAGI SDK repository
-        uses: actions/checkout@v4
-        with:
-          repository: EmberAGI/ember-sdk-typescript
-          path: ember-sdk-typescript
-          token: ${{ secrets.GH_PAT }}
-          submodules: recursive
 
       - name: Install protoc
         run: |
