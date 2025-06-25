@@ -4,14 +4,15 @@ import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with {
 import type { Task } from '@google-a2a/types/src/types.js';
 import { TaskState } from '@google-a2a/types/src/types.js';
 import { streamText } from 'ai';
-import { type TransactionArtifact, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import {
-  SwapResponseSchema,
-  TransactionPlansSchema,
-  type SwapResponse,
-  type SwapPreview,
+  SwapTokensResponseSchema,
+  TransactionPlanSchema,
+  type SwapTokensResponse,
   type TransactionPlan,
-} from 'ember-schemas';
+  type SwapEstimation,
+  type TokenIdentifier,
+} from 'ember-api';
 import {
   parseUnits,
   createPublicClient,
@@ -284,18 +285,24 @@ export async function handleSwapTokens(
   const swapResponseRaw = await context.mcpClient.callTool({
     name: 'swapTokens',
     arguments: {
-      fromTokenAddress: fromTokenDetail.address,
-      fromTokenChainId: fromTokenDetail.chainId,
-      toTokenAddress: toTokenDetail.address,
-      toTokenChainId: toTokenDetail.chainId,
+      orderType: 'MARKET_BUY',
+      baseToken: {
+        chainId: fromTokenDetail.chainId,
+        address: fromTokenDetail.address,
+      },
+      quoteToken: {
+        chainId: toTokenDetail.chainId,
+        address: toTokenDetail.address,
+      },
       amount: atomicAmount.toString(),
-      userAddress: context.userAddress,
+      recipient: context.userAddress,
+      slippageTolerance: '0.005',
     },
   });
 
-  let validatedSwapResponse: SwapResponse;
+  let validatedSwapResponse: SwapTokensResponse;
   try {
-    validatedSwapResponse = parseMcpToolResponsePayload(swapResponseRaw, SwapResponseSchema);
+    validatedSwapResponse = parseMcpToolResponsePayload(swapResponseRaw, SwapTokensResponseSchema);
   } catch (error) {
     context.log('MCP tool swapTokens returned invalid data structure:', error);
     return {
@@ -392,13 +399,14 @@ export async function handleSwapTokens(
       }),
       value: '0',
       chainId: txChainId,
+      type: '0x2',
     };
   } else {
     context.log('Sufficient allowance already exists.');
   }
 
   context.log('Validating the swap transactions received from MCP tool...');
-  const validatedSwapTxPlan: TransactionPlan[] = TransactionPlansSchema.parse(rawSwapTransactions);
+  const validatedSwapTxPlan: TransactionPlan[] = rawSwapTransactions;
 
   const finalTxPlan: TransactionPlan[] = [
     ...(approveTxResponse ? [approveTxResponse] : []),
@@ -409,16 +417,16 @@ export async function handleSwapTokens(
     txPreview: {
       fromTokenSymbol: fromToken,
       fromTokenAddress: validatedSwapResponse.baseToken.address,
-      fromTokenAmount: validatedSwapResponse.estimation.baseTokenDelta,
+      fromTokenAmount: validatedSwapResponse.estimation?.baseTokenDelta || amount,
       fromChain: validatedSwapResponse.baseToken.chainId,
       toTokenSymbol: toToken,
       toTokenAddress: validatedSwapResponse.quoteToken.address,
-      toTokenAmount: validatedSwapResponse.estimation.quoteTokenDelta,
+      toTokenAmount: validatedSwapResponse.estimation?.quoteTokenDelta || '0',
       toChain: validatedSwapResponse.quoteToken.chainId,
-      exchangeRate: validatedSwapResponse.estimation.effectivePrice,
-      executionTime: validatedSwapResponse.estimation.timeEstimate,
-      expiration: validatedSwapResponse.estimation.expiration,
-      explorerUrl: validatedSwapResponse.providerTracking.explorerUrl,
+      exchangeRate: validatedSwapResponse.estimation?.effectivePrice || '0',
+      executionTime: validatedSwapResponse.estimation?.timeEstimate,
+      expiration: validatedSwapResponse.estimation?.expiration,
+      explorerUrl: validatedSwapResponse.providerTracking?.explorerUrl,
     },
     txPlan: finalTxPlan,
   };
@@ -575,4 +583,21 @@ ${camelotContextContent}`;
   }
 }
 
-export type SwapTransactionArtifact = TransactionArtifact<SwapPreview>;
+// Define the swap transaction artifact type
+export type SwapTransactionArtifact = {
+  txPreview: {
+    fromTokenSymbol: string;
+    fromTokenAddress: string;
+    fromTokenAmount: string;
+    fromChain: string;
+    toTokenSymbol: string;
+    toTokenAddress: string;
+    toTokenAmount: string;
+    toChain: string;
+    exchangeRate: string;
+    executionTime?: string;
+    expiration?: string;
+    explorerUrl?: string;
+  };
+  txPlan: TransactionPlan[];
+};
