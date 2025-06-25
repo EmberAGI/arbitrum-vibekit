@@ -2,6 +2,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { useAutocomplete } from '@/hooks/use-autocomplete';
 import { AutocompleteSuggestion } from '@/components/autocomplete-suggestion';
+import { TokenPicker, type Token } from '@/components/token-picker';
 
 interface TextareaProps extends React.ComponentProps<'textarea'> {
   enableAutocomplete?: boolean;
@@ -14,7 +15,9 @@ const Textarea = React.forwardRef<
 >(({ className, enableAutocomplete = false, onAutocompleteAccept, onChange, value, ...props }, ref) => {
   const [localValue, setLocalValue] = React.useState(value || '');
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-  const [textareaHeight, setTextareaHeight] = React.useState<string>('auto');
+  const [textareaHeight, setTextareaHeight] = React.useState<string>('200px');
+  const [openTokenPicker, setOpenTokenPicker] = React.useState<string | null>(null);
+  const [selectedTokens, setSelectedTokens] = React.useState<Record<string, Token>>({});
 
   const combinedRef = React.useMemo(
     () => (node: HTMLTextAreaElement) => {
@@ -43,7 +46,8 @@ const Textarea = React.forwardRef<
   // Capture textarea height before showing autocomplete
   React.useEffect(() => {
     if (textareaRef.current && !suggestion) {
-      setTextareaHeight(`${textareaRef.current.scrollHeight}px`);
+      const height = Math.max(200, textareaRef.current.scrollHeight);
+      setTextareaHeight(`${height}px`);
     }
   }, [localValue, suggestion]);
 
@@ -112,14 +116,26 @@ const Textarea = React.forwardRef<
     clearSuggestion();
   };
 
+  const handleTokenSelect = (token: Token) => {
+    if (openTokenPicker) {
+      setSelectedTokens(prev => ({ ...prev, [openTokenPicker]: token }));
+      updateInputValue(openTokenPicker, token.symbol);
+      setOpenTokenPicker(null);
+    }
+  };
+
+  const handleTokenSelectFromSuggestion = (segmentName: string, token: Token) => {
+    setSelectedTokens(prev => ({ ...prev, [segmentName]: token }));
+  };
+
   const showAutocomplete = enableAutocomplete && suggestion && suggestion.segments.length > 0;
 
   return (
-    <div className="w-full">
+    <div className="relative w-full" style={{ minHeight: textareaHeight }}>
       <textarea
         className={cn(
-          'top-0 flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm transition-opacity duration-200',
-          showAutocomplete && 'absolute opacity-0 pointer-events-none',
+          'absolute inset-0 flex min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm transition-all duration-300 ease-in-out',
+          showAutocomplete && 'opacity-0 invisible',
           className,
         )}
         ref={combinedRef}
@@ -129,19 +145,37 @@ const Textarea = React.forwardRef<
         {...props}
       />
 
-      {showAutocomplete && (
-        <div
-          className=" bg-background rounded-md border-2 border-primary/50 shadow-lg overflow-hidden pb-12"
-          style={{ minHeight: textareaHeight }}
-        >
-          <div className="p-4 h-full flex flex-col">
-            <AutocompleteSuggestion
-              segments={suggestion.segments}
-              inputValues={inputValues}
-              onInputChange={updateInputValue}
-              onAccept={handleAcceptSuggestion}
-              onReject={handleRejectSuggestion}
-              className="flex-1"
+      <div
+        className={cn(
+          "absolute inset-0 bg-background rounded-md border-2 shadow-lg overflow-hidden transition-all duration-300 ease-in-out",
+          showAutocomplete ? "opacity-100 visible border-primary/50" : "opacity-0 invisible pointer-events-none border-transparent"
+        )}
+        style={{ minHeight: textareaHeight }}
+      >
+        <div className="p-4 h-full flex flex-col">
+          <AutocompleteSuggestion
+            segments={suggestion?.segments || []}
+            inputValues={inputValues}
+            onInputChange={updateInputValue}
+            onAccept={handleAcceptSuggestion}
+            onReject={handleRejectSuggestion}
+            className="flex-1"
+            showAutocomplete={showAutocomplete}
+            onTokenPickerOpen={setOpenTokenPicker}
+            onTokenSelect={handleTokenSelectFromSuggestion}
+          />
+        </div>
+      </div>
+
+      {/* Token Picker positioned outside the main box */}
+      {openTokenPicker && (
+        <div className="absolute left-0 right-0 top-full mt-2 z-50">
+          <div className="bg-background rounded-lg shadow-xl border-2 border-primary/50 overflow-hidden">
+            <TokenPicker
+              selectedToken={selectedTokens[openTokenPicker]}
+              onSelect={handleTokenSelect}
+              onClose={() => setOpenTokenPicker(null)}
+              embedded={true}
             />
           </div>
         </div>

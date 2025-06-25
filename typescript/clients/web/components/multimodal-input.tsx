@@ -68,15 +68,14 @@ function PureMultimodalInput({
   const adjustHeight = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight + 2
-        }px`;
+      textareaRef.current.style.height = `${Math.max(200, textareaRef.current.scrollHeight + 2)}px`;
     }
   };
 
   const resetHeight = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = "98px";
+      textareaRef.current.style.height = "200px";
     }
   };
 
@@ -264,10 +263,10 @@ function PureMultimodalInput({
           enableAutocomplete={true}
           onAutocompleteAccept={handleAutocompleteAccept}
           className={cx(
-            "min-h-[24px] max-h-[calc(75dvh)] overflow-hidden resize-none rounded-2xl !text-base bg-muted pb-10 dark:border-zinc-700",
+            "min-h-[200px] max-h-[calc(75dvh)] overflow-hidden resize-none rounded-2xl !text-base bg-muted pb-10 dark:border-zinc-700",
             className
           )}
-          rows={2}
+          rows={3}
           autoFocus
         />
 
