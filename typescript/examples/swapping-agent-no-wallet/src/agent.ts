@@ -1,5 +1,4 @@
 import { promises as fs } from 'fs';
-import { createRequire } from 'module';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -27,19 +26,24 @@ import type { Chain } from 'viem/chains';
 import type { Task } from '@google-a2a/types/src/types.js';
 import { TaskState } from '@google-a2a/types/src/types.js';
 import {
-  CapabilitySchema,
-  type Capability,
-  type SwapCapability,
-  type TokenSchema,
+  GetTokensResponseSchema,
+  type Token,
 } from 'ember-api';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
+const CHAIN_MAPPINGS = [
+  { id: '1', names: ['ethereum', 'mainnet', 'eth'] },
+  { id: '42161', names: ['arbitrum', 'arbitrum one', 'arb'] },
+  { id: '10', names: ['optimism', 'op'] },
+  { id: '137', names: ['polygon', 'matic'] },
+  { id: '8453', names: ['base'] },
+];
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const CACHE_FILE_PATH = path.join(__dirname, '..', '.cache', 'swap_capabilities.json');
 
 function logError(...args: unknown[]) {
   console.error(...args);
@@ -57,11 +61,6 @@ const SwapTokensSchema = z.object({
 const AskEncyclopediaSchema = z.object({
   question: z.string().describe('Question about Camelot DEX'),
 });
-
-// Type for capabilities response
-type GetCapabilitiesResponse = {
-  capabilities: Capability[];
-};
 
 type SwappingToolSet = {
   swapTokens: Tool<typeof SwapTokensSchema, Task>;
@@ -115,14 +114,7 @@ export class Agent {
   private userAddress: Address | undefined;
   private quicknodeSubdomain: string;
   private quicknodeApiKey: string;
-  private tokenMap: Record<
-    string,
-    Array<{
-      chainId: string;
-      address: string;
-      decimals: number;
-    }>
-  > = {};
+  private tokenMap: Record<string, Array<Token>> = {};
   private availableTokens: string[] = [];
   private conversationMap: Record<string, CoreMessage[]> = {};
   private mcpClient: Client | null = null;
@@ -160,68 +152,43 @@ export class Agent {
     return context;
   }
 
+  /**
+   * Populate the internal tokenMap with generic tokens returned by the onchain-actions getTokens tool.
+   * Duplicates (based on symbol + chainId) are ignored.
+   */
+  private populateGenericTokens(tokens: Token[]) {
+    if (!tokens || tokens.length === 0) {
+      this.log('No generic tokens provided to populateGenericTokens');
+      return;
+    }
+
+    let addedCount = 0;
+
+    tokens.forEach(token => {
+      const symbol = token.symbol;
+
+      if (!this.tokenMap[symbol]) {
+        this.tokenMap[symbol] = [];
+        this.availableTokens.push(symbol);
+      }
+
+      const existsOnChain = this.tokenMap[symbol]!.some(
+        t => t.tokenUid.chainId === token.tokenUid.chainId,
+      );
+
+      if (!existsOnChain) {
+        this.tokenMap[symbol]!.push(token);
+        addedCount++;
+      }
+    });
+
+    this.log(`Added ${addedCount} generic tokens to the token map. Total tokens: ${this.availableTokens.length}`);
+    
+    // Debug: Log first 20 available tokens to help with debugging
+    this.log('First 20 available tokens:', this.availableTokens.slice(0, 20).join(', '));
+  }
+
   async init() {
-    const systemMessage: CoreMessage = {
-      role: 'system',
-      content: `You are an AI agent that provides access to blockchain swapping functionalities via Ember MCP API. 
-You use the tool "swapTokens" to swap or convert tokens. You can also answer questions about Camelot DEX using the "askEncyclopedia" tool.
-
-Available actions:
-- swapTokens: Only use if the user has provided the required parameters.
-- askEncyclopedia: Use when the user asks questions about Camelot DEX.
-
-<examples>
-<example1>
-<user>swap 1 ETH to USDC on Ethereum</user>
-<parameters>
-<amount>1</amount>
-<fromToken>ETH</fromToken>
-<toToken>USDC</toToken>
-<toChain>Ethereum</toChain>
-</parameters>
-</example1>
-
-<example2>
-<user>sell 89 fartcoin</user>
-<parameters>
-<amount>89</amount>
-<fromToken>fartcoin</fromToken>
-</parameters>
-*Note: Required "toToken" parameter is not provided. If it is not provided in the conversation history, you will need to ask the user for it.*
-</example2>
-
-<example3>
-<user>Convert 10.5 USDC to ETH</user>
-<parameters>
-<amount>10.5</amount>
-<fromToken>USDC</fromToken>
-<toToken>ETH</toToken>
-</parameters>
-</example3>
-
-<example4>
-<user>Swap 100.076 arb on arbitrum for dog on base</user>
-<parameters>
-<amount>100.076</amount>
-<fromToken>arb</fromToken>
-<toToken>dog</toToken>
-<fromChain>arbitrum</fromChain>
-<toChain>base</toChain>
-</parameters>
-</example4>
-
-<example5>
-<user>What is Camelot's liquidity mining program?</user>
-<tool_call> {"toolName": "askEncyclopedia", "args": { "question": "What is Camelot's liquidity mining program?" }} </tool_call>
-</example5>
-</examples>
-
-Use relavant conversation history to obtain required tool parameters. Present the user with a list of tokens and chains they can swap from and to if provided by the tool response. Never respond in markdown, always use plain text. Never add links to your response. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.`,
-    };
-
-    let swapCapabilities: GetCapabilitiesResponse | undefined;
-    const useCache = process.env.AGENT_CACHE_TOKENS === 'true';
-
     this.log('Initializing MCP client via HTTP...');
     try {
       this.mcpClient = new Client(
@@ -241,112 +208,22 @@ Use relavant conversation history to obtain required tool parameters. Present th
       await this.mcpClient.connect(transport);
       this.log('MCP client connected successfully.');
 
-      if (useCache) {
-        try {
-          await fs.access(CACHE_FILE_PATH);
-          this.log('Loading swap capabilities from cache...');
-          const cachedData = await fs.readFile(CACHE_FILE_PATH, 'utf-8');
-          const parsedJson = JSON.parse(cachedData);
-          const validationResult = z.object({ capabilities: z.array(CapabilitySchema) }).safeParse(parsedJson);
-          if (validationResult.success) {
-            swapCapabilities = validationResult.data;
-            this.log('Cached capabilities loaded and validated successfully.');
-          } else {
-            logError('Cached capabilities validation failed:', validationResult.error);
-            logError('Data that failed validation:', JSON.stringify(parsedJson));
-            this.log('Proceeding to fetch fresh capabilities...');
-          }
-        } catch (error) {
-          if (error instanceof Error && error.message.includes('invalid JSON')) {
-            logError('Error reading or parsing cache file:', error);
-          } else {
-            this.log('Cache not found or invalid, fetching capabilities via MCP...');
-          }
-        }
-      }
+      // Fetch supported tokens via MCP getTokens
+      try {
+        this.log('Fetching supported tokens via MCP getTokens...');
 
-      if (!swapCapabilities) {
-        this.log('Fetching swap capabilities via MCP...');
-        swapCapabilities = await this.fetchAndCacheCapabilities();
-      }
+        const chainIds = CHAIN_MAPPINGS.map(mapping => mapping.id);
+        const getTokensArgs = chainIds.length > 0 ? { chainIds } : {};
 
-      this.log(
-        'swapCapabilities before processing (first 10 lines):',
-        swapCapabilities
-          ? JSON.stringify(swapCapabilities, null, 2).split('\n').slice(0, 10).join('\n')
-          : 'undefined'
-      );
-      if (swapCapabilities?.capabilities) {
-        this.tokenMap = {};
-        this.availableTokens = [];
-        let loadedTokenCount = 0;
-        let processedCapabilityCount = 0;
-        
-        this.log(`Processing ${swapCapabilities.capabilities.length} capabilities entries...`);
-        swapCapabilities.capabilities.forEach(capabilityEntry => {
-          if (capabilityEntry.type === 'swap' && capabilityEntry.swapCapability) {
-            processedCapabilityCount++;
-            const swapCap = capabilityEntry.swapCapability;
-            swapCap.supportedTokens?.forEach((token: any) => {
-              // Validate that token has all required data (skip empty/incomplete tokens)
-              if (token.symbol && token.symbol.trim() && 
-                  token.tokenUid?.chainId && token.tokenUid?.address) {
-                const symbol = token.symbol.trim();
-
-                const tokenInfo = {
-                  chainId: token.tokenUid.chainId,
-                  address: token.tokenUid.address,
-                  decimals: token.decimals ?? 18,
-                };
-
-                if (!this.tokenMap[symbol]) {
-                  this.tokenMap[symbol] = [tokenInfo];
-                  this.availableTokens.push(symbol);
-                  loadedTokenCount++;
-                } else {
-                  const exists = this.tokenMap[symbol].some(
-                    t => t.chainId === tokenInfo.chainId && 
-                         t.address.toLowerCase() === tokenInfo.address.toLowerCase()
-                  );
-                  if (!exists) {
-                    this.tokenMap[symbol].push(tokenInfo);
-                  }
-                }
-              } else {
-                // Skip tokens with incomplete data (don't log every empty token to avoid spam)
-                if (token.symbol && !token.symbol.trim()) {
-                  // This is the expected case for the test environment
-                } else {
-                  this.log('Skipping token with incomplete data:', {
-                    symbol: token?.symbol,
-                    chainId: token?.tokenUid?.chainId,
-                    address: token?.tokenUid?.address
-                  });
-                }
-              }
-            });
-          }
+        const tokensResult = await this.mcpClient.callTool({
+          name: 'getTokens',
+          arguments: getTokensArgs,
         });
-        
-        this.log(
-          `Finished processing capabilities. Processed ${processedCapabilityCount} swap capabilities. Found ${loadedTokenCount} unique token symbols.`
-        );
-        
-        if (Object.keys(this.tokenMap).length === 0) {
-          this.log('Warning: Token map is empty after processing capabilities. This may indicate the server is returning capabilities with empty token symbols.');
-          // For testing purposes, add some hardcoded token mappings when the server doesn't provide symbols
-          this.addFallbackTokens();
-        } else {
-          this.log('Available Tokens Loaded Internally:', this.availableTokens);
-        }
-      } else {
-        logError(
-          'Failed to parse capabilities or no capabilities array found:',
-          swapCapabilities ? 'No capabilities array' : 'Invalid capabilities data'
-        );
-        this.log('Warning: Could not load available tokens from MCP server.');
-        // For testing purposes, add some hardcoded token mappings
-        this.addFallbackTokens();
+
+        const tokensResponse = parseMcpToolResponsePayload(tokensResult, GetTokensResponseSchema);
+        this.populateGenericTokens(tokensResponse.tokens);
+      } catch (err) {
+        this.log('Failed to fetch generic tokens via getTokens:', err);
       }
 
       await this._loadCamelotDocumentation();
@@ -616,66 +493,6 @@ Use relavant conversation history to obtain required tool parameters. Present th
     }
   }
 
-  private async fetchAndCacheCapabilities(): Promise<GetCapabilitiesResponse> {
-    this.log('Fetching swap capabilities via MCP...');
-    if (!this.mcpClient) {
-      throw new Error('MCP Client not initialized. Cannot fetch capabilities.');
-    }
-
-    try {
-      const mcpTimeoutMs = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '30000', 10);
-      this.log(`Using MCP tool timeout: ${mcpTimeoutMs}ms`);
-
-      const capabilitiesResult = await this.mcpClient.callTool(
-        {
-          name: 'getCapabilities',
-          arguments: { type: 'SWAP' },
-        },
-        undefined,
-        { timeout: mcpTimeoutMs }
-      );
-
-      this.log('Raw capabilitiesResult received from MCP.');
-
-      const dataToValidate = parseMcpToolResponsePayload(capabilitiesResult, z.any());
-
-      const validationResult = z.object({ capabilities: z.array(CapabilitySchema) }).safeParse(dataToValidate);
-
-      this.log('Validation performed on potentially parsed data.');
-      const validationResultString = JSON.stringify(validationResult, null, 2);
-      this.log(
-        'Validation result (first 10 lines):\n',
-        validationResultString.split('\n').slice(0, 10).join('\n') +
-          (validationResultString.includes('\n') ? '\n... (truncated)' : '')
-      );
-
-      if (!validationResult.success) {
-        logError('Fetched capabilities validation failed:', validationResult.error);
-        logError('Data that failed validation:', JSON.stringify(dataToValidate));
-        throw new Error(
-          `Fetched capabilities failed validation: ${validationResult.error.message}`
-        );
-      }
-
-      const capabilities = validationResult.data;
-
-      try {
-        await fs.mkdir(path.dirname(CACHE_FILE_PATH), { recursive: true });
-        await fs.writeFile(CACHE_FILE_PATH, JSON.stringify(capabilities, null, 2), 'utf-8');
-        this.log('Swap capabilities cached successfully.');
-      } catch (cacheError) {
-        logError('Failed to cache capabilities:', cacheError);
-      }
-
-      return capabilities;
-    } catch (error) {
-      logError('Error fetching or validating capabilities via MCP:', error);
-      throw new Error(
-        `Failed to fetch/validate capabilities from MCP server: ${(error as Error).message}`
-      );
-    }
-  }
-
   private async _loadCamelotDocumentation(): Promise<void> {
     const defaultDocsPath = path.resolve(__dirname, '../encyclopedia');
     const docsPath = defaultDocsPath;
@@ -698,36 +515,5 @@ Use relavant conversation history to obtain required tool parameters. Present th
     if (!this.camelotContextContent.trim()) {
       logError('Warning: Camelot documentation context is empty after loading attempts.');
     }
-  }
-
-  private addFallbackTokens(): void {
-    this.log('Adding fallback token mappings for testing purposes...');
-    
-    // Common tokens on Arbitrum (Chain ID 42161) for testing
-    const fallbackTokens = [
-      { symbol: 'WETH', address: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', decimals: 18 },
-      { symbol: 'USDC', address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', decimals: 6 },
-      { symbol: 'USDT', address: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9', decimals: 6 },
-      { symbol: 'ARB', address: '0x912CE59144191C1204E64559FE8253a0e49E6548', decimals: 18 },
-      { symbol: 'DAI', address: '0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1', decimals: 18 },
-      { symbol: 'WBTC', address: '0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f', decimals: 8 }
-    ];
-    
-    const chainId = '42161'; // Arbitrum
-    let addedCount = 0;
-    
-    fallbackTokens.forEach(token => {
-      if (!this.tokenMap[token.symbol]) {
-        this.tokenMap[token.symbol] = [{
-          chainId,
-          address: token.address,
-          decimals: token.decimals
-        }];
-        this.availableTokens.push(token.symbol);
-        addedCount++;
-      }
-    });
-    
-    this.log(`Added ${addedCount} fallback tokens for testing: ${fallbackTokens.map(t => t.symbol).join(', ')}`);
   }
 }

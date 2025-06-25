@@ -7,11 +7,9 @@ import { streamText } from 'ai';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import {
   SwapTokensResponseSchema,
-  TransactionPlanSchema,
   type SwapTokensResponse,
   type TransactionPlan,
-  type SwapEstimation,
-  type TokenIdentifier,
+  type Token,
 } from 'ember-api';
 import {
   parseUnits,
@@ -25,15 +23,9 @@ import {
 
 import { getChainConfigById } from './agent.js';
 
-export type TokenInfo = {
-  chainId: string;
-  address: string;
-  decimals: number;
-};
-
 export interface HandlerContext {
   mcpClient: Client;
-  tokenMap: Record<string, TokenInfo[]>;
+  tokenMap: Record<string, Token[]>;
   userAddress: string | undefined;
   log: (...args: unknown[]) => void;
   quicknodeSubdomain: string;
@@ -43,9 +35,9 @@ export interface HandlerContext {
 }
 
 function findTokensCaseInsensitive(
-  tokenMap: Record<string, TokenInfo[]>,
+  tokenMap: Record<string, Token[]>,
   tokenName: string
-): TokenInfo[] | undefined {
+): Token[] | undefined {
   const lowerCaseTokenName = tokenName.toLowerCase();
   for (const key in tokenMap) {
     if (key.toLowerCase() === lowerCaseTokenName) {
@@ -79,25 +71,25 @@ function mapChainIdToName(chainId: string): string {
 function findTokenDetail(
   tokenName: string,
   optionalChainName: string | undefined,
-  tokenMap: Record<string, TokenInfo[]>,
+  tokenMap: Record<string, Token[]>,
   direction: 'from' | 'to'
-): TokenInfo | string {
+): Token | string {
   const tokens = findTokensCaseInsensitive(tokenMap, tokenName);
   if (tokens === undefined) {
     throw new Error(`Token ${tokenName} not supported.`);
   }
 
-  let tokenDetail: TokenInfo | undefined;
+  let tokenDetail: Token | undefined;
 
   if (optionalChainName) {
     const chainId = mapChainNameToId(optionalChainName);
     if (!chainId) {
       throw new Error(`Chain name ${optionalChainName} is not recognized.`);
     }
-    tokenDetail = tokens?.find(token => token.chainId === chainId);
+    tokenDetail = tokens?.find(token => token.tokenUid.chainId === chainId);
     if (!tokenDetail) {
       throw new Error(
-        `Token ${tokenName} not supported on chain ${optionalChainName}. Available chains: ${tokens?.map(t => mapChainIdToName(t.chainId)).join(', ')}`
+        `Token ${tokenName} not supported on chain ${optionalChainName}. Available chains: ${tokens?.map(t => mapChainIdToName(t.tokenUid.chainId)).join(', ')}`
       );
     }
   } else {
@@ -106,7 +98,7 @@ function findTokenDetail(
     }
     if (tokens.length > 1) {
       const chainList = tokens
-        .map((t, idx) => `${idx + 1}. ${mapChainIdToName(t.chainId)}`)
+        .map((t, idx) => `${idx + 1}. ${mapChainIdToName(t.tokenUid.chainId)}`)
         .join('\n');
       return `Multiple chains supported for ${tokenName}:\n${chainList}\nPlease specify the '${direction}Chain'.`;
     }
@@ -179,12 +171,12 @@ export async function handleSwapTokens(
   const toTokenDetail = toTokenResult;
 
   const atomicAmount = parseUnits(amount, fromTokenDetail.decimals);
-  const txChainId = fromTokenDetail.chainId;
-  const fromTokenAddress = fromTokenDetail.address as Address;
+  const txChainId = fromTokenDetail.tokenUid.chainId;
+  const fromTokenAddress = fromTokenDetail.tokenUid.address as Address;
   const userAddress = context.userAddress as Address;
 
   context.log(
-    `Preparing swap: ${rawFromToken} (${fromTokenAddress} on chain ${txChainId}) to ${rawToToken} (${toTokenDetail.address} on chain ${toTokenDetail.chainId}), Amount: ${amount} (${atomicAmount}), User: ${userAddress}`
+    `Preparing swap: ${rawFromToken} (${fromTokenAddress} on chain ${txChainId}) to ${rawToToken} (${toTokenDetail.tokenUid.address} on chain ${toTokenDetail.tokenUid.chainId}), Amount: ${amount} (${atomicAmount}), User: ${userAddress}`
   );
 
   let publicClient: PublicClient;
@@ -279,7 +271,7 @@ export async function handleSwapTokens(
   }
 
   context.log(
-    `Executing swap via MCP: ${fromToken} (address: ${fromTokenDetail.address}, chain: ${fromTokenDetail.chainId}) to ${toToken} (address: ${toTokenDetail.address}, chain: ${toTokenDetail.chainId}), amount: ${amount}, atomicAmount: ${atomicAmount}, userAddress: ${context.userAddress}`
+    `Executing swap via MCP: ${fromToken} (address: ${fromTokenDetail.tokenUid.address}, chain: ${fromTokenDetail.tokenUid.chainId}) to ${toToken} (address: ${toTokenDetail.tokenUid.address}, chain: ${toTokenDetail.tokenUid.chainId}), amount: ${amount}, atomicAmount: ${atomicAmount}, userAddress: ${context.userAddress}`
   );
 
   const swapResponseRaw = await context.mcpClient.callTool({
@@ -287,12 +279,12 @@ export async function handleSwapTokens(
     arguments: {
       orderType: 'MARKET_BUY',
       baseToken: {
-        chainId: fromTokenDetail.chainId,
-        address: fromTokenDetail.address,
+        chainId: fromTokenDetail.tokenUid.chainId,
+        address: fromTokenDetail.tokenUid.address,
       },
       quoteToken: {
-        chainId: toTokenDetail.chainId,
-        address: toTokenDetail.address,
+        chainId: toTokenDetail.tokenUid.chainId,
+        address: toTokenDetail.tokenUid.address,
       },
       amount: atomicAmount.toString(),
       recipient: context.userAddress,
