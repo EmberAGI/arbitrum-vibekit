@@ -55,6 +55,19 @@ vi.mock('@hyperbolic/ai-sdk-provider', () => ({
   }),
 }));
 
+vi.mock('ollama-ai-provider', () => ({
+  createOllama: vi.fn(() => {
+    const mockProvider = vi.fn(
+      (model: string) =>
+        ({
+          modelId: `secretai:${model}`,
+          provider: 'secretai',
+        }) as unknown as LanguageModelV1
+    );
+    return mockProvider;
+  }),
+}));
+
 describe('createProviderSelector', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -68,12 +81,15 @@ describe('createProviderSelector', () => {
       openaiApiKey: 'test-openai-key',
       xaiApiKey: 'test-xai-key',
       hyperbolicApiKey: 'test-hyperbolic-key',
+      secretaiApiKey: 'test-secretai-key',
+      secretaiUrl: 'test-secretai-url',
     });
 
     expect(selector.openrouter).toBeDefined();
     expect(selector.openai).toBeDefined();
     expect(selector.grok).toBeDefined();
     expect(selector.hyperbolic).toBeDefined();
+    expect(selector.secretai).toBeDefined();
   });
 
   it('should only include providers with API keys', () => {
@@ -82,12 +98,15 @@ describe('createProviderSelector', () => {
       // openaiApiKey not provided
       xaiApiKey: 'test-xai-key',
       hyperbolicApiKey: 'test-hyperbolic-key',
+      secretaiApiKey: 'test-secretai-key',
+      secretaiUrl: 'test-secretai-url',
     });
 
     expect(selector.openrouter).toBeDefined();
     expect(selector.openai).toBeUndefined();
     expect(selector.grok).toBeDefined();
     expect(selector.hyperbolic).toBeDefined();
+    expect(selector.secretai).toBeDefined();
   });
 
   it('should warn when no API keys are provided', () => {
@@ -106,6 +125,8 @@ describe('createProviderSelector', () => {
       openaiApiKey: 'test-openai-key',
       xaiApiKey: 'test-xai-key',
       hyperbolicApiKey: 'test-hyperbolic-key',
+      secretaiApiKey: 'test-secretai-key',
+      secretaiUrl: 'test-secretai-url',
     });
 
     // Test OpenRouter
@@ -135,6 +156,13 @@ describe('createProviderSelector', () => {
       modelId: 'hyperbolic:meta-llama/Llama-3.2-3B-Instruct',
       provider: 'hyperbolic',
     });
+
+    // Test SecretAI
+    const secretaiModel = selector.secretai!('gemma3:4b');
+    expect(secretaiModel).toMatchObject({
+      modelId: 'secretai:gemma3:4b',
+      provider: 'secretai',
+    });
   });
 
   it('should handle partial configurations correctly', () => {
@@ -145,6 +173,7 @@ describe('createProviderSelector', () => {
     expect(selector1.openai).toBeUndefined();
     expect(selector1.grok).toBeUndefined();
     expect(selector1.hyperbolic).toBeUndefined();
+    expect(selector1.secretai).toBeUndefined();
 
     const selector2 = createProviderSelector({
       openaiApiKey: 'test-key',
@@ -153,6 +182,7 @@ describe('createProviderSelector', () => {
     expect(selector2.openai).toBeDefined();
     expect(selector2.grok).toBeUndefined();
     expect(selector2.hyperbolic).toBeUndefined();
+    expect(selector2.secretai).toBeUndefined();
 
     const selector3 = createProviderSelector({
       xaiApiKey: 'test-key',
@@ -161,6 +191,7 @@ describe('createProviderSelector', () => {
     expect(selector3.openai).toBeUndefined();
     expect(selector3.grok).toBeDefined();
     expect(selector3.hyperbolic).toBeUndefined();
+    expect(selector3.secretai).toBeUndefined();
 
     const selector4 = createProviderSelector({
       hyperbolicApiKey: 'test-key',
@@ -169,6 +200,17 @@ describe('createProviderSelector', () => {
     expect(selector4.openai).toBeUndefined();
     expect(selector4.grok).toBeUndefined();
     expect(selector4.hyperbolic).toBeDefined();
+    expect(selector4.secretai).toBeUndefined();
+
+    const selector5 = createProviderSelector({
+      secretaiApiKey: 'test-key',
+      secretaiUrl: 'test-url',
+    });
+    expect(selector5.openrouter).toBeUndefined();
+    expect(selector5.openai).toBeUndefined();
+    expect(selector5.grok).toBeUndefined();
+    expect(selector5.hyperbolic).toBeUndefined();
+    expect(selector5.secretai).toBeDefined();
   });
 });
 
@@ -179,10 +221,12 @@ describe('getAvailableProviders', () => {
       openaiApiKey: 'test-openai-key',
       xaiApiKey: 'test-xai-key',
       hyperbolicApiKey: 'test-hyperbolic-key',
+      secretaiApiKey: 'test-secretai-key',
+      secretaiUrl: 'test-secretai-url',
     });
 
     const available = getAvailableProviders(selector);
-    expect(available).toEqual(['openrouter', 'openai', 'grok', 'hyperbolic']);
+    expect(available).toEqual(['openrouter', 'openai', 'grok', 'hyperbolic', 'secretai']);
   });
 
   it('should return only providers with API keys', () => {
@@ -191,10 +235,12 @@ describe('getAvailableProviders', () => {
       // openaiApiKey not provided
       xaiApiKey: 'test-xai-key',
       hyperbolicApiKey: 'test-hyperbolic-key',
+      secretaiApiKey: 'test-secretai-key',
+      secretaiUrl: 'test-secretai-url',
     });
 
     const available = getAvailableProviders(selector);
-    expect(available).toEqual(['openrouter', 'grok', 'hyperbolic']);
+    expect(available).toEqual(['openrouter', 'grok', 'hyperbolic', 'secretai']);
   });
 
   it('should return empty array when no providers are available', () => {
@@ -224,5 +270,11 @@ describe('getAvailableProviders', () => {
       hyperbolicApiKey: 'test-key',
     });
     expect(getAvailableProviders(selector4)).toEqual(['hyperbolic']);
+
+    const selector5 = createProviderSelector({
+      secretaiApiKey: 'test-key',
+      secretaiUrl: 'test-url',
+    });
+    expect(getAvailableProviders(selector5)).toEqual(['secretai']);
   });
 });

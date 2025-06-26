@@ -1,6 +1,6 @@
 # Provider Selector
 
-The provider selector module provides a unified interface for creating AI language models from multiple providers (OpenRouter, xAI/Grok, and Hyperbolic) that are compatible with the Vercel AI SDK.
+The provider selector module provides a unified interface for creating AI language models from multiple providers (OpenRouter, xAI/Grok, SecretAI and Hyperbolic) that are compatible with the Vercel AI SDK.
 
 ## Usage
 
@@ -12,6 +12,8 @@ const providers = createProviderSelector({
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
   xaiApiKey: process.env.XAI_API_KEY,
   hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
+  secretaiApiKey: process.env.SECRETAI_API_KEY,
+  secretaiUrl: process.env.SECRETAI_URL,
 });
 
 // Use with an Agent
@@ -31,6 +33,7 @@ if (providers.openrouter) {
 - **OpenRouter** (`openrouter`): Access to 100+ models through OpenRouter
 - **xAI/Grok** (`grok`): Access to Grok models from xAI
 - **Hyperbolic** (`hyperbolic`): Access to open-source models via Hyperbolic
+- **SecretAI** (`secretai`): Access to confidential LLMs via SecretAI
 
 ## Testing
 
@@ -53,6 +56,8 @@ This will run:
    OPENROUTER_API_KEY="your-key"
    XAI_API_KEY="your-key"
    HYPERBOLIC_API_KEY="your-key"
+   SECRETAI_API_KEY="your-key"
+   SECRETAI_URL="secretai-url"
    ```
 
 2. Run tests:
@@ -74,3 +79,4 @@ Get your API keys from:
 - **OpenRouter**: https://openrouter.ai/keys
 - **xAI**: https://x.ai/api
 - **Hyperbolic**: https://app.hyperbolic.xyz/settings
+- **SecretAI**: https://secretai.scrtlabs.com/keys

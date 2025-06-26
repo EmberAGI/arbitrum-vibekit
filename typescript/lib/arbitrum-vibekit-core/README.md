@@ -49,6 +49,8 @@ import 'dotenv/config';
 // HYPERBOLIC_API_KEY=...
 // OPENAI_API_KEY=...
 // XAI_API_KEY=...
+// SECRETAI_API_KEY=...
+// SECRETAI_URL=...
 
 // Create a provider selector with your API keys
 const providers = createProviderSelector({
@@ -56,6 +58,8 @@ const providers = createProviderSelector({
   hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
   openaiApiKey: process.env.OPENAI_API_KEY,
   xaiApiKey: process.env.XAI_API_KEY,
+  secretaiApiKey: process.env.SECRETAI_API_KEY,
+  secretaiUrl: process.env.SECRETAI_URL,
 });
 
 // To get a model, you access the provider directly
@@ -70,6 +74,12 @@ if (providers.openrouter) {
 // Get a Hyperbolic model (e.g., Mistral 7B Instruct)
 if (providers.hyperbolic) {
   const hyperModel = providers.hyperbolic('deepseek-ai/DeepSeek-R1-0528');
+  // now you can use the model...
+}
+
+// Get a SecretAI model (e.g., deepseek-r1:70b)
+if (providers.secretai) {
+  const secretAiModel = providers.secretai('deepseek-r1:70b');
   // now you can use the model...
 }
 
@@ -114,5 +124,6 @@ The selector uses the following environment variables for API keys:
 - **Hyperbolic**: `HYPERBOLIC_API_KEY`
 - **OpenAI**: `OPENAI_API_KEY`
 - **xAI/Grok**: `XAI_API_KEY`
+- **SecretAI**: `SECRETAI_API_KEY` and `SECRETAI_URL`
 
 This utility simplifies multi-provider setups and makes your agent's model configuration more flexible and maintainable.
