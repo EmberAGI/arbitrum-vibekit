@@ -1,5 +1,8 @@
 ## 🎛️ Agent Playground
 
+> [!IMPORTANT]  
+> The [`examples`] directory is being deprecated in favor of v2 [templates](../templates/). The examples directory contains the older architecture and will be removed in future releases.
+
 This directory contains ready-to-roll DeFi agents built with the Vibekit. These agents showcase how to deploy smart, autonomous on-chain agents in a few steps. Each agent also doubles as an MCP tool, which enables powerful agent-to-agent integrations.
 
 Many of the tools and operations these agents use are defined in [`mcp-tools`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools). If you're building a new agent or want to extend functionality, the `mcp-tools` directory is the place to define your tool logic and add new capabilities for your agents to use.
