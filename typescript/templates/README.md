@@ -4,7 +4,7 @@ This directory contains production-ready AI agent templates that demonstrate how
 
 Follow this guide to:
 
-- [Understand the v2 Architecture](#-v2-architecture-overview)
+- [Understand the v2 Architecture](#️-template-agent-architecture-overview)
 - [Get Started with Templates](#-get-started-with-templates)
 - [Build Your Own Agent](#%EF%B8%8F-build-your-own-agent)
 
@@ -13,17 +13,9 @@ Follow this guide to:
 > [!IMPORTANT]  
 > The [`examples`](../examples/) directory is being deprecated in favor of these v2 templates. The examples directory contains the older architecture and will be removed in future releases.
 
-## 🏗️ v2 Architecture Overview
+## 🏗️ Template Agent Architecture Overview
 
-### Core Concepts
-
-- **Skills**: High-level capabilities that define what your agent can do (e.g., "price prediction", "token swapping")
-- **Tools**: Internal implementations that handle specific actions within skills
-- **Hooks**: Enhancement functions that can modify tool inputs/outputs or add functionality
-- **Context**: Shared state and type-safe data management across the agent
-- **LLM Orchestration**: Intelligent routing and coordination between tools within skills
-
-### Template Agent Directory Structure
+### Directory Structure
 
 ```
 agent-name/
@@ -43,6 +35,14 @@ agent-name/
 ├── tsconfig.json         # TypeScript configuration
 └── README.md            # Agent documentation
 ```
+
+### Core Concepts
+
+- **Skills**: High-level capabilities that define what your agent can do (e.g., "price prediction", "token swapping")
+- **Tools**: Internal implementations that handle specific actions within skills
+- **Hooks**: Enhancement functions that can modify tool inputs/outputs or add functionality
+- **Context**: Shared state and type-safe data management across the agent
+- **LLM Orchestration**: Intelligent routing and coordination between tools within skills
 
 ## 🚀 Get Started with Templates
 
@@ -162,9 +162,7 @@ You might need to restart Cursor to apply the new configuration. Upon successful
 
 ### Start with the Quickstart Agent
 
-We recommend starting with the [`quickstart-agent`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/quickstart-agent) template. It's a comprehensive example that demonstrates all v2 framework features and serves as both an integration test and a developer template.
-
-### Features Demonstrated
+We recommend starting with the [`quickstart-agent`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/quickstart-agent) template. It's a comprehensive example that demonstrates all v2 framework features and serves as both an integration test and a developer template. The Quickstart agent has the following features:
 
 **Skills:**
 
@@ -184,4 +182,71 @@ We recommend starting with the [`quickstart-agent`](https://github.com/EmberAGI/
 2. `mock-mcp-language` - Supported languages
 3. `mock-mcp-time` - Timezone support
 
-Checkout the [quickstart-agent's guide](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/quickstart-agent#quick-start) to start building your own agent.
+### Modify Quickstart Agent
+
+Follow these steps to transform the quickstart agent into your own custom agent:
+
+1. Copy the Quickstart Agent
+
+   ```bash
+   cd typescript/templates
+   cp -r quickstart-agent my-custom-agent
+   cd my-custom-agent
+   ```
+
+2. Update Package Configuration
+
+   - Edit `package.json` to change the name and description
+   - Update any references to "quickstart-agent" in your new agent's files
+
+3. Define Your Skills
+
+   - Modify files in `src/skills/` to match your agent's capabilities
+   - Remove the demo skills (greet, getTime, echo) and create your own
+   - Each skill should represent a high-level capability your agent provides
+
+4. Implement Your Tools
+
+   - Update files in `src/tools/` with your specific business logic
+   - Replace the greeting tools with tools that perform your desired actions
+   - Keep the tool structure but change the implementation details
+
+5. Configure MCP Integrations
+
+   - Replace the mock MCP servers in `mock-mcp-servers/` with real integrations
+   - Or remove them if you don't need external MCP tools
+   - Update `src/index.ts` to register your MCP connections
+
+6. Add Custom Context & Hooks
+
+   - Modify `src/context/` if you need shared state management
+   - Update `src/hooks/` to add logging, authentication, or data transformation
+   - Remove any context or hooks you don't need
+
+7. Update Environment Configuration
+
+   - Copy `.env.example` to `.env` and configure your API keys
+   - Add any new environment variables your agent requires
+   - Update the example file with your new variables
+
+8. Test Your Agent
+
+   ```bash
+   pnpm build
+   pnpm dev
+   ```
+
+   - Test your agent locally to ensure it works as expected
+   - Use the integration test patterns from the quickstart agent
+
+9. Create Your Agent's README
+
+   - Update the `README.md` file with your agent's specific information
+   - Document your agent's skills, tools, and capabilities
+   - Include setup instructions, environment variables, and usage examples
+   - Add any specific deployment or configuration notes
+
+10. Deploy Your Agent
+    - Update the Dockerfile if needed for your dependencies
+    - Configure Docker Compose or your preferred deployment method
+    - Follow the deployment instructions in the main repository

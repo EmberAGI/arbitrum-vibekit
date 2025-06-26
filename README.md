@@ -53,7 +53,7 @@ Vibekit/
 
 - `templates/`: Vibekit framework agents to use as a starting template to build your own agent, and agent examples that demonstrate the use of Ember AI's MCP tools.
 
-- `examples/` [WILL BE DEPRECATED SOON]: Agent examples that demonstrate the use of Ember AI's MCP tools.
+- `examples/` [Legacy - Use Templates]: Agent examples that demonstrate the use of Ember AI's MCP tools.
 
 - `lib/`: Core libraries and tools.
 
