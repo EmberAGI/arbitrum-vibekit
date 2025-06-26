@@ -32,7 +32,7 @@ If you're looking to add support for a new protocol:
 
 **4. Create Documentation:** Create a `README` file for your new MCP tool that clearly explains its functionality and setup process.
 
-**5. Create Example Agents:** Consider adding a demo agent to the [examples directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) to showcase your new features.
+**5. Create Example Agents:** Consider adding a demo agent to the [templates directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates) to showcase your new features.
 
 **6. Update CHANGELOG:** Document your modifications in [CHANGELOG.md](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CHANGELOG.md) to keep the project's history clear.
 
