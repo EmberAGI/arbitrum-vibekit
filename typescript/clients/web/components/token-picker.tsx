@@ -33,19 +33,6 @@ const mockTokens: Token[] = [
     { symbol: "WBTC", name: "WBTC", balance: "", value: "", icon: "₿", color: "bg-orange-500" },
 ];
 
-// Mock network icons
-const networkIcons = [
-    { id: "ethereum", icon: "Ξ", color: "bg-blue-600" },
-    { id: "arbitrum", icon: "A", color: "bg-blue-500" },
-    { id: "optimism", icon: "O", color: "bg-red-500" },
-    { id: "base", icon: "B", color: "bg-blue-400" },
-    { id: "polygon", icon: "P", color: "bg-purple-600" },
-    { id: "avalanche", icon: "A", color: "bg-red-600" },
-    { id: "bsc", icon: "B", color: "bg-yellow-500" },
-    { id: "gnosis", icon: "G", color: "bg-green-600" },
-    { id: "zksync", icon: "Z", color: "bg-purple-500" },
-];
-
 export function TokenPicker({ onSelect, onClose, selectedToken, embedded = false }: TokenPickerProps) {
     const [searchQuery, setSearchQuery] = useState("");
 
@@ -71,29 +58,6 @@ export function TokenPicker({ onSelect, onClose, selectedToken, embedded = false
                 </Button>
                 <h2 className="text-base font-medium">Select Token</h2>
             </div>
-
-            {/* Network Icons - only show if not embedded */}
-            {!embedded && (
-                <div className="p-4 border-b">
-                    <div className="flex items-center gap-2">
-                        <div className="flex -space-x-2">
-                            {networkIcons.slice(0, 5).map((network, index) => (
-                                <div
-                                    key={network.id}
-                                    className={cn(
-                                        "w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold border-2 border-background",
-                                        network.color
-                                    )}
-                                    style={{ zIndex: 5 - index }}
-                                >
-                                    {network.icon}
-                                </div>
-                            ))}
-                        </div>
-                        <span className="text-sm text-muted-foreground ml-2">+42</span>
-                    </div>
-                </div>
-            )}
 
             {/* Search */}
             <div className="p-4 border-b">

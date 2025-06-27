@@ -108,14 +108,21 @@ function PureMultimodalInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadQueue, setUploadQueue] = useState<Array<string>>([]);
 
-  const submitForm = useCallback(() => {
+  const submitForm = useCallback((newValue?: string) => {
+    const content = newValue ?? input;
+
+    if (content.trim() === '') return;
+
     window.history.replaceState({}, "", `/chat/${chatId}`);
 
-    handleSubmit(undefined, {
-      experimental_attachments: attachments,
+    append({
+      role: 'user',
+      content,
+      experimental_attachments: attachments
     });
 
     setAttachments([]);
+    setInput('');
     setLocalStorageInput("");
     resetHeight();
 
@@ -124,11 +131,13 @@ function PureMultimodalInput({
     }
   }, [
     attachments,
-    handleSubmit,
+    append,
     setAttachments,
     setLocalStorageInput,
     width,
     chatId,
+    setInput,
+    input,
   ]);
 
   const uploadFile = async (file: File) => {
@@ -262,6 +271,7 @@ function PureMultimodalInput({
           onKeyDown={handleKeyDown}
           enableAutocomplete={true}
           onAutocompleteAccept={handleAutocompleteAccept}
+          onSubmit={submitForm}
           className={cx(
             "min-h-[200px] max-h-[calc(75dvh)] overflow-hidden resize-none rounded-2xl !text-base bg-muted pb-10 dark:border-zinc-700",
             className

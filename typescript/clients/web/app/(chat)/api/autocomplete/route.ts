@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 // Define types for autocomplete segments
-export type AutocompleteSegmentType = 'text' | 'input-text' | 'input-select' | 'token-picker';
+export type AutocompleteSegmentType = 'text' | 'input-text' | 'input-select' | 'token-picker' | 'chain-picker';
 
 export interface AutocompleteSegment {
   id: string;
@@ -115,15 +115,13 @@ const mockAutocompleteData: Record<string, AutocompleteResponse> = {
       { id: '3', type: 'text', content: ' ' },
       { id: '4', type: 'token-picker', placeholder: 'from token', name: 'fromToken' },
       { id: '5', type: 'text', content: ' on ' },
-      { id: '6', type: 'input-select', placeholder: 'network', name: 'fromNetwork', options: ['Ethereum', 'Arbitrum', 'Optimism', 'Polygon', 'Base'] },
+      { id: '6', type: 'chain-picker', placeholder: 'network', name: 'fromNetwork' },
       { id: '7', type: 'text', content: ' for ' },
-      { id: '8', type: 'input-text', placeholder: 'to amount', name: 'toAmount' },
-      { id: '9', type: 'text', content: ' ' },
-      { id: '10', type: 'token-picker', placeholder: 'to token', name: 'toToken' },
-      { id: '11', type: 'text', content: ' on ' },
-      { id: '12', type: 'input-select', placeholder: 'network', name: 'toNetwork', options: ['Ethereum', 'Arbitrum', 'Optimism', 'Polygon', 'Base'] }
+      { id: '8', type: 'token-picker', placeholder: 'to token', name: 'toToken' },
+      { id: '9', type: 'text', content: ' on ' },
+      { id: '10', type: 'chain-picker', placeholder: 'network', name: 'toNetwork' }
     ],
-    fullText: 'Swap [amount] [from token] on [network] for [to amount][to token] on [network]'
+    fullText: 'Swap [amount] [from token] on [network] for [to token] on [network]'
   }
 };
 
