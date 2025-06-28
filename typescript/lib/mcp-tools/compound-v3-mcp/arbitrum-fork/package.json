@@ -1,0 +1,12 @@
+{
+  "name": "hardhat-project",
+  "scripts": {
+    "fund": "hardhat run scripts/fund.js --network hardhat"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.24.2",
+    "chai": "^4.3.8",
+    "@types/chai": "^4.3.5"
+  }
+}
