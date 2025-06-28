@@ -5,7 +5,9 @@ export type { SwapActionRequest } from './actions/swap.js';
 export type { SwapResponse } from 'ember-schemas';
 
 // Lending action types and interfaces
-export type { BorrowCallback, BorrowTokenRequest } from './actions/lending/index.js';
+export type { BorrowTokenRequest } from './actions/lending/index.js';
 export type { BorrowResponse } from 'ember-schemas';
-export type { RepayTokensCallback, RepayTokensRequest } from './actions/lending/index.js';
+export type { RepayTokensRequest } from './actions/lending/index.js';
 export type { RepayResponse } from 'ember-schemas';
+export type { SupplyRequest } from './actions/lending/index.js';
+export type { SupplyResponse } from 'ember-schemas';
