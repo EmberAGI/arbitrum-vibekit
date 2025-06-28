@@ -1,5 +1,6 @@
 import type { Token } from 'ember-schemas';
 import type { SwapActionCallback } from './swap.js';
+import type { BorrowCallback } from './lending/index.js';
 
 /**
  * The possible actions an ember plugin can perform.
@@ -9,7 +10,11 @@ export type Action = 'swap' | 'borrow' | 'repay' | 'supply' | 'withdraw';
 /**
  * Type mapping for action callbacks.
  */
-export type ActionCallback<T extends Action> = T extends 'swap' ? SwapActionCallback : never;
+export type ActionCallback<T extends Action> = T extends 'swap'
+  ? SwapActionCallback
+  : T extends 'borrow'
+    ? BorrowCallback
+    : never;
 
 /**
  * Definition of an action that can be performed by the Ember plugin.
