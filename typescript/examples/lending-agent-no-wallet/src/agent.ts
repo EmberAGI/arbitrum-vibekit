@@ -6,12 +6,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Task } from '@google-a2a/types';
 import { TaskState } from '@google-a2a/types';
 import { promises as fs } from 'fs';
-import {
-  generateText,
-  type CoreUserMessage,
-  type CoreAssistantMessage,
-  type StepResult,
-} from 'ai';
+import { generateText, type CoreUserMessage, type CoreAssistantMessage, type StepResult } from 'ai';
 import {
   LendingGetCapabilitiesResponseSchema,
   BorrowRepaySupplyWithdrawSchema,
@@ -329,9 +324,13 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       console.error('Raw capabilitiesResult received from MCP tool call.');
 
       // Check if the response has structuredContent directly (new format)
-      if (capabilitiesResult && typeof capabilitiesResult === 'object' && 'structuredContent' in capabilitiesResult) {
-        const parsedData = (capabilitiesResult as any).structuredContent;
-        
+      if (
+        capabilitiesResult &&
+        typeof capabilitiesResult === 'object' &&
+        'structuredContent' in capabilitiesResult
+      ) {
+        const parsedData = (capabilitiesResult as { structuredContent: unknown }).structuredContent;
+
         const capabilitiesValidationResult =
           LendingGetCapabilitiesResponseSchema.safeParse(parsedData);
 
@@ -340,7 +339,9 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
             'Parsed MCP getCapabilities response validation failed. Zod Error:',
             JSON.stringify(capabilitiesValidationResult.error.format(), null, 2)
           );
-          throw new Error(`Failed to validate the parsed capabilities data from MCP server tool. Complete response: ${JSON.stringify(capabilitiesResult, null, 2)}`);
+          throw new Error(
+            `Failed to validate the parsed capabilities data from MCP server tool. Complete response: ${JSON.stringify(capabilitiesResult, null, 2)}`
+          );
         }
 
         const validatedData = capabilitiesValidationResult.data;
@@ -432,8 +433,13 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
           const token = lendingCap.underlyingToken;
 
           // Check if token has all required data (skip empty/incomplete tokens)
-          if (token && token.symbol && token.symbol.trim() && 
-              token.tokenUid?.chainId && token.tokenUid?.address) {
+          if (
+            token &&
+            token.symbol &&
+            token.symbol.trim() &&
+            token.tokenUid?.chainId &&
+            token.tokenUid?.address
+          ) {
             const symbol = token.symbol.trim();
             const tokenInfo: TokenInfo = {
               chainId: token.tokenUid.chainId,
@@ -459,7 +465,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
             console.error('Skipping capability with incomplete token data:', {
               symbol: token?.symbol,
               chainId: token?.tokenUid?.chainId,
-              address: token?.tokenUid?.address
+              address: token?.tokenUid?.address,
             });
           }
         }
@@ -472,7 +478,9 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
     }
 
     if (Object.keys(this.tokenMap).length === 0) {
-      console.warn('Warning: Token map is empty after processing capabilities. This may indicate the server is returning capabilities with empty token symbols.');
+      console.warn(
+        'Warning: Token map is empty after processing capabilities. This may indicate the server is returning capabilities with empty token symbols.'
+      );
     } else {
       console.error(`Successfully loaded tokens: ${this.availableTokens.join(', ')}`);
     }
@@ -496,7 +504,12 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
     try {
       console.error('Calling generateText with Vercel AI SDK...');
-      const { text, toolResults: _toolResults, finishReason, response } = await generateText({
+      const {
+        text,
+        toolResults: _toolResults,
+        finishReason,
+        response,
+      } = await generateText({
         model: this.model,
         system: this.conversationHistory.find(m => m.role === 'system')?.content as string,
         messages: this.conversationHistory.filter(m => m.role !== 'system') as (
@@ -643,7 +656,9 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       }
     }
 
-    throw new Error(`No positions data found in response. Response: ${JSON.stringify(response, null, 2)}`);
+    throw new Error(
+      `No positions data found in response. Response: ${JSON.stringify(response, null, 2)}`
+    );
   }
 
   /**
@@ -664,13 +679,17 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
           } catch (error) {
             console.error('Failed to parse UserReserve:', error);
             console.error('Reserve object that failed parsing:', reserve);
-            throw new Error(`Failed to parse reserve data for token ${tokenNameOrSymbol}. Ensure the SDK response matches UserReserveSchema. Reserve: ${JSON.stringify(reserve, null, 2)}`);
+            throw new Error(
+              `Failed to parse reserve data for token ${tokenNameOrSymbol}. Ensure the SDK response matches UserReserveSchema. Reserve: ${JSON.stringify(reserve, null, 2)}`
+            );
           }
         }
       }
     }
 
-    throw new Error(`No reserve found for token ${tokenNameOrSymbol}. Response: ${JSON.stringify(response, null, 2)}`);
+    throw new Error(
+      `No reserve found for token ${tokenNameOrSymbol}. Response: ${JSON.stringify(response, null, 2)}`
+    );
   }
 
   /**
@@ -687,12 +706,17 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
    */
   private populateTokenMapFromPositions(positionsData: GetWalletLendingPositionsResponse): void {
     const newTokensFound: string[] = [];
-    
+
     positionsData.positions.forEach(position => {
       position.userReserves.forEach(reserve => {
         const token = reserve.token;
-        if (token && token.symbol && token.symbol.trim() && 
-            token.tokenUid?.chainId && token.tokenUid?.address) {
+        if (
+          token &&
+          token.symbol &&
+          token.symbol.trim() &&
+          token.tokenUid?.chainId &&
+          token.tokenUid?.address
+        ) {
           const symbol = token.symbol.trim();
           const tokenInfo: TokenInfo = {
             chainId: token.tokenUid.chainId,
@@ -717,9 +741,11 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
         }
       });
     });
-    
+
     if (newTokensFound.length > 0) {
-      console.error(`Populated token map from position data. Added tokens: ${newTokensFound.join(', ')}`);
+      console.error(
+        `Populated token map from position data. Added tokens: ${newTokensFound.join(', ')}`
+      );
       console.error(`Total available tokens: ${this.availableTokens.join(', ')}`);
     }
   }

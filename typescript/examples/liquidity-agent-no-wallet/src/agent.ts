@@ -5,13 +5,7 @@ import { tool } from 'ai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Task } from '@google-a2a/types';
 import { TaskState } from '@google-a2a/types';
-import { promises as fs } from 'fs';
-import {
-  generateText,
-  type CoreUserMessage,
-  type CoreAssistantMessage,
-  type StepResult,
-} from 'ai';
+import { generateText, type CoreUserMessage, type CoreAssistantMessage } from 'ai';
 import { z } from 'zod';
 import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
@@ -298,10 +292,7 @@ Rules:
     try {
       const result = await generateText({
         model: this.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...this.conversationHistory,
-        ],
+        messages: [{ role: 'system', content: systemPrompt }, ...this.conversationHistory],
         tools: this.toolSet,
         maxSteps: 10,
       });
@@ -356,7 +347,9 @@ Rules:
             role: 'agent',
             messageId: `msg-${Date.now()}`,
             kind: 'message',
-            parts: [{ kind: 'text', text: result.text || "I'm sorry, I couldn't process that request." }],
+            parts: [
+              { kind: 'text', text: result.text || "I'm sorry, I couldn't process that request." },
+            ],
           },
         },
       };
@@ -366,28 +359,28 @@ Rules:
       const errorMessage = error instanceof Error ? error.message : String(error);
       logError(`Error during processUserInput: ${errorMessage}`);
 
-            return {
+      return {
         id: userAddress,
         contextId: `error-${Date.now()}`,
-              kind: 'task',
-              status: {
-                state: TaskState.Failed,
-                message: {
-                  role: 'agent',
-                  messageId: `msg-${Date.now()}`,
-                  kind: 'message',
+        kind: 'task',
+        status: {
+          state: TaskState.Failed,
+          message: {
+            role: 'agent',
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
             parts: [{ kind: 'text', text: `Error: ${errorMessage}` }],
-                },
-              },
-            };
-        }
-      }
+          },
+        },
+      };
+    }
+  }
 
   private getHandlerContext(): HandlerContext {
     if (!this.mcpClient) {
       throw new Error('MCP client not initialized');
     }
-        return {
+    return {
       mcpClient: this.mcpClient,
       userAddress: this.userAddress,
       quicknodeSubdomain: this.quicknodeSubdomain,
