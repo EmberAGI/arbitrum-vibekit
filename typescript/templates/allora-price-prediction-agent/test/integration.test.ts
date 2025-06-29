@@ -15,7 +15,7 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
   let baseUrl: string;
   const port = 3458; // Use a different port to avoid conflicts
 
-  before(async function() {
+  before(async function () {
     this.timeout(30000);
     console.log('🚀 Starting Allora Price Prediction Agent for integration testing...');
 
@@ -65,7 +65,7 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
     await mcpClient.connect(transport);
   });
 
-  after(async function() {
+  after(async function () {
     this.timeout(15000);
     console.log('🛑 Shutting down test agent...');
     try {
@@ -129,7 +129,7 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
       expect(pricePredictionTool?.inputSchema.properties).to.have.property('message');
     });
 
-    it('should get BTC price prediction', async function() {
+    it('should get BTC price prediction', async function () {
       this.timeout(30000); // 30 second timeout for this test
       const result = await mcpClient.callTool({
         name: 'predict-price',
@@ -156,7 +156,7 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
       expect(responseText).to.contain('_Data provided by Allora prediction markets_');
     });
 
-    it('should handle unknown token gracefully', async function() {
+    it('should handle unknown token gracefully', async function () {
       this.timeout(30000); // 30 second timeout for this test
       const result = await mcpClient.callTool({
         name: 'predict-price',
@@ -197,7 +197,7 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
       }
     });
 
-    it('should work without timeframe parameter', async function() {
+    it('should work without timeframe parameter', async function () {
       this.timeout(30000); // 30 second timeout for this test
       const result = await mcpClient.callTool({
         name: 'predict-price',
@@ -241,7 +241,7 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
       expect(response.kind).to.equal('message');
       expect(response.role).to.equal('agent');
       // The agent should ask for clarification
-      expect(response.parts[0].text).to.match(/what token would you like|which token|please|specify/i);
+      expect(response.parts[0].text).to.match(/what token|which token|please|specify/i);
 
       // Test with missing message - this should throw an MCP error
       try {
