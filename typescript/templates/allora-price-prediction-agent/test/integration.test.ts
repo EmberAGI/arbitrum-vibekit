@@ -6,8 +6,8 @@ import { describe, it, before, after } from 'mocha';
 import { expect } from 'chai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import { Agent, createProviderSelector } from 'arbitrum-vibekit-core';
-import { agentConfig } from '../src/index.js';
+import { Agent, createProviderSelector, type AgentConfig } from 'arbitrum-vibekit-core';
+import { pricePredictionSkill } from '../src/skills/pricePrediction.js';
 
 describe('Allora Price Prediction Agent - Integration Tests', () => {
   let agent: Agent<any, any>;
@@ -23,6 +23,24 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
     if (!process.env.ALLORA_API_KEY) {
       process.env.ALLORA_API_KEY = 'test-api-key';
     }
+
+    // Define agent config locally to avoid importing from index.js
+    const agentConfig: AgentConfig = {
+      name: process.env.AGENT_NAME || 'Allora Price Prediction Agent',
+      version: process.env.AGENT_VERSION || '1.0.0',
+      description:
+        process.env.AGENT_DESCRIPTION ||
+        'An AI agent that provides price predictions using Allora prediction markets data',
+      skills: [pricePredictionSkill],
+      url: 'localhost',
+      capabilities: {
+        streaming: false,
+        pushNotifications: false,
+        stateTransitionHistory: false,
+      },
+      defaultInputModes: ['application/json'],
+      defaultOutputModes: ['application/json'],
+    };
 
     // Debug: Check if AGENT_NAME is set
     console.log('Environment AGENT_NAME:', process.env.AGENT_NAME);
