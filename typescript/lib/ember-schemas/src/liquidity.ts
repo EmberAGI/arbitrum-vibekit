@@ -45,7 +45,7 @@ export const WithdrawLiquiditySchema = z.object({
     .int()
     .positive()
     .describe(
-      'The index number (starting from 1) of the liquidity position to withdraw, as listed by getUserLiquidityPositions.'
+      'The index number (starting from 1) of the liquidity position to withdraw, as listed by getWalletLiquidityPositions.'
     ),
 });
 export type WithdrawLiquidityArgs = z.infer<typeof WithdrawLiquiditySchema>;
@@ -53,8 +53,8 @@ export type WithdrawLiquidityArgs = z.infer<typeof WithdrawLiquiditySchema>;
 export const GetLiquidityPoolsSchema = z.object({}); 
 export type GetLiquidityPoolsArgs = z.infer<typeof GetLiquidityPoolsSchema>;
 
-export const GetUserLiquidityPositionsSchema = z.object({});
-export type GetUserLiquidityPositionsArgs = z.infer<typeof GetUserLiquidityPositionsSchema>;
+export const GetWalletLiquidityPositionsSchema = z.object({});
+export type GetWalletLiquidityPositionsArgs = z.infer<typeof GetWalletLiquidityPositionsSchema>;
 
 //
 // Liquidity Preview and Artifact Schemas
@@ -121,7 +121,7 @@ export const UserPositionsArtifactSchema = z.object({
 });
 export type UserPositionsArtifact = z.infer<typeof UserPositionsArtifactSchema>;
 
-export const GetUserLiquidityPositionsResponseSchema = z.object({
+export const GetWalletLiquidityPositionsResponseSchema = z.object({
   positions: z.array(LiquidityPositionArtifactSchema),
 });
-export type GetUserLiquidityPositionsResponse = z.infer<typeof GetUserLiquidityPositionsResponseSchema>; 
+export type GetWalletLiquidityPositionsResponse = z.infer<typeof GetWalletLiquidityPositionsResponseSchema>; 

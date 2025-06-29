@@ -1,30 +1,31 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import type { Task } from 'a2a-samples-js';
-import cors from 'cors';
 import * as dotenv from 'dotenv';
 import express from 'express';
 import { isAddress } from 'viem';
-import { z } from 'zod';
 
 import { Agent } from './agent.js';
+import cors from 'cors';
+import { z } from 'zod';
+import type { Task } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
 
-const SwapAgentSchema = z.object({
+const SwappingAgentSchema = z.object({
   instruction: z
     .string()
     .describe(
-      "A natural‑language swap directive, e.g. 'Swap 50 DAI into USDT' or question to ask the agent, e.g. 'How does Camelot work?'."
+      "A natural-language swapping directive, e.g. 'Swap 1 ETH to USDC' or 'Convert 100 DAI to WETH' or questions about Camelot DEX."
     ),
   userAddress: z
     .string()
     .describe('The user wallet address which is used to sign transactions and to pay for gas.'),
 });
-type SwapAgentArgs = z.infer<typeof SwapAgentSchema>;
+type SwappingAgentArgs = z.infer<typeof SwappingAgentSchema>;
 
 dotenv.config();
 
 const server = new McpServer({
-  name: 'mcp-sse-agent-server',
+  name: 'swapping-agent-server',
   version: '1.0.0',
 });
 
@@ -41,15 +42,15 @@ const initializeAgent = async (): Promise<void> => {
   await agent.init();
 };
 
-const agentToolName = 'askSwapAgent';
+const agentToolName = 'askSwappingAgent';
 const agentToolDescription =
-  'Sends a free‑form, natural‑language swap instruction to this token‑swap AI agent and returns a structured quote (route, estimate, fees, calldata). You can also ask questions to the agent about the Camelot protocol. This agent can help you swap tokens on Camelot and other protocols. It supports both same-chain and cross-chain swaps.';
+  'Sends a free-form, natural-language swapping instruction to this swapping AI agent via Ember AI On-chain Actions MCP server (onchain-actions) and returns a structured quote including transaction data. You can also ask questions about Camelot DEX.';
 
 server.tool(
   agentToolName,
   agentToolDescription,
-  SwapAgentSchema.shape,
-  async (args: SwapAgentArgs) => {
+  SwappingAgentSchema.shape,
+  async (args: SwappingAgentArgs) => {
     const { instruction, userAddress } = args;
     if (!isAddress(userAddress)) {
       throw new Error('Invalid user address provided.');
@@ -66,12 +67,15 @@ server.tool(
       const err = error as Error;
       const errorTask: Task = {
         id: userAddress,
-        //sessionId: 'c295ea44-7543-4f78-b524-7a38915ad6e4',
+        contextId: `error-${Date.now()}`,
+        kind: 'task',
         status: {
-          state: 'failed',
+          state: TaskState.Failed,
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: `Error: ${err.message}` }],
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
+            parts: [{ kind: 'text', text: `Error: ${err.message}` }],
           },
         },
       };
@@ -89,7 +93,7 @@ app.use(cors());
 
 app.get('/', (_req, res) => {
   res.json({
-    name: 'MCP SSE Agent Server',
+    name: 'Swapping Agent No Wallet Server',
     version: '1.0.0',
     status: 'running',
     endpoints: {

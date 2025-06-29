@@ -1,7 +1,7 @@
 {
   "name": "liquidity-agent-no-wallet",
   "version": "1.0.0",
-  "description": "Ember On-chain Actions liquidity management Agent Example without integrated wallet",
+  "description": "Ember API Liquidity Agent Example",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -10,7 +10,7 @@
     "lint:fix": "eslint --ext .ts,.tsx src --fix",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
-    "test": "pnpm --filter arbitrum-vibekit build && pnpm --filter ember-schemas build && pnpm --filter test-utils build && NODE_OPTIONS=\"--no-warnings\" mocha --require tsx --require mocha-suppress-logs --exit --config ../../.mocharc.json 'test/**/*.test.ts'",
+    "test": "pnpm --filter arbitrum-vibekit build && pnpm --filter ember-schemas build && pnpm --filter test-utils build && NODE_OPTIONS=\"--no-warnings\" tsx node_modules/mocha/bin/mocha --exit --timeout 120000 --config ../../.mocharc.json 'test/**/*.test.ts'",
     "test:ts": "tsc --project tsconfig.test.json",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
     "docker:build": "docker build -t liquidity-agent-no-wallet ../../",
@@ -22,16 +22,16 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\" \"test/**/*.{ts,tsx,js,jsx}\""
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.5.0",
+    "@google-a2a/types": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.13.1",
     "@openrouter/ai-sdk-provider": "^0.4.5",
     "@openzeppelin/contracts": "^5.3.0",
-    "a2a-samples-js": "workspace:*",
     "ai": "^4.3.2",
     "arbitrum-vibekit-core": "workspace:*",
-    "ember-schemas": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "ember-mcp-tool-server": "workspace:*",
+    "ember-api": "workspace:^",
+    "ember-schemas": "workspace:*",
     "express": "^4.21.2",
     "viem": "^2.26.3",
     "zod": "^3.22.4"

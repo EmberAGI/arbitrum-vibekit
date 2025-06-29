@@ -8,17 +8,17 @@
     "build": "tsc --build",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:run": "vitest run",
+    "test": "NODE_OPTIONS=\"--no-warnings\" tsx node_modules/mocha/bin/mocha --exit --timeout 120000 'test/**/*.test.ts'",
+    "test:watch": "NODE_OPTIONS=\"--no-warnings\" tsx node_modules/mocha/bin/mocha --watch --timeout 120000 'test/**/*.test.ts'",
+    "test:run": "NODE_OPTIONS=\"--no-warnings\" tsx node_modules/mocha/bin/mocha --exit --timeout 120000 'test/**/*.test.ts'",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
   },
   "dependencies": {
     "@alloralabs/mcp-server": "workspace:*",
-    "@google-a2a/types": "github:google-a2a/A2A#path:types",
-    "@modelcontextprotocol/sdk": "^1.5.0",
+    "@google-a2a/types": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.13.1",
     "@openrouter/ai-sdk-provider": "^0.4.5",
     "ai": "^4.3.2",
     "arbitrum-vibekit-core": "workspace:*",
@@ -29,12 +29,18 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@types/chai": "^4.3.20",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^20.17.57",
+    "@types/sinon": "^17.0.4",
+    "chai": "^4.5.0",
+    "mocha": "^10.8.2",
+    "mocha-suppress-logs": "^0.3.1",
     "prettier": "^3.5.3",
+    "sinon": "^20.0.0",
     "tsx": "^4.6.2",
-    "typescript": "^5.3.0",
-    "vitest": "^3.2.1"
+    "typescript": "^5.3.0"
   }
 }

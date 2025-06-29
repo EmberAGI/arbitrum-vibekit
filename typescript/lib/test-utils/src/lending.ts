@@ -2,9 +2,8 @@
  * Lending-specific test utilities
  */
 
-import type { GetWalletPositionsResponse } from '@emberai/sdk-typescript';
-import type { Task } from 'a2a-samples-js';
-import { type UserReserve, UserReserveSchema } from 'ember-schemas';
+import type { GetWalletLendingPositionsResponse, LendTokenDetail } from 'ember-api';
+import type { Task } from '@google-a2a/types';
 
 import type { TransactionPlan } from './transactions.js';
 
@@ -20,7 +19,7 @@ export function extractLendingTransactionPlan(response: Task): Array<Transaction
   for (const artifact of response.artifacts) {
     if (artifact.name === 'transaction-plan') {
       for (const part of artifact.parts) {
-        if (part.type === 'data' && part.data.txPlan) {
+        if (part.kind === 'data' && part.data.txPlan) {
           return part.data.txPlan as Array<TransactionPlan>;
         }
       }
@@ -33,7 +32,7 @@ export function extractLendingTransactionPlan(response: Task): Array<Transaction
 /**
  * Extract positions data from response
  */
-export function extractPositionsData(response: Task): GetWalletPositionsResponse {
+export function extractPositionsData(response: Task): GetWalletLendingPositionsResponse {
   if (!response.artifacts) {
     throw new Error(`No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`);
   }
@@ -42,8 +41,8 @@ export function extractPositionsData(response: Task): GetWalletPositionsResponse
   for (const artifact of response.artifacts) {
     if (artifact.name === 'positions' || artifact.name === 'wallet-positions') {
       for (const part of artifact.parts) {
-        if (part.type === 'data' && part.data.positions) {
-          return part.data as unknown as GetWalletPositionsResponse;
+        if (part.kind === 'data' && part.data?.positions) {
+          return part.data as unknown as GetWalletLendingPositionsResponse;
         }
       }
     }
@@ -51,7 +50,7 @@ export function extractPositionsData(response: Task): GetWalletPositionsResponse
 
   // Debug: log available artifact names before throwing an error
   try {
-    const names = response.artifacts.map((a) => a.name).join(', ');
+    const names = response.artifacts.map(a => a.name).join(', ');
      
     console.log(`[extractPositionsData] Available artifact names: ${names}`);
   } catch (_) {
@@ -65,23 +64,21 @@ export function extractPositionsData(response: Task): GetWalletPositionsResponse
  * Finds the reserve information for a given token symbol or name within the positions response.
  */
 export function getReserveForToken(
-  response: GetWalletPositionsResponse,
+  response: GetWalletLendingPositionsResponse,
   tokenNameOrSymbol: string
-): UserReserve {
+): LendTokenDetail {
   for (const position of response.positions) {
-    if (!position.lendingPosition) continue;
-
-    for (const reserve of position.lendingPosition.userReserves) {
+    for (const reserve of position.userReserves) {
       const name = reserve.token!.name;
       const symbol = reserve.token!.symbol;
 
       if (name === tokenNameOrSymbol || symbol === tokenNameOrSymbol) {
         try {
-          return UserReserveSchema.parse(reserve);
+          return reserve;
         } catch (error) {
-          console.error('Failed to parse UserReserve:', error);
+          console.error('Failed to parse LendTokenDetail:', error);
           console.error('Reserve object that failed parsing:', reserve);
-          throw new Error(`Failed to parse reserve data for token ${tokenNameOrSymbol}. Ensure the SDK response matches UserReserveSchema. Reserve: ${JSON.stringify(reserve, null, 2)}`);
+          throw new Error(`Failed to parse reserve data for token ${tokenNameOrSymbol}. Reserve: ${JSON.stringify(reserve, null, 2)}`);
         }
       }
     }
@@ -99,7 +96,7 @@ export async function getTokenReserve(
   },
   userAddress: string,
   tokenName: string
-): Promise<UserReserve> {
+): Promise<LendTokenDetail> {
   const response = await agent.processUserInput('show my positions', userAddress);
   const positionsData = extractPositionsData(response);
   return getReserveForToken(positionsData, tokenName);

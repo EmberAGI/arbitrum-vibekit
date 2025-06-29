@@ -14,7 +14,6 @@
       "./examples/lending-agent-no-wallet/tsconfig.json",
       "./examples/swapping-agent-no-wallet/tsconfig.json",
       "./examples/liquidity-agent-no-wallet/tsconfig.json",
-      "./lib/a2a/tsconfig.json",
       "./lib/mcp-tools/allora-mcp-server/tsconfig.json",
       "./examples/swapping-agent/tsconfig.json"
     ]
@@ -58,7 +57,6 @@
           "./examples/lending-agent-no-wallet/tsconfig.json",
           "./examples/swapping-agent-no-wallet/tsconfig.json",
           "./examples/liquidity-agent-no-wallet/tsconfig.json",
-          "./lib/a2a/tsconfig.json",
           "./lib/mcp-tools/allora-mcp-server/tsconfig.json",
           "./examples/swapping-agent/tsconfig.json"
         ]

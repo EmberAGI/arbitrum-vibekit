@@ -3,7 +3,7 @@ import {
   TextContentSchema,
   CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
-import type { Task, Message } from "@google-a2a/types/src/types.js";
+import type { Task, Message } from "@google-a2a/types";
 import { nanoid } from "nanoid";
 import { ZodType } from "zod";
 
@@ -39,7 +39,7 @@ export function parseMcpToolResponsePayload<T>(
   rawResponse: unknown,
   schema: ZodType<T>
 ): T {
-  const { content, isError } = CallToolResultSchema.parse(rawResponse);
+  const { content, structuredContent, isError } = CallToolResultSchema.parse(rawResponse);
 
   // If the MCP tool signaled an error, extract and throw its message
   if (isError) {
@@ -51,24 +51,11 @@ export function parseMcpToolResponsePayload<T>(
     throw new Error(text);
   }
 
-  if (!content || content.length === 0) {
-    throw new Error("MCP response content is empty.");
+  if (!structuredContent) {
+    throw new Error("Expected structured content but received text content.");
   }
 
-  // Validate and extract 'text' from the first content item
-  const { text } = TextContentSchema.parse(content[0]);
-
-  // Try to parse as JSON and validate against schema
-  try {
-    const jsonPayload = JSON.parse(text);
-    return schema.parse(jsonPayload);
-  } catch (e: unknown) {
-    if (e instanceof SyntaxError) {
-      throw new Error("Expected JSON payload but received plain text.");
-    }
-    // Otherwise it's a schema validation error
-    throw e;
-  }
+  return schema.parse(structuredContent);
 }
 
 /**

@@ -9,7 +9,7 @@ import { z } from "zod";
 import { expect } from "chai";
 import sinon from "sinon";
 import { createInfoMessage } from "../src/utils.js";
-import type { Task, Message } from "@google-a2a/types/src/types.js";
+import type { Task, Message } from "@google-a2a/types";
 
 describe("LLM Orchestration", () => {
   // We'll capture arguments passed to the model instead of mocking generateText

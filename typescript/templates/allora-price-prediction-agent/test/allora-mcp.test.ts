@@ -5,15 +5,22 @@
  */
 
 import 'dotenv/config';
-import { describe, test, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, before, after } from 'mocha';
+import { expect } from 'chai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import * as path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+// Get the current directory for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 describe('Allora MCP Server Tools', () => {
   let mcpClient: Client;
 
-  beforeAll(async () => {
+  before(async function() {
+    this.timeout(30000); // 30 second timeout for connection
     console.log('🚀 Starting Allora MCP Server for isolated testing...');
 
     // Verify ALLORA_API_KEY is set
@@ -23,7 +30,7 @@ describe('Allora MCP Server Tools', () => {
     console.log('✅ ALLORA_API_KEY is set');
 
     // Find the Allora MCP server path - it should be in the workspace
-    const mcpServerPath = require.resolve('@alloralabs/mcp-server');
+    const mcpServerPath = join(__dirname, '../../../lib/mcp-tools/allora-mcp-server/dist/index.js');
     console.log('MCP Server path:', mcpServerPath);
 
     // Create MCP client with stdio transport
@@ -48,9 +55,9 @@ describe('Allora MCP Server Tools', () => {
 
     await mcpClient.connect(transport);
     console.log('✅ Connected to Allora MCP Server');
-  }, 30000); // 30 second timeout for connection
+  });
 
-  afterAll(async () => {
+  after(async () => {
     console.log('🛑 Shutting down Allora MCP Server...');
     if (mcpClient) {
       await mcpClient.close();
@@ -58,7 +65,8 @@ describe('Allora MCP Server Tools', () => {
   });
 
   describe('list_all_topics', () => {
-    test('should list available topics', async () => {
+    it('should list available topics', async function() {
+      this.timeout(30000); // 30 second timeout
       const result = await mcpClient.callTool({
         name: 'list_all_topics',
         arguments: {},
@@ -67,17 +75,17 @@ describe('Allora MCP Server Tools', () => {
       console.log('list_all_topics response:', JSON.stringify(result, null, 2));
 
       const content = result.content as any[];
-      expect(content).toBeDefined();
-      expect(Array.isArray(content)).toBe(true);
-      expect(content.length).toBeGreaterThan(0);
+      expect(content).to.exist;
+      expect(Array.isArray(content)).to.be.true;
+      expect(content.length).to.be.greaterThan(0);
 
       // Check the structure of the response
       const firstContent = content[0];
-      expect(firstContent).toHaveProperty('text');
+      expect(firstContent).to.have.property('text');
 
       // Parse the topics
       const topics = JSON.parse(firstContent.text);
-      expect(Array.isArray(topics)).toBe(true);
+      expect(Array.isArray(topics)).to.be.true;
 
       if (topics.length > 0) {
         console.log(`Found ${topics.length} topics`);
@@ -85,8 +93,8 @@ describe('Allora MCP Server Tools', () => {
 
         // Verify topic structure
         const firstTopic = topics[0];
-        expect(firstTopic).toHaveProperty('topic_id');
-        expect(firstTopic).toHaveProperty('topic_name');
+        expect(firstTopic).to.have.property('topic_id');
+        expect(firstTopic).to.have.property('topic_name');
 
         // Look for crypto-related topics
         const cryptoTopics = topics.filter(
@@ -103,11 +111,12 @@ describe('Allora MCP Server Tools', () => {
           console.log('Crypto topics:', cryptoTopics);
         }
       }
-    }, 30000); // 30 second timeout
+    });
   });
 
   describe('get_inference_by_topic_id', () => {
-    test('should get inference for a valid topic ID', async () => {
+    it('should get inference for a valid topic ID', async function() {
+      this.timeout(30000); // 30 second timeout
       // First, get the list of topics to find a valid ID
       const topicsResult = await mcpClient.callTool({
         name: 'list_all_topics',
@@ -140,13 +149,13 @@ describe('Allora MCP Server Tools', () => {
       console.log('get_inference_by_topic_id response:', JSON.stringify(result, null, 2));
 
       const inferenceContent = result.content as any[];
-      expect(inferenceContent).toBeDefined();
-      expect(Array.isArray(inferenceContent)).toBe(true);
-      expect(inferenceContent.length).toBeGreaterThan(0);
+      expect(inferenceContent).to.exist;
+      expect(Array.isArray(inferenceContent)).to.be.true;
+      expect(inferenceContent.length).to.be.greaterThan(0);
 
       // Check the structure of the response
       const firstInferenceContent = inferenceContent[0];
-      expect(firstInferenceContent).toHaveProperty('text');
+      expect(firstInferenceContent).to.have.property('text');
 
       // Parse the inference data
       const inference = JSON.parse(firstInferenceContent.text);
@@ -154,12 +163,11 @@ describe('Allora MCP Server Tools', () => {
 
       // The inference might have various structures depending on the topic
       // Let's just verify it's an object with some data
-      expect(typeof inference).toBe('object');
-    }, 30000); // 30 second timeout
-  });
+      expect(typeof inference).to.equal('object');
+    });
 
-  describe('get_inference_by_topic_id', () => {
-    test('should handle invalid topic ID gracefully', async () => {
+    it('should handle invalid topic ID gracefully', async function() {
+      this.timeout(30000); // 30 second timeout
       const result = await mcpClient.callTool({
         name: 'get_inference_by_topic_id',
         arguments: {
@@ -171,17 +179,18 @@ describe('Allora MCP Server Tools', () => {
 
       const errorContent = result.content as any[];
       // The response might be an error or empty data
-      expect(errorContent).toBeDefined();
+      expect(errorContent).to.exist;
 
       if (errorContent.length > 0 && errorContent[0].text) {
         const response = JSON.parse(errorContent[0].text);
         console.log('Error response:', response);
       }
-    }, 30000); // 30 second timeout
+    });
   });
 
   describe('Token to Topic Mapping', () => {
-    test('should find topics for common crypto tokens', async () => {
+    it('should find topics for common crypto tokens', async function() {
+      this.timeout(30000); // 30 second timeout
       const result = await mcpClient.callTool({
         name: 'list_all_topics',
         arguments: {},
@@ -214,12 +223,12 @@ describe('Allora MCP Server Tools', () => {
       console.log(`Found topics for ${foundTokens.length} out of ${tokens.length} tokens`);
 
       if (foundTokens.length > 0) {
-        expect(foundTokens.length).toBeGreaterThan(0);
+        expect(foundTokens.length).to.be.greaterThan(0);
       } else {
         console.warn(
           'No topics found for any common crypto tokens - check if the API has crypto price prediction topics',
         );
       }
-    }, 30000); // 30 second timeout
+    });
   });
 });

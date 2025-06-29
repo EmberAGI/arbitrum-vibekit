@@ -5,6 +5,7 @@
     "outDir": "./dist-test",
     "composite": true,
     "baseUrl": ".",
+    "verbatimModuleSyntax": false,
     "paths": {
       "test-utils": ["../../lib/test-utils/src"]
     }
