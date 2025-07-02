@@ -1,0 +1,387 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+body {
+  margin: 0;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 0.5rem;
+  }
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 24% 24%;
+    --input: 217.2 24% 24%;
+    --ring: 212.7 26.8% 83.9%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom CSS to hide specific sidebar sections */
+@layer utilities {
+  /* Hide Transport Type section */
+  label[for="transport-type-select"],
+  #transport-type-select {
+    display: none !important;
+  }
+
+  /* Hide the entire div containing Transport Type */
+  label[for="transport-type-select"] + * {
+    display: none !important;
+  }
+
+  /* Hide the div containing the Transport Type label and select */
+  label[for="transport-type-select"]:nth-child(1) {
+    display: none !important;
+  }
+
+  /* Alternative: Hide the parent div of Transport Type */
+  .space-y-2:has(label[for="transport-type-select"]) {
+    display: none !important;
+  }
+
+  /* Hide Command input section */
+  label[for="command-input"],
+  #command-input {
+    display: none !important;
+  }
+  
+  .space-y-2:has(label[for="command-input"]) {
+    display: none !important;
+  }
+
+  /* Hide Arguments input section */
+  label[for="arguments-input"],
+  #arguments-input {
+    display: none !important;
+  }
+  
+  .space-y-2:has(label[for="arguments-input"]) {
+    display: none !important;
+  }
+
+  /* Hide URL input section */
+  label[for="sse-url-input"],
+  #sse-url-input {
+    display: none !important;
+  }
+  
+  .space-y-2:has(label[for="sse-url-input"]) {
+    display: none !important;
+  }
+
+  /* Hide Environment Variables section */
+  button[data-testid="env-vars-button"] {
+    display: none !important;
+  }
+  
+  .space-y-2:has(button[data-testid="env-vars-button"]) {
+    display: none !important;
+  }
+
+  /* Center the remaining sidebar content */
+  .sidebar-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+
+  /* Center the sidebar content container */
+  .bg-card .p-4.flex-1.overflow-auto {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  /* Center the space-y-4 container inside sidebar */
+  .bg-card .p-4.flex-1.overflow-auto .space-y-4 {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 300px;
+  }
+
+  /* Center individual sections that remain */
+  .space-y-2:not(:has(label[for="transport-type-select"])):not(:has(label[for="command-input"])):not(:has(label[for="arguments-input"])):not(:has(label[for="sse-url-input"])):not(:has(button[data-testid="env-vars-button"])) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+  }
+
+  /* Center grid layout for copy buttons (Server Entry/Servers File) */
+  .grid.grid-cols-2.gap-2.mt-2 {
+    justify-self: center;
+    width: 100%;
+    display: grid;
+    place-items: center;
+  }
+
+  /* Center Configuration button and section */
+  button[data-testid="config-button"] {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+
+  .space-y-2:has(button[data-testid="config-button"]) {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+
+  /* Center Connect/Disconnect buttons */
+  .space-y-2:has(button[data-testid="connect-button"]) {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+
+  /* Center the grid for connected state buttons */
+  .grid.grid-cols-2.gap-4 {
+    display: grid !important;
+    place-items: center !important;
+    width: 100% !important;
+  }
+
+  /* Center single Connect button */
+  button:has(svg + text):not([data-testid]) {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
+  /* Center connection status indicator */
+  .flex.items-center.justify-center.space-x-2.mb-4 {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    text-align: center !important;
+    width: 100% !important;
+  }
+
+  /* Center logging level section */
+  .space-y-2:has(label[for="logging-level-select"]) {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+
+  /* Center any remaining buttons in sidebar */
+  .bg-card button:not([data-testid="config-button"]):not([data-testid="connect-button"]):not([data-testid="env-vars-button"]) {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
+  /* Center the bottom footer section */
+  .p-4.border-t {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  /* Center the footer content */
+  .p-4.border-t .flex.items-center.justify-between {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 1rem !important;
+    width: 100% !important;
+  }
+
+  /* Center theme selector */
+  select[id="theme-select"] {
+    align-self: center !important;
+  }
+
+  /* Center footer buttons */
+  .flex.items-center.space-x-2 {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
+  /* Hide all tabs except Tools tab */
+  button[data-radix-collection-item][data-state]:not([value="tools"]) {
+    display: none !important;
+  }
+
+  /* Alternative selector - hide specific tab triggers */
+  button[role="tab"]:not([value="tools"]) {
+    display: none !important;
+  }
+
+  /* Hide TabsTrigger components except Tools */
+  .mb-4.py-0 button:not([value="tools"]) {
+    display: none !important;
+  }
+
+  /* More specific - target the TabsList and hide non-tools triggers */
+  [role="tablist"] button:not([value="tools"]) {
+    display: none !important;
+  }
+
+  /* Hide tab content for all tabs except Tools */
+  [role="tabpanel"]:not([data-state="active"]) {
+    display: none !important;
+  }
+
+  /* Ensure Tools tab is always active/visible */
+  [role="tabpanel"][data-value="tools"] {
+    display: block !important;
+  }
+
+  /* Force Tools tab button to be active state */
+  button[value="tools"][role="tab"] {
+    display: flex !important;
+    data-state: active !important;
+  }
+
+  /* Hide other specific tab contents by component names if needed */
+  [data-value="resources"],
+  [data-value="prompts"], 
+  [data-value="ping"],
+  [data-value="sampling"],
+  [data-value="roots"],
+  [data-value="auth"] {
+    display: none !important;
+  }
+
+  /* Ensure only tools content is shown */
+  [data-value="tools"] {
+    display: block !important;
+  }
+
+  /* Hide the bottom history/notifications panel */
+  .relative.border-t.border-border {
+    display: none !important;
+  }
+
+  /* Hide the drag handle for history pane */
+  .absolute.w-full.h-4.-top-2.cursor-row-resize {
+    display: none !important;
+  }
+
+  /* Hide HistoryAndNotifications component specifically */
+  .h-full.overflow-auto:has([data-testid*="history"]) {
+    display: none !important;
+  }
+
+  /* Alternative - hide any element containing history or notifications */
+  div:has(+ div:contains("HistoryAndNotifications")) {
+    display: none !important;
+  }
+
+  /* Make main content take full height without bottom panel */
+  .flex-1.overflow-auto {
+    height: 100vh !important;
+  }
+}
