@@ -3,29 +3,41 @@ import type { SwapActionCallback } from './swap.js';
 import type {
   BorrowCallback,
   RepayTokensCallback,
-  SupplyCallback,
-  WithdrawCallback,
+  SupplyCallback as LendingSupplyCallback,
+  WithdrawCallback as LendingWithdrawCallback,
 } from './lending.js';
+import type { SupplyLiquidityCallback, WithdrawLiquidityCallback } from './liquidity.js';
 
 /**
  * The possible actions an ember plugin can perform.
  */
-export type Action = 'swap' | 'borrow' | 'repay' | 'supply' | 'withdraw';
+export type Action =
+  | 'swap'
+  | 'lending-borrow'
+  | 'lending-repay'
+  | 'lending-supply'
+  | 'lending-withdraw'
+  | 'liquidity-supply'
+  | 'liquidity-withdraw';
 
 /**
  * Type mapping for action callbacks.
  */
 export type ActionCallback<T extends Action> = T extends 'swap'
   ? SwapActionCallback
-  : T extends 'borrow'
+  : T extends 'lending-borrow'
     ? BorrowCallback
-    : T extends 'repay'
+    : T extends 'lending-repay'
       ? RepayTokensCallback
-      : T extends 'supply'
-        ? SupplyCallback
-        : T extends 'withdraw'
-          ? WithdrawCallback
-          : never;
+      : T extends 'lending-supply'
+        ? LendingSupplyCallback
+        : T extends 'lending-withdraw'
+          ? LendingWithdrawCallback
+          : T extends 'liquidity-supply'
+            ? SupplyLiquidityCallback
+            : T extends 'liquidity-withdraw'
+              ? WithdrawLiquidityCallback
+              : never;
 
 /**
  * Definition of an action that can be performed by the Ember plugin.
