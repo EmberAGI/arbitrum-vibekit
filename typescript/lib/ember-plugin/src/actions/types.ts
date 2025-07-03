@@ -7,7 +7,7 @@ import type {
   WithdrawCallback as LendingWithdrawCallback,
 } from './lending.js';
 import type { SupplyLiquidityCallback, WithdrawLiquidityCallback } from './liquidity.js';
-import type { Chain } from 'src/common.js';
+import type { Chain } from '../common.js';
 
 /**
  * The possible actions an ember plugin can perform.
