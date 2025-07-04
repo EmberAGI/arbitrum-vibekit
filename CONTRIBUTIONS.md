@@ -8,15 +8,24 @@ Before you start your work, checkout [open issues](https://github.com/EmberAGI/a
 
 ## Expanding Protocol Support (Integrating New Plugins)
 
-Vibekit primarily interacts with DeFi protocols through the MCP server powered by [EmberAI](https://www.emberai.xyz/), which supports a specific set of protocols at launch. Vibekit and Ember are designed for extensibility, and we highly encourage contributions that integrate support for additional protocols via new plugins.
+Vibekit supports DeFi protocol integrations through the Ember plugin system. The plugin architecture provides a standardized way to add support for protocols with swap, lending, and liquidity capabilities.
 
-If you're looking to add support for a new protocol:
+### Quick Overview
 
-1.  **Identify Protocol & Similar Integrations:**
-    Begin by identifying the protocol you wish to integrate. Look for the most similar existing integration within Vibekit. This can serve as a valuable reference for design patterns and shared abstractions. For instance, if you're aiming to integrate a DEX similar to Uniswap, the Camelot integration could be a good starting point.
+The plugin system is built around:
 
-2.  **Create an Issue:**
-    Navigate to the [Vibekit issues board](https://github.com/EmberAGI/arbitrum-vibekit/issues) to create a new issue detailing the protocol you intend to integrate. Describe the protocol, highlight its similarities to any existing integrations, and outline your proposed integration plan. This helps in tracking progress and discussing the approach.
+- **EmberPluginFactory**: Core class for creating plugins
+- **Action Definitions**: Simple descriptions of capabilities
+- **Action Types**: Predefined categories (swap, lending, liquidity operations)
+- **Multi-Chain Support**: Organize tokens by blockchain network using TokenSets
+
+### Getting Started
+
+1. **Create an Issue**: Navigate to the [Vibekit issues board](https://github.com/EmberAGI/arbitrum-vibekit/issues) to create a new issue detailing the protocol you intend to integrate.
+
+2. **Review Documentation**: Check the detailed [Ember Plugin README](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/ember-plugin) for comprehensive implementation guidelines, examples, and best practices.
+
+3. **Study Similar Integrations**: Look for existing plugin implementations that are similar to your target protocol for reference patterns.
 
 ## Development Steps
 
