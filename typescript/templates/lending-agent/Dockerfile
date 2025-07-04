@@ -32,6 +32,16 @@ COPY templates/lending-agent/package.json ./templates/lending-agent/
 #    because source files are not yet in the build context (they are copied in step 4).
 #    This keeps the layer cache-friendly while avoiding prepare/postinstall failures.
 # ------------------------------
+
+# Configure git to use HTTPS instead of SSH for GitHub
+RUN apt-get update && apt-get install -y --no-install-recommends git && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    git config --global url."https://github.com/".insteadOf "git@github.com:" && \
+    git config --global url."https://github.com/".insteadOf "ssh://git@github.com/" && \
+    git config --global url."https://github.com/".insteadOf "git+ssh://git@github.com/" && \
+    git config --global url."https://github.com/".insteadOf "https://git@github.com:"
+
 RUN pnpm install --frozen-lockfile
 
 # ------------------------------

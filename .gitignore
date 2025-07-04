@@ -79,3 +79,5 @@ logs/
 /playwright-report/
 /blob-report/
 /playwright/*
+
+hyperliquid-vault-agent/venv/*

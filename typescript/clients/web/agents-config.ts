@@ -29,6 +29,18 @@ export const chatAgents = [
       },
     ],
   },
+  {
+    id: 'hyperliquid-vault-agent' as const,
+    name: 'Vault',
+    description: 'Hyperliquid Vault agent',
+    suggestedActions: [
+      {
+        title: 'Buy SOL',
+        label: 'in Hyperliquid Vault',
+        action: 'Buy SOL with TP1 at 154, TP2 at 155, and SL at 152.',
+      },
+    ],
+  },
   // {
   //   id: 'langgraph-workflow' as const,
   //   name: 'Greeting Optimizer',
@@ -135,6 +147,7 @@ export const chatAgents = [
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
   ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
+  ['hyperliquid-vault-agent', 'http://hyperliquid-vault-agent:3012/sse'],
   // ['langgraph-workflow', 'http://langgraph-workflow-agent:3009/sse'],
   // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
   // ['allora-price-prediction-agent', 'http://allora-price-prediction-agent:3008/sse'],
