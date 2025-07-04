@@ -74,13 +74,15 @@ export const getInitialSseUrl = (): string => {
 export const getInitialCommand = (): string => {
   const param = getSearchParam("serverCommand");
   if (param) return param;
-  return localStorage.getItem("lastCommand") || "mcp-server-everything";
+  // Force Ember MCP defaults - always return "node"
+  return "node";
 };
 
 export const getInitialArgs = (): string => {
   const param = getSearchParam("serverArgs");
   if (param) return param;
-  return localStorage.getItem("lastArgs") || "";
+  // Force Ember MCP defaults - always return the Ember path
+  return "/Users/paras/Desktop/folder/Ember/Vibekit-Repo/arbitrum-vibekit/typescript/lib/mcp-tools/emberai-mcp/dist/index.js";
 };
 
 // Returns a map of config key -> value from query params if present

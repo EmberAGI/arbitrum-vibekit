@@ -141,7 +141,7 @@ h1 {
   #command-input {
     display: none !important;
   }
-  
+
   .space-y-2:has(label[for="command-input"]) {
     display: none !important;
   }
@@ -151,7 +151,7 @@ h1 {
   #arguments-input {
     display: none !important;
   }
-  
+
   .space-y-2:has(label[for="arguments-input"]) {
     display: none !important;
   }
@@ -161,7 +161,7 @@ h1 {
   #sse-url-input {
     display: none !important;
   }
-  
+
   .space-y-2:has(label[for="sse-url-input"]) {
     display: none !important;
   }
@@ -170,7 +170,7 @@ h1 {
   button[data-testid="env-vars-button"] {
     display: none !important;
   }
-  
+
   .space-y-2:has(button[data-testid="env-vars-button"]) {
     display: none !important;
   }
@@ -202,7 +202,11 @@ h1 {
   }
 
   /* Center individual sections that remain */
-  .space-y-2:not(:has(label[for="transport-type-select"])):not(:has(label[for="command-input"])):not(:has(label[for="arguments-input"])):not(:has(label[for="sse-url-input"])):not(:has(button[data-testid="env-vars-button"])) {
+  .space-y-2:not(:has(label[for="transport-type-select"])):not(
+      :has(label[for="command-input"])
+    ):not(:has(label[for="arguments-input"])):not(
+      :has(label[for="sse-url-input"])
+    ):not(:has(button[data-testid="env-vars-button"])) {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -273,39 +277,24 @@ h1 {
   }
 
   /* Center any remaining buttons in sidebar */
-  .bg-card button:not([data-testid="config-button"]):not([data-testid="connect-button"]):not([data-testid="env-vars-button"]) {
+  .bg-card
+    button:not([data-testid="config-button"]):not(
+      [data-testid="connect-button"]
+    ):not([data-testid="env-vars-button"]) {
     display: flex !important;
     justify-content: center !important;
     align-items: center !important;
   }
 
-  /* Center the bottom footer section */
+  /* Keep the footer layout but don't break it */
   .p-4.border-t {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
+    display: block !important;
   }
 
-  /* Center the footer content */
+  /* Keep the footer flex layout intact */
   .p-4.border-t .flex.items-center.justify-between {
     display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 1rem !important;
-    width: 100% !important;
-  }
-
-  /* Center theme selector */
-  select[id="theme-select"] {
-    align-self: center !important;
-  }
-
-  /* Center footer buttons */
-  .flex.items-center.space-x-2 {
-    display: flex !important;
-    justify-content: center !important;
+    justify-content: space-between !important;
     align-items: center !important;
   }
 
@@ -347,7 +336,7 @@ h1 {
 
   /* Hide other specific tab contents by component names if needed */
   [data-value="resources"],
-  [data-value="prompts"], 
+  [data-value="prompts"],
   [data-value="ping"],
   [data-value="sampling"],
   [data-value="roots"],
@@ -383,5 +372,262 @@ h1 {
   /* Make main content take full height without bottom panel */
   .flex-1.overflow-auto {
     height: 100vh !important;
+  }
+
+  /* Hide Tools tab padding and make it full height */
+  [role="tabpanel"][data-value="tools"] {
+    padding: 0 !important;
+    height: 100% !important;
+  }
+
+  [role="tabpanel"][data-value="tools"] > div {
+    height: 100% !important;
+    padding: 0 !important;
+  }
+
+  [role="tabpanel"][data-value="tools"] .grid {
+    height: 100% !important;
+  }
+
+  /* Make the specific tool panels use full height and width */
+  .bg-card.border.border-border.rounded-lg.shadow {
+    height: calc(100vh - 120px) !important;
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* Make the tools list scrollable area use remaining height */
+  .bg-card .space-y-2.overflow-y-auto.max-h-96 {
+    max-height: none !important;
+    height: calc(100vh - 300px) !important;
+    overflow-y: auto !important;
+    width: 100% !important;
+  }
+
+  /* Make the panel content area flex to fill space */
+  .bg-card > div.p-4:last-child {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    width: 100% !important;
+  }
+
+  /* Ensure the grid containing both panels uses full height and width */
+  .grid.grid-cols-2.gap-4 {
+    height: calc(100vh - 100px) !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Make each grid item use full available width */
+  .grid.grid-cols-2 > div {
+    width: 100% !important;
+  }
+
+  /* Remove any padding/margins from the tabs container */
+  div[dir="ltr"][data-orientation="horizontal"].w-full.p-4 {
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Make the tools tabpanel use full width */
+  [role="tabpanel"][data-value="tools"] {
+    width: 100% !important;
+    padding: 0 !important;
+  }
+
+  /* Fix tools list alignment and layout */
+  .space-y-2 > div {
+    width: 100% !important;
+    margin: 0 !important;
+    padding-left: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  /* Ensure tool items are properly aligned */
+  .flex.items-center.py-2.px-4.rounded.hover\:bg-gray-50 {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0.5rem 1rem !important;
+    display: flex !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Fix the tool content layout */
+  .flex.flex-col.items-start {
+    width: 100% !important;
+    align-items: flex-start !important;
+    text-align: left !important;
+  }
+
+  /* Ensure tool names and descriptions are properly aligned */
+  .flex.flex-col.items-start > span {
+    width: 100% !important;
+    text-align: left !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Remove any extra margins/padding from the tools container */
+  .space-y-2 {
+    gap: 0.25rem !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Ensure consistent spacing between tool items */
+  .space-y-2 > * + * {
+    margin-top: 0.25rem !important;
+  }
+
+  /* Make the main content area use full viewport height */
+  main {
+    height: 100vh !important;
+    overflow: hidden !important;
+  }
+
+  /* Keep the sidebar at its original width - multiple selectors to ensure it works */
+  .bg-card.border-r.border-border,
+  aside,
+  nav,
+  [role="navigation"],
+  .sidebar,
+  .w-80,
+  /* Target the specific sidebar container */
+  .bg-card.border-r.border-border.flex.flex-col.h-full.relative {
+    width: 320px !important;
+    min-width: 320px !important;
+    max-width: 320px !important;
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+    flex-basis: 320px !important;
+  }
+
+  /* Prevent any sidebar content from expanding */
+  .bg-card.border-r.border-border *,
+  .bg-card.border-r.border-border .p-4,
+  .bg-card.border-r.border-border .space-y-4,
+  .bg-card.border-r.border-border input,
+  .bg-card.border-r.border-border button,
+  .bg-card.border-r.border-border select {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Fix the sidebar container overflow */
+  .bg-card.border-r.border-border .p-4.flex-1.overflow-auto {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    max-width: 320px !important;
+  }
+
+  /* Ensure the main content area takes remaining space */
+  .flex-1.flex.flex-col {
+    flex: 1 !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+
+  /* Force the main layout container to respect sidebar width */
+  .flex.h-screen > *:first-child {
+    width: 320px !important;
+    min-width: 320px !important;
+    max-width: 320px !important;
+    flex-shrink: 0 !important;
+    flex-basis: 320px !important;
+  }
+
+  /* Ensure sidebar content doesn't overflow */
+  .bg-card.border-r.border-border .flex-1 {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Force all buttons in sidebar to respect width */
+  .bg-card.border-r.border-border button {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  /* Ensure the connect/disconnect button stays within bounds */
+  .bg-card.border-r.border-border button[data-testid="connect-button"],
+  .bg-card.border-r.border-border button[data-testid="disconnect-button"] {
+    width: calc(100% - 32px) !important;
+    margin: 0 16px !important;
+  }
+
+  /* Make the sidebar a flex container with proper sections */
+  .bg-card.border-r.border-border.flex.flex-col.h-full {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+  }
+
+  /* Ensure the scrollable area doesn't push buttons off screen */
+  .bg-card.border-r.border-border .p-4.flex-1.overflow-auto {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Keep the bottom section (theme selector) fixed */
+  .bg-card.border-r.border-border .p-4.border-t {
+    flex-shrink: 0 !important;
+    position: sticky !important;
+    bottom: 0 !important;
+    background: inherit !important;
+    z-index: 10 !important;
+  }
+
+  /* Move connect/disconnect buttons and status to a fixed bottom area */
+  .bg-card.border-r.border-border
+    .space-y-2:has(button[data-testid="connect-button"]),
+  .bg-card.border-r.border-border .space-y-2:has(button:has(.w-4.h-4.mr-2)) {
+    position: sticky !important;
+    bottom: 60px !important;
+    background: inherit !important;
+    padding: 16px !important;
+    margin: -16px !important;
+    z-index: 10 !important;
+  }
+
+  /* Make parent containers flex to accommodate full height */
+  [role="tabpanel"][data-value="tools"] {
+    height: calc(100vh - 80px) !important;
+  }
+
+  [role="tabpanel"][data-value="tools"] > div {
+    height: 100% !important;
+  }
+
+  /* Hide bottom links in sidebar footer - more specific targeting */
+  .p-4.border-t a[href*="modelcontextprotocol.io"],
+  .p-4.border-t a[href*="github.com"] {
+    display: none !important;
+  }
+
+  /* Hide only the links container, not the theme selector */
+  .p-4.border-t .flex.items-center.justify-between > div:last-child {
+    display: none !important;
+  }
+
+  /* Hide only the error output container inside the space-y-2 div */
+  .space-y-2 > .mt-4.border-t.border-gray-200.pt-4 {
+    display: none !important;
+  }
+
+  /* Hide the stderr notifications list */
+  .mt-2.max-h-80.overflow-y-auto:has(.text-red-500) {
+    display: none !important;
   }
 }

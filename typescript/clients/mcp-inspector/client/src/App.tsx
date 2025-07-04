@@ -32,7 +32,7 @@ import React, {
 import { useConnection } from "./lib/hooks/useConnection";
 import {
   useDraggablePane,
-  useDraggableSidebar,
+  // useDraggableSidebar,
 } from "./lib/hooks/useDraggablePane";
 import { StdErrNotification } from "./lib/notificationTypes";
 
@@ -159,11 +159,12 @@ const App = () => {
   const progressTokenRef = useRef(0);
 
   const { height: historyPaneHeight, handleDragStart } = useDraggablePane(300);
-  const {
-    width: sidebarWidth,
-    isDragging: isSidebarDragging,
-    handleDragStart: handleSidebarDragStart,
-  } = useDraggableSidebar(320);
+  // Sidebar is now fixed width, so we don't need the draggable functionality
+  // const {
+  //   width: sidebarWidth,
+  //   isDragging: isSidebarDragging,
+  //   handleDragStart: handleSidebarDragStart,
+  // } = useDraggableSidebar(320);
 
   const {
     connectionStatus,
@@ -625,10 +626,10 @@ const App = () => {
     <div className="flex h-screen bg-background">
       <div
         style={{
-          width: sidebarWidth,
-          minWidth: 200,
-          maxWidth: 600,
-          transition: isSidebarDragging ? "none" : "width 0.15s",
+          width: 320,
+          minWidth: 320,
+          maxWidth: 320,
+          transition: "none",
         }}
         className="bg-card border-r border-border flex flex-col h-full relative"
       >
@@ -658,22 +659,7 @@ const App = () => {
           loggingSupported={!!serverCapabilities?.logging || false}
           clearStdErrNotifications={clearStdErrNotifications}
         />
-        {/* Drag handle for resizing sidebar */}
-        <div
-          onMouseDown={handleSidebarDragStart}
-          style={{
-            cursor: "col-resize",
-            position: "absolute",
-            top: 0,
-            right: 0,
-            width: 6,
-            height: "100%",
-            zIndex: 10,
-            background: isSidebarDragging ? "rgba(0,0,0,0.08)" : "transparent",
-          }}
-          aria-label="Resize sidebar"
-          data-testid="sidebar-drag-handle"
-        />
+        {/* Drag handle hidden - sidebar is fixed width */}
       </div>
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-auto">

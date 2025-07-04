@@ -32,7 +32,7 @@ import {
 import { InspectorConfig } from "@/lib/configurationTypes";
 import { ConnectionStatus } from "@/lib/constants";
 import useTheme from "../lib/hooks/useTheme";
-import { version } from "../../../package.json";
+// import { version } from "../../../package.json";
 import {
   Tooltip,
   TooltipTrigger,
@@ -214,7 +214,15 @@ const Sidebar = ({
   }, [generateMCPServerFile, toast, reportError]);
 
   return (
-    <div className="bg-card border-r border-border flex flex-col h-full">
+    <div
+      className="bg-card border-r border-border flex flex-col h-full"
+      style={{
+        width: "320px",
+        minWidth: "320px",
+        maxWidth: "320px",
+        flexShrink: 0,
+      }}
+    >
       <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-border">
         <div className="flex items-center justify-center w-full">
           <h1 className="text-lg font-semibold">EmberAI MCP Server</h1>
@@ -740,7 +748,7 @@ const Sidebar = ({
           </div>
         </div>
       </div>
-      <div className="p-4 border-t">
+      <div className="p-4 border-t border-border bg-card">
         <div className="flex items-center justify-between">
           <Select
             value={theme}
