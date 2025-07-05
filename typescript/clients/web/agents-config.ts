@@ -29,6 +29,28 @@ export const chatAgents = [
       },
     ],
   },
+  {
+    id: 'ember-docs' as const,
+    name: 'Documentation RAG',
+    description: 'AI agent for indexing and querying documentation using RAG',
+    suggestedActions: [
+      {
+        title: 'Index React docs',
+        label: 'from react.dev',
+        action: 'Index the React documentation from https://react.dev',
+      },
+      {
+        title: 'Query documentation',
+        label: 'about hooks',
+        action: 'How do React hooks work?',
+      },
+      {
+        title: 'List indexed',
+        label: 'documentation',
+        action: 'Show me all indexed documentation',
+      },
+    ],
+  },
   // {
   //   id: 'langgraph-workflow' as const,
   //   name: 'Greeting Optimizer',
@@ -135,6 +157,7 @@ export const chatAgents = [
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
   ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
+  ['ember-docs', 'http://doc-rag-agent:3008/sse'],
   // ['langgraph-workflow', 'http://langgraph-workflow-agent:3009/sse'],
   // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
   // ['allora-price-prediction-agent', 'http://allora-price-prediction-agent:3008/sse'],
