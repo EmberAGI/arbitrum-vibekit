@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
@@ -26,7 +26,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
@@ -80,18 +80,18 @@ jobs:
           # Start the anvil server and capture its output to a log file
           pnpm run start:anvil 2>&1 | tee anvil_server.log &
           SERVER_PID=$!
-          
+
           echo "Waiting for anvil server to be ready..."
-          
+
           # Set a timeout (in seconds)
           timeout=300
-          
+
           # Wait until we see the readiness message or timeout
           until grep -q "You can run integration tests now" anvil_server.log || [ $timeout -le 0 ]; do
             sleep 1
             timeout=$((timeout - 1))
           done
-          
+
           # Check if we timed out
           if [ $timeout -le 0 ]; then
             echo "Anvil server did not start in time. Logs:"
@@ -99,13 +99,13 @@ jobs:
             kill $SERVER_PID
             exit 1
           fi
-          
+
           echo "Anvil server is ready!"
           echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
 
       - name: Install dependencies in project
         working-directory: ./typescript
-        run: pnpm install 
+        run: pnpm install
 
       - name: Run tests
         working-directory: ./typescript
