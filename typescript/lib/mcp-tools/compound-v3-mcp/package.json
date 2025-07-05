@@ -1,0 +1,41 @@
+{
+  "name": "@arbitrum-vibekit/compound-v3-mcp",
+  "version": "0.1.0",
+  "description": "MCP stdio server for Compound v3 protocol operations",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "compound-v3-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc && node -e \"const { join } = require('path'); const fs=require('fs'); const p=join(process.cwd(),'dist/index.js'); if(fs.existsSync(p)){ fs.chmodSync(p,'755'); }\"",
+    "lint": "eslint --ext .ts src",
+    "lint:fix": "eslint --ext .ts src --fix",
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
+    "prepare": "pnpm build"
+  },
+  "files": [
+    "dist"
+  ],
+  "packageManager": "pnpm@10.7.0",
+  "dependencies": {
+    "@compound-finance/compound-js": "^0.6.2",
+    "@modelcontextprotocol/sdk": "^1.9.0",
+    "dotenv": "^16.3.1",
+    "ethers": "^5.8.0",
+    "viem": "^1.1.5",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.14",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.24.2",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "chai": "^4.3.8",
+    "@types/chai": "^4.3.5"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "name": "arbscan-mcp-tool-server",
+  "version": "1.1.0",
+  "description": "MCP stdio server exposing Arbiscan API endpoints",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "arbscan-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc && node -e \"const { join } = require('path'); const fs=require('fs'); const p=join(process.cwd(),'dist/index.js'); if(fs.existsSync(p)){ fs.chmodSync(p,'755'); }\"",
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "mcp",
+    "arbiscan",
+    "arbitrum",
+    "blockchain"
+  ],
+  "license": "ISC",
+  "packageManager": "pnpm@10.7.0",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.9.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.14",
+    "dotenv": "^16.3.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}
