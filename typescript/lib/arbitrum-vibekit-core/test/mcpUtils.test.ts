@@ -5,8 +5,8 @@ import {
   createMcpErrorResponse,
   createMcpTextResponse,
 } from "../src/mcpUtils.js";
-import type { Task, Message, TaskState } from "../src/index.js";
-// No need to import specific MCP types - we'll use type assertions on properties
+import type { Task, Message } from "@google-a2a/types";
+import { TaskState } from "@google-a2a/types";
 
 describe("MCP Utils", () => {
   describe("createMcpA2AResponse", () => {
@@ -16,7 +16,7 @@ describe("MCP Utils", () => {
         contextId: "context-456",
         kind: "task",
         status: {
-          state: "completed" as TaskState,
+          state: TaskState.Completed,
           message: {
             role: "agent",
             parts: [{ kind: "text", text: "Task completed successfully" }],

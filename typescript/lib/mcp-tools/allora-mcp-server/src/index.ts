@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 
-import { AlloraAPIClient, ChainSlug } from "@alloralabs/allora-sdk";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import dotenv from "dotenv";
-import express from "express";
+import { AlloraAPIClient, ChainSlug } from '@alloralabs/allora-sdk';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import dotenv from 'dotenv';
+import express from 'express';
 
-import { createServer } from "./mcp.js";
-
+import { createServer } from './mcp.js';
 
 dotenv.config();
 
@@ -19,9 +18,9 @@ async function main() {
     next();
   });
 
-  const apiKey = process.env.ALLORA_API_KEY || "UP-86455f53320d4ee48a958cc0";
+  const apiKey = process.env.ALLORA_API_KEY;
   if (!apiKey) {
-    console.error("Error: ALLORA_API_KEY environment variable is required");
+    console.error('Error: ALLORA_API_KEY environment variable is required');
     process.exit(1);
   }
 
@@ -33,29 +32,29 @@ async function main() {
 
   const transports: { [sessionId: string]: SSEServerTransport } = {};
 
-  app.get("/sse", async (_req, res) => {
-    console.log("Received connection");
+  app.get('/sse', async (_req, res) => {
+    console.log('Received connection');
 
-    const transport = new SSEServerTransport("/messages", res);
+    const transport = new SSEServerTransport('/messages', res);
     transports[transport.sessionId] = transport;
 
     await server.connect(transport);
   });
 
-  app.post("/messages", async (_req, res) => {
+  app.post('/messages', async (_req, res) => {
     const sessionId = _req.query.sessionId as string;
     console.log(`Received message for session: ${sessionId}`);
 
     let bodyBuffer = Buffer.alloc(0);
 
-    _req.on("data", (chunk) => {
+    _req.on('data', chunk => {
       bodyBuffer = Buffer.concat([bodyBuffer, chunk]);
     });
 
-    _req.on("end", async () => {
+    _req.on('end', async () => {
       try {
         // Parse the body
-        const bodyStr = bodyBuffer.toString("utf8");
+        const bodyStr = bodyBuffer.toString('utf8');
         const bodyObj = JSON.parse(bodyStr);
         console.log(`${JSON.stringify(bodyObj, null, 4)}`);
       } catch (error) {
@@ -64,7 +63,7 @@ async function main() {
     });
     const transport = transports[sessionId];
     if (!transport) {
-      res.status(400).send("No transport found for sessionId");
+      res.status(400).send('No transport found for sessionId');
       return;
     }
     await transport.handlePostMessage(_req, res);
@@ -77,10 +76,16 @@ async function main() {
 
   // Start stdio transport
   const stdioTransport = new StdioServerTransport();
-  console.error("Initializing stdio transport...");
+  console.error('Initializing stdio transport...');
   await server.connect(stdioTransport);
-  console.error("Allora MCP stdio server started and connected.");
-  console.error("Server is now ready to receive stdio requests.");
+  console.error('Allora MCP stdio server started and connected.');
+  console.error('Server is now ready to receive stdio requests.');
+
+  // Exit when stdio is closed (e.g., when parent process ends)
+  process.stdin.on('end', () => {
+    console.error('Stdio connection closed, exiting...');
+    process.exit(0);
+  });
 }
 
 main().catch(() => process.exit(-1));

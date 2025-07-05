@@ -4,10 +4,11 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "@alloralabs/mcp-server": "./dist/index.js"
+    "allora-mcp-server": "./dist/index.js"
   },
   "scripts": {
     "prepare": "pnpm build",
+    "prepublishOnly": "pnpm build",
     "build": "tsc",
     "lint": "eslint --ext .ts,.tsx src",
     "lint:fix": "eslint --ext .ts,.tsx src --fix",
@@ -24,12 +25,13 @@
   "description": "Allora MCP Server",
   "dependencies": {
     "@alloralabs/allora-sdk": "^0.1.1",
-    "@modelcontextprotocol/sdk": "^1.8.0",
+    "@modelcontextprotocol/sdk": "^1.13.1",
     "@types/express": "^5.0.1",
     "@types/node": "^22.13.17",
     "dotenv": "^16.3.1",
     "express": "^5.1.0",
     "nodemon": "^3.1.9",
+    "p-retry": "^6.2.1",
     "raw-body": "^3.0.0",
     "tee": "^0.2.0",
     "typescript": "^5.8.2",

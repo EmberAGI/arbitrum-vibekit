@@ -1,6 +1,6 @@
 ---
-description: 
-globs: 
+description: Global rules
+globs:
 alwaysApply: true
 ---
 # Monorepo Workspace Guidelines
@@ -8,7 +8,7 @@ alwaysApply: true
 Rules and best practices that apply to the entire pnpm workspace monorepo.
 
 ## PNPM Workspace Setup
-- Bootstrap all dependencies: run `pnpm install` at the repository root.
+- Bootstrap all dependencies: run `pnpm install` at the `typescript/` directory of the repo.
 - Build all packages: run `pnpm build` at root (executes each package's TypeScript compiler).
 
 ## Running in Development
@@ -40,6 +40,7 @@ Rules and best practices that apply to the entire pnpm workspace monorepo.
 - Never add depenencies directly to `package.json` files. Instead use `pnpm add` or `pnpm add -D` commands to add new dependencies. This ensures you have the latest versions.
 - Do not add trivial assertions like this:
 > expect(response).to.exist;
+- Prefer deep equality checks in assertion tests to multiple shallow equality checks (`expect(sth).to.deep.equal...`)
 - Do not wrap blocks of code in try/catch only to add context to the error. simply propagate errors.
 - To lint the code, run `pnpm recursive run lint` in the `typescript/` folder.
 - Never use .passthrough() with zod schemas.

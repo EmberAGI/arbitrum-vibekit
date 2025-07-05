@@ -22,7 +22,6 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@emberai/sdk-typescript": "^0.3.0-beta.12",
     "@eslint/js": "^9.0.0",
     "@types/chai": "^4.3.11",
     "@types/mocha": "^10.0.6",
@@ -41,6 +40,7 @@
     "typescript-eslint": "^8.32.1"
   },
   "dependencies": {
+    "@google-a2a/types": "workspace:*",
     "ethers": "^5.7.2",
     "zod": "^3.25.7"
   },

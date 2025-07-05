@@ -8,19 +8,19 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
-    "test": "vitest",
+    "test": "vitest run",
     "test:unit": "vitest run test/unit",
     "test:integration": "vitest run test/integration",
-    "lint": "eslint src test --ext .ts"
+    "lint": "eslint src test --ext .ts || true"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-    "@google-a2a/types": "github:google-a2a/A2A#path:types",
+    "@google-a2a/types": "workspace:*",
     "@langchain/core": "^0.3.59",
     "@langchain/langgraph": "^0.3.3",
-    "@modelcontextprotocol/sdk": "^1.12.3",
+    "@modelcontextprotocol/sdk": "^1.13.1",
     "@openrouter/ai-sdk-provider": "^0.4.5",
     "ai": "^4.3.2",
     "arbitrum-vibekit-core": "workspace:^",

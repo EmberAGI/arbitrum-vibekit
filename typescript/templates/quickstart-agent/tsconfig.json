@@ -1,12 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
+    "rootDir": ".",
     "outDir": "dist",
     "verbatimModuleSyntax": false,
     "moduleResolution": "NodeNext"
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "test/**/*", "mock-mcp-servers/**/*"],
   "exclude": ["node_modules", "dist"],
   "references": [{ "path": "../../lib/arbitrum-vibekit-core" }]
 }

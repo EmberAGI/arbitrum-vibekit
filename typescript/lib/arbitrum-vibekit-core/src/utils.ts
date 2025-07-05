@@ -1,16 +1,16 @@
+import { z } from 'zod';
+import { VibkitError } from './error.js';
+import { nanoid } from 'nanoid';
+import escapeHtml from 'escape-html';
+import type { AgentContext, VibkitToolDefinition } from './agent.js';
 import type {
   Artifact,
   TaskStatus,
   Task,
   Message,
   Part,
-  TaskState,
-} from '@google-a2a/types/src/types.js';
-import { z } from 'zod';
-import { VibkitError } from './error.js';
-import { nanoid } from 'nanoid';
-import escapeHtml from 'escape-html';
-import type { AgentContext, VibkitToolDefinition } from './agent.js';
+} from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
 
 /**
  * Error thrown when trying to use an unsupported Zod schema type
@@ -172,7 +172,7 @@ export function createSuccessTask(
     contextId: `${skillName}-${contextIdSuffix}-${Date.now()}-${nanoid(6)}`,
     kind: 'task',
     status: {
-      state: 'completed' as TaskState,
+      state: TaskState.Completed,
       message: createInfoMessage(message, 'agent'),
       timestamp: getCurrentTimestamp(),
     },
@@ -201,7 +201,7 @@ export function createErrorTask(
     contextId: `${skillName}-${contextIdSuffix}-${Date.now()}-${nanoid(6)}`,
     kind: 'task',
     status: {
-      state: 'failed' as TaskState,
+      state: TaskState.Failed,
       message: createInfoMessage(error.message, 'agent'),
       timestamp: getCurrentTimestamp(),
     },

@@ -10,7 +10,6 @@
   "exclude": ["./dist", "node_modules"],
   "references": [
     { "path": "../../lib/test-utils" },
-    { "path": "../../lib/arbitrum-vibekit-core" },
-    { "path": "../../lib/mcp-tools/emberai-mcp" }
+    { "path": "../../lib/arbitrum-vibekit-core" }
   ]
 }
