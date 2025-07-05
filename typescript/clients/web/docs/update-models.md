@@ -68,19 +68,19 @@ export const openRouterProvider = isTestEnvironment
     })
   : customProvider({
       languageModels: {
-        'chat-model': openRouter('google/gemini-2.5-pro-preview', {
+        'chat-model': openRouter('deepseek/deepseek-chat-v3-0324:free', {
           reasoning: {
             exclude: true,
             effort: 'low',
           },
         }),
-        'chat-model-medium': openRouter('google/gemini-2.5-pro-preview', {
+        'chat-model-medium': openRouter('deepseek/deepseek-chat-v3-0324:free', {
           reasoning: {
             effort: 'medium',
           },
         }),
-        'title-model': openRouter('google/gemini-2.5-flash-preview'),
-        'artifact-model': openRouter('google/gemini-2.5-flash-preview'),
+        'title-model': openRouter('deepseek/deepseek-chat-v3-0324:free'),
+        'artifact-model': openRouter('deepseek/deepseek-chat-v3-0324:free'),
 
         // New entry for the 'anthropic-direct-sonnet' ID from models.ts
         'anthropic-direct-sonnet': openRouter('anthropic/claude-3.5-sonnet'),

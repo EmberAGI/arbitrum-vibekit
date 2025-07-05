@@ -366,7 +366,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
-        model: openrouter('google/gemini-2.5-flash-preview'),
+        model: openrouter('deepseek/deepseek-chat-v3-0324:free'),
         messages: this.conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,

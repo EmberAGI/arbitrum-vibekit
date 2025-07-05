@@ -1,17 +1,17 @@
 services:
-  lending-agent-no-wallet:
-    build:
-      context: ./
-      dockerfile: examples/lending-agent-no-wallet/Dockerfile
-    container_name: vibekit-lending-agent-no-wallet
-    env_file:
-      - path: .env
-        required: true
-      - path: examples/lending-agent-no-wallet/.env
-        required: false
-    ports:
-      - 3001:3001
-    restart: unless-stopped
+  # lending-agent-no-wallet:
+  #   build:
+  #     context: ./
+  #     dockerfile: examples/lending-agent-no-wallet/Dockerfile
+  #   container_name: vibekit-lending-agent-no-wallet
+  #   env_file:
+  #     - path: .env
+  #       required: true
+  #     - path: examples/lending-agent-no-wallet/.env
+  #       required: false
+  #   ports:
+  #     - 3001:3001
+  #   restart: unless-stopped
 
   swapping-agent-no-wallet:
     build:
@@ -26,6 +26,24 @@ services:
     ports:
       - 3005:3005
     restart: unless-stopped
+
+  hyperliquid-vault-agent:
+    build:
+      context: ./
+      dockerfile: templates/hyperliquid-vault-agent/Dockerfile
+    container_name: vibekit-hyperliquid-vault-agent
+    env_file:
+      - path: .env
+        required: true
+      - path: templates/hyperliquid-vault-agent/.env
+        required: false
+    environment:
+      # Configure the agent to connect to Python API on host machine
+      HYPERLIQUID_API_URL: http://host.docker.internal:5000
+    ports:
+      - 3012:3012
+    restart: unless-stopped
+
 
   # langgraph-workflow-agent:
   #   build:

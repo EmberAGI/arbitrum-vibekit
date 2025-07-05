@@ -63,7 +63,7 @@ const providers = createProviderSelector({
 
 // Get the OpenRouter model for Gemini Flash
 if (providers.openrouter) {
-  const model = providers.openrouter('google/gemini-2.5-flash');
+  const model = providers.openrouter('deepseek/deepseek-chat-v3-0324:free');
   // now you can use the model...
 }
 
@@ -101,7 +101,7 @@ const myAgentConfig = {
 // Create the agent with runtime options
 const agent = Agent.create(myAgentConfig, {
   llm: {
-    model: providers.openrouter('google/gemini-2.5-pro'),
+    model: providers.openrouter('deepseek/deepseek-chat-v3-0324:free'),
   },
 });
 ```
