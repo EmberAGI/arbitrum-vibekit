@@ -1,17 +1,12 @@
 import { useState, useCallback } from "react";
 import {
-  Play,
   ChevronDown,
   ChevronRight,
-  CircleHelp,
-  Bug,
-  Github,
   Eye,
   EyeOff,
   RotateCcw,
   Settings,
   HelpCircle,
-  RefreshCwOff,
   Copy,
   CheckCheck,
 } from "lucide-react";
@@ -24,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { StdErrNotification } from "@/lib/notificationTypes";
 import {
   LoggingLevel,
   LoggingLevelSchema,
@@ -43,64 +37,53 @@ import { useToast } from "../lib/hooks/useToast";
 interface SidebarProps {
   connectionStatus: ConnectionStatus;
   transportType: "stdio" | "sse" | "streamable-http";
-  setTransportType: (type: "stdio" | "sse" | "streamable-http") => void;
-  command: string;
-  setCommand: (command: string) => void;
-  args: string;
-  setArgs: (args: string) => void;
-  sseUrl: string;
-  setSseUrl: (url: string) => void;
   env: Record<string, string>;
   setEnv: (env: Record<string, string>) => void;
-  bearerToken: string;
-  setBearerToken: (token: string) => void;
-  headerName?: string;
-  setHeaderName?: (name: string) => void;
   onConnect: () => void;
   onDisconnect: () => void;
-  stdErrNotifications: StdErrNotification[];
-  clearStdErrNotifications: () => void;
   logLevel: LoggingLevel;
   sendLogLevelRequest: (level: LoggingLevel) => void;
   loggingSupported: boolean;
   config: InspectorConfig;
   setConfig: (config: InspectorConfig) => void;
+  command: string;
+  args: string;
+  sseUrl: string;
 }
+
+// Define allowed statuses for type safety
+type AllowedStatus =
+  | "connected"
+  | "connecting"
+  | "error"
+  | "error-connecting-to-proxy"
+  | "disconnected";
 
 const Sidebar = ({
   connectionStatus,
   transportType,
-  setTransportType,
-  command,
-  setCommand,
-  args,
-  setArgs,
-  sseUrl,
-  setSseUrl,
   env,
   setEnv,
-  bearerToken,
-  setBearerToken,
-  headerName,
-  setHeaderName,
   onConnect,
   onDisconnect,
-  stdErrNotifications,
-  clearStdErrNotifications,
   logLevel,
   sendLogLevelRequest,
   loggingSupported,
   config,
   setConfig,
+  command,
+  args,
+  sseUrl,
 }: SidebarProps) => {
   const [theme, setTheme] = useTheme();
   const [showEnvVars, setShowEnvVars] = useState(false);
-  const [showBearerToken, setShowBearerToken] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [shownEnvVars, setShownEnvVars] = useState<Set<string>>(new Set());
   const [copiedServerEntry, setCopiedServerEntry] = useState(false);
   const [copiedServerFile, setCopiedServerFile] = useState(false);
   const { toast } = useToast();
+
+  const isConnected = connectionStatus === "connected";
 
   // Reusable error reporter for copy actions
   const reportError = useCallback(
@@ -223,472 +206,402 @@ const Sidebar = ({
         flexShrink: 0,
       }}
     >
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-border">
-        <div className="flex items-center justify-center w-full">
-          <h1 className="text-lg font-semibold">EmberAI MCP Server</h1>
-        </div>
-      </div>
+      <div className="flex flex-col items-center justify-start w-full px-4 pt-4 space-y-3">
+        <h1 className="text-2xl font-bold">EmberAI MCP Server</h1>
+        <p className="text-base text-gray-600 text-left max-w-[260px]">
+          The Ember MCP server exposes on-chain AI agent skills and tools for
+          DeFi, trading, and analytics. Use this panel to connect and interact
+          with Ember's AI capabilities.
+        </p>
+        <div className="mb-16" />
+        <a
+          href="https://docs.emberai.xyz/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-lg text-blue-600 hover:underline font-semibold mb-14 text-left w-full block"
+        >
+          Ember Documentation
+        </a>
+        <div className="mb-8" />
 
-      <div className="p-4 flex-1 overflow-auto">
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label
-              className="text-sm font-medium"
-              htmlFor="transport-type-select"
-            >
-              Transport Type
-            </label>
-            <Select
-              value={transportType}
-              onValueChange={(value: "stdio" | "sse" | "streamable-http") =>
-                setTransportType(value)
-              }
-            >
-              <SelectTrigger id="transport-type-select">
-                <SelectValue placeholder="Select transport type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="stdio">STDIO</SelectItem>
-                <SelectItem value="sse">SSE</SelectItem>
-                <SelectItem value="streamable-http">Streamable HTTP</SelectItem>
-              </SelectContent>
-            </Select>
+        {/* Server configuration section */}
+        <div className="w-full flex flex-col items-center mt-4">
+          <div className="mb-16" />
+          {/* Status indicator and message */}
+          <div className="flex items-center justify-center space-x-2 mb-2">
+            <div
+              className={`w-2 h-2 rounded-full ${(() => {
+                switch (connectionStatus as AllowedStatus) {
+                  case "connected":
+                    return "bg-green-500";
+                  case "connecting":
+                    return "bg-yellow-500";
+                  case "error":
+                  case "error-connecting-to-proxy":
+                    return "bg-red-500";
+                  default:
+                    return "bg-gray-400";
+                }
+              })()}`}
+            />
+            <span className="text-xs text-gray-600">
+              {(() => {
+                switch (connectionStatus as AllowedStatus) {
+                  case "connected":
+                    return "Connected";
+                  case "connecting":
+                    return "Connecting...";
+                  case "error":
+                  case "error-connecting-to-proxy":
+                    return "Connection Error";
+                  default:
+                    return "Disconnected";
+                }
+              })()}
+            </span>
           </div>
-
-          {transportType === "stdio" ? (
-            <>
-              <div className="space-y-2">
-                <label className="text-sm font-medium" htmlFor="command-input">
-                  Command
-                </label>
-                <Input
-                  id="command-input"
-                  placeholder="Command"
-                  value={command}
-                  onChange={(e) => setCommand(e.target.value)}
-                  className="font-mono"
-                />
-              </div>
-              <div className="space-y-2">
-                <label
-                  className="text-sm font-medium"
-                  htmlFor="arguments-input"
-                >
-                  Arguments
-                </label>
-                <Input
-                  id="arguments-input"
-                  placeholder="Arguments (space-separated)"
-                  value={args}
-                  onChange={(e) => setArgs(e.target.value)}
-                  className="font-mono"
-                />
-              </div>
-            </>
+          {/* Connect/Restart button */}
+          {isConnected ? (
+            <Button
+              data-testid="connect-button"
+              onClick={() => {
+                onDisconnect();
+                onConnect();
+              }}
+              className="w-full"
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Restart
+            </Button>
           ) : (
-            <>
-              <div className="space-y-2">
-                <label className="text-sm font-medium" htmlFor="sse-url-input">
-                  URL
-                </label>
-                {sseUrl ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Input
-                        id="sse-url-input"
-                        placeholder="URL"
-                        value={sseUrl}
-                        onChange={(e) => setSseUrl(e.target.value)}
-                        className="font-mono"
-                      />
-                    </TooltipTrigger>
-                    <TooltipContent>{sseUrl}</TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <Input
-                    id="sse-url-input"
-                    placeholder="URL"
-                    value={sseUrl}
-                    onChange={(e) => setSseUrl(e.target.value)}
-                    className="font-mono"
-                  />
-                )}
-              </div>
+            <Button
+              className="w-full"
+              onClick={onConnect}
+              data-testid="connect-button"
+            >
+              Connect
+            </Button>
+          )}
+          <div className="mb-16" />
+        </div>
+
+        {/* Server entry/configuration section (move all config here) */}
+        <div className="w-full mt-2">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label
+                className="text-sm font-medium"
+                htmlFor="transport-type-select"
+              >
+                Transport Type
+              </label>
+              <Select value={transportType} disabled>
+                <SelectTrigger id="transport-type-select">
+                  <SelectValue placeholder="Select transport type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="stdio">STDIO</SelectItem>
+                  <SelectItem value="sse">SSE</SelectItem>
+                  <SelectItem value="streamable-http">
+                    Streamable HTTP
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Always show command and arguments fields for demo purposes */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="command-input">
+                Command
+              </label>
+              <Input
+                id="command-input"
+                placeholder="Command"
+                value={command}
+                readOnly
+                className="font-mono bg-muted cursor-not-allowed"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="arguments-input">
+                Arguments
+              </label>
+              <Input
+                id="arguments-input"
+                placeholder="Arguments (space-separated)"
+                value={args}
+                readOnly
+                className="font-mono bg-muted cursor-not-allowed"
+              />
+            </div>
+
+            {transportType === "stdio" && (
               <div className="space-y-2">
                 <Button
                   variant="outline"
-                  onClick={() => setShowBearerToken(!showBearerToken)}
+                  onClick={() => setShowEnvVars(!showEnvVars)}
                   className="flex items-center w-full"
-                  data-testid="auth-button"
-                  aria-expanded={showBearerToken}
+                  data-testid="env-vars-button"
+                  aria-expanded={showEnvVars}
                 >
-                  {showBearerToken ? (
+                  {showEnvVars ? (
                     <ChevronDown className="w-4 h-4 mr-2" />
                   ) : (
                     <ChevronRight className="w-4 h-4 mr-2" />
                   )}
-                  Authentication
+                  Environment Variables
                 </Button>
-                {showBearerToken && (
+                {showEnvVars && (
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Header Name</label>
-                    <Input
-                      placeholder="Authorization"
-                      onChange={(e) =>
-                        setHeaderName && setHeaderName(e.target.value)
-                      }
-                      data-testid="header-input"
-                      className="font-mono"
-                      value={headerName}
-                    />
-                    <label
-                      className="text-sm font-medium"
-                      htmlFor="bearer-token-input"
+                    {Object.entries(env).map(([key, value], idx) => (
+                      <div key={idx} className="space-y-2 pb-4">
+                        <div className="flex gap-2">
+                          <Input
+                            aria-label={`Environment variable key ${idx + 1}`}
+                            placeholder="Key"
+                            value={key}
+                            onChange={(e) => {
+                              const newKey = e.target.value;
+                              const newEnv = Object.entries(env).reduce(
+                                (acc, [k, v]) => {
+                                  if (k === key) {
+                                    acc[newKey] = value;
+                                  } else {
+                                    acc[k] = v;
+                                  }
+                                  return acc;
+                                },
+                                {} as Record<string, string>,
+                              );
+                              setEnv(newEnv);
+                              setShownEnvVars((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(key)) {
+                                  next.delete(key);
+                                  next.add(newKey);
+                                }
+                                return next;
+                              });
+                            }}
+                            className="font-mono"
+                          />
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            className="h-9 w-9 p-0 shrink-0"
+                            onClick={() => {
+                              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                              const { [key]: _removed, ...rest } = env;
+                              setEnv(rest);
+                            }}
+                          >
+                            ×
+                          </Button>
+                        </div>
+                        <div className="flex gap-2">
+                          <Input
+                            aria-label={`Environment variable value ${idx + 1}`}
+                            type={shownEnvVars.has(key) ? "text" : "password"}
+                            placeholder="Value"
+                            value={value}
+                            onChange={(e) => {
+                              const newEnv = { ...env };
+                              newEnv[key] = e.target.value;
+                              setEnv(newEnv);
+                            }}
+                            className="font-mono"
+                          />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-9 w-9 p-0 shrink-0"
+                            onClick={() => {
+                              setShownEnvVars((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(key)) {
+                                  next.delete(key);
+                                } else {
+                                  next.add(key);
+                                }
+                                return next;
+                              });
+                            }}
+                            aria-label={
+                              shownEnvVars.has(key)
+                                ? "Hide value"
+                                : "Show value"
+                            }
+                            aria-pressed={shownEnvVars.has(key)}
+                            title={
+                              shownEnvVars.has(key)
+                                ? "Hide value"
+                                : "Show value"
+                            }
+                          >
+                            {shownEnvVars.has(key) ? (
+                              <Eye className="h-4 w-4" aria-hidden="true" />
+                            ) : (
+                              <EyeOff className="h-4 w-4" aria-hidden="true" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    <Button
+                      variant="outline"
+                      className="w-full mt-2"
+                      onClick={() => {
+                        const key = "";
+                        const newEnv = { ...env };
+                        newEnv[key] = "";
+                        setEnv(newEnv);
+                      }}
                     >
-                      Bearer Token
-                    </label>
-                    <Input
-                      id="bearer-token-input"
-                      placeholder="Bearer Token"
-                      value={bearerToken}
-                      onChange={(e) => setBearerToken(e.target.value)}
-                      data-testid="bearer-token-input"
-                      className="font-mono"
-                      type="password"
-                    />
+                      Add Environment Variable
+                    </Button>
                   </div>
                 )}
               </div>
-            </>
-          )}
+            )}
 
-          {transportType === "stdio" && (
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyServerEntry}
+                    className="w-full"
+                  >
+                    {copiedServerEntry ? (
+                      <CheckCheck className="h-4 w-4 mr-2" />
+                    ) : (
+                      <Copy className="h-4 w-4 mr-2" />
+                    )}
+                    Server Entry
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Copy Server Entry</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyServerFile}
+                    className="w-full"
+                  >
+                    {copiedServerFile ? (
+                      <CheckCheck className="h-4 w-4 mr-2" />
+                    ) : (
+                      <Copy className="h-4 w-4 mr-2" />
+                    )}
+                    Servers File
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Copy Servers File</TooltipContent>
+              </Tooltip>
+            </div>
+
             <div className="space-y-2">
               <Button
                 variant="outline"
-                onClick={() => setShowEnvVars(!showEnvVars)}
+                onClick={() => setShowConfig(!showConfig)}
                 className="flex items-center w-full"
-                data-testid="env-vars-button"
-                aria-expanded={showEnvVars}
+                data-testid="config-button"
+                aria-expanded={showConfig}
               >
-                {showEnvVars ? (
+                {showConfig ? (
                   <ChevronDown className="w-4 h-4 mr-2" />
                 ) : (
                   <ChevronRight className="w-4 h-4 mr-2" />
                 )}
-                Environment Variables
+                <Settings className="w-4 h-4 mr-2" />
+                Configuration
               </Button>
-              {showEnvVars && (
+              {showConfig && (
                 <div className="space-y-2">
-                  {Object.entries(env).map(([key, value], idx) => (
-                    <div key={idx} className="space-y-2 pb-4">
-                      <div className="flex gap-2">
-                        <Input
-                          aria-label={`Environment variable key ${idx + 1}`}
-                          placeholder="Key"
-                          value={key}
-                          onChange={(e) => {
-                            const newKey = e.target.value;
-                            const newEnv = Object.entries(env).reduce(
-                              (acc, [k, v]) => {
-                                if (k === key) {
-                                  acc[newKey] = value;
-                                } else {
-                                  acc[k] = v;
-                                }
-                                return acc;
-                              },
-                              {} as Record<string, string>,
-                            );
-                            setEnv(newEnv);
-                            setShownEnvVars((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(key)) {
-                                next.delete(key);
-                                next.add(newKey);
-                              }
-                              return next;
-                            });
-                          }}
-                          className="font-mono"
-                        />
-                        <Button
-                          variant="destructive"
-                          size="icon"
-                          className="h-9 w-9 p-0 shrink-0"
-                          onClick={() => {
-                            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                            const { [key]: _removed, ...rest } = env;
-                            setEnv(rest);
-                          }}
-                        >
-                          ×
-                        </Button>
+                  {Object.entries(config).map(([key, configItem]) => {
+                    const configKey = key as keyof InspectorConfig;
+                    return (
+                      <div key={key} className="space-y-2">
+                        <div className="flex items-center gap-1">
+                          <label
+                            className="text-sm font-medium text-green-600 break-all"
+                            htmlFor={`${configKey}-input`}
+                          >
+                            {configItem.label}
+                          </label>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {configItem.description}
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                        {typeof configItem.value === "number" ? (
+                          <Input
+                            id={`${configKey}-input`}
+                            type="number"
+                            data-testid={`${configKey}-input`}
+                            value={configItem.value}
+                            onChange={(e) => {
+                              const newConfig = { ...config };
+                              newConfig[configKey] = {
+                                ...configItem,
+                                value: Number(e.target.value),
+                              };
+                              setConfig(newConfig);
+                            }}
+                            className="font-mono"
+                          />
+                        ) : typeof configItem.value === "boolean" ? (
+                          <Select
+                            data-testid={`${configKey}-select`}
+                            value={configItem.value.toString()}
+                            onValueChange={(val) => {
+                              const newConfig = { ...config };
+                              newConfig[configKey] = {
+                                ...configItem,
+                                value: val === "true",
+                              };
+                              setConfig(newConfig);
+                            }}
+                          >
+                            <SelectTrigger id={`${configKey}-input`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="true">True</SelectItem>
+                              <SelectItem value="false">False</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input
+                            id={`${configKey}-input`}
+                            data-testid={`${configKey}-input`}
+                            value={configItem.value}
+                            onChange={(e) => {
+                              const newConfig = { ...config };
+                              newConfig[configKey] = {
+                                ...configItem,
+                                value: e.target.value,
+                              };
+                              setConfig(newConfig);
+                            }}
+                            className="font-mono"
+                          />
+                        )}
                       </div>
-                      <div className="flex gap-2">
-                        <Input
-                          aria-label={`Environment variable value ${idx + 1}`}
-                          type={shownEnvVars.has(key) ? "text" : "password"}
-                          placeholder="Value"
-                          value={value}
-                          onChange={(e) => {
-                            const newEnv = { ...env };
-                            newEnv[key] = e.target.value;
-                            setEnv(newEnv);
-                          }}
-                          className="font-mono"
-                        />
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-9 w-9 p-0 shrink-0"
-                          onClick={() => {
-                            setShownEnvVars((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(key)) {
-                                next.delete(key);
-                              } else {
-                                next.add(key);
-                              }
-                              return next;
-                            });
-                          }}
-                          aria-label={
-                            shownEnvVars.has(key) ? "Hide value" : "Show value"
-                          }
-                          aria-pressed={shownEnvVars.has(key)}
-                          title={
-                            shownEnvVars.has(key) ? "Hide value" : "Show value"
-                          }
-                        >
-                          {shownEnvVars.has(key) ? (
-                            <Eye className="h-4 w-4" aria-hidden="true" />
-                          ) : (
-                            <EyeOff className="h-4 w-4" aria-hidden="true" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                  <Button
-                    variant="outline"
-                    className="w-full mt-2"
-                    onClick={() => {
-                      const key = "";
-                      const newEnv = { ...env };
-                      newEnv[key] = "";
-                      setEnv(newEnv);
-                    }}
-                  >
-                    Add Environment Variable
-                  </Button>
+                    );
+                  })}
                 </div>
               )}
             </div>
-          )}
 
-          {/* Always show both copy buttons for all transport types */}
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCopyServerEntry}
-                  className="w-full"
-                >
-                  {copiedServerEntry ? (
-                    <CheckCheck className="h-4 w-4 mr-2" />
-                  ) : (
-                    <Copy className="h-4 w-4 mr-2" />
-                  )}
-                  Server Entry
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Copy Server Entry</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCopyServerFile}
-                  className="w-full"
-                >
-                  {copiedServerFile ? (
-                    <CheckCheck className="h-4 w-4 mr-2" />
-                  ) : (
-                    <Copy className="h-4 w-4 mr-2" />
-                  )}
-                  Servers File
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Copy Servers File</TooltipContent>
-            </Tooltip>
-          </div>
-
-          {/* Configuration */}
-          <div className="space-y-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowConfig(!showConfig)}
-              className="flex items-center w-full"
-              data-testid="config-button"
-              aria-expanded={showConfig}
-            >
-              {showConfig ? (
-                <ChevronDown className="w-4 h-4 mr-2" />
-              ) : (
-                <ChevronRight className="w-4 h-4 mr-2" />
-              )}
-              <Settings className="w-4 h-4 mr-2" />
-              Configuration
-            </Button>
-            {showConfig && (
-              <div className="space-y-2">
-                {Object.entries(config).map(([key, configItem]) => {
-                  const configKey = key as keyof InspectorConfig;
-                  return (
-                    <div key={key} className="space-y-2">
-                      <div className="flex items-center gap-1">
-                        <label
-                          className="text-sm font-medium text-green-600 break-all"
-                          htmlFor={`${configKey}-input`}
-                        >
-                          {configItem.label}
-                        </label>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {configItem.description}
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                      {typeof configItem.value === "number" ? (
-                        <Input
-                          id={`${configKey}-input`}
-                          type="number"
-                          data-testid={`${configKey}-input`}
-                          value={configItem.value}
-                          onChange={(e) => {
-                            const newConfig = { ...config };
-                            newConfig[configKey] = {
-                              ...configItem,
-                              value: Number(e.target.value),
-                            };
-                            setConfig(newConfig);
-                          }}
-                          className="font-mono"
-                        />
-                      ) : typeof configItem.value === "boolean" ? (
-                        <Select
-                          data-testid={`${configKey}-select`}
-                          value={configItem.value.toString()}
-                          onValueChange={(val) => {
-                            const newConfig = { ...config };
-                            newConfig[configKey] = {
-                              ...configItem,
-                              value: val === "true",
-                            };
-                            setConfig(newConfig);
-                          }}
-                        >
-                          <SelectTrigger id={`${configKey}-input`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="true">True</SelectItem>
-                            <SelectItem value="false">False</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Input
-                          id={`${configKey}-input`}
-                          data-testid={`${configKey}-input`}
-                          value={configItem.value}
-                          onChange={(e) => {
-                            const newConfig = { ...config };
-                            newConfig[configKey] = {
-                              ...configItem,
-                              value: e.target.value,
-                            };
-                            setConfig(newConfig);
-                          }}
-                          className="font-mono"
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            {connectionStatus === "connected" && (
-              <div className="grid grid-cols-2 gap-4">
-                <Button
-                  data-testid="connect-button"
-                  onClick={() => {
-                    onDisconnect();
-                    onConnect();
-                  }}
-                >
-                  <RotateCcw className="w-4 h-4 mr-2" />
-                  {transportType === "stdio" ? "Restart" : "Reconnect"}
-                </Button>
-                <Button onClick={onDisconnect}>
-                  <RefreshCwOff className="w-4 h-4 mr-2" />
-                  Disconnect
-                </Button>
-              </div>
-            )}
-            {connectionStatus !== "connected" && (
-              <Button className="w-full" onClick={onConnect}>
-                <Play className="w-4 h-4 mr-2" />
-                Connect
-              </Button>
-            )}
-
-            <div className="flex items-center justify-center space-x-2 mb-4">
-              <div
-                className={`w-2 h-2 rounded-full ${(() => {
-                  switch (connectionStatus) {
-                    case "connected":
-                      return "bg-green-500";
-                    case "error":
-                      return "bg-red-500";
-                    case "error-connecting-to-proxy":
-                      return "bg-red-500";
-                    default:
-                      return "bg-gray-500";
-                  }
-                })()}`}
-              />
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                {(() => {
-                  switch (connectionStatus) {
-                    case "connected":
-                      return "Connected";
-                    case "error": {
-                      const hasProxyToken = config.MCP_PROXY_AUTH_TOKEN?.value;
-                      if (!hasProxyToken) {
-                        return "Connection Error - Did you add the proxy session token in Configuration?";
-                      }
-                      return "Connection Error - Check if your MCP server is running and proxy token is correct";
-                    }
-                    case "error-connecting-to-proxy":
-                      return "Error Connecting to MCP Inspector Proxy - Check Console logs";
-                    default:
-                      return "Disconnected";
-                  }
-                })()}
-              </span>
-            </div>
-
-            {loggingSupported && connectionStatus === "connected" && (
+            {loggingSupported && isConnected && (
               <div className="space-y-2">
                 <label
                   className="text-sm font-medium"
@@ -715,48 +628,24 @@ const Sidebar = ({
                 </Select>
               </div>
             )}
-
-            {stdErrNotifications.length > 0 && (
-              <>
-                <div className="mt-4 border-t border-gray-200 pt-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-sm font-medium">
-                      Error output from MCP server
-                    </h3>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={clearStdErrNotifications}
-                      className="h-8 px-2"
-                    >
-                      Clear
-                    </Button>
-                  </div>
-                  <div className="mt-2 max-h-80 overflow-y-auto">
-                    {stdErrNotifications.map((notification, index) => (
-                      <div
-                        key={index}
-                        className="text-sm text-red-500 font-mono py-2 border-b border-gray-200 last:border-b-0"
-                      >
-                        {notification.params.content}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
           </div>
         </div>
-      </div>
-      <div className="p-4 border-t border-border bg-card">
-        <div className="flex items-center justify-between">
+        <div className="mb-48" style={{ minHeight: 96 }} />
+        {/* Theme selector section (move to end) */}
+        <div className="w-full mt-4">
+          <label
+            htmlFor="theme-select"
+            className="block text-xs font-medium text-gray-500 mb-1 text-left"
+          >
+            Theme
+          </label>
           <Select
             value={theme}
             onValueChange={(value: string) =>
               setTheme(value as "system" | "light" | "dark")
             }
           >
-            <SelectTrigger className="w-[100px]" id="theme-select">
+            <SelectTrigger className="w-full" id="theme-select">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -765,8 +654,12 @@ const Sidebar = ({
               <SelectItem value="dark">Dark</SelectItem>
             </SelectContent>
           </Select>
-
-          <div className="flex items-center space-x-2">
+        </div>
+      </div>
+      {/*
+      <div className="p-4 border-t border-border bg-card">
+        <div className="flex flex-col items-center">
+          <div className="w-full flex flex-col items-center mt-4">
             <Button variant="ghost" title="Inspector Documentation" asChild>
               <a
                 href="https://modelcontextprotocol.io/docs/tools/inspector"
@@ -801,6 +694,7 @@ const Sidebar = ({
           </div>
         </div>
       </div>
+      */}
     </div>
   );
 };

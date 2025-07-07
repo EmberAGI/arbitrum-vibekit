@@ -44,8 +44,6 @@ describe("Sidebar Environment Variables", () => {
     setSseUrl: jest.fn(),
     env: {},
     setEnv: jest.fn(),
-    bearerToken: "",
-    setBearerToken: jest.fn(),
     onConnect: jest.fn(),
     onDisconnect: jest.fn(),
     stdErrNotifications: [],
@@ -139,8 +137,6 @@ describe("Sidebar Environment Variables", () => {
     it("should update bearer token", () => {
       const setBearerToken = jest.fn();
       renderSidebar({
-        bearerToken: "",
-        setBearerToken,
         transportType: "sse", // Set transport type to SSE
       });
 
@@ -171,8 +167,6 @@ describe("Sidebar Environment Variables", () => {
     it("should clear bearer token", () => {
       const setBearerToken = jest.fn();
       renderSidebar({
-        bearerToken: "existing_token",
-        setBearerToken,
         transportType: "sse", // Set transport type to SSE
       });
 
@@ -186,7 +180,6 @@ describe("Sidebar Environment Variables", () => {
 
     it("should properly render bearer token input", () => {
       const { rerender } = renderSidebar({
-        bearerToken: "existing_token",
         transportType: "sse", // Set transport type to SSE
       });
 
@@ -202,11 +195,7 @@ describe("Sidebar Environment Variables", () => {
       // Rerender with updated token
       rerender(
         <TooltipProvider>
-          <Sidebar
-            {...defaultProps}
-            bearerToken="new_token"
-            transportType="sse"
-          />
+          <Sidebar {...defaultProps} transportType="sse" />
         </TooltipProvider>,
       );
 
@@ -216,7 +205,6 @@ describe("Sidebar Environment Variables", () => {
 
     it("should maintain token visibility state after update", () => {
       const { rerender } = renderSidebar({
-        bearerToken: "existing_token",
         transportType: "sse", // Set transport type to SSE
       });
 
@@ -232,11 +220,7 @@ describe("Sidebar Environment Variables", () => {
       // Rerender with updated token
       rerender(
         <TooltipProvider>
-          <Sidebar
-            {...defaultProps}
-            bearerToken="new_token"
-            transportType="sse"
-          />
+          <Sidebar {...defaultProps} transportType="sse" />
         </TooltipProvider>,
       );
 

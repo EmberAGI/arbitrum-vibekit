@@ -10,34 +10,25 @@ import type { JsonValue, JsonSchemaType } from "@/utils/jsonUtils";
 import { generateDefaultValue } from "@/utils/schemaUtils";
 import {
   CompatibilityCallToolResult,
-  ListToolsResult,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Loader2, Send, ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useState } from "react";
-import ListPane from "./ListPane";
 import JsonView from "./JsonView";
 import ToolResults from "./ToolResults";
 
 const ToolsTab = ({
   tools,
-  listTools,
-  clearTools,
   callTool,
   selectedTool,
   setSelectedTool,
   toolResult,
-  nextCursor,
 }: {
   tools: Tool[];
-  listTools: () => void;
-  clearTools: () => void;
   callTool: (name: string, params: Record<string, unknown>) => Promise<void>;
   selectedTool: Tool | null;
   setSelectedTool: (tool: Tool | null) => void;
   toolResult: CompatibilityCallToolResult | null;
-  nextCursor: ListToolsResult["nextCursor"];
-  error: string | null;
 }) => {
   const [params, setParams] = useState<Record<string, unknown>>({});
   const [isToolRunning, setIsToolRunning] = useState(false);
@@ -56,26 +47,29 @@ const ToolsTab = ({
   return (
     <TabsContent value="tools">
       <div className="grid grid-cols-2 gap-4">
-        <ListPane
-          items={tools}
-          listItems={listTools}
-          clearItems={() => {
-            clearTools();
-            setSelectedTool(null);
-          }}
-          setSelectedItem={setSelectedTool}
-          renderItem={(tool) => (
-            <div className="flex flex-col items-start">
-              <span className="flex-1">{tool.name}</span>
-              <span className="text-sm text-gray-500 text-left">
-                {tool.description}
-              </span>
+        <div className="bg-card border border-border rounded-lg shadow">
+          <div className="p-4 border-b border-gray-200 dark:border-border">
+            <h3 className="font-semibold dark:text-white">Tools</h3>
+          </div>
+          <div className="p-4">
+            <div className="space-y-2 overflow-y-auto max-h-96">
+              {tools.map((tool, index) => (
+                <div
+                  key={index}
+                  className="flex items-center py-2 px-4 rounded hover:bg-gray-50 dark:hover:bg-secondary cursor-pointer"
+                  onClick={() => setSelectedTool(tool)}
+                >
+                  <div className="flex flex-col items-start">
+                    <span className="flex-1">{tool.name}</span>
+                    <span className="text-sm text-gray-500 text-left">
+                      {tool.description}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
-          title="Tools"
-          buttonText={nextCursor ? "List More Tools" : "List Tools"}
-          isButtonDisabled={!nextCursor && tools.length > 0}
-        />
+          </div>
+        </div>
 
         <div className="bg-card border border-border rounded-lg shadow">
           <div className="p-4 border-b border-gray-200 dark:border-border">
