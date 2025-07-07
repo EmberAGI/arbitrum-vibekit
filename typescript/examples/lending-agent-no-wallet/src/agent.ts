@@ -49,7 +49,7 @@ const providers = createProviderSelector({
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
 });
 
-const model = providers.openrouter!('google/gemini-2.5-flash-preview');
+const model = providers.openrouter!('deepseek/deepseek-chat-v3-0324:free');
 
 function logError(...args: unknown[]) {
   console.error(...args);

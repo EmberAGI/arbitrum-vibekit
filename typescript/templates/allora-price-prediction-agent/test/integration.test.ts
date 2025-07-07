@@ -33,7 +33,7 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
 
     agent = Agent.create(agentConfig, {
       llm: {
-        model: providers.openrouter!('google/gemini-2.5-flash-preview'),
+        model: providers.openrouter!('deepseek/deepseek-chat-v3-0324:free'),
       },
       cors: true,
       basePath: '/api/v1',

@@ -329,7 +329,7 @@ Present the user with a list of tokens and chains they can swap from and to if p
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
-        model: openrouter('google/gemini-2.0-flash-001'),
+        model: openrouter('deepseek/deepseek-chat-v3-0324:free'),
         messages: this.conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,
