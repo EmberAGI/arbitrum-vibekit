@@ -19,7 +19,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: EmberAGI/onchain-actions
-          ref: klntsky/use-proper-port
           path: typescript/onchain-actions
           token: ${{ secrets.GH_PAT }}
 
