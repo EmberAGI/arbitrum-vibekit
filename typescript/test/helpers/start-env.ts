@@ -68,9 +68,9 @@ export const startEnv = async (useAnvil: boolean) => {
     "compose",
   );
 
-  await runCommand("pnpm install", "install");
+  await runCommand("pnpm install --ignore-workspace --no-frozen-lockfile", "install");
   try {
-    await runCommand("pnpm run dev", "dev", {}, "service running");
+    await runCommand("pnpm run dev", "dev", {}, "Server listening on port");
   } catch (e) {
     console.error(e);
     throw new Error(
