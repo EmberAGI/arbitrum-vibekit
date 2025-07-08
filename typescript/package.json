@@ -16,7 +16,10 @@
     "lint:fix": "eslint --ext .ts,.tsx . --fix",
     "test": "pnpm recursive run --workspace-concurrency=1 test",
     "format": "pnpm recursive run format",
-    "format:check": "pnpm recursive run format:check"
+    "format:check": "pnpm recursive run format:check",
+    "lint:require-submodule": "./scripts/require-submodule.sh",
+    "start:anvil": "pnpm run lint:require-submodule && npx tsx test/start-anvil.ts",
+    "start:mainnet": "pnpm run lint:require-submodule && npx tsx test/start-mainnet.ts"
   },
   "keywords": [],
   "author": "",
@@ -27,6 +30,7 @@
     "@types/mocha": "^10.0.6",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
+    "@viem/anvil": "^0.0.10",
     "chai": "^4.3.10",
     "dotenv": "^16.3.1",
     "eslint": "^9.0.0",
@@ -35,6 +39,7 @@
     "mocha": "^10.2.0",
     "mocha-suppress-logs": "^0.5.1",
     "prettier": "^3.5.3",
+    "prool": "^0.0.24",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.32.1"
