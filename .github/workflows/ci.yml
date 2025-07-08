@@ -17,10 +17,9 @@ jobs:
 
       - name: Clone onchain-actions repository
         uses: actions/checkout@v4
-        working-directory: ./typescript
         with:
           repository: EmberAGI/onchain-actions
-          path: onchain-actions
+          path: typescript/onchain-actions
           token: ${{ secrets.GH_PAT }}
 
       - name: Setup Node.js
