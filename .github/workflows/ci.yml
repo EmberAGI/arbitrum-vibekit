@@ -102,7 +102,7 @@ jobs:
           QUICKNODE_SUBDOMAIN: ${{ secrets.QUICKNODE_SUBDOMAIN }}
           MNEMONIC: ${{ secrets.MNEMONIC }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          EMBER_ENDPOINT: http://localhost:50051/mcp
+          EMBER_ENDPOINT: http://localhost:3001/mcp
         run: pnpm run test
 
       - name: Kill anvil server
