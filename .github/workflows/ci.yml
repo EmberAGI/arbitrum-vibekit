@@ -15,13 +15,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Clone EmberAGI SDK repository
+      - name: Clone onchain-actions repository
         uses: actions/checkout@v4
         with:
-          repository: EmberAGI/ember-sdk-typescript
-          path: ember-sdk-typescript
+          repository: EmberAGI/onchain-actions
+          path: typescript/onchain-actions
           token: ${{ secrets.GH_PAT }}
-          submodules: recursive
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -46,30 +45,17 @@ jobs:
         working-directory: ./typescript
         run: pnpm run build || true
 
-      - name: Install protoc
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
-
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Install dependencies in EmberAGI SDK
-        working-directory: ./ember-sdk-typescript
-        run: pnpm install
-
-      - name: Build the package
-        working-directory: ./ember-sdk-typescript
-        run: pnpm run build
-
       - name: Initialize environment files
-        working-directory: ./ember-sdk-typescript
+        working-directory: ./typescript
         run: |
           cp .env.example .env
           cp onchain-actions/.env.template onchain-actions/.env
 
       - name: Start anvil server and wait for readiness
-        working-directory: ./ember-sdk-typescript
+        working-directory: ./typescript
         env:
           MNEMONIC: ${{ secrets.MNEMONIC }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -116,7 +102,7 @@ jobs:
           QUICKNODE_SUBDOMAIN: ${{ secrets.QUICKNODE_SUBDOMAIN }}
           MNEMONIC: ${{ secrets.MNEMONIC }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          EMBER_ENDPOINT: localhost:50051
+          EMBER_ENDPOINT: http://localhost:3001/mcp
         run: pnpm run test
 
       - name: Kill anvil server
