@@ -15,8 +15,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Clone EmberAGI SDK repository
+      - name: Clone onchain-actions repository
         uses: actions/checkout@v4
+        working-directory: ./typescript
         with:
           repository: EmberAGI/onchain-actions
           path: onchain-actions
