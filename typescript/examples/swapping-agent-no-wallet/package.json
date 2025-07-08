@@ -12,12 +12,13 @@
     "start": "node dist/index.js",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
     "docker:build": "docker build -t swapping-agent-no-wallet ../../",
-    "docker:run": "docker run --env-file .env -p 3001:3001 swapping-agent-no-wallet",
+    "docker:run": "docker run --env-file ../../.env --env-file .env -p 3001:3001 swapping-agent-no-wallet",
     "docker:compose:up": "docker compose up --build --no-log-prefix",
     "docker:compose:down": "docker compose down",
     "docker:compose:build": "docker compose build --no-cache",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\"",
+    "test:e2e": "vitest test-e2e"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.5.0",

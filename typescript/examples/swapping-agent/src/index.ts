@@ -6,10 +6,19 @@ import express from 'express';
 import { type Address } from 'viem';
 import { mnemonicToAccount } from 'viem/accounts';
 import { z } from 'zod';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 import { Agent } from './agent.js';
 
-dotenv.config();
+// Load environment variables from the main typescript/.env file
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const envPath = path.resolve(__dirname, '../../../.env');
+dotenv.config({ path: envPath });
+
+// Also try to load agent-specific .env if it exists
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const server = new McpServer({
   name: 'mcp-sse-agent-server',
