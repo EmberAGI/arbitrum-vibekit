@@ -49,6 +49,7 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
 
       - name: Initialize environment files
+        working-directory: ./typescript
         run: |
           cp .env.example .env
           cp onchain-actions/.env.template onchain-actions/.env
