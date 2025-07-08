@@ -1,16 +1,16 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
-import type { Task } from 'a2a-samples-js';
+import type { Task } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
 import { streamText } from 'ai';
-import { type TransactionArtifact, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import {
-  SwapResponseSchema,
-  TransactionPlansSchema,
-  type SwapResponse,
-  type SwapPreview,
+  SwapTokensResponseSchema,
+  type SwapTokensResponse,
   type TransactionPlan,
-} from 'ember-schemas';
+  type Token,
+} from 'ember-api';
 import {
   parseUnits,
   createPublicClient,
@@ -23,15 +23,9 @@ import {
 
 import { getChainConfigById } from './agent.js';
 
-export type TokenInfo = {
-  chainId: string;
-  address: string;
-  decimals: number;
-};
-
 export interface HandlerContext {
   mcpClient: Client;
-  tokenMap: Record<string, TokenInfo[]>;
+  tokenMap: Record<string, Token[]>;
   userAddress: string | undefined;
   log: (...args: unknown[]) => void;
   quicknodeSubdomain: string;
@@ -41,9 +35,9 @@ export interface HandlerContext {
 }
 
 function findTokensCaseInsensitive(
-  tokenMap: Record<string, TokenInfo[]>,
+  tokenMap: Record<string, Token[]>,
   tokenName: string
-): TokenInfo[] | undefined {
+): Token[] | undefined {
   const lowerCaseTokenName = tokenName.toLowerCase();
   for (const key in tokenMap) {
     if (key.toLowerCase() === lowerCaseTokenName) {
@@ -77,25 +71,25 @@ function mapChainIdToName(chainId: string): string {
 function findTokenDetail(
   tokenName: string,
   optionalChainName: string | undefined,
-  tokenMap: Record<string, TokenInfo[]>,
+  tokenMap: Record<string, Token[]>,
   direction: 'from' | 'to'
-): TokenInfo | string {
+): Token | string {
   const tokens = findTokensCaseInsensitive(tokenMap, tokenName);
   if (tokens === undefined) {
     throw new Error(`Token ${tokenName} not supported.`);
   }
 
-  let tokenDetail: TokenInfo | undefined;
+  let tokenDetail: Token | undefined;
 
   if (optionalChainName) {
     const chainId = mapChainNameToId(optionalChainName);
     if (!chainId) {
       throw new Error(`Chain name ${optionalChainName} is not recognized.`);
     }
-    tokenDetail = tokens?.find(token => token.chainId === chainId);
+    tokenDetail = tokens?.find(token => token.tokenUid.chainId === chainId);
     if (!tokenDetail) {
       throw new Error(
-        `Token ${tokenName} not supported on chain ${optionalChainName}. Available chains: ${tokens?.map(t => mapChainIdToName(t.chainId)).join(', ')}`
+        `Token ${tokenName} not supported on chain ${optionalChainName}. Available chains: ${tokens?.map(t => mapChainIdToName(t.tokenUid.chainId)).join(', ')}`
       );
     }
   } else {
@@ -104,7 +98,7 @@ function findTokenDetail(
     }
     if (tokens.length > 1) {
       const chainList = tokens
-        .map((t, idx) => `${idx + 1}. ${mapChainIdToName(t.chainId)}`)
+        .map((t, idx) => `${idx + 1}. ${mapChainIdToName(t.tokenUid.chainId)}`)
         .join('\n');
       return `Multiple chains supported for ${tokenName}:\n${chainList}\nPlease specify the '${direction}Chain'.`;
     }
@@ -142,9 +136,16 @@ export async function handleSwapTokens(
   if (typeof fromTokenResult === 'string') {
     return {
       id: context.userAddress,
+      contextId: `swap-from-token-clarification-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'input-required',
-        message: { role: 'agent', parts: [{ type: 'text', text: fromTokenResult }] },
+        state: TaskState.InputRequired,
+        message: {
+          role: 'agent',
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: fromTokenResult }],
+        },
       },
     };
   }
@@ -154,21 +155,28 @@ export async function handleSwapTokens(
   if (typeof toTokenResult === 'string') {
     return {
       id: context.userAddress,
+      contextId: `swap-to-token-clarification-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'input-required',
-        message: { role: 'agent', parts: [{ type: 'text', text: toTokenResult }] },
+        state: TaskState.InputRequired,
+        message: {
+          role: 'agent',
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: toTokenResult }],
+        },
       },
     };
   }
   const toTokenDetail = toTokenResult;
 
   const atomicAmount = parseUnits(amount, fromTokenDetail.decimals);
-  const txChainId = fromTokenDetail.chainId;
-  const fromTokenAddress = fromTokenDetail.address as Address;
+  const txChainId = fromTokenDetail.tokenUid.chainId;
+  const fromTokenAddress = fromTokenDetail.tokenUid.address as Address;
   const userAddress = context.userAddress as Address;
 
   context.log(
-    `Preparing swap: ${rawFromToken} (${fromTokenAddress} on chain ${txChainId}) to ${rawToToken} (${toTokenDetail.address} on chain ${toTokenDetail.chainId}), Amount: ${amount} (${atomicAmount}), User: ${userAddress}`
+    `Preparing swap: ${rawFromToken} (${fromTokenAddress} on chain ${txChainId}) to ${rawToToken} (${toTokenDetail.tokenUid.address} on chain ${toTokenDetail.tokenUid.chainId}), Amount: ${amount} (${atomicAmount}), User: ${userAddress}`
   );
 
   let publicClient: PublicClient;
@@ -191,11 +199,15 @@ export async function handleSwapTokens(
     context.log(`Failed to create public client for chain ${txChainId}:`, chainError);
     return {
       id: userAddress,
+      contextId: `swap-chain-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
+        state: TaskState.Failed,
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: `Network configuration error for chain ${txChainId}.` }],
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: `Network configuration error for chain ${txChainId}.` }],
         },
       },
     };
@@ -216,13 +228,17 @@ export async function handleSwapTokens(
       context.log(`Insufficient balance for the swap. Needs ${amount}, has ${formattedBalance}`);
       return {
         id: userAddress,
+        contextId: `swap-insufficient-balance-${Date.now()}`,
+        kind: 'task',
         status: {
-          state: 'failed',
+          state: TaskState.Failed,
           message: {
             role: 'agent',
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
             parts: [
               {
-                type: 'text',
+                kind: 'text',
                 text: `Insufficient ${fromToken} balance. You need ${amount} but only have ${formattedBalance}.`,
               },
             ],
@@ -235,13 +251,17 @@ export async function handleSwapTokens(
     context.log(`Warning: Failed to read token balance. Error: ${(readError as Error).message}`);
     return {
       id: userAddress,
+      contextId: `swap-balance-check-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
+        state: TaskState.Failed,
         message: {
           role: 'agent',
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
           parts: [
             {
-              type: 'text',
+              kind: 'text',
               text: `Could not verify your ${fromToken} balance due to a network error. Please try again.`,
             },
           ],
@@ -251,33 +271,43 @@ export async function handleSwapTokens(
   }
 
   context.log(
-    `Executing swap via MCP: ${fromToken} (address: ${fromTokenDetail.address}, chain: ${fromTokenDetail.chainId}) to ${toToken} (address: ${toTokenDetail.address}, chain: ${toTokenDetail.chainId}), amount: ${amount}, atomicAmount: ${atomicAmount}, userAddress: ${context.userAddress}`
+    `Executing swap via MCP: ${fromToken} (address: ${fromTokenDetail.tokenUid.address}, chain: ${fromTokenDetail.tokenUid.chainId}) to ${toToken} (address: ${toTokenDetail.tokenUid.address}, chain: ${toTokenDetail.tokenUid.chainId}), amount: ${amount}, atomicAmount: ${atomicAmount}, userAddress: ${context.userAddress}`
   );
 
   const swapResponseRaw = await context.mcpClient.callTool({
     name: 'swapTokens',
     arguments: {
-      fromTokenAddress: fromTokenDetail.address,
-      fromTokenChainId: fromTokenDetail.chainId,
-      toTokenAddress: toTokenDetail.address,
-      toTokenChainId: toTokenDetail.chainId,
+      orderType: 'MARKET_BUY',
+      baseToken: {
+        chainId: fromTokenDetail.tokenUid.chainId,
+        address: fromTokenDetail.tokenUid.address,
+      },
+      quoteToken: {
+        chainId: toTokenDetail.tokenUid.chainId,
+        address: toTokenDetail.tokenUid.address,
+      },
       amount: atomicAmount.toString(),
-      userAddress: context.userAddress,
+      recipient: context.userAddress,
+      slippageTolerance: '0.005',
     },
   });
 
-  let validatedSwapResponse: SwapResponse;
+  let validatedSwapResponse: SwapTokensResponse;
   try {
-    validatedSwapResponse = parseMcpToolResponsePayload(swapResponseRaw, SwapResponseSchema);
+    validatedSwapResponse = parseMcpToolResponsePayload(swapResponseRaw, SwapTokensResponseSchema);
   } catch (error) {
     context.log('MCP tool swapTokens returned invalid data structure:', error);
     return {
       id: userAddress,
+      contextId: `swap-mcp-parse-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
+        state: TaskState.Failed,
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: (error as Error).message }],
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: (error as Error).message }],
         },
       },
     };
@@ -288,11 +318,15 @@ export async function handleSwapTokens(
     context.log('Invalid or empty transaction plan received from MCP tool:', rawSwapTransactions);
     return {
       id: userAddress,
+      contextId: `swap-empty-plan-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
+        state: TaskState.Failed,
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: 'Swap service returned an empty transaction plan.' }],
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: 'Swap service returned an empty transaction plan.' }],
         },
       },
     };
@@ -303,13 +337,17 @@ export async function handleSwapTokens(
     context.log('Invalid swap transaction object received from MCP:', firstSwapTx);
     return {
       id: userAddress,
+      contextId: `swap-invalid-tx-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
+        state: TaskState.Failed,
         message: {
           role: 'agent',
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
           parts: [
             {
-              type: 'text',
+              kind: 'text',
               text: 'Swap service returned an invalid transaction structure.',
             },
           ],
@@ -353,13 +391,14 @@ export async function handleSwapTokens(
       }),
       value: '0',
       chainId: txChainId,
+      type: '0x2',
     };
   } else {
     context.log('Sufficient allowance already exists.');
   }
 
   context.log('Validating the swap transactions received from MCP tool...');
-  const validatedSwapTxPlan: TransactionPlan[] = TransactionPlansSchema.parse(rawSwapTransactions);
+  const validatedSwapTxPlan: TransactionPlan[] = rawSwapTransactions;
 
   const finalTxPlan: TransactionPlan[] = [
     ...(approveTxResponse ? [approveTxResponse] : []),
@@ -370,29 +409,33 @@ export async function handleSwapTokens(
     txPreview: {
       fromTokenSymbol: fromToken,
       fromTokenAddress: validatedSwapResponse.baseToken.address,
-      fromTokenAmount: validatedSwapResponse.estimation.baseTokenDelta,
+      fromTokenAmount: validatedSwapResponse.estimation?.baseTokenDelta || amount,
       fromChain: validatedSwapResponse.baseToken.chainId,
       toTokenSymbol: toToken,
       toTokenAddress: validatedSwapResponse.quoteToken.address,
-      toTokenAmount: validatedSwapResponse.estimation.quoteTokenDelta,
+      toTokenAmount: validatedSwapResponse.estimation?.quoteTokenDelta || '0',
       toChain: validatedSwapResponse.quoteToken.chainId,
-      exchangeRate: validatedSwapResponse.estimation.effectivePrice,
-      executionTime: validatedSwapResponse.estimation.timeEstimate,
-      expiration: validatedSwapResponse.estimation.expiration,
-      explorerUrl: validatedSwapResponse.providerTracking.explorerUrl,
+      exchangeRate: validatedSwapResponse.estimation?.effectivePrice || '0',
+      executionTime: validatedSwapResponse.estimation?.timeEstimate,
+      expiration: validatedSwapResponse.estimation?.expiration,
+      explorerUrl: validatedSwapResponse.providerTracking?.explorerUrl,
     },
     txPlan: finalTxPlan,
   };
 
   return {
     id: context.userAddress,
+    contextId: `swap-success-${Date.now()}`,
+    kind: 'task',
     status: {
-      state: 'completed',
+      state: TaskState.Completed,
       message: {
         role: 'agent',
+        messageId: `msg-${Date.now()}`,
+        kind: 'message',
         parts: [
           {
-            type: 'text',
+            kind: 'text',
             text: `Transaction plan created for swapping ${amount} ${fromToken} to ${toToken}. Ready to sign.`,
           },
         ],
@@ -400,10 +443,11 @@ export async function handleSwapTokens(
     },
     artifacts: [
       {
+        artifactId: `swap-transaction-${Date.now()}`,
         name: 'transaction-plan',
         parts: [
           {
-            type: 'data',
+            kind: 'data',
             data: { ...txArtifact },
           },
         ],
@@ -426,13 +470,17 @@ export async function handleAskEncyclopedia(
     log('Error: OpenRouter API key is not configured in HandlerContext.');
     return {
       id: userAddress,
+      contextId: `encyclopedia-config-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
+        state: TaskState.Failed,
         message: {
           role: 'agent',
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
           parts: [
             {
-              type: 'text',
+              kind: 'text',
               text: 'The Camelot expert tool is not configured correctly (Missing API Key). Please contact support.',
             },
           ],
@@ -448,13 +496,17 @@ export async function handleAskEncyclopedia(
       log('Error: Camelot context documentation provided by the agent is empty.');
       return {
         id: userAddress,
+        contextId: `encyclopedia-content-error-${Date.now()}`,
+        kind: 'task',
         status: {
-          state: 'failed',
+          state: TaskState.Failed,
           message: {
             role: 'agent',
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
             parts: [
               {
-                type: 'text',
+                kind: 'text',
                 text: 'Could not load the necessary Camelot documentation to answer your question.',
               },
             ],
@@ -491,11 +543,15 @@ ${camelotContextContent}`;
 
     return {
       id: userAddress,
+      contextId: `encyclopedia-success-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'completed',
+        state: TaskState.Completed,
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: responseText }],
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: responseText }],
         },
       },
     };
@@ -504,15 +560,36 @@ ${camelotContextContent}`;
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return {
       id: userAddress,
+      contextId: `encyclopedia-error-${Date.now()}`,
+      kind: 'task',
       status: {
-        state: 'failed',
+        state: TaskState.Failed,
         message: {
           role: 'agent',
-          parts: [{ type: 'text', text: `Error asking Camelot expert: ${errorMessage}` }],
+          messageId: `msg-${Date.now()}`,
+          kind: 'message',
+          parts: [{ kind: 'text', text: `Error asking Camelot expert: ${errorMessage}` }],
         },
       },
     };
   }
 }
 
-export type SwapTransactionArtifact = TransactionArtifact<SwapPreview>;
+// Define the swap transaction artifact type
+export type SwapTransactionArtifact = {
+  txPreview: {
+    fromTokenSymbol: string;
+    fromTokenAddress: string;
+    fromTokenAmount: string;
+    fromChain: string;
+    toTokenSymbol: string;
+    toTokenAddress: string;
+    toTokenAmount: string;
+    toChain: string;
+    exchangeRate: string;
+    executionTime?: string;
+    expiration?: string;
+    explorerUrl?: string;
+  };
+  txPlan: TransactionPlan[];
+};

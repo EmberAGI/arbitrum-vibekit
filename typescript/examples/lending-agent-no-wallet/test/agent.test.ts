@@ -178,7 +178,7 @@ describe('Lending Agent Integration Tests', function () {
           const newBorrows = parseFloat(newReserve.totalBorrows || '0');
           const borrowIncrease = newBorrows - oldBorrows;
           expect(borrowIncrease).to.be.closeTo(
-            parseFloat(amountToBorrow),
+            amountToBorrow,
             0.00001, // Allow for some tolerance due to rounding
             `Expected borrow to increase by ${amountToBorrow}, but increased by ${borrowIncrease}`
           );
@@ -249,4 +249,4 @@ describe('Lending Agent Integration Tests', function () {
       });
     });
   }
-}); 
+});

@@ -12,13 +12,13 @@ import {
   composeBeforeHooks,
 } from './hooks.js';
 import {
-  ZodBorrowResponseSchema,
-  ZodRepayResponseSchema,
-  ZodSupplyResponseSchema,
-  ZodWithdrawResponseSchema,
-} from './schemas.js';
+  BorrowResponseSchema,
+  RepayResponseSchema,
+  SupplyResponseSchema,
+  WithdrawResponseSchema,
+} from 'ember-schemas';
 import type { AgentContext } from 'arbitrum-vibekit-core';
-import type { Task, Message } from '@google-a2a/types/src/types.js';
+import type { Task, Message } from '@google-a2a/types';
 import type { LendingAgentContext } from '../agent.js';
 import type { TokenInfo } from './types.js';
 
@@ -54,7 +54,7 @@ export const borrow = withHooks(borrowBase, {
       result,
       context,
       args as ArgsWithResolvedToken,
-      ZodBorrowResponseSchema,
+      BorrowResponseSchema,
       'borrow'
     ),
 });
@@ -67,7 +67,7 @@ export const repay = withHooks(repayBase, {
       result,
       context,
       args as ArgsWithResolvedToken,
-      ZodRepayResponseSchema,
+      RepayResponseSchema,
       'repay'
     ),
 });
@@ -80,7 +80,7 @@ export const supply = withHooks(supplyBase, {
       result,
       context,
       args as ArgsWithResolvedToken,
-      ZodSupplyResponseSchema,
+      SupplyResponseSchema,
       'supply'
     ),
 });
@@ -93,7 +93,7 @@ export const withdraw = withHooks(withdrawBase, {
       result,
       context,
       args as ArgsWithResolvedToken,
-      ZodWithdrawResponseSchema,
+      WithdrawResponseSchema,
       'withdraw'
     ),
 });

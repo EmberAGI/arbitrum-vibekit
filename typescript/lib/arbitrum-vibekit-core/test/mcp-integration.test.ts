@@ -9,16 +9,16 @@ import {
   createInfoMessage,
   createSuccessTask,
   VibkitToolDefinition,
-} from "../src/index.js"; // Changed import path
+} from "../src/index.js";
 import type {
-  Task,
-  Message,
   SkillDefinition,
   AgentConfig,
-} from "../src/index.js"; // Add type imports
-import type { TaskState } from "../src/index.js";
+} from "../src/index.js";
+import type { Task, Message } from "@google-a2a/types";
+import { TaskState } from "@google-a2a/types";
 
 const dummyTool: VibkitToolDefinition<z.ZodObject<{}>, Task> = {
+  name: "dummy-tool",
   description: "Dummy tool",
   parameters: z.object({}),
   execute: async () => ({
@@ -26,7 +26,7 @@ const dummyTool: VibkitToolDefinition<z.ZodObject<{}>, Task> = {
     kind: "task",
     contextId: "dummy",
     status: {
-      state: "completed" as TaskState,
+      state: TaskState.Completed,
       message: {
         kind: "message",
         role: "agent",
@@ -56,7 +56,7 @@ describe("MCP Integration Tests", () => {
           contextId: "format-context",
           kind: "task",
           status: {
-            state: "completed" as TaskState,
+            state: TaskState.Completed,
             message: createInfoMessage("Success", "agent"),
             timestamp: new Date().toISOString(),
           },
@@ -111,7 +111,7 @@ describe("MCP Integration Tests", () => {
           contextId: "string-context",
           kind: "task",
           status: {
-            state: "completed" as TaskState,
+            state: TaskState.Completed,
             message: createInfoMessage("Success", "agent"),
             timestamp: new Date().toISOString(),
           },
@@ -161,7 +161,7 @@ describe("MCP Integration Tests", () => {
           contextId: "ctx-success",
           kind: "task",
           status: {
-            state: "completed" as TaskState,
+            state: TaskState.Completed,
             message: createInfoMessage(`Processed: ${input.data}`, "agent"),
             timestamp: new Date().toISOString(),
           },
@@ -249,7 +249,7 @@ describe("MCP Integration Tests", () => {
         expect(successResult).to.have.property("status");
         expect(successResult.status).to.have.property(
           "state",
-          "completed" as TaskState
+          TaskState.Completed
         );
       }
 
@@ -260,7 +260,7 @@ describe("MCP Integration Tests", () => {
       if (failResult.kind === "task") {
         expect(failResult.status).to.have.property(
           "state",
-          "failed" as TaskState
+          TaskState.Failed
         );
       }
 

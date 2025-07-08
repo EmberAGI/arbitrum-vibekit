@@ -2,7 +2,6 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import {
   LendingGetCapabilitiesResponseSchema,
   type LendingGetCapabilitiesResponse,
-  McpTextWrapperSchema,
   type TokenInfo,
   type LendingAgentCapability,
 } from 'ember-schemas';
@@ -59,39 +58,26 @@ export async function loadTokenMapFromMcp(
 
       console.log('Raw capabilitiesResult received from MCP tool call.');
 
-      // Validate the MCP wrapper format
-      const wrapperValidationResult = McpTextWrapperSchema.safeParse(capabilitiesResult);
-      if (!wrapperValidationResult.success) {
-        console.error(
-          'MCP getCapabilities tool returned an unexpected structure:',
-          wrapperValidationResult.error
-        );
-        throw new Error('MCP getCapabilities tool returned an unexpected structure.');
-      }
+      // Check if the response has structuredContent directly (modern format)
+      if (capabilitiesResult && typeof capabilitiesResult === 'object' && 'structuredContent' in capabilitiesResult) {
+        const parsedData = (capabilitiesResult as any).structuredContent;
+        
+        // Validate the capabilities structure
+        const capabilitiesValidationResult =
+          LendingGetCapabilitiesResponseSchema.safeParse(parsedData);
+        if (!capabilitiesValidationResult.success) {
+          console.error(
+            'Parsed MCP getCapabilities response validation failed:',
+            capabilitiesValidationResult.error
+          );
+          throw new Error(`Failed to validate the parsed capabilities data from MCP server. Complete response: ${JSON.stringify(capabilitiesResult, null, 2)}`);
+        }
 
-      // Parse the nested JSON
-      const jsonString = wrapperValidationResult.data.content[0]!.text;
-      let parsedData: unknown;
-      try {
-        parsedData = JSON.parse(jsonString);
-      } catch (parseError) {
-        console.error('Failed to parse JSON from MCP response:', parseError);
-        throw new Error(`Failed to parse nested JSON response from getCapabilities`);
+        capabilitiesResponse = capabilitiesValidationResult.data;
+        console.log(`Validated ${capabilitiesResponse.capabilities.length} capabilities.`);
+      } else {
+        throw new Error(`MCP getCapabilities tool returned an unexpected structure. Expected { structuredContent: { capabilities: [...] } }. Complete response: ${JSON.stringify(capabilitiesResult, null, 2)}`);
       }
-
-      // Validate the capabilities structure
-      const capabilitiesValidationResult =
-        LendingGetCapabilitiesResponseSchema.safeParse(parsedData);
-      if (!capabilitiesValidationResult.success) {
-        console.error(
-          'Parsed MCP getCapabilities response validation failed:',
-          capabilitiesValidationResult.error
-        );
-        throw new Error('Failed to validate the parsed capabilities data from MCP server.');
-      }
-
-      capabilitiesResponse = capabilitiesValidationResult.data;
-      console.log(`Validated ${capabilitiesResponse.capabilities.length} capabilities.`);
 
       // Cache the response
       if (useCache) {
