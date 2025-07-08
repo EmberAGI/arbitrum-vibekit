@@ -11,6 +11,6 @@ fi;
 
 pushd  "$submodule_dir"
 
-pnpm install --ignore-workspace 1>/dev/null
+pnpm install --ignore-workspace
 
 popd
