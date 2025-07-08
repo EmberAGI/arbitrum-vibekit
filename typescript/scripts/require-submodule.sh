@@ -11,6 +11,6 @@ fi;
 
 pushd  "$submodule_dir"
 
-pnpm install --ignore-workspace
+pnpm install --ignore-workspace --no-frozen-lockfile
 
 popd
