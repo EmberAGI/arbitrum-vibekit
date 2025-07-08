@@ -14,7 +14,7 @@
     "docker:compose:down": "docker compose down",
     "lint": "eslint --ext .ts,.tsx .",
     "lint:fix": "eslint --ext .ts,.tsx . --fix",
-    "test": "pnpm recursive run --workspace-concurrency=1 test",
+    "test": "pnpm --filter lending-agent-no-wallet run test && pnpm --filter swapping-agent-no-wallet run test && pnpm --filter pendle-agent run test && pnpm --filter liquidity-agent-no-wallet run test",
     "format": "pnpm recursive run format",
     "format:check": "pnpm recursive run format:check",
     "lint:require-submodule": "./scripts/require-submodule.sh",
