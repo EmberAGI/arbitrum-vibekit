@@ -1,4 +1,5 @@
 packages:
-  - "lib/**/*"
-  - "examples/*"
-  - "templates/*"
+  - 'lib/**/*'
+  - 'examples/*'
+  - 'templates/*'
+  - 'clients/*'

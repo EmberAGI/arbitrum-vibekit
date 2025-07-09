@@ -1,7 +1,7 @@
 ARG NODE_BASE=23-slim
 
-FROM node:$NODE_BASE AS base
-# Install dependencies for node-gyp support for installing bufferutil
+# Build stage
+FROM node:$NODE_BASE AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -9,21 +9,66 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
 
-FROM base AS production-dependencies
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm i --prod --frozen-lockfile
+# Copy workspace configuration files
+COPY pnpm-lock.yaml pnpm-workspace.yaml .npmrc package.json tsconfig.base.json ./
 
-FROM base AS build
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm i --frozen-lockfile
+# Copy all workspace package.json files maintaining structure
+COPY lib/a2a-types/package.json ./lib/a2a-types/
+COPY lib/arbitrum-vibekit-core/package.json ./lib/arbitrum-vibekit-core/
+COPY lib/ember-api/package.json ./lib/ember-api/
+COPY lib/ember-schemas/package.json ./lib/ember-schemas/
+COPY lib/test-utils/package.json ./lib/test-utils/
+COPY lib/mcp-tools/allora-mcp-server/package.json ./lib/mcp-tools/allora-mcp-server/
+COPY examples/*/package.json ./examples/
+COPY templates/*/package.json ./templates/
+COPY clients/web/package.json ./clients/web/
+
+# Copy library source files that need to be built during prepare
+COPY lib/a2a-types/tsconfig.json ./lib/a2a-types/
+COPY lib/a2a-types/src ./lib/a2a-types/src/
+COPY lib/ember-schemas/tsconfig.json ./lib/ember-schemas/
+COPY lib/ember-schemas/src ./lib/ember-schemas/src/
+COPY lib/mcp-tools/allora-mcp-server/tsconfig.json ./lib/mcp-tools/allora-mcp-server/
+COPY lib/mcp-tools/allora-mcp-server/src ./lib/mcp-tools/allora-mcp-server/src/
+COPY lib/arbitrum-vibekit-core/tsconfig.json ./lib/arbitrum-vibekit-core/
+COPY lib/arbitrum-vibekit-core/src ./lib/arbitrum-vibekit-core/src/
+COPY lib/ember-api/tsconfig.json ./lib/ember-api/
+COPY lib/ember-api/src ./lib/ember-api/src/
+COPY lib/test-utils/tsconfig.json ./lib/test-utils/
+COPY lib/test-utils/src ./lib/test-utils/src/
+
+# Install all dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy all source files
 COPY . .
-RUN pnpm run build
 
-FROM node:$NODE_BASE
+# Build the web client
+RUN pnpm --filter vibekit-web-client build || (echo "Build failed" && exit 1)
+
+# Production stage
+FROM node:$NODE_BASE AS production
+RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
-COPY --from=production-dependencies /app/node_modules node_modules
-COPY --from=build /app/.next ./.next
-COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/lib ./lib
+
+ENV NODE_ENV=production
+
+# Copy package.json
+COPY --from=builder /app/clients/web/package.json ./package.json
+
+# Copy built application
+COPY --from=builder /app/clients/web/.next ./.next
+COPY --from=builder /app/clients/web/public ./public
+COPY --from=builder /app/clients/web/lib ./lib
+
+# Copy node_modules from builder
+COPY --from=builder /app/node_modules ./node_modules
+
 EXPOSE 3000
-ENTRYPOINT ["/bin/sh", "-c", "npx tsx lib/db/migrate.ts && npx next start"]
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["npx", "next", "start"]

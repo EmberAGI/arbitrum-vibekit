@@ -1,4 +1,4 @@
-import NextAuth, { type DefaultSession } from 'next-auth';
+import NextAuth, { type DefaultSession, type NextAuthResult } from 'next-auth';
 
 import { authConfig } from './auth.config';
 import Credentials from 'next-auth/providers/credentials';
@@ -26,12 +26,13 @@ declare module 'next-auth/jwt' {
   }
 }
 
+// @ts-ignore - TypeScript inference issue with next-auth beta
 export const {
   handlers: { GET, POST },
   auth,
   signIn,
   signOut,
-} = NextAuth({
+}: NextAuthResult = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
@@ -79,7 +80,7 @@ export const {
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user?.id && user?.address) {
+      if (user && user.id && user.address) {
         token.id = user.id;
         token.address = user.address;
       }
