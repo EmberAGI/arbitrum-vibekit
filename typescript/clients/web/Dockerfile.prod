@@ -12,18 +12,20 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 
 FROM base AS production-dependencies
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm i --prod --frozen-lockfile
+COPY . .
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm i --prod --frozen-lockfile --ignore-scripts
 
 FROM base AS build
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm i --frozen-lockfile
 COPY . .
-RUN pnpm run build
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm i --frozen-lockfile
+RUN pnpm --filter vibekit-web-client run build
 
 FROM node:$NODE_BASE
 WORKDIR /app
 COPY --from=production-dependencies /app/node_modules node_modules
-COPY --from=build /app/.next ./.next
-COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/lib ./lib
+COPY --from=build /app/clients/web/.next ./.next
+COPY --from=build /app/clients/web/package.json ./package.json
+COPY --from=build /app/clients/web/lib ./lib
+COPY --from=build /app/clients/web/public ./public
 EXPOSE 3000
 ENTRYPOINT ["/bin/sh", "-c", "npx tsx lib/db/migrate.ts && npx next start"]
