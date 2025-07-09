@@ -114,8 +114,8 @@ services:
   web:
     container_name: vibekit-web-app
     build:
-      context: ./
-      dockerfile: clients/web/Dockerfile.prod
+      context: clients/web/
+      dockerfile: Dockerfile.prod
     env_file:
       - path: .env
         required: true
