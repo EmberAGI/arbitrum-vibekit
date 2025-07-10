@@ -20,18 +20,18 @@
     "@google-a2a/types": "workspace:*",
     "@langchain/core": "^0.3.59",
     "@langchain/langgraph": "^0.3.3",
-    "@modelcontextprotocol/sdk": "^1.13.1",
-    "@openrouter/ai-sdk-provider": "^0.4.5",
-    "ai": "^4.3.2",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@openrouter/ai-sdk-provider": "catalog:",
+    "ai": "catalog:",
     "arbitrum-vibekit-core": "workspace:^",
-    "dotenv": "^16.3.1",
-    "zod": "^3.24.3"
+    "dotenv": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^24.0.3",
+    "@types/node": "catalog:",
     "@vitest/ui": "^3.2.3",
-    "tsx": "^4.20.3",
-    "typescript": "^5.8.3",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
     "vitest": "^3.2.1"
   }
 }
