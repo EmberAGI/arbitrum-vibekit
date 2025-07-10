@@ -55,14 +55,18 @@ WORKDIR /app
 # Install pnpm globally
 RUN npm install -g pnpm@10.7.0
 
+# Copy workspace configuration
+COPY --from=builder /app/pnpm-workspace.yaml /app/
+COPY --from=builder /app/package.json /app/
+
 # Copy only what we need from the builder stage
-# COPY --from=builder /app/clients/web/dist /app/clients/web/dist
-# COPY --from=builder /app/clients/web/encyclopedia /app/clients/web/encyclopedia
-COPY clients/web/package.json /app/clients/web/
-COPY clients/web/node_modules /app/clients/web/node_modules
-COPY clients/web/public ./app/clients/web/public
-COPY clients/web/lib/ /app/clients/web/lib/
+COPY --from=builder /app/clients/web/package.json /app/clients/web/
+COPY --from=builder /app/clients/web/node_modules /app/clients/web/node_modules
+COPY --from=builder /app/clients/web/public /app/clients/web/public
+COPY --from=builder /app/clients/web/lib/ /app/clients/web/lib/
 COPY --from=builder /app/clients/web/.next /app/clients/web/.next
+COPY --from=builder /app/clients/web/.env* /app/clients/web/
+COPY --from=builder /app/clients/web/drizzle.config.ts /app/clients/web/
 COPY --from=builder /app/lib /app/lib
 COPY --from=builder /app/node_modules /app/node_modules
 
@@ -75,5 +79,8 @@ USER ember
 # Expose port
 EXPOSE 3000
 
+# Use dumb-init to properly handle signals
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+
 # Start the client (path is relative to the WORKDIR set above)
-CMD ["/bin/sh", "-c", "pnpm --filter vibekit-web-client... db:migrate && pnpm --filter vibekit-web-client... start"]
+CMD ["/bin/sh", "-c", "pnpm --filter vibekit-web-client db:migrate && pnpm --filter vibekit-web-client start"]

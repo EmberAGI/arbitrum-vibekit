@@ -1,4 +1,5 @@
 {
+  "root": true,
   "extends": [
     "plugin:import/typescript",
     "prettier",
@@ -15,7 +16,7 @@
     "import/resolver": {
       "typescript": {
         "alwaysTryTypes": true,
-        "project": "./tsconfig.json"
+        "project": ["./tsconfig.json", "../../tsconfig.base.json"]
       }
     }
   },
