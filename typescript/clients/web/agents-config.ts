@@ -57,6 +57,28 @@ export const chatAgents = [
   //   description: 'Quickstart agent',
   //   suggestedActions: [],
   // },
+  {
+    id: 'liquidation-prevention-agent' as const,
+    name: 'Liquidation Prevention',
+    description: 'Aave liquidation prevention agent that monitors health factors and prevents liquidations',
+    suggestedActions: [
+      {
+        title: 'Monitor',
+        label: 'my positions',
+        action: 'Monitor my Aave positions and health factor',
+      },
+      {
+        title: 'Check',
+        label: 'liquidation risk',
+        action: 'Check my liquidation risk and health factor',
+      },
+      {
+        title: 'Prevent',
+        label: 'liquidation automatically',
+        action: 'Set up automatic liquidation prevention for my positions',
+      },
+    ],
+  },
   // {
   //   id: 'allora-price-prediction-agent' as const,
   //   name: 'Price Prediction',
@@ -137,6 +159,7 @@ export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
   // ['langgraph-workflow', 'http://langgraph-workflow-agent:3009/sse'],
   // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
+  ['liquidation-prevention-agent', 'http://liquidation-prevention-agent:3010/sse'],
   // ['allora-price-prediction-agent', 'http://allora-price-prediction-agent:3008/sse'],
   // ["ember-lp", "http://liquidity-agent-no-wallet:3002/sse"],
   // ["ember-pendle", "http://pendle-agent:3003/sse"],
