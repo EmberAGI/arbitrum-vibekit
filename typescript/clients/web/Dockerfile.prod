@@ -1,74 +1,79 @@
-ARG NODE_BASE=23-slim
+# Build stage - Context should be the typescript/ directory
+FROM node:23-slim AS builder
 
-# Build stage
-FROM node:$NODE_BASE AS builder
-RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
 WORKDIR /app
 
-# Copy workspace configuration files
-COPY pnpm-lock.yaml pnpm-workspace.yaml .npmrc package.json tsconfig.base.json ./
+# Install pnpm globally
+RUN npm install -g pnpm@10.7.0 typescript@5.8.3
 
-# Copy all workspace package.json files maintaining structure
-COPY lib/a2a-types/package.json ./lib/a2a-types/
-COPY lib/arbitrum-vibekit-core/package.json ./lib/arbitrum-vibekit-core/
-COPY lib/ember-api/package.json ./lib/ember-api/
-COPY lib/ember-schemas/package.json ./lib/ember-schemas/
-COPY lib/test-utils/package.json ./lib/test-utils/
-COPY lib/mcp-tools/allora-mcp-server/package.json ./lib/mcp-tools/allora-mcp-server/
-COPY examples/*/package.json ./examples/
-COPY templates/*/package.json ./templates/
+# ------------------------------
+# 1. Copy lockfile & workspace config that affect dependency graph cache
+# ------------------------------
+COPY pnpm-lock.yaml* pnpm-workspace.yaml .npmrc ./
+# Copy root package.json for pnpm workspace
+COPY package.json ./
+# Copy base TS configuration so that tsconfig.base.json can be resolved
+COPY tsconfig.base.json ./
+
+# ------------------------------
+# 2. Copy all workspace package.json files (to maximise Docker cache)
+# ------------------------------
+COPY lib/ lib/
 COPY clients/web/package.json ./clients/web/
 
-# Copy library source files that need to be built during prepare
-COPY lib/a2a-types/tsconfig.json ./lib/a2a-types/
-COPY lib/a2a-types/src ./lib/a2a-types/src/
-COPY lib/ember-schemas/tsconfig.json ./lib/ember-schemas/
-COPY lib/ember-schemas/src ./lib/ember-schemas/src/
-COPY lib/mcp-tools/allora-mcp-server/tsconfig.json ./lib/mcp-tools/allora-mcp-server/
-COPY lib/mcp-tools/allora-mcp-server/src ./lib/mcp-tools/allora-mcp-server/src/
-COPY lib/arbitrum-vibekit-core/tsconfig.json ./lib/arbitrum-vibekit-core/
-COPY lib/arbitrum-vibekit-core/src ./lib/arbitrum-vibekit-core/src/
-COPY lib/ember-api/tsconfig.json ./lib/ember-api/
-COPY lib/ember-api/src ./lib/ember-api/src/
-COPY lib/test-utils/tsconfig.json ./lib/test-utils/
-COPY lib/test-utils/src ./lib/test-utils/src/
+# ------------------------------
+# 3. Install deps based on the copied package.json set. Skip lifecycle scripts for now
+#    because source files are not yet in the build context (they are copied in step 4).
+#    This keeps the layer cache-friendly while avoiding prepare/postinstall failures.
+# ------------------------------
+RUN pnpm install --prefer-frozen-lockfile
 
-# Install all dependencies
-RUN pnpm install --frozen-lockfile
-
-# Copy all source files
+# ------------------------------
+# 4. Now copy the rest of the source code
+# ------------------------------
 COPY . .
 
-# Build the web client
-RUN pnpm --filter vibekit-web-client build || (echo "Build failed" && exit 1)
+# ------------------------------
+# 5. Build every workspace package that provides a build script (recursive build)
+# ------------------------------
+RUN pnpm --filter vibekit-web-client... build
 
 # Production stage
-FROM node:$NODE_BASE AS production
+FROM node:23-slim AS production
+
+# Copy pnpm config
+COPY --from=builder /app/.npmrc ./
+
+# Create a non-root user
 RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd -r ember && useradd -r -g ember ember
 
 WORKDIR /app
 
-ENV NODE_ENV=production
+# Install pnpm globally
+RUN npm install -g pnpm@10.7.0
 
-# Copy package.json
-COPY --from=builder /app/clients/web/package.json ./package.json
+# Copy only what we need from the builder stage
+# COPY --from=builder /app/clients/web/dist /app/clients/web/dist
+# COPY --from=builder /app/clients/web/encyclopedia /app/clients/web/encyclopedia
+COPY clients/web/package.json /app/clients/web/
+COPY clients/web/node_modules /app/clients/web/node_modules
+COPY clients/web/public ./app/clients/web/public
+COPY clients/web/lib/ /app/clients/web/lib/
+COPY --from=builder /app/clients/web/.next /app/clients/web/.next
+COPY --from=builder /app/lib /app/lib
+COPY --from=builder /app/node_modules /app/node_modules
 
-# Copy built application
-COPY --from=builder /app/clients/web/.next ./.next
-COPY --from=builder /app/clients/web/public ./public
-COPY --from=builder /app/clients/web/lib ./lib
+# Change ownership to non-root user
+RUN chown -R ember:ember /app
 
-# Copy node_modules from builder
-COPY --from=builder /app/node_modules ./node_modules
+# Switch to non-root user
+USER ember
 
+# Expose port
 EXPOSE 3000
 
-ENTRYPOINT ["dumb-init", "--"]
-CMD ["npx", "next", "start"]
+# Start the client (path is relative to the WORKDIR set above)
+CMD ["/bin/sh", "-c", "pnpm --filter vibekit-web-client... db:migrate && pnpm --filter vibekit-web-client... start"]
