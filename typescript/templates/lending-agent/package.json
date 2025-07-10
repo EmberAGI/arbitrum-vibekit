@@ -26,6 +26,7 @@
     "arbitrum-vibekit-core": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "catalog:",
+    "zod": "catalog:",
     "ember-schemas": "workspace:*",
     "ember-api": "workspace:*",
     "express": "catalog:",
