@@ -277,7 +277,7 @@ export async function handleSwapTokens(
   const swapResponseRaw = await context.mcpClient.callTool({
     name: 'swapTokens',
     arguments: {
-      orderType: 'MARKET_BUY',
+      orderType: 'MARKET_SELL',
       baseToken: {
         chainId: fromTokenDetail.tokenUid.chainId,
         address: fromTokenDetail.tokenUid.address,
