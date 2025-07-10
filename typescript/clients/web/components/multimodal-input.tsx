@@ -1,6 +1,6 @@
 "use client";
 
-import type { Attachment, Message, UIMessage } from "ai";
+import type { Attachment, UIMessage } from "ai";
 import cx from "classnames";
 import type React from "react";
 import {
@@ -264,7 +264,7 @@ function PureMultimodalInput({
         <AgentSelector
           selectedAgentId={selectedAgentId}
           onAgentChange={onAgentChange}
-        ></AgentSelector>
+        />
       </div>
 
       <div className="absolute bottom-0 right-0 p-2 w-fit flex flex-row justify-end">

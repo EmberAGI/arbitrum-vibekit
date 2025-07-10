@@ -1,4 +1,5 @@
 import NextAuth, { type DefaultSession } from 'next-auth';
+import type { NextAuthResult } from 'next-auth';
 
 import { authConfig } from './auth.config';
 import Credentials from 'next-auth/providers/credentials';
@@ -26,12 +27,7 @@ declare module 'next-auth/jwt' {
   }
 }
 
-export const {
-  handlers: { GET, POST },
-  auth,
-  signIn,
-  signOut,
-} = NextAuth({
+const nextAuthResult = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
@@ -79,7 +75,7 @@ export const {
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user?.id && user?.address) {
+      if (user?.id && user.address) {
         token.id = user.id;
         token.address = user.address;
       }
@@ -97,4 +93,22 @@ export const {
       };
     },
   },
-});
+}) as NextAuthResult;
+
+// -----------------------------------------------------------------------------
+// Re-export handlers and helpers in a way that avoids exposing the internal
+// (and currently unstable) next-auth types.  By wrapping the re-exports in
+// simple forwarders and casting them to `any`, we prevent TypeScript from
+// trying to reference private types from the next-auth package at build time
+// while still maintaining the same runtime behaviour.  Once next-auth v5 is
+// stable we can remove these casts and rely on the official types.
+// -----------------------------------------------------------------------------
+
+// Endpoint handlers
+export const GET: any = nextAuthResult.handlers.GET;
+export const POST: any = nextAuthResult.handlers.POST;
+
+// Auth helpers
+export const auth: any = nextAuthResult.auth;
+export const signIn: any = nextAuthResult.signIn;
+export const signOut: any = nextAuthResult.signOut;

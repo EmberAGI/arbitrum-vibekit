@@ -1,10 +1,10 @@
 {
+  "root": true,
   "extends": [
-    "plugin:import/recommended",
     "plugin:import/typescript",
     "prettier",
     "plugin:tailwindcss/recommended",
-    "next", 
+    "next",
     "next/core-web-vitals"
   ],
   "plugins": ["tailwindcss"],
@@ -16,9 +16,9 @@
     "import/resolver": {
       "typescript": {
         "alwaysTryTypes": true,
-        "project": "./tsconfig.json"
+        "project": ["./tsconfig.json", "../../tsconfig.base.json"]
       }
     }
   },
-  "ignorePatterns": ["**/components/ui/**"]
+  "ignorePatterns": ["**/components/ui/**", "lib/editor/diff.js"]
 }

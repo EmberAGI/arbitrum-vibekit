@@ -38,21 +38,45 @@ interface JsonNodeProps {
   arrayIndex?: number;
 }
 
-function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArrayItem, arrayIndex }: JsonNodeProps) {
+function JsonNode({
+  data,
+  path,
+  depth = 0,
+  onCopy,
+  copiedPath,
+  parentKey,
+  isArrayItem,
+  arrayIndex,
+}: JsonNodeProps) {
   const [isExpanded, setIsExpanded] = useState(depth < 3);
 
   // Handle primitive values
-  if (data === null || data === undefined || typeof data === 'boolean' || typeof data === 'number' || typeof data === 'string') {
-    const value = data === null ? 'null' :
-      data === undefined ? 'undefined' :
-        typeof data === 'boolean' ? data.toString() :
-          typeof data === 'number' ? data.toString() :
-            data;
+  if (
+    data === null ||
+    data === undefined ||
+    typeof data === 'boolean' ||
+    typeof data === 'number' ||
+    typeof data === 'string'
+  ) {
+    const value =
+      data === null
+        ? 'null'
+        : data === undefined
+          ? 'undefined'
+          : typeof data === 'boolean'
+            ? data.toString()
+            : typeof data === 'number'
+              ? data.toString()
+              : data;
 
-    const colorClass = data === null || data === undefined ? 'text-zinc-500' :
-      typeof data === 'boolean' ? 'text-green-400' :
-        typeof data === 'number' ? 'text-sky-400' :
-          'text-orange-400';
+    const colorClass =
+      data === null || data === undefined
+        ? 'text-zinc-500'
+        : typeof data === 'boolean'
+          ? 'text-green-400'
+          : typeof data === 'number'
+            ? 'text-sky-400'
+            : 'text-orange-400';
 
     const displayValue = typeof data === 'string' ? `"${data}"` : value;
 
@@ -61,7 +85,7 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
       return (
         <div className="group flex items-center justify-between py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150">
           <div className="flex items-center gap-2 text-xs">
-            <span className="bg-zinc-600/50 text-zinc-400 px-1.5 py-0.5 rounded text-[10px] font-mono min-w-[1.5rem] text-center">
+            <span className="bg-zinc-600/50 text-zinc-400 px-1.5 py-0.5 rounded text-[10px] font-mono min-w-6 text-center">
               {arrayIndex}
             </span>
             <span className={`${colorClass}`}>{displayValue}</span>
@@ -123,7 +147,9 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
           <div className="py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150">
             <div className="flex items-center gap-2 text-xs">
               <span className="text-zinc-300">{parentKey}:</span>
-              <span className="text-zinc-500 bg-zinc-600/30 px-1.5 py-0.5 rounded text-[10px]">Empty Array</span>
+              <span className="text-zinc-500 bg-zinc-600/30 px-1.5 py-0.5 rounded text-[10px]">
+                Empty Array
+              </span>
             </div>
           </div>
         );
@@ -132,10 +158,12 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
         return (
           <div className="py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150">
             <div className="flex items-center gap-2 text-xs">
-              <span className="bg-zinc-600/50 text-zinc-400 px-1.5 py-0.5 rounded text-[10px] font-mono min-w-[1.5rem] text-center">
+              <span className="bg-zinc-600/50 text-zinc-400 px-1.5 py-0.5 rounded text-[10px] font-mono min-w-6 text-center">
                 {arrayIndex}
               </span>
-              <span className="text-zinc-500 bg-zinc-600/30 px-1.5 py-0.5 rounded text-[10px]">Empty Array</span>
+              <span className="text-zinc-500 bg-zinc-600/30 px-1.5 py-0.5 rounded text-[10px]">
+                Empty Array
+              </span>
             </div>
           </div>
         );
@@ -182,7 +210,8 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
           <div className="border-l border-zinc-500/30 ml-3 pl-3 mt-0.5">
             {data.map((item, index) => (
               <JsonNode
-                key={index}
+                // biome-ignore lint/suspicious/noArrayIndexKey: Rendering arbitrary JSON data without unique IDs
+                key={`${path}-${index}`}
                 data={item}
                 path={`${path}[${index}]`}
                 depth={depth + 1}
@@ -209,7 +238,9 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
           <div className="py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150">
             <div className="flex items-center gap-2 text-xs">
               <span className="text-zinc-300">{parentKey}:</span>
-              <span className="text-zinc-500 bg-zinc-600/30 px-1.5 py-0.5 rounded text-[10px]">Empty Object</span>
+              <span className="text-zinc-500 bg-zinc-600/30 px-1.5 py-0.5 rounded text-[10px]">
+                Empty Object
+              </span>
             </div>
           </div>
         );
@@ -218,10 +249,12 @@ function JsonNode({ data, path, depth = 0, onCopy, copiedPath, parentKey, isArra
         return (
           <div className="py-0.5 px-1 hover:bg-zinc-600/20 rounded transition-all duration-150">
             <div className="flex items-center gap-2 text-xs">
-              <span className="bg-zinc-600/50 text-zinc-400 px-1.5 py-0.5 rounded text-[10px] font-mono min-w-[1.5rem] text-center">
+              <span className="bg-zinc-600/50 text-zinc-400 px-1.5 py-0.5 rounded text-[10px] font-mono min-w-6 text-center">
                 {arrayIndex}
               </span>
-              <span className="text-zinc-500 bg-zinc-600/30 px-1.5 py-0.5 rounded text-[10px]">Empty Object</span>
+              <span className="text-zinc-500 bg-zinc-600/30 px-1.5 py-0.5 rounded text-[10px]">
+                Empty Object
+              </span>
             </div>
           </div>
         );

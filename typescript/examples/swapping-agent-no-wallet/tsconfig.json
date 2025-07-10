@@ -1,14 +1,14 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": ".",
-    "outDir": "dist",
+    "rootDir": "./src",
+    "outDir": "./dist",
     "composite": true,
     "moduleResolution": "NodeNext",
     "types": ["node", "mocha"],
     "verbatimModuleSyntax": false
   },
-  "include": ["src/**/*", "test/**/*"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"],
   "references": [
     { "path": "../../lib/ember-api" },

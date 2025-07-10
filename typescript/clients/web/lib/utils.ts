@@ -2,15 +2,12 @@ import type {
   CoreAssistantMessage,
   CoreToolMessage,
   Message,
-  TextStreamPart,
-  ToolInvocation,
-  ToolSet,
   UIMessage,
 } from 'ai';
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-import type { DBMessage, Document } from '@/lib/db/schema';
+import type { Document } from '@/lib/db/schema';
 import { toast } from 'sonner';
 
 export function cn(...inputs: ClassValue[]) {
@@ -170,8 +167,8 @@ export function strToDecimal(input: string): string {
     return '∞';
   } else {
     //convert decimal string into 2 decimal string
-    const decimal = parseFloat(input);
-    if (isNaN(decimal)) {
+    const decimal = Number.parseFloat(input);
+    if (Number.isNaN(decimal)) {
       return '';
     }
     const decimalString = decimal.toFixed(2).toString();
@@ -193,11 +190,11 @@ export function shortenAddress(address: string): string {
 
 //function to take a string that's a float, multiply by 100 and convert it to a string with 2 decimal places
 export function formatPercentage(input: string): string {
-  const decimal = parseFloat(input);
-  if (isNaN(decimal)) {
+  const decimal = Number.parseFloat(input);
+  if (Number.isNaN(decimal)) {
     return '';
   }
   const percentage = decimal * 100;
-  const percentageString = percentage.toFixed(2).toString() + '%';
+  const percentageString = `${percentage.toFixed(2).toString()}%`;
   return percentageString;
 }
