@@ -210,7 +210,8 @@ function JsonNode({
           <div className="border-l border-zinc-500/30 ml-3 pl-3 mt-0.5">
             {data.map((item, index) => (
               <JsonNode
-                key={index}
+                // biome-ignore lint/suspicious/noArrayIndexKey: Rendering arbitrary JSON data without unique IDs
+                key={`${path}-${index}`}
                 data={item}
                 path={`${path}[${index}]`}
                 depth={depth + 1}

@@ -75,7 +75,7 @@ const nextAuthResult = NextAuth({
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user && user.id && user.address) {
+      if (user?.id && user.address) {
         token.id = user.id;
         token.address = user.address;
       }

@@ -21,8 +21,7 @@ export function ChatHeader() {
         <SidebarToggle />
 
         {(!open || windowWidth < 768) && (
-          <>
-            <Tooltip>
+          <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
@@ -38,7 +37,6 @@ export function ChatHeader() {
               </TooltipTrigger>
               <TooltipContent>New Chat</TooltipContent>
             </Tooltip>
-          </>
         )}
       </section>
       <div>

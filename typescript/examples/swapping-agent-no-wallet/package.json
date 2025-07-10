@@ -21,7 +21,6 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
   },
   "dependencies": {
-    "@eslint/js": "catalog:",
     "@google-a2a/types": "workspace:*",
     "@modelcontextprotocol/sdk": "catalog:",
     "@openrouter/ai-sdk-provider": "catalog:",
@@ -31,20 +30,15 @@
     "cors": "^2.8.5",
     "dotenv": "catalog:",
     "ember-api": "workspace:*",
-    "eslint": "catalog:",
     "ethers": "^5.7.2",
     "express": "catalog:",
     "fastify": "^5.1.0",
-    "globals": "^16.1.0",
-    "prettier": "catalog:",
-    "tsx": "catalog:",
-    "typescript": "catalog:",
-    "typescript-eslint": "catalog:",
     "viem": "^2.19.8",
     "ws": "^8.18.2",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@eslint/js": "catalog:",
     "@types/chai": "catalog:",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
@@ -52,10 +46,14 @@
     "@types/node": "catalog:",
     "chai": "catalog:",
     "cpx": "^1.5.0",
+    "eslint": "catalog:",
+    "globals": "^16.1.0",
     "mocha": "catalog:",
     "mocha-suppress-logs": "catalog:",
     "prettier": "catalog:",
     "test-utils": "workspace:*",
-    "tsx": "catalog:"
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:"
   }
 }
