@@ -288,7 +288,7 @@ export async function handleSwapTokens(
       },
       amount: atomicAmount.toString(),
       recipient: context.userAddress,
-      slippageTolerance: '0.005',
+      slippageTolerance: '0.5',
     },
   });
 
