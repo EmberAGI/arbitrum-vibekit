@@ -42,11 +42,6 @@ export type ActionCallback<T extends keyof CallbacksRecord> = CallbacksRecord[T]
  */
 export interface TokenSet {
   /**
-   * An optional unique identifier for the token set.
-   * This can be used to indicate equality between input and output token sets or between input/output token sets of different actions.
-   */
-  id?: string;
-  /**
    * The chain to which the tokens belong.
    */
   chain: Chain;
