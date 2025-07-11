@@ -24,22 +24,19 @@ export type Action =
 /**
  * Type mapping for action callbacks.
  */
-export type ActionCallback<T extends Action> = T extends 'swap'
-  ? SwapActionCallback
-  : T extends 'lending-borrow'
-    ? BorrowCallback
-    : T extends 'lending-repay'
-      ? RepayTokensCallback
-      : T extends 'lending-supply'
-        ? LendingSupplyCallback
-        : T extends 'lending-withdraw'
-          ? LendingWithdrawCallback
-          : T extends 'liquidity-supply'
-            ? SupplyLiquidityCallback
-            : T extends 'liquidity-withdraw'
-              ? WithdrawLiquidityCallback
-              : never;
-
+type CallbacksRecord = {
+  swap: SwapActionCallback;
+  'lending-borrow': BorrowCallback;
+  'lending-repay': RepayTokensCallback;
+  'lending-supply': LendingSupplyCallback;
+  'lending-withdraw': LendingWithdrawCallback;
+  'liquidity-supply': SupplyLiquidityCallback;
+  'liquidity-withdraw': WithdrawLiquidityCallback;
+};
+/**
+ * Type mapping for action callbacks.
+ */
+export type ActionCallback<T extends keyof CallbacksRecord> = CallbacksRecord[T];
 /**
  * Represents a grouping of tokens associated with a specific chain.
  */
