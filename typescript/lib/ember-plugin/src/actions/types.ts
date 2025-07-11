@@ -1,12 +1,12 @@
 import type { Token } from 'ember-schemas';
 import type { SwapActionCallback } from './swap.js';
 import type {
-  BorrowCallback,
-  RepayTokensCallback,
-  SupplyCallback as LendingSupplyCallback,
-  WithdrawCallback as LendingWithdrawCallback,
+  LendingBorrowCallback,
+  LendingRepayTokensCallback,
+  LendingSupplyCallback,
+  LendingWithdrawCallback,
 } from './lending.js';
-import type { SupplyLiquidityCallback, WithdrawLiquidityCallback } from './liquidity.js';
+import type { LiquiditySupplyCallback, LiquidityWithdrawCallback } from './liquidity.js';
 import type { Chain } from 'src/common.js';
 
 /**
@@ -26,12 +26,12 @@ export type Action =
  */
 type CallbacksRecord = {
   swap: SwapActionCallback;
-  'lending-borrow': BorrowCallback;
-  'lending-repay': RepayTokensCallback;
+  'lending-borrow': LendingBorrowCallback;
+  'lending-repay': LendingRepayTokensCallback;
   'lending-supply': LendingSupplyCallback;
   'lending-withdraw': LendingWithdrawCallback;
-  'liquidity-supply': SupplyLiquidityCallback;
-  'liquidity-withdraw': WithdrawLiquidityCallback;
+  'liquidity-supply': LiquiditySupplyCallback;
+  'liquidity-withdraw': LiquidityWithdrawCallback;
 };
 /**
  * Type mapping for action callbacks.
