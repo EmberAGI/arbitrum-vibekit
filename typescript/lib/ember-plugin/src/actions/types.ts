@@ -64,7 +64,7 @@ export interface ActionDefinition<T extends Action> {
    */
   callback: ActionCallback<T>;
   /**
-   * THis function returns the possible input tokens for the action in all chains.
+   * This function returns the possible input tokens for the action in all chains.
    * @returns The list of token sets that can be used as input for the action.
    */
   inputTokens: () => Promise<TokenSet[]>;
