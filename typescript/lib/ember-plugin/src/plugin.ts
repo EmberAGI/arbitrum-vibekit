@@ -1,32 +1,24 @@
 import type { Action, ActionDefinition } from './actions/index.js';
 
-export class EmberPluginFactory {
-  private actions: ActionDefinition<Action>[] = [];
-
+export interface EmberPlugin {
   /**
-   * Creates a new Ember plugin factory.
-   * @param name The name of the plugin.
-   * @param description The description of what the plugin does.
+   * The possible actions that the plugin can perform.
    */
-  constructor(
-    public readonly name: string,
-    public readonly description?: string,
-    public readonly x?: string,
-    public readonly website: string = '0.1.0'
-  ) {}
-
+  actions: ActionDefinition<Action>[];
   /**
-   * Returns the list of actions that can be performed by this plugin.
-   * @returns The list of actions.
+   * The name of the plugin.
    */
-  public addAction<T extends Action>(definition: ActionDefinition<T>): void {
-    this.actions.push(definition);
-  }
-
+  name: string;
   /**
-   * @returns The list of actions that can be performed by this plugin.
+   * An optional description of the plugin.
    */
-  public getActions(): ActionDefinition<Action>[] {
-    return this.actions;
-  }
+  description?: string;
+  /**
+   * The twitter URL for the plugin or its creator.
+   */
+  x?: string;
+  /**
+   * The website URL for the plugin or its creator.
+   */
+  website: string;
 }
