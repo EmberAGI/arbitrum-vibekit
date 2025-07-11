@@ -4,6 +4,7 @@ import {
   appendResponseMessages,
   smoothStream,
   streamText,
+  DataStreamWriter,
 } from 'ai';
 import { auth } from '@/app/(auth)/auth';
 import { systemPrompt } from '@/lib/ai/prompts';
@@ -39,63 +40,164 @@ type Context = z.infer<typeof ContextSchema>;
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
-  try {
-    const {
-      id,
-      messages,
-      selectedChatModel,
-      context,
-    }: {
-      id: string;
-      messages: Array<UIMessage>;
-      selectedChatModel: string;
-      context: Context;
-      } = await request.json();
+  const requestId = generateUUID();
+  console.log(`[Chat API] Starting POST request - ID: ${requestId}`);
+  
+  // Initialize error collection
+  let errorMessage: string | null = null;
+  let errorContext: string = '';
 
-    const session: Session | null = await auth();
-
-    console.log('session', session);
-
-    const validationResult = ContextSchema.safeParse(context);
-
-    console.log('validationResult', validationResult);
-
-    if (!validationResult.success) {
-      return new Response(JSON.stringify(validationResult.error.errors), {
-        status: 400,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+  // Helper function to safely execute operations
+  const safeExecute = async <T>(
+    operation: () => Promise<T>,
+    context: string,
+    defaultValue?: T
+  ): Promise<T | undefined> => {
+    try {
+      return await operation();
+    } catch (error) {
+      errorContext = context;
+      errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[Chat API] Error in ${context}:`, {
+        requestId,
+        context,
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined
       });
+      return defaultValue;
     }
+  };
 
-    const validatedContext = validationResult.data;
+  // Parse request body
+  const requestData = await safeExecute(
+    async () => {
+      const data = await request.json();
+      return data as {
+        id: string;
+        messages: Array<UIMessage>;
+        selectedChatModel: string;
+        context: Context;
+      };
+    },
+    'parsing request body'
+  );
 
-    if (!session || !session.user || !session.user.id) {
+  if (errorMessage || !requestData) {
+    console.error(`[Chat API] Failed to parse request body - ID: ${requestId}`);
+    return new Response(
+      JSON.stringify({ error: errorMessage || 'Failed to parse request body' }),
+      {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
+  const { id, messages, selectedChatModel, context } = requestData;
+  console.log(`[Chat API] Request parsed - ID: ${requestId}`, {
+    chatId: id,
+    messageCount: messages.length,
+    model: selectedChatModel,
+    hasWalletAddress: !!context.walletAddress
+  });
+
+  // Get session
+  const session = await safeExecute(
+    () => auth(),
+    'authenticating user'
+  ) as Session | null | undefined;
+
+  console.log(`[Chat API] Authentication check - ID: ${requestId}`, {
+    authenticated: !!session,
+    userId: session?.user?.id || 'none'
+  });
+
+  // Validate context
+  const validationResult = ContextSchema.safeParse(context);
+
+  if (!validationResult.success) {
+    console.error(`[Chat API] Context validation failed - ID: ${requestId}`, {
+      errors: validationResult.error.errors
+    });
+    return new Response(JSON.stringify(validationResult.error.errors), {
+      status: 400,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  }
+
+  const validatedContext = validationResult.data;
+
+  if (!session || !session.user || !session.user.id) {
+    console.warn(`[Chat API] Unauthorized request - ID: ${requestId}`);
+    return new Response('Unauthorized', { status: 401 });
+  }
+
+  const userMessage = getMostRecentUserMessage(messages);
+
+  if (!userMessage) {
+    console.error(`[Chat API] No user message found - ID: ${requestId}`);
+    return new Response('No user message found', { status: 400 });
+  }
+
+  console.log(`[Chat API] Processing user message - ID: ${requestId}`, {
+    messageId: userMessage.id,
+    messageLength: JSON.stringify(userMessage).length
+  });
+
+  // Get chat
+  const chat = await safeExecute(
+    () => getChatById({ id }),
+    'fetching chat'
+  );
+
+  if (errorMessage) {
+    return createDataStreamResponse({
+      execute: async (dataStream: DataStreamWriter) => {
+        await streamError(dataStream, errorMessage!, errorContext);
+      },
+    });
+  }
+
+  // Handle chat creation or authorization
+  if (!chat) {
+    console.log(`[Chat API] Creating new chat - ID: ${requestId}`, { chatId: id });
+    
+    const title = await safeExecute(
+      () => generateTitleFromUserMessage({ message: userMessage }),
+      'generating title',
+      'New Chat'
+    );
+
+    await safeExecute(
+      () => saveChat({
+        id,
+        userId: session.user.id,
+        title: title || 'New Chat',
+        address: validatedContext.walletAddress || ""
+      }),
+      'saving new chat'
+    );
+  } else {
+    console.log(`[Chat API] Using existing chat - ID: ${requestId}`, { 
+      chatId: id,
+      chatUserId: chat.userId
+    });
+    
+    if (chat.userId !== session.user.id) {
+      console.warn(`[Chat API] Unauthorized chat access - ID: ${requestId}`, {
+        chatId: id,
+        chatUserId: chat.userId,
+        requestUserId: session.user.id
+      });
       return new Response('Unauthorized', { status: 401 });
     }
+  }
 
-    const userMessage = getMostRecentUserMessage(messages);
-
-    if (!userMessage) {
-      return new Response('No user message found', { status: 400 });
-    }
-
-    const chat = await getChatById({ id });
-
-    if (!chat) {
-      const title = await generateTitleFromUserMessage({
-        message: userMessage,
-      });
-
-      await saveChat({ id, userId: session.user.id, title, address: validatedContext.walletAddress || "" });
-    } else {
-      if (chat.userId !== session.user.id) {
-        return new Response('Unauthorized', { status: 401 });
-      }
-    }
-
-    await saveMessages({
+  // Save user message
+  await safeExecute(
+    () => saveMessages({
       messages: [
         {
           chatId: id,
@@ -106,99 +208,220 @@ export async function POST(request: Request) {
           createdAt: new Date(),
         },
       ],
-    });
+    }),
+    'saving user message'
+  );
 
-    console.log('Chat ID:', id);
-    // Get dynamic tools
-    const dynamicTools = await getDynamicTools();
+  console.log(`[Chat API] Starting stream response - ID: ${requestId}`, { chatId: id });
 
-    console.log('Dynamic tools:', dynamicTools);
+  return createDataStreamResponse({
+    execute: async (dataStream: DataStreamWriter) => {
+      try {
+        // Get dynamic tools
+        const dynamicTools = await safeExecute(
+          () => getDynamicTools(),
+          'loading dynamic tools',
+          {}
+        );
 
-    return createDataStreamResponse({
-      execute: (dataStream) => {
-        const result = streamText({
-          model: openRouterProvider.languageModel(selectedChatModel),
-          system: systemPrompt({
+        if (errorMessage) {
+          await streamError(dataStream, errorMessage, errorContext);
+          return;
+        }
+
+        console.log(`[Chat API] Loaded dynamic tools - ID: ${requestId}`, {
+          toolCount: Object.keys(dynamicTools || {}).length,
+          toolNames: Object.keys(dynamicTools || {})
+        });
+
+        // Create language model
+        const model = await safeExecute(
+          () => openRouterProvider.languageModel(selectedChatModel),
+          'creating language model'
+        );
+
+        if (errorMessage || !model) {
+          await streamError(
+            dataStream,
+            errorMessage || 'Failed to create language model',
+            errorContext || 'creating language model'
+          );
+          return;
+        }
+
+        // Generate system prompt
+        const prompt = await safeExecute(
+          async () => await systemPrompt({
             selectedChatModel,
             walletAddress: validatedContext.walletAddress,
           }),
-          messages,
+          'generating system prompt',
+          ''
+        );
+
+        if (errorMessage) {
+          await streamError(dataStream, errorMessage, errorContext);
+          return;
+        }
+
+        console.log(`[Chat API] Starting text stream - ID: ${requestId}`, {
+          model: selectedChatModel,
           maxSteps: 20,
-          experimental_transform: smoothStream({ chunking: 'word' }),
-          experimental_generateMessageId: generateUUID,
-          tools: {
-            //getWeather,
-            //createDocument: createDocument({ session, dataStream }),
-            //updateDocument: updateDocument({ session, dataStream }),
-            //requestSuggestions: requestSuggestions({
-            //  session,
-            //  dataStream,
-            //}),
-            ...dynamicTools,
-          },
-          onFinish: async ({ response }) => {
-            if (session.user?.id) {
-              try {
-                const assistantId = getTrailingMessageId({
-                  messages: response.messages.filter(
-                    (message) => message.role === 'assistant',
-                  ),
-                });
+          hasTools: !!dynamicTools && Object.keys(dynamicTools).length > 0
+        });
 
-                if (!assistantId) {
-                  throw new Error('No assistant message found!');
-                }
+        // Stream text
+        const result = await safeExecute(
+          () => streamText({
+            model,
+            system: prompt || '',
+            messages,
+            maxSteps: 20,
+            experimental_transform: smoothStream({ chunking: 'word' }),
+            experimental_generateMessageId: generateUUID,
+            tools: dynamicTools || {},
+            onFinish: async ({ response }: { response: any }) => {
+              if (session.user?.id) {
+                await safeExecute(
+                  async () => {
+                    const assistantId = getTrailingMessageId({
+                      messages: response.messages.filter(
+                        (message: any) => message.role === 'assistant',
+                      ),
+                    });
 
-                const [, assistantMessage] = appendResponseMessages({
-                  messages: [userMessage],
-                  responseMessages: response.messages,
-                });
+                    if (!assistantId) {
+                      throw new Error('No assistant message found!');
+                    }
 
-                await saveMessages({
-                  messages: [
-                    {
-                      id: assistantId,
-                      chatId: id,
-                      role: assistantMessage.role,
-                      parts: assistantMessage.parts,
-                      attachments:
-                        assistantMessage.experimental_attachments ?? [],
-                      createdAt: new Date(),
-                    },
-                  ],
-                });
-              } catch (_) {
-                console.error('Failed to save chat');
+                    const [, assistantMessage] = appendResponseMessages({
+                      messages: [userMessage],
+                      responseMessages: response.messages,
+                    });
+
+                    await saveMessages({
+                      messages: [
+                        {
+                          id: assistantId,
+                          chatId: id,
+                          role: assistantMessage.role,
+                          parts: assistantMessage.parts,
+                          attachments:
+                            assistantMessage.experimental_attachments ?? [],
+                          createdAt: new Date(),
+                        },
+                      ],
+                    });
+                    
+                    console.log(`[Chat API] Saved assistant response - ID: ${requestId}`, {
+                      assistantId,
+                      chatId: id
+                    });
+                  },
+                  'saving assistant message'
+                );
               }
-            }
-          },
-          experimental_telemetry: {
-            isEnabled: isProductionEnvironment,
-            functionId: 'stream-text',
-          },
+            },
+            experimental_telemetry: {
+              isEnabled: isProductionEnvironment,
+              functionId: 'stream-text',
+            },
+          }),
+          'streaming text'
+        );
+
+        if (errorMessage || !result) {
+          await streamError(
+            dataStream,
+            errorMessage || 'Failed to stream text',
+            errorContext || 'streaming text'
+          );
+          return;
+        }
+
+        console.log(`[Chat API] Stream created successfully - ID: ${requestId}`);
+
+        // Merge stream
+        await safeExecute(
+          () => result?.mergeIntoDataStream(dataStream, {
+            sendReasoning: true,
+          }),
+          'merging data stream'
+        );
+
+        if (errorMessage) {
+          await streamError(dataStream, errorMessage, errorContext);
+        } else {
+          console.log(`[Chat API] Request completed successfully - ID: ${requestId}`);
+        }
+      } catch (error) {
+        // This is the global catch for any unexpected errors
+        console.error(`[Chat API] Unexpected error in stream - ID: ${requestId}`, {
+          error: error instanceof Error ? error.message : error,
+          stack: error instanceof Error ? error.stack : undefined
         });
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        await streamError(dataStream, message, 'unexpected error');
+      }
+    },
+    onError: (error: unknown) => {
+      console.error(`[Chat API] Error in createDataStreamResponse - ID: ${requestId}`, {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      return 'An error occurred while setting up the response stream.';
+    },
+  });
+}
 
-        console.log('FN RES', result);
-
-        // result.consumeStream(); // Calling consumeStream() here buffers the entire response server-side, preventing streaming to the client.
-
-        result.mergeIntoDataStream(dataStream, {
-          sendReasoning: true,
-        });
-      },
-      onError: (error: unknown) => {
-        console.error('Error:', error);
-        return `${error}`;
-      },
+// Helper function to stream error messages
+async function streamError(
+  dataStream: DataStreamWriter,
+  errorMessage: string,
+  context: string
+) {
+  try {
+    console.error(`[Chat API] Streaming error response`, {
+      context,
+      errorMessage
     });
-  } catch (error) {
-    const JSONerror = JSON.stringify(error, null, 2);
-    return new Response(
-      `An error occurred while processing your request! ${JSONerror}`,
-      {
-        status: 404,
-      },
-    );
+    
+    // Generate a message ID for the error response
+    const messageId = generateUUID();
+    
+    // Write the message annotation first
+    dataStream.writeMessageAnnotation({
+      messageId,
+    });
+    
+    // Sanitize the error message
+    const sanitizedError = errorMessage
+      .replace(/"/g, "'")
+      .replace(/\n/g, ' ')
+      .replace(/\r/g, ' ')
+      .trim();
+    
+    // Create the full error message
+    const fullMessage = `I encountered an error while ${context}: ${sanitizedError}. Please try again or contact support if the issue persists.`;
+    
+    // Split into words for streaming
+    const errorWords = fullMessage.split(' ');
+    
+    // Stream each word
+    for (const word of errorWords) {
+      dataStream.write(`0:"${word} "\n`);
+    }
+    
+    // Write the finish event
+    dataStream.write(`e:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":${errorWords.length}},"isContinued":false}\n`);
+    
+    // Write the done event
+    dataStream.write(`d:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":${errorWords.length}}}\n`);
+  } catch (streamError) {
+    console.error('[Chat API] Critical error while streaming error message:', {
+      originalError: errorMessage,
+      streamError: streamError instanceof Error ? streamError.message : streamError
+    });
   }
 }
 
