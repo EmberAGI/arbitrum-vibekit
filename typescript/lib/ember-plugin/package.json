@@ -12,11 +12,11 @@
     "format": "prettier --write \"src/**/*.ts\""
   },
   "devDependencies": {
-    "@types/node": "^22.15.19",
+    "@types/node": "catalog:",
     "ember-schemas": "workspace:*",
-    "typescript": "^5.4.2"
+    "typescript": "catalog:"
   },
   "dependencies": {
-    "zod": "^3.22.4"
+    "zod": "catalog:"
   }
 }
