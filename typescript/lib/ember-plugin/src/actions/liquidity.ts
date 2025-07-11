@@ -8,14 +8,14 @@ import type {
 /**
  * The callback function type for the supply liquidity action.
  */
-export type SupplyLiquidityCallback = (
+export type LiquiditySupplyCallback = (
   request: SupplyLiquidityArgs
 ) => Promise<LiquidityTransactionArtifact>;
 
 /**
  * The response type for the withdraw liquidity action.
  */
-export interface WithdrawLiquidityResponse {
+export interface LiquidityWithdrawResponse {
   transactions: TransactionPlan[];
   chainId: string;
 }
@@ -23,6 +23,6 @@ export interface WithdrawLiquidityResponse {
 /**
  * The callback function type for the withdraw liquidity action.
  */
-export type WithdrawLiquidityCallback = (
+export type LiquidityWithdrawCallback = (
   request: WithdrawLiquidityArgs
-) => Promise<WithdrawLiquidityResponse>;
+) => Promise<LiquidityWithdrawResponse>;
