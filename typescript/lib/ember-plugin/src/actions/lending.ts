@@ -27,19 +27,23 @@ export interface LendingInteractionRequest {
 /**
  * Callback function type for the borrow action.
  */
-export type BorrowCallback = (request: LendingInteractionRequest) => Promise<BorrowResponse>;
+export type LendingBorrowCallback = (request: LendingInteractionRequest) => Promise<BorrowResponse>;
 
 /**
  * Callback function type for the repay tokens action.
  */
-export type RepayTokensCallback = (request: LendingInteractionRequest) => Promise<RepayResponse>;
+export type LendingRepayTokensCallback = (
+  request: LendingInteractionRequest
+) => Promise<RepayResponse>;
 
 /**
  * Callback function type for the supply action.
  */
-export type SupplyCallback = (request: LendingInteractionRequest) => Promise<SupplyResponse>;
+export type LendingSupplyCallback = (request: LendingInteractionRequest) => Promise<SupplyResponse>;
 
 /**
  * Callback function type for the withdraw action.
  */
-export type WithdrawCallback = (request: LendingInteractionRequest) => Promise<WithdrawResponse>;
+export type LendingWithdrawCallback = (
+  request: LendingInteractionRequest
+) => Promise<WithdrawResponse>;
