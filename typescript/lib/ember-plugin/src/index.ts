@@ -1,4 +1,4 @@
-export { EmberPluginFactory } from './plugin.js';
+export type { EmberPlugin } from './plugin.js';
 
 // Swap action types and interfaces
 export type { SwapActionRequest } from './actions/swap.js';
