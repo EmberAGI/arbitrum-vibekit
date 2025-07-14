@@ -1,17 +1,20 @@
 ---
-description: 
-globs: 
+description: Global rules
+globs:
 alwaysApply: true
 ---
+
 # Monorepo Workspace Guidelines
 
 Rules and best practices that apply to the entire pnpm workspace monorepo.
 
 ## PNPM Workspace Setup
-- Bootstrap all dependencies: run `pnpm install` at the repository root.
+
+- Bootstrap all dependencies: run `pnpm install` at the `typescript/` directory of the repo.
 - Build all packages: run `pnpm build` at root (executes each package's TypeScript compiler).
 
 ## Running in Development
+
 - Prefer `tsx` for ESM TypeScript entrypoints:
   - Install as a dev dependency at root: `pnpm add -Dw tsx`
   - In each package's `package.json`, configure:
@@ -23,23 +26,37 @@ Rules and best practices that apply to the entire pnpm workspace monorepo.
 - To start a single package in dev mode: `pnpm dev -F <package-name>`.
 
 ## Module Resolution & Transpilation
+
 - Use `NodeNext` module resolution and ES2022 target in all `tsconfig.json` files.
 - Avoid using `ts-node` without `--esm`; rely on `tsx` for local ESM TypeScript execution.
 
 ## CI/CD & Non-interactive Flags
+
 - Use non-interactive flags for automation (e.g., `pnpm install --frozen-lockfile`, `pnpm test -- --ci`).
 - Always run scripts via `pnpm run <script>` to ensure consistency.
 
 ## Version Control & Force Flags
+
 - Do not use any `--force` flags (e.g., `git push --force`, `pnpm install --force`) without explicit approval.
 
+## Dependency Management with pnpm Catalogs
+
+- Shared dependency versions are managed through pnpm catalogs defined in `pnpm-workspace.yaml`.
+- To use a catalog dependency in a package, specify `"catalog:"` as the version (e.g., `"zod": "catalog:"`).
+- To add a new shared dependency to the catalog:
+  1. Add it to the `catalog:` section in `pnpm-workspace.yaml` with a specific version
+  2. Use `"catalog:"` in any package that needs this dependency
+- Benefits: explicit opt-in per package, transparent version management, easy updates.
+
 ## General Best Practices
-- Maintain consistent dependency versions across packages; leverage `pnpm` overrides in root `package.json` if necessary.
+
+- Maintain consistent dependency versions across packages using pnpm catalogs defined in `pnpm-workspace.yaml`.
 - Use pnpm filters (`-r`, `-F`) or `pnpm recursive` for efficient cross-package commands.
 - Document any new workspace-level tool or script additions in this file.
 - Never add depenencies directly to `package.json` files. Instead use `pnpm add` or `pnpm add -D` commands to add new dependencies. This ensures you have the latest versions.
 - Do not add trivial assertions like this:
-> expect(response).to.exist;
+  > expect(response).to.exist;
+- Prefer deep equality checks in assertion tests to multiple shallow equality checks (`expect(sth).to.deep.equal...`)
 - Do not wrap blocks of code in try/catch only to add context to the error. simply propagate errors.
 - To lint the code, run `pnpm recursive run lint` in the `typescript/` folder.
 - Never use .passthrough() with zod schemas.

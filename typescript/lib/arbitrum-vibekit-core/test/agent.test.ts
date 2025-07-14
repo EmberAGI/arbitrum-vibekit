@@ -4,14 +4,14 @@ import { defineSkill, Agent, VibkitToolDefinition } from "../src/agent.js"; // C
 import { UnsupportedSchemaError } from "../src/utils.js";
 import { formatToolDescriptionWithTagsAndExamples } from "../src/utils.js";
 import type {
-  Task,
-  Message,
   SkillDefinition,
   AgentConfig,
-  TaskState,
 } from "../src/index.js";
+import type { Task, Message } from "@google-a2a/types";
+import { TaskState } from "@google-a2a/types";
 
 const dummyTool: VibkitToolDefinition<z.ZodObject<{}>, Task> = {
+  name: "dummy-tool",
   description: "Dummy tool",
   parameters: z.object({}),
   execute: async () => ({
@@ -19,7 +19,7 @@ const dummyTool: VibkitToolDefinition<z.ZodObject<{}>, Task> = {
     kind: "task",
     contextId: "dummy",
     status: {
-      state: "completed" as TaskState,
+      state: TaskState.Completed,
       message: {
         kind: "message",
         role: "agent",
@@ -38,7 +38,7 @@ describe("defineSkill", () => {
     contextId: "test-context",
     kind: "task",
     status: {
-      state: "completed" as TaskState,
+      state: TaskState.Completed,
       message: {
         role: "agent",
         parts: [{ kind: "text", text: "Success" }],
@@ -190,7 +190,7 @@ describe("Agent", () => {
       contextId: "echo-context",
       kind: "task",
       status: {
-        state: "completed" as TaskState,
+        state: TaskState.Completed,
         message: {
           role: "agent",
           parts: [{ kind: "text", text: `Echoed: ${input.text}` }],
@@ -290,7 +290,7 @@ describe("Agent", () => {
           contextId: "reverse-context",
           kind: "task",
           status: {
-            state: "completed" as TaskState,
+            state: TaskState.Completed,
             message: {
               role: "agent",
               parts: [
@@ -383,7 +383,7 @@ describe("Agent", () => {
           contextId: "multi-context",
           kind: "task",
           status: {
-            state: "completed" as TaskState,
+            state: TaskState.Completed,
             message: {
               role: "agent",
               parts: [{ kind: "text", text: "Success" }],
@@ -438,7 +438,7 @@ describe("Agent", () => {
           contextId: "single-context",
           kind: "task",
           status: {
-            state: "completed" as TaskState,
+            state: TaskState.Completed,
             message: {
               role: "agent",
               parts: [{ kind: "text", text: "Success" }],
@@ -489,7 +489,7 @@ describe("Agent", () => {
           contextId: "id-name-context",
           kind: "task",
           status: {
-            state: "completed" as TaskState,
+            state: TaskState.Completed,
             message: {
               role: "agent",
               parts: [{ kind: "text", text: "Processed" }],

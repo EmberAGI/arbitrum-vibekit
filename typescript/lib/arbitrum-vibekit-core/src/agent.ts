@@ -4,7 +4,7 @@ import type {
   AgentCapabilities,
   Task,
   Message,
-} from '@google-a2a/types/src/types.js';
+} from '@google-a2a/types';
 import { CorsOptions } from 'cors';
 import { InMemoryTaskStore, TaskStore } from './store.js';
 import express, { Request, Response, NextFunction } from 'express';

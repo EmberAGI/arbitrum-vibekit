@@ -1,7 +1,7 @@
 import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
-import type { Task, Message } from '@google-a2a/types/src/types.js';
+import type { Task, Message } from '@google-a2a/types';
 import type { LendingAgentContext } from '../agent.js';
-import { BorrowRepaySupplyWithdrawSchema } from './schemas.js';
+import { BorrowRepaySupplyWithdrawSchema } from 'ember-schemas';
 import type { TokenInfo } from './types.js';
 
 // This is the "base" tool. It expects token to be resolved already.

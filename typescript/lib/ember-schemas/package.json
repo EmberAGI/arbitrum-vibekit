@@ -7,16 +7,16 @@
   "scripts": {
     "prepare": "pnpm build",
     "build": "tsc -b",
-    "lint": "eslint --ext .ts,.tsx src",
-    "lint:fix": "eslint --ext .ts,.tsx src --fix",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\""
   },
   "devDependencies": {
-    "@types/node": "^22.15.19",
-    "prettier": "^3.5.3",
-    "typescript": "^5.4.2"
+    "@types/node": "catalog:",
+    "prettier": "catalog:",
+    "typescript": "catalog:"
   },
   "dependencies": {
-    "zod": "^3.22.4"
+    "zod": "catalog:"
   }
 }

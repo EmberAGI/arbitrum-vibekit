@@ -1,5 +1,5 @@
-import { copyAddressToClipboard, shortenAddress } from "@/lib/utils";
-import { CopyIcon } from "lucide-react";
+import { copyAddressToClipboard, shortenAddress } from '@/lib/utils';
+import { CopyIcon } from 'lucide-react';
 
 const ShortAddress = ({ web3Address }: { web3Address: string }) => {
   const shortenedAddress = shortenAddress(web3Address);
@@ -9,9 +9,13 @@ const ShortAddress = ({ web3Address }: { web3Address: string }) => {
   };
 
   return (
-    <span onClick={() => handleCopy()} className="flex gap-2 w-min">
+    <button
+      onClick={() => handleCopy()}
+      className="flex gap-2 w-min hover:opacity-80 transition-opacity"
+      type="button"
+    >
       {shortenedAddress} <CopyIcon size={18} />
-    </span>
+    </button>
   );
 };
 

@@ -1,8 +1,9 @@
 import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
-import type { Task, Message, DataPart, TaskState } from '@google-a2a/types/src/types.js';
+import type { Task, Message, DataPart } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
 import type { LendingAgentContext } from '../agent.js';
-import { BorrowRepaySupplyWithdrawSchema, ZodRepayResponseSchema } from './schemas.js';
+import { BorrowRepaySupplyWithdrawSchema, RepayResponseSchema } from 'ember-schemas';
 import type { LendingTransactionArtifact, LendingPreview, TokenInfo } from './types.js';
 import { createTaskId, findTokenInfo } from './utils.js';
 
@@ -32,7 +33,7 @@ export const repayBase: VibkitToolDefinition<
           contextId: `${rawTokenName}-not-found-${Date.now()}`,
           kind: 'task' as const,
           status: {
-            state: 'failed' as TaskState,
+            state: TaskState.Failed,
             message: {
               role: 'agent',
               parts: [{ type: 'text', text: `Token '${rawTokenName}' not supported.` }],
@@ -49,7 +50,7 @@ export const repayBase: VibkitToolDefinition<
           contextId: `${rawTokenName}-clarification-${Date.now()}`,
           kind: 'task' as const,
           status: {
-            state: 'input-required' as TaskState,
+            state: TaskState.InputRequired,
             message: {
               role: 'agent',
               parts: [
@@ -79,7 +80,7 @@ export const repayBase: VibkitToolDefinition<
           });
 
           // Parse and validate the MCP response
-          const repayResp = parseMcpToolResponsePayload(toolResult, ZodRepayResponseSchema);
+          const repayResp = parseMcpToolResponsePayload(toolResult, RepayResponseSchema);
           const { transactions } = repayResp;
 
           // Build artifact
@@ -97,13 +98,13 @@ export const repayBase: VibkitToolDefinition<
             contextId: `repay-${tokenName}-${Date.now()}`,
             kind: 'task' as const,
             status: {
-              state: 'completed' as TaskState,
+              state: TaskState.Completed,
               message: {
                 role: 'agent',
                 parts: [
                   {
                     type: 'text',
-                    text: `Repay transaction plan ready (${transactions.length} txs).`,
+                    text: `Repay transaction plan created for ${amount} ${tokenName}. Ready to sign.`,
                   },
                 ],
               },
@@ -116,10 +117,15 @@ export const repayBase: VibkitToolDefinition<
             contextId: `repay-error-${Date.now()}`,
             kind: 'task' as const,
             status: {
-              state: 'failed' as TaskState,
+              state: TaskState.Failed,
               message: {
                 role: 'agent',
-                parts: [{ type: 'text', text: `Repay Error: ${(error as Error).message}` }],
+                parts: [
+                  {
+                    type: 'text',
+                    text: `Failed to create repay transaction plan: ${(error as Error).message}`,
+                  },
+                ],
               },
             },
           } as unknown as Task;

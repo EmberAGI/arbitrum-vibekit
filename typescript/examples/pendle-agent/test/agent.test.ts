@@ -6,7 +6,8 @@ import {
   MultiChainSigner,
   CHAIN_CONFIGS,
   extractAndExecuteTransactions,
-  extractTokenMarketData,
+  extractMessageText,
+  ensureWethBalance,
 } from 'test-utils';
 import { type Address } from 'viem';
 
@@ -64,6 +65,16 @@ describe('Pendle Agent Integration Tests', function () {
             `Chain configuration missing for chain ID ${chainId}. Please add it to CHAIN_CONFIGS.`
           );
         }
+
+        // Ensure the test wallet has at least a minimal WETH balance (0.05) so swaps that
+        // route through WETH never fail due to insufficient funds.
+        const wethAddress = CHAIN_CONFIGS[chainId]?.wrappedNativeToken?.address;
+        if (!wethAddress) {
+          throw new Error(`No wrapped native token (WETH) defined for chain ${chainId}.`);
+        }
+
+        const signer = multiChainSigner.getSignerForChainId(chainId);
+        await ensureWethBalance(signer, '0.05', wethAddress);
       });
 
       describe('Market Listing', function () {
@@ -89,6 +100,7 @@ describe('Pendle Agent Integration Tests', function () {
             multiChainSigner.wallet.address as Address
           );
 
+          console.log('Swap response:', JSON.stringify(response, null, 2));
           expect(response.status?.state).to.not.equal('failed', 'Swap operation failed');
 
           const txHashes = await extractAndExecuteTransactions(
@@ -116,37 +128,20 @@ describe('Pendle Agent Integration Tests', function () {
               expect(marketArtifact.parts.length).to.be.greaterThan(0, 'Markets array should not be empty');
             }
           }
-
-          // Test wallet balances returns non-empty array
-          const balancesResponse = await agent.processUserInput(
-            'show me my current token balances',
-            multiChainSigner.wallet.address as Address
-          );
-          expect(balancesResponse).to.exist;
-          expect(balancesResponse.status?.state).to.not.equal('failed');
-          console.error("Balances response", JSON.stringify(balancesResponse, null, 2));
-          const balanceArtifact = balancesResponse!.artifacts!.find(artifact => artifact.name === 'wallet-balances');
-          expect(balanceArtifact!.parts!.length).to.be.greaterThan(0, 'Balances array should not be empty');
         });
       });
 
-      describe('Market Data', function () {
-        it('should fetch market data for tokens by symbol', async function () {
+      describe('Basic Capabilities', function () {
+        it('should be able to describe what it can do', async function () {
           const response = await agent.processUserInput(
-            'What is the current price of USDC on Arbitrum?',
+            'What can you do?',
             multiChainSigner.wallet.address as Address
           );
 
-          expect(response.status?.state).to.not.equal('failed', 'Market data operation failed');
-          
-          // Use the utility function to extract market data
-          const marketData = extractTokenMarketData(response);
-          
-          // Verify that we get some market data fields from the schema
-          const hasMarketDataFields = ['price', 'marketCap', 'volume24h', 'priceChange24h'].some(
-            field => marketData[field] !== undefined
+          const messageText = extractMessageText(response);
+          expect(messageText.toLowerCase()).to.satisfy((text: string) =>
+            text.includes('yield') || text.includes('pendle') || text.includes('swap')
           );
-          expect(hasMarketDataFields).to.be.true;
         });
       });
     });

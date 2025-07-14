@@ -1,4 +1,37 @@
 packages:
-  - "lib/**/*"
-  - "examples/*"
-  - "templates/*"
+  - 'lib/**/*'
+  - 'examples/*'
+  - 'templates/*'
+  - 'clients/*'
+
+catalog:
+  # Core dependencies
+  zod: ^3.24.3
+  '@modelcontextprotocol/sdk': ^1.13.1
+  dotenv: ^16.3.1
+  '@openrouter/ai-sdk-provider': ^0.4.5
+  ai: ^4.3.2
+  express: ^4.21.2
+
+  # Dev dependencies
+  '@types/node': ^20.10.0
+  typescript: ^5.8.3
+  tsx: ^4.6.2
+  prettier: ^3.5.3
+
+  # Testing
+  '@types/chai': ^4.3.11
+  '@types/mocha': ^10.0.6
+  chai: ^4.3.10
+  mocha: ^10.2.0
+  mocha-suppress-logs: ^0.5.1
+
+  # Linting
+  eslint: ^8.57.0
+  '@eslint/js': ^8.57.0
+  eslint-config-prettier: ^9.1.0
+
+  # Build tools
+  '@typescript-eslint/eslint-plugin': ^8.0.0
+  '@typescript-eslint/parser': ^8.0.0
+  typescript-eslint: ^8.0.0
