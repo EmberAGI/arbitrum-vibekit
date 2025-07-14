@@ -100,6 +100,9 @@ importers:
       chai:
         specifier: ^4.3.10
         version: 4.5.0
+      dotenv:
+        specifier: 'catalog:'
+        version: 16.6.1
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
@@ -14997,10 +15000,10 @@ snapshots:
   ox@0.6.7(typescript@5.8.3)(zod@3.25.76):
     dependencies:
       '@adraffy/ens-normalize': 1.11.0
-      '@noble/curves': 1.8.1
-      '@noble/hashes': 1.7.1
-      '@scure/bip32': 1.6.2
-      '@scure/bip39': 1.5.4
+      '@noble/curves': 1.9.2
+      '@noble/hashes': 1.8.0
+      '@scure/bip32': 1.7.0
+      '@scure/bip39': 1.6.0
       abitype: 1.0.8(typescript@5.8.3)(zod@3.25.76)
       eventemitter3: 5.0.1
     optionalDependencies:
