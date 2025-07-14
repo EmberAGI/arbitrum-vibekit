@@ -204,7 +204,7 @@ The agent automatically selects strategies based on:
 
 ## Development Status
 
-### ✅ Completed (Task 1)
+### ✅ Completed (Task 1-4.3)
 
 - [x] Project setup with quickstart-agent pattern
 - [x] Package.json configuration
@@ -216,26 +216,101 @@ The agent automatically selects strategies based on:
 - [x] Context provider with MCP integration
 - [x] Basic agent entry point
 
-### 🚧 In Progress (Next Tasks)
+### ✅ Task 2: Core Monitoring (COMPLETED)
 
-- [ ] Health monitoring skill implementation
-- [ ] Liquidation prevention strategies (1, 2, 3)
-- [ ] Risk assessment and strategy selection
-- [ ] MCP tool integrations
-- [ ] Testing and validation
+- [x] Health monitoring skill implementation
+- [x] getUserPositions tool for position tracking
+- [x] getWalletBalances tool for balance analysis
+- [x] monitorHealth tool for continuous monitoring
+- [x] MCP tool integrations with Ember server
+
+### ✅ Task 3: Liquidation Prevention Strategies (COMPLETED)
+
+- [x] Liquidation prevention skill implementation
+- [x] Strategy 1: Supply collateral tool
+- [x] Strategy 2: Repay debt tool
+- [x] Strategy 3: Intelligent automatic strategy selection
+- [x] Real transaction execution with user's private key
+- [x] TransactionExecutor utility for on-chain operations
+
+### ✅ Task 4.1-4.3: Configuration & Safety Features (COMPLETED)
+
+- [x] **Task 4.1**: Configurable health factor thresholds (default: 1.1)
+- [x] **Task 4.2**: Configurable monitoring intervals (default: 15 minutes)
+- [x] **Task 4.3**: User preference parsing from initial instructions
+- [x] UserPreferences utility for natural language parsing
+- [x] Preference merging with default configuration
+- [x] Enhanced input schemas with instruction field
+- [x] Updated examples with preference-based instructions
+
+### 🚧 Future Tasks
+
+- [ ] Advanced gas optimization features
+- [ ] Emergency stop functionality
+- [ ] Multi-chain support
+- [ ] Advanced analytics and reporting
 
 ## Environment Variables
 
+### Required Configuration
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
 | `OPENROUTER_API_KEY` | OpenRouter API key for LLM | Yes | - |
 | `EMBER_ENDPOINT` | Ember MCP endpoint | Yes | `grpc.api.emberai.xyz:50051` |
-| `PORT` | Agent server port | No | `3010` |
+| `USER_PRIVATE_KEY` | User's private key for transaction execution | Yes | - |
+| `QUICKNODE_SUBDOMAIN` | QuickNode subdomain for RPC access | Yes | - |
+| `QUICKNODE_API_KEY` | QuickNode API key for RPC access | Yes | - |
+
+### Task 4.1: Health Factor Thresholds
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
 | `HEALTH_FACTOR_WARNING` | Warning threshold | No | `1.5` |
 | `HEALTH_FACTOR_DANGER` | Danger threshold | No | `1.2` |
 | `HEALTH_FACTOR_CRITICAL` | Critical threshold | No | `1.05` |
+
+### Task 4.2: Monitoring Configuration
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
 | `MONITORING_INTERVAL` | Check interval (ms) | No | `60000` |
+| `MAX_RETRY_ATTEMPTS` | Maximum retry attempts | No | `3` |
+| `GAS_PRICE_MULTIPLIER` | Gas price multiplier | No | `1.5` |
+
+### Task 4.3: Strategy & User Preferences
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
 | `DEFAULT_STRATEGY` | Strategy preference | No | `auto` |
+| `MIN_SUPPLY_BALANCE_USD` | Minimum USD for supply | No | `100` |
+| `MIN_REPAY_BALANCE_USD` | Minimum USD for repay | No | `50` |
+| `MAX_TRANSACTION_USD` | Maximum USD per transaction | No | `10000` |
+
+### Optional Configuration
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `PORT` | Agent server port | No | `3010` |
+| `ENABLE_WEBHOOKS` | Enable webhook notifications | No | `false` |
+| `WEBHOOK_URL` | Webhook URL for notifications | No | - |
+| `RATE_LIMIT_RPM` | Rate limit requests per minute | No | `60` |
+| `DEBUG_MODE` | Enable debug logging | No | `false` |
+
+### User Preference Examples (Task 4.3)
+The agent can parse user preferences from natural language instructions:
+
+```bash
+# Health factor preferences
+"Monitor with health factor 1.3, warning at 1.5"
+
+# Monitoring intervals
+"Check every 30 minutes, continuous monitoring"
+
+# Strategy preferences  
+"Use conservative strategy, max $500 transactions"
+
+# Risk tolerance
+"Apply aggressive approach with gas optimization"
+
+# Combined preferences
+"Prevent liquidation with health factor 1.2, monitor every 15 minutes, conservative approach, max $1000"
+```
 
 See `.env.example` for complete configuration options.
 

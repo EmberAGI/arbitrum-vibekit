@@ -8,10 +8,12 @@
 import { createSuccessTask, createErrorTask, type VibkitToolDefinition } from 'arbitrum-vibekit-core';
 import { z } from 'zod';
 import type { LiquidationPreventionContext } from '../context/types.js';
+import { parseUserPreferences, mergePreferencesWithDefaults, generatePreferencesSummary } from '../utils/userPreferences.js';
 
 // Input schema for monitorHealth tool
 const MonitorHealthParams = z.object({
   userAddress: z.string().describe('The wallet address to monitor'),
+  instruction: z.string().optional().describe('Natural language instruction with user preferences'),
   intervalMinutes: z.number().optional().default(5).describe('Monitoring interval in minutes'),
   enableAlerts: z.boolean().optional().default(true).describe('Whether to enable threshold alerts'),
 });
@@ -41,7 +43,16 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
   parameters: MonitorHealthParams,
   execute: async (args, context) => {
     try {
+      // Parse user preferences from instruction (Task 4.3)
+      const userPrefs = parseUserPreferences(args.instruction || '');
+      const mergedPrefs = mergePreferencesWithDefaults(userPrefs, {
+        thresholds: context.custom.thresholds,
+        monitoring: context.custom.monitoring,
+        strategy: context.custom.strategy,
+      });
+      
       console.log(`🔄 Starting health monitoring for: ${args.userAddress}`);
+      console.log(`⚙️  User preferences: ${generatePreferencesSummary(mergedPrefs)}`);
 
       // Ensure we have MCP clients available
       if (!context.mcpClients) {

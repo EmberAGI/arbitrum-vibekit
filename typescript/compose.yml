@@ -55,6 +55,20 @@ services:
   #     - 3007:3007
   #   restart: unless-stopped
 
+  # lending-agent:
+  #   build:
+  #     context: ./
+  #     dockerfile: templates/lending-agent/Dockerfile
+  #   container_name: vibekit-lending-agent
+  #   env_file:
+  #     - path: .env
+  #       required: true
+  #     - path: templates/lending-agent/.env
+  #       required: false
+  #   ports:
+  #     - 3006:3006
+  #   restart: unless-stopped 
+
   # allora-price-prediction-agent:
   #   build:
   #     context: ./

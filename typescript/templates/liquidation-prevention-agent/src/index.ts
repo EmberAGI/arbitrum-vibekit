@@ -8,13 +8,13 @@ import 'dotenv/config';
 import { Agent, type AgentConfig } from 'arbitrum-vibekit-core';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { contextProvider } from './context/provider.js';
-import type { LiquidationPreventionContext } from './context/types.js';
+import { loadTokenMapFromMcp } from './tokenMap.js';
 
 // Import implemented skills
 import { healthMonitoringSkill } from './skills/healthMonitoring.js';
+import { liquidationPreventionSkill } from './skills/liquidationPrevention.js';
 
 // Skills to be implemented in future tasks
-// import { liquidationPreventionSkill } from './skills/liquidationPrevention.js';
 // import { riskAssessmentSkill } from './skills/riskAssessment.js';
 
 // Create OpenRouter instance for LLM
@@ -30,7 +30,7 @@ export const agentConfig: AgentConfig = {
   protocolVersion: '1.0.0',
   skills: [
     healthMonitoringSkill,         // ✅ Implemented: Task 2
-    // liquidationPreventionSkill, // 🔄 To be implemented: Task 3
+    liquidationPreventionSkill,    // ✅ Implemented: Task 3.1
     // riskAssessmentSkill,        // 🔄 To be implemented: Task 4
   ],
   url: 'localhost',
@@ -57,7 +57,19 @@ const agent = Agent.create(agentConfig, {
 const PORT = parseInt(process.env.PORT || '3010', 10);
 
 agent
-  .start(PORT, contextProvider)
+  .start(PORT, async deps => {
+    // Check if ember-mcp-tool-server is available
+    const emberMcpClient = deps.mcpClients['ember-mcp-tool-server'];
+    if (!emberMcpClient) {
+      console.warn('ember-mcp-tool-server MCP client not available, token map will be empty');
+      return contextProvider(deps, {});
+    }
+
+    console.log('Loading token map from MCP capabilities...');
+    const tokenMap = await loadTokenMapFromMcp(emberMcpClient);
+
+    return contextProvider(deps, tokenMap);
+  })
   .then(() => {
     console.log(`🚀 Liquidation Prevention Agent running on port ${PORT}`);
     console.log(`📍 Base URL: http://localhost:${PORT}`);
@@ -67,12 +79,15 @@ agent
     console.log('  ✅ Health factor monitoring with risk assessment');
     console.log('  ✅ Periodic position monitoring with change detection');  
     console.log('  ✅ Wallet balance analysis for liquidation strategies');
-    console.log('  🔄 Strategy 1: Supply more collateral (Task 3)');
-    console.log('  🔄 Strategy 2: Repay debt (Task 3)');
-    console.log('  🔄 Strategy 3: Combined approach (Task 3)');
-    console.log('  🔄 Risk assessment and strategy selection (Task 4)');
-    console.log('\n⚡ Current Status: Task 2 (Core Monitoring) COMPLETED');
-    console.log('📊 Available tools: getUserPositions, getWalletBalances, monitorHealth');
+    console.log('  ✅ Strategy 1: Supply more collateral (supplyCollateral)');
+    console.log('  ✅ Strategy 2: Repay debt (repayDebt)');
+    console.log('  ✅ Strategy 3: Intelligent automatic strategy selection');
+    console.log('  ✅ Task 4.1: Configurable health factor thresholds');
+    console.log('  ✅ Task 4.2: Configurable monitoring intervals');
+    console.log('  ✅ Task 4.3: User preference parsing from instructions');
+    console.log('\n⚡ Current Status: Task 4.3 (Configuration & Safety Features) COMPLETED');
+    console.log('📊 Available tools: getUserPositions, getWalletBalances, monitorHealth, supplyCollateral, repayDebt, intelligentPreventionStrategy');
+    console.log('⚙️  User preferences: Health factors, monitoring intervals, strategies, risk tolerance, gas optimization');
   })
   .catch((error) => {
     console.error('Failed to start liquidation prevention agent:', error);

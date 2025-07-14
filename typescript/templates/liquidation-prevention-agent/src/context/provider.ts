@@ -5,49 +5,53 @@
 
 import type { LiquidationPreventionContext } from './types.js';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { type Address } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { TransactionExecutor } from '../utils/transactionExecutor.js';
 
-export async function contextProvider(deps: { mcpClients: Record<string, Client> }): Promise<LiquidationPreventionContext> {
+export async function contextProvider(
+  deps: { mcpClients: Record<string, Client> }, 
+  tokenMap: Record<string, Array<{ chainId: string; address: string; decimals: number }>>
+): Promise<LiquidationPreventionContext> {
   console.log('[Context] Loading liquidation prevention context...');
 
   const { mcpClients } = deps;
-  let tokenMap: Record<string, Array<{ chainId: string; address: string; decimals: number }>> = {};
+  console.log(`[Context] Received token map with ${Object.keys(tokenMap).length} tokens`);
 
-  // Try to load token map from Ember MCP server
-  try {
-    const emberMcpClient = mcpClients['ember-mcp-tool-server'];
-    
-    if (emberMcpClient) {
-      console.log('[Context] Found Ember MCP client, loading token map...');
-      
-      // Call the getTokenMap tool if available
-      try {
-        const response = await emberMcpClient.callTool({
-          name: 'getTokenMap',
-          arguments: {},
-        });
-
-        if (response.content && Array.isArray(response.content) && response.content.length > 0) {
-          const firstContent = response.content[0];
-          if (firstContent && 'type' in firstContent && firstContent.type === 'text' && 'text' in firstContent) {
-            const data = JSON.parse(firstContent.text);
-            tokenMap = data.tokenMap || {};
-            console.log(`[Context] Loaded token map with ${Object.keys(tokenMap).length} tokens`);
-          }
-        }
-      } catch (tokenMapError) {
-        console.warn('[Context] Failed to load token map from Ember MCP:', tokenMapError);
-        // Continue with empty token map
-      }
-    } else {
-      console.warn('[Context] Ember MCP client not available, using empty token map');
-    }
-  } catch (error) {
-    console.warn('[Context] Error accessing MCP clients:', error);
-    // Continue with defaults
+  // Set up user account from private key
+  const userPrivateKey = process.env.USER_PRIVATE_KEY;
+  if (!userPrivateKey) {
+    throw new Error('USER_PRIVATE_KEY not found in .env file. This is required for transaction execution.');
   }
+
+  const quicknodeSubdomain = process.env.QUICKNODE_SUBDOMAIN;
+  const quicknodeApiKey = process.env.QUICKNODE_API_KEY;
+  if (!quicknodeSubdomain || !quicknodeApiKey) {
+    throw new Error('QUICKNODE_SUBDOMAIN and QUICKNODE_API_KEY must be set in .env file for transaction execution.');
+  }
+
+  // Create account from private key
+  const account = privateKeyToAccount(userPrivateKey as `0x${string}`);
+  const userAddress: Address = account.address;
+  console.log(`[Context] Using wallet address: ${userAddress}`);
+
+  // Create transaction executor
+  const transactionExecutor = new TransactionExecutor(
+    account,
+    userAddress,
+    quicknodeSubdomain,
+    quicknodeApiKey
+  );
 
   // Load configuration from environment variables with defaults
   const context: LiquidationPreventionContext = {
+    // User wallet information
+    userAddress,
+    account,
+    
+    // Transaction execution function
+    executeTransaction: transactionExecutor.executeTransactions.bind(transactionExecutor),
+
     thresholds: {
       warning: parseFloat(process.env.HEALTH_FACTOR_WARNING || '1.5'),
       danger: parseFloat(process.env.HEALTH_FACTOR_DANGER || '1.2'),

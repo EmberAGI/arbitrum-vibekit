@@ -3,7 +3,16 @@
  * Defines configuration and thresholds for liquidation prevention
  */
 
+import type { Address, LocalAccount } from 'viem';
+import type { TransactionPlan } from 'ember-schemas';
+
 export interface LiquidationPreventionContext {
+  // User wallet information
+  userAddress: Address;
+  account: LocalAccount<string>;
+  
+  // Transaction execution function
+  executeTransaction: (actionName: string, transactions: TransactionPlan[]) => Promise<string>;
   // Health factor thresholds for risk assessment
   thresholds: {
     warning: number;
