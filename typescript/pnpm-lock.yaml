@@ -100,6 +100,9 @@ importers:
       chai:
         specifier: ^4.3.10
         version: 4.5.0
+      dotenv:
+        specifier: 'catalog:'
+        version: 16.6.1
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
