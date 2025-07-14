@@ -1,5 +1,5 @@
 import * as ethers from 'ethers';
-import type { Task } from 'a2a-samples-js';
+import type { Task } from '@google-a2a/types';
 
 import { extractLendingTransactionPlan } from './lending.js';
 import { MultiChainSigner } from './multi-chain-signer.js';
@@ -19,7 +19,7 @@ export function extractFunctionCall(task: Task): { name: string; arguments: stri
   // Check if there's a parts array with function_call
   if (task.status?.message?.parts) {
     for (const part of task.status.message.parts) {
-      if (part.type === 'text' && 'function_call' in part && part.function_call) {
+      if (part.kind === 'text' && 'function_call' in part && part.function_call) {
         return part.function_call as { name: string; arguments: string };
       }
     }
@@ -97,7 +97,7 @@ export function extractLiquidityTransactionPlan(response: Task): Array<Transacti
   for (const artifact of response.artifacts) {
     if (artifact.name === 'liquidity-transaction') {
       for (const part of artifact.parts) {
-        if (part.type === 'data' && part.data.txPlan) {
+        if (part.kind === 'data' && part.data.txPlan) {
           return part.data.txPlan as Array<TransactionPlan>;
         }
       }
@@ -119,7 +119,7 @@ export function extractPendleSwapTransactionPlan(response: Task): Array<Transact
   for (const artifact of response.artifacts) {
     if (artifact.name === 'swap-transaction-plan') {
       for (const part of artifact.parts) {
-        if (part.type === 'data' && part.data.txPlan) {
+        if (part.kind === 'data' && part.data.txPlan) {
           return part.data.txPlan as Array<TransactionPlan>;
         }
       }

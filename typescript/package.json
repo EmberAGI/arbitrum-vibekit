@@ -12,42 +12,44 @@
     "docker:compose:up": "docker compose up --build --no-log-prefix",
     "docker:compose:build": "docker compose build --no-cache",
     "docker:compose:down": "docker compose down",
-    "lint": "eslint --ext .ts,.tsx .",
-    "lint:fix": "eslint --ext .ts,.tsx . --fix",
-    "test": "pnpm recursive run --workspace-concurrency=1 test",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "pnpm --filter lending-agent-no-wallet run test && pnpm --filter swapping-agent-no-wallet run test && pnpm --filter pendle-agent run test && pnpm --filter liquidity-agent-no-wallet run test",
     "format": "pnpm recursive run format",
-    "format:check": "pnpm recursive run format:check"
+    "format:check": "pnpm recursive run format:check",
+    "lint:require-submodule": "./scripts/require-submodule.sh",
+    "start:anvil": "pnpm run lint:require-submodule && npx tsx test/start-anvil.ts",
+    "start:mainnet": "pnpm run lint:require-submodule && npx tsx test/start-mainnet.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@emberai/sdk-typescript": "^0.3.0-beta.12",
-    "@eslint/js": "^9.0.0",
+    "@eslint/js": "catalog:",
     "@types/chai": "^4.3.11",
     "@types/mocha": "^10.0.6",
+    "@types/node": "^20.10.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
+    "@viem/anvil": "^0.0.10",
     "chai": "^4.3.10",
-    "dotenv": "^16.3.1",
-    "eslint": "^9.0.0",
-    "eslint-config-prettier": "^9.1.0",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
     "globals": "^16.1.0",
     "mocha": "^10.2.0",
     "mocha-suppress-logs": "^0.5.1",
     "prettier": "^3.5.3",
-    "tsx": "^4.19.3",
+    "prool": "^0.0.24",
+    "dotenv": "catalog:",
+    "tsx": "^4.6.2",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.32.1"
   },
   "dependencies": {
-    "ethers": "^5.7.2",
-    "zod": "^3.25.7"
+    "@google-a2a/types": "workspace:*",
+    "ethers": "^5.7.2"
   },
   "pnpm": {
-    "overrides": {
-      "zod": "^3.24.3"
-    },
     "ignoredBuiltDependencies": [
       "@firebase/util",
       "core-js",

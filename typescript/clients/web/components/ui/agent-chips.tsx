@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useOptimistic, useState, startTransition } from "react";
+import { useMemo, useOptimistic, startTransition } from "react";
 //import { saveChatAgentAsCookie } from '@/app/(chat)/actions';
 import type { Button } from "@/components/ui/button";
 import { chatAgents } from "@/agents-config";

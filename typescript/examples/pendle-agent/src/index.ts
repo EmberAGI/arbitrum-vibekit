@@ -31,7 +31,7 @@ const initializeAgent = async (): Promise<void> => {
 // Define tool name and description for clarity
 const agentToolName = 'askYieldTokenizationAgent';
 const agentToolDescription =
-  'Sends a free-form, natural-language instruction to the Pendle yield tokenization agent via Ember AI On-chain Actions, returning market information or a structured swap transaction plan. Example: "Swap 0.00001 wstETH to wstETH_YT via wstETH market on arbitrum one".';
+  'Sends a free-form, natural-language instruction to the yield trading agent via Ember MCP server, returning market information or a structured swap transaction plan. Example: "Swap 0.00001 wstETH to wstETH_YT via wstETH market on arbitrum one".';
 server.tool(
   agentToolName,
   agentToolDescription,

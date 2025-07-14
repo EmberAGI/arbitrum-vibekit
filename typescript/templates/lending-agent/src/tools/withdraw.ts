@@ -1,8 +1,9 @@
 import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
-import type { Task, Message, DataPart, TaskState } from '@google-a2a/types/src/types.js';
+import type { Task, Message, DataPart } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
 import type { LendingAgentContext } from '../agent.js';
-import { BorrowRepaySupplyWithdrawSchema, ZodWithdrawResponseSchema } from './schemas.js';
+import { BorrowRepaySupplyWithdrawSchema, WithdrawResponseSchema } from 'ember-schemas';
 import type { LendingTransactionArtifact, LendingPreview, TokenInfo } from './types.js';
 import { createTaskId, findTokenInfo } from './utils.js';
 import type { TransactionPlan } from 'ember-schemas';
@@ -33,12 +34,10 @@ export const withdrawBase: VibkitToolDefinition<
           contextId: `${rawTokenName}-not-found-${Date.now()}`,
           kind: 'task' as const,
           status: {
-            state: 'failed' as TaskState,
+            state: TaskState.Failed,
             message: {
               role: 'agent',
-              parts: [
-                { type: 'text', text: `Token '${rawTokenName}' not supported for withdrawing.` },
-              ],
+              parts: [{ type: 'text', text: `Token '${rawTokenName}' not supported.` }],
             },
           },
         } as unknown as Task;
@@ -52,7 +51,7 @@ export const withdrawBase: VibkitToolDefinition<
           contextId: `${rawTokenName}-clarification-${Date.now()}`,
           kind: 'task' as const,
           status: {
-            state: 'input-required' as TaskState,
+            state: TaskState.InputRequired,
             message: {
               role: 'agent',
               parts: [
@@ -80,7 +79,7 @@ export const withdrawBase: VibkitToolDefinition<
           });
 
           // Parse and validate the MCP response
-          const withdrawResp = parseMcpToolResponsePayload(toolResult, ZodWithdrawResponseSchema);
+          const withdrawResp = parseMcpToolResponsePayload(toolResult, WithdrawResponseSchema);
           const validatedTxPlan: TransactionPlan[] = withdrawResp.transactions;
 
           const txPreview: LendingPreview = {
@@ -95,7 +94,7 @@ export const withdrawBase: VibkitToolDefinition<
             contextId: `withdraw-${tokenName}-${Date.now()}`,
             kind: 'task' as const,
             status: {
-              state: 'completed' as TaskState,
+              state: TaskState.Completed,
               message: {
                 role: 'agent',
                 parts: [
@@ -124,13 +123,13 @@ export const withdrawBase: VibkitToolDefinition<
             contextId: `withdraw-error-${Date.now()}`,
             kind: 'task' as const,
             status: {
-              state: 'failed' as TaskState,
+              state: TaskState.Failed,
               message: {
                 role: 'agent',
                 parts: [
                   {
                     type: 'text',
-                    text: `Failed to create withdraw transaction plan: ${(error as Error).message}`,
+                    text: `Failed to get valid withdraw plan: ${(error as Error).message}`,
                   },
                 ],
               },
