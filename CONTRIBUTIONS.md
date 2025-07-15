@@ -14,18 +14,47 @@ Vibekit supports DeFi protocol integrations through the Ember plugin system. The
 
 The plugin system is built around:
 
-- **EmberPluginFactory**: Core class for creating plugins
-- **Action Definitions**: Simple descriptions of capabilities
-- **Action Types**: Predefined categories (swap, lending, liquidity operations)
+- **EmberPlugin Interface**: Simple interface for defining plugins with actions, metadata, and links
+- **Action Definitions**: Callback functions that implement specific protocol operations
+- **Action Types**: Predefined categories for different DeFi operations
 - **Multi-Chain Support**: Organize tokens by blockchain network using TokenSets
+
+### Current Action Types
+
+The system supports these action types:
+
+- **Swap**: Token swapping operations (`swap`)
+- **Lending**: Lending protocol interactions (`lending-borrow`, `lending-repay`, `lending-supply`, `lending-withdraw`)
+- **Liquidity**: Liquidity provision operations (`liquidity-supply`, `liquidity-withdraw`)
+
+### Plugin Structure
+
+A basic plugin implements the `EmberPlugin` interface:
+
+```typescript
+interface EmberPlugin {
+  actions: ActionDefinition<Action>[]; // Array of supported actions
+  name: string; // Plugin display name
+  description?: string; // Optional description
+  x?: string; // Twitter/X URL
+  website: string; // Plugin website URL
+}
+```
 
 ### Getting Started
 
 1. **Create an Issue**: Navigate to the [Vibekit issues board](https://github.com/EmberAGI/arbitrum-vibekit/issues) to create a new issue detailing the protocol you intend to integrate.
 
-2. **Review Documentation**: Check the detailed [Ember Plugin README](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/ember-plugin) for comprehensive implementation guidelines, examples, and best practices.
+2. **Review Code Examples**: Examine the existing plugin structure in `https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/ember-plugin/src/` to understand the current implementation patterns:
 
-3. **Study Similar Integrations**: Look for existing plugin implementations that are similar to your target protocol for reference patterns.
+   - `src/plugin.ts` - Core plugin interface
+   - `src/actions/` - Action type definitions and interfaces
+   - `src/actions/types.ts` - Action definitions and callback types
+
+3. **Study Action Implementations**: Look at the action interfaces in `https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/ember-plugin/src/actions/` for implementation guidelines:
+   - `swap.ts` - Token swapping actions
+   - `lending.ts` - Lending protocol actions
+   - `liquidity.ts` - Liquidity provision actions
 
 ## Development Steps
 
@@ -43,7 +72,9 @@ The plugin system is built around:
 
 **5. Create Example Agents:** Consider adding a demo agent to the [templates directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates) to showcase your new features.
 
-**6. Update CHANGELOG:** Document your modifications in [CHANGELOG.md](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CHANGELOG.md) to keep the project's history clear.
+**6. Provide Comprehensive Testing:** Ensure your implementation includes thorough testing coverage, which is a key quality metric we evaluate.
+
+**7. Update CHANGELOG:** Document your modifications in [CHANGELOG.md](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CHANGELOG.md) to keep the project's history clear.
 
 ## Submitting Your Work
 
