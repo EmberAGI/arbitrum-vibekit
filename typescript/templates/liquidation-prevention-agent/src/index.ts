@@ -27,7 +27,6 @@ export const agentConfig: AgentConfig = {
   name: process.env.AGENT_NAME || 'Liquidation Prevention Agent',
   version: process.env.AGENT_VERSION || '1.0.0',
   description: process.env.AGENT_DESCRIPTION || 'Aave liquidation prevention agent that monitors health factors and prevents liquidations',
-  protocolVersion: '1.0.0',
   skills: [
     healthMonitoringSkill,         // ✅ Implemented: Task 2
     liquidationPreventionSkill,    // ✅ Implemented: Task 3.1

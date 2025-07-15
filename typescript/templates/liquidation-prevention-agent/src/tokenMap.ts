@@ -2,7 +2,6 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import {
   LendingGetCapabilitiesResponseSchema,
   type LendingGetCapabilitiesResponse,
-  McpTextWrapperSchema,
   type TokenInfo,
   type LendingAgentCapability,
 } from 'ember-schemas';
@@ -60,28 +59,28 @@ export async function loadTokenMapFromMcp(
       console.log('Raw capabilitiesResult received from MCP tool call.');
 
       // Validate the MCP wrapper format
-      const wrapperValidationResult = McpTextWrapperSchema.safeParse(capabilitiesResult);
-      if (!wrapperValidationResult.success) {
-        console.error(
-          'MCP getCapabilities tool returned an unexpected structure:',
-          wrapperValidationResult.error
-        );
-        throw new Error('MCP getCapabilities tool returned an unexpected structure.');
-      }
+      // const wrapperValidationResult = McpTextWrapperSchema.safeParse(capabilitiesResult);
+      // if (!wrapperValidationResult.success) {
+      //   console.error(
+      //     'MCP getCapabilities tool returned an unexpected structure:',
+      //     wrapperValidationResult.error
+      //   );
+      //   throw new Error('MCP getCapabilities tool returned an unexpected structure.');
+      // }
 
       // Parse the nested JSON
-      const jsonString = wrapperValidationResult.data.content[0]!.text;
-      let parsedData: unknown;
-      try {
-        parsedData = JSON.parse(jsonString);
-      } catch (parseError) {
-        console.error('Failed to parse JSON from MCP response:', parseError);
-        throw new Error(`Failed to parse nested JSON response from getCapabilities`);
-      }
+      // const jsonString = wrapperValidationResult.data.content[0]!.text;
+      // let parsedData: unknown;
+      // try {
+      //   parsedData = JSON.parse(jsonString);
+      // } catch (parseError) {
+      //   console.error('Failed to parse JSON from MCP response:', parseError);
+      //   throw new Error(`Failed to parse nested JSON response from getCapabilities`);
+      // }
 
       // Validate the capabilities structure
       const capabilitiesValidationResult =
-        LendingGetCapabilitiesResponseSchema.safeParse(parsedData);
+        LendingGetCapabilitiesResponseSchema.safeParse(capabilitiesResult);
       if (!capabilitiesValidationResult.success) {
         console.error(
           'Parsed MCP getCapabilities response validation failed:',

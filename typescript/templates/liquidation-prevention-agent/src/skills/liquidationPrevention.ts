@@ -43,7 +43,7 @@ export const liquidationPreventionSkill = defineSkill({
       command: 'node',
       moduleName: 'ember-mcp-tool-server',
       env: {
-        EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'grpc.api.emberai.xyz:50051',
+        EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'http://api.emberai.xyz/mcp',
       },
     },
   ],
