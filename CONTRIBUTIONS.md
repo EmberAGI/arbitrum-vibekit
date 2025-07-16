@@ -8,24 +8,23 @@ Before you start your work, checkout [open issues](https://github.com/EmberAGI/a
 
 ## Expanding Protocol Support (Integrating New Plugins)
 
-Vibekit supports DeFi protocol integrations through the Ember plugin system. The plugin architecture provides a standardized way to add support for protocols with swap, lending, and liquidity capabilities.
+Vibekit supports DeFi protocol integrations through the Ember plugin system. This standardized architecture enables adding support for protocols with swap, lending, and liquidity capabilities.
 
 ### Quick Overview
 
-The plugin system is built around:
+The plugin system supports:
 
-- **EmberPluginFactory**: Core class for creating plugins
-- **Action Definitions**: Simple descriptions of capabilities
-- **Action Types**: Predefined categories (swap, lending, liquidity operations)
-- **Multi-Chain Support**: Organize tokens by blockchain network using TokenSets
+- **Swap Operations**: Token swapping across DEXs
+- **Lending Operations**: Borrow, repay, supply, and withdraw on lending protocols
+- **Liquidity Operations**: Provide and withdraw liquidity from pools
 
 ### Getting Started
 
 1. **Create an Issue**: Navigate to the [Vibekit issues board](https://github.com/EmberAGI/arbitrum-vibekit/issues) to create a new issue detailing the protocol you intend to integrate.
 
-2. **Review Documentation**: Check the detailed [Ember Plugin README](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/ember-plugin) for comprehensive implementation guidelines, examples, and best practices.
+2. **Review Plugin Documentation**: Check the comprehensive [Ember Plugin README](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/ember-plugin) for detailed implementation guidelines, architecture overview, and code examples.
 
-3. **Study Similar Integrations**: Look for existing plugin implementations that are similar to your target protocol for reference patterns.
+3. **Study Existing Implementations**: Examine existing plugins and action implementations in the `typescript/lib/ember-plugin/` directory for reference patterns.
 
 ## Development Steps
 
@@ -43,7 +42,9 @@ The plugin system is built around:
 
 **5. Create Example Agents:** Consider adding a demo agent to the [templates directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates) to showcase your new features.
 
-**6. Update CHANGELOG:** Document your modifications in [CHANGELOG.md](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CHANGELOG.md) to keep the project's history clear.
+**6. Provide Comprehensive Testing:** Ensure your implementation includes thorough testing coverage, which is a key quality metric we evaluate.
+
+**7. Update CHANGELOG:** Document your modifications in [CHANGELOG.md](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CHANGELOG.md) to keep the project's history clear.
 
 ## Submitting Your Work
 
