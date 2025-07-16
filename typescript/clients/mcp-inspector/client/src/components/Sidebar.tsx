@@ -35,156 +35,137 @@ const Sidebar = ({
 
   return (
     <div
-      className="bg-gray-50 border-r border-border flex flex-col h-full shadow-md"
+      className="bg-card border-r border-border flex flex-col px-4 pt-4 pb-4 shadow-md"
       style={{
         width: "320px",
         minWidth: "320px",
         maxWidth: "320px",
         flexShrink: 0,
+        height: "100vh",
       }}
     >
-      <div className="flex flex-col items-start justify-start w-full px-4 pt-4 space-y-3">
-        <h1 className="text-2xl font-bold">EmberAI MCP Server</h1>
-        <p className="text-base text-gray-600 text-left max-w-[260px]">
-          The Ember MCP server exposes on-chain AI agent skills and tools for
-          DeFi, trading, and analytics. Use this panel to connect and interact
-          with Ember's AI capabilities.
-        </p>
-        <div className="mb-16" />
-        <a
-          href="https://docs.emberai.xyz/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-lg text-blue-600 hover:underline font-semibold mb-14 text-left w-full block"
+      {/* Main content */}
+      <h1 className="text-2xl font-bold text-foreground">EmberAI MCP Server</h1>
+      <p className="text-base text-left text-muted-foreground mt-3 mb-6">
+        The Ember MCP server exposes on-chain AI agent skills and tools for
+        DeFi, trading, and analytics. Use this panel to connect and interact
+        with Ember's AI capabilities.
+      </p>
+      <a
+        href="https://docs.emberai.xyz/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-lg hover:underline font-semibold text-left block text-blue-600 mb-12"
+      >
+        Ember Documentation
+      </a>
+
+      {/* Hardcoded connection config display */}
+      <div className="flex flex-col items-start space-y-2 mb-12">
+        <div>
+          <span className="text-xs font-semibold text-muted-foreground">
+            Transport:
+          </span>
+          <span className="ml-2 text-sm text-foreground select-text">
+            simple-http
+          </span>
+        </div>
+        <div>
+          <span className="text-xs font-semibold text-muted-foreground">
+            MCP Server URL:
+          </span>
+          <span className="ml-2 text-sm text-foreground select-text">
+            http://api.emberai.xyz/mcp
+          </span>
+        </div>
+      </div>
+
+      {/* Spacer */}
+      <div className="h-32"></div>
+
+      {/* Connection status and button */}
+      <div className="flex flex-col items-center mb-8">
+        {/* Connect/Restart button */}
+        {isConnected ? (
+          <Button
+            data-testid="connect-button"
+            onClick={() => {
+              onDisconnect();
+              onConnect();
+            }}
+            className="w-full mb-4"
+          >
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Restart
+          </Button>
+        ) : (
+          <Button
+            onClick={onConnect}
+            data-testid="connect-button"
+            className="w-full mb-4"
+          >
+            Connect
+          </Button>
+        )}
+        {/* Status indicator and message */}
+        <div className="flex items-center justify-center space-x-2 mt-4">
+          <div
+            className={`w-2 h-2 rounded-full ${(() => {
+              switch (connectionStatus as AllowedStatus) {
+                case "connected":
+                  return "bg-green-500";
+                case "connecting":
+                  return "bg-yellow-500";
+                case "error":
+                case "error-connecting-to-proxy":
+                  return "bg-red-500";
+                default:
+                  return "bg-gray-400";
+              }
+            })()}`}
+          />
+          <span className="text-xs text-muted-foreground">
+            {(() => {
+              switch (connectionStatus as AllowedStatus) {
+                case "connected":
+                  return "Connected";
+                case "connecting":
+                  return "Connecting...";
+                case "error":
+                case "error-connecting-to-proxy":
+                  return "Connection Error";
+                default:
+                  return "Disconnected";
+              }
+            })()}
+          </span>
+        </div>
+      </div>
+
+      {/* Theme selector - pushed to bottom with margin-top: auto */}
+      <div className="mt-auto">
+        <label
+          htmlFor="theme-select"
+          className="block text-xs font-medium text-muted-foreground mb-1 text-left"
         >
-          Ember Documentation
-        </a>
-        <div className="mb-8" />
-        {/* Only show connection status and connect/restart button */}
-        <div className="w-full flex flex-col items-center mt-4">
-          <div className="mb-16" />
-          {/* Status indicator and message */}
-          <div className="flex items-center justify-center space-x-2 mb-2">
-            <div
-              className={`w-2 h-2 rounded-full ${(() => {
-                switch (connectionStatus as AllowedStatus) {
-                  case "connected":
-                    return "bg-green-500";
-                  case "connecting":
-                    return "bg-yellow-500";
-                  case "error":
-                  case "error-connecting-to-proxy":
-                    return "bg-red-500";
-                  default:
-                    return "bg-gray-400";
-                }
-              })()}`}
-            />
-            <span className="text-xs text-gray-600">
-              {(() => {
-                switch (connectionStatus as AllowedStatus) {
-                  case "connected":
-                    return "Connected";
-                  case "connecting":
-                    return "Connecting...";
-                  case "error":
-                  case "error-connecting-to-proxy":
-                    return "Connection Error";
-                  default:
-                    return "Disconnected";
-                }
-              })()}
-            </span>
-          </div>
-          {/* Connect/Restart button */}
-          {isConnected ? (
-            <Button
-              data-testid="connect-button"
-              onClick={() => {
-                onDisconnect();
-                onConnect();
-              }}
-              className="w-full"
-            >
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Restart
-            </Button>
-          ) : (
-            <Button
-              className="w-full"
-              onClick={onConnect}
-              data-testid="connect-button"
-            >
-              Connect
-            </Button>
-          )}
-          <div className="mb-16" />
-        </div>
-        <div className="mb-48" style={{ minHeight: 96 }} />
-        {/* Theme selector section (move to end) */}
-        <div className="w-full mt-4">
-          <label
-            htmlFor="theme-select"
-            className="block text-xs font-medium text-gray-500 mb-1 text-left"
-          >
-            Theme
-          </label>
-          <Select
-            value={theme}
-            onValueChange={(value: string) =>
-              setTheme(value as "system" | "light" | "dark")
-            }
-          >
-            <SelectTrigger className="w-full" id="theme-select">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="system">System</SelectItem>
-              <SelectItem value="light">Light</SelectItem>
-              <SelectItem value="dark">Dark</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+          Theme
+        </label>
+        <Select
+          value={theme}
+          onValueChange={(value: string) =>
+            setTheme(value as "system" | "light" | "dark")
+          }
+        >
+          <SelectTrigger className="w-full" id="theme-select">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="system">System</SelectItem>
+            <SelectItem value="light">Light</SelectItem>
+            <SelectItem value="dark">Dark</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
-      {/*
-      <div className="p-4 border-t border-border bg-card">
-        <div className="flex flex-col items-center">
-          <div className="w-full flex flex-col items-center mt-4">
-            <Button variant="ghost" title="Inspector Documentation" asChild>
-              <a
-                href="https://modelcontextprotocol.io/docs/tools/inspector"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <CircleHelp className="w-4 h-4 text-foreground" />
-              </a>
-            </Button>
-            <Button variant="ghost" title="Debugging Guide" asChild>
-              <a
-                href="https://modelcontextprotocol.io/docs/tools/debugging"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Bug className="w-4 h-4 text-foreground" />
-              </a>
-            </Button>
-            <Button
-              variant="ghost"
-              title="Report bugs or contribute on GitHub"
-              asChild
-            >
-              <a
-                href="https://github.com/modelcontextprotocol/inspector"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Github className="w-4 h-4 text-foreground" />
-              </a>
-            </Button>
-          </div>
-        </div>
-      </div>
-      */}
     </div>
   );
 };

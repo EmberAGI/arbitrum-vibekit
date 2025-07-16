@@ -217,6 +217,10 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
   } else if (transportType === "streamable-http") {
     const headers = getHttpHeaders(req, transportType);
 
+    console.log(
+      `StreamableHTTP transport: url=${query.url}, headers=${JSON.stringify(headers)}`,
+    );
+
     const transport = new StreamableHTTPClientTransport(
       new URL(query.url as string),
       {
@@ -225,6 +229,98 @@ const createTransport = async (req: express.Request): Promise<Transport> => {
         },
       },
     );
+
+    console.log(`Attempting to start StreamableHTTP transport to ${query.url}`);
+    try {
+      await transport.start();
+      console.log(`Successfully connected to StreamableHTTP transport`);
+      return transport;
+    } catch (error) {
+      console.error(`Failed to start StreamableHTTP transport:`, error);
+      console.error(`Error details:`, {
+        message: error instanceof Error ? error.message : String(error),
+        code: (error as any)?.code,
+        cause: (error as any)?.cause,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
+  } else if (transportType === "simple-http") {
+    const headers = getHttpHeaders(req, transportType);
+
+    console.log(
+      `Simple HTTP transport: url=${query.url}, headers=${JSON.stringify(headers)}`,
+    );
+
+    // Create a simple HTTP transport that doesn't use SSE
+    const url = new URL(query.url as string);
+
+    class SimpleHTTPTransport implements Transport {
+      onmessage?: (message: any) => void;
+      onclose?: () => void;
+      onerror?: (error: Error) => void;
+      private isConnected = false;
+
+      async start() {
+        console.log(`Simple HTTP transport started for ${url}`);
+        this.isConnected = true;
+      }
+
+      async send(message: any) {
+        console.log(`Sending message to ${url}:`, JSON.stringify(message));
+
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...headers,
+          },
+          body: JSON.stringify(message),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const responseText = await response.text();
+        console.log(`Received raw response:`, responseText);
+
+        // Handle SSE format
+        let result;
+        if (responseText.startsWith("event: message\ndata: ")) {
+          // Extract JSON from SSE format
+          const dataLine = responseText
+            .split("\n")
+            .find((line) => line.startsWith("data: "));
+          if (dataLine) {
+            const jsonStr = dataLine.substring(6); // Remove "data: " prefix
+            result = JSON.parse(jsonStr);
+          } else {
+            throw new Error("Could not extract data from SSE response");
+          }
+        } else {
+          // Try to parse as regular JSON
+          result = JSON.parse(responseText);
+        }
+
+        console.log(`Parsed response:`, JSON.stringify(result));
+
+        if (this.onmessage) {
+          this.onmessage(result);
+        }
+
+        return result;
+      }
+
+      async close() {
+        console.log(`Simple HTTP transport closed`);
+        if (this.onclose) {
+          this.onclose();
+        }
+      }
+    }
+
+    const transport = new SimpleHTTPTransport();
     await transport.start();
     return transport;
   } else {
@@ -262,11 +358,14 @@ app.post(
   originValidationMiddleware,
   authMiddleware,
   async (req, res) => {
+    const transportType = req.query.transportType as string;
+
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     let serverTransport: Transport | undefined;
     if (!sessionId) {
       try {
-        console.log("New StreamableHttp connection request");
+        const transportType = req.query.transportType as string;
+        console.log(`New ${transportType} connection request`);
         try {
           serverTransport = await createTransport(req);
         } catch (error) {
@@ -282,7 +381,7 @@ app.post(
           throw error;
         }
 
-        console.log("Created StreamableHttp server transport");
+        console.log(`Created ${transportType} server transport`);
 
         const webAppTransport = new StreamableHTTPServerTransport({
           sessionIdGenerator: randomUUID,

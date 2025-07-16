@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useConnection } from "./lib/hooks/useConnection";
 import { Tabs } from "@/components/ui/tabs";
 import ToolsTab from "./components/ToolsTab";
@@ -45,8 +45,10 @@ const minimalConfig: InspectorConfig = {
 };
 
 const App = () => {
-  const [tools] = useState<Tool[]>([]);
-  const [toolResult] = useState<CompatibilityCallToolResult | null>(null);
+  const [tools, setTools] = useState<Tool[]>([]);
+  const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
+  const [toolResult, setToolResult] =
+    useState<CompatibilityCallToolResult | null>(null);
 
   const {
     connectionStatus,
@@ -54,13 +56,69 @@ const App = () => {
     connect: connectMcpServer,
     disconnect: disconnectMcpServer,
   } = useConnection({
-    transportType: "streamable-http",
+    transportType: "simple-http",
     command: "",
     args: "",
     sseUrl: "http://api.emberai.xyz/mcp",
     env: {},
     config: minimalConfig,
   });
+
+  // Fetch tools when MCP client becomes available
+  useEffect(() => {
+    const fetchTools = async () => {
+      if (!mcpClient) {
+        setTools([]);
+        return;
+      }
+
+      try {
+        console.log("Fetching tools from MCP server...");
+        const response = await mcpClient.listTools();
+        console.log("Tools fetched:", response.tools);
+        setTools(response.tools || []);
+      } catch (error) {
+        console.error("Failed to fetch tools:", error);
+        setTools([]);
+      }
+    };
+
+    fetchTools();
+  }, [mcpClient]);
+
+  // Clear tool result when a new tool is selected
+  useEffect(() => {
+    setToolResult(null);
+  }, [selectedTool]);
+
+  // Function to call a tool
+  const callTool = async (name: string, params: Record<string, unknown>) => {
+    if (!mcpClient) {
+      console.error("MCP client not available");
+      return;
+    }
+
+    try {
+      console.log("Calling tool:", name, "with params:", params);
+      const result = await mcpClient.callTool({
+        name,
+        arguments: params,
+      });
+      console.log("Tool result:", result);
+      setToolResult(result);
+    } catch (error) {
+      console.error("Failed to call tool:", error);
+      setToolResult({
+        content: [
+          {
+            type: "text",
+            text: `Error calling tool: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        ],
+        isError: true,
+      });
+    }
+  };
 
   return (
     <div className="flex h-screen bg-background">
@@ -90,9 +148,9 @@ const App = () => {
               <div className="w-full">
                 <ToolsTab
                   tools={tools}
-                  callTool={async () => Promise.resolve()}
-                  selectedTool={null}
-                  setSelectedTool={() => {}}
+                  callTool={callTool}
+                  selectedTool={selectedTool}
+                  setSelectedTool={setSelectedTool}
                   toolResult={toolResult}
                 />
               </div>

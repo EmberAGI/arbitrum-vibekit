@@ -49,7 +49,7 @@ import { InspectorConfig } from "../configurationTypes";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 interface UseConnectionOptions {
-  transportType: "stdio" | "sse" | "streamable-http";
+  transportType: "stdio" | "sse" | "streamable-http" | "simple-http";
   command: string;
   args: string;
   sseUrl: string;
@@ -416,6 +416,16 @@ export function useConnection({
             },
           };
           break;
+
+        case "simple-http":
+          mcpProxyServerUrl = new URL(`${getMCPProxyAddress(config)}/mcp`);
+          mcpProxyServerUrl.searchParams.append("url", sseUrl);
+          transportOptions = {
+            requestInit: {
+              headers: { ...headers, ...proxyHeaders },
+            },
+          };
+          break;
       }
       (mcpProxyServerUrl as URL).searchParams.append(
         "transportType",
@@ -451,16 +461,29 @@ export function useConnection({
 
       let capabilities;
       try {
-        const transport =
-          transportType === "streamable-http"
-            ? new StreamableHTTPClientTransport(mcpProxyServerUrl as URL, {
-                sessionId: undefined,
-                ...transportOptions,
-              })
-            : new SSEClientTransport(
-                mcpProxyServerUrl as URL,
-                transportOptions,
-              );
+        let transport: Transport;
+        if (transportType === "streamable-http") {
+          transport = new StreamableHTTPClientTransport(
+            mcpProxyServerUrl as URL,
+            {
+              sessionId: undefined,
+              ...transportOptions,
+            },
+          );
+        } else if (transportType === "simple-http") {
+          transport = new StreamableHTTPClientTransport(
+            mcpProxyServerUrl as URL,
+            {
+              sessionId: undefined,
+              ...transportOptions,
+            },
+          );
+        } else {
+          transport = new SSEClientTransport(
+            mcpProxyServerUrl as URL,
+            transportOptions,
+          );
+        }
 
         await client.connect(transport as Transport);
 

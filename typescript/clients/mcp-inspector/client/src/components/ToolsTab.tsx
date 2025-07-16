@@ -45,14 +45,14 @@ const ToolsTab = ({
   }, [selectedTool]);
 
   return (
-    <TabsContent value="tools">
-      <div className="grid grid-cols-2 gap-4">
+    <TabsContent value="tools" className="p-6">
+      <div className="grid grid-cols-2 gap-6">
         <div className="bg-card border border-border rounded-lg shadow">
-          <div className="p-4 border-b border-gray-200 dark:border-border">
+          <div className="p-6 border-b border-gray-200 dark:border-border">
             <h3 className="font-semibold dark:text-white">Tools</h3>
           </div>
-          <div className="p-4">
-            <div className="space-y-2 overflow-y-auto max-h-96">
+          <div className="p-6">
+            <div className="space-y-2 overflow-y-auto max-h-[75vh]">
               {tools.map((tool, index) => (
                 <div
                   key={index}
@@ -71,15 +71,15 @@ const ToolsTab = ({
           </div>
         </div>
 
-        <div className="bg-card border border-border rounded-lg shadow">
-          <div className="p-4 border-b border-gray-200 dark:border-border">
+        <div className="bg-card border border-border rounded-lg shadow flex flex-col h-[80vh]">
+          <div className="p-6 border-b border-gray-200 dark:border-border flex-shrink-0">
             <h3 className="font-semibold">
               {selectedTool ? selectedTool.name : "Select a tool"}
             </h3>
           </div>
-          <div className="p-4">
+          <div className="p-6 overflow-y-auto flex-1">
             {selectedTool ? (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
                   {selectedTool.description}
                 </p>
