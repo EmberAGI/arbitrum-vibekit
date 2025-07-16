@@ -26,7 +26,11 @@ import {
 import { type Address } from 'viem';
 import { z } from 'zod';
 
-import { type HandlerContext, handleSwapTokens, SwapTokensArgsSchema } from './agentToolHandlers.js';
+import {
+  type HandlerContext,
+  handleSwapTokens,
+  SwapTokensArgsSchema,
+} from './agentToolHandlers.js';
 import { logError } from './utils.js';
 
 const openrouter = createOpenRouter({
@@ -185,7 +189,9 @@ export class Agent {
       }
 
       // Check if this PT token for this chain is already added
-      const existingPtForChain = this.tokenMap[ptSymbol] ? this.tokenMap[ptSymbol].find(token => token.tokenUid.chainId === chainId) : undefined;
+      const existingPtForChain = this.tokenMap[ptSymbol]
+        ? this.tokenMap[ptSymbol].find(token => token.tokenUid.chainId === chainId)
+        : undefined;
       if (!existingPtForChain) {
         this.tokenMap[ptSymbol]!.push(market.pt);
         ptTokensAdded++;
@@ -201,7 +207,9 @@ export class Agent {
       }
 
       // Check if this YT token for this chain is already added
-      const existingYtForChain = this.tokenMap[ytSymbol] ? this.tokenMap[ytSymbol].find(token => token.tokenUid.chainId === chainId) : undefined;
+      const existingYtForChain = this.tokenMap[ytSymbol]
+        ? this.tokenMap[ytSymbol].find(token => token.tokenUid.chainId === chainId)
+        : undefined;
       if (!existingYtForChain) {
         this.tokenMap[ytSymbol]!.push(market.yt);
         ytTokensAdded++;
@@ -236,7 +244,7 @@ export class Agent {
       }
 
       const existsOnChain = this.tokenMap[symbol]!.some(
-        t => t.tokenUid.chainId === token.tokenUid.chainId,
+        t => t.tokenUid.chainId === token.tokenUid.chainId
       );
 
       if (!existsOnChain) {
@@ -245,7 +253,9 @@ export class Agent {
       }
     });
 
-    this.log(`Added ${addedCount} generic tokens to the token map. Total tokens: ${this.availableTokens.length}`);
+    this.log(
+      `Added ${addedCount} generic tokens to the token map. Total tokens: ${this.availableTokens.length}`
+    );
   }
 
   async init() {
@@ -344,7 +354,13 @@ Never respond in markdown, always use plain text. Never add links to your respon
                   parts: [],
                 },
               },
-              artifacts: [{ artifactId: `yield-markets-${Date.now()}`, name: 'yield-markets', parts: dataArtifacts }],
+              artifacts: [
+                {
+                  artifactId: `yield-markets-${Date.now()}`,
+                  name: 'yield-markets',
+                  parts: dataArtifacts,
+                },
+              ],
             };
             return task;
           } catch (error: unknown) {
@@ -357,11 +373,11 @@ Never respond in markdown, always use plain text. Never add links to your respon
               kind: 'task',
               status: {
                 state: TaskState.Failed,
-                message: { 
-                  role: 'agent', 
+                message: {
+                  role: 'agent',
                   messageId: `msg-${Date.now()}`,
                   kind: 'message',
-                  parts: [{ kind: 'text', text: msg }] 
+                  parts: [{ kind: 'text', text: msg }],
                 },
               },
             };
@@ -434,7 +450,13 @@ Never respond in markdown, always use plain text. Never add links to your respon
                   ],
                 },
               },
-              artifacts: [{ artifactId: `wallet-balances-${Date.now()}`, name: 'wallet-balances', parts: dataArtifacts }],
+              artifacts: [
+                {
+                  artifactId: `wallet-balances-${Date.now()}`,
+                  name: 'wallet-balances',
+                  parts: dataArtifacts,
+                },
+              ],
             };
             return task;
           } catch (error: unknown) {
@@ -533,7 +555,13 @@ Never respond in markdown, always use plain text. Never add links to your respon
                   ],
                 },
               },
-              artifacts: [{ artifactId: `token-market-data-${Date.now()}`, name: 'token-market-data', parts: dataArtifacts }],
+              artifacts: [
+                {
+                  artifactId: `token-market-data-${Date.now()}`,
+                  name: 'token-market-data',
+                  parts: dataArtifacts,
+                },
+              ],
             };
             return task;
           } catch (error: unknown) {
@@ -587,7 +615,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
-        model: openrouter('google/gemini-2.5-flash-preview'),
+        model: openrouter('deepseek/deepseek-chat-v3-0324:free'),
         messages: this.conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,
@@ -647,11 +675,11 @@ Never respond in markdown, always use plain text. Never add links to your respon
           kind: 'task',
           status: {
             state: TaskState.Completed,
-            message: { 
+            message: {
               role: 'agent',
               messageId: `msg-${Date.now()}`,
               kind: 'message',
-              parts: [{ kind: 'text', text }] 
+              parts: [{ kind: 'text', text }],
             },
           },
         };
