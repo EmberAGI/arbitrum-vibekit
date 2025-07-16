@@ -25,7 +25,7 @@ function PureSuggestedActions({
 }: SuggestedActionsProps) {
   const agentConfig =
     chatAgents.find((agent) => agent.id === selectedAgentId) ||
-    chatAgents.find((agent) => agent.id === "all");
+    chatAgents[0];
   const suggestedActions = agentConfig?.suggestedActions || [];
 
   return (

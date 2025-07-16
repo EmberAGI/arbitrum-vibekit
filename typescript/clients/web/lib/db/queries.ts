@@ -14,8 +14,9 @@ import {
   message,
   vote,
   type DBMessage,
+  agentTransaction,
 } from './schema';
-import type { ArtifactKind } from '@/components/artifact';
+import type { ArtifactKind, InsertTransactionInput } from '@/components/artifact';
 
 // Optionally, if not using email/pass login, you can
 // use the Drizzle adapter for Auth.js / NextAuth
@@ -23,6 +24,7 @@ import type { ArtifactKind } from '@/components/artifact';
 
 // biome-ignore lint: Forbidden non-null assertion.
 const client = postgres(process.env.POSTGRES_URL!);
+console.log('Connected to Postgres database', client);
 const db = drizzle(client);
 
 export async function getUser(address: string): Promise<Array<User>> {
@@ -69,18 +71,13 @@ export async function saveChat({
   try {
     // Check if user exists
     try {
-      const [existingUser] = await db
-        .select()
-        .from(user)
-        .where(eq(user.id, userId));
+      const [existingUser] = await db.select().from(user).where(eq(user.id, userId));
       console.log('existingUser', existingUser);
-      
+
       if (!existingUser) {
         console.log('creating new user');
         // Create new user with the provided userId and address
-        await db
-          .insert(user)
-          .values({ address, id: userId });
+        await db.insert(user).values({ address, id: userId });
 
         console.log('actualUserId');
       }
@@ -115,11 +112,7 @@ export async function deleteChatById({ id }: { id: string }) {
 
 export async function getChatsByUserId({ id }: { id: string }) {
   try {
-    return await db
-      .select()
-      .from(chat)
-      .where(eq(chat.userId, id))
-      .orderBy(desc(chat.createdAt));
+    return await db.select().from(chat).where(eq(chat.userId, id)).orderBy(desc(chat.createdAt));
   } catch (error) {
     console.error('Failed to get chats by user from database');
     throw error;
@@ -136,11 +129,7 @@ export async function getChatById({ id }: { id: string }) {
   }
 }
 
-export async function saveMessages({
-  messages,
-}: {
-  messages: Array<DBMessage>;
-}) {
+export async function saveMessages({ messages }: { messages: Array<DBMessage> }) {
   try {
     return await db.insert(message).values(messages);
   } catch (error) {
@@ -271,29 +260,18 @@ export async function deleteDocumentsByIdAfterTimestamp({
   try {
     await db
       .delete(suggestion)
-      .where(
-        and(
-          eq(suggestion.documentId, id),
-          gt(suggestion.documentCreatedAt, timestamp),
-        ),
-      );
+      .where(and(eq(suggestion.documentId, id), gt(suggestion.documentCreatedAt, timestamp)));
 
     return await db
       .delete(document)
       .where(and(eq(document.id, id), gt(document.createdAt, timestamp)));
   } catch (error) {
-    console.error(
-      'Failed to delete documents by id after timestamp from database',
-    );
+    console.error('Failed to delete documents by id after timestamp from database');
     throw error;
   }
 }
 
-export async function saveSuggestions({
-  suggestions,
-}: {
-  suggestions: Array<Suggestion>;
-}) {
+export async function saveSuggestions({ suggestions }: { suggestions: Array<Suggestion> }) {
   try {
     return await db.insert(suggestion).values(suggestions);
   } catch (error) {
@@ -302,20 +280,14 @@ export async function saveSuggestions({
   }
 }
 
-export async function getSuggestionsByDocumentId({
-  documentId,
-}: {
-  documentId: string;
-}) {
+export async function getSuggestionsByDocumentId({ documentId }: { documentId: string }) {
   try {
     return await db
       .select()
       .from(suggestion)
       .where(and(eq(suggestion.documentId, documentId)));
   } catch (error) {
-    console.error(
-      'Failed to get suggestions by document version from database',
-    );
+    console.error('Failed to get suggestions by document version from database');
     throw error;
   }
 }
@@ -340,29 +312,21 @@ export async function deleteMessagesByChatIdAfterTimestamp({
     const messagesToDelete = await db
       .select({ id: message.id })
       .from(message)
-      .where(
-        and(eq(message.chatId, chatId), gte(message.createdAt, timestamp)),
-      );
+      .where(and(eq(message.chatId, chatId), gte(message.createdAt, timestamp)));
 
-    const messageIds = messagesToDelete.map((message) => message.id);
+    const messageIds = messagesToDelete.map(message => message.id);
 
     if (messageIds.length > 0) {
       await db
         .delete(vote)
-        .where(
-          and(eq(vote.chatId, chatId), inArray(vote.messageId, messageIds)),
-        );
+        .where(and(eq(vote.chatId, chatId), inArray(vote.messageId, messageIds)));
 
       return await db
         .delete(message)
-        .where(
-          and(eq(message.chatId, chatId), inArray(message.id, messageIds)),
-        );
+        .where(and(eq(message.chatId, chatId), inArray(message.id, messageIds)));
     }
   } catch (error) {
-    console.error(
-      'Failed to delete messages by id after timestamp from database',
-    );
+    console.error('Failed to delete messages by id after timestamp from database');
     throw error;
   }
 }
@@ -378,6 +342,52 @@ export async function updateChatVisiblityById({
     return await db.update(chat).set({ visibility }).where(eq(chat.id, chatId));
   } catch (error) {
     console.error('Failed to update chat visibility in database');
+    throw error;
+  }
+}
+
+export async function insertAgentTransaction(data: InsertTransactionInput) {
+  const now = new Date();
+
+  try {
+    const result = await db.insert(agentTransaction).values({
+      txHash: data.txHash, // Transaction hash get from component file 
+      userAddress: data.userAddress, //pass user address from hook only
+      agentType: data.agentType, // pass from individual component
+      chainId: data.chainId, //call getChainById(data.chainId) if needed or from component only
+      status: data.status ?? 'pending',
+      transactionType: data.transactionType, // pass from individual component
+      blockNumber: data.blockNumber, //get from transaction completion time
+      gasUsed: data.gasUsed, // get from transaction completion time from component
+      gasPrice: data.gasPrice, // get from transaction completion time from component
+      value: data.value, // get from transaction completion time from component
+      contractAddress: data.contractAddress, // we can keep this optional
+      methodName: data.methodName, // get from component file manually pass 
+      transactionDetails: data.transactionDetails, // get from component file manually pass
+      executedAt: data.executedAt, 
+      confirmedAt: data.confirmedAt ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return result;
+  } catch (error) {
+    console.log('Error inserting agent transaction:', error);
+    throw error;
+  }
+}
+
+export async function getAgentTransactionsByUser(userAddress: string) {
+  try {
+    const result = await db
+      .select()
+      .from(agentTransaction)
+      .where(eq(agentTransaction.userAddress, userAddress))
+      .orderBy(desc(agentTransaction.executedAt));
+
+    return result;
+  } catch (error) {
+    console.error('Failed to get agent transactions by user from database', error);
     throw error;
   }
 }

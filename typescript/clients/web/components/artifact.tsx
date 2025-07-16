@@ -45,6 +45,24 @@ export interface UIArtifact {
   };
 }
 
+export interface InsertTransactionInput {
+  txHash: string;
+  userAddress: string;
+  agentType: string;
+  chainId: string;
+  status?: 'pending' | 'confirmed' | 'failed';
+  transactionType?: string;
+  blockNumber?: string;
+  gasUsed?: string;
+  gasPrice?: string;
+  value?: string;
+  contractAddress?: string;
+  methodName?: string;
+  transactionDetails?: any;
+  executedAt: Date;
+  confirmedAt?: Date | null;
+}
+
 function PureArtifact({
   chatId,
   input,
