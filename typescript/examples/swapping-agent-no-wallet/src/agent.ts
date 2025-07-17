@@ -25,10 +25,7 @@ import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
 import type { Task } from '@google-a2a/types';
 import { TaskState } from '@google-a2a/types';
-import {
-  GetTokensResponseSchema,
-  type Token,
-} from 'ember-api';
+import { GetTokensResponseSchema, type Token } from 'ember-api';
 
 const providerSelector = createProviderSelector({
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
@@ -37,7 +34,6 @@ const providerSelector = createProviderSelector({
   hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
 });
 
-<<<<<<< HEAD
 const availableProviders = getAvailableProviders(providerSelector);
 
 if (availableProviders.length === 0) {
@@ -62,7 +58,7 @@ console.log(
   `Swapping Agent using provider: ${preferredProvider}` +
     (modelOverride ? ` (model: ${modelOverride})` : '')
 );
-=======
+
 const CHAIN_MAPPINGS = [
   { id: '1', names: ['ethereum', 'mainnet', 'eth'] },
   { id: '42161', names: ['arbitrum', 'arbitrum one', 'arb'] },
@@ -70,7 +66,6 @@ const CHAIN_MAPPINGS = [
   { id: '137', names: ['polygon', 'matic'] },
   { id: '8453', names: ['base'] },
 ];
->>>>>>> main
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -201,7 +196,7 @@ export class Agent {
       }
 
       const existsOnChain = this.tokenMap[symbol]!.some(
-        t => t.tokenUid.chainId === token.tokenUid.chainId,
+        t => t.tokenUid.chainId === token.tokenUid.chainId
       );
 
       if (!existsOnChain) {
@@ -210,8 +205,10 @@ export class Agent {
       }
     });
 
-    this.log(`Added ${addedCount} generic tokens to the token map. Total tokens: ${this.availableTokens.length}`);
-    
+    this.log(
+      `Added ${addedCount} generic tokens to the token map. Total tokens: ${this.availableTokens.length}`
+    );
+
     // Debug: Log first 20 available tokens to help with debugging
     this.log('First 20 available tokens:', this.availableTokens.slice(0, 20).join(', '));
   }
@@ -315,7 +312,7 @@ export class Agent {
       throw new Error('Agent not initialized. Call start() first.');
     }
     this.userAddress = userAddress;
-    
+
     // Initialize conversation history for this user if not exists
     if (!this.conversationMap[userAddress]) {
       this.conversationMap[userAddress] = [
@@ -377,7 +374,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
         },
       ];
     }
-    
+
     const conversationHistory = this.conversationMap[userAddress];
     const userMessage: CoreUserMessage = { role: 'user', content: userInput };
     conversationHistory.push(userMessage);
@@ -385,13 +382,8 @@ Use relavant conversation history to obtain required tool parameters. Present th
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
-<<<<<<< HEAD
         model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
-        messages: this.conversationHistory,
-=======
-        model: openrouter('google/gemini-2.5-flash-preview'),
         messages: conversationHistory,
->>>>>>> main
         tools: this.toolSet,
         maxSteps: 10,
         onStepFinish: async (stepResult: StepResult<typeof this.toolSet>) => {
@@ -501,11 +493,11 @@ Use relavant conversation history to obtain required tool parameters. Present th
           kind: 'task',
           status: {
             state: TaskState.Completed,
-            message: { 
-              role: 'agent', 
+            message: {
+              role: 'agent',
               messageId: `msg-${Date.now()}`,
               kind: 'message',
-              parts: [{ kind: 'text', text: text }] 
+              parts: [{ kind: 'text', text: text }],
             },
           },
         };

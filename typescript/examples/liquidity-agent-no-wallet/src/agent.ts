@@ -17,7 +17,6 @@ import {
   handleGetWalletLiquidityPositions,
   type HandlerContext,
 } from './agentToolHandlers.js';
-import { createProviderSelector } from 'arbitrum-vibekit-core';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -152,38 +151,6 @@ export function getChainConfigById(chainId: string): ChainConfig {
   return { viemChain: viemChain as Chain, quicknodeSegment };
 }
 
-<<<<<<< HEAD
-type TokenIdentifier = {
-  chainId: string;
-  address: string;
-  symbol?: string;
-};
-
-export type LiquidityPair = {
-  handle: string;
-  symbol0: string;
-  symbol1: string;
-  token0: TokenIdentifier;
-  token1: TokenIdentifier;
-  price: string;
-};
-
-export type LiquidityPosition = {
-  tokenId: string;
-  poolAddress: string;
-  operator: string;
-  token0: { chainId: string; address: string };
-  token1: { chainId: string; address: string };
-  tokensOwed0: string;
-  tokensOwed1: string;
-  amount0: string;
-  amount1: string;
-  symbol0: string;
-  symbol1: string;
-  price: string;
-  providerId: string;
-  positionRange: { fromPrice: string; toPrice: string };
-};
 // Define the extended schema with concrete values
 type SupplyLiquidityExtendedSchema = z.ZodObject<{
   pair: z.ZodEnum<[string, ...string[]]>;
@@ -193,47 +160,6 @@ type SupplyLiquidityExtendedSchema = z.ZodObject<{
   priceTo: z.ZodString;
 }>;
 
-type LiquidityToolSet = {
-  supplyLiquidity: Tool<SupplyLiquidityExtendedSchema, Task>;
-  withdrawLiquidity: Tool<typeof WithdrawLiquiditySchema, Task>;
-  getLiquidityPools: Tool<typeof GetLiquidityPoolsSchema, Task>;
-  getUserLiquidityPositions: Tool<typeof GetUserLiquidityPositionsSchema, Task>;
-};
-
-const providerSelector = createProviderSelector({
-  openRouterApiKey: process.env.OPENROUTER_API_KEY,
-  openaiApiKey: process.env.OPENAI_API_KEY,
-  xaiApiKey: process.env.XAI_API_KEY,
-  hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
-});
-
-const availableProviders = getAvailableProviders(providerSelector);
-
-if (availableProviders.length === 0) {
-  throw new Error(
-    'No AI providers configured. Please set at least one of: OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or HYPERBOLIC_API_KEY.'
-  );
-}
-
-const preferredProvider = process.env.AI_PROVIDER || availableProviders[0]!;
-
-const selectedProvider = providerSelector[preferredProvider as keyof typeof providerSelector];
-
-if (!selectedProvider) {
-  throw new Error(
-    `Preferred provider '${preferredProvider}' is not available. Available providers: ${availableProviders.join(', ')}`
-  );
-}
-
-const modelOverride = process.env.AI_MODEL;
-
-console.log(
-  `Using AI provider: ${preferredProvider} (available: ${availableProviders.join(', ')})` +
-    (modelOverride ? ` with model: ${modelOverride}` : '')
-);
-
-=======
->>>>>>> main
 export class Agent {
   private mcpClient: Client | null = null;
   private quicknodeSubdomain: string;
@@ -246,22 +172,14 @@ export class Agent {
   private liquidityPositions: LiquidityPosition[] = [];
 
   constructor(quicknodeSubdomain: string, quicknodeApiKey: string) {
-<<<<<<< HEAD
     if (!quicknodeSubdomain) {
       throw new Error('quicknodeSubdomain is required!');
     }
     if (!quicknodeApiKey) {
       throw new Error('quicknodeApiKey is required!');
     }
-=======
->>>>>>> main
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
-
-    if (!providers.openrouter) {
-      throw new Error('OPENROUTER_API_KEY not set!');
-    }
-    this.model = model;
   }
 
   async init(): Promise<void> {
@@ -407,16 +325,10 @@ Rules:
     }
 
     try {
-<<<<<<< HEAD
       this.log('Calling generateText with Vercel AI SDK...');
-      const { response, text, finishReason } = await generateText({
-        model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
-        messages: this.conversationHistory,
-=======
       const result = await generateText({
-        model: this.model,
+        model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
         messages: [{ role: 'system', content: systemPrompt }, ...this.conversationHistory],
->>>>>>> main
         tools: this.toolSet,
         maxSteps: 10,
       });
