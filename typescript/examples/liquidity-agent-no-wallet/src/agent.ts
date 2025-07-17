@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'url';
 import path from 'path';
-import type { CoreMessage, LanguageModelV1, Tool } from 'ai';
+import type { CoreMessage, Tool } from 'ai';
 import { tool } from 'ai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
