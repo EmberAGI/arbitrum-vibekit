@@ -1,5 +1,6 @@
-import type { AgentContext } from 'arbitrum-vibekit-core';
-import type { Task, Message, TaskState, DataPart } from '@google-a2a/types/src/types.js';
+import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
+import type { Task, Message, DataPart } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
 import {
   createPublicClient,
   http,
@@ -59,7 +60,7 @@ export async function tokenResolutionHook<Args extends TokenResolutionHookArgs, 
         contextId: `${tokenName}-not-found-${Date.now()}`,
         kind: 'task' as const,
         status: {
-          state: 'failed' as TaskState,
+          state: TaskState.Failed,
           message: {
             role: 'agent',
             parts: [{ type: 'text', text: `Token '${tokenName}' not supported.` }],
@@ -76,7 +77,7 @@ export async function tokenResolutionHook<Args extends TokenResolutionHookArgs, 
         contextId: `${tokenName}-clarification-${Date.now()}`,
         kind: 'task' as const,
         status: {
-          state: 'input-required' as TaskState,
+          state: TaskState.InputRequired,
           message: {
             role: 'agent',
             parts: [
@@ -134,7 +135,7 @@ export async function balanceCheckHook<
       contextId: `balance-check-error-wallet-${Date.now()}`,
       kind: 'task' as const,
       status: {
-        state: 'failed' as TaskState,
+        state: TaskState.Failed,
         message: {
           role: 'agent',
           parts: [{ type: 'text', text: 'Cannot check balance: User wallet address is missing.' }],
@@ -150,7 +151,7 @@ export async function balanceCheckHook<
       contextId: `balance-check-error-qn-${Date.now()}`,
       kind: 'task' as const,
       status: {
-        state: 'failed' as TaskState,
+        state: TaskState.Failed,
         message: {
           role: 'agent',
           parts: [
@@ -173,7 +174,7 @@ export async function balanceCheckHook<
       contextId: `balance-check-error-amount-${Date.now()}`,
       kind: 'task' as const,
       status: {
-        state: 'failed' as TaskState,
+        state: TaskState.Failed,
         message: {
           role: 'agent',
           parts: [{ type: 'text', text: `Invalid amount format for balance check: ${amount}` }],
@@ -207,7 +208,7 @@ export async function balanceCheckHook<
         contextId: `balance-insufficient-${Date.now()}`,
         kind: 'task' as const,
         status: {
-          state: 'failed' as TaskState,
+          state: TaskState.Failed,
           message: {
             role: 'agent',
             parts: [
@@ -233,7 +234,7 @@ export async function balanceCheckHook<
       contextId: `balance-check-error-rpc-${Date.now()}`,
       kind: 'task' as const,
       status: {
-        state: 'failed' as TaskState,
+        state: TaskState.Failed,
         message: {
           role: 'agent',
           parts: [
@@ -310,7 +311,7 @@ export async function responseParserHook<
       contextId: `${action}-${resolvedToken.address}-${Date.now()}`,
       kind: 'task' as const,
       status: {
-        state: 'completed' as TaskState,
+        state: TaskState.Completed,
         message: {
           role: 'agent',
           parts: [
@@ -338,7 +339,7 @@ export async function responseParserHook<
       contextId: `${action}-parse-error-${Date.now()}`,
       kind: 'task' as const,
       status: {
-        state: 'failed' as TaskState,
+        state: TaskState.Failed,
         message: {
           role: 'agent',
           parts: [

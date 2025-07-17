@@ -6,11 +6,11 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc --build && cpx \"encyclopedia/**/*\" dist/encyclopedia",
-    "lint": "eslint --ext .ts,.tsx src",
-    "lint:fix": "eslint --ext .ts,.tsx src --fix",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
-    "test": "pnpm --filter arbitrum-vibekit build && pnpm --filter ember-schemas build && pnpm --filter test-utils build && NODE_OPTIONS=\"--no-warnings\" mocha --require tsx --require mocha-suppress-logs --exit --config ../../.mocharc.json 'test/**/*.test.ts'",
+    "test": "pnpm --filter arbitrum-vibekit build && pnpm --filter ember-schemas build && pnpm --filter test-utils build && NODE_OPTIONS=\"--no-warnings\" tsx node_modules/mocha/bin/mocha --exit --timeout 120000 --config ../../.mocharc.json 'test/**/*.test.ts'",
     "test:ts": "tsc --project tsconfig.test.json",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
     "docker:build": "docker build -t lending-agent-no-wallet ../../",
@@ -22,31 +22,30 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\" \"test/**/*.{ts,tsx,js,jsx}\""
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.5.0",
+    "@google-a2a/types": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
     "@openzeppelin/contracts": "^5.3.0",
-    "a2a-samples-js": "workspace:*",
-    "ai": "^4.3.2",
+    "ai": "catalog:",
     "arbitrum-vibekit-core": "workspace:*",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "ember-mcp-tool-server": "workspace:*",
+    "dotenv": "catalog:",
     "ember-schemas": "workspace:*",
-    "express": "^4.21.2",
-    "viem": "^2.26.3",
-    "zod": "^3.22.4"
+    "express": "catalog:",
+    "viem": "^2.31.0",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/chai": "^4.3.20",
+    "@types/chai": "catalog:",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
-    "@types/mocha": "^10.0.10",
-    "@types/node": "^20.10.0",
-    "chai": "^4.5.0",
+    "@types/mocha": "catalog:",
+    "@types/node": "catalog:",
+    "chai": "catalog:",
     "cpx": "^1.5.0",
-    "mocha": "^10.8.2",
-    "mocha-suppress-logs": "^0.3.1",
-    "prettier": "^3.5.3",
+    "mocha": "catalog:",
+    "mocha-suppress-logs": "catalog:",
+    "prettier": "catalog:",
     "test-utils": "workspace:*",
-    "tsx": "^4.6.2"
+    "tsx": "catalog:"
   }
 }

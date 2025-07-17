@@ -9,7 +9,6 @@ import {
 
 import { SidebarLeftIcon } from "./icons";
 import { Button } from "./ui/button";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 export function SidebarToggle({
   className,

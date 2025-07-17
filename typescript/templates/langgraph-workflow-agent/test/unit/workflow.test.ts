@@ -371,7 +371,6 @@ describe('Greeting Workflow', () => {
     const { generateText, generateObject } = await import('ai');
 
     // Track state changes through the workflow
-    const stateSnapshots: any[] = [];
 
     // Mock implementations that capture state
     vi.mocked(generateText)

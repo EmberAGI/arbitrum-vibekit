@@ -1,6 +1,6 @@
 /// <reference types="mocha" />
 import { expect } from 'chai';
-import type { Task } from 'a2a-samples-js';
+import type { Task } from '@google-a2a/types';
 
 import 'dotenv/config';
 import * as ethers from 'ethers';
@@ -170,7 +170,7 @@ describe('Liquidity Agent Integration Tests', function () {
 
           // Deposit liquidity
           const response = await agent.processUserInput(
-            `Deposit ${targetUSDCAmount} USDC and ${wethAmount} WETH to the WETH/USDC pool within the range from ${(price * 0.8).toFixed(2)} to ${(price * 1.2).toFixed(2)}`,
+            `Deposit ${wethAmount} WETH and ${targetUSDCAmount} USDC to the WETH/USDC pool within the range from ${(price * 0.8).toFixed(2)} to ${(price * 1.2).toFixed(2)}`,
             walletAddress
           );
           
@@ -227,15 +227,15 @@ function extractPools(response: Task): Array<{
   price: string;
 }> {
   if (!response.artifacts) {
-    return [];
+    throw new Error(`No artifacts found in response: ${JSON.stringify(response, null, 2)}`);
   }
 
   // Look for available-liquidity-pools artifact
   for (const artifact of response.artifacts) {
     if (artifact.name === 'available-liquidity-pools') {
       for (const part of artifact.parts) {
-        if (part.type === 'data' && part.data.pools) {
-          const pools = part.data.pools;
+        if ((part as any).kind === 'data' && (part as any).data.liquidityPools) {
+          const pools = (part as any).data.liquidityPools;
           if (Array.isArray(pools)) {
             return pools;
           }
@@ -244,5 +244,5 @@ function extractPools(response: Task): Array<{
     }
   }
 
-  return [];
+  throw new Error(`No pools found in response: ${JSON.stringify(response, null, 2)}`);
 }

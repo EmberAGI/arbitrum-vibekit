@@ -45,10 +45,10 @@ export const PositionSchema = z.object({
 });
 export type Position = z.infer<typeof PositionSchema>;
 
-export const GetWalletPositionsResponseSchema = z.object({
-  positions: z.array(PositionSchema),
+export const GetWalletLendingPositionsResponseSchema = z.object({
+  positions: z.array(LendingPositionSchema),
 });
-export type GetWalletPositionsResponse = z.infer<typeof GetWalletPositionsResponseSchema>;
+export type GetWalletLendingPositionsResponse = z.infer<typeof GetWalletLendingPositionsResponseSchema>;
 
 //
 // Tool Response Schemas
@@ -58,7 +58,7 @@ export type GetWalletPositionsResponse = z.infer<typeof GetWalletPositionsRespon
 export const SupplyResponseSchema = z.object({
   tokenUid: TokenIdentifierSchema,
   amount: z.string(),
-  supplierWalletAddress: z.string(),
+  walletAddress: z.string(),
   transactions: z.array(TransactionPlanSchema),
   chainId: z.string(),
 });
@@ -68,7 +68,7 @@ export type SupplyResponse = z.infer<typeof SupplyResponseSchema>;
 export const WithdrawResponseSchema = z.object({
   tokenUid: TokenIdentifierSchema,
   amount: z.string(),
-  lenderWalletAddress: z.string(),
+  walletAddress: z.string(),
   transactions: z.array(TransactionPlanSchema),
   chainId: z.string(),
 });
@@ -87,7 +87,7 @@ export type BorrowResponse = z.infer<typeof BorrowResponseSchema>;
 export const RepayResponseSchema = z.object({
   tokenUid: TokenIdentifierSchema,
   amount: z.string(),
-  borrowerWalletAddress: z.string(),
+  walletAddress: z.string(),
   transactions: z.array(TransactionPlanSchema),
   chainId: z.string(),
 });
@@ -134,18 +134,6 @@ export const LendingGetCapabilitiesResponseSchema = z.object({
 });
 export type LendingGetCapabilitiesResponse = z.infer<typeof LendingGetCapabilitiesResponseSchema>;
 
-export const McpTextWrapperSchema = z.object({
-  content: z
-    .array(
-      z.object({
-        type: z.literal('text'),
-        text: z.string(),
-      })
-    )
-    .min(1),
-});
-export type McpTextWrapper = z.infer<typeof McpTextWrapperSchema>;
-
 //
 // Agent Tool Schemas
 //
@@ -162,8 +150,8 @@ export const BorrowRepaySupplyWithdrawSchema = z.object({
 });
 export type BorrowRepaySupplyWithdrawArgs = z.infer<typeof BorrowRepaySupplyWithdrawSchema>;
 
-export const GetUserPositionsSchema = z.object({});
-export type GetUserPositionsArgs = z.infer<typeof GetUserPositionsSchema>;
+export const GetWalletLendingPositionsSchema = z.object({});
+export type GetWalletLendingPositionsArgs = z.infer<typeof GetWalletLendingPositionsSchema>;
 
 // Define an alias for the lending interface
 export { AskEncyclopediaSchema as LendingAskEncyclopediaSchema };

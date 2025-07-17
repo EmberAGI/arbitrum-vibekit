@@ -10,19 +10,27 @@
   "scripts": {
     "prepare": "pnpm build",
     "build": "tsc -b",
-    "lint": "eslint --ext .ts,.tsx src",
-    "lint:fix": "eslint --ext .ts,.tsx src --fix",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\""
   },
   "devDependencies": {
-    "@types/node": "^22.15.19",
-    "prettier": "^3.5.3",
-    "typescript": "^5.4.2"
+    "@types/node": "catalog:",
+    "prettier": "catalog:",
+    "typescript": "catalog:"
   },
   "dependencies": {
-    "a2a-samples-js": "workspace:*",
+    "ember-api": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@openrouter/ai-sdk-provider": "catalog:",
+    "@openzeppelin/contracts": "^5.3.0",
+    "ai": "catalog:",
+    "arbitrum-vibekit-core": "workspace:*",
+    "cors": "^2.8.5",
+    "dotenv": "catalog:",
     "ember-schemas": "workspace:*",
+    "express": "catalog:",
     "viem": "^2.26.3",
-    "zod": "^3.22.4"
+    "zod": "catalog:"
   }
 }

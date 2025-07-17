@@ -8,15 +8,23 @@ Before you start your work, checkout [open issues](https://github.com/EmberAGI/a
 
 ## Expanding Protocol Support (Integrating New Plugins)
 
-Vibekit primarily interacts with DeFi protocols through the MCP server powered by [EmberAI](https://www.emberai.xyz/), which supports a specific set of protocols at launch. Vibekit and Ember are designed for extensibility, and we highly encourage contributions that integrate support for additional protocols via new plugins.
+Vibekit supports DeFi protocol integrations through the Ember plugin system. This standardized architecture enables adding support for protocols with swap, lending, and liquidity capabilities.
 
-If you're looking to add support for a new protocol:
+### Quick Overview
 
-1.  **Identify Protocol & Similar Integrations:**
-    Begin by identifying the protocol you wish to integrate. Look for the most similar existing integration within Vibekit. This can serve as a valuable reference for design patterns and shared abstractions. For instance, if you're aiming to integrate a DEX similar to Uniswap, the Camelot integration could be a good starting point.
+The plugin system supports:
 
-2.  **Create an Issue:**
-    Navigate to the [Vibekit issues board](https://github.com/EmberAGI/arbitrum-vibekit/issues) to create a new issue detailing the protocol you intend to integrate. Describe the protocol, highlight its similarities to any existing integrations, and outline your proposed integration plan. This helps in tracking progress and discussing the approach.
+- **Swap Operations**: Token swapping across DEXs
+- **Lending Operations**: Borrow, repay, supply, and withdraw on lending protocols
+- **Liquidity Operations**: Provide and withdraw liquidity from pools
+
+### Getting Started
+
+1. **Create an Issue**: Navigate to the [Vibekit issues board](https://github.com/EmberAGI/arbitrum-vibekit/issues) to create a new issue detailing the protocol you intend to integrate.
+
+2. **Review Plugin Documentation**: Check the comprehensive [Ember Plugin README](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/ember-plugin) for detailed implementation guidelines, architecture overview, and code examples.
+
+3. **Study Existing Implementations**: Examine existing plugins and action implementations in the `typescript/lib/ember-plugin/` directory for reference patterns.
 
 ## Development Steps
 
@@ -32,9 +40,11 @@ If you're looking to add support for a new protocol:
 
 **4. Create Documentation:** Create a `README` file for your new MCP tool that clearly explains its functionality and setup process.
 
-**5. Create Example Agents:** Consider adding a demo agent to the [examples directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) to showcase your new features.
+**5. Create Example Agents:** Consider adding a demo agent to the [templates directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates) to showcase your new features.
 
-**6. Update CHANGELOG:** Document your modifications in [CHANGELOG.md](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CHANGELOG.md) to keep the project's history clear.
+**6. Provide Comprehensive Testing:** Ensure your implementation includes thorough testing coverage, which is a key quality metric we evaluate.
+
+**7. Update CHANGELOG:** Document your modifications in [CHANGELOG.md](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CHANGELOG.md) to keep the project's history clear.
 
 ## Submitting Your Work
 

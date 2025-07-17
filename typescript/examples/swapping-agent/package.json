@@ -6,8 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc --build && node -e \"require('fs').chmodSync('dist/index.js', '755')\"",
-    "lint": "eslint --ext .ts,.tsx src",
-    "lint:fix": "eslint --ext .ts,.tsx src --fix",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
@@ -20,26 +20,25 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.5.0",
+    "@google-a2a/types": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
     "@openzeppelin/contracts": "^5.3.0",
-    "a2a-samples-js": "workspace:*",
-    "ai": "^4.3.2",
+    "ai": "catalog:",
     "arbitrum-vibekit-core": "workspace:*",
-    "ember-schemas": "workspace:*",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "ember-mcp-tool-server": "workspace:*",
-    "express": "^4.21.2",
+    "dotenv": "catalog:",
+    "ember-schemas": "workspace:*",
+    "express": "catalog:",
     "viem": "^2.26.3",
-    "zod": "^3.22.4"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
-    "@types/node": "^20.10.0",
+    "@types/node": "catalog:",
     "cpx": "^1.5.0",
-    "prettier": "^3.5.3",
-    "tsx": "^4.6.2",
-    "typescript": "^5.3.2"
+    "prettier": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
   }
 }

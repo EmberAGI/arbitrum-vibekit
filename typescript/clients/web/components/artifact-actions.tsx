@@ -1,8 +1,8 @@
 import { Button } from './ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
-import { artifactDefinitions, UIArtifact } from './artifact';
-import { Dispatch, memo, SetStateAction, useState } from 'react';
-import { ArtifactActionContext } from './create-artifact';
+import { artifactDefinitions, type UIArtifact } from './artifact';
+import { type Dispatch, memo, type SetStateAction, useState } from 'react';
+import type { ArtifactActionContext } from './create-artifact';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -28,7 +28,7 @@ function PureArtifactActions({
   const [isLoading, setIsLoading] = useState(false);
 
   const artifactDefinition = artifactDefinitions.find(
-    (definition) => definition.kind === artifact.kind,
+    definition => definition.kind === artifact.kind
   );
 
   if (!artifactDefinition) {
@@ -47,7 +47,7 @@ function PureArtifactActions({
 
   return (
     <div className="flex flex-row gap-1">
-      {artifactDefinition.actions.map((action) => (
+      {artifactDefinition.actions.map((action: any) => (
         <Tooltip key={action.description}>
           <TooltipTrigger asChild>
             <Button
@@ -86,15 +86,11 @@ function PureArtifactActions({
   );
 }
 
-export const ArtifactActions = memo(
-  PureArtifactActions,
-  (prevProps, nextProps) => {
-    if (prevProps.artifact.status !== nextProps.artifact.status) return false;
-    if (prevProps.currentVersionIndex !== nextProps.currentVersionIndex)
-      return false;
-    if (prevProps.isCurrentVersion !== nextProps.isCurrentVersion) return false;
-    if (prevProps.artifact.content !== nextProps.artifact.content) return false;
+export const ArtifactActions = memo(PureArtifactActions, (prevProps, nextProps) => {
+  if (prevProps.artifact.status !== nextProps.artifact.status) return false;
+  if (prevProps.currentVersionIndex !== nextProps.currentVersionIndex) return false;
+  if (prevProps.isCurrentVersion !== nextProps.isCurrentVersion) return false;
+  if (prevProps.artifact.content !== nextProps.artifact.content) return false;
 
-    return true;
-  },
-);
+  return true;
+});

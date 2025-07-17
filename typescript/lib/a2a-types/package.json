@@ -1,0 +1,29 @@
+{
+  "name": "@google-a2a/types",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare": "pnpm build",
+    "prepublishOnly": "npm run build",
+    "generate": "./node_modules/.bin/typescript-json-schema tsconfig.json \"*\" --defaultNumberType integer --required > ../specification/json/a2a.json",
+    "prettier": "prettier src/types.ts --write"
+  },
+  "author": "",
+  "description": "Vendored A2A Types - a copy from https://github.com/a2aproject/A2A",
+  "dependencies": {
+    "typescript-json-schema": "^0.65.1"
+  },
+  "devDependencies": {
+    "prettier": "catalog:",
+    "typescript": "catalog:"
+  }
+}

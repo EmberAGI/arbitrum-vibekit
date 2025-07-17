@@ -4,7 +4,6 @@ import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useTransactionExecutor } from "../hooks/useTransactionExecutor";
 import type { TxPlan } from "../lib/transactionUtils";
-import { strToDecimal } from "@/lib/utils";
 import { JsonViewer } from "./JsonViewer";
 
 // Removed: useState, viem imports, useSendTransaction

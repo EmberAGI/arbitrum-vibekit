@@ -1,32 +1,22 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import type { Task } from 'a2a-samples-js';
-import { promises as fs } from 'fs';
-import { createRequire } from 'module';
-import path, { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import {
-  generateText,
-  tool,
-  type Tool,
-  type CoreMessage,
-  type CoreUserMessage,
-  type CoreAssistantMessage,
-  type StepResult,
-  type LanguageModelV1,
-} from 'ai';
+import path from 'path';
+import type { CoreMessage, LanguageModelV1, Tool } from 'ai';
+import { tool } from 'ai';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { Task } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
+import { promises as fs } from 'fs';
+import { generateText, type CoreUserMessage, type CoreAssistantMessage, type StepResult } from 'ai';
 import {
   LendingGetCapabilitiesResponseSchema,
-  McpTextWrapperSchema,
   BorrowRepaySupplyWithdrawSchema,
-  GetUserPositionsSchema,
+  GetWalletLendingPositionsSchema,
   LendingAskEncyclopediaSchema,
   type LendingGetCapabilitiesResponse,
-  type McpTextWrapper,
   type TokenInfo,
   type UserReserve,
   UserReserveSchema,
-  type GetWalletPositionsResponse,
+  type GetWalletLendingPositionsResponse,
 } from 'ember-schemas';
 import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
@@ -35,11 +25,12 @@ import {
   handleRepay,
   handleSupply,
   handleWithdraw,
-  handleGetUserPositions,
+  handleGetWalletLendingPositions,
   handleAskEncyclopedia,
   type HandlerContext,
 } from './agentToolHandlers.js';
 import { createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -90,7 +81,7 @@ type LendingToolSet = {
   repay: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
   supply: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
   withdraw: Tool<typeof BorrowRepaySupplyWithdrawSchema, Task>;
-  getUserPositions: Tool<typeof GetUserPositionsSchema, Task>;
+  getUserPositions: Tool<typeof GetWalletLendingPositionsSchema, Task>;
   askEncyclopedia: Tool<typeof LendingAskEncyclopediaSchema, Task>;
 };
 
@@ -155,19 +146,11 @@ export class Agent {
 
     console.error('Initializing MCP client transport...');
     try {
-      const require = createRequire(import.meta.url);
-      const mcpToolPath = require.resolve('ember-mcp-tool-server');
-      console.error(`Found MCP tool server path: ${mcpToolPath}`);
-
+      if (!process.env.EMBER_ENDPOINT) {
+        throw new Error('EMBER_ENDPOINT is not set');
+      }
       console.error(`Connecting to MCP server at ${process.env.EMBER_ENDPOINT}`);
-      const transport = new StdioClientTransport({
-        command: 'node',
-        args: [mcpToolPath],
-        env: {
-          ...process.env,
-          EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'grpc.api.emberai.xyz:50051',
-        },
-      });
+      const transport = new StreamableHTTPClientTransport(new URL(process.env.EMBER_ENDPOINT));
 
       if (!this.mcpClient) {
         throw new Error('MCP Client was not initialized before attempting connection.');
@@ -241,11 +224,11 @@ export class Agent {
       }),
       getUserPositions: tool({
         description: 'Get a summary of your current lending and borrowing positions.',
-        parameters: GetUserPositionsSchema,
+        parameters: GetWalletLendingPositionsSchema,
         execute: async args => {
           console.error('Vercel AI SDK calling handler: getUserPositions', args);
           try {
-            return await handleGetUserPositions(args, this.getHandlerContext());
+            return await handleGetWalletLendingPositions(args, this.getHandlerContext());
           } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             logError(`Error during getUserPositions via toolSet: ${errorMessage}`);
@@ -359,73 +342,48 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
       console.error('Raw capabilitiesResult received from MCP tool call.');
 
-      const wrapperValidationResult = McpTextWrapperSchema.safeParse(capabilitiesResult);
+      // Check if the response has structuredContent directly (new format)
+      if (
+        capabilitiesResult &&
+        typeof capabilitiesResult === 'object' &&
+        'structuredContent' in capabilitiesResult
+      ) {
+        const parsedData = (capabilitiesResult as { structuredContent: unknown }).structuredContent;
 
-      if (!wrapperValidationResult.success) {
-        logError(
-          'MCP getCapabilities tool returned an unexpected structure. Zod Error:',
-          JSON.stringify(wrapperValidationResult.error.format(), null, 2)
-        );
-        logError('Data that failed wrapper validation:', capabilitiesResult);
-        throw new Error(
-          'MCP getCapabilities tool returned an unexpected structure. Expected { content: [{ type: "text", text: string }] }.'
-        );
-      }
+        const capabilitiesValidationResult =
+          LendingGetCapabilitiesResponseSchema.safeParse(parsedData);
 
-      const jsonString = (wrapperValidationResult.data as McpTextWrapper).content[0]!.text;
-      let parsedData: unknown;
-      try {
-        console.error('Attempting to parse JSON string from content[0].text...');
-        parsedData = JSON.parse(jsonString);
-      } catch (parseError) {
-        logError('Failed to parse JSON string from content[0].text:', parseError);
-        logError('Original text content:', jsonString);
-        throw new Error(
-          `Failed to parse nested JSON response from getCapabilities: ${(parseError as Error).message}`
-        );
-      }
-
-      const dataString = JSON.stringify(parsedData, null, 2);
-      const previewLength = 500;
-      if (dataString.length < previewLength * 2) {
-        console.error('Parsed data structure before final validation:', dataString);
-      } else {
-        console.error(
-          'Parsed data structure before final validation (Head):\n',
-          dataString.substring(0, previewLength) + '\n...'
-        );
-        console.error(
-          'Parsed data structure before final validation (Tail):\n...',
-          dataString.substring(dataString.length - previewLength)
-        );
-      }
-
-      const capabilitiesValidationResult =
-        LendingGetCapabilitiesResponseSchema.safeParse(parsedData);
-
-      if (!capabilitiesValidationResult.success) {
-        logError(
-          'Parsed MCP getCapabilities response validation failed. Zod Error:',
-          JSON.stringify(capabilitiesValidationResult.error.format(), null, 2)
-        );
-        throw new Error('Failed to validate the parsed capabilities data from MCP server tool.');
-      }
-
-      const validatedData = capabilitiesValidationResult.data;
-      console.error(`Validated ${validatedData.capabilities.length} capabilities.`);
-
-      const useCache = process.env.AGENT_CACHE_TOKENS === 'true';
-      if (useCache) {
-        try {
-          await fs.mkdir(path.dirname(CACHE_FILE_PATH), { recursive: true });
-          await fs.writeFile(CACHE_FILE_PATH, JSON.stringify(validatedData, null, 2));
-          console.error('Cached validated capabilities response to', CACHE_FILE_PATH);
-        } catch (err) {
-          console.error('Failed to cache capabilities response:', err);
+        if (!capabilitiesValidationResult.success) {
+          logError(
+            'Parsed MCP getCapabilities response validation failed. Zod Error:',
+            JSON.stringify(capabilitiesValidationResult.error.format(), null, 2)
+          );
+          throw new Error(
+            `Failed to validate the parsed capabilities data from MCP server tool. Complete response: ${JSON.stringify(capabilitiesResult, null, 2)}`
+          );
         }
+
+        const validatedData = capabilitiesValidationResult.data;
+        console.error(`Validated ${validatedData.capabilities.length} capabilities.`);
+
+        const useCache = process.env.AGENT_CACHE_TOKENS === 'true';
+        if (useCache) {
+          try {
+            await fs.mkdir(path.dirname(CACHE_FILE_PATH), { recursive: true });
+            await fs.writeFile(CACHE_FILE_PATH, JSON.stringify(validatedData, null, 2));
+            console.error('Cached validated capabilities response to', CACHE_FILE_PATH);
+          } catch (err) {
+            console.error('Failed to cache capabilities response:', err);
+          }
+        }
+
+        return validatedData;
       }
 
-      return validatedData;
+      // If no structuredContent, throw error
+      throw new Error(
+        `MCP getCapabilities tool returned an unexpected structure. Expected { structuredContent: { capabilities: [...] } }. Complete response: ${JSON.stringify(capabilitiesResult, null, 2)}`
+      );
     } catch (error) {
       logError('Error calling getCapabilities tool or processing response:', error);
       throw new Error(
@@ -477,6 +435,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       }
     }
 
+    // Process capabilities to populate token map
     this.tokenMap = {};
     this.availableTokens = [];
     let loadedTokenCount = 0;
@@ -492,8 +451,15 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
           const lendingCap = capabilityEntry.lendingCapability;
           const token = lendingCap.underlyingToken;
 
-          if (token && token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
-            const symbol = token.symbol;
+          // Check if token has all required data (skip empty/incomplete tokens)
+          if (
+            token &&
+            token.symbol &&
+            token.symbol.trim() &&
+            token.tokenUid?.chainId &&
+            token.tokenUid?.address
+          ) {
+            const symbol = token.symbol.trim();
             const tokenInfo: TokenInfo = {
               chainId: token.tokenUid.chainId,
               address: token.tokenUid.address,
@@ -514,6 +480,12 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
                 this.tokenMap[symbol].push(tokenInfo);
               }
             }
+          } else {
+            console.error('Skipping capability with incomplete token data:', {
+              symbol: token?.symbol,
+              chainId: token?.tokenUid?.chainId,
+              address: token?.tokenUid?.address,
+            });
           }
         }
       });
@@ -525,7 +497,11 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
     }
 
     if (Object.keys(this.tokenMap).length === 0) {
-      console.warn('Warning: Token map is empty after processing capabilities.');
+      console.warn(
+        'Warning: Token map is empty after processing capabilities. This may indicate the server is returning capabilities with empty token symbols.'
+      );
+    } else {
+      console.error(`Successfully loaded tokens: ${this.availableTokens.join(', ')}`);
     }
   }
 
@@ -554,9 +530,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
           | CoreUserMessage
           | CoreAssistantMessage
         )[],
-        tools: this.toolSet as {
-          [key: string]: Tool<any, any>;
-        },
+        tools: this.toolSet,
         maxSteps: 5,
         onStepFinish: async (stepResult: StepResult<typeof this.toolSet>) => {
           console.error(`Step finished. Reason: ${stepResult.finishReason}`);
@@ -600,11 +574,15 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       console.error('No tool called or task found, returning text response.');
       return {
         id: this.userAddress!,
+        contextId: `text-response-${Date.now()}`,
+        kind: 'task',
         status: {
-          state: 'completed',
+          state: TaskState.Completed,
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: text || "I'm sorry, I couldn't process that request." }],
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
+            parts: [{ kind: 'text', text: text || "I'm sorry, I couldn't process that request." }],
           },
         },
       };
@@ -618,11 +596,15 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       this.conversationHistory.push(errorAssistantMessage);
       return {
         id: this.userAddress!,
+        contextId: `error-${Date.now()}`,
+        kind: 'task',
         status: {
-          state: 'failed',
+          state: TaskState.Failed,
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: `An error occurred: ${String(error)}` }],
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
+            parts: [{ kind: 'text', text: `An error occurred: ${String(error)}` }],
           },
         },
       };
@@ -630,6 +612,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
   }
 
   private getHandlerContext(): HandlerContext {
+    console.error('userAddress', this.userAddress);
     return {
       mcpClient: this.mcpClient!,
       tokenMap: this.tokenMap,
@@ -644,9 +627,9 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
   private async _loadAaveDocumentation(): Promise<void> {
     const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    const docsPath = join(__dirname, '../encyclopedia');
-    const filePaths = [join(docsPath, 'aave-01.md'), join(docsPath, 'aave-02.md')];
+    const __dirname = path.dirname(__filename);
+    const docsPath = path.join(__dirname, '../encyclopedia');
+    const filePaths = [path.join(docsPath, 'aave-01.md'), path.join(docsPath, 'aave-02.md')];
     let combinedContent = '';
 
     console.error(`Loading Aave documentation from: ${docsPath}`);
@@ -668,28 +651,27 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
   }
 
   /**
-   * Extract positions data from response
+   * Extract positions data from response and populate token map
    */
-  private extractPositionsData(response: Task): GetWalletPositionsResponse {
-    if (!response.artifacts) {
-      throw new Error(
-        `No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`
-      );
-    }
-
-    // Look for positions artifact (support both legacy and new names)
-    for (const artifact of response.artifacts) {
-      if (artifact.name === 'positions' || artifact.name === 'wallet-positions') {
-        for (const part of artifact.parts || []) {
-          if (part.type === 'data' && part.data?.positions) {
-            return part.data as GetWalletPositionsResponse;
+  private extractPositionsData(response: Task): GetWalletLendingPositionsResponse {
+    // First try to extract from artifacts (successful response)
+    if (response.artifacts) {
+      // Look for positions artifact (support both legacy and new names)
+      for (const artifact of response.artifacts) {
+        if (artifact.name === 'positions' || artifact.name === 'wallet-positions') {
+          for (const part of artifact.parts) {
+            if (part.kind === 'data' && part.data?.positions) {
+              const positionsData = part.data as GetWalletLendingPositionsResponse;
+              this.populateTokenMapFromPositions(positionsData);
+              return positionsData;
+            }
           }
         }
       }
     }
 
     throw new Error(
-      `No positions data found in artifacts. Response: ${JSON.stringify(response, null, 2)}`
+      `No positions data found in response. Response: ${JSON.stringify(response, null, 2)}`
     );
   }
 
@@ -697,13 +679,11 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
    * Finds the reserve information for a given token symbol or name within the positions response.
    */
   private getReserveForToken(
-    response: GetWalletPositionsResponse,
+    response: GetWalletLendingPositionsResponse,
     tokenNameOrSymbol: string
   ): UserReserve {
     for (const position of response.positions) {
-      if (!position.lendingPosition) continue;
-
-      for (const reserve of position.lendingPosition.userReserves) {
+      for (const reserve of position.userReserves) {
         const name = reserve.token!.name;
         const symbol = reserve.token!.symbol;
 
@@ -733,5 +713,54 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
     const response = await this.processUserInput('show my positions', userAddress);
     const positionsData = this.extractPositionsData(response);
     return this.getReserveForToken(positionsData, tokenName);
+  }
+
+  /**
+   * Populate token map from position data since capabilities return empty symbols
+   */
+  private populateTokenMapFromPositions(positionsData: GetWalletLendingPositionsResponse): void {
+    const newTokensFound: string[] = [];
+
+    positionsData.positions.forEach(position => {
+      position.userReserves.forEach(reserve => {
+        const token = reserve.token;
+        if (
+          token &&
+          token.symbol &&
+          token.symbol.trim() &&
+          token.tokenUid?.chainId &&
+          token.tokenUid?.address
+        ) {
+          const symbol = token.symbol.trim();
+          const tokenInfo: TokenInfo = {
+            chainId: token.tokenUid.chainId,
+            address: token.tokenUid.address,
+            decimals: token.decimals ?? 18,
+          };
+
+          if (!this.tokenMap[symbol]) {
+            this.tokenMap[symbol] = [tokenInfo];
+            this.availableTokens.push(symbol);
+            newTokensFound.push(symbol);
+          } else {
+            const exists = this.tokenMap[symbol].some(
+              t =>
+                t.chainId === tokenInfo.chainId &&
+                t.address.toLowerCase() === tokenInfo.address.toLowerCase()
+            );
+            if (!exists) {
+              this.tokenMap[symbol].push(tokenInfo);
+            }
+          }
+        }
+      });
+    });
+
+    if (newTokensFound.length > 0) {
+      console.error(
+        `Populated token map from position data. Added tokens: ${newTokensFound.join(', ')}`
+      );
+      console.error(`Total available tokens: ${this.availableTokens.join(', ')}`);
+    }
   }
 }

@@ -1,10 +1,9 @@
 import { promises as fs } from 'fs';
-import { createRequire } from 'module';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
 import {
   generateText,
@@ -24,13 +23,12 @@ import { handleSwapTokens, handleAskEncyclopedia } from './agentToolHandlers.js'
 
 import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
-import type { Task } from 'a2a-samples-js';
+import type { Task } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
 import {
-  AskEncyclopediaSchema,
-  McpGetCapabilitiesResponseSchema,
-  type McpGetCapabilitiesResponse,
-  SwapTokensSchema,
-} from 'ember-schemas';
+  GetTokensResponseSchema,
+  type Token,
+} from 'ember-api';
 
 const providerSelector = createProviderSelector({
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
@@ -39,6 +37,7 @@ const providerSelector = createProviderSelector({
   hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
 });
 
+<<<<<<< HEAD
 const availableProviders = getAvailableProviders(providerSelector);
 
 if (availableProviders.length === 0) {
@@ -63,14 +62,35 @@ console.log(
   `Swapping Agent using provider: ${preferredProvider}` +
     (modelOverride ? ` (model: ${modelOverride})` : '')
 );
+=======
+const CHAIN_MAPPINGS = [
+  { id: '1', names: ['ethereum', 'mainnet', 'eth'] },
+  { id: '42161', names: ['arbitrum', 'arbitrum one', 'arb'] },
+  { id: '10', names: ['optimism', 'op'] },
+  { id: '137', names: ['polygon', 'matic'] },
+  { id: '8453', names: ['base'] },
+];
+>>>>>>> main
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const CACHE_FILE_PATH = path.join(__dirname, '..', '.cache', 'swap_capabilities.json');
 
 function logError(...args: unknown[]) {
   console.error(...args);
 }
+
+// Local tool schemas
+const SwapTokensSchema = z.object({
+  amount: z.string().describe('The amount of the token to swap'),
+  fromToken: z.string().describe('The token symbol to swap from'),
+  toToken: z.string().describe('The token symbol to swap to'),
+  fromChain: z.string().optional().describe('The chain to swap from'),
+  toChain: z.string().optional().describe('The chain to swap to'),
+});
+
+const AskEncyclopediaSchema = z.object({
+  question: z.string().describe('Question about Camelot DEX'),
+});
 
 type SwappingToolSet = {
   swapTokens: Tool<typeof SwapTokensSchema, Task>;
@@ -124,16 +144,9 @@ export class Agent {
   private userAddress: Address | undefined;
   private quicknodeSubdomain: string;
   private quicknodeApiKey: string;
-  private tokenMap: Record<
-    string,
-    Array<{
-      chainId: string;
-      address: string;
-      decimals: number;
-    }>
-  > = {};
+  private tokenMap: Record<string, Array<Token>> = {};
   private availableTokens: string[] = [];
-  public conversationHistory: CoreMessage[] = [];
+  private conversationMap: Record<string, CoreMessage[]> = {};
   private mcpClient: Client | null = null;
   private toolSet: SwappingToolSet | null = null;
   private camelotContextContent: string = '';
@@ -167,162 +180,78 @@ export class Agent {
     return context;
   }
 
+  /**
+   * Populate the internal tokenMap with generic tokens returned by the onchain-actions getTokens tool.
+   * Duplicates (based on symbol + chainId) are ignored.
+   */
+  private populateGenericTokens(tokens: Token[]) {
+    if (!tokens || tokens.length === 0) {
+      this.log('No generic tokens provided to populateGenericTokens');
+      return;
+    }
+
+    let addedCount = 0;
+
+    tokens.forEach(token => {
+      const symbol = token.symbol;
+
+      if (!this.tokenMap[symbol]) {
+        this.tokenMap[symbol] = [];
+        this.availableTokens.push(symbol);
+      }
+
+      const existsOnChain = this.tokenMap[symbol]!.some(
+        t => t.tokenUid.chainId === token.tokenUid.chainId,
+      );
+
+      if (!existsOnChain) {
+        this.tokenMap[symbol]!.push(token);
+        addedCount++;
+      }
+    });
+
+    this.log(`Added ${addedCount} generic tokens to the token map. Total tokens: ${this.availableTokens.length}`);
+    
+    // Debug: Log first 20 available tokens to help with debugging
+    this.log('First 20 available tokens:', this.availableTokens.slice(0, 20).join(', '));
+  }
+
   async init() {
-    this.conversationHistory = [
-      {
-        role: 'system',
-        content: `You are an AI agent that provides access to blockchain swapping functionalities via Ember AI On-chain Actions. You use the tool "swapTokens" to swap or convert tokens. You can also answer questions about Camelot DEX using the "askEncyclopedia" tool.
-
-Available actions:
-- swapTokens: Only use if the user has provided the required parameters.
-- askEncyclopedia: Use when the user asks questions about Camelot DEX.
-
-<examples>
-<example1>
-<user>swap 1 ETH to USDC on Ethereum</user>
-<parameters>
-<amount>1</amount>
-<fromToken>ETH</fromToken>
-<toToken>USDC</toToken>
-<toChain>Ethereum</toChain>
-</parameters>
-</example1>
-
-<example2>
-<user>sell 89 fartcoin</user>
-<parameters>
-<amount>89</amount>
-<fromToken>fartcoin</fromToken>
-</parameters>
-*Note: Required "toToken" parameter is not provided. If it is not provided in the conversation history, you will need to ask the user for it.*
-</example2>
-
-<example3>
-<user>Convert 10.5 USDC to ETH</user>
-<parameters>
-<amount>10.5</amount>
-<fromToken>USDC</fromToken>
-<toToken>ETH</toToken>
-</parameters>
-</example3>
-
-<example4>
-<user>Swap 100.076 arb on arbitrum for dog on base</user>
-<parameters>
-<amount>100.076</amount>
-<fromToken>arb</fromToken>
-<toToken>dog</toToken>
-<fromChain>arbitrum</fromChain>
-<toChain>base</toChain>
-</parameters>
-</example4>
-
-<example5>
-<user>What is Camelot's liquidity mining program?</user>
-<tool_call> {"toolName": "askEncyclopedia", "args": { "question": "What is Camelot's liquidity mining program?" }} </tool_call>
-</example5>
-</examples>
-
-Use relavant conversation history to obtain required tool parameters. Present the user with a list of tokens and chains they can swap from and to if provided by the tool response. Never respond in markdown, always use plain text. Never add links to your response. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.`,
-      },
-    ];
-
-    let swapCapabilities: McpGetCapabilitiesResponse | undefined;
-    const useCache = process.env.AGENT_DEBUG === 'true';
-
-    this.log('Initializing MCP client via stdio...');
+    this.log('Initializing MCP client via HTTP...');
     try {
       this.mcpClient = new Client(
         { name: 'SwappingAgent', version: '1.0.0' },
         { capabilities: { tools: {}, resources: {}, prompts: {} } }
       );
 
-      const require = createRequire(import.meta.url);
-      const mcpToolPath = require.resolve('ember-mcp-tool-server');
+      const emberEndpoint = process.env.EMBER_ENDPOINT;
+      if (!emberEndpoint) {
+        throw new Error('EMBER_ENDPOINT environment variable not set');
+      }
 
-      this.log(`Connecting to MCP server at ${process.env.EMBER_ENDPOINT}`);
+      this.log(`Connecting to MCP server at ${emberEndpoint}`);
 
-      const transport = new StdioClientTransport({
-        command: 'node',
-        args: [mcpToolPath],
-        env: {
-          ...process.env,
-          EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'grpc.api.emberai.xyz:50051',
-        },
-      });
+      const transport = new StreamableHTTPClientTransport(new URL(emberEndpoint));
 
       await this.mcpClient.connect(transport);
-      this.log('MCP client initialized successfully.');
+      this.log('MCP client connected successfully.');
 
-      if (useCache) {
-        try {
-          await fs.access(CACHE_FILE_PATH);
-          this.log('Loading swap capabilities from cache...');
-          const cachedData = await fs.readFile(CACHE_FILE_PATH, 'utf-8');
-          const parsedJson = JSON.parse(cachedData);
-          const validationResult = McpGetCapabilitiesResponseSchema.safeParse(parsedJson);
-          if (validationResult.success) {
-            swapCapabilities = validationResult.data;
-            this.log('Cached capabilities loaded and validated successfully.');
-          } else {
-            logError('Cached capabilities validation failed:', validationResult.error);
-            logError('Data that failed validation:', JSON.stringify(parsedJson));
-            this.log('Proceeding to fetch fresh capabilities...');
-          }
-        } catch (error) {
-          if (error instanceof Error && error.message.includes('invalid JSON')) {
-            logError('Error reading or parsing cache file:', error);
-          } else {
-            this.log('Cache not found or invalid, fetching capabilities via MCP...');
-          }
-        }
-      }
+      // Fetch supported tokens via MCP getTokens
+      try {
+        this.log('Fetching supported tokens via MCP getTokens...');
 
-      if (!swapCapabilities) {
-        this.log('Fetching swap capabilities via MCP...');
-        swapCapabilities = await this.fetchAndCacheCapabilities();
-      }
+        const chainIds = CHAIN_MAPPINGS.map(mapping => mapping.id);
+        const getTokensArgs = chainIds.length > 0 ? { chainIds } : {};
 
-      this.log(
-        'swapCapabilities before processing (first 10 lines):',
-        swapCapabilities
-          ? JSON.stringify(swapCapabilities, null, 2).split('\n').slice(0, 10).join('\n')
-          : 'undefined'
-      );
-      if (swapCapabilities?.capabilities) {
-        this.tokenMap = {};
-        this.availableTokens = [];
-        swapCapabilities.capabilities.forEach(capabilityEntry => {
-          if (capabilityEntry.swapCapability) {
-            const swapCap = capabilityEntry.swapCapability;
-            swapCap.supportedTokens?.forEach(token => {
-              if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
-                const symbol = token.symbol;
-
-                let tokenList = this.tokenMap[symbol];
-
-                if (!tokenList) {
-                  tokenList = [];
-                  this.tokenMap[symbol] = tokenList;
-                  this.availableTokens.push(symbol);
-                }
-
-                tokenList.push({
-                  chainId: token.tokenUid.chainId,
-                  address: token.tokenUid.address,
-                  decimals: token.decimals ?? 18,
-                });
-              }
-            });
-          }
+        const tokensResult = await this.mcpClient.callTool({
+          name: 'getTokens',
+          arguments: getTokensArgs,
         });
-        this.log('Available Tokens Loaded Internally:', this.availableTokens);
-      } else {
-        logError(
-          'Failed to parse capabilities or no capabilities array found:',
-          swapCapabilities ? 'No capabilities array' : 'Invalid capabilities data'
-        );
-        this.log('Warning: Could not load available tokens from MCP server.');
+
+        const tokensResponse = parseMcpToolResponsePayload(tokensResult, GetTokensResponseSchema);
+        this.populateGenericTokens(tokensResponse.tokens);
+      } catch (err) {
+        this.log('Failed to fetch generic tokens via getTokens:', err);
       }
 
       await this._loadCamelotDocumentation();
@@ -386,14 +315,83 @@ Use relavant conversation history to obtain required tool parameters. Present th
       throw new Error('Agent not initialized. Call start() first.');
     }
     this.userAddress = userAddress;
+    
+    // Initialize conversation history for this user if not exists
+    if (!this.conversationMap[userAddress]) {
+      this.conversationMap[userAddress] = [
+        {
+          role: 'system',
+          content: `You are an AI agent that provides access to blockchain swapping functionalities via Ember AI On-chain Actions. You use the tool "swapTokens" to swap or convert tokens. You can also answer questions about Camelot DEX using the "askEncyclopedia" tool.
+
+Available actions:
+- swapTokens: Only use if the user has provided the required parameters.
+- askEncyclopedia: Use when the user asks questions about Camelot DEX.
+
+<examples>
+<example1>
+<user>swap 1 ETH to USDC on Ethereum</user>
+<parameters>
+<amount>1</amount>
+<fromToken>ETH</fromToken>
+<toToken>USDC</toToken>
+<toChain>Ethereum</toChain>
+</parameters>
+</example1>
+
+<example2>
+<user>sell 89 fartcoin</user>
+<parameters>
+<amount>89</amount>
+<fromToken>fartcoin</fromToken>
+</parameters>
+*Note: Required "toToken" parameter is not provided. If it is not provided in the conversation history, you will need to ask the user for it.*
+</example2>
+
+<example3>
+<user>Convert 10.5 USDC to ETH</user>
+<parameters>
+<amount>10.5</amount>
+<fromToken>USDC</fromToken>
+<toToken>ETH</toToken>
+</parameters>
+</example3>
+
+<example4>
+<user>Swap 100.076 arb on arbitrum for dog on base</user>
+<parameters>
+<amount>100.076</amount>
+<fromToken>arb</fromToken>
+<toToken>dog</toToken>
+<fromChain>arbitrum</fromChain>
+<toChain>base</toChain>
+</parameters>
+</example4>
+
+<example5>
+<user>What is Camelot's liquidity mining program?</user>
+<tool_call> {"toolName": "askEncyclopedia", "args": { "question": "What is Camelot's liquidity mining program?" }} </tool_call>
+</example5>
+</examples>
+
+Use relavant conversation history to obtain required tool parameters. Present the user with a list of tokens and chains they can swap from and to if provided by the tool response. Never respond in markdown, always use plain text. Never add links to your response. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.`,
+        },
+      ];
+    }
+    
+    const conversationHistory = this.conversationMap[userAddress];
     const userMessage: CoreUserMessage = { role: 'user', content: userInput };
-    this.conversationHistory.push(userMessage);
+    conversationHistory.push(userMessage);
 
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
+<<<<<<< HEAD
         model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
         messages: this.conversationHistory,
+=======
+        model: openrouter('google/gemini-2.5-flash-preview'),
+        messages: conversationHistory,
+>>>>>>> main
         tools: this.toolSet,
         maxSteps: 10,
         onStepFinish: async (stepResult: StepResult<typeof this.toolSet>) => {
@@ -418,7 +416,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
         }
       });
 
-      this.conversationHistory.push(...response.messages);
+      conversationHistory.push(...response.messages);
 
       const lastToolResultMessage = response.messages
         .slice()
@@ -442,7 +440,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
             processedToolResult = toolResultPart.result as Task;
             this.log(`Tool Result State: ${processedToolResult?.status?.state ?? 'N/A'}`);
             const firstPart = processedToolResult?.status?.message?.parts[0];
-            const messageText = firstPart && firstPart.type === 'text' ? firstPart.text : 'N/A';
+            const messageText = firstPart && firstPart.kind === 'text' ? firstPart.text : 'N/A';
             this.log(`Tool Result Message: ${messageText}`);
           } else {
             this.log('Tool result part content is null or undefined.');
@@ -462,7 +460,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
             this.log(
               `Task finished with state ${processedToolResult.status.state}. Clearing conversation history.`
             );
-            this.conversationHistory = [];
+            this.conversationMap[userAddress] = [];
             return processedToolResult;
           case 'input-required':
           case 'submitted':
@@ -473,13 +471,17 @@ Use relavant conversation history to obtain required tool parameters. Present th
             this.log(`Unexpected task state: ${processedToolResult.status.state}`);
             return {
               id: this.userAddress || 'unknown-user',
+              contextId: `unknown-${Date.now()}`,
+              kind: 'task',
               status: {
-                state: 'failed',
+                state: TaskState.Failed,
                 message: {
                   role: 'agent',
+                  messageId: `msg-${Date.now()}`,
+                  kind: 'message',
                   parts: [
                     {
-                      type: 'text',
+                      kind: 'text',
                       text: `Agent encountered unexpected task state: ${processedToolResult.status.state}`,
                     },
                   ],
@@ -494,10 +496,17 @@ Use relavant conversation history to obtain required tool parameters. Present th
           'No specific tool task processed or returned. Returning final text response as completed task.'
         );
         return {
-          id: this.userAddress,
+          id: this.userAddress || 'unknown-user',
+          contextId: `text-response-${Date.now()}`,
+          kind: 'task',
           status: {
-            state: 'completed',
-            message: { role: 'agent', parts: [{ type: 'text', text: text }] },
+            state: TaskState.Completed,
+            message: { 
+              role: 'agent', 
+              messageId: `msg-${Date.now()}`,
+              kind: 'message',
+              parts: [{ kind: 'text', text: text }] 
+            },
           },
         };
       }
@@ -512,68 +521,8 @@ Use relavant conversation history to obtain required tool parameters. Present th
         role: 'assistant',
         content: String(error),
       };
-      this.conversationHistory.push(errorAssistantMessage);
+      conversationHistory.push(errorAssistantMessage);
       throw error;
-    }
-  }
-
-  private async fetchAndCacheCapabilities(): Promise<McpGetCapabilitiesResponse> {
-    this.log('Fetching swap capabilities via MCP...');
-    if (!this.mcpClient) {
-      throw new Error('MCP Client not initialized. Cannot fetch capabilities.');
-    }
-
-    try {
-      const mcpTimeoutMs = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '30000', 10);
-      this.log(`Using MCP tool timeout: ${mcpTimeoutMs}ms`);
-
-      const capabilitiesResult = await this.mcpClient.callTool(
-        {
-          name: 'getCapabilities',
-          arguments: { type: 'SWAP' },
-        },
-        undefined,
-        { timeout: mcpTimeoutMs }
-      );
-
-      this.log('Raw capabilitiesResult received from MCP.');
-
-      const dataToValidate = parseMcpToolResponsePayload(capabilitiesResult, z.any());
-
-      const validationResult = McpGetCapabilitiesResponseSchema.safeParse(dataToValidate);
-
-      this.log('Validation performed on potentially parsed data.');
-      const validationResultString = JSON.stringify(validationResult, null, 2);
-      this.log(
-        'Validation result (first 10 lines):\n',
-        validationResultString.split('\n').slice(0, 10).join('\n') +
-          (validationResultString.includes('\n') ? '\n... (truncated)' : '')
-      );
-
-      if (!validationResult.success) {
-        logError('Fetched capabilities validation failed:', validationResult.error);
-        logError('Data that failed validation:', JSON.stringify(dataToValidate));
-        throw new Error(
-          `Fetched capabilities failed validation: ${validationResult.error.message}`
-        );
-      }
-
-      const capabilities = validationResult.data;
-
-      try {
-        await fs.mkdir(path.dirname(CACHE_FILE_PATH), { recursive: true });
-        await fs.writeFile(CACHE_FILE_PATH, JSON.stringify(capabilities, null, 2), 'utf-8');
-        this.log('Swap capabilities cached successfully.');
-      } catch (cacheError) {
-        logError('Failed to cache capabilities:', cacheError);
-      }
-
-      return capabilities;
-    } catch (error) {
-      logError('Error fetching or validating capabilities via MCP:', error);
-      throw new Error(
-        `Failed to fetch/validate capabilities from MCP server: ${(error as Error).message}`
-      );
     }
   }
 

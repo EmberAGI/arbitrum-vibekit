@@ -20,6 +20,6 @@ export type {
 } from './types.js';
 export {
   BorrowRepaySupplyWithdrawSchema,
-  GetUserPositionsSchema,
+  GetWalletLendingPositionsSchema,
   AskEncyclopediaSchema,
-} from './schemas.js';
+} from 'ember-schemas';

@@ -1,11 +1,12 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import type { Task } from 'a2a-samples-js';
-import cors from 'cors';
 import * as dotenv from 'dotenv';
 import express from 'express';
 import { isAddress } from 'viem';
+import cors from 'cors';
 import { z } from 'zod';
+import type { Task } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
 
 import { Agent } from './agent.js';
 
@@ -13,7 +14,7 @@ const LiquidityAgentSchema = z.object({
   instruction: z
     .string()
     .describe(
-      "A natural‑language liquidity management directive, e.g. 'Supply 1 WETH and 1500 USDC to WETH/USDC pool' or question to ask the agent, e.g. 'What are my liquidity positions?'."
+      "A natural‑language liquidity directive, e.g. 'Supply liquidity to WETH/USDC' or 'Withdraw position 1' or question to ask the agent, e.g. 'What are my positions?' or 'What pools are available?'."
     ),
   userAddress: z
     .string()
@@ -24,7 +25,7 @@ type LiquidityAgentArgs = z.infer<typeof LiquidityAgentSchema>;
 dotenv.config();
 
 const server = new McpServer({
-  name: 'mcp-sse-liquidity-agent-server',
+  name: 'liquidity-agent-server',
   version: '1.0.0',
 });
 
@@ -43,7 +44,7 @@ const initializeAgent = async (): Promise<void> => {
 
 const agentToolName = 'askLiquidityAgent';
 const agentToolDescription =
-  'Sends a free‑form, natural‑language liquidity instruction to this Camelot liquidity AI agent and returns a structured response (info or transaction plan). This agent can manage your liquidity positions on Camelot.';
+  'Sends a free‑form, natural‑language liquidity instruction to this liquidity management AI agent and returns a structured quote including transaction data. You can also ask questions to the agent about liquidity pools and positions.';
 
 server.tool(
   agentToolName,
@@ -66,12 +67,15 @@ server.tool(
       const err = error as Error;
       const errorTask: Task = {
         id: userAddress,
-        //sessionId: 'c295ea44-7543-4f78-b524-7a38915ad6e4',
+        contextId: `error-${Date.now()}`,
+        kind: 'task',
         status: {
-          state: 'failed',
+          state: TaskState.Failed,
           message: {
             role: 'agent',
-            parts: [{ type: 'text', text: `Error: ${err.message}` }],
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
+            parts: [{ kind: 'text', text: `Error: ${err.message}` }],
           },
         },
       };
@@ -89,7 +93,7 @@ app.use(cors());
 
 app.get('/', (_req, res) => {
   res.json({
-    name: 'MCP SSE Liquidity Agent Server',
+    name: 'Liquidity Agent No Wallet Server',
     version: '1.0.0',
     status: 'running',
     endpoints: {
@@ -137,12 +141,12 @@ app.post('/messages', async (req, res) => {
   await transport.handlePostMessage(req, res);
 });
 
-const PORT = 3002;
+const PORT = 3001;
 const main = async () => {
   try {
     await initializeAgent();
     app.listen(PORT, () => {
-      console.error(`MCP SSE Liquidity Agent Server running on port ${PORT}`);
+      console.error(`MCP SSE Agent Server running on port ${PORT}`);
     });
   } catch (error: unknown) {
     const err = error as Error;
