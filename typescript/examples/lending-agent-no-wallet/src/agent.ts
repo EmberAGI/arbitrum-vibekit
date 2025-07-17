@@ -525,7 +525,12 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
 
     try {
       console.error('Calling generateText with Vercel AI SDK...');
-      const { text, toolResults, finishReason, response } = await generateText({
+      const {
+        text,
+        toolResults: _toolResults,
+        finishReason,
+        response,
+      } = await generateText({
         model: modelOverride ? this.provider(modelOverride) : this.provider(),
         system: this.conversationHistory.find(m => m.role === 'system')?.content as string,
         messages: this.conversationHistory.filter(m => m.role !== 'system') as (

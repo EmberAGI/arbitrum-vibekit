@@ -151,15 +151,6 @@ export function getChainConfigById(chainId: string): ChainConfig {
   return { viemChain: viemChain as Chain, quicknodeSegment };
 }
 
-// Define the extended schema with concrete values
-type SupplyLiquidityExtendedSchema = z.ZodObject<{
-  pair: z.ZodEnum<[string, ...string[]]>;
-  amount0: z.ZodString;
-  amount1: z.ZodString;
-  priceFrom: z.ZodString;
-  priceTo: z.ZodString;
-}>;
-
 export class Agent {
   private mcpClient: Client | null = null;
   private quicknodeSubdomain: string;

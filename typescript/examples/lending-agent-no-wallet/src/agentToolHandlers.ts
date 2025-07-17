@@ -1,8 +1,4 @@
-import { z } from 'zod';
 import {
-  BorrowRepaySupplyWithdrawSchema,
-  GetWalletLendingPositionsSchema,
-  LendingAskEncyclopediaSchema,
   BorrowResponseSchema,
   RepayResponseSchema,
   SupplyResponseSchema,
