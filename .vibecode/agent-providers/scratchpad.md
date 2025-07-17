@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Project: Refactor Agents to Use Provider Selector
 
-Last Updated: 2025-06-20T09:15:00Z
+Last Updated: 2025-06-20T09:30:00Z
 Current Role: Executor
 
 ## Background and Motivation
@@ -365,6 +365,35 @@ The linter errors shown are likely due to missing dependencies or build state an
   • All provider selector tests now pass (9 unit tests, 10 integration tests)
   • Note: The temporary test script was created for refactoring verification only - comprehensive tests already existed in the core library
 
+2025-06-20T09:30:00Z – Quickstart Agent Test Refactoring:
+• Initially kept quickstart-agent test using OpenRouter directly (mistakenly thought user preferred this)
+• User correctly identified this as inconsistent with refactoring goals
+• Updated test/integration.test.ts to use provider selector pattern:
+
+- Replaced createOpenRouter import with createProviderSelector and getAvailableProviders
+- Updated both test instances to use provider selector instead of direct OpenRouter
+- Removed @openrouter/ai-sdk-provider from devDependencies
+  • Verified build passes without compilation errors
+  • Note: @openrouter/ai-sdk-provider remains in pnpm catalog as it's needed by arbitrum-vibekit-core and clients/web
+
+2025-01-17T19:20:00Z – Comprehensive Test Execution:
+• Executed all tests in the repository (excluding those requiring anvil)
+• Test Results:
+
+- arbitrum-vibekit-core: 19/19 tests passed ✅
+- quickstart-agent: 29/29 tests passed ✅
+- langgraph-workflow-agent: 50/50 tests passed ✅
+- allora-price-prediction-agent: Initially had 3 failures due to model availability
+  • Fixed model name issue:
+- Changed `google/gemini-2.5-flash-preview` to `google/gemini-2.5-flash` in:
+  - templates/allora-price-prediction-agent/test/integration.test.ts
+  - clients/web/lib/ai/providers.ts
+  - clients/web/docs/update-models.md
+- After fix: allora-price-prediction-agent: 29/29 tests passed ✅
+  • Total: 127 tests passed, 0 failed (for non-anvil tests)
+  • Skipped 4 packages that require anvil (lending-agent-no-wallet, swapping-agent-no-wallet, pendle-agent, liquidity-agent-no-wallet)
+  • Web client tests have SSR environment issues (indexedDB not available in Node.js)
+
 ## Summary of Completed Work
 
 1. **Provider Selector Refactoring**: All example and template agents now use the centralized provider selector
@@ -376,6 +405,8 @@ The linter errors shown are likely due to missing dependencies or build state an
 7. **Dockerfile Verification**: All Dockerfiles properly configured for runtime env vars
 8. **Testing**: Provider selection logic thoroughly tested and verified working
 9. **Graceful Shutdown**: All agents have SIGINT/SIGTERM handlers
+10. **Comprehensive Test Execution**: Successfully ran and passed all 127 non-anvil tests across 4 packages
+11. **Model Name Fixes**: Updated incorrect `google/gemini-2.5-flash-preview` references to `google/gemini-2.5-flash` in 3 files
 
 ## Remaining Tasks
 
