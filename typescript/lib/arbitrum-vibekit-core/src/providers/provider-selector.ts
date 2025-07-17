@@ -14,7 +14,7 @@ export interface ProviderSelectorConfig {
 export interface ProviderSelector {
   openrouter?: (model?: string) => LanguageModelV1;
   openai?: (model?: string) => LanguageModelV1;
-  grok?: (model?: string) => LanguageModelV1;
+  xai?: (model?: string) => LanguageModelV1;
   hyperbolic?: (model?: string) => LanguageModelV1;
 }
 
@@ -34,10 +34,10 @@ export function createProviderSelector(config: ProviderSelectorConfig): Provider
     selector.openai = (model?: string) => openaiInstance(model || 'gpt-4o');
   }
 
-  // Only add Grok if API key is provided
+  // Only add XAI if API key is provided
   if (config.xaiApiKey) {
     const xaiInstance = createXai({ apiKey: config.xaiApiKey });
-    selector.grok = (model?: string) => xaiInstance(model || 'grok-3');
+    selector.xai = (model?: string) => xaiInstance(model || 'grok-3');
   }
 
   // Only add Hyperbolic if API key is provided

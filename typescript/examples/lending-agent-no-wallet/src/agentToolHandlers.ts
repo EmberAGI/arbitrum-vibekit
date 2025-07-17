@@ -1,18 +1,22 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Task } from '@google-a2a/types';
-import { TaskState } from '@google-a2a/types';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { streamText } from 'ai';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
+import { z } from 'zod';
 import {
-  SupplyResponseSchema,
-  WithdrawResponseSchema,
+  BorrowRepaySupplyWithdrawSchema,
+  GetWalletLendingPositionsSchema,
+  LendingAskEncyclopediaSchema,
   BorrowResponseSchema,
   RepayResponseSchema,
+  SupplyResponseSchema,
+  WithdrawResponseSchema,
   GetWalletLendingPositionsResponseSchema,
   type TokenInfo,
   type LendingTransactionArtifact,
 } from 'ember-schemas';
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { LanguageModelV1 } from 'ai';
+import type { Task } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
+import { streamText } from 'ai';
+import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 
 export interface HandlerContext {
   mcpClient: Client;
@@ -23,6 +27,7 @@ export interface HandlerContext {
   quicknodeApiKey: string;
   openRouterApiKey: string;
   aaveContextContent: string;
+  provider: (model?: string) => LanguageModelV1;
 }
 
 export type FindTokenResult =
@@ -701,10 +706,6 @@ export async function handleAskEncyclopedia(
       };
     }
 
-    const openrouter = createOpenRouter({
-      apiKey: openRouterApiKey,
-    });
-
     const systemPrompt = `You are an Aave protocol expert. The following information is your own knowledge and expertise - do not refer to it as provided, given, or external information. Speak confidently in the first person as the expert you are.
 
 Do not say phrases like "Based on my knowledge" or "According to the information". Instead, simply state the facts directly as an expert would.
@@ -713,9 +714,9 @@ If you don't know something, simply say "I don't know" or "I don't have informat
 
 ${aaveContextContent}`;
 
-    log('Calling OpenRouter model...');
+    log('Calling AI model...');
     const { textStream } = await streamText({
-      model: openrouter('google/gemini-2.5-flash-preview'),
+      model: context.provider(),
       system: systemPrompt,
       prompt: question,
     });

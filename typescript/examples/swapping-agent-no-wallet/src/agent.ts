@@ -14,6 +14,7 @@ import {
   type CoreUserMessage,
   type CoreAssistantMessage,
   type StepResult,
+  type LanguageModelV1,
 } from 'ai';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import { type Address } from 'viem';
@@ -145,10 +146,12 @@ export class Agent {
   private mcpClient: Client | null = null;
   private toolSet: SwappingToolSet | null = null;
   private camelotContextContent: string = '';
+  private provider: (model?: string) => LanguageModelV1;
 
   constructor(quicknodeSubdomain: string, quicknodeApiKey: string) {
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
+    this.provider = selectedProvider!;
 
     // provider availability validated at module load time.
   }
@@ -171,6 +174,7 @@ export class Agent {
       quicknodeApiKey: this.quicknodeApiKey,
       openRouterApiKey: process.env.OPENROUTER_API_KEY,
       camelotContextContent: this.camelotContextContent,
+      provider: this.provider,
     };
     return context;
   }
@@ -382,7 +386,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
-        model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
+        model: modelOverride ? this.provider(modelOverride) : this.provider(),
         messages: conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,

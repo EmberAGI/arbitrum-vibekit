@@ -1,9 +1,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
 import type { Task } from '@google-a2a/types';
 import { TaskState } from '@google-a2a/types';
-import { streamText } from 'ai';
+import { streamText, type LanguageModelV1 } from 'ai';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import {
   SwapTokensResponseSchema,
@@ -32,6 +31,7 @@ export interface HandlerContext {
   quicknodeApiKey: string;
   openRouterApiKey?: string;
   camelotContextContent: string;
+  provider: (model?: string) => LanguageModelV1;
 }
 
 function findTokensCaseInsensitive(
@@ -515,10 +515,6 @@ export async function handleAskEncyclopedia(
       };
     }
 
-    const openrouter = createOpenRouter({
-      apiKey: openRouterApiKey,
-    });
-
     const systemPrompt = `You are a Camelot DEX expert. The following information is your own knowledge and expertise - do not refer to it as provided, given, or external information. Speak confidently in the first person as the expert you are.
 
 Do not say phrases like "Based on my knowledge" or "According to the information". Instead, simply state the facts directly as an expert would.
@@ -527,9 +523,9 @@ If you don't know something, simply say "I don't know" or "I don't have informat
 
 ${camelotContextContent}`;
 
-    log('Calling OpenRouter model...');
+    log('Calling AI model...');
     const { textStream } = await streamText({
-      model: openrouter('google/gemini-2.5-flash-preview'),
+      model: context.provider(),
       system: systemPrompt,
       prompt: question,
     });

@@ -135,10 +135,12 @@ export class Agent {
   public conversationHistory: CoreMessage[] = [];
   private userAddress?: string;
   private aaveContextContent: string = '';
+  private provider: (model?: string) => LanguageModelV1;
 
   constructor(quicknodeSubdomain: string, quicknodeApiKey: string) {
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
+    this.provider = selectedProvider!;
   }
 
   async init(): Promise<void> {
@@ -524,7 +526,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
     try {
       console.error('Calling generateText with Vercel AI SDK...');
       const { text, toolResults, finishReason, response } = await generateText({
-        model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
+        model: modelOverride ? this.provider(modelOverride) : this.provider(),
         system: this.conversationHistory.find(m => m.role === 'system')?.content as string,
         messages: this.conversationHistory.filter(m => m.role !== 'system') as (
           | CoreUserMessage
@@ -622,6 +624,7 @@ Always use plain text. Do not suggest the user to ask questions. When an unknown
       quicknodeApiKey: this.quicknodeApiKey,
       openRouterApiKey: process.env.OPENROUTER_API_KEY!,
       aaveContextContent: this.aaveContextContent,
+      provider: this.provider,
     };
   }
 

@@ -9,10 +9,15 @@ import { describe, it, before, after } from 'mocha';
 import { expect } from 'chai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import { Agent, AgentConfig, type StdioMcpConfig } from 'arbitrum-vibekit-core';
+import {
+  Agent,
+  AgentConfig,
+  type StdioMcpConfig,
+  createProviderSelector,
+  getAvailableProviders,
+} from 'arbitrum-vibekit-core';
 import * as http from 'http';
 import { spawn, type ChildProcess } from 'child_process';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import 'dotenv/config';
@@ -26,17 +31,27 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
   let baseUrl: string;
   const port = 3456; // Use a different port to avoid conflicts
 
-  before(async function() {
+  before(async function () {
     console.log('🚀 Starting Hello Quickstart Agent for integration testing...');
 
-    // Create the agent with test configuration
-    const openrouter = createOpenRouter({
-      apiKey: process.env.OPENROUTER_API_KEY || 'test-api-key',
+    // Create the agent with test configuration using provider selector
+    const providers = createProviderSelector({
+      openRouterApiKey: process.env.OPENROUTER_API_KEY || 'test-api-key',
+      openaiApiKey: process.env.OPENAI_API_KEY,
+      xaiApiKey: process.env.XAI_API_KEY,
+      hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
     });
+
+    const available = getAvailableProviders(providers);
+    if (available.length === 0) {
+      throw new Error('No AI providers configured for testing');
+    }
+
+    const selectedProvider = providers[available[0] as keyof typeof providers];
 
     agent = Agent.create(agentConfig, {
       llm: {
-        model: openrouter('anthropic/claude-3.5-sonnet'),
+        model: selectedProvider!('anthropic/claude-3.5-sonnet'),
       },
       cors: true,
       basePath: '/api/v1',
@@ -96,7 +111,7 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
     it('GET /.well-known/agent.json returns AgentCard', async () => {
       const response = await fetch(`${baseUrl}/api/v1/.well-known/agent.json`);
       expect(response.status).to.equal(200);
-      const agentCard = await response.json() as any;
+      const agentCard = (await response.json()) as any;
 
       // Validate AgentCard structure
       expect(agentCard).to.have.property('type', 'AgentCard');
@@ -161,7 +176,7 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
   });
 
   describe('Skill Testing - LLM Orchestration', () => {
-    it('greet skill with formal style (LLM chooses formal tool)', async function() {
+    it('greet skill with formal style (LLM chooses formal tool)', async function () {
       this.timeout(50000); // 50 second timeout for LLM operations
       const result = await mcpClient.callTool({
         name: 'greet-skill',
@@ -183,7 +198,7 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
       }
     });
 
-    it('greet skill with casual style (LLM chooses casual tool)', async function() {
+    it('greet skill with casual style (LLM chooses casual tool)', async function () {
       this.timeout(50000); // 50 second timeout for LLM operations
       const result = await mcpClient.callTool({
         name: 'greet-skill',
@@ -204,7 +219,7 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
       }
     });
 
-    it('greet skill with localized style (tests hooks)', async function() {
+    it('greet skill with localized style (tests hooks)', async function () {
       this.timeout(50000); // 50 second timeout for LLM operations
       const result = await mcpClient.callTool({
         name: 'greet-skill',
@@ -340,7 +355,7 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
   });
 
   describe('Context & MCP Integration', () => {
-    it('Context provider can load data from MCP servers', async function() {
+    it('Context provider can load data from MCP servers', async function () {
       this.timeout(40000); // 40 second timeout for this test
       // First, ensure the original agent is properly stopped
       console.log('Stopping original agent...');
@@ -364,12 +379,19 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
       const testPort = 3457;
       const testBaseUrl = `http://localhost:${testPort}`;
 
-      // Create a new agent with context
+      // Create a new agent with context using provider selector
+      const contextProviders = createProviderSelector({
+        openRouterApiKey: process.env.OPENROUTER_API_KEY || 'test-api-key',
+        openaiApiKey: process.env.OPENAI_API_KEY,
+        xaiApiKey: process.env.XAI_API_KEY,
+        hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
+      });
+      const contextAvailable = getAvailableProviders(contextProviders);
+      const contextProvider = contextProviders[contextAvailable[0] as keyof typeof contextProviders];
+
       const agentWithContext = Agent.create(agentConfig, {
         llm: {
-          model: createOpenRouter({
-            apiKey: process.env.OPENROUTER_API_KEY || 'test-api-key',
-          })('anthropic/claude-3.5-sonnet'),
+          model: contextProvider!('anthropic/claude-3.5-sonnet'),
         },
         cors: true,
         basePath: '/api/v1',
@@ -498,7 +520,7 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
       });
     });
 
-    it('Graceful shutdown with SIGINT', async function() {
+    it('Graceful shutdown with SIGINT', async function () {
       this.timeout(20000); // 20 second timeout for this test
       // Create a subprocess to test SIGINT handling
       const agentPath = path.join(process.cwd(), 'src', 'index.ts');
@@ -585,7 +607,7 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
   });
 
   describe('Advanced Features', () => {
-    it('withHooks utility enhances tool execution', async function() {
+    it('withHooks utility enhances tool execution', async function () {
       this.timeout(30000); // 30 second timeout for this test
       // After the context provider test, we need to ensure the MCP client is still connected
       // The context provider test stops and restarts the agent, which might invalidate our connection
