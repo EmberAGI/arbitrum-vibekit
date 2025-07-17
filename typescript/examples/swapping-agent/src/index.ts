@@ -136,3 +136,16 @@ const main = async () => {
 };
 
 main();
+
+// Graceful shutdown
+const shutdown = async (signal: string) => {
+  console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
+  if (agent) {
+    await agent.stop();
+  }
+  process.exit(0);
+};
+
+['SIGINT', 'SIGTERM'].forEach(sig => {
+  process.on(sig, () => shutdown(sig));
+});

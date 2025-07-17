@@ -75,6 +75,10 @@ logs/
 .vercel
 
 # Playwright
+**/test-results/
+**/playwright-report/
+**/blob-report/
+**/playwright/*
 /test-results/
 /playwright-report/
 /blob-report/

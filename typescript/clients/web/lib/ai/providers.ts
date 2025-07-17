@@ -1,18 +1,9 @@
-import {
-  customProvider,
-  extractReasoningMiddleware,
-  wrapLanguageModel,
-} from 'ai';
+import { customProvider, extractReasoningMiddleware, wrapLanguageModel } from 'ai';
 import { groq } from '@ai-sdk/groq';
 import { xai } from '@ai-sdk/xai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { isTestEnvironment } from '../constants';
-import {
-  artifactModel,
-  chatModel,
-  reasoningModel,
-  titleModel,
-} from './models.test';
+import { artifactModel, chatModel, reasoningModel, titleModel } from './models.test';
 
 const openRouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -40,8 +31,8 @@ export const openRouterProvider = isTestEnvironment
             effort: 'medium',
           },
         }),
-        'title-model': openRouter('google/gemini-2.5-flash-preview'),
-        'artifact-model': openRouter('google/gemini-2.5-flash-preview'),
+        'title-model': openRouter('google/gemini-2.5-flash'),
+        'artifact-model': openRouter('google/gemini-2.5-flash'),
       },
       imageModels: {
         'small-model': xai.image('grok-2-image'),

@@ -12,10 +12,10 @@ export interface ProviderSelectorConfig {
 }
 
 export interface ProviderSelector {
-  openrouter?: (model: string) => LanguageModelV1;
-  openai?: (model: string) => LanguageModelV1;
-  grok?: (model: string) => LanguageModelV1;
-  hyperbolic?: (model: string) => LanguageModelV1;
+  openrouter?: (model?: string) => LanguageModelV1;
+  openai?: (model?: string) => LanguageModelV1;
+  xai?: (model?: string) => LanguageModelV1;
+  hyperbolic?: (model?: string) => LanguageModelV1;
 }
 
 export function createProviderSelector(config: ProviderSelectorConfig): ProviderSelector {
@@ -24,25 +24,27 @@ export function createProviderSelector(config: ProviderSelectorConfig): Provider
   // Only add OpenRouter if API key is provided
   if (config.openRouterApiKey) {
     const openRouterInstance = createOpenRouter({ apiKey: config.openRouterApiKey });
-    selector.openrouter = (model: string) => openRouterInstance(model);
+    selector.openrouter = (model?: string) =>
+      openRouterInstance(model || 'google/gemini-2.5-flash');
   }
 
   // Only add OpenAI if API key is provided
   if (config.openaiApiKey) {
     const openaiInstance = createOpenAI({ apiKey: config.openaiApiKey });
-    selector.openai = (model: string) => openaiInstance(model);
+    selector.openai = (model?: string) => openaiInstance(model || 'gpt-4o');
   }
 
-  // Only add Grok if API key is provided
+  // Only add XAI if API key is provided
   if (config.xaiApiKey) {
     const xaiInstance = createXai({ apiKey: config.xaiApiKey });
-    selector.grok = (model: string) => xaiInstance(model);
+    selector.xai = (model?: string) => xaiInstance(model || 'grok-3');
   }
 
   // Only add Hyperbolic if API key is provided
   if (config.hyperbolicApiKey) {
     const hyperbolicInstance = createHyperbolic({ apiKey: config.hyperbolicApiKey });
-    selector.hyperbolic = (model: string) => hyperbolicInstance(model);
+    selector.hyperbolic = (model?: string) =>
+      hyperbolicInstance(model || 'meta-llama/Llama-3.3-70B-Instruct');
   }
 
   // Warn if no providers are configured
