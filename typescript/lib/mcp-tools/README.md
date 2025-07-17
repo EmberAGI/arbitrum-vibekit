@@ -40,7 +40,7 @@ If you'd like to speed up the setup process, consider using [FastMCP](https://gi
 
 2.  **Set Up the File Structure**:
 
-    Create a `src` folder with an `index.ts` file inside. This will be the main entry point for your tool server. You can look at [`emberai-mcp/src/index.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/mcp-tools/emberai-mcp/src/index.ts) as a reference implementation.
+    Create a `src` folder with an `index.ts` file inside. This will be the main entry point for your tool server. You can reference existing MCP tool implementations in this directory for guidance on structure and patterns.
 
 3.  **Define Configuration**:
 
@@ -131,7 +131,7 @@ server.tool(
 For advanced use cases, you can enhance your MCP tools with hooks that run before or after tool execution. This pattern, similar to [Anthropic's hooks concept for Claude Code](https://docs.anthropic.com/en/docs/claude-code/hooks), allows you to:
 
 - Add logging and monitoring
-- Validate inputs beyond schema validation  
+- Validate inputs beyond schema validation
 - Transform outputs or add metadata
 - Implement caching or rate limiting
 - Add authentication or authorization layers
@@ -149,7 +149,7 @@ const enhancedTool = withHooks(myBaseTool, {
   after: async (result, context) => {
     console.log('Tool result:', result);
     return result; // or transform it
-  }
+  },
 });
 ```
 

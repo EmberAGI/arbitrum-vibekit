@@ -97,8 +97,8 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 export async function contextProvider(deps: {
   mcpClients: Record<string, Client>;
 }): Promise<AgentContext> {
-  // Load token mapping from MCP server
-  const emberClient = deps.mcpClients['ember-mcp-tool-server'];
+  // Load token mapping from remote Ember MCP server
+  const emberClient = deps.mcpClients['ember'];
   let tokenMap = {};
 
   if (emberClient) {
@@ -120,6 +120,25 @@ export async function contextProvider(deps: {
   };
 }
 ```
+
+#### **Connecting to Remote MCP Servers**
+
+For remote MCP servers like Ember AI, you need to configure the connection transport. Here's how to connect to the remote Ember server:
+
+```ts
+// context/provider.ts
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/http.js';
+
+// The framework automatically sets up MCP clients based on your skills
+// For agents that need to access remote servers like Ember, ensure you have:
+// - EMBER_ENDPOINT=@http://api.emberai.xyz/mcp in your environment variables
+// - Skills that reference the remote MCP server
+
+// The ember client will be available as deps.mcpClients['ember']
+// when the framework initializes MCP clients for your skills
+```
+
+**Note:** The v2 framework automatically handles MCP client initialization when you define skills that reference external MCP servers. The transport configuration is managed internally based on your environment variables.
 
 ```ts
 // tools/getTokenInfo.ts

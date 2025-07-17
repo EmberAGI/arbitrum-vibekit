@@ -121,7 +121,7 @@ ENABLE_HISTORY=true
 ENABLE_ANALYTICS=true
 
 # External Service Dependencies
-EMBER_ENDPOINT=grpc.api.emberai.xyz:50051
+EMBER_ENDPOINT=@http://api.emberai.xyz/mcp
 QUICKNODE_API_KEY=qn_...
 ALCHEMY_API_KEY=alch_...
 

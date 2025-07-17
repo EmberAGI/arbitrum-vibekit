@@ -143,7 +143,7 @@ export async function contextProvider(deps: {
   mcpClients: Record<string, Client>;
 }): Promise<AgentContext> {
   // Load shared data from MCP servers at startup
-  const emberClient = deps.mcpClients['ember-mcp-tool-server'];
+  const emberClient = deps.mcpClients['ember'];
   const tokenMap = await loadTokenMapFromMcp(emberClient);
 
   return {

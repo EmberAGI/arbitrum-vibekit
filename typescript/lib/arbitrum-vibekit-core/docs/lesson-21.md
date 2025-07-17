@@ -219,6 +219,42 @@ agent
 
 ---
 
+### 🔌 External MCP Server Configuration
+
+When your agent needs to connect to external MCP servers (like Ember AI), the framework handles client initialization automatically. You just need to:
+
+1. **Set Environment Variables:**
+
+```bash
+# Remote MCP servers
+EMBER_ENDPOINT=@http://api.emberai.xyz/mcp
+ALLORA_ENDPOINT=@http://allora.example.com/mcp
+```
+
+2. **Reference in Skills:**
+
+```ts
+// The framework detects MCP server references in your skills
+// and automatically creates clients for them
+const emberClient = deps.mcpClients['ember']; // Available if EMBER_ENDPOINT is set
+```
+
+3. **Framework Auto-Discovery:**
+   The v2 framework automatically:
+
+- Detects MCP server references in your skills
+- Creates appropriate transport connections (`StreamableHTTPClientTransport` for HTTP endpoints)
+- Initializes clients before calling your context provider
+- Makes them available via `deps.mcpClients['server-name']`
+
+**Transport Configuration (Handled Automatically):**
+
+```ts
+// This is done internally by the framework:
+// const transport = new StreamableHTTPClientTransport(new URL(process.env.EMBER_ENDPOINT));
+// const emberClient = new Client({ name: 'ember', version: '1.0.0' }, { capabilities: {} });
+```
+
 ### 🔧 Complete Setup Example
 
 Here's a complete agent setup following best practices:
@@ -310,7 +346,7 @@ ENABLE_NOTIFICATIONS=false
 ENABLE_HISTORY=false
 
 # Service Dependencies
-EMBER_ENDPOINT=grpc.api.emberai.xyz:50051
+EMBER_ENDPOINT=@http://api.emberai.xyz/mcp
 QUICKNODE_API_KEY=your_quicknode_key
 ```
 
