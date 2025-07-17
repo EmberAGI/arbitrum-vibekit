@@ -43,13 +43,13 @@ const port = parseInt(process.env.CLIENT_PORT || "6274", 10);
 const host = process.env.HOST || "localhost";
 server.on("listening", () => {
   console.log(
-    `🔍 MCP Inspector is up and running at http://${host}:${port} 🚀`,
+    `🔍 EmberAI MCP Server is up and running at http://${host}:${port} 🚀`,
   );
 });
 server.on("error", (err) => {
   if (err.message.includes(`EADDRINUSE`)) {
     console.error(
-      `❌  MCP Inspector PORT IS IN USE at http://${host}:${port} ❌ `,
+      `❌  EmberAI MCP Server PORT IS IN USE at http://${host}:${port} ❌ `,
     );
   } else {
     throw err;

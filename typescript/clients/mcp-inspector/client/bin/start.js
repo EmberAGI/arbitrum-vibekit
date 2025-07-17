@@ -214,8 +214,8 @@ async function main() {
 
   console.log(
     isDev
-      ? "Starting MCP inspector in development mode..."
-      : "Starting MCP inspector...",
+      ? "Starting EmberAI MCP Server in development mode..."
+      : "Starting EmberAI MCP Server...",
   );
 
   // Generate session token for authentication

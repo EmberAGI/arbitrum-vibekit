@@ -70,7 +70,7 @@ async function runWebClient(args: Args): Promise<void> {
   const CLIENT_PORT: string = process.env.CLIENT_PORT ?? "6274";
   const SERVER_PORT: string = process.env.SERVER_PORT ?? "6277";
 
-  console.log("Starting MCP inspector...");
+  console.log("Starting EmberAI MCP Server...");
 
   const abort = new AbortController();
   let cancelled: boolean = false;
