@@ -158,7 +158,6 @@ export class Agent {
   private toolSet: LiquidityToolSet | null = null;
   public conversationHistory: CoreMessage[] = [];
   private userAddress?: string;
-  private model: LanguageModelV1;
   private liquidityPairs: LiquidityPair[] = [];
   private liquidityPositions: LiquidityPosition[] = [];
 
@@ -171,6 +170,10 @@ export class Agent {
     }
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
+  }
+
+  async log(...args: unknown[]) {
+    console.error(...args);
   }
 
   async init(): Promise<void> {
