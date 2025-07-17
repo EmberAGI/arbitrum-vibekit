@@ -1,6 +1,6 @@
 # Project: Ember Agent Framework Refactoring
 
-Last Updated: 2025-01-27T20:45:00Z
+Last Updated: 2025-01-27T23:45:00Z
 Current Role: Executor
 
 ## Background and Motivation
@@ -332,14 +332,14 @@ This approach allows for incremental adoption of modern tooling without disrupti
 
 - Description: Implement swap tools using hooks pattern
 - Success Criteria:
-  - Base swapTokens tool implementation
-  - Token resolution before hook
-  - Balance checking before hook
-  - Response formatting after hook
-  - Proper error handling and response formatting
-  - Integration with Ember MCP server
+  - Base swapTokens tool implementation ✅
+  - Token resolution before hook ✅
+  - Balance checking before hook ✅
+  - Response formatting after hook ✅
+  - Proper error handling and response formatting ✅
+  - Integration with Ember MCP server ❌ **BLOCKED - Framework only supports stdio MCP, not HTTP**
 - Dependencies: Task 1.4
-- Status: Not Started
+- Status: **Partially Complete - BLOCKED by Framework Limitation**
 
 #### Task 1.6: Documentation Skill with Camelot Tool
 
@@ -505,7 +505,7 @@ This approach allows for incremental adoption of modern tooling without disrupti
 - [x] Task 1.2: Core Agent Configuration (COMPLETED)
 - [x] Task 1.3: Context Provider Implementation (COMPLETED)
 - [x] Task 1.4: Swapping Skill Definition (COMPLETED)
-- [x] Task 1.5: Swapping Tools with Hooks (COMPLETED)
+- [!] Task 1.5: Swapping Tools with Hooks (**BLOCKED** - Cannot connect to Ember MCP HTTP server)
 - [x] Task 1.6: Documentation Skill with Camelot Tool (COMPLETED)
 - [ ] Task 1.7: Testing and CI for Phase 1
 
@@ -578,7 +578,7 @@ This approach allows for incremental adoption of modern tooling without disrupti
 - ✅ **Documentation covers full Camelot ecosystem** including GRAIL/xGRAIL tokenomics, AMM V2/V3/V4, Round Table program, launchpad, fees, and orbital expansion
 - 📝 **Ready for Task 1.7**: Testing and CI validation for Phase 1 completion
 
-**2025-01-27T22:45:00Z** - Task 1.5 Completed (Following Lending Agent Pattern):
+**2025-01-27T22:45:00Z** - Task 1.5 Partially Complete (BLOCKED by Framework):
 
 - ✅ **Created custom withHooks implementation** following lending agent's approach
 - ✅ **Implemented hook composition utilities** including `composeBeforeHooks`
@@ -587,10 +587,12 @@ This approach allows for incremental adoption of modern tooling without disrupti
 - ✅ **Balance checking hook** verifies sufficient balance with RPC calls
 - ✅ **Response formatting hook** parses MCP responses and creates transaction artifacts
 - ✅ **Clean hook composition** using `composeBeforeHooks(resolveTokensHook, checkBalanceHook)`
-- ✅ **Full integration** with Ember MCP server for token swap execution
+- ❌ **BLOCKED: Cannot integrate with Ember MCP server** - Framework only supports stdio (local process) MCP servers, not HTTP endpoints like `api.emberai.xyz/mcp`
+- ❌ **Using mock URLs** (`https://test-ember-server.com`) in all tests and implementations
 - ✅ **Comprehensive error handling** with proper A2A Task states
-- ✅ All tests passing (22/22) confirming successful implementation
-- ✅ **Framework Decision**: Using custom implementation until core framework adds this feature
+- ✅ All tests passing (22/22) but using mocked MCP server responses
+- 📝 **Framework Decision**: Using custom implementation until core framework adds this feature
+- 🚨 **CRITICAL BLOCKER**: Swapping cannot execute real transactions until framework supports HTTP MCP clients
 - Starting Task 1.6: Documentation Skill with Camelot Tool
 
 **2025-01-27T22:00:00Z** - Progress Validation Completed:
@@ -858,6 +860,67 @@ Until this enhancement is implemented:
 3. Manual verification required for actual Ember integration
 4. Consider using a local HTTP proxy that converts to stdio for testing
 
+## Outstanding Requirements to Complete Token Swapping
+
+### 🚨 CRITICAL BLOCKER: HTTP MCP Client Support
+
+The token swapping skill implementation is **functionally complete** but **cannot execute real transactions** because:
+
+1. **Framework Limitation**: Vibekit currently only supports `stdio` (local process) MCP servers
+2. **Ember Requires HTTP**: The actual Ember MCP server runs at `https://api.emberai.xyz/mcp`
+3. **Current State**: All swapping code uses mock URLs (`https://test-ember-server.com`)
+
+### What's Needed to Complete Swapping
+
+1. **Implement HTTP MCP Client Support in Vibekit Core**:
+
+   - Add `HttpMcpConfig` interface supporting URL-based servers
+   - Implement `StreamableHTTPClientTransport` from MCP SDK
+   - Update `setupSkillMcpClients()` to detect and handle HTTP servers
+   - Support authentication headers for Ember API key
+
+2. **Update Swapping Skill Configuration**:
+
+   ```typescript
+   mcpServers: {
+     "ember-onchain": {
+       url: process.env.EMBER_MCP_SERVER_URL || "https://api.emberai.xyz/mcp",
+       headers: {
+         Authorization: `Bearer ${process.env.EMBER_API_KEY}`,
+       },
+       alwaysAllow: ["getTokens", "swapTokens"],
+     },
+   }
+   ```
+
+3. **Remove Mock URLs from Implementation**:
+
+   - Replace all instances of `https://test-ember-server.com` with actual Ember URL
+   - Update tests to use real or properly mocked HTTP connections
+
+4. **Validate Real Transaction Execution**:
+   - Test actual token swaps on Arbitrum network
+   - Verify transaction artifacts are correctly generated
+   - Ensure proper error handling for network failures
+
+### Current Swapping Capabilities (with Mock Server)
+
+✅ **Implemented and Tested**:
+
+- Natural language token resolution ("swap USDC to ETH")
+- Multi-chain token disambiguation
+- Balance checking before swaps
+- Slippage protection
+- Transaction artifact generation
+- Comprehensive error handling
+- 22 tests passing
+
+❌ **Blocked by Framework**:
+
+- Cannot connect to real Ember MCP server
+- Cannot execute actual on-chain transactions
+- Cannot validate real token prices and routing
+
 ## Executor's Feedback or Assistance Requests
 
 **Critical Framework Enhancement Required:**
@@ -878,18 +941,28 @@ Despite the MCP limitation, the core documentation skill implementation is compl
 3. **Comprehensive Test Coverage**: 42 tests total (including integration tests) covering all aspects of both skills
 4. **Framework Integration**: Both swapping and documentation skills properly registered and working in agent
 
-**Phase 1 Status**: 6 of 7 tasks completed. Task 1.7 (Testing and CI) remains to finalize Phase 1 before proceeding to Phase 2 (Lending Skill).
+**Phase 1 Status**: 5 of 7 tasks completed, 1 task BLOCKED:
 
-**Recommendation**: Consider implementing the HTTP MCP client support as a parallel effort while continuing with mock-based testing for skill development.
+- Task 1.5 (Swapping Tools) is **BLOCKED** - cannot connect to real Ember MCP server
+- Task 1.7 (Testing and CI) remains
+- **CRITICAL**: Swapping skill cannot execute real transactions until framework supports HTTP MCP clients
+
+**Recommendation**: The HTTP MCP client support MUST be implemented before swapping can be considered complete. This is not optional - without it, the ember-agent cannot fulfill its core purpose of executing on-chain transactions.
 
 **Current Capabilities**:
 
-- ✅ Token swapping with intelligent routing and validation
-- ✅ Protocol documentation expert for Camelot DEX
+- ⚠️ Token swapping **implementation complete but non-functional** (using mock server)
+- ✅ Protocol documentation expert for Camelot DEX (fully functional)
 - ✅ Comprehensive test coverage with hybrid Mocha/Vitest strategy
 - ✅ Production-ready build and deployment configuration
+- ❌ **Cannot execute real transactions** due to framework limitation
 
-Ready to proceed with Task 1.7 or await instructions for Phase 2 planning.
+**Next Steps Required**:
+
+1. Implement HTTP MCP client support in Vibekit core (see detailed requirements above)
+2. Update swapping skill to use real Ember MCP server
+3. Validate with actual on-chain transactions
+4. Then proceed with Task 1.7 (CI) and Phase 2 (Lending Skill)
 
 ## Lessons Learned
 
