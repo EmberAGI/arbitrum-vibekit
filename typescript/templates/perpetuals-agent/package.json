@@ -1,0 +1,30 @@
+{
+  "name": "perpetuals-agent",
+  "version": "0.1.0",
+  "description": "GMX Perpetuals trading agent built with Arbitrum Vibekit",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc --build",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@google-a2a/types": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "arbitrum-vibekit-core": "workspace:*",
+    "ember-api": "workspace:*",
+    "ai": "catalog:",
+    "cors": "^2.8.5",
+    "dotenv": "catalog:",
+    "express": "catalog:",
+    "nanoid": "^5.0.7",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "prettier": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  }
+} 
