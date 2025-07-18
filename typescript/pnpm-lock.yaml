@@ -1203,6 +1203,9 @@ importers:
       nanoid:
         specifier: ^5.0.7
         version: 5.1.5
+      p-retry:
+        specifier: ^6.2.1
+        version: 6.2.1
       viem:
         specifier: ^2.26.3
         version: 2.31.7(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.76)
