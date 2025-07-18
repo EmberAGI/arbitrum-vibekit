@@ -8,7 +8,7 @@
 import { createSuccessTask, createErrorTask, type VibkitToolDefinition, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import { z } from 'zod';
 import type { LiquidationPreventionContext } from '../context/types.js';
-import { TransactionPlan, TransactionPlanSchema } from 'ember-schemas';
+import { TransactionPlan, TransactionPlanSchema, SupplyResponseSchema } from 'ember-schemas';
 import { parseUserPreferences, mergePreferencesWithDefaults, generatePreferencesSummary } from '../utils/userPreferences.js';
 
 // Input schema for supplyCollateral tool
@@ -37,29 +37,28 @@ export const supplyCollateralTool: VibkitToolDefinition<typeof SupplyCollateralP
       
       console.log(`💰 Supplying collateral: ${args.amount} tokens at ${args.tokenAddress} for user ${args.userAddress}`);
       console.log(`⚙️  User preferences: ${generatePreferencesSummary(mergedPrefs)}`);
-
-      // Ensure we have MCP clients available
-      if (!context.mcpClients) {
-        throw new Error('MCP clients not available in context');
-      }
-
-      // Access Ember MCP client
-      const emberClient = context.mcpClients['ember-mcp-tool-server'];
+      console.log('💰 args........:', args);
+      // Access Ember MCP client from custom context  
+      const emberClient = context.custom.mcpClient;
 
       if (!emberClient) {
-        throw new Error('Ember MCP client not found. Available clients: ' + Object.keys(context.mcpClients).join(', '));
+        throw new Error('Ember MCP client not found in context');
       }
 
-      // Call the Ember MCP server's supply tool to get transaction plan
+      console.log("calling lendingSupply..........!!!");
+      // Call the Ember MCP server's lendingSupply tool to get transaction plan
       const result = await emberClient.callTool({
-        name: 'supply',
+        name: 'lendingSupply',
         arguments: {
-          tokenAddress: args.tokenAddress,
+          tokenUid: {
+            chainId: args.chainId || '42161', // Default to Arbitrum
+            address: args.tokenAddress,
+          },
           amount: args.amount,
-          onBehalfOf: args.userAddress,
-          chainId: args.chainId || '42161', // Default to Arbitrum
+          walletAddress: args.userAddress,
         },
       });
+      console.log('💰 supplyCollateral result........:', result);
 
       if (result.isError) {
         console.error('❌ Error calling supply tool:', result.content);
@@ -67,69 +66,38 @@ export const supplyCollateralTool: VibkitToolDefinition<typeof SupplyCollateralP
         if (Array.isArray(result.content) && result.content[0]?.text) {
           errorMessage = result.content[0].text;
         }
-        return createErrorTask(
-          'supply-collateral',
-          new Error(`Failed to prepare supply transaction: ${errorMessage}`)
-        );
+        throw new Error(`Failed to prepare supply transaction: ${errorMessage}`);
       }
 
-      // Parse and validate the transaction plan from MCP response
-      console.log('📋 Parsing transaction plan from MCP response...');
-      const dataToValidate = parseMcpToolResponsePayload(result, z.any());
-      
-      const validationResult = z.array(TransactionPlanSchema).safeParse(dataToValidate);
-      if (!validationResult.success) {
-        console.error('❌ Transaction plan validation failed:', validationResult.error);
-        return createErrorTask(
-          'supply-collateral',
-          new Error('MCP supply tool returned invalid transaction data')
-        );
-      }
-
-      const transactions: TransactionPlan[] = validationResult.data;
+      // Parse and validate the supply response from MCP
+      console.log('📋 Parsing supply response from MCP...');
+      const supplyResp = parseMcpToolResponsePayload(result, SupplyResponseSchema);
+      const { transactions } = supplyResp;
       console.log(`📋 Received ${transactions.length} transaction(s) to execute`);
 
       // Execute the transactions using the user's wallet
       try {
         console.log('⚡ Executing supply transactions...');
         const executionResult = await context.custom.executeTransaction('supply-collateral', transactions);
-        
-        // Create success message
-        const message = [
-          `✅ **Collateral Supply Successful**`,
-          ``,
-          `💰 **Amount:** ${args.amount} tokens`,
-          `🏦 **Token:** ${args.tokenAddress}`,
-          `👤 **User:** ${args.userAddress}`,
-          `⛓️  **Chain:** ${args.chainId || '42161'}`,
-          ``,
-          `🔗 **Execution Result:** ${executionResult}`,
-          `⏱️  **Timestamp:** ${new Date().toLocaleString()}`,
-          ``,
-          `🛡️ **Next Steps:** Monitor health factor improvement`,
-        ].join('\n');
 
         console.log(`✅ Successfully executed supply collateral transactions`);
 
+        // Return structured success response that frontend can display
+        const successMessage = `💰 Successfully supplied ${args.amount} tokens as collateral to improve health factor and prevent liquidation`;
+        
         return createSuccessTask(
           'supply-collateral',
-          undefined,
-          `🛡️ Collateral Supply: Successfully supplied ${args.amount} tokens to improve health factor. ${message}`
+          undefined, // No artifacts needed
+          `🛡️ ${successMessage}. ${executionResult}`
         );
       } catch (executionError) {
         console.error('❌ Transaction execution failed:', executionError);
-        return createErrorTask(
-          'supply-collateral',
-          new Error(`Failed to execute supply transaction: ${executionError instanceof Error ? executionError.message : 'Unknown execution error'}`)
-        );
+        throw new Error(`Failed to execute supply transaction: ${executionError instanceof Error ? executionError.message : 'Unknown execution error'}`);
       }
 
     } catch (error) {
       console.error('❌ supplyCollateral tool error:', error);
-      return createErrorTask(
-        'supply-collateral',
-        error instanceof Error ? error : new Error(`Failed to supply collateral: ${error}`)
-      );
+      throw error instanceof Error ? error : new Error(`Failed to supply collateral: ${error}`);
     }
   },
 }; 

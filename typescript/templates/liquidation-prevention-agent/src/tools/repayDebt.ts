@@ -8,7 +8,7 @@
 import { createSuccessTask, createErrorTask, type VibkitToolDefinition, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import { z } from 'zod';
 import type { LiquidationPreventionContext } from '../context/types.js';
-import { TransactionPlan, TransactionPlanSchema } from 'ember-schemas';
+import { TransactionPlan, TransactionPlanSchema, RepayResponseSchema } from 'ember-schemas';
 import { parseUserPreferences, mergePreferencesWithDefaults, generatePreferencesSummary } from '../utils/userPreferences.js';
 
 // Input schema for repayDebt tool
@@ -39,27 +39,23 @@ export const repayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Li
       console.log(`💸 Repaying debt: ${args.amount} of ${args.tokenAddress} for user ${args.userAddress}`);
       console.log(`⚙️  User preferences: ${generatePreferencesSummary(mergedPrefs)}`);
 
-      // Ensure we have MCP clients available
-      if (!context.mcpClients) {
-        throw new Error('MCP clients not available in context');
-      }
-
-      // Access Ember MCP client
-      const emberClient = context.mcpClients['ember-mcp-tool-server'];
+      // Access Ember MCP client from custom context
+      const emberClient = context.custom.mcpClient;
 
       if (!emberClient) {
-        throw new Error('Ember MCP client not found. Available clients: ' + Object.keys(context.mcpClients).join(', '));
+        throw new Error('Ember MCP client not found in context');
       }
 
-      // Call the Ember MCP server's repay tool to get transaction plan
+      // Call the Ember MCP server's lendingRepay tool to get transaction plan
       const result = await emberClient.callTool({
-        name: 'repay',
+        name: 'lendingRepay',
         arguments: {
-          asset: args.tokenAddress,
+          tokenUid: {
+            chainId: args.chainId || '42161', // Default to Arbitrum
+            address: args.tokenAddress,
+          },
           amount: args.amount,
-          onBehalfOf: args.userAddress,
-          chainId: args.chainId || '42161', // Default to Arbitrum
-          interestRateMode: args.interestRateMode || '2', // Default to variable rate
+          walletAddress: args.userAddress,
         },
       });
 
@@ -69,71 +65,38 @@ export const repayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Li
         if (Array.isArray(result.content) && result.content[0]?.text) {
           errorMessage = result.content[0].text;
         }
-        return createErrorTask(
-          'repay-debt',
-          new Error(`Failed to prepare repay transaction: ${errorMessage}`)
-        );
+        throw new Error(`Failed to prepare repay transaction: ${errorMessage}`);
       }
 
-      // Parse and validate the transaction plan from MCP response
-      console.log('📋 Parsing transaction plan from MCP response...');
-      const dataToValidate = parseMcpToolResponsePayload(result, z.any());
-      
-      const validationResult = z.array(TransactionPlanSchema).safeParse(dataToValidate);
-      if (!validationResult.success) {
-        console.error('❌ Transaction plan validation failed:', validationResult.error);
-        return createErrorTask(
-          'repay-debt',
-          new Error('MCP repay tool returned invalid transaction data')
-        );
-      }
-
-      const transactions: TransactionPlan[] = validationResult.data;
+      // Parse and validate the repay response from MCP
+      console.log('📋 Parsing repay response from MCP...');
+      const repayResp = parseMcpToolResponsePayload(result, RepayResponseSchema);
+      const { transactions } = repayResp;
       console.log(`📋 Received ${transactions.length} transaction(s) to execute`);
 
       // Execute the transactions using the user's wallet
       try {
         console.log('⚡ Executing repay transactions...');
         const executionResult = await context.custom.executeTransaction('repay-debt', transactions);
-        
-        // Create success message
-        const rateMode = args.interestRateMode === '1' ? 'Stable' : 'Variable';
-        const message = [
-          `✅ **Debt Repayment Successful**`,
-          ``,
-          `💸 **Amount:** ${args.amount} tokens`,
-          `🏦 **Token:** ${args.tokenAddress}`,
-          `👤 **User:** ${args.userAddress}`,
-          `⛓️  **Chain:** ${args.chainId || '42161'}`,
-          `📊 **Rate Mode:** ${rateMode}`,
-          ``,
-          `🔗 **Execution Result:** ${executionResult}`,
-          `⏱️  **Timestamp:** ${new Date().toLocaleString()}`,
-          ``,
-          `🛡️ **Next Steps:** Monitor health factor improvement`,
-        ].join('\n');
 
         console.log(`✅ Successfully executed repay debt transactions`);
 
+        // Return structured success response that frontend can display
+        const successMessage = `💸 Successfully repaid ${args.amount} tokens to improve health factor and prevent liquidation`;
+        
         return createSuccessTask(
           'repay-debt',
-          undefined,
-          `🛡️ Debt Repayment: Successfully repaid ${args.amount} tokens to improve health factor. ${message}`
+          undefined, // No artifacts needed
+          `🛡️ ${successMessage}. ${executionResult}`
         );
       } catch (executionError) {
         console.error('❌ Transaction execution failed:', executionError);
-        return createErrorTask(
-          'repay-debt',
-          new Error(`Failed to execute repay transaction: ${executionError instanceof Error ? executionError.message : 'Unknown execution error'}`)
-        );
+        throw new Error(`Failed to execute repay transaction: ${executionError instanceof Error ? executionError.message : 'Unknown execution error'}`);
       }
 
     } catch (error) {
       console.error('❌ repayDebt tool error:', error);
-      return createErrorTask(
-        'repay-debt',
-        error instanceof Error ? error : new Error(`Failed to repay debt: ${error}`)
-      );
+      throw error instanceof Error ? error : new Error(`Failed to repay debt: ${error}`);
     }
   },
 }; 

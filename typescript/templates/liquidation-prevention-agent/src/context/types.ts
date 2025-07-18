@@ -5,11 +5,15 @@
 
 import type { Address, LocalAccount } from 'viem';
 import type { TransactionPlan } from 'ember-schemas';
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
 export interface LiquidationPreventionContext {
   // User wallet information
   userAddress: Address;
   account: LocalAccount<string>;
+  
+  // MCP client for Ember API calls
+  mcpClient: Client;
   
   // Transaction execution function
   executeTransaction: (actionName: string, transactions: TransactionPlan[]) => Promise<string>;

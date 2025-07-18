@@ -5,8 +5,9 @@
  * and threshold-based alerting for liquidation prevention.
  */
 
-import { createSuccessTask, createErrorTask, type VibkitToolDefinition } from 'arbitrum-vibekit-core';
+import { createSuccessTask, createErrorTask, type VibkitToolDefinition, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import { z } from 'zod';
+import { GetWalletLendingPositionsResponseSchema } from 'ember-schemas';
 import type { LiquidationPreventionContext } from '../context/types.js';
 import { parseUserPreferences, mergePreferencesWithDefaults, generatePreferencesSummary } from '../utils/userPreferences.js';
 
@@ -14,7 +15,7 @@ import { parseUserPreferences, mergePreferencesWithDefaults, generatePreferences
 const MonitorHealthParams = z.object({
   userAddress: z.string().describe('The wallet address to monitor'),
   instruction: z.string().optional().describe('Natural language instruction with user preferences'),
-  intervalMinutes: z.number().optional().default(5).describe('Monitoring interval in minutes'),
+  intervalMinutes: z.number().optional().default(15).describe('Monitoring interval in minutes'),
   enableAlerts: z.boolean().optional().default(true).describe('Whether to enable threshold alerts'),
 });
 
@@ -25,6 +26,9 @@ interface MonitoringSession {
   startTime: string;
   lastCheck: string;
   checksPerformed: number;
+  timerId?: NodeJS.Timeout;
+  isActive: boolean;
+  targetHealthFactor: number;
   alerts: Array<{
     timestamp: string;
     riskLevel: string;
@@ -36,10 +40,134 @@ interface MonitoringSession {
 // Global monitoring state (in production, this would be in a database)
 const monitoringSessions = new Map<string, MonitoringSession>();
 
+// Store the MCP client and context for use in background monitoring
+let globalMcpClient: any = null;
+let globalContext: LiquidationPreventionContext | null = null;
+
+// Background monitoring function
+async function performHealthCheck(userAddress: string): Promise<void> {
+  const session = monitoringSessions.get(userAddress);
+  if (!session || !session.isActive || !globalMcpClient || !globalContext) {
+    console.log(`❌ Monitoring session not found or inactive for ${userAddress}`);
+    return;
+  }
+
+  try {
+    console.log(`🔄 [${new Date().toLocaleTimeString()}] Performing automated health check for ${userAddress}`);
+    
+    // Get fresh position data using ember MCP client
+    const emberClient = globalMcpClient;
+
+    if (!emberClient) {
+      console.error(`❌ Ember MCP client not found for ${userAddress}`);
+      return;
+    }
+
+    console.log(`📡 Fetching lending positions using getWalletLendingPositions for ${userAddress}...`);
+
+    // Get current positions
+    const positionsResult = await emberClient.callTool({
+      name: 'getWalletLendingPositions',
+      arguments: { walletAddress: userAddress },
+    });
+
+    if (positionsResult.isError) {
+      console.error(`❌ Error fetching positions for ${userAddress}:`, positionsResult.content);
+      return;
+    }
+
+    // Parse the response using proper schema validation
+    const positionData = parseMcpToolResponsePayload(positionsResult, GetWalletLendingPositionsResponseSchema);
+    
+    // Extract health factor from the standardized response
+    const positions = positionData.positions || [];
+    const firstPosition = positions[0];
+    const currentHealthFactor = firstPosition?.healthFactor ? parseFloat(firstPosition.healthFactor) : undefined;
+
+    console.log(`📥 Retrieved ${positions.length} positions for ${userAddress}`);
+    console.log("session.checksPerformed", session.checksPerformed);
+
+    // Update session
+    session.lastCheck = new Date().toISOString();
+    session.checksPerformed += 1;
+
+    console.log(`📊 Health Factor for ${userAddress}: ${currentHealthFactor?.toFixed(4) || 'N/A'}, Target: ${session.targetHealthFactor}`);
+
+    // Check if action is needed
+    if (currentHealthFactor && currentHealthFactor <= session.targetHealthFactor) {
+      console.log(`🚨 LIQUIDATION RISK DETECTED! Health Factor ${currentHealthFactor.toFixed(4)} ≤ ${session.targetHealthFactor}`);
+      
+      // Add alert
+      session.alerts.push({
+        timestamp: new Date().toISOString(),
+        riskLevel: 'CRITICAL',
+        healthFactor: currentHealthFactor,
+        message: `Automatic prevention triggered - HF: ${currentHealthFactor.toFixed(4)} ≤ ${session.targetHealthFactor}`,
+      });
+
+      console.log(`⚠️ Triggering automatic prevention strategy for ${userAddress}`);
+
+      // Trigger automatic prevention
+      await triggerAutomaticPrevention(userAddress, currentHealthFactor, session.targetHealthFactor);
+    } else {
+      console.log(`✅ Health Factor OK for ${userAddress}: ${currentHealthFactor?.toFixed(4)} > ${session.targetHealthFactor}`);
+    }
+    const nextRun = new Date(Date.now() + session.intervalMinutes * 60 * 1000);
+    console.log(`🛠️ Health check completed for ${userAddress}. Total checks: ${session.checksPerformed}`);
+    console.log(`⏭️ Next health check for ${userAddress} scheduled at: ${nextRun.toLocaleString()}`);
+
+  } catch (error) {
+    console.error(`❌ Error during health check for ${userAddress}:`, error);
+  }
+}
+
+// Trigger automatic prevention
+async function triggerAutomaticPrevention(userAddress: string, currentHF: number, targetHF: number): Promise<void> {
+  
+  console.log("triggerAutomaticPrevention........:", userAddress, currentHF, targetHF);
+  if (!globalMcpClient || !globalContext) {
+    console.error('❌ MCP client or context not available for automatic prevention');
+    return;
+  }
+
+  try {
+    console.log(`⚡ EXECUTING AUTOMATIC LIQUIDATION PREVENTION for ${userAddress}`);
+    console.log(`📊 Current HF: ${currentHF.toFixed(4)}, Target HF: ${targetHF}`);
+
+    // Import the intelligent prevention strategy tool dynamically
+    const { intelligentPreventionStrategyTool } = await import('./intelligentPreventionStrategy.js');
+    
+    // Execute the prevention strategy
+    const result = await intelligentPreventionStrategyTool.execute(
+      {
+        userAddress,
+        targetHealthFactor: targetHF,
+        instruction: `Automatic prevention triggered - current HF: ${currentHF.toFixed(4)}, target: ${targetHF}`,
+        chainId: '42161', // Default to Arbitrum
+      },
+      {
+        custom: {
+          ...globalContext,
+          mcpClient: globalMcpClient,
+        },
+      }
+    );
+
+    if (result.status?.state === 'completed') {
+      console.log(`✅ Automatic prevention executed successfully for ${userAddress}`);
+    } else {
+      console.error(`❌ Automatic prevention failed for ${userAddress}:`, result);
+    }
+
+  } catch (error) {
+    console.error(`❌ Error executing automatic prevention for ${userAddress}:`, error);
+  }
+}
+
 // monitorHealth tool implementation
 export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams, any, LiquidationPreventionContext, any> = {
   name: 'monitor-health',
-  description: 'Start continuous health factor monitoring with periodic checks and alerts',
+  description: 'Start continuous health factor monitoring with periodic checks and automatic liquidation prevention',
   parameters: MonitorHealthParams,
   execute: async (args, context) => {
     try {
@@ -51,31 +179,39 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
         strategy: context.custom.strategy,
       });
       
+      const targetHF = mergedPrefs.targetHealthFactor || 1.1;
       console.log(`🔄 Starting health monitoring for: ${args.userAddress}`);
       console.log(`⚙️  User preferences: ${generatePreferencesSummary(mergedPrefs)}`);
+      console.log(`🎯 Target Health Factor: ${targetHF} (action will be triggered if HF ≤ ${targetHF})`);
 
-      // Ensure we have MCP clients available
-      if (!context.mcpClients) {
-        throw new Error('MCP clients not available in context');
-      }
-
-      // Access Ember MCP client using standardized name
-      const emberClient = context.mcpClients['ember-mcp-tool-server'];
+      // Access Ember MCP client from custom context
+      const emberClient = context.custom.mcpClient;
 
       if (!emberClient) {
-        throw new Error('Ember MCP client not found. Available clients: ' + Object.keys(context.mcpClients).join(', '));
+        throw new Error('Ember MCP client not found in context');
       }
 
-      // Perform initial health check using correct parameter name
+      // Store global references for background monitoring
+      globalMcpClient = emberClient;
+      globalContext = context.custom;
+
+      // Stop existing monitoring session if any
+      const existingSession = monitoringSessions.get(args.userAddress);
+      if (existingSession?.timerId) {
+        clearInterval(existingSession.timerId);
+        console.log(`🛑 Stopped existing monitoring session for ${args.userAddress}`);
+      }
+
+      // Perform initial health check
       const result = await emberClient.callTool({
-        name: 'getUserPositions',
+        name: 'getWalletLendingPositions',
         arguments: {
-          userAddress: args.userAddress,  // This is correct!
+          walletAddress: args.userAddress,
         },
       });
 
       if (result.isError) {
-        console.error('❌ Error calling getUserPositions for monitoring:', result.content);
+        console.error('❌ Error calling getWalletLendingPositions for monitoring:', result.content);
         let errorMessage = 'Unknown error';
         if (Array.isArray(result.content) && result.content[0]?.text) {
           errorMessage = result.content[0].text;
@@ -86,17 +222,15 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
         );
       }
 
-      // Parse the initial response
+      // Parse the initial response using proper schema validation
       let healthFactor: number | undefined;
       try {
-        const contentArray = Array.isArray(result.content) ? result.content : [];
-        const responseText = contentArray.length > 0 && typeof contentArray[0]?.text === 'string'
-          ? contentArray[0].text
-          : undefined;
-        if (responseText) {
-          const positionData = JSON.parse(responseText);
-          healthFactor = positionData.healthFactor;
-        }
+        const positionData = parseMcpToolResponsePayload(result, GetWalletLendingPositionsResponseSchema);
+        
+        // Extract health factor from the standardized response
+        const positions = positionData.positions || [];
+        const firstPosition = positions[0];
+        healthFactor = firstPosition?.healthFactor ? parseFloat(firstPosition.healthFactor) : undefined;
       } catch (parseError) {
         console.error('❌ Error parsing initial health data:', parseError);
         return createErrorTask(
@@ -110,9 +244,10 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
       let riskColor = '🟢';
       
       if (healthFactor !== undefined) {
-        if (healthFactor <= context.custom.thresholds.critical) {
+        if (healthFactor <= targetHF) {
           riskLevel = 'CRITICAL';
           riskColor = '🔴';
+          console.log(`🚨 IMMEDIATE ACTION NEEDED: Health Factor ${healthFactor.toFixed(4)} ≤ ${targetHF}`);
         } else if (healthFactor <= context.custom.thresholds.danger) {
           riskLevel = 'DANGER';
           riskColor = '🟠';
@@ -132,6 +267,8 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
         startTime: now,
         lastCheck: now,
         checksPerformed: 1,
+        isActive: true,
+        targetHealthFactor: targetHF,
         alerts: args.enableAlerts && riskLevel !== 'SAFE' ? [{
           timestamp: now,
           riskLevel,
@@ -140,33 +277,49 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
         }] : [],
       };
 
+      // Set up periodic monitoring with setInterval
+      const intervalMs = args.intervalMinutes * 60 * 1000; // Convert minutes to milliseconds
+      session.timerId = setInterval(() => {
+        performHealthCheck(args.userAddress);
+      }, intervalMs);
+
       monitoringSessions.set(sessionKey, session);
+
+      console.log(`✅ Automatic monitoring started for ${args.userAddress}`);
+      console.log(`⏰ Will check every ${args.intervalMinutes} minutes (${intervalMs}ms)`);
+      console.log(`🎯 Will trigger prevention if Health Factor ≤ ${targetHF}`);
+
+      // If already at risk, trigger immediate action
+      if (healthFactor && healthFactor <= targetHF) {
+        console.log(`🚨 Immediate prevention needed - triggering now!`);
+        setTimeout(() => triggerAutomaticPrevention(args.userAddress, healthFactor, targetHF), 1000);
+      }
 
       // Create detailed response
       const message = [
-        `${riskColor} **Health Monitoring Started**`,
+        `${riskColor} **Automatic Liquidation Prevention Started**`,
         ``,
         `👤 **User:** ${args.userAddress}`,
         `📊 **Current Health Factor:** ${healthFactor ? healthFactor.toFixed(4) : 'N/A'}`,
+        `🎯 **Target Health Factor:** ${targetHF} (prevention triggers if HF ≤ ${targetHF})`,
         `⚠️  **Risk Level:** ${riskLevel}`,
-        `⏱️  **Monitoring Interval:** ${args.intervalMinutes} minutes`,
-        `🔔 **Alerts Enabled:** ${args.enableAlerts ? 'Yes' : 'No'}`,
+        `⏱️  **Check Interval:** ${args.intervalMinutes} minutes`,
+        `🤖 **Auto-Prevention:** ${healthFactor && healthFactor <= targetHF ? 'TRIGGERING NOW' : 'Armed and ready'}`,
         ``,
-        `**Risk Thresholds:**`,
-        `• 🟡 Warning: ≤ ${context.custom.thresholds.warning}`,
-        `• 🟠 Danger: ≤ ${context.custom.thresholds.danger}`,
-        `• 🔴 Critical: ≤ ${context.custom.thresholds.critical}`,
+        `**How it works:**`,
+        `• Checks your health factor every ${args.intervalMinutes} minutes`,
+        `• If HF drops to ${targetHF} or below, automatically prevents liquidation`,
+        `• Uses intelligent strategy selection (supply collateral, repay debt, or both)`,
+        `• Runs continuously in the background`,
         ``,
-        `🚀 **Status:** Monitoring active with periodic checks every ${args.intervalMinutes} minutes`,
+        `🚀 **Status:** Active monitoring with automatic protection`,
         `🕐 **Started:** ${new Date().toLocaleString()}`,
       ].join('\n');
 
-      console.log(`✅ Health monitoring started for ${args.userAddress}. Health Factor: ${healthFactor}, Risk: ${riskLevel}`);
-
       return createSuccessTask(
         'monitor-health',
-        undefined, // No artifacts for now, keep it simple
-        `🔄 Health monitoring started for ${args.userAddress}. Current health factor: ${healthFactor?.toFixed(4) || 'N/A'}, Risk: ${riskLevel}. Monitoring every ${args.intervalMinutes} minutes. ${message}`
+        undefined,
+        `🤖 Automatic liquidation prevention activated! Monitoring ${args.userAddress} every ${args.intervalMinutes} minutes. Will prevent liquidation if health factor ≤ ${targetHF}. Current HF: ${healthFactor?.toFixed(4) || 'N/A'}. ${message}`
       );
 
     } catch (error) {
@@ -181,18 +334,35 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
 
 // Helper function to get monitoring session (for external use)
 export const getMonitoringSession = (userAddress: string): MonitoringSession | undefined => {
-  return monitoringSessions.get(userAddress.toLowerCase());
+  return monitoringSessions.get(userAddress);
 };
 
 // Helper function to stop monitoring session
 export const stopMonitoringSession = (userAddress: string): boolean => {
-  const session = monitoringSessions.get(userAddress.toLowerCase());
+  const session = monitoringSessions.get(userAddress);
   if (session) {
-    // In a real application, you would update the session's isActive flag
-    // For now, we'll just remove it from the map
-    monitoringSessions.delete(userAddress.toLowerCase());
+    if (session.timerId) {
+      clearInterval(session.timerId);
+      console.log(`⏰ Cleared timer for ${userAddress}`);
+    }
+    session.isActive = false;
+    monitoringSessions.delete(userAddress);
     console.log(`🛑 Stopped monitoring session for ${userAddress}`);
     return true;
   }
   return false;
+};
+
+// Helper function to stop all monitoring sessions (for graceful shutdown)
+export const stopAllMonitoringSessions = (): number => {
+  let stoppedCount = 0;
+  for (const [userAddress, session] of monitoringSessions.entries()) {
+    if (session.timerId) {
+      clearInterval(session.timerId);
+    }
+    session.isActive = false;
+    stoppedCount++;
+  }
+  monitoringSessions.clear();
+  return stoppedCount;
 }; 

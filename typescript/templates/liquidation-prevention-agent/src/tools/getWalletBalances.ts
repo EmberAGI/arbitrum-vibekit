@@ -5,8 +5,9 @@
  * for liquidation prevention strategies.
  */
 
-import { createSuccessTask, createErrorTask, type VibkitToolDefinition } from 'arbitrum-vibekit-core';
+import { createSuccessTask, createErrorTask, type VibkitToolDefinition, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import { z } from 'zod';
+import { GetWalletBalancesResponseSchema } from 'ember-schemas';
 import type { LiquidationPreventionContext } from '../context/types.js';
 
 // Input schema for getWalletBalances tool - matching Ember MCP server exactly
@@ -38,78 +39,48 @@ export const getWalletBalancesTool: VibkitToolDefinition<typeof GetWalletBalance
     try {
       console.log(`💰 Fetching wallet balances for: ${args.walletAddress}`);
 
-      // Ensure we have MCP clients available
-      if (!context.mcpClients) {
-        throw new Error('MCP clients not available in context');
-      }
+      // Access Ember MCP client from custom context
+      const emberClient = context.custom.mcpClient;
+ 
 
-      // Access Ember MCP client using standardized name
-      const emberClient = context.mcpClients['ember-mcp-tool-server'];
-
-      if (!emberClient) {
-        throw new Error('Ember MCP client not found. Available clients: ' + Object.keys(context.mcpClients).join(', '));
-      }
+      let toolsResponse = await emberClient.listTools();
+      console.log("toolsResponse........:", toolsResponse);
 
       // Call the Ember MCP server's getWalletBalances tool with correct parameter name
       const result = await emberClient.callTool({
         name: 'getWalletBalances',
         arguments: {
-          walletAddress: args.walletAddress,  // Correct parameter name!
+          walletAddress: args.walletAddress!,
         },
       });
+      
 
-      if (result.isError) {
-        console.error('❌ Error calling getWalletBalances:', result.content);
-        let errorMessage = 'Unknown error';
-        if (Array.isArray(result.content) && result.content[0]?.text) {
-          errorMessage = result.content[0].text;
-        }
-        return createErrorTask(
-          'get-wallet-balances',
-          new Error(`Failed to fetch wallet balances: ${errorMessage}`)
-        );
-      }
-
-      // Parse the response data
-      let balanceData: BalanceData = {};
-      try {
-        const contentArray = Array.isArray(result.content) ? result.content : [];
-        const responseText = contentArray.length > 0 && typeof contentArray[0]?.text === 'string'
-          ? contentArray[0].text
-          : undefined;
-        if (responseText) {
-          balanceData = JSON.parse(responseText);
-        }
-      } catch (parseError) {
-        console.error('❌ Error parsing balance data:', parseError);
-        return createErrorTask(
-          'get-wallet-balances',
-          new Error('Failed to parse balance data from Ember response')
-        );
-      }
+      console.log('💰 getWalletBalances result........:', result);
+      // Parse the response using proper schema validation
+      const balanceData = parseMcpToolResponsePayload(result, GetWalletBalancesResponseSchema);
 
       const balances = balanceData.balances || [];
-      const totalBalanceUsd = balanceData.totalBalanceUsd || 0;
+      const totalBalanceUsd = balances.reduce((sum, balance) => sum + (balance.valueUsd || 0), 0);
 
       // Analyze balances for liquidation prevention strategies
       const collateralTokens = balances.filter(token => 
-        ['USDC', 'USDT', 'DAI', 'ETH', 'WETH', 'WBTC'].includes(token.tokenSymbol.toUpperCase())
+        ['USDC', 'USDT', 'DAI', 'ETH', 'WETH', 'WBTC'].includes(token.symbol.toUpperCase())
       );
 
       const stablecoins = balances.filter(token => 
-        ['USDC', 'USDT', 'DAI'].includes(token.tokenSymbol.toUpperCase())
+        ['USDC', 'USDT', 'DAI'].includes(token.symbol.toUpperCase())
       );
 
       // Strategy recommendations
       const strategies = [];
       
       if (collateralTokens.length > 0) {
-        const totalCollateralValue = collateralTokens.reduce((sum, token) => sum + token.balanceUsd, 0);
+        const totalCollateralValue = collateralTokens.reduce((sum, token) => sum + (token.valueUsd || 0), 0);
         strategies.push(`💪 Supply collateral: $${totalCollateralValue.toLocaleString()} available in quality collateral tokens`);
       }
 
       if (stablecoins.length > 0) {
-        const totalStableValue = stablecoins.reduce((sum, token) => sum + token.balanceUsd, 0);
+        const totalStableValue = stablecoins.reduce((sum, token) => sum + (token.valueUsd || 0), 0);
         strategies.push(`💸 Repay debt: $${totalStableValue.toLocaleString()} available in stablecoins for debt repayment`);
       }
 
@@ -126,7 +97,7 @@ export const getWalletBalancesTool: VibkitToolDefinition<typeof GetWalletBalance
         ``,
         `**Available Tokens:**`,
         ...balances.slice(0, 10).map(token => 
-          `• ${token.tokenSymbol}: ${token.balance.toLocaleString()} ($${token.balanceUsd.toLocaleString()})`
+          `• ${token.symbol}: ${token.amount} ($${(token.valueUsd || 0).toLocaleString()})`
         ),
         ...(balances.length > 10 ? [`... and ${balances.length - 10} more tokens`] : []),
         ``,

@@ -11,7 +11,8 @@ import { TransactionExecutor } from '../utils/transactionExecutor.js';
 
 export async function contextProvider(
   deps: { mcpClients: Record<string, Client> }, 
-  tokenMap: Record<string, Array<{ chainId: string; address: string; decimals: number }>>
+  tokenMap: Record<string, Array<{ chainId: string; address: string; decimals: number }>>,
+  emberMcpClient: Client
 ): Promise<LiquidationPreventionContext> {
   console.log('[Context] Loading liquidation prevention context...');
 
@@ -48,6 +49,9 @@ export async function contextProvider(
     // User wallet information
     userAddress,
     account,
+    
+    // MCP client for Ember API calls
+    mcpClient: emberMcpClient,
     
     // Transaction execution function
     executeTransaction: transactionExecutor.executeTransactions.bind(transactionExecutor),

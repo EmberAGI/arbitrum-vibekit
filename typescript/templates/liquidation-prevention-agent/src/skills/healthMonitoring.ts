@@ -14,6 +14,7 @@ import { monitorHealthTool } from '../tools/monitorHealth.js';
 // Input schema for the health monitoring skill
 const HealthMonitoringInputSchema = z.object({
   instruction: z.string().describe('Health monitoring instruction with user preferences - e.g., "Monitor my health factor with warning at 1.5", "Check my positions every 30 minutes", "Start continuous monitoring with notifications"'),
+  userAddress: z.string().describe('The wallet address to monitor and protect from liquidation'),
 });
 
 export const healthMonitoringSkill = defineSkill({
@@ -34,15 +35,5 @@ export const healthMonitoringSkill = defineSkill({
     getUserPositionsTool,
     getWalletBalancesTool,
     monitorHealthTool,
-  ],
-  // MCP servers this skill needs
-  mcpServers: [
-    {
-      command: 'node',
-      moduleName: 'ember-mcp-tool-server',
-      env: {
-        EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'http://api.emberai.xyz/mcp',
-      },
-    },
   ],
 }); 

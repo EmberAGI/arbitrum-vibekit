@@ -7,6 +7,8 @@
 import 'dotenv/config';
 import { Agent, type AgentConfig } from 'arbitrum-vibekit-core';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { contextProvider } from './context/provider.js';
 import { loadTokenMapFromMcp } from './tokenMap.js';
 
@@ -57,17 +59,58 @@ const PORT = parseInt(process.env.PORT || '3010', 10);
 
 agent
   .start(PORT, async deps => {
-    // Check if ember-mcp-tool-server is available
-    const emberMcpClient = deps.mcpClients['ember-mcp-tool-server'];
+    // Create manual MCP client for Ember endpoint
+    let emberMcpClient: Client | null = null;
+    
+    const emberEndpoint = process.env.EMBER_ENDPOINT || 'http://api.emberai.xyz/mcp';
+    
+    try {
+      console.log(`Connecting to MCP server at ${emberEndpoint}`);
+      emberMcpClient = new Client(
+        { name: 'LiquidationPreventionAgent', version: '1.0.0' },
+        { capabilities: { tools: {}, resources: {}, prompts: {} } }
+      );
+      
+      const transport = new StreamableHTTPClientTransport(new URL(emberEndpoint));
+      await emberMcpClient.connect(transport);
+      console.log('MCP client connected successfully.');
+    } catch (error) {
+      console.error('Failed to connect to MCP server:', error);
+    }
+
+    // if (process.env.EMBER_ENDPOINT) {
+    //   try {
+    //     console.log(`Connecting to MCP server at ${process.env.EMBER_ENDPOINT}`);
+    //     emberMcpClient = new Client({
+    //       name: 'LiquidationPreventionAgent',
+    //       version: '1.0.0',
+    //     });
+        
+    //     const transport = new StreamableHTTPClientTransport(new URL(process.env.EMBER_ENDPOINT));
+    //     await emberMcpClient.connect(transport);
+    //     console.log('MCP client connected successfully.');
+    //   } catch (error) {
+    //     console.error('Failed to connect to MCP server:', error);
+    //   }
+
     if (!emberMcpClient) {
-      console.warn('ember-mcp-tool-server MCP client not available, token map will be empty');
-      return contextProvider(deps, {});
+      console.error('ember-mcp-tool-server MCP client not available, agent cannot start');
+      throw new Error('Failed to connect to Ember MCP server. Agent cannot function without MCP client.');
     }
 
     console.log('Loading token map from MCP capabilities...');
     const tokenMap = await loadTokenMapFromMcp(emberMcpClient);
 
-    return contextProvider(deps, tokenMap);
+    // Add the manual MCP client to the deps so tools can access it
+    const updatedDeps = {
+      ...deps,
+      mcpClients: {
+        ...deps.mcpClients,
+        'ember-mcp-tool-server': emberMcpClient
+      }
+    };
+
+    return contextProvider(updatedDeps, tokenMap, emberMcpClient);
   })
   .then(() => {
     console.log(`🚀 Liquidation Prevention Agent running on port ${PORT}`);
@@ -96,6 +139,15 @@ agent
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n\n🛑 Shutting down liquidation prevention agent gracefully...');
+  
+  // Stop all monitoring sessions
+  const { stopAllMonitoringSessions } = await import('./tools/monitorHealth.js');
+  const stoppedSessions = stopAllMonitoringSessions();
+  if (stoppedSessions > 0) {
+    console.log(`🛑 Stopped ${stoppedSessions} active monitoring sessions`);
+  }
+  
   await agent.stop();
+  console.log('✅ Agent stopped successfully');
   process.exit(0);
 }); 

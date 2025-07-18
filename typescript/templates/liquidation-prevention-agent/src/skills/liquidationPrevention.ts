@@ -14,6 +14,7 @@ import { intelligentPreventionStrategyTool } from '../tools/intelligentPreventio
 // Input schema for the liquidation prevention skill
 const LiquidationPreventionInputSchema = z.object({
   instruction: z.string().describe('Liquidation prevention instruction with user preferences - e.g., "Prevent liquidation with health factor 1.2, monitor every 15 minutes", "Supply more collateral with max $1000, conservative approach"'),
+  userAddress: z.string().describe('The wallet address to manage and protect from liquidation'),
 });
 
 export const liquidationPreventionSkill = defineSkill({
@@ -36,15 +37,5 @@ export const liquidationPreventionSkill = defineSkill({
     intelligentPreventionStrategyTool,
     supplyCollateralTool,
     repayDebtTool,
-  ],
-  // MCP servers this skill needs
-  mcpServers: [
-    {
-      command: 'node',
-      moduleName: 'ember-mcp-tool-server',
-      env: {
-        EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'http://api.emberai.xyz/mcp',
-      },
-    },
   ],
 }); 

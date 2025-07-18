@@ -81,24 +81,24 @@ export const chatAgents = [
   },
 
   //Todo :add for lending agent from template folder 
-  {
-    id: 'lending-agent' as const,
-    name: 'Lending',
-    description: 'Lending agent',
-    suggestedActions: [
-      {
-        title: 'Deposit WETH',
-        label: 'to my balance',
-        action: 'Deposit WETH to my balance',
-      },
-      {
-        title: 'borrow DAI',
-        label: 'to my balance',
-        action: 'borrow DAI to my balance',
-      },
-      { title: 'Check', label: 'balance', action: 'Check balance' },
-    ],
-  },    
+  // {
+  //   id: 'lending-agent' as const,
+  //   name: 'Lending',
+  //   description: 'Lending agent',
+  //   suggestedActions: [
+  //     {
+  //       title: 'Deposit WETH',
+  //       label: 'to my balance',
+  //       action: 'Deposit WETH to my balance',
+  //     },
+  //     {
+  //       title: 'borrow DAI',
+  //       label: 'to my balance',
+  //       action: 'borrow DAI to my balance',
+  //     },
+  //     { title: 'Check', label: 'balance', action: 'Check balance' },
+  //   ],
+  // },    
 
   // {
   //   id: 'allora-price-prediction-agent' as const,
@@ -177,10 +177,10 @@ export const chatAgents = [
 
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
-  ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
+  // ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
   // ['langgraph-workflow', 'http://langgraph-workflow-agent:3009/sse'],
   // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
-  ['lending-agent', 'http://lending-agent:3006/sse'],
+  // ['lending-agent', 'http://lending-agent:3006/sse'],
   ['liquidation-prevention-agent', 'http://liquidation-prevention-agent:3010/sse'],
   // ['allora-price-prediction-agent', 'http://allora-price-prediction-agent:3008/sse'],
   // ["ember-lp", "http://liquidity-agent-no-wallet:3002/sse"],
