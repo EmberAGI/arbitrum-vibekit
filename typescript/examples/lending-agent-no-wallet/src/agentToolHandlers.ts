@@ -13,6 +13,7 @@ import type { Task } from '@google-a2a/types';
 import { TaskState } from '@google-a2a/types';
 import { streamText } from 'ai';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
+import { parseUnits } from 'viem';
 
 export interface HandlerContext {
   mcpClient: Client;
@@ -42,11 +43,29 @@ function findTokenInfo(
     return { type: 'notFound' };
   }
 
-  if (possibleTokens.length === 1) {
-    return { type: 'found', token: possibleTokens[0]! };
+  // Deduplicate by chainId + address to avoid redundant duplicates
+  const uniqueTokens: TokenInfo[] = [];
+  const seen = new Set<string>();
+  for (const t of possibleTokens) {
+    const key = `${t.chainId.toString().toLowerCase()}-${t.address.toLowerCase()}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueTokens.push(t);
+    }
   }
 
-  return { type: 'clarificationNeeded', options: possibleTokens };
+  if (uniqueTokens.length === 1) {
+    return { type: 'found', token: uniqueTokens[0]! };
+  }
+
+  // If all unique tokens share the same chainId, automatically select first
+  const firstChainId = uniqueTokens[0]!.chainId;
+  const allSameChain = uniqueTokens.every(t => t.chainId === firstChainId);
+  if (allSameChain) {
+    return { type: 'found', token: uniqueTokens[0]! };
+  }
+
+  return { type: 'clarificationNeeded', options: uniqueTokens };
 }
 
 export async function handleBorrow(
@@ -113,6 +132,9 @@ export async function handleBorrow(
       );
 
       try {
+        // Convert human-readable amount to atomic units
+        const atomicAmount = parseUnits(amount, tokenDetail.decimals);
+
         const rawResult = await context.mcpClient.callTool({
           name: 'lendingBorrow',
           arguments: {
@@ -120,7 +142,7 @@ export async function handleBorrow(
               chainId: tokenDetail.chainId,
               address: tokenDetail.address,
             },
-            amount,
+            amount: atomicAmount.toString(),
             walletAddress: context.userAddress,
           },
         });
@@ -247,6 +269,9 @@ export async function handleRepay(
       );
 
       try {
+        // Convert human-readable amount to atomic units
+        const atomicAmount = parseUnits(amount, tokenDetail.decimals);
+
         const rawResult = await context.mcpClient.callTool({
           name: 'lendingRepay',
           arguments: {
@@ -254,7 +279,7 @@ export async function handleRepay(
               chainId: tokenDetail.chainId,
               address: tokenDetail.address,
             },
-            amount,
+            amount: atomicAmount.toString(),
             walletAddress: context.userAddress,
           },
         });
@@ -379,6 +404,9 @@ export async function handleSupply(
       );
 
       try {
+        // Convert human-readable amount to atomic units
+        const atomicAmount = parseUnits(amount, tokenDetail.decimals);
+
         const rawResult = await context.mcpClient.callTool({
           name: 'lendingSupply',
           arguments: {
@@ -386,7 +414,7 @@ export async function handleSupply(
               chainId: tokenDetail.chainId,
               address: tokenDetail.address,
             },
-            amount,
+            amount: atomicAmount.toString(),
             walletAddress: context.userAddress,
           },
         });
@@ -511,6 +539,9 @@ export async function handleWithdraw(
       );
 
       try {
+        // Convert human-readable amount to atomic units
+        const atomicAmount = parseUnits(amount, tokenDetail.decimals);
+
         const rawResult = await context.mcpClient.callTool({
           name: 'lendingWithdraw',
           arguments: {
@@ -518,7 +549,7 @@ export async function handleWithdraw(
               chainId: tokenDetail.chainId,
               address: tokenDetail.address,
             },
-            amount,
+            amount: atomicAmount.toString(),
             walletAddress: context.userAddress,
           },
         });
