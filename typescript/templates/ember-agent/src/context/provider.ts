@@ -127,7 +127,7 @@ export async function contextProvider(
 
   // Parse configuration from environment
   const arbitrumRpcUrl = process.env.ARBITRUM_RPC_URL || 'https://arb1.arbitrum.io/rpc';
-  const emberMcpServerUrl = process.env.EMBER_MCP_SERVER_URL || '';
+  const emberMcpServerUrl = process.env.EMBER_MCP_SERVER_URL || 'http://api.emberai.xyz/mcp';
   const defaultUserAddress = parseUserAddress(process.env.DEFAULT_USER_ADDRESS);
   const enableCaching = process.env.AGENT_CACHE_TOKENS === 'true';
 

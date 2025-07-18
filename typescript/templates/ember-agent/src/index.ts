@@ -89,15 +89,15 @@ async function startAgent() {
     console.log(`   - Model: ${modelOverride || 'default'}`);
     console.log(`   - CORS Enabled: ${process.env.ENABLE_CORS !== 'false'}`);
     console.log(
-      `   - Arbitrum RPC: ${process.env.ARBITRUM_RPC_URL ? '✅ configured' : '❌ missing'}`
+      `   - Arbitrum RPC: ${process.env.ARBITRUM_RPC_URL ? '✅ configured' : '⚠️  using default'}`
     );
     console.log(
-      `   - Ember MCP Server: ${process.env.EMBER_MCP_SERVER_URL ? '✅ configured' : '❌ missing'}`
+      `   - Ember MCP Server: ${process.env.EMBER_MCP_SERVER_URL ? '✅ configured' : '⚠️  using default'}`
     );
 
     if (!process.env.ARBITRUM_RPC_URL || !process.env.EMBER_MCP_SERVER_URL) {
-      console.log('\n⚠️  Warning: Some required environment variables are missing.');
-      console.log('   The agent may not function properly without proper configuration.');
+      console.log('\n⚠️  Warning: Using default values for some environment variables.');
+      console.log('   For production use, please configure these in your .env file.');
     }
   } catch (error) {
     console.error('❌ Failed to start Ember Agent:', error);
