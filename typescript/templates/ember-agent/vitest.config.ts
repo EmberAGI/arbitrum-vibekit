@@ -1,8 +1,9 @@
 import { defineConfig } from 'vitest/config';
 import dotenv from 'dotenv';
+import { join } from 'path';
 
-// Load .env file
-dotenv.config();
+// Load .env file specific to this template directory
+dotenv.config({ path: join(__dirname, '.env') });
 
 export default defineConfig({
   test: {
