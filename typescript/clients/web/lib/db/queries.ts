@@ -348,24 +348,31 @@ export async function updateChatVisiblityById({
 
 export async function insertAgentTransaction(data: InsertTransactionInput) {
   const now = new Date();
+  console.log('[insertAgentTransaction] data line number 351:', data);
 
   try {
+    // Ensure executedAt and confirmedAt are Date objects
+    const executedAt = data.executedAt instanceof Date ? data.executedAt : new Date(data.executedAt);
+    const confirmedAt = data.confirmedAt 
+      ? (data.confirmedAt instanceof Date ? data.confirmedAt : new Date(data.confirmedAt))
+      : null;
+
     const result = await db.insert(agentTransaction).values({
-      txHash: data.txHash, // Transaction hash get from component file 
-      userAddress: data.userAddress, //pass user address from hook only
-      agentType: data.agentType, // pass from individual component
-      chainId: data.chainId, //call getChainById(data.chainId) if needed or from component only
+      txHash: data.txHash,
+      userAddress: data.userAddress,
+      agentType: data.agentType,
+      chainId: data.chainId,
       status: data.status ?? 'pending',
-      transactionType: data.transactionType, // pass from individual component
-      blockNumber: data.blockNumber, //get from transaction completion time
-      gasUsed: data.gasUsed, // get from transaction completion time from component
-      gasPrice: data.gasPrice, // get from transaction completion time from component
-      value: data.value, // get from transaction completion time from component
-      contractAddress: data.contractAddress, // we can keep this optional
-      methodName: data.methodName, // get from component file manually pass 
-      transactionDetails: data.transactionDetails, // get from component file manually pass
-      executedAt: data.executedAt, 
-      confirmedAt: data.confirmedAt ?? null,
+      transactionType: data.transactionType ?? null,
+      blockNumber: data.blockNumber ?? null,
+      gasUsed: data.gasUsed ?? null,
+      gasPrice: data.gasPrice ?? null,
+      value: data.value ?? null,
+      contractAddress: data.contractAddress ?? null,
+      methodName: data.methodName ?? null,
+      transactionDetails: data.transactionDetails ?? null,
+      executedAt,
+      confirmedAt,
       createdAt: now,
       updatedAt: now,
     });

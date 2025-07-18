@@ -63,7 +63,7 @@ const providers = createProviderSelector({
 
 // Get the OpenRouter model for Gemini Flash
 if (providers.openrouter) {
-  const model = providers.openrouter('google/gemini-2.5-flash');
+  const model = providers.openrouter('x-ai/grok-3-mini');
   // now you can use the model...
 }
 

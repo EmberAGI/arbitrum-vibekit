@@ -8,6 +8,7 @@ import {
   type RawTransaction,
   type TxPlan,
 } from '../lib/transactionUtils';
+import type { InsertTransactionInput } from '../components/artifact';
 
 // Args interface expects necessary values from the calling component's wagmi hooks
 interface UseTransactionExecutorArgs {
@@ -16,6 +17,8 @@ interface UseTransactionExecutorArgs {
   address?: Hex;
   currentChainId?: number;
   switchChainAsync?: ReturnType<typeof useSwitchChain>['switchChainAsync'];
+  agentType?: string; // Add agentType prop
+  methodName?: string; // Add methodName prop
 }
 
 // Return interface defines the state and actions exposed by the hook
@@ -41,6 +44,8 @@ export function useTransactionExecutor({
   address,
   currentChainId,
   switchChainAsync,
+  agentType = 'unknown', // Default agent type
+  methodName,
 }: UseTransactionExecutorArgs): UseTransactionExecutorReturn {
   // Internal Wagmi hook for sending transactions
   const {
@@ -62,6 +67,7 @@ export function useTransactionExecutor({
   const [approvalError, setApprovalError] = useState<Error | null>(null);
   const [mainTxSubmitted, setMainTxSubmitted] = useState(false); // Tracks if executeMain was *called*
   const [isProcessingTx, setIsProcessingTx] = useState(false); // General lock during processTx
+  const [lastProcessedTxHash, setLastProcessedTxHash] = useState<string | null>(null); // Track processed transactions
 
   // --- Derived State from Props and Internal State ---
   const { approvalTxs, mainTx, totalApprovals, needsApproval } = useMemo(() => {
@@ -333,6 +339,77 @@ export function useTransactionExecutor({
     approveNext, // The action to call
   ]);
 
+  // Effect to save successful transactions to database
+  useEffect(() => {
+    const saveTransactionToDatabase = async () => {
+      // Check if we have a successful main transaction that hasn't been processed yet
+      if (
+        isWagmiTxSuccess && 
+        mainTxSubmitted && 
+        _txResultData && 
+        address && 
+        currentChainId &&
+        mainTx &&
+        _txResultData !== lastProcessedTxHash // Avoid duplicate saves
+      ) {
+        try {
+          console.log('[useTransactionExecutor] Saving successful transaction to database:', _txResultData);
+          
+          const transactionData: InsertTransactionInput = {
+            txHash: _txResultData, // _txResultData is the hash itself
+            userAddress: address,
+            agentType: agentType || 'unknown',
+            chainId: currentChainId.toString(),
+            status: 'confirmed',
+            transactionType: 'main',
+            value: String(mainTx.value || '0'),
+            contractAddress: mainTx.to,
+            methodName: methodName || 'unknown',
+            transactionDetails: {
+              txPlan: txPlan,
+              rawTransaction: mainTx,
+              wagmiResult: _txResultData
+            },
+            executedAt: new Date(), // Back to Date object
+            confirmedAt: new Date(), // Back to Date object
+          };
+
+          console.log('[useTransactionExecutor] Transaction data line number 376:', transactionData);
+
+          // Use API route instead of direct database call
+          const response = await fetch('/api/transactions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(transactionData),
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to save transaction: ${response.statusText}`);
+          }
+          setLastProcessedTxHash(_txResultData); // Mark as processed
+          console.log('[useTransactionExecutor] Transaction saved successfully to database');
+        } catch (error) {
+          console.error('[useTransactionExecutor] Failed to save transaction to database:', error);
+        }
+      }
+    };
+
+    saveTransactionToDatabase();
+  }, [
+    isWagmiTxSuccess,
+    mainTxSubmitted,
+    _txResultData,
+    address,
+    currentChainId,
+    mainTx,
+    agentType,
+    methodName,
+    txPlan,
+    lastProcessedTxHash
+  ]);
+
   // Effect to reset internal state when the transaction plan changes
   useEffect(() => {
     console.log('[useTxExec Effect] txPlan changed, resetting internal state.');
@@ -341,6 +418,7 @@ export function useTransactionExecutor({
     setApprovalError(null);
     setMainTxSubmitted(false);
     setIsProcessingTx(false);
+    setLastProcessedTxHash(null); // Reset processed hash tracking
     resetWagmiSendState(); // Also reset wagmi's internal state
   }, [txPlan, resetWagmiSendState]); // Depend only on txPlan and the reset function
 

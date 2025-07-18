@@ -220,6 +220,8 @@ export class Agent {
           arguments: getTokensArgs,
         });
 
+        console.log("Line number 223:",tokensResult);
+
         const tokensResponse = parseMcpToolResponsePayload(tokensResult, GetTokensResponseSchema);
         this.populateGenericTokens(tokensResponse.tokens);
       } catch (err) {
@@ -357,7 +359,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
-        model: openrouter('deepseek/deepseek-chat-v3-0324:free'),
+        model: openrouter('x-ai/grok-3-mini'),
         messages: conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,

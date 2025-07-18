@@ -26,7 +26,7 @@ const providers = createProviderSelector({
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
 });
 
-const model = providers.openrouter!('deepseek/deepseek-chat-v3-0324:free');
+const model = providers.openrouter!('x-ai/grok-3-mini');
 
 function logError(...args: unknown[]) {
   console.error(...args);

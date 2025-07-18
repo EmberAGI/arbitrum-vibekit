@@ -306,6 +306,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
       this.log('Fetching supported tokens via MCP getTokens...');
 
       const chainIds = CHAIN_MAPPINGS.map(mapping => mapping.id);
+      console.log("Line number 309:",chainIds);
       const getTokensArgs = chainIds.length > 0 ? { chainIds } : {};
 
       const tokensResult = await this.mcpClient.callTool({
@@ -587,7 +588,7 @@ Never respond in markdown, always use plain text. Never add links to your respon
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
-        model: openrouter('deepseek/deepseek-chat-v3-0324:free'),
+        model: openrouter('x-ai/grok-3-mini'),
         messages: this.conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,

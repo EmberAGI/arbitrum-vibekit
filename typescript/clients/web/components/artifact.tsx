@@ -59,8 +59,8 @@ export interface InsertTransactionInput {
   contractAddress?: string;
   methodName?: string;
   transactionDetails?: any;
-  executedAt: Date;
-  confirmedAt?: Date | null;
+  executedAt: Date | string;
+  confirmedAt?: Date | string | null;
 }
 
 function PureArtifact({

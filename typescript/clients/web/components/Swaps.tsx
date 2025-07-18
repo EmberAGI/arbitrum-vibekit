@@ -46,6 +46,8 @@ export function Swaps({
     address,
     currentChainId: chainId,
     switchChainAsync, // Pass the function needed by the hook
+    agentType: 'swap', // Specify this is a swap transaction
+    methodName: 'swap', // Specify the method name
   });
 
   const needsApproval = totalApprovals > 0; // Still useful for conditional rendering
