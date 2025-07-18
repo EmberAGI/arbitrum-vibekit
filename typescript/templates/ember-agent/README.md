@@ -55,8 +55,9 @@ ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc
 # Required: AI Provider (OpenRouter recommended)
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 
-# Required: Ember MCP Server URL
-EMBER_MCP_SERVER_URL=https://your-ember-mcp-server.com
+# Required: Ember MCP Server Configuration
+EMBER_MCP_SERVER_URL=http://api.emberai.xyz/mcp
+EMBER_API_KEY=your_ember_api_key_here
 
 # Optional: Server configuration
 PORT=3001

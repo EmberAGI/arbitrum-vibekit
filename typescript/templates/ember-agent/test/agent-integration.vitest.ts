@@ -5,7 +5,8 @@ describe('Agent Integration', () => {
     // Set required environment variables for testing
     process.env.OPENROUTER_API_KEY = 'test-key';
     process.env.ARBITRUM_RPC_URL = 'https://arb1.arbitrum.io/rpc';
-    process.env.EMBER_MCP_SERVER_URL = 'https://test-ember-server.com';
+    process.env.EMBER_MCP_SERVER_URL = 'http://api.emberai.xyz/mcp';
+    process.env.EMBER_API_KEY = 'test-key';
   });
 
   it('should be able to import agent configuration', async () => {
