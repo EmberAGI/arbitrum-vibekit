@@ -511,12 +511,13 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
       // Check that MCP server configs have environment variables
       const greetSkill = agentConfig.skills.find((s) => s.id === 'greet-skill');
       expect(greetSkill?.mcpServers).to.not.be.undefined;
-      expect(greetSkill?.mcpServers).to.have.lengthOf(2);
+      const mcpValues = Object.values(greetSkill!.mcpServers!);
+      expect(mcpValues).to.have.lengthOf(2);
 
-      greetSkill?.mcpServers?.forEach((mcpConfig) => {
+      mcpValues.forEach((mcpConfig) => {
         expect(mcpConfig).to.not.be.undefined;
-        expect(mcpConfig).to.have.property('env');
-        expect(mcpConfig.env).to.have.property('DEBUG', 'true');
+        expect(mcpConfig as any).to.have.property('env');
+        expect((mcpConfig as any).env).to.have.property('DEBUG', 'true');
       });
     });
 

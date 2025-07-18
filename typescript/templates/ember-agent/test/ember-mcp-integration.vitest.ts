@@ -50,7 +50,7 @@ describe('Ember MCP Server Integration', () => {
     expect(context.tokenMap).toBeDefined();
     expect(Object.keys(context.tokenMap).length).toBeGreaterThan(0);
     expect(context.tokenMap.WBTC).toBeDefined();
-    expect(context.tokenMap.WBTC![0].address).toBe('0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f');
+    expect(context.tokenMap.WBTC![0]!.address).toBe('0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f');
   });
 
   it('should generate a swap transaction from a mocked MCP response', async () => {

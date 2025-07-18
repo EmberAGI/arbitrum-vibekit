@@ -89,10 +89,10 @@ describe('Ember Agent E2E Swapping Integration', () => {
     expect(task.status.message).toBeDefined();
     expect(task.status.message!.parts).toBeDefined();
     expect(task.status.message!.parts.length).toBeGreaterThan(0);
-    const firstPart = task.status.message!.parts[0];
+    const firstPart = task.status.message!.parts[0] as TextPart | undefined;
     expect(firstPart).toBeDefined();
-    expect(firstPart.kind).toBe('text');
-    expect((firstPart as TextPart).text).toContain('Transaction plan created');
+    expect(firstPart!.kind).toBe('text');
+    expect(firstPart!.text).toContain('Transaction plan created');
 
     // Validate the artifact
     expect(task.artifacts).toBeDefined();
