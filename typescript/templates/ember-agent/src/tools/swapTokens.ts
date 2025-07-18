@@ -186,20 +186,73 @@ const resolveTokensHook = async (
           role: 'agent',
           messageId: `msg-${Date.now()}`,
           kind: 'message',
-          parts: [{ kind: 'text', text: 'User address not set. Please provide a wallet address.' }],
+          parts: [
+            {
+              kind: 'text',
+              text: 'User address not set. Please provide a wallet address.',
+            },
+          ],
         },
       },
     };
   }
 
   try {
-    // Resolve from token
-    const fromTokenResult = findTokenDetail(
-      rawFromToken,
-      fromChain,
-      context.custom.tokenMap,
-      'from'
-    );
+    // Retrieve all possible token variants first so we can attempt smart chain inference
+    const fromTokenVariants = findTokensCaseInsensitive(context.custom.tokenMap, rawFromToken);
+    const toTokenVariants = findTokensCaseInsensitive(context.custom.tokenMap, rawToToken);
+
+    if (!fromTokenVariants) {
+      throw new Error(`Token ${rawFromToken} not supported.`);
+    }
+    if (!toTokenVariants) {
+      throw new Error(`Token ${rawToToken} not supported.`);
+    }
+
+    // Helper to normalise chain input
+    const normaliseChain = (chainName?: string): string | undefined => {
+      return chainName ? mapChainNameToId(chainName) : undefined;
+    };
+
+    // Attempt to determine a single chain to use when the user has not explicitly provided both
+    const explicitFromChainId = normaliseChain(fromChain);
+    const explicitToChainId = normaliseChain(toChain);
+
+    let inferredChainId: string | undefined;
+
+    if (explicitFromChainId) {
+      inferredChainId = explicitFromChainId;
+    } else if (explicitToChainId) {
+      inferredChainId = explicitToChainId;
+    } else {
+      // No explicit chain provided – attempt to infer a single common chain
+      const fromChains = new Set(fromTokenVariants.map(t => t.chainId.toString()));
+      const toChains = new Set(toTokenVariants.map(t => t.chainId.toString()));
+      const intersection = [...fromChains].filter(id => toChains.has(id));
+      if (intersection.length > 0) {
+        // Prefer Arbitrum (42161) if it's a common chain, otherwise pick the first deterministic option
+        inferredChainId = intersection.includes('42161') ? '42161' : intersection[0];
+      }
+    }
+
+    // Helper that picks token detail for a given chain ID or falls back to findTokenDetail for clarification handling
+    const pickTokenDetail = (
+      tokenName: string,
+      chainName: string | undefined,
+      direction: 'from' | 'to'
+    ): TokenInfo | string => {
+      // If we already know target chain, just find the token on that chain.
+      if (inferredChainId) {
+        const candidates = findTokensCaseInsensitive(context.custom.tokenMap, tokenName);
+        const match = candidates?.find(t => t.chainId.toString() === inferredChainId);
+        if (match) return match;
+        // fallthrough to existing behaviour if not found
+      }
+      return findTokenDetail(tokenName, chainName, context.custom.tokenMap, direction);
+    };
+
+    // Resolve from token (may return clarification string)
+    const fromTokenResult = pickTokenDetail(rawFromToken, fromChain, 'from');
     if (typeof fromTokenResult === 'string') {
       return {
         id: userAddress,
@@ -217,8 +270,8 @@ const resolveTokensHook = async (
       };
     }
 
-    // Resolve to token
-    const toTokenResult = findTokenDetail(rawToToken, toChain, context.custom.tokenMap, 'to');
+    // Resolve to token (may return clarification string)
+    const toTokenResult = pickTokenDetail(rawToToken, toChain, 'to');
     if (typeof toTokenResult === 'string') {
       return {
         id: userAddress,
@@ -241,7 +294,7 @@ const resolveTokensHook = async (
     const atomicAmount = parseUnits(amount, fromTokenDetail.decimals);
 
     console.log(
-      `[TokenResolution] Resolved: ${rawFromToken} -> ${fromTokenDetail.address}, ${rawToToken} -> ${toTokenDetail.address}`
+      `[TokenResolution] Resolved: ${rawFromToken} -> ${fromTokenDetail.address}, ${rawToToken} -> ${toTokenDetail.address} on chain ${inferredChainId ?? 'unknown'}`
     );
 
     // Add resolved data to args for next hooks and base tool
