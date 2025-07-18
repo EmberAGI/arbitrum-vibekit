@@ -28,6 +28,14 @@ export const swappingSkill = defineSkill({
     'Trade 2 ETH for maximum LINK tokens',
   ],
   inputSchema: swappingSkillInputSchema,
+  mcpServers: {
+    'ember-onchain': {
+      url: process.env.EMBER_MCP_SERVER_URL || 'http://api.emberai.xyz/mcp',
+      // No authorization needed according to user
+      alwaysAllow: ['getCapabilities', 'getTokens', 'swapTokens'],
+      disabled: false,
+    },
+  },
   tools: [swapTokensTool],
   // No manual handler - use LLM orchestration for flexible routing
 });
