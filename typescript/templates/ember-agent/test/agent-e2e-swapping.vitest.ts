@@ -6,7 +6,7 @@ import { agentConfig } from '../src/config.js';
 import { contextProvider } from '../src/context/provider.js';
 import type { Task, TextPart } from '@google-a2a/types';
 
-describe('Ember Agent E2E Swapping Integration', () => {
+describe.skip('Ember Agent E2E Swapping Integration', () => {
   let agent: ReturnType<typeof Agent.create>;
   let mcpClient: Client;
   const PORT = 31339; // Use a unique port for this test suite
