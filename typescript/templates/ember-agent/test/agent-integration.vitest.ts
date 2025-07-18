@@ -10,7 +10,7 @@ describe('Agent Integration', () => {
   });
 
   it('should be able to import agent configuration', async () => {
-    const { agentConfig } = await import('../src/index.js');
+    const { agentConfig } = await import('../src/config.js');
     expect(agentConfig).toBeDefined();
     expect(agentConfig.name).toContain('Ember Agent');
     expect(agentConfig.skills).toBeDefined();
@@ -18,7 +18,7 @@ describe('Agent Integration', () => {
   });
 
   it('should have swapping skill in agent configuration', async () => {
-    const { agentConfig } = await import('../src/index.js');
+    const { agentConfig } = await import('../src/config.js');
     expect(agentConfig.skills.length).toBeGreaterThan(0);
 
     const swappingSkill = agentConfig.skills.find(skill => skill.id === 'token-swapping');
@@ -28,7 +28,7 @@ describe('Agent Integration', () => {
   });
 
   it('should have documentation skill in agent configuration', async () => {
-    const { agentConfig } = await import('../src/index.js');
+    const { agentConfig } = await import('../src/config.js');
 
     const documentationSkill = agentConfig.skills.find(
       skill => skill.id === 'protocol-documentation'
@@ -41,7 +41,7 @@ describe('Agent Integration', () => {
   });
 
   it('should have both swapping and documentation skills', async () => {
-    const { agentConfig } = await import('../src/index.js');
+    const { agentConfig } = await import('../src/config.js');
 
     // Should have exactly 2 skills for now
     expect(agentConfig.skills).toHaveLength(2);
@@ -52,7 +52,7 @@ describe('Agent Integration', () => {
   });
 
   it('should have correct agent metadata', async () => {
-    const { agentConfig } = await import('../src/index.js');
+    const { agentConfig } = await import('../src/config.js');
 
     expect(agentConfig.version).toBeDefined();
     expect(agentConfig.description).toContain('DeFi agent');
@@ -64,7 +64,7 @@ describe('Agent Integration', () => {
 
   it('should be able to create agent with current configuration', async () => {
     const { Agent } = await import('arbitrum-vibekit-core');
-    const { agentConfig } = await import('../src/index.js');
+    const { agentConfig } = await import('../src/config.js');
 
     // This should not throw an error
     expect(() => Agent.create(agentConfig)).not.toThrow();
@@ -77,7 +77,7 @@ describe('Agent Integration', () => {
 
   it('should have MCP server with registered tools', async () => {
     const { Agent } = await import('arbitrum-vibekit-core');
-    const { agentConfig } = await import('../src/index.js');
+    const { agentConfig } = await import('../src/config.js');
 
     const agent = Agent.create(agentConfig);
     expect(agent.mcpServer).toBeDefined();

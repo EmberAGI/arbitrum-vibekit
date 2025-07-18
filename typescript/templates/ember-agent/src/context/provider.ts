@@ -7,82 +7,43 @@ import type { EmberContext, ContextDependencies, TokenInfo } from './types.js';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { LanguageModelV1 } from 'ai';
 import { Address, isAddress } from 'viem';
+import pRetry from 'p-retry';
 
 /**
  * Load token map from Ember MCP server
  */
 async function loadTokenMap(mcpClient: Client): Promise<Record<string, TokenInfo[]>> {
-  try {
+  const MCP_TOOL_TIMEOUT_MS = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '120000', 10);
+
+  const fetchTokens = async () => {
     console.log('[Context] Loading token map from Ember MCP server...');
-
-    // Increase timeout to 2 minutes since tokens can take over 1 minute to load
-    const timeout = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '120000', 10);
-    console.log(`[Context] Using timeout of ${timeout}ms (${timeout / 1000} seconds)`);
-
-    const startTime = Date.now();
-    console.log('[Context] Starting getCapabilities call...');
-
     const response = await mcpClient.callTool(
       {
         name: 'getCapabilities',
         arguments: { type: 'SWAP' }, // Server expects uppercase
       },
       undefined,
-      { timeout }
+      { timeout: MCP_TOOL_TIMEOUT_MS }
     );
-
-    const elapsed = Date.now() - startTime;
-    console.log(
-      `[Context] getCapabilities call completed in ${elapsed}ms (${(elapsed / 1000).toFixed(1)} seconds)`
-    );
-
-    console.log('[Context] Response type:', typeof response);
-    console.log('[Context] Response keys:', response ? Object.keys(response) : 'null');
 
     if (response && typeof response === 'object' && 'structuredContent' in response) {
       const data = (response as any).structuredContent;
-      console.log('[Context] structuredContent type:', typeof data);
-      console.log('[Context] structuredContent keys:', data ? Object.keys(data) : 'null');
-
-      // The actual response structure has capabilities array with supportedTokens
       if (data && data.capabilities && Array.isArray(data.capabilities)) {
-        console.log('[Context] capabilities array length:', data.capabilities.length);
-
-        // Log all capability types to debug
-        console.log(
-          '[Context] Available capability types:',
-          data.capabilities.map((cap: any) => cap.type)
-        );
-
-        const swapCapability = data.capabilities.find((cap: any) => cap.type === 'swap'); // Response has lowercase
-        console.log('[Context] swap capability found:', !!swapCapability);
-
+        const swapCapability = data.capabilities.find((cap: any) => cap.type === 'swap');
         if (swapCapability) {
-          console.log('[Context] swap capability keys:', Object.keys(swapCapability));
-          console.log('[Context] supportedTokens exists:', 'supportedTokens' in swapCapability);
-
-          // Check if tokens are in swapCapability property
           if (
             swapCapability.swapCapability &&
             Array.isArray(swapCapability.swapCapability.supportedTokens)
           ) {
             const supportedTokens = swapCapability.swapCapability.supportedTokens;
-            console.log('[Context] supportedTokens array length:', supportedTokens.length);
-
             const tokenMap: Record<string, TokenInfo[]> = {};
             let loadedCount = 0;
-
-            // Process supported tokens from the response
             for (const token of supportedTokens) {
               if (token.symbol && token.tokenUid) {
                 const symbol = token.symbol.toUpperCase();
-
-                // Initialize array if not exists
                 if (!tokenMap[symbol]) {
                   tokenMap[symbol] = [];
                 }
-
-                // Add token info
                 tokenMap[symbol].push({
                   chainId: parseInt(token.tokenUid.chainId, 10),
                   address: token.tokenUid.address,
@@ -90,32 +51,32 @@ async function loadTokenMap(mcpClient: Client): Promise<Record<string, TokenInfo
                   symbol: token.symbol,
                   name: token.name || token.symbol,
                 });
-
                 loadedCount++;
               }
             }
-
             console.log(`[Context] Loaded ${loadedCount} tokens from Ember MCP`);
-            console.log(`[Context] Unique symbols: ${Object.keys(tokenMap).length}`);
-
-            // Log some sample tokens for verification
-            const sampleSymbols = Object.keys(tokenMap).slice(0, 5);
-            console.log(`[Context] Sample tokens: ${sampleSymbols.join(', ')}`);
-
             return tokenMap;
-          } else {
-            console.log('[Context] No supportedTokens array in swapCapability.swapCapability');
           }
         }
-      } else {
-        console.log('[Context] No capabilities array in response');
       }
     }
+    throw new Error('No valid token data found in Ember MCP response');
+  };
 
-    console.warn('[Context] No tokens found in Ember MCP response');
-    return {};
+  try {
+    return await pRetry(fetchTokens, {
+      retries: 3,
+      onFailedAttempt: error => {
+        console.warn(
+          `[Context] Attempt ${error.attemptNumber} failed. There are ${error.retriesLeft} retries left.`
+        );
+      },
+    });
   } catch (error) {
-    console.error('[Context] Error loading token map from Ember MCP:', error);
+    console.error(
+      '[Context] Error loading token map from Ember MCP after multiple retries:',
+      error
+    );
     console.warn('[Context] Using empty token map due to MCP error');
     return {};
   }

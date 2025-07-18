@@ -5,14 +5,9 @@
  */
 
 import 'dotenv/config';
-import {
-  Agent,
-  type AgentConfig,
-  createProviderSelector,
-  getAvailableProviders,
-} from 'arbitrum-vibekit-core';
+import { Agent, createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
 import { contextProvider } from './context/provider.js';
-import type { EmberContext } from './context/types.js';
+import { agentConfig } from './config.js';
 
 // Skills - implemented and planned
 import { swappingSkill } from './skills/swapping.js';
@@ -48,29 +43,7 @@ if (!selectedProvider) {
 const modelOverride = process.env.AI_MODEL;
 
 // Export agent configuration for testing
-export const agentConfig: AgentConfig = {
-  name: process.env.AGENT_NAME || 'Ember Agent',
-  version: process.env.AGENT_VERSION || '1.0.0',
-  description:
-    process.env.AGENT_DESCRIPTION ||
-    'Unified multi-skill DeFi agent supporting swapping, lending, liquidity, and yield trading operations on Arbitrum',
-  skills: [
-    // Skills implemented so far
-    swappingSkill,
-    documentationSkill,
-    // lendingSkill,
-    // liquiditySkill,
-    // yieldTradingSkill,
-  ],
-  url: process.env.AGENT_URL || 'localhost',
-  capabilities: {
-    streaming: true,
-    pushNotifications: false,
-    stateTransitionHistory: true,
-  },
-  defaultInputModes: ['application/json'],
-  defaultOutputModes: ['application/json'],
-};
+export { agentConfig };
 
 // Configure the agent
 const agent = Agent.create(agentConfig, {

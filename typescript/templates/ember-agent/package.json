@@ -28,22 +28,23 @@
     "arbitrum-vibekit-core": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "catalog:",
-    "zod": "catalog:",
-    "ember-schemas": "workspace:*",
     "ember-api": "workspace:*",
+    "ember-schemas": "workspace:*",
     "express": "catalog:",
     "nanoid": "^5.0.7",
-    "viem": "^2.26.3"
+    "p-retry": "^6.2.1",
+    "viem": "^2.26.3",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "catalog:",
+    "c8": "catalog:",
     "cpx": "^1.5.0",
     "prettier": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "c8": "catalog:"
+    "vitest": "catalog:"
   }
 }
