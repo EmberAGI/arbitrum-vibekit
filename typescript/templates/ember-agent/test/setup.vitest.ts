@@ -1,4 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import dotenv from 'dotenv';
+
+// Load environment variables from .env file for tests
+dotenv.config();
 
 describe('Ember Agent Setup', () => {
   it('should have basic setup working', () => {
