@@ -53,7 +53,7 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
 
     agent = Agent.create(agentConfig, {
       llm: {
-        model: providers.openrouter!('deepseek/deepseek-chat-v3-0324:free'),
+        model: providers.openrouter!('x-ai/grok-3-mini'),
       },
       cors: true,
       basePath: '/api/v1',

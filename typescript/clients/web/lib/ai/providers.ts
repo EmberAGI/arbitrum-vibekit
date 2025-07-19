@@ -29,19 +29,19 @@ export const openRouterProvider = isTestEnvironment
     })
   : customProvider({
       languageModels: {
-        'chat-model': openRouter('deepseek/deepseek-chat-v3-0324:free', {
+        'chat-model': openRouter('x-ai/grok-3-mini', {
           reasoning: {
             exclude: true,
             effort: 'low',
           },
         }),
-        'chat-model-medium': openRouter('deepseek/deepseek-chat-v3-0324:free', {
+        'chat-model-medium': openRouter('x-ai/grok-3-mini', {
           reasoning: {
             effort: 'medium',
           },
         }),
-        'title-model': openRouter('deepseek/deepseek-chat-v3-0324:free'),
-        'artifact-model': openRouter('deepseek/deepseek-chat-v3-0324:free'),
+        'title-model': openRouter('x-ai/grok-3-mini'),
+        'artifact-model': openRouter('x-ai/grok-3-mini'),
       },
       imageModels: {
         'small-model': xai.image('grok-2-image'),

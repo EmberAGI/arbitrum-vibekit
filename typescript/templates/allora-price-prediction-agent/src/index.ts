@@ -41,7 +41,7 @@ const agent = Agent.create(agentConfig, {
   cors: process.env.ENABLE_CORS !== 'false',
   basePath: process.env.BASE_PATH || undefined,
   llm: {
-    model: providers.openrouter(process.env.LLM_MODEL || 'deepseek/deepseek-chat-v3-0324:free'),
+    model: providers.openrouter(process.env.LLM_MODEL || 'x-ai/grok-3-mini'),
   },
 });
 

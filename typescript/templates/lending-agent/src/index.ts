@@ -12,7 +12,7 @@ const runtimeOptions: AgentRuntimeOptions = {
   cors: true,
   basePath: '/',
   llm: {
-    model: openRouter('deepseek/deepseek-chat-v3-0324:free'),
+    model: openRouter('x-ai/grok-3-mini'),
   },
 };
 
