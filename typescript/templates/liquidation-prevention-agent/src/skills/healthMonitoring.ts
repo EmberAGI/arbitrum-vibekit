@@ -1,8 +1,8 @@
 /**
  * Health Monitoring Skill
  * 
- * Provides comprehensive health factor monitoring capabilities including
- * real-time position tracking, continuous monitoring, and threshold alerts.
+ * Provides comprehensive health factor monitoring with automatic liquidation prevention.
+ * Continuously tracks positions and automatically executes prevention strategies when needed.
  */
 
 import { defineSkill } from 'arbitrum-vibekit-core';
@@ -13,22 +13,24 @@ import { monitorHealthTool } from '../tools/monitorHealth.js';
 
 // Input schema for the health monitoring skill
 const HealthMonitoringInputSchema = z.object({
-  instruction: z.string().describe('Health monitoring instruction with user preferences - e.g., "Monitor my health factor with warning at 1.5", "Check my positions every 30 minutes", "Start continuous monitoring with notifications"'),
+  instruction: z.string().describe('Health monitoring instruction with user preferences - e.g., "Monitor my position every 2 minutes and prevent liquidation if health factor goes below 1.5", "Prevent my liquidation automatically", "Set up automatic monitoring and prevention"'),
   userAddress: z.string().describe('The wallet address to monitor and protect from liquidation'),
 });
 
 export const healthMonitoringSkill = defineSkill({
   id: 'health-monitoring',
-  name: 'Health Factor Monitoring',
-  description: 'Monitor Aave positions, health factors, and liquidation risks with real-time tracking and alerts',
-  tags: ['defi', 'aave', 'health-factor', 'monitoring', 'liquidation-prevention'],
+  name: 'Health Factor Monitoring & Auto-Prevention',
+  description: 'Monitor Aave positions continuously and automatically prevent liquidations through intelligent strategy execution',
+  tags: ['defi', 'aave', 'health-factor', 'monitoring', 'auto-prevention', 'liquidation-prevention'],
   examples: [
-    'Monitor my health factor for liquidation risk with warning at 1.5',
-    'Check my current Aave positions and health status every 30 minutes',
-    'Start continuous monitoring of my positions with notifications',
-    'Analyze my wallet balances for liquidation prevention, conservative approach',
-    'What is my current health factor? Set alerts for danger threshold 1.2',
-    'Set up alerts for my liquidation risk with 15-minute intervals',
+    'Monitor my position every 2 minutes and prevent liquidation if health factor goes below 1.5',
+    'Prevent my liquidation automatically with default monitoring (15 min intervals, 1.1 threshold)',
+    'Set up automatic liquidation prevention with health factor 1.3 threshold',
+    'Monitor and protect my Aave positions with continuous prevention',
+    'Automatically prevent liquidation by monitoring every 10 minutes',
+    'Set up smart monitoring that prevents liquidation when health factor drops below 1.2',
+    'Check my positions and automatically prevent liquidation if needed',
+    'Monitor my wallet and execute prevention strategies when liquidation risk is detected',
   ],
   inputSchema: HealthMonitoringInputSchema,
   tools: [

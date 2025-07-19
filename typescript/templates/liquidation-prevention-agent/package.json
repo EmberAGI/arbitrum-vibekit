@@ -17,14 +17,14 @@
     },
     "dependencies": {
         "@google-a2a/types": "workspace:*",
-        "@modelcontextprotocol/sdk": "^1.5.0",
-        "@openrouter/ai-sdk-provider": "^0.4.5",
+        "@modelcontextprotocol/sdk": "catalog:",
+        "@openrouter/ai-sdk-provider": "catalog:",
         "ai": "catalog:",
         "arbitrum-vibekit-core": "workspace:*",
         "cors": "^2.8.5",
-        "dotenv": "^16.3.1",
+        "dotenv": "catalog:",
         "ember-schemas": "workspace:*",
-        "express": "^4.21.2",
+        "express": "catalog:",
         "nanoid": "^5.0.7",
         "viem": "^2.26.3",
         "zod": "catalog:"
@@ -39,9 +39,9 @@
         "chai": "catalog:",
         "mocha": "catalog:",
         "mocha-suppress-logs": "catalog:",
-        "prettier": "^3.5.3",
+        "prettier": "catalog:",
         "sinon": "^20.0.0",
-        "tsx": "^4.6.2",
+        "tsx": "catalog:",
         "typescript": "catalog:"
     }
 }

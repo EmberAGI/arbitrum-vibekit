@@ -10,24 +10,64 @@ import { z } from 'zod';
 import type { LiquidationPreventionContext } from '../context/types.js';
 import { TransactionPlan, TransactionPlanSchema, RepayResponseSchema } from 'ember-schemas';
 import { parseUserPreferences, mergePreferencesWithDefaults, generatePreferencesSummary } from '../utils/userPreferences.js';
+import { resolveTokenInfo, isTokenSymbol } from '../utils/tokenResolver.js';
 
-// Input schema for repayDebt tool
+// Input schema for repayDebt tool (supports both tokenAddress and tokenSymbol)
 const RepayDebtParams = z.object({
-  tokenAddress: z.string().describe('The debt token contract address to repay'),
+  tokenAddress: z.string().optional().describe('The debt token contract address to repay (alternative to tokenSymbol)'),
+  tokenSymbol: z.string().optional().describe('The debt token symbol to repay (e.g., USDC, DAI, ETH - alternative to tokenAddress)'),
   amount: z.string().describe('The amount to repay (in token units, or "max" for full repayment)'),
   userAddress: z.string().describe('The user wallet address'),
   instruction: z.string().optional().describe('Natural language instruction with user preferences'),
-  chainId: z.string().optional().describe('The chain ID (defaults to Arbitrum)'),
+  chainId: z.string().optional().describe('The chain ID (42161 for Arbitrum, 1 for Ethereum, 10 for Optimism, 137 for Polygon, 8453 for Base)'),
   interestRateMode: z.enum(['1', '2']).optional().describe('Interest rate mode: 1 for stable, 2 for variable (defaults to 2)'),
-});
+}).refine(
+  (data) => data.tokenAddress || data.tokenSymbol,
+  {
+    message: "Either tokenAddress or tokenSymbol must be provided",
+    path: ["tokenAddress", "tokenSymbol"],
+  }
+);
 
 // repayDebt tool implementation
 export const repayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, LiquidationPreventionContext, any> = {
   name: 'repay-debt',
-  description: 'Repay debt on Aave to improve health factor and prevent liquidation',
+  description: 'Repay debt on Aave to improve health factor and prevent liquidation. Supports multiple chains (Arbitrum, Ethereum, Optimism, Polygon, Base) and both token addresses and symbols (e.g., USDC, DAI, ETH).',
   parameters: RepayDebtParams,
   execute: async (args, context) => {
     try {
+      // Resolve token address and chain info from symbol or use provided address
+      let finalTokenAddress: string;
+      let finalChainId: string;
+      
+      if (args.tokenAddress) {
+        // Use provided token address directly
+        finalTokenAddress = args.tokenAddress;
+        finalChainId = args.chainId || '42161'; // Default to Arbitrum if not specified
+        console.log(`💸 Using provided token address: ${finalTokenAddress} on chain ${finalChainId}`);
+      } else if (args.tokenSymbol) {
+        // Resolve token symbol to address and chain using tokenMap
+        if (!context.custom.tokenMap) {
+          throw new Error('Token map not available. Cannot resolve token symbol.');
+        }
+        
+        try {
+          const tokenInfo = resolveTokenInfo(
+            context.custom.tokenMap,
+            args.tokenSymbol,
+            args.chainId // Pass user's preferred chainId (if any)
+          );
+          finalTokenAddress = tokenInfo.address;
+          finalChainId = tokenInfo.chainId;
+          console.log(`💸 Resolved token symbol "${args.tokenSymbol}" to address: ${finalTokenAddress} on chain ${finalChainId}`);
+        } catch (resolverError) {
+          console.error(`❌ Token resolution failed for "${args.tokenSymbol}":`, resolverError);
+          throw resolverError; // Re-throw with original error message
+        }
+      } else {
+        throw new Error('Either tokenAddress or tokenSymbol must be provided');
+      }
+      
       // Parse user preferences from instruction (Task 4.3)
       const userPrefs = parseUserPreferences(args.instruction || '');
       const mergedPrefs = mergePreferencesWithDefaults(userPrefs, {
@@ -36,7 +76,8 @@ export const repayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Li
         strategy: context.custom.strategy,
       });
       
-      console.log(`💸 Repaying debt: ${args.amount} of ${args.tokenAddress} for user ${args.userAddress}`);
+      const tokenIdentifier = args.tokenSymbol || finalTokenAddress;
+      console.log(`💸 Repaying debt: ${args.amount} of ${tokenIdentifier} for user ${args.userAddress}`);
       console.log(`⚙️  User preferences: ${generatePreferencesSummary(mergedPrefs)}`);
 
       // Access Ember MCP client from custom context
@@ -51,8 +92,8 @@ export const repayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Li
         name: 'lendingRepay',
         arguments: {
           tokenUid: {
-            chainId: args.chainId || '42161', // Default to Arbitrum
-            address: args.tokenAddress,
+            chainId: finalChainId,
+            address: finalTokenAddress,
           },
           amount: args.amount,
           walletAddress: args.userAddress,
@@ -82,7 +123,7 @@ export const repayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Li
         console.log(`✅ Successfully executed repay debt transactions`);
 
         // Return structured success response that frontend can display
-        const successMessage = `💸 Successfully repaid ${args.amount} tokens to improve health factor and prevent liquidation`;
+        const successMessage = `💸 Successfully repaid ${args.amount} ${tokenIdentifier} to improve health factor and prevent liquidation`;
         
         return createSuccessTask(
           'repay-debt',

@@ -5,8 +5,7 @@
  */
 
 import 'dotenv/config';
-import { Agent, type AgentConfig } from 'arbitrum-vibekit-core';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { Agent, type AgentConfig, createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { contextProvider } from './context/provider.js';
@@ -19,19 +18,37 @@ import { liquidationPreventionSkill } from './skills/liquidationPrevention.js';
 // Skills to be implemented in future tasks
 // import { riskAssessmentSkill } from './skills/riskAssessment.js';
 
-// Create OpenRouter instance for LLM
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
+// Provider selector initialization
+const providers = createProviderSelector({
+  openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  // openaiApiKey: process.env.OPENAI_API_KEY,
+  // xaiApiKey: process.env.XAI_API_KEY,
+  // hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
 });
+
+const available = getAvailableProviders(providers);
+if (available.length === 0) {
+  console.error('No AI providers configured. Please set at least one provider API key.');
+  process.exit(1);
+}
+
+const preferred = process.env.AI_PROVIDER || available[0]!;
+const selectedProvider = providers[preferred as keyof typeof providers];
+if (!selectedProvider) {
+  console.error(`Preferred provider '${preferred}' not available. Available: ${available.join(', ')}`);
+  process.exit(1);
+}
+
+const modelOverride = process.env.AI_MODEL;
 
 // Export agent configuration for testing
 export const agentConfig: AgentConfig = {
   name: process.env.AGENT_NAME || 'Liquidation Prevention Agent',
   version: process.env.AGENT_VERSION || '1.0.0',
-  description: process.env.AGENT_DESCRIPTION || 'Aave liquidation prevention agent that monitors health factors and prevents liquidations',
+  description: process.env.AGENT_DESCRIPTION || 'Intelligent Aave liquidation prevention agent with continuous monitoring and automatic risk mitigation',
   skills: [
-    healthMonitoringSkill,         // ✅ Implemented: Task 2
-    liquidationPreventionSkill,    // ✅ Implemented: Task 3.1
+    healthMonitoringSkill,         // ✅ Continuous monitoring + automatic prevention
+    liquidationPreventionSkill,    // ✅ Direct supply/repay actions
     // riskAssessmentSkill,        // 🔄 To be implemented: Task 4
   ],
   url: 'localhost',
@@ -50,7 +67,7 @@ const agent = Agent.create(agentConfig, {
   cors: process.env.ENABLE_CORS !== 'false',
   basePath: process.env.BASE_PATH || undefined,
   llm: {
-    model: openrouter(process.env.LLM_MODEL || 'x-ai/grok-3-mini'),
+    model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(process.env.LLM_MODEL || 'x-ai/grok-3-mini'),
   },
 });
 
@@ -118,17 +135,16 @@ agent
     console.log(`🤖 Agent Card: http://localhost:${PORT}/.well-known/agent.json`);
     console.log(`🔌 MCP SSE: http://localhost:${PORT}/sse`);
     console.log('\n🛡️  Liquidation Prevention Features:');
-    console.log('  ✅ Health factor monitoring with risk assessment');
-    console.log('  ✅ Periodic position monitoring with change detection');  
-    console.log('  ✅ Wallet balance analysis for liquidation strategies');
-    console.log('  ✅ Strategy 1: Supply more collateral (supplyCollateral)');
-    console.log('  ✅ Strategy 2: Repay debt (repayDebt)');
-    console.log('  ✅ Strategy 3: Intelligent automatic strategy selection');
-    console.log('  ✅ Task 4.1: Configurable health factor thresholds');
-    console.log('  ✅ Task 4.2: Configurable monitoring intervals');
-    console.log('  ✅ Task 4.3: User preference parsing from instructions');
-    console.log('\n⚡ Current Status: Task 4.3 (Configuration & Safety Features) COMPLETED');
-    console.log('📊 Available tools: getUserPositions, getWalletBalances, monitorHealth, supplyCollateral, repayDebt, intelligentPreventionStrategy');
+    console.log('  ✅ Continuous health factor monitoring with automatic prevention');
+    console.log('  ✅ Intelligent strategy execution when liquidation risk detected');  
+    console.log('  ✅ Direct manual liquidation prevention actions');
+    console.log('  ✅ Configurable health factor thresholds and monitoring intervals');
+    console.log('  ✅ User preference parsing from natural language instructions');
+    console.log('  ✅ Automatic wallet balance analysis and strategy selection');
+    console.log('\n🎯 Two-Skill Architecture:');
+    console.log('  🔄 Health Monitoring: Continuous monitoring + automatic prevention');
+    console.log('  ⚡ Liquidation Prevention: Direct supply/repay actions');
+    console.log('\n📊 Available tools: getUserPositions, getWalletBalances, monitorHealth, supplyCollateral, repayDebt');
     console.log('⚙️  User preferences: Health factors, monitoring intervals, strategies, risk tolerance, gas optimization');
   })
   .catch((error) => {

@@ -1,40 +1,40 @@
 /**
  * Liquidation Prevention Skill
  * 
- * Provides intelligent liquidation prevention capabilities including
- * automatic strategy selection, collateral supply, debt repayment, and combined approaches.
+ * Provides direct liquidation prevention actions including
+ * collateral supply and debt repayment for immediate execution.
+ * 
+ * Note: For continuous monitoring and automatic prevention, use the Health Monitoring skill.
  */
 
 import { defineSkill } from 'arbitrum-vibekit-core';
 import { z } from 'zod';
 import { supplyCollateralTool } from '../tools/supplyCollateral.js';
 import { repayDebtTool } from '../tools/repayDebt.js';
-import { intelligentPreventionStrategyTool } from '../tools/intelligentPreventionStrategy.js';
 
 // Input schema for the liquidation prevention skill
 const LiquidationPreventionInputSchema = z.object({
-  instruction: z.string().describe('Liquidation prevention instruction with user preferences - e.g., "Prevent liquidation with health factor 1.2, monitor every 15 minutes", "Supply more collateral with max $1000, conservative approach"'),
+  instruction: z.string().describe('Direct liquidation prevention instruction - e.g., "Supply 100 USDC as collateral", "Repay 50 DAI debt", "Supply more collateral with max $1000"'),
   userAddress: z.string().describe('The wallet address to manage and protect from liquidation'),
 });
 
 export const liquidationPreventionSkill = defineSkill({
   id: 'liquidation-prevention',
   name: 'Liquidation Prevention',
-  description: 'Automatically prevent liquidations through intelligent strategy selection and execution including collateral supply, debt repayment, and combined approaches',
-  tags: ['defi', 'aave', 'liquidation-prevention', 'automatic', 'strategy'],
+  description: 'Execute direct liquidation prevention actions including collateral supply and debt repayment for immediate risk mitigation',
+  tags: ['defi', 'aave', 'liquidation-prevention', 'supply', 'repay'],
   examples: [
-    'Prevent my liquidation automatically with health factor 1.2',
-    'Execute intelligent liquidation prevention strategy with conservative approach',
-    'Supply collateral to improve my health factor, max $1000',
-    'Repay debt to avoid liquidation, monitor every 15 minutes',
-    'Choose the best strategy to prevent liquidation with 1.5% slippage',
-    'Automatically manage my position to maintain health factor above 1.1, gas optimized',
-    'Execute combined supply and repay strategy with moderate risk tolerance',
-    'Analyze and execute optimal liquidation prevention with notifications enabled',
+    'Supply 100 USDC as collateral to improve my health factor',
+    'Repay 50 DAI debt to reduce liquidation risk',
+    'Supply more ETH collateral with max $1000',
+    'Repay all available USDT debt',
+    'Supply half of my WETH balance as collateral',
+    'Repay 25% of my borrowed tokens',
+    'Supply this amount of tokens to strengthen my position',
+    'Execute immediate debt repayment to prevent liquidation',
   ],
   inputSchema: LiquidationPreventionInputSchema,
   tools: [
-    intelligentPreventionStrategyTool,
     supplyCollateralTool,
     repayDebtTool,
   ],
