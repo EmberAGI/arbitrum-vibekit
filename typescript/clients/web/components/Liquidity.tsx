@@ -76,6 +76,8 @@ export function Liquidity({
     address,
     currentChainId: chainId,
     switchChainAsync,
+    agentType: 'liquidity', // Add this
+    methodName: txPreview?.action || 'liquidity',
   });
 
   const needsApproval = totalApprovals > 0;

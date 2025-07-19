@@ -58,6 +58,8 @@ export function Pendle({
     address,
     currentChainId: chainId,
     switchChainAsync, // Pass the function needed by the hook
+    agentType: 'pendle', // Add this
+    methodName: txPreview?.action || 'pendle',
   });
 
   const needsApproval = totalApprovals > 0; // Still useful for conditional rendering
