@@ -14,7 +14,9 @@
     "docker:compose:down": "docker compose down",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "pnpm --filter lending-agent-no-wallet run test && pnpm --filter swapping-agent-no-wallet run test && pnpm --filter pendle-agent run test && pnpm --filter liquidity-agent-no-wallet run test",
+    "test": "pnpm run test:vitest && pnpm run test:anvil",
+    "test:anvil": "pnpm --filter lending-agent-no-wallet run test && pnpm --filter swapping-agent-no-wallet run test && pnpm --filter pendle-agent run test && pnpm --filter liquidity-agent-no-wallet run test",
+    "test:vitest": "vitest run",
     "format": "pnpm recursive run format",
     "format:check": "pnpm recursive run format:check",
     "lint:require-submodule": "./scripts/require-submodule.sh",
@@ -43,7 +45,9 @@
     "dotenv": "catalog:",
     "tsx": "^4.6.2",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.32.1"
+    "typescript-eslint": "^8.32.1",
+    "vitest": "catalog:",
+    "c8": "catalog:"
   },
   "dependencies": {
     "@google-a2a/types": "workspace:*",

@@ -20,40 +20,50 @@ export async function mintUSDC({
   balanceStr: string;
 }): Promise<void> {
   const newBalance = ethers.BigNumber.from(balanceStr);
-  // For USDC, the balance mapping is known to be stored at slot 9.
-  const mappingSlot = 9;
 
-  // Calculate the storage slot for the given user.
-  // The storage slot for a mapping is computed as keccak256(abi.encode(key, mappingSlot))
-  const storageSlot = ethers.utils.keccak256(
-    ethers.utils.defaultAbiCoder.encode(
-      ["address", "uint256"],
-      [userAddress, mappingSlot],
-    ),
-  );
+  // Commonly observed storage slots for USDC-like tokens
+  const candidateSlots = [0, 9, 51];
 
-  // Prepare the new balance as a 32-byte hex string.
   const newBalanceHex = ethers.utils.hexZeroPad(newBalance.toHexString(), 32);
-  // Use Anvil's cheatcode to set storage.
-  await provider.send("anvil_setStorageAt", [
-    tokenAddress,
-    storageSlot,
-    newBalanceHex,
-  ]);
-  await provider.send("evm_mine", []);
+
+  for (const mappingSlot of candidateSlots) {
+    // Calculate the storage slot for the given user.
+    const storageSlot = ethers.utils.keccak256(
+      ethers.utils.defaultAbiCoder.encode(['address', 'uint256'], [userAddress, mappingSlot])
+    );
+
+    // Attempt to set balance in this slot
+    await provider.send('anvil_setStorageAt', [tokenAddress, storageSlot, newBalanceHex]);
+    await provider.send('evm_mine', []);
+
+    // Verify by reading balanceOf; if matches we are done
+    try {
+      const erc20 = new Contract(tokenAddress, ERC20_ABI, provider);
+      const balanceAfter: ethers.BigNumber = await erc20.balanceOf(userAddress);
+      if (balanceAfter.eq(newBalance)) {
+        return; // success
+      }
+    } catch {
+      // ignore and try next slot
+    }
+  }
+
+  throw new Error(
+    `mintUSDC: Failed to set balance for token ${tokenAddress}. Tried slots ${candidateSlots.join(', ')}`
+  );
 }
 
 // ABI for ERC20 token
 const ERC20_ABI = [
-  "function name() view returns (string)",
-  "function symbol() view returns (string)",
-  "function decimals() view returns (uint8)",
-  "function totalSupply() view returns (uint256)",
-  "function balanceOf(address owner) view returns (uint256)",
-  "function transfer(address to, uint256 amount) returns (bool)",
-  "function allowance(address owner, address spender) view returns (uint256)",
-  "function approve(address spender, uint256 amount) returns (bool)",
-  "function transferFrom(address from, address to, uint256 amount) returns (bool)",
+  'function name() view returns (string)',
+  'function symbol() view returns (string)',
+  'function decimals() view returns (uint8)',
+  'function totalSupply() view returns (uint256)',
+  'function balanceOf(address owner) view returns (uint256)',
+  'function transfer(address to, uint256 amount) returns (bool)',
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function approve(address spender, uint256 amount) returns (bool)',
+  'function transferFrom(address from, address to, uint256 amount) returns (bool)',
 ];
 
 /**
@@ -70,11 +80,7 @@ export class ERC20Wrapper {
    */
   constructor(provider: providers.Provider, contractAddress: string) {
     this.provider = provider;
-    this.contract = new Contract(
-      contractAddress,
-      ERC20_ABI,
-      provider,
-    );
+    this.contract = new Contract(contractAddress, ERC20_ABI, provider);
   }
 
   /**
@@ -123,9 +129,9 @@ export class ERC20Wrapper {
   async transfer(
     signer: ethers.Signer,
     to: string | Address,
-    amount: BigNumber,
+    amount: BigNumber
   ): Promise<ethers.ContractTransaction> {
     const contractWithSigner = this.contract.connect(signer);
     return await contractWithSigner.transfer(to, amount);
   }
-} 
+}

@@ -52,7 +52,7 @@ The workflow uses a 5-level satisfaction scale:
 ### Prerequisites
 
 - Node.js 18+
-- OpenRouter API key
+- At least one AI provider API key (OpenRouter, OpenAI, Grok/xAI, or Hyperbolic)
 
 ### Installation
 
@@ -69,9 +69,26 @@ pnpm install
    cp env.example .env
    ```
 
-2. Edit `.env` and add your OpenRouter API key:
+2. Edit `.env` and add your API keys:
+
    ```env
-   OPENROUTER_API_KEY=your-actual-api-key-here
+   # Option 1: OpenRouter (supports many models)
+   OPENROUTER_API_KEY=your-openrouter-api-key
+
+   # Option 2: OpenAI
+   OPENAI_API_KEY=your-openai-api-key
+
+   # Option 3: Grok (xAI)
+   XAI_API_KEY=your-xai-api-key
+
+   # Option 4: Hyperbolic
+   HYPERBOLIC_API_KEY=your-hyperbolic-api-key
+
+   # Optional: Preferred provider (defaults to first configured)
+   AI_PROVIDER=openrouter
+
+   # Optional: Model override (defaults to provider-specific default)
+   AI_MODEL=google/gemini-2.5-flash
    ```
 
 See `env.example` for all available configuration options.

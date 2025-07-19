@@ -47,9 +47,9 @@ export const greetSkill = defineSkill({
   tools: [getFormalGreetingTool, getCasualGreetingTool, getLocalizedGreetingTool],
 
   // MCP servers this skill needs
-  mcpServers: [
-    {
-      // Tests multiple MCP servers per skill
+  mcpServers: {
+    translate: {
+      // Translation MCP server
       command: 'tsx',
       moduleName: path.join(__dirname, '../../mock-mcp-servers/mock-mcp-translate.ts'),
       env: {
@@ -57,7 +57,8 @@ export const greetSkill = defineSkill({
         DEBUG: 'true',
       },
     },
-    {
+    language: {
+      // Language detection MCP server
       command: 'tsx',
       moduleName: path.join(__dirname, '../../mock-mcp-servers/mock-mcp-language.ts'),
       env: {
@@ -65,7 +66,7 @@ export const greetSkill = defineSkill({
         DEBUG: 'true',
       },
     },
-  ],
+  },
 
   // No handler - will use LLM orchestration by default
   // This demonstrates the LLM-first approach with optional manual handlers
