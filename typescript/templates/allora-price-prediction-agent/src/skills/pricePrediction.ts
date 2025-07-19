@@ -34,8 +34,8 @@ export const pricePredictionSkill = defineSkill({
   tools: [getPricePredictionTool],
 
   // MCP servers this skill needs
-  mcpServers: [
-    {
+  mcpServers: {
+    allora: {
       command: 'node', // Using node since the package is built
       moduleName: '@alloralabs/mcp-server', // Will be resolved from workspace
       env: {
@@ -44,7 +44,7 @@ export const pricePredictionSkill = defineSkill({
         PORT: process.env.ALLORA_MCP_PORT || '3009', // Different from Docker Compose's 3001
       },
     },
-  ],
+  },
 
   // No handler - will use LLM orchestration
 });

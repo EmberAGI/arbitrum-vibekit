@@ -1,0 +1,50 @@
+{
+  "name": "ember-agent",
+  "version": "1.0.0",
+  "description": "Unified Ember Agent - Multi-skill DeFi agent supporting swapping, lending, liquidity, and yield trading operations",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc --build && cpx \"encyclopedia/**/*\" dist/encyclopedia",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:run": "vitest run",
+    "test:watch": "vitest watch",
+    "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
+    "docker:build": "docker build -t ember-agent ../../",
+    "docker:run": "docker run --env-file .env -p 3001:3001 ember-agent",
+    "docker:compose:up": "docker compose up --build --no-log-prefix",
+    "docker:compose:build": "docker compose build --no-cache",
+    "docker:compose:down": "docker compose down",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
+  },
+  "dependencies": {
+    "@google-a2a/types": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@openzeppelin/contracts": "^5.3.0",
+    "ai": "catalog:",
+    "arbitrum-vibekit-core": "workspace:*",
+    "cors": "^2.8.5",
+    "dotenv": "catalog:",
+    "ember-api": "workspace:*",
+    "ember-schemas": "workspace:*",
+    "express": "catalog:",
+    "nanoid": "^5.0.7",
+    "p-retry": "^6.2.1",
+    "viem": "^2.26.3",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "catalog:",
+    "c8": "catalog:",
+    "cpx": "^1.5.0",
+    "prettier": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -31,15 +31,15 @@ export const agentConfig: AgentConfig = {
       inputSchema,
       tools: lendingTools,
       // MCP servers this skill needs
-      mcpServers: [
-        {
+      mcpServers: {
+        ember: {
           command: 'node',
           moduleName: 'ember-mcp-tool-server',
           env: {
             EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'grpc.api.emberai.xyz:50051',
           },
         },
-      ],
+      },
       // No handler: LLM orchestration will be used when tools are present
     }),
   ],

@@ -1,0 +1,74 @@
+# Multi-stage build for production
+FROM node:18-alpine AS builder
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Set working directory
+WORKDIR /app
+
+# Copy workspace files
+COPY typescript/package.json typescript/pnpm-workspace.yaml ./
+COPY typescript/pnpm-lock.yaml ./
+COPY typescript/tsconfig.base.json ./
+
+# Copy ember-agent specific files
+COPY typescript/templates/ember-agent/package.json ./templates/ember-agent/
+COPY typescript/templates/ember-agent/tsconfig.json ./templates/ember-agent/
+
+# Copy required workspace packages
+COPY typescript/lib/ ./lib/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy agent source code
+COPY typescript/templates/ember-agent/src/ ./templates/ember-agent/src/
+
+# Build the project
+RUN pnpm build
+
+# Production stage
+FROM node:18-alpine AS production
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Create app user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S agent -u 1001
+
+# Set working directory
+WORKDIR /app
+
+# Copy workspace configuration
+COPY --chown=agent:nodejs typescript/package.json typescript/pnpm-workspace.yaml ./
+COPY --chown=agent:nodejs typescript/pnpm-lock.yaml ./
+
+# Copy ember-agent package.json
+COPY --chown=agent:nodejs typescript/templates/ember-agent/package.json ./templates/ember-agent/
+
+# Copy required lib packages
+COPY --chown=agent:nodejs typescript/lib/ ./lib/
+
+# Install production dependencies only
+RUN pnpm install --frozen-lockfile --prod
+
+# Copy built application
+COPY --from=builder --chown=agent:nodejs /app/templates/ember-agent/dist ./templates/ember-agent/dist
+
+# Set working directory to ember-agent
+WORKDIR /app/templates/ember-agent
+
+# Switch to non-root user
+USER agent
+
+# Expose port
+EXPOSE 3001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "fetch('http://localhost:3001/health').then(() => process.exit(0)).catch(() => process.exit(1))"
+
+# Start the agent
+CMD ["node", "dist/index.js"] 
