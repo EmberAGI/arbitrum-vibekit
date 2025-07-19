@@ -34,7 +34,7 @@ export const agentConfig: AgentConfig = {
       tools: perpetualsTools as unknown as any[], // type inference workaround
       mcpServers: {
         onchain: {
-          url: process.env.ONCHAIN_ACTIONS_MCP_URL || 'http://localhost:41242/mcp',
+          url: process.env.EMBER_ENDPOINT || 'http://localhost:3001/mcp',
         },
       },
     }),

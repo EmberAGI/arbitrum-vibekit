@@ -26,35 +26,48 @@ if (!selectedProvider) {
 
 const modelOverride = process.env.AI_MODEL;
 
-const agent = Agent.create(agentConfig, {
-  cors: true,
-  basePath: '/',
-  llm: {
-    model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
-  },
-});
-
-const PORT = parseInt(process.env.PORT || '3008', 10);
-
-agent
-  .start(PORT)
-  .then(() => {
-    console.log(`🚀 Perpetuals Agent running on port ${PORT}`);
-    console.log(`🤖 Agent Card: http://localhost:${PORT}/.well-known/agent.json`);
-    console.log(`🔌 MCP SSE: http://localhost:${PORT}/sse`);
-  })
-  .catch(err => {
-    console.error('Failed to start Perpetuals Agent:', err);
-    process.exit(1);
+// Only run the main execution if this file is run directly (not imported)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const agent = Agent.create(agentConfig, {
+    cors: true,
+    basePath: '/',
+    llm: {
+      model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
+    },
   });
 
-// Graceful shutdown
-const shutdown = async (signal: string) => {
-  console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
-  await agent.stop();
-  process.exit(0);
-};
+  const PORT = parseInt(process.env.PORT || '3008', 10);
 
-['SIGINT', 'SIGTERM'].forEach(sig => {
-  process.on(sig, () => shutdown(sig));
-}); 
+  agent
+    .start(PORT)
+    .then(() => {
+      console.log(`🚀 Perpetuals Agent running on port ${PORT}`);
+      console.log(`🤖 Agent Card: http://localhost:${PORT}/.well-known/agent.json`);
+      console.log(`🔌 MCP SSE: http://localhost:${PORT}/sse`);
+    })
+    .catch(err => {
+      console.error('Failed to start Perpetuals Agent:', err);
+      process.exit(1);
+    });
+
+  // Graceful shutdown
+  const shutdown = async (signal: string) => {
+    console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
+    await agent.stop();
+    process.exit(0);
+  };
+
+  ['SIGINT', 'SIGTERM'].forEach(sig => {
+    process.on(sig, () => shutdown(sig));
+  });
+}
+
+export function createPerpetualsAgent() {
+  return Agent.create(agentConfig, {
+    cors: true,
+    basePath: '/',
+    llm: {
+      model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
+    },
+  });
+} 

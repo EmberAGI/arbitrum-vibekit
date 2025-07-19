@@ -530,7 +530,7 @@ importers:
         version: 16.6.1
       ember-api:
         specifier: workspace:^
-        version: link:../../lib/ember-api
+        version: file:lib/ember-api(bufferutil@4.0.9)(react@19.0.0-rc-45804af1-20241021)(typescript@5.8.3)(utf-8-validate@5.0.10)
       ember-schemas:
         specifier: workspace:*
         version: link:../../lib/ember-schemas
@@ -606,7 +606,7 @@ importers:
         version: 16.6.1
       ember-api:
         specifier: workspace:*
-        version: link:../../lib/ember-api
+        version: file:lib/ember-api(bufferutil@4.0.9)(react@19.0.0-rc-45804af1-20241021)(typescript@5.8.3)(utf-8-validate@5.0.10)
       ember-schemas:
         specifier: workspace:*
         version: link:../../lib/ember-schemas
@@ -743,7 +743,7 @@ importers:
         version: 16.6.1
       ember-api:
         specifier: workspace:*
-        version: link:../../lib/ember-api
+        version: file:lib/ember-api(bufferutil@4.0.9)(react@19.0.0-rc-45804af1-20241021)(typescript@5.8.3)(utf-8-validate@5.0.10)
       ethers:
         specifier: ^5.7.2
         version: 5.8.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
@@ -1074,7 +1074,7 @@ importers:
         version: 16.6.1
       ember-api:
         specifier: workspace:*
-        version: link:../ember-api
+        version: file:lib/ember-api(bufferutil@4.0.9)(react@19.0.0-rc-45804af1-20241021)(typescript@5.8.3)(utf-8-validate@5.0.10)
       ember-schemas:
         specifier: workspace:*
         version: link:../ember-schemas
@@ -1196,7 +1196,7 @@ importers:
         version: 16.6.1
       ember-api:
         specifier: workspace:*
-        version: link:../../lib/ember-api
+        version: file:lib/ember-api(bufferutil@4.0.9)(react@19.0.0-rc-45804af1-20241021)(typescript@5.8.3)(utf-8-validate@5.0.10)
       ember-schemas:
         specifier: workspace:*
         version: link:../../lib/ember-schemas
@@ -1312,7 +1312,7 @@ importers:
         version: 16.6.1
       ember-api:
         specifier: workspace:*
-        version: link:../../lib/ember-api
+        version: file:lib/ember-api(bufferutil@4.0.9)(react@19.0.0-rc-45804af1-20241021)(typescript@5.8.3)(utf-8-validate@5.0.10)
       ember-schemas:
         specifier: workspace:*
         version: link:../../lib/ember-schemas
@@ -1356,37 +1356,37 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.15.1
-      ai:
-        specifier: 'catalog:'
-        version: 4.3.17(react@19.0.0-rc-45804af1-20241021)(zod@3.25.76)
       arbitrum-vibekit-core:
         specifier: workspace:*
         version: link:../../lib/arbitrum-vibekit-core
-      cors:
-        specifier: ^2.8.5
-        version: 2.8.5
       dotenv:
         specifier: 'catalog:'
         version: 16.6.1
       ember-api:
         specifier: workspace:*
-        version: link:../../lib/ember-api
-      express:
-        specifier: 'catalog:'
-        version: 4.21.2
-      nanoid:
-        specifier: ^5.0.7
-        version: 5.1.5
+        version: file:lib/ember-api(bufferutil@4.0.9)(react@19.0.0-rc-45804af1-20241021)(typescript@5.8.3)(utf-8-validate@5.0.10)
       zod:
         specifier: 'catalog:'
         version: 3.25.76
     devDependencies:
+      '@types/mocha':
+        specifier: 'catalog:'
+        version: 10.0.10
       '@types/node':
         specifier: 'catalog:'
         version: 20.19.7
+      chai:
+        specifier: 'catalog:'
+        version: 4.5.0
+      mocha:
+        specifier: 'catalog:'
+        version: 10.8.2
       prettier:
         specifier: 'catalog:'
         version: 3.6.2
+      test-utils:
+        specifier: workspace:*
+        version: link:../../lib/test-utils
       tsx:
         specifier: 'catalog:'
         version: 4.20.3
@@ -2576,6 +2576,9 @@ packages:
   '@gmx-io/sdk@1.2.0':
     resolution: {integrity: sha512-PGjuc1MhPNa1kLpQXUFEgrurvJ3oObn8J1uMzAfgybRNDTzE0SmrnTrpXVAM4ZrDE+lmIYM0TaS/aPVdE3wRPg==}
     engines: {node: '>=18.0.0'}
+
+  '@google-a2a/types@file:lib/a2a-types':
+    resolution: {directory: lib/a2a-types, type: directory}
 
   '@humanwhocodes/config-array@0.13.0':
     resolution: {integrity: sha512-DZLEEqFWQFiyK6h5YIeynKx7JlvCYWL0cImfSRXZ9l4Sg2efkFGTuFf6vzXjK1cq6IYkU+Eg/JizXw+TD2vRNw==}
@@ -4461,6 +4464,11 @@ packages:
     resolution: {integrity: sha512-KMReFUr0B4t+D+OBkjR3KYqvocp2XaSzO55UcB6mgQMd3KbcE+mWTyvVV7D/zsdEbNnV6acZUutkiHQXvTr1Rw==}
     engines: {node: '>= 8'}
 
+  arbitrum-vibekit-core@file:lib/arbitrum-vibekit-core:
+    resolution: {directory: lib/arbitrum-vibekit-core, type: directory}
+    peerDependencies:
+      zod: ^3.24.3
+
   arg@4.1.3:
     resolution: {integrity: sha512-58S9QDqG0Xx27YwPSt9fJxivjYl432YCwfDMfZ+71RAqUrZef7LrKQZ3LHLOwCS4FLNBplP533Zx895SeOCHvA==}
 
@@ -5407,6 +5415,12 @@ packages:
 
   elliptic@6.6.1:
     resolution: {integrity: sha512-RaddvvMatK2LJHqFJ+YA4WysVN5Ita9E35botqIYspQ4TkRAlCicdzKOjlyv/1Za5RyTNn7di//eEV0uTAfe3g==}
+
+  ember-api@file:lib/ember-api:
+    resolution: {directory: lib/ember-api, type: directory}
+
+  ember-schemas@file:lib/ember-schemas:
+    resolution: {directory: lib/ember-schemas, type: directory}
 
   emoji-regex@8.0.0:
     resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==}
@@ -10737,6 +10751,13 @@ snapshots:
       - utf-8-validate
       - zod
 
+  '@google-a2a/types@file:lib/a2a-types':
+    dependencies:
+      typescript-json-schema: 0.65.1
+    transitivePeerDependencies:
+      - '@swc/core'
+      - '@swc/wasm'
+
   '@humanwhocodes/config-array@0.13.0':
     dependencies:
       '@humanwhocodes/object-schema': 2.0.3
@@ -13476,6 +13497,33 @@ snapshots:
       normalize-path: 3.0.0
       picomatch: 2.3.1
 
+  arbitrum-vibekit-core@file:lib/arbitrum-vibekit-core(bufferutil@4.0.9)(react@19.0.0-rc-45804af1-20241021)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.76):
+    dependencies:
+      '@ai-sdk/openai': 1.3.23(zod@3.25.76)
+      '@ai-sdk/xai': 1.2.17(zod@3.25.76)
+      '@google-a2a/types': file:lib/a2a-types
+      '@hyperbolic/ai-sdk-provider': 0.1.3(react@19.0.0-rc-45804af1-20241021)
+      '@modelcontextprotocol/sdk': 1.15.1
+      '@openrouter/ai-sdk-provider': 0.4.6(zod@3.25.76)
+      '@openzeppelin/contracts': 5.3.0
+      ai: 4.3.17(react@19.0.0-rc-45804af1-20241021)(zod@3.25.76)
+      cors: 2.8.5
+      dotenv: 16.6.1
+      ember-schemas: file:lib/ember-schemas
+      escape-html: 1.0.3
+      express: 4.21.2
+      nanoid: 5.1.5
+      viem: 2.31.7(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.76)
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - '@swc/core'
+      - '@swc/wasm'
+      - bufferutil
+      - react
+      - supports-color
+      - typescript
+      - utf-8-validate
+
   arg@4.1.3: {}
 
   arg@5.0.2: {}
@@ -14432,6 +14480,28 @@ snapshots:
       inherits: 2.0.4
       minimalistic-assert: 1.0.1
       minimalistic-crypto-utils: 1.0.1
+
+  ember-api@file:lib/ember-api(bufferutil@4.0.9)(react@19.0.0-rc-45804af1-20241021)(typescript@5.8.3)(utf-8-validate@5.0.10):
+    dependencies:
+      '@gmx-io/sdk': 1.2.0(bufferutil@4.0.9)(react-native-performance@5.1.4(react-native@0.80.1(@babel/core@7.28.0)(bufferutil@4.0.9)(react@19.0.0-rc-45804af1-20241021)(utf-8-validate@5.0.10)))(utf-8-validate@5.0.10)(zod@3.25.76)
+      '@modelcontextprotocol/sdk': 1.15.1
+      arbitrum-vibekit-core: file:lib/arbitrum-vibekit-core(bufferutil@4.0.9)(react@19.0.0-rc-45804af1-20241021)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.76)
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - '@swc/core'
+      - '@swc/wasm'
+      - bufferutil
+      - debug
+      - encoding
+      - react
+      - react-native-performance
+      - supports-color
+      - typescript
+      - utf-8-validate
+
+  ember-schemas@file:lib/ember-schemas:
+    dependencies:
+      zod: 3.25.76
 
   emoji-regex@8.0.0: {}
 
