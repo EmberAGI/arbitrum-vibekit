@@ -15,9 +15,9 @@
 
 ## 📙 Introduction
 
-Welcome to Vibekit, the v2 framework for building smart, autonomous DeFi agents with skills, tools, and LLM orchestration. Whether you're automating trades, managing liquidity, or integrating with on-chain and off-chain data, Vibekit v2 makes it effortless and powerful.
+Welcome to Vibekit, the polyglot toolkit for vibe coding smart, autonomous DeFi agents that can perform complex on-chain operations. Whether you're automating trades, managing liquidity, or integrating with blockchain data, Vibekit makes it simple to create intelligent agents that understand natural language and execute sophisticated workflows.
 
-At its core, the v2 framework uses **skills** (high-level capabilities) that intelligently coordinate **tools** (specific actions) through LLM orchestration. Built on the Model Context Protocol (MCP) with StreamableHTTP transport, it includes Agent2Agent (A2A) integration and modern deployment patterns. Vibekit works smoothly with popular frameworks like Eliza and LangGraph - just add our MCP tools to your existing agents and watch them level up with DeFi superpowers!
+At its core, Vibekit uses the Model Context Protocol (MCP) to standardize how agents connect with tools and data. It includes built-in Agent2Agent (A2A) integration, so the agents can easily work together. Vibekit also works smoothly with popular frameworks like Eliza and LangGraph, allowing you to enhance your existing agents with our specialized DeFi tools.
 
 Here's an overview of how everything fits together:
 
@@ -27,47 +27,47 @@ Here's an overview of how everything fits together:
 
 ## 🧬 Repository Organization
 
-Vibekit is structured as a monorepo with TypeScript at its core, organized around the v2 framework architecture:
+Vibekit is structured as a monorepo with TypeScript at its core, with a Rust implementation on the horizon. Here's how it's organized:
 
 ```
 Vibekit/
-├── typescript/
-|   └── clients/
-|       └── web/                    # Frontend for interacting with agents
-│   └── templates/                  # 🆕 V2 agent templates (recommended)
-│       ├── quickstart-agent/       # Complete example with all v2 features
-│       ├── ember-agent/            # Multi-skill DeFi agent
-│       ├── lending-agent/          # Aave lending operations
-│       ├── allora-price-prediction-agent/ # Price prediction with Allora
-│       └── langgraph-workflow-agent/      # LangGraph integration example
-│   └── examples/                   # [Legacy] Older architecture examples
-│-------- lib/
-│       └── arbitrum-vibekit-core/  # V2 framework core
-│       └── ember-schemas/          # Schema definitions
-│       └── mcp-tools/              # MCP tool server implementations
-│       └── test-utils/             # Testing utilities
-│-------- test/                     # Integration tests
+├── typescript/                     # Main monorepo workspace
+│   ├── clients/
+│   │   └── web/                    # Frontend for interacting with agents
+│   ├── templates/                  # Agent templates
+│   ├── examples/                   # [Legacy] Older architecture examples
+│   ├── lib/
+│   │   ├── arbitrum-vibekit-core/  # Core framework implementation
+│   │   ├── ember-api/              # Ember API client
+│   │   ├── ember-schemas/          # Schema definitions
+│   │   ├── mcp-tools/              # MCP tool server implementations
+│   │   ├── test-utils/             # Testing utilities
+│   │   └── a2a-types/              # Agent-to-Agent type definitions
+│   ├── test/                       # Integration tests
+│   └── scripts/                    # Build and utility scripts
+├── img/                            # Documentation images
+├── .cursor/                        # Cursor IDE rules and configuration
 ├── CHANGELOG.md
 ├── CONTRIBUTIONS.md
 ├── LICENSE
-├── README.md
+└── README.md
 ```
 
 ### Key Directories
 
-- **`templates/`**: Production-ready v2 agent templates with skills, tools, hooks, and modern deployment patterns. **Start here for new projects.**
+- **`templates/`**: Production-ready agent templates with skills, tools, hooks, and modern deployment patterns. **Start here for new projects.**
 
 - **`examples/` [Legacy]**: Older architecture examples. Use templates instead for new development.
 
 - **`clients/web/`**: Web frontend for interacting with agents via MCP.
 
-- **`lib/arbitrum-vibekit-core/`**: The v2 framework providing skills, tools, LLM orchestration, and modern transport.
+- **`lib/`**: Core framework libraries and supporting packages:
 
-- **`mcp-tools/`**: MCP server implementations for external services.
+- **`.cursor/`**: Cursor IDE configuration and development rules for vibe coding.
 
 ## ⚡ Developer Quickstart
 
-Follow these steps to build and run v2 DeFi agents:
+Follow these steps to build and run DeFi agents:
 
 ### 1. Get the Code
 
@@ -87,9 +87,9 @@ cd arbitrum-vibekit
 
 For more detailed contribution steps, please see our [Contribution Guidelines](CONTRIBUTIONS.md).
 
-### 2. Run V2 DeFi Agents
+### 2. Run DeFi Agents
 
-Let's run the ember agent that demonstrates the v2 framework's multi-skill architecture. This agent supports token swapping, lending operations, and documentation queries.
+Let's run the swapping and lending agents. These agents are started by default when the frontend is started. Follow this guide to launch the frontend:
 
 - **Prerequisites:**
 
@@ -121,74 +121,133 @@ Open the `.env` file and fill in the required values. At minimum, you need:
 docker compose up
 ```
 
-This command will start:
+> [!NOTE]  
+> If you get a `permission denied error`, try running the above command with `sudo`:
+>
+> ```bash
+> sudo docker compose up
+> ```
 
-- **Web Frontend** on http://localhost:3000
-- **Ember Agent** (multi-skill DeFi agent) on port 3001
-- **Supporting services** (database, etc.)
-
-> [!WARNING]  
-> The first time you run this command, Docker will download and build several images, which may take 5-10 minutes depending on your internet connection and system performance.
+> [!WARNING]
+> If you previously ran `docker compose up` with an older version of this repository and encounter frontend errors or database-related errors in the `docker service logs`, follow these steps:
+>
+> 1. Clear your browser cache.
+> 2. Run the following command in your terminal:
+>    ```bash
+>    docker compose down && docker volume rm typescript_db_data && docker compose build web --no-cache && docker compose up
+>    ```
 
 - **Access the Web Interface:**
 
-Once all services are running (you'll see log output from multiple containers), open your browser and navigate to:
+Once all services are running, open your browser and navigate to http://localhost:3000. To be able to chat with the agents, you need to connect your wallet first. Click on "Connect Wallet" to get started:
 
-**🌐 http://localhost:3000**
+<p align="left">
+  <img src="img/wallet.png" width="900px" alt="wallet"/>
+</p>
 
-You'll see the Vibekit web interface where you can:
+After setting up your wallet, you'll see the Vibekit web interface where you can explore different agent capabilities:
 
-- Chat with the ember agent using natural language
-- Try commands like "What tokens can I swap?" or "Show me my Aave positions"
-- Explore the agent's skills through the UI
+<p align="left">
+  <img src="img/frontend.png" width="900px" alt="frontend"/>
+</p>
 
-### 3. Explore V2 Agent Templates
+- **Integrate Other Agents:**
 
-The [`templates/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates) directory contains production-ready v2 agent examples:
+  Checkout the [templates/](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates) directory to explore other Vibekit agents. To integrate any other example agents into the frontend, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web#agent-configuration).
 
-- **[`quickstart-agent`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/quickstart-agent)**: Complete v2 example with skills, tools, hooks, and multiple AI providers
-- **[`ember-agent`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/ember-agent)**: Multi-skill DeFi agent with swapping, lending, and documentation
-- **[`lending-agent`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/lending-agent)**: Focused Aave lending operations
-- **[`allora-price-prediction-agent`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/allora-price-prediction-agent)**: Price predictions using Allora markets
-- **[`langgraph-workflow-agent`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/langgraph-workflow-agent)**: LangGraph integration example
+### 3. Build Your Custom DeFi Agent
 
-### 4. Build Your Own V2 Agent
+To build your own agent, we recommend using our [Quickstart Agent template](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/quickstart-agent). It provides all the necessary boilerplate code so you can start building right away. Follow these steps to integrate and run the Quickstart Agent:
 
-Use the quickstart template as a starting point:
+- **Enable the Quickstart Agent in the Frontend:**
 
-```bash
-cd typescript/templates
-cp -r quickstart-agent my-custom-agent
-cd my-custom-agent
+In the [agents-config.ts](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/agents-config.ts) file, uncomment the agent's configuration in two places:
 
-# Install dependencies
-pnpm install
-
-# Configure your agent
-cp .env.example .env
-# Edit .env with your API keys
-
-# Start your agent
-pnpm dev
+```typescript
+...
+  {
+    id: 'quickstart-agent-template' as const,
+    name: 'Quickstart',
+    description: 'Quickstart agent',
+    suggestedActions: [],
+  },
+...
 ```
 
-See the [template README](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/README.md) for detailed customization instructions.
+```typescript
+...
+  ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
+...
+```
+
+- **Add the Agent to Docker Compose:**
+
+In the [docker compose](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/compose.yml) file, uncomment the service definition for the Quickstart Agent:
+
+```yaml
+---
+quickstart-agent-template:
+  build:
+    context: ./
+    dockerfile: templates/quickstart-agent/Dockerfile
+  container_name: vibekit-quickstart-agent-template
+  env_file:
+    - path: .env
+      required: true
+    - path: templates/quickstart-agent/.env
+      required: false
+  ports:
+    - 3007:3007
+  restart: unless-stopped
+```
+
+- **Configure the Agent's Environment:**
+
+Navigate to the agent's directory and create a local `.env` by copying the`.env.example` file. Make sure to populate the `.env` file with your API keys and configurations:
+
+```bash
+cd typescript/templates/quickstart-agent && cp .env.example .env
+```
+
+- **Rebuild and Restart Services:**
+
+Navigate to the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory, rebuild the web application and restart all services to apply the changes:
+
+```bash
+cd ../.. &&
+docker compose build web --no-cache && docker compose up
+```
+
+The Quickstart Agent is now accessible through the web frontend:
+
+<p align="left">
+  <img src="/img/quickstart-agent.png" width="900px" alt="quickstart-agent"/>
+</p>
+
+> [!TIP]
+> To learn more about Vibekit's agent configurations, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web#agent-configuration).
 
 ## 🎧 Vibe Coding Guide
 
-Vibe coding is a development approach where you use AI assistance to rapidly build and iterate on agents. The v2 framework is designed to work seamlessly with AI coding assistants.
+Vibe coding is all about teaming up with AI to enhance your development process. Instead of writing every line of code manually, you guide an AI assistant using natural language prompts. The AI understands your project's context (such as folder structures, tools, and data schemas) and provides targeted suggestions to help you build more efficiently.
 
-### 🔧 Setting Up AI-Powered Development
+Vibekit enables you to build and customize DeFi agents through vibe coding. Whether you're creating a swapping agent, a lending agent, or a liquidity provider, you can describe your agent's behavior in natural language and let the AI help you implement it. The framework provides pre-built tools for common DeFi operations, MCP integration for external data, and a structured way to define your agent's capabilities through rules files.
+
+### 🤖 Vibe Coding DeFi Agents
+
+Ready to vibe with some DeFi agents? to run any of the existing agents or vibe code your own, head over to [the agent playground](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates).
+
+### 🧠 Crafting Effective AI Prompts
 
 To make the most of vibe coding, it's important to provide your AI assistant with clear and structured context. In the `.cursor/rules` folder, you can define the scope of your project, including its purpose, key components, and any relevant data schemas.
 
 #### 📝 Vibekit's Cursor Rules Structure
 
-Vibekit's rules files are located in the project's [`arbitrum-vibekit/.cursor/rules`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/.cursor/rules) directory. These files define best practices, workflows, and workspace conventions for building and maintaining v2 agents:
+Vibekit's rules files are located in the project's [`arbitrum-vibekit/.cursor/rules`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/.cursor/rules) directory. These files define best practices, workflows, and workspace conventions for building and maintaining agents:
 
 - **createVibekitAgent.mdc**
 
-  A comprehensive guide for creating v2 agents using skills, tools, LLM orchestration, and modern deployment patterns.
+  A guide for creating and configuring new agents, including best practices, required dependencies, and setup instructions.
 
 - **vibeCodingWorkflow.mdc**
 
@@ -207,85 +266,58 @@ Here's guidelines for adding or editing rules:
   Create a new `.mdc` file in `.cursor/rules` if you want to introduce a new agent type, workflow, or set of best practices. Follow the structure of the existing files for consistency.
 
 - **Update Existing Rules:**
-  - Edit `createVibekitAgent.mdc` to add new v2 framework features, configuration options, or tool integrations.
+  - Edit `createVibekitAgent.mdc` to add new agent configuration options, initialization parameters, or tool integrations.
   - Update `vibeCodingWorkflow.mdc` to refine development workflows, add new patterns, or document troubleshooting steps.
   - Revise `workspaceRules.mdc` to keep workspace-wide practices and scripts up to date.
 
-Keep these files current to ensure your team and agents always follow the latest v2 best practices and workflows.
+Keep these files current to ensure your team and agents always follow the latest best practices and workflows.
 
-#### 📚 Interactive Learning Lessons
+#### 📚 Vibekit Concepts
 
-For hands-on learning and deeper understanding of Vibekit v2 concepts, explore our comprehensive lesson series in the [`.cursor/rules/lessons/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/.cursor/rules/lessons) directory. These interactive lessons cover everything from basic concepts to advanced agent development patterns:
-
-**🏗️ V2 Architecture & Design:**
-
-- [Lesson 1: What is an AI Agent in V2?](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-01.md) - V2 framework overview with skills and tools
-- [Lesson 2: Understanding MCP in V2](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-02.md) - Modern transport and skills-based architecture
-- [Lesson 19: Skills - The V2 Foundation](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-19.md) - Core defineSkill patterns and architecture
-- [Lesson 20: LLM Orchestration vs Manual Handlers](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-20.md) - Decision framework for skill design
-- [Lesson 22: Workflow Tools and Design Patterns](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-22.md) - Best practices for skills and tools
-
-**⚙️ Implementation & Configuration:**
-
-- [Lesson 21: Provider Selection and Agent Configuration](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-21.md) - Multi-provider LLM setup and agent configuration
-- [Lesson 6: V2 Agent Structure and File Layout](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-06.md) - Template agent architecture
-- [Lesson 4: Stateless vs Context-Aware Logic](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-04.md) - Context providers and state management
-
-**🚀 Advanced Features & Production:**
-
-- [Lesson 23: Advanced Hooks and Artifacts](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-23.md) - Cross-cutting concerns and rich responses
-- [Lesson 24: Production Deployment and Configuration](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-24.md) - Containerization, monitoring, and operations
-- [Lesson 25: Modern Transport and Service Discovery](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-25.md) - StreamableHTTP, agent cards, and service patterns
-- [Lesson 26: Frontend Integration and User Context Patterns](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-26.md) - Frontend integration and user context management
+For deeper understanding of Vibekit concepts, explore our comprehensive lesson series in [this directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/arbitrum-vibekit-core/docs). These lessons cover everything from basic concepts to advanced agent development patterns, including skills architecture, LLM orchestration, deployment strategies, and production best practices.
 
 ## 🔌 MCP Explained
 
-The Model Context Protocol (MCP) is how AI models discover and use your agent's capabilities. In the v2 framework:
+MCP (Model Context Protocol) makes it easy for on-chain agents to tap into external data and tools. Here's how it works: tools get registered with the MCP server, then agents can plug in to browse what's available and start calling those tools whenever it makes sense. Agents may decide on their own when and how to use each tool, and they use the results to inform their next actions to enable autonomous decision-making.
 
-### V2 MCP Features
+Want to dig deeper? Check out the [official MCP docs](https://modelcontextprotocol.io/introduction).
 
-- **Skills as Tools**: Each skill becomes an MCP tool with natural language input
-- **Modern Transport**: StreamableHTTP by default, with legacy SSE support
-- **Agent Cards**: Automatic service discovery via `/.well-known/agent.json`
-- **LLM Orchestration**: Skills intelligently route to appropriate internal tools
-- **Multi-Provider Support**: OpenRouter, OpenAI, Anthropic, xAI, and Hyperbolic
+### 🤝 Vibekit's MCP Integrations
 
-### Example: Using a V2 Agent with Claude
+Vibekit integrates MCP in three powerful ways:
 
-1. **Start your agent** (it automatically exposes MCP tools)
-2. **Connect Claude Desktop** to `http://localhost:3000/mcp`
-3. **Use natural language** like "Supply 100 USDC to Aave to earn yield"
-4. **Watch the magic** as the agent coordinates multiple tools automatically
+#### 1. Built-in MCP Tools
 
-The v2 framework handles all the complexity - skills route to tools, LLM orchestration manages multi-step workflows, and you get clean, structured responses.
+Vibekit comes with a suite of implemented MCP tools in the [mcp-tools](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools) directory:
 
-### Building Custom MCP Tools
+- Access real-time market data and on-chain information
+- Interact with DeFi protocols and smart contracts
+- Execute complex trading and liquidity operations
+- Each tool is designed to be easily integrated with any MCP-compatible agent
 
-For standalone MCP tools (not full agents), see our [`mcp-tools`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools) directory.
+#### 2. Framework Integration
+
+Vibekit integrates with popular agent frameworks like Eliza, allowing them to:
+
+- Access standardized tool interfaces through MCP
+- Maintain their existing functionality while gaining new capabilities
+- Use Vibekit's pre-built tools without modifying their core architecture
+
+#### 3. Agent as MCP Server
+
+Every agent built with Vibekit is itself an MCP server, which means:
+
+- Agents can expose their own capabilities as MCP tools
+- Other agents can discover and use these capabilities
+- Agents can be both consumers and providers of MCP tools
+- This creates a network of interoperable agents
+
+### 🛠️ Creating Your Own MCP Tools
+
+You'll find a collection of ready-to-use MCP tools, along with step-by-step guidelines for creating your own, in our [mcp-tools](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools) directory.
 
 ## 💰 Contributions & Bounties
 
-We're building the future of autonomous agents together! Here's how you can contribute to Vibekit v2:
+We welcome contributions from the community! If you'd like to help improve Vibekit, please check out our [Contribution Guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md). These guidelines detail the process for forking the repository, making your changes, and submitting a pull request.
 
-### 🏆 Active Bounty Programs
-
-- **Agent Templates**: $200-500 for new v2 agent templates showcasing different DeFi protocols
-- **MCP Tool Integrations**: $100-300 for new MCP tool servers connecting to DeFi protocols
-- **Documentation**: $50-150 for lesson improvements, tutorials, and guides
-- **Framework Enhancements**: $300-1000 for core v2 framework improvements
-
-### 🤝 Ways to Contribute
-
-1. **Build V2 Agent Templates**: Create new agent templates for different DeFi use cases
-2. **Improve Framework**: Enhance the v2 core with new features and optimizations
-3. **Write Documentation**: Create tutorials, lessons, and guides for the v2 framework
-4. **Test and Debug**: Help us find and fix issues in the v2 architecture
-5. **Share Knowledge**: Write blog posts, create videos, or speak at events
-
-### 📞 Get Support
-
-- **Discord**: [Join our community](https://discord.com/invite/bgxWQ2fSBR) for real-time help and discussions
-- **Issues**: [GitHub Issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) for bug reports and feature requests
-- **Discussions**: [GitHub Discussions](https://github.com/EmberAGI/arbitrum-vibekit/discussions) for questions and ideas
-
-Ready to start building? Check out our [Contribution Guidelines](CONTRIBUTIONS.md) and dive into the [template agents](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates)!
+To show our appreciation, we have launched an [incentive program](https://docs.google.com/forms/d/e/1FAIpQLSe-GF7UcUOuyEMsgnVpLFrG_W83RAchaPPqOCD83pZaZXskgw/viewform) that rewards [valuable contributions](https://github.com/orgs/EmberAGI/projects/13) to the Vibekit. Checkout our [blog post](https://www.emberai.xyz/blog/introducing-arbitrum-vibekit-and-the-trailblazer-fund-2-0) to learn more!

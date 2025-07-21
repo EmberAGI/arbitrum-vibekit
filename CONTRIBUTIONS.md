@@ -12,7 +12,7 @@ We welcome several types of contributions, all of which follow the same developm
 
 ### 🐛 Bug Reports and Fixes
 
-Found a bug? Help us improve Vibekit by reporting it and contributing a fix:
+Found a bug? Help us improve Vibekit by reporting it and contributing a fix.
 
 **Reporting Bugs:**
 

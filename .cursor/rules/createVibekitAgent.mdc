@@ -7,59 +7,72 @@ alwaysApply: true
 
 _A comprehensive guide for creating on-chain AI agents using the Arbitrum Vibekit v2 framework - enabling vibe coding (AI-generated working code) in minutes._
 
-## Core V2 Principles
+## Core Principles
 
-1. **Skills-First Architecture**: Define what your agent can do through skills that coordinate multiple tools
-2. **LLM Orchestration**: Let AI intelligently route and coordinate complex multi-tool workflows
-3. **Modern Transport**: Use StreamableHTTP with legacy SSE backwards compatibility
-4. **Context Providers**: Share data like token mappings, RPC connections across tools cleanly
-5. **Production Ready**: Built-in health checks, metrics, agent cards, and deployment patterns
+1. **Continuous Learning**: When users correct assumptions or suggest improvements, ask if they should be incorporated into this guide
+2. **No Hacks**: Always prioritize robust, idiomatic solutions over workarounds (e.g., avoid stubbing `*.d.ts` files)
+3. **Framework First**: Use Vibekit v2 patterns and abstractions rather than custom implementations
+4. **Skills-First Architecture**: Define what your agent can do through skills that coordinate multiple tools
+5. **LLM Orchestration**: Let AI intelligently route and coordinate complex multi-tool workflows
 
-## V2 Architecture Overview
+## Architecture Overview
 
-The v2 framework centers around a three-layer architecture:
+- Agents are MCP servers themselves using the v2 framework
+- Agents have internal tools and can also use external MCP tools to perform actions
+- **Modern Transport**: StreamableHTTP (default) with legacy SSE backwards compatibility
+- MCP server connections:
+  - **Remote**: StreamableHTTP/SSE via URL
+  - **Local**: STDIO via files in `typescript/lib/mcp-tools/`
+- Agents live in `typescript/templates/`, external service tools in `typescript/lib/mcp-tools/`
+- **Each skill is served as a tool of the agent's own MCP server**
+- **Agent Cards**: Automatic service discovery via `/.well-known/agent.json`
 
-### Skills (Public Interface)
-Skills define what your agent can do and serve as the public interface:
+## Skill and Tool Design
+
+### Fundamental Concepts
+
+| Concept | Definition | Example |
+|---------|------------|---------|
+| **Skills** | External capabilities (what agents can do) | "Lending Operations", "Trading" |
+| **Tools** | Internal actions (how skills work) | supply, borrow, swap, approve |
+| **LLM** | Intent router and orchestrator | Routes "lend me 100 USDC" → borrowTool |
+
+### Design Philosophy
+
+Skills follow the A2A (Agent-to-Agent) protocol:
+- **One Skill = One Capability** - Each skill represents a cohesive capability
+- **Opaque Implementation** - Internal workings hidden from callers
+- **Clear Interface** - Well-defined inputs and outputs
+
+The v2 framework is designed to be:
+- **Accessible** - Clear patterns for beginners
+- **Flexible** - Complex orchestrations for advanced users
+- **Extensible** - Easy to add tools without breaking changes
+- **Production Ready** - Built-in health checks, metrics, agent cards
+
+### Skills vs Tools: External vs Internal
+
+- **Skills** are the external interface - what other agents and users see
+- **Tools** are internal implementation details - how the skill accomplishes its capability
+- This separation allows you to refactor tools without changing the skill's public interface
+
+### Required Skill Metadata
 
 ```typescript
 export const lendingSkill = defineSkill({
   id: 'lending-operations',
-  name: 'Lending Operations', 
-  description: 'Perform lending operations on Aave protocol',
-  tags: ['defi', 'lending'],
-  examples: ['Supply 100 USDC', 'Borrow 50 ETH'],
-  
-  inputSchema: z.object({
+  name: 'Lending Operations',
+  description: 'Perform lending operations on Aave protocol',    // Required
+  tags: ['defi', 'lending', 'aave'],                            // Min 1 tag
+  examples: ['Supply 100 USDC to Aave', 'Borrow 50 DAI'],      // Min 1 example
+  inputSchema: z.object({ 
     instruction: z.string(),
-    walletAddress: z.string(),
+    walletAddress: z.string() 
   }),
-  
-  tools: [supplyTool, borrowTool, repayTool, withdrawTool],
+  tools: [supplyTool, borrowTool, repayTool, withdrawTool]
   // No handler = LLM orchestration (recommended)
 });
 ```
-
-### Tools (Internal Implementation)
-Tools implement the actual business logic:
-
-```typescript
-export const supplyTool = defineTool({
-  name: 'supplyToken',
-  description: 'Supply tokens to Aave lending pool',
-  inputSchema: z.object({
-    token: z.string(),
-    amount: z.number(),
-    walletAddress: z.string(),
-  }),
-  implementation: async (args, context) => {
-    // Tool implementation here
-  },
-});
-```
-
-### LLM Orchestration
-The LLM intelligently routes requests and coordinates tools automatically.
 
 ## V2 Development Patterns
 
@@ -102,7 +115,198 @@ export const enhancedTool = withHooks(baseTool, {
 });
 ```
 
-## Agent Directory Structure
+## Implementation Patterns
+
+### When to Use Multiple Tools
+
+Use multiple tools when actions are:
+- **Independent** - Users might want just one
+- **Composable** - Can be mixed based on needs
+- **Distinct** - Require different intent interpretation
+
+```typescript
+// Good: Independent lending actions
+tools: [supplyTool, borrowTool, repayTool, withdrawTool]
+```
+
+### When to Use Workflow Tools
+
+Create workflow tools for multi-step processes that always occur together:
+
+```typescript
+// Good: Swap always requires quote → approve → execute
+tools: [executeSwapWorkflow]
+
+// Bad: Exposing internal steps as separate tools
+tools: [getQuoteTool, approveTokenTool, executeSwapTool]
+```
+
+### LLM Orchestration Capabilities
+
+Beyond simple routing, the LLM handles:
+1. **Intent Routing** - Selecting appropriate tools
+2. **Sequential Execution** - Planning multi-tool operations
+3. **Conditional Logic** - Using results to determine next steps
+4. **Result Aggregation** - Combining outputs coherently
+5. **Error Recovery** - Handling failures gracefully
+
+Example of full orchestration:
+```typescript
+export const portfolioAnalysisSkill = defineSkill({
+  id: 'portfolio-analysis',
+  name: 'Portfolio Analysis',
+  description: 'Analyze crypto portfolio performance and provide insights',
+  tools: [
+    getHoldingsTool,           // User: "What tokens do I own?"
+    getPriceDataTool,          // User: "What's the price of ETH?"
+    analyzePerformanceWorkflow,// User: "How's my portfolio doing?" (fetches → calculates → formats)
+    suggestRebalanceTool,      // User: "How should I rebalance?"
+    exportDataTool             // User: "Export my portfolio data"
+  ]
+});
+
+// User: "Analyze my portfolio and suggest improvements"
+// LLM orchestration:
+// 1. Calls getHoldingsTool to see what they own
+// 2. Calls analyzePerformanceWorkflow (which internally handles:
+//    - Fetching current prices
+//    - Calculating metrics
+//    - Generating formatted analysis)
+// 3. Based on the analysis results, calls suggestRebalanceTool
+// 4. Aggregates all outputs into a comprehensive response
+```
+
+The LLM handles:
+- **Planning**: Determining which tools to use and in what order
+- **Data Flow**: Passing results from one tool to the next
+- **Decision Making**: Choosing whether to call additional tools based on results
+- **Error Recovery**: Handling failures and trying alternatives
+
+### Single-Tool Skills (Recommended Default)
+
+Even with one tool, use the tool pattern for future flexibility:
+
+```typescript
+export const tokenSwapSkill = defineSkill({
+  id: 'token-swap',
+  name: 'Token Swap',
+  description: 'Swap tokens on DEX',
+  tools: [executeSwapWorkflow] // Easy to add more tools later
+});
+```
+
+### Workflow Tools vs Regular Tools
+
+A skill can mix both types:
+- **Workflow tools**: Encapsulate multi-step processes (quote → approve → swap)
+- **Regular tools**: Single actions (check price, cancel order)
+
+Example:
+```typescript
+export const tradingSkill = defineSkill({
+  id: 'advanced-trading',
+  name: 'Advanced Trading',
+  tools: [
+    executeMarketOrderWorkflow,  // Workflow: validate → execute → confirm
+    executeLimitOrderWorkflow,   // Workflow: validate → place → monitor
+    cancelOrder,                 // Single action
+    checkOrderStatus,            // Single action
+    getMarketDepth              // Single action
+  ]
+});
+```
+
+### Manual Handlers (Use Sparingly)
+
+Only use manual handlers when the entire skill can be defined deterministically without any need for tool routing or orchestration:
+- The skill's complete behavior is self-contained
+- No LLM interpretation or routing is necessary
+- The skill will never need orchestration capabilities
+
+```typescript
+// Rare example: Pure computation - entire skill is deterministic
+export const mathSkill = defineSkill({
+  id: 'calculator',
+  name: 'Math Calculator',
+  inputSchema: z.object({ expression: z.string() }),
+  tools: [calculateTool], // Required by framework
+  handler: async (input) => {
+    // Entire skill behavior defined here - no orchestration needed
+    const result = evaluate(input.expression);
+    return createSuccessTask('calc', { result });
+  }
+});
+```
+
+## Decision Framework
+
+1. **Multiple independent actions?** → Multiple tools
+2. **One action now, maybe more later?** → Single tool (not handler)
+3. **Actions that always occur together?** → Workflow tool
+4. **Pure deterministic computation?** → Manual handler (rare)
+
+## Common Patterns
+
+### Multi-Tool Skills
+- **DeFi**: supply, borrow, repay, withdraw, claim
+- **Trading**: buy, sell, limit/stop orders
+- **Governance**: propose, vote, delegate, claim
+
+### Single-Tool Skills  
+- **Swapping**: executeSwapWorkflow
+- **Analytics**: analyzePortfolioWorkflow
+- **Minting**: mintNFTWorkflow
+
+### Mixed Patterns
+- **Advanced Trading**: Order workflows + status/cancel tools
+- **Portfolio Management**: Rebalance workflow + position adjustments
+- **Liquidity Provision**: Add/remove liquidity workflows + reward claims
+
+### Manual Handler Skills (Rare)
+- **Pure Math**: Calculations that are entirely deterministic
+- **Hash Functions**: Deterministic cryptographic operations with no orchestration needed
+- **Static Data**: Hardcoded constants or configuration values that never change
+
+## Anti-Patterns to Avoid
+
+**Don't bypass LLM for cost savings:**
+```typescript
+// Wrong - reimplements routing poorly
+handler: async (input) => {
+  if (input.action === 'supply') return supply();
+  if (input.action === 'borrow') return borrow();
+}
+```
+
+**Don't expose internal steps:**
+```typescript
+// Wrong - these aren't user-facing
+tools: [validateInputTool, checkBalanceTool, calculateFeeTool]
+```
+
+**Don't separate coupled operations:**
+```typescript
+// Wrong - these always happen together
+tools: [getQuoteTool, approveTokenTool, executeSwapTool]
+// Right - single workflow
+tools: [executeSwapWorkflow]
+```
+
+## Technical Stack
+
+### Core Dependencies
+- **Build System**: pnpm workspace (root: `typescript/`)
+- **AI Framework**: Vercel AI SDK (`ai`) with provider selector for multiple LLM providers
+- **Protocol**: Model Context Protocol (MCP) SDK (`@modelcontextprotocol/sdk`) with StreamableHTTP transport
+- **Blockchain**: Viem (`viem`), OpenZeppelin (`@openzeppelin/contracts`)
+- **V2 Framework**: `arbitrum-vibekit-core` with skills, tools, hooks, and context providers
+
+### Workspace Structure
+- `typescript/templates/` - V2 production-ready agent templates
+- `typescript/lib/` - Supporting packages and MCP tools
+- Key packages: `arbitrum-vibekit-core`, `ember-api`, `mcp-tools`
+
+## V2 Agent Directory Structure
 
 V2 agents follow this standard structure:
 
@@ -132,77 +336,12 @@ agent-name/
 └── README.md            # Agent documentation
 ```
 
-## Skill and Tool Design
-
-### Required Skill Metadata
-
-```typescript
-export const mySkill = defineSkill({
-  // Core identity
-  id: 'unique-skill-id',           // Required: unique identifier
-  name: 'Human Readable Name',     // Required: display name
-  description: 'What this does',   // Required: clear capability description
-
-  // Discovery (required)
-  tags: ['tag1', 'tag2'],         // Required: minimum 1 tag
-  examples: ['Example 1'],         // Required: minimum 1 example
-
-  // Interface
-  inputSchema: z.object({...}),    // Required: input validation
-
-  // Implementation
-  tools: [tool1, tool2],          // Required: minimum 1 tool
-
-  // Optional
-  mcpServers: [...],              // External dependencies
-  handler: async (input) => {...} // Manual override (rare)
-});
-```
-
-### Design Philosophy
-
-Skills follow the Agent-to-Agent (A2A) protocol:
-- **One Skill = One Capability** - Each skill represents a cohesive capability
-- **Opaque Implementation** - Internal workings hidden from callers
-- **Clear Interface** - Well-defined inputs and outputs
-
-### When to Use Multiple Tools
-
-Use multiple tools when actions are:
-- **Independent** - Users might want just one
-- **Composable** - Can be mixed based on needs
-- **Distinct** - Require different intent interpretation
-
-```typescript
-// Good: Independent lending actions
-tools: [supplyTool, borrowTool, repayTool, withdrawTool]
-```
-
-### When to Use Workflow Tools
-
-Create workflow tools for multi-step processes that always occur together:
-
-```typescript
-// Good: Swap always requires quote → approve → execute
-tools: [executeSwapWorkflow]
-
-// Bad: Exposing internal steps as separate tools
-tools: [getQuoteTool, approveTokenTool, executeSwapTool]
-```
-
-### LLM Orchestration vs Manual Handlers
-
-**Use LLM Orchestration When:**
-- Multiple tools need coordination
-- Natural language input is important
-- Complex workflows with conditional logic
-- User intent varies significantly
-
-**Use Manual Handlers When:**
-- Simple, deterministic operations
-- Performance is critical
-- Complete control over logic flow is needed
-- Predefined input/output mapping
+### Directory Purposes:
+- **skills/**: Define high-level capabilities exposed as MCP tools. Each skill groups related tools.
+- **tools/**: Implement the actual actions. Tools are internal to skills and handle specific operations.
+- **hooks/**: Optional enhancement functions that can modify tool inputs/outputs or add logging.
+- **context/**: Optional shared state and type definitions used across the agent.
+- **index.ts**: Sets up the MCP server and registers all skills.
 
 ## Modern Transport and Deployment
 
@@ -234,144 +373,22 @@ Every v2 agent automatically publishes an agent card:
 - Docker containers
 - Environment-based configuration
 
-## Getting Started
-
-### 1. Use a Template
-Start with an existing v2 template:
+## Setup Instructions
 
 ```bash
-cd typescript/templates
+# From typescript/ directory
+pnpm install
+pnpm build
+
+# Use a v2 template
+cd templates
 cp -r quickstart-agent my-custom-agent
 cd my-custom-agent
-```
 
-### 2. Configure Environment
-```bash
+# Configure environment
 cp .env.example .env
 # Edit .env with your API keys
-```
 
-### 3. Customize Skills
-Replace template skills with your own:
-
-```typescript
-// src/skills/mySkill.ts
-export const mySkill = defineSkill({
-  id: 'my-capability',
-  name: 'My Capability',
-  description: 'What my agent does',
-  tools: [myTool1, myTool2],
-  // Let LLM orchestrate
-});
-```
-
-### 4. Implement Tools
-```typescript
-// src/tools/myTool.ts
-export const myTool = defineTool({
-  name: 'myAction',
-  description: 'Specific action my agent performs',
-  inputSchema: z.object({
-    param: z.string(),
-  }),
-  implementation: async (args, context) => {
-    // Your business logic
-    return { success: true };
-  },
-});
-```
-
-### 5. Start Development
-```bash
-pnpm install
+# Start development
 pnpm dev
 ```
-
-## Best Practices
-
-### Skill Design
-1. **Clear boundaries**: One skill = one capability
-2. **Natural language friendly**: Support varied user input
-3. **Comprehensive examples**: Help LLM understand usage
-4. **Proper tagging**: Enable discovery
-
-### Tool Implementation
-1. **Single responsibility**: One tool = one action
-2. **Clear descriptions**: Help LLM select appropriate tool
-3. **Robust validation**: Use Zod schemas
-4. **Error handling**: Return structured errors
-
-### Context Management
-1. **Shared resources**: Use context providers for common data
-2. **Clean separation**: Context vs tool-specific logic
-3. **Type safety**: Define clear context interfaces
-
-### Production Readiness
-1. **Environment variables**: Externalize all configuration
-2. **Health monitoring**: Implement custom health checks
-3. **Error handling**: Graceful failure and recovery
-4. **Documentation**: Clear README and API docs
-
-## Common Patterns
-
-### Multi-Tool Skills
-```typescript
-// DeFi operations with multiple independent actions
-export const defiSkill = defineSkill({
-  id: 'defi-operations',
-  tools: [supply, borrow, swap, stake, unstake]
-});
-```
-
-### Single-Tool Skills
-```typescript
-// Focused capability that might expand later
-export const priceSkill = defineSkill({
-  id: 'price-prediction',
-  tools: [getPricePrediction] // Easy to add more tools later
-});
-```
-
-### Workflow Skills
-```typescript
-// Coordinated multi-step processes
-export const portfolioSkill = defineSkill({
-  id: 'portfolio-optimization',
-  tools: [optimizePortfolioWorkflow] // Handles analysis → rebalancing → execution
-});
-```
-
-## Testing and Validation
-
-### Unit Testing
-```typescript
-describe('MySkill', () => {
-  it('should handle user requests correctly', async () => {
-    const result = await mySkill.handler({
-      instruction: 'Test request',
-      walletAddress: '0x123...'
-    });
-    expect(result.success).toBe(true);
-  });
-});
-```
-
-### Integration Testing
-```typescript
-describe('Agent Integration', () => {
-  it('should start and expose MCP endpoints', async () => {
-    const agent = Agent.create(agentConfig, runtimeOptions);
-    await agent.start(3000);
-    
-    // Test agent card
-    const response = await fetch('http://localhost:3000/.well-known/agent.json');
-    expect(response.ok).toBe(true);
-  });
-});
-```
-
-## Resources
-
-- [Template Agents](mdc:https:/github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates) - Production-ready examples
-- [V2 Lessons](mdc:https:/github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/arbitrum-vibekit-core/docs) - Detailed learning materials
-- [MCP Tools](mdc:https:/github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/mcp-tools) - External service integrations
