@@ -160,6 +160,16 @@ You might need to restart Cursor to apply the new configuration. Upon successful
 
 ## 🛠️ Build Your Own Agent
 
+### 📖 Essential Reading: Development Lessons
+
+Before building your agent, we highly recommend reviewing these key lessons that cover the v2 framework architecture and best practices:
+
+- **[Lesson 19: Skills - The v2 Foundation](../../.cursor/rules/lessons/lesson-19.md)** - Understand the core `defineSkill` pattern and agent architecture
+- **[Lesson 06: v2 Agent Structure and File Layout](../../.cursor/rules/lessons/lesson-06.md)** - Learn the template agent directory structure and organization
+- **[Lesson 20: LLM Orchestration vs Manual Handlers](../../.cursor/rules/lessons/lesson-20.md)** - Master the decision framework for when to use tools vs handlers
+
+For a complete learning path, explore all lessons in the [`.cursor/rules/lessons/`](../../.cursor/rules/lessons/) directory.
+
 ### Start with the Quickstart Agent
 
 We recommend starting with the [`quickstart-agent`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/quickstart-agent) template. It's a comprehensive example that demonstrates all v2 framework features and serves as both an integration test and a developer template. The Quickstart agent has the following features:

@@ -6,6 +6,41 @@ Thanks for your interest in contributing to Vibetkit! This guide explains how to
 
 Before you start your work, checkout [open issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) to see if someone is already working on the same topic. For big changes or new features, create an issue first to avoid duplicate work, though it's not required for smaller updates.
 
+## Bug Reports and Fixes
+
+Found a bug? Help us improve Vibekit by reporting it and contributing a fix:
+
+### Reporting Bugs
+
+1. **Search Existing Issues**: Check [open issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) to see if the bug has already been reported.
+
+2. **Create a Detailed Bug Report**: If not found, [create a new issue](https://github.com/EmberAGI/arbitrum-vibekit/issues/new) with:
+   - Clear, descriptive title
+   - Steps to reproduce the bug
+   - Expected vs actual behavior
+   - Environment details (OS, Node version, browser, etc.)
+   - Code snippets or screenshots if applicable
+   - Any error messages or logs
+
+### Contributing Bug Fixes
+
+We welcome contributions that fix reported bugs:
+
+1. **Comment on the Issue**: Let others know you're working on it to avoid duplicate efforts.
+
+2. **Fork and Fix**:
+
+   - Fork the repository and create a branch for your fix
+   - Implement the fix with appropriate tests
+   - Ensure all existing tests still pass
+
+3. **Submit a Pull Request**:
+   - Reference the issue number in your PR (e.g., "Fixes #123")
+   - Provide a clear description of what was broken and how you fixed it
+   - Include any relevant test cases
+
+Even small bug fixes are valuable contributions and help make Vibekit more reliable for everyone!
+
 ## Expanding Protocol Support (Integrating New Plugins)
 
 Vibekit supports DeFi protocol integrations through the Ember plugin system. This standardized architecture enables adding support for protocols with swap, lending, and liquidity capabilities.

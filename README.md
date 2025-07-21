@@ -262,6 +262,29 @@ Here's a guidelines for adding or editing rules:
 
 Keep these files current to ensure your team and agents always follow the latest best practices and workflows.
 
+#### 📚 Interactive Learning Lessons
+
+For hands-on learning and deeper understanding of Vibekit concepts, explore our comprehensive lesson series in the [`.cursor/rules/lessons/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/.cursor/rules/lessons) directory. These interactive lessons cover everything from basic concepts to advanced agent development patterns:
+
+**🏗️ Architecture & Design:**
+
+- [Lesson 19: Skills - The v2 Foundation](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/.cursor/rules/lessons/lesson-19.md) - Core defineSkill patterns and architecture
+- [Lesson 20: LLM Orchestration vs Manual Handlers](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/.cursor/rules/lessons/lesson-20.md) - Decision framework for skill design
+- [Lesson 22: Workflow Tools and Design Patterns](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/.cursor/rules/lessons/lesson-22.md) - Best practices for skills and tools
+
+**⚙️ Implementation & Configuration:**
+
+- [Lesson 21: Provider Selection and Agent Configuration](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/.cursor/rules/lessons/lesson-21.md) - LLM provider setup and agent configuration
+- [Lesson 06: v2 Agent Structure and File Layout](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/.cursor/rules/lessons/lesson-06.md) - Template agent architecture
+- [Lesson 04: Stateless vs Stateful Logic with Context](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/.cursor/rules/lessons/lesson-04.md) - Context providers and state management
+
+**🚀 Advanced Features & Production:**
+
+- [Lesson 23: Advanced Hooks and Artifacts](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/.cursor/rules/lessons/lesson-23.md) - Cross-cutting concerns and rich responses
+- [Lesson 24: Production Deployment and Configuration](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/.cursor/rules/lessons/lesson-24.md) - Containerization, monitoring, and operations
+
+Each lesson includes practical examples, code snippets, and best practices to help you build robust DeFi agents. Start with the architecture lessons to understand the framework, then dive into implementation details as you build your own agents.
+
 ## 🔌 MCP Explained
 
 MCP (Model Context Protocol) makes it easy for on-chain agents to tap into external data and tools. Here's how it works: tools get registered with the MCP server, then agents can plug in to browse what's available and start calling those tools whenever it makes sense. Agents may decide on their own when and how to use each tool, and they use the results to inform their next actions to enable autonomous decision-making.
