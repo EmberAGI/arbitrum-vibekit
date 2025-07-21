@@ -1,79 +1,300 @@
-# **Lesson 6: Folder Structure and File Layout**
+# **Lesson 6: v2 Agent Structure and File Layout**
 
 ---
 
 ### 📂 Overview
 
-Our agent framework is designed to be modular, lightweight, and beginner-friendly. This lesson explains the default folder structure and how each piece connects—so you always know where to look (or add) when building new tools, hooks, or stateful workflows.
+The v2 framework introduces a clean, modular architecture centered around **skills** as the primary abstraction. This lesson explains the folder structure used in template agents and how each component fits together to create powerful, maintainable AI agents.
 
-This structure isn’t strict, but it helps keep things clean and composable.
+The v2 structure prioritizes clarity, type safety, and separation of concerns—making it easy for developers to understand, extend, and maintain their agents.
 
 ---
 
-### 📁 Agent Repo Layout
+### 📁 Template Agent Structure
 
-_Tools, state slices, and configuration specific to your agent._
+_The standard folder layout used by all v2 template agents._
 
 ```plaintext
-my-agent/
-├── tools/            # Custom MCP/A2A tool definitions
-│   └── swapToken.ts
-├── adapters/         # Adapters around third‑party provider tools
-│   └── priceAdapter.ts
-├── state/            # Optional: selectors/reducers for custom slices
-│   └── selectors.ts
-├── config.ts         # Agent metadata (name, fees, capabilities)
-└── index.ts          # Entrypoint: imports startAgent from `arbitrum-vibekit`
+agent-name/
+├── src/
+│   ├── index.ts          # Agent entry point and MCP server setup
+│   ├── skills/           # Skill definitions (high-level capabilities)
+│   │   ├── lending.ts    # Example: lending skill with multiple tools
+│   │   ├── trading.ts    # Example: trading skill
+│   │   └── analytics.ts  # Example: analytics skill
+│   ├── tools/            # Tool implementations (actions)
+│   │   ├── supply.ts     # Example: supply tool
+│   │   ├── borrow.ts     # Example: borrow tool
+│   │   └── swap.ts       # Example: swap workflow tool
+│   ├── hooks/            # Tool enhancement hooks (optional)
+│   │   └── index.ts      # Before/after hooks for tools
+│   └── context/          # Shared context and types (optional)
+│       ├── provider.ts   # Context provider
+│       └── types.ts      # Type definitions
+├── test/                 # Test files
+├── package.json          # Agent dependencies
+├── tsconfig.json         # TypeScript configuration
+└── README.md            # Agent documentation
 ```
-
-**Framework‑provided modules (via `arbitrum-vibekit`)**
-
-- **Provider MCP servers** (`providers/*`): ready‑made external services (price feeds, RPC, e‑mail) that your agent can call as tools.
-- **Error handling** (`createErrorMiddleware`, `AgentError`, `wrapAsync`).
-- **Paywall** (`withPaywall` decorator).
-- **A2A helpers** (`createLoopTask`, `sendTask`, task schemas).
-- **Global store** (`createGlobalStore`, Immer store bootstrap).
-- **Server scaffolding** (`startAgent` to wire up MCP/A2A endpoints).
 
 ---
 
-### 🛠️ File Roles
+### 🛠️ Directory Roles
 
-#### In Agent Repo
+#### **src/skills/** - High-Level Capabilities
 
-- `tools/`: Your custom tool files (schema, `impl`, hooks).
-- `adapters/`: Adapters that modify or extend provider tools (e.g., symbol→address mapper, paywall decorator). Adapters can use the **same before/after hook pattern** for custom logic.
-- `state/`: Agent‑specific selectors or reducers using the global store.
-- `config.ts`: Agent name, pricing, capabilities, env vars.
-- `index.ts`: `startAgent({ config, tools })` from `arbitrum-vibekit`.
+Skills define what your agent can do. Each skill groups related tools and handles LLM orchestration.
 
-#### Provided by `arbitrum-vibekit`
+```ts
+// skills/greeting.ts
+import { defineSkill } from 'arbitrum-vibekit-core';
+import { getFormalGreetingTool, getCasualGreetingTool } from '../tools/index.js';
 
-- **errors/**: Centralized `AgentError` class, Express error middleware, `wrapAsync`.
-- **paywall/**: `withPaywall` decorator and fee calculation helpers.
-- **a2a/**: Helpers for task delegation, loop management, and SSE streaming.
-- **state/**: `createGlobalStore` to bootstrap and manage the agent store via Immer.
-- **server.ts**: Framework code to wire MCP and A2A HTTP endpoints and start the server.
+export const greetingSkill = defineSkill({
+  id: 'greeting-skill',
+  name: 'Greeting Generator',
+  description: 'Generate personalized greetings in different styles',
+  tags: ['greeting', 'personalization'],
+  examples: ['Greet Alice formally', 'Say hello to Bob casually'],
+  inputSchema: z.object({
+    name: z.string(),
+    style: z.enum(['formal', 'casual']),
+  }),
+  tools: [getFormalGreetingTool, getCasualGreetingTool],
+  mcpServers: [
+    /* external MCP servers */
+  ],
+  // LLM orchestration handles tool routing automatically
+});
+```
+
+#### **src/tools/** - Implementation Logic
+
+Tools contain the actual business logic. They're internal to skills and handle specific operations.
+
+```ts
+// tools/getFormalGreeting.ts
+import { z } from 'zod';
+import { defineTool } from 'arbitrum-vibekit-core';
+
+export const getFormalGreetingTool = defineTool({
+  name: 'getFormalGreeting',
+  description: 'Generate a formal greeting',
+  inputSchema: z.object({
+    name: z.string(),
+  }),
+  handler: async input => {
+    return `Good day, ${input.name}. I hope you are well.`;
+  },
+});
+```
+
+#### **src/hooks/** - Tool Enhancement (Optional)
+
+Hooks run before or after tool execution to add cross-cutting concerns like logging, validation, or formatting.
+
+```ts
+// hooks/index.ts
+import type { ToolContext } from 'arbitrum-vibekit-core';
+
+export const beforeHooks = {
+  // Runs before any tool in the getPricePrediction family
+  getPricePrediction: async (context: ToolContext) => {
+    console.log(`[Hook] Getting price prediction for:`, context.input);
+    // Modify context.input if needed
+  },
+};
+
+export const afterHooks = {
+  getPricePrediction: async (context: ToolContext) => {
+    // Format the response with emojis and structure
+    if (context.result && typeof context.result === 'object') {
+      context.result = {
+        ...context.result,
+        formatted: `📈 Price prediction: ${context.result.prediction}`,
+      };
+    }
+  },
+};
+```
+
+#### **src/context/** - Shared State (Optional)
+
+Context provides type-safe shared state loaded at startup, typically from MCP servers or environment variables.
+
+```ts
+// context/types.ts
+export interface AgentContext {
+  tokenMap: Record<string, { address: string; decimals: number }>;
+  apiEndpoints: {
+    quicknode: string;
+    ember: string;
+  };
+  loadedAt: Date;
+}
+```
+
+```ts
+// context/provider.ts
+import type { AgentContext } from './types.js';
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+
+export async function contextProvider(deps: {
+  mcpClients: Record<string, Client>;
+}): Promise<AgentContext> {
+  // Load shared data from MCP servers at startup
+  const emberClient = deps.mcpClients['ember'];
+  const tokenMap = await loadTokenMapFromMcp(emberClient);
+
+  return {
+    tokenMap,
+    apiEndpoints: {
+      quicknode: process.env.QUICKNODE_URL!,
+      ember: process.env.EMBER_ENDPOINT!,
+    },
+    loadedAt: new Date(),
+  };
+}
+```
+
+#### **src/index.ts** - Agent Entry Point
+
+The main entry point sets up the agent configuration and starts the MCP server.
+
+```ts
+// index.ts
+import { Agent, type AgentConfig } from 'arbitrum-vibekit-core';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { greetingSkill } from './skills/greeting.js';
+import { contextProvider } from './context/provider.js';
+
+const openrouter = createOpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+export const agentConfig: AgentConfig = {
+  name: 'My Agent',
+  version: '1.0.0',
+  description: 'A helpful AI agent',
+  skills: [greetingSkill],
+  url: 'localhost',
+  capabilities: {
+    streaming: false,
+    pushNotifications: false,
+    stateTransitionHistory: false,
+  },
+  defaultInputModes: ['application/json'],
+  defaultOutputModes: ['application/json'],
+};
+
+const agent = Agent.create(agentConfig, {
+  cors: true,
+  llm: { model: openrouter('google/gemini-2.0-flash-001') },
+});
+
+await agent.start(3000, contextProvider);
+```
+
+---
+
+### 🏗️ Architecture Principles
+
+#### **Skills as Public Interface**
+
+- **Skills** are what other agents and users see
+- Each skill represents a cohesive capability
+- Skills use LLM orchestration to route between tools
+- Skills declare their MCP server dependencies
+
+#### **Tools as Internal Implementation**
+
+- **Tools** are internal implementation details
+- Tools contain the actual business logic
+- Tools can be shared between skills
+- Tools access context for shared resources
+
+#### **LLM Orchestration First**
+
+- Skills default to LLM orchestration (no manual handler)
+- LLM intelligently routes user requests to appropriate tools
+- Manual handlers only for simple, deterministic operations
+- Supports multi-tool workflows and conditional logic
+
+#### **Type Safety Throughout**
+
+- Context providers ensure type-safe shared state
+- Zod schemas validate all inputs
+- TypeScript interfaces for all data structures
+- Compile-time checking prevents runtime errors
+
+---
+
+### 📋 Design Patterns
+
+#### **Single-Tool Skills**
+
+For focused capabilities that might expand later:
+
+```ts
+export const tokenSwapSkill = defineSkill({
+  id: 'token-swap',
+  name: 'Token Swap',
+  description: 'Swap tokens on DEX',
+  tools: [executeSwapWorkflow], // Easy to add more tools later
+});
+```
+
+#### **Multi-Tool Skills**
+
+For complex capabilities with multiple related operations:
+
+```ts
+export const lendingSkill = defineSkill({
+  id: 'lending-operations',
+  name: 'Lending Operations',
+  description: 'Perform lending operations on Aave protocol',
+  tools: [supplyTool, borrowTool, repayTool, withdrawTool],
+});
+```
+
+#### **Workflow Tools**
+
+For multi-step processes that always occur together:
+
+```ts
+// tools/executeSwapWorkflow.ts
+export const executeSwapWorkflow = defineTool({
+  name: 'executeSwapWorkflow',
+  description: 'Complete token swap workflow',
+  handler: async input => {
+    // Encapsulates: quote → approve → execute → confirm
+    const quote = await getQuote(input);
+    await approveToken(input, quote);
+    const result = await executeSwap(input, quote);
+    return result;
+  },
+});
+```
 
 ---
 
 ### ✅ Summary
 
-This default layout separates responsibilities cleanly:
+The v2 folder structure provides:
 
-- **tools/** = logic
-- **state/** = memory
-- **a2a/** = coordination
-- **paywall/** = monetization
-- **errors/** = resilience
+- **Clear separation of concerns** between skills, tools, hooks, and context
+- **LLM-first architecture** with intelligent orchestration
+- **Type-safe state management** through context providers
+- **Modular design** that's easy to understand and extend
+- **Standardized patterns** across all template agents
 
-You can always rearrange as your agent grows—but this structure gives you a scalable, legible starting point.
+This structure scales from simple single-skill agents to complex multi-capability systems while maintaining clarity and maintainability.
 
-> "Folders are mental boundaries. Structure helps you think clearly before you code."
+> "Good architecture makes the right thing easy and the wrong thing hard."
 
-| Decision                              | Rationale                                                                                                                                                          |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Repo vs Library split**             | Keeps agent repos tiny (only `tools/`, `adapters/`, `state/`, `config.ts`) while all boilerplate and common code lives in `arbitrum-vibekit`. Simplifies upgrades. |
-| **`adapters/` directory**             | Clearly delineates where interface-mapping or wrapper logic lives, preventing third-party adapters from being mixed with core tool code.                           |
-| **Providers inside library**          | Ships battle-tested MCP servers (price, wallet, explorer) for instant use—no per-repo setup.                                                                       |
-| **One-line bootstrap (`startAgent`)** | Hides Express/MCP/A2A wiring under the hood, ensuring all agents share the same security, error-handling, and state initialization.                                |
+| Component   | Purpose                | When to Use                                    |
+| ----------- | ---------------------- | ---------------------------------------------- |
+| **Skills**  | Public capabilities    | Always - the primary abstraction               |
+| **Tools**   | Implementation logic   | Always - at least one per skill                |
+| **Hooks**   | Cross-cutting concerns | Optional - for logging, formatting, validation |
+| **Context** | Shared state           | Optional - when tools need shared resources    |

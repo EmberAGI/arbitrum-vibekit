@@ -4,77 +4,198 @@
 
 ### 🔍 Overview
 
-An AI agent in our framework is a lightweight, self-contained service that exposes one or more tools (functions) to perform useful work—typically with the help of a language model (LLM). It can be called directly (via HTTP or MCP) or indirectly (via another agent using A2A). Some agents are purely stateless. Others manage memory, long-running tasks, or even payment logic.
+An AI agent in the v2 framework is a lightweight, self-contained service that exposes **skills** (high-level capabilities) to perform useful work with the help of a language model (LLM). Each skill groups related **tools** under intelligent LLM orchestration, creating a clean separation between public interfaces and internal implementation.
 
-Agents can run anywhere: on your laptop, in the cloud, or inside a container. The framework is designed to be simple, pluggable, and understandable by junior developers with minimal setup.
+Agents can be called via MCP (Model Context Protocol) or A2A (Agent-to-Agent Protocol) and can run anywhere: on your laptop, in the cloud, or inside a container. The v2 framework is designed to be simple, powerful, and understandable by developers with minimal setup.
 
 ---
 
 ### 🛠 What Does an Agent Do?
 
-- **Expose a single entrypoint tool**, e.g. `askXAgent`, which accepts free-form natural-language requests. Internally, the agent orchestrates other tools or agents under the hood.
-- **Accept input** from a user, another agent, or a language model.
-- **Run those tools** with optional logic before/after each call.
-- **Return a response**, which might be plain data, a signed transaction, a streamed answer, or a delegated task.
+- **Exposes skills as capabilities**, e.g. `lending-operations`, `token-swapping`, which accept natural-language requests and coordinate multiple tools intelligently
+- **Uses LLM orchestration** to route user requests to appropriate tools based on intent
+- **Accepts input** from users, other agents, or language models via standardized protocols
+- **Executes tools** with optional hooks for validation, transformation, and enhancement
+- **Returns structured responses**, which might include transaction data, analysis results, or rich artifacts
+
+---
+
+### 🏗️ V2 Architecture: Skills, Tools, and LLM Orchestration
+
+The v2 framework is built around a three-layer architecture:
+
+#### **Skills (Public Interface)**
+
+Skills define what your agent can do and serve as the public interface:
+
+```ts
+export const lendingSkill = defineSkill({
+  id: 'lending-operations',
+  name: 'Lending Operations',
+  description: 'Perform lending operations on Aave protocol',
+  tags: ['defi', 'lending'],
+  examples: ['Supply 100 USDC', 'Borrow 50 ETH'],
+
+  inputSchema: z.object({
+    instruction: z.string(),
+    walletAddress: z.string(),
+  }),
+
+  tools: [supplyTool, borrowTool, repayTool, withdrawTool],
+  // No handler = LLM orchestration (recommended)
+});
+```
+
+#### **Tools (Internal Implementation)**
+
+Tools implement the actual business logic:
+
+```ts
+export const supplyTool = defineTool({
+  name: 'supplyToken',
+  description: 'Supply tokens to Aave lending pool',
+  inputSchema: z.object({
+    token: z.string(),
+    amount: z.number(),
+    walletAddress: z.string(),
+  }),
+  implementation: async (args, context) => {
+    // Tool implementation here
+  },
+});
+```
+
+#### **LLM Orchestration**
+
+The LLM intelligently routes requests and coordinates tools:
+
+```
+User: "I want to supply 100 USDC and then borrow 50 ETH"
+↓
+LLM Orchestration:
+1. Analyzes: Two operations - supply USDC, then borrow ETH
+2. Routes: First to supplyTool, then to borrowTool
+3. Executes: supplyTool({ token: "USDC", amount: 100, ... })
+4. Then: borrowTool({ token: "ETH", amount: 50, ... })
+5. Returns: "Successfully supplied 100 USDC and borrowed 50 ETH"
+```
 
 ---
 
 ### 🌐 Agent Communication
 
-> ℹ️ **Note:** In our framework, every agent acts as both an MCP server **and** an MCP client. This means agents can both expose themselves as tools (for LLMs or other agents to call) and also call other agents as tools. Under the hood, all tool calls follow the same A2A schema—so agents can be chained, composed, or orchestrated like Lego blocks using a shared protocol.
+In the v2 framework, agents communicate via two primary protocols:
 
-Agents can be called in multiple ways:
-
-- **HTTP or CLI**
 - **Model Context Protocol (MCP)**
 
-  - Used when an LLM is calling your agent as a tool (not direct A2A)
-  - Schema-based and compatible with many LLM frameworks
+  - Primary interface for LLM integration
+  - Skills are exposed as MCP tools
+  - Compatible with Claude, Cursor, and other MCP clients
+  - Uses modern StreamableHTTP transport by default
 
 - **Agent-to-Agent Protocol (A2A)**
+  - Direct agent-to-agent communication
+  - Supports long-running tasks and streaming
+  - Enables swarm architectures and delegation
 
-  - Used when another agent wants to delegate work to yours
-  - Supports long-running tasks and streams
+#### **Agent Cards & Service Discovery**
 
-### ⚖ Stateless vs. Stateful Agents
+Every v2 agent automatically publishes an agent card at `/.well-known/agent.json`:
 
-- **Stateless agents**:
-
-  - Don't remember anything between calls
-  - Easy to cache and scale
-
-- **Stateful agents**:
-
-  - Can track long-running tasks, store memory, or manage workflows
-  - Use simple built-in helpers to manage global or per-task state
-
-You choose which model you need per use case.
+```json
+{
+  "name": "Lending Agent",
+  "version": "1.0.0",
+  "description": "A DeFi lending agent for Aave protocol",
+  "skills": [
+    {
+      "id": "lending-operations",
+      "name": "Lending Operations",
+      "tags": ["defi", "lending"],
+      "examples": ["Supply 100 USDC", "Borrow 50 ETH"]
+    }
+  ],
+  "endpoints": {
+    "mcp": "/mcp",
+    "health": "/health"
+  }
+}
+```
 
 ---
 
-### 💡 Why Agents Are Useful
+### ⚖ Stateless vs. Context-Aware Agents
 
-Agents provide a clean boundary around logic you want to:
+- **Stateless tools**: Process requests independently without memory between calls
+- **Context-aware agents**: Use context providers to share data like token mappings, RPC connections, or user preferences across tools
+- **Optional state**: Some agents may use external state stores for persistence
 
-- Isolate
-- Secure
-- Reuse
-- Chain together with other agents
+```ts
+// Context provider example
+export const contextProvider: ContextProvider<MyContext> = async deps => {
+  return {
+    tokenMap: await loadTokenMap(),
+    rpcProvider: createProvider(process.env.RPC_URL),
+    // ... other shared context
+  };
+};
+```
 
-They simplify LLM-driven workflows, let you enforce logic and validation, and allow you to charge for services via micro-payments if desired.
+---
+
+### 💡 Why V2 Agents Are Powerful
+
+The v2 architecture provides:
+
+- **Clear boundaries**: Skills define public interface, tools handle implementation
+- **Intelligent orchestration**: LLM routes complex multi-step requests automatically
+- **Modularity**: Tools can be reused across skills, skills across agents
+- **Extensibility**: Adding new tools expands capability without breaking interfaces
+- **Production readiness**: Built-in health checks, metrics, and deployment patterns
+
+---
+
+### 🔧 Modern Development Patterns
+
+#### **Provider Selection**
+
+Unified LLM provider access:
+
+```ts
+const providers = createProviderSelector({
+  openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+const agent = Agent.create(agentConfig, {
+  llm: { model: providers.openrouter('google/gemini-2.5-flash') },
+});
+```
+
+#### **Hook Enhancement**
+
+Enhance tools with cross-cutting concerns:
+
+```ts
+export const enhancedTool = withHooks(baseTool, {
+  before: [validateInputHook, authHook],
+  after: [formatResponseHook, metricsHook],
+});
+```
 
 ---
 
 ### ✅ Summary
 
-An **agent is a tool-powered, LLM-friendly function server** that can be stateless or stateful, and can collaborate with other agents over a standard protocol. It handles requests, executes logic, manages optional state, and returns structured results—all in a way that's easy to scale and extend.
+A **v2 agent is a skill-powered, LLM-orchestrated service** that exposes high-level capabilities through intelligent coordination of internal tools. The architecture emphasizes clear separation of concerns: skills define what agents can do, tools implement how they work, and LLM orchestration handles the intelligent routing between them.
 
-> “Agents are just functions with context, coordination, and control—wrapped in a simple service shell.”
+> "Skills are promises. Tools are implementations. LLM orchestration is the intelligence that connects them."
 
-| Decision                            | Rationale                                                                                                                   |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **Single-entry tool (`askXAgent`)** | Keeps the public interface tiny and self-describing for LLMs; avoids “many-tool sprawl,” which bloats prompt context.       |
-| **Single-responsibility rule**      | Each agent owns one domain (price feed, wallet ops, etc.). Makes reasoning, scaling, and charging simpler.                  |
-| **Dual role (MCP server + client)** | Lets any agent call or be called without extra glue; aligns with “lego block” vision.                                       |
-| **A2A as internal language**        | Guarantees every agent understands every other—no matter which outer wrapper (MCP, CLI, webhook) invoked it.                |
-| **Swarm narrative**                 | Explicitly encourages composing many focused agents instead of one mega-agent, preventing context bloat and latency spikes. |
+| Decision                               | Rationale                                                                   |
+| -------------------------------------- | --------------------------------------------------------------------------- |
+| **Skills as primary abstraction**      | Creates clear public interface while hiding implementation complexity       |
+| **LLM orchestration by default**       | Leverages AI for intelligent routing without requiring manual logic         |
+| **Tools always required**              | Maintains consistency and provides implementation even with manual handlers |
+| **Modern transport (StreamableHTTP)**  | Latest MCP SDK capabilities with legacy SSE backwards compatibility         |
+| **Agent cards for discovery**          | Enables automatic service discovery and capability advertising              |
+| **Context providers for shared state** | Clean dependency injection for shared resources across tools                |
