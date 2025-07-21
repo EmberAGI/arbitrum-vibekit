@@ -58,8 +58,8 @@ export async function contextProvider(
 
     thresholds: {
       warning: parseFloat(process.env.HEALTH_FACTOR_WARNING || '1.5'),
-      danger: parseFloat(process.env.HEALTH_FACTOR_DANGER || '1.2'),
-      critical: parseFloat(process.env.HEALTH_FACTOR_CRITICAL || '1.05'),
+      danger: parseFloat(process.env.HEALTH_FACTOR_DANGER || '1.1'),
+      critical: parseFloat(process.env.HEALTH_FACTOR_CRITICAL || '1.03'),
     },
 
     monitoring: {

@@ -14,6 +14,7 @@ import { loadTokenMapFromMcp } from './tokenMap.js';
 // Import implemented skills
 import { healthMonitoringSkill } from './skills/healthMonitoring.js';
 import { liquidationPreventionSkill } from './skills/liquidationPrevention.js';
+import { positionStatusSkill } from './skills/positionStatus.js';
 
 // Skills to be implemented in future tasks
 // import { riskAssessmentSkill } from './skills/riskAssessment.js';
@@ -45,8 +46,9 @@ const modelOverride = process.env.AI_MODEL;
 export const agentConfig: AgentConfig = {
   name: process.env.AGENT_NAME || 'Liquidation Prevention Agent',
   version: process.env.AGENT_VERSION || '1.0.0',
-  description: process.env.AGENT_DESCRIPTION || 'Intelligent Aave liquidation prevention agent with continuous monitoring and automatic risk mitigation',
+  description: process.env.AGENT_DESCRIPTION || 'Intelligent Aave liquidation prevention agent with immediate status checks, continuous monitoring, and automatic risk mitigation',
   skills: [
+    positionStatusSkill,           // ✅ Immediate status checks and health factor queries
     healthMonitoringSkill,         // ✅ Continuous monitoring + automatic prevention
     liquidationPreventionSkill,    // ✅ Direct supply/repay actions
     // riskAssessmentSkill,        // 🔄 To be implemented: Task 4
@@ -135,13 +137,15 @@ agent
     console.log(`🤖 Agent Card: http://localhost:${PORT}/.well-known/agent.json`);
     console.log(`🔌 MCP SSE: http://localhost:${PORT}/sse`);
     console.log('\n🛡️  Liquidation Prevention Features:');
+    console.log('  ✅ Immediate position status checks and health factor queries');
     console.log('  ✅ Continuous health factor monitoring with automatic prevention');
     console.log('  ✅ Intelligent strategy execution when liquidation risk detected');  
     console.log('  ✅ Direct manual liquidation prevention actions');
     console.log('  ✅ Configurable health factor thresholds and monitoring intervals');
-    console.log('  ✅ User preference parsing from natural language instructions');
-    console.log('  ✅ Automatic wallet balance analysis and strategy selection');
-    console.log('\n🎯 Two-Skill Architecture:');
+    console.log('  ✅ Multi-chain support for all Ember-supported networks');
+    console.log('  ✅ Token symbol resolution with comprehensive token mapping');
+    console.log('\n🎯 Three-Skill Architecture:');
+    console.log('  📊 Position Status: Immediate health factor and position checks');
     console.log('  🔄 Health Monitoring: Continuous monitoring + automatic prevention');
     console.log('  ⚡ Liquidation Prevention: Direct supply/repay actions');
     console.log('\n📊 Available tools: getUserPositions, getWalletBalances, monitorHealth, supplyCollateral, repayDebt');

@@ -15,7 +15,7 @@ import { parseUserPreferences, mergePreferencesWithDefaults, generatePreferences
 const MonitorHealthParams = z.object({
   userAddress: z.string().describe('The wallet address to monitor'),
   instruction: z.string().optional().describe('Natural language instruction with user preferences'),
-  intervalMinutes: z.number().optional().default(15).describe('Monitoring interval in minutes'),
+  intervalMinutes: z.number().optional().default(1).describe('Monitoring interval in minutes'),
   enableAlerts: z.boolean().optional().default(true).describe('Whether to enable threshold alerts'),
 });
 
@@ -179,7 +179,7 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
         strategy: context.custom.strategy,
       });
       
-      const targetHF = mergedPrefs.targetHealthFactor || 1.1;
+      const targetHF = mergedPrefs.targetHealthFactor || 1.03;
       console.log(`🔄 Starting health monitoring for: ${args.userAddress}`);
       console.log(`⚙️  User preferences: ${generatePreferencesSummary(mergedPrefs)}`);
       console.log(`🎯 Target Health Factor: ${targetHF} (action will be triggered if HF ≤ ${targetHF})`);
@@ -210,6 +210,7 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
         },
       });
 
+      console.log("getWalletLendingPositions result", result);
       if (result.isError) {
         console.error('❌ Error calling getWalletLendingPositions for monitoring:', result.content);
         let errorMessage = 'Unknown error';
