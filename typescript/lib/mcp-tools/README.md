@@ -153,7 +153,7 @@ const enhancedTool = withHooks(myBaseTool, {
 });
 ```
 
-For detailed patterns and best practices, see our [hooks documentation](../arbitrum-vibekit-core/docs/lesson-08.md) and refer to [Anthropic's hooks guide](https://docs.anthropic.com/en/docs/claude-code/hooks) for additional customization patterns.
+For detailed patterns and best practices, see our [hooks documentation](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-16.md) and refer to [Anthropic's hooks guide](https://docs.anthropic.com/en/docs/claude-code/hooks) for additional customization patterns.
 
 ### 7. Run Your MCP Server
 
