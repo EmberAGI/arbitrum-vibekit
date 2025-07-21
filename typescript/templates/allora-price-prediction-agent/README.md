@@ -65,8 +65,18 @@ The price prediction tool uses a hook-based approach:
 
    ```bash
    # .env
+   # Option 1: OpenRouter (supports many models)
    OPENROUTER_API_KEY=your_openrouter_api_key
-   ALLORA_API_KEY=your_allora_api_key_here
+
+   # Option 2: OpenAI
+   OPENAI_API_KEY=your_openai_api_key
+
+   # Option 3: Grok (xAI)
+   XAI_API_KEY=your_xai_api_key
+
+   # Option 4: Hyperbolic
+   HYPERBOLIC_API_KEY=your_hyperbolic_api_key
+   ALLORA_API_KEY=your_allora_api_key
    ```
 
 3. **Build the agent**:
@@ -101,6 +111,9 @@ The provider is initialized as follows:
 // src/index.ts
 const providers = createProviderSelector({
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  xaiApiKey: process.env.XAI_API_KEY,
+  hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
 });
 ```
 
@@ -124,13 +137,17 @@ allora-price-prediction-agent/
 
 ## Environment Variables
 
-| Variable             | Description                                               | Required |
-| -------------------- | --------------------------------------------------------- | -------- |
-| `OPENROUTER_API_KEY` | Your API key for the OpenRouter service.                  | Yes      |
-| `ALLORA_API_KEY`     | Your API key for the Allora service.                      | Yes      |
-| `PORT`               | Server port for the agent (default: 3008).                | No       |
-| `LLM_MODEL`          | LLM model name (default: google/gemini-flash-1.5).        | No       |
-| `ALLORA_MCP_PORT`    | Port for the spawned Allora MCP server (default: 3009).   | No       |
+| Variable             | Description                                                       | Required    |
+| -------------------- | ----------------------------------------------------------------- | ----------- |
+| `OPENROUTER_API_KEY` | OpenRouter API key                                                | Conditional |
+| `OPENAI_API_KEY`     | OpenAI API key                                                    | Conditional |
+| `XAI_API_KEY`        | Grok (xAI) API key                                                | Conditional |
+| `HYPERBOLIC_API_KEY` | Hyperbolic API key                                                | Conditional |
+| `ALLORA_API_KEY`     | Allora API key (required for price prediction data)               | Yes         |
+| `AI_PROVIDER`        | Preferred provider (`openrouter`, `openai`, `grok`, `hyperbolic`) | No          |
+| `AI_MODEL`           | Model override (e.g., `google/gemini-2.5-flash`)                  | No          |
+| `PORT`               | Server port for the agent (default: 3008)                         | No          |
+| `ALLORA_MCP_PORT`    | Port for the spawned Allora MCP server (default: 3009)            | No          |
 
 ### Port Configuration Note
 

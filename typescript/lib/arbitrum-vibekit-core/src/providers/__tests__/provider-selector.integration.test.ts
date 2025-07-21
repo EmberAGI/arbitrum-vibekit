@@ -42,8 +42,8 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
       expect(selector.openai).toBeDefined();
     }
     if (hasXai) {
-      expect(available).toContain('grok');
-      expect(selector.grok).toBeDefined();
+      expect(available).toContain('xai');
+      expect(selector.xai).toBeDefined();
     }
     if (hasHyperbolic) {
       expect(available).toContain('hyperbolic');
@@ -58,7 +58,7 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
       expect(selector.openai).toBeUndefined();
     }
     if (!hasXai) {
-      expect(selector.grok).toBeUndefined();
+      expect(selector.xai).toBeUndefined();
     }
     if (!hasHyperbolic) {
       expect(selector.hyperbolic).toBeUndefined();
@@ -95,9 +95,9 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
     expect(model.provider).toBe('openai.chat');
   });
 
-  it.skipIf(!hasXai)('should create a valid xAI/Grok model instance', () => {
+  it.skipIf(!hasXai)('should create a valid xAI model instance', () => {
     const selector = createProviderSelector({ xaiApiKey: API_KEYS.xaiApiKey! });
-    const model = selector.grok!('grok-3-mini');
+    const model = selector.xai!('grok-3-mini');
 
     // Verify it's a valid LanguageModelV1 instance
     expect(model).toBeDefined();
@@ -145,7 +145,7 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
       expect(available).toContain('openai');
     }
     if (hasXai) {
-      expect(available).toContain('grok');
+      expect(available).toContain('xai');
     }
     if (hasHyperbolic) {
       expect(available).toContain('hyperbolic');
@@ -198,7 +198,7 @@ describe.skipIf(!hasAnyKey)('Provider Selector Integration Tests', () => {
     'should successfully call xAI API',
     async () => {
       const selector = createProviderSelector({ xaiApiKey: API_KEYS.xaiApiKey! });
-      const model = selector.grok!('grok-3-mini');
+      const model = selector.xai!('grok-3-mini');
 
       // Make a minimal API call
       const result = await model.doGenerate({

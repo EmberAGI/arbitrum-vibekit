@@ -5,18 +5,38 @@
  */
 
 import 'dotenv/config';
-import { Agent, type AgentConfig, createProviderSelector } from 'arbitrum-vibekit-core';
+import { Agent, type AgentConfig, createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
 import { pricePredictionSkill } from './skills/pricePrediction.js';
 
-// Create provider selector
+// Initialize provider selector with all supported API keys
 const providers = createProviderSelector({
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  xaiApiKey: process.env.XAI_API_KEY,
+  hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
 });
 
-// Check if OpenRouter is available
-if (!providers.openrouter) {
-  throw new Error('OpenRouter provider is not available. Please check your OPENROUTER_API_KEY.');
+// Determine available providers
+const availableProviders = getAvailableProviders(providers);
+
+if (availableProviders.length === 0) {
+  throw new Error(
+    'No AI providers configured. Please set at least one provider API key (OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or HYPERBOLIC_API_KEY).',
+  );
 }
+
+// Allow user to choose provider via env, else fall back to first available
+const preferredProvider = process.env.AI_PROVIDER || availableProviders[0]!;
+const selectedProvider = providers[preferredProvider as keyof typeof providers];
+
+if (!selectedProvider) {
+  throw new Error(
+    `Preferred provider '${preferredProvider}' is not available. Available providers: ${availableProviders.join(', ')}`,
+  );
+}
+
+// Optional model override via AI_MODEL env variable
+const modelOverride = process.env.AI_MODEL;
 
 // Export agent configuration for testing
 export const agentConfig: AgentConfig = {
@@ -41,7 +61,7 @@ const agent = Agent.create(agentConfig, {
   cors: process.env.ENABLE_CORS !== 'false',
   basePath: process.env.BASE_PATH || undefined,
   llm: {
-    model: providers.openrouter(process.env.LLM_MODEL || 'google/gemini-2.5-flash-preview'),
+    model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
   },
 });
 
@@ -68,8 +88,12 @@ agent
   });
 
 // Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('\n\n🛑 Shutting down gracefully...');
+const shutdown = async (signal: string) => {
+  console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
   await agent.stop();
   process.exit(0);
+};
+
+['SIGINT', 'SIGTERM'].forEach((sig) => {
+  process.on(sig, () => shutdown(sig));
 });

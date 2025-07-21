@@ -1,10 +1,4 @@
-import type {
-  AgentCard,
-  AgentSkill,
-  AgentCapabilities,
-  Task,
-  Message,
-} from '@google-a2a/types';
+import type { AgentCard, AgentSkill, AgentCapabilities, Task, Message } from '@google-a2a/types';
 import { CorsOptions } from 'cors';
 import { InMemoryTaskStore, TaskStore } from './store.js';
 import express, { Request, Response, NextFunction } from 'express';
@@ -14,6 +8,7 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { z } from 'zod';
 import { Server } from 'http';
 import { createRequire } from 'module';
@@ -31,12 +26,25 @@ import type { LanguageModel, CoreMessage } from 'ai';
 import { nanoid } from 'nanoid';
 
 /**
+ * Configuration for HTTP-based MCP server connection (SSE or Streamable HTTP)
+ */
+export interface HttpMcpConfig {
+  url: string; // Server URL (e.g., 'https://api.emberai.xyz/mcp')
+  headers?: Record<string, string>; // Optional HTTP headers for auth
+  alwaysAllow?: string[]; // Tools to auto-approve
+  disabled?: boolean; // Whether this server is disabled
+}
+
+/**
  * Configuration for stdio MCP server connection
  */
 export interface StdioMcpConfig {
   command: string; // e.g., 'node'
-  moduleName: string; // e.g., 'ember-mcp-tool-server' - will be resolved via require.resolve
+  args?: string[]; // Command arguments (for compatibility with standard format)
+  moduleName?: string; // e.g., 'ember-mcp-tool-server' - will be resolved via require.resolve (deprecated, use args instead)
   env?: Record<string, string>; // Additional environment variables
+  alwaysAllow?: string[]; // Tools to auto-approve
+  disabled?: boolean; // Whether this server is disabled
 }
 
 /**
@@ -64,7 +72,7 @@ export interface SkillDefinition<I extends z.ZodTypeAny, TContext = any> {
   inputSchema: I;
   tools: Array<VibkitToolDefinition<any, Task | Message, TContext, z.infer<I>>>; // Tools now have access to skill input type
   handler?: (input: z.infer<I>) => Promise<Task | Message>; // Optional - when provided, bypasses LLM orchestration
-  mcpServers?: StdioMcpConfig[]; // Optional - MCP servers this skill needs
+  mcpServers?: Record<string, StdioMcpConfig | HttpMcpConfig>; // Optional - MCP servers this skill needs (named object format)
 }
 
 /**
@@ -322,16 +330,22 @@ export class Agent<TSkillsArray extends SkillDefinition<z.ZodTypeAny, TContext>[
 
   private async setupSkillMcpClients(): Promise<void> {
     for (const [skillName, skill] of this.skillsMap) {
-      if (skill.mcpServers && skill.mcpServers.length > 0) {
+      if (skill.mcpServers && Object.keys(skill.mcpServers).length > 0) {
         const clientsMap = new Map<string, Client>();
 
-        for (const mcpConfig of skill.mcpServers) {
+        for (const [serverName, mcpConfig] of Object.entries(skill.mcpServers)) {
+          // Skip disabled servers
+          if (mcpConfig.disabled) {
+            console.log(`Skipping disabled MCP server "${serverName}" for skill "${skillName}"`);
+            continue;
+          }
+
           try {
-            console.log(
-              `Setting up MCP client for skill "${skillName}", server: ${mcpConfig.moduleName}`
-            );
-            const client = await this.createMcpClient(mcpConfig, skillName);
-            clientsMap.set(mcpConfig.moduleName, client);
+            console.log(`Setting up MCP client for skill "${skillName}", server: ${serverName}`);
+            const client = await this.createMcpClient(serverName, mcpConfig, skillName);
+            if (client) {
+              clientsMap.set(serverName, client);
+            }
           } catch (error) {
             console.error(`Failed to set up MCP client for skill "${skillName}":`, error);
             throw error;
@@ -343,31 +357,59 @@ export class Agent<TSkillsArray extends SkillDefinition<z.ZodTypeAny, TContext>[
     }
   }
 
-  private async createMcpClient(mcpConfig: StdioMcpConfig, skillName: string): Promise<Client> {
+  private async createMcpClient(
+    serverName: string,
+    mcpConfig: StdioMcpConfig | HttpMcpConfig,
+    skillName: string
+  ): Promise<Client | null> {
     const client = new Client({
-      name: `${this.card.name}-${skillName}-client`,
+      name: `${this.card.name}-${skillName}-${serverName}`,
       version: this.card.version,
     });
 
     console.log('Initializing MCP client transport...');
     try {
-      const require = createRequire(import.meta.url);
-      const mcpToolPath = require.resolve(mcpConfig.moduleName);
-      console.log(`Found MCP tool server path: ${mcpToolPath}`);
+      if ('url' in mcpConfig) {
+        // HTTP MCP Server (Streamable HTTP or SSE)
+        console.log(`Connecting to HTTP MCP server at ${mcpConfig.url}`);
+        const transport = new StreamableHTTPClientTransport(
+          new URL(mcpConfig.url),
+          mcpConfig.headers
+        );
+        await client.connect(transport);
+        console.log('HTTP MCP client connected successfully.');
+      } else {
+        // Stdio MCP Server (existing logic)
+        const require = createRequire(import.meta.url);
+        let args: string[];
 
-      const transport = new StdioClientTransport({
-        command: mcpConfig.command,
-        args: [mcpToolPath],
-        env: {
-          ...(Object.fromEntries(
-            Object.entries(process.env).filter(([_, v]) => v !== undefined)
-          ) as Record<string, string>),
-          ...mcpConfig.env,
-        },
-      });
+        if (mcpConfig.args) {
+          // Use args directly if provided
+          args = mcpConfig.args;
+        } else if (mcpConfig.moduleName) {
+          // Legacy support: resolve module name
+          const mcpToolPath = require.resolve(mcpConfig.moduleName);
+          console.log(`Found MCP tool server path: ${mcpToolPath}`);
+          args = [mcpToolPath];
+        } else {
+          throw new Error('StdioMcpConfig must have either args or moduleName');
+        }
 
-      await client.connect(transport);
-      console.log('MCP client connected successfully.');
+        const transport = new StdioClientTransport({
+          command: mcpConfig.command,
+          args,
+          env: {
+            ...(Object.fromEntries(
+              Object.entries(process.env).filter(([_, v]) => v !== undefined)
+            ) as Record<string, string>),
+            ...mcpConfig.env,
+          },
+        });
+
+        await client.connect(transport);
+        console.log('Stdio MCP client connected successfully.');
+      }
+
       return client;
     } catch (error) {
       console.error('Failed to initialize MCP client transport or connect:', error);
