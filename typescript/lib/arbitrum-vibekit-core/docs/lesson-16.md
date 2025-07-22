@@ -1,94 +1,340 @@
-**Lesson 16: Validations and Caveats**
+# **Lesson 16: Validations and Tool Enhancement with Hooks**
 
 ---
 
 ### 🔍 Overview
 
-Some tools—especially those related to transaction execution—require more than input validation. You may want to confirm conditions like wallet ownership, session duration, token allowance, or external authorization before the tool completes.
+The v2 framework provides powerful hook-based patterns for tool enhancement, validation, and cross-cutting concerns. Understanding how to use `withHooks`, before/after hooks, and validation patterns is essential for building robust, production-ready agents.
 
-This is where **validations and caveats** come in. Validations are runtime checks. Caveats are persisted guarantees attached to a delegation or signed session.
+Hooks allow you to add validation, logging, metrics collection, and response formatting without cluttering your core business logic. This lesson covers the hook patterns actively used in v2 templates and production agents.
 
 ---
 
-### ✅ Runtime Validations (Agent-Controlled)
+### 🪝 Hook-Based Tool Enhancement
 
-These are custom checks you run in a `before()` hook or middleware. For example:
+The v2 framework uses `withHooks` to enhance tools with before/after hooks:
 
 ```ts
-export const before = async (ctx) => {
-  if (!ctx.meta.session?.isVerified) {
-    throw new AgentError("SessionInvalid", "Session must be verified");
+// Enhanced tool with validation and response formatting
+export const supplyTool = withHooks(baseSupplyTool, {
+  before: [tokenResolutionHook, balanceCheckHook],
+  after: [responseParserHook, metricsHook],
+});
+```
+
+### 🎯 Before Hooks for Validation
+
+Before hooks run validation and transformation logic before tool execution:
+
+```ts
+// Token resolution hook from lending-agent
+export async function tokenResolutionHook<Args extends TokenResolutionHookArgs>(
+  args: Args,
+  context: AgentContext<LendingAgentContext, any>
+): Promise<(Args & { resolvedToken: TokenInfo }) | Task | Message> {
+  const { tokenName } = args;
+  const findResult = findTokenInfo(context.custom.tokenMap, tokenName);
+
+  switch (findResult.type) {
+    case 'notFound':
+      return {
+        id: createTaskId(),
+        kind: 'task' as const,
+        status: {
+          state: TaskState.Failed,
+          message: {
+            role: 'agent',
+            parts: [{ type: 'text', text: `Token '${tokenName}' not supported.` }],
+          },
+        },
+      } as Task;
+
+    case 'clarificationNeeded':
+      const optionsText = findResult.options
+        .map(opt => `- ${tokenName} on chain ${opt.chainId}`)
+        .join('\n');
+      return {
+        id: createTaskId(),
+        kind: 'task' as const,
+        status: {
+          state: TaskState.InputRequired,
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                type: 'text',
+                text: `Which ${tokenName} do you want to use?\n${optionsText}`,
+              },
+            ],
+          },
+        },
+      } as Task;
+
+    case 'found':
+      return { ...args, resolvedToken: findResult.token };
   }
+}
+```
+
+### 🔍 Balance and Permission Validation
+
+Before hooks can validate external conditions like wallet balances:
+
+```ts
+// Balance check hook from lending-agent
+export async function balanceCheckHook<Args extends BalanceCheckHookArgs>(
+  args: Args,
+  context: AgentContext<LendingAgentContext, any>
+): Promise<Args | Task> {
+  const { resolvedToken, amount } = args;
+  const walletAddress = context.skillInput?.walletAddress;
+
+  if (!walletAddress) {
+    return {
+      id: createTaskId(),
+      kind: 'task' as const,
+      status: {
+        state: TaskState.Failed,
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: 'Wallet address is required.' }],
+        },
+      },
+    } as Task;
+  }
+
+  try {
+    const balance = await checkTokenBalance(
+      walletAddress,
+      resolvedToken.address,
+      context.custom.rpcProvider
+    );
+
+    if (balance < parseFloat(amount)) {
+      return {
+        id: createTaskId(),
+        kind: 'task' as const,
+        status: {
+          state: TaskState.Failed,
+          message: {
+            role: 'agent',
+            parts: [
+              {
+                type: 'text',
+                text: `Insufficient balance. You have ${balance} ${resolvedToken.symbol}, but need ${amount}.`,
+              },
+            ],
+          },
+        },
+      } as Task;
+    }
+
+    return args; // Validation passed
+  } catch (error) {
+    return {
+      id: createTaskId(),
+      kind: 'task' as const,
+      status: {
+        state: TaskState.Failed,
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: `Failed to check balance: ${error.message}` }],
+        },
+      },
+    } as Task;
+  }
+}
+```
+
+---
+
+### 🔄 After Hooks for Response Processing
+
+After hooks transform raw results into structured responses:
+
+```ts
+// Response parser hook from lending-agent
+export async function responseParserHook<ParsedResponse extends McpToolTxResponseData>(
+  mcpResult: any,
+  context: AgentContext<LendingAgentContext, any>,
+  toolArgs: { resolvedToken: TokenInfo; amount: string; [key: string]: any },
+  zodSchema: z.ZodType<ParsedResponse>,
+  action: LendingPreview['action']
+): Promise<Task> {
+  const { resolvedToken, amount } = toolArgs;
+
+  try {
+    // Validate MCP response
+    const parsedResponse = zodSchema.parse(mcpResult);
+
+    if (!parsedResponse.success) {
+      throw new Error(parsedResponse.error || 'Operation failed');
+    }
+
+    // Create structured response
+    return {
+      id: createTaskId(),
+      kind: 'task' as const,
+      status: {
+        state: TaskState.Completed,
+        message: {
+          role: 'agent',
+          parts: [
+            {
+              type: 'text',
+              text: `Successfully prepared ${action} transaction for ${amount} ${resolvedToken.symbol}`,
+            },
+            {
+              type: 'code',
+              language: 'json',
+              code: JSON.stringify(parsedResponse.data, null, 2),
+            },
+          ],
+        },
+      },
+    } as Task;
+  } catch (error) {
+    return {
+      id: createTaskId(),
+      kind: 'task' as const,
+      status: {
+        state: TaskState.Failed,
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: `Parsing failed: ${error.message}` }],
+        },
+      },
+    } as Task;
+  }
+}
+```
+
+---
+
+### 🔗 Composing Multiple Hooks
+
+Use composition functions to combine multiple before hooks:
+
+```ts
+// From ember-agent
+export function composeBeforeHooks<TArgs extends object>(
+  ...hooks: Array<(args: TArgs, context: any) => Promise<TArgs | Task | Message>>
+): (args: TArgs, context: any) => Promise<TArgs | Task | Message> {
+  return async (args, context) => {
+    let currentArgs = args;
+    for (const hook of hooks) {
+      const result = await hook(currentArgs, context);
+
+      // Check if the hook short-circuited with Task/Message
+      if (
+        typeof result === 'object' &&
+        result !== null &&
+        'kind' in result &&
+        (result.kind === 'task' || result.kind === 'message')
+      ) {
+        return result; // Short-circuit
+      }
+
+      currentArgs = result as TArgs; // Continue with modified args
+    }
+    return currentArgs;
+  };
+}
+
+// Usage: combine token resolution and balance checks
+export const swapTokensTool = withHooks(baseSwapTokensTool, {
+  before: composeBeforeHooks(resolveTokensHook, checkBalanceHook),
+  after: formatSwapResponseHook,
+});
+```
+
+---
+
+### 🛡️ Security and Validation Patterns
+
+**Input Validation:**
+
+```ts
+export const inputValidationHook: BeforeHook<any> = async (args, context) => {
+  // Sanitize and validate input
+  const sanitized = {
+    ...args,
+    amount: Math.abs(parseFloat(args.amount)), // Ensure positive
+    tokenName: args.tokenName.trim().toUpperCase(), // Normalize
+  };
+
+  if (sanitized.amount <= 0) {
+    throw new VibkitError('InvalidAmount', -32602, 'Amount must be positive');
+  }
+
+  return sanitized;
 };
 ```
 
-Runtime validations are dynamic, per-request checks that control access to the tool logic.
+**Rate Limiting:**
+
+```ts
+const rateLimiter = new Map<string, number>();
+
+export const rateLimitHook: BeforeHook<any> = async (args, context) => {
+  const userKey = context.skillInput?.walletAddress || 'anonymous';
+  const now = Date.now();
+  const lastCall = rateLimiter.get(userKey) || 0;
+
+  if (now - lastCall < 1000) {
+    // 1 second rate limit
+    return {
+      id: createTaskId(),
+      kind: 'task' as const,
+      status: {
+        state: TaskState.Failed,
+        message: {
+          role: 'agent',
+          parts: [{ type: 'text', text: 'Rate limit exceeded. Please wait.' }],
+        },
+      },
+    } as Task;
+  }
+
+  rateLimiter.set(userKey, now);
+  return args;
+};
+```
 
 ---
 
-### 🔏 Caveats (Delegation-Controlled)
+### ⚠️ Best Practices
 
-Caveats are attached to a **signed delegation** using something like MetaMask's Delegation Toolkit. These are external constraints that persist with a signature:
+**Do:**
 
-- Token limit per session
-- Tool call whitelist
-- Expiry timestamps
+- Use hooks for cross-cutting concerns (validation, logging, metrics)
+- Return structured Task/Message objects from hooks for consistent error handling
+- Compose hooks to build complex validation pipelines
+- Keep business logic separate from validation logic
+- Use TypeScript types to ensure hook compatibility
 
-Your agent can **enforce caveats** at runtime by verifying that the session meets all the attached requirements.
+**Don't:**
 
----
-
-### 🧩 Combining Both
-
-In most real-world cases:
-
-- Caveats define the **outer contract** of a delegation
-- Runtime validations enforce **local policy** inside the agent
-
-This lets users delegate safely, while your agent still protects its own logic.
-
----
-
-### ⚠️ What Not to Do
-
-- Don’t rely only on client-side caveats
-- Don’t hard-code validation logic—use named validators or shared helpers
-- Don’t assume a signature is enough—always check context
+- Mix business logic with validation in the same function
+- Ignore hook short-circuit returns (Task/Message objects)
+- Create hooks with side effects that can't be undone
+- Bypass validation hooks in production
+- Hardcode validation rules - use configuration where possible
 
 ---
 
 ### ✅ Summary
 
-Validations are your safety net. Caveats are their signed complement. Use both to ensure your agent only executes when the environment is trusted and secure.
+V2 hooks provide a clean, composable way to enhance tools with validation, transformation, and cross-cutting concerns. The `withHooks` utility and before/after hook patterns are fundamental to building robust agents.
 
-> "Signed intent is not enough. You must still verify context."
+Use before hooks for validation and transformation, after hooks for response formatting, and composition functions to build complex validation pipelines.
 
----
+> "Hooks separate concerns cleanly. Validation stays out of business logic, and business logic stays focused."
 
-### 📚 Rationale
-
-We took design cues from both OpenAI and MetaMask:
-
-**From OpenAI Agent SDK:**
-
-- Guardrails that run before any tool logic → inspired `before()` validation
-- Typed, structured errors surfaced to models → became `AgentError`
-- Built-in trace support → influenced our OpenTelemetry integration in Lesson 15
-
-**From MetaMask Delegation Toolkit:**
-
-- Signed "caveats" represent session-bound constraints (token cap, whitelist, expiry)
-- Agents—not wallets—enforce those caveats at runtime
-- Clear split between signature-level constraints and agent-specific validations
-
-Together, these patterns help agents enforce multi-layered safety: signed intent from the user, local policy from the developer.. Caveats are their signed complement. Use both to ensure your agent only executes when the environment is trusted and secure.
-
-> "Signed intent is not enough. You must still verify context."
-
-| Decision                              | Rationale                                                                                                                                                                      |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Two–layer security model**          | _Outer_ layer = signed MetaMask _delegations_ (caveats); _inner_ layer = runtime `before()` validations. Covers both persistent permission limits and per-call context checks. |
-| **Caveat verification in `before()`** | Keeps enforcement code adjacent to business logic; avoids a separate middleware tier that could be bypassed.                                                                   |
-| **Env var `AGENT_WALLET_PK`**         | Hot-wallet key is injected, not committed. Makes clear the agent’s signing key differs from user keys.                                                                         |
-| **Sequence diagram in docs**          | Shows juniors exactly how delegation flows: user → wallet → agent hot-wallet → chain. Clarifies that the agent never holds the user’s private key.                             |
-| **AgentError `CaveatFail`**           | Provides explicit, typed feedback when a delegation doesn’t satisfy caveats, aligning with SDK error style.                                                                    |
+| Pattern                   | Use Case                            | Benefits                        |
+| ------------------------- | ----------------------------------- | ------------------------------- |
+| **Before hooks**          | Input validation and transformation | Clean separation of concerns    |
+| **After hooks**           | Response formatting and metrics     | Consistent output structure     |
+| **Hook composition**      | Complex validation pipelines        | Reusable, testable validation   |
+| **Short-circuit returns** | Early validation failures           | Prevents unnecessary processing |
+| **Type safety**           | Hook argument and return types      | Compile-time validation         |

@@ -72,7 +72,7 @@ describe('createProviderSelector', () => {
 
     expect(selector.openrouter).toBeDefined();
     expect(selector.openai).toBeDefined();
-    expect(selector.grok).toBeDefined();
+    expect(selector.xai).toBeDefined();
     expect(selector.hyperbolic).toBeDefined();
   });
 
@@ -86,7 +86,7 @@ describe('createProviderSelector', () => {
 
     expect(selector.openrouter).toBeDefined();
     expect(selector.openai).toBeUndefined();
-    expect(selector.grok).toBeDefined();
+    expect(selector.xai).toBeDefined();
     expect(selector.hyperbolic).toBeDefined();
   });
 
@@ -122,9 +122,9 @@ describe('createProviderSelector', () => {
       provider: 'openai',
     });
 
-    // Test Grok (xAI)
-    const grokModel = selector.grok!('grok-3-mini');
-    expect(grokModel).toMatchObject({
+    // Test XAI
+    const xaiModel = selector.xai!('grok-3-mini');
+    expect(xaiModel).toMatchObject({
       modelId: 'xai:grok-3-mini',
       provider: 'xai',
     });
@@ -143,7 +143,7 @@ describe('createProviderSelector', () => {
     });
     expect(selector1.openrouter).toBeDefined();
     expect(selector1.openai).toBeUndefined();
-    expect(selector1.grok).toBeUndefined();
+    expect(selector1.xai).toBeUndefined();
     expect(selector1.hyperbolic).toBeUndefined();
 
     const selector2 = createProviderSelector({
@@ -151,7 +151,7 @@ describe('createProviderSelector', () => {
     });
     expect(selector2.openrouter).toBeUndefined();
     expect(selector2.openai).toBeDefined();
-    expect(selector2.grok).toBeUndefined();
+    expect(selector2.xai).toBeUndefined();
     expect(selector2.hyperbolic).toBeUndefined();
 
     const selector3 = createProviderSelector({
@@ -159,7 +159,7 @@ describe('createProviderSelector', () => {
     });
     expect(selector3.openrouter).toBeUndefined();
     expect(selector3.openai).toBeUndefined();
-    expect(selector3.grok).toBeDefined();
+    expect(selector3.xai).toBeDefined();
     expect(selector3.hyperbolic).toBeUndefined();
 
     const selector4 = createProviderSelector({
@@ -167,7 +167,7 @@ describe('createProviderSelector', () => {
     });
     expect(selector4.openrouter).toBeUndefined();
     expect(selector4.openai).toBeUndefined();
-    expect(selector4.grok).toBeUndefined();
+    expect(selector4.xai).toBeUndefined();
     expect(selector4.hyperbolic).toBeDefined();
   });
 });
@@ -182,7 +182,7 @@ describe('getAvailableProviders', () => {
     });
 
     const available = getAvailableProviders(selector);
-    expect(available).toEqual(['openrouter', 'openai', 'grok', 'hyperbolic']);
+    expect(available).toEqual(['openrouter', 'openai', 'xai', 'hyperbolic']);
   });
 
   it('should return only providers with API keys', () => {
@@ -194,7 +194,7 @@ describe('getAvailableProviders', () => {
     });
 
     const available = getAvailableProviders(selector);
-    expect(available).toEqual(['openrouter', 'grok', 'hyperbolic']);
+    expect(available).toEqual(['openrouter', 'xai', 'hyperbolic']);
   });
 
   it('should return empty array when no providers are available', () => {
@@ -218,7 +218,7 @@ describe('getAvailableProviders', () => {
     const selector3 = createProviderSelector({
       xaiApiKey: 'test-key',
     });
-    expect(getAvailableProviders(selector3)).toEqual(['grok']);
+    expect(getAvailableProviders(selector3)).toEqual(['xai']);
 
     const selector4 = createProviderSelector({
       hyperbolicApiKey: 'test-key',

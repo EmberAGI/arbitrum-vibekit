@@ -2,6 +2,8 @@
 
 A hello-world agent demonstrating the evaluator-optimizer workflow pattern using LangGraph. This agent takes a simple greeting and iteratively improves it to be more friendly, engaging, and personalized.
 
+**📚 Learn the patterns**: This agent demonstrates workflow tool patterns covered in [Lesson 22: Decision Framework](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-22.md) and single-skill architecture from [Lesson 19: Skills Foundation](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-19.md).
+
 ## Overview
 
 The agent implements a classic AI pattern where:
@@ -30,8 +32,8 @@ graph TD
 
 ### Key Components
 
-- **Single Skill**: `greeting-optimizer` - Optimizes greetings
-- **Single Tool**: `optimize-greeting` - Encapsulates the entire LangGraph workflow
+- **Single Skill**: `greeting-optimizer` - Optimizes greetings ([Lesson 19](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-19.md))
+- **Single Tool**: `optimize-greeting` - Encapsulates the entire LangGraph workflow (workflow tool pattern from [Lesson 22](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-22.md))
 - **Three Nodes**:
   - **Generator**: Creates/improves greetings based on feedback
   - **Evaluator**: Rates on friendliness, engagement, and personalization
@@ -52,7 +54,7 @@ The workflow uses a 5-level satisfaction scale:
 ### Prerequisites
 
 - Node.js 18+
-- OpenRouter API key
+- At least one AI provider API key (OpenRouter, OpenAI, Grok/xAI, or Hyperbolic)
 
 ### Installation
 
@@ -69,9 +71,26 @@ pnpm install
    cp env.example .env
    ```
 
-2. Edit `.env` and add your OpenRouter API key:
+2. Edit `.env` and add your API keys:
+
    ```env
-   OPENROUTER_API_KEY=your-actual-api-key-here
+   # Option 1: OpenRouter (supports many models)
+   OPENROUTER_API_KEY=your-openrouter-api-key
+
+   # Option 2: OpenAI
+   OPENAI_API_KEY=your-openai-api-key
+
+   # Option 3: Grok (xAI)
+   XAI_API_KEY=your-xai-api-key
+
+   # Option 4: Hyperbolic
+   HYPERBOLIC_API_KEY=your-hyperbolic-api-key
+
+   # Optional: Preferred provider (defaults to first configured)
+   AI_PROVIDER=openrouter
+
+   # Optional: Model override (defaults to provider-specific default)
+   AI_MODEL=google/gemini-2.5-flash
    ```
 
 See `env.example` for all available configuration options.

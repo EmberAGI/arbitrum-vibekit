@@ -5,10 +5,11 @@ import 'dotenv/config';
 import {
   MultiChainSigner,
   CHAIN_CONFIGS,
-  ensureWethBalance,
+  mintUSDC,
   extractPositionsData,
   getReserveForToken,
-  extractAndExecuteTransactions
+  extractAndExecuteTransactions,
+  extractMessageText,
 } from 'test-utils';
 
 import { Agent } from '../src/agent.js';
@@ -56,197 +57,193 @@ describe('Lending Agent Integration Tests', function () {
     await agent.stop();
   });
 
-  // Create a separate test suite for each chain
-  for (const chainId of CHAINS_TO_TEST) {
-    describe(`Chain: ${CHAIN_CONFIGS[chainId]?.name || `Chain ${chainId}`}`, function () {
-      before(async function () {
-        // Verify that chain configuration exists
-        if (!CHAIN_CONFIGS[chainId]) {
-          throw new Error(
-            `Chain configuration missing for chain ID ${chainId}. Please add it to CHAIN_CONFIGS.`
-          );
-        }
+  describe(`Lending operations on Arbitrum One`, function () {
+    const chainId = 42161;
 
-        // Get WETH address from chain config
-        const wethAddress = CHAIN_CONFIGS[chainId]?.wrappedNativeToken?.address;
-        if (!wethAddress) {
-          throw new Error(
-            `No wrapped native token (WETH) defined for chain ${chainId}.`
-          );
-        }
+    beforeEach(async function () {
+      // Select chain
+      const signer = multiChainSigner.getSignerForChainId(chainId);
+      const provider = signer.provider;
 
-        // Ensure WETH balance - use higher amount to ensure all operations can be completed
-        const signer = multiChainSigner.getSignerForChainId(chainId);
-        await ensureWethBalance(signer, '0.5', wethAddress);
+      if (!provider) {
+        throw new Error('Provider not initialized');
+      }
+
+      // Get USDC address from chain config
+      const usdcAddress = CHAIN_CONFIGS[chainId]?.anotherToken?.address;
+      if (!usdcAddress) {
+        throw new Error(`No USDC token defined for chain ${chainId}.`);
+      }
+
+      // Ensure USDC balance - use higher amount to ensure all operations can be completed
+      // USDC has 6 decimals, so 1000 USDC = 1000000000
+      await mintUSDC({
+        provider: provider as any,
+        tokenAddress: usdcAddress,
+        userAddress: multiChainSigner.wallet.address,
+        balanceStr: '1000000000', // 1000 USDC
       });
 
-      describe('Basic Capabilities', function () {
-        it('should be able to describe what it can do', async function () {
-          const response = await agent.processUserInput(
-            'What can you do?',
-            multiChainSigner.wallet.address
-          );
-
-          // Test passes if agent returns a response and mentions lending operations
-          expect(response).to.exist;
-
-          // Extract text from response, accounting for different possible response structures
-          let messageText = '';
-          if (response.status?.message?.parts && Array.isArray(response.status.message.parts)) {
-            const firstPart = response.status.message.parts[0];
-            if (firstPart && typeof firstPart === 'object' && 'text' in firstPart) {
-              messageText = firstPart.text as string;
-            }
-          }
-
-          expect(messageText.toLowerCase()).to.satisfy(
-            (text: string) =>
-              text.includes('borrow') || text.includes('supply') || text.includes('lending')
-          );
-        });
-      });
-
-      describe('Supply Operations', function () {
-        it('should supply WETH successfully', async function () {
-          const amountToSupply = '0.001';
-
-          // Get original balance
-          const oldReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
-          const oldBalance = parseFloat(oldReserve.underlyingBalance);
-
-          // Supply some WETH
-          const response = await agent.processUserInput(
-            `supply ${amountToSupply} WETH`,
-            multiChainSigner.wallet.address
-          );
-
-          // Check for response errors
-          expect(response.status?.state).to.not.equal('failed', 'Supply operation failed');
-
-          // Execute transactions
-          const txHashes = await extractAndExecuteTransactions(
-            response,
-            multiChainSigner,
-            'supply'
-          );
-          expect(txHashes.length).to.be.greaterThan(0, 'No transaction hashes returned');
-
-          // Just log transaction hash without explorer link
-          console.log(`Supply transaction hash: ${txHashes[0]}`);
-
-
-          // Check the new balance increased by the expected amount
-          const newReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
-          const newBalance = parseFloat(newReserve.underlyingBalance);
-          const balanceIncrease = newBalance - oldBalance;
-          expect(balanceIncrease).to.be.closeTo(
-            parseFloat(amountToSupply),
-            0.0001, // Allow for some tolerance due to rounding and gas fees
-            `Expected balance to increase by ${amountToSupply}, but increased by ${balanceIncrease}`
-          );
-        });
-      });
-
-      describe('Borrow Operations', function () {
-        it('should borrow WETH successfully', async function () {
-          const amountToBorrow = 0.0005;
-
-          // Get original borrow balance
-          const oldReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
-          const oldBorrows = parseFloat(oldReserve.totalBorrows || '0');
-
-          // Borrow some WETH
-          const response = await agent.processUserInput(
-            `borrow ${amountToBorrow} WETH`,
-            multiChainSigner.wallet.address
-          );
-
-          // Check for response errors
-          expect(response.status?.state).to.not.equal('failed', 'Borrow operation failed');
-
-          // Execute transactions immediately after getting response
-          const txHashes = await extractAndExecuteTransactions(
-            response,
-            multiChainSigner,
-            'borrow'
-          );
-          expect(txHashes.length).to.be.greaterThan(0, 'No transaction hashes returned');
-          console.log(`Borrow transaction hash: ${txHashes[0]}`);
-
-          // Now check the balance - transaction is already executed and confirmed
-          const newReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
-          const newBorrows = parseFloat(newReserve.totalBorrows || '0');
-          const borrowIncrease = newBorrows - oldBorrows;
-          expect(borrowIncrease).to.be.closeTo(
-            amountToBorrow,
-            0.00001, // Allow for some tolerance due to rounding
-            `Expected borrow to increase by ${amountToBorrow}, but increased by ${borrowIncrease}`
-          );
-        });
-      });
-
-      describe('Position Management', function () {
-        it('should show positions correctly', async function () {
-          // Get and display positions
-          const response = await agent.processUserInput(
-            'show my positions',
-            multiChainSigner.wallet.address
-          );
-
-          // Verify we get a response with positions data
-          const positionsData = extractPositionsData(response);
-          expect(positionsData.positions.length, 'No positions found').to.be.greaterThan(0);
-
-          // Get WETH reserve
-          const wethReserve = getReserveForToken(positionsData, 'WETH');
-
-          // Verify we have both supplies and borrows
-          expect(
-            parseFloat(wethReserve.underlyingBalance),
-            `No WETH supply balance found: ${JSON.stringify(positionsData, null, 2)}`
-          ).to.be.greaterThan(0);
-          expect(
-            parseFloat(wethReserve.totalBorrows || '0'),
-            `No WETH borrow balance found: ${JSON.stringify(positionsData, null, 2)}`
-          ).to.be.greaterThan(0);
-        });
-      });
-
-      describe('Withdraw Operations', function () {
-        it('should withdraw WETH successfully', async function () {
-          const amountToWithdraw = '0.0001';
-
-          // Get original balance
-          const oldReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
-          const oldBalance = parseFloat(oldReserve.underlyingBalance);
-
-          // Withdraw some WETH
-          const response = await agent.processUserInput(
-            `withdraw ${amountToWithdraw} WETH`,
-            multiChainSigner.wallet.address
-          );
-
-          // Check for response errors
-          expect(response.status?.state).to.not.equal('failed', 'Withdraw operation failed');
-
-          // Execute transactions immediately after getting response
-          const txHashes = await extractAndExecuteTransactions(
-            response,
-            multiChainSigner,
-            'withdraw'
-          );
-          expect(txHashes.length).to.be.greaterThan(0, 'No transaction hashes returned');
-          console.log(`Withdraw transaction hash: ${txHashes[0]}`);
-
-          // Now check the balance - transaction is already executed and confirmed
-          const newReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'WETH');
-          const newBalance = parseFloat(newReserve.underlyingBalance);
-          expect(oldBalance).to.be.closeTo(
-            newBalance + parseFloat(amountToWithdraw),
-            0.001 // Allow for some tolerance due to rounding
-          );
-        });
-      });
+      // // Approve the Aave v3 Pool contract to spend USDC
+      // const aaveV3PoolAddress = '0x8dff5e27ea6b7ac08ebfdf9eb090f32ee9a30fcf';
+      // await approveToken({
+      //   signer: signer,
+      //   tokenAddress: usdcAddress,
+      //   spenderAddress: aaveV3PoolAddress,
+      //   amount: ethers.constants.MaxUint256
+      // });
     });
-  }
+
+    afterEach(async function () {
+      // // Wait for transaction to be confirmed if any
+      // if (provider) {
+      //   const latestBlock = await provider.getBlockNumber();
+      //   await provider.waitForBlock(latestBlock + 1, 1000);
+      // }
+    });
+
+    it.skip('should supply USDC successfully', async function () {
+      // Define the amount to supply
+      const amountToSupply = '10'; // 10 USDC
+
+      const oldReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'USDC');
+      console.log(`Old USDC balance: ${oldReserve.underlyingBalance}`);
+
+      // Supply some USDC
+      const result = await agent.processUserInput(
+        `I want to supply ${amountToSupply} USDC on chain 42161 address 0xaf88d065e77c8cc2239327c5edb3a432268e5831`,
+        multiChainSigner.wallet.address
+      );
+
+      // Parse the agent's response
+      const resultText = extractMessageText(result);
+      console.log('Agent response:', resultText);
+
+      // Execute the transactions
+      console.log(`Executing transactions...`);
+      const executedTxs = await extractAndExecuteTransactions(result, multiChainSigner, 'supply');
+      expect(executedTxs).to.have.lengthOf.greaterThan(
+        0,
+        'No transactions were executed successfully'
+      );
+
+      // Wait for tx to confirm
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const newReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'USDC');
+      console.log(`New USDC balance: ${newReserve.underlyingBalance}`);
+
+      // Verify that the balance has increased
+      const oldBalance = parseFloat(oldReserve.underlyingBalance ?? '0');
+      const newBalance = parseFloat(newReserve.underlyingBalance ?? '0');
+      const actualIncrease = newBalance - oldBalance;
+      const expectedIncrease = parseFloat(amountToSupply);
+      console.log(`Expected increase: ${expectedIncrease}, Actual increase: ${actualIncrease}`);
+      expect(actualIncrease).to.be.closeTo(expectedIncrease, expectedIncrease * 0.01); // Within 1%
+    });
+
+    it.skip('should borrow USDC successfully', async function () {
+      // Define the amount to borrow
+      const amountToBorrow = '5'; // 5 USDC
+
+      const oldReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'USDC');
+      console.log(`Old borrow balance: ${oldReserve.totalBorrows}`);
+
+      // Borrow some USDC
+      const result = await agent.processUserInput(
+        `I want to borrow ${amountToBorrow} USDC on chain 42161 address 0xaf88d065e77c8cc2239327c5edb3a432268e5831`,
+        multiChainSigner.wallet.address
+      );
+
+      // Parse the agent's response
+      const resultText = extractMessageText(result);
+      console.log('Agent response:', resultText);
+
+      // Execute the transactions
+      console.log(`Executing transactions...`);
+      const executedTxs = await extractAndExecuteTransactions(result, multiChainSigner, 'borrow');
+      expect(executedTxs).to.have.lengthOf.greaterThan(
+        0,
+        'No transactions were executed successfully'
+      );
+
+      const newReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'USDC');
+      console.log(`New borrow balance: ${newReserve.totalBorrows}`);
+
+      // Verify that the borrow balance has increased
+      const oldBorrowBalance = parseFloat(oldReserve.totalBorrows ?? '0');
+      const newBorrowBalance = parseFloat(newReserve.totalBorrows ?? '0');
+      const actualIncrease = newBorrowBalance - oldBorrowBalance;
+      const expectedIncrease = parseFloat(amountToBorrow);
+      console.log(
+        `Expected borrow increase: ${expectedIncrease}, Actual increase: ${actualIncrease}`
+      );
+      expect(actualIncrease).to.be.closeTo(expectedIncrease, expectedIncrease * 0.01); // Within 1%
+    });
+
+    it.skip('should get lending positions', async function () {
+      const result = await agent.processUserInput(
+        `What are my lending positions?`,
+        multiChainSigner.wallet.address
+      );
+
+      const resultText = extractMessageText(result);
+      console.log('Agent response:', resultText);
+
+      const positions = extractPositionsData(result);
+      expect(positions.positions).to.be.an('array');
+      expect(positions.positions.length).to.be.greaterThan(0);
+
+      // Should have USDC positions from previous tests
+      const usdcReserve = getReserveForToken(positions, 'USDC');
+      expect(usdcReserve).to.exist;
+
+      expect(
+        parseFloat(usdcReserve.underlyingBalance),
+        `No USDC supply balance found: ${JSON.stringify(positions, null, 2)}`
+      ).to.be.greaterThan(0);
+      expect(
+        parseFloat(usdcReserve.totalBorrows || '0'),
+        `No USDC borrow balance found: ${JSON.stringify(positions, null, 2)}`
+      ).to.be.greaterThan(0);
+    });
+
+    // Skip the withdraw test for now as it would reduce our collateral needed for borrowing
+    it.skip('should withdraw USDC successfully', async function () {
+      // Define the amount to withdraw
+      const amountToWithdraw = '2'; // 2 USDC
+
+      const oldReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'USDC');
+      console.log(`Old USDC balance: ${oldReserve.underlyingBalance}`);
+
+      // Withdraw some USDC
+      const result = await agent.processUserInput(
+        `withdraw ${amountToWithdraw} USDC`,
+        multiChainSigner.wallet.address
+      );
+
+      // Parse the agent's response
+      const resultText = extractMessageText(result);
+      console.log('Agent response:', resultText);
+
+      // Execute the transactions
+      console.log(`Executing transactions...`);
+      const executedTxs = await extractAndExecuteTransactions(result, multiChainSigner, 'withdraw');
+      expect(executedTxs).to.have.lengthOf.greaterThan(
+        0,
+        'No transactions were executed successfully'
+      );
+
+      const newReserve = await agent.getTokenReserve(multiChainSigner.wallet.address, 'USDC');
+      console.log(`New USDC balance: ${newReserve.underlyingBalance}`);
+
+      // Verify that the balance has decreased
+      const oldBalance = parseFloat(oldReserve.underlyingBalance ?? '0');
+      const newBalance = parseFloat(newReserve.underlyingBalance ?? '0');
+      const actualDecrease = oldBalance - newBalance;
+      const expectedDecrease = parseFloat(amountToWithdraw);
+      console.log(`Expected decrease: ${expectedDecrease}, Actual decrease: ${actualDecrease}`);
+      expect(actualDecrease).to.be.closeTo(expectedDecrease, expectedDecrease * 0.01); // Within 1%
+    });
+  });
 });

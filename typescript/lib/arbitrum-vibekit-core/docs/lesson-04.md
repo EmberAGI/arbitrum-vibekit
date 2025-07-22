@@ -1,85 +1,244 @@
-# **Lesson 4: Stateless vs Stateful Logic**
+# **Lesson 4: Stateless vs Stateful Logic with Context**
 
 ---
 
 ### 🔍 Overview
 
-> 🧩 **Note:** Every agent call—whether via MCP or direct A2A—creates a **Task** object (threadId) as defined by the A2A schema. Tasks can be used statefully (progress tracking, streaming updates) or statelessly (simple, one-off invocations) ([google.github.io](https://google.github.io/A2A/specification/agent-to-agent-communication/?utm_source=chatgpt.com), [news.ycombinator.com](https://news.ycombinator.com/item?id=43631381&utm_source=chatgpt.com)).
+In the v2 framework, understanding **stateless vs stateful** logic is crucial for designing tools that are maintainable, testable, and efficient. The key difference lies in whether your tool needs to remember information between calls or access shared data across your agent.
 
-In our framework, **stateless vs stateful** is a core design dimension—not just for tools, but for all agent logic, including direct A2A tasks. While MCP tool calls are the most common entrypoint for LLMs, agents often coordinate using A2A, where not everything looks like a tool function.
+A **stateless tool** computes results using only the current input parameters. A **stateful tool** accesses or modifies shared context that persists across multiple tool invocations.
 
-A **stateless process** computes results using only the current input. A **stateful process** uses external context or stores data across time.
-
-Whether you’re writing an MCP tool, an A2A task handler, or an internal agent function, understanding the boundary between stateless and stateful will help you keep logic testable, reusable, and composable.
+The v2 framework provides **context providers** as the primary mechanism for managing shared state, replacing the older global state patterns. This approach offers better type safety, clearer dependencies, and more predictable behavior.
 
 ---
 
-### ⚖️ Stateless Logic
+### ⚖️ Stateless Tools
 
-A **stateless tool** doesn’t remember anything. It computes based on its input alone.
+A **stateless tool** is self-contained and deterministic. Given the same input, it always produces the same output without side effects.
+
+**Benefits:**
 
 - ✅ Easy to test and cache
 - ✅ Safe to retry or parallelize
-- ❌ No memory or long-term task coordination
+- ✅ No hidden dependencies
+- ✅ Predictable behavior
 
-Examples:
+**Examples:**
 
-- `getPrice({ symbol: "ETH" })`
-- `formatTimestamp({ unix: 1690000000 })`
+```ts
+// tools/formatPrice.ts
+import { z } from 'zod';
+import { defineTool } from 'arbitrum-vibekit-core';
 
-Stateless logic can run anywhere, scale horizontally, and is ideal for quick operations with no side effects. It applies equally to MCP tools, A2A handlers, and internal helpers.
+const inputSchema = z.object({
+  amount: z.number(),
+  decimals: z.number(),
+  symbol: z.string(),
+});
+
+export const formatPriceTool = defineTool({
+  name: 'formatPrice',
+  description: 'Format a token amount with proper decimals',
+  inputSchema,
+  handler: async input => {
+    const formatted = (input.amount / Math.pow(10, input.decimals)).toFixed(4);
+    return `${formatted} ${input.symbol}`;
+  },
+});
+```
+
+```ts
+// tools/calculateFee.ts
+export const calculateFeeTool = defineTool({
+  name: 'calculateFee',
+  inputSchema: z.object({
+    amount: z.number(),
+    feePercent: z.number(),
+  }),
+  handler: async input => {
+    return input.amount * (input.feePercent / 100);
+  },
+});
+```
 
 ---
 
-### 🔒 Stateful Logic
+### 🔒 Stateful Tools with Context
 
-A **stateful tool** interacts with memory or persistent context. In our framework, state is managed at the agent level (not inside the tool function).
+A **stateful tool** accesses shared context that exists beyond the individual tool call. In v2, this is managed through **context providers** that supply type-safe, shared data to your tools.
 
-Your logic function may expose a stateless interface, but can still interact with agent state such as:
+**When to use stateful tools:**
 
-- A **task state** (using a `taskId`) for long-running workflows
-- The **global store** (shared across all tool calls)
+- Tool needs configuration loaded at startup
+- Tool requires shared resources (database connections, token mappings)
+- Tool needs to access user preferences or session data
+- Tool depends on data from external services (MCP servers)
 
-Examples:
+**Example with Context Provider:**
 
-- `crawlUrl({ url })` that appends chunks to a task buffer
-- `startWorkflow({ ... })` that creates or updates a task record
+```ts
+// context/types.ts
+export interface AgentContext {
+  tokenMap: Record<string, { address: string; decimals: number }>;
+  defaultChainId: number;
+  apiEndpoints: {
+    quicknode: string;
+    rpc: string;
+  };
+  loadedAt: Date;
+}
+```
 
-This pattern is especially powerful for agents that manage conversations, memory buffers, long-running processes, or collaborative A2A workflows.
+```ts
+// context/provider.ts
+import type { AgentContext } from './types.js';
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
-In fact, most **A2A tasks** are inherently stateful. Each task includes a `threadId` and may evolve over time through streaming updates, cancellation, or coordination with other agents.
+export async function contextProvider(deps: {
+  mcpClients: Record<string, Client>;
+}): Promise<AgentContext> {
+  // Load token mapping from remote Ember MCP server
+  const emberClient = deps.mcpClients['ember'];
+  let tokenMap = {};
+
+  if (emberClient) {
+    const response = await emberClient.callTool({
+      name: 'getTokens',
+      arguments: { chainId: 42161 },
+    });
+    tokenMap = parseTokenResponse(response);
+  }
+
+  return {
+    tokenMap,
+    defaultChainId: 42161,
+    apiEndpoints: {
+      quicknode: process.env.QUICKNODE_URL!,
+      rpc: process.env.RPC_URL!,
+    },
+    loadedAt: new Date(),
+  };
+}
+```
+
+#### **Connecting to Remote MCP Servers**
+
+For remote MCP servers like Ember AI, you need to configure the connection transport. Here's how to connect to the remote Ember server:
+
+```ts
+// context/provider.ts
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/http.js';
+
+// The framework automatically sets up MCP clients based on your skills
+// For agents that need to access remote servers like Ember, ensure you have:
+// - EMBER_ENDPOINT=@http://api.emberai.xyz/mcp in your environment variables
+// - Skills that reference the remote MCP server
+
+// The ember client will be available as deps.mcpClients['ember']
+// when the framework initializes MCP clients for your skills
+```
+
+**Note:** The v2 framework automatically handles MCP client initialization when you define skills that reference external MCP servers. The transport configuration is managed internally based on your environment variables.
+
+```ts
+// tools/getTokenInfo.ts
+import type { AgentContext } from '../context/types.js';
+
+export const getTokenInfoTool = defineTool({
+  name: 'getTokenInfo',
+  inputSchema: z.object({
+    symbol: z.string(),
+  }),
+  handler: async (input, context: AgentContext) => {
+    // Access shared context loaded at startup
+    const tokenInfo = context.tokenMap[input.symbol.toUpperCase()];
+
+    if (!tokenInfo) {
+      throw new VibkitError(
+        'TokenNotFound',
+        `Token ${input.symbol} not found in token map`,
+        -32001
+      );
+    }
+
+    return {
+      symbol: input.symbol,
+      address: tokenInfo.address,
+      decimals: tokenInfo.decimals,
+      chainId: context.defaultChainId,
+    };
+  },
+});
+```
 
 ---
 
-### 🔌 Choosing Stateless vs Stateful Design
+### 🔌 Context in Skills
 
-Use a stateless tool when:
+Skills can declare context requirements and pass context to their tools during LLM orchestration:
 
-- You can compute a response entirely from the input
-- You want to scale or retry it easily
+```ts
+// skills/tokenOperations.ts
+import { defineSkill } from 'arbitrum-vibekit-core';
+import { getTokenInfoTool } from '../tools/getTokenInfo.js';
 
-Use a stateful tool when:
+export const tokenOperationsSkill = defineSkill({
+  id: 'token-operations',
+  name: 'Token Operations',
+  description: 'Get information about tokens and perform operations',
+  tags: ['tokens', 'defi'],
+  examples: ['Get info for USDC', 'What is the address of ETH?'],
+  inputSchema: z.object({
+    instruction: z.string(),
+  }),
+  tools: [getTokenInfoTool],
+  // Context is automatically passed to tools during execution
+});
+```
 
-- You need to persist progress between calls
-- The tool is part of a workflow or task stream
+---
 
-If in doubt, **build it stateless first**, and reach for state only when needed.
+### 📋 Design Guidelines
+
+**Choose stateless when:**
+
+- Pure computation or formatting
+- No external dependencies needed
+- Tool can be easily tested in isolation
+- Performance and caching are priorities
+
+**Choose stateful when:**
+
+- Tool needs configuration or shared resources
+- Tool depends on data loaded from MCP servers
+- Tool requires coordination with external services
+- Tool needs access to user session or preferences
+
+**Best Practices:**
+
+1. **Start stateless**: Build tools without context first when possible
+2. **Minimal context**: Only include what tools actually need
+3. **Type safety**: Use TypeScript interfaces for context
+4. **Fail fast**: Validate required context at startup
+5. **Document dependencies**: Make context requirements clear
 
 ---
 
 ### ✅ Summary
 
-- **Stateless logic** is simple, fast, and repeatable. Ideal for tools and handlers that don’t need memory.
-- **Stateful logic** supports long-lived coordination, tracked tasks, and richer agent workflows.
+The v2 framework's context provider pattern gives you:
 
-This choice applies across the board—from individual tools to full A2A task handlers.
+- **Type-safe state management** through context interfaces
+- **Clear dependency injection** via context providers
+- **Startup-time loading** of shared resources from MCP servers
+- **Clean separation** between stateless computation and stateful coordination
 
-> "A stateless tool solves a problem. A stateful one solves a process."
+By understanding when to use stateless vs stateful patterns, you can build tools that are both powerful and maintainable.
 
-| Decision                                    | Rationale                                                                                                      |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| **Concept applies to any function**         | Avoids limiting the mental model to “tools”; loops & A2A handlers follow the same rule.                        |
-| **Task object created even if stateless**   | Gives every call a `threadId` for tracing and observability with zero cost if unused.                          |
-| **Global state via Immer**                  | Allows copy-on-write without teaching juniors functional programming; mutations look imperative but stay safe. |
-| **Reserved slices (`llm.ctx`, `llm.meta`)** | Separates prompt data from internal memory; prevents accidentally dumping huge objects into the LLM context.   |
-| **Guidance: build stateless first**         | Performance + testability by default; reach for state only when progress needs persisting.                     |
+> "Stateless tools solve problems. Stateful tools coordinate solutions."
+
+| Pattern              | Use Case         | Example                             |
+| -------------------- | ---------------- | ----------------------------------- |
+| **Stateless**        | Pure computation | Price formatting, fee calculation   |
+| **Stateful**         | Shared resources | Token mapping, API configuration    |
+| **Context Provider** | Startup loading  | MCP server data, environment config |

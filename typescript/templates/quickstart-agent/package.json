@@ -18,7 +18,6 @@
   "dependencies": {
     "@google-a2a/types": "workspace:*",
     "@modelcontextprotocol/sdk": "catalog:",
-    "@openrouter/ai-sdk-provider": "catalog:",
     "ai": "catalog:",
     "arbitrum-vibekit-core": "workspace:*",
     "cors": "^2.8.5",

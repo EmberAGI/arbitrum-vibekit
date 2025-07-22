@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
 import {
   generateText,
   tool,
@@ -14,6 +14,7 @@ import {
   type CoreUserMessage,
   type CoreAssistantMessage,
   type StepResult,
+  type LanguageModelV1,
 } from 'ai';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import { type Address } from 'viem';
@@ -25,14 +26,39 @@ import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
 import type { Task } from '@google-a2a/types';
 import { TaskState } from '@google-a2a/types';
-import {
-  GetTokensResponseSchema,
-  type Token,
-} from 'ember-api';
+import { GetTokensResponseSchema, type Token } from 'ember-api';
 
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
+const providerSelector = createProviderSelector({
+  openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  xaiApiKey: process.env.XAI_API_KEY,
+  hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
 });
+
+const availableProviders = getAvailableProviders(providerSelector);
+
+if (availableProviders.length === 0) {
+  throw new Error(
+    'No AI providers configured. Please set at least one provider API key (OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or HYPERBOLIC_API_KEY).'
+  );
+}
+
+const preferredProvider = process.env.AI_PROVIDER || availableProviders[0]!;
+
+const selectedProvider = providerSelector[preferredProvider as keyof typeof providerSelector];
+
+if (!selectedProvider) {
+  throw new Error(
+    `Preferred provider '${preferredProvider}' is not available. Available providers: ${availableProviders.join(', ')}`
+  );
+}
+
+const modelOverride = process.env.AI_MODEL;
+
+console.log(
+  `Swapping Agent using provider: ${preferredProvider}` +
+    (modelOverride ? ` (model: ${modelOverride})` : '')
+);
 
 const CHAIN_MAPPINGS = [
   { id: '1', names: ['ethereum', 'mainnet', 'eth'] },
@@ -120,14 +146,14 @@ export class Agent {
   private mcpClient: Client | null = null;
   private toolSet: SwappingToolSet | null = null;
   private camelotContextContent: string = '';
+  private provider: (model?: string) => LanguageModelV1;
 
   constructor(quicknodeSubdomain: string, quicknodeApiKey: string) {
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
+    this.provider = selectedProvider!;
 
-    if (!process.env.OPENROUTER_API_KEY) {
-      throw new Error('OPENROUTER_API_KEY not set!');
-    }
+    // provider availability validated at module load time.
   }
 
   async log(...args: unknown[]) {
@@ -148,6 +174,7 @@ export class Agent {
       quicknodeApiKey: this.quicknodeApiKey,
       openRouterApiKey: process.env.OPENROUTER_API_KEY,
       camelotContextContent: this.camelotContextContent,
+      provider: this.provider,
     };
     return context;
   }
@@ -173,7 +200,7 @@ export class Agent {
       }
 
       const existsOnChain = this.tokenMap[symbol]!.some(
-        t => t.tokenUid.chainId === token.tokenUid.chainId,
+        t => t.tokenUid.chainId === token.tokenUid.chainId
       );
 
       if (!existsOnChain) {
@@ -182,8 +209,10 @@ export class Agent {
       }
     });
 
-    this.log(`Added ${addedCount} generic tokens to the token map. Total tokens: ${this.availableTokens.length}`);
-    
+    this.log(
+      `Added ${addedCount} generic tokens to the token map. Total tokens: ${this.availableTokens.length}`
+    );
+
     // Debug: Log first 20 available tokens to help with debugging
     this.log('First 20 available tokens:', this.availableTokens.slice(0, 20).join(', '));
   }
@@ -287,7 +316,7 @@ export class Agent {
       throw new Error('Agent not initialized. Call start() first.');
     }
     this.userAddress = userAddress;
-    
+
     // Initialize conversation history for this user if not exists
     if (!this.conversationMap[userAddress]) {
       this.conversationMap[userAddress] = [
@@ -349,7 +378,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
         },
       ];
     }
-    
+
     const conversationHistory = this.conversationMap[userAddress];
     const userMessage: CoreUserMessage = { role: 'user', content: userInput };
     conversationHistory.push(userMessage);
@@ -357,7 +386,7 @@ Use relavant conversation history to obtain required tool parameters. Present th
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
-        model: openrouter('google/gemini-2.5-flash-preview'),
+        model: modelOverride ? this.provider(modelOverride) : this.provider(),
         messages: conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,
@@ -468,11 +497,11 @@ Use relavant conversation history to obtain required tool parameters. Present th
           kind: 'task',
           status: {
             state: TaskState.Completed,
-            message: { 
-              role: 'agent', 
+            message: {
+              role: 'agent',
               messageId: `msg-${Date.now()}`,
               kind: 'message',
-              parts: [{ kind: 'text', text: text }] 
+              parts: [{ kind: 'text', text: text }],
             },
           },
         };

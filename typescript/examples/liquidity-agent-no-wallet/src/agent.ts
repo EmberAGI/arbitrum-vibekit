@@ -1,8 +1,9 @@
 import { fileURLToPath } from 'url';
 import path from 'path';
-import type { CoreMessage, LanguageModelV1, Tool } from 'ai';
+import type { CoreMessage, Tool } from 'ai';
 import { tool } from 'ai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
 import type { Task } from '@google-a2a/types';
 import { TaskState } from '@google-a2a/types';
 import { generateText, type CoreUserMessage, type CoreAssistantMessage } from 'ai';
@@ -16,17 +17,41 @@ import {
   handleGetWalletLiquidityPositions,
   type HandlerContext,
 } from './agentToolHandlers.js';
-import { createProviderSelector } from 'arbitrum-vibekit-core';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const providers = createProviderSelector({
+// Initialize AI provider selector using environment variables for flexibility
+const providerSelector = createProviderSelector({
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  xaiApiKey: process.env.XAI_API_KEY,
+  hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
 });
 
-const model = providers.openrouter!('google/gemini-2.5-flash-preview');
+// Determine which providers are currently configured (based on provided API keys)
+const availableProviders = getAvailableProviders(providerSelector);
+
+if (availableProviders.length === 0) {
+  throw new Error(
+    'No AI providers configured. Please set at least one of: OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or HYPERBOLIC_API_KEY'
+  );
+}
+
+// Allow users to specify preferred provider via AI_PROVIDER env var; otherwise use first available
+const preferredProvider = process.env.AI_PROVIDER || availableProviders[0];
+// Retrieve the provider factory
+const selectedProvider = providerSelector[preferredProvider as keyof typeof providerSelector];
+
+if (!selectedProvider) {
+  throw new Error(
+    `Preferred provider "${preferredProvider}" is not available. Available providers: ${availableProviders.join(', ')}`
+  );
+}
+
+// Optionally override model via AI_MODEL env var
+const modelOverride = process.env.AI_MODEL;
 
 function logError(...args: unknown[]) {
   console.error(...args);
@@ -133,18 +158,22 @@ export class Agent {
   private toolSet: LiquidityToolSet | null = null;
   public conversationHistory: CoreMessage[] = [];
   private userAddress?: string;
-  private model: LanguageModelV1;
   private liquidityPairs: LiquidityPair[] = [];
   private liquidityPositions: LiquidityPosition[] = [];
 
   constructor(quicknodeSubdomain: string, quicknodeApiKey: string) {
+    if (!quicknodeSubdomain) {
+      throw new Error('quicknodeSubdomain is required!');
+    }
+    if (!quicknodeApiKey) {
+      throw new Error('quicknodeApiKey is required!');
+    }
     this.quicknodeSubdomain = quicknodeSubdomain;
     this.quicknodeApiKey = quicknodeApiKey;
+  }
 
-    if (!providers.openrouter) {
-      throw new Error('OPENROUTER_API_KEY not set!');
-    }
-    this.model = model;
+  async log(...args: unknown[]) {
+    console.error(...args);
   }
 
   async init(): Promise<void> {
@@ -290,8 +319,9 @@ Rules:
     }
 
     try {
+      this.log('Calling generateText with Vercel AI SDK...');
       const result = await generateText({
-        model: this.model,
+        model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
         messages: [{ role: 'system', content: systemPrompt }, ...this.conversationHistory],
         tools: this.toolSet,
         maxSteps: 10,
