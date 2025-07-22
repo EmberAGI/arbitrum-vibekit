@@ -76,11 +76,11 @@ h1 {
     --radius: 0.5rem;
   }
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 0 0% 14.5%;
     --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
+    --card: 0 0% 14.5%;
     --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
+    --popover: 0 0% 14.5%;
     --popover-foreground: 210 40% 98%;
     --primary: 210 40% 98%;
     --primary-foreground: 222.2 47.4% 11.2%;
@@ -514,6 +514,20 @@ h1 {
     overflow: hidden !important;
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
+  }
+
+  /* Override for server config button to align with links */
+  .bg-card.border-r.border-border button.server-config-button {
+    width: auto !important;
+    max-width: none !important;
+    overflow: visible !important;
+    text-overflow: initial !important;
+    white-space: normal !important;
+    display: inline-flex !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   /* Ensure the connect/disconnect button stays within bounds */

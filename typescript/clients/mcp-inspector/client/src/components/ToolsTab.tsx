@@ -56,10 +56,16 @@ const ToolsTab = ({
               {tools.map((tool, index) => (
                 <div
                   key={index}
-                  className="flex items-center py-2 px-4 rounded hover:bg-gray-50 dark:hover:bg-secondary cursor-pointer"
+                  className={`flex items-center py-3 px-4 rounded hover:bg-gray-300 cursor-pointer ${
+                    selectedTool?.name === tool.name ? "" : ""
+                  }`}
+                  style={{
+                    backgroundColor:
+                      selectedTool?.name === tool.name ? "#BDB9B8" : undefined,
+                  }}
                   onClick={() => setSelectedTool(tool)}
                 >
-                  <div className="flex flex-col items-start">
+                  <div className="flex flex-col items-start pl-2">
                     <span className="flex-1">{tool.name}</span>
                     <span className="text-sm text-gray-500 text-left">
                       {tool.description}
