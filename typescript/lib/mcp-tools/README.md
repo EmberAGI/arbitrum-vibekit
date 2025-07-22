@@ -40,7 +40,7 @@ If you'd like to speed up the setup process, consider using [FastMCP](https://gi
 
 2.  **Set Up the File Structure**:
 
-    Create a `src` folder with an `index.ts` file inside. This will be the main entry point for your tool server. You can look at [`emberai-mcp/src/index.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/mcp-tools/emberai-mcp/src/index.ts) as a reference implementation.
+    Create a `src` folder with an `index.ts` file inside. This will be the main entry point for your tool server. You can reference existing MCP tool implementations in this directory for guidance on structure and patterns.
 
 3.  **Define Configuration**:
 
@@ -126,7 +126,36 @@ server.tool(
 );
 ```
 
-### 6. Run Your MCP Server
+### 6. Advanced Tool Customization with Hooks
+
+For advanced use cases, you can enhance your MCP tools with hooks that run before or after tool execution. This pattern, similar to [Anthropic's hooks concept for Claude Code](https://docs.anthropic.com/en/docs/claude-code/hooks), allows you to:
+
+- Add logging and monitoring
+- Validate inputs beyond schema validation
+- Transform outputs or add metadata
+- Implement caching or rate limiting
+- Add authentication or authorization layers
+
+Vibekit provides a `withHooks` utility that wraps your tools with before/after functionality:
+
+```typescript
+import { withHooks } from 'arbitrum-vibekit-core';
+
+const enhancedTool = withHooks(myBaseTool, {
+  before: async (args, context) => {
+    console.log('Tool called with:', args);
+    return args; // or transform them
+  },
+  after: async (result, context) => {
+    console.log('Tool result:', result);
+    return result; // or transform it
+  },
+});
+```
+
+For detailed patterns and best practices, see our [hooks documentation](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-16.md) and refer to [Anthropic's hooks guide](https://docs.anthropic.com/en/docs/claude-code/hooks) for additional customization patterns.
+
+### 7. Run Your MCP Server
 
 To allow your MCP tool to communicate with an agent, connect your server to a transport layer, such as STDIO, and create an entry point for execution. The following `main` function includes graceful shutdown handling to ensure that the server closes cleanly when it receives a termination signal.
 
@@ -160,7 +189,7 @@ async function main() {
 main();
 ```
 
-### 7. Inspect Your MCP Tool
+### 8. Inspect Your MCP Tool
 
 You can quickly test your MCP tool using the Inspector, which provides an interactive interface for sending requests and viewing responses. Before running the Inspector, add a `build` script to your `package.json` file to compile your TypeScript code.
 
@@ -176,6 +205,6 @@ Then, build your project and launch the Inspector with the following command:
 pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js
 ```
 
-### 8. Showcase Your Tool with a Demo Agent
+### 9. Showcase Your Tool with a Demo Agent
 
 Consider showcasing your new MCP tool by building a demo agent in the [examples](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) directory. Creating a simple agent that uses your tool is a great way to demonstrate its functionality and help others understand how to integrate it into their own projects.
