@@ -24,6 +24,7 @@ export const positionStatusSkill = defineSkill({
   description: 'Get immediate status of Aave positions and current health factor without monitoring or automation',
   tags: ['defi', 'aave', 'health-factor', 'status', 'positions', 'immediate', 'check'],
   examples: [
+    // Position and health factor examples
     'Check my liquidation risk and health factor',
     'Show my current Aave positions',
     'What is my health factor right now?',
@@ -32,6 +33,18 @@ export const positionStatusSkill = defineSkill({
     'Show me my current health factor and position details',
     'Get my current Aave position information',
     'What are my current positions and how safe am I from liquidation?',
+    
+    // Wallet balance specific examples
+    'Show my wallet token balances',
+    'Check my wallet balances for liquidation prevention',
+    'What tokens do I have in my wallet?',
+    'Display my available token balances',
+    'Check my wallet token balances',
+    'Show me what tokens I can use for supply or repay',
+    'What token balances do I have available?',
+    'Check wallet balances for tokens I can supply or repay with',
+    'Display my wallet token holdings',
+    'Show my available token amounts for liquidation prevention',
   ],
   inputSchema: PositionStatusInputSchema,
   tools: [

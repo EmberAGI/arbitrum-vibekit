@@ -52,8 +52,11 @@ export const getUserPositionsTool: VibkitToolDefinition<typeof GetUserPositionsP
         },
       });
 
+      console.log("result........:", result);
+
       // Parse the response using proper schema validation
       const positionData = parseMcpToolResponsePayload(result, GetWalletLendingPositionsResponseSchema);
+      console.log("positionData........:", positionData);
 
       // Extract key metrics for monitoring from the standardized response
       // Note: The response structure is { positions: [...] } where each position has healthFactor
@@ -62,6 +65,25 @@ export const getUserPositionsTool: VibkitToolDefinition<typeof GetUserPositionsP
       const healthFactor = firstPosition?.healthFactor ? parseFloat(firstPosition.healthFactor) : undefined;
       const totalSupplied = firstPosition?.totalCollateralUsd ? parseFloat(firstPosition.totalCollateralUsd) : 0;
       const totalBorrowed = firstPosition?.totalBorrowsUsd ? parseFloat(firstPosition.totalBorrowsUsd) : 0;
+
+      // export const TokenSchema = z.object({
+      //   tokenUid: TokenIdentifierSchema.describe("Unique identifier for the token, if it's not a native token."),
+      //   name: z.string().describe("Full name of the token, e.g., 'Ethereum'."),
+      //   symbol: z.string().describe("Symbol of the token, e.g., 'ETH'."),
+      //   isNative: z.boolean().describe("Whether this is the native token of the chain."),
+      //   decimals: z.number().describe("Number of decimal places the token uses."),
+      //   iconUri: z.string().optional().describe("URI for the token's icon."),
+      //   usdPrice: z.string().optional().describe("Current USD price of the token, as a string to maintain precision."),
+      //   isVetted: z.boolean().describe("Whether this token is considered vetted or trusted."),
+      // });
+
+      // console all values of token like symbol, name, isNative, decimals, iconUri, usdPrice, isVetted
+      positions.flatMap(pos => 
+        pos.userReserves.map(reserve => 
+          console.log("reserve........:", reserve.token)
+          // console.log("reserve........:", reserve.token.symbol, reserve.token.name, reserve.token.isNative, reserve.token.decimals, reserve.token.iconUri, reserve.token.usdPrice, reserve.token.isVetted)
+        )
+      );
 
       // Determine risk level based on health factor
       let riskLevel = 'SAFE';
