@@ -5,6 +5,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { VibkitError } from './error.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -148,7 +149,7 @@ export class Agent<TSkillsArray extends SkillDefinition<z.ZodTypeAny, TContext>[
   public mcpServer: McpServer;
   private httpServer?: Server;
   private sseConnections: Set<Response> = new Set();
-  private transport?: SSEServerTransport;
+  private transport?: SSEServerTransport | StreamableHTTPServerTransport;
   private skillsMap = new Map<string, TSkillsArray[number]>();
   private model?: LanguageModel;
   private baseSystemPrompt?: string;
@@ -325,7 +326,7 @@ export class Agent<TSkillsArray extends SkillDefinition<z.ZodTypeAny, TContext>[
       this.customContext = await contextProvider(deps);
     }
 
-    return this._startServer(port);
+    return await this._startServer(port);
   }
 
   private async setupSkillMcpClients(): Promise<void> {
@@ -417,11 +418,14 @@ export class Agent<TSkillsArray extends SkillDefinition<z.ZodTypeAny, TContext>[
     }
   }
 
-  private _startServer(port: number): express.Express {
+  private async _startServer(port: number): Promise<express.Express> {
     if (this.httpServer) {
       throw VibkitError.invalidRequest('Agent server is already running');
     }
     const app = express();
+    
+    app.use(express.json());
+    
     if (this.corsOptions !== false) {
       const options =
         typeof this.corsOptions === 'string'
@@ -431,6 +435,12 @@ export class Agent<TSkillsArray extends SkillDefinition<z.ZodTypeAny, TContext>[
             : this.corsOptions;
       app.use(cors(options));
     }
+
+    // Initialize StreamableHTTP transport for MCP
+    this.transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+    });
+    await this.mcpServer.connect(this.transport);
 
     // Helper to join base path with route
     const route = (path: string) => {
@@ -483,7 +493,25 @@ export class Agent<TSkillsArray extends SkillDefinition<z.ZodTypeAny, TContext>[
       });
     });
     app.post(route('/messages'), async (req, res) => {
-      await this.transport?.handlePostMessage(req, res);
+      try {
+        if (this.transport instanceof StreamableHTTPServerTransport) {
+          await this.transport.handleRequest(req, res, req.body);
+        } else if (this.transport instanceof SSEServerTransport) {
+          await this.transport.handlePostMessage(req, res);
+        }
+      } catch (error) {
+        console.error('Error handling MCP request:', error);
+        if (!res.headersSent) {
+          res.status(500).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32603,
+              message: 'Internal server error',
+            },
+            id: null,
+          });
+        }
+      }
     });
     this.httpServer = app.listen(port, () => {
       console.log(`Agent server listening on port ${port}`);
