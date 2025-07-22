@@ -37,6 +37,9 @@ export const PriceChart = ({ data, width = 600, height = 300 }: PriceChartProps)
           fontWeight: '500',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
         }}
+        data-testid="price-chart-no-data"
+        role="img"
+        aria-label="No price data available"
       >
         No price data available.
       </div>
@@ -153,11 +156,15 @@ export const PriceChart = ({ data, width = 600, height = 300 }: PriceChartProps)
   };
 
   return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
+    <div 
+      style={{ position: 'relative', display: 'inline-block' }}
+      data-testid="price-chart"
+    >
       <svg
         ref={svgRef}
         width={width}
         height={height}
+        data-testid="chart-svg"
         style={{
           borderRadius: '12px',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
@@ -166,6 +173,8 @@ export const PriceChart = ({ data, width = 600, height = 300 }: PriceChartProps)
         }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
+        role="img"
+        aria-label={`Price chart for ${data.prices.length} data points`}
       >
         {/* Gradient definitions */}
         <defs>
@@ -250,6 +259,7 @@ export const PriceChart = ({ data, width = 600, height = 300 }: PriceChartProps)
             filter: hoveredPoint ? 'url(#glow)' : 'none',
             transition: 'filter 0.2s ease',
           }}
+          data-testid="chart-path"
         />
 
         {/* Data points */}
@@ -267,6 +277,7 @@ export const PriceChart = ({ data, width = 600, height = 300 }: PriceChartProps)
                 fill="#667eea"
                 stroke="white"
                 strokeWidth="2"
+                data-testid={`data-point-${i}`}
                 style={{
                   transition: 'r 0.2s ease, filter 0.2s ease',
                   filter: isHovered ? 'url(#glow)' : 'none',

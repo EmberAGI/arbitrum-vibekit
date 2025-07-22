@@ -91,6 +91,22 @@ export default defineConfig({
         storageState: 'playwright/.auth/session.json',
       },
     },
+    {
+      name: 'chart-generation',
+      testMatch: /chart-generation.test.ts/,
+      dependencies: ['setup:auth'],
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: 'playwright/.auth/session.json',
+      },
+    },
+    {
+      name: 'chart-unit-tests',
+      testMatch: /generate-chart-unit.test.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+      },
+    },
 
     // {
     //   name: 'firefox',
