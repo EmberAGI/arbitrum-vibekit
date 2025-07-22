@@ -101,7 +101,10 @@ export function TransactionHistory({ isOpen, onClose }: TransactionHistoryProps)
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      data-testid="transaction-history-modal"
+    >
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-4xl w-full max-h-[80vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
@@ -111,6 +114,7 @@ export function TransactionHistory({ isOpen, onClose }: TransactionHistoryProps)
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            data-testid="transaction-history-close"
           >
             <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
@@ -131,7 +135,7 @@ export function TransactionHistory({ isOpen, onClose }: TransactionHistoryProps)
             </div>
           ) : (
             <div className="overflow-auto max-h-[calc(80vh-200px)]">
-              <table className="w-full">
+              <table className="w-full" data-testid="transaction-table">
                 <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -159,9 +163,13 @@ export function TransactionHistory({ isOpen, onClose }: TransactionHistoryProps)
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {transactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    <tr 
+                      key={tx.id} 
+                      className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      data-testid="transaction-row"
+                    >
                       <td className="px-4 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
+                        <div className="flex items-center" data-testid="tx-status">
                           {getStatusIcon(tx.status)}
                           <span className="ml-2 text-sm font-medium text-gray-900 dark:text-white capitalize">
                             {tx.status}
@@ -169,22 +177,34 @@ export function TransactionHistory({ isOpen, onClose }: TransactionHistoryProps)
                         </div>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200">
+                        <span 
+                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200"
+                          data-testid="agent-type"
+                        >
                           {tx.agentType}
                         </span>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
                         {tx.methodName || 'N/A'}
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
+                      <td 
+                        className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300"
+                        data-testid="chain-name"
+                      >
                         {getChainName(tx.chainId)}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
-                        <code className="text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-gray-900 dark:text-gray-300">
+                        <code 
+                          className="text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-gray-900 dark:text-gray-300"
+                          data-testid="tx-hash"
+                        >
                           {truncateHash(tx.txHash)}
                         </code>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
+                      <td 
+                        className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300"
+                        data-testid="tx-date"
+                      >
                         {formatDate(tx.executedAt)}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
@@ -193,6 +213,7 @@ export function TransactionHistory({ isOpen, onClose }: TransactionHistoryProps)
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                          data-testid="explorer-link"
                         >
                           View
                           <ExternalLink className="ml-1 w-3 h-3" />

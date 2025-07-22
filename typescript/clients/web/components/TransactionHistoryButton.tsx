@@ -47,6 +47,7 @@ export function TransactionHistoryButton({
             transition-colors duration-200 p-2
             ${className}
           `}
+          data-testid="transaction-history-button"
           title="View Transaction History"
           aria-label="View Transaction History"
         >

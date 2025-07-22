@@ -91,6 +91,33 @@ export default defineConfig({
         storageState: 'playwright/.auth/session.json',
       },
     },
+    {
+      name: 'transaction-history',
+      testMatch: /transaction-history\.test\.ts/,
+      dependencies: ['setup:auth'],
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: 'playwright/.auth/session.json',
+      },
+    },
+    {
+      name: 'transaction-execution',
+      testMatch: /transaction-execution\.test\.ts/,
+      dependencies: ['setup:auth'],
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: 'playwright/.auth/session.json',
+      },
+    },
+    {
+      name: 'multi-agent-transactions',
+      testMatch: /multi-agent-transactions\.test\.ts/,
+      dependencies: ['setup:auth'],
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: 'playwright/.auth/session.json',
+      },
+    },
 
     // {
     //   name: 'firefox',
