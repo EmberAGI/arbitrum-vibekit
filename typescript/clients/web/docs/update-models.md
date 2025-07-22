@@ -7,7 +7,6 @@ Vibekit's web frontend allows users to select different Large Language Models (L
 Vibekit's model configuration involves two main parts:
 
 1.  **Frontend Model Definitions in [`models.ts`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/lib/ai/models.ts):**
-
     - This file defines the list of models that appear in the web frontend's user interface.
     - It also sets a `DEFAULT_CHAT_MODEL`.
     - Note that this file does not handle the actual connection to LLM providers or API keys.
@@ -79,8 +78,8 @@ export const openRouterProvider = isTestEnvironment
             effort: 'medium',
           },
         }),
-        'title-model': openRouter('google/gemini-2.5-flash-preview'),
-        'artifact-model': openRouter('google/gemini-2.5-flash-preview'),
+        'title-model': openRouter('google/gemini-2.5-flash'),
+        'artifact-model': openRouter('google/gemini-2.5-flash'),
 
         // New entry for the 'anthropic-direct-sonnet' ID from models.ts
         'anthropic-direct-sonnet': openRouter('anthropic/claude-3.5-sonnet'),

@@ -70,9 +70,14 @@ The Hello Quickstart Agent showcases:
 
 2. **Set up environment**:
 
-   ```bash
+   # (Optional) Copy the provided `.env.example` template to `.env` and fill in your secrets.
+
    cp .env.example .env
-   # Add your OPENROUTER_API_KEY
+
+   # Edit .env with your provider API keys. At minimum, set one of OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY or HYPERBOLIC_API_KEY.
+
+   ```
+
    ```
 
 3. **Run in development**:
@@ -110,18 +115,22 @@ The integration test suite validates all framework features:
 pnpm test
 
 # Test specific endpoints
-curl http://localhost:3002/
-curl http://localhost:3002/.well-known/agent.json
+curl http://localhost:3007/
+curl http://localhost:3007/.well-known/agent.json
 ```
 
 ## Environment Variables
 
-| Variable             | Description                                 | Required |
-| -------------------- | ------------------------------------------- | -------- |
-| `OPENROUTER_API_KEY` | OpenRouter API key for LLM                  | Yes      |
-| `PORT`               | Server port (default: 3002)                 | No       |
-| `LLM_MODEL`          | LLM model name (default: gpt-4o-2024-08-06) | No       |
-| `LOG_LEVEL`          | Logging level (default: debug)              | No       |
+| Variable             | Description                                                                                         | Required    |
+| -------------------- | --------------------------------------------------------------------------------------------------- | ----------- |
+| `OPENROUTER_API_KEY` | OpenRouter API key                                                                                  | Conditional |
+| `OPENAI_API_KEY`     | OpenAI API key                                                                                      | Conditional |
+| `XAI_API_KEY`        | Grok (xAI) API key                                                                                  | Conditional |
+| `HYPERBOLIC_API_KEY` | Hyperbolic API key                                                                                  | Conditional |
+| `AI_PROVIDER`        | Preferred AI provider (`openrouter`, `openai`, `grok`, `hyperbolic`). Defaults to first configured. | No          |
+| `AI_MODEL`           | Override model name (e.g., `google/gemini-2.5-flash`). Defaults to provider's built-in default.     | No          |
+| `PORT`               | Server port (default: 3007)                                                                         | No          |
+| `LOG_LEVEL`          | Logging level (default: debug)                                                                      | No          |
 
 ## Developer Notes
 

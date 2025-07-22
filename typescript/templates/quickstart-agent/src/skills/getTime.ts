@@ -84,8 +84,8 @@ export const getTimeSkill = defineSkill({
   },
 
   // MCP server for time services (demonstrates single MCP server)
-  mcpServers: [
-    {
+  mcpServers: {
+    time: {
       command: 'tsx',
       moduleName: path.join(__dirname, '../../mock-mcp-servers/mock-mcp-time.ts'),
       env: {
@@ -93,5 +93,5 @@ export const getTimeSkill = defineSkill({
         DEBUG: 'true',
       },
     },
-  ],
+  },
 });

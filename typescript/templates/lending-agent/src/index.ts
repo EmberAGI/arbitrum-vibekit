@@ -1,24 +1,41 @@
-import { Agent } from 'arbitrum-vibekit-core';
+import { Agent, getAvailableProviders, createProviderSelector } from 'arbitrum-vibekit-core';
 import type { AgentRuntimeOptions } from 'arbitrum-vibekit-core';
 import { agentConfig } from './agent.js';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { loadTokenMapFromMcp } from './tokenMap.js';
 
-const openRouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
+// Provider selector setup
+const providers = createProviderSelector({
+  openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  xaiApiKey: process.env.XAI_API_KEY,
+  hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
 });
+
+const available = getAvailableProviders(providers);
+if (available.length === 0) {
+  throw new Error('No AI providers configured. Please set a provider API key.');
+}
+
+const preferred = process.env.AI_PROVIDER || available[0]!;
+const selectedProvider = providers[preferred as keyof typeof providers];
+if (!selectedProvider) {
+  throw new Error(`Preferred provider '${preferred}' not available.`);
+}
+
+const modelOverride = process.env.AI_MODEL;
 
 const runtimeOptions: AgentRuntimeOptions = {
   cors: true,
   basePath: '/',
   llm: {
-    model: openRouter('google/gemini-2.0-flash-001'),
+    model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
   },
 };
 
-async function main() {
-  const agent = Agent.create(agentConfig, runtimeOptions);
+// Create agent instance at module level for shutdown access
+const agent = Agent.create(agentConfig, runtimeOptions);
 
+async function main() {
   // Start the agent with custom context
   await agent.start(3006, async deps => {
     // Check if ember-mcp-tool-server is available
@@ -46,3 +63,14 @@ async function main() {
 }
 
 main().catch(console.error);
+
+// Graceful shutdown
+const shutdown = async (signal: string) => {
+  console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
+  await agent.stop();
+  process.exit(0);
+};
+
+['SIGINT', 'SIGTERM'].forEach(sig => {
+  process.on(sig, () => shutdown(sig));
+});
