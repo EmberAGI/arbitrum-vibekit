@@ -2,14 +2,16 @@
 
 A comprehensive example demonstrating **all v2 framework features** of the Arbitrum Vibekit Core framework. This agent serves as both an integration test and a developer template.
 
+**📚 Learn the concepts**: New to the v2 framework? Check out [Lesson 6: Agent Structure](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-06.md), [Lesson 19: Skills Foundation](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-19.md), and [Lesson 20: LLM Orchestration](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-20.md) to understand the architecture demonstrated here.
+
 ## Overview
 
 The Hello Quickstart Agent showcases:
 
-- **Multiple Skills**: LLM-orchestrated and manual handlers
+- **Multiple Skills**: LLM-orchestrated and manual handlers ([Lesson 20](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-20.md))
 - **Internal Tools**: Context-aware business logic tools
-- **MCP Integration**: Multiple mock MCP servers
-- **Hook System**: Tool enhancement with `withHooks`
+- **MCP Integration**: Multiple mock MCP servers ([Lesson 2](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-02.md))
+- **Hook System**: Tool enhancement with `withHooks` ([Lesson 16](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-16.md))
 - **Context Management**: Custom context loading and type safety
 - **Error Handling**: Comprehensive error scenarios
 - **HTTP Endpoints**: Full REST API and MCP over SSE

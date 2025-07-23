@@ -2,6 +2,8 @@
 
 A unified multi-skill DeFi agent supporting swapping, lending, liquidity provision, and Pendle operations on Arbitrum. Built using the Arbitrum Vibekit framework.
 
+**📚 Learn the architecture**: This agent demonstrates advanced multi-skill patterns covered in [Lesson 19: Skills Foundation](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-19.md), [Lesson 22: Decision Framework](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-22.md), and [Lesson 16: Hook Enhancement](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-16.md).
+
 ## Features
 
 ### Skills
@@ -14,10 +16,10 @@ A unified multi-skill DeFi agent supporting swapping, lending, liquidity provisi
 
 ### Architecture
 
-- **Skills-based**: Each capability is a separate skill with focused tools
-- **LLM Orchestration**: AI automatically routes to appropriate tools
-- **Hook Enhancement**: Before/after hooks for validation and formatting
-- **Modern Transport**: StreamableHTTP with legacy SSE backwards compatibility
+- **Skills-based**: Each capability is a separate skill with focused tools ([Lesson 19](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-19.md))
+- **LLM Orchestration**: AI automatically routes to appropriate tools ([Lesson 20](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-20.md))
+- **Hook Enhancement**: Before/after hooks for validation and formatting ([Lesson 16](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-16.md))
+- **Modern Transport**: StreamableHTTP with legacy SSE backwards compatibility ([Lesson 25](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-25.md))
 - **External Integration**: Connects to Ember MCP server for blockchain operations
 
 ## Quick Start
