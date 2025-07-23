@@ -19,6 +19,7 @@ import { Lending } from './Lending';
 import { Liquidity } from './Liquidity';
 import type { Dispatch } from 'react';
 import { TemplateComponent } from './TemplateComponent';
+import { PriceChart } from './price-chart';
 
 interface MessageRendererProps {
   message: UIMessage;
@@ -136,6 +137,12 @@ export const MessageRenderer = ({
   if (type === 'tool-invocation' && part.toolInvocation.state === 'result') {
     const { toolInvocation } = part;
     const { result, toolCallId, toolName } = toolInvocation;
+
+    if (toolName.endsWith('generateChart')) {
+      return <PriceChart data={result as any} />;
+    }
+
+
     const toolInvocationParsableString = result?.result?.content?.[0]?.text
       ? result?.result?.content?.[0]?.text
       : result?.result?.content?.[0]?.resource?.text;
