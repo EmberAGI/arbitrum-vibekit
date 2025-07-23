@@ -66,21 +66,54 @@ export async function loadTokenMapFromMcp(
       ) {
         const parsedData = (capabilitiesResult as { structuredContent: unknown }).structuredContent;
 
-      const capabilitiesValidationResult =
+        const capabilitiesValidationResult =
           LendingGetCapabilitiesResponseSchema.safeParse(parsedData);
 
-      if (!capabilitiesValidationResult.success) {
-        console.error(
-          'Parsed MCP getCapabilities response validation failed:',
-          capabilitiesValidationResult.error
-        );
+        if (!capabilitiesValidationResult.success) {
+          console.error(
+            'Parsed MCP getCapabilities response validation failed:',
+            capabilitiesValidationResult.error
+          );
           throw new Error(
             `Failed to validate the parsed capabilities data from MCP server tool. Complete response: ${JSON.stringify(capabilitiesResult, null, 2)}`
           );
-      }
+        }
 
-      capabilitiesResponse = capabilitiesValidationResult.data;
-      console.log(`Validated ${capabilitiesResponse.capabilities.length} capabilities.`);
+        capabilitiesResponse = capabilitiesValidationResult.data;
+        console.log(`Validated ${capabilitiesResponse.capabilities.length} capabilities.`);
+
+        // Debug: Log first few capabilities to understand the actual structure
+        console.log('🔍 DEBUG - First 2 capabilities structure:');
+        capabilitiesResponse.capabilities.slice(0, 2).forEach((cap, index) => {
+          console.log(`Capability ${index}:`, JSON.stringify(cap, null, 2));
+        });
+
+        // Extract token risk parameters for analysis and logging
+        const tokenRiskData = capabilitiesResponse.capabilities
+          .filter((cap: LendingAgentCapability) => cap.lendingCapability?.underlyingToken?.symbol)
+          .map((cap: LendingAgentCapability) => {
+            const lendingCap = cap.lendingCapability!;
+            const token = lendingCap.underlyingToken!;
+
+            console.log(`🔍 Raw capability for ${token.symbol}:`, JSON.stringify(lendingCap, null, 2));
+
+            return {
+              symbol: token.symbol,
+              usdPrice: token.usdPrice,
+              chainId: token.tokenUid.chainId,
+              address: token.tokenUid.address,
+              maxLtv: lendingCap.maxLtv,
+              liquidationThreshold: lendingCap.liquidationThreshold,
+              currentSupplyApy: lendingCap.currentSupplyApy,
+              currentBorrowApy: lendingCap.currentBorrowApy,
+            };
+          });
+
+        console.log('✅ Token Risk Parameters Loaded:');
+        console.log('Total tokens with risk data:', tokenRiskData.length);
+        tokenRiskData.forEach(token => {
+          console.log(`📊 ${token.symbol} ${token.address} :(${token.chainId}): LTV=${token.maxLtv}, USD Price=${token.usdPrice}, LiqThreshold=${token.liquidationThreshold}, SupplyAPY=${token.currentSupplyApy}, BorrowAPY=${token.currentBorrowApy}`);
+        });
       } else {
         // If no structuredContent, throw error
         throw new Error(
