@@ -51,14 +51,15 @@ export default defineConfig({
 
   /* Configure projects */
   projects: [
+    // Replace old auth setup with wallet-based auth
     {
-      name: 'setup:auth',
-      testMatch: /auth.setup.ts/,
+      name: 'setup:wallet-auth',
+      testMatch: /auth-wallet.setup.ts/,
     },
     {
       name: 'setup:reasoning',
       testMatch: /reasoning.setup.ts/,
-      dependencies: ['setup:auth'],
+      dependencies: ['setup:wallet-auth'], // Changed from setup:auth
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/session.json',
@@ -67,7 +68,7 @@ export default defineConfig({
     {
       name: 'chat',
       testMatch: /chat.test.ts/,
-      dependencies: ['setup:auth'],
+      dependencies: ['setup:wallet-auth'], // Changed from setup:auth
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/session.json',
@@ -85,7 +86,7 @@ export default defineConfig({
     {
       name: 'artifacts',
       testMatch: /artifacts.test.ts/,
-      dependencies: ['setup:auth'],
+      dependencies: ['setup:wallet-auth'], // Changed from setup:auth
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/session.json',
@@ -93,17 +94,15 @@ export default defineConfig({
     },
     {
       name: 'transaction-history',
-      testMatch: /transaction-history\.test\.ts/,
-      dependencies: ['setup:auth'],
+      testMatch: /transaction-history-simple\.test\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        storageState: 'playwright/.auth/session.json',
       },
     },
     {
       name: 'transaction-execution',
       testMatch: /transaction-execution\.test\.ts/,
-      dependencies: ['setup:auth'],
+      dependencies: ['setup:wallet-auth'], // Changed from setup:auth
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/session.json',
@@ -112,42 +111,30 @@ export default defineConfig({
     {
       name: 'multi-agent-transactions',
       testMatch: /multi-agent-transactions\.test\.ts/,
-      dependencies: ['setup:auth'],
+      dependencies: ['setup:wallet-auth'], // Changed from setup:auth
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: 'playwright/.auth/session.json',
+      },  
+    },
+    {
+      name: 'transaction-history',
+      testMatch: /transaction-history\.test\.ts/,
+      dependencies: ['setup:wallet-auth'],
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/session.json',
       },
     },
-
-    // {
-    //   name: 'firefox',
-    //   use: { ...devices['Desktop Firefox'] },
-    // },
-
-    // {
-    //   name: 'webkit',
-    //   use: { ...devices['Desktop Safari'] },
-    // },
-
-    /* Test against mobile viewports. */
-    // {
-    //   name: 'Mobile Chrome',
-    //   use: { ...devices['Pixel 5'] },
-    // },
-    // {
-    //   name: 'Mobile Safari',
-    //   use: { ...devices['iPhone 12'] },
-    // },
-
-    /* Test against branded browsers. */
-    // {
-    //   name: 'Microsoft Edge',
-    //   use: { ...devices['Desktop Edge'], channel: 'msedge' },
-    // },
-    // {
-    //   name: 'Google Chrome',
-    //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-    // },
+    // Keep this for debugging without auth dependencies
+    {
+      name: 'chrome-no-auth',
+      use: { 
+        ...devices['Desktop Chrome'],
+        // No storageState - fresh session every time
+      },
+      testMatch: /debug-auth\.test\.ts/,
+    },
   ],
 
   /* Run your local dev server before starting the tests */
