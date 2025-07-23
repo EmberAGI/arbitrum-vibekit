@@ -1,8 +1,15 @@
 'use client';
 
 import useSWR from 'swr';
-import type { UIArtifact } from '@/components/artifact';
+import type { UIArtifact as OriginalUIArtifact } from '@/components/artifact';
 import { useCallback, useMemo } from 'react';
+
+export type SidepanelMode = 'default' | 'fullscreen';
+
+// Extend the original UIArtifact type to include sidepanel mode
+export interface UIArtifact extends OriginalUIArtifact {
+  sidepanelMode?: SidepanelMode;
+}
 
 export const initialArtifactData: UIArtifact = {
   documentId: 'init',
@@ -17,6 +24,7 @@ export const initialArtifactData: UIArtifact = {
     width: 0,
     height: 0,
   },
+  sidepanelMode: 'default', // Default to 33% width mode
 };
 
 type Selector<T> = (state: UIArtifact) => T;
@@ -63,6 +71,21 @@ export function useArtifact() {
     [setLocalArtifact],
   );
 
+  // Add sidepanel mode controls
+  const toggleSidepanelMode = useCallback(() => {
+    setArtifact((current) => ({
+      ...current,
+      sidepanelMode: current.sidepanelMode === 'default' ? 'fullscreen' : 'default',
+    }));
+  }, [setArtifact]);
+
+  const setSidepanelMode = useCallback((mode: SidepanelMode) => {
+    setArtifact((current) => ({
+      ...current,
+      sidepanelMode: mode,
+    }));
+  }, [setArtifact]);
+
   const { data: localArtifactMetadata, mutate: setLocalArtifactMetadata } =
     useSWR<any>(
       () =>
@@ -79,7 +102,9 @@ export function useArtifact() {
       setArtifact,
       metadata: localArtifactMetadata,
       setMetadata: setLocalArtifactMetadata,
+      toggleSidepanelMode,
+      setSidepanelMode,
     }),
-    [artifact, setArtifact, localArtifactMetadata, setLocalArtifactMetadata],
+    [artifact, setArtifact, localArtifactMetadata, setLocalArtifactMetadata, toggleSidepanelMode, setSidepanelMode],
   );
 }

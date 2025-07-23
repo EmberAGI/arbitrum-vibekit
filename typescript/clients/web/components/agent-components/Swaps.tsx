@@ -2,8 +2,8 @@
 
 import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useTransactionExecutor } from "../hooks/useTransactionExecutor"; // Import the hook
-import type { TxPlan } from "../lib/transactionUtils"; // Import shared types -> Use 'import type'
+import { useTransactionExecutor } from "../../hooks/useTransactionExecutor"; // Fixed path
+import type { TxPlan } from "../../lib/transactionUtils"; // Fixed path
 
 // Removed: useState, useEffect, useCallback, useMemo, viem imports, useSendTransaction
 // Removed: getChainById, withSafeDefaults, toBigInt, signTx, ensureReady, approveTransaction, signMainTransaction
@@ -141,9 +141,8 @@ export function Swaps({
               {needsApproval &&
                 isApprovalPending && ( // Approval pending
                   <p className=" p-2 rounded-2xl border-gray-400 bg-gray-200 w-full border-2 text-slate-800">
-                    {`Processing Approval ${
-                      approvalIndex + 1
-                    }/${totalApprovals}...`}
+                    {`Processing Approval ${approvalIndex + 1
+                      }/${totalApprovals}...`}
                   </p>
                 )}
               {needsApproval &&
@@ -177,8 +176,8 @@ export function Swaps({
                     {isApprovalPending // Use hook state
                       ? `Approving ${approvalIndex + 1}/${totalApprovals}...`
                       : isApprovalPhaseComplete // Use hook state
-                      ? "All Approved"
-                      : `Approve ${approvalIndex + 1}/${totalApprovals}`}
+                        ? "All Approved"
+                        : `Approve ${approvalIndex + 1}/${totalApprovals}`}
                   </button>
                 )}
                 <button
@@ -190,8 +189,8 @@ export function Swaps({
                   {isTxPending // Use hook state
                     ? "Executing..."
                     : needsApproval // Still relevant for button text
-                    ? "Execute Transaction"
-                    : "Sign Transaction"}
+                      ? "Execute Transaction"
+                      : "Sign Transaction"}
                 </button>
               </div>
             </>

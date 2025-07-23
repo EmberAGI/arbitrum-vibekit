@@ -1,3 +1,6 @@
+import type { ComponentRegistry } from './components/agent-components/types';
+import type { AgentSidepanelRegistry } from './artifacts/agent-sidepanels/types';
+
 export const chatAgents = [
   {
     id: 'ember-aave' as const,
@@ -143,3 +146,98 @@ export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
 ]);
 
 export type ChatAgentId = (typeof chatAgents)[number]['id'];
+
+// Component registry - defines which component to use for each tool name pattern
+export const componentRegistry: ComponentRegistry = [
+  {
+    toolNamePattern: /askSwapAgent$/,
+    componentPath: 'Swaps',
+  },
+  {
+    toolNamePattern: /askLendingAgent$/,
+    componentPath: 'Lending',
+  },
+  {
+    toolNamePattern: /askLiquidityAgent$/,
+    componentPath: 'Liquidity',
+    propsExtractor: (toolInvocationResult) => ({
+      positions: toolInvocationResult?.artifacts?.[0]?.parts[0]?.data?.positions || null,
+      pools: toolInvocationResult?.artifacts?.[0]?.parts[0]?.data?.pools || null,
+    }),
+  },
+  {
+    toolNamePattern: /askYieldTokenizationAgent$/,
+    componentPath: 'Pendle',
+    propsExtractor: (toolInvocationResult) => {
+      const getParts = () => toolInvocationResult?.artifacts ? toolInvocationResult?.artifacts[0]?.parts : null;
+      const getArtifact = () => toolInvocationResult?.artifacts ? toolInvocationResult?.artifacts[0] : null;
+      
+      return {
+        markets: getParts(),
+        isMarketList: getArtifact()?.name === 'yield-markets',
+      };
+    },
+  },
+  // Weather component (legacy support)
+  {
+    toolNamePattern: /getWeather$/,
+    componentPath: 'Weather', // This would need to be moved to agent-components if desired
+  },
+  // Document components (legacy support)
+  {
+    toolNamePattern: /createDocument$/,
+    componentPath: 'DocumentPreview',
+  },
+  {
+    toolNamePattern: /updateDocument$/,
+    componentPath: 'DocumentToolResult',
+  },
+  {
+    toolNamePattern: /requestSuggestions$/,
+    componentPath: 'DocumentToolResult',
+  },
+];
+
+// Agent sidepanel registry - defines which sidepanel to show for each agent and trigger
+export const agentSidepanelRegistry: AgentSidepanelRegistry = [
+  {
+    sidepanelId: 'hello-world',
+    agentId: 'ember-aave', // Lending agent
+    triggerMode: 'on-agent-selection',
+    priority: 10,
+    propsExtractor: (data) => ({
+      message: `Hello from the ${data.selectedAgentId} agent!`,
+      customData: {
+        timestamp: new Date().toISOString(),
+        agentType: 'lending',
+      },
+    }),
+  },
+  // Example configurations for other trigger modes:
+  
+  // Show sidepanel on tool invocation
+  // {
+  //   sidepanelId: 'hello-world',
+  //   agentId: 'ember-camelot',
+  //   triggerMode: 'on-tool-invocation',
+  //   toolNamePattern: /askSwapAgent$/,
+  //   priority: 5,
+  //   propsExtractor: (data) => ({
+  //     message: 'Swap operation completed!',
+  //     swapData: data.toolInvocationResult,
+  //   }),
+  // },
+  
+  // Show sidepanel when specific property exists
+  // {
+  //   sidepanelId: 'hello-world',
+  //   agentId: 'all',
+  //   triggerMode: 'on-property-existence',
+  //   triggerProperty: 'artifacts.0.parts.0.data.txPlan',
+  //   priority: 1,
+  //   propsExtractor: (data) => ({
+  //     message: 'Transaction plan detected!',
+  //     txData: data.toolInvocationResult?.artifacts?.[0]?.parts[0]?.data,
+  //   }),
+  // },
+];

@@ -1,10 +1,9 @@
+'use client';
+
 import type { UIMessage } from 'ai';
-import { PreviewMessage, ThinkingMessage } from './message';
-import { useScrollToBottom } from './use-scroll-to-bottom';
-import { Overview } from './overview';
 import { memo } from 'react';
+import { MessageRenderer } from './message.renderer';
 import type { Vote } from '@/lib/db/schema';
-import equal from 'fast-deep-equal';
 import type { UseChatHelpers } from '@ai-sdk/react';
 
 interface MessagesProps {
@@ -16,6 +15,7 @@ interface MessagesProps {
   reload: UseChatHelpers['reload'];
   isReadonly: boolean;
   isArtifactVisible: boolean;
+  selectedAgentId?: string;
 }
 
 function PureMessages({
@@ -26,54 +26,41 @@ function PureMessages({
   setMessages,
   reload,
   isReadonly,
+  isArtifactVisible,
+  selectedAgentId,
 }: MessagesProps) {
-  const [messagesContainerRef, messagesEndRef] =
-    useScrollToBottom<HTMLDivElement>();
+  if (!messages.length) {
+    return null;
+  }
 
   return (
     <div
-      ref={messagesContainerRef}
-      className="flex flex-col min-w-0 gap-6 flex-1 overflow-y-scroll pt-4"
+      className={`flex flex-col gap-6 w-full pt-8 ${isArtifactVisible ? 'max-w-sm' : 'max-w-3xl'
+        } mx-auto`}
     >
-      {messages.length === 0 && <Overview />}
-
       {messages.map((message, index) => (
-        <PreviewMessage
+        <div
           key={message.id}
-          chatId={chatId}
-          message={message}
-          isLoading={status === 'streaming' && messages.length - 1 === index}
-          vote={
-            votes
-              ? votes.find((vote) => vote.messageId === message.id)
-              : undefined
-          }
-          setMessages={setMessages}
-          reload={reload}
-          isReadonly={isReadonly}
-        />
+          className={`flex flex-col gap-4 ${message.role === 'user' ? 'self-end' : 'self-start'}`}
+        >
+          {message.parts?.map((part, partIndex) => (
+            <MessageRenderer
+              key={`${message.id}-${partIndex}`}
+              part={part}
+              message={message}
+              isLoading={status === 'streaming' && index === messages.length - 1}
+              mode="view"
+              setMode={() => { }}
+              isReadonly={isReadonly}
+              setMessages={setMessages}
+              reload={reload}
+              selectedAgentId={selectedAgentId}
+            />
+          ))}
+        </div>
       ))}
-
-      {status === 'submitted' &&
-        messages.length > 0 &&
-        messages[messages.length - 1].role === 'user' && <ThinkingMessage />}
-
-      <div
-        ref={messagesEndRef}
-        className="shrink-0 min-w-[24px] min-h-[24px]"
-      />
     </div>
   );
 }
 
-export const Messages = memo(PureMessages, (prevProps, nextProps) => {
-  if (prevProps.isArtifactVisible && nextProps.isArtifactVisible) return true;
-
-  if (prevProps.status !== nextProps.status) return false;
-  if (prevProps.status && nextProps.status) return false;
-  if (prevProps.messages.length !== nextProps.messages.length) return false;
-  if (!equal(prevProps.messages, nextProps.messages)) return false;
-  if (!equal(prevProps.votes, nextProps.votes)) return false;
-
-  return true;
-});
+export const Messages = memo(PureMessages);

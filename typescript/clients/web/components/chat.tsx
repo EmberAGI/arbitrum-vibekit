@@ -2,7 +2,7 @@
 
 import type { Attachment, UIMessage } from 'ai';
 import { useChat } from '@ai-sdk/react';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { ChatHeader } from '@/components/chat-header';
 import type { Vote } from '@/lib/db/schema';
@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { useAccount } from 'wagmi';
 import { useSession } from 'next-auth/react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useDynamicSidepanel } from '../lib/sidepanel-loader';
 
 export function Chat({
   id,
@@ -35,8 +36,48 @@ export function Chat({
   const { mutate } = useSWRConfig();
   const { address } = useAccount();
   const { data: session } = useSession();
+  const { triggerSidepanel } = useDynamicSidepanel();
 
   const [selectedChatAgent, _setSelectedChatAgent] = useState(initialChatAgent);
+
+  // Track which sidepanels have been triggered to prevent duplicates
+  const triggeredSidepanelsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    console.log('🎭 Agent selection changed:', {
+      selectedChatAgent,
+      isNotAll: selectedChatAgent !== 'all',
+      isReadonly
+    });
+
+    if (selectedChatAgent && selectedChatAgent !== 'all') {
+      // Create a unique key for this trigger
+      const triggerKey = `${selectedChatAgent}-on-agent-selection`;
+
+      // Only trigger if we haven't already triggered this combination
+      if (!triggeredSidepanelsRef.current.has(triggerKey)) {
+        console.log('🎯 Triggering sidepanel for agent selection (first time)...');
+        triggeredSidepanelsRef.current.add(triggerKey);
+
+        triggerSidepanel(selectedChatAgent, 'on-agent-selection', {
+          isReadonly,
+        }).then(result => {
+          console.log('🎭 Sidepanel trigger result:', result);
+        }).catch(error => {
+          console.error('🎭 Sidepanel trigger error:', error);
+        });
+      } else {
+        console.log('🎭 Sidepanel already triggered for this agent selection, skipping...');
+      }
+    } else {
+      console.log('🎭 Not triggering sidepanel (agent is "all" or empty)');
+    }
+  }, [selectedChatAgent, isReadonly, triggerSidepanel]); // Added isReadonly dependency
+
+  // Clear triggered sidepanels when agent changes (but not on first mount)
+  useEffect(() => {
+    triggeredSidepanelsRef.current.clear();
+  }, [selectedChatAgent]);
 
   const { messages, setMessages, handleSubmit, input, setInput, append, status, stop, reload } =
     useChat({
@@ -68,6 +109,8 @@ export function Chat({
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
   const isArtifactVisible = useArtifactSelector(state => state.isVisible);
 
+  console.log('🎨 Artifact visibility state:', isArtifactVisible);
+
   return (
     <>
       <div className="flex flex-col min-w-0 h-dvh bg-background">
@@ -91,6 +134,7 @@ export function Chat({
           reload={reload}
           isReadonly={isReadonly}
           isArtifactVisible={isArtifactVisible}
+          selectedAgentId={selectedChatAgent}
         />
 
         <form className="flex mx-auto px-4 bg-background pb-4 md:pb-6 gap-2 w-full md:max-w-3xl">

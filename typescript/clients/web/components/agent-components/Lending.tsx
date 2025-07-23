@@ -2,8 +2,8 @@
 
 import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useTransactionExecutor } from "../hooks/useTransactionExecutor";
-import type { TxPlan } from "../lib/transactionUtils";
+import { useTransactionExecutor } from "../../hooks/useTransactionExecutor"; // Fixed path
+import type { TxPlan } from "../../lib/transactionUtils"; // Fixed path
 
 // Removed: useState, viem imports, useSendTransaction
 // Removed: getChainById, withSafeDefaults, toBigInt, signTx
@@ -99,9 +99,8 @@ export function Lending({
               {/* Approval Status */}
               {needsApproval && isApprovalPending && (
                 <p className=" p-2 rounded-2xl border-gray-400 bg-gray-200 w-full border-2 text-slate-800">
-                  {`Processing Approval ${
-                    approvalIndex + 1
-                  }/${totalApprovals}...`}
+                  {`Processing Approval ${approvalIndex + 1
+                    }/${totalApprovals}...`}
                 </p>
               )}
               {needsApproval && approvalError && (
@@ -134,8 +133,8 @@ export function Lending({
                     {isApprovalPending
                       ? `Approving ${approvalIndex + 1}/${totalApprovals}...`
                       : isApprovalPhaseComplete
-                      ? "All Approved"
-                      : `Approve ${approvalIndex + 1}/${totalApprovals}`}
+                        ? "All Approved"
+                        : `Approve ${approvalIndex + 1}/${totalApprovals}`}
                   </button>
                 )}
                 <button
@@ -147,8 +146,8 @@ export function Lending({
                   {isTxPending
                     ? "Executing..."
                     : needsApproval
-                    ? "Execute Transaction"
-                    : "Sign Transaction"}
+                      ? "Execute Transaction"
+                      : "Sign Transaction"}
                 </button>
               </div>
             </>

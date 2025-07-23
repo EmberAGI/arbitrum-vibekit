@@ -2,9 +2,9 @@
 
 import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useTransactionExecutor } from "../hooks/useTransactionExecutor"; // Import the hook
-import type { TxPlan } from "../lib/transactionUtils"; // Import shared types -> Use 'import type'
-import ShortAddress from "./ShortAddress";
+import { useTransactionExecutor } from "../../hooks/useTransactionExecutor"; // Fixed path
+import type { TxPlan } from "../../lib/transactionUtils"; // Fixed path
+import ShortAddress from "../ShortAddress"; // ShortAddress is in the parent components folder
 import {
   Accordion,
   AccordionContent,

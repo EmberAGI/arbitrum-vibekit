@@ -2,9 +2,9 @@
 
 import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useTransactionExecutor } from "../hooks/useTransactionExecutor";
-import type { TxPlan } from "../lib/transactionUtils";
-import { JsonViewer } from "./JsonViewer";
+import { useTransactionExecutor } from "../../hooks/useTransactionExecutor"; // Fixed path
+import type { TxPlan } from "../../lib/transactionUtils"; // Fixed path
+import { JsonViewer } from "../JsonViewer"; // JsonViewer is in the parent components folder
 
 // Removed: useState, viem imports, useSendTransaction
 // Removed: getChainById, withSafeDefaults, toBigInt, signTx

@@ -13,12 +13,10 @@ import { MessageEditor } from './message-editor';
 import { DocumentPreview } from './document-preview';
 import { MessageReasoning } from './message-reasoning';
 import type { UseChatHelpers } from '@ai-sdk/react';
-import { Swaps } from './Swaps';
-import { Pendle } from './Pendle';
-import { Lending } from './Lending';
-import { Liquidity } from './Liquidity';
 import type { Dispatch } from 'react';
-import { TemplateComponent } from './TemplateComponent';
+import { DynamicComponentRenderer } from '../lib/component-loader';
+import { useDynamicSidepanel } from '../lib/sidepanel-loader';
+import { useEffect } from 'react';
 
 interface MessageRendererProps {
   message: UIMessage;
@@ -29,6 +27,7 @@ interface MessageRendererProps {
   isReadonly: boolean;
   setMessages: UseChatHelpers['setMessages'];
   reload: UseChatHelpers['reload'];
+  selectedAgentId?: string;
 }
 
 export const MessageRenderer = ({
@@ -40,10 +39,107 @@ export const MessageRenderer = ({
   isReadonly,
   setMessages,
   reload,
+  selectedAgentId,
 }: MessageRendererProps) => {
   const { role } = message;
   const { type } = part;
+  const { triggerSidepanel } = useDynamicSidepanel();
+
   console.log(part);
+
+  // Extract complex expressions to variables for better dependency tracking
+  const toolInvocationState = type === 'tool-invocation' ? (part as any).toolInvocation?.state : null;
+  const toolCallId = type === 'tool-invocation' ? (part as any).toolInvocation?.toolCallId : null;
+
+  // Move useEffect to top level to comply with Rules of Hooks
+  // Optimize dependencies to prevent infinite loops
+  useEffect(() => {
+    // Only trigger sidepanel for tool invocation results with selectedAgentId
+    if (
+      type === 'tool-invocation' &&
+      toolInvocationState === 'result' &&
+      selectedAgentId &&
+      selectedAgentId !== 'all' // Don't trigger for 'all' agent selection
+    ) {
+      const { toolInvocation } = part as any;
+      const { result, toolName, toolCallId } = toolInvocation;
+
+      // Avoid triggering for undefined/null results
+      if (!result?.result?.content?.[0]) {
+        return;
+      }
+
+      // Create a unique key to prevent duplicate triggers for the same tool call
+      const triggerKey = `${toolCallId}-${selectedAgentId}`;
+
+      // Use a simple way to track already processed tool calls
+      if ((window as any).__processedToolCalls) {
+        if ((window as any).__processedToolCalls.has(triggerKey)) {
+          console.log('🎭 Tool call already processed, skipping sidepanel trigger:', triggerKey);
+          return;
+        }
+      } else {
+        (window as any).__processedToolCalls = new Set();
+      }
+
+      // Mark this tool call as processed
+      (window as any).__processedToolCalls.add(triggerKey);
+
+      const toolInvocationParsableString = result?.result?.content?.[0]?.text
+        ? result?.result?.content?.[0]?.text
+        : result?.result?.content?.[0]?.resource?.text;
+
+      let toolInvocationResult = null;
+      try {
+        toolInvocationResult = result?.result?.content?.[0]
+          ? JSON.parse(toolInvocationParsableString || '{}')
+          : null;
+      } catch (error) {
+        console.warn('Failed to parse tool invocation result:', error);
+        return;
+      }
+
+      if (toolInvocationResult) {
+        const getKeyFromResult = (key: string) =>
+          toolInvocationResult?.artifacts?.[0]?.parts[0]?.data?.[key] || null;
+        const txPlan = getKeyFromResult('txPlan');
+        const txPreview = getKeyFromResult('txPreview');
+
+        console.log('🎯 Processing tool invocation for sidepanel triggers:', { toolCallId, toolName, selectedAgentId });
+
+        // Trigger sidepanel for tool invocation (but only once per unique combination)
+        triggerSidepanel(selectedAgentId, 'on-tool-invocation', {
+          toolName,
+          toolInvocationResult,
+          txPreview,
+          txPlan,
+          isReadonly,
+        }).catch((error: any) => {
+          console.error('Failed to trigger on-tool-invocation sidepanel:', error);
+        });
+
+        // Also check for property-based triggers (but only once per unique combination)
+        triggerSidepanel(selectedAgentId, 'on-property-existence', {
+          toolName,
+          toolInvocationResult,
+          txPreview,
+          txPlan,
+          isReadonly,
+        }).catch((error: any) => {
+          console.error('Failed to trigger on-property-existence sidepanel:', error);
+        });
+      }
+    }
+  }, [
+    // Use more stable dependencies to prevent constant re-runs
+    type,
+    toolInvocationState,
+    toolCallId,
+    selectedAgentId,
+    isReadonly,
+    part,
+    triggerSidepanel
+  ]);
 
   if (type === 'reasoning') {
     return <MessageReasoning isLoading={isLoading} reasoning={part.reasoning} />;
@@ -69,40 +165,41 @@ export const MessageRenderer = ({
             <TooltipContent>Edit message</TooltipContent>
           </Tooltip>
         )}
-
-        <div
-          data-testid="message-content"
-          className={cn('flex flex-col gap-4', {
-            'bg-primary text-primary-foreground px-3 py-2 rounded-xl': role === 'user',
-          })}
-        >
-          <Markdown>{part.text}</Markdown>
-        </div>
+        <Markdown>{part.text}</Markdown>
       </div>
     );
   }
 
   if (type === 'text' && mode === 'edit') {
     return (
-      <div className="flex flex-row gap-2 items-start">
-        <div className="size-8" />
-
-        <MessageEditor
-          key={message.id}
-          message={message}
-          setMode={setMode}
-          setMessages={setMessages}
-          reload={reload}
-        />
-      </div>
+      <MessageEditor
+        setMode={setMode}
+        reload={reload}
+        setMessages={setMessages}
+        message={message}
+      />
     );
   }
 
   if (type === 'tool-invocation' && part.toolInvocation.state === 'call') {
-    const { toolInvocation } = part;
-    const { toolName, toolCallId, args } = toolInvocation;
+    const { toolName, toolCallId, args } = part.toolInvocation;
 
-    console.log('toolInvocation', toolInvocation);
+    if (toolName === 'getWeather') {
+      return (
+        <div key={toolCallId} className={cx({ skeleton: isLoading })}>
+          <Weather weatherAtLocation={args.location} />
+        </div>
+      );
+    }
+
+    if (toolName === 'retrieveDocuments') {
+      return (
+        <div key={toolCallId}>
+          <DocumentToolCall type="create" args={args} isReadonly={isReadonly} />
+        </div>
+      );
+    }
+
     return (
       <div
         key={toolCallId}
@@ -110,25 +207,13 @@ export const MessageRenderer = ({
           skeleton: ['getWeather'].includes(toolName) || ['askSwapAgent'].includes(toolName),
         })}
       >
-        {toolName.endsWith('getWeather') ? (
-          <Weather />
-        ) : toolName.endsWith('createDocument') ? (
-          <DocumentPreview isReadonly={isReadonly} args={args} />
-        ) : toolName === 'updateDocument' ? (
-          <DocumentToolCall type="update" args={args} isReadonly={isReadonly} />
-        ) : toolName.endsWith('requestSuggestions') ? (
-          <DocumentToolCall type="request-suggestions" args={args} isReadonly={isReadonly} />
-        ) : toolName.endsWith('askSwapAgent') ? (
-          <Swaps txPreview={null} txPlan={null} />
-        ) : toolName.endsWith('askLendingAgent') ? (
-          <Lending txPreview={null} txPlan={null} />
-        ) : toolName.endsWith('askLiquidityAgent') ? (
-          <Liquidity positions={null} txPreview={null} txPlan={null} pools={null} />
-        ) : toolName.endsWith('askYieldTokenizationAgent') ? (
-          <Pendle txPreview={null} txPlan={null} markets={[]} isMarketList={false} />
-        ) : (
-          <TemplateComponent txPreview={null} txPlan={null} />
-        )}
+        <DynamicComponentRenderer
+          toolName={toolName}
+          txPreview={null}
+          txPlan={null}
+          isReadonly={isReadonly}
+          args={args}
+        />
       </div>
     );
   }
@@ -136,13 +221,35 @@ export const MessageRenderer = ({
   if (type === 'tool-invocation' && part.toolInvocation.state === 'result') {
     const { toolInvocation } = part;
     const { result, toolCallId, toolName } = toolInvocation;
+
+    if (toolName === 'getWeather') {
+      const { temperature, description, location } = result;
+      return (
+        <div key={toolCallId}>
+          <Weather weatherAtLocation={result} />
+        </div>
+      );
+    }
+
+    if (toolName === 'retrieveDocuments') {
+      return (
+        <div key={toolCallId}>
+          <DocumentToolResult
+            type="create"
+            result={result}
+            isReadonly={isReadonly}
+          />
+        </div>
+      );
+    }
+
     const toolInvocationParsableString = result?.result?.content?.[0]?.text
       ? result?.result?.content?.[0]?.text
       : result?.result?.content?.[0]?.resource?.text;
     const toolInvocationResult = result?.result?.content?.[0]
       ? JSON.parse(
-          toolInvocationParsableString || '{Error: An error occurred while parsing the result}'
-        )
+        toolInvocationParsableString || '{Error: An error occurred while parsing the result}'
+      )
       : null;
     const getKeyFromResult = (key: string) =>
       toolInvocationResult?.artifacts?.[0]?.parts[0]?.data?.[key] || null;
@@ -151,50 +258,16 @@ export const MessageRenderer = ({
     const txPlan = getKeyFromResult('txPlan');
     const txPreview = getKeyFromResult('txPreview');
 
-    const getParts = () =>
-      toolInvocationResult?.artifacts ? toolInvocationResult?.artifacts[0]?.parts : null;
-    const getArtifact = () =>
-      toolInvocationResult?.artifacts ? toolInvocationResult?.artifacts[0] : null;
-
     return (
       <div key={toolCallId}>
-        {toolName.endsWith('getWeather') ? (
-          <Weather weatherAtLocation={result} />
-        ) : toolName.endsWith('createDocument') ? (
-          <DocumentPreview isReadonly={isReadonly} result={result} />
-        ) : toolName.endsWith('updateDocument') ? (
-          <DocumentToolResult type="update" result={result} isReadonly={isReadonly} />
-        ) : toolName.endsWith('requestSuggestions') ? (
-          <DocumentToolResult type="request-suggestions" result={result} isReadonly={isReadonly} />
-        ) : toolName.endsWith('askSwapAgent') ? (
-          toolInvocationResult && <Swaps txPreview={txPreview} txPlan={txPlan} />
-        ) : toolName.endsWith('askLendingAgent') ? (
-          toolInvocationResult && <Lending txPreview={txPreview} txPlan={txPlan} />
-        ) : toolName.endsWith('askLiquidityAgent') ? (
-          toolInvocationResult && (
-            <Liquidity
-              positions={getKeyFromResult('positions')}
-              pools={getKeyFromResult('pools')}
-              txPreview={txPreview}
-              txPlan={txPlan}
-            />
-          )
-        ) : toolName.endsWith('askYieldTokenizationAgent') ? (
-          toolInvocationResult && (
-            <Pendle
-              txPreview={txPreview}
-              txPlan={txPlan}
-              markets={getParts()}
-              isMarketList={getArtifact()?.name === 'yield-markets'}
-            />
-          )
-        ) : (
-          <TemplateComponent
-            txPreview={txPreview}
-            txPlan={txPlan}
-            jsonObject={toolInvocationResult}
-          />
-        )}
+        <DynamicComponentRenderer
+          toolName={toolName}
+          toolInvocationResult={toolInvocationResult}
+          txPreview={txPreview}
+          txPlan={txPlan}
+          isReadonly={isReadonly}
+          result={result}
+        />
       </div>
     );
   }
