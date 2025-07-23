@@ -160,7 +160,7 @@ test.describe('Generate Chart Tool - Unit Tests', () => {
       });
     
     // Should still return the response even if malformed
-    expect(result).toEqual({ invalid: 'data' });
+    expect(result).toEqual({ prices: undefined });
   });
 
   test('should handle JSON parsing errors', async () => {

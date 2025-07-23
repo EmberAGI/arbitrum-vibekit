@@ -52,13 +52,13 @@ export default defineConfig({
   /* Configure projects */
   projects: [
     {
-      name: 'setup:auth',
-      testMatch: /auth.setup.ts/,
+      name: 'setup:wallet-auth',
+      testMatch: /auth-wallet.setup.ts/,
     },
     {
       name: 'setup:reasoning',
       testMatch: /reasoning.setup.ts/,
-      dependencies: ['setup:auth'],
+      dependencies: ['setup:wallet-auth'],
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/session.json',
@@ -67,7 +67,7 @@ export default defineConfig({
     {
       name: 'chat',
       testMatch: /chat.test.ts/,
-      dependencies: ['setup:auth'],
+      dependencies: ['setup:wallet-auth'],
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/session.json',
@@ -85,7 +85,7 @@ export default defineConfig({
     {
       name: 'artifacts',
       testMatch: /artifacts.test.ts/,
-      dependencies: ['setup:auth'],
+      dependencies: ['setup:wallet-auth'],
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/session.json',
@@ -94,10 +94,10 @@ export default defineConfig({
     {
       name: 'chart-generation',
       testMatch: /chart-generation.test.ts/,
-      dependencies: ['setup:auth'],
+      // dependencies: ['setup:wallet-auth'],
       use: {
         ...devices['Desktop Chrome'],
-        storageState: 'playwright/.auth/session.json',
+        // storageState: 'playwright/.auth/session.json',
       },
     },
     {
