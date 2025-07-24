@@ -49,6 +49,8 @@ export default defineConfig({
     timeout: 60 * 1000,
   },
 
+   testIgnore:['**/auth.setup.ts', '**/auth.test.ts'],
+
   /* Configure projects */
   projects: [
     // Replace old auth setup with wallet-based auth
