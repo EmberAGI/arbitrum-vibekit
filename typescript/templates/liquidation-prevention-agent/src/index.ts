@@ -11,14 +11,6 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { contextProvider } from './context/provider.js';
 import { loadTokenMapFromMcp } from './tokenMap.js';
 
-// Import implemented skills
-import { healthMonitoringSkill } from './skills/healthMonitoring.js';
-import { liquidationPreventionSkill } from './skills/liquidationPrevention.js';
-import { positionStatusSkill } from './skills/positionStatus.js';
-
-// Skills to be implemented in future tasks
-// import { riskAssessmentSkill } from './skills/riskAssessment.js';
-
 // Provider selector initialization
 const providers = createProviderSelector({
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
@@ -42,26 +34,8 @@ if (!selectedProvider) {
 
 const modelOverride = process.env.AI_MODEL;
 
-// Export agent configuration for testing
-export const agentConfig: AgentConfig = {
-  name: process.env.AGENT_NAME || 'Liquidation Prevention Agent',
-  version: process.env.AGENT_VERSION || '1.0.0',
-  description: process.env.AGENT_DESCRIPTION || 'Intelligent Aave liquidation prevention agent with immediate status checks, continuous monitoring, and automatic risk mitigation',
-  skills: [
-    positionStatusSkill,           // ✅ Immediate status checks and health factor queries
-    healthMonitoringSkill,         // ✅ Continuous monitoring + automatic prevention
-    liquidationPreventionSkill,    // ✅ Direct supply/repay actions
-    // riskAssessmentSkill,        // 🔄 To be implemented: Task 4
-  ],
-  url: 'localhost',
-  capabilities: {
-    streaming: false,
-    pushNotifications: false,
-    stateTransitionHistory: false,
-  },
-  defaultInputModes: ['application/json'],
-  defaultOutputModes: ['application/json'],
-};
+// Remove agentConfig definition and import it from config.ts instead
+import { agentConfig } from './config.js';
 
 // Configure the agent
 const agent = Agent.create(agentConfig, {
@@ -80,16 +54,16 @@ agent
   .start(PORT, async deps => {
     // Create manual MCP client for Ember endpoint
     let emberMcpClient: Client | null = null;
-    
+
     const emberEndpoint = process.env.EMBER_ENDPOINT || 'http://api.emberai.xyz/mcp';
-    
+
     try {
       console.log(`Connecting to MCP server at ${emberEndpoint}`);
       emberMcpClient = new Client(
         { name: 'LiquidationPreventionAgent', version: '1.0.0' },
         { capabilities: { tools: {}, resources: {}, prompts: {} } }
       );
-      
+
       const transport = new StreamableHTTPClientTransport(new URL(emberEndpoint));
       await emberMcpClient.connect(transport);
       console.log('MCP client connected successfully.');
@@ -104,7 +78,7 @@ agent
     //       name: 'LiquidationPreventionAgent',
     //       version: '1.0.0',
     //     });
-        
+
     //     const transport = new StreamableHTTPClientTransport(new URL(process.env.EMBER_ENDPOINT));
     //     await emberMcpClient.connect(transport);
     //     console.log('MCP client connected successfully.');
@@ -139,7 +113,7 @@ agent
     console.log('\n🛡️  Liquidation Prevention Features:');
     console.log('  ✅ Immediate position status checks and health factor queries');
     console.log('  ✅ Continuous health factor monitoring with automatic prevention');
-    console.log('  ✅ Intelligent strategy execution when liquidation risk detected');  
+    console.log('  ✅ Intelligent strategy execution when liquidation risk detected');
     console.log('  ✅ Direct manual liquidation prevention actions');
     console.log('  ✅ Configurable health factor thresholds and monitoring intervals');
     console.log('  ✅ Multi-chain support for all Ember-supported networks');
@@ -159,14 +133,14 @@ agent
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n\n🛑 Shutting down liquidation prevention agent gracefully...');
-  
+
   // Stop all monitoring sessions
   const { stopAllMonitoringSessions } = await import('./tools/monitorHealth.js');
   const stoppedSessions = stopAllMonitoringSessions();
   if (stoppedSessions > 0) {
     console.log(`🛑 Stopped ${stoppedSessions} active monitoring sessions`);
   }
-  
+
   await agent.stop();
   console.log('✅ Agent stopped successfully');
   process.exit(0);

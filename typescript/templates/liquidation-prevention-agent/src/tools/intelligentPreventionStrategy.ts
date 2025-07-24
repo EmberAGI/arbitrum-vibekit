@@ -5,11 +5,14 @@
  * for liquidation prevention.
  */
 
-import { createSuccessTask, createErrorTask, type VibkitToolDefinition, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
+import { createSuccessTask, createErrorTask, type VibkitToolDefinition } from 'arbitrum-vibekit-core';
 import { z } from 'zod';
 import type { LiquidationPreventionContext } from '../context/types.js';
-import { GetWalletLendingPositionsResponseSchema, GetWalletBalancesResponseSchema } from 'ember-schemas';
 import { parseUserPreferences, mergePreferencesWithDefaults, generatePreferencesSummary } from '../utils/userPreferences.js';
+import { generateLiquidationPreventionData, LiquidationPreventionDataSchema } from '../utils/liquidationData.js';
+import { supplyCollateralTool } from './supplyCollateral.js';
+import { repayDebtTool } from './repayDebt.js';
+import { testLiquidationDataTool } from './testLiquidationData.js';
 
 // Input schema for intelligentPreventionStrategy tool
 const IntelligentPreventionStrategyParams = z.object({
@@ -19,7 +22,42 @@ const IntelligentPreventionStrategyParams = z.object({
   chainId: z.string().optional().default('42161').describe('Chain ID for the operation'),
 });
 
-// Strategy option interface
+
+// LLM System Prompt
+const LLM_SYSTEM_PROMPT = `Act as a financial advisor focused on preventing liquidation in DeFi lending protocols.
+
+Based on the data I’ll provide (including current Health Factor, supplied and borrowed assets, their amounts and prices), generate a PreventionResponse in the following format:
+
+export interface PreventionAction {
+  actionType: "SUPPLY" | "REPAY" | "HYBRID";
+  asset: string;
+  amountUsd: string;
+  amountToken: string;
+  expectedHealthFactor: string;
+  priority: number; // 1 = highest priority
+}
+
+export interface PreventionResponse {
+  currentAnalysis: {
+    currentHF: string;
+    targetHF: string;
+    requiredIncrease: string;
+  };
+  recommendedActions: PreventionAction[];
+  optimalAction: PreventionAction;
+}
+
+Your task is to:
+
+Analyze the user's current Health Factor (HF) and determine the gap to a target HF
+
+Suggest 1 or more PreventionActions (e.g., supplying more collateral or repaying part of the loan) to reach or exceed the target HF.
+
+Set the priority field to rank the most effective actions.
+
+Choose the best overall optimalAction`;
+
+// Strategy option interface (can be removed as LLM response will dictate actions)
 interface StrategyOption {
   type: 'supply' | 'repay' | 'combined';
   priority: number;
@@ -48,263 +86,110 @@ export const intelligentPreventionStrategyTool: VibkitToolDefinition<typeof Inte
         monitoring: context.custom.monitoring,
         strategy: context.custom.strategy,
       });
-      
+
       const targetHF = mergedPrefs.targetHealthFactor || args.targetHealthFactor || 1.1;
       console.log(`🧠 Analyzing intelligent prevention strategy for user: ${args.userAddress}, target HF: ${targetHF}`);
       console.log(`⚙️  User preferences: ${generatePreferencesSummary(mergedPrefs)}`);
 
-      // Access MCP clients from context
-      const emberClient = context.custom.mcpClient;
-      if (!emberClient) {
-        throw new Error('Ember MCP client not found');
-      }
-
-      // Step 1: Get current position data
-      console.log('📊 Step 1: Fetching current positions...');
-      const positionsResult = await emberClient.callTool({
-        name: 'getWalletLendingPositions',
-        arguments: { walletAddress: args.userAddress },
-      });
-
-      if (positionsResult.isError) {
-        throw new Error('Failed to fetch user positions');
-      }
-
-      // Step 2: Get wallet balances
-      console.log('💰 Step 2: Fetching wallet balances...');
-      const balancesResult = await emberClient.callTool({
-        name: 'getWalletBalances',
-        arguments: { walletAddress: args.userAddress },
-      });
-
-      if (balancesResult.isError) {
-        throw new Error('Failed to fetch wallet balances');
-      }
-
-      // Parse data using proper schema validation
-      const positionsData = parseMcpToolResponsePayload(positionsResult, GetWalletLendingPositionsResponseSchema);
-      const balancesData = parseMcpToolResponsePayload(balancesResult, GetWalletBalancesResponseSchema);
-
-      // Extract health factor and positions
-      const positions = positionsData.positions || [];
-      const firstPosition = positions[0];
-      const currentHF = firstPosition?.healthFactor ? parseFloat(firstPosition.healthFactor) : undefined;
-      const balances = balancesData.balances || [];
-
-      // Step 3: Analyze strategies using 3-priority system
-      console.log('🔍 Step 3: Analyzing prevention strategies...');
-      
-      // Get available collateral tokens (ETH, WETH, USDC, USDT, DAI, WBTC)
-      const collateralTokens = balances.filter((balance: any) => 
-        ['ETH', 'WETH', 'USDC', 'USDT', 'DAI', 'WBTC'].includes(balance.symbol.toUpperCase()) &&
-        parseFloat(balance.amount) > 0 && 
-        (balance.valueUsd || 0) > 10 // Min $10
+      // Step 1: Call generateLiquidationPreventionData function
+      console.log('📊 Step 1: Generating liquidation prevention data...');
+      const liquidationData = await generateLiquidationPreventionData(
+        args.userAddress,
+        context.custom,
+        String(targetHF) // Ensure targetHF is a string as expected by generateLiquidationPreventionData
       );
 
-      // Get borrowed reserves
-      const borrowedReserves = firstPosition?.userReserves?.filter(reserve => 
-        parseFloat(reserve.variableBorrows) > 0
-      ) || [];
+      // Step 2: Call LLM with the generated data
+      console.log('🧠 Step 2: Calling LLM for prevention strategy...');
+        const llmResponse = await context.mcpClient.generateText({
+          systemPrompt: LLM_SYSTEM_PROMPT,
+          userPrompt: `Here is the data: ${JSON.stringify(liquidationData)}`,
+          responseSchema: z.object({
+            currentAnalysis: z.object({
+              currentHF: z.string(),
+              targetHF: z.string(),
+              requiredIncrease: z.string(),
+            }),
+            recommendedActions: z.array(z.object({
+              actionType: z.enum(["SUPPLY", "REPAY", "HYBRID"]),
+              asset: z.string(),
+              amountUsd: z.string(),
+              amountToken: z.string(),
+              expectedHealthFactor: z.string(),
+              priority: z.number(),
+            })),
+            optimalAction: z.object({
+              actionType: z.enum(["SUPPLY", "REPAY", "HYBRID"]),
+              asset: z.string(),
+              amountUsd: z.string(),
+              amountToken: z.string(),
+              expectedHealthFactor: z.string(),
+              priority: z.number(),
+            }),
+          }),
+        });
 
-      // Check if user has borrowed token balances for repayment
-      const repayableTokens = borrowedReserves.filter(borrowedReserve => {
-        const matchingBalance = balances.find(balance => 
-          balance.token.address.toLowerCase() === borrowedReserve.token.tokenUid.address.toLowerCase()
-        );
-        return matchingBalance && parseFloat(matchingBalance.amount) > 0;
-      });
-
-      let selectedStrategy: StrategyOption;
-
-      // Priority 1: Supply half of available collateral tokens
-      if (collateralTokens.length > 0) {
-        const bestCollateral = collateralTokens.sort((a, b) => (b.valueUsd || 0) - (a.valueUsd || 0))[0];
-        if (bestCollateral) {
-          const supplyAmount = (parseFloat(bestCollateral.amount) / 2).toString();
-          
-          selectedStrategy = {
-            type: 'supply',
-            priority: 1,
-            estimatedCost: (bestCollateral.valueUsd || 0) / 2,
-            estimatedHealthImprovement: 0.2,
-            reason: `Priority 1: Supply half of available ${bestCollateral.symbol} collateral`,
-             actions: [{
-              tool: 'supply',
-              tokenAddress: bestCollateral.token.address,
-              amount: supplyAmount,
-              description: `Supply ${supplyAmount} ${bestCollateral.symbol} as collateral`,
-             }],
-           };
-          
-          console.log(`✅ Strategy 1 selected: Supply ${supplyAmount} ${bestCollateral.symbol}`);
-        } else {
-          // Fallback if somehow no best collateral found
-          selectedStrategy = {
-            type: 'supply',
-            priority: 0,
-            estimatedCost: 0,
-            estimatedHealthImprovement: 0,
-            reason: 'No collateral tokens available',
-            actions: [],
-          };
-        }
-      }
-      // Priority 2: Repay half of borrowed token debt
-      else if (repayableTokens.length > 0) {
-        const borrowedReserve = repayableTokens[0]; // Take first available
-        if (borrowedReserve) {
-          const matchingBalance = balances.find(balance => 
-            balance.token.address.toLowerCase() === borrowedReserve.token.tokenUid.address.toLowerCase()
-          );
-          
-          if (matchingBalance) {
-            const debtAmount = parseFloat(borrowedReserve.variableBorrows);
-            const availableAmount = parseFloat(matchingBalance.amount);
-            const repayAmount = Math.min(debtAmount / 2, availableAmount).toString();
-            
-            selectedStrategy = {
-              type: 'repay',
-              priority: 2,
-              estimatedCost: parseFloat(repayAmount) * (matchingBalance.valueUsd || 0) / parseFloat(matchingBalance.amount),
-              estimatedHealthImprovement: 0.25,
-              reason: `Priority 2: Repay half of ${borrowedReserve.token.symbol} debt`,
-              actions: [{
-                tool: 'repay',
-                tokenAddress: borrowedReserve.token.tokenUid.address,
-                amount: repayAmount,
-                description: `Repay ${repayAmount} ${borrowedReserve.token.symbol} debt`,
-              }],
-            };
-            
-            console.log(`✅ Strategy 2 selected: Repay ${repayAmount} ${borrowedReserve.token.symbol}`);
-          } else {
-            // Fallback if no matching balance found
-            selectedStrategy = {
-              type: 'repay',
-              priority: 0,
-              estimatedCost: 0,
-              estimatedHealthImprovement: 0,
-              reason: 'No matching balance for debt repayment',
-              actions: [],
-            };
-          }
-        } else {
-          // Fallback if no borrowed reserve found
-          selectedStrategy = {
-            type: 'repay',
-            priority: 0,
-            estimatedCost: 0,
-            estimatedHealthImprovement: 0,
-            reason: 'No borrowed reserves available',
-            actions: [],
-          };
-        }
-      }
-      // Priority 3: Combined approach - supply half collateral + repay as much debt as possible
-      else if (balances.length > 0) {
-        const actions: any[] = [];
-        let totalCost = 0;
-        
-        // Supply half of any available tokens
-        if (balances.length > 0) {
-          const bestBalance = balances.sort((a, b) => (b.valueUsd || 0) - (a.valueUsd || 0))[0];
-          if (bestBalance && parseFloat(bestBalance.amount) > 0) {
-            const supplyAmount = (parseFloat(bestBalance.amount) / 2).toString();
-            actions.push({
-              tool: 'supply',
-              tokenAddress: bestBalance.token.address,
-              amount: supplyAmount,
-              description: `Supply ${supplyAmount} ${bestBalance.symbol} as collateral`,
-            });
-            totalCost += (bestBalance.valueUsd || 0) / 2;
-          }
-        }
-        
-        // Try to repay any debt with remaining balances
-        for (const borrowedReserve of borrowedReserves) {
-          const matchingBalance = balances.find(balance => 
-            balance.token.address.toLowerCase() === borrowedReserve.token.tokenUid.address.toLowerCase()
-          );
-          
-          if (matchingBalance && parseFloat(matchingBalance.amount) > 0) {
-            const debtAmount = parseFloat(borrowedReserve.variableBorrows);
-            const availableAmount = parseFloat(matchingBalance.amount);
-            const repayAmount = Math.min(debtAmount, availableAmount).toString();
-            
-            actions.push({
-              tool: 'repay',
-              tokenAddress: borrowedReserve.token.tokenUid.address,
-              amount: repayAmount,
-              description: `Repay ${repayAmount} ${borrowedReserve.token.symbol} debt`,
-            });
-            totalCost += parseFloat(repayAmount) * (matchingBalance.valueUsd || 0) / parseFloat(matchingBalance.amount);
-          }
-        }
-        
-        selectedStrategy = {
-          type: 'combined',
-          priority: 3,
-          estimatedCost: totalCost,
-          estimatedHealthImprovement: 0.3,
-          reason: 'Priority 3: Combined supply + repay strategy (insufficient single-token options)',
-          actions,
-        };
-        
-        console.log(`✅ Strategy 3 selected: Combined approach with ${actions.length} actions`);
-      }
-      // No viable strategy
-      else {
-        selectedStrategy = {
-          type: 'supply',
-          priority: 0,
-          estimatedCost: 0,
-          estimatedHealthImprovement: 0,
-          reason: 'No viable strategy found - insufficient balances for any prevention action',
-          actions: [],
-        };
-        
-        console.log(`❌ No viable strategy found`);
+      if (!llmResponse || !llmResponse.optimalAction) {
+        throw new Error('LLM did not provide an optimal action.');
       }
 
-      console.log(`🎯 Selected strategy: Priority ${selectedStrategy.priority} - ${selectedStrategy.reason}`);
+      const optimalAction = llmResponse.optimalAction;
+      console.log(`✅ LLM recommended optimal action: ${optimalAction.actionType} ${optimalAction.amountToken} ${optimalAction.asset}`);
 
-      // Create comprehensive response
+      // Step 3: Execute the optimal action using the imported tools
+      console.log('🚀 Step 3: Executing optimal action...');
+      let executionResult;
+      if (optimalAction.actionType === 'SUPPLY' || optimalAction.actionType === 'HYBRID') {
+        executionResult = await supplyCollateralTool.execute({
+          userAddress: args.userAddress,
+          tokenAddress: optimalAction.asset,
+          amount: optimalAction.amountToken,
+          chainId: args.chainId,
+        }, context);
+      } else if (optimalAction.actionType === 'REPAY') {
+        executionResult = await repayDebtTool.execute({
+          userAddress: args.userAddress,
+          tokenAddress: optimalAction.asset,
+          amount: optimalAction.amountToken,
+          chainId: args.chainId,
+        }, context);
+      } else {
+        throw new Error(`Unsupported action type from LLM: ${optimalAction.actionType}`);
+      }
+
+      if (executionResult.isError) {
+        throw new Error(`Failed to execute optimal action: ${executionResult.error.message}`);
+      }
+
       const message = [
         `🧠 **Intelligent Prevention Strategy Analysis**`,
         ``,
         `👤 **User:** ${args.userAddress}`,
-        `📊 **Current Health Factor:** ${currentHF?.toFixed(4) || 'N/A'}`,
+        `📊 **Current Health Factor:** ${liquidationData.positionSummary.currentHealthFactor}`,
         `🎯 **Target Health Factor:** ${targetHF}`,
         ``,
-        `📋 **Recommended Strategy:** ${selectedStrategy.type.toUpperCase()}`,
-        `💡 **Reasoning:** ${selectedStrategy.reason}`,
-        `💰 **Estimated Cost:** $${selectedStrategy.estimatedCost.toFixed(2)}`,
-        `📈 **Expected HF Improvement:** +${selectedStrategy.estimatedHealthImprovement.toFixed(4)}`,
+        `📋 **LLM Recommended Optimal Action:** ${optimalAction.actionType} ${optimalAction.amountToken} ${optimalAction.asset}`,
+        `💡 **Reasoning (from LLM):** Optimal action chosen based on analysis.`,
+        `📈 **Expected HF After Action:** ${optimalAction.expectedHealthFactor}`,
         ``,
-        `🔧 **Actions to Execute:**`,
-        ...selectedStrategy.actions.map(a => `  • ${a.description}`),
-        ``,
-        `⚠️  **Status:** Strategy analyzed successfully`,
-        `🕐 **Analyzed:** ${new Date().toLocaleString()}`,
-        ``,
-        `📝 **Note:** This is a strategy recommendation. Execute using the specific supply/repay tools.`,
+        `🚀 **Action Executed:** Successfully executed ${optimalAction.actionType} for ${optimalAction.amountToken} ${optimalAction.asset}.`,
+        `🕐 **Analyzed & Executed:** ${new Date().toLocaleString()}`,
       ].join('\n');
 
-      console.log(`✅ Strategy analysis complete: ${selectedStrategy.type} strategy recommended`);
+      console.log(`✅ Strategy analysis and execution complete.`);
 
       return createSuccessTask(
         'intelligent-prevention-strategy',
         undefined,
-        `🧠 Strategy Analysis: Recommended ${selectedStrategy.type} strategy for improving health factor from ${currentHF?.toFixed(4) || 'N/A'} to ${targetHF}. ${message}`
+        message
       );
 
     } catch (error) {
       console.error('❌ intelligentPreventionStrategy error:', error);
       return createErrorTask(
         'intelligent-prevention-strategy',
-        error instanceof Error ? error : new Error(`Failed to analyze prevention strategy: ${error}`)
+        error instanceof Error ? error : new Error(`Failed to analyze or execute prevention strategy: ${error}`)
       );
     }
   },
 };
- 
