@@ -15,23 +15,6 @@ const GetUserPositionsParams = z.object({
   userAddress: z.string().describe('The wallet address to fetch positions for'),
 });
 
-// Define types for the response structure
-interface PositionData {
-  healthFactor?: number;
-  totalSuppliedUsd?: number;
-  totalBorrowedUsd?: number;
-  positions?: Array<{
-    tokenSymbol: string;
-    tokenAddress: string;
-    chainId: string;
-    suppliedAmount?: number;
-    borrowedAmount?: number;
-    supplyApy?: number;
-    borrowApy?: number;
-    isCollateral?: boolean;
-  }>;
-}
-
 // getUserPositions tool implementation
 export const getUserPositionsTool: VibkitToolDefinition<typeof GetUserPositionsParams, any, LiquidationPreventionContext, any> = {
   name: 'get-user-positions',
@@ -66,29 +49,11 @@ export const getUserPositionsTool: VibkitToolDefinition<typeof GetUserPositionsP
       const totalSupplied = firstPosition?.totalCollateralUsd ? parseFloat(firstPosition.totalCollateralUsd) : 0;
       const totalBorrowed = firstPosition?.totalBorrowsUsd ? parseFloat(firstPosition.totalBorrowsUsd) : 0;
 
-      // export const TokenSchema = z.object({
-      //   tokenUid: TokenIdentifierSchema.describe("Unique identifier for the token, if it's not a native token."),
-      //   name: z.string().describe("Full name of the token, e.g., 'Ethereum'."),
-      //   symbol: z.string().describe("Symbol of the token, e.g., 'ETH'."),
-      //   isNative: z.boolean().describe("Whether this is the native token of the chain."),
-      //   decimals: z.number().describe("Number of decimal places the token uses."),
-      //   iconUri: z.string().optional().describe("URI for the token's icon."),
-      //   usdPrice: z.string().optional().describe("Current USD price of the token, as a string to maintain precision."),
-      //   isVetted: z.boolean().describe("Whether this token is considered vetted or trusted."),
-      // });
-
-      // console all values of token like symbol, name, isNative, decimals, iconUri, usdPrice, isVetted
-      positions.flatMap(pos => 
-        pos.userReserves.map(reserve => 
-          console.log("reserve........:", reserve.token)
-          // console.log("reserve........:", reserve.token.symbol, reserve.token.name, reserve.token.isNative, reserve.token.decimals, reserve.token.iconUri, reserve.token.usdPrice, reserve.token.isVetted)
-        )
-      );
 
       // Determine risk level based on health factor
       let riskLevel = 'SAFE';
       let riskColor = '🟢';
-      
+
       if (healthFactor !== undefined) {
         if (healthFactor <= context.custom.thresholds.critical) {
           riskLevel = 'CRITICAL';
@@ -101,17 +66,6 @@ export const getUserPositionsTool: VibkitToolDefinition<typeof GetUserPositionsP
           riskColor = '🟡';
         }
       }
-
-      const summary = {
-        userAddress: args.userAddress,
-        healthFactor,
-        riskLevel,
-        totalSuppliedUsd: totalSupplied,
-        totalBorrowedUsd: totalBorrowed,
-        positionCount: positions.length,
-        timestamp: new Date().toISOString(),
-      };
-
       // Create detailed response
       const message = [
         `${riskColor} **Position Summary for ${args.userAddress}**`,
@@ -123,10 +77,10 @@ export const getUserPositionsTool: VibkitToolDefinition<typeof GetUserPositionsP
         `📈 **Active Positions:** ${positions.length}`,
         ``,
         positions.length > 0 ? `**Position Details:**` : '',
-                 ...positions.flatMap(pos => 
-           pos.userReserves.map(reserve => 
-             `• ${reserve.token.symbol}: Supplied: ${reserve.underlyingBalance}, Borrowed: ${reserve.variableBorrows}`
-           )
+        ...positions.flatMap(pos =>
+          pos.userReserves.map(reserve =>
+            `• ${reserve.token.symbol}: Supplied: ${reserve.underlyingBalance}, Borrowed: ${reserve.variableBorrows}`
+          )
         ),
         ``,
         `🕐 **Last Updated:** ${new Date().toLocaleString()}`,

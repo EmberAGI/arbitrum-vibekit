@@ -8,7 +8,7 @@
 import { createSuccessTask, createErrorTask, type VibkitToolDefinition, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import { z } from 'zod';
 import { GetWalletLendingPositionsResponseSchema } from 'ember-schemas';
-import type { LiquidationPreventionContext } from '../context/types.js';
+import { MinimalErc20Abi, TokenBalance, type LiquidationPreventionContext } from '../context/types.js';
 import {
   createPublicClient,
   http,
@@ -17,44 +17,11 @@ import {
 } from 'viem';
 import { arbitrum } from 'viem/chains';
 
-// CoinGecko API function to fetch token prices
-// async function fetchTokenPrices(tokenAddresses: string[]): Promise<Record<string, number>> {
-//   if (tokenAddresses.length === 0) return {};
-//   // 'https://api.coingecko.com/api/v3/simple/token_price/arbitrum-one?contract_addresses=${addressesParam}&vs_currencies=usd
-//   // `https://api.coingecko.com/api/v3/simple/token_price/arbitrum-one?contract_addresses=${addressesParam}&vs_currencies=usd`;
+export interface ChainConfig {
+  viemChain: typeof arbitrum;
+  quicknodeSegment: string;
+}
 
-//   try {
-//     // CoinGecko API for Arbitrum tokens
-//     const addressesParam = tokenAddresses.map(addr => addr.toLowerCase()).join(',');
-//     const url = `https://api.coingecko.com/api/v3/simple/token_price/arbitrum-one?contract_addresses=${addressesParam}&vs_currencies=usd`;
-
-//     console.log(`🔍 Fetching prices from CoinGecko for ${tokenAddresses.length} tokens...`);
-//     const response = await fetch(url);
-//     console.log(response);
-//     console.log(url);
-
-//     if (!response.ok) {
-//       console.error(`❌ CoinGecko API error: ${response.status} ${response.statusText}`);
-//       return {};
-//     }
-
-//     const data = await response.json() as Record<string, any>;
-//     console.log(`✅ Successfully fetched prices from CoinGecko`);
-
-//     // Convert to our format: address -> price
-//     const prices: Record<string, number> = {};
-//     for (const [address, priceData] of Object.entries(data)) {
-//       if (priceData && typeof priceData === 'object' && 'usd' in priceData) {
-//         prices[address.toLowerCase()] = priceData.usd;
-//       }
-//     }
-
-//     return prices;
-//   } catch (error) {
-//     console.error('❌ Failed to fetch token prices from CoinGecko:', error);
-//     return {};
-//   }
-// }
 
 async function fetchTokenPrices(tokenAddresses: string[]): Promise<Record<string, number>> {
   const prices: Record<string, number> = {};
@@ -86,16 +53,6 @@ async function fetchTokenPrices(tokenAddresses: string[]): Promise<Record<string
   return prices;
 }
 
-// Minimal ERC20 ABI for balance check (based on lending-agent pattern)
-const MinimalErc20Abi = [
-  {
-    constant: true,
-    inputs: [{ name: '_owner', type: 'address' }],
-    name: 'balanceOf',
-    outputs: [{ name: 'balance', type: 'uint256' }],
-    type: 'function',
-  },
-] as const;
 
 // Input schema for getWalletBalances tool
 const GetWalletBalancesParams = z.object({
@@ -103,24 +60,7 @@ const GetWalletBalancesParams = z.object({
 });
 
 // Define types for the response structure
-interface TokenBalance {
-  tokenSymbol: string;
-  tokenAddress: string;
-  chainId: string;
-  balance: string;
-  balanceUsd?: number;
-  decimals: number;
-  hasSupply: boolean;
-  hasBorrow: boolean;
-  suppliedAmount?: string;
-  borrowedAmount?: string;
-}
 
-// Chain configuration for RPC calls (based on transactionExecutor pattern)
-interface ChainConfig {
-  viemChain: typeof arbitrum;
-  quicknodeSegment: string;
-}
 
 const chainIdMap: Record<string, ChainConfig> = {
   '42161': { viemChain: arbitrum, quicknodeSegment: 'arbitrum-mainnet' },

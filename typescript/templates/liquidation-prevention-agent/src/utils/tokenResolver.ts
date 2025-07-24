@@ -73,7 +73,7 @@ export function resolveTokenInfo(
           return preferredToken;
         }
       }
-      
+
       // Otherwise, require clarification
       const chainOptions = findResult.options
         .map(token => {
@@ -120,7 +120,7 @@ export function getChainName(chainId: string): string {
     '8453': 'Base',
     '42161': 'Arbitrum One',
   };
-  
+
   return chainNames[chainId] || `Chain ${chainId}`;
 }
 
@@ -134,11 +134,11 @@ export function isTokenSymbol(input: string): boolean {
   if (input.startsWith('0x') && input.length === 42) {
     return false;
   }
-  
+
   // Symbols are typically 2-6 characters, all uppercase or mixed case
   if (input.length >= 2 && input.length <= 10 && !/^0x/.test(input)) {
     return true;
   }
-  
+
   return false;
-} 
+}

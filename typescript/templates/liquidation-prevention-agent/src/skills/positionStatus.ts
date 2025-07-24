@@ -11,6 +11,7 @@ import { defineSkill } from 'arbitrum-vibekit-core';
 import { z } from 'zod';
 import { getUserPositionsTool } from '../tools/getUserPositions.js';
 import { getWalletBalancesTool } from '../tools/getWalletBalances.js';
+import { testLiquidationDataTool } from '../tools/testLiquidationData.js';
 
 // Input schema for the position status skill
 const PositionStatusInputSchema = z.object({
@@ -33,7 +34,7 @@ export const positionStatusSkill = defineSkill({
     'Show me my current health factor and position details',
     'Get my current Aave position information',
     'What are my current positions and how safe am I from liquidation?',
-    
+
     // Wallet balance specific examples
     'Show my wallet token balances',
     'Check my wallet balances for liquidation prevention',
@@ -45,10 +46,17 @@ export const positionStatusSkill = defineSkill({
     'Check wallet balances for tokens I can supply or repay with',
     'Display my wallet token holdings',
     'Show my available token amounts for liquidation prevention',
+    // LiquidationPreventionData structure test examples
+    'Show me the full liquidation prevention data structure',
+    'Test the LiquidationPreventionData output',
+    'Display all asset data for LLM analysis',
+    'Generate the liquidation prevention data for my account',
+    'Show the structured data for liquidation prevention',
   ],
   inputSchema: PositionStatusInputSchema,
   tools: [
     getUserPositionsTool,        // ✅ Immediate position lookup and health status
     getWalletBalancesTool,       // ✅ Current wallet balance information
+    testLiquidationDataTool,     // ✅ Test and display LiquidationPreventionData format
   ],
 }); 
