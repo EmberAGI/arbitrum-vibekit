@@ -10,7 +10,7 @@ describe('Liquidation Prevention Agent Integration', () => {
     });
 
     it('should be able to import agent configuration', async () => {
-        const { agentConfig } = await import('../src/index.js');
+        const { agentConfig } = await import('../src/config.ts');
         expect(agentConfig).toBeDefined();
         expect(agentConfig.name).toContain('Liquidation Prevention Agent');
         expect(agentConfig.skills).toBeDefined();
@@ -18,7 +18,7 @@ describe('Liquidation Prevention Agent Integration', () => {
     });
 
     it('should have position status skill in agent configuration', async () => {
-        const { agentConfig } = await import('../src/index.js');
+        const { agentConfig } = await import('../src/config.ts');
         const skill = agentConfig.skills.find(skill => skill.id === 'position-status');
         expect(skill).toBeDefined();
         expect(skill!.name).toBe('Position Status & Health Check');
@@ -26,7 +26,7 @@ describe('Liquidation Prevention Agent Integration', () => {
     });
 
     it('should have health monitoring skill in agent configuration', async () => {
-        const { agentConfig } = await import('../src/index.js');
+        const { agentConfig } = await import('../src/config.ts');
         const skill = agentConfig.skills.find(skill => skill.id === 'health-monitoring');
         expect(skill).toBeDefined();
         expect(skill!.name).toBe('Health Factor Monitoring & Auto-Prevention');
@@ -34,7 +34,7 @@ describe('Liquidation Prevention Agent Integration', () => {
     });
 
     it('should have liquidation prevention skill in agent configuration', async () => {
-        const { agentConfig } = await import('../src/index.js');
+        const { agentConfig } = await import('../src/config.ts');
         const skill = agentConfig.skills.find(skill => skill.id === 'liquidation-prevention');
         expect(skill).toBeDefined();
         expect(skill!.name).toBe('Liquidation Prevention');
@@ -42,7 +42,7 @@ describe('Liquidation Prevention Agent Integration', () => {
     });
 
     it('should have all required skills', async () => {
-        const { agentConfig } = await import('../src/index.js');
+        const { agentConfig } = await import('../src/config.ts');
         const skillIds = agentConfig.skills.map(skill => skill.id);
         expect(skillIds).toContain('position-status');
         expect(skillIds).toContain('health-monitoring');
@@ -50,7 +50,7 @@ describe('Liquidation Prevention Agent Integration', () => {
     });
 
     it('should have correct agent metadata', async () => {
-        const { agentConfig } = await import('../src/index.js');
+        const { agentConfig } = await import('../src/config.ts');
         expect(agentConfig.version).toBeDefined();
         expect(agentConfig.description).toContain('liquidation prevention');
         expect(agentConfig.capabilities).toBeDefined();
@@ -60,7 +60,7 @@ describe('Liquidation Prevention Agent Integration', () => {
 
     it('should be able to create agent with current configuration', async () => {
         const { Agent } = await import('arbitrum-vibekit-core');
-        const { agentConfig } = await import('../src/index.js');
+        const { agentConfig } = await import('../src/config.ts');
         expect(() => Agent.create(agentConfig)).not.toThrow();
         const agent = Agent.create(agentConfig);
         expect(agent).toBeDefined();
@@ -70,7 +70,7 @@ describe('Liquidation Prevention Agent Integration', () => {
 
     it('should have MCP server with registered tools', async () => {
         const { Agent } = await import('arbitrum-vibekit-core');
-        const { agentConfig } = await import('../src/index.js');
+        const { agentConfig } = await import('../src/config.ts');
         const agent = Agent.create(agentConfig);
         expect(agent.mcpServer).toBeDefined();
         expect(agent.card.skills.length).toBe(agentConfig.skills.length);
