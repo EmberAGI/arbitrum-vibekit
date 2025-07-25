@@ -17,11 +17,28 @@ You can call these tools directly from your agent, or **wrap them in adapters** 
 
 The framework comes with a growing library of ready-made services:
 
-- `providers/emberai/`: On-chain DeFi execution
+- **Ember AI** (Remote): On-chain DeFi execution via `@http://api.emberai.xyz/mcp`
 - `providers/allora`: Token price forecasting
 - `providers/trendmoon`: Social sentiment metrics
 
-Each is an MCP server, not a client. That means you can **treat it like any other tool** in your agent, or pass it directly to the LLM.
+Remote services like Ember AI are accessed via MCP connections, while local providers are MCP servers you can run directly. Both can be **treated like any other tool** in your agent, or passed directly to the LLM.
+
+#### **Connecting to Remote Ember AI**
+
+To use Ember AI's remote MCP server in your agent:
+
+```bash
+# .env
+EMBER_ENDPOINT=@http://api.emberai.xyz/mcp
+```
+
+The framework automatically handles the connection setup using `StreamableHTTPClientTransport`. In your context provider or tools, access the client as:
+
+```ts
+const emberClient = deps.mcpClients['ember'];
+```
+
+**Note:** The deprecated `emberai-mcp` local folder has been replaced by this remote service. Update your environment variables and client references accordingly.
 
 ---
 
@@ -51,10 +68,10 @@ They use the **same before/after hook pattern** as your normal tools, so you can
 Example:
 
 ```ts
-import { getPrice } from "arbitrum-vibekit/providers/price";
-import { withPaywall } from "arbitrum-vibekit/paywall";
+import { getPrice } from 'arbitrum-vibekit/providers/price';
+import { withPaywall } from 'arbitrum-vibekit/paywall';
 
-export const before = (ctx) => {
+export const before = ctx => {
   ctx.args.symbol = ctx.args.symbol.toUpperCase();
 };
 

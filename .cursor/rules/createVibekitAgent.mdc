@@ -3,25 +3,29 @@ description:
 globs: 
 alwaysApply: true
 ---
-# Arbitrum Vibekit Agent Creation Guide
+# Arbitrum Vibekit V2 Agent Creation Guide
 
-_A comprehensive guide for creating on-chain AI agents using the Arbitrum Vibekit framework - enabling vibe coding (AI-generated working code) in minutes._
+_A comprehensive guide for creating on-chain AI agents using the Arbitrum Vibekit v2 framework - enabling vibe coding (AI-generated working code) in minutes._
 
 ## Core Principles
 
 1. **Continuous Learning**: When users correct assumptions or suggest improvements, ask if they should be incorporated into this guide
 2. **No Hacks**: Always prioritize robust, idiomatic solutions over workarounds (e.g., avoid stubbing `*.d.ts` files)
-3. **Framework First**: Use Vibekit patterns and abstractions rather than custom implementations
+3. **Framework First**: Use Vibekit v2 patterns and abstractions rather than custom implementations
+4. **Skills-First Architecture**: Define what your agent can do through skills that coordinate multiple tools
+5. **LLM Orchestration**: Let AI intelligently route and coordinate complex multi-tool workflows
 
 ## Architecture Overview
 
-- Agents are MCP servers themselves
+- Agents are MCP servers themselves using the v2 framework
 - Agents have internal tools and can also use external MCP tools to perform actions
+- **Modern Transport**: StreamableHTTP (default) with legacy SSE backwards compatibility
 - MCP server connections:
-  - **Remote**: SSE/WebSocket via URL
+  - **Remote**: StreamableHTTP/SSE via URL
   - **Local**: STDIO via files in `typescript/lib/mcp-tools/`
 - Agents live in `typescript/templates/`, external service tools in `typescript/lib/mcp-tools/`
 - **Each skill is served as a tool of the agent's own MCP server**
+- **Agent Cards**: Automatic service discovery via `/.well-known/agent.json`
 
 ## Skill and Tool Design
 
@@ -40,10 +44,11 @@ Skills follow the A2A (Agent-to-Agent) protocol:
 - **Opaque Implementation** - Internal workings hidden from callers
 - **Clear Interface** - Well-defined inputs and outputs
 
-The framework is designed to be:
+The v2 framework is designed to be:
 - **Accessible** - Clear patterns for beginners
 - **Flexible** - Complex orchestrations for advanced users
 - **Extensible** - Easy to add tools without breaking changes
+- **Production Ready** - Built-in health checks, metrics, agent cards
 
 ### Skills vs Tools: External vs Internal
 
@@ -60,8 +65,53 @@ export const lendingSkill = defineSkill({
   description: 'Perform lending operations on Aave protocol',    // Required
   tags: ['defi', 'lending', 'aave'],                            // Min 1 tag
   examples: ['Supply 100 USDC to Aave', 'Borrow 50 DAI'],      // Min 1 example
-  inputSchema: z.object({ instruction: z.string() }),
+  inputSchema: z.object({ 
+    instruction: z.string(),
+    walletAddress: z.string() 
+  }),
   tools: [supplyTool, borrowTool, repayTool, withdrawTool]
+  // No handler = LLM orchestration (recommended)
+});
+```
+
+## V2 Development Patterns
+
+### Provider Selection
+Unified LLM provider access across multiple providers:
+
+```typescript
+const providers = createProviderSelector({
+  openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  xaiApiKey: process.env.XAI_API_KEY,
+});
+
+const agent = Agent.create(agentConfig, {
+  llm: { model: providers.openrouter('google/gemini-2.5-flash') }
+});
+```
+
+### Context Providers
+Share data across tools cleanly:
+
+```typescript
+export const contextProvider: ContextProvider<MyContext> = async (deps) => {
+  return {
+    tokenMap: await loadTokenMap(),
+    rpcProvider: createProvider(process.env.RPC_URL),
+    emberClient: deps.mcpClients['ember'],
+  };
+};
+```
+
+### Hook Enhancement
+Add cross-cutting concerns without cluttering business logic:
+
+```typescript
+export const enhancedTool = withHooks(baseTool, {
+  before: [validateInputHook, authHook],
+  after: [formatResponseHook, metricsHook],
 });
 ```
 
@@ -246,33 +296,25 @@ tools: [executeSwapWorkflow]
 
 ### Core Dependencies
 - **Build System**: pnpm workspace (root: `typescript/`)
-- **AI Framework**: Vercel AI SDK (`ai`) with OpenRouter provider (`@openrouter/ai-sdk-provider`)
-- **Protocol**: Model Context Protocol (MCP) SDK (`@modelcontextprotocol/sdk`)
+- **AI Framework**: Vercel AI SDK (`ai`) with provider selector for multiple LLM providers
+- **Protocol**: Model Context Protocol (MCP) SDK (`@modelcontextprotocol/sdk`) with StreamableHTTP transport
 - **Blockchain**: Viem (`viem`), OpenZeppelin (`@openzeppelin/contracts`)
+- **V2 Framework**: `arbitrum-vibekit-core` with skills, tools, hooks, and context providers
 
 ### Workspace Structure
-- `typescript/templates/` - Fully functional agents
+- `typescript/templates/` - V2 production-ready agent templates
 - `typescript/lib/` - Supporting packages and MCP tools
-- Two workspace package directories: `typescript/templates/` for fully functional AI agents and `typescript/lib/` for supporting packages
-- Key packages: `arbitrum-vibekit-core`, `ember-mcp-tool-server`
+- Key packages: `arbitrum-vibekit-core`, `ember-api`, `mcp-tools`
 
-## Setup Instructions
+## V2 Agent Directory Structure
 
-```bash
-# From typescript/ directory
-pnpm install
-pnpm build
-
-# From agent directory
-pnpm dev
-```
-
-## Typical Agent Directory Structure
+V2 agents follow this standard structure:
 
 ```
 agent-name/
 ├── src/
 │   ├── index.ts          # Agent entry point and MCP server setup
+│   ├── config.ts         # Agent configuration
 │   ├── skills/           # Skill definitions (high-level capabilities)
 │   │   ├── lending.ts    # Example: lending skill with multiple tools
 │   │   ├── trading.ts    # Example: trading skill
@@ -289,6 +331,8 @@ agent-name/
 ├── test/                 # Test files
 ├── package.json          # Agent dependencies
 ├── tsconfig.json         # TypeScript configuration
+├── Dockerfile           # Container definition
+├── Dockerfile.prod      # Production container
 └── README.md            # Agent documentation
 ```
 
@@ -298,3 +342,53 @@ agent-name/
 - **hooks/**: Optional enhancement functions that can modify tool inputs/outputs or add logging.
 - **context/**: Optional shared state and type definitions used across the agent.
 - **index.ts**: Sets up the MCP server and registers all skills.
+
+## Modern Transport and Deployment
+
+### Agent Cards & Service Discovery
+Every v2 agent automatically publishes an agent card:
+
+```json
+// GET /.well-known/agent.json
+{
+  "name": "Lending Agent",
+  "version": "1.0.0",
+  "description": "A DeFi lending agent for Aave protocol",
+  "skills": [...],
+  "endpoints": {
+    "mcp": "/mcp",
+    "health": "/health"
+  }
+}
+```
+
+### Modern Transport
+- **StreamableHTTP** (default): Latest MCP SDK, better performance
+- **Legacy SSE**: Backwards compatibility via `enableLegacySseTransport: true`
+
+### Production Features
+- Built-in health endpoints
+- Metrics collection
+- Structured logging
+- Docker containers
+- Environment-based configuration
+
+## Setup Instructions
+
+```bash
+# From typescript/ directory
+pnpm install
+pnpm build
+
+# Use a v2 template
+cd templates
+cp -r quickstart-agent my-custom-agent
+cd my-custom-agent
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your API keys
+
+# Start development
+pnpm dev
+```
