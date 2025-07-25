@@ -805,7 +805,8 @@ Rules:
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
-        model: openrouter('x-ai/grok-3-mini'),
+        model: openrouter('deepseek/deepseek-chat-v3-0324:free
+'),
         messages: this.conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,
