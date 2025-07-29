@@ -18,44 +18,46 @@ The Ember MCP server provides the following tools, each mapped to specific DeFi 
 
 ### Token Swapping
 
-- **`swapTokens`** - Cross-chain token swaps via DEX aggregation
+- **`swapTokens`** : Cross-chain token swaps via DEX aggregation
 
 ### Lending & Borrowing (Aave Protocol)
 
-- **`lendingSupply`** - Supply assets to earn yield
-- **`lendingWithdraw`** - Withdraw supplied assets
-- **`lendingBorrow`** - Borrow against collateral
-- **`lendingRepay`** - Repay borrowed assets
+- **`lendingSupply`** : Supply assets to earn yield
+- **`lendingWithdraw`** : Withdraw supplied assets
+- **`lendingBorrow`** : Borrow against collateral
+- **`lendingRepay`** : Repay borrowed assets
 
 ### Liquidity Operations (Camelot DEX)
 
-- **`supplyLiquidity`** - Add liquidity to pools
-- **`withdrawLiquidity`** - Remove liquidity from pools
-- **`getLiquidityPools`** - Query available pools
+- **`supplyLiquidity`** : Add liquidity to pools
+- **`withdrawLiquidity`** : Remove liquidity from pools
+- **`getLiquidityPools`** : Query available pools
 
 ### Market Data & Information
 
-- **`getTokenMarketData`** - Real-time token prices
-- **`getTokens`** - Available tokens across chains
-- **`getChains`** - Supported blockchain networks
-- **`getCapabilities`** - Protocol capabilities by chain
+- **`getTokenMarketData`** : Real-time token prices
+- **`getTokens`** : Available tokens across chains
+- **`getChains`** : Supported blockchain networks
+- **`getCapabilities`** : Protocol capabilities by chain
 
 ### Wallet & Portfolio
 
-- **`getWalletBalances`** - Token balances across chains
-- **`getWalletLendingPositions`** - Lending/borrowing positions
-- **`getWalletLiquidityPositions`** - LP positions
-- **`getYieldMarkets`** - Available yield opportunities
+- **`getWalletBalances`** : Token balances across chains
+- **`getWalletLendingPositions`** : Lending/borrowing positions
+- **`getWalletLiquidityPositions`** : LP positions
+- **`getYieldMarkets`** : Available yield opportunities
 
 ### Transaction Tracking
 
-- **`getProviderTrackingStatus`** - Track transaction status
+- **`getProviderTrackingStatus`** : Track transaction status
 
 ## Installation
 
 ```bash
-npm install ember-api
-# or
+# Add to your package.json dependencies
+"ember-api": "workspace:*"
+
+# Or install from the monorepo workspace
 pnpm add ember-api
 ```
 
@@ -68,43 +70,39 @@ import { EmberMcpClient } from 'ember-api';
 const client = new EmberMcpClient('https://api.emberai.xyz/mcp');
 await client.connect();
 
-// Swap tokens on same chain
+// Swap tokens on the same chain (Arbitrum)
 const swapResult = await client.swapTokens({
-  fromTokenAddress: '0x...', // USDC address
-  fromTokenChainId: '42161', // Arbitrum
-  toTokenAddress: '0x...', // ETH address
-  toTokenChainId: '42161',
+  orderType: 'MARKET_BUY',
+  baseToken: { address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', chainId: '42161' }, // USDC
+  quoteToken: { address: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', chainId: '42161' }, // WETH
   amount: '10000000', // 10 USDC (6 decimals)
-  userAddress: '0x...',
+  recipient: '0x...',
 });
 
-// Supply to lending protocol (Aave)
+// Supply to the lending protocol (Aave)
 const supplyResult = await client.lendingSupply({
-  tokenAddress: '0x...',
-  tokenChainId: '42161',
-  amount: '100000000000000000', // 0.1 ETH
-  userAddress: '0x...',
+  tokenUid: { address: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', chainId: '42161' }, // WETH
+  amount: '100000000000000000', // 0.1 WETH (18 decimals)
+  walletAddress: '0x...',
 });
 
-// Add liquidity to pools (Camelot)
+// Add liquidity to Camelot V3 pool (full range)
 const liquidityTx = await client.supplyLiquidity({
-  token0Address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // USDC
-  token0ChainId: '42161',
-  token0Amount: '25000000', // 25 USDC
-  token1Address: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', // WETH
-  token1ChainId: '42161',
-  token1Amount: '10000000000000000', // 0.01 ETH
-  userAddress: '0x...',
+  token0: { address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', chainId: '42161' }, // USDC
+  token1: { address: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', chainId: '42161' }, // WETH
+  amount0: '25000000', // 25 USDC (6 decimals)
+  amount1: '10000000000000000', // 0.01 WETH (18 decimals)
+  range: { type: 'full' },
+  walletAddress: '0x...',
 });
 
-// Cross-chain swaps
+// Cross-chain swap (Arbitrum → Ethereum Mainnet)
 const crossChainSwap = await client.swapTokens({
-  fromTokenAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // USDC on Arbitrum
-  fromTokenChainId: '42161',
-  toTokenAddress: '0x0000000000000000000000000000000000000000', // Native ETH
-  toTokenChainId: '1', // Ethereum mainnet
+  orderType: 'MARKET_BUY',
+  baseToken: { address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', chainId: '42161' }, // USDC (Arbitrum)
+  quoteToken: { address: '0x0000000000000000000000000000000000000000', chainId: '1' }, // Native ETH (Mainnet)
   amount: '20000000', // 20 USDC
-  userAddress: '0x...',
+  recipient: '0x...',
 });
 
 client.close();
@@ -117,6 +115,7 @@ All tool responses include transaction plans that can be executed:
 ```typescript
 interface ToolResponse {
   transactions: TransactionPlan[];
+  chainId: string;
   // ... other tool-specific data
 }
 

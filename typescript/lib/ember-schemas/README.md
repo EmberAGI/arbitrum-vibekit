@@ -6,10 +6,10 @@ TypeScript schemas and type definitions for the Ember API ecosystem, providing s
 
 This package contains all the Zod schemas, TypeScript types, and validation logic used across the Ember ecosystem for:
 
-- **Request/Response validation**
-- **Type safety**
-- **Schema composition**
-- **Runtime validation**
+- **Agent tool parameter validation**
+- **Agent response type safety**
+- **AI-friendly schema composition**
+- **Runtime validation for agent inputs**
 
 ## Schema Categories
 
@@ -17,41 +17,49 @@ This package contains all the Zod schemas, TypeScript types, and validation logi
 
 Fundamental building blocks used across all protocols:
 
-- `TokenIdentifierSchema` - Token identification across chains
-- `TransactionPlanSchema` - Transaction execution plans
-- `AskEncyclopediaSchema` - Protocol documentation queries
+- `TokenIdentifierSchema` : Token identification across chains
+- `TransactionPlanSchema` : Transaction execution plans
+- `AskEncyclopediaSchema` : Protocol documentation queries
 
 ### Lending Schemas (`lending.ts`)
 
 Aave protocol lending and borrowing operations:
 
-- `BorrowRepaySupplyWithdrawSchema` - Tool parameters for lending operations
-- `SupplyResponseSchema`, `BorrowResponseSchema` - MCP response validation
-- `LendingPositionSchema` - User position data structures
+- `BorrowRepaySupplyWithdrawSchema` : Tool parameters for lending operations
+- `SupplyResponseSchema`, `BorrowResponseSchema`, `RepayResponseSchema`, `WithdrawResponseSchema` : MCP response validation
+- `LendingPositionSchema` : User position data structures
 
 ### Swapping Schemas (`swapping.ts`)
 
 Cross-chain token swap operations:
 
-- `SwapTokensArgsSchema` - Swap parameters and validation
-- `SwapPreviewSchema` - Swap estimation data
-- `SwapTokensTransactionArtifactSchema` - Transaction artifacts
+- `SwapTokensSchema` : Swap parameters and validation
+- `SwapPreviewSchema` : Swap estimation data
+- `SwapResponseSchema` : MCP response validation
 
 ### Liquidity Schemas (`liquidity.ts`)
 
 Camelot DEX liquidity pool operations:
 
-- `SupplyWithdrawLiquiditySchema` - Liquidity operation parameters
-- `LiquidityPoolSchema` - Pool information structures
-- `UserLiquidityPositionSchema` - LP position tracking
+- `SupplyLiquiditySchema`, `WithdrawLiquiditySchema` : Liquidity operation parameters
+- `LiquidityPoolSchema` : Pool information structures
+- `LiquidityPositionArtifactSchema` : LP position tracking
+
+### Pendle Schemas (`pendle.ts`)
+
+Pendle yield and swap operations:
+
+- `SwapTokensParamsSchema` : Swap parameters for Pendle protocol
+- `PendleSwapPreviewSchema` : Human-readable swap preview data
+- `YieldMarketSchema` : Yield market information structures
 
 ### Token & Balance Schemas (`token.ts`, `balance.ts`)
 
 Token metadata and wallet balance operations:
 
-- `TokenSchema` - Token information and metadata
-- `GetMarketDataSchema` - Market data request parameters
-- `GetWalletBalancesSchema` - Balance query structures
+- `TokenSchema` : Token information and metadata
+- `GetMarketDataSchema` : Market data request parameters
+- `GetWalletBalancesSchema` : Balance query structures
 
 ## Agent Tool Schemas
 
@@ -59,17 +67,16 @@ Each agent tool has corresponding parameter and response schemas:
 
 **Tool Parameter Schemas** (validate agent inputs):
 
-- `BorrowRepaySupplyWithdrawSchema` - lending operations
-- `SupplyWithdrawLiquiditySchema` - liquidity operations
-- `SwapTokensArgsSchema` - swapping operations
-- `GetMarketDataSchema` - market data queries
+- `BorrowRepaySupplyWithdrawSchema` : lending operations
+- `SupplyLiquiditySchema`, `WithdrawLiquiditySchema` : liquidity operations
+- `SwapTokensSchema` : swapping operations
+- `GetMarketDataSchema` : market data queries
 
 **Response Schemas** (validate MCP responses):
 
-- `SupplyResponseSchema`, `BorrowResponseSchema` - lending responses
-- `SupplyLiquidityResponseSchema` - liquidity responses
-- `SwapTokensResponseSchema` - swap responses
-- `GetMarketDataResponseSchema` - market data responses
+- `SupplyResponseSchema`, `BorrowResponseSchema`, `RepayResponseSchema`, `WithdrawResponseSchema` : lending responses
+- `SwapResponseSchema` : swap responses
+- `GetMarketDataResponseSchema` : market data responses
 
 ## Usage Patterns
 
@@ -78,14 +85,14 @@ Each agent tool has corresponding parameter and response schemas:
 Validate user inputs and API responses at runtime:
 
 ```typescript
-import { SwapTokensArgsSchema } from 'ember-schemas';
+import { SwapTokensSchema } from 'ember-schemas';
 
 function handleSwapRequest(userInput: unknown) {
   try {
-    const validatedInput = SwapTokensArgsSchema.parse(userInput);
+    const validatedInput = SwapTokensSchema.parse(userInput);
     console.log(`Swapping ${validatedInput.amount} ${validatedInput.fromToken}`);
   } catch (error) {
-    console.error('Invalid swap parameters:', error.message);
+    console.error('Invalid swap parameters:', (error as Error).message);
   }
 }
 ```
