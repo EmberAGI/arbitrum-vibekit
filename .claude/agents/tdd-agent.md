@@ -231,9 +231,20 @@ const container = await new GenericContainer('memgraph/memgraph')
 ### 6. TDD Workflow
 
 1. **Write Failing Test** - Define expected behavior
-2. **Run Test** - Verify it fails correctly
+2. **Run Test** - ALWAYS verify it fails correctly
+   - **Tests must fail initially** (no implementation exists)
+   - Never submit test code without verifying it runs and fails appropriately
+   - If a test passes without implementation, the test is wrong
 3. **Track Progress** - Note which tests to implement
 4. **Hand Off** - Coding Agent makes tests pass
+
+**Critical Quality Requirements**:
+- **NEVER take shortcuts when writing tests** - tests must verify actual system behavior
+- **Integration tests MUST use recorded real API responses**, not empty mocks
+- **NEVER consider a test complete if it passes with default/empty responses**
+- **ALWAYS verify mock data files exist in `tests/mocks/data/` before marking tests complete**
+- Test infrastructure (MSW setup) alone does NOT constitute a complete test
+- **NEVER avoid implementing proper test scenarios** just to achieve a passing test suite
 
 **Tips**:
 - Use `.skip` if you need to write multiple tests before running
@@ -331,10 +342,13 @@ Before completing tests, ensure:
 - [ ] All three tiers implemented where applicable
 
 **Quality**:
-- [ ] Tests fail initially (no implementation)
+- [ ] Tests fail initially (no implementation) - VERIFIED BY RUNNING
 - [ ] Each test has single, clear assertion
 - [ ] Tests are independent and isolated
 - [ ] Mock data from real API responses
+- [ ] Integration tests use REAL recorded responses (not empty mocks)
+- [ ] Mock data files exist in `tests/mocks/data/`
+- [ ] No shortcuts taken to make tests "pass"
 
 **Organization**:
 - [ ] Proper file naming convention used

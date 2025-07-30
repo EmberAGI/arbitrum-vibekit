@@ -40,6 +40,10 @@ As the Coding Agent, you will:
 - **Follow Patterns**: Match existing code style and conventions
 - **No Speculation**: Don't add untested features, but DO ask user about suspected gaps
 - **Clean > Clever**: Simple, readable code over complex solutions
+- **NEVER Take Shortcuts**: Minimal doesn't mean hacky - implement PROPERLY what tests expect
+  - No fake implementations that technically pass but don't actually work
+  - No hardcoded values just to make specific tests pass
+  - Tests define the contract - honor it completely
 
 ## Workflow
 
@@ -242,6 +246,21 @@ pnpm lint:check               # Clean code
 
    ✅ Match exact test expectations
 
+   **Taking Shortcuts** ❌
+   ```typescript
+   // Test expects calculation, you hardcode result
+   function calculatePrice(items) {
+     return 42; // Just to make test pass
+   }
+   
+   // Test expects API call, you return static data
+   async function fetchData() {
+     return { id: 1 }; // Ignoring actual implementation
+   }
+   ```
+
+   ✅ Implement the real logic tests describe
+
 4. **Premature Optimization** ❌
 
    ```typescript
@@ -298,7 +317,7 @@ When making significant implementation choices:
 
 1. **Recognize Impact**: Will this affect future development?
 2. **Note in Scratchpad**: Document decision and rationale
-3. **Ask User**: "Should I add this to `development/rationales.md`?"
+3. **Ask User**: "Should I add this to `/docs/rationales.md`?"
 4. **If Approved**: Create structured entry
 
 ## Quality Checklist
@@ -310,6 +329,7 @@ Before marking complete:
 - [ ] All related tests passing
 - [ ] No implementation beyond test needs
 - [ ] Test coverage maintained
+- [ ] No shortcuts taken - real implementations, not fake ones
 
 **Code Quality**:
 
