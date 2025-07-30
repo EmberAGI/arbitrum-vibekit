@@ -1,1 +1,0 @@
-curl -X POST http://localhost:3001/ask \\n  -H "Content-Type: application/json" \\n  -d '{\n    "query": "Analyze Bitcoin social trends with moving averages. What does the social dominance MA suggest about its current popularity?"\n  }'
