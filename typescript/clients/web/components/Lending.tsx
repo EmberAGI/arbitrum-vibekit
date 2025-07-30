@@ -43,6 +43,8 @@ export function Lending({
     address,
     currentChainId: chainId,
     switchChainAsync,
+    agentType: 'lending', // Specify this is a lending transaction
+    methodName: txPreview?.action || 'lending', // Use the action from preview or default to 'lending'
   });
 
   const needsApproval = totalApprovals > 0;
@@ -57,7 +59,7 @@ export function Lending({
           {/* Preview Rendering */}
           <div className="rounded-xl bg-zinc-700 p-4 flex flex-col gap-2">
             <span className="font-normal flex gap-3 w-full items-center text-sm">
-              Action: {txPreview.action?.toUpperCase()}
+              Action: `${txPreview.action?.toUpperCase()}this is lending page part!`
             </span>
             <p className="font-normal w-full ">
               <span className="font-normal">

@@ -50,6 +50,13 @@
       "when": 1748557053348,
       "tag": "0006_loose_iron_lad",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1752646549305,
+      "tag": "0007_loose_onslaught",
+      "breakpoints": true
     }
   ]
 }

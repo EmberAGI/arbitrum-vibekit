@@ -144,9 +144,27 @@ export const MessageRenderer = ({
           toolInvocationParsableString || '{Error: An error occurred while parsing the result}'
         )
       : null;
-    const getKeyFromResult = (key: string) =>
-      toolInvocationResult?.artifacts?.[0]?.parts[0]?.data?.[key] || null;
+    const getKeyFromResult = (key: string) => {
+      // First try the default structure
+      let result = toolInvocationResult?.artifacts?.[0]?.parts[0]?.data?.[key];
+      
+      // If not found, try looking in different artifact types
+      if (!result && toolInvocationResult?.artifacts) {
+        for (const artifact of toolInvocationResult.artifacts) {
+          if (artifact.name === 'liquidity-transaction' || 
+              artifact.name === 'transaction-plan') {
+            result = artifact.parts?.[0]?.data?.[key];
+            if (result) break;
+          }
+        }
+      }
+      
+      return result || null;
+    };
 
+    console.log('toolInvocationResult', toolInvocationResult);
+    // Add this to the console to see what's being returned
+    console.log('Full toolInvocationResult:', JSON.stringify(toolInvocationResult, null, 2));
     // Default keys
     const txPlan = getKeyFromResult('txPlan');
     const txPreview = getKeyFromResult('txPreview');
