@@ -1,6 +1,6 @@
-# Arbitrum Vibekit Core – Rationale Log
+# Arbitrum Vibekit - Architectural Decision Records
 
-> This document records the rationale behind every major design and implementation decision, as captured in the project scratchpad and reflected in the `agent.ts` class. It is intended as a living, chronological log to help new contributors understand why the system is architected as it is.
+> This document consolidates all architectural and implementation decisions across the Arbitrum Vibekit project. Each entry is chronologically ordered and captures the rationale behind major design choices to help contributors understand why the system is architected as it is.
 
 ---
 
@@ -231,7 +231,7 @@
 ## Runtime Schema Conversion for Remote Tools
 
 - **Decision:** Remote tool input schemas (JSON Schema) are converted to Zod schemas at runtime for validation and type safety in the local framework.
-- **Rationale:** Ensures that all tool invocations—local or remote—benefit from the same validation, error handling, and developer ergonomics, even when the tool's schema is not known until runtime.
+- **Rationale:** Ensures that all tool invocations--local or remote--benefit from the same validation, error handling, and developer ergonomics, even when the tool's schema is not known until runtime.
 - **Reference:** Scratchpad §Dynamic Adapter Strategy, §Key Challenges
 
 ---
@@ -284,7 +284,7 @@
 - **Rationale:** Without the LLM reasoning engine, the agent cannot interpret skill requests or decide which tools to use. The MCP server from v1 is just an empty interface without the "brain" to process requests. Once basic LLM integration works, we can layer on sophisticated tool management, adapters, and dynamic discovery.
 - **Reference:** Release plan restructuring, architectural dependencies.
 
-## Implementation Details for Future Releases 🚀
+## Implementation Details for Future Releases =§
 
 Based on the scratchpad vision, here are the key implementation details planned for v2 and beyond:
 
@@ -321,7 +321,7 @@ Based on the scratchpad vision, here are the key implementation details planned 
 ### v3: Simplified Developer Surface
 
 - **Decision:** Single `defineTools()` manifest for all tool configuration.
-- **Rationale:** Reduces cognitive load—one place to declare local tools, remote servers, and adaptation rules.
+- **Rationale:** Reduces cognitive load--one place to declare local tools, remote servers, and adaptation rules.
 - **Example Structure:**
   ```typescript
   export const toolManifest = defineTools({
@@ -341,7 +341,7 @@ Based on the scratchpad vision, here are the key implementation details planned 
 
 - **Decision:** Standalone `withHooks(tool, {before?, after?})` utility for composable tool enhancement.
 - **Rationale:** Simpler than middleware, works uniformly for local and remote tools, enables clean composition.
-- **Note:** This differs from the file-local hooks mentioned in lessons—it's a wrapper pattern, not export-based.
+- **Note:** This differs from the file-local hooks mentioned in lessons--it's a wrapper pattern, not export-based.
 
 ### v4: Stateful Conversation Management
 
@@ -357,12 +357,13 @@ Based on the scratchpad vision, here are the key implementation details planned 
 
 From scratchpad to release plan:
 
-- ✅ v1: MCP server exposure, basic skill handling
-- 🧠 v2: LLM integration, reasoning engine, basic tools
-- 🔧 v3: Tool registry, remote proxy building, hook system, adapters
-- 💾 v4: Conversation history, state management, multi-turn
-- 🌊 v5: Streaming support throughout
-- 🤝 v6: Direct A2A transport, multi-agent coordination
+- -  v1: MCP server exposure, basic skill handling
+- >§ v2: LLM integration, reasoning engine, basic tools
+- =' v3: Tool registry, remote proxy building, hook system, adapters
+- =§ v4: Conversation history, state management, multi-turn
+- <
+ v5: Streaming support throughout
+- >-  v6: Direct A2A transport, multi-agent coordination
 
 ## Direct OpenRouter Integration (v2)
 
@@ -441,7 +442,7 @@ From scratchpad to release plan:
   - **Clearer responsibility**: The LLM focuses on HOW to accomplish the skill, not WHICH skill to use
   - **Better prompting**: Skill-specific prompts can be more focused and effective
   - **Reduced complexity**: No need for the LLM to understand the entire skill catalog
-  - **Natural flow**: Client → MCP tool → Skill handler → LLM orchestration → Internal tools
+  - **Natural flow**: Client § MCP tool § Skill handler § LLM orchestration § Internal tools
 - **Implementation:** Each skill handler creates its own LLM context with skill-specific prompts
 - **Implications:**
   - System prompts are generated per-skill, not globally
