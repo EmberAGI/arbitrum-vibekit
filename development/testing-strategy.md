@@ -7,7 +7,7 @@ This guide provides practical instructions for writing and maintaining tests in 
 We use a three-tier testing approach to balance speed, reliability, and real-world validation:
 
 1. **Unit Tests** (`.unit.test.ts`) - Fast, isolated tests for business logic
-2. **Integration Tests** (`.int.test.ts`) - Component interaction tests with mocked external services  
+2. **Integration Tests** (`.int.test.ts`) - Component interaction tests with mocked external services
 3. **Live Integration Tests** (`.live.test.ts`) - Real service tests for development and monitoring
 
 ## Test File Naming and Location
@@ -15,6 +15,7 @@ We use a three-tier testing approach to balance speed, reliability, and real-wor
 ### Naming Convention
 
 All test files must follow these naming patterns:
+
 - `*.unit.test.ts` - Unit tests
 - `*.int.test.ts` - Integration tests
 - `*.live.test.ts` - Live integration tests
@@ -49,27 +50,28 @@ Unit tests focus on testing individual functions or modules in isolation.
 
 ```typescript
 // src/utils/erc20.unit.test.ts
-import { describe, it, expect } from 'vitest';
-import { toRawAmount, formatTokenAmount } from './erc20';
+import { describe, it, expect } from "vitest";
+import { toRawAmount, formatTokenAmount } from "./erc20";
 
-describe('ERC20 Utilities', () => {
-  describe('toRawAmount', () => {
-    it('should convert decimal amount to raw amount for 18 decimals', () => {
-      expect(toRawAmount('1.5', 18)).toBe('1500000000000000000');
+describe("ERC20 Utilities", () => {
+  describe("toRawAmount", () => {
+    it("should convert decimal amount to raw amount for 18 decimals", () => {
+      expect(toRawAmount("1.5", 18)).toBe("1500000000000000000");
     });
 
-    it('should handle 6 decimal tokens (USDC)', () => {
-      expect(toRawAmount('100.50', 6)).toBe('100500000');
+    it("should handle 6 decimal tokens (USDC)", () => {
+      expect(toRawAmount("100.50", 6)).toBe("100500000");
     });
 
-    it('should handle zero amounts', () => {
-      expect(toRawAmount('0', 18)).toBe('0');
+    it("should handle zero amounts", () => {
+      expect(toRawAmount("0", 18)).toBe("0");
     });
   });
 });
 ```
 
 **Best Practices for Unit Tests:**
+
 - Mock all external dependencies
 - Test edge cases (zero values, MAX values, invalid inputs)
 - Keep tests focused on a single behavior
@@ -83,42 +85,43 @@ Integration tests verify that multiple components work together correctly, using
 
 ```typescript
 // src/services/api/mcpServer.int.test.ts
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { setupServer } from 'msw/node';
-import { rest } from 'msw';
-import { createTestContainer } from '../../test-utils/container';
-import { McpServer } from './mcpServer';
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { setupServer } from "msw/node";
+import { rest } from "msw";
+import { createTestContainer } from "../../test-utils/container";
+import { McpServer } from "./mcpServer";
 
 const server = setupServer(
-  rest.get('https://api.squid.com/v1/tokens', (req, res, ctx) => {
-    return res(ctx.json({
-      tokens: [
-        { address: '0x...', symbol: 'USDC', decimals: 6 }
-      ]
-    }));
+  rest.get("https://api.squid.com/v1/tokens", (req, res, ctx) => {
+    return res(
+      ctx.json({
+        tokens: [{ address: "0x...", symbol: "USDC", decimals: 6 }],
+      })
+    );
   })
 );
 
-describe('MCP Server Integration', () => {
+describe("MCP Server Integration", () => {
   beforeAll(() => server.listen());
   afterAll(() => server.close());
 
-  it('should retrieve wallet balances through getWalletBalances tool', async () => {
+  it("should retrieve wallet balances through getWalletBalances tool", async () => {
     const container = await createTestContainer();
     const mcpServer = container.get(McpServer);
-    
-    const result = await mcpServer.callTool('getWalletBalances', {
-      walletAddress: '0x...',
-      chainIds: [1, 137]
+
+    const result = await mcpServer.callTool("getWalletBalances", {
+      walletAddress: "0x...",
+      chainIds: [1, 137],
     });
 
-    expect(result).toHaveProperty('balances');
+    expect(result).toHaveProperty("balances");
     expect(result.balances).toHaveLength(2);
   });
 });
 ```
 
 **Best Practices for Integration Tests:**
+
 - Use MSW for HTTP mocking to ensure high-fidelity responses
 - Use Testcontainers for real database testing (Memgraph)
 - Validate complete workflows, not just individual calls
@@ -132,16 +135,16 @@ Live tests connect to real services and are used for development verification an
 
 ```typescript
 // tests/live/wallet-balance.live.test.ts
-import { describe, it, expect } from 'vitest';
-import { DuneAdapter } from '../../src/adapters/dune/DuneAdapter';
+import { describe, it, expect } from "vitest";
+import { DuneAdapter } from "../../src/adapters/dune/DuneAdapter";
 
-describe.skipIf(!process.env.DUNE_API_KEY)('Live Wallet Balance Tests', () => {
-  it('should fetch real mainnet wallet balances', async () => {
+describe.skipIf(!process.env.DUNE_API_KEY)("Live Wallet Balance Tests", () => {
+  it("should fetch real mainnet wallet balances", async () => {
     const dune = new DuneAdapter(process.env.DUNE_API_KEY!);
-    
+
     // Use a known wallet with balances
     const balances = await dune.getWalletBalances(
-      '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', // vitalik.eth
+      "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", // vitalik.eth
       [1] // Ethereum mainnet
     );
 
@@ -153,6 +156,7 @@ describe.skipIf(!process.env.DUNE_API_KEY)('Live Wallet Balance Tests', () => {
 ```
 
 **Best Practices for Live Tests:**
+
 - Use `.skipIf()` to skip when credentials are missing
 - Don't assert specific values that change over time
 - Cache responses when possible to reduce API usage
@@ -169,7 +173,7 @@ Before you can use mocks in integration tests, you need to record them from live
 ```bash
 # Check .env for required keys
 DUNE_API_KEY=your_key
-BIRDEYE_API_KEY=your_key  
+BIRDEYE_API_KEY=your_key
 COINGECKO_API_KEY=your_key
 ```
 
@@ -189,6 +193,7 @@ pnpm tsx tests/mocks/utils/record-mocks.ts coingecko-price-ethereum
 ```
 
 **Available Recording Configurations**:
+
 - `squid-route` - Squid Router API swap route
 - `squid-chains` - Squid supported chains list
 - `dune-wallet-balances` - Dune Analytics wallet balance query
@@ -207,12 +212,14 @@ pnpm tsx tests/mocks/utils/validate-mocks.ts
 ```
 
 **When to Record New Mocks**:
+
 - Initial setup: Record all mocks before running integration tests
 - New endpoints: When adding support for new API endpoints
 - API updates: When drift detection reports changes
 - Development: To capture specific test scenarios
 
 **Mock Expiration**:
+
 - Mocks include expiration dates (typically 30 days)
 - Expired mocks are automatically ignored by the mock loader
 - Re-record mocks when they expire or APIs change
@@ -225,18 +232,18 @@ After recording real responses, we use Mock Service Worker (MSW) to serve them d
 
 ```typescript
 // src/adapters/squid/schemas.ts
-import { z } from 'zod';
+import { z } from "zod";
 
 export const SquidTokenSchema = z.object({
   address: z.string(),
   symbol: z.string(),
   decimals: z.number(),
   name: z.string(),
-  logoURI: z.string().optional()
+  logoURI: z.string().optional(),
 });
 
 export const SquidTokensResponseSchema = z.object({
-  tokens: z.array(SquidTokenSchema)
+  tokens: z.array(SquidTokenSchema),
 });
 ```
 
@@ -244,16 +251,16 @@ export const SquidTokensResponseSchema = z.object({
 
 ```typescript
 // src/adapters/squid/__mocks__/handlers.ts
-import { rest } from 'msw';
-import { SquidTokensResponseSchema } from '../schemas';
-import tokensResponse from './responses/tokens-v1.json';
+import { rest } from "msw";
+import { SquidTokensResponseSchema } from "../schemas";
+import tokensResponse from "./responses/tokens-v1.json";
 
 export const handlers = [
-  rest.get('https://api.squid.com/v1/tokens', (req, res, ctx) => {
+  rest.get("https://api.squid.com/v1/tokens", (req, res, ctx) => {
     // Validate mock data against schema
     const validated = SquidTokensResponseSchema.parse(tokensResponse);
     return res(ctx.json(validated));
-  })
+  }),
 ];
 ```
 
@@ -287,13 +294,16 @@ The mock handlers use **real recorded API error responses** for high-fidelity te
 **1. Global Error Triggers**
 
 ```typescript
-import { errorTriggers, resetErrorTriggers } from "../mocks/utils/error-simulation";
+import {
+  errorTriggers,
+  resetErrorTriggers,
+} from "../mocks/utils/error-simulation";
 
 // Trigger specific errors for testing
 // These load real recorded error responses from JSON files
-errorTriggers.dune.rateLimit = true;        // Loads error-rate-limit.json if available
+errorTriggers.dune.rateLimit = true; // Loads error-rate-limit.json if available
 errorTriggers.coingecko.serverError = true; // Loads error-server-error.json if available
-errorTriggers.squid.authError = true;       // Loads error-auth-error.json
+errorTriggers.squid.authError = true; // Loads error-auth-error.json
 
 // Reset after test
 resetErrorTriggers();
@@ -301,6 +311,7 @@ resetErrorTriggers();
 
 **2. Available Error Types**
 All error types use real recorded responses when available:
+
 - **Rate Limit (429)**: Real rate limit response with actual headers
 - **Server Error (500)**: Actual server error from the API
 - **Auth Error (401)**: Real authentication failure response
@@ -315,7 +326,7 @@ All service-specific errors use real recorded responses:
 // These all use real recorded error responses from the APIs:
 
 // Dune: Invalid address format - uses error-invalid-address-format.json
-await duneAdapter.getBalance("invalid-address", [1]); 
+await duneAdapter.getBalance("invalid-address", [1]);
 
 // CoinGecko: Invalid currency - uses error-invalid-currency.json
 await coingeckoAdapter.getPrice("ethereum", "invalid_currency");
@@ -332,6 +343,7 @@ await squidAdapter.getRoute({
 To add new error scenarios:
 
 1. Update `tests/utils/record-mocks.ts` with the error-triggering request:
+
 ```typescript
 {
   name: "error-insufficient-liquidity",
@@ -346,11 +358,13 @@ To add new error scenarios:
 ```
 
 2. Run the recording script:
+
 ```bash
 pnpm tsx tests/utils/record-mocks.ts
 ```
 
 3. Verify the error response was recorded:
+
 ```bash
 cat tests/mocks/data/squid/error-insufficient-liquidity.json
 ```
@@ -365,7 +379,7 @@ describe('Error Handling', () => {
   it('should handle rate limit with real API response', async () => {
     // Triggers real recorded rate limit response
     errorTriggers.dune.rateLimit = true;
-    
+
     try {
       await adapter.getBalance(...);
     } catch (error) {
@@ -378,6 +392,7 @@ describe('Error Handling', () => {
 ```
 
 **Key Principles**:
+
 - ✅ All error responses MUST be recorded from real APIs
 - ✅ Use `tests/utils/record-mocks.ts` to capture error scenarios
 - ✅ Error responses are stored in `tests/mocks/data/[service]/error-*.json`
@@ -387,6 +402,7 @@ describe('Error Handling', () => {
 ### Mock Recording Workflow
 
 **For New Developers**:
+
 1. Clone the repository and install dependencies
 2. Copy `.env.example` to `.env` and add API keys
 3. Record all mocks (including errors): `pnpm test:record-mocks`
@@ -397,11 +413,13 @@ The `pnpm test:record-mocks` command records both successful and error responses
 ### Recording API Responses
 
 **1. Run the Mock Recording Script**
+
 ```bash
 pnpm test:record-mocks
 ```
 
 This single command captures:
+
 - ✅ Successful API responses for normal operations
 - ❌ Error responses (401, 400, 422, 404) for error handling tests
   - Invalid API keys (401)
@@ -410,6 +428,7 @@ This single command captures:
   - Rate limit errors (429) - when possible
 
 **2. Review Recorded Mock Data**
+
 ```bash
 ls tests/mocks/data/*/
 ```
@@ -417,20 +436,22 @@ ls tests/mocks/data/*/
 Error responses are saved with `error-` prefix for easy identification.
 
 **3. Key Findings from Real APIs**:
+
 - **Dune**: Uses `error` field for auth errors, `message` for validation
 - **CoinGecko**: Returns 200 with empty objects for invalid coins/currencies
 - **Squid**: Uses `message` and `type` fields consistently
 
 **4. Error Simulation System**
 The `error-simulation.ts` file automatically loads real recorded error responses:
-```typescript
+
+````typescript
 // This function loads real recorded error responses
 function createResponseFromMock(mockKey: string, service: string): Response {
   const mockData = loadMockData(service, mockKey);
   if (!mockData) {
     return HttpResponse.json({ error: "Mock data not found" }, { status: 500 });
   }
-  
+
   // Returns the actual recorded API response
   return HttpResponse.json(mockData.response.body, {
     status: mockData.response.status,
@@ -476,7 +497,7 @@ jobs:
       - run: pnpm install
       - run: pnpm run check-mock-drift
       # Script creates issues on drift detection
-```
+````
 
 ## Running Tests
 
@@ -488,7 +509,7 @@ pnpm test
 
 # Run specific test tiers
 pnpm test:unit      # Unit tests only
-pnpm test:int       # Integration tests only  
+pnpm test:int       # Integration tests only
 pnpm test:live      # Live tests only (requires API keys)
 
 # Run tests in watch mode during development
@@ -507,6 +528,7 @@ pnpm test:mocha
 ### CI/CD Execution
 
 In CI/CD, only unit and integration tests run by default:
+
 ```bash
 pnpm test:ci  # Runs test:unit && test:int
 ```
@@ -525,28 +547,30 @@ When modifying existing Mocha tests:
 4. **Update imports** - Change from `chai` to `vitest` assertions
 
 **Before (Mocha)**:
-```typescript
-import { expect } from 'chai';
-import sinon from 'sinon';
 
-describe('TokenService', () => {
-  it('should fetch token metadata', async () => {
-    const stub = sinon.stub(api, 'getToken').resolves({ symbol: 'USDC' });
-    const result = await service.getToken('0x...');
-    expect(result.symbol).to.equal('USDC');
+```typescript
+import { expect } from "chai";
+import sinon from "sinon";
+
+describe("TokenService", () => {
+  it("should fetch token metadata", async () => {
+    const stub = sinon.stub(api, "getToken").resolves({ symbol: "USDC" });
+    const result = await service.getToken("0x...");
+    expect(result.symbol).to.equal("USDC");
   });
 });
 ```
 
 **After (Vitest)**:
-```typescript
-import { describe, it, expect, vi } from 'vitest';
 
-describe('TokenService', () => {
-  it('should fetch token metadata', async () => {
-    vi.spyOn(api, 'getToken').mockResolvedValue({ symbol: 'USDC' });
-    const result = await service.getToken('0x...');
-    expect(result.symbol).toBe('USDC');
+```typescript
+import { describe, it, expect, vi } from "vitest";
+
+describe("TokenService", () => {
+  it("should fetch token metadata", async () => {
+    vi.spyOn(api, "getToken").mockResolvedValue({ symbol: "USDC" });
+    const result = await service.getToken("0x...");
+    expect(result.symbol).toBe("USDC");
   });
 });
 ```
@@ -556,20 +580,24 @@ describe('TokenService', () => {
 ### General Guidelines
 
 1. **Test Behavior, Not Implementation**
+
    - Focus on what the code does, not how it does it
    - Avoid testing private methods directly
 
 2. **Use Descriptive Names**
+
    - Test names should explain the scenario and expected outcome
    - Bad: `it('should work')`
    - Good: `it('should return zero when converting empty string to raw amount')`
 
 3. **Follow AAA Pattern**
+
    - **Arrange**: Set up test data and mocks
    - **Act**: Execute the code under test
    - **Assert**: Verify the results
 
 4. **One Assertion Per Test**
+
    - Each test should verify one specific behavior
    - Use multiple tests for multiple behaviors
 
@@ -582,37 +610,42 @@ describe('TokenService', () => {
 When testing financial operations:
 
 1. **Test All Decimal Scenarios**
+
    - 6 decimals (USDC, USDT)
    - 8 decimals (WBTC)
    - 18 decimals (ETH, most tokens)
 
 2. **Test Edge Cases**
+
    - Zero amounts
    - Maximum uint256 values
    - Negative amounts (should error)
    - Non-numeric inputs
 
 3. **Use Exact String Comparisons**
+
    ```typescript
    // Good - precise comparison
-   expect(toRawAmount('1.23', 6)).toBe('1230000');
-   
+   expect(toRawAmount("1.23", 6)).toBe("1230000");
+
    // Bad - loses precision
-   expect(Number(toRawAmount('1.23', 6))).toBe(1230000);
+   expect(Number(toRawAmount("1.23", 6))).toBe(1230000);
    ```
 
 ### Database Testing Guidelines
 
 1. **Unit Tests**: Mock the repository layer
+
    ```typescript
    const mockRepo = {
-     findTokenByAddress: vi.fn().mockResolvedValue({ symbol: 'USDC' })
+     findTokenByAddress: vi.fn().mockResolvedValue({ symbol: "USDC" }),
    };
    ```
 
 2. **Integration Tests**: Use real Memgraph with Testcontainers
+
    ```typescript
-   const container = await new GenericContainer('memgraph/memgraph')
+   const container = await new GenericContainer("memgraph/memgraph")
      .withExposedPorts(7687)
      .start();
    ```
@@ -627,16 +660,19 @@ When testing financial operations:
 ### Common Issues
 
 1. **MSW Not Intercepting Requests**
+
    - Ensure server.listen() is called in beforeAll
    - Check that request URLs match exactly
    - Verify MSW handlers are imported
 
 2. **Memgraph Container Fails to Start**
+
    - Check Docker is running
    - Ensure port 7687 is available
    - Verify sufficient memory allocated to Docker
 
 3. **Tests Timing Out**
+
    - Increase timeout for integration tests: `it('...', { timeout: 30000 }, async () => {})`
    - Check for missing await statements
    - Verify external services are mocked
@@ -649,6 +685,7 @@ When testing financial operations:
 ### Debug Mode
 
 Run tests with debugging output:
+
 ```bash
 # Vitest debug mode
 pnpm test:watch -- --reporter=verbose
@@ -663,6 +700,6 @@ node --inspect-brk ./node_modules/.bin/vitest run
 - [MSW Documentation](https://mswjs.io/)
 - [Testcontainers Documentation](https://testcontainers.com/)
 - Project-specific docs:
-  - `/docs/rationales.md` - Testing architecture decisions
-  - `/.vibecode/test-new-strategy-setup/prd.md` - Full testing PRD
-  - `/CLAUDE.md` - Project development guidelines
+  - `development/rationales.md` - Testing architecture decisions
+  - `.vibecode/test-new-strategy-setup/prd.md` - Full testing PRD
+  - `CLAUDE.md` - Project development guidelines
