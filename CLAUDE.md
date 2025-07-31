@@ -11,47 +11,30 @@ Arbitrum Vibekit is a polyglot toolkit for building smart, autonomous DeFi agent
 ### Development Commands
 
 ```bash
-# Bootstrap dependencies (run from typescript/ directory)
 pnpm install
-
-# Build all packages in the workspace
 pnpm build
-
-# Run linting across the workspace
-pnpm lint
+pnpm lint:check
 pnpm lint:fix
-
-# Run tests
-pnpm test              # Runs both vitest and anvil tests
-pnpm test:vitest       # Runs vitest tests only (*.vitest.ts files)
-pnpm test:anvil        # Runs anvil-based tests for agents
-
-# Run a single vitest test file
+pnpm test
+pnpm test:vitest
+pnpm test:anvil
+pnpm test:coverage
+pnpm test:watch
+pnpm test:grep -- "pattern"
 pnpm vitest run path/to/test.vitest.ts
-
-# Run a single mocha test file
 pnpm mocha 'dist/test/**/*.test.js' --grep "test name"
-
-# Start local blockchain for testing
-pnpm start:anvil       # Starts Anvil fork
-pnpm start:mainnet     # Starts mainnet fork
-
-# Docker operations
-docker compose up      # Start web frontend and default agents
-docker compose build   # Build all services
-docker compose down    # Stop all services
+pnpm start:anvil
+pnpm start:mainnet
+docker compose up
+docker compose build
+docker compose down
 ```
 
 ### Agent Development Commands
 
 ```bash
-# Run agent in development mode (from agent directory)
 pnpm dev
-
-# Build agent
 pnpm build
-
-# Test agent
 pnpm test
 ```
 
@@ -80,8 +63,12 @@ pnpm test
 
 ### Testing Strategy
 
-- **Vitest**: For V2 agents in templates (files ending in `.vitest.ts`)
+- **Vitest**: For V2 agents in templates
+  - Unit tests: `*.unit.test.ts`
+  - Integration tests: `*.int.test.ts`
+  - Live tests: `*.live.test.ts`
 - **Mocha**: For legacy agents in examples
+- **Note**: We are migrating from Mocha to Vitest. All new tests should be written for Vitest
 - **Integration Tests**: Use real MCP connections and LLM calls
 - **Unit Tests**: Mock external dependencies
 
@@ -118,6 +105,13 @@ Required environment variables:
 5. Use TypeScript strict mode and proper error handling
 6. Test with real MCP connections when possible
 
+### Package Management
+
+- **ALWAYS use pnpm** - never use npm
+- Install dependencies with `pnpm add` or `pnpm add -D` to ensure latest versions
+- Never manually edit `package.json` dependencies - use pnpm commands
+- For CI/CD, use non-interactive flags: `pnpm install --frozen-lockfile`
+
 ### Code Quality Guidelines
 
 - Don't create files unless necessary (prefer editing existing)
@@ -131,6 +125,25 @@ Required environment variables:
 - Never produce mocks instead of real implementations
 - Don't create value/type aliases for compatibility - update call sites to use true names
 - When refactoring, update import paths rather than maintaining compatibility aliases
+- **NEVER use `any` type** - use proper types, `unknown`, or type assertions with `as`
+- Never use `.passthrough()` with Zod schemas
+
+### Code Quality Validation
+
+- **ALWAYS run `pnpm lint:check` and `pnpm build` after writing or modifying any code**
+- This ensures:
+  - Code follows project standards:
+    - TypeScript type safety (no `any` types)
+    - ESLint rules (unused variables, naming conventions)
+    - Prettier formatting (consistent code style)
+  - Code compiles successfully:
+    - TypeScript compilation passes
+    - Import paths are correct (requires `.js` extensions for relative imports)
+    - No type errors
+- If lint check fails, use `pnpm lint:fix` to auto-fix issues where possible
+- If build fails, fix compilation errors (missing imports, type errors, etc.)
+- Manually fix any remaining errors before considering the task complete
+- Never commit or submit code that doesn't pass both `pnpm lint:check` and `pnpm build`
 
 ### Error Handling
 
@@ -142,12 +155,16 @@ Required environment variables:
   - Third attempt: Document issue and escalate to user
 - Document recurring issues in code comments for future reference
 
-### Debugging Tips
+### Problem-Solving Strategy
 
-- Check `pnpm-debug.log` for dependency issues
-- Use `MCP_TOOL_TIMEOUT_MS` env var for slow MCP connections
-- Kill hanging MCP processes: `pkill -f "mock-mcp"`
-- For agent issues, check both agent logs and MCP server logs
+- It's good that you try a couple of times using your internal intelligence, but after you fail a couple of times you should search online for answers
+
+### TypeScript Configuration
+
+- Target: ES2022 with NodeNext module resolution
+- Strict mode enabled
+- Source maps for debugging
+- Use `tsx` for development execution (already configured in dev scripts)
 
 ### Git Commit Guidelines
 
@@ -164,104 +181,6 @@ Required environment variables:
 - Keep PRs focused on a single feature or fix
 - Update PR description with summary and test plan before marking ready for review
 
-## Agent-Based Development Workflow
-
-This project supports a multi-agent workflow for development. Each agent has specific responsibilities and works together to deliver high-quality features.
-
-### Available Agents
-
-1. **PRD Agent** (`/agent prd`) - Creates Product Requirements Documents
-
-   - Analyzes requirements and creates comprehensive PRDs
-   - Defines business requirements and success conditions
-   - Documents constraints, considerations, and integration points
-
-2. **BDD Agent** (`/agent bdd`) - Creates Gherkin feature files
-
-   - Owns creation of ALL acceptance criteria
-   - Translates PRD success conditions into testable scenarios
-   - Writes comprehensive Given-When-Then scenarios
-   - Places feature files in root-level `features/` directory
-   - Asks clarifying questions to fill requirement gaps
-
-3. **TDD Agent** (`/agent tdd`) - Writes comprehensive tests
-
-   - Creates unit tests (`.unit.test.ts`)
-   - Creates integration tests (`.int.test.ts`) with mocked services
-   - Creates live tests (`.live.test.ts`) for real service validation
-
-4. **Coding Agent** (`/agent coding`) - Implements minimal code
-
-   - Reads failing tests and implements just enough code to pass
-   - Follows TDD principles strictly
-   - Maintains implementation notes in scratchpad
-   - Never over-engineers solutions
-
-5. **Documentation Agent** (`/agent docs`) - Maintains documentation
-   - Proactively monitors changes and suggests documentation updates
-   - Always asks for approval before updating
-   - Maintains API docs, setup guides, and architecture documentation
-
-### Agent Orchestration
-
-#### Sequential Workflow
-
-For a typical feature implementation:
-
-```
-PRD Agent → BDD Agent → TDD Agent → Coding Agent → Documentation Agent
-```
-
-**Important Dependencies:**
-
-- BDD Agent must complete before TDD Agent (TDD needs feature files)
-- TDD Agent must complete before Coding Agent (Coding needs failing tests)
-- PRD is read-only once approved (all agents reference it)
-
-#### Using Agents
-
-1. **Start with Planning**:
-
-   ```
-   /agent prd think hard about implementing cross-chain swaps
-   ```
-
-2. **Create Feature Files**:
-
-   ```
-   /agent bdd
-   ```
-
-   The BDD agent will create comprehensive feature files with all scenario types (@core, @error-handling, @edge-case, @integration).
-
-3. **Write Tests**:
-
-   ```
-   /agent tdd
-   ```
-
-   The TDD agent will create tests across all layers based on the feature files.
-
-4. **Implement Code**:
-
-   ```
-   /agent coding
-   ```
-
-   The Coding agent will implement all components to make the tests pass.
-
-5. **Update Documentation**:
-   ```
-   /agent docs
-   ```
-   The Documentation agent monitors changes and suggests updates.
-
-### Agent Communication
-
-- Agents communicate through files in `.vibecode/<branch>/`
-- PRD is read-only once approved
-- Scratchpad is for implementation notes
-- Feature files in `features/` directory are permanent artifacts
 
 ## DeFi Domain Terminology
 
@@ -279,33 +198,10 @@ When working with this codebase, use these consistent terms across all documenta
 
 When creating tests, documentation, or handling errors, consider these standard categories:
 
-#### Token Operations
-
-- Balance queries
-- Token approvals
-- Direct transfers
-
-#### DeFi Operations
-
-- Token swaps
-- Liquidity provision/removal
-- Yield farming
-- Lending and borrowing
-
-#### Cross-chain Operations
-
-- Bridge transfers
-- Multi-chain balance queries
-- Cross-chain swaps
-
-#### Common Error Scenarios
-
-- Invalid addresses
-- Insufficient balance
-- Network failures
-- Slippage exceeded
-- Gas estimation failures
-- Rate limit errors
+- **Token Operations**
+- **DeFi Operations**
+- **Cross-chain Operations**
+- **Common Error Scenarios**
 
 ## Rationales.md Management
 
@@ -324,12 +220,20 @@ When creating tests, documentation, or handling errors, consider these standard 
   - **Trade-offs**: Pros/cons of the chosen approach
   ```
 
-- Examples of decisions worthy of documentation:
-  - Technology/library selections
-  - Architectural patterns (sync vs async, monolithic vs modular)
-  - Performance vs maintainability trade-offs
-  - Deviations from standard practices
-  - Decisions affecting future extensibility
+- **Include** decisions about:
+  - Technology/library selections (e.g., MSW vs Nock, Zod for validation)
+  - Architectural patterns (e.g., plugin system design, testing strategies)
+  - Data flow and state management approaches
+  - API design choices and contracts
+  - Performance optimizations that affect code structure
+  - Security implementations
+- **Exclude** decisions about:
+  - Task ordering or development sequencing
+  - Team processes or workflows
+  - Documentation structure (unless it affects code organization)
+  - Temporary implementation details
+  - Style preferences without technical impact
+- Not every decision needs documentation - only those that future developers need to understand the codebase
 
 ## Important Documentation
 
@@ -339,37 +243,3 @@ When creating tests, documentation, or handling errors, consider these standard 
 - `typescript/lib/arbitrum-vibekit-core/README.md` - Core framework documentation
 - `typescript/templates/README.md` - V2 agent templates guide
 
-## Claude Code Commands and Agents
-
-### Agents
-
-If this project uses specialized agents for different development tasks, they can be invoked using:
-
-- `/agent prd` - Launch PRD Creation Agent
-- `/agent bdd` - Launch BDD Agent for feature files
-- `/agent tdd` - Launch TDD Agent for test writing
-- `/agent coding` - Launch Coding Agent for implementation
-- `/agent docs` - Launch Documentation Agent
-
-### Creating Custom Commands
-
-Custom commands are markdown files in `.claude/commands/` with frontmatter:
-
-```yaml
----
-description: "Brief description of what the command does"
-allowed-tools: ["Bash", "Read", "Edit", "etc."]
-argument-hint: "(optional) hint for command arguments"
----
-# Command content goes here
-Your detailed instructions for the command in markdown format.
-```
-
-### Thinking Triggers
-
-Magic phrases (`think`, `think hard`, `think harder`, `ultrathink`) increase Claude's reasoning budget when used in:
-
-- ✅ **Prompt body** or **arguments** (e.g., `/agent prd think hard about auth`)
-- ❌ **YAML front-matter** or **HTML comments** (stripped before processing)
-
-Tips: Use one trigger per message. Higher levels = more tokens/latency. Token limits still apply.
