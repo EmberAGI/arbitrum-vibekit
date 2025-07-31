@@ -16,7 +16,7 @@ describe.skip('Ember Agent E2E Swapping Integration', () => {
     // Set required environment variables for the test
     process.env.OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || 'test-key-for-ci';
     process.env.ARBITRUM_RPC_URL = 'https://arb1.arbitrum.io/rpc';
-    process.env.EMBER_MCP_SERVER_URL = 'http://api.emberai.xyz/mcp';
+    process.env.EMBER_MCP_SERVER_URL = 'https://api.emberai.xyz/mcp';
     // Use a dummy address for testing, as we only need to generate a plan, not execute it
     process.env.DEFAULT_USER_ADDRESS = '0x000000000000000000000000000000000000dead';
 

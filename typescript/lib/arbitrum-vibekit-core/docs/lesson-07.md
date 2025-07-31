@@ -17,7 +17,7 @@ You can call these tools directly from your agent, or **wrap them in adapters** 
 
 The framework comes with a growing library of ready-made services:
 
-- **Ember AI** (Remote): On-chain DeFi execution via `@http://api.emberai.xyz/mcp`
+- **Ember AI** (Remote): On-chain DeFi execution via `@https://api.emberai.xyz/mcp`
 - `providers/allora`: Token price forecasting
 - `providers/trendmoon`: Social sentiment metrics
 
@@ -29,7 +29,7 @@ To use Ember AI's remote MCP server in your agent:
 
 ```bash
 # .env
-EMBER_ENDPOINT=@http://api.emberai.xyz/mcp
+EMBER_ENDPOINT=@https://api.emberai.xyz/mcp
 ```
 
 The framework automatically handles the connection setup using `StreamableHTTPClientTransport`. In your context provider or tools, access the client as:

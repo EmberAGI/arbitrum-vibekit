@@ -30,7 +30,7 @@ export const swappingSkill = defineSkill({
   inputSchema: swappingSkillInputSchema,
   mcpServers: {
     'ember-onchain': {
-      url: process.env.EMBER_MCP_SERVER_URL || 'http://api.emberai.xyz/mcp',
+      url: process.env.EMBER_MCP_SERVER_URL || 'https://api.emberai.xyz/mcp',
       // No authorization needed according to user
       alwaysAllow: ['getCapabilities', 'getTokens', 'swapTokens'],
       disabled: false,
