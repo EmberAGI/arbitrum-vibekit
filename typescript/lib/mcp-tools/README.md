@@ -30,6 +30,21 @@ To clone Vibekit in Cursor:
 
 Once cloned, Cursor will automatically detect Vibekit's [`.cursor/rules`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/.cursor/rules) directory and set up the AI context.
 
+### Using Claude Code CLI
+
+If you prefer using Claude Code instead, you can install the Claude Code CLI and interact with Vibekit entirely from your terminal:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+cd arbitrum-vibekit
+claude plan "Create a new MCP tool that fetches on-chain NFT metadata"
+claude execute
+```
+
+Because the `.claude/` folder is part of this repository, the CLI automatically applies all prompts and hooks, ensuring a consistent developer experience.
+
+To learn more about Claude Code, visit [their official docs](https://docs.anthropic.com/en/docs/claude-code/overview).
+
 ### 2. Set Up Your Project
 
 If you'd like to speed up the setup process, consider using [FastMCP](https://github.com/punkpeye/fastmcp/) or [AI Tool Maker](https://github.com/nihaocami/ai-tool-maker). These tools can automatically generate the boilerplate code and folder structure for your MCP tool, allowing you to focus on your tool's unique logic. If you prefer a more hands-on approach or need a custom setup, follow the manual steps outlined below to build your MCP tool from scratch.
