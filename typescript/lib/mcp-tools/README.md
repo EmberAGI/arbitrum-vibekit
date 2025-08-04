@@ -35,9 +35,14 @@ Once cloned, Cursor will automatically detect Vibekit's [`.cursor/rules`](https:
 If you prefer using Claude Code instead, you can install the Claude Code CLI and interact with Vibekit entirely from your terminal:
 
 ```bash
-npm install -g @anthropic-ai/claude-code
+npm install -g @anthropic-ai/claude-code &&
 cd arbitrum-vibekit
-claude plan "Create a new MCP tool that fetches on-chain NFT metadata"
+```
+
+Next you can can start planning and executing with Claude:
+
+```bash
+claude plan "Create a new MCP tool that fetches on-chain NFT metadata" &&
 claude execute
 ```
 
