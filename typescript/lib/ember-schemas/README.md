@@ -11,6 +11,14 @@ This package contains all the Zod schemas, TypeScript types, and validation logi
 - **AI-friendly schema composition**
 - **Runtime validation for agent inputs**
 
+## Endpoint
+
+The Ember MCP server is hosted at the following URL:
+
+```
+https://api.emberai.xyz/mcp
+```
+
 ## Schema Categories
 
 ### Core Schemas (`common.ts`)

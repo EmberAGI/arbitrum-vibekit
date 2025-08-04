@@ -25,7 +25,7 @@ To clone Vibekit in Cursor:
 3. Choose your local directory and click "Clone".
 
 <p align="left">
-  <img src="../../../img/cursor.png" width="900px" alt="cursor"/>
+  <img src="../../../img/cursor.png" width="900" alt="cursor"/>
 </p>
 
 Once cloned, Cursor will automatically detect Vibekit's [`.cursor/rules`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/.cursor/rules) directory and set up the AI context.
@@ -227,4 +227,4 @@ pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js
 
 ### 9. Showcase Your Tool with a Demo Agent
 
-Consider showcasing your new MCP tool by building a demo agent in the [examples](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/examples) directory. Creating a simple agent that uses your tool is a great way to demonstrate its functionality and help others understand how to integrate it into their own projects.
+Consider showcasing your new MCP tool by building a demo agent in the [templates](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates) directory. Creating a simple agent that uses your tool is a great way to demonstrate its functionality and help others understand how to integrate it into their own projects.
