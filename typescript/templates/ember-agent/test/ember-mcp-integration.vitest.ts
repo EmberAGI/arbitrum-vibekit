@@ -10,7 +10,7 @@ describe('Ember MCP Server Integration', () => {
     if (!emberConfig || !('url' in emberConfig)) {
       throw new Error('Expected HttpMcpConfig');
     }
-    expect(emberConfig.url).toBe('http://api.emberai.xyz/mcp');
+    expect(emberConfig.url).toBe('https://api.emberai.xyz/mcp');
     expect(emberConfig.alwaysAllow).toContain('swapTokens');
     expect(emberConfig.disabled).toBe(false);
   });

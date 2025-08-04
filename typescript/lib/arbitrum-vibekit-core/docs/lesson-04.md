@@ -131,7 +131,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 // The framework automatically sets up MCP clients based on your skills
 // For agents that need to access remote servers like Ember, ensure you have:
-// - EMBER_ENDPOINT=@http://api.emberai.xyz/mcp in your environment variables
+// - EMBER_ENDPOINT=@https://api.emberai.xyz/mcp in your environment variables
 // - Skills that reference the remote MCP server
 
 // The ember client will be available as deps.mcpClients['ember']

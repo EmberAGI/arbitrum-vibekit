@@ -22,7 +22,7 @@ The `getCapabilities-integration.vitest.ts` file contains tests for the Ember MC
 
    ```bash
    # Set your Ember MCP server URL
-   export EMBER_MCP_SERVER_URL="http://api.emberai.xyz/mcp"
+   export EMBER_MCP_SERVER_URL="https://api.emberai.xyz/mcp"
 
    # Run the tests
    pnpm test getCapabilities-integration
