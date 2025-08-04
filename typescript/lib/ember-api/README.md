@@ -12,6 +12,14 @@ The Ember API client abstracts the complexity of multi-protocol DeFi interaction
 - **Market Data**
 - **Wallet Management**
 
+## Endpoint
+
+The Ember MCP server is hosted at the following URL:
+
+```
+https://api.emberai.xyz/mcp
+```
+
 ## Available Tools
 
 The Ember MCP server provides the following tools, each mapped to specific DeFi protocols:
