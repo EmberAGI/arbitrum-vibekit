@@ -341,6 +341,30 @@ describe('End-to-End: Liquidation Prevention Agent', () => {
         }
       });
 
+      // Mock MCP response for repayDebt tool that will be called by intelligentPreventionStrategy
+      mockMcpClient.callTool.mockResolvedValue({
+        isError: false,
+        structuredContent: {
+          transactions: [{
+            type: 'approval',
+            tokenAddress: '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1',
+            spenderAddress: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
+            amount: '2000000000000000000000',
+            description: 'Approve DAI for repayment',
+            chainId: 42161,
+            userAddress: '0x789...ghi'
+          }, {
+            type: 'repay',
+            tokenAddress: '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1',
+            amount: '2000000000000000000000',
+            interestRateMode: 2,
+            description: 'Repay 2000 DAI debt',
+            chainId: 42161,
+            userAddress: '0x789...ghi'
+          }]
+        }
+      });
+
       // Get AI recommendation
       const strategyResult = await intelligentPreventionStrategyTool.execute({
         userAddress: '0x789...ghi',
