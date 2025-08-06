@@ -25,12 +25,20 @@ Here's an overview of how everything fits together:
   <img src="img/Flow Chart.png" width="800px" alt="FlowChart"/>
 </p>
 
+### 📚 Vibekit Concepts
+
+For deeper understanding of Vibekit concepts, explore our comprehensive lesson series in [this directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/arbitrum-vibekit-core/docs). These lessons cover everything from basic concepts to advanced agent development patterns, including skills architecture, LLM orchestration, deployment strategies, and production best practices.
+
 ## 🧬 Repository Organization
 
 Vibekit is structured as a monorepo with TypeScript at its core, with a Rust implementation on the horizon. Here's how it's organized:
 
 ```
 Vibekit/
+├── .claude/                        # Claude AI prompt engineering files
+├── .cursor/                        # Cursor IDE rules and configuration
+├── .github/                        # GitHub Actions and configurations
+├── .vscode/                        # VSCode workspace settings
 ├── typescript/                     # Main monorepo workspace
 │   ├── clients/
 │   │   └── web/                    # Frontend for interacting with agents
@@ -46,7 +54,6 @@ Vibekit/
 │   ├── test/                       # Integration tests
 │   └── scripts/                    # Build and utility scripts
 ├── img/                            # Documentation images
-├── .cursor/                        # Cursor IDE rules and configuration
 ├── CHANGELOG.md
 ├── CONTRIBUTIONS.md
 ├── LICENSE
@@ -64,6 +71,8 @@ Vibekit/
 - **`lib/`**: Core framework libraries and supporting packages:
 
 - **`.cursor/`**: Cursor IDE configuration and development rules for vibe coding.
+
+- **`.claude/`**: Claude AI prompt engineering files.
 
 ## ⚡ Developer Quickstart
 
@@ -239,9 +248,23 @@ Ready to vibe with some DeFi agents? to run any of the existing agents or vibe c
 
 ### 🧠 Crafting Effective AI Prompts
 
-To make the most of vibe coding, it's important to provide your AI assistant with clear and structured context. In the `.cursor/rules` folder, you can define the scope of your project, including its purpose, key components, and any relevant data schemas.
+To make the most of vibe coding, it's important to provide your AI assistant with clear and structured context. This is done through prompt engineering files that define the scope of your project, including its purpose, key components, and any relevant data schemas.
 
-#### 📝 Vibekit's Cursor Rules Structure
+#### 📝 Claude Prompt Engineering
+
+For Claude models, prompt engineering is handled through a set of dedicated files in the project's [`.claude/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/.claude) directory. These files include detailed instructions, examples, and best practices to guide the AI in generating accurate and efficient code:
+
+- **agents/**: Contains prompts for persona-driven agents that specialize in tasks like Test-Driven Development, documentation, and feature writing.
+- **commands/**: Includes prompts that define high-level command structures for planning, execution, and version control.
+- **hooks/**: Provides scripts that can be triggered at different stages of the development lifecycle, such as pre-task and post-task actions.
+
+#### Extending and Maintaining Claude Prompts
+
+- **Add a New Prompt File** – Place your Markdown prompt in the relevant sub-directory (`agents`, `commands`, or `hooks`). Keep filenames short and descriptive.
+- **Update Existing Prompts** – Edit the appropriate file and describe the change clearly in your commit message.
+- **Best Practices** – Keep prompts concise, include concrete examples, and document any assumptions for future contributors.
+
+#### 📝 Cursor Prompt Engineering
 
 Vibekit's rules files are located in the project's [`arbitrum-vibekit/.cursor/rules`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/.cursor/rules) directory. These files define best practices, workflows, and workspace conventions for building and maintaining agents:
 
@@ -257,7 +280,7 @@ Vibekit's rules files are located in the project's [`arbitrum-vibekit/.cursor/ru
 
   Documents workspace-wide guidelines and best practices for the monorepo, such as dependency management, development scripts, and CI/CD standards.
 
-#### 🔄 Extending and Maintaining Rules
+#### Extending and Maintaining Cursor Rules
 
 Here's guidelines for adding or editing rules:
 
@@ -271,10 +294,6 @@ Here's guidelines for adding or editing rules:
   - Revise `workspaceRules.mdc` to keep workspace-wide practices and scripts up to date.
 
 Keep these files current to ensure your team and agents always follow the latest best practices and workflows.
-
-#### 📚 Vibekit Concepts
-
-For deeper understanding of Vibekit concepts, explore our comprehensive lesson series in [this directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/arbitrum-vibekit-core/docs). These lessons cover everything from basic concepts to advanced agent development patterns, including skills architecture, LLM orchestration, deployment strategies, and production best practices.
 
 ## 🔌 MCP Explained
 
