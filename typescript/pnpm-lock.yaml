@@ -1423,6 +1423,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.8.3
+      vitest:
+        specifier: 'catalog:'
+        version: 2.1.9(@types/node@20.19.7)
 
   templates/quickstart-agent:
     dependencies:

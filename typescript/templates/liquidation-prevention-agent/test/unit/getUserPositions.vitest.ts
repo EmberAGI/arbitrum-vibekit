@@ -30,8 +30,8 @@ describe('getUserPositions Tool', () => {
     vi.clearAllMocks();
 
     // Mock console methods to avoid noise in test output
-    // vi.spyOn(console, 'log').mockImplementation(() => { });
-    // vi.spyOn(console, 'error').mockImplementation(() => { });
+    vi.spyOn(console, 'log').mockImplementation(() => { });
+    vi.spyOn(console, 'error').mockImplementation(() => { });
 
     mockMcpClient = {
       callTool: vi.fn()
