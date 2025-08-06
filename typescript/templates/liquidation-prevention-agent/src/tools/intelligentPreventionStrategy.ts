@@ -39,21 +39,37 @@ const IntelligentPreventionStrategyParams = z.object({
 });
 
 
-// LLM System Prompt
-const LLM_SYSTEM_PROMPT = `Act as a financial advisor focused on preventing liquidation in DeFi lending protocols.
+const LLM_SYSTEM_PROMPT = `
+You are a backend assistant helping manage DeFi borrowing risk.
 
-Based on the data I’ll provide (including current Health Factor, supplied and borrowed assets, their amounts and prices), generate a PreventionResponse in the following format:
+### User Task
+The user wants to avoid liquidation by improving their health factor (HF) to a safe level.  
+You are given a snapshot of their wallet, current supplied/borrowed assets, and position summary.  
 
-export interface PreventionAction {
-  actionType: "SUPPLY" | "REPAY" | "HYBRID";
-  asset: string;
-  amountUsd: string;
-  amountToken: string;
-  expectedHealthFactor: string;
-  priority: number; // 1 = highest priority
-}
+Your job is to:
+1. Analyze the current Health Factor (HF) vs. the target HF.
+2. Determine how much collateral needs to be added or debt repaid to reach the target.
+3. Recommend one or more actions to improve the HF, using only wallet assets.
+4. Select the optimal action (SUPPLY / REPAY / HYBRID) based on feasibility and impact.
 
-export interface PreventionResponse {
+### Action Strategy Constraints
+- Suggest 1 or more PreventionActions (e.g., SUPPLY, REPAY, or HYBRID) to reach or slightly exceed the target health factor.
+- DO NOT suggest actions that raise the health factor significantly above the target (e.g., HF of 2.0 when target is 1.5).
+- Prefer the smallest action(s) that meet or slightly exceed the target.
+- Use wallet assets efficiently. Do not recommend using all available assets if a smaller amount is enough.
+- Do not exceed token balances from the wallet.
+- OptimalAction should be the minimal effective action with the highest health factor gain per dollar used.
+
+### HYBRID Action Notes
+- HYBRID actions are a combination of multiple smaller SUPPLY and/or REPAY actions.
+- Each HYBRID action must contain a steps array listing the individual actions.
+- Do not include more than 2 steps in a HYBRID action.
+- The asset, amountUsd, and amountToken fields are optional for HYBRID and may be omitted.
+
+### Output Format
+Return a valid JSON object that matches this TypeScript interface exactly:
+
+interface PreventionResponse {
   currentAnalysis: {
     currentHF: string;
     targetHF: string;
@@ -63,34 +79,27 @@ export interface PreventionResponse {
   optimalAction: PreventionAction;
 }
 
-Your task is to:
-
-Analyze the user's current Health Factor (HF) and determine the gap to a target HF
-
-Suggest 1 or more PreventionActions (e.g., supplying more collateral or repaying part of the loan) to reach or exceed the target HF.
-
-Set the priority field to rank the most effective actions.
-
-Choose the best overall optimalAction
-
-Respond ONLY with a JSON object that matches this TypeScript interface. Do not explain anything.
-
-`;
-
-// Strategy option interface (can be removed as LLM response will dictate actions)
-interface StrategyOption {
-  type: 'supply' | 'repay' | 'combined';
-  priority: number;
-  estimatedCost: number;
-  estimatedHealthImprovement: number;
-  reason: string;
-  actions: Array<{
-    tool: 'supply' | 'repay';
-    tokenAddress: string;
-    amount: string;
-    description: string;
-  }>;
+interface PreventionAction {
+  actionType: "SUPPLY" | "REPAY" | "HYBRID";
+  steps?: {
+    actionType: "SUPPLY" | "REPAY";
+    asset: string;
+    amountUsd: string;
+    amountToken: string;
+  }[];
+  asset: string;
+  amountUsd: string;
+  amountToken: string;
+  expectedHealthFactor: string;
+  priority: number; // 1 = highest priority
 }
+
+### Output Rules
+- 🚫 Do NOT explain anything.
+- 🚫 Do NOT return markdown (no triple backticks).
+- 🚫 Do NOT include extra fields or explanation.
+- ✅ Return ONLY valid JSON (no comments, no extra keys).
+`;
 
 // intelligentPreventionStrategy tool implementation
 export const intelligentPreventionStrategyTool: VibkitToolDefinition<typeof IntelligentPreventionStrategyParams, any, LiquidationPreventionContext, any> = {
@@ -124,8 +133,16 @@ export const intelligentPreventionStrategyTool: VibkitToolDefinition<typeof Inte
       );
 
 
-      console.log('🧠 Step 2: Calling LLM for prevention strategy...');
-      const prompt = `${LLM_SYSTEM_PROMPT} Here is the data: ${JSON.stringify(liquidationData)}`;
+      const prompt = `
+      ${LLM_SYSTEM_PROMPT}
+      
+      ### User Data
+      The following is the user's liquidation data in JSON format:
+      
+      ${JSON.stringify(liquidationData)}
+      `;
+
+      console.log("🧠 prompt:", prompt);
 
 
       const modelId = process.env.LLM_MODEL;
@@ -138,58 +155,51 @@ export const intelligentPreventionStrategyTool: VibkitToolDefinition<typeof Inte
         })();
       console.log('🧠 LLM model:', model);
 
+      // Define the base action shape for SUPPLY or REPAY
+      const baseActionSchema = z.object({
+        actionType: z.enum(["SUPPLY", "REPAY"]),
+        asset: z.string(),
+        amountUsd: z.string(),
+        amountToken: z.string(),
+        expectedHealthFactor: z.string(),
+        priority: z.number(),
+      });
+
+      // Define the extended HYBRID action which includes steps
+      const hybridActionSchema = z.object({
+        actionType: z.literal("HYBRID"),
+        asset: z.string(),
+        amountUsd: z.string(),
+        amountToken: z.string(),
+        expectedHealthFactor: z.string(),
+        priority: z.number(),
+        steps: z.array(baseActionSchema),
+      });
+
+      // Union of either a base action or hybrid action
+      const preventionActionSchema = z.union([baseActionSchema, hybridActionSchema]);
+
       const preventionResponseSchema = z.object({
         currentAnalysis: z.object({
           currentHF: z.string(),
           targetHF: z.string(),
           requiredIncrease: z.string(),
         }),
-        recommendedActions: z.array(z.object({
-          actionType: z.enum(["SUPPLY", "REPAY", "HYBRID"]),
-          asset: z.string(),
-          amountUsd: z.string(),
-          amountToken: z.string(),
-          expectedHealthFactor: z.string(),
-          priority: z.number(),
-        })),
-        optimalAction: z.object({
-          actionType: z.enum(["SUPPLY", "REPAY", "HYBRID"]),
-          asset: z.string(),
-          amountUsd: z.string(),
-          amountToken: z.string(),
-          expectedHealthFactor: z.string(),
-          priority: z.number(),
-        }),
+        recommendedActions: z.array(preventionActionSchema),
+        optimalAction: preventionActionSchema,
       });
 
       const { response } = await generateText({
         model,
         prompt: prompt,
-        temperature: 0.7,
-        maxTokens: 1000,
+        temperature: 0.7 ,
+        maxTokens: 4000,
       });
       console.log("response done....");
       console.log("response:", response);
 
       // const messageFromLLM = response?.messages?.[0];
       console.log("🧾 LLM message from LLM:", response?.messages ? JSON.stringify(response?.messages) : "No messages");
-
-
-      // response.messages is an array of ResponseMessage, not a string
-      // We expect the LLM's JSON output to be in the 'content' of the first message
-      // const text = response?.messages?.[0]?.content?.[0]?.text;
-
-      // if (!text || typeof text !== "string") {
-      //   throw new Error("LLM content[0].text is missing or not a string.");
-      // }
-
-      // let llmResponse;
-      // try {
-      //   llmResponse = preventionResponseSchema.parse(JSON.parse(text));
-      // } catch (e) {
-      //   console.error("❌ Failed to parse LLM response:", text);
-      //   throw e;
-      // }
 
       const llmMessage = response?.messages?.[0];
 
@@ -198,53 +208,73 @@ export const intelligentPreventionStrategyTool: VibkitToolDefinition<typeof Inte
       }
 
       // Find the first "text"-type content block
-      const firstTextContent = llmMessage.content.find(c => c.type === "reasoning" || c.type === "text");
+      const firstTextContent = llmMessage.content.find(c => c.type === "text");
 
       if (!firstTextContent || typeof firstTextContent.text !== "string") {
         throw new Error("LLM content array does not contain a valid text entry.");
       }
 
-      let llmResponse;
+      let parsedJson;
       try {
-        llmResponse = preventionResponseSchema.parse(JSON.parse(firstTextContent.text));
+        parsedJson = JSON.parse(firstTextContent.text);
+        console.log("🧠 Parsed JSON from LLM:", parsedJson);
       } catch (e) {
-        console.error("❌ Failed to parse LLM response content:", firstTextContent.text);
+        console.error("❌ Failed to parse LLM response as JSON:", firstTextContent.text);
         throw e;
       }
 
-      console.log("🧠 LLM response:", llmResponse);
-
-      if (!llmResponse || !llmResponse.optimalAction) {
-        throw new Error('LLM did not provide an optimal action.');
+      let llmResponse;
+      try {
+        llmResponse = preventionResponseSchema.parse(parsedJson);
+        console.log("✅ Validated LLM response:", llmResponse);
+      } catch (e) {
+        console.error("❌ Schema validation failed:", parsedJson);
+        throw e;
       }
+
 
       const optimalAction = llmResponse.optimalAction;
       console.log(`✅ LLM recommended optimal action: ${optimalAction.actionType} ${optimalAction.amountToken} ${optimalAction.asset}`);
 
-      // Step 3: Execute the optimal action using the imported tools
-      // console.log('🚀 Step 3: Executing optimal action...');
-      // let executionResult;
-      // if (optimalAction.actionType === 'SUPPLY' || optimalAction.actionType === 'HYBRID') {
-      //   executionResult = await supplyCollateralTool.execute({
-      //     userAddress: args.userAddress,
-      //     tokenAddress: optimalAction.asset,
-      //     amount: optimalAction.amountToken,
-      //     chainId: args.chainId,
-      //   }, context);
-      // } else if (optimalAction.actionType === 'REPAY') {
-      //   executionResult = await repayDebtTool.execute({
-      //     userAddress: args.userAddress,
-      //     tokenAddress: optimalAction.asset,
-      //     amount: optimalAction.amountToken,
-      //     chainId: args.chainId,
-      //   }, context);
-      // } else {
-      //   throw new Error(`Unsupported action type from LLM: ${optimalAction.actionType}`);
-      // }
+      console.log('🚀 Step 3: Executing optimal action...');
 
-      // if (executionResult.isError) {
-      //   throw new Error(`Failed to execute optimal action: ${executionResult.error.message}`);
-      // }
+      let executionResults: { step: string; result: any }[] = [];
+
+      // 🔁 Reusable helper function to execute a single step
+      const executeStep = async (label: string, actionType: "SUPPLY" | "REPAY", asset: string, amountToken: string) => {
+        const tool = actionType === "SUPPLY" ? supplyCollateralTool : repayDebtTool;
+        const result = await tool.execute({
+          userAddress: args.userAddress,
+          tokenSymbol: asset,
+          amount: amountToken,
+          chainId: args.chainId,
+        }, context);
+
+        if (result?.isError) {
+          throw new Error(`❌ ${label} failed: ${result.error.message}`);
+        }
+
+        executionResults.push({ step: label, result });
+        console.log(`✅ ${label} executed successfully.`);
+      };
+
+      if (optimalAction.actionType === 'HYBRID') {
+        if (!optimalAction.steps || !Array.isArray(optimalAction.steps)) {
+          throw new Error("HYBRID action must include 'steps'.");
+        }
+
+        for (const [index, step] of optimalAction.steps.entries()) {
+          const label = `Step ${index + 1}: ${step.actionType} ${step.amountToken} ${step.asset}`;
+          await executeStep(label, step.actionType, step.asset, step.amountToken);
+        }
+
+      } else if (optimalAction.actionType === 'SUPPLY' || optimalAction.actionType === 'REPAY') {
+        const label = `${optimalAction.actionType} ${optimalAction.amountToken} ${optimalAction.asset}`;
+        await executeStep(label, optimalAction.actionType, optimalAction.asset, optimalAction.amountToken);
+
+      } else {
+        throw new Error(`Unsupported action type from LLM: ${optimalAction.actionType}`);
+      }
 
       const message = [
         `🧠 **Intelligent Prevention Strategy Analysis**`,
