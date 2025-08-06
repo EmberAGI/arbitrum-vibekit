@@ -55,7 +55,7 @@ agent
     // Create manual MCP client for Ember endpoint
     let emberMcpClient: Client | null = null;
 
-    const emberEndpoint = process.env.EMBER_ENDPOINT || 'http://api.emberai.xyz/mcp';
+    const emberEndpoint = process.env.EMBER_ENDPOINT || 'https://api.emberai.xyz/mcp';
 
     try {
       console.log(`Connecting to MCP server at ${emberEndpoint}`);
@@ -70,21 +70,6 @@ agent
     } catch (error) {
       console.error('Failed to connect to MCP server:', error);
     }
-
-    // if (process.env.EMBER_ENDPOINT) {
-    //   try {
-    //     console.log(`Connecting to MCP server at ${process.env.EMBER_ENDPOINT}`);
-    //     emberMcpClient = new Client({
-    //       name: 'LiquidationPreventionAgent',
-    //       version: '1.0.0',
-    //     });
-
-    //     const transport = new StreamableHTTPClientTransport(new URL(process.env.EMBER_ENDPOINT));
-    //     await emberMcpClient.connect(transport);
-    //     console.log('MCP client connected successfully.');
-    //   } catch (error) {
-    //     console.error('Failed to connect to MCP server:', error);
-    //   }
 
     if (!emberMcpClient) {
       console.error('ember-mcp-tool-server MCP client not available, agent cannot start');
