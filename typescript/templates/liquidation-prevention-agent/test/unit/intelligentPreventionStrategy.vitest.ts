@@ -47,6 +47,7 @@ vi.mock('../../src/utils/liquidationData.js', () => ({
 vi.mock('../../src/tools/supplyCollateral.js', () => ({
   supplyCollateralTool: {
     execute: vi.fn().mockResolvedValue({
+      isError: false,
       status: { state: 'completed' },
       message: 'Collateral supplied successfully'
     })
@@ -56,6 +57,7 @@ vi.mock('../../src/tools/supplyCollateral.js', () => ({
 vi.mock('../../src/tools/repayDebt.js', () => ({
   repayDebtTool: {
     execute: vi.fn().mockResolvedValue({
+      isError: false,
       status: { state: 'completed' },
       message: 'Debt repaid successfully'
     })
@@ -198,9 +200,9 @@ describe('intelligentPreventionStrategy Tool', () => {
     expect(mockGenerateText).toHaveBeenCalledWith(
       expect.objectContaining({
         model: expect.any(Object),
-        prompt: expect.stringContaining('Act as a financial advisor'),
+        prompt: expect.stringContaining('You are a backend assistant'),
         temperature: 0.7,
-        maxTokens: 1000
+        maxTokens: 4000
       })
     );
 
@@ -278,7 +280,25 @@ describe('intelligentPreventionStrategy Tool', () => {
                   amountUsd: '3000',
                   amountToken: '1500+1500',
                   expectedHealthFactor: '1.7',
-                  priority: 1
+                  priority: 1,
+                  steps: [
+                    {
+                      actionType: 'SUPPLY',
+                      asset: 'USDC',
+                      amountUsd: '1500',
+                      amountToken: '1500',
+                      expectedHealthFactor: '1.5',
+                      priority: 1
+                    },
+                    {
+                      actionType: 'REPAY',
+                      asset: 'DAI',
+                      amountUsd: '1500',
+                      amountToken: '1500',
+                      expectedHealthFactor: '1.7',
+                      priority: 2
+                    }
+                  ]
                 }
               ],
               optimalAction: {
@@ -287,7 +307,25 @@ describe('intelligentPreventionStrategy Tool', () => {
                 amountUsd: '3000',
                 amountToken: '1500+1500',
                 expectedHealthFactor: '1.7',
-                priority: 1
+                priority: 1,
+                steps: [
+                  {
+                    actionType: 'SUPPLY',
+                    asset: 'USDC',
+                    amountUsd: '1500',
+                    amountToken: '1500',
+                    expectedHealthFactor: '1.5',
+                    priority: 1
+                  },
+                  {
+                    actionType: 'REPAY',
+                    asset: 'DAI',
+                    amountUsd: '1500',
+                    amountToken: '1500',
+                    expectedHealthFactor: '1.7',
+                    priority: 2
+                  }
+                ]
               }
             })
           }]
@@ -491,7 +529,7 @@ describe('intelligentPreventionStrategy Tool', () => {
       response: {
         messages: [{
           content: [{
-            type: 'reasoning',
+            type: 'text',
             text: JSON.stringify({
               currentAnalysis: {
                 currentHF: '1.05',
