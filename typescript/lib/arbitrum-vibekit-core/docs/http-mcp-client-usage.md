@@ -57,7 +57,7 @@ export const hybridSkill = defineSkill({
   mcpServers: {
     // HTTP server
     'ember-onchain': {
-      url: process.env.EMBER_MCP_SERVER_URL || 'http://api.emberai.xyz/mcp',
+      url: process.env.EMBER_MCP_SERVER_URL || 'https://api.emberai.xyz/mcp',
     } as HttpMcpConfig,
 
     // Local stdio server
@@ -164,7 +164,7 @@ export const swappingSkill = defineSkill({
   }),
   mcpServers: {
     'ember-onchain': {
-      url: process.env.EMBER_MCP_SERVER_URL || 'http://api.emberai.xyz/mcp',
+      url: process.env.EMBER_MCP_SERVER_URL || 'https://api.emberai.xyz/mcp',
       alwaysAllow: ['getTokens', 'swapTokens'],
     },
   },
