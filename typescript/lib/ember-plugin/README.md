@@ -6,9 +6,10 @@ The Ember Plugin System provides a standardized architecture for integrating DeF
 
 The plugin system is built around several core components:
 
-- **EmberPlugin Interface**: Defines the structure of a plugin
+- **EmberPlugin Interface**: Defines the structure of a plugin with type-safe actions and queries
+- **Plugin Types**: Categorizes plugins into specific DeFi operation types
 - **Action Definitions**: Callback functions that implement specific protocol operations
-- **Action Types**: Predefined categories for different DeFi operations
+- **Queries**: Metadata and position retrieval functions for different protocols
 - **TokenSets**: Multi-chain token organization system
 
 ## Core Interfaces
@@ -16,23 +17,39 @@ The plugin system is built around several core components:
 ### EmberPlugin Interface
 
 ```typescript
-interface EmberPlugin {
-  actions: ActionDefinition<Action>[]; // Array of supported actions
+interface EmberPlugin<Type extends PluginType> {
+  id?: string; // Optional unique identifier
+  type: Type; // Plugin type (lending, liquidity, or swap)
+  actions: ActionDefinition<AvailableActions[Type]>[]; // Type-safe actions based on plugin type
+  queries: AvailableQueries[Type]; // Type-safe queries based on plugin type
   name: string; // Plugin display name
   description?: string; // Optional description
   x?: string; // Twitter/X URL
-  website: string; // Plugin website URL
+  website?: string; // Plugin website URL (optional)
 }
+```
+
+### Plugin Types
+
+```typescript
+type PluginType = 'lending' | 'liquidity' | 'swap';
+
+type AvailableActions = {
+  lending: 'lending-borrow' | 'lending-repay' | 'lending-supply' | 'lending-withdraw';
+  liquidity: 'liquidity-supply' | 'liquidity-withdraw';
+  swap: 'swap';
+};
 ```
 
 ### ActionDefinition Interface
 
 ```typescript
 interface ActionDefinition<T extends Action> {
+  name: string; // Unique action name within the plugin
   type: T; // The action type
   callback: ActionCallback<T>; // Function to execute when action is triggered
   inputTokens: () => Promise<TokenSet[]>; // Available input tokens for all chains
-  outputTokens?: () => Promise<TokenSet[]>; // Available output tokens (optional)
+  outputTokens?: () => Promise<TokenSet[]>; // Available output tokens (defaults to input tokens if not provided)
 }
 ```
 
@@ -40,8 +57,8 @@ interface ActionDefinition<T extends Action> {
 
 ```typescript
 interface TokenSet {
-  chain: Chain; // The blockchain network
-  tokens: Set<Token>; // Set of tokens for this chain
+  chainId: string; // The blockchain network ID
+  tokens: string[]; // Array of token addresses for this chain
 }
 ```
 
@@ -52,14 +69,8 @@ interface TokenSet {
 **Action Type**: `swap`
 
 ```typescript
-interface SwapActionRequest {
-  fromToken: TokenIdentifier;
-  toToken: TokenIdentifier;
-  amount: string; // Human-readable format
-  walletAddress?: string;
-}
-
-type SwapActionCallback = (request: SwapActionRequest) => Promise<SwapResponse>;
+// Uses ember-schemas types
+type SwapActionCallback = (request: SwapTokensRequest) => Promise<SwapTokensResponse>;
 ```
 
 ### Lending Operations
@@ -67,17 +78,11 @@ type SwapActionCallback = (request: SwapActionRequest) => Promise<SwapResponse>;
 **Action Types**: `lending-borrow`, `lending-repay`, `lending-supply`, `lending-withdraw`
 
 ```typescript
-interface LendingInteractionRequest {
-  token: TokenIdentifier;
-  amount: string; // Human-readable format
-  walletAddress: string;
-}
-
-// Callback types for each lending operation
-type LendingBorrowCallback = (request: LendingInteractionRequest) => Promise<BorrowResponse>;
-type LendingRepayTokensCallback = (request: LendingInteractionRequest) => Promise<RepayResponse>;
-type LendingSupplyCallback = (request: LendingInteractionRequest) => Promise<SupplyResponse>;
-type LendingWithdrawCallback = (request: LendingInteractionRequest) => Promise<WithdrawResponse>;
+// All use ember-schemas types for requests and responses
+type LendingBorrowCallback = (request: BorrowTokensRequest) => Promise<BorrowTokensResponse>;
+type LendingRepayTokensCallback = (request: RepayTokensRequest) => Promise<RepayTokensResponse>;
+type LendingSupplyCallback = (request: SupplyTokensRequest) => Promise<SupplyTokensResponse>;
+type LendingWithdrawCallback = (request: WithdrawTokensRequest) => Promise<WithdrawTokensResponse>;
 ```
 
 ### Liquidity Operations
@@ -85,34 +90,111 @@ type LendingWithdrawCallback = (request: LendingInteractionRequest) => Promise<W
 **Action Types**: `liquidity-supply`, `liquidity-withdraw`
 
 ```typescript
-type LiquiditySupplyCallback = (request: SupplyLiquidityArgs) => Promise<LiquidityTransactionArtifact>;
-
-interface LiquidityWithdrawResponse {
-  transactions: TransactionPlan[];
-  chainId: string;
-}
-
-type LiquidityWithdrawCallback = (request: WithdrawLiquidityArgs) => Promise<LiquidityWithdrawResponse>;
+// All use ember-schemas types for requests and responses
+type LiquiditySupplyCallback = (
+  request: SupplyLiquidityRequest
+) => Promise<SupplyLiquidityResponse>;
+type LiquidityWithdrawCallback = (
+  request: WithdrawLiquidityRequest
+) => Promise<WithdrawLiquidityResponse>;
 ```
 
+## Plugin Queries
+
+The plugin system now includes query capabilities for retrieving metadata and positions:
+
+### Lending Queries
+
+```typescript
+type LendingQueries = {
+  getPositions: (request: GetWalletLendingPositionsRequest) => Promise<LendingPosition>;
+};
+```
+
+### Liquidity Queries
+
+```typescript
+type LiquidityQueries = {
+  getWalletPositions: (
+    request: GetWalletLiquidityPositionsRequest
+  ) => Promise<GetWalletLiquidityPositionsResponse>;
+  getPools: () => Promise<GetLiquidityPoolsResponse>;
+};
+```
+
+### Swap Queries
+
+Swap plugins currently do not require queries (empty interface).
 
 ## File Structure
 
 ```
 typescript/lib/ember-plugin/
 ├── src/
-│   ├── plugin.ts           # Core EmberPlugin interface
-│   ├── common.ts           # Chain and common types
+│   ├── index.ts            # Main exports and EmberPlugin interface
+│   ├── pluginType.ts       # Plugin types and type mappings
+│   ├── common.ts           # Chain types and common interfaces
 │   ├── actions/
 │   │   ├── index.ts        # Action exports
 │   │   ├── types.ts        # ActionDefinition and callback types
 │   │   ├── swap.ts         # Swap action interfaces
 │   │   ├── lending.ts      # Lending action interfaces
 │   │   └── liquidity.ts    # Liquidity action interfaces
-│   └── index.ts            # Main exports
+│   └── queries/
+│       ├── index.ts        # Query exports
+│       ├── lending.ts      # Lending query interfaces
+│       └── liquidity.ts    # Liquidity query interfaces
 ├── package.json
 ├── tsconfig.json
 └── README.md               # This file
+```
+
+## Key Changes and Features
+
+1. **Type Safety**: The plugin system now uses generic types to ensure plugins only implement actions and queries relevant to their type
+2. **Ember Schemas Integration**: All request/response types are now imported from the `ember-schemas` package for consistency
+3. **Query System**: New query capabilities allow plugins to provide metadata and position information
+4. **Simplified TokenSet**: TokenSet now uses string arrays for token addresses and chainId strings
+5. **Plugin Categories**: Clear separation between lending, liquidity, and swap plugins with type-specific constraints
+
+## Example Plugin Implementation
+
+```typescript
+import type { EmberPlugin } from 'ember-plugin';
+
+const myLendingPlugin: EmberPlugin<'lending'> = {
+  id: 'my-protocol',
+  type: 'lending',
+  name: 'My Protocol',
+  description: 'A lending protocol plugin',
+  website: 'https://myprotocol.com',
+  actions: [
+    {
+      name: 'supply-usdc',
+      type: 'lending-supply',
+      callback: async (request) => {
+        // Implementation
+        return {
+          /* SupplyTokensResponse */
+        };
+      },
+      inputTokens: async () => [
+        {
+          chainId: '42161', // Arbitrum
+          tokens: ['0xA0b86a33E6441fffFFFFFf00d3a81E6B18A6f14F'], // USDC
+        },
+      ],
+    },
+  ],
+  queries: {
+    getPositions: async (request) => {
+      // Implementation
+      return {
+        /* LendingPosition */
+      };
+    },
+  },
+};
 ```
 
 ## Next Steps
@@ -122,4 +204,4 @@ typescript/lib/ember-plugin/
 3. **Add Comprehensive Tests**: Follow the testing guidelines above
 4. **Submit Your Contribution**: Create a pull request with your plugin implementation
 
-For questions or support, create an issue in the [Vibekit repository](https://github.com/EmberAGI/arbitrum-vibekit/issues) or join our [Discord community](https://discord.com/invite/bgxWQ2fSBR). 
+For questions or support, create an issue in the [Vibekit repository](https://github.com/EmberAGI/arbitrum-vibekit/issues) or join our [Discord community](https://discord.com/invite/bgxWQ2fSBR).
