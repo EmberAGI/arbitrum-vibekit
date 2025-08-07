@@ -1,9 +1,23 @@
 import type { UIMessage } from 'ai';
-import { createDataStreamResponse, appendResponseMessages, smoothStream, streamText } from 'ai';
+import {
+  createDataStreamResponse,
+  appendResponseMessages,
+  smoothStream,
+  streamText,
+} from 'ai';
 import { auth } from '@/app/(auth)/auth';
 import { systemPrompt } from '@/lib/ai/prompts';
-import { deleteChatById, getChatById, saveChat, saveMessages } from '@/lib/db/queries';
-import { generateUUID, getMostRecentUserMessage, getTrailingMessageId } from '@/lib/utils';
+import {
+  deleteChatById,
+  getChatById,
+  saveChat,
+  saveMessages,
+} from '@/lib/db/queries';
+import {
+  generateUUID,
+  getMostRecentUserMessage,
+  getTrailingMessageId,
+} from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
 // import { createDocument } from '@/lib/ai/tools/create-document';
 // import { updateDocument } from '@/lib/ai/tools/update-document';
@@ -12,7 +26,7 @@ import { generateTitleFromUserMessage } from '../../actions';
 import { isProductionEnvironment } from '@/lib/constants';
 import { openRouterProvider } from '@/lib/ai/providers';
 import { getTools as getDynamicTools } from '@/lib/ai/tools/tool-agents';
-import { generateChart } from '@/lib/ai/tools/generate-chart';
+// import { generateChart } from '@/lib/ai/tools/generate-chart'; // Now using MCP server
 
 import type { Session } from 'next-auth';
 
@@ -79,7 +93,10 @@ export async function POST(request: Request) {
           address: validatedContext.walletAddress || '',
         });
       } catch (error) {
-        console.error('[ROUTE] Error in title generation or chat saving:', error);
+        console.error(
+          '[ROUTE] Error in title generation or chat saving:',
+          error,
+        );
         throw error; // Re-throw to be caught by outer try-catch
       }
     } else {
@@ -116,7 +133,7 @@ export async function POST(request: Request) {
     }
 
     return createDataStreamResponse({
-      execute: dataStream => {
+      execute: (dataStream) => {
         console.log('[ROUTE] Executing stream...');
 
         try {
@@ -143,14 +160,16 @@ export async function POST(request: Request) {
               //  dataStream,
               //}),
               ...dynamicTools,
-              generateChart,
+              // generateChart, // Now handled by MCP server via dynamicTools
             },
             onFinish: async ({ response }) => {
               console.log('🔍 [ROUTE] StreamText finished');
               if (session.user?.id) {
                 try {
                   const assistantId = getTrailingMessageId({
-                    messages: response.messages.filter(message => message.role === 'assistant'),
+                    messages: response.messages.filter(
+                      (message) => message.role === 'assistant',
+                    ),
                   });
 
                   if (!assistantId) {
@@ -169,13 +188,17 @@ export async function POST(request: Request) {
                         chatId: id,
                         role: assistantMessage.role,
                         parts: assistantMessage.parts,
-                        attachments: assistantMessage.experimental_attachments ?? [],
+                        attachments:
+                          assistantMessage.experimental_attachments ?? [],
                         createdAt: new Date(),
                       },
                     ],
                   });
                 } catch (saveError) {
-                  console.error('[ROUTE] Failed to save assistant response:', saveError);
+                  console.error(
+                    '[ROUTE] Failed to save assistant response:',
+                    saveError,
+                  );
                 }
               }
             },
@@ -191,7 +214,10 @@ export async function POST(request: Request) {
         } catch (streamError) {
           console.error('[ROUTE] Stream error details:', {
             name: streamError instanceof Error ? streamError.name : 'Unknown',
-            message: streamError instanceof Error ? streamError.message : String(streamError),
+            message:
+              streamError instanceof Error
+                ? streamError.message
+                : String(streamError),
             stack: streamError instanceof Error ? streamError.stack : undefined,
           });
           throw streamError;
@@ -205,9 +231,12 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('[ROUTE] Main POST error:', error);
     const JSONerror = JSON.stringify(error, null, 2);
-    return new Response(`An error occurred while processing your request! ${JSONerror}`, {
-      status: 500,
-    });
+    return new Response(
+      `An error occurred while processing your request! ${JSONerror}`,
+      {
+        status: 500,
+      },
+    );
   }
 }
 

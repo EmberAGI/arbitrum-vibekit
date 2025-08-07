@@ -19,7 +19,7 @@ The v2 framework uses StreamableHTTP as the primary MCP transport, providing sig
 ```ts
 // Automatically configured with modern transport
 const agent = Agent.create(agentConfig, {
-  llm: { model: providers.openrouter('google/gemini-2.5-flash') },
+  llm: { model: providers.openrouter('x-ai/grok-3-mini') },
 });
 
 // Exposes modern MCP endpoint at /mcp

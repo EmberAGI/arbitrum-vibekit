@@ -10,7 +10,11 @@ interface PriceChartProps {
   height?: number;
 }
 
-export const PriceChart = ({ data, width = 600, height = 300 }: PriceChartProps) => {
+export const PriceChart = ({
+  data,
+  width = 600,
+  height = 300,
+}: PriceChartProps) => {
   console.log('Line number 14:', data);
   const [hoveredPoint, setHoveredPoint] = useState<{
     x: number;
@@ -18,7 +22,10 @@ export const PriceChart = ({ data, width = 600, height = 300 }: PriceChartProps)
     price: number;
     timestamp: number;
   } | null>(null);
-  const [mousePosition, setMousePosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [mousePosition, setMousePosition] = useState<{ x: number; y: number }>({
+    x: 0,
+    y: 0,
+  });
   const svgRef = useRef<SVGSVGElement>(null);
 
   if (!data || !data.prices || data.prices.length === 0) {
@@ -46,8 +53,8 @@ export const PriceChart = ({ data, width = 600, height = 300 }: PriceChartProps)
     );
   }
 
-  const prices = data.prices.map(p => p[1]);
-  const timestamps = data.prices.map(p => p[0]);
+  const prices = data.prices.map((p) => p[1]);
+  const timestamps = data.prices.map((p) => p[0]);
 
   const maxPrice = Math.max(...prices);
   const minPrice = Math.min(...prices);
@@ -59,11 +66,18 @@ export const PriceChart = ({ data, width = 600, height = 300 }: PriceChartProps)
   const chartHeight = height - 2 * padding;
 
   const getX = (timestamp: number) => {
-    return padding + ((timestamp - minTimestamp) / (maxTimestamp - minTimestamp)) * chartWidth;
+    return (
+      padding +
+      ((timestamp - minTimestamp) / (maxTimestamp - minTimestamp)) * chartWidth
+    );
   };
 
   const getY = (price: number) => {
-    return padding + chartHeight - ((price - minPrice) / (maxPrice - minPrice)) * chartHeight;
+    return (
+      padding +
+      chartHeight -
+      ((price - minPrice) / (maxPrice - minPrice)) * chartHeight
+    );
   };
 
   const pathData = data.prices
@@ -94,7 +108,8 @@ export const PriceChart = ({ data, width = 600, height = 300 }: PriceChartProps)
   const xAxisLabels = [];
   const numXLabels = 5;
   for (let i = 0; i <= numXLabels; i++) {
-    const timestamp = minTimestamp + (i / numXLabels) * (maxTimestamp - minTimestamp);
+    const timestamp =
+      minTimestamp + (i / numXLabels) * (maxTimestamp - minTimestamp);
     xAxisLabels.push({
       date: new Date(timestamp).toLocaleDateString('en-US', {
         month: 'short',
@@ -120,7 +135,9 @@ export const PriceChart = ({ data, width = 600, height = 300 }: PriceChartProps)
     data.prices.forEach(([timestamp, price]) => {
       const x = getX(timestamp);
       const y = getY(price);
-      const distance = Math.sqrt(Math.pow(mouseX - x, 2) + Math.pow(mouseY - y, 2));
+      const distance = Math.sqrt(
+        Math.pow(mouseX - x, 2) + Math.pow(mouseY - y, 2),
+      );
 
       if (distance < minDistance && distance < 30) {
         minDistance = distance;
@@ -156,7 +173,7 @@ export const PriceChart = ({ data, width = 600, height = 300 }: PriceChartProps)
   };
 
   return (
-    <div 
+    <div
       style={{ position: 'relative', display: 'inline-block' }}
       data-testid="price-chart"
     >
@@ -266,7 +283,8 @@ export const PriceChart = ({ data, width = 600, height = 300 }: PriceChartProps)
         {data.prices.map(([timestamp, price], i) => {
           const x = getX(timestamp);
           const y = getY(price);
-          const isHovered = hoveredPoint && hoveredPoint.x === x && hoveredPoint.y === y;
+          const isHovered =
+            hoveredPoint && hoveredPoint.x === x && hoveredPoint.y === y;
 
           return (
             <g key={i}>
@@ -345,7 +363,9 @@ export const PriceChart = ({ data, width = 600, height = 300 }: PriceChartProps)
             minWidth: '180px',
           }}
         >
-          <div style={{ fontWeight: '600', color: '#667eea', marginBottom: '4px' }}>
+          <div
+            style={{ fontWeight: '600', color: '#667eea', marginBottom: '4px' }}
+          >
             {formatPrice(hoveredPoint.price)}
           </div>
           <div style={{ fontSize: '12px', color: '#64748b' }}>

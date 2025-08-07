@@ -14,7 +14,9 @@
     "lint:fix": "eslint src --fix",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "watch": "nodemon --watch 'src/**/*.ts' --exec 'tsx' src/index.ts"
+    "watch": "nodemon --watch 'src/**/*.ts' --exec 'tsx' src/index.ts",
+    "test": "tsx test-mcp.ts",
+    "test:mcp": "pnpm build && tsx test-mcp.ts"
   },
   "keywords": [
     "mcp",

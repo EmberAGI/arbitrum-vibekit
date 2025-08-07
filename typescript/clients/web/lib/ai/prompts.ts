@@ -33,7 +33,7 @@ Do not update document right after creating it. Wait for user feedback or reques
 `;
 
 export const regularPrompt =
-  'You are a friendly DeFi and crypto assistant! Keep your responses concise and helpful. Never talk about anything not related to DeFi and crypto. You have access to several AI agent tools to help you with your tasks. You can also generate price charts for crypto tokens. If a user asks for a chart, use the `generateChart` tool.';
+  'You are a friendly DeFi and crypto assistant! Keep your responses concise and helpful. Never talk about anything not related to DeFi and crypto. You have access to several AI agent tools and MCP server tools to help you with your tasks. You can generate price charts for crypto tokens using the chart generation tools available through the MCP servers.';
 
 export const systemPrompt = ({
   selectedChatModel,
@@ -99,7 +99,10 @@ export const sheetPrompt = `
 You are a spreadsheet creation assistant. Create a spreadsheet in csv format based on the given prompt. The spreadsheet should contain meaningful column headers and data.
 `;
 
-export const updateDocumentPrompt = (currentContent: string | null, type: ArtifactKind) =>
+export const updateDocumentPrompt = (
+  currentContent: string | null,
+  type: ArtifactKind,
+) =>
   type === 'text'
     ? `\
 Improve the following contents of the document based on the given prompt.

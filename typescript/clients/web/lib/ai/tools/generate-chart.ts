@@ -17,10 +17,13 @@ const tokenMap: Record<string, string> = {
 };
 
 export const generateChart = tool({
-  description: 'Generate a price chart for a cryptocurrency over a specified number of days.',
+  description:
+    'Generate a price chart for a cryptocurrency over a specified number of days.',
   parameters: z.object({
     token: z.string().describe('The symbol of the token, e.g., BTC, ETH.'),
-    days: z.number().describe('The number of days of historical data to chart.'),
+    days: z
+      .number()
+      .describe('The number of days of historical data to chart.'),
   }),
   execute: async ({ token, days }: { token: string; days: number }) => {
     const tokenId = tokenMap[token.toUpperCase()];
@@ -30,10 +33,12 @@ export const generateChart = tool({
 
     try {
       const response = await fetch(
-        `https://api.coingecko.com/api/v3/coins/${tokenId}/market_chart?vs_currency=usd&days=${days}`
+        `https://api.coingecko.com/api/v3/coins/${tokenId}/market_chart?vs_currency=usd&days=${days}`,
       );
       if (!response.ok) {
-        throw new Error(`CoinGecko API request failed with status ${response.status}`);
+        throw new Error(
+          `CoinGecko API request failed with status ${response.status}`,
+        );
       }
       const data = await response.json();
       console.log('🔍 [TOOL] Chart data:', data.prices);

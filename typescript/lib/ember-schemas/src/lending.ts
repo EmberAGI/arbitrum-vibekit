@@ -7,7 +7,7 @@ import {
   AskEncyclopediaSchema,
   type AskEncyclopediaArgs,
   TokenIdentifierSchema,
-  type TokenIdentifier
+  type TokenIdentifier,
 } from './common.js';
 import { TokenSchema } from './token.js';
 
@@ -48,7 +48,9 @@ export type Position = z.infer<typeof PositionSchema>;
 export const GetWalletLendingPositionsResponseSchema = z.object({
   positions: z.array(LendingPositionSchema),
 });
-export type GetWalletLendingPositionsResponse = z.infer<typeof GetWalletLendingPositionsResponseSchema>;
+export type GetWalletLendingPositionsResponse = z.infer<
+  typeof GetWalletLendingPositionsResponseSchema
+>;
 
 //
 // Tool Response Schemas
@@ -160,4 +162,4 @@ export type LendingAskEncyclopediaArgs = AskEncyclopediaArgs;
 // Additional lending-related types
 export interface TokenInfo extends TokenIdentifier {
   decimals: number;
-} 
+}

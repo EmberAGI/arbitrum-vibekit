@@ -32,20 +32,26 @@ test.describe('Generate Chart Tool - Unit Tests', () => {
       } as Response;
     };
 
-    const result = await generateChart.execute({ token: 'BTC', days: 7 },{
-          toolCallId: '',
-          messages: []
-      });
-    
+    const result = await generateChart.execute(
+      { token: 'BTC', days: 7 },
+      {
+        toolCallId: '',
+        messages: [],
+      },
+    );
+
     expect(result).toEqual({ prices: mockResponseData.prices });
   });
 
   test('should handle unsupported token', async () => {
-    const result = await generateChart.execute({ token: 'INVALIDTOKEN', days: 7 },{
-          toolCallId: '',
-          messages: []
-      });
-    
+    const result = await generateChart.execute(
+      { token: 'INVALIDTOKEN', days: 7 },
+      {
+        toolCallId: '',
+        messages: [],
+      },
+    );
+
     expect(result).toEqual({ error: 'Token "INVALIDTOKEN" is not supported.' });
   });
 
@@ -58,11 +64,14 @@ test.describe('Generate Chart Tool - Unit Tests', () => {
       } as Response;
     };
 
-    const result = await generateChart.execute({ token: 'BTC', days: 7 },{
-          toolCallId: '',
-          messages: []
-      });
-    
+    const result = await generateChart.execute(
+      { token: 'BTC', days: 7 },
+      {
+        toolCallId: '',
+        messages: [],
+      },
+    );
+
     expect(result).toEqual({ error: 'Failed to fetch chart data' });
   });
 
@@ -72,17 +81,32 @@ test.describe('Generate Chart Tool - Unit Tests', () => {
       throw new Error('Network error');
     };
 
-    const result = await generateChart.execute({ token: 'ETH', days: 30 },{
-          toolCallId: '',
-          messages: []
-      });
-    
+    const result = await generateChart.execute(
+      { token: 'ETH', days: 30 },
+      {
+        toolCallId: '',
+        messages: [],
+      },
+    );
+
     expect(result).toEqual({ error: 'Failed to fetch chart data' });
   });
 
   test('should handle all supported tokens', async () => {
-    const supportedTokens = ['BTC', 'ETH', 'USDC', 'USDT', 'DAI', 'WBTC', 'WETH', 'ARB', 'BASE', 'MATIC', 'OP'];
-    
+    const supportedTokens = [
+      'BTC',
+      'ETH',
+      'USDC',
+      'USDT',
+      'DAI',
+      'WBTC',
+      'WETH',
+      'ARB',
+      'BASE',
+      'MATIC',
+      'OP',
+    ];
+
     for (const token of supportedTokens) {
       global.fetch = async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString();
@@ -94,40 +118,50 @@ test.describe('Generate Chart Tool - Unit Tests', () => {
         } as Response;
       };
 
-      const result = await generateChart.execute({ token, days: 1 },{
+      const result = await generateChart.execute(
+        { token, days: 1 },
+        {
           toolCallId: '',
-          messages: []
-      });
+          messages: [],
+        },
+      );
       expect(result).toHaveProperty('prices');
       expect(result).not.toHaveProperty('error');
     }
   });
 
   test('should handle case insensitive token input', async () => {
-    global.fetch = async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ prices: [[Date.now(), 1000]] }),
-    } as Response);
+    global.fetch = async () =>
+      ({
+        ok: true,
+        status: 200,
+        json: async () => ({ prices: [[Date.now(), 1000]] }),
+      }) as Response;
 
     // Test lowercase
-    const resultLower = await generateChart.execute({ token: 'btc', days: 1 },{
-          toolCallId: '',
-          messages: []
-      });
+    const resultLower = await generateChart.execute(
+      { token: 'btc', days: 1 },
+      {
+        toolCallId: '',
+        messages: [],
+      },
+    );
     expect(resultLower).toHaveProperty('prices');
 
     // Test mixed case
-    const resultMixed = await generateChart.execute({ token: 'eTh', days: 1 },{
-          toolCallId: '',
-          messages: []
-      });
+    const resultMixed = await generateChart.execute(
+      { token: 'eTh', days: 1 },
+      {
+        toolCallId: '',
+        messages: [],
+      },
+    );
     expect(resultMixed).toHaveProperty('prices');
   });
 
   test('should pass correct days parameter to API', async () => {
     const testDays = [1, 7, 30, 365];
-    
+
     for (const days of testDays) {
       global.fetch = async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString();
@@ -139,59 +173,70 @@ test.describe('Generate Chart Tool - Unit Tests', () => {
         } as Response;
       };
 
-      await generateChart.execute({ token: 'BTC', days },{
+      await generateChart.execute(
+        { token: 'BTC', days },
+        {
           toolCallId: '',
-          messages: []
-      });
+          messages: [],
+        },
+      );
     }
   });
 
   test('should handle malformed API response', async () => {
     // Mock malformed response
-    global.fetch = async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ invalid: 'data' }), // Missing prices array
-    } as Response);
+    global.fetch = async () =>
+      ({
+        ok: true,
+        status: 200,
+        json: async () => ({ invalid: 'data' }), // Missing prices array
+      }) as Response;
 
-    const result = await generateChart.execute({ token: 'BTC', days: 7 },{
-          toolCallId: '',
-          messages: []
-      });
-    
+    const result = await generateChart.execute(
+      { token: 'BTC', days: 7 },
+      {
+        toolCallId: '',
+        messages: [],
+      },
+    );
+
     // Should still return the response even if malformed
     expect(result).toEqual({ prices: undefined });
   });
 
   test('should handle JSON parsing errors', async () => {
     // Mock response with invalid JSON
-    global.fetch = async () => ({
+    global.fetch = async () =>
+      ({
         ok: true,
         status: 200,
         json: async () => {
-            throw new Error('Invalid JSON');
+          throw new Error('Invalid JSON');
         },
-    } as unknown as Response);
+      }) as unknown as Response;
 
-    const result = await generateChart.execute({ token: 'BTC', days: 7 },{
-          toolCallId: '',
-          messages: []
-      });
-    
+    const result = await generateChart.execute(
+      { token: 'BTC', days: 7 },
+      {
+        toolCallId: '',
+        messages: [],
+      },
+    );
+
     expect(result).toEqual({ error: 'Failed to fetch chart data' });
   });
 
   test('should validate tool parameters schema', () => {
     const parameters = generateChart.parameters;
-    
+
     // Check that parameters are correctly defined
     expect(parameters._def.shape()).toHaveProperty('token');
     expect(parameters._def.shape()).toHaveProperty('days');
-    
+
     // Test valid parameters
     const validParams = { token: 'BTC', days: 7 };
     expect(() => parameters.parse(validParams)).not.toThrow();
-    
+
     // Test invalid parameters should throw during validation
     expect(() => parameters.parse({ token: 'BTC' })).toThrow(); // Missing days
     expect(() => parameters.parse({ days: 7 })).toThrow(); // Missing token
@@ -199,22 +244,26 @@ test.describe('Generate Chart Tool - Unit Tests', () => {
   });
 
   test('should handle edge case days values', async () => {
-    global.fetch = async (_input: RequestInfo | URL) => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ prices: [] }),
-    } as Response);
+    global.fetch = async (_input: RequestInfo | URL) =>
+      ({
+        ok: true,
+        status: 200,
+        json: async () => ({ prices: [] }),
+      }) as Response;
 
     // Test boundary values
     const edgeCases = [0, 1, 365, 1000];
-    
+
     for (const days of edgeCases) {
-      const result = await generateChart.execute({ token: 'BTC', days },{
+      const result = await generateChart.execute(
+        { token: 'BTC', days },
+        {
           toolCallId: '',
-          messages: []
-      });
+          messages: [],
+        },
+      );
       // Should not error on edge case values
       expect(result).not.toHaveProperty('error');
     }
   });
-}); 
+});

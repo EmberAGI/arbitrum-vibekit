@@ -77,7 +77,7 @@ setup('authenticate with improved wallet mock', async ({ page }) => {
           {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
-          }
+          },
         );
       }
       return originalFetch(url, options);
@@ -102,11 +102,12 @@ setup('authenticate with improved wallet mock', async ({ page }) => {
           status: 'connected',
         },
         version: 2,
-      })
+      }),
     );
 
     // Set cookies for session persistence
-    document.cookie = 'next-auth.session-token=mock-token; path=/; max-age=86400';
+    document.cookie =
+      'next-auth.session-token=mock-token; path=/; max-age=86400';
 
     console.log('✅ Improved wallet mocks initialized');
   });

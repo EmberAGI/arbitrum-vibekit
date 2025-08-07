@@ -109,6 +109,15 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
       },
     },
+    {
+      name: 'mcp-integration',
+      testMatch: /mcp-integration.test.ts/,
+      dependencies: ['setup:wallet-auth'],
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: 'playwright/.auth/session.json',
+      },
+    },
 
     // {
     //   name: 'firefox',

@@ -56,7 +56,7 @@ async function fetchChartDataWithRetry(tokenId: string, days: number) {
                 return await response.json();
             } catch (error) {
                 if (isRetryableError(error)) {
-                    console.log(`Rate limit or server error hit, retrying... Error: ${error}`);
+                    console.error(`Rate limit or server error hit, retrying... Error: ${error}`);
                     throw error; // This will trigger a retry
                 }
                 // For non-retryable errors, don't retry
@@ -66,7 +66,7 @@ async function fetchChartDataWithRetry(tokenId: string, days: number) {
         {
             ...RETRY_CONFIG,
             onFailedAttempt: (error) => {
-                console.log(
+                console.error(
                     `fetchChartData attempt ${error.attemptNumber} failed (${error.retriesLeft} retries left): ${error.message}`
                 );
             },
@@ -109,10 +109,10 @@ export async function createServer() {
                     };
                 }
 
-                console.log(`🔍 [MCP] Fetching chart data for ${token} (${tokenId}) over ${days} days`);
+                console.error(`🔍 [MCP] Fetching chart data for ${token} (${tokenId}) over ${days} days`);
                 
                 const data = await fetchChartDataWithRetry(tokenId, days) as any;
-                console.log('🔍 [MCP] Chart data received:', data.prices?.length || 0, 'data points');
+                console.error('🔍 [MCP] Chart data received:', data.prices?.length || 0, 'data points');
 
                 return {
                     content: [

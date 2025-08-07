@@ -97,7 +97,6 @@ export const YieldMarketVolatileDataSchema = z.object({
 });
 export type YieldMarketVolatileData = z.infer<typeof YieldMarketVolatileDataSchema>;
 
-
 export const YieldMarketSchema = z.object({
   name: z.string().describe('The name of the yield market.'),
   address: z.string().describe('The address of the yield market.'),
@@ -115,8 +114,7 @@ export const GetYieldMarketsResponseSchema = z.object({
     .array(YieldMarketSchema)
     .describe('List of yield markets matching the request criteria.'),
 });
-export type GetYieldMarketsResponse = z.infer<typeof GetYieldMarketsResponseSchema>; 
-
+export type GetYieldMarketsResponse = z.infer<typeof GetYieldMarketsResponseSchema>;
 
 export const GetPendleMarketsRequestSchema = z.object({});
 export type GetPendleMarketsRequestArgs = z.infer<typeof GetPendleMarketsRequestSchema>;

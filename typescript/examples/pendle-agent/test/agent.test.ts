@@ -86,8 +86,10 @@ describe('Pendle Agent Integration Tests', function () {
 
           expect(response.status?.state).to.not.equal('failed', 'List markets operation failed');
 
-          const marketArtifact = response!.artifacts!.find(artifact => artifact.name === 'yield-markets');
-          expect(marketArtifact!.parts!.length).to.be.greaterThan(0, 'No market data found');              
+          const marketArtifact = response!.artifacts!.find(
+            artifact => artifact.name === 'yield-markets'
+          );
+          expect(marketArtifact!.parts!.length).to.be.greaterThan(0, 'No market data found');
         });
       });
 
@@ -103,13 +105,9 @@ describe('Pendle Agent Integration Tests', function () {
           console.log('Swap response:', JSON.stringify(response, null, 2));
           expect(response.status?.state).to.not.equal('failed', 'Swap operation failed');
 
-          const txHashes = await extractAndExecuteTransactions(
-            response,
-            multiChainSigner,
-            'swap'
-          );
+          const txHashes = await extractAndExecuteTransactions(response, multiChainSigner, 'swap');
           expect(txHashes.length).to.be.greaterThan(0, 'No transaction hashes returned');
-        });        
+        });
       });
 
       describe('Agent State Management', function () {
@@ -121,11 +119,16 @@ describe('Pendle Agent Integration Tests', function () {
           );
           expect(marketsResponse).to.exist;
           expect(marketsResponse.status?.state).to.not.equal('failed');
-          
+
           if (marketsResponse.artifacts && marketsResponse.artifacts.length > 0) {
-            const marketArtifact = marketsResponse.artifacts.find(artifact => artifact.name === 'yield-markets');
+            const marketArtifact = marketsResponse.artifacts.find(
+              artifact => artifact.name === 'yield-markets'
+            );
             if (marketArtifact && marketArtifact.parts) {
-              expect(marketArtifact.parts.length).to.be.greaterThan(0, 'Markets array should not be empty');
+              expect(marketArtifact.parts.length).to.be.greaterThan(
+                0,
+                'Markets array should not be empty'
+              );
             }
           }
         });
@@ -139,11 +142,12 @@ describe('Pendle Agent Integration Tests', function () {
           );
 
           const messageText = extractMessageText(response);
-          expect(messageText.toLowerCase()).to.satisfy((text: string) =>
-            text.includes('yield') || text.includes('pendle') || text.includes('swap')
+          expect(messageText.toLowerCase()).to.satisfy(
+            (text: string) =>
+              text.includes('yield') || text.includes('pendle') || text.includes('swap')
           );
         });
       });
     });
   }
-}); 
+});

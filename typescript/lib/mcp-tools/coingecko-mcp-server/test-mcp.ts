@@ -3,39 +3,72 @@
 // Simple test script for the CoinGecko MCP server
 // This script tests the stdio transport directly
 
-const { spawn } = require('child_process');
-const path = require('path');
+import { spawn, ChildProcess } from 'child_process';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
-async function testMcpServer() {
-  console.log('🧪 Testing CoinGecko MCP Server...\n');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-  // Start the MCP server
-  const serverProcess = spawn('node', [path.join(__dirname, 'dist/index.js')], {
+interface TestResult {
+  name: string;
+  status: 'PASS' | 'FAIL';
+}
+
+interface McpRequest {
+  jsonrpc: '2.0';
+  id: number;
+  method: string;
+  params: Record<string, any>;
+}
+
+interface McpResponse {
+  jsonrpc: '2.0';
+  id: number;
+  result?: any;
+  error?: any;
+}
+
+async function testMcpServer(): Promise<void> {
+  console.log('ℹ️  Starting CoinGecko MCP Server...\n');
+
+  // Start the MCP server (stdio-only version)
+  const serverProcess = spawn('node', [join(__dirname, 'dist/stdio-server.js')], {
     stdio: ['pipe', 'pipe', 'pipe']
   });
 
   let serverReady = false;
-  let testResults = [];
+  const testResults: TestResult[] = [];
+
+  // Add timeout for server startup
+  const startupTimeout = setTimeout(() => {
+    if (!serverReady) {
+      console.error('❌ Test failed: Server failed to start within 10 seconds');
+      serverProcess.kill();
+      process.exit(1);
+    }
+  }, 10000);
 
   // Listen for server output
-  serverProcess.stderr.on('data', (data) => {
+  serverProcess.stderr?.on('data', (data: Buffer) => {
     const output = data.toString();
     console.log('Server:', output.trim());
     
     if (output.includes('CoinGecko MCP stdio server started and connected')) {
       serverReady = true;
+      clearTimeout(startupTimeout);
       console.log('✅ Server is ready!\n');
       runTests();
     }
   });
 
   // Listen for server errors
-  serverProcess.on('error', (error) => {
+  serverProcess.on('error', (error: Error) => {
     console.error('❌ Server error:', error);
     process.exit(1);
   });
 
-  async function runTests() {
+  async function runTests(): Promise<void> {
     try {
       // Test 1: Get supported tokens
       console.log('📋 Test 1: Getting supported tokens...');
@@ -52,10 +85,10 @@ async function testMcpServer() {
       if (tokensResult.result) {
         const tokens = JSON.parse(tokensResult.result.content[0].text);
         console.log(`✅ Found ${tokens.count} supported tokens`);
-        testResults.push('get_supported_tokens: PASS');
+        testResults.push({ name: 'get_supported_tokens', status: 'PASS' });
       } else {
         console.log('❌ Failed to get supported tokens');
-        testResults.push('get_supported_tokens: FAIL');
+        testResults.push({ name: 'get_supported_tokens', status: 'FAIL' });
       }
 
       // Test 2: Generate chart for BTC
@@ -77,14 +110,14 @@ async function testMcpServer() {
         const chartData = JSON.parse(chartResult.result.content[0].text);
         if (chartData.prices && chartData.prices.length > 0) {
           console.log(`✅ Generated chart with ${chartData.prices.length} data points`);
-          testResults.push('generate_chart: PASS');
+          testResults.push({ name: 'generate_chart', status: 'PASS' });
         } else {
           console.log('❌ Chart data is empty');
-          testResults.push('generate_chart: FAIL');
+          testResults.push({ name: 'generate_chart', status: 'FAIL' });
         }
       } else {
         console.log('❌ Failed to generate chart');
-        testResults.push('generate_chart: FAIL');
+        testResults.push({ name: 'generate_chart', status: 'FAIL' });
       }
 
       // Test 3: Test invalid token
@@ -106,24 +139,23 @@ async function testMcpServer() {
         const errorData = JSON.parse(invalidResult.result.content[0].text);
         if (errorData.error && errorData.error.includes('not supported')) {
           console.log('✅ Correctly handled invalid token');
-          testResults.push('invalid_token: PASS');
+          testResults.push({ name: 'invalid_token', status: 'PASS' });
         } else {
           console.log('❌ Did not handle invalid token correctly');
-          testResults.push('invalid_token: FAIL');
+          testResults.push({ name: 'invalid_token', status: 'FAIL' });
         }
       } else {
         console.log('❌ Failed to test invalid token');
-        testResults.push('invalid_token: FAIL');
+        testResults.push({ name: 'invalid_token', status: 'FAIL' });
       }
 
       // Print test summary
       console.log('\n📊 Test Summary:');
       testResults.forEach(result => {
-        const [test, status] = result.split(': ');
-        console.log(`${status === 'PASS' ? '✅' : '❌'} ${test}`);
+        console.log(`${result.status === 'PASS' ? '✅' : '❌'} ${result.name}`);
       });
 
-      const passedTests = testResults.filter(r => r.includes('PASS')).length;
+      const passedTests = testResults.filter(r => r.status === 'PASS').length;
       const totalTests = testResults.length;
       console.log(`\n🎯 Results: ${passedTests}/${totalTests} tests passed`);
 
@@ -136,22 +168,22 @@ async function testMcpServer() {
     }
   }
 
-  async function sendMcpRequest(request) {
+  async function sendMcpRequest(request: McpRequest): Promise<McpResponse> {
     return new Promise((resolve, reject) => {
       const requestStr = JSON.stringify(request) + '\n';
       
       // Send request to server
-      serverProcess.stdin.write(requestStr);
+      serverProcess.stdin?.write(requestStr);
       
       // Listen for response
       const timeout = setTimeout(() => {
         reject(new Error('Request timeout'));
       }, 10000);
 
-      serverProcess.stdout.once('data', (data) => {
+      serverProcess.stdout?.once('data', (data: Buffer) => {
         clearTimeout(timeout);
         try {
-          const response = JSON.parse(data.toString().trim());
+          const response = JSON.parse(data.toString().trim()) as McpResponse;
           resolve(response);
         } catch (error) {
           reject(error);
@@ -172,4 +204,4 @@ async function testMcpServer() {
 testMcpServer().catch(error => {
   console.error('❌ Test failed:', error);
   process.exit(1);
-}); 
+});

@@ -3,41 +3,54 @@ import { spawn } from 'child_process';
 import path from 'path';
 
 // Test configuration
-const MCP_SERVER_PORT = 3002;
+const MCP_SERVER_PORT = 3011;
 const MCP_SERVER_URL = `http://localhost:${MCP_SERVER_PORT}/sse`;
 
 // Helper function to start the MCP server
 async function startMcpServer(): Promise<any> {
   return new Promise((resolve, reject) => {
-    const serverProcess = spawn('node', [
-      path.join(__dirname, '../../lib/mcp-tools/coingecko-mcp-server/dist/index.js')
-    ], {
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
+    // Use the stdio-only server for testing (simpler and more reliable)
+    const serverProcess = spawn(
+      'node',
+      [
+        path.join(
+          __dirname,
+          '../../../lib/mcp-tools/coingecko-mcp-server/dist/stdio-server.js',
+        ),
+      ],
+      {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      },
+    );
 
     let serverReady = false;
 
-    serverProcess.stderr.on('data', (data) => {
-      const output = data.toString();
-      console.log('MCP Server:', output.trim());
-      
-      if (output.includes('CoinGecko MCP stdio server started and connected')) {
-        serverReady = true;
-        resolve(serverProcess);
-      }
-    });
-
-    serverProcess.on('error', (error) => {
-      reject(error);
-    });
-
-    // Timeout after 10 seconds
-    setTimeout(() => {
+    // Add timeout for server startup
+    const startupTimeout = setTimeout(() => {
       if (!serverReady) {
+        console.error('❌ MCP server failed to start within 10 seconds');
         serverProcess.kill();
         reject(new Error('MCP server failed to start within 10 seconds'));
       }
     }, 10000);
+
+    serverProcess.stderr.on('data', (data) => {
+      const output = data.toString();
+      console.log('MCP Server:', output.trim());
+
+      if (output.includes('CoinGecko MCP stdio server started and connected')) {
+        serverReady = true;
+        clearTimeout(startupTimeout);
+        console.log('✅ MCP Server is ready!');
+        setTimeout(() => resolve(serverProcess), 1000); // Wait a bit for full readiness
+      }
+    });
+
+    serverProcess.on('error', (error) => {
+      clearTimeout(startupTimeout);
+      console.error('❌ MCP Server error:', error);
+      reject(error);
+    });
   });
 }
 
@@ -45,31 +58,38 @@ async function startMcpServer(): Promise<any> {
 async function testMcpServerDirectly(serverProcess: any) {
   return new Promise((resolve, reject) => {
     const testRequest = {
-      jsonrpc: '2.0',
+      jsonrpc: '2.0' as const,
       id: 1,
       method: 'tools/call',
       params: {
         name: 'get_supported_tokens',
-        arguments: {}
-      }
+        arguments: {},
+      },
     };
 
     const requestStr = JSON.stringify(testRequest) + '\n';
-    serverProcess.stdin.write(requestStr);
 
+    // Set up response listener before sending request
     const timeout = setTimeout(() => {
       reject(new Error('Direct MCP test timeout'));
-    }, 5000);
+    }, 10000);
 
-    serverProcess.stdout.once('data', (data: Buffer) => {
+    const onData = (data: Buffer) => {
       clearTimeout(timeout);
       try {
         const response = JSON.parse(data.toString().trim());
+        serverProcess.stdout.removeListener('data', onData);
         resolve(response);
       } catch (error) {
+        serverProcess.stdout.removeListener('data', onData);
         reject(error);
       }
-    });
+    };
+
+    serverProcess.stdout.on('data', onData);
+
+    // Send the request
+    serverProcess.stdin.write(requestStr);
   });
 }
 
@@ -81,7 +101,7 @@ test.describe('CoinGecko MCP Server Integration Tests', () => {
     try {
       serverProcess = await startMcpServer();
       console.log('✅ MCP Server started successfully');
-      
+
       // Test direct connection
       const directResult = await testMcpServerDirectly(serverProcess);
       console.log('✅ Direct MCP test passed:', directResult);
@@ -101,25 +121,27 @@ test.describe('CoinGecko MCP Server Integration Tests', () => {
   test('should connect to MCP server and discover tools', async ({ page }) => {
     // Navigate to the chat page
     await page.goto('/');
-    
+
     // Wait for the page to load
-    await page.waitForSelector('[data-testid="chat-input"]', { timeout: 10000 });
-    
+    await page.waitForSelector('[data-testid="multimodal-input"]', {
+      timeout: 10000,
+    });
+
     // Check if the page loaded successfully
-    const chatInput = page.locator('[data-testid="chat-input"]');
+    const chatInput = page.locator('[data-testid="multimodal-input"]');
     await expect(chatInput).toBeVisible();
-    
+
     console.log('✅ Chat interface loaded successfully');
   });
 
   test('should display supported tokens when requested', async ({ page }) => {
     await page.goto('/');
-    await page.waitForSelector('[data-testid="chat-input"]');
+    await page.waitForSelector('[data-testid="multimodal-input"]');
 
     // Send a message requesting supported tokens
     const message = 'What cryptocurrency tokens are supported?';
-    await page.fill('[data-testid="chat-input"]', message);
-    await page.press('[data-testid="chat-input"]', 'Enter');
+    await page.fill('[data-testid="multimodal-input"]', message);
+    await page.press('[data-testid="multimodal-input"]', 'Enter');
 
     // Wait for response
     await page.waitForTimeout(5000);
@@ -127,21 +149,21 @@ test.describe('CoinGecko MCP Server Integration Tests', () => {
     // Check if we get a response about supported tokens
     const messages = page.locator('[data-testid="message-content"]');
     const lastMessage = messages.last();
-    
+
     // The response should mention supported tokens
     await expect(lastMessage).toBeVisible();
-    
+
     console.log('✅ Supported tokens request handled');
   });
 
   test('should generate price chart for BTC', async ({ page }) => {
     await page.goto('/');
-    await page.waitForSelector('[data-testid="chat-input"]');
+    await page.waitForSelector('[data-testid="multimodal-input"]');
 
     // Send a message requesting BTC price chart
     const message = 'Generate a price chart for BTC over 7 days';
-    await page.fill('[data-testid="chat-input"]', message);
-    await page.press('[data-testid="chat-input"]', 'Enter');
+    await page.fill('[data-testid="multimodal-input"]', message);
+    await page.press('[data-testid="multimodal-input"]', 'Enter');
 
     // Wait for response and chart to appear
     await page.waitForTimeout(8000);
@@ -149,27 +171,27 @@ test.describe('CoinGecko MCP Server Integration Tests', () => {
     // Check if price chart appears
     const priceChart = page.locator('[data-testid="price-chart"]');
     await expect(priceChart).toBeVisible({ timeout: 10000 });
-    
+
     // Check if chart has SVG content
     const svg = priceChart.locator('svg');
     await expect(svg).toBeVisible();
-    
+
     // Check if chart has data points
     const dataPoints = svg.locator('circle');
     const pointCount = await dataPoints.count();
     expect(pointCount).toBeGreaterThan(0);
-    
+
     console.log(`✅ BTC price chart generated with ${pointCount} data points`);
   });
 
   test('should handle invalid token gracefully', async ({ page }) => {
     await page.goto('/');
-    await page.waitForSelector('[data-testid="chat-input"]');
+    await page.waitForSelector('[data-testid="multimodal-input"]');
 
     // Send a message with invalid token
     const message = 'Generate a price chart for INVALIDTOKEN over 7 days';
-    await page.fill('[data-testid="chat-input"]', message);
-    await page.press('[data-testid="chat-input"]', 'Enter');
+    await page.fill('[data-testid="multimodal-input"]', message);
+    await page.press('[data-testid="multimodal-input"]', 'Enter');
 
     // Wait for response
     await page.waitForTimeout(5000);
@@ -177,28 +199,28 @@ test.describe('CoinGecko MCP Server Integration Tests', () => {
     // Check if we get an error message
     const messages = page.locator('[data-testid="message-content"]');
     const lastMessage = messages.last();
-    
+
     // Should show error about unsupported token
     const messageText = await lastMessage.textContent();
     expect(messageText).toContain('not supported');
-    
+
     console.log('✅ Invalid token handled gracefully');
   });
 
   test('should handle multiple chart requests', async ({ page }) => {
     await page.goto('/');
-    await page.waitForSelector('[data-testid="chat-input"]');
+    await page.waitForSelector('[data-testid="multimodal-input"]');
 
     // Request multiple charts
     const requests = [
       'Generate a price chart for ETH over 3 days',
       'Generate a price chart for USDC over 1 day',
-      'Generate a price chart for ARB over 14 days'
+      'Generate a price chart for ARB over 14 days',
     ];
 
     for (const request of requests) {
-      await page.fill('[data-testid="chat-input"]', request);
-      await page.press('[data-testid="chat-input"]', 'Enter');
+      await page.fill('[data-testid="multimodal-input"]', request);
+      await page.press('[data-testid="multimodal-input"]', 'Enter');
       await page.waitForTimeout(3000);
     }
 
@@ -209,7 +231,7 @@ test.describe('CoinGecko MCP Server Integration Tests', () => {
     const priceCharts = page.locator('[data-testid="price-chart"]');
     const chartCount = await priceCharts.count();
     expect(chartCount).toBeGreaterThanOrEqual(requests.length);
-    
+
     console.log(`✅ Multiple charts generated: ${chartCount} charts found`);
   });
 
@@ -221,12 +243,12 @@ test.describe('CoinGecko MCP Server Integration Tests', () => {
     }
 
     await page.goto('/');
-    await page.waitForSelector('[data-testid="chat-input"]');
+    await page.waitForSelector('[data-testid="multimodal-input"]');
 
     // Try to request a chart when server is down
     const message = 'Generate a price chart for BTC over 7 days';
-    await page.fill('[data-testid="chat-input"]', message);
-    await page.press('[data-testid="chat-input"]', 'Enter');
+    await page.fill('[data-testid="multimodal-input"]', message);
+    await page.press('[data-testid="multimodal-input"]', 'Enter');
 
     // Wait for response
     await page.waitForTimeout(5000);
@@ -234,10 +256,10 @@ test.describe('CoinGecko MCP Server Integration Tests', () => {
     // Check if we get an error message
     const messages = page.locator('[data-testid="message-content"]');
     const lastMessage = messages.last();
-    
+
     // Should show some kind of error or fallback
     await expect(lastMessage).toBeVisible();
-    
+
     console.log('✅ Network errors handled gracefully');
 
     // Restart server for other tests
@@ -248,48 +270,50 @@ test.describe('CoinGecko MCP Server Integration Tests', () => {
 
   test('should maintain chart interactivity', async ({ page }) => {
     await page.goto('/');
-    await page.waitForSelector('[data-testid="chat-input"]');
+    await page.waitForSelector('[data-testid="multimodal-input"]');
 
     // Generate a chart
     const message = 'Generate a price chart for BTC over 30 days';
-    await page.fill('[data-testid="chat-input"]', message);
-    await page.press('[data-testid="chat-input"]', 'Enter');
+    await page.fill('[data-testid="multimodal-input"]', message);
+    await page.press('[data-testid="multimodal-input"]', 'Enter');
 
     // Wait for chart to appear
-    await page.waitForSelector('[data-testid="price-chart"]', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="price-chart"]', {
+      timeout: 10000,
+    });
 
     // Test hover interactions
     const chart = page.locator('[data-testid="price-chart"]');
     const svg = chart.locator('svg');
-    
+
     // Hover over the chart
     await svg.hover();
-    
+
     // Check if hover effects work (data points should be visible)
     const dataPoints = svg.locator('circle');
     await expect(dataPoints.first()).toBeVisible();
-    
+
     // Test clicking on data points
     await dataPoints.first().click();
-    
+
     console.log('✅ Chart interactivity maintained');
   });
 
   test('should handle concurrent requests', async ({ page }) => {
     await page.goto('/');
-    await page.waitForSelector('[data-testid="chat-input"]');
+    await page.waitForSelector('[data-testid="multimodal-input"]');
 
     // Send multiple requests quickly
     const requests = [
       'Generate a price chart for BTC over 7 days',
       'Generate a price chart for ETH over 7 days',
-      'What tokens are supported?'
+      'What tokens are supported?',
     ];
 
     // Send all requests
     for (const request of requests) {
-      await page.fill('[data-testid="chat-input"]', request);
-      await page.press('[data-testid="chat-input"]', 'Enter');
+      await page.fill('[data-testid="multimodal-input"]', request);
+      await page.press('[data-testid="multimodal-input"]', 'Enter');
       await page.waitForTimeout(500); // Small delay between requests
     }
 
@@ -300,7 +324,7 @@ test.describe('CoinGecko MCP Server Integration Tests', () => {
     const messages = page.locator('[data-testid="message-content"]');
     const messageCount = await messages.count();
     expect(messageCount).toBeGreaterThanOrEqual(requests.length);
-    
+
     console.log(`✅ Concurrent requests handled: ${messageCount} responses`);
   });
-}); 
+});

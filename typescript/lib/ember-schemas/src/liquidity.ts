@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-import { 
-  createTransactionArtifactSchema, 
+import {
+  createTransactionArtifactSchema,
   type TransactionArtifact,
   TokenIdentifierSchema,
 } from './common.js';
@@ -50,7 +50,7 @@ export const WithdrawLiquiditySchema = z.object({
 });
 export type WithdrawLiquidityArgs = z.infer<typeof WithdrawLiquiditySchema>;
 
-export const GetLiquidityPoolsSchema = z.object({}); 
+export const GetLiquidityPoolsSchema = z.object({});
 export type GetLiquidityPoolsArgs = z.infer<typeof GetLiquidityPoolsSchema>;
 
 export const GetWalletLiquidityPositionsSchema = z.object({});
@@ -124,4 +124,6 @@ export type UserPositionsArtifact = z.infer<typeof UserPositionsArtifactSchema>;
 export const GetWalletLiquidityPositionsResponseSchema = z.object({
   positions: z.array(LiquidityPositionArtifactSchema),
 });
-export type GetWalletLiquidityPositionsResponse = z.infer<typeof GetWalletLiquidityPositionsResponseSchema>; 
+export type GetWalletLiquidityPositionsResponse = z.infer<
+  typeof GetWalletLiquidityPositionsResponseSchema
+>;
