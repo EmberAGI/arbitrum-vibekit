@@ -1,25 +1,21 @@
-import type { Token } from 'ember-schemas';
-import type { SwapActionCallback } from './swap.js';
+import type { SwapActionCallback, SwapActions } from './swap.js';
 import type {
+  LendingActions,
   LendingBorrowCallback,
   LendingRepayTokensCallback,
   LendingSupplyCallback,
   LendingWithdrawCallback,
 } from './lending.js';
-import type { LiquiditySupplyCallback, LiquidityWithdrawCallback } from './liquidity.js';
-import type { Chain } from 'src/common.js';
+import type {
+  LiquidityActions,
+  LiquiditySupplyCallback,
+  LiquidityWithdrawCallback,
+} from './liquidity.js';
 
 /**
  * The possible actions an ember plugin can perform.
  */
-export type Action =
-  | 'swap'
-  | 'lending-borrow'
-  | 'lending-repay'
-  | 'lending-supply'
-  | 'lending-withdraw'
-  | 'liquidity-supply'
-  | 'liquidity-withdraw';
+export type Action = LendingActions | LiquidityActions | SwapActions;
 
 /**
  * Type mapping for action callbacks.
@@ -37,24 +33,29 @@ type CallbacksRecord = {
  * Type mapping for action callbacks.
  */
 export type ActionCallback<T extends keyof CallbacksRecord> = CallbacksRecord[T];
+
 /**
  * Represents a grouping of tokens associated with a specific chain.
  */
 export interface TokenSet {
   /**
-   * The chain to which the tokens belong.
+   * The chain id to which the tokens belong.
    */
-  chain: Chain;
+  chainId: string;
   /**
-   * The set of tokens associated with the chain.
+   * The set of tokens addresses associated with the chain.
    */
-  tokens: Set<Token>;
+  tokens: string[];
 }
 
 /**
  * Definition of an action that can be performed by the Ember plugin.
  */
 export interface ActionDefinition<T extends Action> {
+  /**
+   * The name for the action, should be unique across all actions in the plugin.
+   */
+  name: string;
   /**
    * The action type
    */

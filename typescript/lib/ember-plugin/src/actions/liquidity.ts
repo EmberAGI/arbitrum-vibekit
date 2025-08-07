@@ -1,28 +1,25 @@
 import type {
-  SupplyLiquidityArgs,
-  LiquidityTransactionArtifact,
-  WithdrawLiquidityArgs,
-  TransactionPlan,
+  SupplyLiquidityRequest,
+  SupplyLiquidityResponse,
+  WithdrawLiquidityRequest,
+  WithdrawLiquidityResponse,
 } from 'ember-schemas';
 
 /**
  * The callback function type for the supply liquidity action.
  */
 export type LiquiditySupplyCallback = (
-  request: SupplyLiquidityArgs
-) => Promise<LiquidityTransactionArtifact>;
-
-/**
- * The response type for the withdraw liquidity action.
- */
-export interface LiquidityWithdrawResponse {
-  transactions: TransactionPlan[];
-  chainId: string;
-}
+  request: SupplyLiquidityRequest
+) => Promise<SupplyLiquidityResponse>;
 
 /**
  * The callback function type for the withdraw liquidity action.
  */
 export type LiquidityWithdrawCallback = (
-  request: WithdrawLiquidityArgs
-) => Promise<LiquidityWithdrawResponse>;
+  request: WithdrawLiquidityRequest
+) => Promise<WithdrawLiquidityResponse>;
+
+/**
+ * The possible actions related to liquidity.
+ */
+export type LiquidityActions = 'liquidity-supply' | 'liquidity-withdraw';
