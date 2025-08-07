@@ -26,11 +26,24 @@ export class ChatPage {
     return this.page.url();
   }
 
-  async sendUserMessage(message: string) {
-    await this.multimodalInput.click();
-    await this.multimodalInput.fill(message);
-    await this.sendButton.click();
+async sendUserMessage(message: string) {
+  // Handle authentication prompt if present
+  const connectWalletButton = this.page.getByRole("button", { name: "Connect Wallet" });
+  if (await connectWalletButton.isVisible()) {
+    await connectWalletButton.click();
+    // Wait for authentication to complete (adjust based on your app's behavior)
+    await this.page.waitForResponse((response) => response.url().includes("/api/auth"));
+    // Ensure the overlay is gone
+    await expect(this.page.locator('div.fixed.inset-0')).not.toBeVisible();
   }
+
+  // Ensure the input is interactable before clicking
+  await expect(this.multimodalInput).toBeVisible();
+  await expect(this.multimodalInput).toBeEnabled();
+  await this.multimodalInput.click();
+  await this.multimodalInput.fill(message);
+  await this.sendButton.click();
+}
 
   async isGenerationComplete() {
     const response = await this.page.waitForResponse((response) =>

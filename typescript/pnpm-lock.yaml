@@ -1046,6 +1046,46 @@ importers:
         specifier: 'catalog:'
         version: 4.20.3
 
+  lib/mcp-tools/coingecko-mcp-server:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: 'catalog:'
+        version: 1.15.1
+      '@types/express':
+        specifier: ^5.0.1
+        version: 5.0.3
+      '@types/node':
+        specifier: 'catalog:'
+        version: 20.19.7
+      dotenv:
+        specifier: 'catalog:'
+        version: 16.6.1
+      express:
+        specifier: 'catalog:'
+        version: 4.21.2
+      nodemon:
+        specifier: ^3.1.9
+        version: 3.1.10
+      p-retry:
+        specifier: ^6.2.1
+        version: 6.2.1
+      raw-body:
+        specifier: ^3.0.0
+        version: 3.0.0
+      tee:
+        specifier: ^0.2.0
+        version: 0.2.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.8.3
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.76
+    devDependencies:
+      tsx:
+        specifier: 'catalog:'
+        version: 4.20.3
+
   lib/test-utils:
     dependencies:
       '@modelcontextprotocol/sdk':
