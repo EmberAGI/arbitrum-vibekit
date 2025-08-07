@@ -34,7 +34,6 @@ export function extractMessageText(response: Task): string {
   return '';
 }
 
-
 export function extractTokenMarketData(response: Task): GetMarketDataResponse {
   if (!response.artifacts) {
     throw new Error('No artifacts found in response');
@@ -45,11 +44,11 @@ export function extractTokenMarketData(response: Task): GetMarketDataResponse {
       for (const part of artifact.parts) {
         if (part.kind === 'data' && part.data) {
           const parseResult = GetMarketDataResponseSchema.safeParse(part.data);
-          
+
           if (!parseResult.success) {
             throw new Error(`Invalid market data format: ${parseResult.error.message}`);
           }
-          
+
           return parseResult.data;
         }
       }
@@ -57,4 +56,4 @@ export function extractTokenMarketData(response: Task): GetMarketDataResponse {
   }
 
   throw new Error('No token market data found in artifacts');
-} 
+}

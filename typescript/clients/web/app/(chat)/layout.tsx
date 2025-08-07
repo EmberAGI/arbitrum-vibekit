@@ -1,8 +1,8 @@
-import { cookies } from "next/headers";
+import { cookies } from 'next/headers';
 
-import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import Script from "next/script";
+import { AppSidebar } from '@/components/app-sidebar';
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+import Script from 'next/script';
 
 export const experimental_ppr = true;
 
@@ -12,7 +12,7 @@ export default async function Layout({
   children: React.ReactNode;
 }) {
   const cookieStore = await cookies();
-  const isCollapsed = cookieStore.get("sidebar:state")?.value !== "true";
+  const isCollapsed = cookieStore.get('sidebar:state')?.value !== 'true';
 
   return (
     <>
