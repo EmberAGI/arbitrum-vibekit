@@ -9,7 +9,7 @@ Create a `.env` file in the agent directory with these **required** variables:
 ```env
 # REQUIRED
 OPENROUTER_API_KEY=your_openrouter_api_key_here
-EMBER_ENDPOINT=http://api.emberai.xyz/mcp
+EMBER_ENDPOINT=https://api.emberai.xyz/mcp
 USER_PRIVATE_KEY=0x1234567890abcdef...  # Your wallet's private key
 QUICKNODE_SUBDOMAIN=your_quicknode_subdomain
 QUICKNODE_API_KEY=your_quicknode_api_key
@@ -17,8 +17,8 @@ QUICKNODE_API_KEY=your_quicknode_api_key
 # OPTIONAL (with defaults)
 PORT=3010
 HEALTH_FACTOR_WARNING=1.5
-HEALTH_FACTOR_DANGER=1.2
-HEALTH_FACTOR_CRITICAL=1.05
+HEALTH_FACTOR_DANGER=1.1
+HEALTH_FACTOR_CRITICAL=1.03
 MONITORING_INTERVAL=900000  # 15 minutes in milliseconds
 ```
 
@@ -98,12 +98,12 @@ Monitor my position every 10 minutes and prevent liquidation if health factor dr
 
 ### **Conservative Approach:**
 ```
-Set up automatic liquidation prevention with health factor 1.5, check every 5 minutes, conservative strategy
+Set up automatic liquidation prevention with health factor 1.5, check every 5 minutes
 ```
 
-### **Aggressive Settings:**
+### **Quick Response:**
 ```
-Prevent liquidation at health factor 1.05, monitor every 30 minutes, max $2000 transactions
+Prevent liquidation at health factor 1.05, monitor every 1 minute
 ```
 
 ## Configuration Options
@@ -112,11 +112,8 @@ The agent supports these preferences via natural language:
 
 | Setting | Example Phrases | Default |
 |---------|----------------|---------|
-| **Health Factor Threshold** | "health factor 1.2", "when HF drops below 1.3" | 1.1 |
+| **Health Factor Threshold** | "health factor 1.2", "when HF drops below 1.3" | 1.03 |
 | **Monitoring Interval** | "every 15 min", "check every 10 minutes" | 15 minutes |
-| **Strategy** | "conservative", "supply only", "repay debt" | auto |
-| **Max Transaction** | "max $1000", "limit transactions to $500" | $10,000 |
-| **Risk Tolerance** | "conservative", "moderate", "aggressive" | moderate |
 
 ## Environment Variables Reference
 
@@ -130,12 +127,12 @@ The agent supports these preferences via natural language:
 ### **Optional:**
 - `PORT=3010` - Agent server port
 - `HEALTH_FACTOR_WARNING=1.5` - Warning threshold
-- `HEALTH_FACTOR_DANGER=1.2` - Danger threshold  
-- `HEALTH_FACTOR_CRITICAL=1.05` - Critical threshold
+- `HEALTH_FACTOR_DANGER=1.1` - Danger threshold  
+- `HEALTH_FACTOR_CRITICAL=1.03` - Critical threshold
 - `MONITORING_INTERVAL=900000` - Check interval (ms)
-- `DEFAULT_STRATEGY=auto` - Default prevention strategy
-- `MIN_SUPPLY_BALANCE_USD=100` - Minimum balance for supply
-- `MAX_TRANSACTION_USD=10000` - Maximum transaction amount
+- `LLM_MODEL=deepseek/deepseek-chat-v3-0324:free` - AI model to use
+- `MAX_RETRY_ATTEMPTS=3` - Transaction retry attempts
+- `GAS_PRICE_MULTIPLIER=1.5` - Gas price safety multiplier
 
 ## Safety Features
 

@@ -4,15 +4,15 @@ An intelligent AI agent that monitors Aave positions and automatically prevents 
 
 ## Overview
 
-The Liquidation Prevention Agent continuously monitors user positions on Aave, tracks health factors, and executes preventive strategies when liquidation risk is detected. The agent uses three intelligent strategies based on user wallet balances and position analysis.
+The Liquidation Prevention Agent continuously monitors user positions on Aave, tracks health factors, and executes AI-powered preventive strategies when liquidation risk is detected. The agent uses intelligent strategy selection combining wallet analysis, position data, and large language models to determine optimal prevention approaches.
 
 ## Features
 
 - **🛡️ Continuous Monitoring**: Real-time health factor tracking with configurable thresholds
-- **🎯 Three Prevention Strategies**: 
-  - Strategy 1: Supply more collateral
-  - Strategy 2: Repay debt  
-  - Strategy 3: Combined approach (supply + repay)
+- **🎯 Intelligent Prevention Strategies**: 
+  - **Supply Collateral**: Add more assets to improve health factor
+  - **Repay Debt**: Reduce borrowed amounts to lower risk  
+  - **Hybrid Approach**: Combined supply + repay for optimal results
 - **🧠 Intelligent Selection**: Wallet balance analysis for optimal strategy selection
 - **⚡ Autonomous Operation**: Local execution with private key management
 - **🔗 MCP Integration**: Direct integration with Ember AI's MCP tools for Aave operations
@@ -27,30 +27,43 @@ The agent follows the focused skills architecture:
 liquidation-prevention-agent/
 ├── src/
 │   ├── skills/
-│   │   ├── healthMonitoring.ts        # Monitor health factors
-│   │   ├── liquidationPrevention.ts   # Execute strategies 1,2,3
-│   │   └── riskAssessment.ts          # Strategy selection logic
+│   │   ├── healthMonitoring.ts        # Health factor monitoring & alerts  
+│   │   ├── liquidationPrevention.ts   # Intelligent prevention strategies
+│   │   └── positionStatus.ts          # Position status & health checks
 │   ├── tools/
-│   │   ├── getUserPositions.ts        # Health factor monitoring
-│   │   ├── getWalletBalances.ts       # Balance analysis  
-│   │   ├── strategy1Supply.ts         # Strategy 1 implementation
-│   │   ├── strategy2Repay.ts          # Strategy 2 implementation
-│   │   └── strategy3Combined.ts       # Strategy 3 implementation
+│   │   ├── getUserPositions.ts        # Position data retrieval
+│   │   ├── getWalletBalances.ts       # Token balance analysis
+│   │   ├── monitorHealth.ts           # Continuous monitoring
+│   │   ├── supplyCollateral.ts        # Supply collateral operations
+│   │   ├── repayDebt.ts               # Debt repayment operations
+│   │   └── intelligentPreventionStrategy.ts # AI-powered strategy selection
 │   ├── context/
-│   │   ├── provider.ts                # Load configuration & token maps
-│   │   └── types.ts                   # Context types
+│   │   ├── provider.ts                # Context & configuration provider
+│   │   └── types.ts                   # TypeScript interfaces
+│   ├── utils/
+│   │   ├── liquidationData.ts         # Data aggregation utilities
+│   │   ├── tokenResolver.ts           # Token address resolution
+│   │   ├── transactionExecutor.ts     # On-chain transaction execution
+│   │   └── userPreferences.ts         # Natural language parsing
+│   ├── schemas/
+│   │   └── prevention.ts              # Zod validation schemas
+│   ├── config.ts                      # Agent configuration
+│   ├── tokenMap.ts                    # Token mapping loader
 │   └── index.ts                       # Agent entry point
 ```
 
-### Prevention Strategies
+### Intelligent Prevention System
 
-1. **Strategy 1 - Supply More Collateral**: Adds additional assets to improve health factor when user has sufficient token balances
+The agent uses **AI-powered strategy selection** through the `intelligentPreventionStrategy` tool, which:
 
-2. **Strategy 2 - Repay Debt**: Reduces borrowed amounts to lower liquidation risk when user has tokens for repayment
+1. **Analyzes Position Risk**: Evaluates current health factor vs target threshold
+2. **Assesses Available Resources**: Reviews wallet balances and available tokens
+3. **LLM Strategy Selection**: Uses large language model to determine optimal approach:
+   - **SUPPLY**: Add collateral when user has available tokens
+   - **REPAY**: Reduce debt when user has tokens matching borrowed assets  
+   - **HYBRID**: Multi-step approach combining both supply and repay operations
 
-3. **Strategy 3 - Combined Approach**: Executes both supply and repay operations when user has diverse token holdings
-
-**Strategy Selection Logic**: The agent analyzes wallet balances via `getWalletBalances` MCP tool and automatically selects the optimal strategy.
+**Automatic Execution**: Once strategy is selected, the agent executes the corresponding tools (`supplyCollateral`, `repayDebt`) with real on-chain transactions.
 
 ## Quick Start
 
@@ -92,16 +105,17 @@ Edit `.env` file with your configuration:
 ```env
 # Required
 OPENROUTER_API_KEY=your_openrouter_api_key_here
-EMBER_ENDPOINT=grpc.api.emberai.xyz:50051
+EMBER_ENDPOINT=https://api.emberai.xyz/mcp
+USER_PRIVATE_KEY=your_private_key_here
+QUICKNODE_SUBDOMAIN=your_quicknode_subdomain  
+QUICKNODE_API_KEY=your_quicknode_api_key
 
 # Optional - Agent Configuration
 PORT=3010
 HEALTH_FACTOR_WARNING=1.5
-HEALTH_FACTOR_DANGER=1.2
-HEALTH_FACTOR_CRITICAL=1.05
-
-# Private Keys (Required for autonomous operation)
-# PRIVATE_KEY=your_private_key_here
+HEALTH_FACTOR_DANGER=1.1
+HEALTH_FACTOR_CRITICAL=1.03
+MONITORING_INTERVAL=900000
 ```
 
 ### Running the Agent
@@ -151,36 +165,36 @@ The agent is pre-configured for frontend integration:
 ### Example Interactions
 
 ```bash
-# Monitor positions
+# Check position status and health factor
 curl -X POST http://localhost:3010/invoke \
   -H "Content-Type: application/json" \
   -d '{
-    "skillId": "health-monitoring",
+    "skillId": "position-status",
     "input": {
-      "walletAddress": "0x...",
-      "instruction": "Monitor my Aave positions and health factor"
+      "userAddress": "0x...",
+      "instruction": "Check my current Aave position and health factor"
     }
   }'
 
-# Check liquidation risk
+# Start continuous health monitoring with automatic prevention
 curl -X POST http://localhost:3010/invoke \
   -H "Content-Type: application/json" \
   -d '{
-    "skillId": "risk-assessment", 
+    "skillId": "health-monitoring", 
     "input": {
-      "walletAddress": "0x...",
-      "instruction": "Check my liquidation risk"
+      "userAddress": "0x...",
+      "instruction": "Monitor my health factor every 15 minutes and prevent liquidation if it drops below 1.2"
     }
   }'
 
-# Set up automatic prevention
+# Execute intelligent liquidation prevention strategy
 curl -X POST http://localhost:3010/invoke \
   -H "Content-Type: application/json" \
   -d '{
     "skillId": "liquidation-prevention",
     "input": {
-      "walletAddress": "0x...",
-      "instruction": "Set up automatic liquidation prevention"
+      "userAddress": "0x...",
+      "instruction": "Analyze my position and execute the best prevention strategy"
     }
   }'
 ```
@@ -190,8 +204,8 @@ curl -X POST http://localhost:3010/invoke \
 ### Health Factor Thresholds
 
 - **Warning**: 1.5 (default) - Start monitoring more closely
-- **Danger**: 1.2 (default) - Prepare for intervention
-- **Critical**: 1.05 (default) - Execute prevention strategy immediately
+- **Danger**: 1.1 (default) - Prepare for intervention
+- **Critical**: 1.03 (default) - Execute prevention strategy immediately
 
 ### Strategy Selection
 
@@ -202,53 +216,17 @@ The agent automatically selects strategies based on:
 - Overall portfolio composition and risk distribution
 - Minimum balance thresholds (configurable)
 
-## Development Status
+## Key Capabilities
 
-### ✅ Completed (Task 1-4.3)
+### ✅ Production Ready Features
 
-- [x] Project setup with quickstart-agent pattern
-- [x] Package.json configuration
-- [x] TypeScript configuration
-- [x] Dockerfile for containerization
-- [x] Docker Compose integration
-- [x] Frontend agent configuration
-- [x] Environment configuration (.env.example)
-- [x] Context provider with MCP integration
-- [x] Basic agent entry point
-
-### ✅ Task 2: Core Monitoring (COMPLETED)
-
-- [x] Health monitoring skill implementation
-- [x] getUserPositions tool for position tracking
-- [x] getWalletBalances tool for balance analysis
-- [x] monitorHealth tool for continuous monitoring
-- [x] MCP tool integrations with Ember server
-
-### ✅ Task 3: Liquidation Prevention Strategies (COMPLETED)
-
-- [x] Liquidation prevention skill implementation
-- [x] Strategy 1: Supply collateral tool
-- [x] Strategy 2: Repay debt tool
-- [x] Strategy 3: Intelligent automatic strategy selection
-- [x] Real transaction execution with user's private key
-- [x] TransactionExecutor utility for on-chain operations
-
-### ✅ Task 4.1-4.3: Configuration & Safety Features (COMPLETED)
-
-- [x] **Task 4.1**: Configurable health factor thresholds (default: 1.1)
-- [x] **Task 4.2**: Configurable monitoring intervals (default: 15 minutes)
-- [x] **Task 4.3**: User preference parsing from initial instructions
-- [x] UserPreferences utility for natural language parsing
-- [x] Preference merging with default configuration
-- [x] Enhanced input schemas with instruction field
-- [x] Updated examples with preference-based instructions
-
-### 🚧 Future Tasks
-
-- [ ] Advanced gas optimization features
-- [ ] Emergency stop functionality
-- [ ] Multi-chain support
-- [ ] Advanced analytics and reporting
+- **🛡️ Continuous Health Factor Monitoring**: Real-time position tracking with configurable intervals
+- **⚡ Intelligent Prevention Strategies**: Automatic supply/repay/hybrid approaches based on wallet analysis
+- **🎯 Natural Language Configuration**: Parse user preferences from conversational instructions
+- **🔗 MCP Integration**: Direct integration with Ember AI's blockchain tools
+- **🏗️ Transaction Execution**: Real on-chain operations with user's private key
+- **📊 Risk Assessment**: Multi-threshold alerting (warning/danger/critical)
+- **🔧 Configurable Parameters**: Customizable health factor thresholds and monitoring intervals
 
 ## Environment Variables
 
@@ -256,43 +234,25 @@ The agent automatically selects strategies based on:
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
 | `OPENROUTER_API_KEY` | OpenRouter API key for LLM | Yes | - |
-| `EMBER_ENDPOINT` | Ember MCP endpoint | Yes | `grpc.api.emberai.xyz:50051` |
+| `EMBER_ENDPOINT` | Ember MCP endpoint | Yes | `https://api.emberai.xyz/mcp` |
 | `USER_PRIVATE_KEY` | User's private key for transaction execution | Yes | - |
 | `QUICKNODE_SUBDOMAIN` | QuickNode subdomain for RPC access | Yes | - |
 | `QUICKNODE_API_KEY` | QuickNode API key for RPC access | Yes | - |
 
-### Task 4.1: Health Factor Thresholds
-| Variable | Description | Required | Default |
-|----------|-------------|----------|---------|
-| `HEALTH_FACTOR_WARNING` | Warning threshold | No | `1.5` |
-| `HEALTH_FACTOR_DANGER` | Danger threshold | No | `1.2` |
-| `HEALTH_FACTOR_CRITICAL` | Critical threshold | No | `1.05` |
-
-### Task 4.2: Monitoring Configuration
-| Variable | Description | Required | Default |
-|----------|-------------|----------|---------|
-| `MONITORING_INTERVAL` | Check interval (ms) | No | `60000` |
-| `MAX_RETRY_ATTEMPTS` | Maximum retry attempts | No | `3` |
-| `GAS_PRICE_MULTIPLIER` | Gas price multiplier | No | `1.5` |
-
-### Task 4.3: Strategy & User Preferences
-| Variable | Description | Required | Default |
-|----------|-------------|----------|---------|
-| `DEFAULT_STRATEGY` | Strategy preference | No | `auto` |
-| `MIN_SUPPLY_BALANCE_USD` | Minimum USD for supply | No | `100` |
-| `MIN_REPAY_BALANCE_USD` | Minimum USD for repay | No | `50` |
-| `MAX_TRANSACTION_USD` | Maximum USD per transaction | No | `10000` |
-
 ### Optional Configuration
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
+| `HEALTH_FACTOR_WARNING` | Warning threshold | No | `1.5` |
+| `HEALTH_FACTOR_DANGER` | Danger threshold | No | `1.1` |
+| `HEALTH_FACTOR_CRITICAL` | Critical threshold | No | `1.03` |
+| `MONITORING_INTERVAL` | Check interval (ms) | No | `900000` |
+| `MAX_RETRY_ATTEMPTS` | Maximum retry attempts | No | `3` |
+| `GAS_PRICE_MULTIPLIER` | Gas price multiplier | No | `1.5` |
+| `LLM_MODEL` | AI model to use | No | `deepseek/deepseek-chat-v3-0324:free` |
 | `PORT` | Agent server port | No | `3010` |
-| `ENABLE_WEBHOOKS` | Enable webhook notifications | No | `false` |
-| `WEBHOOK_URL` | Webhook URL for notifications | No | - |
-| `RATE_LIMIT_RPM` | Rate limit requests per minute | No | `60` |
 | `DEBUG_MODE` | Enable debug logging | No | `false` |
 
-### User Preference Examples (Task 4.3)
+### User Preference Examples
 The agent can parse user preferences from natural language instructions:
 
 ```bash
@@ -300,16 +260,10 @@ The agent can parse user preferences from natural language instructions:
 "Monitor with health factor 1.3, warning at 1.5"
 
 # Monitoring intervals
-"Check every 30 minutes, continuous monitoring"
-
-# Strategy preferences  
-"Use conservative strategy, max $500 transactions"
-
-# Risk tolerance
-"Apply aggressive approach with gas optimization"
+"Check every 15 minutes, continuous monitoring"
 
 # Combined preferences
-"Prevent liquidation with health factor 1.2, monitor every 15 minutes, conservative approach, max $1000"
+"Prevent liquidation with health factor 1.2, monitor every 15 minutes"
 ```
 
 See `.env.example` for complete configuration options.

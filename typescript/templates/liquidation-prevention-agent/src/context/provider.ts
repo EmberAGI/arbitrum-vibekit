@@ -63,7 +63,7 @@ export async function contextProvider(
     },
 
     monitoring: {
-      intervalMs: parseInt(process.env.MONITORING_INTERVAL || '60000', 10),
+      intervalMs: parseInt(process.env.MONITORING_INTERVAL || '900000', 10),
       maxRetryAttempts: parseInt(process.env.MAX_RETRY_ATTEMPTS || '3', 10),
       gasPriceMultiplier: parseFloat(process.env.GAS_PRICE_MULTIPLIER || '1.5'),
     },
