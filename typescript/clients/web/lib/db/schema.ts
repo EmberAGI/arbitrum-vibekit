@@ -149,3 +149,32 @@ export const suggestion = pgTable(
 );
 
 export type Suggestion = InferSelectModel<typeof suggestion>;
+
+// Agent Transaction History - Enhanced for agent-specific storage
+export const agentTransaction = pgTable('AgentTransaction', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  txHash: varchar('txHash', { length: 66 }).notNull(),
+  userAddress: varchar('userAddress', { length: 42 }).notNull(),
+  agentId: varchar('agentId', { length: 100 }).notNull(), // Unique identifier for each agent instance
+  agentType: varchar('agentType', { length: 50 }).notNull(), // e.g., 'swap', 'liquidity', 'lending'
+  chainId: varchar('chainId', { length: 10 }).notNull(),
+  status: varchar('status', { enum: ['pending', 'confirmed', 'failed'] }).notNull().default('pending'),
+  transactionType: varchar('transactionType', { length: 50 }), // e.g., 'approval', 'main'
+  blockNumber: varchar('blockNumber', { length: 20 }),
+  gasUsed: varchar('gasUsed', { length: 20 }),
+  gasPrice: varchar('gasPrice', { length: 30 }),
+  value: varchar('value', { length: 50 }), // transaction value in wei
+  contractAddress: varchar('contractAddress', { length: 42 }),
+  methodName: varchar('methodName', { length: 100 }),
+  transactionDetails: json('transactionDetails'), // Store full transaction details from API
+  executedAt: timestamp('executedAt').notNull(),
+  confirmedAt: timestamp('confirmedAt'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+  // Additional metadata for enhanced querying
+  skillName: varchar('skillName', { length: 100 }), // The skill that initiated the transaction
+  toolName: varchar('toolName', { length: 100 }), // The specific tool that executed the transaction
+  sessionId: varchar('sessionId', { length: 100 }), // Session identifier for grouping related transactions
+});
+
+export type AgentTransaction = InferSelectModel<typeof agentTransaction>;
