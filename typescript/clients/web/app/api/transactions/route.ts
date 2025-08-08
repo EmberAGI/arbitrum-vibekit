@@ -1,12 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { getAgentTransactionsByUser, insertAgentTransaction } from '@/lib/db/queries';
 import type { InsertTransactionInput } from '@/components/artifact';
 
-// GET /api/transactions?userAddress=0x...
+// GET /api/transactions?userAddress=0x...&agentId=ember-agent
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const userAddress = searchParams.get('userAddress');
+    const agentId = searchParams.get('agentId');
 
     if (!userAddress) {
       return NextResponse.json(
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const transactions = await getAgentTransactionsByUser(userAddress);
+    const transactions = await getAgentTransactionsByUser(userAddress, agentId);
     return NextResponse.json(transactions);
   } catch (error) {
     console.error('Failed to fetch transactions:', error);

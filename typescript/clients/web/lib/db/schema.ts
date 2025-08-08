@@ -150,11 +150,12 @@ export const suggestion = pgTable(
 
 export type Suggestion = InferSelectModel<typeof suggestion>;
 
-// New table for Agent Transaction History
+// Agent Transaction History - Enhanced for agent-specific storage
 export const agentTransaction = pgTable('AgentTransaction', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),
-  txHash: varchar('txHash', { length: 66 }).notNull(), // Ethereum transaction hash
+  txHash: varchar('txHash', { length: 66 }).notNull(),
   userAddress: varchar('userAddress', { length: 42 }).notNull(),
+  agentId: varchar('agentId', { length: 100 }).notNull(), // Unique identifier for each agent instance
   agentType: varchar('agentType', { length: 50 }).notNull(), // e.g., 'swap', 'liquidity', 'lending'
   chainId: varchar('chainId', { length: 10 }).notNull(),
   status: varchar('status', { enum: ['pending', 'confirmed', 'failed'] }).notNull().default('pending'),
@@ -170,6 +171,10 @@ export const agentTransaction = pgTable('AgentTransaction', {
   confirmedAt: timestamp('confirmedAt'),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+  // Additional metadata for enhanced querying
+  skillName: varchar('skillName', { length: 100 }), // The skill that initiated the transaction
+  toolName: varchar('toolName', { length: 100 }), // The specific tool that executed the transaction
+  sessionId: varchar('sessionId', { length: 100 }), // Session identifier for grouping related transactions
 });
 
 export type AgentTransaction = InferSelectModel<typeof agentTransaction>;
