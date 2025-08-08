@@ -69,10 +69,6 @@ describe('monitorHealth Tool', () => {
           enabled: true,
           interval: 300
         },
-        strategy: {
-          autoPrevent: true,
-          targetHealthFactor: 1.5
-        }
       }
     };
 
@@ -471,10 +467,10 @@ describe('monitorHealth Tool', () => {
     const result = await monitorHealthTool.execute(parsedArgs, mockContext);
 
     expect(result.status.state).toBe('completed');
-    expect(result.message).toContain('every 1 minutes');
+    expect(result.message).toContain('every 15 minutes');
 
     const session = getMonitoringSession('0xaaa...bbb');
-    expect(session?.intervalMinutes).toBe(1);
+    expect(session?.intervalMinutes).toBe(15);
   });
 
   describe('Helper Functions', () => {

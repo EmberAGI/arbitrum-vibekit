@@ -61,14 +61,14 @@ describe('Health Monitoring Skill Integration', () => {
 
   it('should have comprehensive examples for monitoring scenarios', () => {
     expect(healthMonitoringSkill.examples).toContain('Monitor my position every 2 minutes and prevent liquidation if health factor goes below 1.5');
-    expect(healthMonitoringSkill.examples).toContain('Start automatic liquidation prevention with default settings (15 min intervals, 1.1 threshold)');
+    expect(healthMonitoringSkill.examples).toContain('Start automatic liquidation prevention with default settings (15 min intervals, 1.03 threshold)');
     expect(healthMonitoringSkill.examples).toContain('Set up continuous monitoring with health factor 1.3 threshold');
     expect(healthMonitoringSkill.examples.length).toBeGreaterThan(5);
   });
 
   it('should validate input schema correctly', () => {
     const schema = healthMonitoringSkill.inputSchema;
-    
+
     // Valid input
     const validInput = {
       instruction: 'Monitor my position and prevent liquidation automatically',
@@ -89,7 +89,7 @@ describe('Health Monitoring Skill Integration', () => {
 
   it('should handle continuous monitoring setup', async () => {
     const { monitorHealthTool } = await import('../../src/tools/monitorHealth.js');
-    
+
     const args = {
       instruction: 'Start monitoring every 5 minutes with automatic liquidation prevention',
       userAddress: '0x123...abc'
@@ -97,7 +97,7 @@ describe('Health Monitoring Skill Integration', () => {
 
     // Simulate the skill would use monitorHealthTool for continuous monitoring
     const result = await monitorHealthTool.execute(args, {} as any);
-    
+
     expect(monitorHealthTool.execute).toHaveBeenCalledWith(args, {});
     expect(result.status.state).toBe('completed');
     expect(result.message).toContain('Automatic liquidation prevention activated');
@@ -107,7 +107,7 @@ describe('Health Monitoring Skill Integration', () => {
 
   it('should handle different monitoring intervals', async () => {
     const { monitorHealthTool } = await import('../../src/tools/monitorHealth.js');
-    
+
     const argsShortInterval = {
       instruction: 'Monitor every 1 minute for high-risk position',
       userAddress: '0x456...def'
@@ -129,14 +129,14 @@ describe('Health Monitoring Skill Integration', () => {
 
   it('should handle automatic prevention configuration', async () => {
     const { monitorHealthTool } = await import('../../src/tools/monitorHealth.js');
-    
+
     const args = {
       instruction: 'Set up automatic prevention with conservative threshold of 1.8',
       userAddress: '0xabc...123'
     };
 
     const result = await monitorHealthTool.execute(args, {} as any);
-    
+
     expect(result.status.state).toBe('completed');
     expect(result.message).toContain('liquidation prevention');
   });
@@ -150,10 +150,10 @@ describe('Health Monitoring Skill Integration', () => {
 
   it('should cover different monitoring patterns in examples', () => {
     const examples = healthMonitoringSkill.examples;
-    
+
     // Continuous monitoring examples
-    const continuousExamples = examples.filter(ex => 
-      ex.toLowerCase().includes('continuous') || 
+    const continuousExamples = examples.filter(ex =>
+      ex.toLowerCase().includes('continuous') ||
       ex.toLowerCase().includes('monitoring') ||
       ex.toLowerCase().includes('automatic')
     );
@@ -161,14 +161,14 @@ describe('Health Monitoring Skill Integration', () => {
 
     // Prevention examples  
     const preventionExamples = examples.filter(ex =>
-      ex.toLowerCase().includes('prevent') || 
+      ex.toLowerCase().includes('prevent') ||
       ex.toLowerCase().includes('prevention')
     );
     expect(preventionExamples.length).toBeGreaterThan(2);
 
     // Interval-specific examples
-    const intervalExamples = examples.filter(ex => 
-      ex.toLowerCase().includes('minute') || 
+    const intervalExamples = examples.filter(ex =>
+      ex.toLowerCase().includes('minute') ||
       ex.toLowerCase().includes('interval')
     );
     expect(intervalExamples.length).toBeGreaterThan(1);
@@ -179,14 +179,14 @@ describe('Health Monitoring Skill Integration', () => {
     const monitoringTool = healthMonitoringSkill.tools[0];
     expect(monitoringTool.parameters).toBeDefined();
     expect(typeof monitoringTool.parameters.parse).toBe('function');
-    
+
     // Verify the skill's input schema validation works
     const schema = healthMonitoringSkill.inputSchema;
     const validInput = {
       instruction: 'Monitor continuously with 10 minute intervals',
       userAddress: '0x1234567890123456789012345678901234567890'
     };
-    
+
     expect(() => schema.parse(validInput)).not.toThrow();
   });
 
@@ -194,7 +194,7 @@ describe('Health Monitoring Skill Integration', () => {
     // Verify the skill description emphasizes automation
     expect(healthMonitoringSkill.description).toContain('continuous monitoring');
     expect(healthMonitoringSkill.description).toContain('automatic liquidation prevention');
-    
+
     // Verify examples include automation language
     const automationExamples = healthMonitoringSkill.examples.filter(ex =>
       ex.toLowerCase().includes('automatic') ||
@@ -209,7 +209,7 @@ describe('Health Monitoring Skill Integration', () => {
     // The description should clarify this is for continuous monitoring, not one-time checks
     expect(healthMonitoringSkill.description).toContain('continuous');
     expect(healthMonitoringSkill.description).toContain('position lookup instead');
-    
+
     // Should not include immediate checking tools
     const toolNames = healthMonitoringSkill.tools.map(tool => tool.name);
     expect(toolNames).not.toContain('get-user-positions');
@@ -219,7 +219,7 @@ describe('Health Monitoring Skill Integration', () => {
 
   it('should handle different instruction formats for monitoring', () => {
     const schema = healthMonitoringSkill.inputSchema;
-    
+
     const testInstructions = [
       'Monitor my position continuously and prevent liquidation',
       'Start automatic monitoring every 5 minutes',
@@ -239,14 +239,14 @@ describe('Health Monitoring Skill Integration', () => {
 
   it('should support complex monitoring configurations', async () => {
     const { monitorHealthTool } = await import('../../src/tools/monitorHealth.js');
-    
+
     const complexArgs = {
       instruction: 'Monitor every 2 minutes with alerts enabled, prevent liquidation if health factor drops below 1.4, use conservative approach',
       userAddress: '0xcomplex...address'
     };
 
     const result = await monitorHealthTool.execute(complexArgs, {} as any);
-    
+
     expect(monitorHealthTool.execute).toHaveBeenCalledWith(complexArgs, {});
     expect(result.status.state).toBe('completed');
   });
@@ -254,7 +254,7 @@ describe('Health Monitoring Skill Integration', () => {
   it('should handle monitoring session management concepts', () => {
     // The skill should be aware that monitoring creates persistent sessions
     expect(healthMonitoringSkill.description).toContain('continuous');
-    
+
     // Examples should reflect persistent monitoring
     const persistentExamples = healthMonitoringSkill.examples.filter(ex =>
       ex.toLowerCase().includes('start') ||
@@ -267,12 +267,12 @@ describe('Health Monitoring Skill Integration', () => {
 
   it('should validate required fields for monitoring setup', () => {
     const schema = healthMonitoringSkill.inputSchema;
-    
+
     // Both instruction and userAddress are required for monitoring
     expect(() => schema.parse({})).toThrow();
     expect(() => schema.parse({ instruction: 'Monitor me' })).toThrow();
     expect(() => schema.parse({ userAddress: '0x123...abc' })).toThrow();
-    
+
     // Valid when both are provided
     expect(() => schema.parse({
       instruction: 'Monitor my position',

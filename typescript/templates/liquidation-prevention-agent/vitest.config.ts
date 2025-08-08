@@ -16,6 +16,6 @@ export default defineConfig({
       ...process.env,
     },
     // Increase timeout for integration tests that may need time to import modules
-    testTimeout: 30000, // 30 seconds
+    testTimeout: 60000, // 30 seconds
   },
 });

@@ -15,6 +15,7 @@ import { repayDebtTool } from './repayDebt.js';
 import { generateText, type LanguageModelV1 } from 'ai';
 import { createProviderSelector } from 'arbitrum-vibekit-core';
 import dotenv from 'dotenv';
+import { preventionResponseSchema } from '../schemas/prevention.js';
 
 dotenv.config();
 
@@ -86,6 +87,8 @@ interface PreventionAction {
     asset: string;
     amountUsd: string;
     amountToken: string;
+    expectedHealthFactor: string;
+    priority: number;
   }[];
   asset: string;
   amountUsd: string;
@@ -149,41 +152,7 @@ export const intelligentPreventionStrategyTool: VibkitToolDefinition<typeof Inte
           console.warn('⚠️ No LLM_MODEL set in env; using default model from provider.');
           return selectedProvider!();
         })();
-      console.log('🧠 LLM model:', model);
 
-      // Define the base action shape for SUPPLY or REPAY
-      const baseActionSchema = z.object({
-        actionType: z.enum(["SUPPLY", "REPAY"]),
-        asset: z.string(),
-        amountUsd: z.string(),
-        amountToken: z.string(),
-        expectedHealthFactor: z.string(),
-        priority: z.number(),
-      });
-
-      // Define the extended HYBRID action which includes steps
-      const hybridActionSchema = z.object({
-        actionType: z.literal("HYBRID"),
-        asset: z.string(),
-        amountUsd: z.string(),
-        amountToken: z.string(),
-        expectedHealthFactor: z.string(),
-        priority: z.number(),
-        steps: z.array(baseActionSchema),
-      });
-
-      // Union of either a base action or hybrid action
-      const preventionActionSchema = z.union([baseActionSchema, hybridActionSchema]);
-
-      const preventionResponseSchema = z.object({
-        currentAnalysis: z.object({
-          currentHF: z.string(),
-          targetHF: z.string(),
-          requiredIncrease: z.string(),
-        }),
-        recommendedActions: z.array(preventionActionSchema),
-        optimalAction: preventionActionSchema,
-      });
 
       const { response } = await generateText({
         model,
@@ -191,8 +160,6 @@ export const intelligentPreventionStrategyTool: VibkitToolDefinition<typeof Inte
         temperature: 0.7,
         maxTokens: 4000,
       });
-      console.log("response done....");
-      console.log("response:", response);
 
       // const messageFromLLM = response?.messages?.[0];
       console.log("🧾 LLM message from LLM:", response?.messages ? JSON.stringify(response?.messages) : "No messages");

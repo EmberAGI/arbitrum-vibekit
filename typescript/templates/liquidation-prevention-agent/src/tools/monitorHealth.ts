@@ -15,7 +15,7 @@ import { parseUserPreferences } from '../utils/userPreferences.js';
 const MonitorHealthParams = z.object({
   userAddress: z.string().describe('The wallet address to monitor'),
   instruction: z.string().optional().describe('Natural language instruction with user preferences'),
-  intervalMinutes: z.number().optional().default(1).describe('Monitoring interval in minutes'),
+  intervalMinutes: z.number().optional().default(15).describe('Monitoring interval in minutes'),
   enableAlerts: z.boolean().optional().default(true).describe('Whether to enable threshold alerts'),
 });
 
@@ -38,7 +38,7 @@ async function performHealthCheck(userAddress: string): Promise<void> {
 
   try {
     console.log(`🔄 [${new Date().toLocaleTimeString()}] Performing automated health check for ${userAddress}`);
-    
+
     // Get fresh position data using ember MCP client
     const emberClient = globalMcpClient;
 
@@ -62,7 +62,7 @@ async function performHealthCheck(userAddress: string): Promise<void> {
 
     // Parse the response using proper schema validation
     const positionData = parseMcpToolResponsePayload(positionsResult, GetWalletLendingPositionsResponseSchema);
-    
+
     // Extract health factor from the standardized response
     const positions = positionData.positions || [];
     const firstPosition = positions[0];
@@ -80,7 +80,7 @@ async function performHealthCheck(userAddress: string): Promise<void> {
     // Check if action is needed
     if (currentHealthFactor && currentHealthFactor <= session.targetHealthFactor) {
       console.log(`🚨 LIQUIDATION RISK DETECTED! Health Factor ${currentHealthFactor.toFixed(4)} ≤ ${session.targetHealthFactor}`);
-      
+
       // Add alert
       session.alerts.push({
         timestamp: new Date().toISOString(),
@@ -107,7 +107,7 @@ async function performHealthCheck(userAddress: string): Promise<void> {
 
 // Trigger automatic prevention
 async function triggerAutomaticPrevention(userAddress: string, currentHF: number, targetHF: number): Promise<void> {
-  
+
   console.log("triggerAutomaticPrevention........:", userAddress, currentHF, targetHF);
   if (!globalMcpClient || !globalContext) {
     console.error('❌ MCP client or context not available for automatic prevention');
@@ -120,13 +120,13 @@ async function triggerAutomaticPrevention(userAddress: string, currentHF: number
 
     // Import the intelligent prevention strategy tool dynamically
     const { intelligentPreventionStrategyTool } = await import('./intelligentPreventionStrategy.js');
-    
+
     // Execute the prevention strategy
     const result = await intelligentPreventionStrategyTool.execute(
       {
         userAddress,
         targetHealthFactor: targetHF,
-        instruction: `Automatic prevention triggered - current HF: ${currentHF.toFixed(4)}, target: ${targetHF}`,
+        instruction: `Automatic prevention triggered - target health factor: ${targetHF}`,
         chainId: '42161', // Default to Arbitrum
       },
       {
@@ -157,7 +157,7 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
     try {
       // Parse user preferences for targetHealthFactor and intervalMinutes
       const userPrefs = parseUserPreferences(args.instruction || '');
-      
+
       const targetHF = userPrefs.targetHealthFactor || 1.03;
       console.log(`🔄 Starting health monitoring for: ${args.userAddress}`);
       if (userPrefs.targetHealthFactor) {
@@ -211,7 +211,7 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
       let healthFactor: number | undefined;
       try {
         const positionData = parseMcpToolResponsePayload(result, GetWalletLendingPositionsResponseSchema);
-        
+
         // Extract health factor from the standardized response
         const positions = positionData.positions || [];
         const firstPosition = positions[0];
@@ -227,7 +227,7 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
       // Determine initial risk level
       let riskLevel = 'SAFE';
       let riskColor = '🟢';
-      
+
       if (healthFactor !== undefined) {
         if (healthFactor <= targetHF) {
           riskLevel = 'CRITICAL';
@@ -245,7 +245,7 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
       // Initialize monitoring session
       const sessionKey = args.userAddress;
       const now = new Date().toISOString();
-      
+
       const session: MonitoringSession = {
         userAddress: args.userAddress,
         intervalMinutes: args.intervalMinutes,

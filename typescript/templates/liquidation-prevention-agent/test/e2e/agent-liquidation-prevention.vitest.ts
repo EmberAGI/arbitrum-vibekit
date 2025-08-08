@@ -108,10 +108,6 @@ describe('End-to-End: Liquidation Prevention Agent', () => {
           enabled: true,
           interval: 300
         },
-        strategy: {
-          autoPrevent: true,
-          targetHealthFactor: 1.5
-        },
         quicknode: {
           subdomain: 'test-subdomain',
           apiKey: 'test-api-key'

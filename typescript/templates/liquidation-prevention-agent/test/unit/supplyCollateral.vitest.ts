@@ -82,10 +82,6 @@ describe('supplyCollateral Tool', () => {
           enabled: true,
           interval: 300
         },
-        strategy: {
-          autoSupply: true,
-          maxSupplyAmount: '1000'
-        }
       }
     };
   });

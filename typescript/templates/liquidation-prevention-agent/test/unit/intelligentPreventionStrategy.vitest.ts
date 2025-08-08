@@ -100,10 +100,6 @@ describe('intelligentPreventionStrategy Tool', () => {
           enabled: true,
           interval: 300
         },
-        strategy: {
-          autoPrevent: true,
-          targetHealthFactor: 1.5
-        }
       }
     };
 

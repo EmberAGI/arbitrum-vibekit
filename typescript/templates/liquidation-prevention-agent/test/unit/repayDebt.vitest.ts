@@ -82,10 +82,6 @@ describe('repayDebt Tool', () => {
           enabled: true,
           interval: 300
         },
-        strategy: {
-          autoRepay: true,
-          maxRepayAmount: '5000'
-        }
       }
     };
   });

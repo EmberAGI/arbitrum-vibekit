@@ -88,7 +88,6 @@ describe('Context Provider MCP Integration', () => {
                 executeTransaction: vi.fn().mockResolvedValue('Executed!'),
                 thresholds: {},
                 monitoring: {},
-                strategy: {},
             },
         };
         const args = {
@@ -132,7 +131,6 @@ describe('Context Provider MCP Integration', () => {
                 executeTransaction: vi.fn().mockResolvedValue('Executed!'),
                 thresholds: {},
                 monitoring: {},
-                strategy: {},
             },
         };
         const args = {

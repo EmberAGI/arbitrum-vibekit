@@ -31,14 +31,6 @@ export interface LiquidationPreventionContext {
     gasPriceMultiplier: number;
   };
 
-  // Strategy selection configuration
-  strategy: {
-    default: 'auto' | '1' | '2' | '3';
-    minSupplyBalanceUsd: number;
-    minRepayBalanceUsd: number;
-    maxTransactionUsd: number;
-  };
-
   // Token mapping loaded from Ember MCP (if available)
   tokenMap: Record<string, Array<{ chainId: string; address: string; decimals: number }>>;
 
@@ -46,13 +38,6 @@ export interface LiquidationPreventionContext {
   quicknode: {
     subdomain: string;
     apiKey: string;
-  };
-
-  // Security and operational settings
-  security: {
-    enableWebhooks: boolean;
-    webhookUrl?: string;
-    rateLimitRpm: number;
   };
 
   // When the context was loaded
@@ -63,7 +48,6 @@ export interface LiquidationPreventionContext {
     mcpServersConnected: number;
     environment: string;
     agentVersion: string;
-    debugMode: boolean;
   };
 }
 

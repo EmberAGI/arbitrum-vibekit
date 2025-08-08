@@ -24,7 +24,7 @@ export const healthMonitoringSkill = defineSkill({
   tags: ['defi', 'aave', 'health-factor', 'monitoring', 'auto-prevention', 'continuous', 'automation'],
   examples: [
     'Monitor my position every 2 minutes and prevent liquidation if health factor goes below 1.5',
-    'Start automatic liquidation prevention with default settings (15 min intervals, 1.1 threshold)',
+    'Start automatic liquidation prevention with default settings (15 min intervals, 1.03 threshold)',
     'Set up continuous monitoring with health factor 1.3 threshold',
     'Begin automatic monitoring and protection of my Aave positions',
     'Start monitoring every 10 minutes and prevent liquidation automatically',
