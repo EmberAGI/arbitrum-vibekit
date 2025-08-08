@@ -9,7 +9,7 @@ import { createSuccessTask, createErrorTask, type VibkitToolDefinition, parseMcp
 import { z } from 'zod';
 import type { LiquidationPreventionContext } from '../context/types.js';
 import { TransactionPlan, TransactionPlanSchema, RepayResponseSchema } from 'ember-schemas';
-import { parseUserPreferences, mergePreferencesWithDefaults, generatePreferencesSummary } from '../utils/userPreferences.js';
+import { parseUserPreferences } from '../utils/userPreferences.js';
 import { resolveTokenInfo, isTokenSymbol } from '../utils/tokenResolver.js';
 
 // Input schema for repayDebt tool (supports both tokenAddress and tokenSymbol)
@@ -68,17 +68,14 @@ export const repayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Li
         throw new Error('Either tokenAddress or tokenSymbol must be provided');
       }
       
-      // Parse user preferences from instruction (Task 4.3)
+      // Parse user preferences from instruction (only for targetHealthFactor if needed)
       const userPrefs = parseUserPreferences(args.instruction || '');
-      const mergedPrefs = mergePreferencesWithDefaults(userPrefs, {
-        thresholds: context.custom.thresholds,
-        monitoring: context.custom.monitoring,
-        strategy: context.custom.strategy,
-      });
       
       const tokenIdentifier = args.tokenSymbol || finalTokenAddress;
       console.log(`💸 Repaying debt: ${args.amount} of ${tokenIdentifier} for user ${args.userAddress}`);
-      console.log(`⚙️  User preferences: ${generatePreferencesSummary(mergedPrefs)}`);
+      if (userPrefs.targetHealthFactor) {
+        console.log(`🎯 Target Health Factor: ${userPrefs.targetHealthFactor}`);
+      }
 
       // Access Ember MCP client from custom context
       const emberClient = context.custom.mcpClient;

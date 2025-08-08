@@ -30,19 +30,6 @@ vi.mock('../../src/tools/getWalletBalances.js', () => ({
   }
 }));
 
-vi.mock('../../src/tools/testLiquidationData.js', () => ({
-  testLiquidationDataTool: {
-    name: 'test-liquidation-data',
-    description: 'Test liquidation prevention data generation',
-    parameters: {
-      parse: vi.fn().mockImplementation((args) => args)
-    },
-    execute: vi.fn().mockResolvedValue({
-      status: { state: 'completed' },
-      message: 'LiquidationPreventionData generated successfully! Found 12 assets (3 supplied, 2 borrowed, 7 wallet). Current HF: 2.45, Target: 1.5.'
-    })
-  }
-}));
 
 describe('Position Status Skill Integration', () => {
   beforeEach(() => {
@@ -55,20 +42,18 @@ describe('Position Status Skill Integration', () => {
     expect(positionStatusSkill.name).toBe('Position Status & Health Check');
     expect(positionStatusSkill.description).toContain('immediate status');
     expect(positionStatusSkill.tags).toContain('health-factor');
-    expect(positionStatusSkill.tools).toHaveLength(3);
+    expect(positionStatusSkill.tools).toHaveLength(2);
   });
 
   it('should include all required tools', () => {
     const toolNames = positionStatusSkill.tools.map(tool => tool.name);
     expect(toolNames).toContain('get-user-positions');
     expect(toolNames).toContain('get-wallet-balances');
-    expect(toolNames).toContain('test-liquidation-data');
   });
 
   it('should have comprehensive examples for different use cases', () => {
     expect(positionStatusSkill.examples).toContain('Check my liquidation risk and health factor');
     expect(positionStatusSkill.examples).toContain('Show my wallet token balances');
-    expect(positionStatusSkill.examples).toContain('Show me the full liquidation prevention data structure');
     expect(positionStatusSkill.examples.length).toBeGreaterThan(10);
   });
 
@@ -127,22 +112,6 @@ describe('Position Status Skill Integration', () => {
     expect(result.message).toContain('tokens');
   });
 
-  it('should handle liquidation data structure testing', async () => {
-    const { testLiquidationDataTool } = await import('../../src/tools/testLiquidationData.js');
-    
-    const args = {
-      instruction: 'Show me the full liquidation prevention data structure',
-      userAddress: '0x789...ghi'
-    };
-
-    // Simulate the skill would use testLiquidationDataTool for data structure testing
-    const result = await testLiquidationDataTool.execute(args, {} as any);
-    
-    expect(testLiquidationDataTool.execute).toHaveBeenCalledWith(args, {});
-    expect(result.status.state).toBe('completed');
-    expect(result.message).toContain('LiquidationPreventionData generated');
-    expect(result.message).toContain('assets');
-  });
 
   it('should provide appropriate tags for skill discovery', () => {
     const expectedTags = ['defi', 'aave', 'health-factor', 'status', 'positions', 'immediate', 'check'];
@@ -168,12 +137,6 @@ describe('Position Status Skill Integration', () => {
     );
     expect(balanceExamples.length).toBeGreaterThan(3);
 
-    // Data structure related examples
-    const dataExamples = examples.filter(ex => 
-      ex.toLowerCase().includes('data') || 
-      ex.toLowerCase().includes('structure')
-    );
-    expect(dataExamples.length).toBeGreaterThan(1);
   });
 
   it('should have properly configured tool parameters', () => {
@@ -228,7 +191,7 @@ describe('Position Status Skill Integration', () => {
       'Show my current positions',
       'What is my liquidation risk?',
       'Display my wallet balances',
-      'Test the liquidation data structure'
+      'Check wallet balances for available tokens'
     ];
 
     testInstructions.forEach(instruction => {

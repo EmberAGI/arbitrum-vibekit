@@ -25,13 +25,8 @@ vi.mock('arbitrum-vibekit-core', () => ({
 vi.mock('../../src/utils/userPreferences.js', () => ({
   parseUserPreferences: vi.fn().mockReturnValue({
     targetHealthFactor: 1.5,
-    riskTolerance: 'moderate'
-  }),
-  mergePreferencesWithDefaults: vi.fn().mockReturnValue({
-    targetHealthFactor: 1.5,
-    riskTolerance: 'moderate'
-  }),
-  generatePreferencesSummary: vi.fn().mockReturnValue('Target Health Factor: 1.5, Risk Tolerance: moderate')
+    intervalMinutes: 15
+  })
 }));
 
 // Mock the intelligent prevention strategy tool
@@ -201,10 +196,10 @@ describe('monitorHealth Tool', () => {
     });
 
     // Use custom preferences to set target HF higher than current
-    const { mergePreferencesWithDefaults } = await import('../../src/utils/userPreferences.js');
-    vi.mocked(mergePreferencesWithDefaults).mockReturnValueOnce({
-      targetHealthFactor: 1.3, // Set target lower than current HF to avoid immediate trigger
-      riskTolerance: 'moderate'
+    const { parseUserPreferences } = await import('../../src/utils/userPreferences.js');
+    vi.mocked(parseUserPreferences).mockReturnValueOnce({
+      targetHealthFactor: 1.3, // Set target higher than current HF to avoid immediate trigger
+      intervalMinutes: 2
     });
 
     const args = {
@@ -240,11 +235,11 @@ describe('monitorHealth Tool', () => {
       structuredContent: mockPositionsResponse.structuredContent
     });
 
-    // Use custom preferences to set target HF lower than current
-    const { mergePreferencesWithDefaults } = await import('../../src/utils/userPreferences.js');
-    vi.mocked(mergePreferencesWithDefaults).mockReturnValueOnce({
-      targetHealthFactor: 1.1, // Set target lower than current HF to avoid immediate trigger
-      riskTolerance: 'moderate'
+    // Use custom preferences to set target HF lower than current  
+    const { parseUserPreferences } = await import('../../src/utils/userPreferences.js');
+    vi.mocked(parseUserPreferences).mockReturnValueOnce({
+      targetHealthFactor: 1.1, // Set target lower than current HF to trigger immediate action
+      intervalMinutes: 1
     });
 
     const args = {

@@ -434,7 +434,6 @@ describe('End-to-End: Liquidation Prevention Agent', () => {
     it('should execute position status skill workflow', async () => {
       const { getUserPositionsTool } = await import('../../src/tools/getUserPositions.js');
       const { getWalletBalancesTool } = await import('../../src/tools/getWalletBalances.js');
-      const { testLiquidationDataTool } = await import('../../src/tools/testLiquidationData.js');
 
       // Mock position data
       mockMcpClient.callTool.mockResolvedValue({
@@ -480,20 +479,6 @@ describe('End-to-End: Liquidation Prevention Agent', () => {
 
       expect(walletResult.status.state).toBe('completed');
       expect(walletResult.message).toContain('Balance Analysis');
-
-      // Execute liquidation data test
-      mockPublicClient.mockResolvedValue([
-        BigInt(0), BigInt(0), BigInt(8400), BigInt(0), BigInt(0),
-        false, false, false, false, false
-      ]);
-
-      const dataResult = await testLiquidationDataTool.execute({
-        userAddress: '0xabc...123',
-        targetHealthFactor: '1.5'
-      }, mockContext);
-
-      expect(dataResult.status.state).toBe('completed');
-      expect(dataResult.message).toContain('LiquidationPreventionData generated successfully');
     });
 
     it('should execute health monitoring skill workflow', async () => {

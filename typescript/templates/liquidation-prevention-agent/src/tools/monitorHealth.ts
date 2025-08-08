@@ -8,8 +8,8 @@
 import { createSuccessTask, createErrorTask, type VibkitToolDefinition, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import { z } from 'zod';
 import { GetWalletLendingPositionsResponseSchema } from 'ember-schemas';
-import type { LiquidationPreventionContext } from '../context/types.js';
-import { parseUserPreferences, mergePreferencesWithDefaults, generatePreferencesSummary } from '../utils/userPreferences.js';
+import type { LiquidationPreventionContext, MonitoringSession } from '../context/types.js';
+import { parseUserPreferences } from '../utils/userPreferences.js';
 
 // Input schema for monitorHealth tool
 const MonitorHealthParams = z.object({
@@ -19,23 +19,7 @@ const MonitorHealthParams = z.object({
   enableAlerts: z.boolean().optional().default(true).describe('Whether to enable threshold alerts'),
 });
 
-// Define types for monitoring
-interface MonitoringSession {
-  userAddress: string;
-  intervalMinutes: number;
-  startTime: string;
-  lastCheck: string;
-  checksPerformed: number;
-  timerId?: NodeJS.Timeout;
-  isActive: boolean;
-  targetHealthFactor: number;
-  alerts: Array<{
-    timestamp: string;
-    riskLevel: string;
-    healthFactor: number;
-    message: string;
-  }>;
-}
+// MonitoringSession interface is imported from '../context/types.js'
 
 // Global monitoring state (in production, this would be in a database)
 const monitoringSessions = new Map<string, MonitoringSession>();
@@ -171,17 +155,17 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
   parameters: MonitorHealthParams,
   execute: async (args, context) => {
     try {
-      // Parse user preferences from instruction (Task 4.3)
+      // Parse user preferences for targetHealthFactor and intervalMinutes
       const userPrefs = parseUserPreferences(args.instruction || '');
-      const mergedPrefs = mergePreferencesWithDefaults(userPrefs, {
-        thresholds: context.custom.thresholds,
-        monitoring: context.custom.monitoring,
-        strategy: context.custom.strategy,
-      });
       
-      const targetHF = mergedPrefs.targetHealthFactor || 1.03;
+      const targetHF = userPrefs.targetHealthFactor || 1.03;
       console.log(`🔄 Starting health monitoring for: ${args.userAddress}`);
-      console.log(`⚙️  User preferences: ${generatePreferencesSummary(mergedPrefs)}`);
+      if (userPrefs.targetHealthFactor) {
+        console.log(`🎯 User specified Target Health Factor: ${userPrefs.targetHealthFactor}`);
+      }
+      if (userPrefs.intervalMinutes) {
+        console.log(`⏱️ User specified Interval: ${userPrefs.intervalMinutes} minutes`);
+      }
       console.log(`🎯 Target Health Factor: ${targetHF} (action will be triggered if HF ≤ ${targetHF})`);
 
       // Access Ember MCP client from custom context

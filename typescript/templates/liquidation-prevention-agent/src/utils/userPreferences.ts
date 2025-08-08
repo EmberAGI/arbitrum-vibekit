@@ -1,219 +1,168 @@
 /**
  * User Preferences Parser
  * 
- * Extracts user preferences and configuration from natural language instructions
- * for Task 4.3: Add user preference parsing from initial instructions
+ * Simplified version that extracts only the essential preferences from user instructions.
+ * Only includes properties that are actually used in the business logic.
  */
 
 import { z } from 'zod';
 
+// Simplified user preferences interface - only properties actually used
 export interface UserPreferences {
-  // Health factor preferences
   targetHealthFactor?: number;
-  warningThreshold?: number;
-  dangerThreshold?: number;
-  criticalThreshold?: number;
-
-  // Monitoring preferences
-  monitoringInterval?: number; // in minutes
-  enableContinuousMonitoring?: boolean;
-
-  // Strategy preferences
-  preferredStrategy?: 'auto' | '1' | '2' | '3';
-  maxTransactionAmount?: number; // in USD
-  minBalanceThreshold?: number; // in USD
-
-  // Safety preferences
-  enableNotifications?: boolean;
-  maxSlippagePercent?: number;
-  gasOptimization?: boolean;
-
-  // Risk tolerance
-  riskTolerance?: 'conservative' | 'moderate' | 'aggressive';
+  intervalMinutes?: number;
+  thresholds?: {
+    warning?: number;
+    danger?: number;
+    critical?: number;
+  };
 }
 
-// Schema for validating extracted preferences
-export const UserPreferencesSchema = z.object({
-  targetHealthFactor: z.number().min(1.0).max(2.0).optional(),
-  warningThreshold: z.number().min(1.0).max(2.0).optional(),
-  dangerThreshold: z.number().min(1.0).max(1.5).optional(),
-  criticalThreshold: z.number().min(1.0).max(1.2).optional(),
-  monitoringInterval: z.number().min(1).max(1440).optional(), // 1 minute to 24 hours
-  enableContinuousMonitoring: z.boolean().optional(),
-  preferredStrategy: z.enum(['auto', '1', '2', '3']).optional(),
-  maxTransactionAmount: z.number().min(10).max(100000).optional(),
-  minBalanceThreshold: z.number().min(1).max(10000).optional(),
-  enableNotifications: z.boolean().optional(),
-  maxSlippagePercent: z.number().min(0.1).max(10).optional(),
-  gasOptimization: z.boolean().optional(),
-  riskTolerance: z.enum(['conservative', 'moderate', 'aggressive']).optional(),
-});
+// Context defaults interface (used for merging)
+export interface ContextDefaults {
+  thresholds?: {
+    warning: number;
+    danger: number;
+    critical: number;
+  };
+  monitoring?: {
+    intervalMinutes: number;
+  };
+  strategy?: {
+    targetHealthFactor: number;
+  };
+  targetHealthFactor?: number;
+}
 
 /**
  * Parse user preferences from natural language instruction
+ * Only extracts properties that are actually used in business logic
  */
 export function parseUserPreferences(instruction: string): UserPreferences {
-  const preferences: UserPreferences = {};
   const lowerInstruction = instruction.toLowerCase();
+  const preferences: UserPreferences = {};
 
-  // Health factor preferences
-  const hfMatch = lowerInstruction.match(/health factor.*?(\d+\.?\d*)/i);
-  if (hfMatch && hfMatch[1]) {
-    const value = parseFloat(hfMatch[1]);
-    if (value >= 1.0 && value <= 2.0) {
-      preferences.targetHealthFactor = value;
+  // Extract target health factor (used in intelligentPreventionStrategy, monitorHealth)
+  const healthFactorMatches = [
+    /target.*health.*factor.*?(\d+(?:\.\d+)?)/i,
+    /health.*factor.*?(\d+(?:\.\d+)?)/i,
+    /hf.*?(\d+(?:\.\d+)?)/i,
+  ];
+
+  for (const pattern of healthFactorMatches) {
+    const match = instruction.match(pattern);
+    if (match && match[1]) {
+      const value = parseFloat(match[1]);
+      if (value > 0 && value <= 10) { // Reasonable bounds for health factor
+        preferences.targetHealthFactor = value;
+        break;
+      }
     }
   }
+
+  // Extract monitoring interval (used in monitorHealth)
+  const intervalMatches = [
+    /(?:every|check.*?every|interval.*?of).*?(\d+).*?minute/i,
+    /(\d+).*?minute.*?interval/i,
+    /monitor.*?(\d+).*?minute/i,
+  ];
+
+  for (const pattern of intervalMatches) {
+    const match = instruction.match(pattern);
+    if (match && match[1]) {
+      const value = parseInt(match[1]);
+      if (value > 0 && value <= 1440) { // Max 24 hours
+        preferences.intervalMinutes = value;
+        break;
+      }
+    }
+  }
+
+  // Extract threshold preferences (used for risk assessment)
+  const thresholds: UserPreferences['thresholds'] = {};
 
   // Warning threshold
-  const warningMatch = lowerInstruction.match(/warning.*?(\d+\.?\d*)/i);
+  const warningMatch = instruction.match(/warning.*?(?:threshold|factor).*?(\d+(?:\.\d+)?)/i);
   if (warningMatch && warningMatch[1]) {
     const value = parseFloat(warningMatch[1]);
-    if (value >= 1.0 && value <= 2.0) {
-      preferences.warningThreshold = value;
+    if (value > 0 && value <= 10) {
+      thresholds.warning = value;
     }
   }
 
-  // Danger threshold
-  const dangerMatch = lowerInstruction.match(/danger.*?(\d+\.?\d*)/i);
+  // Danger threshold  
+  const dangerMatch = instruction.match(/danger.*?(?:threshold|factor).*?(\d+(?:\.\d+)?)/i);
   if (dangerMatch && dangerMatch[1]) {
     const value = parseFloat(dangerMatch[1]);
-    if (value >= 1.0 && value <= 1.5) {
-      preferences.dangerThreshold = value;
+    if (value > 0 && value <= 10) {
+      thresholds.danger = value;
     }
   }
 
   // Critical threshold
-  const criticalMatch = lowerInstruction.match(/critical.*?(\d+\.?\d*)/i);
+  const criticalMatch = instruction.match(/critical.*?(?:threshold|factor).*?(\d+(?:\.\d+)?)/i);
   if (criticalMatch && criticalMatch[1]) {
     const value = parseFloat(criticalMatch[1]);
-    if (value >= 1.0 && value <= 1.2) {
-      preferences.criticalThreshold = value;
+    if (value > 0 && value <= 10) {
+      thresholds.critical = value;
     }
   }
 
-  // Monitoring interval
-  const intervalMatch = lowerInstruction.match(/(\d+)\s*(min|minute|hour|hr)/i);
-  if (intervalMatch && intervalMatch[1] && intervalMatch[2]) {
-    const value = parseInt(intervalMatch[1]);
-    const unit = intervalMatch[2].toLowerCase();
-    if (unit.includes('hour') || unit.includes('hr')) {
-      preferences.monitoringInterval = value * 60; // Convert to minutes
-    } else {
-      preferences.monitoringInterval = value;
-    }
-  }
-
-  // Continuous monitoring
-  if (lowerInstruction.includes('continuous') || lowerInstruction.includes('monitor continuously')) {
-    preferences.enableContinuousMonitoring = true;
-  }
-
-  // Transaction amount limits
-  const amountMatch = lowerInstruction.match(/(\d+)\s*(usd|dollar)/i);
-  if (amountMatch && amountMatch[1]) {
-    const value = parseFloat(amountMatch[1]);
-    if (value >= 10 && value <= 100000) {
-      preferences.maxTransactionAmount = value;
-    }
-  }
-
-  // Balance thresholds
-  const balanceMatch = lowerInstruction.match(/min.*?(\d+)\s*(usd|dollar)/i);
-  if (balanceMatch && balanceMatch[1]) {
-    const value = parseFloat(balanceMatch[1]);
-    if (value >= 1 && value <= 10000) {
-      preferences.minBalanceThreshold = value;
-    }
-  }
-
-  // Notifications
-  if (lowerInstruction.includes('notify') || lowerInstruction.includes('alert') || lowerInstruction.includes('notification')) {
-    preferences.enableNotifications = true;
-  }
-
-  // Slippage
-  const slippageMatch = lowerInstruction.match(/(\d+\.?\d*)\s*%?\s*slippage/i);
-  if (slippageMatch && slippageMatch[1]) {
-    const value = parseFloat(slippageMatch[1]);
-    if (value >= 0.1 && value <= 10) {
-      preferences.maxSlippagePercent = value;
-    }
-  }
-
-  // Gas optimization
-  if (lowerInstruction.includes('gas') && (lowerInstruction.includes('optimize') || lowerInstruction.includes('save'))) {
-    preferences.gasOptimization = true;
-  }
-
-  // Risk tolerance
-  if (lowerInstruction.includes('conservative') || lowerInstruction.includes('safe')) {
-    preferences.riskTolerance = 'conservative';
-  } else if (lowerInstruction.includes('aggressive') || lowerInstruction.includes('risky')) {
-    preferences.riskTolerance = 'aggressive';
-  } else if (lowerInstruction.includes('moderate') || lowerInstruction.includes('balanced')) {
-    preferences.riskTolerance = 'moderate';
+  // Only set thresholds if at least one was found
+  if (Object.keys(thresholds).length > 0) {
+    preferences.thresholds = thresholds;
   }
 
   return preferences;
 }
 
 /**
- * Merge user preferences with default configuration
+ * Merge user preferences with context defaults
  */
 export function mergePreferencesWithDefaults(
   userPrefs: UserPreferences,
-  defaults: {
-    thresholds: { warning: number; danger: number; critical: number };
-    monitoring: { intervalMs: number };
-    strategy: { default: string; maxTransactionUsd: number; minSupplyBalanceUsd: number };
-    targetHealthFactor?: number;
-  }
+  defaults: ContextDefaults
 ): UserPreferences {
   return {
-    // Apply user preferences with defaults as fallback
-    targetHealthFactor: userPrefs.targetHealthFactor || defaults.targetHealthFactor || 1.03,
-    warningThreshold: userPrefs.warningThreshold || defaults.thresholds.warning,
-    dangerThreshold: userPrefs.dangerThreshold || defaults.thresholds.danger,
-    criticalThreshold: userPrefs.criticalThreshold || defaults.thresholds.critical,
-    monitoringInterval: userPrefs.monitoringInterval || Math.floor(defaults.monitoring.intervalMs / 60000), // Convert ms to minutes
-    enableContinuousMonitoring: userPrefs.enableContinuousMonitoring ?? true,
-    maxTransactionAmount: userPrefs.maxTransactionAmount || defaults.strategy.maxTransactionUsd,
-    minBalanceThreshold: userPrefs.minBalanceThreshold || defaults.strategy.minSupplyBalanceUsd,
-    enableNotifications: userPrefs.enableNotifications ?? true,
-    maxSlippagePercent: userPrefs.maxSlippagePercent || 2.0,
-    gasOptimization: userPrefs.gasOptimization ?? true,
-    riskTolerance: userPrefs.riskTolerance || 'moderate',
+    targetHealthFactor: userPrefs.targetHealthFactor
+      || defaults.strategy?.targetHealthFactor
+      || defaults.targetHealthFactor
+      || 1.03,
+    intervalMinutes: userPrefs.intervalMinutes
+      || defaults.monitoring?.intervalMinutes
+      || 15,
+    thresholds: {
+      warning: userPrefs.thresholds?.warning || defaults.thresholds?.warning || 2.0,
+      danger: userPrefs.thresholds?.danger || defaults.thresholds?.danger || 1.5,
+      critical: userPrefs.thresholds?.critical || defaults.thresholds?.critical || 1.1,
+    },
   };
 }
 
 /**
- * Generate a summary of parsed preferences
+ * Generate a concise summary of user preferences for logging
  */
 export function generatePreferencesSummary(preferences: UserPreferences): string {
-  const summary: string[] = [];
+  const parts: string[] = [];
 
   if (preferences.targetHealthFactor) {
-    summary.push(`Target Health Factor: ${preferences.targetHealthFactor}`);
-  }
-  if (preferences.warningThreshold) {
-    summary.push(`Warning Threshold: ${preferences.warningThreshold}`);
-  }
-  if (preferences.dangerThreshold) {
-    summary.push(`Danger Threshold: ${preferences.dangerThreshold}`);
-  }
-  if (preferences.criticalThreshold) {
-    summary.push(`Critical Threshold: ${preferences.criticalThreshold}`);
-  }
-  if (preferences.monitoringInterval) {
-    summary.push(`Monitoring Interval: ${preferences.monitoringInterval} minutes`);
-  }
-  if (preferences.maxTransactionAmount) {
-    summary.push(`Max Transaction Amount: $${preferences.maxTransactionAmount}`);
-  }
-  if (preferences.riskTolerance) {
-    summary.push(`Risk Tolerance: ${preferences.riskTolerance}`);
+    parts.push(`Target HF: ${preferences.targetHealthFactor}`);
   }
 
-  return summary.length > 0 ? summary.join(', ') : 'Using default preferences';
+  if (preferences.intervalMinutes) {
+    parts.push(`Interval: ${preferences.intervalMinutes}min`);
+  }
+
+  if (preferences.thresholds) {
+    const thresholdParts: string[] = [];
+    if (preferences.thresholds.warning) thresholdParts.push(`warn:${preferences.thresholds.warning}`);
+    if (preferences.thresholds.danger) thresholdParts.push(`danger:${preferences.thresholds.danger}`);
+    if (preferences.thresholds.critical) thresholdParts.push(`crit:${preferences.thresholds.critical}`);
+
+    if (thresholdParts.length > 0) {
+      parts.push(`Thresholds: ${thresholdParts.join(', ')}`);
+    }
+  }
+
+  return parts.length > 0 ? parts.join(' | ') : 'Using defaults';
 } 

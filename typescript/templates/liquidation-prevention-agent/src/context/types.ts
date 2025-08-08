@@ -67,6 +67,13 @@ export interface LiquidationPreventionContext {
   };
 }
 
+// --- Chain Configuration ---
+
+export interface ChainConfig {
+  viemChain: any; // This should be typed as a viem chain, but avoiding import to prevent circular deps
+  quicknodeSegment: string;
+}
+
 /**
  * Data Models for LLM-based Liquidation Prevention
  * These types define the structured data format for LLM decision making
@@ -101,25 +108,23 @@ export interface LiquidationPreventionData {
   preventionConfig: PreventionConfig;
 }
 
-// --- LLM Response Schema ---
+// --- Monitoring Types ---
 
-export interface PreventionAction {
-  actionType: "SUPPLY" | "REPAY" | "HYBRID";
-  asset: string;
-  amountUsd: string;
-  amountToken: string;
-  expectedHealthFactor: string;
-  priority: number; // 1 = highest priority
-}
-
-export interface PreventionResponse {
-  currentAnalysis: {
-    currentHF: string;
-    targetHF: string;
-    requiredIncrease: string;
-  };
-  recommendedActions: PreventionAction[];
-  optimalAction: PreventionAction;
+export interface MonitoringSession {
+  userAddress: string;
+  intervalMinutes: number;
+  startTime: string;
+  lastCheck: string;
+  checksPerformed: number;
+  timerId?: NodeJS.Timeout;
+  isActive: boolean;
+  targetHealthFactor: number;
+  alerts: Array<{
+    timestamp: string;
+    riskLevel: string;
+    healthFactor: number;
+    message: string;
+  }>;
 }
 
 // --- Aave Configuration ---
@@ -130,27 +135,6 @@ export const ARBITRUM_CONFIG = {
   poolAddress: "0x794a61358D6845594F94dc1DB02A252b5b4814aD",
 };
 
-// ABI for Aave Protocol Data Provider (only what we need)
-export const dataProviderABI = [
-  {
-    "inputs": [{ "internalType": "address", "name": "asset", "type": "address" }],
-    "name": "getReserveConfigurationData",
-    "outputs": [
-      { "internalType": "uint256", "name": "decimals", "type": "uint256" },
-      { "internalType": "uint256", "name": "ltv", "type": "uint256" },
-      { "internalType": "uint256", "name": "liquidationThreshold", "type": "uint256" },
-      { "internalType": "uint256", "name": "liquidationBonus", "type": "uint256" },
-      { "internalType": "uint256", "name": "reserveFactor", "type": "uint256" },
-      { "internalType": "bool", "name": "usageAsCollateralEnabled", "type": "bool" },
-      { "internalType": "bool", "name": "borrowingEnabled", "type": "bool" },
-      { "internalType": "bool", "name": "stableBorrowRateEnabled", "type": "bool" },
-      { "internalType": "bool", "name": "isActive", "type": "bool" },
-      { "internalType": "bool", "name": "isFrozen", "type": "bool" }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  }
-] as const;
 
 
 export interface TokenBalance {

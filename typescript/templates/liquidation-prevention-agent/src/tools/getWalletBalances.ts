@@ -8,7 +8,7 @@
 import { createSuccessTask, createErrorTask, type VibkitToolDefinition, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
 import { z } from 'zod';
 import { GetWalletLendingPositionsResponseSchema } from 'ember-schemas';
-import { MinimalErc20Abi, TokenBalance, type LiquidationPreventionContext } from '../context/types.js';
+import { MinimalErc20Abi, TokenBalance, ChainConfig, type LiquidationPreventionContext } from '../context/types.js';
 import {
   createPublicClient,
   http,
@@ -17,10 +17,7 @@ import {
 } from 'viem';
 import { arbitrum } from 'viem/chains';
 
-export interface ChainConfig {
-  viemChain: typeof arbitrum;
-  quicknodeSegment: string;
-}
+// ChainConfig interface is imported from '../context/types.js'
 
 
 async function fetchTokenPrices(tokenAddresses: string[]): Promise<Record<string, number>> {

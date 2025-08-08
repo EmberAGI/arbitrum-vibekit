@@ -10,10 +10,12 @@ export default defineConfig({
     // Include test files with .vitest.ts extension
     include: ['**/*.{test,spec,vitest}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     // Global test setup file to suppress console output
-    setupFiles: ['./test/test-setup.ts'],
+    // setupFiles: ['./test/test-setup.ts'],
     // Pass through environment variables that we need
     env: {
       ...process.env,
     },
+    // Increase timeout for integration tests that may need time to import modules
+    testTimeout: 30000, // 30 seconds
   },
 });

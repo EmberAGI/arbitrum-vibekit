@@ -11,7 +11,6 @@ export const agentConfig: AgentConfig = {
         positionStatusSkill,           // ✅ Immediate status checks and health factor queries
         healthMonitoringSkill,         // ✅ Continuous monitoring + automatic prevention
         liquidationPreventionSkill,    // ✅ Direct supply/repay actions
-        // riskAssessmentSkill,        // 🔄 To be implemented: Task 4
     ],
     url: process.env.AGENT_URL || 'localhost',
     capabilities: {

@@ -49,6 +49,25 @@ describe('Liquidation Prevention Agent Integration', () => {
         expect(skillIds).toContain('liquidation-prevention');
     });
 
+    it('should have exactly 3 skills with correct names', async () => {
+        const { agentConfig } = await import('../src/config.ts');
+        const expectedSkills = ['position-status', 'health-monitoring', 'liquidation-prevention'];
+        const skillIds = agentConfig.skills.map(skill => skill.id);
+        
+        // Check exact count
+        expect(agentConfig.skills).toHaveLength(3);
+        
+        // Check all expected skills are present
+        expectedSkills.forEach(expectedSkillId => {
+            expect(skillIds).toContain(expectedSkillId);
+        });
+        
+        // Check no unexpected skills are present
+        skillIds.forEach(skillId => {
+            expect(expectedSkills).toContain(skillId);
+        });
+    });
+
     it('should have correct agent metadata', async () => {
         const { agentConfig } = await import('../src/config.ts');
         expect(agentConfig.version).toBeDefined();

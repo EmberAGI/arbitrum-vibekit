@@ -8,7 +8,7 @@
 import { createSuccessTask, createErrorTask, type VibkitToolDefinition, getAvailableProviders } from 'arbitrum-vibekit-core';
 import { z } from 'zod';
 import type { LiquidationPreventionContext } from '../context/types.js';
-import { parseUserPreferences, mergePreferencesWithDefaults, generatePreferencesSummary } from '../utils/userPreferences.js';
+import { parseUserPreferences } from '../utils/userPreferences.js';
 import { generateLiquidationPreventionData } from '../utils/liquidationData.js';
 import { supplyCollateralTool } from './supplyCollateral.js';
 import { repayDebtTool } from './repayDebt.js';
@@ -94,6 +94,7 @@ interface PreventionAction {
   priority: number; // 1 = highest priority
 }
 
+
 ### Output Rules
 - 🚫 Do NOT explain anything.
 - 🚫 Do NOT return markdown (no triple backticks).
@@ -108,21 +109,16 @@ export const intelligentPreventionStrategyTool: VibkitToolDefinition<typeof Inte
   parameters: IntelligentPreventionStrategyParams,
   execute: async (args, context) => {
     try {
-      // Parse user preferences from instruction (Task 4.3)
+      // Parse user preferences from instruction (only for targetHealthFactor)
       const userPrefs = parseUserPreferences(args.instruction || '');
-      const mergedPrefs = mergePreferencesWithDefaults(userPrefs, {
-        thresholds: context.custom.thresholds,
-        monitoring: context.custom.monitoring,
-        strategy: context.custom.strategy,
-        targetHealthFactor: args.targetHealthFactor,
-      });
 
-      // const targetHF = mergedPrefs.targetHealthFactor || args.targetHealthFactor || 1.03;
       const targetHF = userPrefs.targetHealthFactor
         || args.targetHealthFactor
         || 1.03;
       console.log(`🧠 Analyzing intelligent prevention strategy for user: ${args.userAddress}, target HF: ${targetHF}`);
-      console.log(`⚙️  User preferences: ${generatePreferencesSummary(mergedPrefs)}`);
+      if (userPrefs.targetHealthFactor) {
+        console.log(`🎯 User specified Target Health Factor: ${userPrefs.targetHealthFactor}`);
+      }
 
       // Step 1: Call generateLiquidationPreventionData function
       console.log('📊 Step 1: Generating liquidation prevention data...');
@@ -192,7 +188,7 @@ export const intelligentPreventionStrategyTool: VibkitToolDefinition<typeof Inte
       const { response } = await generateText({
         model,
         prompt: prompt,
-        temperature: 0.7 ,
+        temperature: 0.7,
         maxTokens: 4000,
       });
       console.log("response done....");

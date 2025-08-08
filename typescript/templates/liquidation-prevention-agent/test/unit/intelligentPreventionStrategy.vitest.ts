@@ -30,13 +30,8 @@ vi.mock('ai', () => ({
 vi.mock('../../src/utils/userPreferences.js', () => ({
   parseUserPreferences: vi.fn().mockReturnValue({
     targetHealthFactor: 1.5,
-    riskTolerance: 'moderate'
-  }),
-  mergePreferencesWithDefaults: vi.fn().mockReturnValue({
-    targetHealthFactor: 1.5,
-    riskTolerance: 'moderate'
-  }),
-  generatePreferencesSummary: vi.fn().mockReturnValue('Target Health Factor: 1.5, Risk Tolerance: moderate')
+    intervalMinutes: 15
+  })
 }));
 
 vi.mock('../../src/utils/liquidationData.js', () => ({
@@ -372,7 +367,7 @@ describe('intelligentPreventionStrategy Tool', () => {
     const { parseUserPreferences } = await import('../../src/utils/userPreferences.js');
     vi.mocked(parseUserPreferences).mockReturnValueOnce({
       targetHealthFactor: 2.0,
-      riskTolerance: 'conservative'
+      intervalMinutes: 30
     });
 
     const args = {
