@@ -227,7 +227,7 @@ When your agent needs to connect to external MCP servers (like Ember AI), the fr
 
 ```bash
 # Remote MCP servers
-EMBER_ENDPOINT=@http://api.emberai.xyz/mcp
+EMBER_ENDPOINT=@https://api.emberai.xyz/mcp
 ALLORA_ENDPOINT=@http://allora.example.com/mcp
 ```
 
@@ -346,7 +346,7 @@ ENABLE_NOTIFICATIONS=false
 ENABLE_HISTORY=false
 
 # Service Dependencies
-EMBER_ENDPOINT=@http://api.emberai.xyz/mcp
+EMBER_ENDPOINT=@https://api.emberai.xyz/mcp
 QUICKNODE_API_KEY=your_quicknode_key
 ```
 

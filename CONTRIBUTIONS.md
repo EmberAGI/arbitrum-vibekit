@@ -45,8 +45,8 @@ Vibekit supports DeFi protocol integrations through the Ember plugin system. Thi
 **Getting Started:**
 
 1. **Create an Issue**: Navigate to the [Vibekit issues board](https://github.com/EmberAGI/arbitrum-vibekit/issues) to create a new issue detailing the protocol you intend to integrate.
-2. **Review Plugin Documentation**: Check the comprehensive [Ember Plugin README](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/ember-plugin) for detailed implementation guidelines, architecture overview, and code examples.
-3. **Study Existing Implementations**: Examine existing plugins and action implementations in the `typescript/lib/ember-plugin/` directory for reference patterns.
+2. **Review Plugin Documentation**: Check the comprehensive [Ember API README](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/ember-api) for detailed implementation guidelines, architecture overview, and code examples.
+3. **Study Existing Implementations**: Examine existing plugins and action implementations in the `typescript/lib/ember-api/` directory for reference patterns.
 4. Follow the development workflow below to implement your protocol integration.
 
 ### 🚀 Adding New Functionality
