@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { PaymentRequirementsSchema, VerifyResponseSchema, ChainIdToNetwork, evm } from 'x402/types';
+import { PaymentRequirementsSchema, ChainIdToNetwork, evm } from 'x402/types';
 import { CallToolResultSchema, type CallToolRequest } from '@modelcontextprotocol/sdk/types.js';
 import type { Account } from 'viem';
 import { createPaymentHeader, selectPaymentRequirements } from 'x402/client';
@@ -9,10 +9,19 @@ import { createPaymentHeader, selectPaymentRequirements } from 'x402/client';
  * The response from the X402 payment when there is an error
  */
 const XError = z.object({
-  x402Version: z.number(),
-  error: z.string().optional(),
-  accepts: z.array(PaymentRequirementsSchema),
-  payer: VerifyResponseSchema.shape.payer.optional(),
+  wrappedResponse: z.discriminatedUnion('_x402_type', [
+    z.object({
+      _x402_type: z.literal('x402_error'),
+      x402Version: z.number(),
+      error: z.string().optional(),
+      accepts: z.array(PaymentRequirementsSchema),
+      payer: z.string().optional(),
+    }),
+    z.object({
+      _x402_type: z.literal('success'),
+      result: z.unknown(),
+    }),
+  ]),
 });
 
 export type X402PaymentResponse = z.infer<typeof XError>;
@@ -44,20 +53,26 @@ export async function callXTool(
   }
 
   const callToolResult = await CallToolResultSchema.safeParseAsync(result);
-  if (
-    !callToolResult.success ||
-    callToolResult.data.content.length === 0 ||
-    callToolResult.data.content[0]?.type !== 'text'
-  ) {
+  if (!callToolResult.success || callToolResult.data.structuredContent === undefined) {
     return result;
   }
 
-  const xError = await XError.safeParseAsync(callToolResult.data.content[0].text);
+  const xError = await XError.safeParseAsync(callToolResult.data.structuredContent);
+
+  // The result wasn't an X402 error, return the original result
   if (!xError.success) {
     return result;
   }
+
   console.log('Tools is protected by X402 payment, attempting to pay...');
-  const { x402Version, accepts } = xError.data;
+  if (xError.data.wrappedResponse._x402_type === 'success') {
+    return {
+      ...result,
+      structuredContent: xError.data.wrappedResponse.result,
+    };
+  }
+
+  const { x402Version, accepts } = xError.data.wrappedResponse;
 
   console.log('Payment requirements:', accepts);
   const parsedPaymentRequirements = accepts.map(x => PaymentRequirementsSchema.parse(x));
@@ -87,11 +102,40 @@ export async function callXTool(
 
   const paramsWithXPayment = {
     ...params,
-    XPayment: paymentHeader,
+    arguments: {
+      ...params.arguments,
+      XPayment: paymentHeader,
+    },
   };
-  console.log('Creating payment header:', paymentHeader, ', attempting to call tool again...');
   const secondResponse = await client.callTool(paramsWithXPayment);
-  return secondResponse;
+  const secondToolResult = await CallToolResultSchema.safeParseAsync(secondResponse);
+
+  // Second response wasn't an X402 response, return the original result
+  if (!secondToolResult.success || secondToolResult.data.structuredContent === undefined) {
+    return secondResponse;
+  }
+
+  const xSecondResponse = await XError.safeParseAsync(secondToolResult.data.structuredContent);
+
+  // Second response wasn't an X402 error, return the original result
+  if (!xSecondResponse.success) {
+    return secondResponse;
+  }
+
+  // If the second response is still an error, payment was not successful or tool failed
+  if (xSecondResponse.data.wrappedResponse._x402_type === 'x402_error') {
+    // Payment failed, return the error response
+    console.log(
+      'Second response is an X402 error, returning original result:',
+      xSecondResponse.error
+    );
+    return secondResponse;
+  }
+
+  return {
+    ...secondResponse,
+    structuredContent: xSecondResponse.data.wrappedResponse.result,
+  };
 }
 
 export { decodeXPaymentResponse } from 'x402/shared';
