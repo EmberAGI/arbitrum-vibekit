@@ -1,10 +1,9 @@
 import { promises as fs } from 'fs';
-import { createRequire } from 'module';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
 import {
   generateText,
@@ -15,35 +14,19 @@ import {
   type CoreUserMessage,
   type CoreAssistantMessage,
   type StepResult,
+  type LanguageModelV1,
 } from 'ai';
 import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
-import {
-  type Address,
-  type Hex,
-  type TransactionReceipt,
-  BaseError,
-  ContractFunctionRevertedError,
-  hexToString,
-  isHex,
-  createWalletClient,
-  createPublicClient,
-  http,
-  type LocalAccount,
-} from 'viem';
+import { LocalAccount, type Address } from 'viem';
 import { z } from 'zod';
-import { handleSwapTokens } from './agentToolHandlers.js';
-
 import type { HandlerContext } from './agentToolHandlers.js';
+import { handleSwapTokens, handleAskEncyclopedia } from './agentToolHandlers.js';
 
-import {
-  SwapTokensSchema,
-  McpGetCapabilitiesResponseSchema,
-  type TransactionPlan,
-  type McpGetCapabilitiesResponse,
-} from 'ember-schemas';
-
-import { mainnet, arbitrum, optimism, polygon, base } from 'viem/chains';
+import * as chains from 'viem/chains';
 import type { Chain } from 'viem/chains';
+import type { Task } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
+import { GetTokensResponseSchema, type Token } from 'ember-api';
 
 const providerSelector = createProviderSelector({
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
@@ -56,7 +39,7 @@ const availableProviders = getAvailableProviders(providerSelector);
 
 if (availableProviders.length === 0) {
   throw new Error(
-    'No AI providers configured. Please set at least one of: OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or HYPERBOLIC_API_KEY.'
+    'No AI providers configured. Please set at least one provider API key (OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or HYPERBOLIC_API_KEY).'
   );
 }
 
@@ -73,20 +56,44 @@ if (!selectedProvider) {
 const modelOverride = process.env.AI_MODEL;
 
 console.log(
-  `Using AI provider: ${preferredProvider} (available: ${availableProviders.join(', ')})` +
-    (modelOverride ? ` with model: ${modelOverride}` : '')
+  `Swapping Agent using provider: ${preferredProvider}` +
+    (modelOverride ? ` (model: ${modelOverride})` : '')
 );
+
+const CHAIN_MAPPINGS = [
+  { id: '1', names: ['ethereum', 'mainnet', 'eth'] },
+  { id: '42161', names: ['arbitrum', 'arbitrum one', 'arb'] },
+  { id: '10', names: ['optimism', 'op'] },
+  { id: '137', names: ['polygon', 'matic'] },
+  { id: '8453', names: ['base'] },
+];
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const CACHE_FILE_PATH = path.join(__dirname, '.cache', 'swap_capabilities.json');
 
 function logError(...args: unknown[]) {
   console.error(...args);
 }
 
-type swappingToolSet = {
-  swapTokens: Tool<typeof SwapTokensSchema, Awaited<ReturnType<typeof handleSwapTokens>>>;
+// Local tool schemas
+const SwapTokensSchema = z.object({
+  amount: z.string().describe('The amount of the token to swap'),
+  fromToken: z.string().describe('The token symbol to swap from'),
+  toToken: z.string().describe('The token symbol to swap to'),
+  fromChain: z.string().optional().describe('The chain to swap from'),
+  toChain: z.string().optional().describe('The chain to swap to'),
+});
+
+const AskEncyclopediaSchema = z.object({
+  question: z.string().describe('Question about Camelot DEX'),
+});
+
+type SwappingToolSet = {
+  swapTokens: Tool<typeof SwapTokensSchema, Task>;
+  askEncyclopedia: Tool<
+    typeof AskEncyclopediaSchema,
+    Awaited<ReturnType<typeof handleAskEncyclopedia>>
+  >;
 };
 
 interface ChainConfig {
@@ -94,50 +101,59 @@ interface ChainConfig {
   quicknodeSegment: string;
 }
 
-const chainIdMap: Record<string, ChainConfig> = {
-  '1': { viemChain: mainnet, quicknodeSegment: '' },
-  '42161': { viemChain: arbitrum, quicknodeSegment: 'arbitrum-mainnet' },
-  '10': { viemChain: optimism, quicknodeSegment: 'optimism' },
-  '137': { viemChain: polygon, quicknodeSegment: 'matic' },
-  '8453': { viemChain: base, quicknodeSegment: 'base-mainnet' },
+const quicknodeSegments: Record<string, string> = {
+  '1': '',
+  '42161': 'arbitrum-mainnet',
+  '10': 'optimism',
+  '137': 'matic',
+  '8453': 'base-mainnet',
 };
 
 export function getChainConfigById(chainId: string): ChainConfig {
-  const config = chainIdMap[chainId];
-  if (!config) {
-    throw new Error(`Unsupported chainId: ${chainId}. Please update chainIdMap.`);
+  const numericChainId = parseInt(chainId, 10);
+  if (isNaN(numericChainId)) {
+    throw new Error(`Invalid chainId format: ${chainId}`);
   }
-  return config;
+
+  const viemChain = Object.values(chains).find(
+    chain => chain && typeof chain === 'object' && 'id' in chain && chain.id === numericChainId
+  );
+
+  if (!viemChain) {
+    throw new Error(
+      `Unsupported chainId: ${chainId}. Viem chain definition not found in imported chains.`
+    );
+  }
+
+  const quicknodeSegment = quicknodeSegments[chainId];
+
+  if (quicknodeSegment === undefined) {
+    throw new Error(
+      `Unsupported chainId: ${chainId}. QuickNode segment not configured in quicknodeSegments map.`
+    );
+  }
+
+  return { viemChain: viemChain as Chain, quicknodeSegment };
 }
 
 export class Agent {
-  private account: LocalAccount<string>;
-  private userAddress: Address;
-  private quicknodeSubdomain: string;
-  private quicknodeApiKey: string;
-  private tokenMap: Record<
-    string,
-    Array<{
-      chainId: string;
-      address: string;
-      decimals: number;
-    }>
-  > = {};
+  private userAddress: Address | undefined;
+  private tokenMap: Record<string, Array<Token>> = {};
   private availableTokens: string[] = [];
-  public conversationHistory: CoreMessage[] = [];
+  private conversationMap: Record<string, CoreMessage[]> = {};
   private mcpClient: Client | null = null;
-  private toolSet: swappingToolSet | null = null;
+  private toolSet: SwappingToolSet | null = null;
+  private camelotContextContent: string = '';
+  private provider: (model?: string) => LanguageModelV1;
 
   constructor(
-    account: LocalAccount<string>,
-    userAddress: Address,
-    quicknodeSubdomain: string,
-    quicknodeApiKey: string
+    private account: LocalAccount<string>,
+    private quicknodeSubdomain: string,
+    private quicknodeApiKey: string
   ) {
-    this.account = account;
-    this.userAddress = userAddress;
-    this.quicknodeSubdomain = quicknodeSubdomain;
-    this.quicknodeApiKey = quicknodeApiKey;
+    this.provider = selectedProvider!;
+
+    // provider availability validated at module load time.
   }
 
   async log(...args: unknown[]) {
@@ -153,153 +169,93 @@ export class Agent {
       mcpClient: this.mcpClient,
       tokenMap: this.tokenMap,
       userAddress: this.userAddress,
-      executeAction: this.executeAction.bind(this),
       log: this.log.bind(this),
       quicknodeSubdomain: this.quicknodeSubdomain,
       quicknodeApiKey: this.quicknodeApiKey,
+      openRouterApiKey: process.env.OPENROUTER_API_KEY,
+      camelotContextContent: this.camelotContextContent,
+      provider: this.provider,
     };
     return context;
   }
 
+  /**
+   * Populate the internal tokenMap with generic tokens returned by the onchain-actions getTokens tool.
+   * Duplicates (based on symbol + chainId) are ignored.
+   */
+  private populateGenericTokens(tokens: Token[]) {
+    if (!tokens || tokens.length === 0) {
+      this.log('No generic tokens provided to populateGenericTokens');
+      return;
+    }
+
+    let addedCount = 0;
+
+    tokens.forEach(token => {
+      const symbol = token.symbol;
+
+      if (!this.tokenMap[symbol]) {
+        this.tokenMap[symbol] = [];
+        this.availableTokens.push(symbol);
+      }
+
+      const existsOnChain = this.tokenMap[symbol]!.some(
+        t => t.tokenUid.chainId === token.tokenUid.chainId
+      );
+
+      if (!existsOnChain) {
+        this.tokenMap[symbol]!.push(token);
+        addedCount++;
+      }
+    });
+
+    this.log(
+      `Added ${addedCount} generic tokens to the token map. Total tokens: ${this.availableTokens.length}`
+    );
+
+    // Debug: Log first 20 available tokens to help with debugging
+    this.log('First 20 available tokens:', this.availableTokens.slice(0, 20).join(', '));
+  }
+
   async init() {
-    this.conversationHistory = [
-      {
-        role: 'system',
-        content: `You are an assistant that provides access to blockchain swapping functionalities via Ember AI On-chain Actions.
-
-<examples>
-<example>
-<user>swap 1 ETH to USDC on Ethereum</user>
-<parameters>
-<amount>1</amount>
-<fromToken>ETH</fromToken>
-<toToken>USDC</toToken>
-<toChain>Ethereum</toChain>
-</parameters>
-</example>
-
-<example>
-<user>sell 89 fartcoin</user>
-<parameters>
-<amount>89</amount>
-<fromToken>fartcoin</fromToken>
-</parameters>
-</example>
-
-<example>
-<user>Convert 10.5 USDC to ETH</user>
-<parameters>
-<amount>10.5</amount>
-<fromToken>USDC</fromToken>
-<toToken>ETH</toToken>
-</parameters>
-</example>
-
-<example>
-<user>Swap 100.076 arb on arbitrum for dog on base</user>
-<parameters>
-<amount>100.076</amount>
-<fromToken>arb</fromToken>
-<toToken>dog</toToken>
-<fromChain>arbitrum</fromChain>
-<toChain>base</toChain>
-</parameters>
-</example>
-</examples>
-
-Present the user with a list of tokens and chains they can swap from and to if provided by the tool response. Never respond in markdown, always use plain text. Never add links to your response. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.`,
-      },
-    ];
-
-    let swapCapabilities: McpGetCapabilitiesResponse | undefined;
-    const useCache = process.env.AGENT_DEBUG === 'true';
-
-    this.log('Initializing MCP client via stdio...');
+    this.log('Initializing MCP client via HTTP...');
     try {
       this.mcpClient = new Client(
         { name: 'SwappingAgent', version: '1.0.0' },
         { capabilities: { tools: {}, resources: {}, prompts: {} } }
       );
 
-      const require = createRequire(import.meta.url);
-      const mcpToolPath = require.resolve('ember-mcp-tool-server');
+      const emberEndpoint = process.env.EMBER_ENDPOINT;
+      if (!emberEndpoint) {
+        throw new Error('EMBER_ENDPOINT environment variable not set');
+      }
 
-      const transport = new StdioClientTransport({
-        command: 'node',
-        args: [mcpToolPath],
-        env: {
-          ...process.env, // Inherit existing environment variables
-          EMBER_ENDPOINT: process.env.EMBER_ENDPOINT ?? 'grpc.api.emberai.xyz:50051',
-        },
-      });
+      this.log(`Connecting to MCP server at ${emberEndpoint}`);
+
+      const transport = new StreamableHTTPClientTransport(new URL(emberEndpoint));
 
       await this.mcpClient.connect(transport);
-      this.log('MCP client initialized successfully.');
+      this.log('MCP client connected successfully.');
 
-      if (useCache) {
-        try {
-          await fs.access(CACHE_FILE_PATH);
-          this.log('Loading swap capabilities from cache...');
-          const cachedData = await fs.readFile(CACHE_FILE_PATH, 'utf-8');
-          const parsedJson = JSON.parse(cachedData);
-          const validationResult = McpGetCapabilitiesResponseSchema.safeParse(parsedJson);
-          if (validationResult.success) {
-            swapCapabilities = validationResult.data;
-            this.log('Cached capabilities loaded and validated successfully.');
-          } else {
-            logError('Cached capabilities validation failed:', validationResult.error);
-            logError('Data that failed validation:', JSON.stringify(parsedJson));
-            this.log('Proceeding to fetch fresh capabilities...');
-          }
-        } catch (error) {
-          if (error instanceof Error && error.message.includes('invalid JSON')) {
-            logError('Error reading or parsing cache file:', error);
-          } else {
-            this.log('Cache not found or invalid, fetching capabilities via MCP...');
-          }
-        }
-      }
+      // Fetch supported tokens via MCP getTokens
+      try {
+        this.log('Fetching supported tokens via MCP getTokens...');
 
-      if (!swapCapabilities) {
-        this.log('Fetching swap capabilities via MCP...');
-        swapCapabilities = await this.fetchAndCacheCapabilities();
-      }
+        const chainIds = CHAIN_MAPPINGS.map(mapping => mapping.id);
+        const getTokensArgs = chainIds.length > 0 ? { chainIds } : {};
 
-      this.log(
-        'swapCapabilities before processing (first 10 lines):',
-        swapCapabilities
-          ? JSON.stringify(swapCapabilities, null, 2).split('\n').slice(0, 10).join('\n')
-          : 'undefined'
-      );
-      if (swapCapabilities?.capabilities) {
-        this.tokenMap = {};
-        this.availableTokens = [];
-        swapCapabilities.capabilities.forEach(capabilityEntry => {
-          if (capabilityEntry.swapCapability) {
-            const swapCap = capabilityEntry.swapCapability;
-            swapCap.supportedTokens?.forEach(token => {
-              if (token.symbol && token.tokenUid?.chainId && token.tokenUid?.address) {
-                if (!this.tokenMap[token.symbol]) {
-                  this.tokenMap[token.symbol] = [];
-                  this.availableTokens.push(token.symbol);
-                }
-                this.tokenMap[token.symbol]!.push({
-                  chainId: token.tokenUid!.chainId,
-                  address: token.tokenUid!.address,
-                  decimals: token.decimals ?? 18,
-                });
-              }
-            });
-          }
+        const tokensResult = await this.mcpClient.callTool({
+          name: 'getTokens',
+          arguments: getTokensArgs,
         });
-        this.log('Available Tokens Loaded Internally:', this.availableTokens);
-      } else {
-        logError(
-          'Failed to parse capabilities or no capabilities array found:',
-          swapCapabilities ? 'No capabilities array' : 'Invalid capabilities data'
-        );
-        this.log('Warning: Could not load available tokens from MCP server.');
+
+        const tokensResponse = parseMcpToolResponsePayload(tokensResult, GetTokensResponseSchema);
+        this.populateGenericTokens(tokensResponse.tokens);
+      } catch (err) {
+        this.log('Failed to fetch generic tokens via getTokens:', err);
       }
+
+      await this._loadCamelotDocumentation();
 
       this.toolSet = {
         swapTokens: tool({
@@ -307,10 +263,24 @@ Present the user with a list of tokens and chains they can swap from and to if p
           parameters: SwapTokensSchema,
           execute: async args => {
             try {
-              return await handleSwapTokens(args, this.getHandlerContext());
+              return await handleSwapTokens(args, this.getHandlerContext(), this.account);
             } catch (error: unknown) {
               const errorMessage = error instanceof Error ? error.message : String(error);
-              logError(`Error during swapTokens tool execution: ${errorMessage}`);
+              logError(`Error during swapTokens via toolSet: ${errorMessage}`);
+              throw error;
+            }
+          },
+        }),
+        askEncyclopedia: tool({
+          description:
+            'Ask questions about Camelot DEX to get expert information about the protocol.',
+          parameters: AskEncyclopediaSchema,
+          execute: async args => {
+            try {
+              return await handleAskEncyclopedia(args, this.getHandlerContext());
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              logError(`Error during askEncyclopedia via toolSet: ${errorMessage}`);
               throw error;
             }
           },
@@ -341,20 +311,83 @@ Present the user with a list of tokens and chains they can swap from and to if p
     }
   }
 
-  async processUserInput(userInput: string): Promise<CoreMessage> {
+  async processUserInput(userInput: string, userAddress: Address): Promise<Task> {
     if (!this.toolSet) {
       throw new Error('Agent not initialized. Call start() first.');
     }
-    const userMessage: CoreUserMessage = { role: 'user', content: userInput };
-    this.conversationHistory.push(userMessage);
+    this.userAddress = userAddress;
 
-    let assistantResponseContent = 'Sorry, an error occurred.';
+    // Initialize conversation history for this user if not exists
+    if (!this.conversationMap[userAddress]) {
+      this.conversationMap[userAddress] = [
+        {
+          role: 'system',
+          content: `You are an AI agent that provides access to blockchain swapping functionalities via Ember AI On-chain Actions. You use the tool "swapTokens" to swap or convert tokens. You can also answer questions about Camelot DEX using the "askEncyclopedia" tool.
+
+Available actions:
+- swapTokens: Only use if the user has provided the required parameters.
+- askEncyclopedia: Use when the user asks questions about Camelot DEX.
+
+<examples>
+<example1>
+<user>swap 1 ETH to USDC on Ethereum</user>
+<parameters>
+<amount>1</amount>
+<fromToken>ETH</fromToken>
+<toToken>USDC</toToken>
+<toChain>Ethereum</toChain>
+</parameters>
+</example1>
+
+<example2>
+<user>sell 89 fartcoin</user>
+<parameters>
+<amount>89</amount>
+<fromToken>fartcoin</fromToken>
+</parameters>
+*Note: Required "toToken" parameter is not provided. If it is not provided in the conversation history, you will need to ask the user for it.*
+</example2>
+
+<example3>
+<user>Convert 10.5 USDC to ETH</user>
+<parameters>
+<amount>10.5</amount>
+<fromToken>USDC</fromToken>
+<toToken>ETH</toToken>
+</parameters>
+</example3>
+
+<example4>
+<user>Swap 100.076 arb on arbitrum for dog on base</user>
+<parameters>
+<amount>100.076</amount>
+<fromToken>arb</fromToken>
+<toToken>dog</toToken>
+<fromChain>arbitrum</fromChain>
+<toChain>base</toChain>
+</parameters>
+</example4>
+
+<example5>
+<user>What is Camelot's liquidity mining program?</user>
+<tool_call> {"toolName": "askEncyclopedia", "args": { "question": "What is Camelot's liquidity mining program?" }} </tool_call>
+</example5>
+</examples>
+
+Use relavant conversation history to obtain required tool parameters. Present the user with a list of tokens and chains they can swap from and to if provided by the tool response. Never respond in markdown, always use plain text. Never add links to your response. Do not suggest the user to ask questions. When an unknown error happens, do not try to guess the error reason.`,
+        },
+      ];
+    }
+
+    const conversationHistory = this.conversationMap[userAddress];
+    const userMessage: CoreUserMessage = { role: 'user', content: userInput };
+    conversationHistory.push(userMessage);
 
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const { response, text, finishReason } = await generateText({
-        model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
-        messages: this.conversationHistory,
+        model: modelOverride ? this.provider(modelOverride) : this.provider(),
+        messages: conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,
         onStepFinish: async (stepResult: StepResult<typeof this.toolSet>) => {
@@ -362,8 +395,6 @@ Present the user with a list of tokens and chains they can swap from and to if p
         },
       });
       this.log(`generateText finished. Reason: ${finishReason}`);
-
-      assistantResponseContent = text ?? 'Processing complete.';
 
       response.messages.forEach((msg, index) => {
         if (msg.role === 'assistant' && Array.isArray(msg.content)) {
@@ -375,243 +406,143 @@ Present the user with a list of tokens and chains they can swap from and to if p
         } else if (msg.role === 'tool') {
           if (Array.isArray(msg.content)) {
             msg.content.forEach((toolResult: ToolResultPart) => {
-              this.log(
-                `[Tool Result ${index} for ${toolResult.toolName}]: ${JSON.stringify(toolResult.result)}`
-              );
+              this.log(`[Tool Result ${index} for ${toolResult.toolName} received]`);
             });
           }
         }
       });
 
-      this.conversationHistory.push(...response.messages);
-    } catch (error) {
-      logError('Error calling Vercel AI SDK generateText:', error);
-      const errorAssistantMessage: CoreAssistantMessage = {
-        role: 'assistant',
-        content: assistantResponseContent,
-      };
-      this.conversationHistory.push(errorAssistantMessage);
-    }
+      conversationHistory.push(...response.messages);
 
-    const finalAssistantMessage = this.conversationHistory
-      .slice()
-      .reverse()
-      .find(
-        (msg): msg is CoreAssistantMessage & { content: string } =>
-          msg.role === 'assistant' && typeof msg.content === 'string'
-      );
+      const lastToolResultMessage = response.messages
+        .slice()
+        .reverse()
+        .find(msg => msg.role === 'tool' && Array.isArray(msg.content));
 
-    const responseMessage: CoreAssistantMessage = {
-      role: 'assistant',
-      content: finalAssistantMessage?.content ?? assistantResponseContent,
-    };
+      let processedToolResult: Task | null = null;
 
-    this.log('[assistant]:', responseMessage.content);
-    return responseMessage;
-  }
+      if (
+        lastToolResultMessage &&
+        lastToolResultMessage.role === 'tool' &&
+        Array.isArray(lastToolResultMessage.content)
+      ) {
+        const toolResultPart = lastToolResultMessage.content.find(
+          part => part.type === 'tool-result'
+        ) as ToolResultPart | undefined;
 
-  async executeAction(actionName: string, transactions: TransactionPlan[]): Promise<string> {
-    if (!transactions || transactions.length === 0) {
-      this.log(`${actionName}: No transactions required.`);
-      return `${actionName.charAt(0).toUpperCase() + actionName.slice(1)}: No on-chain transactions required.`;
-    }
-    try {
-      this.log(`Executing ${transactions.length} transaction(s) for ${actionName}...`);
-      const txHashes: string[] = [];
-      for (const transaction of transactions) {
-        const txHash = await this.signAndSendTransaction(transaction);
-        this.log(`${actionName} transaction sent: ${txHash}`);
-        txHashes.push(txHash);
-      }
-      return `${actionName.charAt(0).toUpperCase() + actionName.slice(1)} successful! Transaction hash(es): ${txHashes.join(', ')}`;
-    } catch (error: unknown) {
-      const err = error as Error;
-      logError(`Error executing ${actionName} action:`, err.message);
-      throw new Error(`Error executing ${actionName}: ${err.message}`);
-    }
-  }
-
-  async signAndSendTransaction(tx: TransactionPlan): Promise<string> {
-    if (!tx.chainId) {
-      const errorMsg = `Transaction object missing required 'chainId' field`;
-      logError(errorMsg, tx);
-      throw new Error(errorMsg);
-    }
-
-    let chainConfig: ChainConfig;
-    try {
-      chainConfig = getChainConfigById(tx.chainId);
-    } catch (chainError) {
-      logError((chainError as Error).message, tx);
-      throw chainError;
-    }
-    const targetChain = chainConfig.viemChain;
-    const networkSegment = chainConfig.quicknodeSegment;
-
-    let dynamicRpcUrl: string;
-    if (networkSegment === '') {
-      dynamicRpcUrl = `https://${this.quicknodeSubdomain}.quiknode.pro/${this.quicknodeApiKey}`;
-    } else {
-      dynamicRpcUrl = `https://${this.quicknodeSubdomain}.${networkSegment}.quiknode.pro/${this.quicknodeApiKey}`;
-    }
-
-    const tempPublicClient = createPublicClient({
-      chain: targetChain,
-      transport: http(dynamicRpcUrl),
-    });
-    const tempWalletClient = createWalletClient({
-      account: this.account,
-      chain: targetChain,
-      transport: http(dynamicRpcUrl),
-    });
-
-    if (!tx.to || !/^0x[a-fA-F0-9]{40}$/.test(tx.to)) {
-      const errorMsg = `Transaction object invalid 'to' field: ${tx.to}`;
-      logError(errorMsg, tx);
-      throw new Error(errorMsg);
-    }
-    if (!tx.data || !isHex(tx.data)) {
-      const errorMsg = `Transaction object invalid 'data' field (not hex): ${tx.data}`;
-      logError(errorMsg, tx);
-      throw new Error(errorMsg);
-    }
-
-    const toAddress = tx.to as Address;
-    const txData = tx.data as Hex;
-    const txValue = tx.value ? BigInt(tx.value) : 0n;
-
-    const baseTx = {
-      account: this.userAddress,
-      to: toAddress,
-      value: txValue,
-      data: txData,
-      chain: targetChain,
-    };
-
-    try {
-      const dataPrefix = txData.substring(0, 10);
-      this.log(
-        `Preparing transaction to ${baseTx.to} on chain ${targetChain.id} (${networkSegment}) via ${dynamicRpcUrl.split('/')[2]} from ${this.userAddress} with data ${dataPrefix}...`
-      );
-
-      this.log(`Sending transaction...`);
-      const txHash = await tempWalletClient.sendTransaction({
-        to: toAddress,
-        value: txValue,
-        data: txData,
-      });
-
-      this.log(
-        `Transaction submitted to chain ${targetChain.id}: ${txHash}. Waiting for confirmation...`
-      );
-
-      const receipt: TransactionReceipt = await tempPublicClient.waitForTransactionReceipt({
-        hash: txHash,
-      });
-
-      this.log(
-        `Transaction confirmed on chain ${targetChain.id} in block ${receipt.blockNumber} (Status: ${receipt.status}): ${txHash}`
-      );
-
-      if (receipt.status === 'reverted') {
-        throw new Error(
-          `Transaction ${txHash} failed (reverted). Check blockchain explorer for details.`
-        );
-      }
-      return txHash;
-    } catch (error: unknown) {
-      let revertReason =
-        error instanceof Error
-          ? `Transaction failed: ${error.message}`
-          : 'Transaction failed: Unknown error';
-
-      if (error instanceof BaseError) {
-        const cause = error.walk((e: unknown) => e instanceof ContractFunctionRevertedError);
-        if (cause instanceof ContractFunctionRevertedError) {
-          const errorName = cause.reason ?? cause.shortMessage;
-          revertReason = `Transaction reverted: ${errorName}`;
-          if (cause.data?.errorName === '_decodeRevertReason') {
-            const hexReason = cause.data.args?.[0];
-            if (hexReason && typeof hexReason === 'string' && isHex(hexReason as Hex)) {
-              try {
-                revertReason = `Transaction reverted: ${hexToString(hexReason as Hex)}`;
-              } catch (decodeError) {
-                logError('Failed to decode revert reason hex:', hexReason, decodeError);
-              }
-            }
+        if (toolResultPart) {
+          this.log(`Processing tool result for ${toolResultPart.toolName} from response.messages`);
+          if (toolResultPart.result != null) {
+            processedToolResult = toolResultPart.result as Task;
+            this.log(`Tool Result State: ${processedToolResult?.status?.state ?? 'N/A'}`);
+            const firstPart = processedToolResult?.status?.message?.parts[0];
+            const messageText = firstPart && firstPart.kind === 'text' ? firstPart.text : 'N/A';
+            this.log(`Tool Result Message: ${messageText}`);
+          } else {
+            this.log('Tool result part content is null or undefined.');
           }
         } else {
-          revertReason = `Transaction failed: ${error.shortMessage}`;
+          this.log('No tool-result part found in the last tool message.');
         }
-        logError(`Send transaction failed: ${revertReason}`, error.details);
-      } else if (error instanceof Error) {
-        logError(`Send transaction failed: ${revertReason}`, error);
       } else {
-        logError(`Send transaction failed with unknown error type: ${revertReason}`, error);
+        this.log('No tool message found in the response.');
       }
 
-      throw new Error(revertReason);
+      if (processedToolResult) {
+        switch (processedToolResult.status.state) {
+          case 'completed':
+          case 'failed':
+          case 'canceled':
+            this.log(
+              `Task finished with state ${processedToolResult.status.state}. Clearing conversation history.`
+            );
+            this.conversationMap[userAddress] = [];
+            return processedToolResult;
+          case 'input-required':
+          case 'submitted':
+          case 'working':
+          case 'unknown':
+            return processedToolResult;
+          default:
+            this.log(`Unexpected task state: ${processedToolResult.status.state}`);
+            return {
+              id: this.userAddress || 'unknown-user',
+              contextId: `unknown-${Date.now()}`,
+              kind: 'task',
+              status: {
+                state: TaskState.Failed,
+                message: {
+                  role: 'agent',
+                  messageId: `msg-${Date.now()}`,
+                  kind: 'message',
+                  parts: [
+                    {
+                      kind: 'text',
+                      text: `Agent encountered unexpected task state: ${processedToolResult.status.state}`,
+                    },
+                  ],
+                },
+              },
+            };
+        }
+      }
+
+      if (text) {
+        this.log(
+          'No specific tool task processed or returned. Returning final text response as completed task.'
+        );
+        return {
+          id: this.userAddress || 'unknown-user',
+          contextId: `text-response-${Date.now()}`,
+          kind: 'task',
+          status: {
+            state: TaskState.Completed,
+            message: {
+              role: 'agent',
+              messageId: `msg-${Date.now()}`,
+              kind: 'message',
+              parts: [{ kind: 'text', text: text }],
+            },
+          },
+        };
+      }
+
+      throw new Error(
+        'Agent processing failed: No tool result task processed and no final text response available.'
+      );
+    } catch (error) {
+      const errorLog = `Error calling Vercel AI SDK generateText: ${error}`;
+      logError(errorLog);
+      const errorAssistantMessage: CoreAssistantMessage = {
+        role: 'assistant',
+        content: String(error),
+      };
+      conversationHistory.push(errorAssistantMessage);
+      throw error;
     }
   }
 
-  private async fetchAndCacheCapabilities(): Promise<McpGetCapabilitiesResponse> {
-    this.log('Fetching swap capabilities via MCP...');
-    if (!this.mcpClient) {
-      throw new Error('MCP Client not initialized. Cannot fetch capabilities.');
-    }
+  private async _loadCamelotDocumentation(): Promise<void> {
+    const defaultDocsPath = path.resolve(__dirname, '../encyclopedia');
+    const docsPath = defaultDocsPath;
+    const filePaths = [path.join(docsPath, 'camelot-01.md')];
+    let combinedContent = '';
 
-    try {
-      // Read timeout from env var, default to 90 seconds
-      const mcpTimeoutMs = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '30000', 10);
-      this.log(`Using MCP tool timeout: ${mcpTimeoutMs}ms`);
+    this.log(`Loading Camelot documentation from: ${docsPath}`);
 
-      const capabilitiesResult = await this.mcpClient.callTool(
-        {
-          name: 'getCapabilities',
-          arguments: { type: 'SWAP' },
-        },
-        undefined,
-        { timeout: mcpTimeoutMs } // Use configured timeout
-      );
-
-      this.log('Raw capabilitiesResult received from MCP.');
-
-      const dataToValidate = parseMcpToolResponsePayload(capabilitiesResult, z.any());
-
-      const validationResult = McpGetCapabilitiesResponseSchema.safeParse(dataToValidate);
-
-      this.log('Validation performed on potentially parsed data.');
-      const validationResultString = JSON.stringify(validationResult, null, 2);
-      this.log(
-        'Validation result (first 10 lines):\n',
-        validationResultString.split('\n').slice(0, 10).join('\n') +
-          (validationResultString.includes('\n') ? '\n... (truncated)' : '')
-      );
-
-      if (!validationResult.success) {
-        logError('Fetched capabilities validation failed:', validationResult.error);
-        logError('Data that failed validation:', JSON.stringify(dataToValidate));
-        throw new Error(
-          `Fetched capabilities failed validation: ${validationResult.error.message}`
-        );
-      }
-
-      const capabilities = validationResult.data;
-
+    for (const filePath of filePaths) {
       try {
-        await fs.mkdir(path.dirname(CACHE_FILE_PATH), { recursive: true });
-        await fs.writeFile(CACHE_FILE_PATH, JSON.stringify(capabilities, null, 2), 'utf-8');
-        this.log('Swap capabilities cached successfully.');
-      } catch (cacheError) {
-        logError('Failed to cache capabilities:', cacheError);
+        const content = await fs.readFile(filePath, 'utf-8');
+        combinedContent += `\n\n--- Content from ${path.basename(filePath)} ---\n\n${content}`;
+        this.log(`Successfully loaded ${path.basename(filePath)}`);
+      } catch (error) {
+        logError(`Warning: Could not load or read Camelot documentation file ${filePath}:`, error);
+        combinedContent += `\n\n--- Failed to load ${path.basename(filePath)} ---`;
       }
-
-      return capabilities;
-    } catch (error) {
-      logError('Error fetching or validating capabilities via MCP:', error);
-      throw new Error(
-        `Failed to fetch/validate capabilities from MCP server: ${(error as Error).message}`
-      );
+    }
+    this.camelotContextContent = combinedContent;
+    if (!this.camelotContextContent.trim()) {
+      logError('Warning: Camelot documentation context is empty after loading attempts.');
     }
   }
 }
