@@ -18,7 +18,6 @@ import { imageArtifact } from '@/artifacts/image/client';
 import { codeArtifact } from '@/artifacts/code/client';
 import { sheetArtifact } from '@/artifacts/sheet/client';
 import { textArtifact } from '@/artifacts/text/client';
-import { transactionHistoryArtifact } from '@/artifacts/transaction-history/client';
 import equal from 'fast-deep-equal';
 import type { UseChatHelpers } from '@ai-sdk/react';
 
@@ -28,7 +27,6 @@ export const artifactDefinitions: any[] = [
   codeArtifact as any,
   imageArtifact as any,
   sheetArtifact as any,
-  transactionHistoryArtifact as any,
 ];
 export type ArtifactKind = (typeof artifactDefinitions)[number]['kind'];
 
@@ -50,7 +48,6 @@ export interface UIArtifact {
 export interface InsertTransactionInput {
   txHash: string;
   userAddress: string;
-  agentId?: string;
   agentType: string;
   chainId: string;
   status?: 'pending' | 'confirmed' | 'failed';
@@ -62,9 +59,6 @@ export interface InsertTransactionInput {
   contractAddress?: string;
   methodName?: string;
   transactionDetails?: any;
-  skillName?: string;
-  toolName?: string;
-  sessionId?: string;
   executedAt: Date | string;
   confirmedAt?: Date | string | null;
 }

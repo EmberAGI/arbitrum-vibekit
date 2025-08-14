@@ -1,7 +1,6 @@
 import type { AgentConfig } from 'arbitrum-vibekit-core';
 import { swappingSkill } from './skills/swapping.js';
 import { documentationSkill } from './skills/documentation.js';
-import { transactionHistorySkill } from './skills/transactionHistory.js';
 
 export const agentConfig: AgentConfig = {
   name: process.env.AGENT_NAME || 'Ember Agent',
@@ -13,7 +12,6 @@ export const agentConfig: AgentConfig = {
     // Skills implemented so far
     swappingSkill,
     documentationSkill,
-    transactionHistorySkill,
     // lendingSkill,
     // liquiditySkill,
     // yieldTradingSkill,

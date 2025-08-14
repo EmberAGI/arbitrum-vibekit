@@ -360,7 +360,6 @@ export async function insertAgentTransaction(data: InsertTransactionInput) {
     const result = await db.insert(agentTransaction).values({
       txHash: data.txHash,
       userAddress: data.userAddress,
-      agentId: data.agentId || 'unknown', // Default value for backward compatibility
       agentType: data.agentType,
       chainId: data.chainId,
       status: data.status ?? 'pending',
@@ -372,9 +371,6 @@ export async function insertAgentTransaction(data: InsertTransactionInput) {
       contractAddress: data.contractAddress ?? null,
       methodName: data.methodName ?? null,
       transactionDetails: data.transactionDetails ?? null,
-      skillName: data.skillName ?? null,
-      toolName: data.toolName ?? null,
-      sessionId: data.sessionId ?? null,
       executedAt,
       confirmedAt,
       createdAt: now,
@@ -388,19 +384,12 @@ export async function insertAgentTransaction(data: InsertTransactionInput) {
   }
 }
 
-export async function getAgentTransactionsByUser(userAddress: string, agentId?: string | null) {
+export async function getAgentTransactionsByUser(userAddress: string) {
   try {
-    const whereConditions = [eq(agentTransaction.userAddress, userAddress)];
-    
-    // Add agentId filter if provided
-    if (agentId) {
-      whereConditions.push(eq(agentTransaction.agentId, agentId));
-    }
-
     const result = await db
       .select()
       .from(agentTransaction)
-      .where(and(...whereConditions))
+      .where(eq(agentTransaction.userAddress, userAddress))
       .orderBy(desc(agentTransaction.executedAt));
 
     return result;
