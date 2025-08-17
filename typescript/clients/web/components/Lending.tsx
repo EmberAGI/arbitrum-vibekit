@@ -3,6 +3,7 @@
 import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useTransactionExecutor } from "../hooks/useTransactionExecutor";
+import { useCurrentAgent } from "../hooks/use-current-agent";
 import type { TxPlan } from "../lib/transactionUtils";
 
 // Removed: useState, viem imports, useSendTransaction
@@ -22,6 +23,7 @@ export function Lending({
   // --- Wagmi hooks ---
   const { address, isConnected, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
+  const currentAgentId = useCurrentAgent();
 
   // --- Central executor hook ---
   const {
@@ -44,6 +46,7 @@ export function Lending({
     currentChainId: chainId,
     switchChainAsync,
     agentType: 'lending', // Specify this is a lending transaction
+    agentId: currentAgentId, // Pass the current agent ID
     methodName: txPreview?.action || 'lending', // Use the action from preview or default to 'lending'
   });
 

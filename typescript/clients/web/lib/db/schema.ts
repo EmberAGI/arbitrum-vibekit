@@ -155,6 +155,7 @@ export const agentTransaction = pgTable('AgentTransaction', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),
   txHash: varchar('txHash', { length: 66 }).notNull(), // Ethereum transaction hash
   userAddress: varchar('userAddress', { length: 42 }).notNull(),
+  agentId: varchar('agentId', { length: 100 }).notNull(), // Unique identifier for the specific agent instance
   agentType: varchar('agentType', { length: 50 }).notNull(), // e.g., 'swap', 'liquidity', 'lending'
   chainId: varchar('chainId', { length: 10 }).notNull(),
   status: varchar('status', { enum: ['pending', 'confirmed', 'failed'] }).notNull().default('pending'),

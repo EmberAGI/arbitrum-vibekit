@@ -3,6 +3,7 @@
 import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useTransactionExecutor } from "../hooks/useTransactionExecutor";
+import { useCurrentAgent } from "../hooks/use-current-agent";
 import type { TxPlan } from "../lib/transactionUtils";
 import { strToDecimal } from "@/lib/utils";
 
@@ -55,6 +56,7 @@ export function Liquidity({
   // --- Wagmi hooks ---
   const { address, isConnected, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
+  const currentAgentId = useCurrentAgent();
 
   // --- Central executor hook ---
   const {
@@ -77,6 +79,7 @@ export function Liquidity({
     currentChainId: chainId,
     switchChainAsync,
     agentType: 'liquidity', // Add this
+    agentId: currentAgentId, // Pass the current agent ID
     methodName: txPreview?.action || 'liquidity',
   });
 

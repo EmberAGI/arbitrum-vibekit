@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { PlusIcon } from '@/components/icons';
 import { SidebarHistory } from '@/components/sidebar-history';
 import { SidebarUserNav } from '@/components/sidebar-user-nav';
-import { TransactionHistoryButton } from '@/components/TransactionHistoryButton';
 import { Button } from '@/components/ui/button';
 import {
   Sidebar,
@@ -42,7 +41,6 @@ export function AppSidebar() {
               </span>
             </Link>
             <div className="flex gap-1">
-              <TransactionHistoryButton variant="icon" size="sm" />
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button

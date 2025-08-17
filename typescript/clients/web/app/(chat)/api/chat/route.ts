@@ -5,8 +5,9 @@ import { systemPrompt } from '@/lib/ai/prompts';
 import { deleteChatById, getChatById, saveChat, saveMessages } from '@/lib/db/queries';
 import { generateUUID, getMostRecentUserMessage, getTrailingMessageId } from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
-// import { createDocument } from '@/lib/ai/tools/create-document';
-// import { updateDocument } from '@/lib/ai/tools/update-document';
+import { createDocument } from '@/lib/ai/tools/create-document';
+import { updateDocument } from '@/lib/ai/tools/update-document';
+import { queryTransactionHistory } from '@/lib/ai/tools/query-transaction-history';
 // import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 // import { getWeather } from '@/lib/ai/tools/get-weather';
 import { isProductionEnvironment } from '@/lib/constants';
@@ -157,7 +158,7 @@ export async function POST(request: Request) {
     console.log('🔍 [ROUTE] Chat ID:', id);
     console.log('🔍 [ROUTE] Getting dynamic tools...');
 
-    let dynamicTools;
+    let dynamicTools: any;
     try {
       dynamicTools = await getDynamicTools();
       console.log('✅ [ROUTE] Dynamic tools loaded:', Object.keys(dynamicTools));
@@ -220,8 +221,9 @@ export async function POST(request: Request) {
             experimental_generateMessageId: generateUUID,
             tools: {
               //getWeather,
-              //createDocument: createDocument({ session, dataStream }),
-              //updateDocument: updateDocument({ session, dataStream }),
+              createDocument: createDocument({ session, dataStream }),
+              updateDocument: updateDocument({ session, dataStream }),
+              queryTransactionHistory: queryTransactionHistory({ session, dataStream }),
               //requestSuggestions: requestSuggestions({
               //  session,
               //  dataStream,

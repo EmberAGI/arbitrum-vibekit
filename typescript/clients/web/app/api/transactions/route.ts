@@ -1,12 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getAgentTransactionsByUser, insertAgentTransaction } from '@/lib/db/queries';
+import { type NextRequest, NextResponse } from 'next/server';
+import { getAgentTransactionsByUser, getAgentTransactionsByUserAndAgent, insertAgentTransaction } from '@/lib/db/queries';
 import type { InsertTransactionInput } from '@/components/artifact';
 
-// GET /api/transactions?userAddress=0x...
+// GET /api/transactions?userAddress=0x...&agentId=agent123
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const userAddress = searchParams.get('userAddress');
+    const agentId = searchParams.get('agentId');
 
     if (!userAddress) {
       return NextResponse.json(
@@ -15,7 +16,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const transactions = await getAgentTransactionsByUser(userAddress);
+    let transactions: any;
+    if (agentId) {
+      // Get transactions for specific agent
+      transactions = await getAgentTransactionsByUserAndAgent(userAddress, agentId);
+    } else {
+      // Get all transactions for user
+      transactions = await getAgentTransactionsByUser(userAddress);
+    }
+
     return NextResponse.json(transactions);
   } catch (error) {
     console.error('Failed to fetch transactions:', error);
@@ -32,9 +41,9 @@ export async function POST(request: NextRequest) {
     const transactionData: InsertTransactionInput = await request.json();
     
     // Validate required fields
-    if (!transactionData.txHash || !transactionData.userAddress || !transactionData.agentType) {
+    if (!transactionData.txHash || !transactionData.userAddress || !transactionData.agentId || !transactionData.agentType) {
       return NextResponse.json(
-        { error: 'Missing required fields: txHash, userAddress, agentType' },
+        { error: 'Missing required fields: txHash, userAddress, agentId, agentType' },
         { status: 400 }
       );
     }

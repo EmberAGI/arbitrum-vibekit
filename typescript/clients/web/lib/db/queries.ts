@@ -360,6 +360,7 @@ export async function insertAgentTransaction(data: InsertTransactionInput) {
     const result = await db.insert(agentTransaction).values({
       txHash: data.txHash,
       userAddress: data.userAddress,
+      agentId: data.agentId,
       agentType: data.agentType,
       chainId: data.chainId,
       status: data.status ?? 'pending',
@@ -395,6 +396,24 @@ export async function getAgentTransactionsByUser(userAddress: string) {
     return result;
   } catch (error) {
     console.error('Failed to get agent transactions by user from database', error);
+    throw error;
+  }
+}
+
+export async function getAgentTransactionsByUserAndAgent(userAddress: string, agentId: string) {
+  try {
+    const result = await db
+      .select()
+      .from(agentTransaction)
+      .where(and(
+        eq(agentTransaction.userAddress, userAddress),
+        eq(agentTransaction.agentId, agentId)
+      ))
+      .orderBy(desc(agentTransaction.executedAt));
+
+    return result;
+  } catch (error) {
+    console.error('Failed to get agent transactions by user and agent from database', error);
     throw error;
   }
 }

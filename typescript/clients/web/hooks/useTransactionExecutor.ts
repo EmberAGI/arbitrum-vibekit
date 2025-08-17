@@ -18,6 +18,7 @@ interface UseTransactionExecutorArgs {
   currentChainId?: number;
   switchChainAsync?: ReturnType<typeof useSwitchChain>['switchChainAsync'];
   agentType?: string; // Add agentType prop
+  agentId?: string; // Add agentId prop
   methodName?: string; // Add methodName prop
 }
 
@@ -45,6 +46,7 @@ export function useTransactionExecutor({
   currentChainId,
   switchChainAsync,
   agentType = 'unknown', // Default agent type
+  agentId = 'unknown', // Default agent id
   methodName,
 }: UseTransactionExecutorArgs): UseTransactionExecutorReturn {
   // Internal Wagmi hook for sending transactions
@@ -111,7 +113,7 @@ export function useTransactionExecutor({
     ]
   );
 
-  // Can the user initiate the *main* transaction?
+
   const canExecute = useMemo(
     () => {
       // Determine if there's an active error related to the main transaction attempt
@@ -138,13 +140,10 @@ export function useTransactionExecutor({
     ] // Correct dependencies
   );
 
-  console.log('Can execute 137:', canExecute);
 
-  // --- Core Logic: processTx (handles chain switch, gas, send) ---
   const processTx = useCallback(
     async (transaction: RawTransaction | undefined, isApproval: boolean) => {
 
-      console.log("Raw transaction data:", transaction);
 
       // Basic validation
       if (!transaction || !transaction.to || !transaction.chainId)
@@ -155,9 +154,7 @@ export function useTransactionExecutor({
       const requiredChainId = Number.parseInt(String(transaction.chainId));
       if (Number.isNaN(requiredChainId)) throw new Error(`Invalid chainId: ${transaction.chainId}`);
 
-      console.log(
-        `[processTx] Start ${isApproval ? `Approval #${approvalIndex + 1}` : 'Main Tx'}. Chain: ${requiredChainId}`
-      );
+     
       setIsProcessingTx(true);
       if (isApproval) {
         setIsApprovalSubmitting(true);
@@ -358,6 +355,7 @@ export function useTransactionExecutor({
           const transactionData: InsertTransactionInput = {
             txHash: _txResultData, // _txResultData is the hash itself
             userAddress: address,
+            agentId: agentId || 'unknown',
             agentType: agentType || 'unknown',
             chainId: currentChainId.toString(),
             status: 'confirmed',
@@ -422,21 +420,17 @@ export function useTransactionExecutor({
     resetWagmiSendState(); // Also reset wagmi's internal state
   }, [txPlan, resetWagmiSendState]); // Depend only on txPlan and the reset function
 
-  // --- Return Values ---
-  // Expose state and actions needed by the UI component
-
-  console.log('Status of user transaction :', isWagmiTxSuccess);
-
+ 
   return {
     approveNext,
     executeMain,
     approvalIndex,
     totalApprovals,
-    isApprovalPending: isCurrentApprovalPending, // Is the approval process busy?
+    isApprovalPending: isCurrentApprovalPending, 
     approvalError,
-    isTxPending: isMainExecutionPending, // Is the main transaction process busy?
-    isTxSuccess: isWagmiTxSuccess && mainTxSubmitted, // Only success if main was attempted and wagmi confirms
-    txError: mainTxSubmitted ? wagmiTxError : null, // Show wagmi error only if main was attempted
+    isTxPending: isMainExecutionPending, 
+    isTxSuccess: isWagmiTxSuccess && mainTxSubmitted, 
+    txError: mainTxSubmitted ? wagmiTxError : null, 
     canApprove,
     canExecute,
     isApprovalPhaseComplete,
