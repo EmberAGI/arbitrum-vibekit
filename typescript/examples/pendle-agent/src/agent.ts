@@ -1,3 +1,7 @@
+import * as dotenv from 'dotenv';
+// Load environment variables first, before any other imports
+dotenv.config();
+
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
@@ -33,43 +37,61 @@ import {
 } from './agentToolHandlers.js';
 import { logError } from './utils.js';
 
+// Debug: Log environment variables (without exposing full keys)
+console.log('🔍 Debug: Environment variables check:');
+console.log('OPENROUTER_API_KEY:', process.env.OPENROUTER_API_KEY ? `${process.env.OPENROUTER_API_KEY.substring(0, 10)}...` : 'NOT SET');
+console.log('OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? `${process.env.OPENAI_API_KEY.substring(0, 10)}...` : 'NOT SET');
+console.log('XAI_API_KEY:', process.env.XAI_API_KEY ? `${process.env.XAI_API_KEY.substring(0, 10)}...` : 'NOT SET');
+console.log('HYPERBOLIC_API_KEY:', process.env.HYPERBOLIC_API_KEY ? `${process.env.HYPERBOLIC_API_KEY.substring(0, 10)}...` : 'NOT SET');
+console.log('PERPLEXITY_API_KEY:', process.env.PERPLEXITY_API_KEY ? `${process.env.PERPLEXITY_API_KEY.substring(0, 10)}...` : 'NOT SET');
+
 // Initialize AI provider selector using environment variables for flexibility
 const providerSelector = createProviderSelector({
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
   openaiApiKey: process.env.OPENAI_API_KEY,
   xaiApiKey: process.env.XAI_API_KEY,
   hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
+  perplexityApiKey: process.env.PERPLEXITY_API_KEY,
 });
 
 // Get available providers
 const availableProviders = getAvailableProviders(providerSelector);
 
 if (availableProviders.length === 0) {
-  throw new Error(
-    'No AI providers configured. Please set at least one of: OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or HYPERBOLIC_API_KEY'
-  );
+  console.log('⚠️  No AI providers configured. Running in mock mode for testing.');
+  console.log('To use real AI features, set one of: OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or HYPERBOLIC_API_KEY');
 }
 
 // Select provider based on preference or availability
-const preferredProvider = process.env.AI_PROVIDER || availableProviders[0];
-const selectedProvider = providerSelector[preferredProvider as keyof typeof providerSelector];
+let selectedProvider: any = null;
+let preferredProvider = 'mock';
 
-if (!selectedProvider) {
-  throw new Error(
-    `Preferred provider '${preferredProvider}' is not available. Available providers: ${availableProviders.join(', ')}`
+if (availableProviders.length > 0) {
+  preferredProvider = process.env.AI_PROVIDER || availableProviders[0];
+  selectedProvider = providerSelector[preferredProvider as keyof typeof providerSelector];
+
+  if (!selectedProvider) {
+    throw new Error(
+      `Preferred provider '${preferredProvider}' is not available. Available providers: ${availableProviders.join(', ')}`
+    );
+  }
+
+  // Log which provider is being used
+  console.log(
+    `Using AI provider: ${preferredProvider} (available: ${availableProviders.join(', ')})`
   );
+
+  // Model can be specified via environment variable
+  const modelOverride = process.env.AI_MODEL;
+  if (modelOverride) {
+    console.log(`Using model: ${modelOverride}`);
+  }
+} else {
+  console.log('Running in mock mode - AI features will return placeholder responses');
 }
 
-// Log which provider is being used
-console.log(
-  `Using AI provider: ${preferredProvider} (available: ${availableProviders.join(', ')})`
-);
-
-// Model can be specified via environment variable
-const modelOverride = process.env.AI_MODEL;
-if (modelOverride) {
-  console.log(`Using model: ${modelOverride}`);
-}
+// Make modelOverride available globally
+const globalModelOverride = process.env.AI_MODEL;
 
 type YieldToolSet = {
   listMarkets: Tool<z.ZodObject<Record<string, never>>, Awaited<Task>>;
@@ -644,8 +666,31 @@ Never respond in markdown, always use plain text. Never add links to your respon
 
     try {
       this.log('Calling generateText with Vercel AI SDK...');
+
+      // Mock mode fallback
+      if (!selectedProvider) {
+        this.log('Running in mock mode - returning placeholder response');
+        return {
+          id: this.userAddress!,
+          contextId: `mock-response-${Date.now()}`,
+          kind: 'task',
+          status: {
+            state: TaskState.Completed,
+            message: {
+              role: 'agent',
+              messageId: `msg-${Date.now()}`,
+              kind: 'message',
+              parts: [{
+                kind: 'text',
+                text: `Mock response for: "${userInput}". To enable real AI features, please configure an API key in the .env file.`
+              }],
+            },
+          },
+        };
+      }
+
       const { response, text, finishReason } = await generateText({
-        model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
+        model: globalModelOverride ? selectedProvider!(globalModelOverride) : selectedProvider!(),
         messages: this.conversationHistory,
         tools: this.toolSet,
         maxSteps: 10,

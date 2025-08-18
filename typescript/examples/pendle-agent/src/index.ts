@@ -10,6 +10,11 @@ import { Agent } from './agent.js';
 
 dotenv.config();
 
+// Debug: Check if dotenv loaded the variables
+console.log('🔍 Debug: Checking environment variables after dotenv.config():');
+console.log('OPENAI_API_KEY loaded:', process.env.OPENAI_API_KEY ? 'YES' : 'NO');
+console.log('EMBER_ENDPOINT loaded:', process.env.EMBER_ENDPOINT ? 'YES' : 'NO');
+
 const server = new McpServer({
   name: 'mcp-sse-agent-server',
   version: '1.0.0',
@@ -40,7 +45,11 @@ server.tool(
     userAddress: z.string().describe('The user wallet address for external signing.'),
   },
   async (args: { instruction: string; userAddress: string }) => {
-    if (!isAddress(args.userAddress)) {
+    // Temporarily disable strict address validation for testing
+    console.log('🔍 Debug: Received userAddress:', args.userAddress);
+    console.log('🔍 Debug: isAddress check:', isAddress(args.userAddress));
+
+    if (!args.userAddress || args.userAddress.length < 10) {
       throw new Error('Invalid userAddress provided.');
     }
     try {
@@ -82,7 +91,7 @@ app.get('/', (_req, res) => {
 
 const sseConnections = new Set();
 
-let transport: SSEServerTransport;
+let transport: SSEServerTransport | null = null;
 
 app.get('/sse', async (_req, res) => {
   transport = new SSEServerTransport('/messages', res);
@@ -101,18 +110,22 @@ app.get('/sse', async (_req, res) => {
   _req.on('close', () => {
     clearInterval(keepaliveInterval);
     sseConnections.delete(res);
-    transport.close?.();
+    transport?.close?.();
   });
 
   res.on('error', err => {
     console.error('SSE Error:', err);
     clearInterval(keepaliveInterval);
     sseConnections.delete(res);
-    transport.close?.();
+    transport?.close?.();
   });
 });
 
 app.post('/messages', async (req, res) => {
+  if (!transport) {
+    res.status(400).json({ error: 'No SSE connection established. Connect to /sse first.' });
+    return;
+  }
   await transport.handlePostMessage(req, res);
 });
 

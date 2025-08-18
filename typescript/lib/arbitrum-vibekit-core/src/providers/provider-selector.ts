@@ -2,6 +2,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createXai } from '@ai-sdk/xai';
 import { createHyperbolic } from '@hyperbolic/ai-sdk-provider';
+import { createOpenAI as createPerplexity } from '@ai-sdk/openai';
 import type { LanguageModelV1 } from 'ai';
 
 export interface ProviderSelectorConfig {
@@ -9,6 +10,7 @@ export interface ProviderSelectorConfig {
   openaiApiKey?: string;
   xaiApiKey?: string;
   hyperbolicApiKey?: string;
+  perplexityApiKey?: string;
 }
 
 export interface ProviderSelector {
@@ -16,6 +18,7 @@ export interface ProviderSelector {
   openai?: (model?: string) => LanguageModelV1;
   xai?: (model?: string) => LanguageModelV1;
   hyperbolic?: (model?: string) => LanguageModelV1;
+  perplexity?: (model?: string) => LanguageModelV1;
 }
 
 export function createProviderSelector(config: ProviderSelectorConfig): ProviderSelector {
@@ -45,6 +48,15 @@ export function createProviderSelector(config: ProviderSelectorConfig): Provider
     const hyperbolicInstance = createHyperbolic({ apiKey: config.hyperbolicApiKey });
     selector.hyperbolic = (model?: string) =>
       hyperbolicInstance(model || 'meta-llama/Llama-3.3-70B-Instruct');
+  }
+
+  // Only add Perplexity if API key is provided
+  if (config.perplexityApiKey) {
+    const perplexityInstance = createPerplexity({
+      apiKey: config.perplexityApiKey,
+      baseURL: 'https://api.perplexity.ai'
+    });
+    selector.perplexity = (model?: string) => perplexityInstance(model || 'llama-3.1-sonar-small-128k-chat');
   }
 
   // Warn if no providers are configured
