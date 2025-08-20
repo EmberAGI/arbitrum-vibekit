@@ -61,6 +61,14 @@ export const startEnv = async (useAnvil: boolean) => {
 
   process.chdir('onchain-actions');
 
+  // Ensure the nested repo is up to date without changing architecture
+  try {
+    await runCommand('git fetch --all --prune', 'git');
+    await runCommand('git pull --ff-only', 'git');
+  } catch (e) {
+    console.warn('[git] Skipping auto-update of onchain-actions (non-fatal).');
+  }
+
   await runCommand(
     'docker compose --progress=plain -f compose.dev.service.yaml up -d --wait',
     'compose'
