@@ -85,7 +85,7 @@ describe('Swapping Agent Integration Tests', function () {
         await ensureWethBalance(signer, '0.05', wethAddress);
       });
 
-      describe.skip('Token Swapping', function () {
+      describe('Token Swapping', function () {
         it('should execute WETH to USDC swap successfully', async function () {
           // Swap a very small amount of WETH for USDC
           const swapAmount = '0.00001';
@@ -178,7 +178,7 @@ describe('Swapping Agent Integration Tests', function () {
         });
       });
 
-      describe.skip('Error Handling', function () {
+      describe('Error Handling', function () {
         it('should handle insufficient balance gracefully', async function () {
           // Try to swap more than we have
           const response = await agent.processUserInput(
