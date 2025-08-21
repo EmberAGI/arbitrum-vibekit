@@ -1,7 +1,7 @@
 import { tool, type CoreTool } from 'ai';
 import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { cookies } from 'next/headers';
 import { DEFAULT_SERVER_URLS } from '../../../agents-config';
 import type { ChatAgentId } from '../../../agents-config';
@@ -68,10 +68,13 @@ async function getTool(serverUrl: string) {
     { capabilities: { tools: {}, resources: {}, prompts: {} } },
   );
 
-  // Create SSE transport
+  // Create StreamableHTTP transport
   let transport = null;
   if (serverUrl) {
-    transport = new SSEClientTransport(new URL(serverUrl));
+    transport = new StreamableHTTPClientTransport(
+      new URL(serverUrl),
+      {} // headers - empty for now
+    );
   }
 
   // Connect to the server

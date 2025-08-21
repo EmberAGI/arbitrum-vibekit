@@ -1,58 +1,30 @@
 # CoinGecko MCP Server
 
-A Model Context Protocol (MCP) server that provides cryptocurrency price data using the CoinGecko API.
+A Model Context Protocol (MCP) server that provides cryptocurrency price data and chart generation using the CoinGecko API.
 
-## Features
+## 🚀 Features
 
-- **Generate Price Charts**: Get historical price data for supported cryptocurrencies
-- **Supported Tokens**: List of popular cryptocurrencies including BTC, ETH, USDC, USDT, DAI, WBTC, WETH, ARB, BASE, MATIC, OP
-- **Rate Limiting**: Built-in retry logic with exponential backoff for API rate limits
-- **Multiple Transports**: Support for both HTTP/SSE and stdio transports
+- **Price Chart Generation**: Create interactive price charts for supported cryptocurrencies
+- **Multi-timeframe Support**: Historical data from 1-365 days
+- **Token Discovery**: Get list of supported cryptocurrency tokens
+- **Rate Limit Handling**: Built-in retry mechanism with exponential backoff
+- **Dual Transport**: HTTP endpoints + stdio transport support
 
-## Installation
+## 🛠 Architecture
 
-```bash
-cd arbitrum-vibekit/typescript/lib/mcp-tools/coingecko-mcp-server
-pnpm install
-pnpm build
-```
+### Transport Layer
+- **StreamableHTTP**: Modern HTTP transport with session management
+- **Stdio**: Command-line interface support
+- **Endpoints**: `/mcp` (POST/GET/DELETE)
 
-## Usage
-
-### Running the Server
-
-#### Development Mode
-```bash
-pnpm dev
-```
-
-#### Production Mode
-```bash
-pnpm start
-```
-
-#### Watch Mode
-```bash
-pnpm watch
-```
-
-### Available Tools
+### Tools Available
 
 #### 1. `generate_chart`
-
-Generate a price chart for a cryptocurrency over a specified number of days.
+Generate price charts for cryptocurrencies using CoinGecko API.
 
 **Parameters:**
-- `token` (string): The symbol of the token (e.g., "BTC", "ETH")
-- `days` (number): Number of days of historical data (1-365)
-
-**Example:**
-```json
-{
-  "token": "BTC",
-  "days": 30
-}
-```
+- `token` (string): Token symbol (BTC, ETH, USDC, etc.)
+- `days` (number): Historical data range (1-365 days)
 
 **Response:**
 ```json
@@ -60,14 +32,13 @@ Generate a price chart for a cryptocurrency over a specified number of days.
   "prices": [[timestamp, price], ...],
   "token": "BTC",
   "tokenId": "bitcoin",
-  "days": 30,
-  "timestamp": "2024-01-01T00:00:00.000Z"
+  "days": 7,
+  "timestamp": "2025-01-01T12:00:00.000Z"
 }
 ```
 
 #### 2. `get_supported_tokens`
-
-Get a list of all supported cryptocurrency tokens.
+Get list of all supported cryptocurrency tokens.
 
 **Parameters:** None
 
@@ -75,55 +46,205 @@ Get a list of all supported cryptocurrency tokens.
 ```json
 {
   "supportedTokens": [
-    {
-      "symbol": "BTC",
-      "id": "bitcoin",
-      "name": "Bitcoin"
-    },
-    ...
+    {"symbol": "BTC", "id": "bitcoin", "name": "Bitcoin"},
+    {"symbol": "ETH", "id": "ethereum", "name": "Ethereum"}
   ],
-  "count": 11,
-  "timestamp": "2024-01-01T00:00:00.000Z"
+  "count": 10
 }
 ```
 
-## Supported Tokens
+## 💰 Supported Tokens
 
-| Symbol | Name | CoinGecko ID |
-|--------|------|--------------|
-| BTC | Bitcoin | bitcoin |
-| ETH | Ethereum | ethereum |
-| USDC | USD Coin | usd-coin |
-| USDT | Tether | tether |
-| DAI | Dai | dai |
-| WBTC | Wrapped Bitcoin | wrapped-bitcoin |
-| WETH | WETH | weth |
-| ARB | Arbitrum | arbitrum |
-| BASE | Base | base |
-| MATIC | Polygon | matic-network |
-| OP | Optimism | optimism |
+| Symbol | CoinGecko ID | Name |
+|--------|--------------|------|
+| BTC | bitcoin | Bitcoin |
+| ETH | ethereum | Ethereum |
+| USDC | usd-coin | USD Coin |
+| USDT | tether | Tether |
+| DAI | dai | Dai |
+| WBTC | wrapped-bitcoin | Wrapped Bitcoin |
+| WETH | weth | Wrapped Ether |
+| ARB | arbitrum | Arbitrum |
+| BASE | base | Base |
+| MATIC | matic-network | Polygon |
+| OP | optimism | Optimism |
 
-## Configuration
+## 🔧 Configuration
 
-The server runs on port 3002 by default. You can change this by setting the `PORT` environment variable:
+### Environment Variables
+- `PORT`: Server port (default: 3011)
 
-```bash
-PORT=3003 pnpm start
+### Endpoints
+- **HTTP**: `http://localhost:3011/mcp` (POST/GET/DELETE)
+- **Health**: Server logs indicate ready state
+
+## 📊 Frontend Integration
+
+### Message Renderer Integration
+The frontend automatically detects chart generation tools:
+
+```typescript
+// Detects these tool patterns:
+- toolName.endsWith('generate_chart')
+- toolName === 'coingecko-generate_chart'
+
+// Renders with PriceChart component
+<PriceChart data={chartData} />
 ```
 
-## Error Handling
+### Chart Component Features
+- **Interactive tooltips** with price and timestamp
+- **Responsive design** with hover effects
+- **SVG-based rendering** for crisp visuals
+- **Gradient styling** with professional appearance
 
-The server includes robust error handling:
+## 🏗 Development
 
-- **Rate Limiting**: Automatic retry with exponential backoff for 429 errors
-- **Server Errors**: Retry logic for 5xx errors
-- **Invalid Tokens**: Clear error messages for unsupported tokens
-- **API Failures**: Graceful handling of CoinGecko API failures
+### Installation
+```bash
+cd arbitrum-vibekit/typescript/lib/mcp-tools/coingecko-mcp-server
+pnpm install
+pnpm build
+```
 
-## Integration with AI Clients
+### Build Commands
+```bash
+# Build TypeScript
+pnpm build
+
+# Development mode
+pnpm dev
+
+# Production mode
+pnpm start
+
+# Watch mode
+pnpm watch
+```
+
+### File Structure
+```
+src/
+├── mcp.ts           # MCP server core & tools
+├── index.ts         # Main entry point (HTTP + stdio)
+├── http-server.ts   # HTTP-only server
+└── package.json     # Dependencies & scripts
+```
+
+## 🔄 Recent Updates
+
+### v2.0 - StreamableHTTP Migration
+- **Migrated from SSE to StreamableHTTP** transport
+- **Added session management** for better reliability
+- **Enhanced error handling** with JSON-RPC responses
+- **Improved rate limiting** with p-retry integration
+
+### Transport Changes
+- **Before**: `/sse` endpoint with SSEServerTransport
+- **After**: `/mcp` endpoint with StreamableHTTPServerTransport
+- **Benefits**: Better session handling, resumability, unified endpoints
+
+## 🔌 Client Integration
+
+### Frontend Configuration
+```typescript
+// agents-config.ts
+['coingecko', 'http://coingecko-mcp-server:3011/mcp']
+
+// tool-agents.ts
+const transport = new StreamableHTTPClientTransport(
+  new URL(serverUrl),
+  {} // headers
+);
+```
+
+### Usage Examples
+
+**Generate BTC Chart:**
+```
+User: "Generate a BTC price chart for 7 days"
+AI: Calls coingecko-generate_chart(token="BTC", days=7)
+Frontend: Renders interactive price chart
+```
+
+**List Supported Tokens:**
+```
+User: "What cryptocurrency tokens are supported?"
+AI: Calls coingecko-get_supported_tokens()
+Response: List of 11 supported tokens
+```
+
+## 🚨 Error Handling
+
+### Rate Limiting
+- **Automatic retry** with exponential backoff
+- **Max retries**: 5 attempts
+- **Backoff**: 1s → 2s → 4s → 8s → 16s
+
+### Common Errors
+- **Unsupported token**: Returns available token list
+- **API failure**: JSON error response with details
+- **Invalid timeframe**: Validates 1-365 day range
+
+## 📈 Performance
+
+### API Efficiency
+- **Direct CoinGecko integration** (no intermediary)
+- **Minimal data transformation** 
+- **Efficient JSON parsing** and response formatting
+
+### Resource Usage
+- **Memory**: Low footprint, stateless design
+- **Network**: Only outbound CoinGecko API calls
+- **CPU**: Light JSON processing overhead
+
+## 🔍 Monitoring & Debugging
+
+### Server Logs
+```bash
+# Connection logs
+CoinGecko MCP Server is running on port 3011
+MCP endpoint available at http://localhost:3011/mcp
+
+# Tool execution logs  
+🔍 [MCP] Fetching chart data for BTC (bitcoin) over 7 days
+🔍 [MCP] Chart data received: 168 data points
+```
+
+### Frontend Debugging
+```bash
+# Browser console
+🔍 [MCP Chart] Parsed chart data: {prices: Array(168), token: "BTC"}
+```
+
+## 🚀 Deployment
+
+### Docker Integration
+```yaml
+# compose.yml
+coingecko-mcp-server:
+  build: ./lib/mcp-tools/coingecko-mcp-server
+  ports:
+    - "3011:3011"
+  environment:
+    - PORT=3011
+```
+
+
+## 🔧 Adding New Tokens
+
+To add support for new tokens, update the `tokenMap` in `src/mcp.ts`:
+
+```typescript
+const tokenMap: Record<string, string> = {
+  // ... existing tokens
+  NEW_TOKEN: 'new-token-coingecko-id', // Add new token here
+};
+```
+
+## 🧪 Testing
 
 ### Using with Claude Desktop
-
 Add to your `claude_desktop_config.json`:
 
 ```json
@@ -138,42 +259,27 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-### Using with Other MCP Clients
+### Direct HTTP Testing
+```bash
+# Test tool discovery
+curl -X POST http://localhost:3011/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "method": "tools/list", "id": 1}'
 
-The server supports both stdio and HTTP/SSE transports, making it compatible with any MCP client.
-
-## Development
-
-### Project Structure
-
-```
-coingecko-mcp-server/
-├── src/
-│   ├── index.ts      # Main entry point
-│   └── mcp.ts        # MCP server implementation
-├── package.json      # Dependencies and scripts
-├── tsconfig.json     # TypeScript configuration
-└── README.md         # This file
-```
-
-### Adding New Tokens
-
-To add support for new tokens, update the `tokenMap` in `src/mcp.ts`:
-
-```typescript
-const tokenMap: Record<string, string> = {
-  // ... existing tokens
-  NEW_TOKEN: 'new-token-id', // Add new token here
-};
+# Test chart generation
+curl -X POST http://localhost:3011/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0", 
+    "method": "tools/call",
+    "params": {
+      "name": "generate_chart",
+      "arguments": {"token": "BTC", "days": 7}
+    },
+    "id": 2
+  }'
 ```
 
-### Testing
+---
 
-The server can be tested using any MCP client or by making direct HTTP requests to the endpoints:
-
-- `GET /sse` - SSE connection endpoint
-- `POST /messages` - Message handling endpoint
-
-## License
-
-ISC 
+*This server provides reliable cryptocurrency data integration for the Arbitrum Vibekit ecosystem.*

@@ -1,16 +1,21 @@
 #!/usr/bin/env node
 
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import dotenv from 'dotenv';
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 
 import { createServer } from './mcp.js';
+import { randomUUID } from 'node:crypto';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
 dotenv.config();
 
 async function main() {
   const app = express();
+
+  // Add JSON parsing middleware
+  app.use(express.json());
 
   app.use(function (req: Request, _res: Response, next: NextFunction) {
     console.log(`${req.method} ${req.url}`);
@@ -19,49 +24,118 @@ async function main() {
 
   const server = await createServer();
 
-  const transports: { [sessionId: string]: SSEServerTransport } = {};
+  const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
-  app.get('/sse', async (_req: Request, res: Response) => {
-    console.log('Received connection');
+  // MCP POST endpoint for StreamableHTTP
+  const mcpPostHandler = async (req: Request, res: Response) => {
+    const sessionId = req.headers['mcp-session-id'] as string;
+    if (sessionId) {
+      console.log(`Received MCP request for session: ${sessionId}`);
+    } else {
+      console.log('Request body:', req.body);
+    }
 
-    const transport = new SSEServerTransport('/messages', res);
-    transports[transport.sessionId] = transport;
+    try {
+      let transport: StreamableHTTPServerTransport;
+      if (sessionId && transports[sessionId]) {
+        // Reuse existing transport
+        transport = transports[sessionId];
+      } else if (!sessionId && isInitializeRequest(req.body)) {
+        // New initialization request
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (sessionId) => {
+            console.log(`Session initialized with ID: ${sessionId}`);
+            transports[sessionId] = transport;
+          }
+        });
 
-    await server.connect(transport);
-  });
+        // Set up onclose handler to clean up transport when closed
+        transport.onclose = () => {
+          const sid = transport.sessionId;
+          if (sid && transports[sid]) {
+            console.log(`Transport closed for session ${sid}, removing from transports map`);
+            delete transports[sid];
+          }
+        };
 
-  app.post('/messages', async (_req: Request, res: Response) => {
-    const sessionId = _req.query.sessionId as string;
-    console.log(`Received message for session: ${sessionId}`);
-
-    let bodyBuffer = Buffer.alloc(0);
-
-    _req.on('data', chunk => {
-      bodyBuffer = Buffer.concat([bodyBuffer, chunk]);
-    });
-
-    _req.on('end', async () => {
-      try {
-        // Parse the body
-        const bodyStr = bodyBuffer.toString('utf8');
-        const bodyObj = JSON.parse(bodyStr);
-        console.log(`${JSON.stringify(bodyObj, null, 4)}`);
-      } catch (error) {
-        console.error(`Error handling request: ${error}`);
+        // Connect the transport to the MCP server
+        await server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+        return;
+      } else {
+        // Invalid request
+        res.status(400).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32000,
+            message: 'Bad Request: No valid session ID provided',
+          },
+          id: null,
+        });
+        return;
       }
-    });
-    const transport = transports[sessionId];
-    if (!transport) {
-      res.status(400).send('No transport found for sessionId');
+
+      // Handle the request with existing transport
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      console.error('Error handling MCP request:', error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: 'Internal server error',
+          },
+          id: null,
+        });
+      }
+    }
+  };
+
+  app.post('/mcp', mcpPostHandler);
+
+  // Handle GET requests for SSE streams (StreamableHTTP backwards compatibility)
+  const mcpGetHandler = async (req: Request, res: Response) => {
+    const sessionId = req.headers['mcp-session-id'] as string;
+    if (!sessionId || !transports[sessionId]) {
+      res.status(400).send('Invalid or missing session ID');
       return;
     }
-    await transport.handlePostMessage(_req, res);
-  });
+
+    console.log(`Establishing SSE stream for session ${sessionId}`);
+    const transport = transports[sessionId];
+    await transport.handleRequest(req, res);
+  };
+
+  app.get('/mcp', mcpGetHandler);
+
+  // Handle DELETE requests for session termination
+  const mcpDeleteHandler = async (req: Request, res: Response) => {
+    const sessionId = req.headers['mcp-session-id'] as string;
+    if (!sessionId || !transports[sessionId]) {
+      res.status(400).send('Invalid or missing session ID');
+      return;
+    }
+
+    console.log(`Received session termination request for session ${sessionId}`);
+    try {
+      const transport = transports[sessionId];
+      await transport.handleRequest(req, res);
+    } catch (error) {
+      console.error('Error handling session termination:', error);
+      if (!res.headersSent) {
+        res.status(500).send('Error processing session termination');
+      }
+    }
+  };
+
+  app.delete('/mcp', mcpDeleteHandler);
 
   const PORT = process.env.PORT || 3011;
   app.listen(PORT, () => {
     console.log(`CoinGecko MCP Server is running on port ${PORT}`);
-    console.log(`SSE endpoint available at http://localhost:${PORT}/sse`);
+    console.log(`MCP endpoint available at http://localhost:${PORT}/mcp`);
   });
 
   // Keep the server running (no stdio transport in Docker)
