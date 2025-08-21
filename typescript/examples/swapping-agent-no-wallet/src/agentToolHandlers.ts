@@ -68,6 +68,19 @@ function mapChainIdToName(chainId: string): string {
   return found?.name || chainId;
 }
 
+// Environment variable overrides for RPC URLs per chainId.
+// If set, these will be preferred over QuickNode for read-only operations in tests/dev.
+const RPC_ENV_VAR_BY_CHAIN_ID: Record<string, string> = {
+  '1': 'ETHEREUM_RPC_URL',
+  '10': 'OPTIMISM_RPC_URL',
+  '137': 'POLYGON_RPC_URL',
+  '42161': 'ARBITRUM_ONE_RPC_URL',
+  '421614': 'ARBITRUM_SEPOLIA_RPC_URL',
+  '8453': 'BASE_CHAIN_RPC_URL',
+  '33139': 'APECHAIN_RPC_URL',
+  '33111': 'APECHAIN_CURTIS_RPC_URL',
+};
+
 function findTokenDetail(
   tokenName: string,
   optionalChainName: string | undefined,
@@ -184,17 +197,31 @@ export async function handleSwapTokens(
     const chainConfig = getChainConfigById(txChainId);
     const networkSegment = chainConfig.quicknodeSegment;
     const targetChain = chainConfig.viemChain;
+    const overrideEnvVar = RPC_ENV_VAR_BY_CHAIN_ID[txChainId];
+    const overrideRpcUrl = overrideEnvVar ? process.env[overrideEnvVar] : undefined;
+
     let dynamicRpcUrl: string;
-    if (networkSegment === '') {
-      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.quiknode.pro/${context.quicknodeApiKey}`;
+    if (overrideRpcUrl) {
+      dynamicRpcUrl = overrideRpcUrl;
+      publicClient = createPublicClient({
+        chain: targetChain,
+        transport: http(dynamicRpcUrl),
+      });
+      context.log(`Public client created for chain ${txChainId} via override ${overrideEnvVar}`);
     } else {
-      dynamicRpcUrl = `https://${context.quicknodeSubdomain}.${networkSegment}.quiknode.pro/${context.quicknodeApiKey}`;
+      if (networkSegment === '') {
+        dynamicRpcUrl = `https://${context.quicknodeSubdomain}.quiknode.pro/${context.quicknodeApiKey}`;
+      } else {
+        dynamicRpcUrl = `https://${context.quicknodeSubdomain}.${networkSegment}.quiknode.pro/${context.quicknodeApiKey}`;
+      }
+      publicClient = createPublicClient({
+        chain: targetChain,
+        transport: http(dynamicRpcUrl),
+      });
+      context.log(
+        `Public client created for chain ${txChainId} via ${dynamicRpcUrl.split('/')[2]}`
+      );
     }
-    publicClient = createPublicClient({
-      chain: targetChain,
-      transport: http(dynamicRpcUrl),
-    });
-    context.log(`Public client created for chain ${txChainId} via ${dynamicRpcUrl.split('/')[2]}`);
   } catch (chainError) {
     context.log(`Failed to create public client for chain ${txChainId}:`, chainError);
     return {

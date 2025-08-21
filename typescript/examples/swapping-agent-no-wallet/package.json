@@ -10,7 +10,7 @@
     "lint:fix": "eslint src --fix",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
-    "test": "pnpm --filter arbitrum-vibekit build && pnpm --filter ember-api build && pnpm --filter test-utils build && NODE_OPTIONS=\"--no-warnings\" tsx node_modules/mocha/bin/mocha --exit --timeout 120000 --config ../../.mocharc.json 'test/**/*.test.ts'",
+    "test": "pnpm --filter arbitrum-vibekit build && pnpm --filter ember-api build && pnpm --filter test-utils build && NODE_OPTIONS=\"--no-warnings\" tsx node_modules/mocha/bin/mocha --require ./test/setup-env.ts --exit --timeout 120000 --config ../../.mocharc.json 'test/**/*.test.ts'",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
     "docker:build": "docker build -t swapping-agent-no-wallet ../../",
     "docker:run": "docker run --env-file .env -p 3001:3001 swapping-agent-no-wallet",
