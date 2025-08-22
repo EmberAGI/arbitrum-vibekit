@@ -3,6 +3,7 @@
 import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useTransactionExecutor } from "../hooks/useTransactionExecutor";
+import { useCurrentAgent } from "../hooks/use-current-agent";
 import type { TxPlan } from "../lib/transactionUtils";
 import { JsonViewer } from "./JsonViewer";
 
@@ -25,6 +26,7 @@ export function TemplateComponent({
   // --- Wagmi hooks ---
   const { address, isConnected, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
+  const currentAgentId = useCurrentAgent();
 
   // --- Central executor hook ---
   const {
@@ -46,6 +48,9 @@ export function TemplateComponent({
     address,
     currentChainId: chainId,
     switchChainAsync,
+    agentType: 'template',
+    agentId: currentAgentId,
+    methodName: txPreview?.action || 'template',
   });
 
   const needsApproval = totalApprovals > 0;
