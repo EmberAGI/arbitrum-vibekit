@@ -11,7 +11,7 @@ The Hello Quickstart Agent showcases:
 - **Multiple Skills**: LLM-orchestrated and manual handlers ([Lesson 20](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-20.md))
 - **Internal Tools**: Context-aware business logic tools
 - **MCP Integration**: Multiple mock MCP servers ([Lesson 2](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-02.md))
-- **Hook System**: Tool enhancement with `withHooks` ([Lesson 16](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-16.md))
+- **Hook System**: Tool enhancement with `withHooks` for validation and transaction signing ([Lesson 16](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-16.md))
 - **Context Management**: Custom context loading and type safety
 - **Error Handling**: Comprehensive error scenarios
 - **HTTP Endpoints**: Full REST API and MCP over SSE
@@ -55,6 +55,8 @@ The Hello Quickstart Agent showcases:
 - `getLocalizedGreeting` - Enhanced with timestamps via hooks
 - `createEchoTool` - For echo skill
 - `createArtifactTool` - For artifact creation
+
+> **Important**: For blockchain transactions, always use `withHooks` after hooks to handle transaction signing and execution securely. See [Lesson 16](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-16.md) for implementation details.
 
 ### Mock MCP Servers
 
