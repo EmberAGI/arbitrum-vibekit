@@ -1,5 +1,5 @@
-import { z } from "zod";
-import { OrderTypeSchema, TransactionPlanStatusSchema } from "./enums.js";
+import { z } from 'zod';
+import { OrderTypeSchema, TransactionPlanStatusSchema } from './enums.js';
 import {
   TokenIdentifierSchema,
   FeeBreakdownSchema,
@@ -7,7 +7,7 @@ import {
   SwapEstimationSchema,
   ProviderTrackingInfoSchema,
   TransactionPlanErrorSchema,
-} from "./core.js";
+} from './core.js';
 
 export const SwapTokensRequestSchema = z.object({
   orderType: OrderTypeSchema,

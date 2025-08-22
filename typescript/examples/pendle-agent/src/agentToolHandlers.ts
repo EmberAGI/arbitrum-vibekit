@@ -47,10 +47,7 @@ export interface HandlerContext {
   quicknodeApiKey: string;
 }
 
-function findTokensCaseInsensitive(
-  tokenMap: Record<string, Token[]>,
-  tokenName: string
-): Token[] {
+function findTokensCaseInsensitive(tokenMap: Record<string, Token[]>, tokenName: string): Token[] {
   const lowerCaseTokenName = tokenName.toLowerCase();
   for (const key in tokenMap) {
     if (key.toLowerCase() === lowerCaseTokenName) {
@@ -167,11 +164,11 @@ export async function handleSwapTokens(
       kind: 'task',
       status: {
         state: TaskState.Failed,
-        message: { 
-          role: 'agent', 
+        message: {
+          role: 'agent',
           messageId: `msg-${Date.now()}`,
           kind: 'message',
-          parts: [{ kind: 'text', text: fromTokenResult }] 
+          parts: [{ kind: 'text', text: fromTokenResult }],
         },
       },
       artifacts: [],
@@ -198,11 +195,11 @@ export async function handleSwapTokens(
       kind: 'task',
       status: {
         state: TaskState.Failed,
-        message: { 
-          role: 'agent', 
+        message: {
+          role: 'agent',
           messageId: `msg-${Date.now()}`,
           kind: 'message',
-          parts: [{ kind: 'text', text: toTokenResult }] 
+          parts: [{ kind: 'text', text: toTokenResult }],
         },
       },
       artifacts: [],
@@ -313,4 +310,3 @@ export async function handleSwapTokens(
     artifacts: [artifact],
   };
 }
-

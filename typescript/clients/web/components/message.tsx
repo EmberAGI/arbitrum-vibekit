@@ -1,17 +1,17 @@
-"use client";
+'use client';
 
-import type { UIMessage } from "ai";
-import cx from "classnames";
-import { AnimatePresence, motion } from "framer-motion";
-import { memo, useState } from "react";
-import type { Vote } from "@/lib/db/schema";
-import { SparklesIcon } from "./icons";
-import { MessageActions } from "./message-actions";
-import { PreviewAttachment } from "./preview-attachment";
-import equal from "fast-deep-equal";
-import { cn } from "@/lib/utils";
-import type { UseChatHelpers } from "@ai-sdk/react";
-import { MessageRenderer } from "./message.renderer";
+import type { UIMessage } from 'ai';
+import cx from 'classnames';
+import { AnimatePresence, motion } from 'framer-motion';
+import { memo, useState } from 'react';
+import type { Vote } from '@/lib/db/schema';
+import { SparklesIcon } from './icons';
+import { MessageActions } from './message-actions';
+import { PreviewAttachment } from './preview-attachment';
+import equal from 'fast-deep-equal';
+import { cn } from '@/lib/utils';
+import type { UseChatHelpers } from '@ai-sdk/react';
+import { MessageRenderer } from './message.renderer';
 
 const PurePreviewMessage = ({
   chatId,
@@ -26,11 +26,11 @@ const PurePreviewMessage = ({
   message: UIMessage;
   vote: Vote | undefined;
   isLoading: boolean;
-  setMessages: UseChatHelpers["setMessages"];
-  reload: UseChatHelpers["reload"];
+  setMessages: UseChatHelpers['setMessages'];
+  reload: UseChatHelpers['reload'];
   isReadonly: boolean;
 }) => {
-  const [mode, setMode] = useState<"view" | "edit">("view");
+  const [mode, setMode] = useState<'view' | 'edit'>('view');
 
   return (
     <AnimatePresence>
@@ -43,14 +43,14 @@ const PurePreviewMessage = ({
       >
         <div
           className={cn(
-            "flex gap-4 w-full group-data-[role=user]/message:ml-auto group-data-[role=user]/message:max-w-2xl",
+            'flex gap-4 w-full group-data-[role=user]/message:ml-auto group-data-[role=user]/message:max-w-2xl',
             {
-              "w-full": mode === "edit",
-              "group-data-[role=user]/message:w-fit": mode !== "edit",
+              'w-full': mode === 'edit',
+              'group-data-[role=user]/message:w-fit': mode !== 'edit',
             },
           )}
         >
-          {message.role === "assistant" && (
+          {message.role === 'assistant' && (
             <div className="size-8 flex items-center rounded-full justify-center ring-1 shrink-0 ring-border bg-background">
               <div className="translate-y-px">
                 <SparklesIcon size={14} />
@@ -116,7 +116,7 @@ export const PreviewMessage = memo(
 );
 
 export const ThinkingMessage = () => {
-  const role = "assistant";
+  const role = 'assistant';
 
   return (
     <motion.div
@@ -128,9 +128,9 @@ export const ThinkingMessage = () => {
     >
       <div
         className={cx(
-          "flex gap-4 group-data-[role=user]/message:px-3 w-full group-data-[role=user]/message:w-fit group-data-[role=user]/message:ml-auto group-data-[role=user]/message:max-w-2xl group-data-[role=user]/message:py-2 rounded-xl",
+          'flex gap-4 group-data-[role=user]/message:px-3 w-full group-data-[role=user]/message:w-fit group-data-[role=user]/message:ml-auto group-data-[role=user]/message:max-w-2xl group-data-[role=user]/message:py-2 rounded-xl',
           {
-            "group-data-[role=user]/message:bg-muted": true,
+            'group-data-[role=user]/message:bg-muted': true,
           },
         )}
       >

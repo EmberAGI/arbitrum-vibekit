@@ -4,7 +4,7 @@ import { TokenIdentifierSchema } from './common.js';
 import {
   TransactionPlanSchema,
   AskEncyclopediaSchema,
-  type AskEncyclopediaArgs
+  type AskEncyclopediaArgs,
 } from './common.js';
 
 //
@@ -12,15 +12,9 @@ import {
 //
 
 export const SwapTokensSchema = z.object({
-  fromToken: z
-    .string()
-    .describe('The symbol or address of the token to swap from.'),
-  toToken: z
-    .string()
-    .describe('The symbol or address of the token to swap to.'),
-  amount: z
-    .string()
-    .describe('The human-readable amount of the token to swap from.'),
+  fromToken: z.string().describe('The symbol or address of the token to swap from.'),
+  toToken: z.string().describe('The symbol or address of the token to swap to.'),
+  amount: z.string().describe('The human-readable amount of the token to swap from.'),
   fromChain: z.string().optional().describe('Optional chain name/ID for the source token.'),
   toChain: z.string().optional().describe('Optional chain name/ID for the destination token.'),
 });
@@ -109,4 +103,4 @@ export const SwapPreviewSchema = z.object({
   expiration: z.string(),
   explorerUrl: z.string(),
 });
-export type SwapPreview = z.infer<typeof SwapPreviewSchema>; 
+export type SwapPreview = z.infer<typeof SwapPreviewSchema>;

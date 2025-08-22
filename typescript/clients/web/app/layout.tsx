@@ -69,7 +69,12 @@ export default async function RootLayout({
       <head>
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" href="/favicon.ico" type="image/icon" sizes="any" />
-        <link rel="apple-touch-icon" href="/favicon.ico" type="image/icon" sizes="any" />
+        <link
+          rel="apple-touch-icon"
+          href="/favicon.ico"
+          type="image/icon"
+          sizes="any"
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: THEME_COLOR_SCRIPT,

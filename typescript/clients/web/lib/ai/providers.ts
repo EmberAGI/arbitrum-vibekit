@@ -1,9 +1,18 @@
-import { customProvider, extractReasoningMiddleware, wrapLanguageModel } from 'ai';
+import {
+  customProvider,
+  extractReasoningMiddleware,
+  wrapLanguageModel,
+} from 'ai';
 import { groq } from '@ai-sdk/groq';
 import { xai } from '@ai-sdk/xai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { isTestEnvironment } from '../constants';
-import { artifactModel, chatModel, reasoningModel, titleModel } from './models.test';
+import {
+  artifactModel,
+  chatModel,
+  reasoningModel,
+  titleModel,
+} from './models.test';
 
 const openRouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
