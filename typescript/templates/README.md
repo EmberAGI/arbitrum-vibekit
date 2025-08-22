@@ -43,6 +43,7 @@ agent-name/
 - **Hooks**: Enhancement functions that can modify tool inputs/outputs or add functionality
 - **Context**: Shared state and type-safe data management across the agent
 - **LLM Orchestration**: Intelligent routing and coordination between tools within skills
+- **Transaction Signing**: All blockchain transactions should be signed and executed using Vibekit's `withHooks` after hook feature for secure transaction handling
 
 ## 🚀 Get Started with Templates
 
