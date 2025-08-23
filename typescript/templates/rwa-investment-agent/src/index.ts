@@ -8,6 +8,7 @@ import 'dotenv/config';
 import { Agent, type AgentConfig, createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
 import { assetDiscoverySkill } from './skills/assetDiscovery.js';
 import { complianceCheckSkill } from './skills/complianceCheck.js';
+import { investmentExecutionSkill } from './skills/investmentExecution.js';
 import { testSkill } from './skills/testSkill.js';
 import { contextProvider } from './context/provider.js';
 import type { RWAContext } from './context/types.js';
@@ -40,7 +41,7 @@ export const agentConfig: AgentConfig = {
     name: process.env.AGENT_NAME || 'RWA Investment Agent',
     version: process.env.AGENT_VERSION || '1.0.0',
     description: process.env.AGENT_DESCRIPTION || 'AI agent for Real World Asset investment and portfolio management',
-    skills: [testSkill, assetDiscoverySkill, complianceCheckSkill],
+    skills: [testSkill, assetDiscoverySkill, complianceCheckSkill, investmentExecutionSkill],
     url: 'localhost',
     capabilities: {
         streaming: false,
@@ -89,6 +90,7 @@ async function main() {
         console.log('📋 Available skills:');
         console.log('   - RWA Asset Discovery: Find real-world asset investment opportunities');
         console.log('   - RWA Compliance Verification: Check regulatory compliance');
+        console.log('   - RWA Investment Execution: Execute investments with blockchain integration');
     } catch (error) {
         console.error('❌ Failed to start RWA Investment Agent:', error);
         console.error('Error details:', error);

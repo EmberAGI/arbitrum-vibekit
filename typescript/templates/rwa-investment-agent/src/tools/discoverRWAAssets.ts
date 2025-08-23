@@ -8,6 +8,7 @@ import type { VibkitToolDefinition } from 'arbitrum-vibekit-core';
 import { createSuccessTask, createErrorTask } from 'arbitrum-vibekit-core';
 import type { RWAContext } from '../context/types.js';
 import { AssetDiscoveryRequestSchema, AssetDiscoveryResponseSchema } from '../schemas/assets.js';
+import { CentrifugeClient } from './centrifuge/client.js';
 
 const DiscoverAssetsParams = z.object({
   assetTypes: z.array(z.string()).optional().describe('Types of RWA assets to search for'),
@@ -71,137 +72,112 @@ export const discoverRWAAssetsTool: VibkitToolDefinition<
 
       console.log(`📊 Found ${supportedAssetTypes.length} matching asset types`);
 
-      // Mock RWA assets for MVP (in production, this would call real APIs)
-      const mockAssets = [
-        {
-          id: 'centrifuge-real-estate-001',
-          name: 'Berlin Commercial Real Estate Pool',
-          description: 'Tokenized commercial properties in Berlin financial district',
-          classification: {
-            type: 'REAL_ESTATE',
-            subtype: 'COMMERCIAL',
-            sector: 'OFFICE_BUILDINGS',
-            geography: 'EUROPE',
-            currency: 'EUR',
-          },
-          totalValue: '25000000',
-          tokenizedValue: '15000000',
-          minimumInvestment: '10000',
-          expectedYield: '8.5',
-          maturityDate: '2029-12-31',
-          creditRating: 'BBB+',
-          riskScore: 45,
-          liquidityScore: 65,
-          tokenAddress: '0x1234567890abcdef1234567890abcdef12345678',
-          tokenSymbol: 'CBRE-001',
-          tokenDecimals: 18,
-          chainId: '42161',
-          regulatoryStatus: 'EU_COMPLIANT',
-          kycRequired: true,
-          accreditedInvestorOnly: false,
-          jurisdictions: ['EU', 'DE'],
-          createdAt: '2024-01-15T00:00:00Z',
-          updatedAt: '2025-01-27T00:00:00Z',
-          isActive: true,
-        },
-        {
-          id: 'centrifuge-invoices-002',
-          name: 'Supply Chain Finance Pool',
-          description: 'Tokenized invoices from verified suppliers',
-          classification: {
-            type: 'INVOICES',
-            subtype: 'SUPPLY_CHAIN',
-            sector: 'MANUFACTURING',
-            geography: 'GLOBAL',
-            currency: 'USD',
-          },
-          totalValue: '50000000',
-          tokenizedValue: '35000000',
-          minimumInvestment: '5000',
-          expectedYield: '12.3',
-          maturityDate: '2025-09-30',
-          creditRating: 'A-',
-          riskScore: 35,
-          liquidityScore: 85,
-          tokenAddress: '0xabcdef1234567890abcdef1234567890abcdef12',
-          tokenSymbol: 'CINV-002',
-          tokenDecimals: 18,
-          chainId: '42161',
-          regulatoryStatus: 'MULTI_JURISDICTION',
-          kycRequired: true,
-          accreditedInvestorOnly: false,
-          jurisdictions: ['US', 'EU', 'UK'],
-          createdAt: '2024-03-01T00:00:00Z',
-          updatedAt: '2025-01-27T00:00:00Z',
-          isActive: true,
-        },
-        {
-          id: 'maple-institutional-003',
-          name: 'Institutional Credit Pool',
-          description: 'Uncollateralized loans to institutional borrowers',
-          classification: {
-            type: 'INSTITUTIONAL_LOANS',
-            subtype: 'CREDIT_FACILITIES',
-            sector: 'FINANCIAL_SERVICES',
-            geography: 'US',
-            currency: 'USD',
-          },
-          totalValue: '100000000',
-          tokenizedValue: '75000000',
-          minimumInvestment: '25000',
-          expectedYield: '15.7',
-          maturityDate: '2026-06-30',
-          creditRating: 'BBB',
-          riskScore: 60,
-          liquidityScore: 40,
-          tokenAddress: '0x9876543210fedcba9876543210fedcba98765432',
-          tokenSymbol: 'MICR-003',
-          tokenDecimals: 18,
-          chainId: '42161',
-          regulatoryStatus: 'US_COMPLIANT',
-          kycRequired: true,
-          accreditedInvestorOnly: true,
-          jurisdictions: ['US'],
-          createdAt: '2024-06-15T00:00:00Z',
-          updatedAt: '2025-01-27T00:00:00Z',
-          isActive: true,
-        },
-      ];
+      // Initialize Centrifuge client for real RWA data
+      const centrifugeClient = new CentrifugeClient('demo-key'); // In production, use real API key
 
-      // Apply filters to mock assets
-      const filteredAssets = mockAssets.filter(asset => {
-        // Asset type filter
-        if (args.assetTypes && !args.assetTypes.includes(asset.classification.type)) {
-          return false;
+      // Search Centrifuge pools with filters
+      const searchFilters: any = {};
+      if (args.assetTypes && args.assetTypes.length > 0) {
+        // Map user asset types to Centrifuge asset classes
+        const assetTypeMapping: Record<string, string> = {
+          'real-estate': 'REAL_ESTATE',
+          'real_estate': 'REAL_ESTATE',
+          'realestate': 'REAL_ESTATE',
+          'invoices': 'INVOICES',
+          'invoice': 'INVOICES',
+          'invoice-financing': 'INVOICES',
+          'invoice_financing': 'INVOICES',
+          'invoice financing': 'INVOICES',
+          'carbon-credits': 'CARBON_CREDITS',
+          'carbon_credits': 'CARBON_CREDITS',
+          'carboncredits': 'CARBON_CREDITS',
+          'carbon credits': 'CARBON_CREDITS',
+          'institutional-loans': 'INFRASTRUCTURE', // Map to infrastructure for now
+          'institutional_loans': 'INFRASTRUCTURE',
+          'institutional loans': 'INFRASTRUCTURE',
+        };
+
+        const userAssetType = args.assetTypes[0].toLowerCase();
+        searchFilters.assetClass = assetTypeMapping[userAssetType] || args.assetTypes[0].toUpperCase();
+
+        console.log(`🔄 [Asset Mapping] "${args.assetTypes[0]}" → "${searchFilters.assetClass}"`);
+      }
+      if (args.minYield) {
+        searchFilters.minYield = args.minYield;
+      }
+      if (args.maxRisk) {
+        searchFilters.maxRisk = args.maxRisk;
+      }
+      if (args.minInvestment) {
+        searchFilters.minInvestment = args.minInvestment;
+      }
+      if (args.maxInvestment) {
+        searchFilters.maxInvestment = args.maxInvestment;
+      }
+
+      console.log('🔍 [Centrifuge] Searching pools with filters:', searchFilters);
+      const centrifugePools = await centrifugeClient.searchPools(searchFilters);
+
+      console.log(`✅ [Centrifuge] Found ${centrifugePools.length} matching pools`);
+
+      // Convert Centrifuge pools to RWA assets
+      const discoveredAssets = await Promise.all(
+        centrifugePools.map(async (pool) => {
+          const poolAssets = await centrifugeClient.getPoolAssets(pool.id);
+
+          return poolAssets.map(asset => ({
+            id: asset.id,
+            name: `${pool.name} - ${asset.description}`,
+            description: `${pool.description} - ${asset.description}`,
+            classification: {
+              type: pool.assetClass.toUpperCase() as any,
+              subtype: asset.assetType,
+              sector: pool.assetClass === 'REAL_ESTATE' ? 'PROPERTY' :
+                pool.assetClass === 'INVOICES' ? 'FINANCE' :
+                  pool.assetClass === 'CARBON_CREDITS' ? 'ENVIRONMENTAL' : 'INFRASTRUCTURE',
+              geography: 'GLOBAL',
+              currency: pool.currency,
+            },
+            totalValue: pool.totalValue,
+            tokenizedValue: pool.availableForInvestment,
+            minimumInvestment: pool.minInvestment,
+            expectedYield: pool.expectedYield.toString(),
+            maturityDate: asset.maturityDate || pool.maturityDate,
+            creditRating: 'BBB+', // Mock for now
+            riskScore: pool.riskScore,
+            liquidityScore: 70, // Mock liquidity score
+            tokenAddress: `0x${pool.id.replace(/-/g, '').padEnd(40, '0')}`, // Mock address
+            tokenSymbol: pool.name.substring(0, 6).toUpperCase(),
+            tokenDecimals: 18,
+            chainId: '42161', // Arbitrum
+            regulatoryStatus: 'MULTI_JURISDICTION',
+            kycRequired: true,
+            accreditedInvestorOnly: false,
+            jurisdictions: ['US', 'EU', 'UK'],
+            createdAt: '2024-01-15T00:00:00Z',
+            updatedAt: '2025-01-27T00:00:00Z',
+            isActive: true,
+          }));
+        })
+      );
+
+      const allAssets = discoveredAssets.flat();
+      console.log(`✅ [Centrifuge] Converted ${allAssets.length} assets from pools`);
+
+      // Apply additional filters
+      const filteredAssets = allAssets.filter(asset => {
+        if (args.jurisdictions && args.jurisdictions.length > 0) {
+          if (!args.jurisdictions.some(jurisdiction => asset.jurisdictions.includes(jurisdiction))) {
+            return false;
+          }
         }
-
-        // Yield filter
-        if (args.minYield && parseFloat(asset.expectedYield) < args.minYield) {
-          return false;
-        }
-
-        // Risk filter
-        if (args.maxRisk && asset.riskScore > args.maxRisk) {
-          return false;
-        }
-
-        // Liquidity filter
         if (args.minLiquidity && asset.liquidityScore < args.minLiquidity) {
           return false;
         }
-
-        // Investment amount filters
-        if (args.minInvestment && parseFloat(asset.minimumInvestment) < parseFloat(args.minInvestment)) {
-          return false;
-        }
-
-        // Jurisdiction filter
-        if (args.jurisdictions && !args.jurisdictions.some(j => asset.jurisdictions.includes(j))) {
-          return false;
-        }
-
         return true;
       });
+
+      console.log(`✅ [Centrifuge] Final filtered assets: ${filteredAssets.length}`);
 
       const response = {
         assets: filteredAssets,
