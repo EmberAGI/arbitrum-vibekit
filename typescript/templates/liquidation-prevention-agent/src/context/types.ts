@@ -27,8 +27,6 @@ export interface LiquidationPreventionContext {
   // Monitoring configuration
   monitoring: {
     intervalMs: number;
-    maxRetryAttempts: number;
-    gasPriceMultiplier: number;
   };
 
   // Token mapping loaded from Ember MCP (if available)

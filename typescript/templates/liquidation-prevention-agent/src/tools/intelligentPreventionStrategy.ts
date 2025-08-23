@@ -14,6 +14,7 @@ import { supplyCollateralTool } from './supplyCollateral.js';
 import { repayDebtTool } from './repayDebt.js';
 import { generateText, type LanguageModelV1 } from 'ai';
 import { createProviderSelector } from 'arbitrum-vibekit-core';
+import { TaskState, type Part } from '@google-a2a/types';
 import dotenv from 'dotenv';
 import { preventionResponseSchema } from '../schemas/prevention.js';
 
@@ -213,8 +214,12 @@ export const intelligentPreventionStrategyTool: VibkitToolDefinition<typeof Inte
           chainId: args.chainId,
         }, context);
 
-        if (result?.isError) {
-          throw new Error(`❌ ${label} failed: ${result.error.message}`);
+        // Check if the result is a failed Task
+        if (result && 'kind' in result && result.kind === 'task' && result.status?.state === TaskState.Failed) {
+          const firstPart = result.status?.message?.parts?.[0];
+          const errorMessage = (firstPart?.kind === 'text' ? firstPart.text : undefined) || 
+            result.metadata?.error?.message || 'Unknown error';
+          throw new Error(`❌ ${label} failed: ${errorMessage}`);
         }
 
         executionResults.push({ step: label, result });

@@ -3,9 +3,7 @@ FROM node:23-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends dumb-init git ca-certificates && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    git config --global url."https://".insteadOf git:// && \
-    git config --global url."https://github.com/".insteadOf git@github.com:
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -50,5 +48,5 @@ WORKDIR /app/templates/liquidation-prevention-agent/dist
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the Liquidation Prevention agent (path is relative to the WORKDIR set above)
+# Start the liquidation prevention agent (path is relative to the WORKDIR set above)
 CMD ["node", "index.js"] 

@@ -54,7 +54,11 @@ export const getUserPositionsTool: VibkitToolDefinition<typeof GetUserPositionsP
       let riskLevel = 'SAFE';
       let riskColor = '🟢';
 
-      if (healthFactor !== undefined) {
+      // Handle case where user has no borrowed amount (no liquidation risk)
+      if (totalBorrowed === 0) {
+        riskLevel = 'SAFE';
+        riskColor = '🟢';
+      } else if (healthFactor !== undefined && healthFactor > 0) {
         if (healthFactor <= context.custom.thresholds.critical) {
           riskLevel = 'CRITICAL';
           riskColor = '🔴';

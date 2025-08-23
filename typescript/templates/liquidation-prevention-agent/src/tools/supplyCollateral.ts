@@ -11,6 +11,7 @@ import type { LiquidationPreventionContext } from '../context/types.js';
 import { TransactionPlan, TransactionPlanSchema, SupplyResponseSchema } from 'ember-schemas';
 import { parseUserPreferences } from '../utils/userPreferences.js';
 import { resolveTokenInfo, isTokenSymbol } from '../utils/tokenResolver.js';
+import { withHooks, transactionSigningAfterHook, transactionValidationBeforeHook } from '../hooks/index.js';
 
 // Input schema for supplyCollateral tool (supports both tokenAddress and tokenSymbol)
 const SupplyCollateralParams = z.object({
@@ -28,8 +29,8 @@ const SupplyCollateralParams = z.object({
   }
 );
 
-// supplyCollateral tool implementation
-export const supplyCollateralTool: VibkitToolDefinition<typeof SupplyCollateralParams, any, LiquidationPreventionContext, any> = {
+// Base supplyCollateral tool implementation (transaction preparation only)
+const baseSupplyCollateralTool: VibkitToolDefinition<typeof SupplyCollateralParams, any, LiquidationPreventionContext, any> = {
   name: 'supply-collateral',
   description: 'Supply tokens as collateral to Aave to improve health factor and prevent liquidation. Supports multiple chains (Arbitrum, Ethereum, Optimism, Polygon, Base) and both token addresses and symbols (e.g., USDC, DAI, ETH).',
   parameters: SupplyCollateralParams,
@@ -121,30 +122,26 @@ export const supplyCollateralTool: VibkitToolDefinition<typeof SupplyCollateralP
       const { transactions } = supplyResp;
       console.log(`📋 Received ${transactions.length} transaction(s) to execute`);
 
-      // Execute the transactions using the user's wallet
-      try {
-        console.log('⚡ Executing supply transactions...');
-        const executionResult = await context.custom.executeTransaction('supply-collateral', transactions);
-
-        console.log(`✅ Successfully executed supply collateral transactions`);
-
-        // Return structured success response that frontend can display
-        const successMessage = `💰 Successfully supplied ${args.amount} ${tokenIdentifier} as collateral to improve health factor and prevent liquidation`;
-        
-        return createSuccessTask(
-          'supply-collateral',
-          undefined, // No artifacts needed
-          `🛡️ ${successMessage}. ${executionResult}`
-        );
-      } catch (executionError) {
-        console.error('❌ Transaction execution failed:', executionError);
-        throw new Error(`Failed to execute supply transaction: ${executionError instanceof Error ? executionError.message : 'Unknown execution error'}`);
-      }
+      // Return transaction data for withHooks execution
+      console.log(`📋 Prepared ${transactions.length} transaction(s) for secure execution via withHooks`);
+      
+      return {
+        transactions,
+        tokenIdentifier,
+        amount: args.amount,
+        operation: 'supply-collateral'
+      };
 
     } catch (error) {
       console.error('❌ supplyCollateral tool error:', error);
       throw error instanceof Error ? error : new Error(`Failed to supply collateral: ${error}`);
     }
   },
-}; 
+};
+
+// Export the tool wrapped with withHooks for secure transaction signing
+export const supplyCollateralTool = withHooks(baseSupplyCollateralTool, {
+  before: transactionValidationBeforeHook,
+  after: transactionSigningAfterHook,
+});
  

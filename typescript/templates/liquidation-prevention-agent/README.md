@@ -8,13 +8,15 @@ The Liquidation Prevention Agent continuously monitors user positions on Aave, t
 
 ## Features
 
-- **🛡️ Continuous Monitoring**: Real-time health factor tracking with configurable thresholds
+- **🛡️ Continuous Monitoring**: Real-time health factor tracking with user-defined target thresholds
 - **🎯 Intelligent Prevention Strategies**: 
   - **Supply Collateral**: Add more assets to improve health factor
   - **Repay Debt**: Reduce borrowed amounts to lower risk  
   - **Hybrid Approach**: Combined supply + repay for optimal results
-- **🧠 Intelligent Selection**: Wallet balance analysis for optimal strategy selection
-- **⚡ Autonomous Operation**: Local execution with private key management
+- **🧠 AI-Powered Strategy Selection**: LLM analyzes position and wallet to choose optimal prevention action
+- **⚡ Automatic Execution**: No warnings - directly executes transactions when health factor drops below target
+- **🔐 Secure Transaction Signing**: Uses Vibekit's `withHooks` pattern for safe blockchain operations
+- **🪙 Token Symbol Support**: Use token symbols (USDC, DAI, ETH) instead of addresses (supports symbols from MCP capabilities)
 - **🔗 MCP Integration**: Direct integration with Ember AI's MCP tools for Aave operations
 
 ## Architecture
@@ -37,6 +39,10 @@ liquidation-prevention-agent/
 │   │   ├── supplyCollateral.ts        # Supply collateral operations
 │   │   ├── repayDebt.ts               # Debt repayment operations
 │   │   └── intelligentPreventionStrategy.ts # AI-powered strategy selection
+│   ├── hooks/                         # Transaction security & validation
+│   │   ├── withHooks.ts              # Hook wrapper implementation
+│   │   ├── transactionSigningHook.ts # Secure signing hooks
+│   │   └── index.ts                  # Hook exports
 │   ├── context/
 │   │   ├── provider.ts                # Context & configuration provider
 │   │   └── types.ts                   # TypeScript interfaces
@@ -64,6 +70,24 @@ The agent uses **AI-powered strategy selection** through the `intelligentPrevent
    - **HYBRID**: Multi-step approach combining both supply and repay operations
 
 **Automatic Execution**: Once strategy is selected, the agent executes the corresponding tools (`supplyCollateral`, `repayDebt`) with real on-chain transactions.
+
+### Secure Transaction Pattern
+
+All blockchain transactions use Vibekit's `withHooks` pattern for enhanced security:
+
+```typescript
+// Tools are wrapped with security hooks
+export const supplyCollateralTool = withHooks(baseSupplyCollateralTool, {
+  before: transactionValidationBeforeHook,   // Validates inputs
+  after: transactionSigningAfterHook,        // Securely signs & executes
+});
+```
+
+This ensures:
+- **Input Validation**: All parameters checked before processing
+- **Secure Signing**: Transaction signing handled by dedicated hooks
+- **Error Handling**: Proper Task/Message error propagation
+- **Transaction Safety**: Secure execution with proper gas estimation
 
 ## Quick Start
 
@@ -201,11 +225,11 @@ curl -X POST http://localhost:3010/invoke \
 
 ## Configuration
 
-### Health Factor Thresholds
+### Health Factor Target
 
-- **Warning**: 1.5 (default) - Start monitoring more closely
-- **Danger**: 1.1 (default) - Prepare for intervention
-- **Critical**: 1.03 (default) - Execute prevention strategy immediately
+- **User-Defined Target**: Set your preferred health factor threshold (e.g., 1.5)
+- **Automatic Prevention**: Agent executes prevention when HF drops below your target
+- **No Warnings**: Direct action execution - no alerts or confirmations
 
 ### Strategy Selection
 
@@ -221,12 +245,12 @@ The agent automatically selects strategies based on:
 ### ✅ Production Ready Features
 
 - **🛡️ Continuous Health Factor Monitoring**: Real-time position tracking with configurable intervals
-- **⚡ Intelligent Prevention Strategies**: Automatic supply/repay/hybrid approaches based on wallet analysis
+- **⚡ Intelligent Prevention Strategies**: Automatic supply/repay/hybrid approaches based on AI analysis
 - **🎯 Natural Language Configuration**: Parse user preferences from conversational instructions
 - **🔗 MCP Integration**: Direct integration with Ember AI's blockchain tools
 - **🏗️ Transaction Execution**: Real on-chain operations with user's private key
-- **📊 Risk Assessment**: Multi-threshold alerting (warning/danger/critical)
-- **🔧 Configurable Parameters**: Customizable health factor thresholds and monitoring intervals
+- **🪙 Token Symbol Resolution**: Resolves token symbols via MCP capabilities (transaction execution on Arbitrum)
+- **🔐 Secure Hook-Based Execution**: Transaction validation and secure signing patterns
 
 ## Environment Variables
 
@@ -242,28 +266,28 @@ The agent automatically selects strategies based on:
 ### Optional Configuration
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
-| `HEALTH_FACTOR_WARNING` | Warning threshold | No | `1.5` |
-| `HEALTH_FACTOR_DANGER` | Danger threshold | No | `1.1` |
-| `HEALTH_FACTOR_CRITICAL` | Critical threshold | No | `1.03` |
+| `HEALTH_FACTOR_WARNING` | Display threshold for risk levels | No | `1.5` |
+| `HEALTH_FACTOR_DANGER` | Display threshold for risk levels | No | `1.1` |
+| `HEALTH_FACTOR_CRITICAL` | Display threshold for risk levels | No | `1.03` |
 | `MONITORING_INTERVAL` | Check interval (ms) | No | `900000` |
-| `MAX_RETRY_ATTEMPTS` | Maximum retry attempts | No | `3` |
-| `GAS_PRICE_MULTIPLIER` | Gas price multiplier | No | `1.5` |
-| `LLM_MODEL` | AI model to use | No | `deepseek/deepseek-chat-v3-0324:free` |
+| `AI_PROVIDER` | AI provider selection | No | `openrouter` |
+| `AI_MODEL` | AI model to use | No | `x-ai/grok-3-mini` |
+| `LLM_MODEL` | Legacy AI model setting | No | `deepseek/deepseek-chat-v3-0324:free` |
 | `PORT` | Agent server port | No | `3010` |
-| `DEBUG_MODE` | Enable debug logging | No | `false` |
+
 
 ### User Preference Examples
 The agent can parse user preferences from natural language instructions:
 
 ```bash
-# Health factor preferences
-"Monitor with health factor 1.3, warning at 1.5"
+# Health factor target preferences
+"Monitor my position and prevent liquidation if health factor drops below 1.3"
 
 # Monitoring intervals
 "Check every 15 minutes, continuous monitoring"
 
 # Combined preferences
-"Prevent liquidation with health factor 1.2, monitor every 15 minutes"
+"Monitor my health factor every 10 minutes and prevent liquidation if it drops below 1.2"
 ```
 
 See `.env.example` for complete configuration options.

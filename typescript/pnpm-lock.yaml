@@ -1368,6 +1368,9 @@ importers:
       dotenv:
         specifier: 'catalog:'
         version: 16.6.1
+      ember-api:
+        specifier: workspace:^
+        version: link:../../lib/ember-api
       ember-schemas:
         specifier: workspace:*
         version: link:../../lib/ember-schemas

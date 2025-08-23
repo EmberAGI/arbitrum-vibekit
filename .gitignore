@@ -83,3 +83,5 @@ logs/
 /playwright-report/
 /blob-report/
 /playwright/*
+node-compiler-cache/
+**/node-compiler-cache/

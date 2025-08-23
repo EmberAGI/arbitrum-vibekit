@@ -11,6 +11,7 @@ import type { LiquidationPreventionContext } from '../context/types.js';
 import { TransactionPlan, TransactionPlanSchema, RepayResponseSchema } from 'ember-schemas';
 import { parseUserPreferences } from '../utils/userPreferences.js';
 import { resolveTokenInfo, isTokenSymbol } from '../utils/tokenResolver.js';
+import { withHooks, transactionSigningAfterHook, transactionValidationBeforeHook } from '../hooks/index.js';
 
 // Input schema for repayDebt tool (supports both tokenAddress and tokenSymbol)
 const RepayDebtParams = z.object({
@@ -29,8 +30,8 @@ const RepayDebtParams = z.object({
   }
 );
 
-// repayDebt tool implementation
-export const repayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, LiquidationPreventionContext, any> = {
+// Base repayDebt tool implementation (transaction preparation only)
+const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, LiquidationPreventionContext, any> = {
   name: 'repay-debt',
   description: 'Repay debt on Aave to improve health factor and prevent liquidation. Supports multiple chains (Arbitrum, Ethereum, Optimism, Polygon, Base) and both token addresses and symbols (e.g., USDC, DAI, ETH).',
   parameters: RepayDebtParams,
@@ -112,30 +113,26 @@ export const repayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Li
       const { transactions } = repayResp;
       console.log(`📋 Received ${transactions.length} transaction(s) to execute`);
 
-      // Execute the transactions using the user's wallet
-      try {
-        console.log('⚡ Executing repay transactions...');
-        const executionResult = await context.custom.executeTransaction('repay-debt', transactions);
-
-        console.log(`✅ Successfully executed repay debt transactions`);
-
-        // Return structured success response that frontend can display
-        const successMessage = `💸 Successfully repaid ${args.amount} ${tokenIdentifier} to improve health factor and prevent liquidation`;
-        
-        return createSuccessTask(
-          'repay-debt',
-          undefined, // No artifacts needed
-          `🛡️ ${successMessage}. ${executionResult}`
-        );
-      } catch (executionError) {
-        console.error('❌ Transaction execution failed:', executionError);
-        throw new Error(`Failed to execute repay transaction: ${executionError instanceof Error ? executionError.message : 'Unknown execution error'}`);
-      }
+      // Return transaction data for withHooks execution
+      console.log(`📋 Prepared ${transactions.length} transaction(s) for secure execution via withHooks`);
+      
+      return {
+        transactions,
+        tokenIdentifier,
+        amount: args.amount,
+        operation: 'repay-debt'
+      };
 
     } catch (error) {
       console.error('❌ repayDebt tool error:', error);
       throw error instanceof Error ? error : new Error(`Failed to repay debt: ${error}`);
     }
   },
-}; 
+};
+
+// Export the tool wrapped with withHooks for secure transaction signing
+export const repayDebtTool = withHooks(baseRepayDebtTool, {
+  before: transactionValidationBeforeHook,
+  after: transactionSigningAfterHook,
+}); 
  
