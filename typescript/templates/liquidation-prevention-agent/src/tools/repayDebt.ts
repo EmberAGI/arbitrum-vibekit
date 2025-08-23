@@ -12,6 +12,7 @@ import { TransactionPlan, TransactionPlanSchema, RepayResponseSchema } from 'emb
 import { parseUserPreferences } from '../utils/userPreferences.js';
 import { resolveTokenInfo, isTokenSymbol } from '../utils/tokenResolver.js';
 import { withHooks, transactionSigningAfterHook, transactionValidationBeforeHook } from '../hooks/index.js';
+import { roundToTokenDecimals, isValidTokenPrecision } from '../utils/decimalPrecision.js';
 
 // Input schema for repayDebt tool (supports both tokenAddress and tokenSymbol)
 const RepayDebtParams = z.object({
@@ -74,6 +75,31 @@ const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Liqui
       
       const tokenIdentifier = args.tokenSymbol || finalTokenAddress;
       console.log(`💸 Repaying debt: ${args.amount} of ${tokenIdentifier} for user ${args.userAddress}`);
+      
+      // Get token decimals from resolved token info for precision handling
+      let tokenDecimals = 18; // Default to 18 decimals
+      if (args.tokenSymbol && context.custom.tokenMap) {
+        try {
+          const tokenInfo = resolveTokenInfo(
+            context.custom.tokenMap,
+            args.tokenSymbol,
+            args.chainId
+          );
+          tokenDecimals = tokenInfo.decimals;
+          console.log(`🔢 Token ${args.tokenSymbol} has ${tokenDecimals} decimals`);
+        } catch (error) {
+          console.warn(`⚠️ Could not get decimals for ${args.tokenSymbol}, using default 18`);
+        }
+      }
+      
+      // Round amount to appropriate decimal precision to prevent ethers.js errors
+      let processedAmount = args.amount;
+      if (args.amount !== "max" && !isValidTokenPrecision(args.amount, tokenDecimals)) {
+        const originalAmount = args.amount;
+        processedAmount = roundToTokenDecimals(args.amount, tokenDecimals);
+        console.log(`🔄 Rounded amount from ${originalAmount} to ${processedAmount} (${tokenDecimals} decimals)`);
+      }
+      
       if (userPrefs.targetHealthFactor) {
         console.log(`🎯 Target Health Factor: ${userPrefs.targetHealthFactor}`);
       }
@@ -93,7 +119,7 @@ const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Liqui
             chainId: finalChainId,
             address: finalTokenAddress,
           },
-          amount: args.amount,
+          amount: processedAmount, // Use the precision-adjusted amount
           walletAddress: args.userAddress,
         },
       });
@@ -119,7 +145,7 @@ const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Liqui
       return {
         transactions,
         tokenIdentifier,
-        amount: args.amount,
+        amount: processedAmount, // Return the processed amount
         operation: 'repay-debt'
       };
 

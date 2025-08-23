@@ -115,6 +115,11 @@ async function triggerAutomaticPrevention(userAddress: string, currentHF: number
   }
 
   try {
+
+     // Apply safety buffer: add +0.03 to user's target for extra protection
+    const safetyBuffer = 0.03;
+    const effectiveTargetHF = targetHF + safetyBuffer;
+
     console.log(`⚡ EXECUTING AUTOMATIC LIQUIDATION PREVENTION for ${userAddress}`);
     console.log(`📊 Current HF: ${currentHF.toFixed(4)}, Target HF: ${targetHF}`);
 
@@ -125,8 +130,8 @@ async function triggerAutomaticPrevention(userAddress: string, currentHF: number
     const result = await intelligentPreventionStrategyTool.execute(
       {
         userAddress,
-        targetHealthFactor: targetHF,
-        instruction: `Automatic prevention triggered - target health factor: ${targetHF}`,
+        targetHealthFactor: effectiveTargetHF,
+        instruction: `Automatic prevention triggered - target health factor: ${effectiveTargetHF}`,
         chainId: '42161', // Default to Arbitrum
       },
       {
