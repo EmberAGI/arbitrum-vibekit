@@ -109,6 +109,31 @@ After setting up your wallet, you can interact with the lending and swapping age
   <img src="../../../img/frontend.png" width="700px" alt="frontend"/>
 </p>
 
+## Available Agents
+
+### Documentation RAG Agent (ember-docs)
+
+The Documentation RAG Agent enables you to index and query documentation websites using AI. This agent demonstrates retrieval-augmented generation (RAG) capabilities.
+
+**Features:**
+- Index documentation from any website (React, TypeScript, etc.)
+- Query indexed docs using natural language
+- Get answers with source citations
+- Manage your documentation index
+
+**Getting Started:**
+1. Start all services including the doc-rag-agent:
+   ```bash
+   docker compose up doc-rag-agent web db
+   ```
+2. Select "Documentation RAG" from the agent dropdown
+3. Try the suggested actions like "Index React docs from react.dev"
+4. Ask questions like "How do React hooks work?"
+
+**Requirements:**
+- `OPENAI_API_KEY` for embeddings (required)
+- `OPENROUTER_API_KEY` for LLM capabilities (required)
+
 ## Agent Configuration
 
 The frontend's connection to different AI agents is managed by the [agents-config.ts](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/agents-config.ts) file and the [docker compose](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/compose.yml) file. These files are pivotal for how the web application identifies and interacts with the available AI agents.

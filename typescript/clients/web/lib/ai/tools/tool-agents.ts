@@ -1,6 +1,7 @@
 import { tool, type CoreTool } from "ai";
 import { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { cookies } from "next/headers";
 import { DEFAULT_SERVER_URLS } from "../../../agents-config";
@@ -68,16 +69,27 @@ async function getTool(serverUrl: string) {
     { capabilities: { tools: {}, resources: {}, prompts: {} } }
   );
 
-  // Create SSE transport
+  // Create transport with fallback strategy
   let transport = null;
   if (serverUrl) {
-    transport = new SSEClientTransport(new URL(serverUrl));
-  }
-
-  // Connect to the server
-  if (transport) {
-    await mcpClient.connect(transport);
-    console.log("MCP client initialized successfully!");
+    try {
+      // Use SSE transport for better handling of long-running operations
+      transport = new SSEClientTransport(new URL(serverUrl));
+      await mcpClient.connect(transport);
+      console.log("MCP client initialized with SSE transport!");
+    } catch (sseError) {
+      console.log("SSE transport failed, trying StreamableHTTP:", sseError);
+      try {
+        // Fallback to StreamableHTTP transport 
+        const httpUrl = serverUrl.replace('/sse', '/messages');
+        transport = new StreamableHTTPClientTransport(new URL(httpUrl));
+        await mcpClient.connect(transport);
+        console.log("MCP client initialized with StreamableHTTP transport!");
+      } catch (httpError) {
+        console.error("Both SSE and StreamableHTTP transports failed:", { sseError, httpError });
+        throw new Error("Failed to initialize MCP client with any transport");
+      }
+    }
   }
 
   // Try to discover tools

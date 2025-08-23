@@ -1,9 +1,9 @@
 Containerfile
 Dockerfile
 .containerignore
-.dockerignore
-node_modules
-README.md
+**/node_modules
+**/*.log
+**/.DS_Store
 .next
 .git
 .gitignore
