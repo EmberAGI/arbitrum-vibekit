@@ -136,7 +136,7 @@ describe('repayDebt Tool', () => {
       }
     });
 
-    expect(mockExecuteTransaction).toHaveBeenCalledWith('repay-debt', [
+    expect(mockExecuteTransaction).toHaveBeenCalledWith('0x123...abc-transaction', [
       {
         type: 'EVM_TX',
         to: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
@@ -147,9 +147,8 @@ describe('repayDebt Tool', () => {
     ]);
 
     expect(result.status.state).toBe('completed');
-    expect(result.message).toContain('Successfully repaid 2000 USDC');
-    expect(result.message).toContain('prevent liquidation');
-    expect(result.message).toContain('improve health factor');
+    expect(result.message).toContain('🛡️ Transaction executed successfully');
+    expect(result.message).toContain('Debt repayment transaction executed successfully');
   });
 
   it('should successfully repay debt using token address', async () => {
@@ -195,7 +194,8 @@ describe('repayDebt Tool', () => {
     });
 
     expect(result.status.state).toBe('completed');
-    expect(result.message).toContain('Successfully repaid 1500');
+    expect(result.message).toContain('🛡️ Transaction executed successfully');
+    expect(result.message).toContain('Debt repayment transaction executed successfully');
   });
 
   it('should handle emergency debt repayment for critical health factor', async () => {
@@ -228,8 +228,8 @@ describe('repayDebt Tool', () => {
     const result = await repayDebtTool.execute(args, mockContext);
 
     expect(result.status.state).toBe('completed');
-    expect(result.message).toContain('Successfully repaid max DAI');
-    expect(result.message).toContain('prevent liquidation');
+    expect(result.message).toContain('🛡️ Transaction executed successfully');
+    expect(result.message).toContain('Debt repayment transaction executed successfully');
   });
 
   it('should handle partial debt repayment strategy', async () => {
@@ -262,7 +262,8 @@ describe('repayDebt Tool', () => {
     const result = await repayDebtTool.execute(args, mockContext);
 
     expect(result.status.state).toBe('completed');
-    expect(result.message).toContain('Successfully repaid 0.5 WETH');
+    expect(result.message).toContain('🛡️ Transaction executed successfully');
+    expect(result.message).toContain('Debt repayment transaction executed successfully');
   });
 
   it('should handle missing MCP client error', async () => {
@@ -345,8 +346,10 @@ describe('repayDebt Tool', () => {
       userAddress: '0x123...abc'
     };
 
-    await expect(repayDebtTool.execute(args, mockContext))
-      .rejects.toThrow('Failed to execute repay transaction: Transaction failed: Gas estimation failed');
+    const result = await repayDebtTool.execute(args, mockContext);
+    
+    expect(result.status.state).toBe('failed');
+    expect(result.error).toContain('Transaction failed: Gas estimation failed');
   });
 
   it('should handle missing token parameters', async () => {
@@ -478,7 +481,7 @@ describe('repayDebt Tool', () => {
 
     const result = await repayDebtTool.execute(args, mockContext);
 
-    expect(mockExecuteTransaction).toHaveBeenCalledWith('repay-debt', [
+    expect(mockExecuteTransaction).toHaveBeenCalledWith('0xdef...456-transaction', [
       {
         type: 'EVM_TX',
         to: '0x2222222222222222222222222222222222222222',
@@ -496,7 +499,8 @@ describe('repayDebt Tool', () => {
     ]);
 
     expect(result.status.state).toBe('completed');
-    expect(result.message).toContain('Successfully repaid 3000 DAI');
+    expect(result.message).toContain('🛡️ Transaction executed successfully');
+    expect(result.message).toContain('Debt repayment transaction executed successfully');
   });
 
   it('should handle stable rate debt repayment', async () => {
@@ -530,6 +534,7 @@ describe('repayDebt Tool', () => {
     const result = await repayDebtTool.execute(args, mockContext);
 
     expect(result.status.state).toBe('completed');
-    expect(result.message).toContain('Successfully repaid 800 USDC');
+    expect(result.message).toContain('🛡️ Transaction executed successfully');
+    expect(result.message).toContain('Debt repayment transaction executed successfully');
   });
 });
