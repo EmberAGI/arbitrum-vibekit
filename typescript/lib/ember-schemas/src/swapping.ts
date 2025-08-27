@@ -1,112 +1,71 @@
 import { z } from 'zod';
-
-import { TokenIdentifierSchema } from './common.js';
+import { OrderTypeSchema, TransactionPlanStatusSchema } from './common.js';
 import {
+  TokenIdentifierSchema,
+  FeeBreakdownSchema,
   TransactionPlanSchema,
-  AskEncyclopediaSchema,
-  type AskEncyclopediaArgs
+  TransactionPlanErrorSchema,
 } from './common.js';
 
-//
-// Swapping Tool Schemas
-//
-
-export const SwapTokensSchema = z.object({
-  fromToken: z
-    .string()
-    .describe('The symbol or address of the token to swap from.'),
-  toToken: z
-    .string()
-    .describe('The symbol or address of the token to swap to.'),
-  amount: z
-    .string()
-    .describe('The human-readable amount of the token to swap from.'),
-  fromChain: z.string().optional().describe('Optional chain name/ID for the source token.'),
-  toChain: z.string().optional().describe('Optional chain name/ID for the destination token.'),
-});
-export type SwapTokensArgs = z.infer<typeof SwapTokensSchema>;
-
-// Re-export AskEncyclopediaSchema for users of this module
-export { AskEncyclopediaSchema };
-export type { AskEncyclopediaArgs };
-
-//
-// Swapping Capability Schemas
-//
-
-export const McpCapabilityTokenSchema = z.object({
-  symbol: z.string().optional(),
-  name: z.string().optional(),
-  decimals: z.number().optional(),
-  tokenUid: TokenIdentifierSchema.optional(),
-});
-export type McpCapabilityToken = z.infer<typeof McpCapabilityTokenSchema>;
-
-export const McpCapabilitySchema = z.object({
-  protocol: z.string().optional(),
-  capabilityId: z.string().optional(),
-  supportedTokens: z.array(McpCapabilityTokenSchema).optional(),
-});
-export type McpCapability = z.infer<typeof McpCapabilitySchema>;
-
-export const McpSingleCapabilityEntrySchema = z.object({
-  swapCapability: McpCapabilitySchema.optional(),
-});
-export type McpSingleCapabilityEntry = z.infer<typeof McpSingleCapabilityEntrySchema>;
-
-export const McpGetCapabilitiesResponseSchema = z.object({
-  capabilities: z.array(McpSingleCapabilityEntrySchema),
-});
-export type McpGetCapabilitiesResponse = z.infer<typeof McpGetCapabilitiesResponseSchema>;
-
-//
-// Swapping Transaction Schemas
-//
-
-// From swapping-agent-no-wallet
-export const TokenDetailSchema = z.object({
-  address: z.string(),
-  chainId: z.string(),
-});
-export type TokenDetail = z.infer<typeof TokenDetailSchema>;
-
-export const EstimationSchema = z.object({
+export const SwapEstimationSchema = z.object({
+  baseTokenDelta: z.string(),
+  quoteTokenDelta: z.string(),
   effectivePrice: z.string(),
   timeEstimate: z.string(),
   expiration: z.string(),
-  baseTokenDelta: z.string(),
-  quoteTokenDelta: z.string(),
 });
-export type Estimation = z.infer<typeof EstimationSchema>;
+export type SwapEstimation = z.infer<typeof SwapEstimationSchema>;
 
-export const ProviderTrackingSchema = z.object({
-  requestId: z.string().optional(),
-  providerName: z.string().optional(),
+export const ProviderTrackingInfoSchema = z.object({
+  requestId: z.string(),
+  providerName: z.string(),
   explorerUrl: z.string(),
 });
-export type ProviderTracking = z.infer<typeof ProviderTrackingSchema>;
+export type ProviderTrackingInfo = z.infer<typeof ProviderTrackingInfoSchema>;
 
-export const SwapResponseSchema = z.object({
-  baseToken: TokenDetailSchema,
-  quoteToken: TokenDetailSchema,
-  estimation: EstimationSchema,
-  providerTracking: ProviderTrackingSchema,
+export const SwapTokensRequestSchema = z.object({
+  orderType: OrderTypeSchema,
+  baseToken: TokenIdentifierSchema,
+  quoteToken: TokenIdentifierSchema,
+  amount: z.string(),
+  limitPrice: z.string().optional(),
+  slippageTolerance: z.string().optional(),
+  expiration: z.string().optional(),
+  recipient: z.string(),
+});
+export type SwapTokensRequest = z.infer<typeof SwapTokensRequestSchema>;
+
+export const SwapTokensResponseSchema = z.object({
+  status: TransactionPlanStatusSchema,
+  orderType: OrderTypeSchema,
+  baseToken: TokenIdentifierSchema,
+  quoteToken: TokenIdentifierSchema,
+  feeBreakdown: FeeBreakdownSchema.optional(),
   transactions: z.array(TransactionPlanSchema),
+  estimation: SwapEstimationSchema.optional(),
+  providerTracking: ProviderTrackingInfoSchema.optional(),
+  error: TransactionPlanErrorSchema.optional(),
+  chainId: z.string(),
 });
-export type SwapResponse = z.infer<typeof SwapResponseSchema>;
+export type SwapTokensResponse = z.infer<typeof SwapTokensResponseSchema>;
 
-export const SwapPreviewSchema = z.object({
-  fromTokenSymbol: z.string(),
-  fromTokenAddress: z.string(),
-  fromTokenAmount: z.string(),
-  fromChain: z.string(),
-  toTokenSymbol: z.string(),
-  toTokenAddress: z.string(),
-  toTokenAmount: z.string(),
-  toChain: z.string(),
-  exchangeRate: z.string(),
-  executionTime: z.string(),
-  expiration: z.string(),
-  explorerUrl: z.string(),
+export const GetProviderTrackingStatusRequestSchema = z.object({
+  requestId: z.string(),
+  transactionId: z.string(),
 });
-export type SwapPreview = z.infer<typeof SwapPreviewSchema>; 
+export type GetProviderTrackingStatusRequest = z.infer<
+  typeof GetProviderTrackingStatusRequestSchema
+>;
+
+export const GetProviderTrackingStatusResponseSchema = z.object({
+  trackingStatus: z.object({
+    requestId: z.string(),
+    transactionId: z.string(),
+    providerName: z.string(),
+    explorerUrl: z.string(),
+    status: z.string(),
+  }),
+});
+export type GetProviderTrackingStatusResponse = z.infer<
+  typeof GetProviderTrackingStatusResponseSchema
+>;
