@@ -9,9 +9,9 @@ A unified multi-skill DeFi agent supporting swapping, lending, liquidity provisi
 ### Skills
 
 - **Token Swapping** - Swap tokens via Camelot DEX
-- **Lending Operations** - Supply, borrow, repay, withdraw via Aave
-- **Liquidity Provision** - Add/remove liquidity on Camelot V3
-- **Pendle Protocol** - PT/YT trading and market operations
+- **Lending Operations** - Supply, borrow, repay, withdraw via Aave (coming soon)
+- **Liquidity Provision** - Add/remove liquidity on Camelot V3 (coming soon)
+- **Pendle Protocol** - PT/YT trading and market operations (coming soon)
 - **Documentation Expert** - Protocol-specific documentation and Q&A
 
 ### Architecture
