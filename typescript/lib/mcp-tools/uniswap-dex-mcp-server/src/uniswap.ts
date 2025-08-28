@@ -403,5 +403,177 @@ export function buildPermit2TypedData(params: {
     return { domain, types, primaryType: 'PermitSingle', message }
 }
 
+// ---------------------
+// MEV Protection: Risk Score & Private Tx
+// ---------------------
+
+export function computeMevRiskScore(params: {
+    amountIn: bigint
+    amountOut: bigint
+    tokenInDecimals: number
+    tokenOutDecimals: number
+    poolLiquidity: bigint
+    recentVolatility: number
+    baseFee: bigint
+}) {
+    // Simplified risk score: size relative to liquidity + volatility multiplier
+    const amountInScaled = Number(params.amountIn) / 10 ** params.tokenInDecimals
+    const liquidityScaled = Number(params.poolLiquidity) / 10 ** params.tokenOutDecimals
+    const sizeRatio = amountInScaled / liquidityScaled
+
+    // Risk factors: size, volatility, gas cost
+    const sizeRisk = Math.min(100, sizeRatio * 1000) // Cap at 100
+    const volRisk = params.recentVolatility * 10 // Scale volatility
+    const gasRisk = Number(params.baseFee) / 10 ** 9 // Base fee in gwei
+
+    const totalRisk = Math.min(100, sizeRisk + volRisk + gasRisk)
+    const riskLevel = totalRisk > 70 ? 'high' : totalRisk > 40 ? 'medium' : 'low'
+
+    return { riskScore: Math.round(totalRisk), riskLevel, factors: { sizeRisk, volRisk, gasRisk } }
+}
+
+export function buildPrivateTxPayload(params: {
+    chainId: EvmChainId
+    to: Address
+    data: string
+    value?: string
+    gasLimit?: bigint
+    maxFeePerGas?: bigint
+    maxPriorityFeePerGas?: bigint
+}) {
+    // Simplified Flashbots-style private tx payload
+    // In practice, you'd use their API or Protect RPC
+    const tx = {
+        type: '0x2', // EIP-1559
+        chainId: params.chainId,
+        to: params.to,
+        data: params.data,
+        value: params.value ?? '0x0',
+        gasLimit: params.gasLimit?.toString() ?? '0x30d40', // 200k gas
+        maxFeePerGas: params.maxFeePerGas?.toString() ?? '0x2540be400', // 10 gwei
+        maxPriorityFeePerGas: params.maxPriorityFeePerGas?.toString() ?? '0x2540be400' // 10 gwei
+    }
+    return { tx, note: 'Use Flashbots Relay API or Protect RPC to submit privately' }
+}
+
+// ---------------------
+// Smart Fee-Tier Selection
+// ---------------------
+
+export async function recommendV3FeeTier(chainId: EvmChainId, params: {
+    tokenIn: Address
+    tokenOut: Address
+    amountIn: bigint
+    poolAddresses?: { [fee: number]: Address } // Optional pre-known pools
+    lookbackSeconds?: number
+}) {
+    const client = getPublicClient(chainId)
+    const lookback = params.lookbackSeconds ?? 300 // 5 min default
+
+    // Check each standard fee tier (500, 3000, 10000)
+    const feeTiers = [500, 3000, 10000]
+    const recommendations: Array<{
+        fee: number
+        pool: Address | null
+        liquidity: string
+        realizedVol: string
+        score: number
+    }> = []
+
+    for (const fee of feeTiers) {
+        try {
+            // Derive pool address (simplified; in practice use Uniswap SDK)
+            const pool = params.poolAddresses?.[fee] ?? `0x${'0'.repeat(40)}` as Address // Placeholder
+
+            let liquidity = '0'
+            let realizedVol = '0'
+
+            if (pool !== `0x${'0'.repeat(40)}`) {
+                const poolState = await getV3PoolState(chainId, pool)
+                liquidity = poolState.liquidity
+
+                // Get recent TWAP to estimate volatility
+                const twap = await getV3TwapTick(chainId, pool, lookback)
+                realizedVol = Math.abs(twap.averageTick).toString() // Simplified vol proxy
+            }
+
+            // Score: prefer liquidity, penalize volatility
+            const liqScore = Math.min(50, Number(liquidity) / 10 ** 18) // Cap at 50
+            const volPenalty = Math.min(30, Number(realizedVol) / 10) // Cap at 30
+            const score = liqScore - volPenalty
+
+            recommendations.push({
+                fee,
+                pool,
+                liquidity,
+                realizedVol,
+                score: Math.max(0, score)
+            })
+        } catch (err) {
+            // Pool doesn't exist or failed to query
+            recommendations.push({
+                fee,
+                pool: null,
+                liquidity: '0',
+                realizedVol: '0',
+                score: 0
+            })
+        }
+    }
+
+    // Sort by score descending
+    recommendations.sort((a, b) => b.score - a.score)
+    return { recommendations, recommendedFee: recommendations[0]?.fee ?? 3000 }
+}
+
+// ---------------------
+// TWAP Execution Planner
+// ---------------------
+
+export function planTwapExecution(params: {
+    totalAmountIn: bigint
+    totalAmountOutMin: bigint
+    deadline: bigint
+    sliceCount: number
+    intervalSeconds: number
+    slippageBps: number
+}) {
+    if (params.sliceCount < 1 || params.intervalSeconds < 1) {
+        throw new Error('Invalid slice parameters')
+    }
+
+    const slices: Array<{
+        index: number
+        amountIn: string
+        amountOutMin: string
+        deadline: string
+        delayFromStart: number
+    }> = []
+
+    const amountInPerSlice = params.totalAmountIn / BigInt(params.sliceCount)
+    const amountOutMinPerSlice = params.totalAmountOutMin / BigInt(params.sliceCount)
+    const startTime = Math.floor(Date.now() / 1000)
+
+    for (let i = 0; i < params.sliceCount; i++) {
+        const sliceDeadline = params.deadline - BigInt((params.sliceCount - 1 - i) * params.intervalSeconds)
+
+        slices.push({
+            index: i,
+            amountIn: amountInPerSlice.toString(),
+            amountOutMin: amountOutMinPerSlice.toString(),
+            deadline: sliceDeadline.toString(),
+            delayFromStart: i * params.intervalSeconds
+        })
+    }
+
+    return {
+        totalSlices: params.sliceCount,
+        totalDuration: (params.sliceCount - 1) * params.intervalSeconds,
+        startTime,
+        slices,
+        note: 'Execute slices sequentially with delays; monitor for MEV and slippage'
+    }
+}
+
 
 

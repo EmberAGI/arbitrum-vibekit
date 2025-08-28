@@ -142,6 +142,60 @@ If V2 reverts, the tool retries with V1 and returns `{ via: "v1-fallback" }`.
 }
 ```
 
+### compute_mev_risk_score
+```json
+{
+  "amountIn": "1000000000000000000",
+  "amountOut": "590000000000000000",
+  "tokenInDecimals": 18,
+  "tokenOutDecimals": 18,
+  "poolLiquidity": "10000000000000000000",
+  "recentVolatility": 5,
+  "baseFee": "10000000000"
+}
+```
+
+### build_private_tx_payload
+```json
+{
+  "chainId": 42161,
+  "to": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+  "data": "0x...",
+  "value": "0x0",
+  "gasLimit": "200000",
+  "maxFeePerGas": "10000000000",
+  "maxPriorityFeePerGas": "2000000000"
+}
+```
+
+### recommend_v3_fee_tier
+```json
+{
+  "chainId": 42161,
+  "tokenIn": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+  "tokenOut": "0x82af49447d8a07e3bd95bd0d56f35241523fbab1",
+  "amountIn": "1000000",
+  "poolAddresses": {
+    "500": "<POOL_500_ADDRESS>",
+    "3000": "<POOL_3000_ADDRESS>",
+    "10000": "<POOL_10000_ADDRESS>"
+  },
+  "lookbackSeconds": 300
+}
+```
+
+### plan_twap_execution
+```json
+{
+  "totalAmountIn": "10000000000000000000",
+  "totalAmountOutMin": "5900000000000000000",
+  "deadline": "1735689600",
+  "sliceCount": 10,
+  "intervalSeconds": 60,
+  "slippageBps": 50
+}
+```
+
 ### compute_min_amount_out
 ```json
 { "amountOut": "1234500000000000000", "slippageBps": 50 }

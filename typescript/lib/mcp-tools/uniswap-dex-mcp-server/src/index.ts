@@ -21,6 +21,10 @@ import {
     computeSafeSlippageBps,
     buildEip2612TypedData,
     buildPermit2TypedData,
+    computeMevRiskScore,
+    buildPrivateTxPayload,
+    recommendV3FeeTier,
+    planTwapExecution,
     type EvmChainId
 } from './uniswap.js'
 
@@ -322,6 +326,115 @@ function createServer() {
                 sqrtPriceLimitX96: sqrtPriceLimitX96 ? BigInt(sqrtPriceLimitX96) : undefined,
                 useV2,
                 recipient: recipient as any
+            })
+            return { content: [{ type: 'text', text: JSON.stringify(res) }] }
+        }
+    )
+
+    // MEV protection
+    const MevRiskSchema = z.object({
+        amountIn: z.string(),
+        amountOut: z.string(),
+        tokenInDecimals: z.number().int(),
+        tokenOutDecimals: z.number().int(),
+        poolLiquidity: z.string(),
+        recentVolatility: z.number(),
+        baseFee: z.string()
+    })
+    server.tool(
+        'compute_mev_risk_score',
+        'Compute MEV risk score based on trade size, volatility, and gas costs.',
+        MevRiskSchema.shape,
+        async ({ amountIn, amountOut, tokenInDecimals, tokenOutDecimals, poolLiquidity, recentVolatility, baseFee }) => {
+            const res = computeMevRiskScore({
+                amountIn: BigInt(amountIn),
+                amountOut: BigInt(amountOut),
+                tokenInDecimals,
+                tokenOutDecimals,
+                poolLiquidity: BigInt(poolLiquidity),
+                recentVolatility,
+                baseFee: BigInt(baseFee)
+            })
+            return { content: [{ type: 'text', text: JSON.stringify(res) }] }
+        }
+    )
+
+    const PrivateTxSchema = z.object({
+        chainId: z.number().int(),
+        to: z.string(),
+        data: z.string(),
+        value: z.string().optional(),
+        gasLimit: z.string().optional(),
+        maxFeePerGas: z.string().optional(),
+        maxPriorityFeePerGas: z.string().optional()
+    })
+    server.tool(
+        'build_private_tx_payload',
+        'Build private transaction payload for Flashbots/Protect RPC to avoid MEV.',
+        PrivateTxSchema.shape,
+        async ({ chainId, to, data, value, gasLimit, maxFeePerGas, maxPriorityFeePerGas }) => {
+            const res = buildPrivateTxPayload({
+                chainId: chainId as EvmChainId,
+                to: to as any,
+                data,
+                value,
+                gasLimit: gasLimit ? BigInt(gasLimit) : undefined,
+                maxFeePerGas: maxFeePerGas ? BigInt(maxFeePerGas) : undefined,
+                maxPriorityFeePerGas: maxPriorityFeePerGas ? BigInt(maxPriorityFeePerGas) : undefined
+            })
+            return { content: [{ type: 'text', text: JSON.stringify(res) }] }
+        }
+    )
+
+    // Smart fee-tier recommendation
+    const FeeTierSchema = z.object({
+        chainId: z.number().int(),
+        tokenIn: z.string(),
+        tokenOut: z.string(),
+        amountIn: z.string(),
+        poolAddresses: z.record(z.number(), z.string()).optional(),
+        lookbackSeconds: z.number().int().positive().optional()
+    })
+    server.tool(
+        'recommend_v3_fee_tier',
+        'Recommend optimal Uniswap V3 fee tier based on liquidity and volatility.',
+        FeeTierSchema.shape,
+        async ({ chainId, tokenIn, tokenOut, amountIn, poolAddresses, lookbackSeconds }) => {
+            const poolAddrs = poolAddresses ? Object.fromEntries(
+                Object.entries(poolAddresses).map(([fee, addr]) => [Number(fee), addr as any])
+            ) : undefined
+            const res = await recommendV3FeeTier(chainId as EvmChainId, {
+                tokenIn: tokenIn as any,
+                tokenOut: tokenOut as any,
+                amountIn: BigInt(amountIn),
+                poolAddresses: poolAddrs,
+                lookbackSeconds
+            })
+            return { content: [{ type: 'text', text: JSON.stringify(res) }] }
+        }
+    )
+
+    // TWAP planner
+    const TwapPlanSchema = z.object({
+        totalAmountIn: z.string(),
+        totalAmountOutMin: z.string(),
+        deadline: z.string(),
+        sliceCount: z.number().int().positive(),
+        intervalSeconds: z.number().int().positive(),
+        slippageBps: z.number().int()
+    })
+    server.tool(
+        'plan_twap_execution',
+        'Plan TWAP (Time-Weighted Average Price) execution schedule for large orders.',
+        TwapPlanSchema.shape,
+        async ({ totalAmountIn, totalAmountOutMin, deadline, sliceCount, intervalSeconds, slippageBps }) => {
+            const res = planTwapExecution({
+                totalAmountIn: BigInt(totalAmountIn),
+                totalAmountOutMin: BigInt(totalAmountOutMin),
+                deadline: BigInt(deadline),
+                sliceCount,
+                intervalSeconds,
+                slippageBps
             })
             return { content: [{ type: 'text', text: JSON.stringify(res) }] }
         }
