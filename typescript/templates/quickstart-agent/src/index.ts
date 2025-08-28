@@ -9,6 +9,7 @@ import { Agent, type AgentConfig, createProviderSelector, getAvailableProviders 
 import { greetSkill } from './skills/greet.js';
 import { getTimeSkill } from './skills/getTime.js';
 import { echoSkill } from './skills/echo.js';
+import { openseaSkill } from './skills/opensea.js';
 import { contextProvider } from './context/provider.js';
 import type { HelloContext } from './context/types.js';
 
@@ -20,15 +21,17 @@ const providers = createProviderSelector({
   hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
 });
 
+const skipLLMInit = process.env.NODE_ENV === 'test';
+
 const available = getAvailableProviders(providers);
-if (available.length === 0) {
+if (available.length === 0 && !skipLLMInit) {
   console.error('No AI providers configured. Please set at least one provider API key.');
   process.exit(1);
 }
 
 const preferred = process.env.AI_PROVIDER || available[0]!;
-const selectedProvider = providers[preferred as keyof typeof providers];
-if (!selectedProvider) {
+const selectedProvider = skipLLMInit ? undefined : providers[preferred as keyof typeof providers];
+if (!selectedProvider && !skipLLMInit) {
   console.error(`Preferred provider '${preferred}' not available. Available: ${available.join(', ')}`);
   process.exit(1);
 }
@@ -40,7 +43,7 @@ export const agentConfig: AgentConfig = {
   name: process.env.AGENT_NAME || 'Hello Quickstart Agent',
   version: process.env.AGENT_VERSION || '1.0.0',
   description: process.env.AGENT_DESCRIPTION || 'A comprehensive example demonstrating all v2 framework features',
-  skills: [greetSkill, getTimeSkill, echoSkill],
+  skills: [greetSkill, getTimeSkill, echoSkill, openseaSkill],
   url: 'localhost',
   capabilities: {
     streaming: false,
@@ -52,42 +55,51 @@ export const agentConfig: AgentConfig = {
 };
 
 // Configure the agent
-const agent = Agent.create(agentConfig, {
+let agent: ReturnType<typeof Agent.create> | undefined;
+agent = Agent.create(agentConfig, {
   // Runtime options
   cors: process.env.ENABLE_CORS !== 'false',
   basePath: process.env.BASE_PATH || undefined,
-  llm: {
-    model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
-  },
+  ...(skipLLMInit
+    ? {}
+    : {
+        llm: {
+          model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
+        },
+      }),
 });
 
 // Start the agent
 const PORT = parseInt(process.env.PORT || '3007', 10);
 
-agent
-  .start(PORT, contextProvider)
-  .then(() => {
-    console.log(`🚀 Hello Quickstart Agent running on port ${PORT}`);
-    console.log(`📍 Base URL: http://localhost:${PORT}`);
-    console.log(`🤖 Agent Card: http://localhost:${PORT}/.well-known/agent.json`);
-    console.log(`🔌 MCP SSE: http://localhost:${PORT}/sse`);
-    console.log('\n✨ Testing all Vibekit features:');
-    console.log('  - LLM orchestration (greet skill)');
-    console.log('  - Manual handlers (getTime, echo skills)');
-    console.log('  - Context-aware tools');
-    console.log('  - Multiple MCP servers');
-    console.log('  - Hook system (withHooks)');
-    console.log('  - Error handling & artifacts');
-  })
-  .catch((error) => {
-    console.error('Failed to start agent:', error);
-    process.exit(1);
-  });
+if (agent) {
+  agent
+    .start(PORT, contextProvider)
+    .then(() => {
+      console.log(`🚀 Hello Quickstart Agent running on port ${PORT}`);
+      console.log(`📍 Base URL: http://localhost:${PORT}`);
+      console.log(`🤖 Agent Card: http://localhost:${PORT}/.well-known/agent.json`);
+      console.log(`🔌 MCP SSE: http://localhost:${PORT}/sse`);
+      console.log('\n✨ Testing all Vibekit features:');
+      console.log('  - LLM orchestration (greet skill)');
+      console.log('  - Manual handlers (getTime, echo skills)');
+      console.log('  - Context-aware tools');
+      console.log('  - Multiple MCP servers');
+      console.log('  - Hook system (withHooks)');
+      console.log('  - Error handling & artifacts');
+    })
+    .catch((error) => {
+      console.error('Failed to start agent:', error);
+      process.exit(1);
+    });
+}
 
 // Graceful shutdown
 const shutdown = async (signal: string) => {
   console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
-  await agent.stop();
+  if (agent) {
+    await agent.stop();
+  }
   process.exit(0);
 };
 
