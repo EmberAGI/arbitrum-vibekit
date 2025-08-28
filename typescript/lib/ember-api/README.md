@@ -1,6 +1,6 @@
 # Ember API
 
-A TypeScript client library for interacting with the Ember MCP (Model Context Protocol) server, providing strongly-typed interfaces for DeFi operations across multiple blockchain protocols. For schema definitions and types, see the [`ember-schemas`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/ember-schemas) package.
+A TypeScript client library for interacting with the EmberAI MCP server, providing strongly-typed interfaces for DeFi operations across multiple blockchain protocols. For schema definitions and types, see the [`ember-schemas`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/ember-schemas) package.
 
 ## Overview
 
@@ -11,6 +11,7 @@ The Ember API client abstracts the complexity of multi-protocol DeFi interaction
 - **Liquidity Operations**
 - **Market Data**
 - **Wallet Management**
+- **Perpetuals Trading**
 
 ## Endpoint
 
@@ -26,38 +27,48 @@ The Ember MCP server provides the following tools, each mapped to specific DeFi 
 
 ### Token Swapping
 
-- **`swapTokens`** : Cross-chain token swaps via DEX aggregation
+- `swapTokens`: Cross-chain token swaps via DEX aggregation
 
 ### Lending & Borrowing (Aave Protocol)
 
-- **`lendingSupply`** : Supply assets to earn yield
-- **`lendingWithdraw`** : Withdraw supplied assets
-- **`lendingBorrow`** : Borrow against collateral
-- **`lendingRepay`** : Repay borrowed assets
+- `lendingSupply`: Supply assets to earn yield
+- `lendingWithdraw`: Withdraw supplied assets
+- `lendingBorrow`: Borrow against collateral
+- `lendingRepay`: Repay borrowed assets
 
 ### Liquidity Operations (Camelot DEX)
 
-- **`supplyLiquidity`** : Add liquidity to pools
-- **`withdrawLiquidity`** : Remove liquidity from pools
-- **`getLiquidityPools`** : Query available pools
+- `supplyLiquidity`: Add liquidity to pools
+- `withdrawLiquidity`: Remove liquidity from pools
+- `getLiquidityPools`: Query available pools
+
+### Perpetuals Trading (GMX)
+
+- `createPerpetualLongPosition`: Create a long position in a perpetual market
+- `possiblePerpetualLongPositions`: Get possible long positions for a user
+- `createPerpetualShortPosition`: Create a short position in a perpetual market
+- `closePerpetualsOrders`: Cancel perpetual orders by order keys
+- `getPerpetualsMarkets`: Get perpetual markets for the specified chains
+- `getPerpetualsPositions`: Gets perpetual positions for a specified address
+- `getPerpetualsOrders`: Gets perpetual orders for a specified address
 
 ### Market Data & Information
 
-- **`getTokenMarketData`** : Real-time token prices
-- **`getTokens`** : Available tokens across chains
-- **`getChains`** : Supported blockchain networks
-- **`getCapabilities`** : Protocol capabilities by chain
+- `getTokenMarketData`: Real-time token prices
+- `getTokens`: Available tokens across chains
+- `getChains`: Supported blockchain networks
+- `getCapabilities`: Protocol capabilities by chain
 
 ### Wallet & Portfolio
 
-- **`getWalletBalances`** : Token balances across chains
-- **`getWalletLendingPositions`** : Lending/borrowing positions
-- **`getWalletLiquidityPositions`** : LP positions
-- **`getYieldMarkets`** : Available yield opportunities
+- `getWalletBalances`: Token balances across chains
+- `getWalletLendingPositions`: Lending/borrowing positions
+- `getWalletLiquidityPositions`: LP positions
+- `getYieldMarkets`: Available yield opportunities
 
 ### Transaction Tracking
 
-- **`getProviderTrackingStatus`** : Track transaction status
+- `getProviderTrackingStatus`: Track transaction status
 
 ## Installation
 
