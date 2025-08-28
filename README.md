@@ -27,11 +27,11 @@ Here's an overview of how everything fits together:
 
 ### 📚 Vibekit Concepts
 
-For deeper understanding of Vibekit concepts, explore our comprehensive lesson series in [this directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/arbitrum-vibekit-core/docs). These lessons cover everything from basic concepts to advanced agent development patterns, including skills architecture, LLM orchestration, deployment strategies, and production best practices.
+For deeper understanding of Vibekit concepts, explore our comprehensive [lesson series](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/arbitrum-vibekit-core/docs). They cover everything from basic concepts to advanced agent development patterns, including skills architecture, LLM orchestration, deployment strategies, and production best practices.
 
 ## 🧬 Repository Organization
 
-Vibekit is structured as a monorepo with TypeScript at its core, with a Rust implementation on the horizon. Here's how it's organized:
+Vibekit is structured as a TypeScript monorepo, with a Rust implementation on the horizon. Here's how it's organized:
 
 ```
 Vibekit/
@@ -45,12 +45,12 @@ Vibekit/
 │   ├── templates/                  # Agent templates
 │   ├── examples/                   # [Legacy] Older architecture examples
 │   ├── lib/
+│   │   └── a2a-types/              # Agent-to-Agent type definitions
 │   │   ├── arbitrum-vibekit-core/  # Core framework implementation
 │   │   ├── ember-api/              # Ember API client
 │   │   ├── ember-schemas/          # Schema definitions
 │   │   ├── mcp-tools/              # MCP tool server implementations
 │   │   ├── test-utils/             # Testing utilities
-│   │   └── a2a-types/              # Agent-to-Agent type definitions
 │   ├── test/                       # Integration tests
 │   └── scripts/                    # Build and utility scripts
 ├── img/                            # Documentation images
@@ -62,17 +62,17 @@ Vibekit/
 
 ### Key Directories
 
-- **`templates/`**: Production-ready agent templates with skills, tools, hooks, and modern deployment patterns. **Start here for new projects.**
+- **`templates/`**: Production-ready agent templates with skills, tools, hooks, and modern deployment patterns. Start here for creating new agents.
 
 - **`examples/` [Legacy]**: Older architecture examples. Use templates instead for new development.
 
-- **`clients/web/`**: Web frontend for interacting with agents via MCP.
+- **`clients/web/`**: Web frontend for interacting with agents.
 
-- **`lib/`**: Core framework libraries and supporting packages:
+- **`lib/`**: Core framework libraries and supporting packages.
 
 - **`.cursor/`**: Cursor IDE configuration and development rules for vibe coding.
 
-- **`.claude/`**: Claude AI prompt engineering files.
+- **`.claude/`**: Claude AI prompt engineering files for vibe coding.
 
 ## ⚡ Developer Quickstart
 
@@ -80,7 +80,7 @@ Follow these steps to build and run DeFi agents:
 
 ### 1. Get the Code
 
-How you get the code depends on whether you want to simply run the project or contribute to its development. If you just want to run Vibekit locally or explore the codebase, you can clone the repository through command line or your preferred IDE:
+How you get the code depends on whether you want to simply run the project or contribute to its development. If you want to run Vibekit locally or explore the codebase, you can clone the repository through command line or your preferred IDE:
 
 ```
 git clone https://github.com/EmberAGI/arbitrum-vibekit.git &&
