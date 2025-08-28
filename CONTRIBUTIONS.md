@@ -4,7 +4,7 @@ Thanks for your interest in contributing to Vibekit! This guide explains how to 
 
 ## Getting Started
 
-Before you start your work, checkout [open issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) to see if someone is already working on the same topic. For big changes or new features, create an issue first to avoid duplicate work, though it's not required for smaller updates.
+Before you start your work, checkout [open issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) to see if someone is already working on the same topic. For any changes or new features, create an issue first to avoid duplicate work.
 
 ## Types of Contributions
 
@@ -35,12 +35,6 @@ Found a bug? Help us improve Vibekit by reporting it and contributing a fix.
 ### 🔌 Expanding Protocol Support
 
 Vibekit supports DeFi protocol integrations through the Ember plugin system. This standardized architecture enables adding support for protocols with swap, lending, and liquidity capabilities.
-
-**What You Can Add:**
-
-- **Swap Operations**: Token swapping across DEXs
-- **Lending Operations**: Borrow, repay, supply, and withdraw on lending protocols
-- **Liquidity Operations**: Provide and withdraw liquidity from pools
 
 **Getting Started:**
 
@@ -90,12 +84,7 @@ Whether you're adding new MCP tools, agent capabilities, or framework features:
 - Add new tests for your functionality
 - Testing is a key quality metric we evaluate
 
-### 6. Update CHANGELOG
-
-- Document your modifications in [CHANGELOG.md](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CHANGELOG.md) to keep the project's history clear
-- Follow the existing format and categorization
-
-### 7. Submit Your Pull Request
+### 6. Submit Your Pull Request
 
 - Create a clear, descriptive PR title
 - Link any relevant issues in your PR description
@@ -104,7 +93,7 @@ Whether you're adding new MCP tools, agent capabilities, or framework features:
 
 ## Review Process
 
-After you submit your PR, we'll acknowledge it within 2–3 days to let you know it's being reviewed. You can expect initial feedback or requested changes from us within 5 days. Once all feedback is addressed and your PR is approved, your contribution will be merged.
+After you submit your PR, we'll acknowledge it within 2–3 days to let you know it's being reviewed. You can expect initial feedback or requested changes from us within a week. Once all feedback is addressed and your PR is approved, your contribution will be merged.
 
 ## Getting Support
 

@@ -36,13 +36,28 @@ The Quickstart Agent showcases:
 
 ### Tools
 
-- `getFormalGreeting` - Returns formal greetings
-- `getCasualGreeting` - Returns casual greetings
-- `getLocalizedGreeting` - Enhanced with timestamps via hooks
-- `createEchoTool` - For echo skill
-- `createArtifactTool` - For artifact creation
+- `getFormalGreeting`: Returns formal greetings
+- `getCasualGreeting`: Returns casual greetings
+- `getLocalizedGreeting`: Enhanced with timestamps via hooks
+- `createEchoTool`: For echo skill
+- `createArtifactTool`: For artifact creation
 
 > **Important**: For blockchain transactions, always use `withHooks` after hooks to handle transaction signing and execution securely. See [Lesson 16](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-16.md) for implementation details.
+
+## Project Structure
+
+```
+quickstart/
+├── src/
+│   ├── index.ts           # Agent entry point
+│   ├── skills/            # Skill definitions
+│   ├── tools/             # Internal tool implementations
+│   ├── hooks/             # Tool enhancement hooks
+│   └── context/           # Context provider
+├── mock-mcp-servers/      # Mock MCP server implementations
+├── test/                  # Integration tests
+└── package.json
+```
 
 ## Environment Variables
 
@@ -78,21 +93,6 @@ The Quickstart Agent showcases:
    ```bash
    pnpm dev
    ```
-
-## Project Structure
-
-```
-quickstart/
-├── src/
-│   ├── index.ts           # Agent entry point
-│   ├── skills/            # Skill definitions
-│   ├── tools/             # Internal tool implementations
-│   ├── hooks/             # Tool enhancement hooks
-│   └── context/           # Context provider
-├── mock-mcp-servers/      # Mock MCP server implementations
-├── test/                  # Integration tests
-└── package.json
-```
 
 ## Testing
 

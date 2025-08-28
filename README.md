@@ -45,12 +45,12 @@ Vibekit/
 │   ├── templates/                  # Agent templates
 │   ├── examples/                   # [Legacy] Older architecture examples
 │   ├── lib/
-│   │   └── a2a-types/              # Agent-to-Agent type definitions
+│   │   ├── a2a-types/              # Agent-to-Agent type definitions
 │   │   ├── arbitrum-vibekit-core/  # Core framework implementation
 │   │   ├── ember-api/              # Ember API client
 │   │   ├── ember-schemas/          # Schema definitions
 │   │   ├── mcp-tools/              # MCP tool server implementations
-│   │   ├── test-utils/             # Testing utilities
+│   │   └── test-utils/             # Testing utilities
 │   ├── test/                       # Integration tests
 │   └── scripts/                    # Build and utility scripts
 ├── img/                            # Documentation images
