@@ -5,3 +5,4 @@ export * from './transactionArtifact.js';
 export * from './error.js';
 export * from './utils.js';
 export * from './providers/index.js';
+export * from './x402.js';

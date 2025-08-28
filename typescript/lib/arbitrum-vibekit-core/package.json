@@ -28,6 +28,7 @@
     "express": "catalog:",
     "nanoid": "^5.0.7",
     "viem": "^2.26.3",
+    "x402": "^0.4.3",
     "zod": "catalog:"
   },
   "peerDependencies": {
