@@ -87,6 +87,61 @@ Parameters: none
 ```
 If V2 reverts, the tool retries with V1 and returns `{ via: "v1-fallback" }`.
 
+### get_oracle_price
+```json
+{ "chainId": 42161, "aggregator": "<CHAINLINK_AGGREGATOR_ADDRESS>" }
+```
+
+### validate_quote_against_oracle
+```json
+{
+  "amountIn": "1000000",
+  "amountOut": "590000000000000000",
+  "tokenInDecimals": 6,
+  "tokenOutDecimals": 18,
+  "oraclePrice": "3000000000",
+  "oracleDecimals": 8,
+  "maxDeviationBps": 100
+}
+```
+
+### get_pool_twap_tick
+```json
+{ "chainId": 42161, "pool": "<UNISWAP_V3_POOL_ADDRESS>", "secondsAgo": 300 }
+```
+
+### compute_safe_slippage_bps
+```json
+{ "averageTick": 50, "baseBps": 30, "perTickBps": 1, "maxBps": 300 }
+```
+
+### build_eip2612_permit
+```json
+{
+  "chainId": 42161,
+  "token": "<ERC20_WITH_EIP2612>",
+  "owner": "<WALLET>",
+  "spender": "<ROUTER_OR_SPENDER>",
+  "value": "1000000",
+  "nonce": "0",
+  "deadline": "1735689600"
+}
+```
+
+### build_permit2_permit
+```json
+{
+  "chainId": 42161,
+  "permit2": "<PERMIT2_ADDRESS>",
+  "token": "<ERC20>",
+  "amount": "1000000",
+  "expiration": "1735689600",
+  "nonce": "0",
+  "spender": "<ROUTER_OR_SPENDER>",
+  "sigDeadline": "1735689600"
+}
+```
+
 ### compute_min_amount_out
 ```json
 { "amountOut": "1234500000000000000", "slippageBps": 50 }

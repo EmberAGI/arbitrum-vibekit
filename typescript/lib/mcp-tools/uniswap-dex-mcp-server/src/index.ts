@@ -15,6 +15,12 @@ import {
     buildV3ExactInputSingleTx,
     computeMinAmountOut,
     computeDeadlineFromNow,
+    getOraclePrice,
+    validateQuoteAgainstOracle,
+    getV3TwapTick,
+    computeSafeSlippageBps,
+    buildEip2612TypedData,
+    buildPermit2TypedData,
     type EvmChainId
 } from './uniswap.js'
 
@@ -64,6 +70,113 @@ function createServer() {
         }
     )
 
+    // Oracle: get price
+    const OraclePriceSchema = z.object({ chainId: z.number().int(), aggregator: z.string() })
+    server.tool(
+        'get_oracle_price',
+        'Fetch latest Chainlink aggregator price and decimals.',
+        OraclePriceSchema.shape,
+        async ({ chainId, aggregator }) => {
+            const res = await getOraclePrice(chainId as EvmChainId, aggregator as any)
+            return { content: [{ type: 'text', text: JSON.stringify(res) }] }
+        }
+    )
+
+    // Oracle: validate quote
+    const ValidateQuoteSchema = z.object({
+        amountIn: z.string(),
+        amountOut: z.string(),
+        tokenInDecimals: z.number().int(),
+        tokenOutDecimals: z.number().int(),
+        oraclePrice: z.string(),
+        oracleDecimals: z.number().int(),
+        maxDeviationBps: z.number().int()
+    })
+    server.tool(
+        'validate_quote_against_oracle',
+        'Validate implied DEX price vs oracle; returns deviation in bps and pass/fail.',
+        ValidateQuoteSchema.shape,
+        async ({ amountIn, amountOut, tokenInDecimals, tokenOutDecimals, oraclePrice, oracleDecimals, maxDeviationBps }) => {
+            const res = validateQuoteAgainstOracle({
+                amountIn: BigInt(amountIn),
+                amountOut: BigInt(amountOut),
+                tokenInDecimals,
+                tokenOutDecimals,
+                oraclePrice: BigInt(oraclePrice),
+                oracleDecimals,
+                maxDeviationBps
+            })
+            return { content: [{ type: 'text', text: JSON.stringify(res) }] }
+        }
+    )
+
+    // TWAP and dynamic slippage
+    const TwapSchema = z.object({ chainId: z.number().int(), pool: z.string(), secondsAgo: z.number().int().positive() })
+    server.tool(
+        'get_pool_twap_tick',
+        'Get average tick over a lookback window for a Uniswap V3 pool.',
+        TwapSchema.shape,
+        async ({ chainId, pool, secondsAgo }) => {
+            const res = await getV3TwapTick(chainId as EvmChainId, pool as any, secondsAgo)
+            return { content: [{ type: 'text', text: JSON.stringify(res) }] }
+        }
+    )
+
+    const SafeSlipSchema = z.object({ averageTick: z.number(), baseBps: z.number().int().min(0), perTickBps: z.number().int().min(0), maxBps: z.number().int().positive() })
+    server.tool(
+        'compute_safe_slippage_bps',
+        'Compute dynamic slippage bps from TWAP-derived average tick.',
+        SafeSlipSchema.shape,
+        async ({ averageTick, baseBps, perTickBps, maxBps }) => {
+            const res = computeSafeSlippageBps({ averageTick, baseBps, perTickBps, maxBps })
+            return { content: [{ type: 'text', text: JSON.stringify(res) }] }
+        }
+    )
+
+    // EIP-2612 Permit typed-data
+    const Eip2612Schema = z.object({
+        chainId: z.number().int(), token: z.string(), owner: z.string(), spender: z.string(), value: z.string(), nonce: z.string(), deadline: z.string(), tokenName: z.string().optional(), tokenVersion: z.string().optional()
+    })
+    server.tool(
+        'build_eip2612_permit',
+        'Build EIP-2612 typed data for exact, expiring approvals.',
+        Eip2612Schema.shape,
+        async ({ chainId, token, owner, spender, value, nonce, deadline, tokenName, tokenVersion }) => {
+            const res = await buildEip2612TypedData({
+                chainId: chainId as EvmChainId,
+                token: token as any,
+                owner: owner as any,
+                spender: spender as any,
+                value: BigInt(value),
+                nonce: BigInt(nonce),
+                deadline: BigInt(deadline),
+                tokenName,
+                tokenVersion
+            })
+            return { content: [{ type: 'text', text: JSON.stringify(res) }] }
+        }
+    )
+
+    // Permit2 typed-data
+    const Permit2Schema = z.object({ chainId: z.number().int(), permit2: z.string(), token: z.string(), amount: z.string(), expiration: z.string(), nonce: z.string(), spender: z.string(), sigDeadline: z.string() })
+    server.tool(
+        'build_permit2_permit',
+        'Build Permit2 typed data for scoped approvals.',
+        Permit2Schema.shape,
+        async ({ chainId, permit2, token, amount, expiration, nonce, spender, sigDeadline }) => {
+            const res = buildPermit2TypedData({
+                chainId: chainId as EvmChainId,
+                permit2: permit2 as any,
+                token: token as any,
+                amount: BigInt(amount),
+                expiration: BigInt(expiration),
+                nonce: BigInt(nonce),
+                spender: spender as any,
+                sigDeadline: BigInt(sigDeadline)
+            })
+            return { content: [{ type: 'text', text: JSON.stringify(res) }] }
+        }
+    )
     // Helper: compute_deadline
     const DeadlineSchema = z.object({ secondsFromNow: z.number().int().positive() })
     server.tool(

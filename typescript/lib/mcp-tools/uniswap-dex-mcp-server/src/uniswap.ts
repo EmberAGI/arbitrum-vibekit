@@ -235,5 +235,173 @@ export function computeDeadlineFromNow(secondsFromNow: number) {
     return BigInt(now + secondsFromNow)
 }
 
+// ---------------------
+// Chainlink Oracle helpers
+// ---------------------
+
+const aggregatorV3Abi = parseAbi([
+    'function latestRoundData() view returns (uint80 roundId,int256 answer,uint256 startedAt,uint256 updatedAt,uint80 answeredInRound)',
+    'function decimals() view returns (uint8)'
+])
+
+export async function getOraclePrice(chainId: EvmChainId, aggregator: Address) {
+    const client = getPublicClient(chainId)
+    const [decimals, latest] = await Promise.all([
+        client.readContract({ address: aggregator, abi: aggregatorV3Abi, functionName: 'decimals' }),
+        client.readContract({ address: aggregator, abi: aggregatorV3Abi, functionName: 'latestRoundData' })
+    ])
+    const answer = (latest as any).answer as bigint
+    const updatedAt = (latest as any).updatedAt as bigint
+    return { price: answer.toString(), decimals: Number(decimals), updatedAt: updatedAt.toString() }
+}
+
+export function validateQuoteAgainstOracle(params: {
+    amountIn: bigint
+    amountOut: bigint
+    tokenInDecimals: number
+    tokenOutDecimals: number
+    oraclePrice: bigint
+    oracleDecimals: number
+    maxDeviationBps: number
+}) {
+    if (params.maxDeviationBps < 0) throw new Error('maxDeviationBps must be >= 0')
+    // implied price = (amountOut / 10^outDec) / (amountIn / 10^inDec)
+    const scaledOut = Number(params.amountOut) / 10 ** params.tokenOutDecimals
+    const scaledIn = Number(params.amountIn) / 10 ** params.tokenInDecimals
+    const impliedPrice = scaledOut / scaledIn
+    const oracle = Number(params.oraclePrice) / 10 ** params.oracleDecimals
+    const deviation = Math.abs(impliedPrice - oracle) / oracle
+    const deviationBps = Math.round(deviation * 10000)
+    const ok = deviationBps <= params.maxDeviationBps
+    return { ok, deviationBps, impliedPrice, oraclePrice: oracle }
+}
+
+// ---------------------
+// Uniswap V3 TWAP & dynamic slippage
+// ---------------------
+
+const v3ObserveAbi = parseAbi([
+    'function observe(uint32[] secondsAgos) view returns (int56[] tickCumulatives, uint160[] secondsPerLiquidityCumulativeX128s)'
+])
+
+export async function getV3TwapTick(chainId: EvmChainId, pool: Address, secondsAgo: number) {
+    if (secondsAgo <= 0) throw new Error('secondsAgo must be positive')
+    const client = getPublicClient(chainId)
+    const secondsAgos: readonly number[] = [secondsAgo, 0]
+    const [tickCumulatives] = await client.readContract({
+        address: pool,
+        abi: v3ObserveAbi,
+        functionName: 'observe',
+        args: [secondsAgos]
+    }) as unknown as [bigint[], bigint[]]
+    const tickCumulativesBI = tickCumulatives as unknown as bigint[]
+    if (!tickCumulativesBI || tickCumulativesBI.length < 2 || tickCumulativesBI[0] === undefined || tickCumulativesBI[1] === undefined) {
+        throw new Error('observe() did not return two tickCumulative values')
+    }
+    const c0 = tickCumulativesBI[0] as bigint
+    const c1 = tickCumulativesBI[1] as bigint
+    const tickAvg = Number((c1 - c0) / BigInt(secondsAgo))
+    return { averageTick: tickAvg }
+}
+
+export function computeSafeSlippageBps(params: {
+    averageTick: number
+    baseBps: number
+    perTickBps: number
+    maxBps: number
+}) {
+    if (params.baseBps < 0 || params.perTickBps < 0 || params.maxBps <= 0) throw new Error('invalid slippage params')
+    const bps = Math.min(params.maxBps, params.baseBps + Math.abs(params.averageTick) * params.perTickBps)
+    return { slippageBps: bps }
+}
+
+// ---------------------
+// EIP-2612 and Permit2 typed-data builders
+// ---------------------
+
+export async function buildEip2612TypedData(params: {
+    chainId: EvmChainId
+    token: Address
+    owner: Address
+    spender: Address
+    value: bigint
+    nonce: bigint
+    deadline: bigint
+    tokenName?: string
+    tokenVersion?: string
+}) {
+    let tokenName = params.tokenName
+    if (!tokenName) {
+        const client = getPublicClient(params.chainId)
+        tokenName = await client.readContract({ address: params.token, abi: erc20Abi, functionName: 'name' }) as unknown as string
+    }
+    const tokenVersion = params.tokenVersion ?? '1'
+    const domain = {
+        name: tokenName,
+        version: tokenVersion,
+        chainId: params.chainId,
+        verifyingContract: params.token
+    }
+    const types = {
+        Permit: [
+            { name: 'owner', type: 'address' },
+            { name: 'spender', type: 'address' },
+            { name: 'value', type: 'uint256' },
+            { name: 'nonce', type: 'uint256' },
+            { name: 'deadline', type: 'uint256' },
+        ]
+    }
+    const message = {
+        owner: params.owner,
+        spender: params.spender,
+        value: params.value.toString(),
+        nonce: params.nonce.toString(),
+        deadline: params.deadline.toString()
+    }
+    return { domain, types, primaryType: 'Permit', message }
+}
+
+export function buildPermit2TypedData(params: {
+    chainId: EvmChainId
+    permit2: Address
+    token: Address
+    amount: bigint
+    expiration: bigint
+    nonce: bigint
+    spender: Address
+    sigDeadline: bigint
+}) {
+    const domain = {
+        name: 'Permit2',
+        version: '1',
+        chainId: params.chainId,
+        verifyingContract: params.permit2
+    }
+    const types = {
+        PermitSingle: [
+            { name: 'details', type: 'PermitDetails' },
+            { name: 'spender', type: 'address' },
+            { name: 'sigDeadline', type: 'uint256' }
+        ],
+        PermitDetails: [
+            { name: 'token', type: 'address' },
+            { name: 'amount', type: 'uint160' },
+            { name: 'expiration', type: 'uint48' },
+            { name: 'nonce', type: 'uint48' }
+        ]
+    }
+    const message = {
+        details: {
+            token: params.token,
+            amount: params.amount.toString(),
+            expiration: params.expiration.toString(),
+            nonce: params.nonce.toString()
+        },
+        spender: params.spender,
+        sigDeadline: params.sigDeadline.toString()
+    }
+    return { domain, types, primaryType: 'PermitSingle', message }
+}
+
 
 
