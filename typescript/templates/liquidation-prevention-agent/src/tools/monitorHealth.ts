@@ -1,11 +1,16 @@
 /**
  * monitorHealth Tool
- * 
+ *
  * Provides continuous health factor monitoring with configurable intervals
  * and threshold-based alerting for liquidation prevention.
  */
 
-import { createSuccessTask, createErrorTask, type VibkitToolDefinition, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
+import {
+  createSuccessTask,
+  createErrorTask,
+  type VibkitToolDefinition,
+  parseMcpToolResponsePayload,
+} from 'arbitrum-vibekit-core';
 import { z } from 'zod';
 import { GetWalletLendingPositionsResponseSchema } from 'ember-schemas';
 import type { LiquidationPreventionContext, MonitoringSession } from '../context/types.js';
@@ -37,7 +42,9 @@ async function performHealthCheck(userAddress: string): Promise<void> {
   }
 
   try {
-    console.log(`🔄 [${new Date().toLocaleTimeString()}] Performing automated health check for ${userAddress}`);
+    console.log(
+      `🔄 [${new Date().toLocaleTimeString()}] Performing automated health check for ${userAddress}`
+    );
 
     // Get fresh position data using ember MCP client
     const emberClient = globalMcpClient;
@@ -47,7 +54,9 @@ async function performHealthCheck(userAddress: string): Promise<void> {
       return;
     }
 
-    console.log(`📡 Fetching lending positions using getWalletLendingPositions for ${userAddress}...`);
+    console.log(
+      `📡 Fetching lending positions using getWalletLendingPositions for ${userAddress}...`
+    );
 
     // Get current positions
     const positionsResult = await emberClient.callTool({
@@ -61,25 +70,38 @@ async function performHealthCheck(userAddress: string): Promise<void> {
     }
 
     // Parse the response using proper schema validation
-    const positionData = parseMcpToolResponsePayload(positionsResult, GetWalletLendingPositionsResponseSchema);
+    const positionData = parseMcpToolResponsePayload(
+      positionsResult,
+      GetWalletLendingPositionsResponseSchema
+    );
 
     // Extract health factor from the standardized response
     const positions = positionData.positions || [];
     const firstPosition = positions[0];
-    const currentHealthFactor = firstPosition?.healthFactor ? parseFloat(firstPosition.healthFactor) : undefined;
+    const currentHealthFactor = firstPosition?.healthFactor
+      ? parseFloat(firstPosition.healthFactor)
+      : undefined;
 
     console.log(`📥 Retrieved ${positions.length} positions for ${userAddress}`);
-    console.log("session.checksPerformed", session.checksPerformed);
+    console.log('session.checksPerformed', session.checksPerformed);
 
     // Update session
     session.lastCheck = new Date().toISOString();
     session.checksPerformed += 1;
 
-    console.log(`📊 Health Factor for ${userAddress}: ${currentHealthFactor?.toFixed(4) || 'N/A'}, Target: ${session.targetHealthFactor}`);
+    console.log(
+      `📊 Health Factor for ${userAddress}: ${currentHealthFactor?.toFixed(4) || 'N/A'}, Target: ${session.targetHealthFactor}`
+    );
 
     // Check if action is needed
-    if (currentHealthFactor && currentHealthFactor <= session.targetHealthFactor) {
-      console.log(`🚨 LIQUIDATION RISK DETECTED! Health Factor ${currentHealthFactor.toFixed(4)} ≤ ${session.targetHealthFactor}`);
+    if (
+      currentHealthFactor &&
+      currentHealthFactor <= session.targetHealthFactor &&
+      currentHealthFactor != -1
+    ) {
+      console.log(
+        `🚨 LIQUIDATION RISK DETECTED! Health Factor ${currentHealthFactor.toFixed(4)} ≤ ${session.targetHealthFactor}`
+      );
 
       // Add alert
       session.alerts.push({
@@ -92,31 +114,42 @@ async function performHealthCheck(userAddress: string): Promise<void> {
       console.log(`⚠️ Triggering automatic prevention strategy for ${userAddress}`);
 
       // Trigger automatic prevention
-      await triggerAutomaticPrevention(userAddress, currentHealthFactor, session.targetHealthFactor);
+      await triggerAutomaticPrevention(
+        userAddress,
+        currentHealthFactor,
+        session.targetHealthFactor
+      );
     } else {
-      console.log(`✅ Health Factor OK for ${userAddress}: ${currentHealthFactor?.toFixed(4)} > ${session.targetHealthFactor}`);
+      console.log(
+        `✅ Health Factor OK for ${userAddress}: ${currentHealthFactor?.toFixed(4)} > ${session.targetHealthFactor}`
+      );
     }
     const nextRun = new Date(Date.now() + session.intervalMinutes * 60 * 1000);
-    console.log(`🛠️ Health check completed for ${userAddress}. Total checks: ${session.checksPerformed}`);
-    console.log(`⏭️ Next health check for ${userAddress} scheduled at: ${nextRun.toLocaleString()}`);
-
+    console.log(
+      `🛠️ Health check completed for ${userAddress}. Total checks: ${session.checksPerformed}`
+    );
+    console.log(
+      `⏭️ Next health check for ${userAddress} scheduled at: ${nextRun.toLocaleString()}`
+    );
   } catch (error) {
     console.error(`❌ Error during health check for ${userAddress}:`, error);
   }
 }
 
 // Trigger automatic prevention
-async function triggerAutomaticPrevention(userAddress: string, currentHF: number, targetHF: number): Promise<void> {
-
-  console.log("triggerAutomaticPrevention........:", userAddress, currentHF, targetHF);
+async function triggerAutomaticPrevention(
+  userAddress: string,
+  currentHF: number,
+  targetHF: number
+): Promise<void> {
+  console.log('triggerAutomaticPrevention........:', userAddress, currentHF, targetHF);
   if (!globalMcpClient || !globalContext) {
     console.error('❌ MCP client or context not available for automatic prevention');
     return;
   }
 
   try {
-
-     // Apply safety buffer: add +0.03 to user's target for extra protection
+    // Apply safety buffer: add +0.03 to user's target for extra protection
     const safetyBuffer = 0.03;
     const effectiveTargetHF = targetHF + safetyBuffer;
 
@@ -124,7 +157,9 @@ async function triggerAutomaticPrevention(userAddress: string, currentHF: number
     console.log(`📊 Current HF: ${currentHF.toFixed(4)}, Target HF: ${targetHF}`);
 
     // Import the intelligent prevention strategy tool dynamically
-    const { intelligentPreventionStrategyTool } = await import('./intelligentPreventionStrategy.js');
+    const { intelligentPreventionStrategyTool } = await import(
+      './intelligentPreventionStrategy.js'
+    );
 
     // Execute the prevention strategy
     const result = await intelligentPreventionStrategyTool.execute(
@@ -147,16 +182,21 @@ async function triggerAutomaticPrevention(userAddress: string, currentHF: number
     } else {
       console.error(`❌ Automatic prevention failed for ${userAddress}:`, result);
     }
-
   } catch (error) {
     console.error(`❌ Error executing automatic prevention for ${userAddress}:`, error);
   }
 }
 
 // monitorHealth tool implementation
-export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams, any, LiquidationPreventionContext, any> = {
+export const monitorHealthTool: VibkitToolDefinition<
+  typeof MonitorHealthParams,
+  any,
+  LiquidationPreventionContext,
+  any
+> = {
   name: 'monitor-health',
-  description: 'Start continuous health factor monitoring with periodic checks and automatic liquidation prevention',
+  description:
+    'Start continuous health factor monitoring with periodic checks and automatic liquidation prevention',
   parameters: MonitorHealthParams,
   execute: async (args, context) => {
     try {
@@ -171,7 +211,9 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
       if (userPrefs.intervalMinutes) {
         console.log(`⏱️ User specified Interval: ${userPrefs.intervalMinutes} minutes`);
       }
-      console.log(`🎯 Target Health Factor: ${targetHF} (action will be triggered if HF ≤ ${targetHF})`);
+      console.log(
+        `🎯 Target Health Factor: ${targetHF} (action will be triggered if HF ≤ ${targetHF})`
+      );
 
       // Access Ember MCP client from custom context
       const emberClient = context.custom.mcpClient;
@@ -199,7 +241,7 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
         },
       });
 
-      console.log("getWalletLendingPositions result", result);
+      console.log('getWalletLendingPositions result', result);
       if (result.isError) {
         console.error('❌ Error calling getWalletLendingPositions for monitoring:', result.content);
         let errorMessage = 'Unknown error';
@@ -215,18 +257,20 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
       // Parse the initial response using proper schema validation
       let healthFactor: number | undefined;
       try {
-        const positionData = parseMcpToolResponsePayload(result, GetWalletLendingPositionsResponseSchema);
+        const positionData = parseMcpToolResponsePayload(
+          result,
+          GetWalletLendingPositionsResponseSchema
+        );
 
         // Extract health factor from the standardized response
         const positions = positionData.positions || [];
         const firstPosition = positions[0];
-        healthFactor = firstPosition?.healthFactor ? parseFloat(firstPosition.healthFactor) : undefined;
+        healthFactor = firstPosition?.healthFactor
+          ? parseFloat(firstPosition.healthFactor)
+          : undefined;
       } catch (parseError) {
         console.error('❌ Error parsing initial health data:', parseError);
-        return createErrorTask(
-          'monitor-health',
-          new Error('Failed to parse initial health data')
-        );
+        return createErrorTask('monitor-health', new Error('Failed to parse initial health data'));
       }
 
       // Determine initial risk level
@@ -237,7 +281,9 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
         if (healthFactor <= targetHF) {
           riskLevel = 'CRITICAL';
           riskColor = '🔴';
-          console.log(`🚨 IMMEDIATE ACTION NEEDED: Health Factor ${healthFactor.toFixed(4)} ≤ ${targetHF}`);
+          console.log(
+            `🚨 IMMEDIATE ACTION NEEDED: Health Factor ${healthFactor.toFixed(4)} ≤ ${targetHF}`
+          );
         } else if (healthFactor <= context.custom.thresholds.danger) {
           riskLevel = 'DANGER';
           riskColor = '🟠';
@@ -259,12 +305,17 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
         checksPerformed: 1,
         isActive: true,
         targetHealthFactor: targetHF,
-        alerts: args.enableAlerts && riskLevel !== 'SAFE' ? [{
-          timestamp: now,
-          riskLevel,
-          healthFactor: healthFactor || 0,
-          message: `Initial ${riskLevel} risk detected`,
-        }] : [],
+        alerts:
+          args.enableAlerts && riskLevel !== 'SAFE'
+            ? [
+                {
+                  timestamp: now,
+                  riskLevel,
+                  healthFactor: healthFactor || 0,
+                  message: `Initial ${riskLevel} risk detected`,
+                },
+              ]
+            : [],
       };
 
       // Set up periodic monitoring with setInterval
@@ -280,9 +331,12 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
       console.log(`🎯 Will trigger prevention if Health Factor ≤ ${targetHF}`);
 
       // If already at risk, trigger immediate action
-      if (healthFactor && healthFactor <= targetHF) {
+      if (healthFactor && healthFactor <= targetHF && healthFactor != -1) {
         console.log(`🚨 Immediate prevention needed - triggering now!`);
-        setTimeout(() => triggerAutomaticPrevention(args.userAddress, healthFactor, targetHF), 1000);
+        setTimeout(
+          () => triggerAutomaticPrevention(args.userAddress, healthFactor, targetHF),
+          1000
+        );
       }
 
       // Create detailed response
@@ -311,7 +365,6 @@ export const monitorHealthTool: VibkitToolDefinition<typeof MonitorHealthParams,
         undefined,
         `🤖 Automatic liquidation prevention activated! Monitoring ${args.userAddress} every ${args.intervalMinutes} minutes. Will prevent liquidation if health factor ≤ ${targetHF}. Current HF: ${healthFactor?.toFixed(4) || 'N/A'}. ${message}`
       );
-
     } catch (error) {
       console.error('❌ monitorHealth tool error:', error);
       return createErrorTask(
@@ -355,4 +408,4 @@ export const stopAllMonitoringSessions = (): number => {
   }
   monitoringSessions.clear();
   return stoppedCount;
-}; 
+};
