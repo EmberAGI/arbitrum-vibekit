@@ -1,0 +1,44 @@
+{
+  "name": "trendmoon-mcp-server",
+  "version": "1.0.0",
+  "description": "Trendmoon MCP Server using @trendmoon/mcp-server library",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "bin": {
+    "trendmoon-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc --build --clean && tsc --build && chmod +x dist/index.js",
+    "lint": "eslint --ext .ts,.tsx src",
+    "lint:fix": "eslint --ext .ts,.tsx src --fix",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "debug": "pnpm run build && DANGEROUSLY_OMIT_AUTH=true node --inspect-brk ./dist/index.js",
+    "inspect:npx": "pnpm run build && chmod +x dist/index.js && DANGEROUSLY_OMIT_AUTH=true npx -y @modelcontextprotocol/inspector node ./dist/index.js",
+    "docker:build": "docker build -t trendmoon-mcp-server .",
+    "docker:run": "docker run --env-file .env -p 3000:3000 trendmoon-mcp-server",
+    "docker:compose:build": "docker compose build --no-cache",
+    "docker:compose:up": "docker compose up --build --no-log-prefix",
+    "docker:compose:down": "docker compose down",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\"",
+    "agent": "tsx src/trendmoonAgent.ts",
+    "start:trendmoon": "node --loader ts-node/esm src/trendmoonAgent.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.5.0",
+    "@trendmoon/mcp-server": "^0.1.8",
+    "dotenv": "^16.3.1",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.1",
+    "prettier": "^3.5.3",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}
