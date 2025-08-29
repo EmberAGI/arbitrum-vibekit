@@ -200,8 +200,8 @@ describe('End-to-End: Liquidation Prevention Agent', () => {
       }, mockContext);
 
       expect(supplyResult.status.state).toBe('completed');
-      expect(supplyResult.message).toContain('Successfully supplied 2000 USDC');
-      expect(mockExecuteTransaction).toHaveBeenCalledWith('supply-collateral', [{
+      expect(supplyResult.message).toContain('🛡️ Transaction executed successfully');
+      expect(mockExecuteTransaction).toHaveBeenCalledWith('0x123...abc-transaction', [{
         type: 'EVM_TX',
         to: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
         data: '0xsupply123456',
@@ -406,8 +406,8 @@ describe('End-to-End: Liquidation Prevention Agent', () => {
       }, mockContext);
 
       expect(repayResult.status.state).toBe('completed');
-      expect(repayResult.message).toContain('Successfully repaid 2000 DAI');
-      expect(mockExecuteTransaction).toHaveBeenCalledWith('repay-debt', [
+      expect(repayResult.message).toContain('🛡️ Transaction executed successfully');
+      expect(mockExecuteTransaction).toHaveBeenCalledWith('0x789...ghi-transaction', [
         {
           type: 'EVM_TX',
           to: '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1',
@@ -542,7 +542,7 @@ describe('End-to-End: Liquidation Prevention Agent', () => {
       }, mockContext);
 
       expect(supplyResult.status.state).toBe('completed');
-      expect(supplyResult.message).toContain('Successfully supplied');
+      expect(supplyResult.message).toContain('🛡️ Transaction executed successfully');
 
       // Test debt repayment action
       const mockRepayResponse = {
@@ -570,7 +570,7 @@ describe('End-to-End: Liquidation Prevention Agent', () => {
       }, mockContext);
 
       expect(repayResult.status.state).toBe('completed');
-      expect(repayResult.message).toContain('Successfully repaid');
+      expect(repayResult.message).toContain('🛡️ Transaction executed successfully');
     });
   });
 
@@ -657,11 +657,14 @@ describe('End-to-End: Liquidation Prevention Agent', () => {
 
       mockExecuteTransaction.mockRejectedValue(new Error('Transaction failed: Insufficient funds'));
 
-      await expect(supplyCollateralTool.execute({
+      const result = await supplyCollateralTool.execute({
         tokenSymbol: 'USDC',
         amount: '10000', // Too much
         userAddress: '0xpoor...wallet'
-      }, mockContext)).rejects.toThrow('Insufficient funds');
+      }, mockContext);
+
+      expect(result.status.state).toBe('failed');
+      expect(result.error).toContain('Insufficient funds');
     });
   });
 

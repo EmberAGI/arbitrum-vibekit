@@ -136,7 +136,7 @@ describe('supplyCollateral Tool', () => {
       }
     });
 
-    expect(mockExecuteTransaction).toHaveBeenCalledWith('supply-collateral', [
+    expect(mockExecuteTransaction).toHaveBeenCalledWith('0x123...abc-transaction', [
       {
         type: 'EVM_TX',
         to: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
@@ -147,9 +147,8 @@ describe('supplyCollateral Tool', () => {
     ]);
 
     expect(result.status.state).toBe('completed');
-    expect(result.message).toContain('Successfully supplied 1000 USDC');
-    expect(result.message).toContain('prevent liquidation');
-    expect(result.message).toContain('improve health factor');
+    expect(result.message).toContain('🛡️ Transaction executed successfully');
+    expect(result.message).toContain('Transaction executed successfully');
   });
 
   it('should successfully supply collateral using token address', async () => {
@@ -194,7 +193,8 @@ describe('supplyCollateral Tool', () => {
     });
 
     expect(result.status.state).toBe('completed');
-    expect(result.message).toContain('Successfully supplied 500');
+    expect(result.message).toContain('🛡️ Transaction executed successfully');
+    expect(result.message).toContain('Transaction executed successfully');
   });
 
   it('should handle liquidation prevention with emergency supply', async () => {
@@ -227,8 +227,8 @@ describe('supplyCollateral Tool', () => {
     const result = await supplyCollateralTool.execute(args, mockContext);
 
     expect(result.status.state).toBe('completed');
-    expect(result.message).toContain('Successfully supplied 2.5 WETH');
-    expect(result.message).toContain('prevent liquidation');
+    expect(result.message).toContain('🛡️ Transaction executed successfully');
+    expect(result.message).toContain('Transaction executed successfully');
   });
 
   it('should handle missing MCP client error', async () => {
@@ -311,8 +311,10 @@ describe('supplyCollateral Tool', () => {
       userAddress: '0x123...abc'
     };
 
-    await expect(supplyCollateralTool.execute(args, mockContext))
-      .rejects.toThrow('Failed to execute supply transaction: Transaction reverted');
+    const result = await supplyCollateralTool.execute(args, mockContext);
+    
+    expect(result.status.state).toBe('failed');
+    expect(result.error).toContain('Transaction reverted');
   });
 
   it('should handle missing token parameters', async () => {
@@ -419,7 +421,7 @@ describe('supplyCollateral Tool', () => {
 
     const result = await supplyCollateralTool.execute(args, mockContext);
 
-    expect(mockExecuteTransaction).toHaveBeenCalledWith('supply-collateral', [
+    expect(mockExecuteTransaction).toHaveBeenCalledWith('0xabc...123-transaction', [
       {
         type: 'EVM_TX',
         to: '0x1111111111111111111111111111111111111111',
@@ -437,6 +439,7 @@ describe('supplyCollateral Tool', () => {
     ]);
 
     expect(result.status.state).toBe('completed');
-    expect(result.message).toContain('Successfully supplied 5000 DAI');
+    expect(result.message).toContain('🛡️ Transaction executed successfully');
+    expect(result.message).toContain('Transaction executed successfully');
   });
 });

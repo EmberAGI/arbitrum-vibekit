@@ -73,7 +73,7 @@ describe('Liquidation Prevention Agent - Live Integration Tests', () => {
     }, 30000);
 
     afterAll(async () => {
-        console.log('🛑 Cleaning up integration test resources...');
+        // console.log('🛑 Cleaning up integration test resources...');
 
         if (mcpClient) {
             try {
