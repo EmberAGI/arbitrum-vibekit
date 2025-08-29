@@ -69,6 +69,20 @@ services:
   #     - 3008:3008
   #   restart: unless-stopped
 
+  liquidation-prevention-agent:
+    build:
+      context: ./
+      dockerfile: templates/liquidation-prevention-agent/Dockerfile
+    container_name: vibekit-liquidation-prevention-agent
+    env_file:
+      - path: .env
+        required: true
+      - path: templates/liquidation-prevention-agent/.env
+        required: false
+    ports:
+      - 3010:3010
+    restart: unless-stopped
+
   # liquidity-agent-no-wallet:
   #   build:
   #     context: ./
