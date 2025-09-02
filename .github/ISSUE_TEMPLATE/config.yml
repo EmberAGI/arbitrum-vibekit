@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Discord Support
+    url: https://discord.com/invite/bgxWQ2fSBR
+    about: Connect with the community and get real-time help
+  - name: 📚 Documentation
+    url: https://github.com/EmberAGI/arbitrum-vibekit/blob/main/README.md
+    about: Check our documentation for setup guides and examples

@@ -1,0 +1,175 @@
+name: 🔌 Protocol Integration Request
+description: Request support for a new DeFi protocol
+title: "[PROTOCOL] Add support for "
+labels: ["enhancement", "protocol-integration"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a protocol integration! This helps expand Vibekit's DeFi ecosystem support.
+
+  - type: input
+    id: protocol-name
+    attributes:
+      label: 🏷️ Protocol Name
+      description: Name of the DeFi protocol
+      placeholder: e.g., "Uniswap V4", "Compound V3", "Balancer V2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: protocol-type
+    attributes:
+      label: 🔧 Protocol Type
+      description: What type of DeFi operations does this protocol support?
+      options:
+        - Swapping/DEX
+        - Lending/Borrowing
+        - Liquidity Provision
+        - Yield Farming
+        - Derivatives/Perpetuals
+        - Cross-chain/Bridge
+        - Options/Structured Products
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: networks
+    attributes:
+      label: 🌐 Supported Networks
+      description: Which networks does this protocol operate on?
+      multiple: true
+      options:
+        - Arbitrum One
+        - Arbitrum Nova
+        - Arbitrum Sepolia (Testnet)
+        - Ethereum Mainnet
+        - Base
+        - Polygon
+        - Optimism
+        - Other (specify in description)
+    validations:
+      required: true
+
+  - type: textarea
+    id: protocol-description
+    attributes:
+      label: 📝 Protocol Description
+      description: Brief description of the protocol and its key features
+      placeholder: |
+        What does this protocol do?
+        What makes it unique or important?
+        Key features/benefits...
+    validations:
+      required: true
+
+  - type: input
+    id: documentation
+    attributes:
+      label: 📚 Protocol Documentation
+      description: Link to official protocol documentation
+      placeholder: https://docs.protocol.com
+    validations:
+      required: true
+
+  - type: input
+    id: contracts
+    attributes:
+      label: 📜 Smart Contract Addresses
+      description: Main contract addresses or contract repository
+      placeholder: https://github.com/protocol/contracts or 0x...
+
+  - type: textarea
+    id: capabilities
+    attributes:
+      label: 🎯 Desired Capabilities
+      description: What specific operations should be supported?
+      placeholder: |
+        For swapping protocols:
+        - Single token swaps
+        - Multi-hop routing
+        - Slippage protection
+        - Price impact calculation
+        
+        For lending protocols:
+        - Supply/withdraw assets
+        - Borrow/repay assets  
+        - Health factor monitoring
+        - Liquidation protection
+        
+        For liquidity protocols:
+        - Add/remove liquidity
+        - Position management
+        - Yield tracking
+        - Impermanent loss calculation
+    validations:
+      required: true
+
+  - type: textarea
+    id: api-sdk
+    attributes:
+      label: 🛠️ Available APIs/SDKs
+      description: Links to any existing APIs, SDKs, or integration tools
+      placeholder: |
+        Official SDK: https://...
+        GraphQL API: https://...
+        REST API: https://...
+        npm packages: @protocol/sdk
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 📈 Priority Level
+      description: How important is this integration?
+      options:
+        - Critical - Widely used protocol
+        - High - Popular protocol with good volume
+        - Medium - Useful addition to ecosystem
+        - Low - Nice to have
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: 💡 Use Cases
+      description: Specific use cases or agents that would benefit from this integration
+      placeholder: |
+        Example agents:
+        - Arbitrage bot using this protocol
+        - DCA strategy with their pools
+        - Yield optimization agent
+        - Risk management for positions
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 📎 Additional Information
+      description: Any other relevant information, security considerations, or special requirements
+      placeholder: |
+        Security audits, known limitations, special permissions needed, etc.
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: 🤝 Contribution Interest
+      options:
+        - label: I'm willing to help implement this integration
+        - label: I can provide testing and feedback
+        - label: I have expertise with this protocol's APIs
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: ✅ Pre-submission Checklist
+      options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+        - label: I have verified this protocol is actively maintained
+          required: true
+        - label: I have provided documentation links
+          required: true
+        - label: I have specified the desired capabilities clearly
+          required: true

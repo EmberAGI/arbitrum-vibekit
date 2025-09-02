@@ -1,0 +1,61 @@
+name: 🔧 Internal/Blank Issue
+description: Blank template for internal developers and maintainers
+title: ""
+labels: ["internal"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **For Internal Developers & Maintainers**
+        
+        This blank template provides flexibility for internal team members who need to create issues that don't fit the standard templates, or for quick internal tracking.
+        
+        ---
+
+  - type: textarea
+    id: content
+    attributes:
+      label: ✍️ Issue Content
+      description: Describe the issue, task, or discussion topic
+      placeholder: |
+        Write your issue content here...
+        
+        This could be:
+        - Internal tasks or reminders
+        - Discussion topics for the team
+        - Technical debt items
+        - Research tasks
+        - Quick bug reports without full template
+        - Planning notes
+        - etc.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: type
+    attributes:
+      label: 📋 Issue Type (optional)
+      options:
+        - label: Internal task/TODO
+        - label: Technical debt
+        - label: Research/investigation
+        - label: Team discussion
+        - label: Planning/design
+        - label: Quick bug note
+        - label: Maintenance task
+        - label: Other
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 📎 Additional Notes
+      description: Any additional context, links, or information
+      placeholder: |
+        Additional context, references, or notes...
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        **Note**: If this issue would benefit from a structured template, consider using one of the specific issue types instead for better tracking and community contribution.

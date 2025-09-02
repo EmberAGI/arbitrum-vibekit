@@ -1,0 +1,149 @@
+name: 🚀 Feature Request
+description: Suggest a new feature or enhancement
+title: "[FEATURE] "
+labels: ["enhancement"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please search existing issues first to avoid duplicates.
+
+  - type: dropdown
+    id: feature-category
+    attributes:
+      label: 🏷️ Feature Category
+      description: What category does this feature belong to?
+      options:
+        - Agent Template/Example
+        - MCP Server/Tools
+        - Core Framework
+        - Web Frontend/UI
+        - Testing/DevOps
+        - Documentation
+        - SDK/Library
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 🎯 Problem Statement
+      description: What problem does this feature solve?
+      placeholder: |
+        As a [user/developer/trader], I want to...
+        Currently, it's difficult to...
+        This would help me...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 💡 Proposed Solution
+      description: Describe your proposed feature in detail
+      placeholder: |
+        I propose we add...
+        This would work by...
+        The user interface would...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 🔄 Alternative Solutions
+      description: Have you considered any alternative approaches?
+      placeholder: |
+        Alternative approach 1: ...
+        Alternative approach 2: ...
+        Why the proposed solution is better...
+
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: 📈 Use Cases & Examples
+      description: Provide specific examples of how this feature would be used
+      placeholder: |
+        Use case 1: A trader wants to...
+        Use case 2: A developer needs to...
+        Example scenario: When building an agent for...
+
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: ⚙️ Estimated Complexity
+      description: How complex do you think this feature would be to implement?
+      options:
+        - Simple - Small addition or modification
+        - Medium - New component or moderate changes
+        - Complex - Significant architectural changes
+        - Unknown - Not sure about complexity
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 📊 Priority
+      description: How important is this feature to you and the community?
+      options:
+        - Critical - Blocking important workflows
+        - High - Would significantly improve experience
+        - Medium - Nice improvement to have
+        - Low - Minor quality of life improvement
+    validations:
+      required: true
+
+  - type: textarea
+    id: technical-requirements
+    attributes:
+      label: 🔧 Technical Requirements
+      description: Any specific technical requirements or constraints?
+      placeholder: |
+        Integration with specific APIs...
+        Performance requirements...
+        Security considerations...
+        Compatibility needs...
+
+  - type: textarea
+    id: mockups
+    attributes:
+      label: 🎨 Mockups/References
+      description: Visual mockups, reference implementations, or similar features in other projects
+      placeholder: |
+        Link to mockups, wireframes, or screenshots...
+        Similar feature in other projects: https://...
+        Reference implementations: https://...
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: 🤝 Contribution Interest
+      options:
+        - label: I'm willing to implement this feature
+        - label: I can help with testing and feedback
+        - label: I can provide design/UX input
+        - label: I can help with documentation
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 📎 Additional Context
+      description: Any other context, screenshots, or information
+      placeholder: Add any other relevant information...
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: ✅ Pre-submission Checklist
+      options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+        - label: I have clearly described the problem this feature solves
+          required: true
+        - label: I have provided specific use cases and examples
+          required: true
+        - label: I have considered the complexity and priority of this request
+          required: true
