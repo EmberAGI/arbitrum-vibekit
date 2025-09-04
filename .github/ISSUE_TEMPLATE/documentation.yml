@@ -1,6 +1,6 @@
 name: 📚 Documentation Issue
 description: Report missing, incorrect, or unclear documentation
-title: "[DOCS] "
+title: "[Update Docs] "
 labels: ["documentation"]
 assignees: []
 body:
@@ -50,10 +50,8 @@ body:
       label: 📍 Documentation Location
       description: Where is this documentation located (or where should it be)?
       placeholder: |
-        File path: typescript/templates/ember-agent/README.md
-        URL: https://github.com/EmberAGI/arbitrum-vibekit/...
-        Section: "Getting Started" section in main README
-        New location needed: docs/guides/protocol-integration.md
+        File path:
+        Section:
     validations:
       required: true
 

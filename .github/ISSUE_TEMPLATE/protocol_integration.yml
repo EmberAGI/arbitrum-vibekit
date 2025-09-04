@@ -1,6 +1,6 @@
-name: 🔌 Protocol Integration Request
+name: 🔌 Protocol Integration
 description: Request support for a new DeFi protocol
-title: "[PROTOCOL] Add support for "
+title: "New Protocol Integration "
 labels: ["enhancement", "protocol-integration"]
 assignees: []
 body:
