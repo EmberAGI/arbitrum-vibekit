@@ -1,6 +1,6 @@
-name: 🤖 Agent Template Request
+name: 🤖 New Agent Template
 description: Propose a new agent template for the templates directory
-title: "[AGENT] "
+title: "NewA gent Template"
 labels: ["enhancement", "agent-template"]
 assignees: []
 body:
@@ -55,13 +55,9 @@ body:
       description: Which DeFi protocols this agent integrates with?
       placeholder: |
         Primary protocols:
-        - Uniswap V3 (for swapping)
-        - Aave V3 (for lending)
-        - Camelot (for liquidity)
 
         Optional protocols:
-        - 1inch (for better routing)
-        - Compound (alternative lending)
+
     validations:
       required: true
 

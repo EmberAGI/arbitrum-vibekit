@@ -1,6 +1,6 @@
-name: 🔧 MCP Server Request
+name: 🔧 New MCP Server
 description: Request a new MCP (Model Context Protocol) server integration
-title: "[MCP] "
+title: "[New MCP Server] "
 labels: ["enhancement", "mcp-server"]
 assignees: []
 body:
@@ -72,26 +72,17 @@ body:
     attributes:
       label: 🔧 MCP Tools to Implement
       description: List the specific tools this MCP server provides
-      placeholder: |
-        1. getCurrentPrice
-           - Description: Get current token price in USD
-           - Input: token symbol or address
-           - Output: price, market cap, volume, price changes
+      placeholder:
+        1. Tool1:
+          - Description:
+          - Input:
+          - Output:
 
-        2. getHistoricalPrices  
-           - Description: Get historical price data for charts
-           - Input: token, time range, interval
-           - Output: array of price points with timestamps
+        1. Tool2:
+          - Description:
+          - Input:
+          - Output:
 
-        3. compareTokens
-           - Description: Compare multiple tokens side by side
-           - Input: array of token symbols
-           - Output: comparative metrics and performance
-
-        4. getPriceAlerts
-           - Description: Set up price alerts for tokens
-           - Input: token, target price, alert type
-           - Output: alert configuration and status
     validations:
       required: true
 
@@ -100,21 +91,11 @@ body:
     attributes:
       label: 🤖 Agent Integration Examples
       description: How would agents use these MCP tools?
-      placeholder: |
-        Example 1: Trading Agent
+      placeholder: 
+        Example: Trading Agent
         - Agent uses getCurrentPrice to check token prices before swaps
         - Uses compareTokens to find arbitrage opportunities
         - Sets up getPriceAlerts for entry/exit signals
-
-        Example 2: Portfolio Manager Agent
-        - Uses getHistoricalPrices to analyze token performance
-        - Compares portfolio tokens to rebalance allocations
-        - Monitors price movements for risk management
-
-        Example 3: Analytics Agent  
-        - Fetches price data to generate market reports
-        - Creates price charts and trend analysis
-        - Provides investment recommendations based on data
     validations:
       required: true
 
