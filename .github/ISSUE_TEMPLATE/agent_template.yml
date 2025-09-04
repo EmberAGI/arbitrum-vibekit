@@ -1,6 +1,6 @@
 name: 🤖 New Agent Template
 description: Propose a new agent template for the templates directory
-title: "NewA gent Template"
+title: "New Agent Template"
 labels: ["enhancement", "agent-template"]
 assignees: []
 body:
