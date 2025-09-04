@@ -1,0 +1,6 @@
+name: 🔧 Internal/Blank Issue
+description: Blank template for internal developers and maintainers
+title: ""
+labels: ["internal"]
+assignees: []
+body:
