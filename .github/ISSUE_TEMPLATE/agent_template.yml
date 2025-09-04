@@ -13,8 +13,7 @@ body:
     id: agent-name
     attributes:
       label: 🏷️ Agent Name
-      description: What should this agent be called?
-      placeholder: e.g., "DCA Bot Agent", "Liquidation Prevention Agent", "Yield Optimizer Agent"
+      description: What is this agent called?
     validations:
       required: true
 
@@ -22,7 +21,7 @@ body:
     id: agent-category
     attributes:
       label: 🏗️ Agent Category
-      description: What type of DeFi operations will this agent perform?
+      description: What type of DeFi operations this agent performs?
       options:
         - Trading/Swapping
         - Lending/Borrowing
@@ -45,11 +44,7 @@ body:
       placeholder: |
         This agent automatically...
         Key features:
-        - Feature 1: ...
-        - Feature 2: ...
-        - Feature 3: ...
-        
-        Target users: DeFi traders who want to...
+
     validations:
       required: true
 
@@ -57,94 +52,24 @@ body:
     id: protocols
     attributes:
       label: 🔌 Required Protocols
-      description: Which DeFi protocols should this agent integrate with?
+      description: Which DeFi protocols this agent integrates with?
       placeholder: |
         Primary protocols:
         - Uniswap V3 (for swapping)
         - Aave V3 (for lending)
         - Camelot (for liquidity)
-        
+
         Optional protocols:
         - 1inch (for better routing)
         - Compound (alternative lending)
     validations:
       required: true
 
-  - type: textarea
-    id: core-functionality
-    attributes:
-      label: ⚙️ Core Functionality
-      description: What are the main functions/skills this agent should have?
-      placeholder: |
-        Skills the agent should provide:
-        1. Monitor portfolio positions
-        2. Execute rebalancing trades
-        3. Calculate optimal allocation
-        4. Risk assessment and alerts
-        5. Historical performance tracking
-        
-        MCP tools needed:
-        - getPortfolioBalance
-        - executeRebalance  
-        - calculateOptimalWeights
-        - assessRisk
-    validations:
-      required: true
-
-  - type: dropdown
-    id: complexity
-    attributes:
-      label: 📊 Agent Complexity
-      description: How complex is this agent to implement?
-      options:
-        - Beginner - Simple operations, good for learning
-        - Intermediate - Multiple protocols, moderate logic
-        - Advanced - Complex strategies, sophisticated algorithms
-        - Expert - Research-level, cutting-edge DeFi
-    validations:
-      required: true
-
-  - type: textarea
-    id: user-scenarios
-    attributes:
-      label: 🎯 User Scenarios
-      description: Provide specific scenarios where users would use this agent
-      placeholder: |
-        Scenario 1: A DeFi user wants to automatically rebalance their portfolio monthly
-        - User sets target allocations (50% ETH, 30% USDC, 20% ARB)
-        - Agent monitors current balances daily
-        - When drift exceeds 5%, agent executes rebalancing trades
-        
-        Scenario 2: Risk management for leveraged positions
-        - User has borrowed against collateral on Aave
-        - Agent monitors health factor continuously
-        - If health factor drops below 1.5, agent repays debt or adds collateral
-    validations:
-      required: true
-
-  - type: textarea
-    id: configuration
-    attributes:
-      label: ⚙️ Configuration Options
-      description: What should users be able to configure?
-      placeholder: |
-        Required configuration:
-        - Target token allocations
-        - Risk tolerance level
-        - Rebalancing frequency
-        - Slippage tolerance
-        
-        Optional configuration:
-        - Preferred DEXs for swapping
-        - Gas price strategy
-        - Emergency stop conditions
-        - Notification preferences
-
   - type: dropdown
     id: automation-level
     attributes:
       label: 🤖 Automation Level
-      description: How automated should this agent be?
+      description: How automated is this agent?
       options:
         - Manual - User triggers each action
         - Semi-automated - Agent suggests, user approves
@@ -154,73 +79,16 @@ body:
       required: true
 
   - type: textarea
-    id: risk-considerations
-    attributes:
-      label: ⚠️ Risk Considerations
-      description: What risks should users be aware of?
-      placeholder: |
-        DeFi risks:
-        - Smart contract risk from integrated protocols
-        - Impermanent loss in liquidity positions
-        - Liquidation risk in leveraged positions
-        
-        Agent-specific risks:
-        - Slippage during rebalancing
-        - Gas cost impact on small portfolios
-        - Timing risks in volatile markets
-        
-        Mitigation strategies:
-        - Conservative default settings
-        - Clear risk warnings in documentation
-        - Emergency stop functionality
-
-  - type: textarea
     id: testing-approach
     attributes:
       label: 🧪 Testing Requirements
       description: How should this agent be tested?
       placeholder: |
         Unit tests:
-        - Portfolio calculation logic
-        - Risk assessment algorithms
-        - Configuration validation
-        
+
         Integration tests:
-        - Protocol interactions
-        - End-to-end rebalancing flows
-        - Error handling scenarios
-        
+
         Live testing:
-        - Testnet integration tests
-        - Small mainnet trials
-        - Performance benchmarks
-
-  - type: textarea
-    id: similar-projects
-    attributes:
-      label: 🔍 Similar Projects/References
-      description: Are there similar agents or projects we can reference?
-      placeholder: |
-        Similar projects:
-        - Yearn Finance vaults (yield optimization)
-        - Balancer smart pools (portfolio management)
-        - DeFi Pulse Index methodology
-        
-        Reference implementations:
-        - GitHub repos, documentation, or research papers
-        - Academic papers on portfolio optimization
-        - Existing DeFi strategies to model after
-
-  - type: checkboxes
-    id: contribution
-    attributes:
-      label: 🤝 Contribution Interest
-      options:
-        - label: I'm willing to implement this agent template
-        - label: I can help with the design and architecture
-        - label: I can provide domain expertise for the DeFi strategy
-        - label: I can help with testing and validation
-        - label: I can write documentation and examples
 
   - type: textarea
     id: additional
@@ -243,6 +111,4 @@ body:
         - label: I have identified the required protocols and integrations
           required: true
         - label: I have considered the risks and testing requirements
-          required: true
-        - label: I have provided realistic user scenarios
           required: true

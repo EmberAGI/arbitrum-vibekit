@@ -13,8 +13,7 @@ body:
     id: mcp-name
     attributes:
       label: 🏷️ MCP Server Name
-      description: What should this MCP server be called?
-      placeholder: e.g., "Coingecko Price MCP", "DEXScreener Analytics MCP", "Chainlink Oracle MCP"
+      description: What is this MCP server called?
     validations:
       required: true
 
@@ -45,13 +44,8 @@ body:
       description: Describe what this MCP server does and why it's needed
       placeholder: |
         This MCP server provides...
-        
         Key capabilities:
-        - Tool 1: Fetch real-time token prices
-        - Tool 2: Get historical price data
-        - Tool 3: Calculate price changes and trends
-        
-        Why it's needed: Agents need reliable price data to make informed trading decisions...
+        Why it's needed:
     validations:
       required: true
 
@@ -61,17 +55,15 @@ body:
       label: 🌐 Data Source/API
       description: What external service or API will this MCP server use?
       placeholder: |
-        Primary API: https://api.coingecko.com/api/v3/
-        
+        Primary API: 
+
         API details:
         - Authentication required: API key
         - Rate limits: 50 calls/minute free tier
-        - Documentation: https://docs.coingecko.com/
+        - Documentation URL: 
         - Reliability: High uptime, widely used
-        
+
         Alternative APIs:
-        - CoinMarketCap API (backup)
-        - DeFiLlama API (cross-reference)
     validations:
       required: true
 
@@ -79,23 +71,23 @@ body:
     id: tools-list
     attributes:
       label: 🔧 MCP Tools to Implement
-      description: List the specific tools this MCP server should provide
+      description: List the specific tools this MCP server provides
       placeholder: |
         1. getCurrentPrice
            - Description: Get current token price in USD
            - Input: token symbol or address
            - Output: price, market cap, volume, price changes
-        
+
         2. getHistoricalPrices  
            - Description: Get historical price data for charts
            - Input: token, time range, interval
            - Output: array of price points with timestamps
-        
+
         3. compareTokens
            - Description: Compare multiple tokens side by side
            - Input: array of token symbols
            - Output: comparative metrics and performance
-        
+
         4. getPriceAlerts
            - Description: Set up price alerts for tokens
            - Input: token, target price, alert type
@@ -113,12 +105,12 @@ body:
         - Agent uses getCurrentPrice to check token prices before swaps
         - Uses compareTokens to find arbitrage opportunities
         - Sets up getPriceAlerts for entry/exit signals
-        
+
         Example 2: Portfolio Manager Agent
         - Uses getHistoricalPrices to analyze token performance
         - Compares portfolio tokens to rebalance allocations
         - Monitors price movements for risk management
-        
+
         Example 3: Analytics Agent  
         - Fetches price data to generate market reports
         - Creates price charts and trend analysis
@@ -150,36 +142,16 @@ body:
         Required configuration:
         - API_KEY: API key for the service
         - BASE_URL: API endpoint URL
-        
+
         Optional configuration:
         - RATE_LIMIT: Custom rate limiting
         - CACHE_TTL: How long to cache responses
         - DEFAULT_CURRENCY: Default fiat currency (USD, EUR, etc.)
         - TIMEOUT: Request timeout in seconds
-        
+
         Environment setup:
         - How users should set up API keys
         - Any special installation requirements
-
-  - type: textarea
-    id: error-handling
-    attributes:
-      label: 🚨 Error Handling
-      description: What error scenarios should be handled?
-      placeholder: |
-        Common error scenarios:
-        - API rate limit exceeded
-        - Invalid token symbol/address
-        - Network connectivity issues
-        - API service downtime
-        - Authentication failures
-        - Invalid request parameters
-        
-        Error handling approach:
-        - Graceful degradation with cached data
-        - Retry logic with exponential backoff
-        - Clear error messages for agents
-        - Fallback to alternative APIs
 
   - type: textarea
     id: testing-approach
@@ -188,72 +160,10 @@ body:
       description: How should this MCP server be tested?
       placeholder: |
         Unit tests:
-        - API request/response handling
-        - Data parsing and validation
-        - Error handling scenarios
-        - Rate limiting logic
-        
+
         Integration tests:
-        - Real API calls with test data
-        - MCP protocol compliance
-        - Agent integration scenarios
-        
+
         Performance tests:
-        - Response time benchmarks
-        - Rate limit handling
-        - Concurrent request handling
-
-  - type: dropdown
-    id: priority
-    attributes:
-      label: 📈 Priority Level
-      description: How important is this MCP server?
-      options:
-        - Critical - Essential for core agent functionality
-        - High - Significantly improves agent capabilities
-        - Medium - Useful addition to ecosystem
-        - Low - Nice to have enhancement
-    validations:
-      required: true
-
-  - type: textarea
-    id: similar-implementations
-    attributes:
-      label: 🔍 Similar Implementations
-      description: Are there similar MCP servers or reference implementations?
-      placeholder: |
-        Similar MCP servers:
-        - Existing price data MCPs
-        - Similar API integrations
-        - Reference implementations in other languages
-        
-        Related projects:
-        - npm packages for this API
-        - Python/JavaScript libraries
-        - Documentation examples
-
-  - type: checkboxes
-    id: contribution
-    attributes:
-      label: 🤝 Contribution Interest
-      options:
-        - label: I'm willing to implement this MCP server
-        - label: I can help with API integration and testing
-        - label: I can provide domain expertise for this service
-        - label: I can help with documentation and examples
-        - label: I can assist with ongoing maintenance
-
-  - type: textarea
-    id: additional
-    attributes:
-      label: 📎 Additional Context
-      description: Any other relevant information or requirements
-      placeholder: |
-        Additional considerations:
-        - Performance requirements
-        - Scaling considerations
-        - Security implications
-        - Maintenance requirements
 
   - type: checkboxes
     id: checklist

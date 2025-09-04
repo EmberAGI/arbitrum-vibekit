@@ -7,7 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for suggesting a protocol integration! This helps expand Vibekit's DeFi ecosystem support.
+        Thanks for suggesting a protocol integration! Note that protocol integration is only supported through the Ember Plugin system, so make sure to checkout the Ember Plugin system first.
 
   - type: input
     id: protocol-name
@@ -85,20 +85,20 @@ body:
     id: capabilities
     attributes:
       label: 🎯 Desired Capabilities
-      description: What specific operations should be supported?
+      description: What specific operations are supported?
       placeholder: |
         For swapping protocols:
         - Single token swaps
         - Multi-hop routing
         - Slippage protection
         - Price impact calculation
-        
+
         For lending protocols:
         - Supply/withdraw assets
         - Borrow/repay assets  
         - Health factor monitoring
         - Liquidation protection
-        
+
         For liquidity protocols:
         - Add/remove liquidity
         - Position management
@@ -106,42 +106,6 @@ body:
         - Impermanent loss calculation
     validations:
       required: true
-
-  - type: textarea
-    id: api-sdk
-    attributes:
-      label: 🛠️ Available APIs/SDKs
-      description: Links to any existing APIs, SDKs, or integration tools
-      placeholder: |
-        Official SDK: https://...
-        GraphQL API: https://...
-        REST API: https://...
-        npm packages: @protocol/sdk
-
-  - type: dropdown
-    id: priority
-    attributes:
-      label: 📈 Priority Level
-      description: How important is this integration?
-      options:
-        - Critical - Widely used protocol
-        - High - Popular protocol with good volume
-        - Medium - Useful addition to ecosystem
-        - Low - Nice to have
-    validations:
-      required: true
-
-  - type: textarea
-    id: use-cases
-    attributes:
-      label: 💡 Use Cases
-      description: Specific use cases or agents that would benefit from this integration
-      placeholder: |
-        Example agents:
-        - Arbitrage bot using this protocol
-        - DCA strategy with their pools
-        - Yield optimization agent
-        - Risk management for positions
 
   - type: textarea
     id: additional
@@ -152,20 +116,13 @@ body:
         Security audits, known limitations, special permissions needed, etc.
 
   - type: checkboxes
-    id: contribution
-    attributes:
-      label: 🤝 Contribution Interest
-      options:
-        - label: I'm willing to help implement this integration
-        - label: I can provide testing and feedback
-        - label: I have expertise with this protocol's APIs
-
-  - type: checkboxes
     id: checklist
     attributes:
       label: ✅ Pre-submission Checklist
       options:
         - label: I have searched existing issues to avoid duplicates
+          required: true
+        - label: I have integrated the protocol using the Ember Plugin system
           required: true
         - label: I have verified this protocol is actively maintained
           required: true

@@ -32,7 +32,6 @@ body:
       label: 🎯 Problem Statement
       description: What problem does this feature solve?
       placeholder: |
-        As a [user/developer/trader], I want to...
         Currently, it's difficult to...
         This would help me...
     validations:
@@ -51,16 +50,6 @@ body:
       required: true
 
   - type: textarea
-    id: alternatives
-    attributes:
-      label: 🔄 Alternative Solutions
-      description: Have you considered any alternative approaches?
-      placeholder: |
-        Alternative approach 1: ...
-        Alternative approach 2: ...
-        Why the proposed solution is better...
-
-  - type: textarea
     id: use-cases
     attributes:
       label: 📈 Use Cases & Examples
@@ -69,19 +58,6 @@ body:
         Use case 1: A trader wants to...
         Use case 2: A developer needs to...
         Example scenario: When building an agent for...
-
-  - type: dropdown
-    id: complexity
-    attributes:
-      label: ⚙️ Estimated Complexity
-      description: How complex do you think this feature would be to implement?
-      options:
-        - Simple - Small addition or modification
-        - Medium - New component or moderate changes
-        - Complex - Significant architectural changes
-        - Unknown - Not sure about complexity
-    validations:
-      required: true
 
   - type: dropdown
     id: priority
@@ -95,17 +71,6 @@ body:
         - Low - Minor quality of life improvement
     validations:
       required: true
-
-  - type: textarea
-    id: technical-requirements
-    attributes:
-      label: 🔧 Technical Requirements
-      description: Any specific technical requirements or constraints?
-      placeholder: |
-        Integration with specific APIs...
-        Performance requirements...
-        Security considerations...
-        Compatibility needs...
 
   - type: textarea
     id: mockups
@@ -126,13 +91,7 @@ body:
         - label: I can help with testing and feedback
         - label: I can provide design/UX input
         - label: I can help with documentation
-
-  - type: textarea
-    id: additional
-    attributes:
-      label: 📎 Additional Context
-      description: Any other context, screenshots, or information
-      placeholder: Add any other relevant information...
+        - label: None
 
   - type: checkboxes
     id: checklist
@@ -144,6 +103,4 @@ body:
         - label: I have clearly described the problem this feature solves
           required: true
         - label: I have provided specific use cases and examples
-          required: true
-        - label: I have considered the complexity and priority of this request
           required: true

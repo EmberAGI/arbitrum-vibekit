@@ -16,7 +16,6 @@ body:
       description: What type of documentation needs attention?
       options:
         - Setup/Installation Guide
-        - API Documentation
         - Agent Template Guide
         - MCP Integration Guide
         - Code Examples/Tutorials
@@ -97,41 +96,6 @@ body:
     validations:
       required: true
 
-  - type: textarea
-    id: user-impact
-    attributes:
-      label: 🎯 User Impact
-      description: How does this documentation issue affect users?
-      placeholder: |
-        Users get stuck when trying to...
-        This prevents developers from...
-        Makes it hard to understand...
-        Causes confusion about...
-    validations:
-      required: true
-
-  - type: textarea
-    id: related-code
-    attributes:
-      label: 🔗 Related Code/Features
-      description: What code, features, or components should this documentation cover?
-      placeholder: |
-        Related to the swap functionality in...
-        Covers the MCP server implementation...
-        Should document the agent lifecycle...
-        Explains the hook system in...
-
-  - type: textarea
-    id: examples-needed
-    attributes:
-      label: 💡 Examples Needed
-      description: What specific examples or code snippets would be helpful?
-      placeholder: |
-        Example of setting up environment variables
-        Code snippet showing how to create a custom agent
-        Step-by-step protocol integration example
-        Configuration file examples
-
   - type: dropdown
     id: priority
     attributes:
@@ -144,16 +108,6 @@ body:
         - Low - Minor improvement
     validations:
       required: true
-
-  - type: checkboxes
-    id: contribution
-    attributes:
-      label: 🤝 Contribution Interest
-      options:
-        - label: I'm willing to write/improve this documentation
-        - label: I can provide examples or code snippets
-        - label: I can review and test the documentation
-        - label: I can help with technical writing
 
   - type: textarea
     id: additional

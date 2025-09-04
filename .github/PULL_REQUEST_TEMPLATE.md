@@ -2,7 +2,7 @@
 
 <!-- Provide a brief description of what this PR accomplishes -->
 
-**Type of change**:
+**Type of Change**:
 
 - [ ] 🐛 Bug fix (fixes an issue)
 - [ ] ✨ New feature (adds functionality)
@@ -16,7 +16,7 @@
 
 <!-- Explain what you changed and why and link related issues. -->
 
-**Addresses**: #(issue_number)
+**Related Issue**:
 
 **What & Why**:
 
@@ -24,9 +24,11 @@
 
 <!-- Describe specific tests you ran & Commands you ran to test-->
 
-**Testing Performed**:
+**Tests Performed**:
 
-**Testing results**:
+**Testing Results**:
+
+**Steps to Run Tests**:
 
 ## 📋 Checklist
 
@@ -59,17 +61,19 @@
 
 <!-- Any special deployment considerations -->
 
-**Environment Variables**:
+**Deployment Considerations**:
 
 <!-- List any new or changed environment variables -->
 
-**Breaking Changes**:
+**Environment Variables**:
 
 <!-- Describe any breaking changes and migration steps -->
 
-**Dependencies**:
+**Breaking Changes**:
 
 <!-- Note any new dependencies added -->
+
+**Dependencies**:
 
 ## 📎 Additional Context
 
