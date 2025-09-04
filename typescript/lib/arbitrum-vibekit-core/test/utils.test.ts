@@ -5,6 +5,7 @@ import {
   UnsupportedSchemaError,
   formatToolDescriptionWithTagsAndExamples,
 } from "../src/utils.js"; // Changed import path
+import { describe, it } from "node:test";
 
 describe("getInputMimeType", () => {
   describe("supported schemas", () => {

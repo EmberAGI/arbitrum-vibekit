@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS "AgentTransaction" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"txHash" varchar(66) NOT NULL,
+	"userAddress" varchar(42) NOT NULL,
+	"agentType" varchar(50) NOT NULL,
+	"chainId" varchar(10) NOT NULL,
+	"status" varchar DEFAULT 'pending' NOT NULL,
+	"transactionType" varchar(50),
+	"blockNumber" varchar(20),
+	"gasUsed" varchar(20),
+	"gasPrice" varchar(30),
+	"value" varchar(50),
+	"contractAddress" varchar(42),
+	"methodName" varchar(100),
+	"transactionDetails" json,
+	"executedAt" timestamp NOT NULL,
+	"confirmedAt" timestamp,
+	"createdAt" timestamp DEFAULT now() NOT NULL,
+	"updatedAt" timestamp DEFAULT now() NOT NULL
+);

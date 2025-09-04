@@ -13,6 +13,7 @@ const runMigrate = async () => {
   }
 
   const connection = postgres(process.env.POSTGRES_URL, { max: 1 });
+  console.log('Connecting to Postgres database...', process.env.POSTGRES_URL);
   const db = drizzle(connection);
 
   console.log('⏳ Running migrations...');
@@ -25,7 +26,7 @@ const runMigrate = async () => {
   process.exit(0);
 };
 
-runMigrate().catch((err) => {
+runMigrate().catch(err => {
   console.error('❌ Migration failed');
   console.error(err);
   process.exit(1);
