@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { useAccount, useSwitchChain } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useTransactionExecutor } from "../hooks/useTransactionExecutor";
-import type { TxPlan } from "../lib/transactionUtils";
-import { strToDecimal } from "@/lib/utils";
+import { useAccount, useSwitchChain } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useTransactionExecutor } from '../hooks/useTransactionExecutor';
+import type { TxPlan } from '../lib/transactionUtils';
+import { strToDecimal } from '@/lib/utils';
 
 // Removed: useState, viem imports, useSendTransaction
 // Removed: getChainById, withSafeDefaults, toBigInt, signTx
@@ -48,9 +48,9 @@ export function Liquidity({
   txPreview: any; // TODO: Define LiquidityTxPreview type
   pools: IPool[] | null;
 }) {
-  console.log("[Liquidity Component] Received txPreview:", txPreview);
-  console.log("[Liquidity Component] Received txPlan:", txPlan);
-  console.log("[Liquidity Component] Received positions:", positions);
+  console.log('[Liquidity Component] Received txPreview:', txPreview);
+  console.log('[Liquidity Component] Received txPlan:', txPlan);
+  console.log('[Liquidity Component] Received positions:', positions);
 
   // --- Wagmi hooks ---
   const { address, isConnected, chainId } = useAccount();
@@ -98,7 +98,7 @@ export function Liquidity({
                   className="rounded-xl bg-zinc-700 p-4 flex flex-col gap-2"
                 >
                   <span className="font-normal flex gap-3 w-full items-center text-sm">
-                    {x.tokenId}{" "}
+                    {x.tokenId}{' '}
                     <span className="text-xs text-gray-400">
                       {x.symbol0?.toUpperCase()} / {x.symbol1?.toUpperCase()}
                     </span>
@@ -110,9 +110,9 @@ export function Liquidity({
                         {x.amount0} {x.amount0 && x.symbol0?.toUpperCase()}
                       </span>
                       <span>
-                        {" (on "}
+                        {' (on '}
                         {x.providerId?.toUpperCase()}
-                        {")"}
+                        {')'}
                       </span>
                     </span>
                   </p>
@@ -122,9 +122,9 @@ export function Liquidity({
                         {x.amount1} {x.amount1 && x.symbol1?.toUpperCase()}
                       </span>
                       <span>
-                        {" (on "}
+                        {' (on '}
                         {x.providerId?.toUpperCase()}
-                        {")"}
+                        {')'}
                       </span>
                     </span>
                   </p>
@@ -133,13 +133,13 @@ export function Liquidity({
                       Price: {x.price}
                     </span>
                     <span className="font-normal  text-sm">
-                      Pool: {x.poolAddress}{" "}
+                      Pool: {x.poolAddress}{' '}
                     </span>
                   </span>
                   <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 my-0">
                     <span className="font-normal  text-sm">
                       {`Position Range from ${strToDecimal(
-                        x.positionRange.fromPrice
+                        x.positionRange.fromPrice,
                       )} to ${strToDecimal(x.positionRange.toPrice)}`}
                     </span>
                   </p>
@@ -161,22 +161,22 @@ export function Liquidity({
                   <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 my-0 flex flex-col">
                     <span className="font-semibold text-sm w-full ">
                       {x.symbol0}
-                      {" on "}
-                      {x.token0.chainId}{" "}
+                      {' on '}
+                      {x.token0.chainId}{' '}
                     </span>
                     <span className="font-normal text-sm w-full">
-                      {x.token0.address}{" "}
+                      {x.token0.address}{' '}
                     </span>
                   </p>
 
                   <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 my-0 flex flex-col">
                     <span className="font-semibold text-sm w-full">
                       {x.symbol1}
-                      {" on "}
-                      {x.token1.chainId}{" "}
+                      {' on '}
+                      {x.token1.chainId}{' '}
                     </span>
                     <span className="font-normal text-sm w-full">
-                      {x.token1.address}{" "}
+                      {x.token1.address}{' '}
                     </span>
                   </p>
                   <span className="font-normal flex gap-3 w-full items-center text-sm">
@@ -196,7 +196,7 @@ export function Liquidity({
                 </h2>
                 <div className="rounded-xl bg-zinc-700 p-4 flex flex-col gap-2">
                   <span className="font-normal flex gap-3 w-full items-center text-sm">
-                    {txPreview?.action?.toUpperCase()}{" "}
+                    {txPreview?.action?.toUpperCase()}{' '}
                     <span className="text-xs text-gray-400">
                       {txPreview?.pairHandle}
                     </span>
@@ -205,7 +205,7 @@ export function Liquidity({
                   <p className="font-normal w-full bg-zinc-600 rounded-full p-5 px-8 ">
                     <span className="font-normal text-sm flex flex-col">
                       <span className="font-semibold w-full text-xl">
-                        {txPreview?.token0Amount}{" "}
+                        {txPreview?.token0Amount}{' '}
                         {txPreview?.token0Amount &&
                           txPreview?.token0Symbol?.toUpperCase()}
                       </span>
@@ -214,7 +214,7 @@ export function Liquidity({
                   <p className="font-normal w-full bg-zinc-600 rounded-full p-5 px-8 ">
                     <span className="font-normal text-sm flex flex-col">
                       <span className="font-semibold w-full text-xl">
-                        {txPreview?.token1Amount}{" "}
+                        {txPreview?.token1Amount}{' '}
                         {txPreview?.token1Amount &&
                           txPreview?.token1Symbol?.toUpperCase()}
                       </span>
@@ -222,7 +222,7 @@ export function Liquidity({
                   </p>
                   <span className="font-normal flex gap-3 w-full items-center text-sm">
                     <span className="text-md text-gray-400">
-                      Price: {txPreview?.priceFrom} {" - "} {txPreview?.priceTo}
+                      Price: {txPreview?.priceFrom} {' - '} {txPreview?.priceTo}
                     </span>
                   </span>
                 </div>
@@ -243,7 +243,7 @@ export function Liquidity({
                     )}
                     {txError && (
                       <p className=" p-2 rounded-2xl border-red-800 bg-red-400 w-full border-2 text-white break-words">
-                        Execution Error!{" "}
+                        Execution Error!{' '}
                         {(txError as any).shortMessage ||
                           txError.message ||
                           JSON.stringify(txError, null, 2)}
@@ -260,7 +260,7 @@ export function Liquidity({
                     )}
                     {needsApproval && approvalError && (
                       <p className=" p-2 rounded-2xl border-red-800 bg-red-400 w-full border-2 text-white break-words">
-                        Approval Error!{" "}
+                        Approval Error!{' '}
                         {(approvalError as any).shortMessage ||
                           approvalError.message ||
                           JSON.stringify(approvalError, null, 2)}
@@ -290,8 +290,8 @@ export function Liquidity({
                                 approvalIndex + 1
                               }/${totalApprovals}...`
                             : isApprovalPhaseComplete
-                            ? "All Approved"
-                            : `Approve ${approvalIndex + 1}/${totalApprovals}`}
+                              ? 'All Approved'
+                              : `Approve ${approvalIndex + 1}/${totalApprovals}`}
                         </button>
                       )}
                       <button
@@ -301,10 +301,10 @@ export function Liquidity({
                         disabled={!canExecute || false} // Use hook state (extra || false is harmless but redundant)
                       >
                         {isTxPending
-                          ? "Executing..."
+                          ? 'Executing...'
                           : needsApproval
-                          ? "Execute Transaction"
-                          : "Sign Transaction"}
+                            ? 'Execute Transaction'
+                            : 'Sign Transaction'}
                       </button>
                     </div>
                   </>

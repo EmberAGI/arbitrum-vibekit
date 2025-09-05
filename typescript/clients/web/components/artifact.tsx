@@ -1,7 +1,14 @@
 import type { Attachment, UIMessage } from 'ai';
 import { formatDistance } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
-import { type Dispatch, memo, type SetStateAction, useCallback, useEffect, useState } from 'react';
+import {
+  type Dispatch,
+  memo,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useState,
+} from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { useDebounceCallback, useWindowSize } from 'usehooks-ts';
 import type { Document, Vote } from '@/lib/db/schema';
@@ -88,7 +95,7 @@ function PureArtifact({
     artifact.documentId !== 'init' && artifact.status !== 'streaming'
       ? `/api/document?id=${artifact.documentId}`
       : null,
-    fetcher
+    fetcher,
   );
 
   const [mode, setMode] = useState<'edit' | 'diff'>('edit');
@@ -104,7 +111,7 @@ function PureArtifact({
       if (mostRecentDocument) {
         setDocument(mostRecentDocument);
         setCurrentVersionIndex(documents.length - 1);
-        setArtifact(currentArtifact => ({
+        setArtifact((currentArtifact) => ({
           ...currentArtifact,
           content: mostRecentDocument.content ?? '',
         }));
@@ -125,7 +132,7 @@ function PureArtifact({
 
       mutate<Array<Document>>(
         `/api/document?id=${artifact.documentId}`,
-        async currentDocuments => {
+        async (currentDocuments) => {
           if (!currentDocuments) return undefined;
 
           const currentDocument = currentDocuments.at(-1);
@@ -157,13 +164,16 @@ function PureArtifact({
           }
           return currentDocuments;
         },
-        { revalidate: false }
+        { revalidate: false },
       );
     },
-    [artifact, mutate]
+    [artifact, mutate],
   );
 
-  const debouncedHandleContentChange = useDebounceCallback(handleContentChange, 2000);
+  const debouncedHandleContentChange = useDebounceCallback(
+    handleContentChange,
+    2000,
+  );
 
   const saveContent = useCallback(
     (updatedContent: string, debounce: boolean) => {
@@ -177,7 +187,7 @@ function PureArtifact({
         }
       }
     },
-    [document, debouncedHandleContentChange, handleContentChange]
+    [document, debouncedHandleContentChange, handleContentChange],
   );
 
   function getDocumentContentById(index: number) {
@@ -195,16 +205,16 @@ function PureArtifact({
     }
 
     if (type === 'toggle') {
-      setMode(mode => (mode === 'edit' ? 'diff' : 'edit'));
+      setMode((mode) => (mode === 'edit' ? 'diff' : 'edit'));
     }
 
     if (type === 'prev') {
       if (currentVersionIndex > 0) {
-        setCurrentVersionIndex(index => index - 1);
+        setCurrentVersionIndex((index) => index - 1);
       }
     } else if (type === 'next') {
       if (currentVersionIndex < documents.length - 1) {
-        setCurrentVersionIndex(index => index + 1);
+        setCurrentVersionIndex((index) => index + 1);
       }
     }
   };
@@ -218,13 +228,15 @@ function PureArtifact({
    */
 
   const isCurrentVersion =
-    documents && documents.length > 0 ? currentVersionIndex === documents.length - 1 : true;
+    documents && documents.length > 0
+      ? currentVersionIndex === documents.length - 1
+      : true;
 
   const { width: windowWidth, height: windowHeight } = useWindowSize();
   const isMobile = windowWidth ? windowWidth < 768 : false;
 
   const artifactDefinition = artifactDefinitions.find(
-    definition => definition.kind === artifact.kind
+    (definition) => definition.kind === artifact.kind,
   );
 
   if (!artifactDefinition) {
@@ -376,7 +388,9 @@ function PureArtifact({
                     x: 400,
                     y: 0,
                     height: windowHeight,
-                    width: windowWidth ? windowWidth - 400 : 'calc(100dvw-400px)',
+                    width: windowWidth
+                      ? windowWidth - 400
+                      : 'calc(100dvw-400px)',
                     borderRadius: 0,
                     transition: {
                       delay: 0,
@@ -406,12 +420,18 @@ function PureArtifact({
                   <div className="font-medium">{artifact.title}</div>
 
                   {isContentDirty ? (
-                    <div className="text-sm text-muted-foreground">Saving changes...</div>
+                    <div className="text-sm text-muted-foreground">
+                      Saving changes...
+                    </div>
                   ) : document ? (
                     <div className="text-sm text-muted-foreground">
-                      {`Updated ${formatDistance(new Date(document.createdAt), new Date(), {
-                        addSuffix: true,
-                      })}`}
+                      {`Updated ${formatDistance(
+                        new Date(document.createdAt),
+                        new Date(),
+                        {
+                          addSuffix: true,
+                        },
+                      )}`}
                     </div>
                   ) : (
                     <div className="w-32 h-3 mt-2 bg-muted-foreground/20 rounded-md animate-pulse" />
@@ -434,7 +454,9 @@ function PureArtifact({
               <artifactDefinition.content
                 title={artifact.title}
                 content={
-                  isCurrentVersion ? artifact.content : getDocumentContentById(currentVersionIndex)
+                  isCurrentVersion
+                    ? artifact.content
+                    : getDocumentContentById(currentVersionIndex)
                 }
                 mode={mode}
                 status={artifact.status}

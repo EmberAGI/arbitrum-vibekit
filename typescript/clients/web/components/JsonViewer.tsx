@@ -21,7 +21,12 @@ export function JsonViewer({ data, title = 'Data Preview' }: JsonViewerProps) {
     <div className="flex flex-col gap-1 p-4 bg-[hsl(0,0%,20%)] backdrop-blur-sm rounded-lg text-white border border-zinc-600">
       <h2 className="text-sm font-semibold mb-2 text-zinc-300">{title}</h2>
       <div className="bg-[hsl(0,0%,14.1%)] rounded-md p-2 overflow-x-auto max-w-full border border-zinc-600/50">
-        <JsonNode data={data} path="" onCopy={handleCopy} copiedPath={copiedPath} />
+        <JsonNode
+          data={data}
+          path=""
+          onCopy={handleCopy}
+          copiedPath={copiedPath}
+        />
       </div>
     </div>
   );
@@ -176,7 +181,8 @@ function JsonNode({
     }
 
     // Non-empty array
-    const displayKey = isArrayItem && arrayIndex !== undefined ? `[${arrayIndex}]` : parentKey;
+    const displayKey =
+      isArrayItem && arrayIndex !== undefined ? `[${arrayIndex}]` : parentKey;
 
     return (
       <div>
@@ -267,7 +273,8 @@ function JsonNode({
     }
 
     // Non-empty object
-    const displayKey = isArrayItem && arrayIndex !== undefined ? `[${arrayIndex}]` : parentKey;
+    const displayKey =
+      isArrayItem && arrayIndex !== undefined ? `[${arrayIndex}]` : parentKey;
 
     return (
       <div>
@@ -292,14 +299,15 @@ function JsonNode({
                 <span className="text-zinc-300 font-medium">{displayKey}:</span>
               )}
               <span className="bg-zinc-600/30 text-zinc-300 px-2 py-0.5 rounded-full text-[10px] font-medium">
-                Object • {keys.length} {keys.length === 1 ? 'property' : 'properties'}
+                Object • {keys.length}{' '}
+                {keys.length === 1 ? 'property' : 'properties'}
               </span>
             </div>
           </button>
         </div>
         {isExpanded && (
           <div className="border-l border-zinc-600/30 ml-3 pl-3 mt-0.5">
-            {keys.map(key => {
+            {keys.map((key) => {
               const currentPath = path ? `${path}.${key}` : key;
               const value = data[key];
 
@@ -324,7 +332,9 @@ function JsonNode({
   // Fallback for any other type
   return (
     <div className="py-1 px-2 bg-red-500/10 border border-red-500/20 rounded text-xs">
-      <span className="text-red-400 text-[10px]">Unknown type: {JSON.stringify(data)}</span>
+      <span className="text-red-400 text-[10px]">
+        Unknown type: {JSON.stringify(data)}
+      </span>
     </div>
   );
 }

@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { useAccount, useSwitchChain } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useTransactionExecutor } from "../hooks/useTransactionExecutor";
-import type { TxPlan } from "../lib/transactionUtils";
+import { useAccount, useSwitchChain } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useTransactionExecutor } from '../hooks/useTransactionExecutor';
+import type { TxPlan } from '../lib/transactionUtils';
 
 // Removed: useState, viem imports, useSendTransaction
 // Removed: getChainById, withSafeDefaults, toBigInt, signTx
@@ -16,8 +16,8 @@ export function Lending({
   txPreview: any; // TODO: Define LendingTxPreview type
   txPlan: TxPlan | null;
 }) {
-  console.log("[Lending Component] Received txPreview:", txPreview);
-  console.log("[Lending Component] Received txPlan:", txPlan);
+  console.log('[Lending Component] Received txPreview:', txPreview);
+  console.log('[Lending Component] Received txPlan:', txPlan);
 
   // --- Wagmi hooks ---
   const { address, isConnected, chainId } = useAccount();
@@ -62,13 +62,13 @@ export function Lending({
             <p className="font-normal w-full ">
               <span className="font-normal">
                 <span className="font-semibold">
-                  {txPreview?.amount}{" "}
+                  {txPreview?.amount}{' '}
                   {txPreview?.amount && txPreview?.tokenName?.toUpperCase()}
                 </span>
-                {" (on "}
+                {' (on '}
                 {/* Assuming txPreview includes chainId, adjust if needed */}
                 {txPreview?.chainId}
-                {")"}
+                {')'}
               </span>
             </p>
             {/* Add token address or other details if available in txPreview */}
@@ -89,7 +89,7 @@ export function Lending({
               )}
               {txError && (
                 <p className=" p-2 rounded-2xl border-red-800 bg-red-400 w-full border-2 text-white break-words">
-                  Execution Error!{" "}
+                  Execution Error!{' '}
                   {(txError as any).shortMessage ||
                     txError.message ||
                     JSON.stringify(txError, null, 2)}
@@ -106,7 +106,7 @@ export function Lending({
               )}
               {needsApproval && approvalError && (
                 <p className=" p-2 rounded-2xl border-red-800 bg-red-400 w-full border-2 text-white break-words">
-                  Approval Error!{" "}
+                  Approval Error!{' '}
                   {(approvalError as any).shortMessage ||
                     approvalError.message ||
                     JSON.stringify(approvalError, null, 2)}
@@ -134,8 +134,8 @@ export function Lending({
                     {isApprovalPending
                       ? `Approving ${approvalIndex + 1}/${totalApprovals}...`
                       : isApprovalPhaseComplete
-                      ? "All Approved"
-                      : `Approve ${approvalIndex + 1}/${totalApprovals}`}
+                        ? 'All Approved'
+                        : `Approve ${approvalIndex + 1}/${totalApprovals}`}
                   </button>
                 )}
                 <button
@@ -145,10 +145,10 @@ export function Lending({
                   disabled={!canExecute} // Use hook state
                 >
                   {isTxPending
-                    ? "Executing..."
+                    ? 'Executing...'
                     : needsApproval
-                    ? "Execute Transaction"
-                    : "Sign Transaction"}
+                      ? 'Execute Transaction'
+                      : 'Sign Transaction'}
                 </button>
               </div>
             </>

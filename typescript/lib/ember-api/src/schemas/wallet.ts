@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { BalanceSchema, TokenSchema } from "./core.js";
-import { LendingPositionSchema } from "./lending.js";
+import { z } from 'zod';
+import { BalanceSchema, TokenSchema } from './core.js';
+import { LendingPositionSchema } from './lending.js';
 
 export const GetWalletLendingPositionsRequestSchema = z.object({
   walletAddress: z.string(),
@@ -20,16 +20,12 @@ export type GetWalletLendingPositionsResponse = z.infer<
 export const GetWalletBalancesRequestSchema = z.object({
   walletAddress: z.string(),
 });
-export type GetWalletBalancesRequest = z.infer<
-  typeof GetWalletBalancesRequestSchema
->;
+export type GetWalletBalancesRequest = z.infer<typeof GetWalletBalancesRequestSchema>;
 
 export const GetWalletBalancesResponseSchema = z.object({
   balances: z.array(BalanceSchema),
 });
-export type GetWalletBalancesResponse = z.infer<
-  typeof GetWalletBalancesResponseSchema
->;
+export type GetWalletBalancesResponse = z.infer<typeof GetWalletBalancesResponseSchema>;
 
 export const YieldMarketPoolDailyRewardEstimationSchema = z.object({
   asset: TokenSchema,
@@ -56,18 +52,14 @@ export const YieldMarketVolatileDataSchema = z.object({
   lpRewardApy: z.string(),
   aggregatedApy: z.string(),
   maxBoostedApy: z.string(),
-  estimatedDailyPoolRewards: z.array(
-    YieldMarketPoolDailyRewardEstimationSchema,
-  ),
+  estimatedDailyPoolRewards: z.array(YieldMarketPoolDailyRewardEstimationSchema),
   totalPt: z.string(),
   totalSy: z.string(),
   totalLp: z.string(),
   totalActiveSupply: z.string(),
   assetPriceUsd: z.string(),
 });
-export type YieldMarketVolatileData = z.infer<
-  typeof YieldMarketVolatileDataSchema
->;
+export type YieldMarketVolatileData = z.infer<typeof YieldMarketVolatileDataSchema>;
 
 export const YieldMarketSchema = z.object({
   name: z.string(),
@@ -85,16 +77,12 @@ export type YieldMarket = z.infer<typeof YieldMarketSchema>;
 export const GetYieldMarketsRequestSchema = z.object({
   chainIds: z.array(z.string()),
 });
-export type GetYieldMarketsRequest = z.infer<
-  typeof GetYieldMarketsRequestSchema
->;
+export type GetYieldMarketsRequest = z.infer<typeof GetYieldMarketsRequestSchema>;
 
 export const GetYieldMarketsResponseSchema = z.object({
   markets: z.array(YieldMarketSchema),
 });
-export type GetYieldMarketsResponse = z.infer<
-  typeof GetYieldMarketsResponseSchema
->;
+export type GetYieldMarketsResponse = z.infer<typeof GetYieldMarketsResponseSchema>;
 
 export const GetMarketDataRequestSchema = z.object({
   tokenUid: z.object({
