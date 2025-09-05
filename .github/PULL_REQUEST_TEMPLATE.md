@@ -1,5 +1,8 @@
 ## Summary
 
+Related Issue(s): 
+Note that it is mandatory to create an issue for your contribution before submiting a PR, to avoid duplicate work and misalignments with Vibekit architecture.
+
 Provide a brief description of what this PR accomplishes:
 
 Type of Change:
@@ -13,8 +16,6 @@ Type of Change:
 - [ ] 🔄 Refactor (code improvements, no functional changes)
 - [ ] 🧪 Tests (adding or updating tests)
 - [ ] ⚙️ Tooling/CI (build process, development tools)
-
-Related Issue(s):
 
 ## 🧪 Testing
 
