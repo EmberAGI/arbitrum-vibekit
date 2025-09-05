@@ -15,20 +15,20 @@
     "inspect": "node ./dist/index.js | pnpm -s dlx @modelcontextprotocol/inspector"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "catalog:",
+    "@modelcontextprotocol/sdk": "^1.13.1",
     "@stargatefinance/stg-evm-sdk-v2": "^1.0.0",
     "cors": "^2.8.5",
-    "dotenv": "catalog:",
-    "express": "catalog:",
+    "dotenv": "^16.3.1",
+    "express": "^4.21.2",
     "viem": "^2.21.10",
-    "zod": "catalog:"
+    "zod": "^3.24.3"
   },
   "devDependencies": {
-    "@types/express": "catalog:",
-    "@types/node": "catalog:",
-    "prettier": "catalog:",
-    "tsx": "catalog:",
-    "typescript": "catalog:"
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "prettier": "^3.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.8.3"
   }
 }
 
