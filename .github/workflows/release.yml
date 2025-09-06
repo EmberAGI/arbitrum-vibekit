@@ -1,44 +1,44 @@
-name: Release
+name: Release ember-plugin-registry
 
 on:
   push:
-    branches: [main, semantic/release]
+    branches: [semantic/release, main]   # prerelease en semantic/release, estable en main
+  workflow_dispatch: {}                  
 
 jobs:
   release:
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: typescript  
+        working-directory: typescript
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20.x"
-          registry-url: "https://registry.npmjs.org"
+          node-version: 20
+          registry-url: https://registry.npmjs.org
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: Install
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: pnpm build
+      - name: Build ember-plugin-registry
+        run: pnpm --filter ./lib/ember-plugin-registry build
 
-      - name: Release
+      - name: Release ember-plugin-registry
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: pnpm release
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}         
+        run: |
+          # Autenticación temporal solo para este step
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
+          pnpm --filter ./lib/ember-plugin-registry exec semantic-release
