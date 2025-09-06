@@ -3,7 +3,7 @@ import type { CapabilityDefinition, EmberPlugin } from "./types.js";
 export class PluginRegistry {
   private plugins = new Map<string, EmberPlugin>();
   private capabilities = new Map<string, CapabilityDefinition>();
-
+  //Comment test
   register(plugin: EmberPlugin) {
     if (this.plugins.has(plugin.meta.name)) {
       throw new Error(`Plugin already registered: ${plugin.meta.name}`);
