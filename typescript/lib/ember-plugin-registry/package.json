@@ -14,10 +14,11 @@
   },
   "keywords": ["vibekit", "plugins", "web3", "agents", "registry"],
   "license": "MIT",
-  "publishConfig": { "access": "public" },
+  "publishConfig": { "access": "public", "tag": "alpha" },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/EmberAGI/arbitrum-vibekit.git",
     "directory": "typescript/lib/ember-plugin-registry"
   }
+  
 }

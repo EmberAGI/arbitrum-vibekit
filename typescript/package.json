@@ -5,7 +5,10 @@
   "private": true,
   "packageManager": "pnpm@10.7.0",
   "description": "Root for the TypeScript pnpm workspace",
-  "workspaces": ["lib/*", "templates/*"],
+  "workspaces": [
+    "lib/*",
+    "templates/*"
+  ],
   "scripts": {
     "clean": "rm -rf .pnpm && find . -name tsconfig.tsbuildinfo -type f -exec rm -f {} + && find . -name node_modules -type d -prune -exec rm -rf {} + && find . -name dist -type d -prune -exec rm -rf {} + && find . -name dist-test -type d -prune -exec rm -rf {} + && echo \"Workspace cleaned.\"",
     "build": "pnpm recursive run build",
@@ -23,12 +26,14 @@
     "lint:require-submodule": "./scripts/require-submodule.sh",
     "start:anvil": "pnpm run lint:require-submodule && npx tsx test/start-anvil.ts",
     "start:mainnet": "pnpm run lint:require-submodule && npx tsx test/start-mainnet.ts",
-    "release": "multi-semantic-release --sequential"
+    "release": "multi-semantic-release --sequential --packages \"lib/ember-plugin-registry\" --ignore-private-packages"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
     "@eslint/js": "catalog:",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/git": "^10.0.1",
@@ -47,6 +52,7 @@
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
     "globals": "^16.1.0",
+    "husky": "^9.1.7",
     "mocha": "^10.2.0",
     "mocha-suppress-logs": "^0.5.1",
     "multi-semantic-release": "^3.0.2",

@@ -4,6 +4,7 @@
   "description": "A hello-world agent demonstrating the evaluator-optimizer workflow pattern using LangGraph",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "private": true,
   "type": "module",
   "scripts": {
     "build": "tsc",
