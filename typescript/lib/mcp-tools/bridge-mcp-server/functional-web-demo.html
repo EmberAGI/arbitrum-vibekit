@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Bridge MCP Server - Functional Testing Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .status-bar {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .server-status {
+            display: flex;
+            align-items: center;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        
+        .status-indicator.offline {
+            background: #e53e3e;
+        }
+        
+        .status-indicator.online {
+            background: #38a169;
+        }
+        
+        .start-server-btn {
+            background: #38a169;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        
+        .start-server-btn:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+        }
+        
+        .test-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .test-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .test-panel h3 {
+            color: #4a5568;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+            display: flex;
+            align-items: center;
+        }
+        
+        .test-panel h3 .emoji {
+            margin-right: 10px;
+            font-size: 1.5em;
+        }
+        
+        .test-section {
+            margin-bottom: 25px;
+        }
+        
+        .test-section h4 {
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+        
+        .test-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+        
+        .test-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        .test-button:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .intent-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 5px;
+            font-family: inherit;
+            margin-bottom: 10px;
+        }
+        
+        .results-panel {
+            grid-column: 1 / -1;
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-top: 20px;
+        }
+        
+        .results-content {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .success { color: #38a169; }
+        .error { color: #e53e3e; }
+        .info { color: #3182ce; }
+        .warning { color: #d69e2e; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Enhanced Bridge MCP Server</h1>
+            <p>Functional Testing Interface - Real MCP Server Integration</p>
+        </div>
+
+        <div class="status-bar">
+            <div class="server-status">
+                <div class="status-indicator offline" id="statusIndicator"></div>
+                <span id="statusText">MCP Server: Offline</span>
+            </div>
+            <button class="start-server-btn" id="startServerBtn" onclick="startServer()">Start Server</button>
+        </div>
+
+        <div class="test-grid">
+            <div class="test-panel">
+                <h3><span class="emoji">🧠</span>Intent-Based Bridging</h3>
+                
+                <div class="test-section">
+                    <h4>Natural Language Commands:</h4>
+                    <input type="text" class="intent-input" id="intentInput" 
+                           placeholder="bridge 100 USDC from arbitrum to ethereum" 
+                           value="bridge 100 USDC from arbitrum to ethereum">
+                    <button class="test-button" onclick="testIntent()">Process Intent</button>
+                </div>
+                
+                <div class="test-section">
+                    <h4>Quick Intent Tests:</h4>
+                    <button class="test-button" onclick="testQuickIntent('fastest bridge 500 USDC from arbitrum to ethereum')">Fastest Bridge</button>
+                    <button class="test-button" onclick="testQuickIntent('bridge 1000 USDC arbitrum to ethereum max 0.3% slippage')">With Slippage</button>
+                    <button class="test-button" onclick="testQuickIntent('bridge and stake 200 USDC from arbitrum to ethereum')">DeFi Composition</button>
+                </div>
+            </div>
+
+            <div class="test-panel">
+                <h3><span class="emoji">🌐</span>Stargate V2 & Core Tools</h3>
+                
+                <div class="test-section">
+                    <h4>Stargate V2 Tests:</h4>
+                    <button class="test-button" onclick="testTool('list_stargate_pools', {})">List Pools</button>
+                    <button class="test-button" onclick="testTool('get_stargate_addresses', {chainId: 42161})">Get Addresses</button>
+                    <button class="test-button" onclick="testStargateBridge()">Build Bridge TX</button>
+                </div>
+                
+                <div class="test-section">
+                    <h4>Core Bridge Tools:</h4>
+                    <button class="test-button" onclick="testTool('get_supported_addresses', {})">Supported Addresses</button>
+                    <button class="test-button" onclick="testTool('list_routes', {originChainId: '42161', destinationChainId: '1'})">List Routes</button>
+                    <button class="test-button" onclick="testSlippageProtection()">Slippage Protection</button>
+                </div>
+                
+                <div class="test-section">
+                    <h4>Security Features:</h4>
+                    <button class="test-button" onclick="testEIP2612Permit()">EIP-2612 Permit</button>
+                    <button class="test-button" onclick="testPermit2()">Permit2</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="results-panel">
+            <h3>🔍 Test Results</h3>
+            <div class="results-content" id="results">
+                <span class="info">Ready to test enhanced features...</span>
+                <br><br>
+                <span class="warning">⚠️ Click "Start Server" above to begin testing the MCP server.</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let serverProcess = null;
+        let isServerRunning = false;
+
+        function updateStatus(online, text) {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            const startBtn = document.getElementById('startServerBtn');
+            
+            indicator.className = `status-indicator ${online ? 'online' : 'offline'}`;
+            statusText.textContent = text;
+            startBtn.disabled = online;
+            startBtn.textContent = online ? 'Server Running' : 'Start Server';
+            isServerRunning = online;
+            
+            // Enable/disable test buttons
+            const testButtons = document.querySelectorAll('.test-button');
+            testButtons.forEach(btn => btn.disabled = !online);
+        }
+
+        function logResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const timestamp = new Date().toLocaleTimeString();
+            const colorClass = type;
+            
+            results.innerHTML += `<span class="${colorClass}">[${timestamp}] ${message}</span>\n`;
+            results.scrollTop = results.scrollHeight;
+        }
+
+        async function startServer() {
+            logResult('🚀 Starting Enhanced Bridge MCP Server...', 'info');
+            updateStatus(false, 'MCP Server: Starting...');
+            
+            try {
+                const response = await fetch('/api/start-server', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateStatus(true, 'MCP Server: Online');
+                    logResult('✅ MCP Server started successfully!', 'success');
+                    logResult('📡 Server ready to accept tool calls', 'success');
+                    logResult('🧪 You can now test all enhanced features', 'info');
+                } else {
+                    throw new Error(result.error + (result.hint ? ` (${result.hint})` : ''));
+                }
+                
+            } catch (error) {
+                updateStatus(false, 'MCP Server: Failed to start');
+                logResult(`❌ Failed to start server: ${error.message}`, 'error');
+                if (error.message.includes('environment')) {
+                    logResult('💡 Create .env file with ARBITRUM_RPC_URL and ETHEREUM_RPC_URL', 'warning');
+                }
+            }
+        }
+
+        async function testTool(toolName, args) {
+            if (!isServerRunning) {
+                logResult('❌ Server not running. Please start the server first.', 'error');
+                return;
+            }
+
+            logResult(`🔧 Testing tool: ${toolName}`, 'info');
+            logResult(`📝 Arguments: ${JSON.stringify(args, null, 2)}`, 'info');
+            
+            try {
+                const response = await fetch(`/api/tool/${toolName}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(args)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    logResult(`✅ ${toolName} completed successfully`, 'success');
+                    
+                    // Use parsed content if available, otherwise raw data
+                    const displayData = result.data.parsedContent || result.data;
+                    logResult(`📊 Result:\n${JSON.stringify(displayData, null, 2)}`, 'success');
+                } else {
+                    throw new Error(result.error);
+                }
+                
+            } catch (error) {
+                logResult(`❌ ${toolName} failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testIntent() {
+            const intentText = document.getElementById('intentInput').value;
+            if (!intentText.trim()) {
+                logResult('❌ Please enter an intent to test', 'error');
+                return;
+            }
+            
+            await testQuickIntent(intentText);
+        }
+
+        async function testQuickIntent(intentText) {
+            if (!isServerRunning) {
+                logResult('❌ Server not running. Please start the server first.', 'error');
+                return;
+            }
+
+            logResult(`🧠 Processing intent: "${intentText}"`, 'info');
+            
+            try {
+                const response = await fetch('/api/tool/process_bridge_intent', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        intent: intentText,
+                        userAddress: '0x742d35Cc6634C0532925a3b8D3Ac6B1e9f6b5000',
+                        maxSlippageBps: 50
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const intentResult = result.data.parsedContent || result.data;
+                    
+                    logResult('✅ Intent processed successfully!', 'success');
+                    
+                    if (intentResult.parsed) {
+                        logResult('🎯 AI Analysis:', 'info');
+                        logResult(`   • Parsed: ${intentResult.parsed.amount} ${intentResult.parsed.token}`, 'success');
+                        logResult(`   • Route: Chain ${intentResult.parsed.fromChain} → ${intentResult.parsed.toChain}`, 'success');
+                        logResult(`   • Priority: ${intentResult.parsed.priority}`, 'success');
+                        
+                        if (intentResult.comparison && intentResult.comparison.length > 0) {
+                            logResult('🔍 Protocol Comparison:', 'info');
+                            intentResult.comparison.forEach(comp => {
+                                const status = comp.recommended ? '⭐ RECOMMENDED' : '';
+                                logResult(`   • ${comp.protocol.toUpperCase()}: ${comp.estimatedCost}, ${comp.estimatedTime} ${status}`, 'success');
+                            });
+                        }
+                        
+                        if (intentResult.executionPlan) {
+                            logResult('📋 Execution Plan:', 'info');
+                            logResult(`   • Selected: ${intentResult.executionPlan.selectedProtocol.toUpperCase()}`, 'success');
+                            logResult(`   • Transactions: ${intentResult.executionPlan.transactions.length}`, 'success');
+                            logResult(`   • Total cost: ${intentResult.executionPlan.estimatedTotalCost}`, 'success');
+                            logResult(`   • Total time: ${intentResult.executionPlan.estimatedTotalTime}`, 'success');
+                        }
+                    } else if (intentResult.error) {
+                        logResult(`⚠️ Intent parsing: ${intentResult.error}`, 'warning');
+                    }
+                } else {
+                    throw new Error(result.error);
+                }
+                
+            } catch (error) {
+                logResult(`❌ Intent processing failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testStargateBridge() {
+            await testTool('build_stargate_bridge_tx', {
+                protocol: 'stargate',
+                originChainId: 42161,
+                destinationChainId: 1,
+                tokenIn: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+                tokenOut: '0xA0b86a33E6417c4b7E0b27c4E1b3E6F2f8b3b8c2',
+                amountIn: '1000000000',
+                recipient: '0x742d35Cc6634C0532925a3b8D3Ac6B1e9f6b5000',
+                srcPoolId: 1,
+                dstPoolId: 1
+            });
+        }
+
+        async function testSlippageProtection() {
+            await testTool('compute_min_destination_amount', {
+                quotedOut: '1000000000',
+                outDecimals: 6,
+                slippageBps: 50
+            });
+        }
+
+        async function testEIP2612Permit() {
+            await testTool('build_eip2612_permit', {
+                chainId: '42161',
+                tokenAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+                owner: '0x742d35Cc6634C0532925a3b8D3Ac6B1e9f6b5000',
+                spender: '0xe35e9842fceaca96570b734083f4a58e8f7c5f2a',
+                value: '1000000000',
+                nonce: '0',
+                deadline: '1735689600'
+            });
+        }
+
+        async function testPermit2() {
+            await testTool('build_permit2_permit', {
+                chainId: '42161',
+                tokenAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+                owner: '0x742d35Cc6634C0532925a3b8D3Ac6B1e9f6b5000',
+                spender: '0xe35e9842fceaca96570b734083f4a58e8f7c5f2a',
+                amount: '1000000000',
+                expiration: '1735689600',
+                nonce: '0',
+                sigDeadline: '1735689600'
+            });
+        }
+
+        // Initialize
+        updateStatus(false, 'MCP Server: Offline');
+        logResult('🚀 Enhanced Bridge MCP Server - Functional Testing Interface', 'info');
+        logResult('💡 This interface demonstrates real MCP server integration', 'info');
+        logResult('🎯 Features: Intent-based bridging, Stargate V2, Advanced security', 'info');
+        logResult('', 'info');
+    </script>
+</body>
+</html>
