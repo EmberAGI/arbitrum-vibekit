@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "main": "dist/index.js",
+  "private": true,
   "bin": {
     "allora-mcp-server": "./dist/index.js"
   },

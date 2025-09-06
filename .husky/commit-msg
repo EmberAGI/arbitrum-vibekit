@@ -1,0 +1,5 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Usa las dependencias y la config dentro de typescript/
+pnpm --prefix typescript commitlint --edit "$1"

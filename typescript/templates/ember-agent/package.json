@@ -4,6 +4,7 @@
   "description": "Unified Ember Agent - Multi-skill DeFi agent supporting swapping, lending, liquidity, and yield trading operations",
   "type": "module",
   "main": "dist/index.js",
+  "private": true,
   "scripts": {
     "build": "tsc --build && cpx \"encyclopedia/**/*\" dist/encyclopedia",
     "dev": "tsx src/index.ts",

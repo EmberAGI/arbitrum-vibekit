@@ -1,0 +1,6 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Ajusta estos comandos a tu proyecto (o coméntalos si aún no tienes scripts)
+pnpm --prefix typescript test || exit 1
+# pnpm --prefix typescript lint || exit 1
