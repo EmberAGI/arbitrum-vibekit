@@ -1,3 +1,14 @@
+## [1.0.0-alpha.2](https://github.com/EmberAGI/arbitrum-vibekit/compare/ember-plugin-registry-v1.0.0-alpha.1...ember-plugin-registry-v1.0.0-alpha.2) (2025-09-06)
+
+### Features
+
+* **registry:** release yaml exec semantic ([dbe44c3](https://github.com/EmberAGI/arbitrum-vibekit/commit/dbe44c3634840903cea2a49888242b525038e2c7))
+* **registry:** version override ([05c6ad3](https://github.com/EmberAGI/arbitrum-vibekit/commit/05c6ad36e193df57892525d3bdd3b726fcaa0d22))
+* **registry:** version override ([f4b1335](https://github.com/EmberAGI/arbitrum-vibekit/commit/f4b133510d5fba6670af9ea8a0d3e7cb472a0815))
+* **registry:** version override ([5d45f79](https://github.com/EmberAGI/arbitrum-vibekit/commit/5d45f79a376e5e8545128e38a349efc917b15f3e))
+* **registry:** version override ([b2a735b](https://github.com/EmberAGI/arbitrum-vibekit/commit/b2a735bbf107b968e559c392b9abc87fd4c64b5e))
+* **registry:** version override ([f1e8645](https://github.com/EmberAGI/arbitrum-vibekit/commit/f1e864562c0c82826db2537b29e4f7757910313c))
+
 ## 1.0.0-alpha.1 (2025-09-06)
 
 ### Features
