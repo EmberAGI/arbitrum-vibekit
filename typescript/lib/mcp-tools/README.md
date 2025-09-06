@@ -228,3 +228,8 @@ pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js
 ### 9. Showcase Your Tool with a Demo Agent
 
 Consider showcasing your new MCP tool by building a demo agent in the [templates](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates) directory. Creating a simple agent that uses your tool is a great way to demonstrate its functionality and help others understand how to integrate it into their own projects.
+
+### Existing Tools
+
+- `allora-mcp-server`: Allora network MCP server
+- `opensea-mcp-server`: OpenSea marketplace MCP server (read-only tools)

@@ -25,6 +25,20 @@ import 'dotenv/config';
 // Import our agent configuration
 import { agentConfig } from '../src/index.js';
 
+const hasProviderKeys = Boolean(
+  process.env.OPENROUTER_API_KEY ||
+  process.env.OPENAI_API_KEY ||
+  process.env.XAI_API_KEY ||
+  process.env.HYPERBOLIC_API_KEY
+);
+
+describe('OpenSea skill registration', () => {
+  it('includes OpenSea (Read-only) in skills', () => {
+    const names = agentConfig.skills.map(s => s.name)
+    expect(names).to.include('OpenSea (Read-only)')
+  })
+})
+
 describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
   let agent: Agent<any, any>;
   let mcpClient: Client;
@@ -36,27 +50,28 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
 
     // Create the agent with test configuration using provider selector
     const providers = createProviderSelector({
-      openRouterApiKey: process.env.OPENROUTER_API_KEY || 'test-api-key',
+      openRouterApiKey: process.env.OPENROUTER_API_KEY,
       openaiApiKey: process.env.OPENAI_API_KEY,
       xaiApiKey: process.env.XAI_API_KEY,
       hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
     });
 
     const available = getAvailableProviders(providers);
-    if (available.length === 0) {
-      throw new Error('No AI providers configured for testing');
+    if (available.length === 0 || !hasProviderKeys) {
+      agent = Agent.create(agentConfig, {
+        cors: true,
+        basePath: '/api/v1',
+      });
+    } else {
+      const selectedProvider = providers[available[0] as keyof typeof providers];
+      agent = Agent.create(agentConfig, {
+        llm: {
+          model: selectedProvider!('anthropic/claude-3.5-sonnet'),
+        },
+        cors: true,
+        basePath: '/api/v1',
+      });
     }
-
-    const selectedProvider = providers[available[0] as keyof typeof providers];
-
-    agent = Agent.create(agentConfig, {
-      llm: {
-        model: selectedProvider!('anthropic/claude-3.5-sonnet'),
-      },
-      cors: true,
-      basePath: '/api/v1',
-      // No context provider for initial tests - we'll test that separately
-    });
 
     // Start the agent
     await agent.start(port, async () => ({
@@ -118,7 +133,7 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
       expect(agentCard).to.have.property('name', agentConfig.name);
       expect(agentCard).to.have.property('version', agentConfig.version);
       expect(agentCard).to.have.property('skills');
-      expect(agentCard.skills).to.have.lengthOf(3); // greet, getTime, echo
+      expect(agentCard.skills).to.have.lengthOf(agentConfig.skills.length);
     });
 
     it('Base path routing works correctly', async () => {
@@ -156,7 +171,7 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
 
     it('MCP client can list tools (skills)', async () => {
       const tools = await mcpClient.listTools();
-      expect(tools.tools).to.have.lengthOf(3);
+      expect(tools.tools).to.have.lengthOf(agentConfig.skills.length);
 
       // Verify skill names match our configuration
       const toolNames = tools.tools.map((t) => t.name);
@@ -177,6 +192,7 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
 
   describe('Skill Testing - LLM Orchestration', () => {
     it('greet skill with formal style (LLM chooses formal tool)', async function () {
+      if (!hasProviderKeys) this.skip();
       this.timeout(50000); // 50 second timeout for LLM operations
       const result = await mcpClient.callTool({
         name: 'greet-skill',
@@ -199,6 +215,7 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
     });
 
     it('greet skill with casual style (LLM chooses casual tool)', async function () {
+      if (!hasProviderKeys) this.skip();
       this.timeout(50000); // 50 second timeout for LLM operations
       const result = await mcpClient.callTool({
         name: 'greet-skill',
@@ -220,6 +237,7 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
     });
 
     it('greet skill with localized style (tests hooks)', async function () {
+      if (!hasProviderKeys) this.skip();
       this.timeout(50000); // 50 second timeout for LLM operations
       const result = await mcpClient.callTool({
         name: 'greet-skill',
@@ -356,6 +374,7 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
 
   describe('Context & MCP Integration', () => {
     it('Context provider can load data from MCP servers', async function () {
+      if (!hasProviderKeys) this.skip();
       this.timeout(40000); // 40 second timeout for this test
       // First, ensure the original agent is properly stopped
       console.log('Stopping original agent...');
@@ -542,9 +561,10 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
           env: {
             ...process.env,
             PORT: '3458', // Use a different port to avoid conflicts
-            OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || 'test-api-key',
+            OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || '',
             ENABLE_CORS: 'true',
             BASE_PATH: '/api/v1',
+            NODE_ENV: 'test',
           },
           stdio: ['pipe', 'pipe', 'pipe'],
         });
@@ -609,6 +629,7 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
 
   describe('Advanced Features', () => {
     it('withHooks utility enhances tool execution', async function () {
+      if (!hasProviderKeys) this.skip();
       this.timeout(30000); // 30 second timeout for this test
       // After the context provider test, we need to ensure the MCP client is still connected
       // The context provider test stops and restarts the agent, which might invalidate our connection
@@ -693,7 +714,8 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
       }
     });
 
-    it('Multi-step tool execution in greet skill', async () => {
+    it('Multi-step tool execution in greet skill', async function () {
+      if (!hasProviderKeys) this.skip();
       // The LLM may use multiple tools to fulfill a request
       // This is harder to test deterministically, but we can verify
       // that the skill completes successfully
