@@ -2,7 +2,7 @@ name: Release ember-plugin-registry
 
 on:
   push:
-    branches: [semantic/release, main]   # alpha en semantic/release, estable en main
+    branches: [semantic/release, main]
   workflow_dispatch: {}
 
 jobs:
@@ -13,38 +13,36 @@ jobs:
         working-directory: typescript
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
 
-      # Instala solo las dependencias del workspace typescript/
+      # Instala solo lo necesario
       - name: Install deps (typescript root)
         run: pnpm install --frozen-lockfile --workspace-root
 
-      # Instala solo las deps del paquete y sus dependencias internas del monorepo
       - name: Install deps (ember-plugin-registry)
         run: pnpm install --filter ./lib/ember-plugin-registry... --frozen-lockfile
 
       - name: Build ember-plugin-registry
         run: pnpm --filter ./lib/ember-plugin-registry build
 
+
+      - name: Verify npm auth
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm whoami
+
       - name: Release ember-plugin-registry
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}   # 👈 clave
         run: |
-          # Auth solo para este paso (evita warnings en install)
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
           pnpm --filter ./lib/ember-plugin-registry exec semantic-release
