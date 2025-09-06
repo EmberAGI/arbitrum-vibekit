@@ -8,10 +8,10 @@
     ["@semantic-release/commit-analyzer", { "preset": "conventionalcommits" }],
     ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits" }],
     ["@semantic-release/changelog", { "changelogFile": "CHANGELOG.md" }],
-    ["@semantic-release/npm", { "npmPublish": true }],
+    ["@semantic-release/npm", { "npmPublish": true, "pkgRoot": ".npm-publish" }],
     ["@semantic-release/git", {
       "assets": ["CHANGELOG.md", "package.json"],
-      "message": "chore(release): ${nextRelease.gitTag} [skip ci]\n\n${nextRelease.notes}"
+      "message": "chore(release): ember-plugin-registry-v${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
     }],
     ["@semantic-release/github", {}]
   ]
