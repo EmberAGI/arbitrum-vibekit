@@ -1,0 +1,23 @@
+{
+  "name": "ember-plugin-registry",
+  "version": "0.0.0",
+  "description": "Contracts y registro para plugins (agentes IA / transacciones web3) del ecosistema Vibekit.",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "echo \"(todo)\""
+  },
+  "keywords": ["vibekit", "plugins", "web3", "agents", "registry"],
+  "license": "MIT",
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EmberAGI/arbitrum-vibekit.git",
+    "directory": "typescript/lib/ember-plugin-registry"
+  }
+}
