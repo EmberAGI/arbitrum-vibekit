@@ -40,6 +40,9 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm whoami
 
+      - name: Prepare npm-publish folder (flatten catalog)
+        run: node scripts/prepare-npm-publish.mjs
+
       - name: Release ember-plugin-registry
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
