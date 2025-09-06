@@ -34,18 +34,25 @@ jobs:
       - name: Build ember-plugin-registry
         run: pnpm --filter ./lib/ember-plugin-registry build
 
-
-      - name: Verify npm auth
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm whoami
-
-      - name: Prepare npm-publish folder (flatten catalog)
+      - name: Prepare npm-publish folder
         run: node scripts/prepare-npm-publish.mjs
 
+      - name: Inspect pkgRoot before publish
+        run: |
+          echo "===== .npm-publish/package.json ====="
+          cat typescript/lib/ember-plugin-registry/.npm-publish/package.json
+
+      - name: Safety net: sync version into pkgRoot
+        run: |
+          node -e "const fs=require('fs');const p='./typescript/lib/ember-plugin-registry';const v=JSON.parse(fs.readFileSync(p+'/package.json')).version;const np=p+'/.npm-publish/package.json';const j=JSON.parse(fs.readFileSync(np));j.version=v;fs.writeFileSync(np, JSON.stringify(j,null,2));console.log('Synced version', v, 'to', np);"
+
+      - name: Verify npm auth
+        env: { NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} }
+        run: npm whoami
+
       - name: Release ember-plugin-registry
+        working-directory: typescript/lib/ember-plugin-registry
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}   # 👈 clave
-        run: |
-          pnpm --filter ./lib/ember-plugin-registry exec semantic-release
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: semantic-release
