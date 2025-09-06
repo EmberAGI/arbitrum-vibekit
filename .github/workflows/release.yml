@@ -43,7 +43,8 @@ jobs:
           cat lib/ember-plugin-registry/.npm-publish/package.json
 
       - name: Verify npm auth
-        env: { NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} }
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm whoami
 
       - name: Release ember-plugin-registry
