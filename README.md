@@ -1,26 +1,26 @@
-# 🌉 Arbitrum Bridge MCP Server
+#  Arbitrum Bridge MCP Server
 
 **The most advanced cross-chain bridge tooling for AI agents** - featuring intent-based bridging, multi-protocol intelligence, and production-grade security.
 
-## 🚀 Breakthrough Features
+##  Breakthrough Features
 
-### 🧠 Intent-Based Bridging
+###  Intent-Based Bridging
 - **Natural Language Interface**: "Bridge 100 USDC to Ethereum with low fees"
 - **Smart Protocol Selection**: AI compares Across vs Stargate routes automatically
 - **Execution Planning**: Complete transaction workflows with optimal parameters
 
-### ⚡ Multi-Protocol Intelligence
+###  Multi-Protocol Intelligence
 - **Across Protocol**: Fast, secure bridging with UMA optimistic oracle
 - **Stargate V2**: Credit-based bridging across 6+ chains
 - **Unified Interface**: One API for multiple bridge protocols
 
-### 🔒 Advanced Security
+###  Advanced Security
 - **Oracle Validation**: Chainlink price feeds verify destination amounts
 - **Permit Integration**: EIP-2612 & Permit2 for gasless approvals
 - **Slippage Protection**: Dynamic slippage calculation with deadline enforcement
 - **MEV Protection**: Built-in safeguards against front-running
 
-## 📊 Production Metrics
+##  Production Metrics
 
 - ✅ **18+ Production-Ready Tools**
 - ✅ **1,547 lines of TypeScript**
@@ -28,7 +28,7 @@
 - ✅ **Professional Documentation**
 - ✅ **Multiple Demo Interfaces**
 
-## 🛠 Quick Start
+##  Quick Start
 
 ### Prerequisites
 - Node.js 18+
@@ -63,7 +63,7 @@ node showcase.js
 npm run inspect:npx
 ```
 
-## 🎯 Core Tools
+##  Core Tools
 
 ### Bridge Operations
 - `list_routes` - Discover available bridge routes
@@ -90,7 +90,7 @@ npm run inspect:npx
 - `build_eip2612_permit` - Gasless permit signatures
 - `build_permit2_permit` - Uniswap Permit2 integration
 
-## 🧪 Testing & Demo
+##  Testing & Demo
 
 ### CLI Showcase (Recommended)
 ```bash
@@ -110,7 +110,7 @@ npm run inspect:npx
 ```
 Professional MCP client for detailed tool inspection.
 
-## 🏗 Architecture
+##  Architecture
 
 ### Transport Layer
 - **STDIO**: Direct MCP client integration
@@ -128,13 +128,13 @@ Professional MCP client for detailed tool inspection.
 - **Stargate V2**: LayerZero-based credit system
 - **Extensible**: Easy to add new protocols
 
-## 🌐 Supported Networks
+##  Supported Networks
 
 - **Arbitrum One** (Primary): Chain ID 42161
 - **Ethereum Mainnet**: Chain ID 1
 - **Extensible**: Framework supports additional chains
 
-## 📈 Example Workflows
+##  Example Workflows
 
 ### Intent-Based Bridge
 ```typescript
@@ -168,7 +168,7 @@ const recommendation = await compareProtocols({
 });
 ```
 
-## 🏆 Arbitrum Trailblazer Fund 2.0
+##  Arbitrum Trailblazer Fund 2.0
 
 This project represents a significant advancement in DeFi tooling:
 
@@ -178,14 +178,14 @@ This project represents a significant advancement in DeFi tooling:
 - **Comprehensive Documentation** and testing
 - **Extensible Architecture** for future protocols
 
-## 📝 License
+##  License
 
 MIT License - See [LICENSE](LICENSE) file for details.
 
-## 🤝 Contributing
+##  Contributing
 
 Contributions welcome! Please read our contributing guidelines and submit pull requests.
 
 ---
 
-**Built for the Arbitrum Ecosystem** 🚀 **Powered by AI Intelligence** 🧠 **Secured by Oracles** 🔒
+**Built for the Arbitrum Ecosystem**  **Powered by AI Intelligence**  **Secured by Oracles** 
