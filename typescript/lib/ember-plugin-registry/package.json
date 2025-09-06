@@ -1,6 +1,6 @@
 {
   "name": "ember-plugin-registry",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Contracts y registro para plugins (agentes IA / transacciones web3) del ecosistema Vibekit.",
   "type": "module",
   "main": "dist/index.cjs",
