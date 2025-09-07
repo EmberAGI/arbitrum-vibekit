@@ -1,4 +1,4 @@
-# Development Dockerfile for TriggerX Agent
+# Development Dockerfile for AutoSynth Agent
 FROM node:20-alpine
 
 # Install pnpm globally
@@ -21,17 +21,17 @@ COPY tsconfig.base.json ./
 # Copy necessary lib dependencies
 COPY lib ./lib
 
-# Copy the TriggerX agent
-COPY templates/triggerx-agent ./templates/triggerx-agent
+# Copy the AutoSynth agent
+COPY templates/autosynth ./templates/autosynth
 
 # Install all workspace dependencies (with another attempt on transient failures)
 RUN pnpm install --no-frozen-lockfile || pnpm install --no-frozen-lockfile
 
 # Build the agent
-RUN cd templates/triggerx-agent && pnpm build
+RUN cd templates/autosynth && pnpm build
 
 # Change to the agent directory
-WORKDIR /workspace/templates/triggerx-agent
+WORKDIR /workspace/templates/autosynth
 
 # Expose port
 EXPOSE 3008

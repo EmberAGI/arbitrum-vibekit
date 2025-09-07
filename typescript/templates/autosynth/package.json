@@ -1,7 +1,7 @@
 {
-  "name": "triggerx-agent",
+  "name": "autosynth",
   "version": "1.0.0",
-  "description": "TriggerX Agent - Automated job scheduling with time, event, and condition triggers",
+  "description": "AutoSynth - Automated job scheduling with time, event, and condition triggers",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

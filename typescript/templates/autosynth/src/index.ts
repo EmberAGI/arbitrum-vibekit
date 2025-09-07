@@ -37,11 +37,11 @@ const modelOverride = process.env.AI_MODEL;
 
 // Export agent configuration for testing
 export const agentConfig: AgentConfig = {
-  name: process.env.AGENT_NAME || 'TriggerX Agent',
+  name: process.env.AGENT_NAME || 'AutoSynth',
   version: process.env.AGENT_VERSION || '1.0.0',
   description: process.env.AGENT_DESCRIPTION || 'Automated job scheduling with time, event, and condition triggers',
   skills: [jobListingSkill, jobManagementSkill, scheduleAssistantSkill],
-  url: 'localhost',
+  url: process.env.AGENT_URL || 'localhost',
   capabilities: {
     streaming: false,
     pushNotifications: false,
@@ -67,10 +67,12 @@ const PORT = parseInt(process.env.PORT || '3008', 10);
 agent
   .start(PORT, contextProvider)
   .then(() => {
-    console.log(`🚀 TriggerX Agent running on port ${PORT}`);
-    console.log(`📍 Base URL: http://localhost:${PORT}`);
-    console.log(`🤖 Agent Card: http://localhost:${PORT}/.well-known/agent.json`);
-    console.log(`🔌 MCP SSE: http://localhost:${PORT}/sse`);
+    const host = process.env.HOST || '0.0.0.0';
+    const agentUrl = process.env.AGENT_URL || `http://${host === '0.0.0.0' ? 'localhost' : host}:${PORT}`;
+    console.log(`🚀 AutoSynth Agent running on ${host}:${PORT}`);
+    console.log(`📍 Base URL: ${agentUrl}`);
+    console.log(`🤖 Agent Card: ${agentUrl}/.well-known/agent.json`);
+    console.log(`🔌 MCP SSE: ${agentUrl}/sse`);
     console.log('\n⚡ TriggerX Features:');
     console.log('  - Time-based job scheduling (interval, cron, specific)');
     console.log('  - Event-triggered automation');
@@ -80,13 +82,13 @@ agent
     console.log('  - Job management and monitoring');
   })
   .catch((error) => {
-    console.error('Failed to start TriggerX agent:', error);
+    console.error('Failed to start AutoSynth agent:', error);
     process.exit(1);
   });
 
 // Graceful shutdown
 const shutdown = async (signal: string) => {
-  console.log(`\n🛑 Received ${signal}. Shutting down TriggerX agent...`);
+  console.log(`\n🛑 Received ${signal}. Shutting down AutoSynth agent...`);
   await agent.stop();
   process.exit(0);
 };

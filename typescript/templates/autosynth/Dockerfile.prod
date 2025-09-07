@@ -1,4 +1,4 @@
-# Production Dockerfile for TriggerX Agent
+# Production Dockerfile for AutoSynth Agent
 FROM node:20-alpine AS builder
 
 # Install pnpm

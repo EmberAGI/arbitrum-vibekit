@@ -485,8 +485,9 @@ export class Agent<TSkillsArray extends SkillDefinition<z.ZodTypeAny, TContext>[
     app.post(route('/messages'), async (req, res) => {
       await this.transport?.handlePostMessage(req, res);
     });
-    this.httpServer = app.listen(port, () => {
-      console.log(`Agent server listening on port ${port}`);
+    const host = process.env.HOST || '0.0.0.0';
+    this.httpServer = app.listen(port, host, () => {
+      console.log(`Agent server listening on ${host}:${port}`);
     });
     return app;
   }
