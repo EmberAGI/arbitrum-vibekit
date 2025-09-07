@@ -26,6 +26,21 @@ services:
     ports:
       - 3005:3005
     restart: unless-stopped
+  
+  triggerx-agent:
+    build:
+      context: .
+      dockerfile: templates/triggerx-agent/Dockerfile
+    container_name: vibekit-triggerx-agent
+    environment:
+      - NODE_ENV=development
+      - PORT=3008
+      - TRIGGERX_CREATE_TIMEOUT_MS=25000
+    env_file:
+      - .env
+    ports:
+      - "3008:3008"
+    restart: unless-stopped
 
   # langgraph-workflow-agent:
   #   build:

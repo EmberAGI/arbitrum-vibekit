@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "prepare": "pnpm build",
-    "build": "tsc -b",
+    "build": "pnpm exec tsc -b",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\""

@@ -25,7 +25,7 @@ export function createProviderSelector(config: ProviderSelectorConfig): Provider
   if (config.openRouterApiKey) {
     const openRouterInstance = createOpenRouter({ apiKey: config.openRouterApiKey });
     selector.openrouter = (model?: string) =>
-      openRouterInstance(model || 'google/gemini-2.5-flash');
+      openRouterInstance(model || 'x-ai/grok-3-mini');
   }
 
   // Only add OpenAI if API key is provided

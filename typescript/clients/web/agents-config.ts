@@ -114,6 +114,33 @@ export const chatAgents = [
   //   ],
   // },
   {
+    id: 'triggerx-agent' as const,
+    name: 'TriggerX Automation',
+    description: 'Automated job scheduling with time, event, and condition triggers',
+    suggestedActions: [
+      {
+        title: 'Create time-based job',
+        label: 'for daily execution',
+        action: 'Create a time-based job that runs daily at 9 AM',
+      },
+      {
+        title: 'Set up event trigger',
+        label: 'for contract events',
+        action: 'Create an event-based job that triggers when a Transfer event occurs',
+      },
+      {
+        title: 'List my jobs',
+        label: 'and their status',
+        action: 'Show me all my automated jobs and their current status',
+      },
+      {
+        title: 'Help with scheduling',
+        label: 'patterns',
+        action: 'How do I create a cron job that runs every Monday at 9 AM?',
+      },
+    ],
+  },
+  {
     id: 'all' as const,
     name: 'All agents',
     description: 'All agents',
@@ -135,6 +162,7 @@ export const chatAgents = [
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
   ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
+  ['triggerx-agent', 'http://triggerx-agent:3008/sse']
   // ['langgraph-workflow', 'http://langgraph-workflow-agent:3009/sse'],
   // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
   // ['allora-price-prediction-agent', 'http://allora-price-prediction-agent:3008/sse'],

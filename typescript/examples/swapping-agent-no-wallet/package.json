@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc --build && cpx \"encyclopedia/**/*\" dist/encyclopedia",
+    "build": "pnpm exec tsc --build && cpx \"encyclopedia/**/*\" dist/encyclopedia",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "dev": "tsx src/index.ts",

@@ -3,9 +3,34 @@ Dockerfile
 .containerignore
 .dockerignore
 node_modules
+**/node_modules
 README.md
+*.md
 .next
+**/.next
+dist
+**/dist
+build
+**/build
+*.tsbuildinfo
+**/*.tsbuildinfo
+.env
+.env.*
 .git
 .gitignore
-*.md
-dist
+# WSL metadata files
+*.zone.identifier
+*:Zone.Identifier
+.DS_Store
+# Windows attributes and symlinks
+Thumbs.db
+# Logs
+*.log
+# Coverage
+coverage/
+# Cache
+.cache/
+.parcel-cache/
+# Editor files
+.vscode/
+.idea/

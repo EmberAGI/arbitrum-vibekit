@@ -22,6 +22,27 @@ export function TemplateComponent({
   console.log("[Liquidity Component] Received txPreview:", txPreview);
   console.log("[Liquidity Component] Received txPlan:", txPlan);
 
+  // Sanitize arbitrary data for safe client rendering
+  const safeData = (() => {
+    try {
+      const seen = new WeakSet();
+      const replacer = (_key: string, value: any) => {
+        if (typeof value === 'bigint') return value.toString();
+        if (value && typeof value === 'object') {
+          if (seen.has(value)) return '[Circular]';
+          seen.add(value);
+        }
+        if (value instanceof Error) return { name: value.name, message: value.message, stack: value.stack };
+        if (typeof ReadableStream !== 'undefined' && value instanceof ReadableStream) return '[ReadableStream]';
+        if (typeof value === 'function') return `[Function ${value.name || 'anonymous'}]`;
+        return value;
+      };
+      return jsonObject ? JSON.parse(JSON.stringify(jsonObject, replacer)) : jsonObject;
+    } catch (_e) {
+      return jsonObject;
+    }
+  })();
+
   // --- Wagmi hooks ---
   const { address, isConnected, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
@@ -159,7 +180,7 @@ export function TemplateComponent({
             </div>
           ) : (
             <JsonViewer
-              data={jsonObject}
+              data={safeData}
               title="Preview Data"
             />
           )}

@@ -136,25 +136,40 @@ export const MessageRenderer = ({
   if (type === 'tool-invocation' && part.toolInvocation.state === 'result') {
     const { toolInvocation } = part;
     const { result, toolCallId, toolName } = toolInvocation;
-    const toolInvocationParsableString = result?.result?.content?.[0]?.text
-      ? result?.result?.content?.[0]?.text
-      : result?.result?.content?.[0]?.resource?.text;
-    const toolInvocationResult = result?.result?.content?.[0]
-      ? JSON.parse(
-          toolInvocationParsableString || '{Error: An error occurred while parsing the result}'
-        )
-      : null;
+    const content0 = result?.result?.content && Array.isArray(result?.result?.content)
+      ? result?.result?.content?.[0]
+      : undefined;
+    const toolInvocationParsableString = content0?.text
+      ? content0.text
+      : content0?.resource?.text
+        ? content0.resource.text
+        : typeof result?.result === 'string'
+          ? result.result
+          : JSON.stringify(result?.result ?? {});
+    let toolInvocationResult: any = null;
+    try {
+      toolInvocationResult = toolInvocationParsableString
+        ? JSON.parse(toolInvocationParsableString)
+        : null;
+    } catch (_e) {
+      // Fallback to wrapping raw content as JSON
+      toolInvocationResult = { raw: result?.result };
+    }
     const getKeyFromResult = (key: string) =>
-      toolInvocationResult?.artifacts?.[0]?.parts[0]?.data?.[key] || null;
+      toolInvocationResult?.artifacts?.[0]?.parts?.[0]?.data?.[key] ?? null;
 
     // Default keys
     const txPlan = getKeyFromResult('txPlan');
     const txPreview = getKeyFromResult('txPreview');
 
     const getParts = () =>
-      toolInvocationResult?.artifacts ? toolInvocationResult?.artifacts[0]?.parts : null;
+      Array.isArray(toolInvocationResult?.artifacts)
+        ? toolInvocationResult?.artifacts?.[0]?.parts ?? null
+        : null;
     const getArtifact = () =>
-      toolInvocationResult?.artifacts ? toolInvocationResult?.artifacts[0] : null;
+      Array.isArray(toolInvocationResult?.artifacts)
+        ? toolInvocationResult?.artifacts?.[0] ?? null
+        : null;
 
     return (
       <div key={toolCallId}>
