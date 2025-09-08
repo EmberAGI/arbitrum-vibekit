@@ -1,5 +1,5 @@
 import type { Task } from '@google-a2a/types';
-import { GetMarketDataResponseSchema, type GetMarketDataResponse } from 'ember-api';
+import { GetMarketDataResponseSchema, type GetMarketDataResponse, GetPerpetualsMarketsResponseSchema, type GetPerpetualsMarketsResponse } from 'ember-api';
 
 /**
  * Parse data from an agent's function call response
@@ -57,4 +57,28 @@ export function extractTokenMarketData(response: Task): GetMarketDataResponse {
   }
 
   throw new Error('No token market data found in artifacts');
+}
+
+export function extractPerpetualsMarketsData(response: Task): GetPerpetualsMarketsResponse {
+  if (!response.artifacts) {
+    throw new Error('No artifacts found in response');
+  }
+
+  for (const artifact of response.artifacts) {
+    if (artifact.name === 'perpetuals-markets' || artifact.name === 'markets' || artifact.name === 'getPerpetualsMarkets') {
+      for (const part of artifact.parts) {
+        if (part.kind === 'data' && part.data) {
+          const parseResult = GetPerpetualsMarketsResponseSchema.safeParse(part.data);
+          
+          if (!parseResult.success) {
+            throw new Error(`Invalid perpetuals markets data format: ${parseResult.error.message}`);
+          }
+          
+          return parseResult.data;
+        }
+      }
+    }
+  }
+
+  throw new Error('No perpetuals markets data found in artifacts');
 } 

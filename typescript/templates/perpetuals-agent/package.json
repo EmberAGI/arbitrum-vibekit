@@ -1,0 +1,36 @@
+{
+  "name": "perpetuals-agent",
+  "version": "1.0.0",
+  "description": "GMX perpetuals trading agent that proxies the Ember MCP API",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc --build",
+    "dev": "tsx src/index.ts",
+    "start": "tsx src/index.ts",
+    "test": "pnpm --filter arbitrum-vibekit build && pnpm --filter ember-api build && pnpm --filter test-utils build && NODE_OPTIONS=\"--no-warnings\" tsx node_modules/mocha/bin/mocha --exit --timeout 30000 --config ../../.mocharc.json 'test/**/*.test.ts'",
+    "test:run": "pnpm --filter arbitrum-vibekit build && pnpm --filter ember-api build && pnpm --filter test-utils build && NODE_OPTIONS=\"--no-warnings\" tsx node_modules/mocha/bin/mocha --exit --timeout 30000 --config ../../.mocharc.json 'test/**/*.test.ts'",
+    "docker:build": "docker build -t perpetuals-agent ../../",
+    "docker:run": "docker run --env-file .env -p 3008:3008 perpetuals-agent",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
+  },
+  "dependencies": {
+    "@google-a2a/types": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "arbitrum-vibekit-core": "workspace:*",
+    "dotenv": "catalog:",
+    "ember-api": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/mocha": "catalog:",
+    "@types/node": "catalog:",
+    "chai": "catalog:",
+    "mocha": "catalog:",
+    "prettier": "catalog:",
+    "test-utils": "workspace:*",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  }
+} 
