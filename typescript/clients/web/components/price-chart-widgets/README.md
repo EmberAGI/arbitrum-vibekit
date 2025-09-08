@@ -40,7 +40,7 @@ The application now supports 9 different types of cryptocurrency widgets:
 The widget panel provides:
 - **Widget Type Selection**: Dropdown to choose widget type
 - **Coin Selection**: 
-  - Search and select from 1000+ cryptocurrencies
+  - Search and select from 18000+ cryptocurrencies
   - Support for single or multiple coin selection based on widget type
   - Visual chips showing selected coins with removal option
 - **Currency Selection**: Choose display currency (USD, EUR, GBP, etc.)
@@ -78,8 +78,6 @@ components/price-chart-widgets/
 
 ## 🔧 Setup & Configuration
 
-### Environment Variables
-The application requires access to CoinGecko's API. Ensure you have proper API access configured.
 
 ### Dependencies
 - **CoinGecko Widget Scripts**: Automatically loaded from CoinGecko CDN
@@ -154,23 +152,6 @@ The application requires access to CoinGecko's API. Ensure you have proper API a
 - Check browser console for script loading errors
 - Verify CoinGecko widget scripts are loaded
 - Ensure proper API response format
-
-## 🔄 Future Enhancements
-
-### Planned Features
-- **Portfolio Tracking**: Save favorite coin selections
-- **Custom Themes**: More appearance customization options
-- **Export Functionality**: Save widget configurations
-- **Performance Optimization**: Lazy loading and caching improvements
-
-### Integration Opportunities
-- **Chat Integration**: Reference crypto data in chat conversations
-- **Alert System**: Price alerts and notifications
-- **Historical Data**: Extended chart timeframes and analysis tools
-
-## 📄 License & Attribution
-
-This feature integrates with CoinGecko's embeddable widgets. Please refer to CoinGecko's terms of service and attribution requirements when using their widgets in production environments.
 
 ---
 
