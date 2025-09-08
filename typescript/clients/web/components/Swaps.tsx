@@ -3,6 +3,7 @@
 import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useTransactionExecutor } from "../hooks/useTransactionExecutor"; // Import the hook
+import { useCurrentAgent } from "../hooks/use-current-agent"; // Import agent hook
 import type { TxPlan } from "../lib/transactionUtils"; // Import shared types -> Use 'import type'
 
 // Removed: useState, useEffect, useCallback, useMemo, viem imports, useSendTransaction
@@ -22,6 +23,7 @@ export function Swaps({
   // --- Use wagmi hooks directly needed by the component or passed to the hook ---
   const { address, isConnected, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain(); // Still needed if hook needs it
+  const currentAgentId = useCurrentAgent(); // Get current agent ID
 
   // --- Use the central transaction executor hook ---
   const {
@@ -46,6 +48,9 @@ export function Swaps({
     address,
     currentChainId: chainId,
     switchChainAsync, // Pass the function needed by the hook
+    agentType: 'swap', // Specify this is a swap transaction
+    agentId: currentAgentId, // Pass the current agent ID
+    methodName: 'swap', // Specify the method name
   });
 
   const needsApproval = totalApprovals > 0; // Still useful for conditional rendering

@@ -8,6 +8,7 @@ import {
   type RawTransaction,
   type TxPlan,
 } from '../lib/transactionUtils';
+import type { InsertTransactionInput } from '../components/artifact';
 
 // Args interface expects necessary values from the calling component's wagmi hooks
 interface UseTransactionExecutorArgs {
@@ -16,6 +17,9 @@ interface UseTransactionExecutorArgs {
   address?: Hex;
   currentChainId?: number;
   switchChainAsync?: ReturnType<typeof useSwitchChain>['switchChainAsync'];
+  agentType?: string; // Add agentType prop
+  agentId?: string; // Add agentId prop
+  methodName?: string; // Add methodName prop
 }
 
 // Return interface defines the state and actions exposed by the hook
@@ -41,6 +45,9 @@ export function useTransactionExecutor({
   address,
   currentChainId,
   switchChainAsync,
+  agentType = 'unknown', // Default agent type
+  agentId = 'unknown', // Default agent id
+  methodName,
 }: UseTransactionExecutorArgs): UseTransactionExecutorReturn {
   // Internal Wagmi hook for sending transactions
   const {
@@ -52,12 +59,17 @@ export function useTransactionExecutor({
     reset: resetWagmiSendState,
   } = useSendTransaction();
 
+  console.log('[useTransactionExecutor] Initializing with txPlan:', txPlan);
+
+  console.log('[useTransactionExecutor] Initialized with txPlan:', _txResultData);
+
   // --- Internal State ---
   const [approvalIndex, setApprovalIndex] = useState(0);
   const [isApprovalSubmitting, setIsApprovalSubmitting] = useState(false); // True only during the async approval call
   const [approvalError, setApprovalError] = useState<Error | null>(null);
   const [mainTxSubmitted, setMainTxSubmitted] = useState(false); // Tracks if executeMain was *called*
   const [isProcessingTx, setIsProcessingTx] = useState(false); // General lock during processTx
+  const [lastProcessedTxHash, setLastProcessedTxHash] = useState<string | null>(null); // Track processed transactions
 
   // --- Derived State from Props and Internal State ---
   const { approvalTxs, mainTx, totalApprovals, needsApproval } = useMemo(() => {
@@ -73,12 +85,11 @@ export function useTransactionExecutor({
 
   const isApprovalPhaseComplete = useMemo(
     () => approvalIndex >= totalApprovals,
-    [approvalIndex, totalApprovals],
+    [approvalIndex, totalApprovals]
   );
 
   // Pending state specifically for the *approval* button/process
-  const isCurrentApprovalPending =
-    isApprovalSubmitting || (isWagmiTxPending && !mainTxSubmitted);
+  const isCurrentApprovalPending = isApprovalSubmitting || (isWagmiTxPending && !mainTxSubmitted);
 
   // Pending state specifically for the *main execution* button/process
   const isMainExecutionPending = isWagmiTxPending && mainTxSubmitted;
@@ -99,10 +110,10 @@ export function useTransactionExecutor({
       isMainExecutionPending,
       approvalError,
       isConnected,
-    ],
+    ]
   );
 
-  // Can the user initiate the *main* transaction?
+
   const canExecute = useMemo(
     () => {
       // Determine if there's an active error related to the main transaction attempt
@@ -126,31 +137,24 @@ export function useTransactionExecutor({
       wagmiTxError,
       mainTxSubmitted,
       isConnected,
-    ], // Correct dependencies
+    ] // Correct dependencies
   );
 
-  // --- Core Logic: processTx (handles chain switch, gas, send) ---
+
   const processTx = useCallback(
     async (transaction: RawTransaction | undefined, isApproval: boolean) => {
+
+
       // Basic validation
       if (!transaction || !transaction.to || !transaction.chainId)
         throw new Error('Invalid transaction data.');
-      if (
-        !isConnected ||
-        !currentChainId ||
-        !switchChainAsync ||
-        !address ||
-        !sendTransactionAsync
-      )
+      if (!isConnected || !currentChainId || !switchChainAsync || !address || !sendTransactionAsync)
         throw new Error('Wallet disconnected or hooks unavailable.');
 
       const requiredChainId = Number.parseInt(String(transaction.chainId));
-      if (Number.isNaN(requiredChainId))
-        throw new Error(`Invalid chainId: ${transaction.chainId}`);
+      if (Number.isNaN(requiredChainId)) throw new Error(`Invalid chainId: ${transaction.chainId}`);
 
-      console.log(
-        `[processTx] Start ${isApproval ? `Approval #${approvalIndex + 1}` : 'Main Tx'}. Chain: ${requiredChainId}`,
-      );
+     
       setIsProcessingTx(true);
       if (isApproval) {
         setIsApprovalSubmitting(true);
@@ -163,9 +167,7 @@ export function useTransactionExecutor({
       try {
         // 1. Switch Chain
         if (currentChainId !== requiredChainId) {
-          console.log(
-            `[processTx] Switching chain ${currentChainId} -> ${requiredChainId}`,
-          );
+          console.log(`[processTx] Switching chain ${currentChainId} -> ${requiredChainId}`);
           await switchChainAsync({ chainId: requiredChainId });
           console.log(`[processTx] Chain switch successful.`);
           // Note: wagmi's state updates might take a moment after switch
@@ -181,42 +183,34 @@ export function useTransactionExecutor({
         // 3. Get Gas Overrides (with fallback)
         let overrides = {};
         try {
-          console.log(
-            `[processTx] Estimating gas for chain ${requiredChainId}...`,
-          );
+          console.log(`[processTx] Estimating gas for chain ${requiredChainId}...`);
           overrides = await withSafeDefaults(requiredChainId, txBase, address);
           console.log(`[processTx] Gas overrides received:`, overrides);
         } catch (estErr) {
-          console.warn(
-            `[processTx] Gas estimation failed, proceeding without overrides.`,
-            estErr,
-          );
+          console.warn(`[processTx] Gas estimation failed, proceeding without overrides.`, estErr);
         }
 
         // 4. Send Transaction
         const finalTx = { ...txBase, ...overrides };
-        console.log(
-          `[processTx] Sending final ${isApproval ? 'approval' : 'main'} tx:`,
-          finalTx,
-        );
+        console.log(`[processTx] Sending final ${isApproval ? 'approval' : 'main'} tx:`, finalTx);
         await sendTransactionAsync(finalTx);
         console.log(
-          `[processTx] sendTransactionAsync finished for ${isApproval ? 'approval' : 'main'} tx.`,
+          `[processTx] sendTransactionAsync finished for ${isApproval ? 'approval' : 'main'} tx.`
         );
 
         // 5. Update State on Success (wagmi handles success state for main)
         if (isApproval) {
           // Must wait for the next render cycle for isWagmiTxSuccess to be true potentially
           // Let's advance index optimistically here
-          setApprovalIndex((idx) => idx + 1);
+          setApprovalIndex(idx => idx + 1);
           console.log(
-            `[processTx] Approval ${approvalIndex + 1}/${totalApprovals} submitted successfully. Advanced index.`,
+            `[processTx] Approval ${approvalIndex + 1}/${totalApprovals} submitted successfully. Advanced index.`
           );
         }
       } catch (err: any) {
         console.error(
           `[processTx] Error during ${isApproval ? 'approval' : 'main'} tx processing:`,
-          err,
+          err
         );
         const message =
           err instanceof BaseError
@@ -254,8 +248,10 @@ export function useTransactionExecutor({
       setApprovalIndex,
       setMainTxSubmitted,
       setIsProcessingTx,
-    ],
+    ]
   );
+
+  console.log('[ProcessTx] processTx function initialized.', processTx);
 
   // --- Action Handlers Exposed to Component ---
 
@@ -269,9 +265,7 @@ export function useTransactionExecutor({
       return;
     }
     const currentApproval = approvalTxs[approvalIndex];
-    console.log(
-      `[approveNext] Triggering approval ${approvalIndex + 1}/${totalApprovals}`,
-    );
+    console.log(`[approveNext] Triggering approval ${approvalIndex + 1}/${totalApprovals}`);
     await processTx(currentApproval, true);
     // Auto-chaining is handled by the useEffect below
   }, [canApprove, approvalTxs, approvalIndex, totalApprovals, processTx]);
@@ -312,25 +306,21 @@ export function useTransactionExecutor({
       // We need to know if the *last action* was a successful approval.
       // This is tricky. Let's rely on the index having advanced and no pending state.
       console.log(
-        `[AutoApprove Effect Check] Conditions met for potential auto-approval. Index: ${approvalIndex}`,
+        `[AutoApprove Effect Check] Conditions met for potential auto-approval. Index: ${approvalIndex}`
       );
       // Avoid infinite loops: only trigger if not already processing
       if (!isProcessingTx) {
         // Consider adding a small delay? Or is state sufficient?
         // If we just successfully completed an approval, wagmi's isPending might still be true briefly.
         // Let's assume the state updates allow this check.
-        console.log(
-          `[AutoApprove Effect] Calling approveNext for index ${approvalIndex + 1}`,
-        );
+        console.log(`[AutoApprove Effect] Calling approveNext for index ${approvalIndex + 1}`);
         // approveNext(); // Call the action directly - it has guards
       } else {
-        console.log(
-          '[AutoApprove Effect Check] Skipping trigger because isProcessingTx is true.',
-        );
+        console.log('[AutoApprove Effect Check] Skipping trigger because isProcessingTx is true.');
       }
     } else {
       console.log(
-        `[AutoApprove Effect Check] Conditions NOT met. Needs: ${needsApproval}, Complete: ${isApprovalPhaseComplete}, ApprPending: ${isCurrentApprovalPending}, MainPending: ${isMainExecutionPending}, Error: ${!!approvalError}, Connected: ${isConnected}`,
+        `[AutoApprove Effect Check] Conditions NOT met. Needs: ${needsApproval}, Complete: ${isApprovalPhaseComplete}, ApprPending: ${isCurrentApprovalPending}, MainPending: ${isMainExecutionPending}, Error: ${!!approvalError}, Connected: ${isConnected}`
       );
     }
   }, [
@@ -346,6 +336,78 @@ export function useTransactionExecutor({
     approveNext, // The action to call
   ]);
 
+  // Effect to save successful transactions to database
+  useEffect(() => {
+    const saveTransactionToDatabase = async () => {
+      // Check if we have a successful main transaction that hasn't been processed yet
+      if (
+        isWagmiTxSuccess && 
+        mainTxSubmitted && 
+        _txResultData && 
+        address && 
+        currentChainId &&
+        mainTx &&
+        _txResultData !== lastProcessedTxHash // Avoid duplicate saves
+      ) {
+        try {
+          console.log('[useTransactionExecutor] Saving successful transaction to database:', _txResultData);
+          
+          const transactionData: InsertTransactionInput = {
+            txHash: _txResultData, // _txResultData is the hash itself
+            userAddress: address,
+            agentId: agentId || 'unknown',
+            agentType: agentType || 'unknown',
+            chainId: currentChainId.toString(),
+            status: 'confirmed',
+            transactionType: 'main',
+            value: String(mainTx.value || '0'),
+            contractAddress: mainTx.to,
+            methodName: methodName || 'unknown',
+            transactionDetails: {
+              txPlan: txPlan,
+              rawTransaction: mainTx,
+              wagmiResult: _txResultData
+            },
+            executedAt: new Date(), // Back to Date object
+            confirmedAt: new Date(), // Back to Date object
+          };
+
+          console.log('[useTransactionExecutor] Transaction data line number 376:', transactionData);
+
+          // Use API route instead of direct database call
+          const response = await fetch('/api/transactions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(transactionData),
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to save transaction: ${response.statusText}`);
+          }
+          setLastProcessedTxHash(_txResultData); // Mark as processed
+          console.log('[useTransactionExecutor] Transaction saved successfully to database');
+        } catch (error) {
+          console.error('[useTransactionExecutor] Failed to save transaction to database:', error);
+        }
+      }
+    };
+
+    saveTransactionToDatabase();
+  }, [
+    isWagmiTxSuccess,
+    mainTxSubmitted,
+    _txResultData,
+    address,
+    currentChainId,
+    mainTx,
+    agentType,
+    methodName,
+    txPlan,
+    lastProcessedTxHash
+  ]);
+
   // Effect to reset internal state when the transaction plan changes
   useEffect(() => {
     console.log('[useTxExec Effect] txPlan changed, resetting internal state.');
@@ -354,21 +416,21 @@ export function useTransactionExecutor({
     setApprovalError(null);
     setMainTxSubmitted(false);
     setIsProcessingTx(false);
+    setLastProcessedTxHash(null); // Reset processed hash tracking
     resetWagmiSendState(); // Also reset wagmi's internal state
   }, [txPlan, resetWagmiSendState]); // Depend only on txPlan and the reset function
 
-  // --- Return Values ---
-  // Expose state and actions needed by the UI component
+ 
   return {
     approveNext,
     executeMain,
     approvalIndex,
     totalApprovals,
-    isApprovalPending: isCurrentApprovalPending, // Is the approval process busy?
+    isApprovalPending: isCurrentApprovalPending, 
     approvalError,
-    isTxPending: isMainExecutionPending, // Is the main transaction process busy?
-    isTxSuccess: isWagmiTxSuccess && mainTxSubmitted, // Only success if main was attempted and wagmi confirms
-    txError: mainTxSubmitted ? wagmiTxError : null, // Show wagmi error only if main was attempted
+    isTxPending: isMainExecutionPending, 
+    isTxSuccess: isWagmiTxSuccess && mainTxSubmitted, 
+    txError: mainTxSubmitted ? wagmiTxError : null, 
     canApprove,
     canExecute,
     isApprovalPhaseComplete,
