@@ -1,6 +1,6 @@
 name: 🔧 New MCP Server
-description: Request a new MCP (Model Context Protocol) server integration
-title: "[New MCP Server] "
+description: Propose a new MCP (Model Context Protocol) server integration
+title: "[New MCP Server]: "
 labels: ["enhancement", "mcp-server"]
 assignees: []
 body:
@@ -72,7 +72,7 @@ body:
     attributes:
       label: 🔧 MCP Tools to Implement
       description: List the specific tools this MCP server provides
-      placeholder:
+      placeholder: |
         1. Tool1:
           - Description:
           - Input:
@@ -91,7 +91,7 @@ body:
     attributes:
       label: 🤖 Agent Integration Examples
       description: How would agents use these MCP tools?
-      placeholder: 
+      placeholder: |
         Example: Trading Agent
         - Agent uses getCurrentPrice to check token prices before swaps
         - Uses compareTokens to find arbitrage opportunities
@@ -157,9 +157,5 @@ body:
           required: true
         - label: I have identified the data source and API requirements
           required: true
-        - label: I have listed the specific tools to be implemented
-          required: true
-        - label: I have provided realistic integration examples
-          required: true
-        - label: I have considered authentication and error handling
+        - label: I will wait for the Vibekit team to approve this issue before continuing to implementation
           required: true

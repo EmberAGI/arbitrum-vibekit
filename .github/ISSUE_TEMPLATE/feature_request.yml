@@ -1,6 +1,6 @@
 name: 🚀 Feature Request
 description: Suggest a new feature or enhancement
-title: "[Feature Request] "
+title: "[Feature Request]: "
 labels: ["enhancement"]
 assignees: []
 body:
@@ -8,23 +8,6 @@ body:
     attributes:
       value: |
         Thanks for suggesting a feature! Please search existing issues first to avoid duplicates.
-
-  - type: dropdown
-    id: feature-category
-    attributes:
-      label: 🏷️ Feature Category
-      description: What category does this feature belong to?
-      options:
-        - Agent Template/Example
-        - MCP Server/Tools
-        - Core Framework
-        - Web Frontend/UI
-        - Testing/DevOps
-        - Documentation
-        - SDK/Library
-        - Other
-    validations:
-      required: true
 
   - type: textarea
     id: problem
@@ -73,6 +56,29 @@ body:
       required: true
 
   - type: textarea
+    id: architecture
+    attributes:
+      label: 🏗️ Code Architecture
+      description: Explain the technical architecture and implementation approach for this feature
+      placeholder: |
+        Architecture overview:
+        - Where this feature fits in the codebase structure
+        - New files/modules that would be created
+        - Existing components that would be modified
+
+        Technical approach:
+        - Core classes/interfaces needed
+        - Data flow and state management
+        - Integration points with existing systems
+
+        Dependencies:
+        - New libraries or frameworks required
+        - Breaking changes to existing APIs
+        - Database schema changes (if applicable)
+    validations:
+      required: true
+
+  - type: textarea
     id: mockups
     attributes:
       label: 🎨 Mockups/References
@@ -81,17 +87,6 @@ body:
         Link to mockups, wireframes, or screenshots...
         Similar feature in other projects: https://...
         Reference implementations: https://...
-
-  - type: checkboxes
-    id: contribution
-    attributes:
-      label: 🤝 Contribution Interest
-      options:
-        - label: I'm willing to implement this feature
-        - label: I can help with testing and feedback
-        - label: I can provide design/UX input
-        - label: I can help with documentation
-        - label: None
 
   - type: checkboxes
     id: checklist
@@ -103,4 +98,6 @@ body:
         - label: I have clearly described the problem this feature solves
           required: true
         - label: I have provided specific use cases and examples
+          required: true
+        - label: I will wait for the Vibekit team to approve this issue before continuing to implementation
           required: true

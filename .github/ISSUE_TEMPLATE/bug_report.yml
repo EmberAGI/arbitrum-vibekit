@@ -1,6 +1,6 @@
 name: 🐛 Bug Report
 description: Report a bug or unexpected behavior
-title: "[BUG] "
+title: "[BUG]: "
 labels: ["bug"]
 assignees: []
 body:
@@ -72,5 +72,5 @@ body:
           required: true
         - label: I have included relevant environment details
           required: true
-        - label: I have removed any sensitive information (API keys, private addresses, etc.)
+        - label: I will wait for the Vibekit team to approve this issue before continuing to implementation
           required: true

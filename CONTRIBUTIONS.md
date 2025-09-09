@@ -13,18 +13,11 @@ Before you start your work, checkout [open issues](https://github.com/EmberAGI/a
 
 We welcome several types of contributions, all of which follow the same development workflow outlined below:
 
-### 🐛 Bug Reports and Fixes
+### 🐛 Bug Reports and Documentation Fixes
 
-1. **Search Existing Issues**: Check [open issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) to see if the bug has already been reported.
+1. **Search Existing Issues**: Check [open issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) to see if the problem has already been reported.
 
-2. **Create a Detailed Bug Report**: If not found, [create a new issue](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=bug_report.yml) with:
-
-   - Clear, descriptive title
-   - Steps to reproduce the bug
-   - Expected vs actual behavior
-   - Environment details (OS, Node version, browser, etc.)
-   - Code snippets or screenshots if applicable
-   - Any error messages or logs
+2. **Create a Detailed Report**: If not found, create a new issue for the [bug report](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=bug_report.yml) or the [documentation update](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=documentation.yml).
 
 3. **Wait For Your Issue To Be Approved By The Team**: A team member will comment on your issue to let you know it is approved for contribution.
 
@@ -49,7 +42,7 @@ Vibekit supports DeFi protocol integrations through the Ember Plugin System.
 
 1. **Search Existing Issues**: Check [open issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) to make sure no one else is working on a similar feature.
 
-2. **Create a Detailed Issue**: Create a detailed issue explaining your new [MCP tools], [agent templates](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=agent_template.yml), [UI improvements] or [framework features](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=feature_request.yml) to expand Vibekit capabilities.
+2. **Create a Detailed Issue**: Create a detailed issue explaining your new [MCP tools](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=mcp_server.yml), [agent templates](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=agent_template.yml), [UI improvement](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=ui_improvement.yml) or [framework features](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=feature_request.yml) to expand Vibekit capabilities.
 
 3. **Wait For Your Issue To Be Approved By The Team**: A team member will comment on your issue to let you know it is approved for contribution.
 

@@ -1,0 +1,91 @@
+name: 🎨 UI/UX Improvement
+description: Suggest improvements to user interface or user experience
+title: "[UI/UX IMPROVEMENT]: "
+labels: ["enhancement", "ui-ux"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a UI/UX improvement!
+
+  - type: textarea
+    id: ui-component
+    attributes:
+      label: 🎯 Component/Area
+      description: Which UI component or area needs improvement?
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-issue
+    attributes:
+      label: 🚫 Current Issue
+      description: Describe the current UI/UX problem or limitation
+      placeholder: |
+        Currently, users struggle with...
+        The interface is confusing because...
+        It's hard to find...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-improvement
+    attributes:
+      label: ✨ Proposed Improvement
+      description: Describe your suggested UI/UX improvement in detail
+      placeholder: |
+        I suggest we improve this by...
+        The new design would...
+        Users would benefit from...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: impact-level
+    attributes:
+      label: 📊 Impact Level
+      description: How significantly would this improvement affect user experience?
+      options:
+        - Critical - Major usability blocker
+        - High - Significantly improves workflows
+        - Medium - Notable improvement to experience
+        - Low - Minor quality of life enhancement
+    validations:
+      required: true
+
+  - type: textarea
+    id: mockups-references
+    attributes:
+      label: 🎨 Mockups & References
+      description: Visual mockups, wireframes, or references to similar successful interfaces
+      placeholder: |
+        Link to mockups/wireframes: 
+
+        Reference examples:
+        - Similar feature in [app name]: [URL/screenshot]
+        - Design inspiration: [URL]
+
+  - type: textarea
+    id: architecture
+    attributes:
+      label: 🏗️ Code Architecture
+      description: Explain the technical architecture for this UI improvement
+      placeholder: |
+
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: ✅ Pre-submission Checklist
+      options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+        - label: I have clearly described the current problem and proposed solution
+          required: true
+        - label: I have considered the impact on different user types
+          required: true
+        - label: I will wait for the Vibekit team to approve this issue before continuing to implementation
+          required: true

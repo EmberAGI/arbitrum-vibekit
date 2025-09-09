@@ -1,7 +1,7 @@
 ## Summary
 
-Related Issue(s): 
-Note that it is mandatory to create an issue for your contribution before submiting a PR, to avoid duplicate work and misalignments with Vibekit architecture.
+Related Issue(s):
+To prevent duplicate work and to ensure that your contribution aligns with Vibekit's architecture, please create an issue before submitting a PR.
 
 Provide a brief description of what this PR accomplishes:
 
