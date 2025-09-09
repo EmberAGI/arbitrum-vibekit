@@ -34,7 +34,7 @@ body:
     validations:
       required: true
 
-    - type: textarea
+  - type: textarea
     id: networks
     attributes:
       label: 🌐 Supported Networks

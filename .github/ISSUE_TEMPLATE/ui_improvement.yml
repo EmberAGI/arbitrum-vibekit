@@ -72,7 +72,20 @@ body:
       label: 🏗️ Code Architecture
       description: Explain the technical architecture for this UI improvement
       placeholder: |
-
+        Component structure:
+        - New components that need to be created
+        - Existing components to be modified
+        - Component hierarchy and composition
+        
+        State management:
+        - Local component state vs global state
+        - Data flow and prop drilling considerations
+        - State update patterns and performance
+        
+        Integration approach:
+        - How UI connects to backend/MCP services
+        - API calls and data fetching strategies
+        - Error boundaries and loading states
     validations:
       required: true
 
