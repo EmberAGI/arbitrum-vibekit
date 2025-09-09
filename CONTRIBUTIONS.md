@@ -42,11 +42,11 @@ Vibekit supports DeFi protocol integrations through the Ember Plugin System.
 
 1. **Search Existing Issues**: Check [open issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) to make sure no one else is working on a similar feature.
 
-2. **Create a Detailed Issue**: Create a detailed issue explaining your new [MCP tools](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=mcp_server.yml), [agent templates](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=agent_template.yml), [UI improvement](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=ui_improvement.yml) or [framework features](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=feature_request.yml) to expand Vibekit capabilities.
+2. **Create a Detailed Issue**: Create a detailed issue explaining your new [MCP tools](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=mcp_server.yml), [agent template](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=agent_template.yml), [UI improvement](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=ui_improvement.yml) or [framework feature](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=feature_request.yml).
 
-3. **Wait For Your Issue To Be Approved By The Team**: A team member will comment on your issue to let you know it is approved for contribution.
+3. **Study Existing Patterns**: Review existing implementations and templates for reference.
 
-4. **Study Existing Patterns**: Review existing implementations and templates for reference.
+4. **Wait For Your Issue To Be Approved By The Team**: A team member will comment on your issue to let you know it is approved for contribution.
 
 5. **Submit Your Contribution**: Follow the [development workflow](#development-workflow) below to implement your new functionality. Make sure to reference the issue number in your PR.
 
