@@ -1,20 +1,19 @@
 name: 🔌 Protocol Integration
 description: Request support for a new DeFi protocol
-title: "New Protocol Integration "
+title: "[New Protocol Integration]: "
 labels: ["enhancement", "protocol-integration"]
 assignees: []
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for suggesting a protocol integration! Note that protocol integration is only supported through the Ember Plugin system, so make sure to checkout the Ember Plugin system first.
+        Thanks for suggesting a protocol integration! Note that protocol integrations are only supported through the Ember Plugin system.
 
   - type: input
     id: protocol-name
     attributes:
       label: 🏷️ Protocol Name
       description: Name of the DeFi protocol
-      placeholder: e.g., "Uniswap V4", "Compound V3", "Balancer V2"
     validations:
       required: true
 
@@ -35,21 +34,11 @@ body:
     validations:
       required: true
 
-  - type: dropdown
+  - type: textarea
     id: networks
     attributes:
       label: 🌐 Supported Networks
-      description: Which networks does this protocol operate on?
-      multiple: true
-      options:
-        - Arbitrum One
-        - Arbitrum Nova
-        - Arbitrum Sepolia (Testnet)
-        - Ethereum Mainnet
-        - Base
-        - Polygon
-        - Optimism
-        - Other (specify in description)
+      description:  Which networks does this protocol operate on?
     validations:
       required: true
 
@@ -73,13 +62,6 @@ body:
       placeholder: https://docs.protocol.com
     validations:
       required: true
-
-  - type: input
-    id: contracts
-    attributes:
-      label: 📜 Smart Contract Addresses
-      description: Main contract addresses or contract repository
-      placeholder: https://github.com/protocol/contracts or 0x...
 
   - type: textarea
     id: capabilities
@@ -126,7 +108,5 @@ body:
           required: true
         - label: I have verified this protocol is actively maintained
           required: true
-        - label: I have provided documentation links
-          required: true
-        - label: I have specified the desired capabilities clearly
+        - label: I will wait for the Vibekit team to approve this issue before continuing to implementation
           required: true

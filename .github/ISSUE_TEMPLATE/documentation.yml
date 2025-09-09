@@ -1,6 +1,6 @@
 name: 📚 Documentation Issue
 description: Report missing, incorrect, or unclear documentation
-title: "[Update Docs] "
+title: "[Update Docs]: "
 labels: ["documentation"]
 assignees: []
 body:
@@ -128,5 +128,5 @@ body:
           required: true
         - label: I have described what needs to be fixed or added
           required: true
-        - label: I have explained how this impacts users
+        - label: I will wait for the Vibekit team to approve this issue before continuing to implementation
           required: true

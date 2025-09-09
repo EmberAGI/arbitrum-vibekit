@@ -1,6 +1,13 @@
 name: 🔧 Internal/Blank Issue
 description: Blank template for internal developers and maintainers
-title: ""
+title: "[Internal] "
 labels: ["internal"]
 assignees: []
 body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe what needs to be done
+    validations:
+      required: true
