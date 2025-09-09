@@ -34,13 +34,13 @@ services:
     container_name: vibekit-autosynth
     environment:
       - NODE_ENV=production
-      - PORT=3008
+      - PORT=3041
       - HOST=0.0.0.0
       - TRIGGERX_CREATE_TIMEOUT_MS=25000
     env_file:
       - .env
     ports:
-      - "3008:3008"
+      - "3041:3041"
     restart: unless-stopped
 
   # langgraph-workflow-agent:
@@ -139,10 +139,10 @@ services:
         required: false
     environment:
       POSTGRES_URL: postgresql://chatbot:changeme@db:5432/chatbot
-      AUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}/api/auth
-      PORT: 3000
+      AUTH_URL: ${NEXTAUTH_URL:-http://localhost:3040}/api/auth
+      PORT: 3040
     ports:
-      - 3000:3000
+      - 3040:3040
     depends_on:
       - db
       - autosynth

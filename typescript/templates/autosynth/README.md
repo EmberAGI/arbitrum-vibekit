@@ -65,7 +65,7 @@ AI_PROVIDER=openrouter
 AI_MODEL=x-ai/grok-3-mini
 
 # Server Configuration
-PORT=3008
+PORT=3041
 ENABLE_CORS=true
 BASE_PATH=/api/v1
 
@@ -274,7 +274,7 @@ pnpm test
 docker build -t triggerx-agent .
 
 # Run
-docker run -p 3008:3008 --env-file .env triggerx-agent
+docker run -p 3041:3041 --env-file .env autosynth
 ```
 
 ## Integration Notes

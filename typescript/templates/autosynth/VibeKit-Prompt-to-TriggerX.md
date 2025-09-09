@@ -19,7 +19,7 @@ This guide shows how to use the TriggerX Agent inside VibeKit to create, list, a
    pnpm install
    pnpm dev
    ```
-   The HTTP server typically runs on port `3008` unless overridden.
+   The HTTP server typically runs on port `3041` unless overridden.
 
 If you're using VibeKit's web client or any MCP-compatible client, point it at this agent endpoint.
 

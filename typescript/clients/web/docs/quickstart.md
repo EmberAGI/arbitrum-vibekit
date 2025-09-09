@@ -71,7 +71,7 @@ docker compose up
 
 **4. Access Vibekit's Web Interface:**
 
-Open your web browser and navigate to http://localhost:3000. To be able to chat with the agents, you need to connect your wallet first. Click on "Connect Wallet" to get started:
+Open your web browser and navigate to http://localhost:3040. To be able to chat with the agents, you need to connect your wallet first. Click on "Connect Wallet" to get started:
 
 <p align="left">
   <img src="../../../../img/wallet.png" width="700px" alt="wallet"/>

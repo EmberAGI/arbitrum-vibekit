@@ -44,15 +44,15 @@ RUN chown -R triggerx:nodejs /app
 USER triggerx
 
 # Expose port
-EXPOSE 3008
+EXPOSE 3041
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3008/.well-known/agent.json', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
+  CMD node -e "require('http').get('http://localhost:3041/.well-known/agent.json', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
 
 # Set production environment
 ENV NODE_ENV=production
-ENV PORT=3008
+ENV PORT=3041
 
 # Start the application
 CMD ["node", "dist/index.js"]

@@ -34,11 +34,11 @@ RUN cd templates/autosynth && pnpm build
 WORKDIR /workspace/templates/autosynth
 
 # Expose port
-EXPOSE 3008
+EXPOSE 3041
 
 # Set environment variables
 ENV NODE_ENV=development
-ENV PORT=3008
+ENV PORT=3041
 
 # Start the application
 CMD ["pnpm", "start"]
