@@ -1,9 +1,10 @@
 {
-  "name": "ember-plugin",
+  "name": "@ember/plugin-core",
   "version": "1.0.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "private": true,
   "scripts": {
     "prepare": "pnpm build",
     "build": "tsc -b",

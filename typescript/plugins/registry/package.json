@@ -1,0 +1,29 @@
+{
+  "name": "@ember/plugin-registry",
+  "version": "0.1.0",
+  "description": "Registry for plugins compatible with Ember to execute DeFi actions.",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "echo \"(todo)\""
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EmberAGI/arbitrum-vibekit.git",
+    "directory": "typescript/lib/ember-plugin-registry"
+  }
+}
