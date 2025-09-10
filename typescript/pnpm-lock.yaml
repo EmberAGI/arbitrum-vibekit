@@ -1345,6 +1345,91 @@ importers:
         specifier: 'catalog:'
         version: 4.20.3
 
+  templates/liquidation-prevention-agent:
+    dependencies:
+      '@google-a2a/types':
+        specifier: workspace:*
+        version: link:../../lib/a2a-types
+      '@modelcontextprotocol/sdk':
+        specifier: 'catalog:'
+        version: 1.15.1
+      '@openrouter/ai-sdk-provider':
+        specifier: 'catalog:'
+        version: 0.4.6(zod@3.25.76)
+      ai:
+        specifier: 'catalog:'
+        version: 4.3.17(react@19.0.0-rc-45804af1-20241021)(zod@3.25.76)
+      arbitrum-vibekit-core:
+        specifier: workspace:*
+        version: link:../../lib/arbitrum-vibekit-core
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.5
+      dotenv:
+        specifier: 'catalog:'
+        version: 16.6.1
+      ember-api:
+        specifier: workspace:^
+        version: link:../../lib/ember-api
+      ember-schemas:
+        specifier: workspace:*
+        version: link:../../lib/ember-schemas
+      express:
+        specifier: 'catalog:'
+        version: 4.21.2
+      nanoid:
+        specifier: ^5.0.7
+        version: 5.1.5
+      viem:
+        specifier: ^2.26.3
+        version: 2.31.7(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.76)
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.76
+    devDependencies:
+      '@types/chai':
+        specifier: 'catalog:'
+        version: 4.3.20
+      '@types/cors':
+        specifier: ^2.8.17
+        version: 2.8.19
+      '@types/express':
+        specifier: ^5.0.0
+        version: 5.0.3
+      '@types/mocha':
+        specifier: 'catalog:'
+        version: 10.0.10
+      '@types/node':
+        specifier: 'catalog:'
+        version: 20.19.7
+      '@types/sinon':
+        specifier: ^17.0.4
+        version: 17.0.4
+      chai:
+        specifier: 'catalog:'
+        version: 4.5.0
+      mocha:
+        specifier: 'catalog:'
+        version: 10.8.2
+      mocha-suppress-logs:
+        specifier: 'catalog:'
+        version: 0.5.1
+      prettier:
+        specifier: 'catalog:'
+        version: 3.6.2
+      sinon:
+        specifier: ^20.0.0
+        version: 20.0.0
+      tsx:
+        specifier: 'catalog:'
+        version: 4.20.3
+      typescript:
+        specifier: 'catalog:'
+        version: 5.8.3
+      vitest:
+        specifier: 'catalog:'
+        version: 2.1.9(@types/node@20.19.7)
+
   templates/quickstart-agent:
     dependencies:
       '@google-a2a/types':
@@ -15532,10 +15617,10 @@ snapshots:
   ox@0.6.7(typescript@5.8.3)(zod@3.25.76):
     dependencies:
       '@adraffy/ens-normalize': 1.11.0
-      '@noble/curves': 1.8.1
-      '@noble/hashes': 1.7.1
-      '@scure/bip32': 1.6.2
-      '@scure/bip39': 1.5.4
+      '@noble/curves': 1.9.2
+      '@noble/hashes': 1.8.0
+      '@scure/bip32': 1.7.0
+      '@scure/bip39': 1.6.0
       abitype: 1.0.8(typescript@5.8.3)(zod@3.25.76)
       eventemitter3: 5.0.1
     optionalDependencies:
