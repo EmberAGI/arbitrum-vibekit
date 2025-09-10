@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { useAccount, useSwitchChain } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useTransactionExecutor } from "../hooks/useTransactionExecutor"; // Import the hook
-import type { TxPlan } from "../lib/transactionUtils"; // Import shared types -> Use 'import type'
+import { useAccount, useSwitchChain } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useTransactionExecutor } from '../hooks/useTransactionExecutor'; // Import the hook
+import type { TxPlan } from '../lib/transactionUtils'; // Import shared types -> Use 'import type'
 
 // Removed: useState, useEffect, useCallback, useMemo, viem imports, useSendTransaction
 // Removed: getChainById, withSafeDefaults, toBigInt, signTx, ensureReady, approveTransaction, signMainTransaction
@@ -16,8 +16,8 @@ export function Swaps({
   txPreview: any; // TODO: Define a proper TxPreview type
   txPlan: TxPlan | null; // Use imported type
 }) {
-  console.log("[Transaction Component] Rendering with txPlan:", txPlan);
-  console.log("[Transaction Component] Received txPreview:", txPreview);
+  console.log('[Transaction Component] Rendering with txPlan:', txPlan);
+  console.log('[Transaction Component] Received txPreview:', txPreview);
 
   // --- Use wagmi hooks directly needed by the component or passed to the hook ---
   const { address, isConnected, chainId } = useAccount();
@@ -70,47 +70,47 @@ export function Swaps({
           <h2 className="text-lg font-semibold mb-4">Transaction Preview:</h2>
           <div className="rounded-xl bg-zinc-700 p-4 flex flex-col gap-2">
             <span className="font-normal flex gap-3 w-full items-center text-sm">
-              From:{" "}
+              From:{' '}
             </span>
 
             <p className="font-normal w-full ">
               <span className="font-normal">
                 <span className="font-semibold">
-                  {txPreview?.fromTokenAmount}{" "}
+                  {txPreview?.fromTokenAmount}{' '}
                   {txPreview?.fromTokenAmount &&
                     txPreview?.fromTokenSymbol?.toUpperCase()}
                 </span>
-                {" (on "}
+                {' (on '}
                 {txPreview?.fromChain}
-                {")"}
+                {')'}
               </span>
             </p>
             <p className="font-normal w-full bg-zinc-600 rounded-full p-2">
               <span className="font-normal  text-sm">
-                {txPreview?.fromTokenAddress}{" "}
+                {txPreview?.fromTokenAddress}{' '}
               </span>
             </p>
 
             <div className="border-t border-gray-500 my-2" />
             <span className="font-normal flex gap-3 w-full items-center text-sm">
-              To:{" "}
+              To:{' '}
             </span>
 
             <p className="font-normal w-full ">
               <span className="font-normal">
                 <span className="font-semibold">
-                  {txPreview?.toTokenAmount}{" "}
+                  {txPreview?.toTokenAmount}{' '}
                   {txPreview?.toTokenAmount &&
                     txPreview?.toTokenSymbol?.toUpperCase()}
                 </span>
-                {" (on "}
+                {' (on '}
                 {txPreview?.toChain}
-                {")"}
+                {')'}
               </span>
             </p>
             <p className="font-normal w-full bg-zinc-600 rounded-full p-2">
               <span className="font-normal  text-sm">
-                {txPreview?.toTokenAddress}{" "}
+                {txPreview?.toTokenAddress}{' '}
               </span>
             </p>
           </div>
@@ -130,7 +130,7 @@ export function Swaps({
               )}
               {txError && ( // Main transaction error
                 <p className=" p-2 rounded-2xl border-red-800 bg-red-400 w-full border-2 text-white break-words">
-                  Execution Error!{" "}
+                  Execution Error!{' '}
                   {(txError as any).shortMessage || // Use hook's txError
                     txError.message ||
                     JSON.stringify(txError, null, 2)}
@@ -149,7 +149,7 @@ export function Swaps({
               {needsApproval &&
                 approvalError && ( // Approval error
                   <p className=" p-2 rounded-2xl border-red-800 bg-red-400 w-full border-2 text-white break-words">
-                    Approval Error!{" "}
+                    Approval Error!{' '}
                     {(approvalError as any).shortMessage || // Use hook's approvalError
                       approvalError.message ||
                       JSON.stringify(approvalError, null, 2)}
@@ -177,8 +177,8 @@ export function Swaps({
                     {isApprovalPending // Use hook state
                       ? `Approving ${approvalIndex + 1}/${totalApprovals}...`
                       : isApprovalPhaseComplete // Use hook state
-                      ? "All Approved"
-                      : `Approve ${approvalIndex + 1}/${totalApprovals}`}
+                        ? 'All Approved'
+                        : `Approve ${approvalIndex + 1}/${totalApprovals}`}
                   </button>
                 )}
                 <button
@@ -188,10 +188,10 @@ export function Swaps({
                   disabled={!canExecute} // Use canExecute from hook
                 >
                   {isTxPending // Use hook state
-                    ? "Executing..."
+                    ? 'Executing...'
                     : needsApproval // Still relevant for button text
-                    ? "Execute Transaction"
-                    : "Sign Transaction"}
+                      ? 'Execute Transaction'
+                      : 'Sign Transaction'}
                 </button>
               </div>
             </>

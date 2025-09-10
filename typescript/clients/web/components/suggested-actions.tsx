@@ -1,14 +1,14 @@
-"use client";
+'use client';
 
-import { motion } from "framer-motion";
-import { Button } from "./ui/button";
-import { memo } from "react";
-import type { UseChatHelpers } from "@ai-sdk/react";
-import { chatAgents } from "../agents-config";
+import { motion } from 'framer-motion';
+import { Button } from './ui/button';
+import { memo } from 'react';
+import type { UseChatHelpers } from '@ai-sdk/react';
+import { chatAgents } from '../agents-config';
 
 interface SuggestedActionsProps {
   chatId: string;
-  append: UseChatHelpers["append"];
+  append: UseChatHelpers['append'];
   selectedAgentId?: string;
 }
 
@@ -25,7 +25,7 @@ function PureSuggestedActions({
 }: SuggestedActionsProps) {
   const agentConfig =
     chatAgents.find((agent) => agent.id === selectedAgentId) ||
-    chatAgents.find((agent) => agent.id === "all");
+    chatAgents.find((agent) => agent.id === 'all');
   const suggestedActions = agentConfig?.suggestedActions || [];
 
   return (
@@ -40,15 +40,15 @@ function PureSuggestedActions({
           exit={{ opacity: 0, y: 20 }}
           transition={{ delay: 0.05 * index }}
           key={`suggested-action-${suggestedAction.title}-${index}`}
-          className={index > 1 ? "hidden sm:block" : "block"}
+          className={index > 1 ? 'hidden sm:block' : 'block'}
         >
           <Button
             variant="ghost"
             onClick={async () => {
-              window.history.replaceState({}, "", `/chat/${chatId}`);
+              window.history.replaceState({}, '', `/chat/${chatId}`);
 
               append({
-                role: "user",
+                role: 'user',
                 content: suggestedAction.action,
               });
             }}

@@ -1,11 +1,11 @@
-import { z } from "zod";
+import { z } from 'zod';
 import {
   TokenIdentifierSchema,
   FeeBreakdownSchema,
   TransactionPlanSchema,
   TransactionPlanErrorSchema,
   TokenSchema,
-} from "./core.js";
+} from './core.js';
 
 export const BorrowTokensRequestSchema = z.object({
   tokenUid: TokenIdentifierSchema,
@@ -76,9 +76,7 @@ export const WithdrawTokensResponseSchema = z.object({
   error: TransactionPlanErrorSchema.optional(),
   chainId: z.string(),
 });
-export type WithdrawTokensResponse = z.infer<
-  typeof WithdrawTokensResponseSchema
->;
+export type WithdrawTokensResponse = z.infer<typeof WithdrawTokensResponseSchema>;
 
 export const TokenPositionSchema = z.object({
   underlyingToken: TokenSchema,
@@ -138,13 +136,9 @@ export type LendingReserve = z.infer<typeof LendingReserveSchema>;
 export const GetLendingUserSummaryRequestSchema = z.object({
   walletAddress: z.string(),
 });
-export type GetLendingUserSummaryRequest = z.infer<
-  typeof GetLendingUserSummaryRequestSchema
->;
+export type GetLendingUserSummaryRequest = z.infer<typeof GetLendingUserSummaryRequestSchema>;
 
 export const GetLendingReservesResponseSchema = z.object({
   reserves: z.array(LendingReserveSchema),
 });
-export type GetLendingReservesResponse = z.infer<
-  typeof GetLendingReservesResponseSchema
->;
+export type GetLendingReservesResponse = z.infer<typeof GetLendingReservesResponseSchema>;
