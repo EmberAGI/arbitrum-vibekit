@@ -3,6 +3,7 @@ packages:
   - 'examples/*'
   - 'templates/*'
   - 'clients/*'
+  - 'plugins/*'
 
 catalog:
   # Core dependencies

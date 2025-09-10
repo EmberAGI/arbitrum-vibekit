@@ -1,8 +1,6 @@
 name: Release ember-plugin-registry
 
 on:
-  push:
-    branches: [semantic/release, main]
   workflow_dispatch: {}
 
 jobs:
@@ -24,15 +22,11 @@ jobs:
       - uses: pnpm/action-setup@v4
         with: { version: 9 }
 
-      # Instala solo lo necesario
       - name: Install deps (typescript root)
         run: pnpm install --frozen-lockfile --workspace-root
 
-      - name: Install deps (ember-plugin-registry)
-        run: pnpm install --filter ./lib/ember-plugin-registry... --frozen-lockfile
-
       - name: Build ember-plugin-registry
-        run: pnpm --filter ./lib/ember-plugin-registry build
+        run: pnpm --filter @ember/plugin-registry build
 
       - name: Prepare npm-publish folder
         run: node scripts/prepare-npm-publish.mjs
