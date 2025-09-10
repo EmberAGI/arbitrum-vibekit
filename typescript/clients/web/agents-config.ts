@@ -130,12 +130,39 @@ export const chatAgents = [
       },
     ],
   },
+  // {
+  //   id: 'trendmoon-agent' as const,
+  //   name: 'Trendmoon',
+  //   description: 'Crypto social trends and market data insights',
+  //   suggestedActions: [
+  //     {
+  //       title: "Top Meme Tokens",
+  //       label: "right now",
+  //       action: "What are the top meme tokens right now?",
+  //     },
+  //     {
+  //       title: "Analyze BTC",
+  //       label: "social trends",
+  //       action: "Analyze BTC social trends over the last week",
+  //     },
+  //     {
+  //       title: "DeFi Projects",
+  //       label: "on Arbitrum",
+  //       action: "Find growing DeFi projects on Arbitrum",
+  //     },
+  //     {
+  //       title: "Trending Narrative",
+  //       label: "this week",
+  //       action: "What narrative is trending this week?",
+  //     },
+  //   ],
+  // },
 ] as const;
 
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
   ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
-  // ['langgraph-workflow', 'http://langgraph-workflow-agent:3009/sse'],
+  // ['trendmoon-agent', 'http://trendmoon-agent:3007/sse'],
   // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
   // ['allora-price-prediction-agent', 'http://allora-price-prediction-agent:3008/sse'],
   // ["ember-lp", "http://liquidity-agent-no-wallet:3002/sse"],

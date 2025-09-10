@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  trendmoon-mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trendmoon-mcp-server
+    environment:
+      - TRENDMOON_HTTP_MODE=true
+      - TRENDMOON_HTTP_PORT=3000
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    networks:
+      - trendmoon-network
+
+networks:
+  trendmoon-network:
+    driver: bridge

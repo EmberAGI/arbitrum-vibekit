@@ -111,6 +111,18 @@ services:
   #     - 3004:3004
   #   restart: unless-stopped
 
+#  trendmoon-agent:
+#    build:
+#      context: ./
+#      dockerfile: examples/trendmoon-agent/Dockerfile
+#    container_name: vibekit-trendmoon-agent
+#    env_file:
+#      - .env
+#    ports:
+#      - 3007:3007
+#    restart: unless-stopped
+
+
   web:
     container_name: vibekit-web-app
     build:
