@@ -1,0 +1,28 @@
+{
+  "name": "@ember/aave-lending-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "private": true,
+  "scripts": {
+    "prepare": "pnpm build",
+    "build": "tsc -b",
+    "lint": "eslint --ext .ts,.tsx src",
+    "lint:fix": "eslint --ext .ts,.tsx src --fix",
+    "format": "prettier --write \"src/**/*.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "@ember/plugin-core": "workspace:*",
+    "@aave/contract-helpers": "^1.32.1",
+    "@aave/math-utils": "^1.32.1",
+    "@bgd-labs/aave-address-book": "^4.10.0",
+    "ember-schemas": "workspace:*",
+    "ethers": "^5.7.2",
+    "zod": "catalog:"
+  }
+}
