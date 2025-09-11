@@ -1,18 +1,32 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import cors from 'cors';
 import * as dotenv from 'dotenv';
 import express from 'express';
-import { type Address } from 'viem';
-import { mnemonicToAccount } from 'viem/accounts';
-import { z } from 'zod';
+import { Address, isAddress } from 'viem';
 
 import { Agent } from './agent.js';
+import cors from 'cors';
+import { z } from 'zod';
+import type { Task } from '@google-a2a/types';
+import { TaskState } from '@google-a2a/types';
+import { mnemonicToAccount } from 'viem/accounts';
+
+const SwappingAgentSchema = z.object({
+  instruction: z
+    .string()
+    .describe(
+      "A natural-language swapping directive, e.g. 'Swap 1 ETH to USDC' or 'Convert 100 DAI to WETH' or questions about Camelot DEX."
+    ),
+  userAddress: z
+    .string()
+    .describe('The user wallet address which is used to sign transactions and to pay for gas.'),
+});
+type SwappingAgentArgs = z.infer<typeof SwappingAgentSchema>;
 
 dotenv.config();
 
 const server = new McpServer({
-  name: 'mcp-sse-agent-server',
+  name: 'swapping-agent-server',
   version: '1.0.0',
 });
 
@@ -34,34 +48,50 @@ const initializeAgent = async (): Promise<void> => {
   const userAddress: Address = account.address;
   console.error(`Using wallet ${userAddress}`);
 
-  agent = new Agent(account, userAddress, quicknodeSubdomain, apiKey);
+  agent = new Agent(account, quicknodeSubdomain, apiKey);
   await agent.init();
 };
 
+const agentToolName = 'askSwappingAgent';
+const agentToolDescription =
+  'Sends a free-form, natural-language swapping instruction to this swapping AI agent via Ember AI On-chain Actions MCP server (onchain-actions) and returns a structured quote including transaction data. You can also ask questions about Camelot DEX.';
+
 server.tool(
-  'chat',
-  'execute swapping tools using Ember On-chain Actions',
-  {
-    userInput: z.string(),
-  },
-  async (args: { userInput: string }) => {
+  agentToolName,
+  agentToolDescription,
+  SwappingAgentSchema.shape,
+  async (args: SwappingAgentArgs) => {
+    const { instruction, userAddress } = args;
+    if (!isAddress(userAddress)) {
+      throw new Error('Invalid user address provided.');
+    }
     try {
-      const result = await agent.processUserInput(args.userInput);
+      const taskResponse = await agent.processUserInput(instruction, userAddress);
 
-      console.error('[server.tool] result', result);
-
-      const responseText =
-        typeof result?.content === 'string'
-          ? result.content
-          : (JSON.stringify(result?.content) ?? 'Error: Could not get a response from the agent.');
+      console.error('[server.tool] result', taskResponse);
 
       return {
-        content: [{ type: 'text', text: responseText }],
+        content: [{ type: 'text', text: JSON.stringify(taskResponse) }],
       };
     } catch (error: unknown) {
       const err = error as Error;
+      const errorTask: Task = {
+        id: userAddress,
+        contextId: `error-${Date.now()}`,
+        kind: 'task',
+        status: {
+          state: TaskState.Failed,
+          message: {
+            role: 'agent',
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
+            parts: [{ kind: 'text', text: `Error: ${err.message}` }],
+          },
+        },
+      };
       return {
-        content: [{ type: 'text', text: `Error: ${err.message}` }],
+        isError: true,
+        content: [{ type: 'text', text: JSON.stringify(errorTask) }],
       };
     }
   }
@@ -73,7 +103,7 @@ app.use(cors());
 
 app.get('/', (_req, res) => {
   res.json({
-    name: 'MCP SSE Agent Server',
+    name: 'Swapping Agent No Wallet Server',
     version: '1.0.0',
     status: 'running',
     endpoints: {
@@ -81,7 +111,7 @@ app.get('/', (_req, res) => {
       '/sse': 'Server-Sent Events endpoint for MCP connection',
       '/messages': 'POST endpoint for MCP messages',
     },
-    tools: [{ name: 'chat', description: 'execute swapping tools using Ember On-chain Actions' }],
+    tools: [{ name: agentToolName, description: agentToolDescription }],
   });
 });
 
@@ -121,7 +151,7 @@ app.post('/messages', async (req, res) => {
   await transport.handlePostMessage(req, res);
 });
 
-const PORT = 3004;
+const PORT = 3005;
 const main = async () => {
   try {
     await initializeAgent();

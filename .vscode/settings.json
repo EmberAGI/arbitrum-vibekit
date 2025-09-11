@@ -6,5 +6,12 @@
   },
   "[javascript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
-  }
-} 
+  },
+  "eslint.workingDirectories": [
+    "./typescript/lib/arbitrum-vibekit-core",
+    "./typescript/lib/a2a-types",
+    "./typescript/lib/ember-api",
+    "./typescript/lib/ember-schemas",
+    "./typescript/mcp-tools/allora-mcp-server"
+  ]
+}
