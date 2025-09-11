@@ -26,7 +26,6 @@ import {
   type GetWalletLendingPositionsRequest,
   type Token,
 } from 'ember-schemas';
-import type { ActionDefinition, EmberPlugin, LendingActions } from '@ember/plugin-core';
 
 export type EModeCategory = 'default' | 'stablecoins';
 
