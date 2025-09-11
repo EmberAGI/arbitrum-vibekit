@@ -1,44 +1,30 @@
-# Hello Quickstart Agent
+# Quickstart Agent
 
-A comprehensive example demonstrating **all v2 framework features** of the Arbitrum Vibekit Core framework. This agent serves as both an integration test and a developer template.
+A comprehensive example demonstrating all features of the Arbitrum Vibekit Core framework.
+You can use this agent as a template for building your own.
 
-**📚 Learn the concepts**: New to the v2 framework? Check out [Lesson 6: Agent Structure](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-06.md), [Lesson 19: Skills Foundation](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-19.md), and [Lesson 20: LLM Orchestration](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-20.md) to understand the architecture demonstrated here.
+**📚 Learn the concepts**: Check out [Lesson 6: Agent Structure](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-06.md), [Lesson 19: Skills Foundation](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-19.md), and [Lesson 20: LLM Orchestration](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-20.md) to understand the architecture demonstrated here.
 
 ## Overview
 
-The Hello Quickstart Agent showcases:
+The Quickstart Agent showcases:
 
 - **Multiple Skills**: LLM-orchestrated and manual handlers ([Lesson 20](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-20.md))
 - **Internal Tools**: Context-aware business logic tools
 - **MCP Integration**: Multiple mock MCP servers ([Lesson 2](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-02.md))
-- **Hook System**: Tool enhancement with `withHooks` ([Lesson 16](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-16.md))
+- **Hook System**: Tool enhancement with `withHooks` for validation and transaction signing ([Lesson 16](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-16.md))
 - **Context Management**: Custom context loading and type safety
 - **Error Handling**: Comprehensive error scenarios
 - **HTTP Endpoints**: Full REST API and MCP over SSE
 
-## Features Demonstrated
-
-### Core v2 Features
-
-- ✅ LLM orchestration with skill-specific prompts
-- ✅ Manual skill handlers that bypass LLM
-- ✅ Context-aware tools with strong typing
-- ✅ Multiple MCP servers per skill
-- ✅ Hook-based tool enhancement
-- ✅ Artifact creation and management
-- ✅ Comprehensive error handling with VibkitError
-- ✅ Environment variable configuration
-
 ### Skills
 
 1. **greet** (LLM-orchestrated)
-
    - Takes name and greeting style
    - Uses multiple tools to generate personalized greetings
    - Demonstrates multi-step LLM execution
 
 2. **getTime** (Manual handler)
-
    - Returns current time without LLM
    - Shows manual handler bypass pattern
    - Uses utility functions
@@ -50,48 +36,13 @@ The Hello Quickstart Agent showcases:
 
 ### Tools
 
-- `getFormalGreeting` - Returns formal greetings
-- `getCasualGreeting` - Returns casual greetings
-- `getLocalizedGreeting` - Enhanced with timestamps via hooks
-- `createEchoTool` - For echo skill
-- `createArtifactTool` - For artifact creation
+- `getFormalGreeting`: Returns formal greetings
+- `getCasualGreeting`: Returns casual greetings
+- `getLocalizedGreeting`: Enhanced with timestamps via hooks
+- `createEchoTool`: For echo skill
+- `createArtifactTool`: For artifact creation
 
-### Mock MCP Servers
-
-- `mock-mcp-translate` - Translation services
-- `mock-mcp-language` - Supported languages
-- `mock-mcp-time` - Timezone support
-
-## Quick Start
-
-1. **Install dependencies**:
-
-   ```bash
-   pnpm install
-   ```
-
-2. **Set up environment**:
-
-   # (Optional) Copy the provided `.env.example` template to `.env` and fill in your secrets.
-
-   cp .env.example .env
-
-   # Edit .env with your provider API keys. At minimum, set one of OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY or HYPERBOLIC_API_KEY.
-
-   ```
-
-   ```
-
-3. **Run in development**:
-
-   ```bash
-   pnpm dev
-   ```
-
-4. **Run tests**:
-   ```bash
-   pnpm test
-   ```
+> **Important**: For blockchain transactions, always use `withHooks` after hooks to handle transaction signing and execution securely. See [Lesson 16](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-16.md) for implementation details.
 
 ## Project Structure
 
@@ -108,19 +59,6 @@ quickstart/
 └── package.json
 ```
 
-## Testing
-
-The integration test suite validates all framework features:
-
-```bash
-# Run full integration test
-pnpm test
-
-# Test specific endpoints
-curl http://localhost:3007/
-curl http://localhost:3007/.well-known/agent.json
-```
-
 ## Environment Variables
 
 | Variable             | Description                                                                                         | Required    |
@@ -134,13 +72,37 @@ curl http://localhost:3007/.well-known/agent.json
 | `PORT`               | Server port (default: 3007)                                                                         | No          |
 | `LOG_LEVEL`          | Logging level (default: debug)                                                                      | No          |
 
-## Developer Notes
+## Quick Start
 
-This agent is designed to be:
+1. **Install dependencies**:
 
-- **Feature Complete**: Tests every v2 capability
-- **Minimal**: Simplest possible use of each feature
-- **Self-Contained**: Includes mock MCP servers
-- **Well-Documented**: Clear comments for each feature
+   ```bash
+   pnpm install
+   ```
 
-Use this as a template for building your own agents!
+2. **Set up environment**:
+
+   Copy the provided `.env.example` template to `.env` and fill in your secrets. Edit .env with your provider API keys. At minimum, set one of OPENROUTER_API_KEY, OPENAI_API_KEY, XAI_API_KEY or HYPERBOLIC_API_KEY.
+
+   ```
+   cp .env.example .env
+   ```
+
+3. **Run in development**:
+
+   ```bash
+   pnpm dev
+   ```
+
+## Testing
+
+The integration test suite validates all framework features:
+
+```bash
+# Run full integration test
+pnpm test
+
+# Test specific endpoints
+curl http://localhost:3007/
+curl http://localhost:3007/.well-known/agent.json
+```

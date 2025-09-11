@@ -73,4 +73,4 @@ Get your API keys from:
 
 - **OpenRouter**: https://openrouter.ai/keys
 - **xAI**: https://x.ai/api
-- **Hyperbolic**: https://app.hyperbolic.xyz/settings
+- **Hyperbolic**: https://docs.hyperbolic.xyz/docs/create-account
