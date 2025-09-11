@@ -42,6 +42,8 @@ services:
     ports:
       - "3041:3041"
     restart: unless-stopped
+    networks:
+      - vibekit_network
 
   # langgraph-workflow-agent:
   #   build:
@@ -127,37 +129,48 @@ services:
   #     - 3004:3004
   #   restart: unless-stopped
 
-  web:
-    container_name: vibekit-web-app
+  web-2:
+    container_name: vibekit-web-app-2
     build:
       context: ./
       dockerfile: clients/web/Dockerfile.prod
+      args:
+        NEXT_PUBLIC_TRIGGERX_API_KEY: ${NEXT_PUBLIC_TRIGGERX_API_KEY}
     env_file:
       - path: .env
         required: true
       - path: clients/web/.env
         required: false
     environment:
-      POSTGRES_URL: postgresql://chatbot:changeme@db:5432/chatbot
+      POSTGRES_URL: postgresql://chatbot:changeme@db:5432/chatbot2
       AUTH_URL: ${NEXTAUTH_URL:-http://localhost:3040}/api/auth
       PORT: 3040
+      NEXT_PUBLIC_TRIGGERX_API_KEY: ${NEXT_PUBLIC_TRIGGERX_API_KEY}
     ports:
       - 3040:3040
     depends_on:
-      - db
+      - db-2
       - autosynth
+    networks:
+      - vibekit_network
 
-  db:
+  db-2:
     image: postgres:17
-    container_name: vibekit-db
+    container_name: vibekit-db-2
     environment:
       POSTGRES_USER: chatbot
       POSTGRES_PASSWORD: changeme
-      POSTGRES_DB: chatbot
+      POSTGRES_DB: chatbot2
     env_file:
       - .env
     volumes:
       - db_data:/var/lib/postgresql/data
+    networks:
+      - vibekit_network
 
 volumes:
-  db_data:
+  db_data_2:
+
+networks:
+  vibekit_network:
+    driver: bridge

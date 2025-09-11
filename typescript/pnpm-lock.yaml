@@ -43,6 +43,9 @@ catalogs:
     eslint-config-prettier:
       specifier: ^9.1.0
       version: 9.1.0
+    ethers:
+      specifier: ^6.13.4
+      version: 6.15.0
     express:
       specifier: ^4.21.2
       version: 4.21.2
@@ -64,6 +67,9 @@ catalogs:
     typescript-eslint:
       specifier: ^8.0.0
       version: 8.36.0
+    viem:
+      specifier: ^2.19.15
+      version: 2.31.7
     vitest:
       specifier: ^2.1.5
       version: 2.1.9
@@ -79,8 +85,8 @@ importers:
         specifier: workspace:*
         version: link:lib/a2a-types
       ethers:
-        specifier: ^5.7.2
-        version: 5.8.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        specifier: ^6.15.0
+        version: 6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
     devDependencies:
       '@eslint/js':
         specifier: 'catalog:'
@@ -133,6 +139,9 @@ importers:
       prool:
         specifier: ^0.0.24
         version: 0.0.24
+      sdk-triggerx:
+        specifier: ^0.1.12
+        version: 0.1.12(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       tsx:
         specifier: ^4.6.2
         version: 4.20.3
@@ -1075,11 +1084,14 @@ importers:
       ember-schemas:
         specifier: workspace:*
         version: link:../ember-schemas
+      ethers:
+        specifier: 'catalog:'
+        version: 6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       express:
         specifier: 'catalog:'
         version: 4.21.2
       viem:
-        specifier: ^2.26.3
+        specifier: 'catalog:'
         version: 2.31.7(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.76)
       zod:
         specifier: 'catalog:'
@@ -1189,7 +1201,7 @@ importers:
         specifier: 'catalog:'
         version: 16.6.1
       ethers:
-        specifier: ^6.13.4
+        specifier: 'catalog:'
         version: 6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       express:
         specifier: 'catalog:'
@@ -1201,8 +1213,11 @@ importers:
         specifier: ^3.0.3
         version: 3.0.3
       sdk-triggerx:
-        specifier: ^0.1.10
-        version: 0.1.10(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        specifier: ^0.1.12
+        version: 0.1.12(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      viem:
+        specifier: 'catalog:'
+        version: 2.31.7(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.76)
       zod:
         specifier: 'catalog:'
         version: 3.25.76
@@ -7704,8 +7719,8 @@ packages:
   scrypt-js@3.0.1:
     resolution: {integrity: sha512-cdwTTnqPu0Hyvf5in5asVdZocVDTNRmR7XEcJuIzMjJeSHybHl7vpB66AzwTaIg6CLSbtjcxc8fqcySfnTkccA==}
 
-  sdk-triggerx@0.1.10:
-    resolution: {integrity: sha512-mG6yvY7U5/19yIAeY0Qo5Ow0zEp2z6cFIYVtaTX1y1duyBHjbhKboY2XrJaRCl5trC63POowzH2LbE7V+PGJ0Q==}
+  sdk-triggerx@0.1.12:
+    resolution: {integrity: sha512-kQxyLz++KRD6WfXHz9p6+GAVKOELzZCn22BJbLh7Pi2jsYOs3Yw3MYZ6r0drwYaKjreV3coOidM4TE8AacK3IA==}
 
   secure-json-parse@2.7.0:
     resolution: {integrity: sha512-6aU+Rwsezw7VR8/nyvKTx8QpWH9FrcYiXXlqC4z5d5XQBDRqtbfsRjnwGyqbi3gddNtWHuEk9OANUotL26qKUw==}
@@ -15797,8 +15812,8 @@ snapshots:
       '@adraffy/ens-normalize': 1.11.0
       '@noble/curves': 1.9.2
       '@noble/hashes': 1.8.0
-      '@scure/bip32': 1.6.2
-      '@scure/bip39': 1.5.4
+      '@scure/bip32': 1.7.0
+      '@scure/bip39': 1.6.0
       abitype: 1.0.8(typescript@5.8.3)(zod@3.25.76)
       eventemitter3: 5.0.1
     optionalDependencies:
@@ -16626,7 +16641,7 @@ snapshots:
 
   scrypt-js@3.0.1: {}
 
-  sdk-triggerx@0.1.10(bufferutil@4.0.9)(utf-8-validate@5.0.10):
+  sdk-triggerx@0.1.12(bufferutil@4.0.9)(utf-8-validate@5.0.10):
     dependencies:
       axios: 1.11.0
       ethers: 6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)

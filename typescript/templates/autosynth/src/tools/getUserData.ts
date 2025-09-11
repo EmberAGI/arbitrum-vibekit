@@ -23,7 +23,7 @@ export const getUserDataTool: VibkitToolDefinition<typeof GetUserDataInputSchema
   parameters: GetUserDataInputSchema,
   execute: async (input, context) => {
     try {
-      const userAddress = input.address || context.custom.userAddress;
+      const userAddress = input.address;
 
       console.log('📤 User data functionality not yet available in SDK');
 

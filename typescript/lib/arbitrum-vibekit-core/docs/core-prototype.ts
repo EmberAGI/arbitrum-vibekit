@@ -147,7 +147,7 @@ export interface ToolDef {
 
 export function startAgent({
   tools,
-  port = 3000,
+  port = 3040,
 }: {
   tools: ToolDef[];
   port?: number;

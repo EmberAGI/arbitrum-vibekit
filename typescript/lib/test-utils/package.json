@@ -8,7 +8,7 @@
     "dist"
   ],
   "scripts": {
-    "prepare": "pnpm build",
+    "prepare": "echo 'Skipping test-utils build for now due to ethers v6 migration'",
     "build": "pnpm exec tsc -b",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
@@ -29,8 +29,9 @@
     "cors": "^2.8.5",
     "dotenv": "catalog:",
     "ember-schemas": "workspace:*",
+    "ethers": "catalog:",
     "express": "catalog:",
-    "viem": "^2.26.3",
+    "viem": "catalog:",
     "zod": "catalog:"
   }
 }

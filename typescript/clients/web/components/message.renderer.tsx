@@ -17,6 +17,7 @@ import { Swaps } from './Swaps';
 import { Pendle } from './Pendle';
 import { Lending } from './Lending';
 import { Liquidity } from './Liquidity';
+import { AutoSynth } from './AutoSynth';
 import type { Dispatch } from 'react';
 import { TemplateComponent } from './TemplateComponent';
 
@@ -43,7 +44,8 @@ export const MessageRenderer = ({
 }: MessageRendererProps) => {
   const { role } = message;
   const { type } = part;
-  console.log(part);
+  console.log('[MessageRenderer] Part:', part);
+  console.log('[MessageRenderer] Part type:', type);
 
   if (type === 'reasoning') {
     return <MessageReasoning isLoading={isLoading} reasoning={part.reasoning} />;
@@ -126,6 +128,8 @@ export const MessageRenderer = ({
           <Liquidity positions={null} txPreview={null} txPlan={null} pools={null} />
         ) : toolName.endsWith('askYieldTokenizationAgent') ? (
           <Pendle txPreview={null} txPlan={null} markets={[]} isMarketList={false} />
+        ) : toolName.includes('autosynth') || toolName.includes('createTimeJob') || toolName.includes('job-management-skill') ? (
+          <AutoSynth txPreview={null} jobData={null} />
         ) : (
           <TemplateComponent txPreview={null} txPlan={null} />
         )}
@@ -136,6 +140,8 @@ export const MessageRenderer = ({
   if (type === 'tool-invocation' && part.toolInvocation.state === 'result') {
     const { toolInvocation } = part;
     const { result, toolCallId, toolName } = toolInvocation;
+    console.log('[MessageRenderer] Tool result - toolName:', toolName);
+    console.log('[MessageRenderer] Tool result - result:', result);
     const content0 = result?.result?.content && Array.isArray(result?.result?.content)
       ? result?.result?.content?.[0]
       : undefined;
@@ -161,6 +167,10 @@ export const MessageRenderer = ({
     // Default keys
     const txPlan = getKeyFromResult('txPlan');
     const txPreview = getKeyFromResult('txPreview');
+    
+    console.log('[MessageRenderer] Parsed toolInvocationResult:', toolInvocationResult);
+    console.log('[MessageRenderer] txPreview:', txPreview);
+    console.log('[MessageRenderer] jobData:', getKeyFromResult('jobData'));
 
     const getParts = () =>
       Array.isArray(toolInvocationResult?.artifacts)
@@ -201,6 +211,22 @@ export const MessageRenderer = ({
               txPlan={txPlan}
               markets={getParts()}
               isMarketList={getArtifact()?.name === 'yield-markets'}
+            />
+          )
+        ) : (() => {
+          const isAutoSynth = toolName.includes('autosynth') || toolName.includes('createTimeJob') || toolName.includes('job-management-skill') || getArtifact()?.name === 'triggerx-job-plan';
+          console.log('[MessageRenderer] AutoSynth condition check:', {
+            toolName,
+            isAutoSynth,
+            artifactName: getArtifact()?.name,
+            hasResult: !!toolInvocationResult
+          });
+          return isAutoSynth;
+        })() ? (
+          toolInvocationResult && (
+            <AutoSynth
+              txPreview={getKeyFromResult('txPreview') || txPreview}
+              jobData={getKeyFromResult('jobData')}
             />
           )
         ) : (

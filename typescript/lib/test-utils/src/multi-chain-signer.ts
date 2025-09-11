@@ -1,4 +1,4 @@
-import * as ethers from "ethers";
+import { ethers, JsonRpcProvider, Wallet, Provider, Contract, Network } from "ethers";
 
 import 'dotenv/config';
 import { type Address } from "viem";
@@ -6,7 +6,7 @@ import { type Address } from "viem";
 import { type ChainConfig, CHAIN_CONFIGS } from "./chains.js";
 
 export interface ChainTestConfig {
-  provider: ethers.providers.Provider;
+  provider: Provider;
   signer: ethers.Signer;
 }
 
@@ -52,10 +52,10 @@ export class MultiChainSigner {
 
   public async sendTransaction(
     chainId: number,
-    tx: ethers.PopulatedTransaction,
-  ): Promise<ethers.providers.TransactionResponse> {
+    tx: ethers.TransactionRequest,
+  ): Promise<ethers.TransactionResponse> {
     const signer = this.getSignerForChainId(chainId);
-    return signer.sendTransaction(tx);
+    return await signer.sendTransaction(tx);
   }
 
   /**
@@ -73,7 +73,7 @@ export class MultiChainSigner {
     while (true) {
       const rpcUrl = `http://localhost:${currentPort}`;
       try {
-        const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+        const provider = new JsonRpcProvider(rpcUrl);
         // Add a short timeout to prevent hanging if the RPC is not responsive
         const networkPromise = provider.getNetwork();
         const timeoutPromise = new Promise((_, reject) =>
@@ -83,10 +83,9 @@ export class MultiChainSigner {
         const network = (await Promise.race([
           networkPromise,
           timeoutPromise,
-        ])) as ethers.providers.Network;
-
+        ])) as Network;
         discoveredChains.push({
-          chainId: network.chainId,
+          chainId: Number(network.chainId), // Convert bigint to number
           rpcUrl,
         });
 
@@ -119,9 +118,8 @@ export class MultiChainSigner {
         "Mnemonic not found. Please provide a mnemonic or set MNEMONIC in .env",
       );
     }
-
     // Create wallet from mnemonic
-    const wallet = ethers.Wallet.fromMnemonic(mnemonic);
+    const wallet = ethers.Wallet.fromPhrase(mnemonic);
     console.log(`Using wallet ${wallet.address} for test chains`);
 
     // Discover available chains
@@ -162,9 +160,8 @@ export class MultiChainSigner {
     for (const chainId of chainIdsToTest) {
       // Find the chain in available chains
       const chain = availableChains.find((c) => c.chainId === chainId)!;
-
       // Create provider for the chain
-      const provider = new ethers.providers.JsonRpcProvider(chain.rpcUrl);
+      const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
 
       // Create signer for the chain
       const signer = wallet.connect(provider);
@@ -203,7 +200,7 @@ export class MultiChainSigner {
     if (!mnemonic) {
       throw new Error("Mnemonic not found in the .env file.");
     }
-    const wallet = ethers.Wallet.fromMnemonic(mnemonic);
+    const wallet = ethers.Wallet.fromPhrase(mnemonic);
     console.log(`Using wallet ${wallet.address}`);
     return new MultiChainSigner(
       CHAIN_CONFIGS,
@@ -218,7 +215,7 @@ export class MultiChainSigner {
     return Object.fromEntries(
       await Promise.all(
         Object.entries(CHAIN_CONFIGS).map(([chainId, { rpcUrl, name }]) => {
-          const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+          const provider = new JsonRpcProvider(rpcUrl);
           const signer = wallet.connect(provider);
           console.log("chain enabled:", name, "rpc:", rpcUrl);
           return [chainId, signer];

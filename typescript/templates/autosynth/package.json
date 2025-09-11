@@ -22,11 +22,12 @@
     "arbitrum-vibekit-core": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "catalog:",
-    "ethers": "^6.13.4",
+    "ethers": "catalog:",
     "express": "catalog:",
     "nanoid": "^5.0.7",
     "node-cron": "^3.0.3",
-    "sdk-triggerx": "^0.1.10",
+    "sdk-triggerx": "^0.1.12",
+    "viem": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

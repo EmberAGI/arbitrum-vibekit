@@ -39,7 +39,7 @@ pnpm dev
 
 ```env
 # TriggerX SDK
-TRIGGERX_API_KEY=your_triggerx_api_key
+NEXT_PUBLIC_TRIGGERX_API_KEY =your_triggerx_api_key
 TRIGGERX_API_URL=https://api.triggerx.com  # Optional: defaults to https://api.triggerx.com
 
 # Blockchain

@@ -25,8 +25,6 @@ export const getJobsTool: VibkitToolDefinition<typeof GetJobsInputSchema, any, T
       console.log('📝 [getJobs] Input:', JSON.stringify(input, null, 2));
       console.log('🧩 [getJobs] Context summary:', {
         hasClient: !!context.custom?.triggerxClient,
-        hasSigner: !!context.custom?.signer,
-        userAddress: context.custom?.userAddress,
         contextKeys: Object.keys(context),
         customKeys: context.custom ? Object.keys(context.custom) : 'no custom context',
       });
@@ -59,7 +57,7 @@ export const getJobsTool: VibkitToolDefinition<typeof GetJobsInputSchema, any, T
         // Try getUserData as fallback to get user info and job IDs
         try {
           console.log('🔄 [getJobs] Trying getUserData as fallback...');
-          const userData = await getUserData(context.custom.triggerxClient, context.custom.userAddress);
+          const userData = await getUserData(context.custom.triggerxClient, 'demo-user'); // Note: Real user address should come from frontend
           console.log('👤 [getJobs] User data:', JSON.stringify(userData, null, 2));
           
           if (userData && userData.job_ids && userData.job_ids.length > 0) {

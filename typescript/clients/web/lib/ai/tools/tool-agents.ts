@@ -59,7 +59,7 @@ const convertToZodSchema = (schema: any): z.ZodSchema => {
   return z.object({});
 };
 
-async function getTool(serverUrl: string) {
+async function getTool(serverUrl: string, context?: { walletAddress?: string }) {
   let mcpClient = null;
 
   // Create MCP Client
@@ -102,9 +102,21 @@ async function getTool(serverUrl: string) {
         console.log("Executing tool:", mcptool.name);
         console.log("Arguments:", args);
         console.log("MCP Client:", mcpClient);
+        console.log("Context walletAddress:", context?.walletAddress);
+        
+        // For autosynth tools, automatically inject userAddress if available
+        let finalArgs = args;
+        if (mcptool.name.includes('autosynth') || mcptool.name.includes('createTimeJob')) {
+          const walletAddress = context?.walletAddress;
+          if (walletAddress && !args.userAddress) {
+            finalArgs = { ...args, userAddress: walletAddress };
+            console.log("Injected userAddress for autosynth tool:", walletAddress);
+          }
+        }
+        
         const result = await mcpClient.callTool({
           name: mcptool.name,
-          arguments: args,
+          arguments: finalArgs,
         });
         //const result = 'chat lending USDC successfully';
         console.log("RUNNING TOOL:", mcptool.name);
@@ -123,7 +135,7 @@ async function getTool(serverUrl: string) {
   return toolObject;
 }
 
-export const getTools = async (): Promise<{ [key: string]: CoreTool }> => {
+export const getTools = async (context?: { walletAddress?: string }): Promise<{ [key: string]: CoreTool }> => {
   console.log("Initializing MCP client...");
 
   const cookieStore = await cookies();
@@ -140,7 +152,7 @@ export const getTools = async (): Promise<{ [key: string]: CoreTool }> => {
     const urls = Array.from(DEFAULT_SERVER_URLS.keys()).map((id) =>
       resolveUrl(id)
     );
-    const toolsByAgent = await Promise.all(urls.map(getTool));
+    const toolsByAgent = await Promise.all(urls.map(url => getTool(url, context)));
     // flatten and prefix so you don't get name collisions
     return toolsByAgent.reduce(
       (
@@ -167,5 +179,5 @@ export const getTools = async (): Promise<{ [key: string]: CoreTool }> => {
     console.error(`No server URL configured for agent "${agentId}"`);
     return {};
   }
-  return getTool(serverUrl);
+  return getTool(serverUrl, context);
 };

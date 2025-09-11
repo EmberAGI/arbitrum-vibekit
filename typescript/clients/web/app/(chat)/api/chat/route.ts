@@ -39,6 +39,7 @@ type Context = z.infer<typeof ContextSchema>;
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
+  console.log('🔍 newwww [ROUTE] POST request started');
   try {
     const {
       id,
@@ -50,7 +51,23 @@ export async function POST(request: Request) {
       messages: Array<UIMessage>;
       selectedChatModel: string;
       context: Context;
-      } = await request.json();
+    } = await request.json();
+
+    console.log('🔍 [ROUTE] Request parsed - messages:', messages?.length);
+    console.log('🔍 [ROUTE] selectedChatModel:', selectedChatModel);
+    console.log('🔍 [ROUTE] context:', context);
+    console.log('🔍 [ROUTE] Environment variables check:');
+    console.log('🔍 [ROUTE] OPENROUTER_API_KEY exists:', !!process.env.OPENROUTER_API_KEY);
+    console.log(
+      '🔍 [ROUTE] OPENROUTER_API_KEY length:',
+      process.env.OPENROUTER_API_KEY?.length || 0
+    );
+    console.log(
+      '🔍 [ROUTE] OPENROUTER_API_KEY prefix:',
+      process.env.OPENROUTER_API_KEY?.substring(0, 10) || 'N/A'
+    );
+
+    console.log('🔍 [ROUTE] id:', id);
 
     const session: Session | null = await auth();
 
@@ -70,31 +87,46 @@ export async function POST(request: Request) {
     }
 
     const validatedContext = validationResult.data;
+    console.log('🔍 [ROUTE] validatedContext:', validatedContext);
 
     if (!session || !session.user || !session.user.id) {
+      console.error('❌ [ROUTE] Unauthorized - no valid session');
       return new Response('Unauthorized', { status: 401 });
     }
 
+    console.log('🔍 [ROUTE] Getting most recent user message...');
     const userMessage = getMostRecentUserMessage(messages);
+    console.log('🔍 [ROUTE] User message:', userMessage);
 
     if (!userMessage) {
+      console.error('❌ [ROUTE] No user message found');
       return new Response('No user message found', { status: 400 });
     }
 
+    console.log('🔍 [ROUTE] Getting chat by ID...');
     const chat = await getChatById({ id });
+    console.log('🔍 [ROUTE] Chat result:', chat ? 'Found' : 'Not found');
+
 
     if (!chat) {
+      console.log('🔍 [ROUTE] No existing chat found, generating title...');
+
       const title = await generateTitleFromUserMessage({
         message: userMessage,
       });
+      console.log('✅ [ROUTE] Title generated successfully:', title);
 
+      console.log('🔍 [ROUTE] Saving chat...');
       await saveChat({ id, userId: session.user.id, title, address: validatedContext.walletAddress || "" });
+      console.log('✅ [ROUTE] Chat saved successfully');
     } else {
+      console.log('🔍 [ROUTE] Chat already exists');
       if (chat.userId !== session.user.id) {
         return new Response('Unauthorized', { status: 401 });
       }
     }
 
+    console.log('🔍 [ROUTE] Saving messages...');
     await saveMessages({
       messages: [
         {
@@ -107,15 +139,21 @@ export async function POST(request: Request) {
         },
       ],
     });
+    console.log('✅ [ROUTE] Messages saved successfully');
 
     console.log('Chat ID:', id);
-    // Get dynamic tools
-    const dynamicTools = await getDynamicTools();
+    // Get dynamic tools with wallet context
+    console.log('🔍 [ROUTE] Getting dynamic tools...');
+    const dynamicTools = await getDynamicTools({ walletAddress: validatedContext.walletAddress });
+    console.log('✅ [ROUTE] Dynamic tools loaded:', Object.keys(dynamicTools));
+      console.log('🔍 [ROUTE] Dynamic tools details:', dynamicTools);
 
-    console.log('Dynamic tools:', dynamicTools);
+    console.log('🔍 [ROUTE] Creating data stream response...');
 
     return createDataStreamResponse({
       execute: (dataStream) => {
+        console.log('🔍 [ROUTE] Executing streamText...');
+
         const result = streamText({
           model: openRouterProvider.languageModel(selectedChatModel),
           system: systemPrompt({
@@ -137,8 +175,12 @@ export async function POST(request: Request) {
             ...dynamicTools,
           },
           onFinish: async ({ response }) => {
+            console.log('🔍 [ROUTE] onFinish callback triggered');
+            console.log('🔍 [ROUTE] StreamText finished');
+
             if (session.user?.id) {
               try {
+                console.log('🔍 [ROUTE] Saving assistant message...');
                 const assistantId = getTrailingMessageId({
                   messages: response.messages.filter(
                     (message) => message.role === 'assistant',
@@ -167,8 +209,9 @@ export async function POST(request: Request) {
                     },
                   ],
                 });
-              } catch (_) {
-                console.error('Failed to save chat');
+                console.log('✅ [ROUTE] Assistant message saved successfully');
+              } catch (error) {
+                console.error('❌ [ROUTE] Failed to save chat:', error);
               }
             }
           },
@@ -178,7 +221,8 @@ export async function POST(request: Request) {
           },
         });
 
-        console.log('FN RES', result);
+        console.log('✅ [ROUTE] StreamText created successfully');
+        console.log('🔍 [ROUTE] StreamText result:', result);
 
         // result.consumeStream(); // Calling consumeStream() here buffers the entire response server-side, preventing streaming to the client.
 

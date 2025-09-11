@@ -37,6 +37,13 @@ const JobManagementInputSchema = z.object({
     .describe(
       'Job configuration object for CREATE operations containing all job parameters like jobTitle, scheduleTypes (array), timeInterval, cronExpression, specificSchedule, contracts, etc. Required only for CREATE operations.'
     ),
+  userAddress: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{40}$/)
+    .optional()
+    .describe(
+      'User wallet address for signing transactions. Auto-extracted from context if not provided.'
+    ),
 });
 
 export const jobManagementSkill = defineSkill({

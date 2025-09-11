@@ -1,24 +1,24 @@
 /**
  * Create Condition-based Job Tool
- * Creates jobs triggered by API or contract condition checks
+ * Creates jobs that trigger when specified conditions are met
  */
 
 import { z } from 'zod';
 import type { VibkitToolDefinition } from 'arbitrum-vibekit-core';
 import { createSuccessTask, createErrorTask } from 'arbitrum-vibekit-core';
-import { createJob, JobType, ArgType, type CreateJobInput } from 'sdk-triggerx';
+import { JobType, ArgType } from 'sdk-triggerx';
 import type { TriggerXContext } from '../context/types.js';
-import { ConditionType, type CreateJobResult } from '../types.js';
+import type { Task } from '@google-a2a/types';
 
 const CreateConditionJobInputSchema = z.object({
   jobTitle: z.string().min(1).describe('Title for the condition-based job'),
-  conditionType: z
-    .enum(['greater_than', 'less_than', 'between', 'equals', 'not_equals', 'greater_equal', 'less_equal'])
-    .describe('Type of condition to check'),
-  upperLimit: z.number().optional().describe('Upper limit for condition (required for greaterThan)'),
-  lowerLimit: z.number().optional().describe('Lower limit for condition (required for lessThan)'),
-  valueSourceType: z.enum(['api', 'contract']).describe('Source type for condition value'),
-  valueSourceUrl: z.string().url().optional().describe('API URL for value fetching (required for api type)'),
+  conditionType: z.enum(['value', 'event']).describe('Type of condition to monitor'),
+  valueSourceType: z.enum(['contract', 'api']).describe('Source type for value-based conditions'),
+  valueSourceContractAddress: z.string().optional().describe('Contract address for value source (contract type)'),
+  valueSourceFunction: z.string().optional().describe('Function to call for value (contract type)'),
+  valueSourceUrl: z.string().optional().describe('API URL for value source (API type)'),
+  operator: z.enum(['>', '<', '>=', '<=', '==', '!=']).describe('Comparison operator'),
+  targetValue: z.string().describe('Target value to compare against'),
   targetContractAddress: z
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/)
@@ -31,33 +31,23 @@ const CreateConditionJobInputSchema = z.object({
   targetChainId: z.string().default('421614').describe('Target blockchain chain ID'),
   dynamicArgumentsScriptUrl: z.string().optional().describe('URL for dynamic argument fetching script'),
   timezone: z.string().default('UTC').describe('Timezone for job execution'),
+  userAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('User wallet address for signing transactions'),
 });
 
-export const createConditionJobTool: VibkitToolDefinition<
-  typeof CreateConditionJobInputSchema,
-  any,
-  TriggerXContext,
-  any
-> = {
+export const createConditionJobTool: VibkitToolDefinition<typeof CreateConditionJobInputSchema, any, TriggerXContext, any> = {
   name: 'createConditionJob',
   description: 'Create a condition-based automated job that triggers when specified conditions are met',
   parameters: CreateConditionJobInputSchema,
   execute: async (input, context) => {
+    console.log('📊 CreateConditionJob tool executing with input:', JSON.stringify(input, null, 2));
     try {
       // Validate condition parameters
-      if (input.conditionType === 'greater_than' && input.upperLimit === undefined) {
-        throw new Error('upperLimit is required for greater_than condition');
-      }
-      if (input.conditionType === 'less_than' && input.lowerLimit === undefined) {
-        throw new Error('lowerLimit is required for less_than condition');
+      if (input.valueSourceType === 'contract' && (!input.valueSourceContractAddress || !input.valueSourceFunction)) {
+        throw new Error('valueSourceContractAddress and valueSourceFunction are required for contract-based conditions');
       }
       if (input.valueSourceType === 'api' && !input.valueSourceUrl) {
         throw new Error('valueSourceUrl is required for API-based conditions');
       }
-
-      // Get user balance for job cost prediction
-      const balance = await context.custom.signer.provider!.getBalance(context.custom.userAddress);
-      const etherBalance = Number(balance);
 
       // Build job input matching the exact SDK example structure
       const jobInput: any = {
@@ -67,62 +57,72 @@ export const createConditionJobTool: VibkitToolDefinition<
         timeFrame: input.timeFrame,
         timezone: input.timezone,
         conditionType: input.conditionType,
-        upperLimit: input.upperLimit || 0,
-        lowerLimit: input.lowerLimit || 0,
-        valueSourceType: input.valueSourceType || 'api',
+        valueSourceType: input.valueSourceType,
+        valueSourceContractAddress: input.valueSourceContractAddress || '',
+        valueSourceFunction: input.valueSourceFunction || '',
         valueSourceUrl: input.valueSourceUrl || '',
+        operator: input.operator,
+        targetValue: input.targetValue,
+        recurring: input.recurring,
         chainId: input.targetChainId,
         targetContractAddress: input.targetContractAddress,
         targetFunction: input.targetFunction,
         abi: input.abi,
-        isImua: true,
+        isImua: false,
         arguments: input.arguments,
         dynamicArgumentsScriptUrl: input.dynamicArgumentsScriptUrl || '',
         autotopupTG: true,
       };
 
-      console.log('📤 Creating condition job with correct SDK pattern:', JSON.stringify(jobInput, null, 2));
+      console.log('📦 Preparing transaction data for user signing...');
 
-      // Bounded wait to avoid MCP timeout (defaults to 30s to leave buffer for MCP 60s timeout)
-      const timeoutMs = Number(process.env.TRIGGERX_CREATE_TIMEOUT_MS || 30000);
-      
-      const createJobPromise = (async () => {
-        const result = await createJob(context.custom.triggerxClient, {
+      // Create transaction preview
+      const txPreview = {
+        action: 'createConditionJob' as const,
+        jobTitle: input.jobTitle,
+        conditionType: input.conditionType,
+        valueSourceType: input.valueSourceType,
+        targetContract: input.targetContractAddress,
+        targetFunction: input.targetFunction,
+        chainId: input.targetChainId,
+      };
+
+      // Create transaction artifact for user signing
+      const txArtifact = {
+        txPreview,
+        jobData: {
           jobInput,
-          signer: context.custom.signer,
-        } as any);
-        return result as any;
-      })();
+          requiresUserSignature: true,
+          // estimatedCost: '0.01', // Placeholder
+        },
+      };
 
-      const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve('TIMEOUT'), timeoutMs));
-      const raceResult = await Promise.race([createJobPromise, timeoutPromise]);
+      console.log('✅ Transaction artifact prepared for user signing');
 
-      if (raceResult === 'TIMEOUT') {
-        console.warn(`⏱️ createJob still processing after ${timeoutMs}ms; returning early to avoid MCP timeout`);
-        return createSuccessTask(
-          'createConditionJob',
-          undefined,
-          `⏳ Job creation for "${input.jobTitle}" is processing in the background. Please use "list my jobs" in a few moments to see your new job.`
-        );
-      }
-
-      const result: any = raceResult;
-
-      console.log('📥 TriggerX SDK response:', JSON.stringify(result, null, 2));
-
-      // Extract job ID from response
-      const jobId = (result as any).jobId || (result as any).id || (result as any).data?.jobId || 'unknown';
-
-      return createSuccessTask(
-        'createConditionJob',
-        undefined,
-        `Condition-based job "${input.jobTitle}" created successfully with ID: ${jobId}`
-      );
+      // Return task with transaction artifact that requires user signature
+      return {
+        id: input.userAddress,
+        contextId: `create-condition-job-${Date.now()}`,
+        kind: 'task',
+        status: {
+          state: 'completed' as const,
+          message: {
+            role: 'agent',
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
+            parts: [{ kind: 'text', text: 'Condition job configuration ready. Please sign to create the automated job.' }],
+          },
+        },
+        artifacts: [
+          {
+            artifactId: `triggerx-job-${Date.now()}`,
+            name: 'triggerx-job-plan',
+            parts: [{ kind: 'data', data: txArtifact }],
+          },
+        ],
+      } as Task;
     } catch (error) {
-      return createErrorTask(
-        'createConditionJob',
-        error instanceof Error ? error : new Error('Unknown error occurred')
-      );
+      return createErrorTask('createConditionJob', error instanceof Error ? error : new Error('Unknown error occurred'));
     }
   },
 };

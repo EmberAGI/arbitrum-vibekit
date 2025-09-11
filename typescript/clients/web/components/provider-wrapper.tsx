@@ -3,7 +3,7 @@
 import '@rainbow-me/rainbowkit/styles.css';
 import { darkTheme, getDefaultConfig, RainbowKitProvider } from '@rainbow-me/rainbowkit';
 import { cookieStorage, cookieToInitialState, createStorage, WagmiProvider } from 'wagmi';
-import { mainnet, arbitrum, } from 'wagmi/chains';
+import { mainnet, arbitrum, arbitrumSepolia} from 'wagmi/chains';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import React, { useMemo } from 'react';
 import { RainbowKitSiweNextAuthProvider } from '@rainbow-me/rainbowkit-siwe-next-auth';
@@ -14,7 +14,7 @@ export function ProviderWrapper({ children }: { children: React.ReactNode }) {
       getDefaultConfig({
         appName: 'Arbitrum VibeKit',
         projectId: '4b49e5e63b9f6253943b470873b47208',
-        chains: [arbitrum, mainnet],
+        chains: [arbitrum, mainnet, arbitrumSepolia],
         ssr: true, // If your dApp uses server side rendering (SSR)
         storage: createStorage({ storage: cookieStorage }),
       }),

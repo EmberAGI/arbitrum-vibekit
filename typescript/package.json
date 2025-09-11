@@ -47,11 +47,12 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.32.1",
     "vitest": "catalog:",
-    "c8": "catalog:"
+    "c8": "catalog:",
+    "sdk-triggerx": "^0.1.12"
   },
   "dependencies": {
     "@google-a2a/types": "workspace:*",
-    "ethers": "^5.7.2"
+    "ethers": "^6.15.0"
   },
   "pnpm": {
     "ignoredBuiltDependencies": [

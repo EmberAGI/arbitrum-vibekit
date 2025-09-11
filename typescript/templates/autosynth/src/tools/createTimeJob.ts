@@ -4,12 +4,12 @@
  */
 
 import { z } from 'zod';
-import { ethers, type Signer } from 'ethers';
 import type { VibkitToolDefinition } from 'arbitrum-vibekit-core';
 import { createSuccessTask, createErrorTask } from 'arbitrum-vibekit-core';
-import { createJob, JobType, ArgType, type CreateJobInput, type CreateJobParams } from 'sdk-triggerx';
+import { JobType, ArgType } from 'sdk-triggerx';
 import type { TriggerXContext } from '../context/types.js';
 import { ScheduleType } from '../types.js';
+import type { Task } from '@google-a2a/types';
 
 const CreateTimeJobInputSchema = z.object({
   jobTitle: z.string().min(1).describe('Title for the scheduled job'),
@@ -29,7 +29,33 @@ const CreateTimeJobInputSchema = z.object({
   targetChainId: z.string().default('421614').describe('Target blockchain chain ID (Arbitrum Sepolia)'),
   dynamicArgumentsScriptUrl: z.string().optional().describe('URL for dynamic argument fetching script'),
   timezone: z.string().default('UTC').describe('Timezone for scheduling'),
+  userAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('User wallet address for signing transactions'),
 });
+
+// Define TriggerX Job Preview Schema
+const TriggerXJobPreviewSchema = z.object({
+  action: z.literal('createTimeJob'),
+  jobTitle: z.string(),
+  scheduleTypes: z.array(z.string()),
+  targetContract: z.string(),
+  targetFunction: z.string(),
+  chainId: z.string(),
+  timeInterval: z.number().optional(),
+  cronExpression: z.string().optional(),
+  specificSchedule: z.string().optional(),
+});
+
+// Define TriggerX Transaction Artifact Schema  
+const TriggerXTransactionArtifactSchema = z.object({
+  txPreview: TriggerXJobPreviewSchema,
+  jobData: z.object({
+    jobInput: z.record(z.any()),
+    requiresUserSignature: z.boolean(),
+    estimatedCost: z.string().optional(),
+  }),
+});
+
+type TriggerXTransactionArtifact = z.infer<typeof TriggerXTransactionArtifactSchema>;
 
 export const createTimeJobTool: VibkitToolDefinition<typeof CreateTimeJobInputSchema, any, TriggerXContext, any> = {
   name: 'createTimeJob',
@@ -37,7 +63,6 @@ export const createTimeJobTool: VibkitToolDefinition<typeof CreateTimeJobInputSc
   parameters: CreateTimeJobInputSchema,
   execute: async (input, context) => {
     console.log('🕒 CreateTimeJob tool executing with input:', JSON.stringify(input, null, 2));
-    console.log('context', context);
     try {
       // Validate scheduling parameters for each type
       if (input.scheduleTypes.includes('interval') && !input.timeInterval) {
@@ -49,11 +74,6 @@ export const createTimeJobTool: VibkitToolDefinition<typeof CreateTimeJobInputSc
       if (input.scheduleTypes.includes('specific') && !input.specificSchedule) {
         throw new Error('specificSchedule is required for specific time scheduling');
       }
-
-      // Get user balance for job cost prediction
-      const balance = await context.custom.signer.provider!.getBalance(context.custom.userAddress);
-      console.log('balance on Arbitrum Sepolia:', balance);
-      const etherBalance = Number(balance);
 
       // Build job input matching the exact SDK example structure
       const jobInput: any = {
@@ -76,73 +96,55 @@ export const createTimeJobTool: VibkitToolDefinition<typeof CreateTimeJobInputSc
         autotopupTG: true,
       };
 
-      console.log('context.custom.triggerxClient', context.custom.triggerxClient);
-      console.log('Using signer for TriggerX operations');
-      console.log('signer type:', typeof context.custom.signer);
-      console.log('signer address:', await context.custom.signer.getAddress());
-      console.log('signer has provider:', !!context.custom.signer.provider);
-      console.log('📤 Creating time job with correct SDK pattern:', JSON.stringify(jobInput, null, 2));
+      console.log('📦 Preparing transaction data for user signing...');
 
-      try {
-        console.log('🔄 Calling createJob SDK method...');
-        console.log('Using signer from context for TriggerX');
-        console.log('Signer address:', await context.custom.signer.getAddress());
-        console.log('TriggerX Client API Key:', (context.custom.triggerxClient as any).apiKey);
-        console.log('Environment API_KEY:', process.env.API_KEY);
+      // Create transaction preview
+      const txPreview = {
+        action: 'createTimeJob' as const,
+        jobTitle: input.jobTitle,
+        scheduleTypes: input.scheduleTypes,
+        targetContract: input.targetContractAddress,
+        targetFunction: input.targetFunction,
+        chainId: input.targetChainId,
+        timeInterval: input.timeInterval,
+        cronExpression: input.cronExpression,
+        specificSchedule: input.specificSchedule,
+      };
 
-        // Bounded wait to avoid MCP timeout (defaults to 30s to leave buffer for MCP 60s timeout)
-        const timeoutMs = Number(process.env.TRIGGERX_CREATE_TIMEOUT_MS || 30000);
+      // Create transaction artifact for user signing
+      const txArtifact: TriggerXTransactionArtifact = {
+        txPreview,
+        jobData: {
+          jobInput,
+          requiresUserSignature: true,
+          estimatedCost: '0.01', // Placeholder - can be calculated based on actual costs
+        },
+      };
 
-        const createJobPromise = (async () => {
-          const result = await createJob(context.custom.triggerxClient, {
-            jobInput,
-            // @ts-ignore
-            signer: context.custom.signer,
-          });
-          console.log('📥 TriggerX SDK response:', JSON.stringify(result, null, 2));
-          return result as any;
-        })();
+      console.log('✅ Transaction artifact prepared for user signing');
 
-        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve('TIMEOUT'), timeoutMs));
-        const raceResult = await Promise.race([createJobPromise, timeoutPromise]);
-
-        if (raceResult === 'TIMEOUT') {
-          console.warn(`⏱️ createJob still processing after ${timeoutMs}ms; returning early to avoid MCP timeout`);
-          return createSuccessTask(
-            'createTimeJob',
-            undefined,
-            `⏳ Job creation for "${input.jobTitle}" is processing in the background. The TriggerX API is taking longer than expected. Please use "list my jobs" in a few moments to see your new job, or check the TriggerX dashboard.`
-          );
-        }
-
-        const result: any = raceResult;
-
-        // Extract job ID from various potential SDK shapes
-        const extractedJobId =
-          result?.jobId ||
-          result?.id ||
-          result?.data?.jobId ||
-          (Array.isArray(result?.data?.job_ids) && result.data.job_ids.length > 0 && result.data.job_ids[0]) ||
-          'unknown';
-
-        console.log('✅ Job created successfully with ID:', extractedJobId);
-
-        return createSuccessTask(
-          'createTimeJob',
-          undefined,
-          `Time-based job "${input.jobTitle}" created successfully with ID: ${extractedJobId}`
-        );
-      } catch (createJobError) {
-        console.error('❌ createJob failed:', createJobError);
-        console.error('❌ Error name:', (createJobError as any).name);
-        console.error('❌ Error message:', (createJobError as any).message);
-        console.error('❌ Error stack:', (createJobError as any).stack);
-
-        return createErrorTask(
-          'createTimeJob',
-          createJobError instanceof Error ? createJobError : new Error('Unknown error occurred')
-        );
-      }
+      // Return task with transaction artifact that requires user signature
+      return {
+        id: input.userAddress,
+        contextId: `create-time-job-${Date.now()}`,
+        kind: 'task',
+        status: {
+          state: 'completed' as const,
+          message: {
+            role: 'agent',
+            messageId: `msg-${Date.now()}`,
+            kind: 'message',
+            parts: [{ kind: 'text', text: 'Job configuration ready. Please sign to create the automated job.' }],
+          },
+        },
+        artifacts: [
+          {
+            artifactId: `triggerx-job-${Date.now()}`,
+            name: 'triggerx-job-plan',
+            parts: [{ kind: 'data', data: txArtifact }],
+          },
+         ],
+       } as Task;
     } catch (error) {
       return createErrorTask('createTimeJob', error instanceof Error ? error : new Error('Unknown error occurred'));
     }

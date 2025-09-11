@@ -11,7 +11,7 @@ This guide shows how to use the TriggerX Agent inside VibeKit to create, list, a
 
 ### Prerequisites
 1. Environment variables configured (see `README.md` → Configuration):
-   - `TRIGGERX_API_KEY`, `TRIGGERX_API_URL` (optional)
+   - `NEXT_PUBLIC_TRIGGERX_API_KEY `, `TRIGGERX_API_URL` (optional)
    - `RPC_URL`, `PRIVATE_KEY`
    - At least one AI key: `OPENROUTER_API_KEY` or `OPENAI_API_KEY` or `XAI_API_KEY`
 2. Start the agent locally:
@@ -179,7 +179,7 @@ Delete job
 ---
 
 ### Troubleshooting
-- Ensure `TRIGGERX_API_KEY` is valid and your `TRIGGERX_API_URL` (or default) is reachable.
+- Ensure `NEXT_PUBLIC_TRIGGERX_API_KEY ` is valid and your `TRIGGERX_API_URL` (or default) is reachable.
 - Check the agent logs in your terminal for detailed error messages.
 - Verify your RPC and `PRIVATE_KEY` are correct for the target chain.
 - If the model is unsure, rephrase with exact details (address, function, ABI, chain ID).

@@ -1,10 +1,20 @@
 # Build stage - Context should be the typescript/ directory
 FROM node:23-slim AS builder
 
+# Accept build arguments for Next.js environment variables
+ARG NEXT_PUBLIC_TRIGGERX_API_KEY
+ENV NEXT_PUBLIC_TRIGGERX_API_KEY=${NEXT_PUBLIC_TRIGGERX_API_KEY}
+
 WORKDIR /app
 
 # Install pnpm globally
 RUN npm install -g pnpm@10.7.0 typescript@5.8.3
+# Harden pnpm network behavior to reduce ETIMEDOUT failures
+ENV PNPM_FETCH_RETRIES=5 \
+    PNPM_FETCH_RETRY_FACTOR=2 \
+    PNPM_FETCH_RETRY_MINTIMEOUT=20000 \
+    PNPM_FETCH_RETRY_MAXTIMEOUT=120000 \
+    PNPM_NETWORK_CONCURRENCY=8
 
 # ------------------------------
 # 1. Copy lockfile & workspace config that affect dependency graph cache
@@ -54,6 +64,12 @@ WORKDIR /app
 
 # Install pnpm globally
 RUN npm install -g pnpm@10.7.0
+# Harden pnpm network behavior to reduce ETIMEDOUT failures
+ENV PNPM_FETCH_RETRIES=5 \
+    PNPM_FETCH_RETRY_FACTOR=2 \
+    PNPM_FETCH_RETRY_MINTIMEOUT=20000 \
+    PNPM_FETCH_RETRY_MAXTIMEOUT=120000 \
+    PNPM_NETWORK_CONCURRENCY=8
 
 # Copy workspace configuration
 COPY --from=builder /app/pnpm-workspace.yaml /app/
@@ -77,7 +93,7 @@ RUN chown -R ember:ember /app
 USER ember
 
 # Expose port
-EXPOSE 3000
+EXPOSE 3040
 
 # Use dumb-init to properly handle signals
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
