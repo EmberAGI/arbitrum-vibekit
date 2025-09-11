@@ -1,11 +1,14 @@
-import type { LendingPosition, GetWalletLendingPositionsRequest } from 'ember-schemas';
+import type {
+  GetWalletLendingPositionsRequest,
+  GetWalletLendingPositionsResponse,
+} from 'ember-schemas';
 
 /**
  * Get lending positions for a wallet.
  */
 export type LendingGetPositions = (
   request: GetWalletLendingPositionsRequest
-) => Promise<LendingPosition>;
+) => Promise<GetWalletLendingPositionsResponse>;
 
 /**
  * All the queries related to lending.

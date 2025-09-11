@@ -11,11 +11,17 @@ import type {
   LiquiditySupplyCallback,
   LiquidityWithdrawCallback,
 } from './liquidity.js';
+import type {
+  PerpetualsActions,
+  PerpetualsCloseOrdersCallback,
+  PerpetualsCreateLongPositionCallback,
+  PerpetualsCreateShortPositionCallback,
+} from './perpetuals.js';
 
 /**
  * The possible actions an ember plugin can perform.
  */
-export type Action = LendingActions | LiquidityActions | SwapActions;
+export type Action = LendingActions | LiquidityActions | SwapActions | PerpetualsActions;
 
 /**
  * Type mapping for action callbacks.
@@ -28,6 +34,9 @@ type CallbacksRecord = {
   'lending-withdraw': LendingWithdrawCallback;
   'liquidity-supply': LiquiditySupplyCallback;
   'liquidity-withdraw': LiquidityWithdrawCallback;
+  'perpetuals-short': PerpetualsCreateShortPositionCallback;
+  'perpetuals-long': PerpetualsCreateLongPositionCallback;
+  'perpetuals-close': PerpetualsCloseOrdersCallback;
 };
 /**
  * Type mapping for action callbacks.

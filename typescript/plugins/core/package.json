@@ -14,10 +14,10 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "ember-schemas": "workspace:*",
     "typescript": "catalog:"
   },
   "dependencies": {
+    "ember-schemas": "workspace:*",
     "zod": "catalog:"
   }
 }
