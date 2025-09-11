@@ -140,3 +140,6 @@ export async function getAaveActions(
     },
   ];
 }
+
+// Re-export type
+export type { AAVEAdapterParams };

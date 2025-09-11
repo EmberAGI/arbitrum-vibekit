@@ -12,9 +12,13 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "echo \"(todo)\""
+    "test": "echo \"(todo)\"",
+    "prepare": "pnpm build"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@ember/aave-lending-plugin": "workspace:*",
+    "@ember/plugin-core": "workspace:*"
+  },
   "devDependencies": {},
   "license": "MIT",
   "publishConfig": {

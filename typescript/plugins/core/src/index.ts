@@ -38,3 +38,4 @@ export interface EmberPlugin<Type extends PluginType> {
 
 export * from './actions/index.js';
 export * from './queries/index.js';
+export * from './pluginType.js';
