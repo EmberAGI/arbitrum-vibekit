@@ -79,6 +79,23 @@ OPENAI_API_KEY=your_openai_api_key_here
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
 ```
 
+### Tatum MCP Integration
+
+Add the following to `.env` if you want on-chain data via Tatum MCP:
+
+```
+# Tatum MCP Server URL (defaults to http://localhost:3010)
+TATUM_MCP_SERVER_URL=http://localhost:3010
+```
+
+Run the Tatum MCP server locally (from `typescript/lib/mcp-tools/tatum-mcp-server/`):
+
+```
+TATUM_API_KEY=*** TATUM_CHAIN=arbitrum-one-mainnet PORT=3010 pnpm dev
+```
+
+Tools exposed: `get_block_number`, `get_native_balance`, `get_token_balance`, `get_block_by_number`, `get_transaction_by_hash`, `get_logs`, `rpc_call` (allow-listed).
+
 ## Usage
 
 ### Starting the Agent
