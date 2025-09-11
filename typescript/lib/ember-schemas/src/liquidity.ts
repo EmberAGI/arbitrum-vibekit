@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TokenIdentifierSchema, TransactionPlanSchema } from './common.js';
+import { TokenIdentifierSchema, TransactionPlanSchema } from './core.js';
 
 export const LimitedLiquidityProvisionRangeSchema = z.object({
   minPrice: z.string(),
@@ -56,8 +56,8 @@ export type LiquidityPool = z.infer<typeof LiquidityPoolSchema>;
 export const SupplyLiquidityRequestSchema = z.object({
   token0: TokenIdentifierSchema,
   token1: TokenIdentifierSchema,
-  amount0: z.string(),
-  amount1: z.string(),
+  amount0: z.bigint(),
+  amount1: z.bigint(),
   range: LiquidityProvisionRangeSchema,
   walletAddress: z.string(),
 });
@@ -71,7 +71,6 @@ export type SupplyLiquidityResponse = z.infer<typeof SupplyLiquidityResponseSche
 
 export const WithdrawLiquidityRequestSchema = z.object({
   tokenId: z.string(),
-  providerId: z.string(),
   walletAddress: z.string(),
 });
 export type WithdrawLiquidityRequest = z.infer<typeof WithdrawLiquidityRequestSchema>;

@@ -1,33 +1,16 @@
 import { z } from 'zod';
-import { OrderTypeSchema, TransactionPlanStatusSchema } from './common.js';
 import {
-  TokenIdentifierSchema,
   FeeBreakdownSchema,
   TransactionPlanSchema,
-  TransactionPlanErrorSchema,
-} from './common.js';
-
-export const SwapEstimationSchema = z.object({
-  baseTokenDelta: z.string(),
-  quoteTokenDelta: z.string(),
-  effectivePrice: z.string(),
-  timeEstimate: z.string(),
-  expiration: z.string(),
-});
-export type SwapEstimation = z.infer<typeof SwapEstimationSchema>;
-
-export const ProviderTrackingInfoSchema = z.object({
-  requestId: z.string(),
-  providerName: z.string(),
-  explorerUrl: z.string(),
-});
-export type ProviderTrackingInfo = z.infer<typeof ProviderTrackingInfoSchema>;
+  SwapEstimationSchema,
+  ProviderTrackingInfoSchema,
+  TokenSchema,
+} from './core.js';
 
 export const SwapTokensRequestSchema = z.object({
-  orderType: OrderTypeSchema,
-  baseToken: TokenIdentifierSchema,
-  quoteToken: TokenIdentifierSchema,
-  amount: z.string(),
+  fromToken: TokenSchema,
+  toToken: TokenSchema,
+  amount: z.bigint(),
   limitPrice: z.string().optional(),
   slippageTolerance: z.string().optional(),
   expiration: z.string().optional(),
@@ -36,16 +19,16 @@ export const SwapTokensRequestSchema = z.object({
 export type SwapTokensRequest = z.infer<typeof SwapTokensRequestSchema>;
 
 export const SwapTokensResponseSchema = z.object({
-  status: TransactionPlanStatusSchema,
-  orderType: OrderTypeSchema,
-  baseToken: TokenIdentifierSchema,
-  quoteToken: TokenIdentifierSchema,
-  feeBreakdown: FeeBreakdownSchema.optional(),
+  fromToken: TokenSchema,
+  toToken: TokenSchema,
+  exactFromAmount: z.string(),
+  displayFromAmount: z.string(),
+  exactToAmount: z.string(),
+  displayToAmount: z.string(),
   transactions: z.array(TransactionPlanSchema),
+  feeBreakdown: FeeBreakdownSchema.optional(),
   estimation: SwapEstimationSchema.optional(),
   providerTracking: ProviderTrackingInfoSchema.optional(),
-  error: TransactionPlanErrorSchema.optional(),
-  chainId: z.string(),
 });
 export type SwapTokensResponse = z.infer<typeof SwapTokensResponseSchema>;
 
