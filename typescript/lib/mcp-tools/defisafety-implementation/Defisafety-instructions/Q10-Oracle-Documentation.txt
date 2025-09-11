@@ -1,0 +1,28 @@
+Q11: Is the protocol's use of an Oracle (external data feed) sufficiently documented?
+Weight: 6%
+
+Purpose: Determine whether the project clearly explains its data sources for off-chain information (typically price oracles) and how they work in the protocol. If the protocol uses an external oracle like Chainlink, or a custom oracle, the docs should identify it and describe key aspects (which feeds, update frequency, etc.). If the protocol does not use any oracle (e.g., an AMM that only uses on-chain prices), the docs should state that and possibly explain why not. Proper Oracle documentation is important because oracle failures or manipulations can heavily impact security.
+
+Where to Look: Check the technical documentation for sections about "Oracle", "Price Feeds", "Data Feeds", or "Market Data". Often, protocols have a subsection discussing how they get prices. Search docs for "oracle", "Chainlink", "price", "feed", or names of known oracle providers. If nothing is found and the protocol is simple (like an AMM), look if they mention using internal pricing (which effectively means no external oracle). Also, sometimes audit reports mention oracles used.
+
+Scoring Criteria: From DeFiSafety guidelines:
+
+    100%: All relevant details about the oracle usage are documented. Specifically, the docs should identify the oracle provider (e.g., Chainlink, Band, internal TWAP, etc.), list which contracts or parts of the protocol rely on the oracle, and mention key parameters like the update frequency (timeframe) of price feeds. In short, a user reading the docs knows exactly where the data is coming from and how fresh it is. Additionally: If the protocol doesn't use an oracle at all, a 100% can also be achieved if the docs clearly explain why no oracle is needed for the protocol's function.
+
+    75%: The docs give some oracle information but not all. For example, they might name the oracle source (Chainlink) and mention update frequency, but not explicitly tie it to which contracts or not explain any custom logic. Or vice versa, they identify source and which contracts use it, but omit update interval details.
+
+    50%: The docs only identify the oracle source but provide little else. E.g., "We use Chainlink oracles" with no further elaboration (no mention of which feeds or how often they update or which parts of the system use them).
+
+    0%: No mention of oracles at all. The documentation does not tell the user if an external data feed is used, leaving a gap in understanding. This could mean the protocol might not use one, but if so, that reasoning isn't documented either. Essentially, the user has no idea about price data sources from the docs.
+
+Answer Format:
+
+    If thoroughly documented: "Yes – the documentation clearly explains the protocol's oracle usage. It states that Chainlink price feeds are used for asset prices, updating every ~5 minutes, and lists which contracts consume these feeds. This comprehensive detail earns full marks. Score: 100%."
+
+    If partial: "Partially – the docs mention that the protocol uses Chainlink oracles for pricing, but they do not detail which feeds or update frequency. Some oracle info is given, but it's not complete. Score: 50%."
+
+    If none: "No – the documentation provides no information about any oracle or price feed. It's not stated how prices or external data are obtained (or if they're needed at all). Score: 0%."
+
+If the protocol doesn't use an oracle and the docs explicitly say so (and maybe give a reason), you would answer "Yes" and treat it as full marks because they have documented that fact. For example: "The protocol does not rely on an external oracle; prices are determined internally from on-chain AMM pools, as explained in the docs. This is clearly documented. Score: 100%."
+
+Always cite where the oracle provider or lack thereof is mentioned. If using a known service, often the docs will have the name which you can quote. If there's truly nothing, cite a section of the docs where you expected it (like the risk or mechanism section) to show you checked and nothing was there.

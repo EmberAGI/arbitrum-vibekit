@@ -1,0 +1,40 @@
+Q6: Is the bug bounty program value acceptably high?
+Weight: 15%
+
+Purpose: Determine if the protocol has a bug bounty program and if the rewards on offer are significant enough to incentivize white-hat hackers to report vulnerabilities. A high-value, active bug bounty indicates the team is proactive about security, willing to pay for bugs to be found rather than exploited. "Acceptably high" generally means the maximum payout is in line with industry standards (e.g., in the hundreds of thousands of dollars or more, depending on the protocol's size). We also consider whether the program is active (ongoing and advertised via a platform like Immunefi or Code4rena) or just a stale mention.
+
+Where to Look: Check the docs or security page for "Bug Bounty" information. Often, projects will have a section describing their bounty program, possibly with a link to a platform (like an Immunefi page) or their own bounty page. Look for details on reward tiers or maximum bounty amounts. If not in docs, check the project's blog or announcements for a bug bounty launch, or search on Google for "<Project> bug bounty".
+
+Key details to gather: Is the program active (currently open for submissions)? What is the maximum reward (or range of rewards) offered? Sometimes it's stated as "up to $X for critical bugs" or a percentage of TVL.
+
+Scoring Criteria: DeFiSafety's rubric for bounty value:
+
+    100%: The bug bounty is extremely high – around 10% of the protocol's TVL or at least $1,000,000 – and the program is active (meaning it's run through a platform or otherwise clearly ongoing). 10% of TVL is a guideline; if TVL is not known, $1M is used as a benchmark for top-tier.
+
+    90%: The bounty is slightly lower but still very high – 5% of TVL or at least $500,000, and active.
+
+    80%: The bounty offers similar amounts (5% TVL or ≥$500k) but the program might not be actively promoted (perhaps just mentioned on docs without a platform).
+
+    70%: The maximum bounty is ≥$100,000 and the program is active.
+
+    60%: Maximum bounty ≥$100k, but program status might be unclear/inactive.
+
+    50%: Maximum bounty is ≥$50,000 and active.
+
+    40%: Maximum bounty ≥$50k, but maybe not active (just mentioned, or a smaller platform, etc.).
+
+    20%: The bounty exists but is less than $50,000 reward at top end. This is relatively low by DeFi standards, so it's not very incentivizing.
+
+    0%: No bug bounty program is offered, or it was offered in the past but is now expired ("dead program"). Also 0% if the docs make no mention of any bounty and we find nothing about it.
+
+(Active vs inactive: "Active" generally means listed on a platform like Immunefi with ongoing invites to hackers. "Inactive" might mean the docs mention a bounty but it's not actually running or has expired.)
+
+Answer Format: Note the presence and size of the bounty, then score:
+
+    "Yes – the project has an active bug bounty on Immunefi, with rewards up to $1,000,000 for critical vulnerabilities. This is an exceptionally high bounty, indicating strong incentives for disclosure. Score: 100%."
+
+    Or: "Partial – a bug bounty program exists with a maximum reward of $50,000 for critical bugs. This amount is moderate, not top-tier, and it's not clear if the program is actively maintained. Score: 40%."
+
+    If none: "No bug bounty program is mentioned or found. The protocol does not appear to offer rewards for reporting bugs. Score: 0%."
+
+Be sure to cite where you found the bounty information (e.g., the docs or Immunefi page listing the rewards). If using TVL percentage, you might not always know TVL; in such cases, rely on absolute dollar amounts if given. Also clarify if the program is currently active (for example, say "active on Immunefi as of [date]" if possible, or "the docs show a live program"). If the program existed but ended, mention that (e.g., "a previous bug bounty campaign was run in 2021 but is now closed – Score 0%").
