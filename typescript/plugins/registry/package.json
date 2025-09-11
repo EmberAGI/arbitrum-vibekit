@@ -25,5 +25,44 @@
     "type": "git",
     "url": "git+https://github.com/EmberAGI/arbitrum-vibekit.git",
     "directory": "typescript/lib/ember-plugin-registry"
+  },
+  "release": {
+    "branches": [
+      {
+        "name": "main",
+        "channel": "alpha",
+        "prerelease": "alpha"
+      },
+      "release"
+    ],
+    "plugins": [
+      [
+        "@semantic-release/commit-analyzer",
+        {
+          "preset": "conventionalcommits"
+        }
+      ],
+      [
+        "@semantic-release/npm",
+        {
+          "npmPublish": true,
+          "pkgRoot": ".npm-publish"
+        }
+      ],
+      [
+        "@semantic-release/git",
+        {
+          "assets": [
+            "CHANGELOG.md",
+            "package.json"
+          ],
+          "message": "chore(release): ember-plugin-registry-v${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+        }
+      ],
+      [
+        "@semantic-release/github",
+        {}
+      ]
+    ]
   }
 }
