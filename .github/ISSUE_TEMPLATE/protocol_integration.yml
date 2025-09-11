@@ -35,14 +35,6 @@ body:
       required: true
 
   - type: textarea
-    id: networks
-    attributes:
-      label: 🌐 Supported Networks
-      description:  Which networks does this protocol operate on?
-    validations:
-      required: true
-
-  - type: textarea
     id: protocol-description
     attributes:
       label: 📝 Protocol Description
@@ -64,9 +56,17 @@ body:
       required: true
 
   - type: textarea
+    id: networks
+    attributes:
+      label: 🌐 Supported Networks
+      description:  Which networks does this protocol operate on?
+    validations:
+      required: true
+
+  - type: textarea
     id: capabilities
     attributes:
-      label: 🎯 Desired Capabilities
+      label: 🎯 Capabilities
       description: What specific operations are supported?
       placeholder: |
         For swapping protocols:
@@ -96,6 +96,14 @@ body:
       description: Any other relevant information, security considerations, or special requirements
       placeholder: |
         Security audits, known limitations, special permissions needed, etc.
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation Required
+      description: What needs to be implemented on Ember's MCP Server for this protocol to be functional? 
+      placeholder: |
+        Note: Add "dev-required" label to this issue if code implementation or adjustment is required from the Vibekit team.
 
   - type: checkboxes
     id: checklist
