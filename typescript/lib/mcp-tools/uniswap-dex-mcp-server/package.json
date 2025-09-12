@@ -1,0 +1,44 @@
+{
+  "name": "uniswap-dex-mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "uniswap-dex-mcp-server": "./dist/index.js"
+  },
+  "scripts": {
+    "prepare": "pnpm build",
+    "prepublishOnly": "pnpm build",
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "uniswap",
+    "dex",
+    "arbitrum"
+  ],
+  "license": "MIT",
+  "description": "Uniswap DEX MCP Server for Vibekit",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@types/express": "^5.0.1",
+    "@types/node": "catalog:",
+    "dotenv": "catalog:",
+    "express": "catalog:",
+    "typescript": "catalog:",
+    "viem": "^2.26.3",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "tsx": "catalog:"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+
+
