@@ -43,6 +43,11 @@
         "channel": "alpha",
         "prerelease": "alpha"
       },
+      {
+        "name": "add/plugins",
+        "channel": "alpha",
+        "prerelease": "alpha"
+      },
       "release"
     ],
     "plugins": [

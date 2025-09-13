@@ -2,6 +2,9 @@ name: Release ember-plugin-registry
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - add/plugins
 
 jobs:
   release:
