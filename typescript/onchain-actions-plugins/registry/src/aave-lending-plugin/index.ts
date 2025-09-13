@@ -150,7 +150,7 @@ export async function getAaveActions(
  * @returns A promise that resolves when the plugin is registered.
  */
 export function registerAave(chainConfig: ChainConfig, registry: PublicEmberPluginRegistry) {
-  const supportedChains = [1, 10, 42161, 137, 1101, 43114, 8453];
+  const supportedChains = [42161];
   if (!supportedChains.includes(chainConfig.chainId)) {
     return;
   }
