@@ -4,7 +4,7 @@ import url from 'node:url';
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
-const PKG_DIR = path.join(REPO_ROOT, 'lib/ember-plugin-registry');
+const PKG_DIR = path.join(REPO_ROOT, 'onchain-actions-plugins/registry');
 const OUT_DIR = path.join(PKG_DIR, '.npm-publish');
 
 function copy(rel) {
