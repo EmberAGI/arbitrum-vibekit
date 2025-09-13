@@ -39,11 +39,6 @@
   "release": {
     "branches": [
       {
-        "name": "main",
-        "channel": "alpha",
-        "prerelease": "alpha"
-      },
-      {
         "name": "add/plugins",
         "channel": "alpha",
         "prerelease": "alpha"
