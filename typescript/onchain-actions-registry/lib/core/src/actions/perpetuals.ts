@@ -3,7 +3,7 @@ import type {
   ClosePerpetualsOrdersResponse,
   CreatePerpetualsPositionRequest,
   CreatePerpetualsPositionResponse,
-} from 'ember-schemas';
+} from '../schemas/perpetuals.js';
 
 export type PerpetualsCreateShortPositionCallback = (
   request: CreatePerpetualsPositionRequest

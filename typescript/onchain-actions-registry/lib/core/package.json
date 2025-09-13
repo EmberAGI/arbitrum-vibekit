@@ -17,7 +17,7 @@
     "typescript": "catalog:"
   },
   "dependencies": {
-    "ember-schemas": "workspace:*",
+    "@gmx-io/sdk": "^1.2.1",
     "zod": "catalog:"
   }
 }

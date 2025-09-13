@@ -7,7 +7,7 @@ import type {
   SupplyTokensResponse,
   WithdrawTokensRequest,
   WithdrawTokensResponse,
-} from 'ember-schemas';
+} from '../schemas/lending.js';
 
 /**
  * Callback function type for the borrow action.

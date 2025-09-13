@@ -1,4 +1,4 @@
-import type { SwapTokensRequest, SwapTokensResponse } from 'ember-schemas';
+import type { SwapTokensRequest, SwapTokensResponse } from '../schemas/swap.js';
 
 /**
  * Callback function type for the swap action.

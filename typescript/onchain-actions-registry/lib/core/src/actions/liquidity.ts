@@ -3,7 +3,7 @@ import type {
   SupplyLiquidityResponse,
   WithdrawLiquidityRequest,
   WithdrawLiquidityResponse,
-} from 'ember-schemas';
+} from '../schemas/liquidity.js';
 
 /**
  * The callback function type for the supply liquidity action.

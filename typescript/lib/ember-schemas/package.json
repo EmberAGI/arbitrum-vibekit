@@ -4,7 +4,6 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "private": true,
   "scripts": {
     "prepare": "pnpm build",
     "build": "tsc -b",
@@ -18,7 +17,6 @@
     "typescript": "catalog:"
   },
   "dependencies": {
-    "@gmx-io/sdk": "^1.2.1",
     "zod": "catalog:"
   }
 }
