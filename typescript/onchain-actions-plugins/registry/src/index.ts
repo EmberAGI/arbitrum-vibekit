@@ -17,3 +17,5 @@ export function initializePublicRegistry(chainConfigs: ChainConfig[]) {
 
   return registry;
 }
+
+export { type ChainConfig, PublicEmberPluginRegistry };
