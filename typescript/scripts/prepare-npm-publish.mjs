@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
+import yaml from 'js-yaml';
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -19,10 +20,26 @@ function copy(rel) {
 const pkg = JSON.parse(fs.readFileSync(path.join(PKG_DIR, 'package.json'), 'utf8'));
 const clean = { ...pkg };
 
+// Read and parse the pnpm-workspace.yaml catalog
+function loadCatalog() {
+  const workspaceFile = path.join(REPO_ROOT, 'pnpm-workspace.yaml');
+  const content = fs.readFileSync(workspaceFile, 'utf8');
+  const workspace = yaml.load(content);
+
+  return workspace?.catalog || {};
+}
+
+const catalog = loadCatalog();
+
 function deCatalog(deps = {}) {
   const out = {};
   for (const [name, ver] of Object.entries(deps)) {
-    out[name] = typeof ver === 'string' && ver.startsWith('catalog:') ? '^0.0.0' : ver;
+    if (typeof ver === 'string' && ver.startsWith('catalog:')) {
+      // Use the version from catalog, fallback to ^0.0.0 if not found
+      out[name] = catalog[name] || '^0.0.0';
+    } else {
+      out[name] = ver;
+    }
   }
   return out;
 }
