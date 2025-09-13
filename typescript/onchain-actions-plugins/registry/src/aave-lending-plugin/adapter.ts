@@ -25,7 +25,7 @@ import {
   TransactionTypes,
   type GetWalletLendingPositionsRequest,
   type Token,
-} from 'ember-schemas';
+} from '@emberai/plugin-core';
 
 export type EModeCategory = 'default' | 'stablecoins';
 

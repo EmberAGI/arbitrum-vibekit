@@ -1,5 +1,7 @@
-import type { ActionDefinition, EmberPlugin, LendingActions } from 'plugins/core/dist/index.js';
+import type { ActionDefinition, EmberPlugin, LendingActions } from '@emberai/plugin-core';
 import { AAVEAdapter, type AAVEAdapterParams } from './adapter.js';
+import type { ChainConfig } from '../chainConfig.js';
+import type { PublicEmberPluginRegistry } from '../registry.js';
 
 /**
  * Get the AAVE Ember plugin.
@@ -141,5 +143,23 @@ export async function getAaveActions(
   ];
 }
 
-// Re-export type
-export type { AAVEAdapterParams };
+/**
+ * Register the AAVE plugin for the specified chain configuration.
+ * @param chainConfig - The chain configuration to check for AAVE support.
+ * @param registry - The public Ember plugin registry to register the plugin with.
+ * @returns A promise that resolves when the plugin is registered.
+ */
+export function registerAave(chainConfig: ChainConfig, registry: PublicEmberPluginRegistry) {
+  const supportedChains = [1, 10, 42161, 137, 1101, 43114, 8453];
+  if (!supportedChains.includes(chainConfig.chainId)) {
+    return;
+  }
+
+  registry.registerDeferredPlugin(
+    getAaveEmberPlugin({
+      chainId: chainConfig.chainId,
+      rpcUrl: chainConfig.rpcUrl,
+      wrappedNativeToken: chainConfig.wrappedNativeToken,
+    })
+  );
+}

@@ -1,6 +1,6 @@
 import type { ChainConfig } from './chainConfig.js';
 import { PublicEmberPluginRegistry } from './registry.js';
-import { getAaveEmberPlugin, type AAVEAdapterParams } from '@ember/aave-lending-plugin';
+import { registerAave, getAaveEmberPlugin } from './aave-lending-plugin/index.js';
 
 /**
  * Initialize the public Ember plugin registry.
@@ -12,13 +12,7 @@ export function initializePublicRegistry(chainConfigs: ChainConfig[]) {
   // Register any plugin in here
   for (const chainConfig of chainConfigs) {
     // Create aave plugins for each chain config
-    registry.registerDeferredPlugin(
-      getAaveEmberPlugin({
-        chainId: chainConfig.chainId,
-        rpcUrl: chainConfig.rpcUrl,
-        wrappedNativeToken: chainConfig.wrappedNativeToken,
-      })
-    );
+    registerAave(chainConfig, registry);
   }
 
   return registry;

@@ -1,5 +1,5 @@
 {
-  "name": "@ember/plugin-registry",
+  "name": "@emberai/onchain-actions-registry",
   "version": "0.1.0",
   "description": "Registry for plugins compatible with Ember to execute DeFi actions.",
   "type": "module",
@@ -18,8 +18,13 @@
     "format": "prettier --write \"src/**/*.ts\""
   },
   "dependencies": {
-    "@ember/aave-lending-plugin": "workspace:*",
-    "@ember/plugin-core": "workspace:*"
+    "@emberai/plugin-core": "workspace:*",
+    "@aave/contract-helpers": "^1.32.1",
+    "@aave/math-utils": "^1.32.1",
+    "@bgd-labs/aave-address-book": "^4.10.0",
+    "ember-schemas": "workspace:*",
+    "ethers": "^5.7.2",
+    "zod": "catalog:"
   },
   "devDependencies": {},
   "license": "MIT",
