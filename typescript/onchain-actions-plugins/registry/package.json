@@ -43,7 +43,7 @@
         "channel": "alpha",
         "prerelease": "alpha"
       },
-      "release"
+      "main"
     ],
     "plugins": [
       [
