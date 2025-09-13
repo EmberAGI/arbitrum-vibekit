@@ -26,7 +26,7 @@ jobs:
         run: pnpm install --frozen-lockfile --workspace-root
 
       - name: Build ember-plugin-registry
-        run: pnpm --filter @ember/plugin-registry build
+        run: pnpm --filter @emberai/onchain-action-registry build
 
       - name: Prepare npm-publish folder
         run: node scripts/prepare-npm-publish.mjs
