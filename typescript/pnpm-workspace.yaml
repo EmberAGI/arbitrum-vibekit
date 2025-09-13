@@ -3,7 +3,7 @@ packages:
   - 'examples/*'
   - 'templates/*'
   - 'clients/*'
-  - 'onchain-actions-registry/*'
+  - 'onchain-actions-plugins/**/*'
 
 catalog:
   # Core dependencies

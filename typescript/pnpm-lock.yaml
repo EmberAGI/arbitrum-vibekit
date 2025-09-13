@@ -484,7 +484,7 @@ importers:
         version: 16.5.0
       ember-schemas:
         specifier: workspace:*
-        version: file:lib/ember-schemas(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        version: link:../../lib/ember-schemas
       express:
         specifier: 'catalog:'
         version: 4.21.2
@@ -560,7 +560,7 @@ importers:
         version: link:../../lib/ember-api
       ember-schemas:
         specifier: workspace:*
-        version: file:lib/ember-schemas(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        version: link:../../lib/ember-schemas
       express:
         specifier: 'catalog:'
         version: 4.21.2
@@ -636,7 +636,7 @@ importers:
         version: link:../../lib/ember-api
       ember-schemas:
         specifier: workspace:*
-        version: file:lib/ember-schemas(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        version: link:../../lib/ember-schemas
       express:
         specifier: 'catalog:'
         version: 4.21.2
@@ -712,7 +712,7 @@ importers:
         version: 16.5.0
       ember-schemas:
         specifier: workspace:*
-        version: file:lib/ember-schemas(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        version: link:../../lib/ember-schemas
       express:
         specifier: 'catalog:'
         version: 4.21.2
@@ -935,7 +935,7 @@ importers:
         version: 16.5.0
       ember-schemas:
         specifier: workspace:^
-        version: file:lib/ember-schemas(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        version: link:../ember-schemas
       escape-html:
         specifier: ^1.0.3
         version: 1.0.3
@@ -1016,9 +1016,6 @@ importers:
 
   lib/ember-schemas:
     dependencies:
-      '@gmx-io/sdk':
-        specifier: ^1.2.1
-        version: 1.2.1(bufferutil@4.0.9)(react-native-performance@5.1.4(react-native@0.81.1(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10)))(utf-8-validate@5.0.10)(zod@3.25.61)
       zod:
         specifier: 'catalog:'
         version: 3.25.61
@@ -1104,7 +1101,7 @@ importers:
         version: link:../ember-api
       ember-schemas:
         specifier: workspace:*
-        version: file:lib/ember-schemas(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        version: link:../ember-schemas
       express:
         specifier: 'catalog:'
         version: 4.21.2
@@ -1124,6 +1121,46 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.8.3
+
+  onchain-actions-plugins/lib/core:
+    dependencies:
+      '@gmx-io/sdk':
+        specifier: ^1.2.1
+        version: 1.2.1(bufferutil@4.0.9)(react-native-performance@5.1.4(react-native@0.81.4(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10)))(utf-8-validate@5.0.10)(zod@3.25.61)
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.61
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 20.19.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.8.3
+
+  onchain-actions-plugins/registry:
+    dependencies:
+      '@aave/contract-helpers':
+        specifier: ^1.32.1
+        version: 1.36.1(bignumber.js@9.3.1)(ethers@5.8.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(reflect-metadata@0.1.14)(tslib@2.8.1)
+      '@aave/math-utils':
+        specifier: ^1.32.1
+        version: 1.36.1(bignumber.js@9.3.1)(tslib@2.8.1)
+      '@bgd-labs/aave-address-book':
+        specifier: ^4.10.0
+        version: 4.29.3(viem@2.31.0(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.61))
+      '@emberai/plugin-core':
+        specifier: workspace:*
+        version: file:onchain-actions-plugins/lib/core(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      ember-schemas:
+        specifier: workspace:*
+        version: link:../../lib/ember-schemas
+      ethers:
+        specifier: ^5.7.2
+        version: 5.8.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.61
 
   templates/allora-price-prediction-agent:
     dependencies:
@@ -1226,7 +1263,7 @@ importers:
         version: link:../../lib/ember-api
       ember-schemas:
         specifier: workspace:*
-        version: file:lib/ember-schemas(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        version: link:../../lib/ember-schemas
       express:
         specifier: 'catalog:'
         version: 4.21.2
@@ -1342,7 +1379,7 @@ importers:
         version: link:../../lib/ember-api
       ember-schemas:
         specifier: workspace:*
-        version: file:lib/ember-schemas(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        version: link:../../lib/ember-schemas
       express:
         specifier: 'catalog:'
         version: 4.21.2
@@ -1446,6 +1483,20 @@ importers:
         version: 5.8.3
 
 packages:
+
+  '@aave/contract-helpers@1.36.1':
+    resolution: {integrity: sha512-Ppoz11WRA3bjkZqnRA0a/txjfb67fVWh+ucgtN/RR45WI9oDsEmtYsqAwiNR3egvigSeyJASFeei0ijGGoFifw==}
+    peerDependencies:
+      bignumber.js: ^9.x
+      ethers: ^5.x
+      reflect-metadata: ^0.1.x
+      tslib: ^2.4.x
+
+  '@aave/math-utils@1.36.1':
+    resolution: {integrity: sha512-rR1sbDX1IFb1B1TLdi8hZANvtviPeU8hfpLuHC9cwlXluujCdHttnNVODwco1J5d2k6KxnNnc0DZJj2yV7nLTQ==}
+    peerDependencies:
+      bignumber.js: ^9.x
+      tslib: ^2.4.x
 
   '@adraffy/ens-normalize@1.11.0':
     resolution: {integrity: sha512-/3DDPKHqqIqxUULp8yP4zODUY1i+2xvVWsv8A79xGWdCAG+8sb0hRh0Rk2QyOJUnnbyPUAZYcpBuRe3nS2OIUg==}
@@ -1696,6 +1747,11 @@ packages:
     resolution: {integrity: sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA==}
     engines: {node: '>=18'}
 
+  '@bgd-labs/aave-address-book@4.29.3':
+    resolution: {integrity: sha512-beO+JEQ0cFgC7tuRbXqupEZRJnnZ3eD9d6RY+7soM7LVe1ywC7mMN2GW7BJr4jlfLr1cZaH4dQIXiTUaCw865w==}
+    peerDependencies:
+      viem: ^2.23.5
+
   '@biomejs/biome@1.9.4':
     resolution: {integrity: sha512-1rkd7G70+o9KkTn5KLmDYXihGoTaIGO9PIIN2ZB7UJxFrWw04CZHPYiMRjYsaDvVV7hP1dYNRLxSANLaBFGpog==}
     engines: {node: '>=14.21.3'}
@@ -1876,6 +1932,9 @@ packages:
     engines: {bun: '>=1', deno: '>=2', node: '>=16'}
     peerDependencies:
       '@noble/ciphers': ^1.0.0
+
+  '@emberai/plugin-core@file:onchain-actions-plugins/lib/core':
+    resolution: {directory: onchain-actions-plugins/lib/core, type: directory}
 
   '@emnapi/core@1.4.4':
     resolution: {integrity: sha512-A9CnAbC6ARNMKcIcrQwq6HeHCjpcBZ5wSx4U01WXCqEKlrzB9F9315WDNHkrs2xbx7YjjSxbUYxuN6EQzpcY2g==}
@@ -3627,18 +3686,18 @@ packages:
       viem: 2.x
       wagmi: ^2.9.0
 
-  '@react-native/assets-registry@0.81.1':
-    resolution: {integrity: sha512-o/AeHeoiPW8x9MzxE1RSnKYc+KZMW9b7uaojobEz0G8fKgGD1R8n5CJSOiQ/0yO2fJdC5wFxMMOgy2IKwRrVgw==}
+  '@react-native/assets-registry@0.81.4':
+    resolution: {integrity: sha512-AMcDadefBIjD10BRqkWw+W/VdvXEomR6aEZ0fhQRAv7igrBzb4PTn4vHKYg+sUK0e3wa74kcMy2DLc/HtnGcMA==}
     engines: {node: '>= 20.19.4'}
 
-  '@react-native/codegen@0.81.1':
-    resolution: {integrity: sha512-8KoUE1j65fF1PPHlAhSeUHmcyqpE+Z7Qv27A89vSZkz3s8eqWSRu2hZtCl0D3nSgS0WW0fyrIsFaRFj7azIiPw==}
+  '@react-native/codegen@0.81.4':
+    resolution: {integrity: sha512-LWTGUTzFu+qOQnvkzBP52B90Ym3stZT8IFCzzUrppz8Iwglg83FCtDZAR4yLHI29VY/x/+pkcWAMCl3739XHdw==}
     engines: {node: '>= 20.19.4'}
     peerDependencies:
       '@babel/core': '*'
 
-  '@react-native/community-cli-plugin@0.81.1':
-    resolution: {integrity: sha512-FuIpZcjBiiYcVMNx+1JBqTPLs2bUIm6X4F5enYGYcetNE2nfSMUVO8SGUtTkBdbUTfKesXYSYN8wungyro28Ag==}
+  '@react-native/community-cli-plugin@0.81.4':
+    resolution: {integrity: sha512-8mpnvfcLcnVh+t1ok6V9eozWo8Ut+TZhz8ylJ6gF9d6q9EGDQX6s8jenan5Yv/pzN4vQEKI4ib2pTf/FELw+SA==}
     engines: {node: '>= 20.19.4'}
     peerDependencies:
       '@react-native-community/cli': '*'
@@ -3649,27 +3708,27 @@ packages:
       '@react-native/metro-config':
         optional: true
 
-  '@react-native/debugger-frontend@0.81.1':
-    resolution: {integrity: sha512-dwKv1EqKD+vONN4xsfyTXxn291CNl1LeBpaHhNGWASK1GO4qlyExMs4TtTjN57BnYHikR9PzqPWcUcfzpVRaLg==}
+  '@react-native/debugger-frontend@0.81.4':
+    resolution: {integrity: sha512-SU05w1wD0nKdQFcuNC9D6De0ITnINCi8MEnx9RsTD2e4wN83ukoC7FpXaPCYyP6+VjFt5tUKDPgP1O7iaNXCqg==}
     engines: {node: '>= 20.19.4'}
 
-  '@react-native/dev-middleware@0.81.1':
-    resolution: {integrity: sha512-hy3KlxNOfev3O5/IuyZSstixWo7E9FhljxKGHdvVtZVNjQdM+kPMh66mxeJbB2TjdJGAyBT4DjIwBaZnIFOGHQ==}
+  '@react-native/dev-middleware@0.81.4':
+    resolution: {integrity: sha512-hu1Wu5R28FT7nHXs2wWXvQ++7W7zq5GPY83llajgPlYKznyPLAY/7bArc5rAzNB7b0kwnlaoPQKlvD/VP9LZug==}
     engines: {node: '>= 20.19.4'}
 
-  '@react-native/gradle-plugin@0.81.1':
-    resolution: {integrity: sha512-RpRxs/LbWVM9Zi5jH1qBLgTX746Ei+Ui4vj3FmUCd9EXUSECM5bJpphcsvqjxM5Vfl/o2wDLSqIoFkVP/6Te7g==}
+  '@react-native/gradle-plugin@0.81.4':
+    resolution: {integrity: sha512-T7fPcQvDDCSusZFVSg6H1oVDKb/NnVYLnsqkcHsAF2C2KGXyo3J7slH/tJAwNfj/7EOA2OgcWxfC1frgn9TQvw==}
     engines: {node: '>= 20.19.4'}
 
-  '@react-native/js-polyfills@0.81.1':
-    resolution: {integrity: sha512-w093OkHFfCnJKnkiFizwwjgrjh5ra53BU0ebPM3uBLkIQ6ZMNSCTZhG8ZHIlAYeIGtEinvmnSUi3JySoxuDCAQ==}
+  '@react-native/js-polyfills@0.81.4':
+    resolution: {integrity: sha512-sr42FaypKXJHMVHhgSbu2f/ZJfrLzgaoQ+HdpRvKEiEh2mhFf6XzZwecyLBvWqf2pMPZa+CpPfNPiejXjKEy8w==}
     engines: {node: '>= 20.19.4'}
 
-  '@react-native/normalize-colors@0.81.1':
-    resolution: {integrity: sha512-TsaeZlE8OYFy3PSWc+1VBmAzI2T3kInzqxmwXoGU4w1d4XFkQFg271Ja9GmDi9cqV3CnBfqoF9VPwRxVlc/l5g==}
+  '@react-native/normalize-colors@0.81.4':
+    resolution: {integrity: sha512-9nRRHO1H+tcFqjb9gAM105Urtgcanbta2tuqCVY0NATHeFPDEAB7gPyiLxCHKMi1NbhP6TH0kxgSWXKZl1cyRg==}
 
-  '@react-native/virtualized-lists@0.81.1':
-    resolution: {integrity: sha512-yG+zcMtyApW1yRwkNFvlXzEg3RIFdItuwr/zEvPCSdjaL+paX4rounpL0YX5kS9MsDIE5FXfcqINXg7L0xuwPg==}
+  '@react-native/virtualized-lists@0.81.4':
+    resolution: {integrity: sha512-hBM+rMyL6Wm1Q4f/WpqGsaCojKSNUBqAXLABNGoWm1vabZ7cSnARMxBvA/2vo3hLcoR4v7zDK8tkKm9+O0LjVA==}
     engines: {node: '>= 20.19.4'}
     peerDependencies:
       '@types/react': ^19.1.0
@@ -4952,6 +5011,10 @@ packages:
     resolution: {integrity: sha512-5T6P4xPgpp0YDFvSWwEZ4NoE3aM4QBQXDzmVbraCkFj8zHM+mba8SyqB5DbZWyR7mYHo6Y7BdQo3MoA4m0TeQg==}
     engines: {node: '>=0.10.0'}
 
+  baseline-browser-mapping@2.8.2:
+    resolution: {integrity: sha512-NvcIedLxrs9llVpX7wI+Jz4Hn9vJQkCPKrTaHIE0sW/Rj1iq6Fzby4NbyTZjQJNoypBXNaG7tEHkTgONZpwgxQ==}
+    hasBin: true
+
   bcrypt-ts@5.0.3:
     resolution: {integrity: sha512-2FcgD12xPbwCoe5i9/HK0jJ1xA1m+QfC1e6htG9Bl/hNOnLyaFmQSlqLKcfe3QdnoMPKpKEGFCbESBTg+SJNOw==}
     engines: {node: '>=18'}
@@ -4967,6 +5030,9 @@ packages:
 
   big.js@6.2.2:
     resolution: {integrity: sha512-y/ie+Faknx7sZA5MfGA2xKlu0GDv8RWrXGsmlteyJQ2lvoKv9GBK/fpRMc2qlSoBAgNxrixICFCBefIq8WCQpQ==}
+
+  bignumber.js@9.3.1:
+    resolution: {integrity: sha512-Ko0uX15oIUS7wJ3Rb30Fs6SkVbLmPBAKdlm7q9+ak9bbIeFf0MwuBsQV6z7+X768/cHsfg+WlysDWJcmthjsjQ==}
 
   binary-extensions@1.13.1:
     resolution: {integrity: sha512-Un7MIEDdUC5gNpcGDV97op1Ywk748MpHcFTHoYs6qnj1Z3j7I53VG3nwZhKzoBZmbdRNnb6WRdFlwl7tSDuZGw==}
@@ -5027,8 +5093,8 @@ packages:
   browser-stdout@1.3.1:
     resolution: {integrity: sha512-qhAVI1+Av2X7qelOfAIYwXONood6XlZE/fXaBSmW/T5SzLAmCgzi+eiWE7fUvbHaeNBQH13UftjpXxsfLkMpgw==}
 
-  browserslist@4.25.4:
-    resolution: {integrity: sha512-4jYpcjabC606xJ3kw2QwGEZKX0Aw7sgQdZCvIK9dhVSPh76BKo+C+btT1RRofH7B+8iNpEbgGNVWiLki5q93yg==}
+  browserslist@4.26.0:
+    resolution: {integrity: sha512-P9go2WrP9FiPwLv3zqRD/Uoxo0RSHjzFCiQz7d4vbmwNqQFo9T9WCeP/Qn5EbcKQY6DBbkxEXNcpJOmncNrb7A==}
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
 
@@ -5881,14 +5947,11 @@ packages:
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
 
-  electron-to-chromium@1.5.216:
-    resolution: {integrity: sha512-uVgsufJ+qIiOsZBmqkM2AGPn3gbqPySHl/SLKXJ70nowhI0VsRX4aog+R9EUL2bOjqPPhfR9pG8j8s4Zk4xq+A==}
+  electron-to-chromium@1.5.218:
+    resolution: {integrity: sha512-uwwdN0TUHs8u6iRgN8vKeWZMRll4gBkz+QMqdS7DDe49uiK68/UX92lFb61oiFPrpYZNeZIqa4bA7O6Aiasnzg==}
 
   elliptic@6.6.1:
     resolution: {integrity: sha512-RaddvvMatK2LJHqFJ+YA4WysVN5Ita9E35botqIYspQ4TkRAlCicdzKOjlyv/1Za5RyTNn7di//eEV0uTAfe3g==}
-
-  ember-schemas@file:lib/ember-schemas:
-    resolution: {directory: lib/ember-schemas, type: directory}
 
   emoji-regex@8.0.0:
     resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==}
@@ -7314,6 +7377,9 @@ packages:
     peerDependencies:
       react-native-performance: '*'
 
+  isomorphic-unfetch@3.1.0:
+    resolution: {integrity: sha512-geDJjpoZ8N0kWexiwkX8F9NkTsXhetLPVbZFQ+JTW239QNOwvB0gniuR1Wc6f0AMTn7/mFGyXvHTifrCp/GH8Q==}
+
   isomorphic-ws@5.0.0:
     resolution: {integrity: sha512-muId7Zzn9ywDsyXgTIafTry2sV3nySZeUDe6YedVd1Hvuuep5AsIlqK+XefWpYTyJG5e503F2xIuT2lcU6rCSw==}
     peerDependencies:
@@ -8283,8 +8349,8 @@ packages:
   node-mock-http@1.0.1:
     resolution: {integrity: sha512-0gJJgENizp4ghds/Ywu2FCmcRsgBTmRQzYPZm61wy+Em2sBarSka0OhQS5huLBg6od1zkNpnWMCZloQDFVvOMQ==}
 
-  node-releases@2.0.20:
-    resolution: {integrity: sha512-7gK6zSXEH6neM212JgfYFXe+GmZQM+fia5SsusuBIUgnPheLFBmIPhtFoAQRj8/7wASYQnbDlHPVwY0BefoFgA==}
+  node-releases@2.0.21:
+    resolution: {integrity: sha512-5b0pgg78U3hwXkCM8Z9b2FJdPZlr9Psr9V2gQPESdGHqbntyFJKFW4r5TeWGFzafGY3hzs1JC62VEQMbl1JFkw==}
 
   nodemon@3.1.10:
     resolution: {integrity: sha512-WDjw3pJ0/0jMFmyNDp3gvY2YizjLmmOUQo6DEBY+JgdvW/yQ9mEeSw6H5ythl5Ny2ytb7f9C2nIbjSxMNzbJXw==}
@@ -9252,8 +9318,8 @@ packages:
     peerDependencies:
       react-native: '*'
 
-  react-native@0.81.1:
-    resolution: {integrity: sha512-k2QJzWc/CUOwaakmD1SXa4uJaLcwB2g2V9BauNIjgtXYYAeyFjx9jlNz/+wAEcHLg9bH5mgMdeAwzvXqjjh9Hg==}
+  react-native@0.81.4:
+    resolution: {integrity: sha512-bt5bz3A/+Cv46KcjV0VQa+fo7MKxs17RCcpzjftINlen4ZDUl0I6Ut+brQ2FToa5oD0IB0xvQHfmsg2EDqsZdQ==}
     engines: {node: '>= 20.19.4'}
     hasBin: true
     peerDependencies:
@@ -9377,6 +9443,9 @@ packages:
 
   redeyed@2.1.1:
     resolution: {integrity: sha512-FNpGGo1DycYAdnrKFxCMmKYgo/mILAqtRYbkdQD8Ep/Hk2PQ5+aEAEx+IU713RTDmuBaH0c8P5ZozurNu5ObRQ==}
+
+  reflect-metadata@0.1.14:
+    resolution: {integrity: sha512-ZhYeb6nRaXCfhnndflDK8qI6ZQ/YcWZCISRAWICW9XYqMUwjZM9Z0DveWX/ABN01oxSHwVxKQmxeYZSsm0jh5A==}
 
   reflect.getprototypeof@1.0.10:
     resolution: {integrity: sha512-00o4I+DVrefhv+nX0ulyi3biSHCPDe+yLv5o/p6d/UVlirijB8E16FtfwSAi4g3tcqrQ4lRAqQSoFEZJehYEcw==}
@@ -10398,6 +10467,9 @@ packages:
     resolution: {integrity: sha512-raqeBD6NQK4SkWhQzeYKd1KmIG6dllBOTt55Rmkt4HtI9mwdWtJljnrXjAFUBLTSN67HWrOIZ3EPF4kjUw80Bg==}
     engines: {node: '>=14.0'}
 
+  unfetch@4.2.0:
+    resolution: {integrity: sha512-F9p7yYCn6cIW9El1zi0HI6vqpeIvBsr3dSuRO6Xuppb1u5rXpCPmMvLSyECLhybr9isec8Ohl0hPekMVrEinDA==}
+
   unicode-emoji-modifier-base@1.0.0:
     resolution: {integrity: sha512-yLSH4py7oFH3oG/9K+XWrz1pSi3dfUrWEnInbxMfArOfc1+33BlGPQtLsOYwvdMy11AwUBetYuaRxSPqgkq+8g==}
     engines: {node: '>=4'}
@@ -11085,6 +11157,21 @@ packages:
 
 snapshots:
 
+  '@aave/contract-helpers@1.36.1(bignumber.js@9.3.1)(ethers@5.8.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(reflect-metadata@0.1.14)(tslib@2.8.1)':
+    dependencies:
+      bignumber.js: 9.3.1
+      ethers: 5.8.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      isomorphic-unfetch: 3.1.0
+      reflect-metadata: 0.1.14
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - encoding
+
+  '@aave/math-utils@1.36.1(bignumber.js@9.3.1)(tslib@2.8.1)':
+    dependencies:
+      bignumber.js: 9.3.1
+      tslib: 2.8.1
+
   '@adraffy/ens-normalize@1.11.0': {}
 
   '@adraffy/ens-normalize@1.9.2': {}
@@ -11220,7 +11307,7 @@ snapshots:
     dependencies:
       '@babel/compat-data': 7.28.4
       '@babel/helper-validator-option': 7.27.1
-      browserslist: 4.25.4
+      browserslist: 4.26.0
       lru-cache: 5.1.1
       semver: 6.3.1
 
@@ -11360,6 +11447,10 @@ snapshots:
       '@babel/helper-validator-identifier': 7.27.1
 
   '@bcoe/v8-coverage@1.0.2': {}
+
+  '@bgd-labs/aave-address-book@4.29.3(viem@2.31.0(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.61))':
+    dependencies:
+      viem: 2.31.0(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.61)
 
   '@biomejs/biome@1.9.4':
     optionalDependencies:
@@ -11614,6 +11705,17 @@ snapshots:
   '@ecies/ciphers@0.2.4(@noble/ciphers@1.3.0)':
     dependencies:
       '@noble/ciphers': 1.3.0
+
+  '@emberai/plugin-core@file:onchain-actions-plugins/lib/core(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
+    dependencies:
+      '@gmx-io/sdk': 1.2.1(bufferutil@4.0.9)(react-native-performance@5.1.4(react-native@0.81.4(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10)))(utf-8-validate@5.0.10)(zod@3.25.61)
+      zod: 3.25.61
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - encoding
+      - react-native-performance
+      - utf-8-validate
 
   '@emnapi/core@1.4.4':
     dependencies:
@@ -12273,13 +12375,13 @@ snapshots:
       - debug
       - utf-8-validate
 
-  '@gmx-io/sdk@1.2.1(bufferutil@4.0.9)(react-native-performance@5.1.4(react-native@0.81.1(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10)))(utf-8-validate@5.0.10)(zod@3.25.61)':
+  '@gmx-io/sdk@1.2.1(bufferutil@4.0.9)(react-native-performance@5.1.4(react-native@0.81.4(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10)))(utf-8-validate@5.0.10)(zod@3.25.61)':
     dependencies:
       '@gelatonetwork/relay-sdk': 5.6.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       cross-fetch: 4.0.0
       crypto-js: 4.2.0
       graphql: 15.8.0
-      isomorphic-performance: 5.1.1(react-native-performance@5.1.4(react-native@0.81.1(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10)))
+      isomorphic-performance: 5.1.1(react-native-performance@5.1.4(react-native@0.81.4(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10)))
       lodash: 4.17.21
       query-string: 7.1.1
       typescript: 5.4.2
@@ -13433,9 +13535,9 @@ snapshots:
       - babel-plugin-macros
       - typescript
 
-  '@react-native/assets-registry@0.81.1': {}
+  '@react-native/assets-registry@0.81.4': {}
 
-  '@react-native/codegen@0.81.1(@babel/core@7.28.4)':
+  '@react-native/codegen@0.81.4(@babel/core@7.28.4)':
     dependencies:
       '@babel/core': 7.28.4
       '@babel/parser': 7.28.4
@@ -13445,9 +13547,9 @@ snapshots:
       nullthrows: 1.1.1
       yargs: 17.7.2
 
-  '@react-native/community-cli-plugin@0.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
+  '@react-native/community-cli-plugin@0.81.4(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
     dependencies:
-      '@react-native/dev-middleware': 0.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@react-native/dev-middleware': 0.81.4(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       debug: 4.4.1(supports-color@5.5.0)
       invariant: 2.2.4
       metro: 0.83.1(bufferutil@4.0.9)(utf-8-validate@5.0.10)
@@ -13459,12 +13561,12 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@react-native/debugger-frontend@0.81.1': {}
+  '@react-native/debugger-frontend@0.81.4': {}
 
-  '@react-native/dev-middleware@0.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
+  '@react-native/dev-middleware@0.81.4(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
     dependencies:
       '@isaacs/ttlcache': 1.4.1
-      '@react-native/debugger-frontend': 0.81.1
+      '@react-native/debugger-frontend': 0.81.4
       chrome-launcher: 0.15.2
       chromium-edge-launcher: 0.2.0
       connect: 3.7.0
@@ -13479,18 +13581,18 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@react-native/gradle-plugin@0.81.1': {}
+  '@react-native/gradle-plugin@0.81.4': {}
 
-  '@react-native/js-polyfills@0.81.1': {}
+  '@react-native/js-polyfills@0.81.4': {}
 
-  '@react-native/normalize-colors@0.81.1': {}
+  '@react-native/normalize-colors@0.81.4': {}
 
-  '@react-native/virtualized-lists@0.81.1(react-native@0.81.1(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10))(react@19.1.0)':
+  '@react-native/virtualized-lists@0.81.4(react-native@0.81.4(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10))(react@19.1.0)':
     dependencies:
       invariant: 2.2.4
       nullthrows: 1.1.1
       react: 19.1.0
-      react-native: 0.81.1(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10)
+      react-native: 0.81.4(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10)
 
   '@reown/appkit-common@1.7.8(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.22.4)':
     dependencies:
@@ -15658,6 +15760,8 @@ snapshots:
       mixin-deep: 1.3.2
       pascalcase: 0.1.1
 
+  baseline-browser-mapping@2.8.2: {}
+
   bcrypt-ts@5.0.3: {}
 
   bech32@1.1.4: {}
@@ -15667,6 +15771,8 @@ snapshots:
   before-after-hook@4.0.0: {}
 
   big.js@6.2.2: {}
+
+  bignumber.js@9.3.1: {}
 
   binary-extensions@1.13.1: {}
 
@@ -15756,12 +15862,13 @@ snapshots:
 
   browser-stdout@1.3.1: {}
 
-  browserslist@4.25.4:
+  browserslist@4.26.0:
     dependencies:
+      baseline-browser-mapping: 2.8.2
       caniuse-lite: 1.0.30001741
-      electron-to-chromium: 1.5.216
-      node-releases: 2.0.20
-      update-browserslist-db: 1.1.3(browserslist@4.25.4)
+      electron-to-chromium: 1.5.218
+      node-releases: 2.0.21
+      update-browserslist-db: 1.1.3(browserslist@4.26.0)
 
   bs58@6.0.0:
     dependencies:
@@ -16562,7 +16669,7 @@ snapshots:
 
   ee-first@1.1.1: {}
 
-  electron-to-chromium@1.5.216: {}
+  electron-to-chromium@1.5.218: {}
 
   elliptic@6.6.1:
     dependencies:
@@ -16573,17 +16680,6 @@ snapshots:
       inherits: 2.0.4
       minimalistic-assert: 1.0.1
       minimalistic-crypto-utils: 1.0.1
-
-  ember-schemas@file:lib/ember-schemas(bufferutil@4.0.9)(utf-8-validate@5.0.10):
-    dependencies:
-      '@gmx-io/sdk': 1.2.1(bufferutil@4.0.9)(react-native-performance@5.1.4(react-native@0.81.1(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10)))(utf-8-validate@5.0.10)(zod@3.25.61)
-      zod: 3.25.61
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - encoding
-      - react-native-performance
-      - utf-8-validate
 
   emoji-regex@8.0.0: {}
 
@@ -18438,9 +18534,16 @@ snapshots:
 
   isobject@3.0.1: {}
 
-  isomorphic-performance@5.1.1(react-native-performance@5.1.4(react-native@0.81.1(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10))):
+  isomorphic-performance@5.1.1(react-native-performance@5.1.4(react-native@0.81.4(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10))):
     dependencies:
-      react-native-performance: 5.1.4(react-native@0.81.1(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10))
+      react-native-performance: 5.1.4(react-native@0.81.4(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10))
+
+  isomorphic-unfetch@3.1.0:
+    dependencies:
+      node-fetch: 2.7.0
+      unfetch: 4.2.0
+    transitivePeerDependencies:
+      - encoding
 
   isomorphic-ws@5.0.0(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@5.0.10)):
     dependencies:
@@ -19780,7 +19883,7 @@ snapshots:
 
   node-mock-http@1.0.1: {}
 
-  node-releases@2.0.20: {}
+  node-releases@2.0.21: {}
 
   nodemon@3.1.10:
     dependencies:
@@ -20689,20 +20792,20 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  react-native-performance@5.1.4(react-native@0.81.1(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10)):
+  react-native-performance@5.1.4(react-native@0.81.4(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10)):
     dependencies:
-      react-native: 0.81.1(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10)
+      react-native: 0.81.4(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10)
 
-  react-native@0.81.1(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10):
+  react-native@0.81.4(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10):
     dependencies:
       '@jest/create-cache-key-function': 29.7.0
-      '@react-native/assets-registry': 0.81.1
-      '@react-native/codegen': 0.81.1(@babel/core@7.28.4)
-      '@react-native/community-cli-plugin': 0.81.1(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      '@react-native/gradle-plugin': 0.81.1
-      '@react-native/js-polyfills': 0.81.1
-      '@react-native/normalize-colors': 0.81.1
-      '@react-native/virtualized-lists': 0.81.1(react-native@0.81.1(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10))(react@19.1.0)
+      '@react-native/assets-registry': 0.81.4
+      '@react-native/codegen': 0.81.4(@babel/core@7.28.4)
+      '@react-native/community-cli-plugin': 0.81.4(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@react-native/gradle-plugin': 0.81.4
+      '@react-native/js-polyfills': 0.81.4
+      '@react-native/normalize-colors': 0.81.4
+      '@react-native/virtualized-lists': 0.81.4(react-native@0.81.4(@babel/core@7.28.4)(bufferutil@4.0.9)(react@19.1.0)(utf-8-validate@5.0.10))(react@19.1.0)
       abort-controller: 3.0.0
       anser: 1.4.10
       ansi-regex: 5.0.1
@@ -20867,6 +20970,8 @@ snapshots:
   redeyed@2.1.1:
     dependencies:
       esprima: 4.0.1
+
+  reflect-metadata@0.1.14: {}
 
   reflect.getprototypeof@1.0.10:
     dependencies:
@@ -22107,6 +22212,8 @@ snapshots:
     dependencies:
       '@fastify/busboy': 2.1.1
 
+  unfetch@4.2.0: {}
+
   unicode-emoji-modifier-base@1.0.0: {}
 
   unicorn-magic@0.1.0: {}
@@ -22222,9 +22329,9 @@ snapshots:
       '@vercel/blob': 0.24.1
       idb-keyval: 6.2.2
 
-  update-browserslist-db@1.1.3(browserslist@4.25.4):
+  update-browserslist-db@1.1.3(browserslist@4.26.0):
     dependencies:
-      browserslist: 4.25.4
+      browserslist: 4.26.0
       escalade: 3.2.0
       picocolors: 1.1.1
 
