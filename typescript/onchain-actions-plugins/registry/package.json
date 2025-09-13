@@ -34,7 +34,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/EmberAGI/arbitrum-vibekit.git",
-    "directory": "typescript/lib/ember-plugin-registry"
+    "directory": "typescript/onchain-actions-plugins/registry"
   },
   "release": {
     "branches": [
@@ -66,7 +66,7 @@
             "CHANGELOG.md",
             "package.json"
           ],
-          "message": "chore(release): ember-plugin-registry-v${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+          "message": "chore(release): onchain-actions-registry-v${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
         }
       ],
       [
