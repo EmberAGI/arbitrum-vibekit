@@ -2,7 +2,7 @@ import type {
   GetLiquidityPoolsResponse,
   GetWalletLiquidityPositionsRequest,
   GetWalletLiquidityPositionsResponse,
-} from 'ember-schemas';
+} from '../schemas/liquidity.js';
 
 /**
  * Get liquidity positions for a wallet.

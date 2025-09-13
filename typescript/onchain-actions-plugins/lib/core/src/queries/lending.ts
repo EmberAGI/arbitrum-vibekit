@@ -1,7 +1,7 @@
 import type {
   GetWalletLendingPositionsRequest,
   GetWalletLendingPositionsResponse,
-} from 'ember-schemas';
+} from '../schemas/lending.js';
 
 /**
  * Get lending positions for a wallet.

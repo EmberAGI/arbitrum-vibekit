@@ -5,7 +5,7 @@ import type {
   GetPerpetualsMarketsPositionsResponse,
   GetPerpetualsMarketsRequest,
   GetPerpetualsMarketsResponse,
-} from 'ember-schemas';
+} from '../schemas/perpetuals.js';
 
 export type PerpetualsGetMarkets = (
   request: GetPerpetualsMarketsRequest
