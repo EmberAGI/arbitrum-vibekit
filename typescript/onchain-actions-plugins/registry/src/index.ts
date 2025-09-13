@@ -1,6 +1,6 @@
 import type { ChainConfig } from './chainConfig.js';
 import { PublicEmberPluginRegistry } from './registry.js';
-import { registerAave, getAaveEmberPlugin } from './aave-lending-plugin/index.js';
+import { registerAave } from './aave-lending-plugin/index.js';
 
 /**
  * Initialize the public Ember plugin registry.

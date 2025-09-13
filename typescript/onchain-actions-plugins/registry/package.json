@@ -18,11 +18,10 @@
     "format": "prettier --write \"src/**/*.ts\""
   },
   "dependencies": {
-    "@emberai/plugin-core": "workspace:*",
     "@aave/contract-helpers": "^1.32.1",
     "@aave/math-utils": "^1.32.1",
     "@bgd-labs/aave-address-book": "^4.10.0",
-    "ember-schemas": "workspace:*",
+    "@gmx-io/sdk": "^1.2.1",
     "ethers": "^5.7.2",
     "zod": "catalog:"
   },

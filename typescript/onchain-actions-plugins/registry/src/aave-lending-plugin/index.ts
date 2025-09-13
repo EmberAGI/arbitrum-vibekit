@@ -1,4 +1,4 @@
-import type { ActionDefinition, EmberPlugin, LendingActions } from '@emberai/plugin-core';
+import type { ActionDefinition, EmberPlugin, LendingActions } from '../core/index.js';
 import { AAVEAdapter, type AAVEAdapterParams } from './adapter.js';
 import type { ChainConfig } from '../chainConfig.js';
 import type { PublicEmberPluginRegistry } from '../registry.js';

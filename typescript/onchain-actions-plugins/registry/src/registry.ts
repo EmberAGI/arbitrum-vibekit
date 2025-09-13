@@ -1,4 +1,4 @@
-import type { EmberPlugin, PluginType } from '@emberai/plugin-core';
+import type { EmberPlugin, PluginType } from './core/index.js';
 
 /**
  * Registry for public Ember plugins.
