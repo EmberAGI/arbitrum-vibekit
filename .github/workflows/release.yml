@@ -1,0 +1,52 @@
+name: Release ember-plugin-registry
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - add/plugins
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: typescript
+
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+
+      - name: Install deps (typescript root)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build ember-plugin-registry
+        run: pnpm --filter @emberai/onchain-actions-registry build
+
+      - name: Prepare npm-publish folder
+        run: node scripts/prepare-npm-publish.mjs
+
+      - name: Inspect pkgRoot before publish
+        run: |
+          echo "===== .npm-publish/package.json ====="
+          cat onchain-actions-plugins/registry/.npm-publish/package.json
+
+      - name: Verify npm auth
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm whoami
+
+      - name: Release ember-plugin-registry
+        working-directory: typescript/onchain-actions-plugins/registry
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm exec semantic-release

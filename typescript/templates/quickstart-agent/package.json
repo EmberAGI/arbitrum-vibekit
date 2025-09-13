@@ -4,6 +4,7 @@
   "description": "Hello Quickstart Agent - A comprehensive example demonstrating all v2 framework features",
   "type": "module",
   "main": "dist/index.js",
+  "private": true,
   "scripts": {
     "build": "tsc --build",
     "dev": "tsx src/index.ts",
