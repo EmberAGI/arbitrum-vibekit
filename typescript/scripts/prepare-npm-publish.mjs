@@ -37,9 +37,9 @@ function deCatalog(deps = {}) {
     if (typeof ver === 'string' && ver.startsWith('catalog:')) {
       // Use the version from catalog, fallback to ^0.0.0 if not found
       out[name] = catalog[name] || '^0.0.0';
-    } else {
-      out[name] = ver;
+      continue;
     }
+    out[name] = ver;
   }
   return out;
 }
