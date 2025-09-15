@@ -249,6 +249,8 @@ export class Agent {
           arguments: getTokensArgs,
         });
 
+        console.log("Line number 223:",tokensResult);
+
         const tokensResponse = parseMcpToolResponsePayload(tokensResult, GetTokensResponseSchema);
         this.populateGenericTokens(tokensResponse.tokens);
       } catch (err) {

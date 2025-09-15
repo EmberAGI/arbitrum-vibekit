@@ -3,6 +3,7 @@
 import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useTransactionExecutor } from "../hooks/useTransactionExecutor";
+import { useCurrentAgent } from "../hooks/use-current-agent";
 import type { TxPlan } from "../lib/transactionUtils";
 
 // Removed: useState, viem imports, useSendTransaction
@@ -22,6 +23,7 @@ export function Lending({
   // --- Wagmi hooks ---
   const { address, isConnected, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
+  const currentAgentId = useCurrentAgent();
 
   // --- Central executor hook ---
   const {
@@ -43,6 +45,9 @@ export function Lending({
     address,
     currentChainId: chainId,
     switchChainAsync,
+    agentType: 'lending', // Specify this is a lending transaction
+    agentId: currentAgentId, // Pass the current agent ID
+    methodName: txPreview?.action || 'lending', // Use the action from preview or default to 'lending'
   });
 
   const needsApproval = totalApprovals > 0;
@@ -57,7 +62,7 @@ export function Lending({
           {/* Preview Rendering */}
           <div className="rounded-xl bg-zinc-700 p-4 flex flex-col gap-2">
             <span className="font-normal flex gap-3 w-full items-center text-sm">
-              Action: {txPreview.action?.toUpperCase()}
+              Action: `${txPreview.action?.toUpperCase()}this is lending page part!`
             </span>
             <p className="font-normal w-full ">
               <span className="font-normal">

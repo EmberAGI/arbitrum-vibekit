@@ -4,7 +4,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { cookies } from "next/headers";
 import { DEFAULT_SERVER_URLS } from "../../../agents-config";
-import type { ChatAgentId } from "../../../agents-config";
+import type { ChatAgentId as OriginalChatAgentId } from "../../../agents-config";
+
+// Extend ChatAgentId to include "all"
+type ChatAgentId = OriginalChatAgentId | "all";
 
 /*export const getEmberLending = tool({
   description: 'Get the current weather at a location',
@@ -133,7 +136,9 @@ export const getTools = async (): Promise<{ [key: string]: CoreTool }> => {
 
   // helper that chooses override first, then config file
   const resolveUrl = (id: ChatAgentId) =>
-    overrideUrl ?? DEFAULT_SERVER_URLS.get(id) ?? "";
+    overrideUrl ??
+    (id !== "all" ? DEFAULT_SERVER_URLS.get(id as OriginalChatAgentId) : "") ??
+    "";
 
   // "all" agents: fan-out to every URL
   if (!agentId || agentId === "all") {

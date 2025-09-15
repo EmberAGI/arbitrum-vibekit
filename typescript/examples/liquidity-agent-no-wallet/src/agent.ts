@@ -321,7 +321,7 @@ Rules:
     try {
       this.log('Calling generateText with Vercel AI SDK...');
       const result = await generateText({
-        model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
+        model: selectedProvider!(modelOverride || 'gpt-3.5-turbo'),
         messages: [{ role: 'system', content: systemPrompt }, ...this.conversationHistory],
         tools: this.toolSet,
         maxSteps: 10,

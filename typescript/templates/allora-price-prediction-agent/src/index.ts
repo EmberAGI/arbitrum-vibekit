@@ -61,7 +61,11 @@ const agent = Agent.create(agentConfig, {
   cors: process.env.ENABLE_CORS !== 'false',
   basePath: process.env.BASE_PATH || undefined,
   llm: {
+<<<<<<< HEAD
+    model: providers.openrouter(process.env.LLM_MODEL || 'x-ai/grok-3-mini'),
+=======
     model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
+>>>>>>> d7704acf429985aca94454ecdbb9c273ec6cbcdb
   },
 });
 
