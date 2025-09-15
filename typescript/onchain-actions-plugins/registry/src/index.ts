@@ -19,3 +19,4 @@ export function initializePublicRegistry(chainConfigs: ChainConfig[]) {
 }
 
 export { type ChainConfig, PublicEmberPluginRegistry };
+export * from './core/index.js';
