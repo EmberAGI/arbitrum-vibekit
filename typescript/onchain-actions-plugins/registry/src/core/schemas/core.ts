@@ -18,19 +18,6 @@ export const TokenSchema = z.object({
 });
 export type Token = z.infer<typeof TokenSchema>;
 
-export const SearchableTokenSchema = z.object({
-  tokenUid: TokenIdentifierSchema,
-  name: z.string(),
-  symbol: z.string(),
-});
-export type SearchableToken = z.infer<typeof SearchableTokenSchema>;
-
-export const SearchableChainSchema = z.object({
-  chainId: z.string(),
-  name: z.string(),
-});
-export type SearchableChain = z.infer<typeof SearchableChainSchema>;
-
 export const ChainSchema = z.object({
   chainId: z.string(),
   type: ChainTypeSchema,
@@ -88,12 +75,3 @@ export const ProviderTrackingStatusSchema = z.object({
   status: z.string(),
 });
 export type ProviderTrackingStatus = z.infer<typeof ProviderTrackingStatusSchema>;
-
-export const BalanceSchema = z.object({
-  tokenUid: TokenIdentifierSchema,
-  amount: z.string(),
-  symbol: z.string().optional(),
-  valueUsd: z.number().optional(),
-  decimals: z.number().int().optional(),
-});
-export type Balance = z.infer<typeof BalanceSchema>;

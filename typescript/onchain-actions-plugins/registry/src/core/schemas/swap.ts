@@ -31,24 +31,3 @@ export const SwapTokensResponseSchema = z.object({
   providerTracking: ProviderTrackingInfoSchema.optional(),
 });
 export type SwapTokensResponse = z.infer<typeof SwapTokensResponseSchema>;
-
-export const GetProviderTrackingStatusRequestSchema = z.object({
-  requestId: z.string(),
-  transactionId: z.string(),
-});
-export type GetProviderTrackingStatusRequest = z.infer<
-  typeof GetProviderTrackingStatusRequestSchema
->;
-
-export const GetProviderTrackingStatusResponseSchema = z.object({
-  trackingStatus: z.object({
-    requestId: z.string(),
-    transactionId: z.string(),
-    providerName: z.string(),
-    explorerUrl: z.string(),
-    status: z.string(),
-  }),
-});
-export type GetProviderTrackingStatusResponse = z.infer<
-  typeof GetProviderTrackingStatusResponseSchema
->;

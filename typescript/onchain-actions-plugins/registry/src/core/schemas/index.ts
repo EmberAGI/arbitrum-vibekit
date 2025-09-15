@@ -3,6 +3,4 @@ export * from './enums.js';
 export * from './lending.js';
 export * from './liquidity.js';
 export * from './perpetuals.js';
-export * from './requests.js';
 export * from './swap.js';
-export * from './wallet.js';
