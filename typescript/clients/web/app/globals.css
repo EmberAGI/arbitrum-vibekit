@@ -162,3 +162,46 @@
 .suggestion-highlight {
   @apply bg-blue-200 hover:bg-blue-300 dark:hover:bg-blue-400/50 dark:text-blue-50 dark:bg-blue-500/40;
 }
+
+/* Price Chart Widget Styles */
+.price-chart-widget {
+  backdrop-filter: blur(8px);
+  z-index: 9999;
+  position: fixed;
+}
+
+.price-chart-widget gecko-coin-price-chart-widget {
+  display: block;
+  width: 100%;
+  max-width: 600px;
+  border-radius: 0.375rem;
+  overflow: hidden;
+}
+
+/* Ensure the widget is responsive */
+@media (max-width: 768px) {
+  .price-chart-widget {
+    left: 1rem !important;
+    width: calc(100vw - 2rem) !important;
+    max-width: none !important;
+  }
+
+  .price-chart-widget .flex {
+    flex-direction: column;
+  }
+
+  .price-chart-widget .flex-shrink-0 {
+    width: 100%;
+  }
+}
+
+/* Custom checkbox styles for price chart widget */
+.price-chart-widget input[type="checkbox"] {
+  accent-color: hsl(var(--primary));
+  cursor: pointer;
+}
+
+.price-chart-widget input[type="checkbox"]:focus {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
