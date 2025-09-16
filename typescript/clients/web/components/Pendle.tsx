@@ -1,17 +1,17 @@
-"use client";
+'use client';
 
-import { useAccount, useSwitchChain } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useTransactionExecutor } from "../hooks/useTransactionExecutor"; // Import the hook
-import type { TxPlan } from "../lib/transactionUtils"; // Import shared types -> Use 'import type'
-import ShortAddress from "./ShortAddress";
+import { useAccount, useSwitchChain } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useTransactionExecutor } from '../hooks/useTransactionExecutor'; // Import the hook
+import type { TxPlan } from '../lib/transactionUtils'; // Import shared types -> Use 'import type'
+import ShortAddress from './ShortAddress';
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@/components/ui/accordion";
-import { formatPercentage } from "@/lib/utils";
+} from '@/components/ui/accordion';
+import { formatPercentage } from '@/lib/utils';
 
 // Removed: useState, useEffect, useCallback, useMemo, viem imports, useSendTransaction
 // Removed: getChainById, withSafeDefaults, toBigInt, signTx, ensureReady, approveTransaction, signMainTransaction
@@ -28,8 +28,8 @@ export function Pendle({
   markets: any[];
   isMarketList: boolean;
 }) {
-  console.log("[Transaction Component] Rendering with txPlan:", txPlan);
-  console.log("[Transaction Component] Received txPreview:", txPreview);
+  console.log('[Transaction Component] Rendering with txPlan:', txPlan);
+  console.log('[Transaction Component] Received txPreview:', txPreview);
 
   // --- Use wagmi hooks directly needed by the component or passed to the hook ---
   const { address, isConnected, chainId } = useAccount();
@@ -84,10 +84,13 @@ export function Pendle({
           </h2>
           <Accordion type="single" collapsible>
             {markets?.map((market) => (
-              <AccordionItem key={market.data?.address + market.data?.name} value={market.data?.address + market.data?.name}>
+              <AccordionItem
+                key={market.data?.address + market.data?.name}
+                value={market.data?.address + market.data?.name}
+              >
                 <AccordionTrigger>
-                  {market.data?.name} ({market.data?.expiry?.split("T")[0]})
-                  Aggr. APY:{" "}
+                  {market.data?.name} ({market.data?.expiry?.split('T')[0]})
+                  Aggr. APY:{' '}
                   {formatPercentage(market.data?.volatileData?.aggregatedApy)}
                 </AccordionTrigger>
                 <AccordionContent>
@@ -99,46 +102,56 @@ export function Pendle({
                       {market.data?.name}
                       <span className="font-normal text-sm">
                         - On chain {market.data?.chainId}
-                        {" - Exp. "}
-                        {market.data?.expiry?.split("T")[0]}
+                        {' - Exp. '}
+                        {market.data?.expiry?.split('T')[0]}
                       </span>
                     </span>
                     <div className="font-semibold w-full ">
                       <div className="font-normal grid grid-cols-2 gap-x-2 gap-y-0 ">
                         <p className="font-normal bg-zinc-600 rounded-full p-2 px-4 mb-2">
                           <span className="font-normal  text-xs flex gap-3">
-                            <span className="font-semibold">Liquidity: </span>{" "}
-                            ${market.data?.volatileData?.marketLiquidityUsd}
+                            <span className="font-semibold">Liquidity: </span> $
+                            {market.data?.volatileData?.marketLiquidityUsd}
                           </span>
                         </p>
                         <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
                           <span className="font-normal  text-xs flex gap-3">
-                            <span className="font-semibold">Volume: </span>{" "}
+                            <span className="font-semibold">Volume: </span>{' '}
                             {market.data?.volatileData?.tradingVolumeUsd}
                           </span>
                         </p>
                         <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
                           <span className="font-normal  text-xs flex gap-3">
-                            <span className="font-semibold">PT: </span>{" "}
+                            <span className="font-semibold">PT: </span>{' '}
                             {market.data?.volatileData?.totalPt}
                           </span>
                         </p>
                         <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
                           <span className="font-normal  text-xs flex gap-3">
-                            <span className="font-semibold">Underlying APY: </span>{" "}
-                            {formatPercentage(market.data?.volatileData?.underlyingApy)}
+                            <span className="font-semibold">
+                              Underlying APY:{' '}
+                            </span>{' '}
+                            {formatPercentage(
+                              market.data?.volatileData?.underlyingApy,
+                            )}
                           </span>
                         </p>
                         <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
                           <span className="font-normal  text-xs flex gap-3">
-                            <span className="font-semibold">Implied APY: </span>{" "}
-                            {formatPercentage(market.data?.volatileData?.impliedApy)}
+                            <span className="font-semibold">Implied APY: </span>{' '}
+                            {formatPercentage(
+                              market.data?.volatileData?.impliedApy,
+                            )}
                           </span>
                         </p>
                         <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-2">
                           <span className="font-normal  text-xs flex gap-3">
-                            <span className="font-semibold">Aggregated APY: </span>{" "}
-                            {formatPercentage(market.data?.volatileData?.aggregatedApy)}
+                            <span className="font-semibold">
+                              Aggregated APY:{' '}
+                            </span>{' '}
+                            {formatPercentage(
+                              market.data?.volatileData?.aggregatedApy,
+                            )}
                           </span>
                         </p>
                       </div>
@@ -148,15 +161,15 @@ export function Pendle({
                       <span className="font-normal  text-sm">
                         {market.data?.underlyingAsset?.symbol}
                       </span>
-                    </span>{" "}
+                    </span>{' '}
                     <p className="font-normal w-full bg-zinc-600 rounded-full p-2 px-4 mb-4">
                       <span className="font-normal  text-sm flex gap-2">
                         <ShortAddress
                           web3Address={
                             market.data?.underlyingAsset?.tokenUid?.address
                           }
-                        />{" "}
-                        {" on chain "}{" "}
+                        />{' '}
+                        {' on chain '}{' '}
                         {market.data?.underlyingAsset?.tokenUid?.chainId}
                       </span>
                     </p>
@@ -240,47 +253,47 @@ export function Pendle({
           <h2 className="text-lg font-semibold mb-4">Transaction Preview:</h2>
           <div className="rounded-xl bg-zinc-700 p-4 flex flex-col gap-2">
             <span className="font-normal flex gap-3 w-full items-center text-sm">
-              From:{" "}
+              From:{' '}
             </span>
 
             <p className="font-normal w-full ">
               <span className="font-normal">
                 <span className="font-semibold">
-                  {txPreview?.fromTokenAmount}{" "}
+                  {txPreview?.fromTokenAmount}{' '}
                   {txPreview?.fromTokenAmount &&
                     txPreview?.fromTokenSymbol?.toUpperCase()}
                 </span>
-                {" (on "}
+                {' (on '}
                 {txPreview?.fromChain}
-                {")"}
+                {')'}
               </span>
             </p>
             <p className="font-normal w-full bg-zinc-600 rounded-full p-2">
               <span className="font-normal  text-sm">
-                {txPreview?.fromTokenAddress}{" "}
+                {txPreview?.fromTokenAddress}{' '}
               </span>
             </p>
 
             <div className="border-t border-gray-500 my-2" />
             <span className="font-normal flex gap-3 w-full items-center text-sm">
-              To:{" "}
+              To:{' '}
             </span>
 
             <p className="font-normal w-full ">
               <span className="font-normal">
                 <span className="font-semibold">
-                  {txPreview?.toTokenAmount}{" "}
+                  {txPreview?.toTokenAmount}{' '}
                   {txPreview?.toTokenAmount &&
                     txPreview?.toTokenSymbol?.toUpperCase()}
                 </span>
-                {" (on "}
+                {' (on '}
                 {txPreview?.toChain}
-                {")"}
+                {')'}
               </span>
             </p>
             <p className="font-normal w-full bg-zinc-600 rounded-full p-2">
               <span className="font-normal  text-sm">
-                {txPreview?.toTokenAddress}{" "}
+                {txPreview?.toTokenAddress}{' '}
               </span>
             </p>
           </div>
@@ -300,7 +313,7 @@ export function Pendle({
               )}
               {txError && ( // Main transaction error
                 <p className=" p-2 rounded-2xl border-red-800 bg-red-400 w-full border-2 text-white break-words">
-                  Execution Error!{" "}
+                  Execution Error!{' '}
                   {(txError as any).shortMessage || // Use hook's txError
                     txError.message ||
                     JSON.stringify(txError, null, 2)}
@@ -311,14 +324,15 @@ export function Pendle({
               {needsApproval &&
                 isApprovalPending && ( // Approval pending
                   <p className=" p-2 rounded-2xl border-gray-400 bg-gray-200 w-full border-2 text-slate-800">
-                    {`Processing Approval ${approvalIndex + 1
-                      }/${totalApprovals}...`}
+                    {`Processing Approval ${
+                      approvalIndex + 1
+                    }/${totalApprovals}...`}
                   </p>
                 )}
               {needsApproval &&
                 approvalError && ( // Approval error
                   <p className=" p-2 rounded-2xl border-red-800 bg-red-400 w-full border-2 text-white break-words">
-                    Approval Error!{" "}
+                    Approval Error!{' '}
                     {(approvalError as any).shortMessage || // Use hook's approvalError
                       approvalError.message ||
                       JSON.stringify(approvalError, null, 2)}
@@ -346,7 +360,7 @@ export function Pendle({
                     {isApprovalPending // Use hook state
                       ? `Approving ${approvalIndex + 1}/${totalApprovals}...`
                       : isApprovalPhaseComplete // Use hook state
-                        ? "All Approved"
+                        ? 'All Approved'
                         : `Approve ${approvalIndex + 1}/${totalApprovals}`}
                   </button>
                 )}
@@ -357,10 +371,10 @@ export function Pendle({
                   disabled={!canExecute} // Use canExecute from hook
                 >
                   {isTxPending // Use hook state
-                    ? "Executing..."
+                    ? 'Executing...'
                     : needsApproval // Still relevant for button text
-                      ? "Execute Transaction"
-                      : "Sign Transaction"}
+                      ? 'Execute Transaction'
+                      : 'Sign Transaction'}
                 </button>
               </div>
             </>

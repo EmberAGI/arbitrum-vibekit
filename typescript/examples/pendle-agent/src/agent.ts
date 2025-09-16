@@ -90,8 +90,25 @@ if (availableProviders.length > 0) {
   console.log('Running in mock mode - AI features will return placeholder responses');
 }
 
-// Make modelOverride available globally
+// Log which provider is being used
+console.log(
+  `Using AI provider: ${preferredProvider} (available: ${availableProviders.join(', ')})`
+);
+
+// Model can be specified via environment variable
 const globalModelOverride = process.env.AI_MODEL;
+
+// Default models for each provider
+const DEFAULT_MODELS: Record<string, string> = {
+  openrouter: 'x-ai/grok-3-mini',
+  openai: 'gpt-4o',
+  xai: 'grok-3',
+  hyperbolic: 'meta-llama/Llama-3.3-70B-Instruct',
+};
+
+if (globalModelOverride) {
+  console.log(`Using model: ${globalModelOverride}`);
+}
 
 type YieldToolSet = {
   listMarkets: Tool<z.ZodObject<Record<string, never>>, Awaited<Task>>;

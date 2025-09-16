@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { useAccount, useSwitchChain } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useTransactionExecutor } from "../hooks/useTransactionExecutor";
-import type { TxPlan } from "../lib/transactionUtils";
-import { JsonViewer } from "./JsonViewer";
+import { useAccount, useSwitchChain } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useTransactionExecutor } from '../hooks/useTransactionExecutor';
+import type { TxPlan } from '../lib/transactionUtils';
+import { JsonViewer } from './JsonViewer';
 
 // Removed: useState, viem imports, useSendTransaction
 // Removed: getChainById, withSafeDefaults, toBigInt, signTx
@@ -19,8 +19,8 @@ export function TemplateComponent({
   txPreview: any; // TODO: Define LiquidityTxPreview type
   jsonObject?: any;
 }) {
-  console.log("[Liquidity Component] Received txPreview:", txPreview);
-  console.log("[Liquidity Component] Received txPlan:", txPlan);
+  console.log('[Liquidity Component] Received txPreview:', txPreview);
+  console.log('[Liquidity Component] Received txPlan:', txPlan);
 
   // --- Wagmi hooks ---
   const { address, isConnected, chainId } = useAccount();
@@ -59,11 +59,7 @@ export function TemplateComponent({
           {/* Transaction Preview & Execution Logic */}
           {txPreview ? (
             <div className="flex flex-col gap-2 p-8 bg-transparent shadow-md rounded-2xl text-white border-red-200 border-2">
-
-              <JsonViewer
-                data={txPreview}
-                title="Transaction Preview"
-              />
+              <JsonViewer data={txPreview} title="Transaction Preview" />
 
               {/* Transaction Execution UI (uses hook state) */}
               {txPlan && txPreview && isConnected ? (
@@ -81,7 +77,7 @@ export function TemplateComponent({
                   )}
                   {txError && (
                     <p className=" p-2 rounded-2xl border-red-800 bg-red-400 w-full border-2 text-white break-words">
-                      Execution Error!{" "}
+                      Execution Error!{' '}
                       {(txError as any).shortMessage ||
                         txError.message ||
                         JSON.stringify(txError, null, 2)}
@@ -91,13 +87,14 @@ export function TemplateComponent({
                   {/* Approval Status */}
                   {needsApproval && isApprovalPending && (
                     <p className=" p-2 rounded-2xl border-gray-400 bg-gray-200 w-full border-2 text-slate-800">
-                      {`Processing Approval ${approvalIndex + 1
-                        }/${totalApprovals}...`}
+                      {`Processing Approval ${
+                        approvalIndex + 1
+                      }/${totalApprovals}...`}
                     </p>
                   )}
                   {needsApproval && approvalError && (
                     <p className=" p-2 rounded-2xl border-red-800 bg-red-400 w-full border-2 text-white break-words">
-                      Approval Error!{" "}
+                      Approval Error!{' '}
                       {(approvalError as any).shortMessage ||
                         approvalError.message ||
                         JSON.stringify(approvalError, null, 2)}
@@ -123,10 +120,11 @@ export function TemplateComponent({
                         disabled={!canApprove} // Use hook state
                       >
                         {isApprovalPending
-                          ? `Approving ${approvalIndex + 1
-                          }/${totalApprovals}...`
+                          ? `Approving ${
+                              approvalIndex + 1
+                            }/${totalApprovals}...`
                           : isApprovalPhaseComplete
-                            ? "All Approved"
+                            ? 'All Approved'
                             : `Approve ${approvalIndex + 1}/${totalApprovals}`}
                       </button>
                     )}
@@ -137,10 +135,10 @@ export function TemplateComponent({
                       disabled={!canExecute || false} // Use hook state (extra || false is harmless but redundant)
                     >
                       {isTxPending
-                        ? "Executing..."
+                        ? 'Executing...'
                         : needsApproval
-                          ? "Execute Transaction"
-                          : "Sign Transaction"}
+                          ? 'Execute Transaction'
+                          : 'Sign Transaction'}
                     </button>
                   </div>
                 </>
@@ -158,10 +156,7 @@ export function TemplateComponent({
               )}
             </div>
           ) : (
-            <JsonViewer
-              data={jsonObject}
-              title="Preview Data"
-            />
+            <JsonViewer data={jsonObject} title="Preview Data" />
           )}
         </div>
       }

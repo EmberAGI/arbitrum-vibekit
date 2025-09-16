@@ -28,11 +28,11 @@ We welcome several types of contributions, all of which follow the same developm
 Vibekit supports DeFi protocol integrations through the Ember Plugin System.
 
 > [!NOTE]  
-> All protocol support and on-chain execution have to be integrated through the Ember Plugin System. Contributions that bypass this step will not be integrated or rewarded.
+> All protocol support and on-chain executions must be implemented through the [Ember Plugin System](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/onchain-actions-plugins). Contributions that bypass this step will not be integrated or rewarded.
 
 1. **Create an Issue**: Navigate to the [issue board](https://github.com/EmberAGI/arbitrum-vibekit/issues) to [create a new issue](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=protocol_integration.yml) detailing the protocol you intend to integrate. Make sure that a similar issue is not already created by someone else.
 
-2. **Review Plugin Documentation**: Check the comprehensive [Ember API README](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/ember-api) for detailed implementation guidelines, architecture overview, and code examples.
+2. **Review Plugin Documentation**: Check the comprehensive [Ember Plugin System documentation](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/onchain-actions-plugins/README.md) for detailed implementation guidelines, architecture overview, and code examples.
 
 3. **Wait For Your Issue To Be Approved By The Team**: A team member will comment on your issue to let you know it is approved for contribution.
 
@@ -74,7 +74,9 @@ Vibekit supports DeFi protocol integrations through the Ember Plugin System.
 
 ### 4. Add Example Usage
 
-- Consider adding a demo agent to the [templates directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates) to showcase your new features.
+- Consider adding an agent to the [templates directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates) to showcase your new features.
+
+- Consider integrating your agent into the [Vibekit UI](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web) to demo your agent's capabilities.
 
 ### 5. Provide Comprehensive Testing
 
