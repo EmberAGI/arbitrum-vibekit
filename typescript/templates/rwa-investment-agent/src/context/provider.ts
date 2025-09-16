@@ -3,11 +3,18 @@
  * Loads RWA-specific configuration and data during agent startup
  */
 
-import type { RWAContext, RWAContextDeps } from './types.js';
+import type { RWAContext, RWAContextDeps, RWAAgentContext } from './types.js';
 
-export const contextProvider = async (deps: RWAContextDeps): Promise<RWAContext> => {
+export const contextProvider = async (deps: RWAContextDeps): Promise<RWAAgentContext> => {
   console.log('🔧 Loading RWA context...');
   console.log('📦 Available MCP clients:', Object.keys(deps.mcpClients));
+
+  // Add Centrifuge MCP server as external tool
+  if (deps.mcpClients['centrifuge-mcp-server']) {
+    console.log('✅ Centrifuge MCP server available - real-time data enabled');
+  } else {
+    console.log('⚠️ Centrifuge MCP server not available - using fallback data');
+  }
 
   // Load protocol configurations from environment
   const context: RWAContext = {

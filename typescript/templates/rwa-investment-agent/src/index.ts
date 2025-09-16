@@ -1,17 +1,14 @@
 #!/usr/bin/env node
 /**
- * RWA Investment Agent
- * First AI agent framework for Real World Asset tokenization and investment
+ * RWA Investment Agent - Vibekit Framework Integration
+ * AI-powered Real World Asset investment analysis with live blockchain data
  */
 
 import 'dotenv/config';
 import { Agent, type AgentConfig, createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
-import { assetDiscoverySkill } from './skills/assetDiscovery.js';
-import { complianceCheckSkill } from './skills/complianceCheck.js';
-import { investmentExecutionSkill } from './skills/investmentExecution.js';
-import { testSkill } from './skills/testSkill.js';
+import { rwaAnalysisSkill, contractVerificationSkill, portfolioManagementSkill } from './skills/index.js';
 import { contextProvider } from './context/provider.js';
-import type { RWAContext } from './context/types.js';
+import type { RWAAgentContext } from './context/types.js';
 
 // Provider selector initialization
 const providers = createProviderSelector({
@@ -40,8 +37,8 @@ const modelOverride = process.env.AI_MODEL;
 export const agentConfig: AgentConfig = {
     name: process.env.AGENT_NAME || 'RWA Investment Agent',
     version: process.env.AGENT_VERSION || '1.0.0',
-    description: process.env.AGENT_DESCRIPTION || 'AI agent for Real World Asset investment and portfolio management',
-    skills: [testSkill, assetDiscoverySkill, complianceCheckSkill, investmentExecutionSkill],
+    description: process.env.AGENT_DESCRIPTION || 'Comprehensive RWA investment platform with real-time blockchain data, contract verification, portfolio management, and risk analysis',
+    skills: [rwaAnalysisSkill, contractVerificationSkill, portfolioManagementSkill],
     url: 'localhost',
     capabilities: {
         streaming: false,
@@ -52,78 +49,46 @@ export const agentConfig: AgentConfig = {
     defaultOutputModes: ['application/json'],
 };
 
-// Configure the agent with LLM
+// Create and start the agent
 const agent = Agent.create(agentConfig, {
     llm: {
-        model: modelOverride
-            ? selectedProvider(modelOverride)
-            : selectedProvider('google/gemini-2.5-flash'),
+        model: modelOverride ? selectedProvider(modelOverride) : selectedProvider(),
+        baseSystemPrompt: `You are an expert RWA (Real World Asset) investment advisor specializing in tokenized assets on Arbitrum. 
+           
+           You have access to comprehensive real-time blockchain data and advanced analysis tools.
+           
+           Key capabilities:
+           - Analyze RWA investment opportunities with real-time blockchain data from Arbitrum protocols
+           - Verify smart contracts and provide detailed security analysis
+           - Track and manage investment portfolios with live performance metrics
+           - Conduct comprehensive risk assessments across multiple risk categories
+           - Provide detailed yield analysis with historical performance data
+           - Monitor real-time market conditions and protocol health
+           
+           Available protocols and data sources:
+           - Ondo Finance (Tokenized U.S. Treasuries)
+           - Centrifuge (Real Estate, Trade Finance) - **REAL-TIME DATA VIA MCP SERVER**
+           - Maple Finance (Institutional Lending)
+           - TrueFi (Uncollateralized Lending)
+           - Real-time Arbitrum blockchain data
+           
+           **IMPORTANT**: When users ask about Centrifuge specifically, use the centrifuge-real-data tool to get real-time data from the Centrifuge MCP server and SDK. This provides live blockchain data, not mock data.
+           
+           Always provide verifiable data with contract addresses, current block numbers, and real-time metrics.`,
     },
 });
 
 // Start the agent server
 const PORT = parseInt(process.env.PORT || '3008', 10);
 
-async function main() {
-    try {
-        console.log('🏛️ Starting RWA Investment Agent...');
-        console.log(`📊 Using AI provider: ${preferred}`);
-        console.log('🔧 Initializing agent...');
-
-        // Test the context provider first
-        console.log('🧪 Testing context provider...');
-        try {
-            const testContext = await contextProvider({ mcpClients: {} });
-            console.log('✅ Context provider working, asset types:', testContext.assetTypes.length);
-        } catch (contextError) {
-            console.error('❌ Context provider failed:', contextError);
-            throw contextError;
-        }
-
-        console.log('🚀 Starting agent WITH context provider...');
-        await agent.start(PORT, contextProvider);
-
-        console.log(`🚀 RWA Investment Agent running on port ${PORT}`);
-        console.log(`🌐 Agent card available at: http://localhost:${PORT}/.well-known/agent.json`);
-        console.log(`🔗 MCP endpoint: http://localhost:${PORT}/sse`);
-        console.log('💼 Ready to discover and invest in Real World Assets!');
-        console.log('📋 Available skills:');
-        console.log('   - RWA Asset Discovery: Find real-world asset investment opportunities');
-        console.log('   - RWA Compliance Verification: Check regulatory compliance');
-        console.log('   - RWA Investment Execution: Execute investments with blockchain integration');
-    } catch (error) {
-        console.error('❌ Failed to start RWA Investment Agent:', error);
-        console.error('Error details:', error);
+agent
+    .start(PORT, contextProvider)
+    .then(() => {
+        console.log(`🚀 RWA Investment Agent started on port ${PORT}`);
+        console.log(`📊 Agent Card: http://localhost:${PORT}/.well-known/agent.json`);
+        console.log(`🔗 MCP Endpoint: http://localhost:${PORT}/mcp`);
+    })
+    .catch((error) => {
+        console.error('Failed to start RWA Investment Agent:', error);
         process.exit(1);
-    }
-}
-
-// Handle graceful shutdown
-process.on('SIGINT', async () => {
-    console.log('\n🛑 Shutting down RWA Investment Agent...');
-    try {
-        await agent.stop();
-        console.log('✅ Agent stopped gracefully');
-        process.exit(0);
-    } catch (error) {
-        console.error('❌ Error during shutdown:', error);
-        process.exit(1);
-    }
-});
-
-process.on('SIGTERM', async () => {
-    console.log('\n🛑 Received SIGTERM, shutting down...');
-    try {
-        await agent.stop();
-        process.exit(0);
-    } catch (error) {
-        console.error('❌ Error during shutdown:', error);
-        process.exit(1);
-    }
-});
-
-// Check if this is the main module being run directly
-const isMainModule = process.argv[1] && process.argv[1].endsWith('index.js');
-if (isMainModule) {
-    main().catch(console.error);
-}
+    });

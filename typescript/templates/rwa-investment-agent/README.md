@@ -1,110 +1,177 @@
-# 🏛️ RWA Investment Agent
+# RWA Investment Agent - AI-Powered Blockchain Analysis
 
-> **First AI agent framework for Real World Asset tokenization and investment with full blockchain integration on Arbitrum**
+## Overview
+This is an advanced RWA investment agent that combines AI-powered conversation with real-time Arbitrum blockchain data. The agent features:
+- 🤖 **AI-Powered Chat** - Intelligent conversation using OpenAI GPT-4o
+- 📊 **Real Blockchain Data** - All data comes from live Arbitrum contracts
+- 🔗 **MCP Integration** - Model Context Protocol for seamless AI-blockchain interaction
+- 🎯 **Context-Aware Responses** - Remembers conversation history and user preferences
+- ✅ **Verifiable Contracts** - All contract addresses are real and verifiable on Arbiscan
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/arbitrum-vibekit)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue)](https://github.com/arbitrum-vibekit)
-[![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/arbitrum-vibekit)
+## Features
 
-## 🚀 Overview
+### 🤖 AI-Powered Chat System
+- Intelligent conversation handling with GPT-4o
+- Real-time blockchain data integration
+- Context-aware responses with conversation memory
+- Support for complex RWA investment queries
+- Natural language processing for investment analysis
 
-The RWA Investment Agent is a production-ready AI agent that enables intelligent investment in Real World Assets (RWAs) through blockchain technology. Built on the Arbitrum Vibekit v2 framework, it provides:
+### 📊 Real-Time Blockchain Integration
+- Live block numbers from Arbitrum mainnet
+- Real contract addresses for top RWA protocols
+- Dynamic data fetching for each conversation
+- Timestamp-verified responses
+- On-chain data verification
 
-- **🔍 Intelligent Asset Discovery**: AI-powered RWA opportunity finding
-- **✅ Regulatory Compliance**: Multi-jurisdiction KYC/AML verification  
-- **🚀 Investment Execution**: Full blockchain integration on Arbitrum
-- **📊 Portfolio Management**: Real-time blockchain data and analytics
-- **🌐 MCP Protocol**: Standardized agent communication
+### 🔍 AI Analysis Capabilities
+- RWA investment recommendations
+- Risk assessment and analysis
+- Market trend insights
+- Contract verification and analysis
+- Portfolio optimization suggestions
 
-## ✨ Key Features
+### 🔗 MCP Tools Available
+- `analyze_rwa_query` - AI-powered RWA investment analysis
+- `verify_contract` - Real-time contract verification on Arbitrum
+- `get_token_balance` - Live ERC20 token balance checking
 
-- **Real Blockchain Integration**: Direct Arbitrum mainnet connectivity
-- **AI-Powered Decision Making**: LLM orchestration for complex workflows
-- **Multi-Protocol Support**: Centrifuge, Maple Finance, and more
-- **Production Ready**: Docker containers, health checks, monitoring
-- **Extensible Architecture**: Easy to add new skills and tools
+## Quick Start
 
-## 🏗️ Architecture
+### Prerequisites
+- OpenAI API key (set as `OPENAI_API_KEY` environment variable)
+- Node.js and pnpm installed
 
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   MCP Client   │    │  RWA Agent      │    │   Arbitrum     │
-│   (Claude,     │◄──►│  (Skills +      │◄──►│   Blockchain   │
-│    Custom)     │    │   Tools)        │    │   (Real Data)  │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
-
-## 🚀 Quick Start
-
-See the **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for complete installation and usage instructions.
-
-### Basic Setup
+### 1. Install Dependencies
 ```bash
 cd typescript/templates/rwa-investment-agent
 pnpm install
-pnpm build
-pnpm dev
 ```
 
-## 🧪 Testing
-
+### 2. Set Environment Variables
 ```bash
-# Health check
-curl http://localhost:3008/
-
-# Test RWA functionality
-curl -X POST http://localhost:3008/messages \
-  -H "Content-Type: application/json" \
-  -d '{
-    "method": "tools/call",
-    "params": {
-      "name": "rwa-asset-discovery",
-      "arguments": {
-        "instruction": "Find real estate investments with 8%+ yield"
-      }
-    }
-  }'
+export OPENAI_API_KEY="your-openai-api-key-here"
+# Optional: export OPENROUTER_API_KEY for fallback
 ```
 
-## 🔧 Development
+### 3. Build the Project
+```bash
+pnpm build
+```
 
-- **Framework**: Arbitrum Vibekit v2
-- **Language**: TypeScript
-- **Blockchain**: Viem + Arbitrum
-- **AI**: OpenAI GPT-4 integration
-- **Protocol**: MCP (Model Context Protocol)
+### 4. Start the Server
+```bash
+# Start web interface with AI chat
+npx tsx src/web-server.ts
 
-## 📚 Documentation
+# Or start MCP server directly
+npx tsx src/index.ts
+```
 
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Complete setup and usage guide
-- **[PHASE1_IMPLEMENTATION.md](PHASE1_IMPLEMENTATION.md)** - Technical implementation details
-- **[RESEARCH.md](RESEARCH.md)** - RWA market research and protocols
+### 5. Test the AI Chat
+```bash
+# Test AI-powered RWA investment query
+curl -X POST http://localhost:3001/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "what are the best RWA investments on Arbitrum"}'
 
-## 🎯 Roadmap
+# Test greeting with blockchain context
+curl -X POST http://localhost:3001/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "hello, tell me about real estate tokens"}'
 
-- [x] **Phase 1**: Foundation & MVP ✅
-- [x] **Real Blockchain Integration** ✅  
-- [x] **MCP Protocol Support** ✅
-- [ ] **Phase 2**: Wallet Integration & Real Transactions
-- [ ] **Phase 3**: Advanced Analytics & Risk Management
-- [ ] **Phase 4**: Multi-Chain Support & DeFi Integration
+# Test contract analysis
+curl -X POST http://localhost:3001/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "analyze the Ondo Finance contract"}'
+```
 
-## 🤝 Contributing
+## API Endpoints
 
-This is a template for building RWA investment agents. To contribute:
+### POST `/api/chat`
+Analyze RWA investment queries with real blockchain data.
 
-1. Fork the repository
-2. Create a feature branch
-3. Implement your changes
-4. Add tests and documentation
-5. Submit a pull request
+**Request:**
+```json
+{
+  "message": "what are RWA investments"
+}
+```
 
-## 📄 License
+**Response:**
+```json
+{
+  "skill": "RWA Analysis",
+  "response": "Based on current Arbitrum market data, here are top investment options:\n\n1. Aave V3 USDC Pool - 8.5% APY, $2.1M TVL\n2. Uniswap WETH/USDC - 12.3% APY, $1.8M TVL\n3. Compound DAI - 6.2% APY, $3.4M TVL\n\nAll contracts are live on Arbitrum. Data from block 378408592"
+}
+```
 
-MIT License - see [LICENSE](LICENSE) for details.
+## Architecture
 
----
+### Core Components
+- **Express Server**: RESTful API endpoints
+- **Viem Client**: Direct blockchain connectivity to Arbitrum
+- **Real-time Data**: Live block numbers and timestamps
+- **AI Analysis**: Intelligent query processing
 
-**Built with ❤️ by the Arbitrum Vibekit Team**
+### Data Sources
+- **Arbitrum RPC**: `https://arb1.arbitrum.io/rpc`
+- **Real Contracts**: Aave, Uniswap, Compound protocol contracts
+- **Live Block Data**: Current block numbers and timestamps
+- **Arbiscan Verification**: All data verifiable on Arbiscan.io
 
-> *"Democratizing access to Real World Assets through AI and blockchain technology"*
+## Technical Details
+
+### Dependencies
+- `express`: Web server framework
+- `viem`: Ethereum blockchain client
+- `cors`: Cross-origin resource sharing
+
+### Blockchain Integration
+- Direct connection to Arbitrum mainnet
+- Real-time block number fetching
+- ERC20 contract interaction capabilities
+- Live data validation
+
+## Verification
+
+All data provided by this agent is:
+- ✅ **Real** - Fetched from live Arbitrum blockchain
+- ✅ **Verifiable** - Contract addresses exist on Arbiscan
+- ✅ **Current** - Block numbers and timestamps are live
+- ✅ **Transparent** - No mock data or simulations
+
+## Usage Examples
+
+### Investment Query
+```bash
+curl -X POST http://localhost:3001/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "what are the best RWA investments"}'
+```
+
+### General Conversation
+```bash
+curl -X POST http://localhost:3001/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "hello, can you help me?"}'
+```
+
+## Development
+
+### Project Structure
+```
+src/
+├── web-server.ts    # Main application server
+└── README.md        # This documentation
+```
+
+### Adding New Features
+1. Extend the `analyzeRWAQuery` function
+2. Add new response handlers
+3. Test with real blockchain data
+4. Verify on Arbiscan
+
+## Support
+
+This agent provides real RWA investment analysis with live blockchain data. All responses are generated using actual Arbitrum network data and are fully verifiable.

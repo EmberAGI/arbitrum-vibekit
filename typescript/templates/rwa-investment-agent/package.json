@@ -22,6 +22,7 @@
     "ember-api": "workspace:*",
     "ember-schemas": "workspace:*",
     "@google-a2a/types": "workspace:*",
+    "@ai-sdk/openai": "catalog:",
     "ai": "catalog:",
     "cors": "catalog:",
     "dotenv": "catalog:",
@@ -29,7 +30,8 @@
     "viem": "catalog:",
     "zod": "catalog:",
     "axios": "^1.6.0",
-    "ethers": "^6.8.0"
+    "ethers": "^6.8.0",
+    "graphql-request": "catalog:"
   },
   "devDependencies": {
     "@types/cors": "catalog:",

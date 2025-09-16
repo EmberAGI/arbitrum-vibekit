@@ -24,7 +24,7 @@ import { generateTitleFromUserMessage } from '../../actions';
 // import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 // import { getWeather } from '@/lib/ai/tools/get-weather';
 import { isProductionEnvironment } from '@/lib/constants';
-import { openRouterProvider } from '@/lib/ai/providers';
+import { openAIProvider } from '@/lib/ai/providers';
 import { getTools as getDynamicTools } from '@/lib/ai/tools/tool-agents';
 // import { generateChart } from '@/lib/ai/tools/generate-chart'; // Now using MCP server
 
@@ -78,7 +78,13 @@ export async function POST(request: Request) {
       return new Response('No user message found', { status: 400 });
     }
 
-    const chat = await getChatById({ id });
+    let chat;
+    try {
+      chat = await getChatById({ id });
+    } catch (error) {
+      console.error('Error getting chat by ID:', error);
+      throw error;
+    }
 
     if (!chat) {
       try {
@@ -86,12 +92,6 @@ export async function POST(request: Request) {
           message: userMessage,
         });
 
-        await saveChat({
-          id,
-          userId: session.user.id,
-          title,
-          address: validatedContext.walletAddress || '',
-        });
       } catch (error) {
         console.error(
           '[ROUTE] Error in title generation or chat saving:',
@@ -124,27 +124,22 @@ export async function POST(request: Request) {
       throw error;
     }
 
+    console.log('Chat ID:', id);
+    // Get dynamic tools
     let dynamicTools;
     try {
       dynamicTools = await getDynamicTools();
+      console.log('Dynamic tools:', dynamicTools);
     } catch (error) {
-      console.error('[ROUTE] Error loading dynamic tools:', error);
-      dynamicTools = {};
+      console.error('Error getting dynamic tools:', error);
+      dynamicTools = {}; // Use empty object as fallback
     }
 
     return createDataStreamResponse({
       execute: (dataStream) => {
         console.log('[ROUTE] Executing stream...');
 
-        try {
-          const model = openRouterProvider.languageModel(selectedChatModel);
-
-          const systemPromptText = systemPrompt({
-            selectedChatModel,
-            walletAddress: validatedContext.walletAddress,
-          });
-
-          const result = streamText({
+        const result = streamText({
             model,
             system: systemPromptText,
             messages,

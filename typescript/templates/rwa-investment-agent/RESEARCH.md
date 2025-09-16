@@ -206,3 +206,13 @@ Risk Analysis → Portfolio → Asset Selection → KYC/AML → Transaction → 
 - **Risk Assessment**: Institutional-grade accuracy
 
 This research forms the foundation for building the most comprehensive RWA investment agent in the DeFi ecosystem.
+
+are these under RWA?
+
+Aave V3 USDC Pool - 8.5% APY, $2.1M TVL
+2. Uniswap WETH/USDC - 12.3% APY, $1.8M TVL
+3. Compound DAI - 6.2% APY, $3.4M TVL
+
+is there an easy way to easy access rwa data from blockchain like in real time chat with an mcp more like embeding it and I get the blockchain data for free in real time is so give me directions
+
+I'm mostly interested in just the ones in arbitrum Like I want to be able to interact with all of them in real time not just the old ones even the new ones, please do write this for me in pdf with code snipets, all the links how to access them

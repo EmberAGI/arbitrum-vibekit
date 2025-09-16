@@ -60,3 +60,6 @@ export interface RiskParameters {
 export interface RWAContextDeps {
   mcpClients: Record<string, Client>;
 }
+
+// Alias for compatibility with Vibekit framework
+export type RWAAgentContext = RWAContext;

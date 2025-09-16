@@ -1,4 +1,3 @@
-export { assetDiscoverySkill } from './assetDiscovery.js';
-export { complianceCheckSkill } from './complianceCheck.js';
-export { investmentExecutionSkill } from './investmentExecution.js';
-export { testSkill } from './testSkill.js';
+export { rwaAnalysisSkill } from './assetDiscovery.js';
+export { contractVerificationSkill } from './contractVerification.js';
+export { portfolioManagementSkill } from './portfolioManagement.js';

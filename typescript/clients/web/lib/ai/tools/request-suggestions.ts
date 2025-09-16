@@ -4,7 +4,7 @@ import { type DataStreamWriter, streamObject, tool } from 'ai';
 import { getDocumentById, saveSuggestions } from '@/lib/db/queries';
 import type { Suggestion } from '@/lib/db/schema';
 import { generateUUID } from '@/lib/utils';
-import { openRouterProvider } from '../providers';
+import { openAIProvider } from '../providers';
 
 interface RequestSuggestionsProps {
   session: Session;
@@ -36,7 +36,7 @@ export const requestSuggestions = ({
       > = [];
 
       const { elementStream } = streamObject({
-        model: openRouterProvider.languageModel('artifact-model'),
+        model: openAIProvider.languageModel('artifact-model'),
         system:
           'You are a help writing assistant. Given a piece of writing, please offer suggestions to improve the piece of writing and describe the change. It is very important for the edits to contain full sentences instead of just words. Max 5 suggestions.',
         prompt: document.content,

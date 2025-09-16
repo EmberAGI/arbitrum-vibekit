@@ -8,6 +8,7 @@ import { defineSkill } from 'arbitrum-vibekit-core';
 import { discoverRWAAssetsTool } from '../tools/discoverRWAAssets.js';
 import { analyzeYieldOpportunitiesTool } from '../tools/analyzeYieldOpportunities.js';
 import { assessAssetRiskTool } from '../tools/assessAssetRisk.js';
+import { centrifugeRealDataTool } from '../tools/centrifugeRealData.js';
 
 // Input schema for asset discovery requests
 const AssetDiscoveryInputSchema = z.object({
@@ -24,13 +25,13 @@ const AssetDiscoveryInputSchema = z.object({
   walletAddress: z.string().optional().describe('Investor wallet address for personalized recommendations'),
 });
 
-export const assetDiscoverySkill = defineSkill({
-  id: 'rwa-asset-discovery',
-  name: 'RWA Asset Discovery',
-  description: 'Discover and analyze Real World Asset investment opportunities with intelligent filtering and risk assessment',
-  
+export const rwaAnalysisSkill = defineSkill({
+  id: 'rwa-analysis',
+  name: 'RWA Analysis',
+  description: 'AI-powered analysis of Real World Asset investment opportunities with live blockchain data',
+
   tags: ['rwa', 'assets', 'discovery', 'investment', 'yield', 'real-estate', 'invoices', 'carbon-credits'],
-  
+
   examples: [
     'Find real estate investments with 8%+ yield in the US',
     'Show me low-risk invoice financing opportunities under $50k',
@@ -38,6 +39,10 @@ export const assetDiscoverySkill = defineSkill({
     'What are the best RWA opportunities for a conservative portfolio?',
     'Find institutional loan investments with 15%+ yield',
     'Show me liquid RWA assets I can invest $25k in',
+    'Show me Centrifuge pools with real-time data',
+    'What are the current Centrifuge investment opportunities on Arbitrum?',
+    'Get real-time Centrifuge pool yields and liquidity data',
+    'Check my Centrifuge investment status and performance',
   ],
 
   inputSchema: AssetDiscoveryInputSchema,
@@ -45,8 +50,9 @@ export const assetDiscoverySkill = defineSkill({
   // Tools available for LLM orchestration
   tools: [
     discoverRWAAssetsTool,
-    analyzeYieldOpportunitiesTool, 
+    analyzeYieldOpportunitiesTool,
     assessAssetRiskTool,
+    centrifugeRealDataTool,
   ],
 
   // No manual handler - use LLM orchestration for intelligent asset discovery

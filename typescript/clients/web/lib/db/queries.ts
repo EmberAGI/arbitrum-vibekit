@@ -26,6 +26,12 @@ const client = postgres(process.env.POSTGRES_URL!);
 const db = drizzle(client);
 
 export async function getUser(address: string): Promise<Array<User>> {
+  // Skip database operations if SKIP_DATABASE is set
+  if (process.env.SKIP_DATABASE === 'true') {
+    console.log('Skipping database operations - using mock user');
+    return [{ id: 'mock-user-id', address }];
+  }
+
   try {
     return await db.select().from(user).where(eq(user.address, address));
   } catch (error) {
@@ -35,6 +41,12 @@ export async function getUser(address: string): Promise<Array<User>> {
 }
 
 export async function getOrCreateUser(address: string) {
+  // Skip database operations if SKIP_DATABASE is set
+  if (process.env.SKIP_DATABASE === 'true') {
+    console.log('Skipping database operations - using mock user');
+    return [{ id: 'mock-user-id', address }];
+  }
+
   try {
     const users = await getUser(address);
     if (users.length > 0) {

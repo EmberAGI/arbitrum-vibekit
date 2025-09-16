@@ -67,6 +67,20 @@ services:
   #     - 3007:3007
   #   restart: unless-stopped
 
+  rwa-investment-agent:
+    build:
+      context: ./
+      dockerfile: templates/rwa-investment-agent/Dockerfile
+    container_name: vibekit-rwa-investment-agent
+    env_file:
+      - path: .env
+        required: true
+      - path: templates/rwa-investment-agent/.env
+        required: false
+    ports:
+      - 3008:3008
+    restart: unless-stopped
+
   # allora-price-prediction-agent:
   #   build:
   #     context: ./

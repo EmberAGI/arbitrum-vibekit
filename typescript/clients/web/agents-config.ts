@@ -134,7 +134,76 @@ export const chatAgents = [
   //       action: "Check balance",
   //     },
   //   ],
-  // },
+  //   },
+  {
+    id: 'centrifuge-mcp-server' as const,
+    name: 'Centrifuge RWA Pro',
+    description: 'Complete Centrifuge RWA investment platform with advanced analytics, portfolio management, and risk assessment',
+    suggestedActions: [
+      {
+        title: 'Discover Investment',
+        label: 'pools',
+        action: 'Discover Centrifuge RWA investment pools with high yields',
+      },
+      {
+        title: 'Analyze Pool',
+        label: 'performance',
+        action: 'Analyze detailed performance metrics for pool ID 1',
+      },
+      {
+        title: 'Portfolio Rebalancing',
+        label: 'suggestions',
+        action: 'Get portfolio rebalancing suggestions for my investments',
+      },
+      {
+        title: 'Yield Optimization',
+        label: 'opportunities',
+        action: 'Find the best yield opportunities across all pools',
+      },
+      {
+        title: 'Risk Assessment',
+        label: 'analysis',
+        action: 'Perform comprehensive risk assessment for pool investments',
+      },
+      {
+        title: 'Investment Status',
+        label: 'check',
+        action: 'Check my current investment positions and status',
+      },
+      {
+        title: 'Performance Tracking',
+        label: 'analytics',
+        action: 'Track investment performance with detailed analytics',
+      },
+      {
+        title: 'Transaction History',
+        label: 'review',
+        action: 'Review my complete transaction history',
+      },
+    ],
+  },
+  {
+    id: 'rwa-investment-agent' as const,
+    name: 'RWA Investment',
+    description: 'AI-powered Real World Asset investment analysis with live blockchain data',
+    suggestedActions: [
+      {
+        title: 'Analyze RWA',
+        label: 'investment opportunities',
+        action: 'What are the best RWA investment opportunities on Arbitrum?',
+      },
+      {
+        title: 'Find real estate',
+        label: 'tokenized assets',
+        action: 'Show me tokenized real estate investments with good yields',
+      },
+      {
+        title: 'Check contract',
+        label: 'verification',
+        action: 'Verify the Ondo Finance contract on Arbitrum',
+      },
+    ],
+  },
   {
     id: 'all' as const,
     name: 'All agents',
@@ -158,6 +227,8 @@ export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
   ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
   ['coingecko', 'http://coingecko-mcp-server:3011/mcp'], // CoinGecko MCP server
+  ['centrifuge-mcp-server', 'http://localhost:3001/sse'],
+  ['rwa-investment-agent', 'http://localhost:3008/sse'],
   // ['langgraph-workflow', 'http://langgraph-workflow-agent:3009/sse'],
   // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
   // ['allora-price-prediction-agent', 'http://allora-price-prediction-agent:3008/sse'],
