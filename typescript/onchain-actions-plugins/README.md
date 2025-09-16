@@ -560,7 +560,7 @@ async function getYourProtocolActions(
 }
 ```
 
-#### 3.3 Full Protocol Adapter Implementation
+#### 3.3 Protocol Adapter Implementation
 
 Create an adapter class that handles protocol-specific logic:
 
@@ -568,35 +568,20 @@ Create an adapter class that handles protocol-specific logic:
 // src/your-protocol-plugin/adapter.ts
 import { Chain } from './chain.js';
 import { type YourProtocolMarket, getMarket } from './market.js';
-import { UserSummary } from './userSummary.js';
-import { getUiPoolDataProviderImpl, type IUiPoolDataProvider } from './dataProvider.js';
-import { ethers, type PopulatedTransaction } from 'ethers';
 import type {
   TransactionPlan,
-  BorrowTokensRequest,
-  BorrowTokensResponse,
-  RepayTokensRequest,
-  RepayTokensResponse,
   SupplyTokensRequest,
   SupplyTokensResponse,
-  WithdrawTokensRequest,
-  WithdrawTokensResponse,
-  GetWalletLendingPositionsResponse,
-  TransactionTypes,
-  GetWalletLendingPositionsRequest,
+  BorrowTokensRequest,
+  BorrowTokensResponse,
   Token,
 } from '../core/index.js';
-
-export type YourProtocolAction = PopulatedTransaction[];
 
 export interface YourProtocolAdapterParams {
   chainId: number;
   rpcUrl: string;
   wrappedNativeToken?: string;
 }
-
-// Your protocol's ETH placeholder address used for native ETH operations
-const PROTOCOL_ETH_PLACEHOLDER = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
 export class YourProtocolAdapter {
   public chain: Chain;
@@ -607,262 +592,62 @@ export class YourProtocolAdapter {
     this.market = getMarket(this.chain.id);
   }
 
-  public normalizeTokenAddress(token: Token): string {
-    return token.isNative ? PROTOCOL_ETH_PLACEHOLDER : token.tokenUid.address;
-  }
-
-  private transformToTransactionPlan(tx: PopulatedTransaction): TransactionPlan {
-    return {
-      type: TransactionTypes.EVM_TX,
-      chainId: this.chain.id.toString(),
-      to: tx.to!,
-      value: tx.value?.toString() || '0',
-      data: tx.data!,
-    };
-  }
-
+  // Core transaction methods - implement your protocol-specific logic
   async createSupplyTransaction(params: SupplyTokensRequest): Promise<SupplyTokensResponse> {
-    const { supplyToken, amount, walletAddress } = params;
-    const txs = await this.supply(
-      this.normalizeTokenAddress(supplyToken),
-      amount.toString(),
-      walletAddress
-    );
-    return {
-      transactions: txs.map(tx => this.transformToTransactionPlan(tx)),
-    };
+    const txs = await this.supply(params.supplyToken, params.amount, params.walletAddress);
+    return { transactions: txs.map(tx => this.transformToTransactionPlan(tx)) };
   }
 
   async createBorrowTransaction(params: BorrowTokensRequest): Promise<BorrowTokensResponse> {
-    const { borrowToken, amount, walletAddress } = params;
-    const txs = await this.borrow(
-      this.normalizeTokenAddress(borrowToken),
-      amount.toString(),
-      walletAddress
-    );
-    return {
-      transactions: txs.map(tx => this.transformToTransactionPlan(tx)),
-    };
+    // Your protocol implementation
   }
 
-  async createRepayTransaction(params: RepayTokensRequest): Promise<RepayTokensResponse> {
-    const { repayToken, amount, walletAddress } = params;
-    const txs = await this.repay(
-      this.normalizeTokenAddress(repayToken),
-      amount.toString(),
-      walletAddress
-    );
-    return {
-      transactions: txs.map(tx => this.transformToTransactionPlan(tx)),
-    };
+  // Additional methods: createRepayTransaction, createWithdrawTransaction, getUserSummary, getReserves
+  
+  private async supply(token: Token, amount: bigint, user: string) {
+    // Your protocol-specific supply logic here
+    // Example: Use your protocol's SDK or direct contract calls
   }
 
-  async createWithdrawTransaction(params: WithdrawTokensRequest): Promise<WithdrawTokensResponse> {
-    const { withdrawToken, amount, walletAddress } = params;
-    const txs = await this.withdraw(
-      this.normalizeTokenAddress(withdrawToken),
-      amount.toString(),
-      walletAddress
-    );
-    return {
-      transactions: txs.map(tx => this.transformToTransactionPlan(tx)),
-    };
-  }
-
-  async getUserSummary(
-    request: GetWalletLendingPositionsRequest
-  ): Promise<GetWalletLendingPositionsResponse> {
-    const userSummary = new UserSummary(
-      this.chain.id,
-      request.walletAddress,
-      this.market,
-      this.getUiPoolDataProvider()
-    );
-    return await userSummary.getSummary();
-  }
-
-  async getReserves() {
-    const reserves = await this.getUiPoolDataProvider().getReservesHumanized({
-      lendingPoolAddressProvider: this.market.POOL_ADDRESSES_PROVIDER,
-    });
-    return reserves;
-  }
-
-  private getUiPoolDataProvider(): IUiPoolDataProvider {
-    return getUiPoolDataProviderImpl(this.chain);
-  }
-
-  // Protocol-specific implementation methods
-  private async supply(
-    asset: string,
-    amount: string,
-    user: string
-  ): Promise<PopulatedTransaction[]> {
-    try {
-      // Implementation specific to your protocol
-      // Example: Use protocol SDK or contract calls
-      // This will vary based on your protocol's SDK and contracts
-      throw new Error('Not implemented - add your protocol-specific logic here');
-    } catch (error) {
-      // Handle protocol-specific errors
-      throw this.handleProtocolError(error, 'supply');
-    }
-  }
-
-  private async borrow(
-    asset: string,
-    amount: string,
-    user: string
-  ): Promise<PopulatedTransaction[]> {
-    try {
-      // Implementation specific to your protocol
-      throw new Error('Not implemented');
-    } catch (error) {
-      throw this.handleProtocolError(error, 'borrow');
-    }
-  }
-
-  private async repay(
-    asset: string,
-    amount: string,
-    user: string
-  ): Promise<PopulatedTransaction[]> {
-    try {
-      // Implementation specific to your protocol
-      throw new Error('Not implemented');
-    } catch (error) {
-      throw this.handleProtocolError(error, 'repay');
-    }
-  }
-
-  private async withdraw(
-    asset: string,
-    amount: string,
-    user: string
-  ): Promise<PopulatedTransaction[]> {
-    try {
-      // Implementation specific to your protocol
-      throw new Error('Not implemented');
-    } catch (error) {
-      throw this.handleProtocolError(error, 'withdraw');
-    }
-  }
-
-  private handleProtocolError(error: unknown, operation: string): Error {
-    if (error instanceof Error) {
-      // Check for protocol-specific error codes
-      const match = error.message.match(/execution reverted: "(\d+)"/);
-      if (match) {
-        const errorCode = match[1];
-        const protocolError = this.getProtocolError(errorCode);
-        if (protocolError) {
-          return new Error(`${operation} failed: ${protocolError.message}`);
-        }
-      }
-      return new Error(`${operation} failed: ${error.message}`);
-    }
-    return new Error(`${operation} failed: Unknown error`);
-  }
-
-  private getProtocolError(code: string) {
-    // Map protocol error codes to readable messages
-    // This should be protocol-specific
-    return null;
+  private transformToTransactionPlan(tx: PopulatedTransaction): TransactionPlan {
+    // Transform ethers PopulatedTransaction to TransactionPlan format
   }
 }
 ```
+
+> **📖 Complete Implementation Reference**: See the [AAVE adapter](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/onchain-actions-plugins/registry/src/aave-lending-plugin/adapter.ts) for a full implementation example including all CRUD operations, error handling, transaction transformation, and protocol-specific logic patterns.
 
 ### 4. Error Handling and Testing
 
-#### 4.1 Error Handling Best Practices
+#### 4.1 Error Handling
 
-Proper error handling is crucial for robust plugin implementation. The AAVE plugin demonstrates comprehensive error handling patterns:
-
-#### Protocol-Specific Error Codes
-
-Create a dedicated error handling system for your protocol:
+Implement robust error handling for your protocol:
 
 ```typescript
-// src/your-protocol-plugin/errors.ts
-class YourProtocolError extends Error {
-  public description: string;
-  public override message: string;
-
-  constructor(code: string, name: string, description: string) {
-    const message = name + ` (${code}): ` + description;
-    super(message);
-    this.name = 'YourProtocolError';
-    this.description = description;
-    this.message = message;
-    Object.setPrototypeOf(this, new.target.prototype);
-  }
-}
-
-export const YOUR_PROTOCOL_ERROR_CODES: Record<string, { name: string; description: string }> = {
-  '1': {
-    name: 'INSUFFICIENT_BALANCE',
-    description: 'User balance is insufficient for this operation',
-  },
-  '2': { name: 'RESERVE_PAUSED', description: 'Reserve is currently paused' },
-  '3': { name: 'INVALID_AMOUNT', description: 'Amount must be greater than 0' },
-  // Add more protocol-specific error codes
-};
-
-export function getYourProtocolError(code: string): YourProtocolError | null {
-  const err = YOUR_PROTOCOL_ERROR_CODES[code];
-  if (err) {
-    return new YourProtocolError(code, err.name, err.description);
-  }
-  return null;
-}
-```
-
-#### Error Handling in Adapter Methods
-
-Implement consistent error handling across all adapter methods:
-
-```typescript
-// Note: Add this import at the top of your file
-// import { isAddress } from 'viem';
-
+// Basic error handling pattern in adapter methods
 async createSupplyTransaction(params: SupplyTokensRequest): Promise<SupplyTokensResponse> {
   try {
-    // Validate inputs
+    // Input validation
     if (!params.amount || params.amount <= 0) {
       throw new Error('Invalid supply amount: must be greater than 0');
     }
-
-    if (!params.walletAddress || !isAddress(params.walletAddress)) {
-      throw new Error('Invalid wallet address provided');
-    }
-
-    const { supplyToken, amount, walletAddress } = params;
-    const txs = await this.supply(
-      this.normalizeTokenAddress(supplyToken),
-      amount.toString(),
-      walletAddress
-    );
-
-    return {
-      transactions: txs.map(tx => this.transformToTransactionPlan(tx)),
-    };
+    
+    // Your protocol implementation
+    const txs = await this.supply(params.supplyToken, params.amount, params.walletAddress);
+    return { transactions: txs.map(tx => this.transformToTransactionPlan(tx)) };
   } catch (error) {
-    // Re-throw with context
-    throw new Error(`Supply transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Supply failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 ```
 
-#### Common Error Scenarios
+**Essential Error Scenarios to Handle:**
+- Insufficient balance and invalid parameters
+- Protocol-specific states (paused, frozen reserves)
+- Health factor and liquidation thresholds
+- Network and RPC failures
 
-Handle these common DeFi protocol error scenarios:
-
-- **Insufficient Balance**: User doesn't have enough tokens
-- **Reserve States**: Reserve is paused, frozen, or inactive
-- **Health Factor**: Borrowing would put user below liquidation threshold
-- **Caps Exceeded**: Supply or borrow caps reached
-- **Invalid Parameters**: Zero amounts, invalid addresses
-- **Network Issues**: RPC failures, timeout errors
+> **📖 Complete Error Handling Reference**: See the [AAVE error handling implementation](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/onchain-actions-plugins/registry/src/aave-lending-plugin/errors.ts) for comprehensive error codes, custom error classes, and protocol-specific error mapping patterns.
 
 #### 4.2 Testing Your Plugin
 
