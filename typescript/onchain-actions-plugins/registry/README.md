@@ -265,7 +265,7 @@ We welcome contributions! Please see our [Contributing Guide](https://github.com
 
 ## License
 
-MIT © [EmberAGI](https://github.com/EmberAGI)
+MIT © [EmberAGI](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/LICENSE)
 
 ## Links
 
