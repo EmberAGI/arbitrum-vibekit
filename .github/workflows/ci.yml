@@ -62,6 +62,9 @@ jobs:
           COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
           SQUID_INTEGRATOR_ID: ${{ secrets.SQUID_INTEGRATOR_ID }}
           DUNE_API_KEY: ${{ secrets.DUNE_API_KEY }}
+          DUST_CHAIN_RECEIVER_ADDRESS: ${{ secrets.DUST_CHAIN_RECEIVER_ADDRESS }}
+          DUST_ACCOUNT_PRIVATE_KEY: ${{ secrets.DUST_ACCOUNT_PRIVATE_KEY }}
+          DUST_CHAIN_ID: ${{ secrets.DUST_CHAIN_ID }}
         run: |
           # Start the anvil server and capture its output to a log file
           pnpm run start:anvil 2>&1 | tee anvil_server.log &
