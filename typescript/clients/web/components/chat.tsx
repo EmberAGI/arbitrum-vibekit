@@ -38,35 +38,44 @@ export function Chat({
 
   const [selectedChatAgent, _setSelectedChatAgent] = useState(initialChatAgent);
 
-  const { messages, setMessages, handleSubmit, input, setInput, append, status, stop, reload } =
-    useChat({
+  const {
+    messages,
+    setMessages,
+    handleSubmit,
+    input,
+    setInput,
+    append,
+    status,
+    stop,
+    reload,
+  } = useChat({
+    id,
+    body: {
       id,
-      body: {
-        id,
-        selectedChatModel,
-        context: {
-          walletAddress: address,
-        },
+      selectedChatModel,
+      context: {
+        walletAddress: address,
       },
-      initialMessages,
-      experimental_throttle: 100,
-      sendExtraMessageFields: true,
-      generateId: generateUUID,
-      onFinish: () => {
-        mutate('/api/history');
-      },
-      onError: () => {
-        toast.error('An error occured, please try again!');
-      },
-    });
+    },
+    initialMessages,
+    experimental_throttle: 100,
+    sendExtraMessageFields: true,
+    generateId: generateUUID,
+    onFinish: () => {
+      mutate('/api/history');
+    },
+    onError: () => {
+      toast.error('An error occured, please try again!');
+    },
+  });
 
   const { data: votes } = useSWR<Array<Vote>>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
-    fetcher
+    fetcher,
   );
 
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
-  const isArtifactVisible = useArtifactSelector(state => state.isVisible);
+  const isArtifactVisible = useArtifactSelector((state) => state.isVisible);
 
   return (
     <>

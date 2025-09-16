@@ -49,16 +49,18 @@ export default defineConfig({
     timeout: 60 * 1000,
   },
 
+  testIgnore: ['**/auth.setup.ts', '**/auth.test.ts'],
+
   /* Configure projects */
   projects: [
     {
-      name: 'setup:auth',
-      testMatch: /auth.setup.ts/,
+      name: 'setup:wallet-auth',
+      testMatch: /auth-wallet.setup.ts/,
     },
     {
       name: 'setup:reasoning',
       testMatch: /reasoning.setup.ts/,
-      dependencies: ['setup:auth'],
+      dependencies: ['setup:wallet-auth'],
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/session.json',
@@ -67,7 +69,7 @@ export default defineConfig({
     {
       name: 'chat',
       testMatch: /chat.test.ts/,
-      dependencies: ['setup:auth'],
+      dependencies: ['setup:wallet-auth'],
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/session.json',
@@ -85,7 +87,32 @@ export default defineConfig({
     {
       name: 'artifacts',
       testMatch: /artifacts.test.ts/,
-      dependencies: ['setup:auth'],
+      dependencies: ['setup:wallet-auth'],
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: 'playwright/.auth/session.json',
+      },
+    },
+    {
+      name: 'chart-generation',
+      testMatch: /chart-generation.test.ts/,
+      // dependencies: ['setup:wallet-auth'],
+      use: {
+        ...devices['Desktop Chrome'],
+        // storageState: 'playwright/.auth/session.json',
+      },
+    },
+    {
+      name: 'chart-unit-tests',
+      testMatch: /generate-chart-unit.test.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+      },
+    },
+    {
+      name: 'mcp-integration',
+      testMatch: /mcp-integration.test.ts/,
+      dependencies: ['setup:wallet-auth'],
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/session.json',

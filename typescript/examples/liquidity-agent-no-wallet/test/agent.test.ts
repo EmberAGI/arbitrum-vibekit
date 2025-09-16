@@ -4,14 +4,14 @@ import type { Task } from '@google-a2a/types';
 
 import 'dotenv/config';
 import * as ethers from 'ethers';
-import {  
+import {
   MultiChainSigner,
   CHAIN_CONFIGS,
   ensureWethBalance,
   extractMessageText,
   extractAndExecuteTransactions,
   mintUSDC,
-  ERC20Wrapper
+  ERC20Wrapper,
 } from 'test-utils';
 import { type Address } from 'viem';
 
@@ -46,7 +46,7 @@ describe('Liquidity Agent Integration Tests', function () {
   before(async function () {
     try {
       multiChainSigner = await MultiChainSigner.fromTestChains(CHAINS_TO_TEST);
-      
+
       walletAddress = await multiChainSigner.getAddress();
 
       agent = new Agent(quicknodeSubdomain, quicknodeApiKey);
@@ -74,22 +74,18 @@ describe('Liquidity Agent Integration Tests', function () {
 
         const wethAddress = CHAIN_CONFIGS[chainId]?.wrappedNativeToken?.address;
         if (!wethAddress) {
-          throw new Error(
-            `No wrapped native token (WETH) defined for chain ${chainId}.`
-          );
+          throw new Error(`No wrapped native token (WETH) defined for chain ${chainId}.`);
         }
 
         const usdcAddress = CHAIN_CONFIGS[chainId]?.anotherToken?.address;
         if (!usdcAddress) {
-          throw new Error(
-            `No secondary token (USDC) defined for chain ${chainId}.`
-          );
+          throw new Error(`No secondary token (USDC) defined for chain ${chainId}.`);
         }
 
         // Ensure WETH balance - use higher amount to ensure all operations can be completed
         const signer = multiChainSigner.getSignerForChainId(chainId);
         await ensureWethBalance(signer, '0.5', wethAddress);
-        
+
         // Mint USDC to the test wallet
         // Get provider from signer and ensure it's a JsonRpcProvider
         const provider = signer.provider as ethers.providers.JsonRpcProvider;
@@ -99,7 +95,7 @@ describe('Liquidity Agent Integration Tests', function () {
           userAddress: walletAddress,
           balanceStr: (1000_000_000).toString(), // 1000 USDC (assuming 6 decimals)
         });
-        
+
         // Initialize USDC wrapper
         usdc = new ERC20Wrapper(provider, usdcAddress);
         // Verify USDC balance
@@ -110,10 +106,7 @@ describe('Liquidity Agent Integration Tests', function () {
 
       describe('Basic Capabilities', function () {
         it('should be able to describe what it can do', async function () {
-          const response = await agent.processUserInput(
-            'What can you do?',
-            walletAddress
-          );
+          const response = await agent.processUserInput('What can you do?', walletAddress);
           const messageText = extractMessageText(response);
           expect(messageText.toLowerCase()).to.satisfy(
             (text: string) =>
@@ -124,14 +117,11 @@ describe('Liquidity Agent Integration Tests', function () {
 
       describe('Pool Management', function () {
         it('should be able to list pools', async function () {
-          const response = await agent.processUserInput(
-            'list pools',
-            walletAddress
-          );
+          const response = await agent.processUserInput('list pools', walletAddress);
 
           // Verify we get a response with pools data
           expect(response.status?.state).to.not.equal('failed', 'List pools operation failed');
-          
+
           const messageText = extractMessageText(response);
           expect(messageText.toLowerCase()).to.include('pool');
         });
@@ -140,28 +130,26 @@ describe('Liquidity Agent Integration Tests', function () {
       describe('Liquidity Operations', function () {
         it('should be able to deposit liquidity', async function () {
           // First get pools to find WETH/USDC pool and its price
-          const poolsResponse = await agent.processUserInput(
-            'list pools',
-            walletAddress
-          );
+          const poolsResponse = await agent.processUserInput('list pools', walletAddress);
           expect(poolsResponse.status?.state).to.not.equal('failed', 'List pools operation failed');
-          
+
           // Extract pools from response artifacts
           const pools = extractPools(poolsResponse);
           expect(pools.length).to.be.greaterThan(0, 'No pools found in response');
-          
+
           // Find WETH/USDC pool
-          const wethUsdcPool = pools.find(pool => 
-            (pool.symbol0 === 'WETH' && pool.symbol1 === 'USDC') || 
-            (pool.symbol0 === 'USDC' && pool.symbol1 === 'WETH')
+          const wethUsdcPool = pools.find(
+            pool =>
+              (pool.symbol0 === 'WETH' && pool.symbol1 === 'USDC') ||
+              (pool.symbol0 === 'USDC' && pool.symbol1 === 'WETH')
           );
-          expect(wethUsdcPool).to.not.be.undefined, 'WETH/USDC pool not found';
-          
+          (expect(wethUsdcPool).to.not.be.undefined, 'WETH/USDC pool not found');
+
           // Get price from pool data
           const price = parseFloat(wethUsdcPool!.price);
           expect(price).to.be.greaterThan(0, 'Invalid pool price');
           console.log(`WETH/USDC pool price: ${price}`);
-          
+
           const targetUSDCAmount = 0.01;
           const wethAmount = (targetUSDCAmount / price).toFixed(6);
 
@@ -173,20 +161,20 @@ describe('Liquidity Agent Integration Tests', function () {
             `Deposit ${wethAmount} WETH and ${targetUSDCAmount} USDC to the WETH/USDC pool within the range from ${(price * 0.8).toFixed(2)} to ${(price * 1.2).toFixed(2)}`,
             walletAddress
           );
-          
+
           expect(response.status?.state).to.not.equal('failed', 'Deposit operation failed');
- 
+
           const txHashes = await extractAndExecuteTransactions(
             response,
             multiChainSigner,
             'deposit'
           );
           expect(txHashes.length).to.be.greaterThan(0, 'No transaction hashes returned');
-          
+
           // Check USDC balance after deposit
           const usdcBalanceAfter = await usdc.balanceOf(walletAddress);
           console.log(`USDC Balance after deposit: ${usdcBalanceAfter.toString()}`);
-          
+
           // Verify USDC balance decreased
           expect(usdcBalanceBefore.sub(usdcBalanceAfter).gt(0)).to.be.true;
         });
@@ -195,14 +183,11 @@ describe('Liquidity Agent Integration Tests', function () {
       describe('Position Management', function () {
         it('should be able to list positions', async function () {
           // Get and display positions
-          const response = await agent.processUserInput(
-            'show my positions',
-            walletAddress
-          );
-          
+          const response = await agent.processUserInput('show my positions', walletAddress);
+
           expect(response.status?.state).to.not.equal('failed', 'Show positions operation failed');
-          
-          const messageText = extractMessageText(response)
+
+          const messageText = extractMessageText(response);
           expect(messageText.toLowerCase()).to.satisfy(
             (text: string) =>
               text.includes('position') || text.includes('liquidity') || text.includes('pool')
