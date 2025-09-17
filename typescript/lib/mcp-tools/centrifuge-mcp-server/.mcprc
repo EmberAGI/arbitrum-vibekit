@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "centrifuge-mcp-server": {
+      "command": "node",
+      "args": ["dist/index.js"],
+      "cwd": "/Users/griffinsoduol/Desktop/OtherProjects/arbitrum-vibekit/typescript/lib/mcp-tools/centrifuge-mcp-server"
+    }
+  }
+}

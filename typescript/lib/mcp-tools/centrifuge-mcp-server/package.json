@@ -1,0 +1,38 @@
+{
+  "name": "centrifuge-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for Centrifuge RWA investment operations",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@centrifuge/sdk": "catalog:",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "eventsource": "^4.0.0",
+    "express": "catalog:",
+    "node-fetch": "^3.3.2",
+    "viem": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/express": "catalog:",
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "keywords": [
+    "centrifuge",
+    "rwa",
+    "mcp",
+    "defi",
+    "arbitrum"
+  ],
+  "author": "Arbitrum Vibekit",
+  "license": "MIT"
+}
