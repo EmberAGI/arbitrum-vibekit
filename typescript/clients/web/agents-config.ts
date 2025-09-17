@@ -29,6 +29,28 @@ export const chatAgents = [
       },
     ],
   },
+  {
+    id: 'coingecko' as const,
+    name: 'Price Charts',
+    description: 'Cryptocurrency price data and charts',
+    suggestedActions: [
+      {
+        title: 'Generate BTC',
+        label: 'price chart',
+        action: 'Generate a price chart for BTC over 7 days',
+      },
+      {
+        title: 'Show supported',
+        label: 'tokens',
+        action: 'What cryptocurrency tokens are supported?',
+      },
+      {
+        title: 'Generate ETH',
+        label: 'price chart',
+        action: 'Generate a price chart for ETH over 30 days',
+      },
+    ],
+  },
   // {
   //   id: 'langgraph-workflow' as const,
   //   name: 'Greeting Optimizer',
@@ -179,6 +201,7 @@ export const chatAgents = [
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
   ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
+  ['coingecko', 'http://coingecko-mcp-server:3011/mcp'], // CoinGecko MCP server
   // ['langgraph-workflow', 'http://langgraph-workflow-agent:3009/sse'],
   // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
   // ['lending-agent', 'http://lending-agent:3006/sse'],

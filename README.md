@@ -1,7 +1,7 @@
 ![Graphic](img/Banner.png)
 
 <p align="center"> 
-   &nbsp&nbsp <a href="https://docs.emberai.xyz/vibekit/introduction">Documentation </a> &nbsp&nbsp | &nbsp&nbsp <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates"> Agent Templates</a>  &nbsp&nbsp |  &nbsp&nbsp   <a href="https://www.emberai.xyz/"> Ember AI</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://discord.com/invite/bgxWQ2fSBR"> Support Discord </a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://t.me/EmberChat"> Ember Telegram</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://x.com/EmberAGI"> 𝕏 </a> &nbsp&nbsp
+   &nbsp&nbsp <a href="https://docs.emberai.xyz/vibekit/introduction">Documentation </a> &nbsp&nbsp | &nbsp&nbsp <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/CONTRIBUTIONS.md"> Contributions </a> &nbsp&nbsp | &nbsp&nbsp <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates"> Agent Templates</a>  &nbsp&nbsp |  &nbsp&nbsp   <a href="https://www.emberai.xyz/"> Ember AI</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://discord.com/invite/bgxWQ2fSBR"> Support Discord </a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://t.me/EmberChat"> Ember Telegram</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://x.com/EmberAGI"> 𝕏 </a> &nbsp&nbsp
 </p>
 
 ## 🧭 Table of Contents
@@ -27,11 +27,11 @@ Here's an overview of how everything fits together:
 
 ### 📚 Vibekit Concepts
 
-For deeper understanding of Vibekit concepts, explore our comprehensive lesson series in [this directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/arbitrum-vibekit-core/docs). These lessons cover everything from basic concepts to advanced agent development patterns, including skills architecture, LLM orchestration, deployment strategies, and production best practices.
+For deeper understanding of Vibekit concepts, explore our comprehensive [lesson series](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/arbitrum-vibekit-core/docs). They cover everything from basic concepts to advanced agent development patterns, including skills architecture, LLM orchestration, deployment strategies, and production best practices.
 
 ## 🧬 Repository Organization
 
-Vibekit is structured as a monorepo with TypeScript at its core, with a Rust implementation on the horizon. Here's how it's organized:
+Vibekit is structured as a TypeScript monorepo, with a Rust implementation on the horizon. Here's how it's organized:
 
 ```
 Vibekit/
@@ -45,12 +45,12 @@ Vibekit/
 │   ├── templates/                  # Agent templates
 │   ├── examples/                   # [Legacy] Older architecture examples
 │   ├── lib/
+│   │   ├── a2a-types/              # Agent-to-Agent type definitions
 │   │   ├── arbitrum-vibekit-core/  # Core framework implementation
 │   │   ├── ember-api/              # Ember API client
 │   │   ├── ember-schemas/          # Schema definitions
 │   │   ├── mcp-tools/              # MCP tool server implementations
-│   │   ├── test-utils/             # Testing utilities
-│   │   └── a2a-types/              # Agent-to-Agent type definitions
+│   │   └── test-utils/             # Testing utilities
 │   ├── test/                       # Integration tests
 │   └── scripts/                    # Build and utility scripts
 ├── img/                            # Documentation images
@@ -62,17 +62,17 @@ Vibekit/
 
 ### Key Directories
 
-- **`templates/`**: Production-ready agent templates with skills, tools, hooks, and modern deployment patterns. **Start here for new projects.**
+- **`templates/`**: Production-ready agent templates with skills, tools, hooks, and modern deployment patterns. Start here for creating new agents.
 
 - **`examples/` [Legacy]**: Older architecture examples. Use templates instead for new development.
 
-- **`clients/web/`**: Web frontend for interacting with agents via MCP.
+- **`clients/web/`**: Web frontend for interacting with agents.
 
-- **`lib/`**: Core framework libraries and supporting packages:
+- **`lib/`**: Core framework libraries and supporting packages.
 
 - **`.cursor/`**: Cursor IDE configuration and development rules for vibe coding.
 
-- **`.claude/`**: Claude AI prompt engineering files.
+- **`.claude/`**: Claude AI prompt engineering files for vibe coding.
 
 ## ⚡ Developer Quickstart
 
@@ -80,7 +80,7 @@ Follow these steps to build and run DeFi agents:
 
 ### 1. Get the Code
 
-How you get the code depends on whether you want to simply run the project or contribute to its development. If you just want to run Vibekit locally or explore the codebase, you can clone the repository through command line or your preferred IDE:
+How you get the code depends on whether you want to simply run the project or contribute to its development. If you want to run Vibekit locally or explore the codebase, you can clone the repository through command line or your preferred IDE:
 
 ```
 git clone https://github.com/EmberAGI/arbitrum-vibekit.git &&
@@ -337,6 +337,6 @@ You'll find a collection of ready-to-use MCP tools, along with step-by-step guid
 
 ## 💰 Contributions & Bounties
 
-We welcome contributions from the community! If you'd like to help improve Vibekit, please check out our [Contribution Guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md). These guidelines detail the process for forking the repository, making your changes, and submitting a pull request.
+We welcome contributions from the community! If you'd like to help improve Vibekit or expand its capabilities, please check out our [contribution guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md).
 
-To show our appreciation, we have launched an [incentive program](https://docs.google.com/forms/d/e/1FAIpQLSe-GF7UcUOuyEMsgnVpLFrG_W83RAchaPPqOCD83pZaZXskgw/viewform) that rewards [valuable contributions](https://github.com/orgs/EmberAGI/projects/13) to the Vibekit. Checkout our [blog post](https://www.emberai.xyz/blog/introducing-arbitrum-vibekit-and-the-trailblazer-fund-2-0) to learn more!
+To show our appreciation, we have launched an [incentive program](https://www.emberai.xyz/blog/introducing-arbitrum-vibekit-and-the-trailblazer-fund-2-0) that rewards valuable contributions to the Vibekit. Checkout our [bounty board](https://github.com/orgs/EmberAGI/projects/13) to get started!

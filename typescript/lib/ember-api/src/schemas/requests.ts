@@ -1,7 +1,7 @@
-import { z } from "zod";
-import { ChainSchema, TokenSchema } from "./core.js";
-import { CapabilitySchema } from "./capabilities.js";
-import { CapabilityTypeSchema } from "./enums.js";
+import { z } from 'zod';
+import { ChainSchema, TokenSchema } from './core.js';
+import { CapabilitySchema } from './capabilities.js';
+import { CapabilityTypeSchema } from './enums.js';
 
 export const GetChainsRequestSchema = z.object({
   filter: z.string(),
@@ -26,13 +26,9 @@ export type GetTokensResponse = z.infer<typeof GetTokensResponseSchema>;
 export const GetCapabilitiesRequestSchema = z.object({
   type: CapabilityTypeSchema,
 });
-export type GetCapabilitiesRequest = z.infer<
-  typeof GetCapabilitiesRequestSchema
->;
+export type GetCapabilitiesRequest = z.infer<typeof GetCapabilitiesRequestSchema>;
 
 export const GetCapabilitiesResponseSchema = z.object({
   capabilities: z.array(CapabilitySchema),
 });
-export type GetCapabilitiesResponse = z.infer<
-  typeof GetCapabilitiesResponseSchema
->;
+export type GetCapabilitiesResponse = z.infer<typeof GetCapabilitiesResponseSchema>;

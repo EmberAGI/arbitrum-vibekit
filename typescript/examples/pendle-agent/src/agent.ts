@@ -67,6 +67,15 @@ console.log(
 
 // Model can be specified via environment variable
 const modelOverride = process.env.AI_MODEL;
+
+// Default models for each provider
+const DEFAULT_MODELS: Record<string, string> = {
+  openrouter: 'x-ai/grok-3-mini',
+  openai: 'gpt-4o',
+  xai: 'grok-3',
+  hyperbolic: 'meta-llama/Llama-3.3-70B-Instruct',
+};
+
 if (modelOverride) {
   console.log(`Using model: ${modelOverride}`);
 }

@@ -33,7 +33,7 @@ Do not update document right after creating it. Wait for user feedback or reques
 `;
 
 export const regularPrompt =
-  'You are a friendly DeFi and crypto assistant! Keep your responses concise and helpful. Never talk about anything not related to DeFi and crypto. You have access to several AI agent tools to help you with your tasks.';
+  'You are a friendly DeFi and crypto assistant! Keep your responses concise and helpful. Never talk about anything not related to DeFi and crypto. You have access to several AI agent tools and MCP server tools to help you with your tasks. You can generate price charts for crypto tokens using the chart generation tools available through the MCP servers.';
 
 export const systemPrompt = ({
   selectedChatModel,

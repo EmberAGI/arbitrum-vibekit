@@ -1,6 +1,6 @@
 # Ember Agent
 
-A unified multi-skill DeFi agent supporting swapping, lending, liquidity provision, and Pendle operations on Arbitrum. Built using the Arbitrum Vibekit framework.
+A unified multi-skill DeFi agent supporting all EmberAI MCP tools such as swapping, lending, liquidity provision, perpetuals trading, and Pendle operations.
 
 **📚 Learn the architecture**: This agent demonstrates advanced multi-skill patterns covered in [Lesson 19: Skills Foundation](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-19.md), [Lesson 22: Decision Framework](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-22.md), and [Lesson 16: Hook Enhancement](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-16.md).
 
@@ -8,11 +8,12 @@ A unified multi-skill DeFi agent supporting swapping, lending, liquidity provisi
 
 ### Skills
 
-- **Token Swapping** - Swap tokens via Camelot DEX
-- **Lending Operations** - Supply, borrow, repay, withdraw via Aave
-- **Liquidity Provision** - Add/remove liquidity on Camelot V3
-- **Pendle Protocol** - PT/YT trading and market operations
-- **Documentation Expert** - Protocol-specific documentation and Q&A
+- **Token Swapping**: Swap tokens via Camelot DEX
+- **Documentation Expert**: Protocol-specific documentation and Q&A
+- **Lending Operations**: Supply, borrow, repay, withdraw via Aave (coming soon)
+- **Liquidity Provision**: Add/remove liquidity on Camelot V3 (coming soon)
+- **Pendle Protocol**: PT/YT trading and market operations (coming soon)
+- **Perpetuals Trading**: GMX perpetuals trading operations such as creating long/short positions, managing orders, and querying markets (coming soon)
 
 ### Architecture
 
@@ -142,14 +143,9 @@ src/
 │   └── types.ts          # Context type definitions
 ├── skills/
 │   ├── swapping.ts       # Token swapping skill
-│   ├── lending.ts        # Lending operations skill
-│   ├── liquidity.ts      # Liquidity provision skill
-│   ├── pendle.ts         # Pendle protocol skill
 │   └── documentation.ts  # Documentation expert skill
 ├── tools/
 │   ├── swapTokens.ts     # Token swapping tool
-│   ├── supply.ts         # Aave supply tool
-│   ├── borrow.ts         # Aave borrow tool
 │   └── ...               # Other protocol-specific tools
 └── hooks/
     ├── index.ts          # Hook composition utilities
@@ -172,55 +168,3 @@ pnpm test:watch
 # Run tests once (CI mode)
 pnpm test:run
 ```
-
-### Code Quality
-
-```bash
-# Format code
-pnpm format
-
-# Check formatting
-pnpm format:check
-
-# Lint (from workspace root)
-pnpm recursive run lint
-```
-
-## Configuration
-
-### Transport Options
-
-- **StreamableHTTP** (default): Modern, efficient transport
-- **SSE**: Legacy transport for backwards compatibility
-
-Set `ENABLE_LEGACY_SSE_TRANSPORT=true` to enable both transports.
-
-### AI Provider Selection
-
-The agent automatically selects the best available provider:
-
-1. OpenRouter (recommended - access to multiple models)
-2. OpenAI (GPT models)
-3. Anthropic (Claude models)
-
-### Protocol Integration
-
-Each skill connects to its respective protocol:
-
-- **Swapping**: Camelot DEX on Arbitrum
-- **Lending**: Aave V3 on Arbitrum
-- **Liquidity**: Camelot V3 pools
-- **Pendle**: Pendle protocol markets
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make changes following the existing patterns
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
-
-## License
-
-MIT License - see LICENSE file for details.

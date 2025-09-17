@@ -4,6 +4,7 @@
   "description": "Ember On-chain Actions lending Agent Example built on the framework",
   "type": "module",
   "main": "dist/index.js",
+  "private": true,
   "scripts": {
     "build": "tsc --build",
     "dev": "tsx src/index.ts",

@@ -27,6 +27,18 @@ services:
       - 3005:3005
     restart: unless-stopped
 
+  coingecko-mcp-server:
+    build:
+      context: ./
+      dockerfile: lib/mcp-tools/coingecko-mcp-server/Dockerfile
+    container_name: vibekit-coingecko-mcp-server
+    env_file:
+      - path: .env
+        required: true
+    ports:
+      - 3011:3011
+    restart: unless-stopped
+
   # langgraph-workflow-agent:
   #   build:
   #     context: ./

@@ -74,18 +74,19 @@ export async function saveChat({
         .from(user)
         .where(eq(user.id, userId));
       console.log('existingUser', existingUser);
-      
+
       if (!existingUser) {
         console.log('creating new user');
         // Create new user with the provided userId and address
-        await db
-          .insert(user)
-          .values({ address, id: userId });
+        await db.insert(user).values({ address, id: userId });
 
         console.log('actualUserId');
       }
     } catch (error) {
-      console.error('Failed to get user from database or create user + ', error);
+      console.error(
+        'Failed to get user from database or create user + ',
+        error,
+      );
       throw error;
     }
 

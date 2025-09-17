@@ -1,5 +1,5 @@
-"use client";
-import { useState } from "react";
+'use client';
+import { useState } from 'react';
 
 interface ChipToggleProps {
   options: { value: string; label: string }[];
@@ -13,11 +13,11 @@ export function ChipToggle({
   onValueChange,
 }: ChipToggleProps) {
   const [selectedValue, setSelectedValue] = useState<string | undefined>(
-    defaultValue
+    defaultValue,
   );
 
   const handleSelect = (value: string) => {
-    console.log("val", value);
+    console.log('val', value);
     setSelectedValue(value);
     onValueChange?.(value);
   };
@@ -36,8 +36,8 @@ export function ChipToggle({
               border border-gray-200 
               ${
                 isSelected
-                  ? "bg-cyan-700 text-white"
-                  : " bg-gray-900 text-white hover:bg-gray-100"
+                  ? 'bg-cyan-700 text-white'
+                  : ' bg-gray-900 text-white hover:bg-gray-100'
               }
             `}
           >
