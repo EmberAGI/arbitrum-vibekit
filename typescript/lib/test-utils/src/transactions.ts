@@ -186,7 +186,7 @@ export async function extractAndExecuteTransactions(
   const transactionsToExecute = txPlanEntries.map(tx => ({
     to: tx.to,
     data: tx.data,
-    value: tx.value || '0' // Ensure value is a string, defaulting to '0'
+    value: tx.value || '0', // Ensure value is a string, defaulting to '0'
   }));
 
   // Execute the transactions using the (new) executeTransactionPlan
@@ -226,4 +226,4 @@ export async function executeTransactionPlan(
   }
 
   return txHashes;
-} 
+}

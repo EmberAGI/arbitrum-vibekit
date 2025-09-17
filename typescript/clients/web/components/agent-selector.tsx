@@ -1,18 +1,18 @@
-"use client";
+'use client';
 
-import { startTransition, useMemo, useOptimistic, useState } from "react";
-import { saveChatAgentAsCookie } from "@/app/(chat)/actions";
-import { Button } from "@/components/ui/button";
+import { startTransition, useMemo, useOptimistic, useState } from 'react';
+import { saveChatAgentAsCookie } from '@/app/(chat)/actions';
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
 
-import { CheckCircleFillIcon, ChevronDownIcon } from "./icons";
-import { chatAgents } from "@/agents-config";
+import { CheckCircleFillIcon, ChevronDownIcon } from './icons';
+import { chatAgents } from '@/agents-config';
 
 export function AgentSelector({
   selectedAgentId,
@@ -26,7 +26,7 @@ export function AgentSelector({
 
   const selectedChatAgent = useMemo(
     () => chatAgents.find((chatAgent) => chatAgent.id === optimisticAgentId),
-    [optimisticAgentId]
+    [optimisticAgentId],
   );
 
   return (
@@ -34,8 +34,8 @@ export function AgentSelector({
       <DropdownMenuTrigger
         asChild
         className={cn(
-          "w-fit data-[state=open]:bg-accent data-[state=open]:text-accent-foreground",
-          className
+          'w-fit data-[state=open]:bg-accent data-[state=open]:text-accent-foreground',
+          className,
         )}
       >
         <Button

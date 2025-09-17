@@ -53,7 +53,7 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
 
     agent = Agent.create(agentConfig, {
       llm: {
-        model: providers.openrouter!('google/gemini-2.5-flash'),
+        model: providers.openrouter!('x-ai/grok-3-mini'),
       },
       cors: true,
       basePath: '/api/v1',

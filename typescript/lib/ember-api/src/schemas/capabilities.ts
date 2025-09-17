@@ -1,5 +1,5 @@
-import { z } from "zod";
-import { TokenSchema } from "./core.js";
+import { z } from 'zod';
+import { TokenSchema } from './core.js';
 
 export const SwapCapabilitySchema = z.object({
   capabilityId: z.string(),
@@ -13,13 +13,13 @@ export const LendingCapabilitySchema = z.object({
 });
 export type LendingCapability = z.infer<typeof LendingCapabilitySchema>;
 
-export const CapabilitySchema = z.discriminatedUnion("type", [
+export const CapabilitySchema = z.discriminatedUnion('type', [
   z.object({
-    type: z.literal("swap"),
+    type: z.literal('swap'),
     swapCapability: SwapCapabilitySchema,
   }),
   z.object({
-    type: z.literal("lending"),
+    type: z.literal('lending'),
     lendingCapability: LendingCapabilitySchema,
   }),
 ]);
