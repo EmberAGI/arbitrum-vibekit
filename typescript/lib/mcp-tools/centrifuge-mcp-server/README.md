@@ -260,3 +260,4 @@ MIT License - see [LICENSE](../../../../LICENSE) for details.
 - [Centrifuge SDK](https://github.com/centrifuge/centrifuge-sdk)
 - [Arbitrum Vibekit Core](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/arbitrum-vibekit-core)
 - [RWA Investment Agent Template](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/rwa-investment-agent)
+
