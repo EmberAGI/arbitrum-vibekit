@@ -24,7 +24,7 @@ import { generateTitleFromUserMessage } from '../../actions';
 // import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 // import { getWeather } from '@/lib/ai/tools/get-weather';
 import { isProductionEnvironment } from '@/lib/constants';
-import { openRouterProvider } from '@/lib/ai/providers';
+import { openAIProvider } from '@/lib/ai/providers';
 import { getTools as getDynamicTools } from '@/lib/ai/tools/tool-agents';
 // import { generateChart } from '@/lib/ai/tools/generate-chart'; // Now using MCP server
 
@@ -78,7 +78,13 @@ export async function POST(request: Request) {
       return new Response('No user message found', { status: 400 });
     }
 
-    const chat = await getChatById({ id });
+    let chat;
+    try {
+      chat = await getChatById({ id });
+    } catch (error) {
+      console.error('Error getting chat by ID:', error);
+      throw error;
+    }
 
     if (!chat) {
       try {
@@ -86,12 +92,6 @@ export async function POST(request: Request) {
           message: userMessage,
         });
 
-        await saveChat({
-          id,
-          userId: session.user.id,
-          title,
-          address: validatedContext.walletAddress || '',
-        });
       } catch (error) {
         console.error(
           '[ROUTE] Error in title generation or chat saving:',
@@ -124,95 +124,96 @@ export async function POST(request: Request) {
       throw error;
     }
 
+    console.log('Chat ID:', id);
+    // Get dynamic tools
     let dynamicTools;
     try {
       dynamicTools = await getDynamicTools();
+      console.log('Dynamic tools:', dynamicTools);
     } catch (error) {
-      console.error('[ROUTE] Error loading dynamic tools:', error);
-      dynamicTools = {};
+      console.error('Error getting dynamic tools:', error);
+      dynamicTools = {}; // Use empty object as fallback
     }
 
     return createDataStreamResponse({
       execute: (dataStream) => {
         console.log('[ROUTE] Executing stream...');
 
-        try {
-          const model = openRouterProvider.languageModel(selectedChatModel);
+        const model = openAIProvider.languageModel(selectedChatModel);
 
-          const systemPromptText = systemPrompt({
+        const result = streamText({
+          model,
+          system: systemPrompt({
             selectedChatModel,
             walletAddress: validatedContext.walletAddress,
-          });
+          }),
+          messages,
+          maxSteps: 20,
+          experimental_transform: smoothStream({ chunking: 'word' }),
+          experimental_generateMessageId: generateUUID,
+          tools: {
+            //getWeather,
+            //createDocument: createDocument({ session, dataStream }),
+            //updateDocument: updateDocument({ session, dataStream }),
+            //requestSuggestions: requestSuggestions({
+            //  session,
+            //  dataStream,
+            //}),
+            ...dynamicTools,
+            // generateChart, // Now handled by MCP server via dynamicTools
+          },
+          onFinish: async ({ response }) => {
+            console.log('🔍 [ROUTE] StreamText finished');
+            if (session.user?.id) {
+              try {
+                const assistantId = getTrailingMessageId({
+                  messages: response.messages.filter(
+                    (message) => message.role === 'assistant',
+                  ),
+                });
 
-          const result = streamText({
-            model,
-            system: systemPromptText,
-            messages,
-            maxSteps: 20,
-            experimental_transform: smoothStream({ chunking: 'word' }),
-            experimental_generateMessageId: generateUUID,
-            tools: {
-              //getWeather,
-              //createDocument: createDocument({ session, dataStream }),
-              //updateDocument: updateDocument({ session, dataStream }),
-              //requestSuggestions: requestSuggestions({
-              //  session,
-              //  dataStream,
-              //}),
-              ...dynamicTools,
-              // generateChart, // Now handled by MCP server via dynamicTools
-            },
-            onFinish: async ({ response }) => {
-              console.log('🔍 [ROUTE] StreamText finished');
-              if (session.user?.id) {
-                try {
-                  const assistantId = getTrailingMessageId({
-                    messages: response.messages.filter(
-                      (message) => message.role === 'assistant',
-                    ),
-                  });
-
-                  if (!assistantId) {
-                    throw new Error('No assistant message found!');
-                  }
-
-                  const [, assistantMessage] = appendResponseMessages({
-                    messages: [userMessage],
-                    responseMessages: response.messages,
-                  });
-
-                  await saveMessages({
-                    messages: [
-                      {
-                        id: assistantId,
-                        chatId: id,
-                        role: assistantMessage.role,
-                        parts: assistantMessage.parts,
-                        attachments:
-                          assistantMessage.experimental_attachments ?? [],
-                        createdAt: new Date(),
-                      },
-                    ],
-                  });
-                } catch (saveError) {
-                  console.error(
-                    '[ROUTE] Failed to save assistant response:',
-                    saveError,
-                  );
+                if (!assistantId) {
+                  throw new Error('No assistant message found!');
                 }
-              }
-            },
-            experimental_telemetry: {
-              isEnabled: isProductionEnvironment,
-              functionId: 'stream-text',
-            },
-          });
 
+                const [, assistantMessage] = appendResponseMessages({
+                  messages: [userMessage],
+                  responseMessages: response.messages,
+                });
+
+                await saveMessages({
+                  messages: [
+                    {
+                      id: assistantId,
+                      chatId: id,
+                      role: assistantMessage.role,
+                      parts: assistantMessage.parts,
+                      attachments:
+                        assistantMessage.experimental_attachments ?? [],
+                      createdAt: new Date(),
+                    },
+                  ],
+                });
+              } catch (saveError) {
+                console.error(
+                  '[ROUTE] Failed to save assistant response:',
+                  saveError,
+                );
+              }
+            }
+          },
+          experimental_telemetry: {
+            isEnabled: isProductionEnvironment,
+            functionId: 'stream-text',
+          },
+        });
+
+        try {
           result.mergeIntoDataStream(dataStream, {
             sendReasoning: true,
           });
         } catch (streamError) {
-          console.error('[ROUTE] Stream error details:', {
+          console.error('[ROUTE] Stream merge error details:', {
             name: streamError instanceof Error ? streamError.name : 'Unknown',
             message:
               streamError instanceof Error

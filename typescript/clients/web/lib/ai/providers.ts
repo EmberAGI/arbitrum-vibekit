@@ -5,6 +5,7 @@ import {
 } from 'ai';
 import { groq } from '@ai-sdk/groq';
 import { xai } from '@ai-sdk/xai';
+import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { isTestEnvironment } from '../constants';
 import {
@@ -18,56 +19,81 @@ const openRouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
+const openAI = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
 export const openRouterProvider = isTestEnvironment
   ? customProvider({
-      languageModels: {
-        'chat-model': chatModel,
-        'chat-model-reasoning': reasoningModel,
-        'title-model': titleModel,
-        'artifact-model': artifactModel,
-      },
-    })
+    languageModels: {
+      'chat-model': chatModel,
+      'chat-model-reasoning': reasoningModel,
+      'title-model': titleModel,
+      'artifact-model': artifactModel,
+    },
+  })
   : customProvider({
-      languageModels: {
-        'chat-model': openRouter('google/gemini-2.5-pro-preview', {
-          reasoning: {
-            exclude: true,
-            effort: 'low',
-          },
-        }),
-        'chat-model-medium': openRouter('google/gemini-2.5-pro-preview', {
-          reasoning: {
-            effort: 'medium',
-          },
-        }),
-        'title-model': openRouter('google/gemini-2.5-flash'),
-        'artifact-model': openRouter('google/gemini-2.5-flash'),
-      },
-      imageModels: {
-        'small-model': xai.image('grok-2-image'),
-      },
-    });
+    languageModels: {
+      'chat-model': openRouter('google/gemini-2.5-pro-preview', {
+        reasoning: {
+          exclude: true,
+          effort: 'low',
+        },
+      }),
+      'chat-model-medium': openRouter('google/gemini-2.5-pro-preview', {
+        reasoning: {
+          effort: 'medium',
+        },
+      }),
+      'title-model': openRouter('google/gemini-2.5-flash'),
+      'artifact-model': openRouter('google/gemini-2.5-flash'),
+    },
+    imageModels: {
+      'small-model': xai.image('grok-2-image'),
+    },
+  });
+
+export const openAIProvider = isTestEnvironment
+  ? customProvider({
+    languageModels: {
+      'chat-model': chatModel,
+      'chat-model-reasoning': reasoningModel,
+      'title-model': titleModel,
+      'artifact-model': artifactModel,
+    },
+  })
+  : customProvider({
+    languageModels: {
+      'chat-model': openAI('gpt-4o-mini'),
+      'chat-model-medium': openAI('gpt-4o'),
+      'title-model': openAI('gpt-4o-mini'),
+      'artifact-model': openAI('gpt-4o-mini'),
+    },
+    imageModels: {
+      'small-model': openAI.image('dall-e-3'),
+    },
+  });
 
 export const grokProvider = isTestEnvironment
   ? customProvider({
-      languageModels: {
-        'chat-model': chatModel,
-        'chat-model-reasoning': reasoningModel,
-        'title-model': titleModel,
-        'artifact-model': artifactModel,
-      },
-    })
+    languageModels: {
+      'chat-model': chatModel,
+      'chat-model-reasoning': reasoningModel,
+      'title-model': titleModel,
+      'artifact-model': artifactModel,
+    },
+  })
   : customProvider({
-      languageModels: {
-        'chat-model': xai('grok-2-1212'),
-        'chat-model-reasoning': wrapLanguageModel({
-          model: groq('deepseek-r1-distill-llama-70b'),
-          middleware: extractReasoningMiddleware({ tagName: 'think' }),
-        }),
-        'title-model': xai('grok-2-1212'),
-        'artifact-model': xai('grok-2-1212'),
-      },
-      imageModels: {
-        'small-model': xai.image('grok-2-image'),
-      },
-    });
+    languageModels: {
+      'chat-model': xai('grok-2-1212'),
+      'chat-model-reasoning': wrapLanguageModel({
+        model: groq('deepseek-r1-distill-llama-70b'),
+        middleware: extractReasoningMiddleware({ tagName: 'think' }),
+      }),
+      'title-model': xai('grok-2-1212'),
+      'artifact-model': xai('grok-2-1212'),
+    },
+    imageModels: {
+      'small-model': xai.image('grok-2-image'),
+    },
+  });

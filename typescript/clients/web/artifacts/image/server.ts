@@ -1,4 +1,4 @@
-import { openRouterProvider } from '@/lib/ai/providers';
+import { openAIProvider } from '@/lib/ai/providers';
 import { createDocumentHandler } from '@/lib/artifacts/server';
 import { experimental_generateImage } from 'ai';
 
@@ -8,7 +8,7 @@ export const imageDocumentHandler = createDocumentHandler<'image'>({
     let draftContent = '';
 
     const { image } = await experimental_generateImage({
-      model: openRouterProvider.imageModel('small-model'),
+      model: openAIProvider.imageModel('small-model'),
       prompt: title,
       n: 1,
     });
@@ -26,7 +26,7 @@ export const imageDocumentHandler = createDocumentHandler<'image'>({
     let draftContent = '';
 
     const { image } = await experimental_generateImage({
-      model: openRouterProvider.imageModel('small-model'),
+      model: openAIProvider.imageModel('small-model'),
       prompt: description,
       n: 1,
     });
