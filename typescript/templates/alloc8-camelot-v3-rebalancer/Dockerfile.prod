@@ -1,0 +1,42 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Copy workspace configuration
+COPY typescript/pnpm-workspace.yaml ./
+COPY typescript/package.json ./
+COPY typescript/pnpm-lock.yaml ./
+COPY typescript/tsconfig.base.json ./
+
+# Copy lib dependencies
+COPY typescript/lib ./lib
+
+# Copy agent source
+COPY typescript/templates/alloc8-camelot-v3-rebalancer ./templates/alloc8-camelot-v3-rebalancer
+
+# Install dependencies (production only)
+RUN pnpm install --frozen-lockfile --prod
+
+# Build the agent
+WORKDIR /app/templates/alloc8-camelot-v3-rebalancer
+RUN pnpm build
+
+# Remove dev dependencies and source files
+RUN rm -rf src node_modules && pnpm install --frozen-lockfile --prod
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nodejs -u 1001
+
+# Change ownership
+RUN chown -R nodejs:nodejs /app
+USER nodejs
+
+# Expose port
+EXPOSE 3001
+
+# Start the agent
+CMD ["node", "dist/index.js"]
