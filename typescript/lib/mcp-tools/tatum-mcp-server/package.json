@@ -1,0 +1,33 @@
+{
+  "name": "@tatum/mcp-server",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "tatum-mcp-server": "./dist/index.js"
+  },
+  "scripts": {
+    "prepare": "pnpm build",
+    "prepublishOnly": "pnpm build",
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "inspect:npx": "pnpm run build && pnpm dlx @modelcontextprotocol/inspector node ./dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "dotenv": "catalog:",
+    "express": "catalog:",
+    "p-retry": "^6.2.1",
+    "node-fetch": "^3.3.2",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/express": "^5.0.1",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  }
+}
+
+
