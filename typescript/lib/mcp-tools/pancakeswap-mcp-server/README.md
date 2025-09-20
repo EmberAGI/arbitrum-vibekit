@@ -152,6 +152,207 @@ Get a list of common token addresses for the specified chain.
 **Parameters:**
 - `chain` (string, optional): Chain identifier
 
+## 🌊 Phase 1: Liquidity Pool Functions
+
+### 7. `get_pair_address`
+Get the PancakeSwap V2 pair address for two tokens.
+
+**Parameters:**
+- `tokenA` (string): First token contract address
+- `tokenB` (string): Second token contract address
+- `chain` (string, optional): Chain identifier
+
+### 8. `get_pair_info`
+Get detailed information about a PancakeSwap V2 pair including reserves and tokens.
+
+**Parameters:**
+- `pairAddress` (string): Pair contract address
+- `chain` (string, optional): Chain identifier
+
+### 9. `get_pair_info_by_tokens`
+Get pair information by providing two token addresses.
+
+**Parameters:**
+- `tokenA` (string): First token contract address
+- `tokenB` (string): Second token contract address
+- `chain` (string, optional): Chain identifier
+
+### 10. `get_liquidity_position`
+Get a user's liquidity position in a PancakeSwap V2 pair.
+
+**Parameters:**
+- `pairAddress` (string): Pair contract address
+- `userAddress` (string): User wallet address
+- `chain` (string, optional): Chain identifier
+
+### 11. `get_all_pairs_length`
+Get the total number of pairs created on PancakeSwap V2.
+
+**Parameters:**
+- `chain` (string, optional): Chain identifier
+
+## 🚜 Phase 2: Farming & Staking Functions
+
+### 12. `get_farm_info`
+Get information about a PancakeSwap farming pool (yield farming).
+
+**Parameters:**
+- `pid` (number): Pool ID in MasterChef contract
+- `chain` (string, optional): Chain identifier
+
+### 13. `get_farm_position`
+Get a user's farming position and pending rewards in a PancakeSwap farm.
+
+**Parameters:**
+- `pid` (number): Pool ID in MasterChef contract
+- `userAddress` (string): User wallet address
+- `chain` (string, optional): Chain identifier
+
+### 14. `get_farm_pool_length`
+Get the total number of farming pools in PancakeSwap MasterChef.
+
+**Parameters:**
+- `chain` (string, optional): Chain identifier
+
+### 15. `get_cake_per_block`
+Get the CAKE reward rate per block in PancakeSwap farming.
+
+**Parameters:**
+- `chain` (string, optional): Chain identifier
+
+### 16. `get_syrup_pool_info`
+Get information about PancakeSwap's auto-compounding Syrup Pool.
+
+**Parameters:**
+- `chain` (string, optional): Chain identifier
+
+### 17. `get_syrup_position`
+Get a user's position in PancakeSwap's auto-compounding Syrup Pool.
+
+**Parameters:**
+- `userAddress` (string): User wallet address
+- `chain` (string, optional): Chain identifier
+
+## 🎯 Phase 3: Prediction Markets, Lottery & NFT Marketplace
+
+### 18. `get_current_prediction_epoch`
+Get the current epoch number for PancakeSwap prediction markets.
+
+**Parameters:**
+- `chain` (string, optional): Chain identifier
+
+### 19. `get_prediction_round`
+Get information about a specific prediction market round.
+
+**Parameters:**
+- `epoch` (number): Epoch number to query
+- `chain` (string, optional): Chain identifier
+
+### 20. `get_prediction_position`
+Get a user's position in a prediction market round.
+
+**Parameters:**
+- `epoch` (number): Epoch number
+- `userAddress` (string): User wallet address
+- `chain` (string, optional): Chain identifier
+
+### 21. `get_current_lottery_id`
+Get the current lottery ID for PancakeSwap lottery.
+
+**Parameters:**
+- `chain` (string, optional): Chain identifier
+
+### 22. `get_lottery_info`
+Get information about a specific PancakeSwap lottery.
+
+**Parameters:**
+- `lotteryId` (number): Lottery ID to query
+- `chain` (string, optional): Chain identifier
+
+### 23. `get_user_lottery_info`
+Get a user's lottery ticket information and status.
+
+**Parameters:**
+- `lotteryId` (number): Lottery ID
+- `userAddress` (string): User wallet address
+- `chain` (string, optional): Chain identifier
+
+### 24. `get_nft_collections`
+Get all NFT collections available on PancakeSwap marketplace.
+
+**Parameters:**
+- `chain` (string, optional): Chain identifier
+
+### 25. `get_nft_collection_info`
+Get detailed information about a specific NFT collection.
+
+**Parameters:**
+- `collectionAddress` (string): NFT collection contract address
+- `chain` (string, optional): Chain identifier
+
+### 26. `get_nft_asks_by_collection`
+Get all NFT sale offers (asks) for a specific collection.
+
+**Parameters:**
+- `collectionAddress` (string): NFT collection contract address
+- `chain` (string, optional): Chain identifier
+
+## 📈 Phase 4: Advanced Trading Features
+
+### 27. `find_optimal_route`
+Find the optimal swap route with gas optimization for token exchanges.
+
+**Parameters:**
+- `tokenIn` (string): Input token contract address
+- `tokenOut` (string): Output token contract address
+- `amountIn` (string): Amount of input token (in wei)
+- `maxHops` (number, optional): Maximum number of hops (default: 3)
+- `chain` (string, optional): Chain identifier
+
+### 28. `get_pool_v3_info`
+Get detailed information about a PancakeSwap V3 pool.
+
+**Parameters:**
+- `tokenA` (string): First token contract address
+- `tokenB` (string): Second token contract address
+- `fee` (number): Pool fee tier (e.g., 500 for 0.05%, 3000 for 0.3%)
+- `chain` (string, optional): Chain identifier
+
+### 29. `get_position_v3_info`
+Get information about a user's PancakeSwap V3 liquidity position.
+
+**Parameters:**
+- `owner` (string): Position owner address
+- `token0` (string): Token0 contract address
+- `token1` (string): Token1 contract address
+- `fee` (number): Pool fee tier
+- `tickLower` (number): Lower tick of the position
+- `tickUpper` (number): Upper tick of the position
+- `chain` (string, optional): Chain identifier
+
+### 30. `get_trading_volume`
+Get 24-hour trading volume and price analytics for a token.
+
+**Parameters:**
+- `tokenAddress` (string): Token contract address
+- `chain` (string, optional): Chain identifier
+
+### 31. `get_portfolio_summary`
+Get a comprehensive summary of a user's entire PancakeSwap portfolio.
+
+**Parameters:**
+- `userAddress` (string): User wallet address
+- `chain` (string, optional): Chain identifier
+
+### 32. `find_arbitrage_opportunities`
+Find potential arbitrage opportunities across different trading pairs.
+
+**Parameters:**
+- `tokenIn` (string): Input token contract address
+- `tokenOut` (string): Output token contract address
+- `amountIn` (string): Amount of input token to arbitrage (in wei)
+- `chain` (string, optional): Chain identifier
+
 ## 🌐 Supported Chains
 
 | Chain | Chain ID | Router Address | WETH Address |

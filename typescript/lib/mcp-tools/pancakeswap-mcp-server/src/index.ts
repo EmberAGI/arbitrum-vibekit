@@ -27,7 +27,7 @@ async function main() {
   const server = await createServer()
 
   // HTTP transport for web clients
-  const transports: { [sessionId: string]: SSEServerTransport } = {}
+  const transports = {} as { [sessionId: string]: SSEServerTransport }
 
   app.get('/sse', async (_req, res) => {
     console.log('Received SSE connection')
@@ -63,11 +63,11 @@ async function main() {
   // Start HTTP server
   const PORT = process.env.PORT || 3002
   app.listen(PORT, () => {
-    console.log(`🥞 PancakeSwap MCP Server running on port ${PORT}`)
-    console.log(`📍 Health check: http://localhost:${PORT}/health`)
-    console.log(`🔌 MCP SSE: http://localhost:${PORT}/sse`)
-    console.log(`📊 Chain: ${process.env.PANCAKESWAP_CHAIN || 'bsc'}`)
-    console.log(`🌐 RPC: ${process.env.RPC_URL || 'default'}`)
+    console.error(`🥞 PancakeSwap MCP Server running on port ${PORT}`)
+    console.error(`📍 Health check: http://localhost:${PORT}/health`)
+    console.error(`🔌 MCP SSE: http://localhost:${PORT}/sse`)
+    console.error(`📊 Chain: ${process.env.PANCAKESWAP_CHAIN || 'bsc'}`)
+    console.error(`🌐 RPC: ${process.env.RPC_URL || 'default'}`)
   })
 
   // Start stdio transport for local MCP clients
@@ -79,7 +79,7 @@ async function main() {
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {
-    console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`)
+    console.error(`\n🛑 Received ${signal}. Shutting down gracefully...`)
     process.exit(0)
   }
 

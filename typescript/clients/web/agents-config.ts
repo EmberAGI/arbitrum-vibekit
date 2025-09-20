@@ -51,6 +51,33 @@ export const chatAgents = [
       },
     ],
   },
+  {
+    id: 'pancakeswap' as const,
+    name: 'PancakeSwap',
+    description: 'PancakeSwap DeFi operations on BSC',
+    suggestedActions: [
+      {
+        title: 'Get CAKE',
+        label: 'token info',
+        action: 'Get token information for CAKE',
+      },
+      {
+        title: 'Get BNB to USDT',
+        label: 'price quote',
+        action: 'Get a price quote for swapping 1 BNB to USDT',
+      },
+      {
+        title: 'Check trading pairs',
+        label: 'on BSC',
+        action: 'Get all trading pairs on BSC',
+      },
+      {
+        title: 'Get farming pools',
+        label: 'information',
+        action: 'Get farming pool information from PancakeSwap',
+      },
+    ],
+  },
   // {
   //   id: 'langgraph-workflow' as const,
   //   name: 'Greeting Optimizer',
@@ -158,6 +185,7 @@ export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
   ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
   ['coingecko', 'http://coingecko-mcp-server:3011/mcp'], // CoinGecko MCP server
+  ['pancakeswap', 'http://localhost:3002/sse'], // PancakeSwap MCP server
   // ['langgraph-workflow', 'http://langgraph-workflow-agent:3009/sse'],
   // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
   // ['allora-price-prediction-agent', 'http://allora-price-prediction-agent:3008/sse'],

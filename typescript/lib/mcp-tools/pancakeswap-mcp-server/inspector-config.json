@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "pancakeswap": {
+      "command": "node",
+      "args": ["dist/index.js"],
+      "env": {
+        "PANCAKESWAP_CHAIN": "arbitrum",
+        "RPC_URL": "https://arb1.arbitrum.io/rpc",
+        "PORT": "3002",
+        "NODE_ENV": "development"
+      }
+    }
+  }
+}
