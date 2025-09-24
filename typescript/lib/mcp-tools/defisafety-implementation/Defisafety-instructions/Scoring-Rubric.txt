@@ -1,0 +1,49 @@
+DeFiSafety Scoring Rubric - Simplified Version
+==============================================
+
+Question Weights (Total: 100%)
+------------------------------
+Q1: Contract Addresses         - 15%
+Q2: Public Repository          - 5%
+Q3: Whitepaper                 - 5%
+Q4: Architecture               - 12%
+Q5: Bug Bounty                 - 8%
+Q6: Admin Controls             - 8%
+Q7: Upgradeability             - 10%
+Q8: Contract Ownership         - 7%
+Q9: Change Capabilities        - 12%
+Q10: Oracle Documentation      - 12%
+--------------------------------------
+TOTAL:                          100%
+
+Scoring Bands
+-------------
+90-100%: Excellent - Very strong documentation and transparency
+70-89%:  Good - Well documented with minor gaps
+50-69%:  Adequate - Acceptable documentation with notable gaps
+30-49%:  Poor - Significant documentation deficiencies
+0-29%:   Failing - Critical lack of documentation and transparency
+
+Score Calculation
+-----------------
+Final Score = Σ(Question Score × Question Weight)
+
+For example:
+- Q1 scores 100% with 15% weight = 15 points
+- Q2 scores 70% with 5% weight = 3.5 points
+- etc.
+
+The final score is the sum of all weighted scores.
+
+Important Notes
+---------------
+1. Scoring has been simplified to be more lenient than original DeFiSafety criteria
+2. Q5 (Testing) has been removed as test-to-code ratio is not implemented
+3. Contract ownership evaluation is based only on documentation, not code analysis
+4. For Q1, Q6, Q7, Q8: 70% and 100% scores are merged into 100% for simplicity
+5. All evaluations are based on publicly available documentation only
+
+Minimum Acceptable Score
+------------------------
+Projects should aim for at least 50% to be considered adequately documented.
+A score below 30% indicates serious transparency and documentation issues that should be addressed immediately.

@@ -1,0 +1,152 @@
+{
+  "Q1": {
+    "id": "Q1",
+    "title": "Contract Addresses",
+    "question": "Are the deployed smart contract addresses easy to find in the documentation?",
+    "weight": 15,
+    "purpose": "Verify that the protocol's documentation clearly lists the addresses of the deployed smart contracts (not just the token address, but the core contracts like pools, vaults, farms, etc.). This is crucial so that users and reviewers can quickly find and verify the running contracts on a block explorer.",
+    "whereToLook": "Check the project's documentation pages (or GitHub README) for a section titled \"Contracts\", \"Deployed Addresses\", \"Smart Contracts\", or similar. Often, well-documented projects have a dedicated page listing all important contract names and their addresses on each network.",
+    "scoringCriteria": {
+      "100": "The contract addresses are listed anywhere in the documentation, whether prominently displayed or requiring some navigation to find. This includes addresses in dedicated sections, FAQs, developer guides, or any other documentation page.",
+      "40": "The addresses were found only after significant effort or in an obscure place – for instance, hidden in a JSON file in the code repository, in an audit report, or an answer on a community Discord/forum.",
+      "0": "No contract addresses are found in any public documentation."
+    },
+    "answerFormat": {
+      "100": "Yes – the documentation lists the deployed contract addresses. Score: 100%.",
+      "40": "Addresses are given, but only in a GitHub repository file or external source, which made them hard to find. Score: 40%.",
+      "0": "No – the documentation does not list any deployed contract addresses. Score: 0%."
+    }
+  },
+  "Q2": {
+    "id": "Q2",
+    "title": "Public Repository",
+    "question": "Is there a public software repository?",
+    "weight": 5,
+    "purpose": "Determine if the protocol's source code is available in a public repository (like GitHub or GitLab). Open-source code is essential for transparency, allowing anyone to review, audit, and verify the implementation.",
+    "whereToLook": "Look for links to GitHub, GitLab, or other code repositories on the project's main website, documentation, or footer. Common locations include \"Developers\", \"Resources\", \"Code\", or \"GitHub\" links.",
+    "scoringCriteria": {
+      "100": "The repository is clearly linked from the main website or documentation, contains the actual smart contract code, and is actively maintained.",
+      "70": "Repository exists and is public but not prominently linked - requires some searching to find.",
+      "40": "Repository exists but is outdated, incomplete, or only contains partial code.",
+      "0": "No public repository available or repository is private/inaccessible."
+    },
+    "answerFormat": {
+      "100": "Yes – the public repository is clearly linked in the documentation and contains all smart contract code. Score: 100%.",
+      "0": "No – there is no public repository available. Score: 0%."
+    }
+  },
+  "Q3": {
+    "id": "Q3",
+    "title": "Whitepaper",
+    "question": "Is there a whitepaper?",
+    "weight": 5,
+    "purpose": "Check if the protocol has published a whitepaper or comprehensive technical documentation that explains the protocol's design, mechanisms, and goals.",
+    "whereToLook": "Search for \"Whitepaper\", \"Technical Paper\", \"Litepaper\", or similar documents on the main website, documentation, or resources section.",
+    "scoringCriteria": {
+      "100": "A comprehensive whitepaper is easily accessible from the main site or docs, detailing the protocol's design and mechanisms.",
+      "70": "Technical documentation exists that serves the purpose of a whitepaper, even if not formally called one.",
+      "40": "Limited technical documentation available, but lacks comprehensive coverage of the protocol.",
+      "0": "No whitepaper or equivalent technical documentation available."
+    },
+    "answerFormat": {
+      "100": "Yes – the whitepaper is clearly linked and provides comprehensive technical details. Score: 100%.",
+      "0": "No – there is no whitepaper or comprehensive technical documentation available. Score: 0%."
+    }
+  },
+  "Q4": {
+    "id": "Q4",
+    "title": "Architecture",
+    "question": "Is the protocol's architecture documented?",
+    "weight": 12,
+    "purpose": "Verify that the protocol provides clear documentation of its system architecture, including how different components interact, data flows, and the overall system design.",
+    "whereToLook": "Look for sections titled \"Architecture\", \"System Design\", \"Technical Overview\", or similar. Check for diagrams, flowcharts, or detailed explanations of how contracts interact.",
+    "scoringCriteria": {
+      "100": "Comprehensive architecture documentation with diagrams, component descriptions, and interaction flows.",
+      "70": "Good architecture documentation present but missing some details or diagrams.",
+      "40": "Basic architecture information available but lacks depth or clarity.",
+      "20": "Minimal architecture information scattered across documentation.",
+      "0": "No architecture documentation available."
+    }
+  },
+  "Q5": {
+    "id": "Q5",
+    "title": "Bug Bounty",
+    "question": "Is there a bug bounty program?",
+    "weight": 8,
+    "purpose": "Check if the protocol has an active bug bounty program that incentivizes security researchers to find and report vulnerabilities.",
+    "whereToLook": "Look for \"Bug Bounty\", \"Security\", or \"Responsible Disclosure\" sections. Check platforms like Immunefi, HackerOne, or the project's own security documentation.",
+    "scoringCriteria": {
+      "100": "Active bug bounty program with clear scope, rewards, and process. Listed on major platforms or well-documented.",
+      "70": "Bug bounty program exists but details are not comprehensive or rewards are minimal.",
+      "40": "Mentions of bug bounty but no clear program or outdated information.",
+      "0": "No bug bounty program."
+    }
+  },
+  "Q6": {
+    "id": "Q6",
+    "title": "Admin Controls",
+    "question": "Are admin controls documented?",
+    "weight": 8,
+    "purpose": "Evaluate whether the protocol clearly documents what administrative controls exist, who controls them, and what powers they have.",
+    "whereToLook": "Search for \"Admin\", \"Governance\", \"Permissions\", \"Roles\", or \"Access Control\" in documentation.",
+    "scoringCriteria": {
+      "100": "Admin controls are documented anywhere in the documentation, whether comprehensive or with some missing details.",
+      "40": "Basic mention of admin controls without comprehensive details.",
+      "0": "No documentation of admin controls."
+    }
+  },
+  "Q7": {
+    "id": "Q7",
+    "title": "Upgradeability",
+    "question": "Is the upgradeability of contracts documented?",
+    "weight": 10,
+    "purpose": "Determine if the protocol documents which contracts are upgradeable, how upgrades work, and what governance process controls upgrades.",
+    "whereToLook": "Look for \"Upgrades\", \"Proxy\", \"Governance\", or \"Contract Management\" sections.",
+    "scoringCriteria": {
+      "100": "Upgradeability is documented anywhere in the documentation, whether with full details or missing some process information.",
+      "40": "Basic mention of upgradeability without comprehensive details.",
+      "0": "No documentation about contract upgradeability."
+    }
+  },
+  "Q8": {
+    "id": "Q8",
+    "title": "Contract Ownership",
+    "question": "Is contract ownership documented?",
+    "weight": 7,
+    "purpose": "Verify that the protocol documents who owns the contracts, whether ownership is renounced, transferred to a DAO, or held by team members.",
+    "whereToLook": "Search for \"Ownership\", \"Contract Owner\", \"Decentralization\", or governance documentation in the official documentation only.",
+    "scoringCriteria": {
+      "100": "Documentation mentions contract ownership in any form.",
+      "40": "Ownership information found in external sources but not in official documentation.",
+      "0": "No documentation about contract ownership found."
+    }
+  },
+  "Q9": {
+    "id": "Q9",
+    "title": "Change Capabilities",
+    "question": "Are the capabilities to change or update the system clearly documented?",
+    "weight": 12,
+    "purpose": "Assess whether the protocol clearly documents what aspects of the system can be changed post-deployment, including parameters, fees, or logic.",
+    "whereToLook": "Look for documentation on governance, parameters, admin functions, or system updates.",
+    "scoringCriteria": {
+      "100": "Comprehensive documentation of all changeable aspects, who can change them, and any limits/restrictions.",
+      "70": "Most changeable aspects are documented but some details missing.",
+      "40": "Some documentation of changeable aspects but incomplete.",
+      "0": "No documentation of what can be changed in the system."
+    }
+  },
+  "Q10": {
+    "id": "Q10",
+    "title": "Oracle Documentation",
+    "question": "If the protocol uses oracles, are they documented?",
+    "weight": 12,
+    "purpose": "For protocols that rely on external data, verify that oracle usage is documented, including which oracles are used, fallback mechanisms, and how oracle failures are handled.",
+    "whereToLook": "Search for \"Oracle\", \"Price Feed\", \"Chainlink\", or similar terms.",
+    "scoringCriteria": {
+      "100": "Comprehensive oracle documentation including providers, fallback mechanisms, and failure handling.",
+      "70": "Oracle usage is documented but missing some implementation details.",
+      "40": "Basic mention of oracles without comprehensive details.",
+      "0": "Uses oracles but no documentation, OR clearly states no oracle usage."
+    }
+  }
+}

@@ -1,0 +1,26 @@
+Q10: Are the contract change capabilities (upgradeability or parameters that admins can change) described?
+Weight: 7%
+
+Purpose: Evaluate whether the docs explain what kinds of changes admins or governance can make to the contracts after deployment. This goes beyond just stating upgradeable vs immutable; it means listing the specific powers or parameters that can be adjusted. For instance, can the team change fees, pause the contract, mint new tokens, upgrade to new logic, etc.? Users should be informed of these "capabilities for change" because they affect the risk profile.
+
+Where to Look: In the admin controls or governance documentation, look for details on what actions the admins are allowed to perform. Keywords: upgrade, change, parameters, configurable, governance actions, admin functions. Sometimes a project will enumerate admin functions (e.g., "governance can adjust interest rates, or replace the oracle, or upgrade the strategy contract"). If a DAO, see if they list what proposals can do. If it's just a multisig, see if docs mention things like the ability to pause or upgrade contracts.
+
+Also, an audit report might list privileged functions – if docs are lacking, an agent might glean it from there, but ideally the project's own documentation should have it.
+
+Scoring Criteria: Based on guidelines:
+
+    100%: The documentation fully covers all change capabilities for all contracts. This means for every contract, the docs describe what can be changed and how. For example, "Contract X can be upgraded by governance, Contract Y's fee percentage can be adjusted up to 5%, Contract Z is immutable," etc. Essentially, no stone unturned – any possible admin action is documented.
+
+    50%: The docs cover some, but not all contracts or parameters. Maybe they mention a few admin abilities (like "governance can update the reward rate") but leave out others (maybe they never mentioned that the contract can be upgraded). Partial credit for partial info.
+
+    0%: No information on what can be changed. Perhaps the docs don't discuss any admin actions at all. Users wouldn't know if the team can upgrade or change anything from reading the docs. If Q7 (finding admin info) was 0, likely this is 0 too because no admin section means no description of capabilities.
+
+Answer Format:
+
+    "Yes – the documentation explains the scope of admin changes. It notes that governance can change parameters like fees and collateral factors, and can deploy new contract implementations via proxy upgrades. Every contract's changeable settings are listed. Score: 100%."
+
+    Partial: "Partially – the docs mention some admin powers (e.g., the team can adjust reward emission rates) but do not cover others (they don't clearly state whether contracts can be upgraded). Score: 50%."
+
+    No: "No – the documentation does not describe what, if anything, admins or devs can change post-deployment. Score: 0%."
+
+Include citations where the docs describe an admin function or explicitly state a limitation. If the docs only implicitly hint at it (or you have to infer from contract code), mention that and score accordingly. The key is whether a reader is given a clear understanding of what aspects of the system are mutable by the project's controllers.

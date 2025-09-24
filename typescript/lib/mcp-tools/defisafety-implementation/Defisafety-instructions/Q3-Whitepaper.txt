@@ -1,0 +1,20 @@
+Q3: Is there a whitepaper or other comprehensive project documentation available?
+Weight: 8%
+
+Purpose: Determine if the project provides a whitepaper or similar high-level documentation describing the protocol's design and functionality. A whitepaper (or detailed doc) often serves as an overview of the project's goals, mechanics, and architecture. Its presence indicates the team has documented what the protocol does, which is the foundation for further detailed docs. If no such document exists, it not only scores 0 for this question but also suggests the subsequent documentation questions (architecture, coverage, traceability) will score 0 because there is no baseline reference.
+
+Where to Look: Check the project's website and documentation for a "Whitepaper" link. Sometimes it might be called a "Litepaper", "Documentation PDF", or simply the main docs if they serve the same purpose. It might be on the homepage, in an About section, or in the GitHub README. Also look for Medium articles or documentation portals that serve as the project's technical overview.
+
+Scoring Criteria: Yes or No:
+
+    100% (Yes): There is a whitepaper or equivalent foundational document. It could be a PDF, a Notion page, a GitBook, or even a series of Medium posts that comprehensively explain the project. If the documentation includes a clear overview of the protocol's purpose and design (beyond just a short README), count this as a "yes". (The whitepaper doesn't have to be called "whitepaper" explicitly – any thorough architectural overview counts.)
+
+    0% (No): No whitepaper or overarching documentation is available or referenced. The absence of a high-level document means the project has not provided a single source that explains the whole system. According to DeFiSafety, if this is the case, related documentation questions (like Q4) are automatically considered 0% as well since there is no base documentation.
+
+Answer Format:
+
+    If present: "Yes – the project's website links to a detailed whitepaper (PDF) that outlines the protocol. Score: 100%." (Or mention if the documentation itself acts as the whitepaper.)
+
+    If not: "No – there is no whitepaper or equivalent comprehensive document provided in the docs or website. Score: 0%."
+
+If no whitepaper, you should also note that this will negatively impact the following documentation questions. For example, you might add: "(This absence means questions on architecture documentation will score 0 as well, due to lack of foundational docs.)"
