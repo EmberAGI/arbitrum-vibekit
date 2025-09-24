@@ -603,7 +603,7 @@ export class YourProtocolAdapter {
   }
 
   // Additional methods: createRepayTransaction, createWithdrawTransaction, getUserSummary, getReserves
-  
+
   private async supply(token: Token, amount: bigint, user: string) {
     // Your protocol-specific supply logic here
     // Example: Use your protocol's SDK or direct contract calls
@@ -617,52 +617,9 @@ export class YourProtocolAdapter {
 
 > **📖 Complete Implementation Reference**: See the [AAVE adapter](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/onchain-actions-plugins/registry/src/aave-lending-plugin/adapter.ts) for a full implementation example including all CRUD operations, error handling, transaction transformation, and protocol-specific logic patterns.
 
-### 4. Error Handling and Testing
+### 4. Registration and Integration
 
-#### 4.1 Error Handling
-
-Implement robust error handling for your protocol:
-
-```typescript
-// Basic error handling pattern in adapter methods
-async createSupplyTransaction(params: SupplyTokensRequest): Promise<SupplyTokensResponse> {
-  try {
-    // Input validation
-    if (!params.amount || params.amount <= 0) {
-      throw new Error('Invalid supply amount: must be greater than 0');
-    }
-    
-    // Your protocol implementation
-    const txs = await this.supply(params.supplyToken, params.amount, params.walletAddress);
-    return { transactions: txs.map(tx => this.transformToTransactionPlan(tx)) };
-  } catch (error) {
-    throw new Error(`Supply failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
-```
-
-**Essential Error Scenarios to Handle:**
-- Insufficient balance and invalid parameters
-- Protocol-specific states (paused, frozen reserves)
-- Health factor and liquidation thresholds
-- Network and RPC failures
-
-> **📖 Complete Error Handling Reference**: See the [AAVE error handling implementation](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/onchain-actions-plugins/registry/src/aave-lending-plugin/errors.ts) for comprehensive error codes, custom error classes, and protocol-specific error mapping patterns.
-
-#### 4.2 Testing Your Plugin
-
-**1. Create a Test Agent**: Consider adding an agent to the [templates directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates) to showcase your new features. Consider integrating your agent into the [Vibekit UI](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web) to demo your agent's capabilities.
-
-**2. Unit Tests**: Test individual plugin functions by writing unit tests for:
-
-- Action function implementations
-- Error handling scenarios
-- Token fetching and validation
-- Protocol-specific business logic
-
-### 5. Registration and Integration
-
-#### 5.1 Plugin Registry Integration
+#### 4.1 Plugin Registry Integration
 
 The registry manages plugin discovery and registration:
 
@@ -679,7 +636,7 @@ for await (const plugin of registry.getPlugins()) {
 }
 ```
 
-#### 5.2 Add to Main Registry
+#### 4.2 Add to Main Registry
 
 Add your plugin to the main registry:
 
@@ -699,6 +656,93 @@ export function initializePublicRegistry(chainConfigs: ChainConfig[]) {
   return registry;
 }
 ```
+
+### 5. Error Handling and Testing
+
+#### 5.1 Error Handling
+
+Implement robust error handling for your protocol:
+
+```typescript
+// Basic error handling pattern in adapter methods
+async createSupplyTransaction(params: SupplyTokensRequest): Promise<SupplyTokensResponse> {
+  try {
+    // Input validation
+    if (!params.amount || params.amount <= 0) {
+      throw new Error('Invalid supply amount: must be greater than 0');
+    }
+
+    // Your protocol implementation
+    const txs = await this.supply(params.supplyToken, params.amount, params.walletAddress);
+    return { transactions: txs.map(tx => this.transformToTransactionPlan(tx)) };
+  } catch (error) {
+    throw new Error(`Supply failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+```
+
+**Essential Error Scenarios to Handle:**
+
+- Insufficient balance and invalid parameters
+- Protocol-specific states (paused, frozen reserves)
+- Health factor and liquidation thresholds
+- Network and RPC failures
+
+> **📖 Complete Error Handling Reference**: See the [AAVE error handling implementation](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/onchain-actions-plugins/registry/src/aave-lending-plugin/errors.ts) for comprehensive error codes, custom error classes, and protocol-specific error mapping patterns.
+
+#### 5.2 Testing Your Plugin
+
+Comprehensive testing ensures plugin reliability and successful integration. Follow this testing strategy:
+
+**1. Unit Tests**
+
+Test individual plugin functions with mocks:
+
+```typescript
+// test/adapter.test.ts
+import { describe, it, expect, vi } from 'vitest';
+import { YourProtocolAdapter } from '../src/adapter.js';
+
+describe('YourProtocolAdapter', () => {
+  it('should create valid supply transaction', async () => {
+    const adapter = new YourProtocolAdapter({ chainId: 42161, rpcUrl: 'test' });
+    vi.spyOn(adapter, 'supply').mockResolvedValue([{ to: '0xContract', data: '0x' }]);
+
+    const result = await adapter.createSupplyTransaction({
+      supplyToken: { address: '0xUSDC', symbol: 'USDC', decimals: 6 },
+      amount: BigInt('1000000'),
+      walletAddress: '0xUser',
+    });
+
+    expect(result.transactions).toHaveLength(1);
+  });
+});
+```
+
+**2. Integration Tests**
+
+Test plugin registration and action validation:
+
+```typescript
+// test/integration.test.ts
+import { getYourProtocolPlugin } from '../src/index.js';
+
+describe('Plugin Integration', () => {
+  it('should register plugin correctly', async () => {
+    const plugin = await getYourProtocolPlugin({ chainId: 42161, rpcUrl: 'test' });
+    expect(plugin.type).toBe('lending');
+    expect(plugin.actions).toHaveLength(4);
+  });
+});
+```
+
+**Testing Best Practices:**
+
+- Mock external dependencies (RPC calls, contract interactions)
+- Test error scenarios and edge cases
+- Use testnets for integration tests
+- Validate transaction structure and token handling
+- Test with realistic data volumes
 
 ## Integration with Ember MCP Server
 
