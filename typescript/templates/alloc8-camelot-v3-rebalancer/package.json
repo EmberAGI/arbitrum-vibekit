@@ -1,0 +1,47 @@
+{
+  "name": "alloc8-camelot-v3-rebalancer",
+  "version": "1.0.0",
+  "description": "Automated LP rebalancing agent for Camelot v3 concentrated liquidity pools",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc --build",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:run": "vitest run",
+    "test:watch": "vitest watch",
+    "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
+    "docker:build": "docker build -t alloc8-camelot-v3-rebalancer ../../",
+    "docker:run": "docker run --env-file .env -p 3001:3001 alloc8-camelot-v3-rebalancer",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
+  },
+  "dependencies": {
+    "@google-a2a/types": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "ai": "catalog:",
+    "arbitrum-vibekit-core": "workspace:*",
+    "cors": "^2.8.5",
+    "dotenv": "catalog:",
+    "ember-api": "workspace:^",
+    "express": "catalog:",
+    "graphql-request": "^7.2.0",
+    "nanoid": "^5.0.7",
+    "node-fetch": "^3.3.2",
+    "node-telegram-bot-api": "^0.66.0",
+    "viem": "^2.31.7",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "catalog:",
+    "@types/node-telegram-bot-api": "^0.64.7",
+    "c8": "catalog:",
+    "prettier": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
