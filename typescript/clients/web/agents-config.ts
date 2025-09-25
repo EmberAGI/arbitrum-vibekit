@@ -51,6 +51,28 @@ export const chatAgents = [
       },
     ],
   },
+  {
+    id: 'beefy' as const,
+    name: 'Beefy Vaults',
+    description: 'Beefy Finance yield optimization vaults',
+    suggestedActions: [
+      {
+        title: 'Get available',
+        label: 'vaults',
+        action: 'What Beefy vaults are available on Arbitrum?',
+      },
+      {
+        title: 'Supply USDC',
+        label: 'to vault',
+        action: 'Supply 100 USDC to a Beefy vault',
+      },
+      {
+        title: 'Check my',
+        label: 'positions',
+        action: 'Show my Beefy vault positions',
+      },
+    ],
+  },
   // {
   //   id: 'langgraph-workflow' as const,
   //   name: 'Greeting Optimizer',
@@ -158,6 +180,7 @@ export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
   ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
   ['coingecko', 'http://coingecko-mcp-server:3011/mcp'], // CoinGecko MCP server
+  ['beefy', 'http://beefy-mcp-server:3012/mcp'], // Beefy MCP server
   // ['langgraph-workflow', 'http://langgraph-workflow-agent:3009/sse'],
   // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
   // ['allora-price-prediction-agent', 'http://allora-price-prediction-agent:3008/sse'],
