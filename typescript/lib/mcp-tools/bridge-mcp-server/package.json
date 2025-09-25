@@ -1,0 +1,35 @@
+{
+  "name": "@emberagi/bridge-mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "bin": {
+    "bridge-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "prepare": "pnpm build",
+    "prepublishOnly": "pnpm build",
+    "build": "tsc -b",
+    "dev": "tsx src/index.ts",
+    "inspect:npx": "node ./dist/index.js | npx -y @modelcontextprotocol/inspector",
+    "inspect": "node ./dist/index.js | pnpm -s dlx @modelcontextprotocol/inspector"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@stargatefinance/stg-evm-sdk-v2": "^1.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "catalog:",
+    "express": "catalog:",
+    "viem": "^2.21.10",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "prettier": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  }
+}
+
