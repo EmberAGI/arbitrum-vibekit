@@ -11,8 +11,14 @@ export type LendingGetPositions = (
 ) => Promise<GetWalletLendingPositionsResponse>;
 
 /**
+ * Get available vaults/pools for lending.
+ */
+export type LendingGetAvailableVaults = () => Promise<any[]>;
+
+/**
  * All the queries related to lending.
  */
 export type LendingQueries = {
   getPositions: LendingGetPositions;
+  getAvailableVaults?: LendingGetAvailableVaults;
 };
