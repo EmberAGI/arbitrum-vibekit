@@ -1093,6 +1093,9 @@ importers:
       '@emberai/onchain-actions-registry':
         specifier: workspace:*
         version: file:onchain-actions-plugins/registry(bignumber.js@9.3.1)(bufferutil@4.0.9)(reflect-metadata@0.1.14)(tslib@2.8.1)(utf-8-validate@5.0.10)(viem@2.31.0(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.61))
+      '@google-a2a/types':
+        specifier: workspace:*
+        version: link:../../a2a-types
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.15.1

@@ -24,6 +24,7 @@ export async function getBeefyVaultEmberPlugin(
     actions: await getBeefyVaultActions(adapter),
     queries: {
       getPositions: adapter.getUserSummary.bind(adapter),
+      getAvailableVaults: adapter.getAvailableVaults.bind(adapter),
     },
   };
 }
@@ -37,7 +38,6 @@ export async function getBeefyVaultActions(
   adapter: BeefyAdapter
 ): Promise<ActionDefinition<LendingActions>[]> {
   const vaults = await adapter.getActiveVaults();
-  console.log('🥩 Beefy plugin found', vaults.length, 'active vaults on chain', adapter.chain.id);
 
   // Extract unique underlying tokens and mooTokens
   const underlyingTokens: string[] = [];
@@ -96,7 +96,6 @@ export async function getBeefyVaultActions(
     },
   ];
 
-  console.log('🥩 Beefy plugin loaded with', actions.length, 'actions');
   return actions;
 }
 
@@ -112,8 +111,6 @@ export function registerBeefyVault(chainConfig: ChainConfig, registry: PublicEmb
   if (!supportedChains.includes(chainConfig.chainId)) {
     return;
   }
-
-  console.log('🥩 Beefy plugin registering for chain:', chainConfig.chainId);
 
   registry.registerDeferredPlugin(
     getBeefyVaultEmberPlugin({

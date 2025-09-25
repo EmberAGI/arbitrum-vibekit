@@ -47,20 +47,12 @@ export class BeefyAdapter {
 
   public async createSupplyTransaction(params: SupplyTokensRequest): Promise<SupplyTokensResponse> {
     const { supplyToken: token, amount, walletAddress } = params;
-    console.log(
-      '🥩 Beefy supply action triggered for token:',
-      token.symbol,
-      'amount:',
-      amount.toString()
-    );
 
     // Find the best vault for this token
     const vault = await this.findBestVaultForToken(token);
     if (!vault) {
       throw new Error(`No Beefy vault found for token ${token.symbol}`);
     }
-
-    console.log('🥩 Selected Beefy vault:', vault.name, 'APY:', vault.apy + '%');
 
     const txs = await this.deposit(vault, token, amount, walletAddress);
     return {
@@ -72,12 +64,6 @@ export class BeefyAdapter {
     params: WithdrawTokensRequest
   ): Promise<WithdrawTokensResponse> {
     const { tokenToWithdraw, amount, walletAddress } = params;
-    console.log(
-      '🥩 Beefy withdraw action triggered for token:',
-      tokenToWithdraw.symbol,
-      'amount:',
-      amount.toString()
-    );
 
     // Find vault that produces this mooToken
     const vault = await this.findVaultByMooToken(tokenToWithdraw);
@@ -85,12 +71,15 @@ export class BeefyAdapter {
       throw new Error(`No Beefy vault found for mooToken ${tokenToWithdraw.symbol}`);
     }
 
-    console.log('🥩 Withdrawing from Beefy vault:', vault.name);
-
     const txs = await this.withdraw(vault, amount, walletAddress);
     return {
       transactions: txs.map(t => this.transactionPlanFromEthers(t)),
     };
+  }
+
+  public async getAvailableVaults(): Promise<VaultData[]> {
+    const vaults = await this.getActiveVaults();
+    return vaults;
   }
 
   public async getUserSummary(
@@ -140,7 +129,7 @@ export class BeefyAdapter {
           });
         }
       } catch (error) {
-        console.warn(`Failed to get balance for vault ${vault.id}:`, error);
+        // Silently ignore vault balance errors
       }
     }
 
