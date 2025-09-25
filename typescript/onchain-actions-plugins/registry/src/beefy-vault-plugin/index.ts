@@ -1,8 +1,34 @@
-import type { ActionDefinition, EmberPlugin, LendingActions } from '../core/index.js';
+import type {
+  ActionDefinition,
+  EmberPlugin,
+  LendingActions,
+  LendingQueries,
+} from '../core/index.js';
 import { BeefyAdapter } from './adapter.js';
-import type { BeefyAdapterParams } from './types.js';
+import type {
+  BeefyAdapterParams,
+  GetVaultsRequest,
+  GetVaultsResponse,
+  GetApyRequest,
+  GetApyResponse,
+  GetTvlRequest,
+  GetTvlResponse,
+  GetApyBreakdownRequest,
+  GetApyBreakdownResponse,
+  GetFeesRequest,
+  GetFeesResponse,
+} from './types.js';
 import type { ChainConfig } from '../chainConfig.js';
 import type { PublicEmberPluginRegistry } from '../registry.js';
+
+// Extended queries interface for Beefy plugin
+interface BeefyQueries extends LendingQueries {
+  getVaults: (params: GetVaultsRequest) => Promise<GetVaultsResponse>;
+  getApyData: (params: GetApyRequest) => Promise<GetApyResponse>;
+  getTvlData: (params: GetTvlRequest) => Promise<GetTvlResponse>;
+  getApyBreakdownData: (params: GetApyBreakdownRequest) => Promise<GetApyBreakdownResponse>;
+  getFeesData: (params: GetFeesRequest) => Promise<GetFeesResponse>;
+}
 
 /**
  * Get the Beefy Vault Ember plugin.
@@ -25,7 +51,12 @@ export async function getBeefyVaultEmberPlugin(
     queries: {
       getPositions: adapter.getUserSummary.bind(adapter),
       getAvailableVaults: adapter.getAvailableVaults.bind(adapter),
-    },
+      getVaults: adapter.getVaults.bind(adapter),
+      getApyData: adapter.getApyData.bind(adapter),
+      getTvlData: adapter.getTvlData.bind(adapter),
+      getApyBreakdownData: adapter.getApyBreakdownData.bind(adapter),
+      getFeesData: adapter.getFeesData.bind(adapter),
+    } as BeefyQueries,
   };
 }
 

@@ -3,6 +3,8 @@ import type {
   BeefyApyResponse,
   BeefyTvlResponse,
   BeefyTokensResponse,
+  BeefyApyBreakdownResponse,
+  BeefyFeesResponse,
   VaultData,
 } from './types.js';
 
@@ -39,6 +41,22 @@ export class BeefyDataProvider {
       throw new Error(`Failed to fetch tokens for ${chain}: ${response.statusText}`);
     }
     return response.json() as Promise<BeefyTokensResponse>;
+  }
+
+  async getApyBreakdown(): Promise<BeefyApyBreakdownResponse> {
+    const response = await fetch(`${this.baseUrl}/apy/breakdown`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch APY breakdown: ${response.statusText}`);
+    }
+    return response.json() as Promise<BeefyApyBreakdownResponse>;
+  }
+
+  async getFees(): Promise<BeefyFeesResponse> {
+    const response = await fetch(`${this.baseUrl}/fees`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch fees data: ${response.statusText}`);
+    }
+    return response.json() as Promise<BeefyFeesResponse>;
   }
 
   async getActiveVaultsForChain(chainId: number): Promise<VaultData[]> {

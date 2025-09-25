@@ -23,10 +23,15 @@ Beefy Finance is a yield optimization protocol that automatically compounds rewa
 - Redeem mooTokens to withdraw underlying tokens
 - Proportional withdrawal based on vault performance
 
-### Position Queries
+### Vault Information Queries
 
-- View all user positions across Beefy vaults
-- Real-time balance and performance tracking
+- **getVaults**: Get all vault configurations and metadata for the current chain
+- **getApyData**: Get current annual percentage yield for all vaults
+- **getTvlData**: Get total value locked for all vaults in USD
+- **getApyBreakdownData**: Get detailed APY breakdown including fees and compounding details
+- **getFeesData**: Get fee structure for each vault (performance fees, withdrawal fees, etc.)
+- **getAvailableVaults**: Get active vaults with combined APY and TVL data
+- **getPositions**: View user positions across Beefy vaults with real-time balance tracking
 
 ## Supported Chains
 
@@ -65,8 +70,12 @@ The plugin integrates with the following Beefy API endpoints:
 
 - `GET /vaults` - Vault configurations and metadata
 - `GET /apy` - Current APY for each vault
+- `GET /apy/breakdown` - Detailed APY breakdown with fees and compounding info
 - `GET /tvl` - Total value locked per vault
+- `GET /fees` - Fee structure for each vault
 - `GET /tokens/{chain}` - Supported tokens per chain
+
+All endpoints are accessible through the plugin's query system, allowing users to retrieve comprehensive vault information without executing transactions.
 
 ## Usage Example
 

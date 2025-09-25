@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Simple test script to verify Beefy plugin loading
-import { initializePublicRegistry } from './onchain-actions-plugins/registry/dist/index.js';
+import { initializePublicRegistry } from '../../dist/index.js';
 
 console.log('🧪 Testing Beefy Plugin Registry...\n');
 

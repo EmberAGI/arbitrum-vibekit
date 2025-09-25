@@ -12,7 +12,21 @@ import type {
   Token,
 } from '../core/index.js';
 import { TransactionTypes } from '../core/index.js';
-import type { BeefyAdapterParams, BeefyAction, VaultData } from './types.js';
+import type {
+  BeefyAdapterParams,
+  BeefyAction,
+  VaultData,
+  GetVaultsRequest,
+  GetVaultsResponse,
+  GetApyRequest,
+  GetApyResponse,
+  GetTvlRequest,
+  GetTvlResponse,
+  GetApyBreakdownRequest,
+  GetApyBreakdownResponse,
+  GetFeesRequest,
+  GetFeesResponse,
+} from './types.js';
 
 // Standard ERC20 ABI for basic operations
 const ERC20_ABI = [
@@ -148,6 +162,66 @@ export class BeefyAdapter {
 
   public async getActiveVaults(): Promise<VaultData[]> {
     return this.dataProvider.getActiveVaultsForChain(this.chain.id);
+  }
+
+  // New methods for vault information actions
+  public async getVaults(params: GetVaultsRequest): Promise<GetVaultsResponse> {
+    const chainName = this.getChainName(this.chain.id);
+    const vaultsData = await this.dataProvider.getVaults();
+
+    // Filter vaults for the current chain
+    const chainVaults = Object.entries(vaultsData)
+      .filter(([_, vault]) => vault.chain === chainName)
+      .map(([_, vault]) => vault);
+
+    return {
+      vaults: chainVaults,
+    };
+  }
+
+  public async getApyData(params: GetApyRequest): Promise<GetApyResponse> {
+    const apyData = await this.dataProvider.getApy();
+    return {
+      apyData,
+    };
+  }
+
+  public async getTvlData(params: GetTvlRequest): Promise<GetTvlResponse> {
+    const tvlData = await this.dataProvider.getTvl();
+    return {
+      tvlData,
+    };
+  }
+
+  public async getApyBreakdownData(
+    params: GetApyBreakdownRequest
+  ): Promise<GetApyBreakdownResponse> {
+    const apyBreakdown = await this.dataProvider.getApyBreakdown();
+    return {
+      apyBreakdown,
+    };
+  }
+
+  public async getFeesData(params: GetFeesRequest): Promise<GetFeesResponse> {
+    const feesData = await this.dataProvider.getFees();
+    return {
+      feesData,
+    };
+  }
+
+  private getChainName(chainId: number): string {
+    switch (chainId) {
+      case 42161:
+        return 'arbitrum';
+      case 1:
+        return 'ethereum';
+      case 137:
+        return 'polygon';
+      case 56:
+        return 'bsc';
+      default:
+        throw new Error(`Unsupported chain ID: ${chainId}`);
+    }
   }
 
   private async findBestVaultForToken(token: Token): Promise<VaultData | null> {

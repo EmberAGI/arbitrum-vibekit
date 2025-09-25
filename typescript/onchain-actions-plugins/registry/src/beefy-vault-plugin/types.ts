@@ -60,3 +60,71 @@ export interface VaultData {
   tvl: number;
   assets: string[];
 }
+
+// New types for additional Beefy API endpoints
+export interface BeefyApyBreakdownResponse {
+  [vaultId: string]: {
+    totalApy?: number;
+    vaultApr?: number;
+    compoundingsPerYear?: number;
+    beefyPerformanceFee?: number;
+    vaultApy?: number;
+    lpFee?: number;
+    tradingApr?: number;
+  };
+}
+
+export interface BeefyFeesResponse {
+  [vaultId: string]: {
+    performance: {
+      total: number;
+      strategist: number;
+      call: number;
+      treasury: number;
+      stakers: number;
+    };
+    withdraw: number;
+    lastUpdated: number;
+  };
+}
+
+// Request/Response types for new actions
+export interface GetVaultsRequest {
+  chainId?: string;
+}
+
+export interface GetVaultsResponse {
+  vaults: BeefyVault[];
+}
+
+export interface GetApyRequest {
+  chainId?: string;
+}
+
+export interface GetApyResponse {
+  apyData: BeefyApyResponse;
+}
+
+export interface GetTvlRequest {
+  chainId?: string;
+}
+
+export interface GetTvlResponse {
+  tvlData: BeefyTvlResponse;
+}
+
+export interface GetApyBreakdownRequest {
+  chainId?: string;
+}
+
+export interface GetApyBreakdownResponse {
+  apyBreakdown: BeefyApyBreakdownResponse;
+}
+
+export interface GetFeesRequest {
+  chainId?: string;
+}
+
+export interface GetFeesResponse {
+  feesData: BeefyFeesResponse;
+}
