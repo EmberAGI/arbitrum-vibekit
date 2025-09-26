@@ -162,3 +162,13 @@
 .suggestion-highlight {
   @apply bg-blue-200 hover:bg-blue-300 dark:hover:bg-blue-400/50 dark:text-blue-50 dark:bg-blue-500/40;
 }
+
+/* Para wallet modal should sit at the top of wallet layers */
+html {
+  --wcm-z-index: 60 !important;
+}
+
+/* RainbowKit modal should appear above the connect overlay but below Para */
+[data-rk][role="dialog"][aria-modal="true"] {
+  z-index: 55 !important;
+}

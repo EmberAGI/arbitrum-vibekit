@@ -1,0 +1,44 @@
+import { NextResponse } from 'next/server';
+import { DEFAULT_SERVER_URLS } from '../../../../agents-config';
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json().catch(() => ({}));
+    const { identifier, identifierType = 'email', walletType = 'EVM' } = body ?? {};
+
+    if (!identifier || typeof identifier !== 'string') {
+      return NextResponse.json(
+        { ok: false, error: 'ValidationError', message: 'identifier (string) is required' },
+        { status: 400 },
+      );
+    }
+
+    // Resolve MCP server base URL from agents-config, fallback to env or localhost
+    const mcpUrl =
+      DEFAULT_SERVER_URLS.get('para') || process.env.PARA_MCP_URL || 'http://localhost:3012/mcp';
+    let target: URL;
+    try {
+      const base = new URL(mcpUrl);
+      target = new URL('/api/pregen-wallet', `${base.protocol}//${base.host}`);
+    } catch {
+      target = new URL('http://localhost:3012/api/pregen-wallet');
+    }
+
+    const upstreamResp = await fetch(target.toString(), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ identifier, identifierType, walletType }),
+      // Do not forward cookies/headers to avoid CORS complications
+    });
+
+    const result = await upstreamResp.json().catch(() => ({ ok: false, message: 'Invalid JSON from server' }));
+    return NextResponse.json(result, { status: upstreamResp.status });
+  } catch (err: any) {
+    return NextResponse.json(
+      { ok: false, error: 'ServerError', message: err?.message || String(err) },
+      { status: 500 },
+    );
+  }
+}
