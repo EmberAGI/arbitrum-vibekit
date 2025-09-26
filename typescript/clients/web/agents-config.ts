@@ -79,6 +79,50 @@ export const chatAgents = [
   //   description: 'Quickstart agent',
   //   suggestedActions: [],
   // },
+  {
+    id: 'liquidation-prevention-agent' as const,
+    name: 'Liquidation Prevention',
+    description:
+      'Aave liquidation prevention agent that monitors health factors and prevents liquidations',
+    suggestedActions: [
+      {
+        title: 'Monitor',
+        label: 'my positions',
+        action: 'Monitor my Aave positions and health factor',
+      },
+      {
+        title: 'Check',
+        label: 'liquidation risk',
+        action: 'Check my liquidation risk and health factor',
+      },
+      {
+        title: 'Prevent',
+        label: 'liquidation automatically',
+        action: 'Set up automatic liquidation prevention for my positions',
+      },
+    ],
+  },
+
+  //Todo :add for lending agent from template folder
+  // {
+  //   id: 'lending-agent' as const,
+  //   name: 'Lending',
+  //   description: 'Lending agent',
+  //   suggestedActions: [
+  //     {
+  //       title: 'Deposit WETH',
+  //       label: 'to my balance',
+  //       action: 'Deposit WETH to my balance',
+  //     },
+  //     {
+  //       title: 'borrow DAI',
+  //       label: 'to my balance',
+  //       action: 'borrow DAI to my balance',
+  //     },
+  //     { title: 'Check', label: 'balance', action: 'Check balance' },
+  //   ],
+  // },
+
   // {
   //   id: 'allora-price-prediction-agent' as const,
   //   name: 'Price Prediction',
@@ -160,6 +204,8 @@ export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['coingecko', 'http://coingecko-mcp-server:3011/mcp'], // CoinGecko MCP server
   // ['langgraph-workflow', 'http://langgraph-workflow-agent:3009/sse'],
   // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
+  // ['lending-agent', 'http://lending-agent:3006/sse'],
+  ['liquidation-prevention-agent', 'http://liquidation-prevention-agent:3010/sse'],
   // ['allora-price-prediction-agent', 'http://allora-price-prediction-agent:3008/sse'],
   // ["ember-lp", "http://liquidity-agent-no-wallet:3002/sse"],
   // ["ember-pendle", "http://pendle-agent:3003/sse"],

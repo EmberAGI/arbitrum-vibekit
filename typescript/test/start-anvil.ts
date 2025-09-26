@@ -1,4 +1,4 @@
-import { startEnv } from "./helpers/start-env";
+import { startEnv } from './helpers/start-env';
 
 try {
   await startEnv(true);
