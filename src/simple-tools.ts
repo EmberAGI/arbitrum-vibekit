@@ -7,6 +7,24 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
+// Security: Private key validation (optional for testing)
+export const PRIVATE_KEY = (() => {
+  const key = process.env.PRIVATE_KEY;
+  if (!key) {
+    console.warn('PRIVATE_KEY environment variable not set - some features may be limited');
+    return null;
+  }
+  if (!key.startsWith('0x') || key.length !== 66) {
+    throw new Error('Invalid private key format');
+  }
+  return key;
+})();
+
+// Security: Maximum gas limits
+const MAX_GAS_LIMIT = BigInt(5000000);
+const MAX_ETH_AMOUNT = BigInt('100000000000000000000'); // 100 ETH
+const MAX_TOKEN_AMOUNT = BigInt('1000000000000000000000000'); // 1M tokens
+
 // Error Classes
 export class BridgeError extends Error {
   constructor(public code: string, message: string) {
@@ -99,6 +117,11 @@ export function getPublicClient(chainId: SupportedChainId, env: any) {
 
 // Address validation
 export function validateAddress(address: string): Address {
+  // Security: Check for zero address
+  if (address === '0x0000000000000000000000000000000000000000') {
+    throw new ValidationError('Zero address is not allowed');
+  }
+  
   // Normalize address to lowercase for validation
   const normalizedAddress = address.toLowerCase();
   
@@ -125,15 +148,16 @@ export function validateAmount(amount: string): string {
     throw new ValidationError('Amount must be greater than 0');
   }
   
-  // Check if it's a valid positive integer (wei)
-  if (!/^\d+$/.test(amountStr)) {
-    throw new ValidationError('Amount must be a positive integer in wei (no decimals)');
+  // Security: Check for hex format
+  if (!amountStr.match(/^0x[0-9a-fA-F]+$/)) {
+    throw new ValidationError('Amount must be hex string');
   }
   
-  // Check if it's actually greater than 0
-  if (BigInt(amountStr) <= 0n) {
-    throw new ValidationError('Amount must be greater than 0');
+  // Check if it's greater than 0
+  if (BigInt(amountStr) <= BigInt(0)) {
+    throw new ValidationError('Amount must be positive');
   }
+  
   
   return amountStr;
 }
@@ -145,6 +169,14 @@ export const CONTRACT_ADDRESSES = {
     1: '0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f',
     // Arbitrum L2 Gateway Router on Arbitrum One
     42161: '0x72Ce9c846789fdB6fC1f34aC4AD25Dd9ef7031ef'
+  },
+  L1_GATEWAY_ROUTER: {
+    // L1 Gateway Router on Ethereum mainnet
+    1: '0x72Ce9c846789fdB6fC1f34aC4AD25Dd9ef7031ef'
+  },
+  L2_GATEWAY_ROUTER: {
+    // L2 Gateway Router on Arbitrum One
+    42161: '0x5288c571Fd7aD117beA99bF60FE0846C4E84F933'
   }
 } as const;
 
@@ -167,6 +199,12 @@ async function estimateGasWithSafety(
   try {
     const gasEstimate = await client.estimateGas(transaction);
     const safeGasLimit = BigInt(Math.ceil(Number(gasEstimate) * safetyMultiplier));
+    
+    // Security: Enforce maximum gas limit
+    if (safeGasLimit > MAX_GAS_LIMIT) {
+      return MAX_GAS_LIMIT.toString();
+    }
+    
     return safeGasLimit.toString();
   } catch (error) {
     // Fallback to conservative estimates if gas estimation fails
@@ -223,16 +261,12 @@ async function validateSufficientBalance(
 function validateMaxAmount(amount: string, tokenAddress?: string): void {
   const amountBigInt = BigInt(amount);
   
-  // Set reasonable maximum limits
-  const MAX_ETH = BigInt('100000000000000000000'); // 100 ETH
-  const MAX_ERC20 = BigInt('1000000000000000000000000'); // 1M tokens (18 decimals)
-  
   if (!tokenAddress || tokenAddress === 'ETH') {
-    if (amountBigInt > MAX_ETH) {
+    if (amountBigInt > MAX_ETH_AMOUNT) {
       throw new ValidationError(`Amount exceeds maximum limit of 100 ETH for safety`);
     }
   } else {
-    if (amountBigInt > MAX_ERC20) {
+    if (amountBigInt > MAX_TOKEN_AMOUNT) {
       throw new ValidationError(`Amount exceeds maximum limit of 1M tokens for safety`);
     }
   }
@@ -328,6 +362,24 @@ const ARBITRUM_INBOX_ABI = [
 ] as const;
 
 // L2 Gateway Router ABI - For Arbitrum to Ethereum withdrawals
+// L1 Gateway Router ABI (for ERC20 bridging)
+const L1_GATEWAY_ROUTER_ABI = [
+  {
+    name: 'outboundTransfer',
+    type: 'function',
+    stateMutability: 'payable',
+    inputs: [
+      { name: 'token', type: 'address' },
+      { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+      { name: 'maxGas', type: 'uint256' },
+      { name: 'gasPriceBid', type: 'uint256' },
+      { name: 'data', type: 'bytes' }
+    ],
+    outputs: [{ name: 'txId', type: 'bytes32' }]
+  }
+] as const;
+
 const ARBITRUM_L2_GATEWAY_ABI = [
   {
     name: 'outboundTransfer',
@@ -342,7 +394,129 @@ const ARBITRUM_L2_GATEWAY_ABI = [
   }
 ] as const;
 
-// Tool: Bridge ETH to Arbitrum
+// Validation Tool: Check Bridge Feasibility
+export const validateBridgeFeasibility: ToolFunction<any> = {
+  description: "Validate if bridge transaction is feasible",
+  parameters: bridgeEthParams,
+  execute: async ({ amount, recipient, userAddress, maxSubmissionCost, maxGas, gasPriceBid, slippageBps = 100, deadlineMinutes = 30 }) => {
+    try {
+      const env = validateEnvironment();
+      validateAmount(amount);
+      validateMaxAmount(amount, 'ETH');
+      const recipientAddr = validateAddress(recipient);
+      const userAddr = validateAddress(userAddress);
+      
+      const bridgeAddress = CONTRACT_ADDRESSES.ARBITRUM_BRIDGE[1];
+      if (!bridgeAddress) {
+        throw new NetworkError('Arbitrum bridge contract not available on Ethereum');
+      }
+      validateContractAddress(bridgeAddress, 1);
+
+      const client = getPublicClient(1, env);
+      
+      // Balance validation
+      await validateSufficientBalance(client, userAddr, amount, 'ETH');
+      
+      // Calculate security parameters
+      const minAmount = calculateMinimumAmount(amount, slippageBps);
+      const deadline = calculateDeadline(deadlineMinutes);
+      
+      // Estimate gas costs
+      const estimatedGas = '200000'; // Conservative estimate
+      const gasPrice = gasPriceBid || '20000000000';
+      const estimatedCost = (parseInt(estimatedGas) * parseInt(gasPrice)).toString();
+      
+      return {
+        feasible: true,
+        estimatedCost,
+        estimatedGas,
+        minAmount,
+        deadline,
+        slippageBps,
+        chainId: 1,
+        description: `Bridge validation successful for ${amount} wei ETH to Arbitrum`
+      };
+    } catch (error) {
+      if (error instanceof BridgeError) throw error;
+      throw new NetworkError(`Bridge validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+};
+
+// Transaction Generation Tool: Generate Bridge Transaction (NO network calls)
+export const generateBridgeTransaction: ToolFunction<any> = {
+  description: "Generate unsigned bridge transaction",
+  parameters: bridgeEthParams,
+  execute: async ({ amount, recipient, userAddress, maxSubmissionCost, maxGas, gasPriceBid, slippageBps = 100, deadlineMinutes = 30 }) => {
+    try {
+      // Pure function - only generates tx data
+      validateAmount(amount);
+      validateMaxAmount(amount, 'ETH');
+      const recipientAddr = validateAddress(recipient);
+      const userAddr = validateAddress(userAddress);
+      
+      const bridgeAddress = CONTRACT_ADDRESSES.ARBITRUM_BRIDGE[1];
+      if (!bridgeAddress) {
+        throw new NetworkError('Arbitrum bridge contract not available on Ethereum');
+      }
+      validateContractAddress(bridgeAddress, 1);
+      
+      // Calculate security parameters
+      const minAmount = calculateMinimumAmount(amount, slippageBps);
+      const deadline = calculateDeadline(deadlineMinutes);
+      
+      // Default values for optional parameters
+      const submissionCost = maxSubmissionCost || '1000000000000000'; // 0.001 ETH
+      const gasLimit = maxGas || '1000000';
+      const gasPrice = gasPriceBid || '20000000000'; // 20 gwei
+      
+      // Convert all amounts to BigInt for ABI encoding
+      const amountWei = BigInt(amount);
+      const submissionCostWei = BigInt(submissionCost);
+      const gasLimitWei = BigInt(gasLimit);
+      const gasPriceWei = BigInt(gasPrice);
+
+      // Encode the createRetryableTicket function call
+      const data = {
+        abi: ARBITRUM_INBOX_ABI,
+        functionName: 'createRetryableTicket' as const,
+        args: [
+          recipientAddr, // to
+          amountWei, // l2CallValue
+          submissionCostWei, // maxSubmissionCost
+          userAddr, // excessFeeRefundAddress
+          userAddr, // callValueRefundAddress
+          gasLimitWei, // gasLimit
+          gasPriceWei, // maxFeePerGas
+          '0x' // data
+        ]
+      };
+
+      return {
+        transaction: {
+          to: bridgeAddress,
+          data: data,
+          value: amount
+        },
+        estimatedGas: '200000', // Conservative estimate
+        chainId: 1,
+        description: `Bridge ${amount} wei ETH to Arbitrum for recipient ${recipientAddr}`,
+        bridgeType: 'eth_to_arbitrum',
+        amount,
+        recipient: recipientAddr,
+        minAmount,
+        deadline,
+        slippageBps,
+        userAddress: userAddr
+      };
+    } catch (error) {
+      if (error instanceof BridgeError) throw error;
+      throw new NetworkError(`Failed to generate bridge transaction: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+};
+
+// Tool: Bridge ETH to Arbitrum (Legacy - for backward compatibility)
 export const bridgeEthToArbitrum: ToolFunction<any> = {
   description: "Bridge ETH from Ethereum to Arbitrum via Arbitrum Bridge",
   parameters: bridgeEthParams,
@@ -368,24 +542,30 @@ export const bridgeEthToArbitrum: ToolFunction<any> = {
       // Calculate security parameters
       const minAmount = calculateMinimumAmount(amount, slippageBps);
       const deadline = calculateDeadline(deadlineMinutes);
-
+      
       // Default values for optional parameters
       const submissionCost = maxSubmissionCost || '1000000000000000'; // 0.001 ETH
       const gasLimit = maxGas || '1000000';
       const gasPrice = gasPriceBid || '20000000000'; // 20 gwei
       
+      // Convert all amounts to BigInt for ABI encoding
+      const amountWei = BigInt(amount);
+      const submissionCostWei = BigInt(submissionCost);
+      const gasLimitWei = BigInt(gasLimit);
+      const gasPriceWei = BigInt(gasPrice);
+
       // Encode the createRetryableTicket function call
       const data = {
         abi: ARBITRUM_INBOX_ABI,
         functionName: 'createRetryableTicket' as const,
         args: [
           recipientAddr, // to
-          BigInt(amount), // l2CallValue
-          BigInt(submissionCost), // maxSubmissionCost
+          amountWei, // l2CallValue
+          submissionCostWei, // maxSubmissionCost
           userAddr, // excessFeeRefundAddress
           userAddr, // callValueRefundAddress
-          BigInt(gasLimit), // gasLimit
-          BigInt(gasPrice), // maxFeePerGas
+          gasLimitWei, // gasLimit
+          gasPriceWei, // maxFeePerGas
           '0x' // data
         ]
       };
@@ -396,12 +576,12 @@ export const bridgeEthToArbitrum: ToolFunction<any> = {
         functionName: 'createRetryableTicket',
         args: [
           recipientAddr, // to
-          BigInt(amount), // l2CallValue
-          BigInt(submissionCost), // maxSubmissionCost
+          amountWei, // l2CallValue
+          submissionCostWei, // maxSubmissionCost
           userAddr, // excessFeeRefundAddress
           userAddr, // callValueRefundAddress
-          BigInt(gasLimit), // gasLimit
-          BigInt(gasPrice), // maxFeePerGas
+          gasLimitWei, // gasLimit
+          gasPriceWei, // maxFeePerGas
           '0x' // data
         ]
       });
@@ -409,7 +589,7 @@ export const bridgeEthToArbitrum: ToolFunction<any> = {
       // Dynamic gas estimation with encoded function call
       const transactionData = {
         to: bridgeAddress as Address,
-        value: BigInt(amount),
+        value: amountWei,
         data: encodedData
       };
 
@@ -471,6 +651,9 @@ export const bridgeEthFromArbitrum: ToolFunction<any> = {
       const gasLimit = maxGas || '1000000';
       const gasPrice = gasPriceBid || '20000000000'; // 20 gwei
       
+      // Convert amount to BigInt for ABI encoding
+      const amountWei = BigInt(amount);
+
       // Encode the outboundTransfer function call for L2 Gateway Router
       const data = {
         abi: ARBITRUM_L2_GATEWAY_ABI,
@@ -478,7 +661,7 @@ export const bridgeEthFromArbitrum: ToolFunction<any> = {
         args: [
           '0x0000000000000000000000000000000000000000', // ETH token address (zero for native ETH)
           recipientAddr, // to
-          BigInt(amount), // amount
+          amountWei, // amount
           '0x' // data
         ]
       };
@@ -490,7 +673,7 @@ export const bridgeEthFromArbitrum: ToolFunction<any> = {
         args: [
           '0x0000000000000000000000000000000000000000', // ETH token address (zero for native ETH)
           recipientAddr, // to
-          BigInt(amount), // amount
+          amountWei, // amount
           '0x' // data
         ]
       });
@@ -498,7 +681,7 @@ export const bridgeEthFromArbitrum: ToolFunction<any> = {
       // Dynamic gas estimation with encoded function call
       const transactionData = {
         to: bridgeAddress as Address,
-        value: BigInt(amount),
+        value: amountWei,
         data: encodedData
       };
 
@@ -561,43 +744,50 @@ export const bridgeErc20ToArbitrum: ToolFunction<any> = {
       const gasLimit = maxGas || '1000000';
       const gasPrice = gasPriceBid || '20000000000'; // 20 gwei
       
-      // For ERC20 tokens, we need to use the L1 Gateway Router
-      // This is a simplified implementation - in production, you'd need to determine the correct gateway
+      // Convert all amounts to BigInt for ABI encoding
+      const amountWei = BigInt(amount);
+      const submissionCostWei = BigInt(submissionCost);
+      const gasLimitWei = BigInt(gasLimit);
+      const gasPriceWei = BigInt(gasPrice);
+
+      // Use L1 Gateway Router for ERC20 bridging
+      const gatewayRouterAddress = CONTRACT_ADDRESSES.L1_GATEWAY_ROUTER[1];
+      if (!gatewayRouterAddress) {
+        throw new NetworkError('L1 Gateway Router not available on Ethereum');
+      }
+      validateContractAddress(gatewayRouterAddress, 1);
+
       const data = {
-        abi: ARBITRUM_INBOX_ABI,
-        functionName: 'createRetryableTicket' as const,
+        abi: L1_GATEWAY_ROUTER_ABI,
+        functionName: 'outboundTransfer' as const,
         args: [
-          tokenAddr, // to (token contract on L2)
-          BigInt('0'), // l2CallValue (no ETH value for ERC20)
-          BigInt(submissionCost), // maxSubmissionCost
-          userAddr, // excessFeeRefundAddress
-          userAddr, // callValueRefundAddress
-          BigInt(gasLimit), // gasLimit
-          BigInt(gasPrice), // maxFeePerGas
+          tokenAddr, // token
+          recipientAddr, // to
+          amountWei, // amount
+          gasLimitWei, // maxGas
+          gasPriceWei, // gasPriceBid
           '0x' // data
         ]
       };
 
       // Encode the function call for gas estimation
       const encodedData = encodeFunctionData({
-        abi: ARBITRUM_INBOX_ABI,
-        functionName: 'createRetryableTicket',
+        abi: L1_GATEWAY_ROUTER_ABI,
+        functionName: 'outboundTransfer',
         args: [
-          tokenAddr, // to (token contract on L2)
-          BigInt('0'), // l2CallValue (no ETH value for ERC20)
-          BigInt(submissionCost), // maxSubmissionCost
-          userAddr, // excessFeeRefundAddress
-          userAddr, // callValueRefundAddress
-          BigInt(gasLimit), // gasLimit
-          BigInt(gasPrice), // maxFeePerGas
+          tokenAddr, // token
+          recipientAddr, // to
+          amountWei, // amount
+          gasLimitWei, // maxGas
+          gasPriceWei, // gasPriceBid
           '0x' // data
         ]
       });
 
       // Dynamic gas estimation with encoded function call
       const transactionData = {
-        to: bridgeAddress as Address,
-        value: BigInt(submissionCost), // Only submission cost for ERC20
+        to: gatewayRouterAddress as Address,
+        value: BigInt(0), // ERC20 bridges don't send ETH
         data: encodedData
       };
 
@@ -605,9 +795,9 @@ export const bridgeErc20ToArbitrum: ToolFunction<any> = {
 
       return {
         transaction: {
-          to: bridgeAddress,
+          to: gatewayRouterAddress,
           data: data,
-          value: submissionCost // Only submission cost, not the token amount
+          value: '0' // ERC20 bridges don't send ETH
         },
         estimatedGas,
         chainId: 1,
@@ -661,6 +851,16 @@ export const bridgeErc20FromArbitrum: ToolFunction<any> = {
       const gasLimit = maxGas || '1000000';
       const gasPrice = gasPriceBid || '20000000000'; // 20 gwei
       
+      // Convert amount to BigInt for ABI encoding
+      const amountWei = BigInt(amount);
+
+      // Use L2 Gateway Router for ERC20 withdrawals
+      const gatewayRouterAddress = CONTRACT_ADDRESSES.L2_GATEWAY_ROUTER[42161];
+      if (!gatewayRouterAddress) {
+        throw new NetworkError('L2 Gateway Router not available on Arbitrum');
+      }
+      validateContractAddress(gatewayRouterAddress, 42161);
+
       // Encode the outboundTransfer function call for L2 Gateway Router
       const data = {
         abi: ARBITRUM_L2_GATEWAY_ABI,
@@ -668,7 +868,7 @@ export const bridgeErc20FromArbitrum: ToolFunction<any> = {
         args: [
           tokenAddr, // token
           recipientAddr, // to
-          BigInt(amount), // amount
+          amountWei, // amount
           '0x' // data
         ]
       };
@@ -680,14 +880,14 @@ export const bridgeErc20FromArbitrum: ToolFunction<any> = {
         args: [
           tokenAddr, // token
           recipientAddr, // to
-          BigInt(amount), // amount
+          amountWei, // amount
           '0x' // data
         ]
       });
 
       // Dynamic gas estimation with encoded function call
       const transactionData = {
-        to: bridgeAddress as Address,
+        to: gatewayRouterAddress as Address,
         value: BigInt(0), // ERC20 withdrawals don't send ETH
         data: encodedData
       };
@@ -696,7 +896,7 @@ export const bridgeErc20FromArbitrum: ToolFunction<any> = {
 
       return {
         transaction: {
-          to: bridgeAddress,
+          to: gatewayRouterAddress,
           data: data,
           value: '0' // ERC20 withdrawals don't send ETH
         },
@@ -865,14 +1065,87 @@ export const processBridgeIntent: ToolFunction<z.infer<typeof intentParams>> = {
     try {
       const env = validateEnvironment();
       
-      // Simple intent parsing for demo
+      // Enhanced intent processing with regex patterns
+      const lowerIntent = intent.toLowerCase();
+      
+      // Extract amount and token with better patterns
+      const amountPatterns = [
+        /(\d+(?:\.\d+)?)\s*(eth|ethereum)/i,
+        /(\d+(?:\.\d+)?)\s*(usdc|usd\s*coin)/i,
+        /(\d+(?:\.\d+)?)\s*(usdt|tether)/i,
+        /(\d+(?:\.\d+)?)\s*(dai)/i,
+        /(\d+(?:\.\d+)?)\s*(arb|arbitrum)/i
+      ];
+      
+      let amount = '1';
+      let token = 'ETH';
+      
+      for (const pattern of amountPatterns) {
+        const match = lowerIntent.match(pattern);
+        if (match) {
+          amount = match[1];
+          const tokenMatch = match[2].toLowerCase();
+          if (tokenMatch.includes('eth') || tokenMatch.includes('ethereum')) {
+            token = 'ETH';
+          } else if (tokenMatch.includes('usdc') || tokenMatch.includes('usd')) {
+            token = 'USDC';
+          } else if (tokenMatch.includes('usdt') || tokenMatch.includes('tether')) {
+            token = 'USDT';
+          } else if (tokenMatch.includes('dai')) {
+            token = 'DAI';
+          } else if (tokenMatch.includes('arb')) {
+            token = 'ARB';
+          }
+          break;
+        }
+      }
+      
+      // Extract source and destination chains with better patterns
+      let fromChain = 'ethereum';
+      let toChain = 'arbitrum';
+      
+      // Look for explicit chain mentions
+      if (lowerIntent.includes('from arbitrum') || lowerIntent.includes('arbitrum to')) {
+        fromChain = 'arbitrum';
+        toChain = 'ethereum';
+      } else if (lowerIntent.includes('from ethereum') || lowerIntent.includes('ethereum to')) {
+        fromChain = 'ethereum';
+        toChain = 'arbitrum';
+      } else if (lowerIntent.includes('to arbitrum') || lowerIntent.includes('bridge to arbitrum')) {
+        fromChain = 'ethereum';
+        toChain = 'arbitrum';
+      } else if (lowerIntent.includes('to ethereum') || lowerIntent.includes('bridge to ethereum')) {
+        fromChain = 'arbitrum';
+        toChain = 'ethereum';
+      }
+      
+      // Convert amount to wei based on token decimals
+      let amountWei: string;
+      const amountFloat = parseFloat(amount);
+      
+      switch (token) {
+        case 'ETH':
+          amountWei = (amountFloat * 1e18).toString();
+          break;
+        case 'USDC':
+        case 'USDT':
+          amountWei = (amountFloat * 1e6).toString();
+          break;
+        case 'DAI':
+        case 'ARB':
+          amountWei = (amountFloat * 1e18).toString();
+          break;
+        default:
+          amountWei = (amountFloat * 1e18).toString();
+      }
+      
       const parsed = {
         type: 'bridge',
         priority: 'balanced',
-        amount: '1000000000000000000', // 1 ETH
-        token: 'ETH',
-        fromChain: 1,
-        toChain: 42161
+        amount: amountWei,
+        token,
+        fromChain: fromChain === 'ethereum' ? 1 : 42161,
+        toChain: toChain === 'ethereum' ? 1 : 42161
       };
       
       return {
@@ -921,6 +1194,13 @@ export const processBridgeIntent: ToolFunction<z.infer<typeof intentParams>> = {
 
 // Main tools object
 export const tools = {
+  // Validation tools (can do network calls)
+  validateBridgeFeasibility,
+  
+  // Transaction generation tools (NO network calls)
+  generateBridgeTransaction,
+  
+  // Legacy tools (for backward compatibility)
   bridgeEthToArbitrum,
   bridgeEthFromArbitrum,
   bridgeErc20ToArbitrum,
