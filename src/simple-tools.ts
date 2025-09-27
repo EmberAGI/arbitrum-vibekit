@@ -138,13 +138,25 @@ export function validateAmount(amount: string): string {
   return amountStr;
 }
 
-// Contract Addresses
+// Contract Addresses - OFFICIAL ARBITRUM BRIDGE ADDRESSES
 export const CONTRACT_ADDRESSES = {
   ARBITRUM_BRIDGE: {
-    1: '0x8315177aB5bA0A56C4c4C4C4C4C4C4C4C4C4C4',
-    42161: '0x0000000000000000000000000000000000000000'
+    // Arbitrum Inbox contract on Ethereum mainnet
+    1: '0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f',
+    // Arbitrum L2 Gateway Router on Arbitrum One
+    42161: '0x72Ce9c846789fdB6fC1f34aC4AD25Dd9ef7031ef'
   }
 } as const;
+
+// Validate contract addresses are not zero addresses
+function validateContractAddress(address: string, chainId: number): void {
+  if (address === '0x0000000000000000000000000000000000000000') {
+    throw new ValidationError(`Contract address is zero address for chain ${chainId}`);
+  }
+  if (!isAddress(address)) {
+    throw new ValidationError(`Invalid contract address format: ${address} for chain ${chainId}`);
+  }
+}
 
 // ETH Bridge Parameters
 export const bridgeEthParams = z.object({
@@ -239,6 +251,7 @@ export const bridgeEthToArbitrum: ToolFunction<z.infer<typeof bridgeEthParams>> 
       if (!bridgeAddress) {
         throw new NetworkError('Arbitrum bridge contract not available on Ethereum');
       }
+      validateContractAddress(bridgeAddress, 1);
 
       // Default values for optional parameters
       const submissionCost = maxSubmissionCost || '1000000000000000'; // 0.001 ETH
@@ -293,6 +306,7 @@ export const bridgeEthFromArbitrum: ToolFunction<z.infer<typeof bridgeEthParams>
       if (!bridgeAddress) {
         throw new NetworkError('Arbitrum bridge contract not available on Arbitrum');
       }
+      validateContractAddress(bridgeAddress, 42161);
 
       // Default values for optional parameters
       const submissionCost = maxSubmissionCost || '1000000000000000'; // 0.001 ETH
@@ -348,6 +362,7 @@ export const bridgeErc20ToArbitrum: ToolFunction<z.infer<typeof bridgeErc20Param
       if (!bridgeAddress) {
         throw new NetworkError('Arbitrum bridge contract not available on Ethereum');
       }
+      validateContractAddress(bridgeAddress, 1);
 
       // Default values for optional parameters
       const submissionCost = maxSubmissionCost || '1000000000000000'; // 0.001 ETH
@@ -406,6 +421,7 @@ export const bridgeErc20FromArbitrum: ToolFunction<z.infer<typeof bridgeErc20Par
       if (!bridgeAddress) {
         throw new NetworkError('Arbitrum bridge contract not available on Arbitrum');
       }
+      validateContractAddress(bridgeAddress, 42161);
 
       // Default values for optional parameters
       const submissionCost = maxSubmissionCost || '1000000000000000'; // 0.001 ETH
@@ -525,7 +541,7 @@ export const estimateBridgeGas: ToolFunction<z.infer<typeof estimateGasParams>> 
         estimatedCost,
         fromChainId,
         toChainId,
-        tokenAddress: tokenAddress || '0x0000000000000000000000000000000000000000',
+        tokenAddress: tokenAddress || 'ETH',
         amount,
         recipient: recipientAddr
       };
@@ -545,12 +561,12 @@ export const listAvailableRoutes: ToolFunction<z.infer<typeof routeParams>> = {
       const routes = [];
       
       // ETH routes
-      if (!tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000') {
+      if (!tokenAddress || tokenAddress === 'ETH') {
         routes.push({
           protocol: 'arbitrum',
           fromChainId,
           toChainId,
-          tokenAddress: '0x0000000000000000000000000000000000000000',
+          tokenAddress: 'ETH',
           tokenSymbol: 'ETH',
           estimatedTime: '7-10 days',
           estimatedCost: '0.001 ETH',
