@@ -63,7 +63,10 @@ async function runDemo() {
   try {
     const bridgeTx = await tools.bridgeEthToArbitrum.execute({
       amount: '1000000000000000000', // 1 ETH
-      recipient: '0x742d35Cc6634C0532925a3b8D0C0C4C4C4C4C4C4'
+      recipient: '0x742d35Cc6634C0532925a3b8D0C0C4C4C4C4C4C4',
+      userAddress: '0x742d35Cc6634C0532925a3b8D0C0C4C4C4C4C4C4',
+      slippageBps: 100,
+      deadlineMinutes: 30
     });
     console.log('Bridge transaction built:');
     console.log(`  To: ${bridgeTx.transaction?.to}`);

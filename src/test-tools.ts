@@ -77,7 +77,10 @@ async function runTests() {
   await testTool('bridgeEthToArbitrum', async () => {
     return await tools.bridgeEthToArbitrum.execute({
       amount: TEST_CONFIG.testAmountEth,
-      recipient: TEST_CONFIG.testRecipient
+      recipient: TEST_CONFIG.testRecipient,
+      userAddress: TEST_CONFIG.testRecipient,
+      slippageBps: 100,
+      deadlineMinutes: 30
     });
   });
   
@@ -86,7 +89,10 @@ async function runTests() {
     return await tools.bridgeErc20ToArbitrum.execute({
       tokenAddress: TEST_CONFIG.testTokenAddress,
       amount: TEST_CONFIG.testAmount,
-      recipient: TEST_CONFIG.testRecipient
+      recipient: TEST_CONFIG.testRecipient,
+      userAddress: TEST_CONFIG.testRecipient,
+      slippageBps: 100,
+      deadlineMinutes: 30
     });
   });
   
