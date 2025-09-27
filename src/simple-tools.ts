@@ -1,5 +1,5 @@
 import type { Address, Chain } from 'viem';
-import { createPublicClient, http, isAddress } from 'viem';
+import { createPublicClient, http, isAddress, encodeFunctionData } from 'viem';
 import { arbitrum, mainnet } from 'viem/chains';
 import { z } from 'zod';
 import dotenv from 'dotenv';
@@ -375,31 +375,46 @@ export const bridgeEthToArbitrum: ToolFunction<any> = {
       const gasLimit = maxGas || '1000000';
       const gasPrice = gasPriceBid || '20000000000'; // 20 gwei
       
-      // Prepare transaction for gas estimation
-      const transactionData = {
-        to: bridgeAddress as Address,
-        value: BigInt(amount),
-        data: '0x' as const
-      };
-
-      // Dynamic gas estimation
-      const estimatedGas = await estimateGasWithSafety(client, transactionData);
-
       // Encode the createRetryableTicket function call
       const data = {
         abi: ARBITRUM_INBOX_ABI,
         functionName: 'createRetryableTicket' as const,
         args: [
           recipientAddr, // to
-          amount, // l2CallValue
-          submissionCost, // maxSubmissionCost
+          BigInt(amount), // l2CallValue
+          BigInt(submissionCost), // maxSubmissionCost
           userAddr, // excessFeeRefundAddress
           userAddr, // callValueRefundAddress
-          gasLimit, // gasLimit
-          gasPrice, // maxFeePerGas
+          BigInt(gasLimit), // gasLimit
+          BigInt(gasPrice), // maxFeePerGas
           '0x' // data
         ]
       };
+
+      // Encode the function call for gas estimation
+      const encodedData = encodeFunctionData({
+        abi: ARBITRUM_INBOX_ABI,
+        functionName: 'createRetryableTicket',
+        args: [
+          recipientAddr, // to
+          BigInt(amount), // l2CallValue
+          BigInt(submissionCost), // maxSubmissionCost
+          userAddr, // excessFeeRefundAddress
+          userAddr, // callValueRefundAddress
+          BigInt(gasLimit), // gasLimit
+          BigInt(gasPrice), // maxFeePerGas
+          '0x' // data
+        ]
+      });
+
+      // Dynamic gas estimation with encoded function call
+      const transactionData = {
+        to: bridgeAddress as Address,
+        value: BigInt(amount),
+        data: encodedData
+      };
+
+      const estimatedGas = await estimateGasWithSafety(client, transactionData);
 
       return {
         transaction: {
@@ -457,16 +472,6 @@ export const bridgeEthFromArbitrum: ToolFunction<any> = {
       const gasLimit = maxGas || '1000000';
       const gasPrice = gasPriceBid || '20000000000'; // 20 gwei
       
-      // Prepare transaction for gas estimation
-      const transactionData = {
-        to: bridgeAddress as Address,
-        value: BigInt(amount),
-        data: '0x' as const
-      };
-
-      // Dynamic gas estimation
-      const estimatedGas = await estimateGasWithSafety(client, transactionData);
-
       // Encode the outboundTransfer function call for L2 Gateway Router
       const data = {
         abi: ARBITRUM_L2_GATEWAY_ABI,
@@ -474,10 +479,31 @@ export const bridgeEthFromArbitrum: ToolFunction<any> = {
         args: [
           '0x0000000000000000000000000000000000000000', // ETH token address (zero for native ETH)
           recipientAddr, // to
-          amount, // amount
+          BigInt(amount), // amount
           '0x' // data
         ]
       };
+
+      // Encode the function call for gas estimation
+      const encodedData = encodeFunctionData({
+        abi: ARBITRUM_L2_GATEWAY_ABI,
+        functionName: 'outboundTransfer',
+        args: [
+          '0x0000000000000000000000000000000000000000', // ETH token address (zero for native ETH)
+          recipientAddr, // to
+          BigInt(amount), // amount
+          '0x' // data
+        ]
+      });
+
+      // Dynamic gas estimation with encoded function call
+      const transactionData = {
+        to: bridgeAddress as Address,
+        value: BigInt(amount),
+        data: encodedData
+      };
+
+      const estimatedGas = await estimateGasWithSafety(client, transactionData);
 
       return {
         transaction: {
@@ -536,16 +562,6 @@ export const bridgeErc20ToArbitrum: ToolFunction<any> = {
       const gasLimit = maxGas || '1000000';
       const gasPrice = gasPriceBid || '20000000000'; // 20 gwei
       
-      // Prepare transaction for gas estimation
-      const transactionData = {
-        to: bridgeAddress as Address,
-        value: BigInt(0),
-        data: '0x' as const
-      };
-
-      // Dynamic gas estimation
-      const estimatedGas = await estimateGasWithSafety(client, transactionData);
-
       // For ERC20 tokens, we need to use the L1 Gateway Router
       // This is a simplified implementation - in production, you'd need to determine the correct gateway
       const data = {
@@ -553,15 +569,40 @@ export const bridgeErc20ToArbitrum: ToolFunction<any> = {
         functionName: 'createRetryableTicket' as const,
         args: [
           tokenAddr, // to (token contract on L2)
-          '0', // l2CallValue (no ETH value for ERC20)
-          submissionCost, // maxSubmissionCost
+          BigInt('0'), // l2CallValue (no ETH value for ERC20)
+          BigInt(submissionCost), // maxSubmissionCost
           userAddr, // excessFeeRefundAddress
           userAddr, // callValueRefundAddress
-          gasLimit, // gasLimit
-          gasPrice, // maxFeePerGas
+          BigInt(gasLimit), // gasLimit
+          BigInt(gasPrice), // maxFeePerGas
           '0x' // data
         ]
       };
+
+      // Encode the function call for gas estimation
+      const encodedData = encodeFunctionData({
+        abi: ARBITRUM_INBOX_ABI,
+        functionName: 'createRetryableTicket',
+        args: [
+          tokenAddr, // to (token contract on L2)
+          BigInt('0'), // l2CallValue (no ETH value for ERC20)
+          BigInt(submissionCost), // maxSubmissionCost
+          userAddr, // excessFeeRefundAddress
+          userAddr, // callValueRefundAddress
+          BigInt(gasLimit), // gasLimit
+          BigInt(gasPrice), // maxFeePerGas
+          '0x' // data
+        ]
+      });
+
+      // Dynamic gas estimation with encoded function call
+      const transactionData = {
+        to: bridgeAddress as Address,
+        value: BigInt(submissionCost), // Only submission cost for ERC20
+        data: encodedData
+      };
+
+      const estimatedGas = await estimateGasWithSafety(client, transactionData);
 
       return {
         transaction: {
@@ -621,16 +662,6 @@ export const bridgeErc20FromArbitrum: ToolFunction<any> = {
       const gasLimit = maxGas || '1000000';
       const gasPrice = gasPriceBid || '20000000000'; // 20 gwei
       
-      // Prepare transaction for gas estimation
-      const transactionData = {
-        to: bridgeAddress as Address,
-        value: BigInt(0),
-        data: '0x' as const
-      };
-
-      // Dynamic gas estimation
-      const estimatedGas = await estimateGasWithSafety(client, transactionData);
-
       // Encode the outboundTransfer function call for L2 Gateway Router
       const data = {
         abi: ARBITRUM_L2_GATEWAY_ABI,
@@ -638,10 +669,31 @@ export const bridgeErc20FromArbitrum: ToolFunction<any> = {
         args: [
           tokenAddr, // token
           recipientAddr, // to
-          amount, // amount
+          BigInt(amount), // amount
           '0x' // data
         ]
       };
+
+      // Encode the function call for gas estimation
+      const encodedData = encodeFunctionData({
+        abi: ARBITRUM_L2_GATEWAY_ABI,
+        functionName: 'outboundTransfer',
+        args: [
+          tokenAddr, // token
+          recipientAddr, // to
+          BigInt(amount), // amount
+          '0x' // data
+        ]
+      });
+
+      // Dynamic gas estimation with encoded function call
+      const transactionData = {
+        to: bridgeAddress as Address,
+        value: BigInt(0), // ERC20 withdrawals don't send ETH
+        data: encodedData
+      };
+
+      const estimatedGas = await estimateGasWithSafety(client, transactionData);
 
       return {
         transaction: {

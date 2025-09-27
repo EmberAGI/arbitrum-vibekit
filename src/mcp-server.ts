@@ -33,41 +33,58 @@ function zodToJsonSchema(zodSchema: any): any {
     const required: string[] = [];
     
     Object.entries(shape).forEach(([key, value]: [string, any]) => {
-      const fieldSchema = value._def;
+      let fieldSchema = value._def;
+      let isOptional = false;
+      let actualSchema = fieldSchema;
       
-      // Check if field is optional by looking at the type name
-      const isOptional = fieldSchema.typeName === 'ZodOptional' || 
-                        fieldSchema.typeName === 'ZodDefault';
+      // Handle optional and default fields
+      if (fieldSchema.typeName === 'ZodOptional') {
+        isOptional = true;
+        actualSchema = fieldSchema.inner?._def || fieldSchema.inner;
+      } else if (fieldSchema.typeName === 'ZodDefault') {
+        isOptional = true;
+        actualSchema = fieldSchema.inner?._def || fieldSchema.inner;
+      }
       
-      // Get the actual schema if it's wrapped
-      const actualSchema = isOptional ? fieldSchema.inner?._def || fieldSchema.inner : fieldSchema;
+      // Handle ZodEffects (refinements)
+      if (actualSchema?.typeName === 'ZodEffects') {
+        actualSchema = actualSchema.schema?._def || actualSchema.schema;
+      }
       
+      // Determine field type and properties
       if (actualSchema?.typeName === 'ZodString') {
         properties[key] = {
           type: 'string',
           description: actualSchema.description || fieldSchema.description || '',
         };
-        if (!isOptional) {
-          required.push(key);
+      } else if (actualSchema?.typeName === 'ZodNumber') {
+        properties[key] = {
+          type: 'number',
+          description: actualSchema.description || fieldSchema.description || '',
+        };
+        if (actualSchema.min !== undefined) {
+          properties[key].minimum = actualSchema.min;
+        }
+        if (actualSchema.max !== undefined) {
+          properties[key].maximum = actualSchema.max;
         }
       } else if (actualSchema?.typeName === 'ZodUnion') {
         properties[key] = {
           type: 'string',
           description: actualSchema.description || fieldSchema.description || '',
-          enum: actualSchema.options.map((opt: any) => opt._def.value),
+          enum: actualSchema.options?.map((opt: any) => opt._def?.value || opt) || [],
         };
-        if (!isOptional) {
-          required.push(key);
-        }
       } else {
         // Fallback for other types
         properties[key] = {
           type: 'string',
-          description: fieldSchema.description || '',
+          description: fieldSchema.description || actualSchema?.description || '',
         };
-        if (!isOptional) {
-          required.push(key);
-        }
+      }
+      
+      // Add to required array if not optional
+      if (!isOptional) {
+        required.push(key);
       }
     });
     
