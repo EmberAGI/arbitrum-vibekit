@@ -1,5 +1,61 @@
 #!/usr/bin/env node
+
+/**
+ * Arbitrum Bridge MCP Server - EmberAGI Compatible
+ * 
+ * This module exports standardized bridge tools following EmberAGI's on-chain action plugins architecture.
+ * Each tool provides a description, Zod schema for parameters, and execute function.
+ * 
+ * Usage:
+ *   import { tools } from './index.js';
+ *   const result = await tools.bridgeEthToArbitrum.execute({ amount: '1000000000000000000', recipient: '0x...' });
+ */
+
 import dotenv from 'dotenv';
+import { tools } from './tools.js';
+
+// Load environment variables
+dotenv.config();
+
+// Export the tools object as the main interface
+export { tools };
+
+// Export individual tool functions for direct access
+export {
+  bridgeEthToArbitrum,
+  bridgeEthFromArbitrum,
+  bridgeErc20ToArbitrum,
+  bridgeErc20FromArbitrum,
+  getBridgeStatus,
+  estimateBridgeGas,
+  listAvailableRoutes,
+  processBridgeIntent
+} from './simple-tools.js';
+
+// Export types
+export type {
+  BridgeResponse,
+  SupportedChainId,
+  ToolFunction
+} from './simple-tools.js';
+
+// CLI interface for testing
+if (import.meta.url === `file://${process.argv[1]}`) {
+  console.log('🌉 Arbitrum Bridge Tools - EmberAGI Compatible');
+  console.log('');
+  console.log('Available tools:');
+  Object.keys(tools).forEach((toolName, index) => {
+    console.log(`  ${index + 1}. ${toolName}: ${(tools as any)[toolName].description}`);
+  });
+  console.log('');
+  console.log('Usage:');
+  console.log('  import { tools } from "./index.js";');
+  console.log('  const result = await tools.bridgeEthToArbitrum.execute({ ... });');
+  console.log('');
+  console.log('Environment variables required:');
+  console.log('  ARBITRUM_RPC_URL - Arbitrum RPC endpoint');
+  console.log('  ETHEREUM_RPC_URL - Ethereum RPC endpoint (optional)');
+}
 import express from 'express';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -211,7 +267,7 @@ async function main() {
   console.error('Bridge MCP stdio server ready.');
 
   process.stdin.on('end', () => { console.error('Stdio closed, exiting'); process.exit(0); });
-}
+}main().catch((err) => { console.error(err); process.exit(1); });
 
-main().catch((err) => { console.error(err); process.exit(1); });
+
 

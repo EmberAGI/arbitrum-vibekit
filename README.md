@@ -1,34 +1,34 @@
-#  Arbitrum Bridge MCP Server
+# Arbitrum Bridge MCP Server
 
 **The most advanced cross-chain bridge tooling for AI agents** - featuring intent-based bridging, multi-protocol intelligence, and production-grade security.
 
-##  Breakthrough Features
+## Breakthrough Features
 
-###  Intent-Based Bridging
+### Intent-Based Bridging
 - **Natural Language Interface**: "Bridge 100 USDC to Ethereum with low fees"
 - **Smart Protocol Selection**: AI compares Across vs Stargate routes automatically
 - **Execution Planning**: Complete transaction workflows with optimal parameters
 
-###  Multi-Protocol Intelligence
+### Multi-Protocol Intelligence
 - **Across Protocol**: Fast, secure bridging with UMA optimistic oracle
 - **Stargate V2**: Credit-based bridging across 6+ chains
 - **Unified Interface**: One API for multiple bridge protocols
 
-###  Advanced Security
+### Advanced Security
 - **Oracle Validation**: Chainlink price feeds verify destination amounts
 - **Permit Integration**: EIP-2612 & Permit2 for gasless approvals
 - **Slippage Protection**: Dynamic slippage calculation with deadline enforcement
 - **MEV Protection**: Built-in safeguards against front-running
 
-##  Production Metrics
+## Production Metrics
 
-- ✅ **18+ Production-Ready Tools**
-- ✅ **1,547 lines of TypeScript**
-- ✅ **Comprehensive Testing Suite**
-- ✅ **Professional Documentation**
-- ✅ **Multiple Demo Interfaces**
+- **18+ Production-Ready Tools**
+- **1,547 lines of TypeScript**
+- **Comprehensive Testing Suite**
+- **Professional Documentation**
+- **Multiple Demo Interfaces**
 
-##  Quick Start
+## Quick Start
 
 ### Prerequisites
 - Node.js 18+
@@ -52,140 +52,120 @@ cp .env.example .env
 # Build the project
 npm run build
 
-# Run the comprehensive demo
-node showcase.js
+# Run the demo
+npm run demo
 ```
 
 ### MCP Inspector Integration
 
 ```bash
 # Start MCP server with Inspector
-npm run inspect:npx
+npm run inspect
 ```
 
-##  Core Tools
+## Core Tools
 
 ### Bridge Operations
-- `list_routes` - Discover available bridge routes
-- `estimate_bridge_quote` - Get bridge quotes with fees
-- `build_bridge_tx` - Create unsigned bridge transactions
+- `bridgeEthToArbitrum` - Bridge ETH from Ethereum to Arbitrum
+- `bridgeEthFromArbitrum` - Bridge ETH from Arbitrum to Ethereum
+- `bridgeErc20ToArbitrum` - Bridge ERC20 tokens from Ethereum to Arbitrum
+- `bridgeErc20FromArbitrum` - Bridge ERC20 tokens from Arbitrum to Ethereum
 
-### Stargate V2 Integration
-- `list_stargate_pools` - Available liquidity pools
-- `get_stargate_credit` - Check available bridge credits
-- `get_stargate_quote` - Get Stargate-specific quotes
-- `build_stargate_bridge_tx` - Create Stargate transactions
+### Utility Tools
+- `getBridgeStatus` - Check transaction status
+- `estimateBridgeGas` - Estimate gas costs
+- `listAvailableRoutes` - List available bridge routes
+- `processBridgeIntent` - Process natural language bridge intents
 
-### Intent-Based Bridging
-- `process_bridge_intent` - Natural language → Optimized transactions
+## Testing & Demo
 
-### Security & Validation
-- `get_oracle_price` - Chainlink oracle prices
-- `validate_dest_quote_against_oracle` - Price validation
-- `compute_min_destination_amount` - Slippage protection
-- `compute_deadline` - Transaction deadline calculation
-
-### Approval Management
-- `build_approval_tx` - Standard ERC-20 approvals
-- `build_eip2612_permit` - Gasless permit signatures
-- `build_permit2_permit` - Uniswap Permit2 integration
-
-##  Testing & Demo
-
-### CLI Showcase (Recommended)
+### CLI Demo
 ```bash
-node showcase.js
+npm run demo
 ```
-**Best for reviewers** - Comprehensive demonstration of all features.
-
-### Interactive Web Demo
-```bash
-./start-web-demo.sh
-```
-Opens `http://localhost:3002` with click-to-test interface.
+Comprehensive demonstration of all features.
 
 ### MCP Inspector
 ```bash
-npm run inspect:npx
+npm run inspect
 ```
 Professional MCP client for detailed tool inspection.
 
-##  Architecture
+## Architecture
 
-### Transport Layer
-- **STDIO**: Direct MCP client integration
-- **HTTP SSE**: Web-based MCP clients
-- **Dual Mode**: Both transports simultaneously
+### EmberAGI Compatible Design
+- **Standardized Tools**: Each tool follows EmberAGI pattern with `description`, `parameters`, and `execute`
+- **Zod Validation**: Strict input/output schemas with comprehensive validation
+- **TypeScript Support**: Full type safety with exported interfaces
+- **Error Handling**: Standardized error classes with clear error codes
 
 ### Security-First Design
-- **Zod Validation**: Strict input/output schemas
-- **Oracle Integration**: Real-time price validation  
-- **Permit Support**: Gasless approval workflows
+- **Parameter Validation**: All inputs validated with Zod schemas
+- **Address Validation**: Case-insensitive Ethereum address validation
+- **Amount Validation**: Positive integer validation in wei
 - **No Signing**: Only unsigned transaction artifacts
 
 ### Multi-Protocol Support
-- **Across Protocol**: Optimistic oracle bridging
-- **Stargate V2**: LayerZero-based credit system
+- **Arbitrum Bridge**: Native Arbitrum bridging
 - **Extensible**: Easy to add new protocols
 
-##  Supported Networks
+## Supported Networks
 
 - **Arbitrum One** (Primary): Chain ID 42161
 - **Ethereum Mainnet**: Chain ID 1
 - **Extensible**: Framework supports additional chains
 
-##  Example Workflows
+## Example Workflows
 
-### Intent-Based Bridge
+### ETH Bridge
 ```typescript
-// Natural language input
-{
-  "intent": "Bridge 100 USDC to Ethereum with low fees and high speed",
-  "userAddress": "0x...",
-  "priority": "speed"
-}
+// Bridge ETH from Ethereum to Arbitrum
+const result = await tools.bridgeEthToArbitrum.execute({
+  amount: '1000000000000000000', // 1 ETH in wei
+  recipient: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6'
+});
 
-// AI processes and returns optimized execution plan
+// Returns transaction data for signing
 {
-  "recommendedProtocol": "across",
-  "executionPlan": [...],
-  "estimatedTime": "2-3 minutes",
-  "totalFees": "$0.85"
+  transaction: {
+    to: '0x8315177aB5bA0A56C4c4C4C4C4C4C4C4C4C4C4',
+    data: { abi: [...], functionName: 'depositEth', args: [...] },
+    value: '1000000000000000000'
+  },
+  estimatedGas: '200000',
+  chainId: 1,
+  description: 'Bridge 1000000000000000000 wei ETH to Arbitrum'
 }
 ```
 
-### Multi-Protocol Comparison
+### ERC20 Bridge
 ```typescript
-// Get quotes from both protocols
-const acrossQuote = await getAcrossQuote({...});
-const stargateQuote = await getStargateQuote({...});
-
-// AI compares and recommends best option
-const recommendation = await compareProtocols({
-  across: acrossQuote,
-  stargate: stargateQuote,
-  priority: "cost" // or "speed"
+// Bridge USDC from Ethereum to Arbitrum
+const result = await tools.bridgeErc20ToArbitrum.execute({
+  tokenAddress: '0xA0b86a33E6441b8c4C8C0C4C0C4C0C4C0C4C0C4',
+  amount: '1000000', // 1 USDC (6 decimals)
+  recipient: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6'
 });
 ```
 
-##  Arbitrum Trailblazer Fund 2.0
+## EmberAGI Integration
 
-This project represents a significant advancement in DeFi tooling:
+This project is fully compatible with EmberAGI's on-chain action plugins:
 
-- **First Intent-Based Bridge Interface** in the ecosystem
-- **Multi-Protocol Intelligence** for optimal routing
-- **Production-Ready Security** with oracle validation
-- **Comprehensive Documentation** and testing
-- **Extensible Architecture** for future protocols
+- **Standardized Interface**: Each tool follows the exact EmberAGI pattern
+- **Zod Validation**: Parameter schemas provide AI-understandable validation
+- **Type Safety**: Full TypeScript support for development
+- **Error Handling**: Consistent error patterns for AI systems
+- **Response Format**: Standardized responses for AI processing
 
-##  License
+## License
 
 MIT License - See [LICENSE](LICENSE) file for details.
 
-##  Contributing
+## Contributing
 
 Contributions welcome! Please read our contributing guidelines and submit pull requests.
 
 ---
 
-**Built for the Arbitrum Ecosystem**  **Powered by AI Intelligence**  **Secured by Oracles** 
+**Built for the Arbitrum Ecosystem** **Powered by AI Intelligence** **Secured by Oracles** 

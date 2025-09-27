@@ -1,34 +1,53 @@
 {
   "name": "arbitrum-bridge-mcp-server",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": false,
   "type": "module",
   "license": "MIT",
-  "main": "dist/index.js",
+  "main": "dist/tools.js",
   "bin": {
-    "bridge-mcp-server": "dist/index.js"
+    "bridge-tools": "dist/tools.js"
   },
   "scripts": {
     "build": "tsc -b",
-    "dev": "tsx src/index.ts",
-    "inspect:npx": "node ./dist/index.js | npx -y @modelcontextprotocol/inspector",
-    "inspect": "node ./dist/index.js | pnpm -s dlx @modelcontextprotocol/inspector"
+    "dev": "tsx src/tools.ts",
+    "test": "tsx src/test-tools.ts",
+    "demo": "tsx src/demo.ts",
+    "inspect:npx": "ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc ETHEREUM_RPC_URL=https://eth.llamarpc.com node ./dist/mcp-server.js | npx -y @modelcontextprotocol/inspector",
+    "inspect": "ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc ETHEREUM_RPC_URL=https://eth.llamarpc.com node ./dist/mcp-server.js | pnpm -s dlx @modelcontextprotocol/inspector"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.1",
     "@stargatefinance/stg-evm-sdk-v2": "^1.0.0",
-    "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "express": "^4.21.2",
     "viem": "^2.21.10",
     "zod": "^3.24.3"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
     "@types/node": "^20.10.0",
     "prettier": "^3.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.8.3"
+  },
+  "keywords": [
+    "arbitrum",
+    "bridge",
+    "ethereum",
+    "defi",
+    "stargate",
+    "across",
+    "emberagi",
+    "onchain-actions"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/tools.js",
+      "types": "./dist/tools.d.ts"
+    },
+    "./types": {
+      "import": "./dist/types.js",
+      "types": "./dist/types.d.ts"
+    }
   }
 }
 
