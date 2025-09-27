@@ -280,16 +280,15 @@ export const bridgeErc20Params = z.object({
 // Bridge Status Parameters
 export const bridgeStatusParams = z.object({
   transactionHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/, 'Invalid transaction hash').describe("Transaction hash to check status"),
-  chainId: z.union([z.literal(1), z.literal(42161)]).describe("Chain ID where transaction was submitted")
+  chainId: z.union([z.literal(1), z.literal(42161)]).default(1).describe("Chain ID where transaction was submitted (default: 1)")
 });
 
 // Gas Estimation Parameters
 export const estimateGasParams = z.object({
-  fromChainId: z.union([z.literal(1), z.literal(42161)]).describe("Source chain ID"),
-  toChainId: z.union([z.literal(1), z.literal(42161)]).describe("Destination chain ID"),
+  fromChain: z.enum(['ethereum', 'arbitrum']).describe("Source chain"),
+  toChain: z.enum(['ethereum', 'arbitrum']).describe("Destination chain"),
   tokenAddress: addressSchema.optional().describe("Token address (optional for ETH)"),
-  amount: amountSchema.describe("Amount to bridge"),
-  recipient: addressSchema.describe("Recipient address")
+  amount: amountSchema.describe("Amount to bridge")
 });
 
 // Route Parameters
@@ -721,7 +720,7 @@ export const bridgeErc20FromArbitrum: ToolFunction<any> = {
 };
 
 // Tool: Get Bridge Status
-export const getBridgeStatus: ToolFunction<z.infer<typeof bridgeStatusParams>> = {
+export const getBridgeStatus: ToolFunction<any> = {
   description: "Check the status of a bridge transaction",
   parameters: bridgeStatusParams,
   execute: async ({ transactionHash, chainId }) => {
@@ -757,14 +756,17 @@ export const getBridgeStatus: ToolFunction<z.infer<typeof bridgeStatusParams>> =
 };
 
 // Tool: Estimate Bridge Gas
-export const estimateBridgeGas: ToolFunction<z.infer<typeof estimateGasParams>> = {
+export const estimateBridgeGas: ToolFunction<any> = {
   description: "Estimate gas costs for a bridge transaction",
   parameters: estimateGasParams,
-  execute: async ({ fromChainId, toChainId, tokenAddress, amount, recipient }) => {
+  execute: async ({ fromChain, toChain, tokenAddress, amount }) => {
     try {
       const env = validateEnvironment();
       validateAmount(amount);
-      const recipientAddr = validateAddress(recipient);
+      
+      // Convert chain names to IDs
+      const fromChainId = fromChain === 'ethereum' ? 1 : 42161;
+      const toChainId = toChain === 'ethereum' ? 1 : 42161;
       
       const client = getPublicClient(fromChainId, env);
       
@@ -790,15 +792,14 @@ export const estimateBridgeGas: ToolFunction<z.infer<typeof estimateGasParams>> 
       
       return {
         chainId: fromChainId,
-        description: `Gas estimation for bridging ${tokenAddress ? 'ERC20' : 'ETH'} from chain ${fromChainId} to ${toChainId}`,
+        description: `Gas estimation for bridging ${tokenAddress ? 'ERC20' : 'ETH'} from ${fromChain} to ${toChain}`,
         estimatedGas: baseGas,
         gasPrice,
         estimatedCost,
         fromChainId,
         toChainId,
         tokenAddress: tokenAddress || 'ETH',
-        amount,
-        recipient: recipientAddr
+        amount
       };
     } catch (error) {
       if (error instanceof BridgeError) throw error;

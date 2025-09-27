@@ -42,11 +42,10 @@ async function runDemo() {
   console.log('-------------------------');
   try {
     const gasEstimate = await tools.estimateBridgeGas.execute({
-      fromChainId: 1,
-      toChainId: 42161,
+    fromChain: 'ethereum',
+    toChain: 'arbitrum',
       tokenAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // USDC
-      amount: '1000000', // 1 USDC
-      recipient: '0x742d35Cc6634C0532925a3b8D0C0C4C4C4C4C4C4'
+      amount: '1000000' // 1 USDC
     });
     console.log(`Estimated gas: ${gasEstimate.estimatedGas}`);
     console.log(`Gas price: ${gasEstimate.gasPrice} wei`);

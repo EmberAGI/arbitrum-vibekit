@@ -65,11 +65,10 @@ async function runTests() {
   // Test 2: Estimate Bridge Gas
   await testTool('estimateBridgeGas', async () => {
     return await tools.estimateBridgeGas.execute({
-      fromChainId: 1,
-      toChainId: 42161,
+      fromChain: 'ethereum',
+      toChain: 'arbitrum',
       tokenAddress: TEST_CONFIG.testTokenAddress,
-      amount: TEST_CONFIG.testAmount,
-      recipient: TEST_CONFIG.testRecipient
+      amount: TEST_CONFIG.testAmount
     });
   });
   
