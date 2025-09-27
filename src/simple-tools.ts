@@ -272,6 +272,19 @@ const ARBITRUM_INBOX_ABI = [
   }
 ] as const;
 
+// L2 Bridge ABI for withdrawals (L2 -> L1)
+const ARBITRUM_L2_BRIDGE_ABI = [
+  {
+    name: 'withdrawEth',
+    type: 'function',
+    stateMutability: 'payable',
+    inputs: [
+      { name: 'destination', type: 'address' }
+    ],
+    outputs: [{ name: '', type: 'uint256' }]
+  }
+] as const;
+
 const L1_GATEWAY_ROUTER_ABI = [
   {
     name: 'outboundTransfer',
@@ -629,51 +642,27 @@ export const bridgeEthFromArbitrum: ToolFunction<any> = {
       const minAmount = calculateMinimumAmount(amount, slippageBps);
       const deadline = calculateDeadline(deadlineMinutes);
       
-      // Default values for optional parameters
-      const submissionCost = maxSubmissionCost || '0x1000000000000000'; // 0.001 ETH
-      const gasLimit = maxGas || '0x100000'; // 1M gas
-      const gasPrice = gasPriceBid || '0x4a817c800'; // 20 gwei
-      
-      // Convert to BigInt for ABI encoding
-      const amountWei = BigInt(amount);
-      const submissionCostWei = BigInt(submissionCost);
-      const gasLimitWei = BigInt(gasLimit);
-      const gasPriceWei = BigInt(gasPrice);
-      
+      // For L2->L1 withdrawals, use the L2 bridge contract with withdrawEth function
       const data = {
-        abi: ARBITRUM_INBOX_ABI,
-        functionName: 'createRetryableTicket' as const,
+        abi: ARBITRUM_L2_BRIDGE_ABI,
+        functionName: 'withdrawEth' as const,
         args: [
-          recipientAddr, // to
-          amountWei, // l2CallValue
-          submissionCostWei, // maxSubmissionCost
-          userAddr, // excessFeeRefundAddress
-          userAddr, // callValueRefundAddress
-          gasLimitWei, // gasLimit
-          gasPriceWei, // maxFeePerGas
-          '0x' // data
+          recipientAddr // destination
         ]
       };
       
       const encodedData = encodeFunctionData({
-        abi: ARBITRUM_INBOX_ABI,
-        functionName: 'createRetryableTicket',
+        abi: ARBITRUM_L2_BRIDGE_ABI,
+        functionName: 'withdrawEth',
         args: [
-          recipientAddr,
-          amountWei,
-          submissionCostWei,
-          userAddr,
-          userAddr,
-          gasLimitWei,
-          gasPriceWei,
-          '0x'
+          recipientAddr
         ]
       });
       
       // Gas estimation with actual encoded data
       const transactionData = {
         to: bridgeAddress as Address,
-        value: amountWei,
+        value: BigInt(amount), // ETH amount to withdraw
         data: encodedData
       };
       const estimatedGas = await estimateGasWithSafety(client, transactionData);
