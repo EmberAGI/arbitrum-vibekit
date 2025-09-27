@@ -234,7 +234,7 @@ export const CONTRACT_ADDRESSES = {
   },
   // Arbitrum One (Chain ID: 42161)
   42161: {
-    bridge: '0x0000000000000000000000000000000000000000', // Placeholder - needs verification
+    bridge: '0x8315177aB297bA92A06054cE80a67Ed4DBd7ed3a', // Arbitrum L2 Bridge (for withdrawals)
     gatewayRouter: '0x5288c571Fd7aD117beA99bF60FE0846C4E84F933' // L2 Gateway Router
   }
 } as const;
@@ -1016,13 +1016,13 @@ export const processBridgeIntent: ToolFunction<any> = {
       const fromChain = fromChainMatch ? fromChainMatch[1].toLowerCase() : 'ethereum';
       const toChain = toChainMatch ? toChainMatch[1].toLowerCase() : 'arbitrum';
       
-      // Convert amount to wei based on token
+      // Convert amount to wei based on token (return as hex string)
       let amountWei: string;
       if (token === 'ETH') {
-        amountWei = (BigInt(Math.floor(amount * 1e18))).toString();
+        amountWei = '0x' + (BigInt(Math.floor(amount * 1e18))).toString(16);
       } else {
         // Assume 6 decimals for stablecoins
-        amountWei = (BigInt(Math.floor(amount * 1e6))).toString();
+        amountWei = '0x' + (BigInt(Math.floor(amount * 1e6))).toString(16);
       }
       
       const parsed = {
