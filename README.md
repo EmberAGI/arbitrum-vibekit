@@ -20,6 +20,23 @@
 - **Slippage Protection**: Dynamic slippage calculation with deadline enforcement
 - **MEV Protection**: Built-in safeguards against front-running
 
+## Recent Fixes (v2.0.0)
+
+### Critical Issues Resolved
+- ✅ **L2 Bridge ABI Fix**: Corrected `bridgeEthFromArbitrum` to use proper L2 bridge contract
+- ✅ **Contract Addresses**: Replaced zero placeholders with official Arbitrum contracts
+- ✅ **Amount Format**: Standardized all amounts to hex format for consistency
+- ✅ **Security Hardening**: Added comprehensive security measures and validations
+- ✅ **Architecture**: Complete refactor to EmberAGI-compatible standards
+
+### Verified Contract Addresses
+- **L1 Inbox**: `0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f`
+- **L1 Gateway Router**: `0x72Ce9c846789fdB6fC1f34aC4AD25Dd9ef7031ef`
+- **L2 Bridge**: `0x8315177aB297bA92A06054cE80a67Ed4DBd7ed3a`
+- **L2 Gateway Router**: `0x5288c571Fd7aD117beA99bF60FE0846C4E84F933`
+
+> **Note**: All critical bugs have been resolved. See [ISSUES_RESOLVED.md](./ISSUES_RESOLVED.md) for detailed information about the fixes.
+
 ## Production Metrics
 
 - **18+ Production-Ready Tools**
