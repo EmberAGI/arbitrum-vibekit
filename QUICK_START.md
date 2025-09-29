@@ -1,4 +1,4 @@
-# Quick Start Guide - Arbitrum Bridge MCP Server
+ # Quick Start Guide - Arbitrum Bridge MCP Server
 
 ## 🚀 Getting Started
 
