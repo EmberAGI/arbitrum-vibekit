@@ -1,8 +1,11 @@
 # Arbitrum Bridge MCP Server
 
+[![Fork of EmberAGI/arbitrum-vibekit](https://img.shields.io/badge/Fork%20of-EmberAGI%2Farbitrum--vibekit-blue?style=flat-square&logo=github)](https://github.com/EmberAGI/arbitrum-vibekit)
+[![Original Repository](https://img.shields.io/badge/Original-EmberAGI%2Farbitrum--vibekit-green?style=flat-square)](https://github.com/EmberAGI/arbitrum-vibekit)
+
 **The most advanced cross-chain bridge tooling for AI agents** - featuring intent-based bridging, multi-protocol intelligence, and production-grade security.
 
-> **Fork of [EmberAGI/arbitrum-vibekit](https://github.com/EmberAGI/arbitrum-vibekit)** - This is a specialized fork focused on Arbitrum bridge functionality with comprehensive security enhancements and EmberAGI compatibility improvements.
+> **🔀 This is a specialized fork of [EmberAGI/arbitrum-vibekit](https://github.com/EmberAGI/arbitrum-vibekit)** - Enhanced with comprehensive Arbitrum bridge functionality, security improvements, and critical bug fixes.
 
 ## Breakthrough Features
 
