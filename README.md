@@ -2,6 +2,8 @@
 
 **The most advanced cross-chain bridge tooling for AI agents** - featuring intent-based bridging, multi-protocol intelligence, and production-grade security.
 
+> **Fork of [EmberAGI/arbitrum-vibekit](https://github.com/EmberAGI/arbitrum-vibekit)** - This is a specialized fork focused on Arbitrum bridge functionality with comprehensive security enhancements and EmberAGI compatibility improvements.
+
 ## Breakthrough Features
 
 ### Intent-Based Bridging

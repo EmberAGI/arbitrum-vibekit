@@ -4,6 +4,14 @@
   "private": false,
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WuodOdhis/arbitrum-bridge-mcp-server.git"
+  },
+  "homepage": "https://github.com/WuodOdhis/arbitrum-bridge-mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/WuodOdhis/arbitrum-bridge-mcp-server/issues"
+  },
   "main": "dist/tools.js",
   "bin": {
     "bridge-tools": "dist/tools.js"
