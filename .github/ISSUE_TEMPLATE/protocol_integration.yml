@@ -1,0 +1,120 @@
+name: 🔌 Protocol Integration
+description: Request support for a new DeFi protocol
+title: "[New Protocol Integration]: "
+labels: ["enhancement", "protocol-integration"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a protocol integration! Note that protocol integrations are only supported through the Ember Plugin system.
+
+  - type: input
+    id: protocol-name
+    attributes:
+      label: 🏷️ Protocol Name
+      description: Name of the DeFi protocol
+    validations:
+      required: true
+
+  - type: dropdown
+    id: protocol-type
+    attributes:
+      label: 🔧 Protocol Type
+      description: What type of DeFi operations does this protocol support?
+      options:
+        - Swapping/DEX
+        - Lending/Borrowing
+        - Liquidity Provision
+        - Yield Farming
+        - Derivatives/Perpetuals
+        - Cross-chain/Bridge
+        - Options/Structured Products
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: protocol-description
+    attributes:
+      label: 📝 Protocol Description
+      description: Brief description of the protocol and its key features
+      placeholder: |
+        What does this protocol do?
+        What makes it unique or important?
+        Key features/benefits...
+    validations:
+      required: true
+
+  - type: input
+    id: documentation
+    attributes:
+      label: 📚 Protocol Documentation
+      description: Link to official protocol documentation
+      placeholder: https://docs.protocol.com
+    validations:
+      required: true
+
+  - type: textarea
+    id: networks
+    attributes:
+      label: 🌐 Supported Networks
+      description:  Which networks does this protocol operate on?
+    validations:
+      required: true
+
+  - type: textarea
+    id: capabilities
+    attributes:
+      label: 🎯 Capabilities
+      description: What specific operations are supported?
+      placeholder: |
+        For swapping protocols:
+        - Single token swaps
+        - Multi-hop routing
+        - Slippage protection
+        - Price impact calculation
+
+        For lending protocols:
+        - Supply/withdraw assets
+        - Borrow/repay assets  
+        - Health factor monitoring
+        - Liquidation protection
+
+        For liquidity protocols:
+        - Add/remove liquidity
+        - Position management
+        - Yield tracking
+        - Impermanent loss calculation
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 📎 Additional Information
+      description: Any other relevant information, security considerations, or special requirements
+      placeholder: |
+        Security audits, known limitations, special permissions needed, etc.
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation Required
+      description: What needs to be implemented on Ember's MCP Server for this protocol to be functional? 
+      placeholder: |
+        Note: Add "dev-required" label to this issue if code implementation or adjustment is required from the Vibekit team.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: ✅ Pre-submission Checklist
+      options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+        - label: I have integrated the protocol using the Ember Plugin system
+          required: true
+        - label: I have verified this protocol is actively maintained
+          required: true
+        - label: I will wait for the Vibekit team to approve this issue before continuing to implementation
+          required: true

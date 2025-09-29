@@ -1,0 +1,76 @@
+name: 🐛 Bug Report
+description: Report a bug or unexpected behavior
+title: "[BUG]: "
+labels: ["bug"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please search existing issues first to avoid duplicates.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 🐛 Bug Description
+      description: Clear and concise description of the bug
+      placeholder: What happened that shouldn't have?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 🔄 Steps to Reproduce
+      description: Provide detailed steps to reproduce the issue
+      placeholder: |
+        1. Set up environment with...
+        2. Run command...
+        3. Execute agent with...
+        4. See error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 🌍 Environment Details
+      description: Please provide your environment information
+      value: |
+        - OS: [e.g. macOS 14.0, Ubuntu 22.04]
+        - Node.js Version: [e.g. v20.10.0]
+        - Package Manager (if applicable): [e.g. pnpm 8.15.0]
+        - Browser (if applicable): [e.g. Chrome 120]
+        - Agent Template (if applicable): [e.g. ember-agent, lending-agent]
+        - Network (if applicable): [e.g. Arbitrum One, Arbitrum Sepolia]
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 📋 Error Messages/Logs
+      description: Paste relevant error messages, console output, or log files
+      placeholder: Paste error messages and logs here...
+      render: shell
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 📎 Additional Context
+      description: Screenshots, relevant code snippets, or other context
+      placeholder: Add any other context about the problem here...
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: ✅ Pre-submission Checklist
+      options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+        - label: I have provided steps to reproduce the issue
+          required: true
+        - label: I have included relevant environment details
+          required: true
+        - label: I will wait for the Vibekit team to approve this issue before continuing to implementation
+          required: true

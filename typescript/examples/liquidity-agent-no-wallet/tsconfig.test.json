@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist-test",
+    "composite": true,
+    "baseUrl": ".",
+    "verbatimModuleSyntax": false,
+    "paths": {
+      "test-utils": ["../../lib/test-utils/src"]
+    }
+  },
+  "include": ["test/**/*", "src/**/*"],
+  "references": [{ "path": "../../lib/test-utils" }]
+}

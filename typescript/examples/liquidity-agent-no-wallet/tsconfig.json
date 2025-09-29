@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "composite": true,
+    "verbatimModuleSyntax": false
+  },
+  "include": ["src/**/*"],
+  "exclude": ["./dist", "node_modules"],
+  "references": [
+    { "path": "../../lib/test-utils" },
+    { "path": "../../lib/ember-api" }
+  ]
+}

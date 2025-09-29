@@ -1,0 +1,16 @@
+# Node.js
+node_modules/
+dist/
+dist-test/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build artifacts
+mcp-tools/
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# Environment variables
+.env*
+!.env.example

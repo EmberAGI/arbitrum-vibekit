@@ -1,29 +1,54 @@
-# Dependencies
+# Node.js / TypeScript
 node_modules/
+dist/
+build/
+coverage/
+.pnpm-store/
+.npm/
+.pnpm-debug.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-
-# Build outputs
-dist/
-*.tsbuildinfo
+lerna-debug.log*
 
 # Environment variables
 .env
-.env.local
-.env.production
-.env.staging
+.env.*
+!.env.example
+!.env.test.example
 
-# IDE
-.vscode/
+# TypeScript cache
+*.tsbuildinfo
+.eslintcache
+
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+**/*.pdb
+
+# Testing
+.coverage/
+.nyc_output/
+
+# IDE / Editors
 .idea/
-*.swp
-*.swo
-
-# OS
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/tasks.json
 .DS_Store
-Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.history/
+*~
+.*.swp
+.cursor/rules/scratchpad.mdc
 
 # Logs
 logs/
@@ -63,3 +88,33 @@ temp/
 
 # Yarn Integrity file
 .yarn-integrity
+
+# Build artifacts
+.turbo
+.cache/
+.vercel
+.next/
+
+# Package managers
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+# Next
+.turbo
+.next
+.vercel
+
+# Playwright
+**/test-results/
+**/playwright-report/
+**/blob-report/
+**/playwright/*
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/*

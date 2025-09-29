@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: ci
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Clone onchain-actions repository
+        uses: actions/checkout@v4
+        with:
+          repository: EmberAGI/onchain-actions
+          path: typescript/onchain-actions
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Install dependencies in project
+        working-directory: ./typescript
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Run linter
+        working-directory: ./typescript
+        run: pnpm recursive run lint
+
+      - name: Build project
+        working-directory: ./typescript
+        run: pnpm run build || true
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Initialize environment files
+        working-directory: ./typescript
+        run: |
+          cp .env.example .env
+          cp onchain-actions/.env.template onchain-actions/.env
+
+      - name: Start anvil server and wait for readiness
+        working-directory: ./typescript
+        env:
+          MNEMONIC: ${{ secrets.MNEMONIC }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+          SQUID_INTEGRATOR_ID: ${{ secrets.SQUID_INTEGRATOR_ID }}
+          DUNE_API_KEY: ${{ secrets.DUNE_API_KEY }}
+          DUST_CHAIN_RECEIVER_ADDRESS: ${{ secrets.DUST_CHAIN_RECEIVER_ADDRESS }}
+          DUST_ACCOUNT_PRIVATE_KEY: ${{ secrets.DUST_ACCOUNT_PRIVATE_KEY }}
+          DUST_CHAIN_ID: ${{ secrets.DUST_CHAIN_ID }}
+        run: |
+          # Start the anvil server and capture its output to a log file
+          pnpm run start:anvil 2>&1 | tee anvil_server.log &
+          SERVER_PID=$!
+
+          echo "Waiting for anvil server to be ready..."
+
+          # Set a timeout (in seconds)
+          timeout=300
+
+          # Wait until we see the readiness message or timeout
+          until grep -q "You can run integration tests now" anvil_server.log || [ $timeout -le 0 ]; do
+            sleep 1
+            timeout=$((timeout - 1))
+          done
+
+          # Check if we timed out
+          if [ $timeout -le 0 ]; then
+            echo "Anvil server did not start in time. Logs:"
+            cat anvil_server.log
+            kill $SERVER_PID
+            exit 1
+          fi
+
+          echo "Anvil server is ready!"
+          echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
+
+      - name: Install dependencies in project
+        working-directory: ./typescript
+        run: pnpm install
+
+      - name: Run tests
+        working-directory: ./typescript
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ALLORA_API_KEY: ${{ secrets.ALLORA_API_KEY }}
+          QUICKNODE_API_KEY: ${{ secrets.QUICKNODE_API_KEY }}
+          QUICKNODE_SUBDOMAIN: ${{ secrets.QUICKNODE_SUBDOMAIN }}
+          MNEMONIC: ${{ secrets.MNEMONIC }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          EMBER_ENDPOINT: http://localhost:3001/mcp
+        run: pnpm run test
+
+      - name: Kill anvil server
+        if: always()
+        run: |
+          if [[ -n "${{ env.SERVER_PID }}" ]]; then
+            kill ${{ env.SERVER_PID }} || true
+          fi

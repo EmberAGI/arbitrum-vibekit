@@ -1,0 +1,81 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run swapping agent",
+      "type": "shell",
+      "command": "pnpm run --filter \"swapping-agent\" docker:compose:up",
+      "group": "none",
+      "options": {
+        "cwd": "${workspaceFolder}/typescript/"
+      },
+      "isBackground": false,
+      "problemMatcher": "$node-sass",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      }
+    },
+    {
+      "label": "[no-wallet] Run swapping agent",
+      "type": "shell",
+      "command": "pnpm run --filter \"swapping-agent-no-wallet\" docker:compose:up",
+      "group": "none",
+      "options": {
+        "cwd": "${workspaceFolder}/typescript/"
+      },
+      "isBackground": false,
+      "problemMatcher": "$node-sass",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      }
+    },
+    {
+      "label": "[no-wallet] Run lending agent",
+      "type": "shell",
+      "command": "pnpm run --filter \"lending-agent-no-wallet\" docker:compose:up",
+      "group": "none",
+      "options": {
+        "cwd": "${workspaceFolder}/typescript/"
+      },
+      "isBackground": false,
+      "problemMatcher": "$node-sass",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      }
+    },
+    {
+      "label": "[no-wallet] Run liquidity agent",
+      "type": "shell",
+      "command": "pnpm run --filter \"liquidity-agent-no-wallet\" docker:compose:up",
+      "group": "none",
+      "options": {
+        "cwd": "${workspaceFolder}/typescript/"
+      },
+      "isBackground": false,
+      "problemMatcher": "$node-sass",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      }
+    }
+  ]
+}

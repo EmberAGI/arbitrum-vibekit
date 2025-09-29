@@ -1,0 +1,132 @@
+name: 📚 Documentation Issue
+description: Report missing, incorrect, or unclear documentation
+title: "[Update Docs]: "
+labels: ["documentation"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us improve Vibekit documentation! Clear docs are essential for developer experience.
+
+  - type: dropdown
+    id: doc-type
+    attributes:
+      label: 📂 Documentation Type
+      description: What type of documentation needs attention?
+      options:
+        - Setup/Installation Guide
+        - Agent Template Guide
+        - MCP Integration Guide
+        - Code Examples/Tutorials
+        - Architecture/Design Docs
+        - Troubleshooting Guide
+        - Contributing Guidelines
+        - README files
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: 🎯 Issue Type
+      description: What's wrong with the documentation?
+      options:
+        - Missing documentation
+        - Incorrect/outdated information
+        - Unclear/confusing explanation
+        - Broken links or references
+        - Missing code examples
+        - Poor organization/structure
+        - Incomplete information
+        - Inconsistent formatting
+    validations:
+      required: true
+
+  - type: textarea
+    id: location
+    attributes:
+      label: 📍 Documentation Location
+      description: Where is this documentation located (or where should it be)?
+      placeholder: |
+        File path:
+        Section:
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-state
+    attributes:
+      label: 📋 Current State
+      description: Describe what currently exists (if anything)
+      placeholder: |
+        Current documentation says...
+        The current example shows...
+        There's no documentation for...
+        The link goes to...
+
+  - type: textarea
+    id: expected-state
+    attributes:
+      label: ✅ Desired State
+      description: What should the documentation include or explain?
+      placeholder: |
+        Should clearly explain how to...
+        Needs step-by-step guide for...
+        Should include examples of...
+        Link should point to...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: audience
+    attributes:
+      label: 👥 Target Audience
+      description: Who is the primary audience for this documentation?
+      options:
+        - New developers getting started
+        - Experienced developers integrating protocols
+        - DeFi users/traders
+        - Contributors to the project
+        - System administrators/DevOps
+        - All users
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 📈 Priority
+      description: How critical is this documentation fix?
+      options:
+        - Critical - Blocks new users from getting started
+        - High - Significantly impacts developer experience
+        - Medium - Improves clarity and usability
+        - Low - Minor improvement
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 📎 Additional Context
+      description: Any other relevant information, screenshots, or context
+      placeholder: |
+        Screenshots of confusing UI...
+        Links to helpful references...
+        Related discussions or issues...
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: ✅ Pre-submission Checklist
+      options:
+        - label: I have searched existing issues for similar documentation problems
+          required: true
+        - label: I have clearly identified the documentation location
+          required: true
+        - label: I have described what needs to be fixed or added
+          required: true
+        - label: I will wait for the Vibekit team to approve this issue before continuing to implementation
+          required: true

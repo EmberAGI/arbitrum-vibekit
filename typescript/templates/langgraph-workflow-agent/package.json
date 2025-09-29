@@ -1,0 +1,37 @@
+{
+  "name": "@vibekit/langgraph-workflow-agent",
+  "version": "1.0.0",
+  "description": "A hello-world agent demonstrating the evaluator-optimizer workflow pattern using LangGraph",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:integration": "vitest run test/integration",
+    "lint": "eslint src test || true"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@google-a2a/types": "workspace:*",
+    "@langchain/core": "^0.3.59",
+    "@langchain/langgraph": "^0.3.3",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "ai": "catalog:",
+    "arbitrum-vibekit-core": "workspace:*",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vitest/ui": "^3.2.3",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "^3.2.1"
+  }
+}

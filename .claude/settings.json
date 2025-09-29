@@ -1,0 +1,47 @@
+{
+    "permissions": {
+        "allow": [
+        ],
+        "deny": [
+        ]
+    },
+    "env": {
+        "ANTHROPIC_SMALL_FAST_MODEL": "claude-sonnet-4-20250514"
+    },
+    "includeCoAuthoredBy": false,
+    "model": "claude-opus-4-20250514",
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Task",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/pre-task-hook.sh"
+                    }
+                ]
+            }
+        ],
+        "PostToolUse": [
+            {
+                "matcher": "Task",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/post-task-hook.sh"
+                    }
+                ]
+            }
+        ],
+        "SubagentStop": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/subagent-stop-hook.sh"
+                    }
+                ]
+            }
+        ]
+    }
+}

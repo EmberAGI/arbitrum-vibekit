@@ -1,0 +1,79 @@
+{
+  "name": "@emberai/onchain-actions-registry",
+  "version": "0.1.0",
+  "description": "Registry for plugins compatible with Ember to execute DeFi actions.",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "format": "prettier --write \"src/**/*.ts\""
+  },
+  "dependencies": {
+    "@aave/contract-helpers": "^1.32.1",
+    "@aave/math-utils": "^1.32.1",
+    "@bgd-labs/aave-address-book": "^4.10.0",
+    "@gmx-io/sdk": "^1.2.1",
+    "ethers": "^5.7.2",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EmberAGI/arbitrum-vibekit.git",
+    "directory": "typescript/onchain-actions-plugins/registry"
+  },
+  "release": {
+    "branches": [
+      {
+        "name": "add/plugins",
+        "channel": "alpha",
+        "prerelease": "alpha"
+      },
+      "main"
+    ],
+    "plugins": [
+      [
+        "@semantic-release/commit-analyzer",
+        {
+          "preset": "conventionalcommits"
+        }
+      ],
+      [
+        "@semantic-release/npm",
+        {
+          "npmPublish": true,
+          "pkgRoot": ".npm-publish"
+        }
+      ],
+      [
+        "@semantic-release/git",
+        {
+          "assets": [
+            "CHANGELOG.md",
+            "package.json"
+          ],
+          "message": "chore(release): onchain-actions-registry-v${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+        }
+      ],
+      [
+        "@semantic-release/github",
+        {}
+      ]
+    ]
+  }
+}

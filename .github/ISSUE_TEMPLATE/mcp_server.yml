@@ -1,0 +1,161 @@
+name: 🔧 New MCP Server
+description: Propose a new MCP (Model Context Protocol) server integration
+title: "[New MCP Server]: "
+labels: ["enhancement", "mcp-server"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing an MCP server! MCP servers extend agent capabilities with new tools and data sources.
+
+  - type: input
+    id: mcp-name
+    attributes:
+      label: 🏷️ MCP Server Name
+      description: What is this MCP server called?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mcp-category
+    attributes:
+      label: 🏗️ MCP Category
+      description: What type of functionality does this MCP server provide?
+      options:
+        - Price Data/Analytics
+        - On-chain Data/Indexing
+        - DeFi Protocol Integration
+        - Trading/DEX Integration
+        - Wallet/Transaction Tools
+        - Security/Risk Analysis
+        - Cross-chain/Bridge
+        - AI/ML Services
+        - External API Integration
+        - Development/Testing Tools
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: mcp-description
+    attributes:
+      label: 📝 MCP Description
+      description: Describe what this MCP server does and why it's needed
+      placeholder: |
+        This MCP server provides...
+        Key capabilities:
+        Why it's needed:
+    validations:
+      required: true
+
+  - type: textarea
+    id: data-source
+    attributes:
+      label: 🌐 Data Source/API
+      description: What external service or API will this MCP server use?
+      placeholder: |
+        Primary API: 
+
+        API details:
+        - Authentication required: API key
+        - Rate limits: 50 calls/minute free tier
+        - Documentation URL: 
+        - Reliability: High uptime, widely used
+
+        Alternative APIs:
+    validations:
+      required: true
+
+  - type: textarea
+    id: tools-list
+    attributes:
+      label: 🔧 MCP Tools to Implement
+      description: List the specific tools this MCP server provides
+      placeholder: |
+        1. Tool1:
+          - Description:
+          - Input:
+          - Output:
+
+        1. Tool2:
+          - Description:
+          - Input:
+          - Output:
+
+    validations:
+      required: true
+
+  - type: textarea
+    id: agent-integration
+    attributes:
+      label: 🤖 Agent Integration Examples
+      description: How would agents use these MCP tools?
+      placeholder: |
+        Example: Trading Agent
+        - Agent uses getCurrentPrice to check token prices before swaps
+        - Uses compareTokens to find arbitrage opportunities
+        - Sets up getPriceAlerts for entry/exit signals
+    validations:
+      required: true
+
+  - type: dropdown
+    id: authentication
+    attributes:
+      label: 🔐 Authentication Requirements
+      description: Does the external API require authentication?
+      options:
+        - No authentication required
+        - API key required (free tier available)
+        - API key required (paid only)
+        - OAuth/complex authentication
+        - Custom authentication method
+        - Unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: configuration
+    attributes:
+      label: ⚙️ Configuration Options
+      description: What should be configurable for this MCP server?
+      placeholder: |
+        Required configuration:
+        - API_KEY: API key for the service
+        - BASE_URL: API endpoint URL
+
+        Optional configuration:
+        - RATE_LIMIT: Custom rate limiting
+        - CACHE_TTL: How long to cache responses
+        - DEFAULT_CURRENCY: Default fiat currency (USD, EUR, etc.)
+        - TIMEOUT: Request timeout in seconds
+
+        Environment setup:
+        - How users should set up API keys
+        - Any special installation requirements
+
+  - type: textarea
+    id: testing-approach
+    attributes:
+      label: 🧪 Testing Strategy
+      description: How should this MCP server be tested?
+      placeholder: |
+        Unit tests:
+
+        Integration tests:
+
+        Performance tests:
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: ✅ Pre-submission Checklist
+      options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+        - label: I have clearly described the MCP server's functionality
+          required: true
+        - label: I have identified the data source and API requirements
+          required: true
+        - label: I will wait for the Vibekit team to approve this issue before continuing to implementation
+          required: true
