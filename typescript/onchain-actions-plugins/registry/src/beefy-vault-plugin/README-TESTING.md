@@ -4,7 +4,22 @@ This document describes the testing setup for the Beefy Vault plugin and demonst
 
 ## Test Files
 
-### 1. `test-vault-discovery.js`
+### Modern Vitest Integration Tests
+
+#### 1. `test/api-integration.vitest.ts`
+
+Comprehensive integration test suite using Vitest framework:
+
+- **API Integration Tests**: Real API calls to Beefy Finance endpoints
+- **Vault Data Retrieval**: Testing vault discovery and metadata fetching
+- **APY and TVL Data**: Validation of yield and liquidity data
+- **Transaction Building**: Deposit and withdrawal transaction generation
+- **Error Handling**: Network timeout and validation testing
+- **Data Structure Validation**: Ensuring proper vault data formats
+
+### Legacy Node.js Tests
+
+#### 1. `test-vault-discovery.js`
 
 Basic test that focuses on the vault discovery functionality:
 
@@ -12,7 +27,7 @@ Basic test that focuses on the vault discovery functionality:
 - Verifies plugin structure and queries
 - Shows sample vault data
 
-### 2. `test-actions.js`
+#### 2. `test-actions.js`
 
 Comprehensive test that demonstrates all plugin functionality:
 
@@ -22,6 +37,25 @@ Comprehensive test that demonstrates all plugin functionality:
 - **AAVE Comparison**: Side-by-side comparison with the AAVE plugin
 
 ## Running the Tests
+
+### Modern Vitest Tests (Recommended)
+
+```bash
+# From the typescript/ directory (monorepo root)
+cd typescript
+
+# Run all tests including Beefy plugin tests
+pnpm test
+
+# Run only the Beefy plugin integration tests
+pnpm run test:vitest -- src/beefy-vault-plugin/test/api-integration.vitest.ts
+
+# Run from the registry directory
+cd onchain-actions-plugins/registry
+pnpm test -- --run src/beefy-vault-plugin/test/api-integration.vitest.ts
+```
+
+### Legacy Node.js Tests
 
 ```bash
 # Navigate to the registry directory

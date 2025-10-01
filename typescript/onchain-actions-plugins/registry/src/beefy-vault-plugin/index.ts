@@ -1,10 +1,12 @@
+import type { ActionDefinition, EmberPlugin, VaultActions, VaultQueries } from '../core/index.js';
 import type {
-  ActionDefinition,
-  EmberPlugin,
-  LendingActions,
-  LendingQueries,
-} from '../core/index.js';
+  VaultDepositParams,
+  VaultWithdrawParams,
+  VaultDepositResponse,
+  VaultWithdrawResponse,
+} from '../core/actions/vaults.js';
 import { BeefyAdapter } from './adapter.js';
+import { ethers } from 'ethers';
 import type {
   BeefyAdapterParams,
   GetVaultsRequest,
@@ -22,8 +24,7 @@ import type { ChainConfig } from '../chainConfig.js';
 import type { PublicEmberPluginRegistry } from '../registry.js';
 
 // Extended queries interface for Beefy plugin
-interface BeefyQueries extends LendingQueries {
-  getVaults: (params: GetVaultsRequest) => Promise<GetVaultsResponse>;
+interface BeefyQueries extends VaultQueries {
   getApyData: (params: GetApyRequest) => Promise<GetApyResponse>;
   getTvlData: (params: GetTvlRequest) => Promise<GetTvlResponse>;
   getApyBreakdownData: (params: GetApyBreakdownRequest) => Promise<GetApyBreakdownResponse>;
@@ -37,21 +38,25 @@ interface BeefyQueries extends LendingQueries {
  */
 export async function getBeefyVaultEmberPlugin(
   params: BeefyAdapterParams
-): Promise<EmberPlugin<'lending'>> {
+): Promise<EmberPlugin<'vaults'>> {
   const adapter = new BeefyAdapter(params);
 
   return {
     id: `BEEFY_VAULT_CHAIN_${params.chainId}`,
-    type: 'lending',
+    type: 'vaults',
     name: `Beefy Vaults for ${params.chainId}`,
     description: 'Beefy Finance yield optimization vaults',
     website: 'https://beefy.finance',
     x: 'https://x.com/beefyfinance',
     actions: await getBeefyVaultActions(adapter),
     queries: {
-      getPositions: adapter.getUserSummary.bind(adapter),
-      getAvailableVaults: adapter.getAvailableVaults.bind(adapter),
       getVaults: adapter.getVaults.bind(adapter),
+      getVaultPerformance: async () => ({
+        performance: { vaultId: '', apy: 0, tvl: 0, pricePerFullShare: '1' },
+      }),
+      getUserVaultPositions: async () => ({ positions: [] }),
+      getVaultStrategies: async () => ({ strategies: [] }),
+      getVaultBoosts: async () => ({ boosts: [] }),
       getApyData: adapter.getApyData.bind(adapter),
       getTvlData: adapter.getTvlData.bind(adapter),
       getApyBreakdownData: adapter.getApyBreakdownData.bind(adapter),
@@ -61,13 +66,13 @@ export async function getBeefyVaultEmberPlugin(
 }
 
 /**
- * Get the Beefy Vault actions for the lending protocol.
+ * Get the Beefy Vault actions for the vault protocol.
  * @param adapter - An instance of BeefyAdapter to interact with Beefy vaults.
  * @returns An array of action definitions for Beefy vault operations.
  */
 export async function getBeefyVaultActions(
   adapter: BeefyAdapter
-): Promise<ActionDefinition<LendingActions>[]> {
+): Promise<ActionDefinition<VaultActions>[]> {
   const vaults = await adapter.getActiveVaults();
 
   // Extract unique underlying tokens and mooTokens
@@ -83,10 +88,10 @@ export async function getBeefyVaultActions(
     }
   }
 
-  const actions: ActionDefinition<LendingActions>[] = [
-    // Supply underlying tokens to Beefy vaults to get mooTokens
+  const actions: ActionDefinition<VaultActions>[] = [
+    // Deposit underlying tokens to Beefy vaults to get mooTokens
     {
-      type: 'lending-supply' as const,
+      type: 'vault-deposit' as const,
       name: `Beefy vault deposits in chain ${adapter.chain.id}`,
       inputTokens: async () =>
         Promise.resolve([
@@ -102,12 +107,42 @@ export async function getBeefyVaultActions(
             tokens: mooTokens,
           },
         ]),
-      callback: adapter.createSupplyTransaction.bind(adapter),
+      callback: async (params: VaultDepositParams): Promise<VaultDepositResponse> => {
+        // Convert vault deposit params to adapter's expected format
+        const response = await adapter.createSupplyTransaction({
+          supplyToken: {
+            symbol: params.tokenAddress.split('/').pop() || '',
+            name: params.tokenAddress.split('/').pop() || '',
+            tokenUid: { chainId: adapter.chain.id.toString(), address: params.tokenAddress },
+            isNative: false,
+            decimals: 18,
+            isVetted: true,
+          },
+          amount: BigInt(params.amount),
+          walletAddress: params.walletAddress,
+        });
+
+        // Convert TransactionPlan to PopulatedTransaction format
+        const transactions = response.transactions.map(tx => ({
+          to: tx.to,
+          data: tx.data,
+          value: ethers.BigNumber.from(tx.value),
+        }));
+
+        return {
+          vaultId: params.vaultId,
+          tokenAddress: params.tokenAddress,
+          amount: params.amount,
+          expectedVaultShares: '0', // Would need calculation
+          transactions,
+          chainId: adapter.chain.id.toString(),
+        };
+      },
     },
 
     // Withdraw from Beefy vaults by redeeming mooTokens for underlying tokens
     {
-      type: 'lending-withdraw' as const,
+      type: 'vault-withdraw' as const,
       name: `Beefy vault withdrawals in chain ${adapter.chain.id}`,
       inputTokens: async () =>
         Promise.resolve([
@@ -123,7 +158,37 @@ export async function getBeefyVaultActions(
             tokens: underlyingTokens,
           },
         ]),
-      callback: adapter.createWithdrawTransaction.bind(adapter),
+      callback: async (params: VaultWithdrawParams): Promise<VaultWithdrawResponse> => {
+        // Convert vault withdraw params to adapter's expected format
+        const response = await adapter.createWithdrawTransaction({
+          tokenToWithdraw: {
+            symbol: params.vaultSharesAddress.split('/').pop() || '',
+            name: params.vaultSharesAddress.split('/').pop() || '',
+            tokenUid: { chainId: adapter.chain.id.toString(), address: params.vaultSharesAddress },
+            isNative: false,
+            decimals: 18,
+            isVetted: true,
+          },
+          amount: BigInt(params.amount),
+          walletAddress: params.walletAddress,
+        });
+
+        // Convert TransactionPlan to PopulatedTransaction format
+        const transactions = response.transactions.map(tx => ({
+          to: tx.to,
+          data: tx.data,
+          value: ethers.BigNumber.from(tx.value),
+        }));
+
+        return {
+          vaultId: params.vaultId,
+          vaultSharesAddress: params.vaultSharesAddress,
+          amount: params.amount,
+          expectedTokens: '0', // Would need calculation
+          transactions,
+          chainId: adapter.chain.id.toString(),
+        };
+      },
     },
   ];
 

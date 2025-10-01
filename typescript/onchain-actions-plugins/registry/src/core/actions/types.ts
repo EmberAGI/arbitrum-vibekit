@@ -17,11 +17,22 @@ import type {
   PerpetualsCreateLongPositionCallback,
   PerpetualsCreateShortPositionCallback,
 } from './perpetuals.js';
+import type {
+  VaultActions,
+  VaultDepositCallback,
+  VaultWithdrawCallback,
+  VaultClaimRewardsCallback,
+} from './vaults.js';
 
 /**
  * The possible actions an ember plugin can perform.
  */
-export type Action = LendingActions | LiquidityActions | SwapActions | PerpetualsActions;
+export type Action =
+  | LendingActions
+  | LiquidityActions
+  | SwapActions
+  | PerpetualsActions
+  | VaultActions;
 
 /**
  * Type mapping for action callbacks.
@@ -37,6 +48,9 @@ type CallbacksRecord = {
   'perpetuals-short': PerpetualsCreateShortPositionCallback;
   'perpetuals-long': PerpetualsCreateLongPositionCallback;
   'perpetuals-close': PerpetualsCloseOrdersCallback;
+  'vault-deposit': VaultDepositCallback;
+  'vault-withdraw': VaultWithdrawCallback;
+  'vault-claim-rewards': VaultClaimRewardsCallback;
 };
 /**
  * Type mapping for action callbacks.

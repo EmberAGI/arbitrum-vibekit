@@ -12,11 +12,22 @@ export class BeefyDataProvider {
   private baseUrl = 'https://api.beefy.finance';
 
   async getVaults(): Promise<BeefyVaultsResponse> {
-    const response = await fetch(`${this.baseUrl}/vaults`);
+    const url = `${this.baseUrl}/vaults`;
+    console.log(`🌐 Making HTTP request to: ${url}`);
+
+    const response = await fetch(url);
+    console.log(`📡 Response status: ${response.status} ${response.statusText}`);
+    console.log(`📡 Response headers:`, Object.fromEntries(response.headers.entries()));
+
     if (!response.ok) {
       throw new Error(`Failed to fetch vaults: ${response.statusText}`);
     }
-    return response.json() as Promise<BeefyVaultsResponse>;
+
+    const data = (await response.json()) as BeefyVaultsResponse;
+    console.log(`📊 Received ${Object.keys(data).length} vaults from Beefy API`);
+    console.log(`📊 Sample vault IDs:`, Object.keys(data).slice(0, 5));
+
+    return data;
   }
 
   async getApy(): Promise<BeefyApyResponse> {
@@ -61,6 +72,7 @@ export class BeefyDataProvider {
 
   async getActiveVaultsForChain(chainId: number): Promise<VaultData[]> {
     const chainName = this.getChainName(chainId);
+    console.log(`🔍 Filtering vaults for chain: ${chainName} (chainId: ${chainId})`);
 
     const [vaults, apyData, tvlData] = await Promise.all([
       this.getVaults(),
@@ -68,9 +80,26 @@ export class BeefyDataProvider {
       this.getTvl(),
     ]);
 
+    console.log(`📊 Total vaults from API: ${Object.keys(vaults).length}`);
+    console.log(`📊 APY data entries: ${Object.keys(apyData).length}`);
+    console.log(`📊 TVL data entries: ${Object.keys(tvlData).length}`);
+
     const activeVaults: VaultData[] = [];
+    let totalChecked = 0;
+    let activeCount = 0;
+    let chainMatches = 0;
 
     for (const [vaultId, vault] of Object.entries(vaults)) {
+      totalChecked++;
+
+      if (vault.status === 'active') {
+        activeCount++;
+      }
+
+      if (vault.chain === chainName) {
+        chainMatches++;
+      }
+
       // Filter for active vaults on the specified chain
       if (vault.status === 'active' && vault.chain === chainName) {
         const apy = apyData[vaultId] || 0;
@@ -87,8 +116,26 @@ export class BeefyDataProvider {
           tvl,
           assets: vault.assets,
         });
+
+        if (activeVaults.length <= 3) {
+          console.log(`✅ Found active vault ${activeVaults.length}:`, {
+            id: vault.id,
+            name: vault.name,
+            chain: vault.chain,
+            status: vault.status,
+            tokenAddress: vault.tokenAddress,
+            apy,
+            tvl,
+          });
+        }
       }
     }
+
+    console.log(`📈 Filtering results:`);
+    console.log(`  - Total vaults checked: ${totalChecked}`);
+    console.log(`  - Active vaults: ${activeCount}`);
+    console.log(`  - Chain matches (${chainName}): ${chainMatches}`);
+    console.log(`  - Final active vaults for ${chainName}: ${activeVaults.length}`);
 
     return activeVaults;
   }
