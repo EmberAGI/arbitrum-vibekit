@@ -4,7 +4,6 @@
   "description": "Hello Quickstart Agent - A comprehensive example demonstrating all v2 framework features",
   "type": "module",
   "main": "dist/index.js",
-  "private": true,
   "scripts": {
     "build": "tsc --build",
     "dev": "tsx src/index.ts",
@@ -21,6 +20,9 @@
     "@modelcontextprotocol/sdk": "catalog:",
     "ai": "catalog:",
     "arbitrum-vibekit-core": "workspace:*",
+    "@vibekit/onchain-actions-nft": "workspace:*",
+    "@vibekit/onchain-actions-opensea": "workspace:*",
+    "@vibekit/onchain-actions-magiceden": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "catalog:",
     "express": "catalog:",

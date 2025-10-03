@@ -3,7 +3,7 @@ packages:
   - 'examples/*'
   - 'templates/*'
   - 'clients/*'
-  - 'onchain-actions-plugins/**/*'
+  - 'onchain-actions-plugins/*'
 
 catalog:
   # Core dependencies
@@ -14,6 +14,7 @@ catalog:
   ai: ^4.3.2
   express: ^4.21.2
   undici: ^6.19.8
+  viem: ^2.21.0
 
   # Dev dependencies
   '@types/node': ^20.10.0

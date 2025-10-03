@@ -9,7 +9,11 @@ import { Agent, type AgentConfig, createProviderSelector, getAvailableProviders 
 import { greetSkill } from './skills/greet.js';
 import { getTimeSkill } from './skills/getTime.js';
 import { echoSkill } from './skills/echo.js';
-import { openseaSkill } from './skills/opensea.js';
+import { openseaSkill, openseaActionsSkill } from './skills/opensea.js';
+import { registerNftPlugin } from '@vibekit/onchain-actions-nft';
+import OpenSeaPlugin from '@vibekit/onchain-actions-opensea';
+import MagicEdenPlugin from '@vibekit/onchain-actions-magiceden';
+import { nftSkill } from './skills/nft.js';
 import { contextProvider } from './context/provider.js';
 import type { HelloContext } from './context/types.js';
 
@@ -43,7 +47,7 @@ export const agentConfig: AgentConfig = {
   name: process.env.AGENT_NAME || 'Hello Quickstart Agent',
   version: process.env.AGENT_VERSION || '1.0.0',
   description: process.env.AGENT_DESCRIPTION || 'A comprehensive example demonstrating all v2 framework features',
-  skills: [greetSkill, getTimeSkill, echoSkill, openseaSkill],
+  skills: [greetSkill, getTimeSkill, echoSkill, openseaSkill, openseaActionsSkill, nftSkill],
   url: 'localhost',
   capabilities: {
     streaming: false,
@@ -76,6 +80,13 @@ if (agent) {
   agent
     .start(PORT, contextProvider)
     .then(() => {
+      // Register NFT plugins (OpenSea and Magic Eden skeleton)
+      try {
+        registerNftPlugin(OpenSeaPlugin);
+        registerNftPlugin(MagicEdenPlugin);
+      } catch (e) {
+        console.error('Failed to register NFT plugins:', e);
+      }
       console.log(`🚀 Hello Quickstart Agent running on port ${PORT}`);
       console.log(`📍 Base URL: http://localhost:${PORT}`);
       console.log(`🤖 Agent Card: http://localhost:${PORT}/.well-known/agent.json`);
@@ -87,6 +98,7 @@ if (agent) {
       console.log('  - Multiple MCP servers');
       console.log('  - Hook system (withHooks)');
       console.log('  - Error handling & artifacts');
+      console.log('  - OpenSea NFT trading (read-only + actions)');
     })
     .catch((error) => {
       console.error('Failed to start agent:', error);

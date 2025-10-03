@@ -1,0 +1,23 @@
+{
+  "name": "@vibekit/onchain-actions-magiceden",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "zod": "catalog:",
+    "undici": "catalog:",
+    "@vibekit/onchain-actions-nft": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "tsx": "catalog:"
+  }
+}
+
+
