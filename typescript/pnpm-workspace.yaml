@@ -13,6 +13,7 @@ catalog:
   '@openrouter/ai-sdk-provider': ^0.4.5
   ai: ^4.3.2
   express: ^4.21.2
+  undici: ^6.19.8
 
   # Dev dependencies
   '@types/node': ^20.10.0
