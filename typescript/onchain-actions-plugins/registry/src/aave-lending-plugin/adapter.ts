@@ -26,6 +26,7 @@ import {
   type GetWalletLendingPositionsRequest,
   type Token,
 } from '../core/index.js';
+import { ur } from 'zod/v4/locales';
 
 export type EModeCategory = 'default' | 'stablecoins';
 
@@ -280,7 +281,7 @@ export class AAVEAdapter {
       variableBorrowsUSD,
       totalBorrows,
       totalBorrowsUSD,
-    } of userReservesData) {
+    } of userReservesData.filter(ur => ur.underlyingBalanceUSD !== '0')) {
       const tokenData = await this.getTokenData(reserve.underlyingAsset);
       userReservesFormatted.push({
         token: {
