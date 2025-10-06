@@ -1,0 +1,49 @@
+{
+  "name": "@vibekit/opensea-actions-mcp-server",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "opensea-actions-mcp-server": "./dist/index.js"
+  },
+  "scripts": {
+    "prepare": "pnpm build",
+    "prepublishOnly": "pnpm build",
+    "build": "tsc",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "watch": "nodemon --watch 'src/**/*.ts' --exec 'tsx' src/index.ts"
+  },
+  "keywords": [
+    "mcp",
+    "opensea",
+    "nft",
+    "arbitrum",
+    "write",
+    "actions"
+  ],
+  "author": "",
+  "license": "MIT",
+  "description": "OpenSea MCP Server (write actions)",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@types/express": "^5.0.1",
+    "@types/node": "catalog:",
+    "dotenv": "catalog:",
+    "express": "catalog:",
+    "undici": "catalog:",
+    "p-retry": "^6.2.1",
+    "nodemon": "^3.1.9",
+    "typescript": "catalog:",
+    "zod": "catalog:",
+    "viem": "catalog:"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "tsx": "catalog:"
+  }
+}
