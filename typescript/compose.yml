@@ -39,6 +39,18 @@ services:
       - 3011:3011
     restart: unless-stopped
 
+  beefy-mcp-server:
+    build:
+      context: ./
+      dockerfile: lib/mcp-tools/beefy-mcp-server/Dockerfile
+    container_name: vibekit-beefy-mcp-server
+    env_file:
+      - path: .env
+        required: true
+    ports:
+      - 3012:3012
+    restart: unless-stopped
+
   # langgraph-workflow-agent:
   #   build:
   #     context: ./

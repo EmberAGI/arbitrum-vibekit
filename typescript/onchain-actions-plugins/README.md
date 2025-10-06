@@ -764,6 +764,56 @@ If what you're trying to integrate is not currently supported by the existing pl
 - What changes would your integration enable
 - Why this integration would benefit the ecosystem
 
+## Testing
+
+The plugin system includes comprehensive testing capabilities to ensure reliability and functionality:
+
+### Running Tests
+
+```bash
+# From the typescript/ directory (monorepo root)
+cd typescript
+
+# Run all tests including plugin tests
+pnpm test
+
+# Run only plugin-specific tests
+pnpm run test:vitest -- onchain-actions-plugins/registry/src/*/test/*.vitest.ts
+
+# Run tests for a specific plugin (e.g., Beefy plugin)
+pnpm run test:vitest -- src/beefy-vault-plugin/test/api-integration.vitest.ts
+```
+
+### Test Coverage
+
+The test suite includes:
+
+- **API Integration Tests**: Real API calls to protocol endpoints
+- **Plugin Registration**: Validation of plugin structure and metadata
+- **Action Functionality**: Testing transaction building and token mapping
+- **Query Operations**: Data retrieval and position tracking
+- **Error Handling**: Network timeouts and validation testing
+- **Data Structure Validation**: Ensuring proper data formats
+
+### Plugin-Specific Testing
+
+Each plugin may include its own testing documentation:
+
+- **Beefy Vault Plugin**: See [beefy-vault-plugin/README-TESTING.md](./registry/src/beefy-vault-plugin/README-TESTING.md)
+- **AAVE Lending Plugin**: Comprehensive reference implementation with test patterns
+
+### Testing Best Practices
+
+When developing new plugins:
+
+1. **Unit Tests**: Test individual adapter methods with mocks
+2. **Integration Tests**: Test plugin registration and action validation
+3. **API Tests**: Validate real protocol interactions (when applicable)
+4. **Error Scenarios**: Test edge cases and failure conditions
+5. **Transaction Validation**: Ensure proper transaction structure
+
+For detailed testing examples, refer to existing plugin implementations in the `registry/src/` directory.
+
 ## Contributions
 
 Please checkout our [contribution guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md) to get started.
