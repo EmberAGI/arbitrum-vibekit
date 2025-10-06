@@ -136,6 +136,33 @@ export const chatAgents = [
   //   ],
   // },
   {
+    id: 'camelot-v3-rebalancer' as const,
+    name: 'LP Rebalancer',
+    description: 'Camelot v3 LP rebalancing agent with automated monitoring',
+    suggestedActions: [
+      {
+        title: 'Start monitoring',
+        label: 'my positions',
+        action: 'Start monitoring my liquidity positions',
+      },
+      {
+        title: 'Check',
+        label: 'monitoring status',
+        action: 'What is the current monitoring status?',
+      },
+      {
+        title: 'Start active',
+        label: 'rebalancing',
+        action: 'Start active rebalancing mode',
+      },
+      {
+        title: 'Stop',
+        label: 'monitoring',
+        action: 'Stop monitoring',
+      },
+    ],
+  },
+  {
     id: 'all' as const,
     name: 'All agents',
     description: 'All agents',
@@ -163,6 +190,7 @@ export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   // ['allora-price-prediction-agent', 'http://allora-price-prediction-agent:3008/sse'],
   // ["ember-lp", "http://liquidity-agent-no-wallet:3002/sse"],
   // ["ember-pendle", "http://pendle-agent:3003/sse"],
+  // ["camelot-v3-rebalancer", "http://camelot-v3-rebalancer:3001/sse"],
 ]);
 
 export type ChatAgentId = (typeof chatAgents)[number]['id'];
