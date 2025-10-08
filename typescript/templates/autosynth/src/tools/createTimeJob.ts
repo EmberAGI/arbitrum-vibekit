@@ -20,14 +20,13 @@ const CreateTimeJobInputSchema = z.object({
   targetFunction: z.string().min(1).describe('Function name to call on the contract'),
   abi: z.string().min(1).describe('Contract ABI (JSON string)'),
   arguments: z.array(z.string()).default([]).describe('Static arguments for the function call'),
-  scheduleTypes: z.array(z.enum(['interval', 'cron', 'specific'])).min(1).describe('Types of time-based scheduling (can be multiple)'),
+  scheduleType: z.enum(['interval', 'cron', 'specific']).describe('Type of time-based scheduling: "interval" for recurring intervals, "cron" for cron expressions, or "specific" for one-time execution'),
   timeInterval: z.number().positive().optional().describe('Interval in seconds (for interval scheduling)'),
   cronExpression: z.string().optional().describe('Cron expression (for cron scheduling)'),
   specificSchedule: z.string().optional().describe('Specific datetime (for one-time scheduling)'),
-  recurring: z.boolean().default(false).describe('Whether the job should repeat'),
   timeFrame: z.number().positive().default(36).describe('Job validity timeframe in hours'),
-  targetChainId: z.string().default('421614').describe('Target blockchain chain ID (Arbitrum Sepolia)'),
-  dynamicArgumentsScriptUrl: z.string().optional().describe('URL for dynamic argument fetching script'),
+  chainId: z.string().default('421614').describe('Target blockchain chain ID (Arbitrum Sepolia)'),
+  dynamicArgumentsScriptUrl: z.string().default('').describe('URL for dynamic argument fetching script'),
   timezone: z.string().default('UTC').describe('Timezone for scheduling'),
   userAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('User wallet address for signing transactions'),
 });
@@ -36,7 +35,7 @@ const CreateTimeJobInputSchema = z.object({
 const TriggerXJobPreviewSchema = z.object({
   action: z.literal('createTimeJob'),
   jobTitle: z.string(),
-  scheduleTypes: z.array(z.string()),
+  scheduleType: z.string(),
   targetContract: z.string(),
   targetFunction: z.string(),
   chainId: z.string(),
@@ -65,36 +64,42 @@ export const createTimeJobTool: VibkitToolDefinition<typeof CreateTimeJobInputSc
     console.log('🕒 CreateTimeJob tool executing with input:', JSON.stringify(input, null, 2));
     try {
       // Validate scheduling parameters for each type
-      if (input.scheduleTypes.includes('interval') && !input.timeInterval) {
+      if (input.scheduleType === 'interval' && !input.timeInterval) {
         throw new Error('timeInterval is required for interval scheduling');
       }
-      if (input.scheduleTypes.includes('cron') && !input.cronExpression) {
+      if (input.scheduleType === 'cron' && !input.cronExpression) {
         throw new Error('cronExpression is required for cron scheduling');
       }
-      if (input.scheduleTypes.includes('specific') && !input.specificSchedule) {
+      if (input.scheduleType === 'specific' && !input.specificSchedule) {
         throw new Error('specificSchedule is required for specific time scheduling');
       }
 
-      // Build job input matching the exact SDK example structure
+      // Build job input matching the exact SDK structure
       const jobInput: any = {
         jobType: JobType.Time,
-        argType: input.dynamicArgumentsScriptUrl ? ArgType.Dynamic : ArgType.Static,
+        argType: ArgType.Static,
         jobTitle: input.jobTitle,
         timeFrame: input.timeFrame,
-        scheduleTypes: input.scheduleTypes,
-        timeInterval: input.timeInterval,
-        cronExpression: input.cronExpression,
-        specificSchedule: input.specificSchedule,
+        scheduleType: input.scheduleType,
         timezone: input.timezone,
-        chainId: input.targetChainId,
+        chainId: input.chainId,
         targetContractAddress: input.targetContractAddress,
         targetFunction: input.targetFunction,
         abi: input.abi,
         isImua: false,
         arguments: input.arguments,
-        dynamicArgumentsScriptUrl: input.dynamicArgumentsScriptUrl || '',
+        dynamicArgumentsScriptUrl: input.dynamicArgumentsScriptUrl,
         autotopupTG: true,
       };
+
+      // Only include the relevant scheduling parameter based on the selected schedule type
+      if (input.scheduleType === 'interval') {
+        jobInput.timeInterval = input.timeInterval;
+      } else if (input.scheduleType === 'cron') {
+        jobInput.cronExpression = input.cronExpression;
+      } else if (input.scheduleType === 'specific') {
+        jobInput.specificSchedule = input.specificSchedule;
+      }
 
       console.log('📦 Preparing transaction data for user signing...');
 
@@ -102,10 +107,10 @@ export const createTimeJobTool: VibkitToolDefinition<typeof CreateTimeJobInputSc
       const txPreview = {
         action: 'createTimeJob' as const,
         jobTitle: input.jobTitle,
-        scheduleTypes: input.scheduleTypes,
+        scheduleType: input.scheduleType,
         targetContract: input.targetContractAddress,
         targetFunction: input.targetFunction,
-        chainId: input.targetChainId,
+        chainId: input.chainId,
         timeInterval: input.timeInterval,
         cronExpression: input.cronExpression,
         specificSchedule: input.specificSchedule,

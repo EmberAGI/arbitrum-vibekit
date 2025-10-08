@@ -114,16 +114,8 @@ Schedule jobs to run at specific intervals or times:
   recurring: false
 }
 
-// Multiple schedules combined
-{
-  jobType: 'time',
-  scheduleTypes: ['interval', 'cron', 'specific'],
-  timeInterval: 33, // seconds
-  cronExpression: '0 0 * * *', // daily at midnight
-  specificSchedule: '2025-01-01 00:00:00', // New Year
-  timezone: 'Asia/Calcutta',
-  recurring: true
-}
+// Note: Only use ONE schedule type per job to avoid conflicts
+// Multiple schedule types in the same job are not supported
 ```
 
 ### 2. Event-based Jobs

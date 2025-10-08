@@ -49,7 +49,6 @@
     "@vercel/postgres": "^0.10.0",
     "ai": "catalog:",
     "bcrypt-ts": "^5.0.2",
-    
     "class-variance-authority": "^0.7.0",
     "classnames": "^2.5.1",
     "clsx": "^2.1.1",
@@ -89,7 +88,6 @@
     "swr": "^2.2.5",
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",
-    
     "tsx": "catalog:",
     "usehooks-ts": "^3.1.0",
     "viem": "^2.27.3",

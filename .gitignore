@@ -83,3 +83,6 @@ logs/
 /playwright-report/
 /blob-report/
 /playwright/*
+
+# .claude
+.claude/

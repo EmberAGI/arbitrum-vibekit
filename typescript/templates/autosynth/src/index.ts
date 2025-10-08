@@ -80,6 +80,7 @@ agent
     console.log('  - Multi-chain support');
     console.log('  - Dynamic argument fetching');
     console.log('  - Job management and monitoring');
+    // Removed Safe/Zodiac features to keep automation generic
   })
   .catch((error) => {
     console.error('Failed to start AutoSynth agent:', error);

@@ -142,7 +142,7 @@ services:
       - path: clients/web/.env
         required: false
     environment:
-      POSTGRES_URL: postgresql://chatbot:changeme@db:5432/chatbot2
+      POSTGRES_URL: postgresql://chatbot:changeme@db-2:5432/chatbot2
       AUTH_URL: ${NEXTAUTH_URL:-http://localhost:3040}/api/auth
       PORT: 3040
       NEXT_PUBLIC_TRIGGERX_API_KEY: ${NEXT_PUBLIC_TRIGGERX_API_KEY}
@@ -169,7 +169,7 @@ services:
       - vibekit_network
 
 volumes:
-  db_data_2:
+  db_data:
 
 networks:
   vibekit_network:

@@ -54,8 +54,10 @@ export const jobManagementSkill = defineSkill({
 
   tags: ['automation', 'scheduling', 'blockchain', 'triggers', 'jobs'],
   examples: [
-    'CREATE: operation=create, jobType=time, jobDetails={jobTitle, scheduleTypes, timeInterval, targetContractAddress...} (NO jobId needed - auto-generated)',
-    'CREATE MULTI-SCHEDULE: operation=create, jobType=time, jobDetails={jobTitle:"SDK Test Time Job", scheduleTypes:["interval","cron","specific"], timeInterval:33, cronExpression:"0 0 * * *", specificSchedule:"2025-01-01 00:00:00", timezone:"Asia/Calcutta", targetContractAddress:"0xDE85FE97A73B891f12CbBF1210cc225AF332C90B", targetFunction:"helloWorld", arguments:["3"], abi:"[...]"} (NO jobId - auto-generated)',
+    'CREATE: operation=create, jobType=time, jobDetails={jobTitle, scheduleType, timeInterval, targetContractAddress...} (NO jobId needed - auto-generated)',
+    'CREATE INTERVAL JOB: operation=create, jobType=time, jobDetails={jobTitle:"SDK Test Time Job", scheduleType:"interval", timeInterval:33, timezone:"Asia/Calcutta", targetContractAddress:"0xDE85FE97A73B891f12CbBF1210cc225AF332C90B", targetFunction:"helloWorld", arguments:["3"], abi:"[...]"} (NO jobId - auto-generated)',
+    'CREATE CRON JOB: operation=create, jobType=time, jobDetails={jobTitle:"Daily Job", scheduleType:"cron", cronExpression:"0 0 * * *", timezone:"Asia/Calcutta", targetContractAddress:"0xDE85FE97A73B891f12CbBF1210cc225AF332C90B", targetFunction:"helloWorld", arguments:["3"], abi:"[...]"} (NO jobId - auto-generated)',
+    'CREATE SPECIFIC TIME JOB: operation=create, jobType=time, jobDetails={jobTitle:"One-time Job", scheduleType:"specific", specificSchedule:"2025-01-01 00:00:00", timezone:"Asia/Calcutta", targetContractAddress:"0xDE85FE97A73B891f12CbBF1210cc225AF332C90B", targetFunction:"helloWorld", arguments:["3"], abi:"[...]"} (NO jobId - auto-generated)',
     'CREATE: operation=create, jobType=event, jobDetails={jobTitle, triggerContractAddress, triggerEvent...} (NO jobId needed - auto-generated)',
     'CREATE: operation=create, jobType=condition, jobDetails={jobTitle, conditionType, valueSourceUrl...} (NO jobId needed - auto-generated)',
     'LIST: operation=list (no other parameters needed)',
