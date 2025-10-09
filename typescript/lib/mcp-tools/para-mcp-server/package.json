@@ -1,0 +1,62 @@
+{
+  "name": "@arbitrum-vibekit/para-mcp-server",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "para-mcp-server": "./dist/index.js"
+  },
+  "scripts": {
+    "prepare": "pnpm build",
+    "prepublishOnly": "pnpm build",
+    "build": "tsc --noCheck || tsc || true",
+    "lint": "eslint src || true",
+    "lint:fix": "eslint src --fix || true",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "watch": "nodemon --watch 'src/**/*.ts' --exec 'tsx' src/index.ts",
+    "test": "tsx test-mcp.ts",
+    "test:mcp": "pnpm build && tsx test-mcp.ts",
+    "pregen:create": "tsx scripts/create-pregen-wallet.ts",
+    "balance:check": "tsx scripts/check-balance.ts",
+    "eth:transfer": "tsx scripts/transfer-eth.ts",
+    "faucet:request": "tsx scripts/request-faucet.ts"
+  },
+  "keywords": [
+    "mcp",
+    "para",
+    "wallet",
+    "cryptocurrency"
+  ],
+  "author": "",
+  "license": "ISC",
+  "description": "Para MCP Server providing wallet tooling (create/list/sign) via MCP",
+  "dependencies": {
+    "@coinbase/cdp-sdk": "^1.38.3",
+    "@getpara/server-sdk": "^1.18.1",
+    "@getpara/viem-v2-integration": "^1.18.1",
+    "@google-a2a/types": "workspace:*",
+    "@hono/node-server": "^1.13.2",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@types/express": "^5.0.1",
+    "@types/node": "catalog:",
+    "arbitrum-vibekit-core": "workspace:*",
+    "dotenv": "catalog:",
+    "express": "catalog:",
+    "hono": "^4.6.11",
+    "jose": "^6.1.0",
+    "nodemon": "^3.1.9",
+    "p-retry": "^6.2.1",
+    "raw-body": "^3.0.0",
+    "tee": "^0.2.0",
+    "typescript": "catalog:",
+    "viem": "catalog:",
+    "zod": "catalog:"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "tsx": "catalog:"
+  }
+}

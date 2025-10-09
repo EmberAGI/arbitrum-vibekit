@@ -73,6 +73,28 @@ export const chatAgents = [
       },
     ],
   },
+  {
+    id: 'para' as const,
+    name: 'Para Wallet',
+    description: 'Para wallet agent',
+    suggestedActions: [
+      {
+        title: 'List',
+        label: 'pregen wallet',
+        action: 'List all pregen wallet',
+      },
+      {
+        title: 'Check',
+        label: 'Balance',
+        action: 'Check balance of this address in arbitrum-sepolia network',
+      },
+      {
+        title: 'Request faucet',
+        label: 'Faucet',
+        action: 'Request faucet for this address in ethereum-sepolia network',
+      },
+    ],
+  },
   // {
   //   id: 'langgraph-workflow' as const,
   //   name: 'Greeting Optimizer',
@@ -181,6 +203,7 @@ export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
   ['defisafety-agent', 'http://defisafety-agent:3010/sse'],
   ['coingecko', 'http://coingecko-mcp-server:3011/mcp'], // CoinGecko MCP server
+  ['para', 'http://para-mcp-server:3012/mcp'],
   // ['langgraph-workflow', 'http://langgraph-workflow-agent:3009/sse'],
   // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
   // ['allora-price-prediction-agent', 'http://allora-price-prediction-agent:3008/sse'],

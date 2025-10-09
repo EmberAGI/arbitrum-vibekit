@@ -20,6 +20,7 @@ import { Liquidity } from './Liquidity';
 import type { Dispatch } from 'react';
 import { TemplateComponent } from './TemplateComponent';
 import { PriceChart } from './price-chart';
+import { ClaimPregenWallet } from './ClaimPregenWallet';
 
 interface MessageRendererProps {
   message: UIMessage;
@@ -261,7 +262,9 @@ export const MessageRenderer = ({
               isMarketList={getArtifact()?.name === 'yield-markets'}
             />
           )
-        ) : (
+        ): toolName.endsWith('claim_pregen_wallet') ? (
+          <ClaimPregenWallet result={result} />
+        )  : (
           <TemplateComponent
             txPreview={txPreview}
             txPlan={txPlan}

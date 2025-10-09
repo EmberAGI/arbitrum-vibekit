@@ -39,6 +39,18 @@ services:
       - 3011:3011
     restart: unless-stopped
 
+  para-mcp-server:
+    build:
+      context: ./
+      dockerfile: lib/mcp-tools/para-mcp-server/Dockerfile
+    container_name: vibekit-para-mcp-server
+    env_file:
+      - path: .env
+        required: true
+      - path: lib/mcp-tools/para-mcp-server/.env
+        required: false
+    ports:
+      - 3012:3012
   defisafety-agent:
     build:
       context: ./
