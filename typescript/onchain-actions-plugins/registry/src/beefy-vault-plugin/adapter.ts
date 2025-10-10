@@ -27,28 +27,8 @@ import type {
   GetFeesRequest,
   GetFeesResponse,
 } from './types.js';
-
-// Standard ERC20 ABI for basic operations
-const ERC20_ABI = [
-  'function balanceOf(address owner) view returns (uint256)',
-  'function decimals() view returns (uint8)',
-  'function symbol() view returns (string)',
-  'function name() view returns (string)',
-  'function approve(address spender, uint256 amount) returns (bool)',
-  'function allowance(address owner, address spender) view returns (uint256)',
-];
-
-// Basic Beefy Vault ABI
-const BEEFY_VAULT_ABI = [
-  'function deposit(uint256 amount)',
-  'function depositAll()',
-  'function withdraw(uint256 shares)',
-  'function withdrawAll()',
-  'function balanceOf(address account) view returns (uint256)',
-  'function totalSupply() view returns (uint256)',
-  'function getPricePerFullShare() view returns (uint256)',
-  'function want() view returns (address)',
-];
+import { createBeefyVaultContract, createERC20Contract } from './contracts/index.js';
+import { createDepositTransaction, createWithdrawTransaction } from './transactions/index.js';
 
 export class BeefyAdapter {
   public chain: Chain;
@@ -107,7 +87,7 @@ export class BeefyAdapter {
 
     for (const vault of vaults) {
       try {
-        const vaultContract = new ethers.Contract(vault.vaultAddress, BEEFY_VAULT_ABI, provider);
+        const vaultContract = createBeefyVaultContract(vault.vaultAddress, provider);
         const balance = await vaultContract.balanceOf(walletAddress);
 
         if (balance.gt(0)) {
@@ -115,12 +95,8 @@ export class BeefyAdapter {
           const underlyingBalance = balance.mul(pricePerShare).div(ethers.utils.parseEther('1'));
 
           // Get token info
-          const tokenContract = new ethers.Contract(vault.tokenAddress, ERC20_ABI, provider);
-          const [name, symbol, decimals] = await Promise.all([
-            tokenContract.name(),
-            tokenContract.symbol(),
-            tokenContract.decimals(),
-          ]);
+          const tokenContract = createERC20Contract(vault.tokenAddress, provider);
+          const tokenInfo = await tokenContract.getTokenInfo();
 
           userReserves.push({
             token: {
@@ -129,12 +105,12 @@ export class BeefyAdapter {
                 chainId: this.chain.id.toString(),
               },
               isNative: false,
-              name,
-              symbol,
-              decimals,
+              name: tokenInfo.name,
+              symbol: tokenInfo.symbol,
+              decimals: tokenInfo.decimals,
               isVetted: true,
             },
-            underlyingBalance: ethers.utils.formatUnits(underlyingBalance, decimals),
+            underlyingBalance: ethers.utils.formatUnits(underlyingBalance, tokenInfo.decimals),
             underlyingBalanceUsd: '0', // Would need price oracle
             variableBorrows: '0',
             variableBorrowsUsd: '0',
@@ -259,24 +235,24 @@ export class BeefyAdapter {
     walletAddress: string
   ): Promise<BeefyAction> {
     const provider = this.chain.getProvider();
-    const vaultContract = new ethers.Contract(vault.vaultAddress, BEEFY_VAULT_ABI, provider);
-    const tokenContract = new ethers.Contract(vault.tokenAddress, ERC20_ABI, provider);
+
+    // Use the new transaction builder
+    const result = await createDepositTransaction({
+      vault,
+      amount: ethers.BigNumber.from(amount.toString()),
+      userAddress: walletAddress,
+      provider,
+    });
 
     const transactions: PopulatedTransaction[] = [];
 
-    // Check if approval is needed
-    const allowance = await tokenContract.allowance(walletAddress, vault.vaultAddress);
-    if (allowance.lt(amount)) {
-      const approveTx = await tokenContract.populateTransaction.approve!(
-        vault.vaultAddress,
-        amount.toString()
-      );
-      transactions.push(approveTx);
+    // Add approval transaction if needed
+    if (result.approvalTx) {
+      transactions.push(result.approvalTx);
     }
 
-    // Create deposit transaction
-    const depositTx = await vaultContract.populateTransaction.deposit!(amount.toString());
-    transactions.push(depositTx);
+    // Add deposit transaction
+    transactions.push(result.depositTx);
 
     return transactions;
   }
@@ -287,10 +263,16 @@ export class BeefyAdapter {
     walletAddress: string
   ): Promise<BeefyAction> {
     const provider = this.chain.getProvider();
-    const vaultContract = new ethers.Contract(vault.vaultAddress, BEEFY_VAULT_ABI, provider);
 
-    const withdrawTx = await vaultContract.populateTransaction.withdraw!(shares.toString());
-    return [withdrawTx];
+    // Use the new transaction builder
+    const result = await createWithdrawTransaction({
+      vault,
+      shares: ethers.BigNumber.from(shares.toString()),
+      userAddress: walletAddress,
+      provider,
+    });
+
+    return [result.withdrawTx];
   }
 
   private transactionPlanFromEthers(tx: PopulatedTransaction): TransactionPlan {

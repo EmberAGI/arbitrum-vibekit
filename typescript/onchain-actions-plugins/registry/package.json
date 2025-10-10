@@ -25,6 +25,8 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/sinon": "^17.0.4",
+    "sinon": "^20.0.0",
     "tsup": "^8.0.0"
   },
   "license": "MIT",
