@@ -140,8 +140,8 @@ importers:
         specifier: ^0.0.24
         version: 0.0.24
       sdk-triggerx:
-        specifier: ^0.1.12
-        version: 0.1.12(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        specifier: ^0.1.16
+        version: 0.1.16(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       tsx:
         specifier: ^4.6.2
         version: 4.20.3
@@ -1079,8 +1079,8 @@ importers:
         specifier: ^3.0.3
         version: 3.0.3
       sdk-triggerx:
-        specifier: ^0.1.12
-        version: 0.1.12(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        specifier: ^0.1.16
+        version: 0.1.16(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       viem:
         specifier: 'catalog:'
         version: 2.31.7(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.76)
@@ -1268,8 +1268,8 @@ importers:
         specifier: ^3.0.3
         version: 3.0.3
       sdk-triggerx:
-        specifier: ^0.1.12
-        version: 0.1.12(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        specifier: ^0.1.16
+        version: 0.1.16(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       viem:
         specifier: 'catalog:'
         version: 2.31.7(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.76)
@@ -7774,8 +7774,8 @@ packages:
   scrypt-js@3.0.1:
     resolution: {integrity: sha512-cdwTTnqPu0Hyvf5in5asVdZocVDTNRmR7XEcJuIzMjJeSHybHl7vpB66AzwTaIg6CLSbtjcxc8fqcySfnTkccA==}
 
-  sdk-triggerx@0.1.12:
-    resolution: {integrity: sha512-kQxyLz++KRD6WfXHz9p6+GAVKOELzZCn22BJbLh7Pi2jsYOs3Yw3MYZ6r0drwYaKjreV3coOidM4TE8AacK3IA==}
+  sdk-triggerx@0.1.16:
+    resolution: {integrity: sha512-IzHQ4YtbdjLuSnpNH6nNrDKiVcCQptFQHvLz2K15JBbzqGDc+2YxXrBSpQ0FjqAdd44ONkA9UGtg2aBVZl5dsw==}
 
   secure-json-parse@2.7.0:
     resolution: {integrity: sha512-6aU+Rwsezw7VR8/nyvKTx8QpWH9FrcYiXXlqC4z5d5XQBDRqtbfsRjnwGyqbi3gddNtWHuEk9OANUotL26qKUw==}
@@ -16696,7 +16696,7 @@ snapshots:
 
   scrypt-js@3.0.1: {}
 
-  sdk-triggerx@0.1.12(bufferutil@4.0.9)(utf-8-validate@5.0.10):
+  sdk-triggerx@0.1.16(bufferutil@4.0.9)(utf-8-validate@5.0.10):
     dependencies:
       axios: 1.11.0
       ethers: 6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
