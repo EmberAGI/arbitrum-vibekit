@@ -1,4 +1,4 @@
-import type { AgentCard, AgentSkill, AgentCapabilities, Task, Message } from '@google-a2a/types';
+import type { AgentCard, AgentSkill, AgentCapabilities, Task, Message } from './vendor/google-a2a-types/index.js';
 import { CorsOptions } from 'cors';
 import { InMemoryTaskStore, TaskStore } from './store.js';
 import express, { Request, Response, NextFunction } from 'express';

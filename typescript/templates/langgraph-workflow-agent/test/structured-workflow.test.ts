@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createProviderSelector } from 'arbitrum-vibekit-core';
+import { createProviderSelector } from '@emberai/arbitrum-vibekit-core';
 import { createGreetingWorkflow } from '../src/workflow/index.js';
 import { createInitialState } from '../src/workflow/state.js';
 

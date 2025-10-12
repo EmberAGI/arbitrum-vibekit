@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { TransactionArtifact } from 'arbitrum-vibekit-core';
+import type { TransactionArtifact } from '@emberai/arbitrum-vibekit-core';
 
 // Token information type
 export type TokenInfo = {

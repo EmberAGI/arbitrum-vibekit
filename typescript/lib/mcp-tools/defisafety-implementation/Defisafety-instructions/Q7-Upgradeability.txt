@@ -1,0 +1,28 @@
+Q7: Is the upgradeability of contracts documented?
+Weight: 10%
+
+Purpose: Determine if the protocol documents which contracts are upgradeable, how upgrades work, and what governance process controls upgrades. Users need to understand if contract logic can change after deployment.
+
+Where to Look: Look for "Upgrades", "Proxy", "Governance", or "Contract Management" sections. Check for explanations of upgrade mechanisms and processes.
+
+Scoring Criteria: Simplified evaluation of upgradeability documentation:
+
+    100% (Full marks): Upgradeability is documented anywhere in the documentation, whether with full details or missing some process information. Any mention of contract upgrades, proxy patterns, or immutability qualifies.
+
+    40%: Basic mention of upgradeability without comprehensive details - perhaps just stating contracts are upgradeable without explaining the process.
+
+    0%: No documentation about contract upgradeability whatsoever.
+
+Answer Format: The answer should state whether upgradeability is documented and provide the resulting score. For example:
+
+    "Yes – the documentation describes the upgrade mechanism for contracts. Score: 100%."
+
+If minimal information:
+
+    "Upgradeability is briefly mentioned but lacks process details. Score: 40%."
+
+If no information:
+
+    "No – the documentation does not mention contract upgradeability. Score: 0%."
+
+Each statement should be backed by a citation from the documentation where the information (or lack thereof) was confirmed.

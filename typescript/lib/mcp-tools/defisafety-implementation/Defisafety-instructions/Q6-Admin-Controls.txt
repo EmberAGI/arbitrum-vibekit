@@ -1,0 +1,28 @@
+Q6: Are admin controls documented?
+Weight: 8%
+
+Purpose: Evaluate whether the protocol clearly documents what administrative controls exist, who controls them, and what powers they have. This is crucial for understanding centralization risks and trust assumptions.
+
+Where to Look: Search for "Admin", "Governance", "Permissions", "Roles", or "Access Control" in documentation. Look for explanations of what can be changed and by whom.
+
+Scoring Criteria: Simplified evaluation of admin control documentation:
+
+    100% (Full marks): Admin controls are documented anywhere in the documentation, whether comprehensive or with some missing details. Any mention of admin functions, governance, or control mechanisms qualifies.
+
+    40%: Basic mention of admin controls without comprehensive details - perhaps just a passing reference without explanation.
+
+    0%: No documentation of admin controls whatsoever.
+
+Answer Format: The answer should state whether admin controls are documented and provide the resulting score. For example:
+
+    "Yes – the documentation describes admin controls and governance mechanisms. Score: 100%."
+
+If minimal information:
+
+    "Admin controls are briefly mentioned but lack detail. Score: 40%."
+
+If no information:
+
+    "No – the documentation does not describe any admin controls. Score: 0%."
+
+Each statement should be backed by a citation from the documentation where the information (or lack thereof) was confirmed.

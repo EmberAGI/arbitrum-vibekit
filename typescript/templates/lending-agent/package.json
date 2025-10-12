@@ -19,15 +19,13 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
   },
   "dependencies": {
-    "@google-a2a/types": "workspace:*",
     "@modelcontextprotocol/sdk": "catalog:",
     "@openzeppelin/contracts": "^5.3.0",
     "ai": "catalog:",
-    "arbitrum-vibekit-core": "workspace:*",
+    "@emberai/arbitrum-vibekit-core": "catalog:",
     "cors": "^2.8.5",
     "dotenv": "catalog:",
     "zod": "catalog:",
-    "ember-schemas": "workspace:*",
     "ember-api": "workspace:*",
     "express": "catalog:",
     "nanoid": "^5.0.7",

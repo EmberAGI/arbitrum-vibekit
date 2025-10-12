@@ -1,6 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
-import type * as schema from "@google-a2a/types";
+import type * as schema from "./vendor/google-a2a-types/index.js";
 import { VibkitError } from "./error.js";
 import { isObject } from "./utils.js";
 // import {

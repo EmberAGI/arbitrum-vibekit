@@ -1,0 +1,28 @@
+Q8: Is contract ownership documented?
+Weight: 7%
+
+Purpose: Verify that the protocol documents who owns the contracts, whether ownership is renounced, transferred to a DAO, or held by team members. This affects the trust model and decentralization.
+
+Where to Look: Search for "Ownership", "Contract Owner", "Decentralization", or governance documentation in the official documentation only. Note: We only evaluate based on documentation, not code analysis.
+
+Scoring Criteria: Simplified evaluation based only on documentation:
+
+    100% (Full marks): Documentation mentions contract ownership in any form - whether describing ownership structure, renunciation, or governance control.
+
+    40%: Ownership information found in external sources but not in official documentation.
+
+    0%: No documentation about contract ownership found.
+
+Answer Format: The answer should state whether contract ownership is documented and provide the resulting score. For example:
+
+    "Yes – the documentation mentions contract ownership structure. Score: 100%."
+
+If found externally:
+
+    "Ownership information found in external sources but not in official docs. Score: 40%."
+
+If no information:
+
+    "No – the documentation does not mention contract ownership. Score: 0%."
+
+Each statement should be backed by a citation from the documentation where the information (or lack thereof) was confirmed.

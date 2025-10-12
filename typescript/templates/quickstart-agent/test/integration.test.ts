@@ -15,7 +15,7 @@ import {
   type StdioMcpConfig,
   createProviderSelector,
   getAvailableProviders,
-} from 'arbitrum-vibekit-core';
+} from '@emberai/arbitrum-vibekit-core';
 import * as http from 'http';
 import { spawn, type ChildProcess } from 'child_process';
 import * as path from 'path';

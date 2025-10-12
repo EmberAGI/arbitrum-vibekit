@@ -1,7 +1,7 @@
-import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
-import type { Task, Message, DataPart } from '@google-a2a/types';
-import { TaskState } from '@google-a2a/types';
-import { AskEncyclopediaSchema } from 'ember-schemas';
+import type { VibkitToolDefinition, AgentContext } from '@emberai/arbitrum-vibekit-core';
+import type { Task, Message, DataPart } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
+import { TaskState } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
+import { AskEncyclopediaSchema } from '@emberai/arbitrum-vibekit-core/ember-schemas';
 import type { LendingAgentContext } from '../agent.js';
 import { createTaskId } from './utils.js';
 

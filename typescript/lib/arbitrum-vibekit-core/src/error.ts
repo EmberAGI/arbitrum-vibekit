@@ -12,7 +12,7 @@ import type {
   UnsupportedOperationError,
   ContentTypeNotSupportedError,
   InvalidAgentResponseError,
-} from "@google-a2a/types";
+} from "./vendor/google-a2a-types/index.js";
 
 /**
  * Custom error class for internal error handling in the Arbitrum Vibekit.

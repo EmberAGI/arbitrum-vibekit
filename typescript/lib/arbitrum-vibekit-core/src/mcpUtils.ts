@@ -3,7 +3,7 @@ import {
   TextContentSchema,
   CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
-import type { Task, Message } from "@google-a2a/types";
+import type { Task, Message } from "./vendor/google-a2a-types/index.js";
 import { nanoid } from "nanoid";
 import { ZodType } from "zod";
 

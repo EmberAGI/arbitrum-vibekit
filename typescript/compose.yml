@@ -39,6 +39,22 @@ services:
       - 3011:3011
     restart: unless-stopped
 
+  defisafety-agent:
+    build:
+      context: ./
+      dockerfile: templates/defisafety-agent/Dockerfile
+    container_name: vibekit-defisafety-agent
+    env_file:
+      - path: .env
+        required: true
+      - path: templates/defisafety-agent/.env
+        required: false
+    environment:
+      - PORT=3010
+    ports:
+      - 3010:3010
+    restart: unless-stopped
+
   # langgraph-workflow-agent:
   #   build:
   #     context: ./

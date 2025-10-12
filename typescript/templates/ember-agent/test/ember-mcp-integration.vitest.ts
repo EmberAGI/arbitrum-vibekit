@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { Task } from '@google-a2a/types';
+import type { Task } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 import { swappingSkill } from '../src/skills/swapping.js';
 
 describe('Ember MCP Server Integration', () => {

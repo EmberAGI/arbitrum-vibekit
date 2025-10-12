@@ -1,7 +1,5 @@
 ---
-description: Global rules
-globs:
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Monorepo Workspace Guidelines

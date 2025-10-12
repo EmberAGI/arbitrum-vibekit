@@ -1,4 +1,4 @@
-import { Agent, createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
+import { Agent, createProviderSelector, getAvailableProviders } from '@emberai/arbitrum-vibekit-core';
 import { greetingOptimizerSkill } from './skills/greeting-optimizer.js';
 import dotenv from 'dotenv';
 

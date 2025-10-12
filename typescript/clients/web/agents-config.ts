@@ -30,6 +30,28 @@ export const chatAgents = [
     ],
   },
   {
+    id: 'defisafety-agent' as const,
+    name: 'DeFi Safety',
+    description: 'AI agent for evaluating DeFi protocol safety and documentation quality',
+    suggestedActions: [
+      {
+        title: 'Quick Evaluation',
+        label: 'safety score',
+        action: 'Evaluate the safety of Aave protocol with 30 pages',
+      },
+      {
+        title: 'Compare Protocols',
+        label: 'side by side',
+        action: 'Compare Uniswap and SushiSwap safety scores with 20 pages each',
+      },
+      {
+        title: 'Generate Report',
+        label: 'detailed analysis',
+        action: 'Generate a comprehensive safety report for Compound with 50 pages',
+      },
+    ],
+  },
+  {
     id: 'coingecko' as const,
     name: 'Price Charts',
     description: 'Cryptocurrency price data and charts',
@@ -157,6 +179,7 @@ export const chatAgents = [
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
   ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
   ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
+  ['defisafety-agent', 'http://defisafety-agent:3010/sse'],
   ['coingecko', 'http://coingecko-mcp-server:3011/mcp'], // CoinGecko MCP server
   // ['langgraph-workflow', 'http://langgraph-workflow-agent:3009/sse'],
   // ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],

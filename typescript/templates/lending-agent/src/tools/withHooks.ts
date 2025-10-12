@@ -1,5 +1,5 @@
-import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
-import type { Task, Message } from '@google-a2a/types';
+import type { VibkitToolDefinition, AgentContext } from '@emberai/arbitrum-vibekit-core';
+import type { Task, Message } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 import type { z } from 'zod';
 
 /**

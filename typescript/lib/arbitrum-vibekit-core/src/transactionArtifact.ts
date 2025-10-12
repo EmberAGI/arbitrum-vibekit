@@ -1,7 +1,7 @@
 import {
   TransactionPlanSchema,
   type TransactionPlan,
-} from "ember-schemas";
+} from "./vendor/ember-schemas/index.js";
 import { z, type ZodType } from "zod";
 
 /**

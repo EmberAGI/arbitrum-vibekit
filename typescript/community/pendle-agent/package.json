@@ -1,0 +1,51 @@
+{
+  "name": "pendle-agent-example",
+  "version": "1.0.0",
+  "description": "Ember On-chain Actions Pendle Agent Example",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc --build",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "pnpm --filter arbitrum-vibekit build && pnpm --filter ember-api build && pnpm --filter test-utils build && NODE_OPTIONS=\"--no-warnings\" tsx node_modules/mocha/bin/mocha --exit --timeout 120000 --config ../../.mocharc.json 'test/**/*.test.ts'",
+    "test:ts": "tsc --project tsconfig.test.json",
+    "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
+    "docker:build": "docker build -t pendle-agent ../../",
+    "docker:run": "docker run --env-file .env -p 3003:3003 pendle-agent",
+    "docker:compose:up": "docker compose up --build --no-log-prefix",
+    "docker:compose:build": "docker compose build --no-cache",
+    "docker:compose:down": "docker compose down",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\" \"test/**/*.{ts,tsx,js,jsx}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\" \"test/**/*.{ts,tsx,js,jsx}\""
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@openzeppelin/contracts": "^5.3.0",
+    "ai": "catalog:",
+    "@emberai/arbitrum-vibekit-core": "catalog:",
+    "cors": "^2.8.5",
+    "dotenv": "catalog:",
+    "ember-api": "workspace:*",
+    "express": "catalog:",
+    "viem": "^2.26.3",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/chai": "catalog:",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/mocha": "catalog:",
+    "@types/node": "catalog:",
+    "chai": "catalog:",
+    "cpx": "^1.5.0",
+    "mocha": "catalog:",
+    "mocha-suppress-logs": "catalog:",
+    "prettier": "catalog:",
+    "test-utils": "workspace:*",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  }
+}

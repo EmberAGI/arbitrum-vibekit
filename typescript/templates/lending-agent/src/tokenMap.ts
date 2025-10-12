@@ -4,7 +4,7 @@ import {
   type LendingGetCapabilitiesResponse,
   type TokenInfo,
   type LendingAgentCapability,
-} from 'ember-schemas';
+} from '@emberai/arbitrum-vibekit-core/ember-schemas';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 

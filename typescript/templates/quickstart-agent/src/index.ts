@@ -5,7 +5,7 @@
  */
 
 import 'dotenv/config';
-import { Agent, type AgentConfig, createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
+import { Agent, type AgentConfig, createProviderSelector, getAvailableProviders } from '@emberai/arbitrum-vibekit-core';
 import { greetSkill } from './skills/greet.js';
 import { getTimeSkill } from './skills/getTime.js';
 import { echoSkill } from './skills/echo.js';

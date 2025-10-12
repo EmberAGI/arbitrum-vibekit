@@ -5,7 +5,7 @@
  */
 
 import 'dotenv/config';
-import { Agent, createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
+import { Agent, createProviderSelector, getAvailableProviders } from '@emberai/arbitrum-vibekit-core';
 import { contextProvider } from './context/provider.js';
 import { agentConfig } from './config.js';
 

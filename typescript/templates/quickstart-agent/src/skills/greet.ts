@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import { defineSkill } from 'arbitrum-vibekit-core';
+import { defineSkill } from '@emberai/arbitrum-vibekit-core';
 import { getFormalGreetingTool } from '../tools/getFormalGreeting.js';
 import { getCasualGreetingTool } from '../tools/getCasualGreeting.js';
 import { getLocalizedGreetingTool } from '../tools/getLocalizedGreeting.js';

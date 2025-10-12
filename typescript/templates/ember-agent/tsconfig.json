@@ -9,7 +9,6 @@
   "include": ["src/**/*", "test/**/*"],
   "exclude": ["node_modules", "dist"],
   "references": [
-    { "path": "../../lib/arbitrum-vibekit-core" },
     { "path": "../../lib/ember-schemas" },
     { "path": "../../lib/ember-api" }
   ]

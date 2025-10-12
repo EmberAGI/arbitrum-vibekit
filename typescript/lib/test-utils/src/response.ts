@@ -1,4 +1,4 @@
-import type { Task } from '@google-a2a/types';
+import type { Task } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 import { GetMarketDataResponseSchema, type GetMarketDataResponse } from 'ember-api';
 
 /**

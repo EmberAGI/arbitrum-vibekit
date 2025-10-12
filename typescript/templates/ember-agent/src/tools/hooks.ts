@@ -1,5 +1,5 @@
-import type { AgentContext } from 'arbitrum-vibekit-core';
-import type { Task, Message } from '@google-a2a/types';
+import type { AgentContext } from '@emberai/arbitrum-vibekit-core';
+import type { Task, Message } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 
 /**
  * Composes multiple 'before' hooks into a single 'before' hook.

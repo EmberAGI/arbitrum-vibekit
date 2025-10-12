@@ -1,0 +1,45 @@
+{
+  "name": "allora-price-prediction-agent",
+  "version": "1.0.0",
+  "description": "An AI agent that provides price predictions using Allora's prediction markets data",
+  "type": "module",
+  "main": "dist/index.js",
+  "private": true,
+  "scripts": {
+    "build": "tsc --build",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "NODE_OPTIONS=\"--no-warnings\" tsx node_modules/mocha/bin/mocha --exit --timeout 120000 'test/**/*.test.ts'",
+    "test:watch": "NODE_OPTIONS=\"--no-warnings\" tsx node_modules/mocha/bin/mocha --watch --timeout 120000 'test/**/*.test.ts'",
+    "test:run": "NODE_OPTIONS=\"--no-warnings\" tsx node_modules/mocha/bin/mocha --exit --timeout 120000 'test/**/*.test.ts'",
+    "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
+  },
+  "dependencies": {
+    "@alloralabs/mcp-server": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "ai": "catalog:",
+    "@emberai/arbitrum-vibekit-core": "catalog:",
+    "cors": "^2.8.5",
+    "dotenv": "catalog:",
+    "express": "catalog:",
+    "nanoid": "^5.0.7",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/chai": "catalog:",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/mocha": "catalog:",
+    "@types/node": "catalog:",
+    "@types/sinon": "^17.0.4",
+    "chai": "catalog:",
+    "mocha": "catalog:",
+    "mocha-suppress-logs": "catalog:",
+    "prettier": "catalog:",
+    "sinon": "^20.0.0",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  }
+}

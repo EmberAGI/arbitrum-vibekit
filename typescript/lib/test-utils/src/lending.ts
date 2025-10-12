@@ -3,7 +3,7 @@
  */
 
 import type { GetWalletLendingPositionsResponse, LendTokenDetail } from 'ember-api';
-import type { Task } from '@google-a2a/types';
+import type { Task } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 
 import type { TransactionPlan } from './transactions.js';
 

@@ -4,8 +4,8 @@
  */
 
 import { z } from 'zod';
-import type { VibkitToolDefinition } from 'arbitrum-vibekit-core';
-import { createSuccessTask } from 'arbitrum-vibekit-core';
+import type { VibkitToolDefinition } from '@emberai/arbitrum-vibekit-core';
+import { createSuccessTask } from '@emberai/arbitrum-vibekit-core';
 import type { HelloContext } from '../context/types.js';
 
 const FormalGreetingParams = z.object({
