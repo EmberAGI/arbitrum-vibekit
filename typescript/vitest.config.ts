@@ -6,9 +6,9 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["./tests/setup/vitest.setup.ts"],
     include: [
-      "src/**/*.unit.test.ts",
-      "tests/**/*.int.test.ts",
-      "tests/**/*.e2e.test.ts",
+      "**/src/**/*.unit.test.ts",
+      "**/tests/**/*.int.test.ts",
+      "**/tests/**/*.e2e.test.ts",
     ],
     exclude: ["node_modules", "dist"],
     coverage: {

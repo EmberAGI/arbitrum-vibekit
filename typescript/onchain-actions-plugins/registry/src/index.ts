@@ -1,6 +1,7 @@
 import type { ChainConfig } from './chainConfig.js';
 import { PublicEmberPluginRegistry } from './registry.js';
 import { registerAave } from './aave-lending-plugin/index.js';
+import { registerArbitrumBridge } from './plugins/arbitrum-bridge/index.js';
 
 /**
  * Initialize the public Ember plugin registry.
@@ -13,6 +14,8 @@ export function initializePublicRegistry(chainConfigs: ChainConfig[]) {
   for (const chainConfig of chainConfigs) {
     // Create aave plugins for each chain config
     registerAave(chainConfig, registry);
+    // Register Arbitrum bridge for supported networks
+    registerArbitrumBridge(chainConfig, registry);
   }
 
   return registry;

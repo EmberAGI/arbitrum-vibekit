@@ -3,13 +3,19 @@ import type {
   LiquidityActions,
   PerpetualsActions,
   SwapActions,
+  BridgeActions,
 } from './actions/index.js';
-import type { LendingQueries, LiquidityQueries, PerpetualsQueries } from './queries/index.js';
+import type {
+  LendingQueries,
+  LiquidityQueries,
+  PerpetualsQueries,
+  BridgeQueries,
+} from './queries/index.js';
 
 /**
  * The type of actions and queries the plugin supports.
  */
-export type PluginType = 'lending' | 'liquidity' | 'swap' | 'perpetuals';
+export type PluginType = 'lending' | 'liquidity' | 'swap' | 'perpetuals' | 'bridge';
 
 /**
  * The possible actions an ember plugin can perform.
@@ -19,6 +25,7 @@ export type AvailableActions = {
   liquidity: LiquidityActions;
   swap: SwapActions;
   perpetuals: PerpetualsActions;
+  bridge: BridgeActions;
 };
 
 /**
@@ -29,4 +36,5 @@ export type AvailableQueries = {
   liquidity: LiquidityQueries;
   swap: Record<string, never> | undefined;
   perpetuals: PerpetualsQueries;
+  bridge: BridgeQueries;
 };

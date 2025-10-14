@@ -17,6 +17,7 @@
     "format": "prettier --write \"src/**/*.ts\""
   },
   "dependencies": {
+    "@arbitrum/sdk": "^4.0.4",
     "@aave/contract-helpers": "^1.32.1",
     "@aave/math-utils": "^1.32.1",
     "@bgd-labs/aave-address-book": "^4.10.0",
