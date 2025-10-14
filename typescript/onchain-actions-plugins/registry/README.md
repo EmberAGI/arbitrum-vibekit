@@ -13,6 +13,7 @@ A modular plugin architecture for integrating DeFi protocols into the Ember ecos
 - **Multi-Chain**: Support for multiple blockchain networks.
 - **Action-Based**: Define actions for supply, borrow, swap, and more.
 - **Plugin for AAVE V3**: Complete lending protocol with supply, borrow, repay, withdraw.
+ - **Plugin for Arbitrum Bridge**: ETH and ERC20 bridging (deposit/withdraw) with message status queries.
 
 ## Installation
 
@@ -271,5 +272,6 @@ MIT © [EmberAGI](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/LICENSE
 
 - [NPM Package](https://www.npmjs.com/package/@emberai/onchain-actions-registry)
 - [GitHub Repository](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/onchain-actions-plugins/)
+- [Arbitrum Bridge Plugin Docs](./src/plugins/arbitrum-bridge/README.md)
 - [Ember Website](https://www.emberai.xyz/)
 - [Ember X](https://x.com/EmberAGI)

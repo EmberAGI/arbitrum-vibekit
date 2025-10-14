@@ -17,11 +17,12 @@ import type {
   PerpetualsCreateLongPositionCallback,
   PerpetualsCreateShortPositionCallback,
 } from './perpetuals.js';
+import type { BridgeActions, BridgeDepositCallback, BridgeWithdrawCallback } from './bridge.js';
 
 /**
  * The possible actions an ember plugin can perform.
  */
-export type Action = LendingActions | LiquidityActions | SwapActions | PerpetualsActions;
+export type Action = LendingActions | LiquidityActions | SwapActions | PerpetualsActions | BridgeActions;
 
 /**
  * Type mapping for action callbacks.
@@ -37,6 +38,8 @@ type CallbacksRecord = {
   'perpetuals-short': PerpetualsCreateShortPositionCallback;
   'perpetuals-long': PerpetualsCreateLongPositionCallback;
   'perpetuals-close': PerpetualsCloseOrdersCallback;
+  'bridge-deposit': BridgeDepositCallback;
+  'bridge-withdraw': BridgeWithdrawCallback;
 };
 /**
  * Type mapping for action callbacks.

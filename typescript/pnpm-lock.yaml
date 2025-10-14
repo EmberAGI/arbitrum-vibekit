@@ -821,6 +821,9 @@ importers:
       '@aave/math-utils':
         specifier: ^1.32.1
         version: 1.36.2(bignumber.js@9.3.1)(tslib@2.8.1)
+      '@arbitrum/sdk':
+        specifier: ^4.0.4
+        version: 4.0.4(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       '@bgd-labs/aave-address-book':
         specifier: ^4.10.0
         version: 4.32.0(viem@2.38.1(bufferutil@4.0.9)(typescript@5.4.2)(utf-8-validate@5.0.10)(zod@4.1.11))
@@ -1206,6 +1209,10 @@ packages:
   '@ampproject/remapping@2.3.0':
     resolution: {integrity: sha512-30iZtAPgz+LTIYoeivqYo853f02jBYSd5uGnGpkFV0M3xOt9aN73erkgYAmZU43x4VfqcnLxW9Kpg3R5LC4YYw==}
     engines: {node: '>=6.0.0'}
+
+  '@arbitrum/sdk@4.0.4':
+    resolution: {integrity: sha512-GscwlkHYmPzRKs9huDHntbqx1xMRhTraTUvTC9exu+prjndKxHe9ZORuIcqmtEqwLwma/l8nqxI+k+pEEdIO6Q==}
+    engines: {node: '>=v11', npm: please-use-yarn, yarn: '>= 1.0.0'}
 
   '@auth/core@0.40.0':
     resolution: {integrity: sha512-n53uJE0RH5SqZ7N1xZoMKekbHfQgjd0sAEyUbE+IYJnmuQkbvuZnXItCU7d+i7Fj8VGOgqvNO7Mw4YfBTlZeQw==}
@@ -4655,6 +4662,9 @@ packages:
 
   async-mutex@0.2.6:
     resolution: {integrity: sha512-Hs4R+4SPgamu6rSGW8C7cV9gaWUKEHykfzCCvIRuaVv636Ju10ZdeUbvb4TBEW0INuq2DHZqXbK4Nd3yG4RaRw==}
+
+  async-mutex@0.4.1:
+    resolution: {integrity: sha512-WfoBo4E/TbCX1G95XTjbWTE3X2XLG0m1Xbv2cwOtuPdyH9CZvnaA5nCt1ucjaKEgW2A5IF71hxrRhr83Je5xjA==}
 
   async-retry@1.3.3:
     resolution: {integrity: sha512-wfr/jstw9xNi/0teMHrRW7dsz3Lt5ARhYNZ2ewpadnhaIp5mbALhOAP+EAdsC7t4Z6wqsDVv9+W6gm1Dk9mEyw==}
@@ -11517,6 +11527,17 @@ snapshots:
       '@jridgewell/gen-mapping': 0.3.13
       '@jridgewell/trace-mapping': 0.3.31
 
+  '@arbitrum/sdk@4.0.4(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
+    dependencies:
+      '@ethersproject/address': 5.8.0
+      '@ethersproject/bignumber': 5.8.0
+      '@ethersproject/bytes': 5.8.0
+      async-mutex: 0.4.1
+      ethers: 5.8.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   '@auth/core@0.40.0':
     dependencies:
       '@panva/hkdf': 1.2.1
@@ -16153,6 +16174,10 @@ snapshots:
   async-limiter@1.0.1: {}
 
   async-mutex@0.2.6:
+    dependencies:
+      tslib: 2.8.1
+
+  async-mutex@0.4.1:
     dependencies:
       tslib: 2.8.1
 
