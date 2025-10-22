@@ -770,6 +770,40 @@ importers:
         specifier: ^1.2.0
         version: 1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4(vitest@3.2.4))(terser@5.44.0)
 
+  lib/mcp-tools/tatum-mcp-server:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: 'catalog:'
+        version: 1.15.1
+      dotenv:
+        specifier: 'catalog:'
+        version: 16.6.1
+      express:
+        specifier: 'catalog:'
+        version: 4.21.2
+      node-fetch:
+        specifier: ^3.3.2
+        version: 3.3.2
+      p-retry:
+        specifier: ^6.2.1
+        version: 6.2.1
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.76
+    devDependencies:
+      '@types/express':
+        specifier: ^5.0.1
+        version: 5.0.3
+      '@types/node':
+        specifier: 'catalog:'
+        version: 20.19.7
+      tsx:
+        specifier: 'catalog:'
+        version: 4.20.3
+      typescript:
+        specifier: 'catalog:'
+        version: 5.8.3
+
   lib/test-utils:
     dependencies:
       '@emberai/arbitrum-vibekit-core':

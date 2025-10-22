@@ -1,5 +1,6 @@
 import type { AgentConfig } from '@emberai/arbitrum-vibekit-core';
 import { swappingSkill } from './skills/swapping.js';
+import { chainDataSkill } from './skills/chainData.js';
 import { documentationSkill } from './skills/documentation.js';
 
 export const agentConfig: AgentConfig = {
@@ -11,6 +12,7 @@ export const agentConfig: AgentConfig = {
   skills: [
     // Skills implemented so far
     swappingSkill,
+    chainDataSkill,
     documentationSkill,
     // lendingSkill,
     // liquiditySkill,
