@@ -25,8 +25,9 @@ import z from 'zod';
 
 import { canonicalizeName } from '../../config/validators/tool-validator.js';
 import { Logger } from '../../utils/logger.js';
-import { verifyPayment } from '../../utils/ap2/x402-server.js';
+import { verifyPayment, settlePayment } from '../../utils/ap2/x402-server.js';
 import type { WorkflowRuntime } from '../../workflows/runtime.js';
+import type { PaymentSettlement } from '../../workflows/types.js';
 import {
   X402_STATUS_KEY,
   X402_REQUIREMENTS_KEY,
@@ -179,14 +180,33 @@ export class WorkflowHandler {
     }
 
     try {
-      this.handlePaymentResponse(taskState, taskId, contextId, metadata, eventBus);
+      // Check if this is a payment response and create settlement object
+      const paymentResult = await this.handlePaymentResponse(
+        taskState,
+        taskId,
+        contextId,
+        metadata,
+        eventBus,
+      );
 
-      // Resume the workflow with the input
-      const input = messageData ?? messageContent;
+      // If payment handling encountered an error, it returns null and already handled the error
+      // We should not continue with the resume in this case
+      if (paymentResult === null) {
+        this.logger.debug('[RESUME] Payment handling failed, aborting resume', { taskId });
+        return;
+      }
+
+      // Resume the workflow with the appropriate input
+      // If settlement object exists (paymentResult is PaymentSettlement), pass it
+      // Otherwise use the original input (paymentResult is undefined)
+      const input = paymentResult ?? messageData ?? messageContent;
 
       // Use execution.resume() instead of calling generator.next() directly
       // This ensures event listeners (set up in dispatchWorkflow) are triggered
-      this.logger.debug('[RESUME] About to call execution.resume()', { taskId, input });
+      this.logger.debug('[RESUME] About to call execution.resume()', {
+        taskId,
+        hasSettlement: !!paymentResult,
+      });
       const resumeResult = await execution.resume(input);
       this.logger.debug('[RESUME] execution.resume() returned', {
         taskId,
@@ -281,18 +301,16 @@ export class WorkflowHandler {
     contextId: string,
     metadata: Record<string, unknown>,
     eventBus: ExecutionEventBus,
-  ): Promise<void> {
+  ): Promise<PaymentSettlement | undefined | null> {
     if (taskState.state !== 'input-required') {
-      return;
+      return undefined;
     }
-    const execution = this.workflowRuntime?.getExecution(taskId);
     const currentTaskState = this.workflowRuntime?.getTaskState(taskId);
 
     // Check if this task was paused for payment
-    const pauseInfo = currentTaskState?.pauseInfo;
     const paymentStatus = metadata[X402_STATUS_KEY];
     if (!paymentStatus) {
-      return;
+      return undefined;
     }
 
     try {
@@ -341,6 +359,22 @@ export class WorkflowHandler {
         taskId,
         payer: verificationResult.payer,
       });
+
+      // Create settlement object that the workflow will receive
+      const settlement: PaymentSettlement = {
+        settlePayment: async () => {
+          this.logger.debug('[PAYMENT] Settling payment', { taskId });
+          await settlePayment(payloadParsed.payload, paymentRequirements);
+          this.logger.debug('[PAYMENT] Payment settled successfully', { taskId });
+        },
+        payer: verificationResult.payer,
+        metadata: {
+          paymentPayload: payloadParsed,
+          paymentRequirements,
+        },
+      };
+
+      return settlement;
     } catch (error) {
       this.logger.debug((error as Error).toString?.() ?? String(error), { taskId });
       const errorMessage: Message = {
@@ -377,7 +411,7 @@ export class WorkflowHandler {
       };
       eventBus.publish(statusUpdate);
       eventBus.finished();
-      return;
+      return null; // Return null to indicate error was handled
     }
   }
 

@@ -148,3 +148,22 @@ export interface ToolMetadata {
   description: string;
   inputSchema?: z.ZodObject<Record<string, z.ZodTypeAny>>;
 }
+
+/**
+ * Payment settlement object returned to workflow after payment is validated
+ */
+export interface PaymentSettlement {
+  /**
+   * Settle the payment with the facilitator
+   * This should be called by the workflow after receiving the settlement object
+   */
+  settlePayment: () => Promise<void>;
+  /**
+   * The verified payer address
+   */
+  payer?: string;
+  /**
+   * Additional payment metadata
+   */
+  metadata?: Record<string, unknown>;
+}

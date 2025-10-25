@@ -19,3 +19,22 @@ export async function verifyPayment(
   const { verify } = useFacilitator({ url: facilitatorUrl as Resource });
   return await verify(paymentPayload, requirements);
 }
+
+/**
+ * Verify payment using the configured facilitator
+ * @param paymentPayload - The payment payload to verify
+ * @param requirements - The payment requirements to verify against
+ * @returns Promise with verification result
+ */
+export async function settlePayment(
+  paymentPayload: PaymentPayload,
+  requirements: PaymentRequirements,
+) {
+  const facilitatorUrl = process.env['X402_FACILITATOR_URL'];
+  if (!facilitatorUrl) {
+    throw new Error('X402_FACILITATOR_URL environment variable is not configured');
+  }
+
+  const { settle } = useFacilitator({ url: facilitatorUrl as Resource });
+  return await settle(paymentPayload, requirements);
+}

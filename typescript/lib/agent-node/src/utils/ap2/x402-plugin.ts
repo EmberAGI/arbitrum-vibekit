@@ -6,9 +6,23 @@ import type { WorkflowState } from '../../workflows/types.js';
  * Creates a payment required workflow state message for x402 payment requests.
  * Plugin developers can use this helper to request payment for agent tools.
  *
+ * When yielded, the workflow will pause and wait for payment. After payment is validated,
+ * the generator receives a PaymentSettlement object with a settlePayment() method.
+ *
  * @param message - Human-readable message explaining why payment is required
  * @param requirements - Payment requirements specification from x402/types
  * @returns WorkflowState object with payment-required type
+ *
+ * @example
+ * ```typescript
+ * const settlement = (yield requirePaymentMessage(
+ *   'Payment required to execute trade',
+ *   paymentRequirements
+ * )) as PaymentSettlement;
+ *
+ * // After payment is validated, settle it
+ * await settlement.settlePayment();
+ * ```
  */
 export function requirePaymentMessage(
   message: string,
