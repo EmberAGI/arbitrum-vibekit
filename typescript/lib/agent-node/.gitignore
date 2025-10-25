@@ -32,6 +32,8 @@ out/
 .tmp/
 .temp/
 .cache/
+*.tgz
+*.zip
 
 # Framework outputs
 .next/
