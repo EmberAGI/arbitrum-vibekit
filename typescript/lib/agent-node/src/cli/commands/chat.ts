@@ -9,7 +9,6 @@ import { Logger } from '../../utils/logger.js';
 import { ChatClient } from '../chat/client.js';
 import { StreamRenderer } from '../chat/renderer.js';
 import { ChatRepl } from '../chat/repl.js';
-import { setDefaultLogLevel } from '../chat/utils.js';
 import { cliOutput } from '../output.js';
 
 export interface ChatOptions {
@@ -32,23 +31,30 @@ export interface ChatOptions {
    * Log directory for file logging (optional, daily JSONL)
    */
   logDir?: string;
+
+  /**
+   * Respect existing LOG_LEVEL from env (opt-out forcing ERROR)
+   */
+  respectLogLevel?: boolean;
 }
 
 export async function chatCommand(options: ChatOptions = {}): Promise<void> {
   const baseUrl = options.url ?? 'http://127.0.0.1:3000';
 
   try {
-    // Set default log level to ERROR in chat mode (unless explicitly overridden)
-    setDefaultLogLevel('ERROR');
+    // Force ERROR by default unless user explicitly opts to respect env
+    if (!options.respectLogLevel) {
+      process.env['LOG_LEVEL'] = 'ERROR';
+    }
 
     // Setup file logging if requested
     if (options.logDir) {
       try {
         await Logger.setFileSink(options.logDir);
-        // Prefer structured for file clarity if not already set
-        if ((process.env['LOG_STRUCTURED'] ?? 'false').toLowerCase() !== 'true') {
-          process.env['LOG_STRUCTURED'] = 'true';
-        }
+        // Prefer structured for file clarity
+        process.env['LOG_STRUCTURED'] = 'true';
+        // Suppress console logs entirely for clean chat output
+        Logger.setConsoleEnabled(false);
       } catch {
         // If file sink fails, continue without file logging
       }

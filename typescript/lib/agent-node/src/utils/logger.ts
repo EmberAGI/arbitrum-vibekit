@@ -32,6 +32,7 @@ export class Logger {
   private namespace?: string;
   private structured: boolean;
   private static fileSink: ((line: string) => void) | undefined;
+  private static consoleEnabled = true;
 
   private constructor(namespace?: string) {
     this.namespace = namespace;
@@ -99,19 +100,22 @@ export class Logger {
 
   debug(message: string, context?: LogContext): void {
     if (this.shouldLog(LogLevel.DEBUG)) {
-      console.log(this.formatMessage('DEBUG', message, context));
+      const line = this.formatMessage('DEBUG', message, context);
+      if (Logger.consoleEnabled) console.log(line);
     }
   }
 
   info(message: string, context?: LogContext): void {
     if (this.shouldLog(LogLevel.INFO)) {
-      console.log(this.formatMessage('INFO', message, context));
+      const line = this.formatMessage('INFO', message, context);
+      if (Logger.consoleEnabled) console.log(line);
     }
   }
 
   warn(message: string, context?: LogContext): void {
     if (this.shouldLog(LogLevel.WARN)) {
-      console.warn(this.formatMessage('WARN', message, context));
+      const line = this.formatMessage('WARN', message, context);
+      if (Logger.consoleEnabled) console.warn(line);
     }
   }
 
@@ -129,7 +133,8 @@ export class Logger {
             : error,
       };
 
-      console.error(this.formatMessage('ERROR', message, errorContext));
+      const line = this.formatMessage('ERROR', message, errorContext);
+      if (Logger.consoleEnabled) console.error(line);
     }
   }
 
@@ -182,6 +187,11 @@ export class Logger {
         // Swallow file sink errors to avoid impacting console output
       }
     };
+  }
+
+  /** Enable or disable console output globally (file sink unaffected). */
+  static setConsoleEnabled(enabled: boolean): void {
+    Logger.consoleEnabled = enabled;
   }
 }
 

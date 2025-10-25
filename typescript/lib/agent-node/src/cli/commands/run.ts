@@ -11,6 +11,7 @@ import { initFromConfigWorkspace } from '../../config/runtime/init.js';
 import type { HotReloadEvent } from '../../config/runtime/init.js';
 import { serviceConfig } from '../../config.js';
 import { cliOutput } from '../output.js';
+import { Logger } from '../../utils/logger.js';
 
 function summarizeHotReload(updated: HotReloadEvent['updated']): string[] {
   const summary: string[] = [];
@@ -66,6 +67,7 @@ export interface RunOptions {
   attach?: boolean;
   chat?: boolean; // Alias for attach
   logDir?: string; // Optional file logging directory when attaching chat
+  respectLogLevel?: boolean; // Opt out of forcing ERROR in chat
 }
 
 export async function runCommand(options: RunOptions = {}): Promise<void> {
@@ -79,6 +81,29 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
   }
   if (shouldAttach) {
     cliOutput.info('Chat mode will be enabled after server starts');
+  }
+
+  // Preconfigure logging BEFORE server initialization when attaching chat
+  if (shouldAttach) {
+    try {
+      if (options.logDir) {
+        await Logger.setFileSink(options.logDir);
+        process.env['LOG_STRUCTURED'] = 'true';
+        // Suppress console logs for clean chat output (stdout reserved for stream)
+        Logger.setConsoleEnabled(false);
+      }
+
+      if (!options.respectLogLevel) {
+        // Force ERROR by default for console (suppressed if logDir set)
+        process.env['LOG_LEVEL'] = 'ERROR';
+      } else {
+        // Ensure a default if none was provided in env
+        const { setDefaultLogLevel } = await import('../chat/utils.js');
+        setDefaultLogLevel('ERROR');
+      }
+    } catch {
+      // Do not block server startup on logging preconfiguration failures
+    }
   }
 
   // Initialize config workspace
@@ -141,16 +166,21 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
       const { setDefaultLogLevel } = await import('../chat/utils.js');
       const { Logger } = await import('../../utils/logger.js');
 
-      // Set default log level to ERROR in chat mode
-      setDefaultLogLevel('ERROR');
+      // Force ERROR by default unless user explicitly opts to respect env
+      if (!options.respectLogLevel) {
+        process.env['LOG_LEVEL'] = 'ERROR';
+      } else {
+        // Ensure default if none set
+        setDefaultLogLevel('ERROR');
+      }
 
       // Setup file logging if requested
       if (options.logDir) {
         try {
           await Logger.setFileSink(options.logDir);
-          if ((process.env['LOG_STRUCTURED'] ?? 'false').toLowerCase() !== 'true') {
-            process.env['LOG_STRUCTURED'] = 'true';
-          }
+          process.env['LOG_STRUCTURED'] = 'true';
+          // Suppress console logs entirely for clean chat output
+          Logger.setConsoleEnabled(false);
         } catch {
           // ignore sink failures
         }
