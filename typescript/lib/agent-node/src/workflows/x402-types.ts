@@ -3,6 +3,8 @@ import {
   PaymentRequirements,
   PaymentRequirementsSchema as x402PaymentRequirementsSchema,
   Network,
+  PaymentPayloadSchema as x402PayloadPaymentSchema,
+  PaymentPayload,
 } from 'x402/types';
 import { z } from 'zod';
 
@@ -17,11 +19,16 @@ export const X402_STATUS_KEY = 'x402.payment.status';
 export const X402_REQUIREMENTS_KEY = 'x402.payment.required';
 
 /**
+ * The payload key.
+ */
+export const X402_PAYMENT_PAYLOAD_KEY = 'x402.payment.payload';
+
+/**
  * Payment scheme options - uses a flexible record schema that infers to PaymentRequirements type
  */
 export const PaymentRequirementsSchema: z.ZodType<PaymentRequirements> = z.any().refine(
   (data) => x402PaymentRequirementsSchema.safeParse(data).success, // Using payment requirements directly doesn't work
-) as z.ZodType<PaymentRequirements>;
+);
 
 /**
  * Status values for x402 payments
@@ -30,6 +37,7 @@ export const x402StatusSchmea = z.enum([
   'payment-required',
   'payment-submitted',
   'payment-completed',
+  'payment-rejected',
 ]);
 
 /**
@@ -62,7 +70,11 @@ export const EIP3009AuthorizationSchema = z.object({
  */
 export const NetworkSchema: z.ZodType<Network> = z
   .any()
-  .refine((data) => x402NetworkSchema.safeParse(data).success) as z.ZodType<Network>;
+  .refine((data) => x402NetworkSchema.safeParse(data).success);
+
+export const PayloadPaymentSchema: z.ZodType<PaymentPayload> = z
+  .any()
+  .refine((data) => x402PayloadPaymentSchema.safeParse(data).success);
 
 /**
  * x402 payment payload schema
@@ -71,8 +83,5 @@ export const x402PaymentPayloadSchema = z.object({
   x402Version: x402VersionSchema,
   scheme: z.string(),
   network: NetworkSchema,
-  payload: z.object({
-    signature: z.string(),
-    authorization: EIP3009AuthorizationSchema,
-  }),
+  payload: PayloadPaymentSchema,
 });

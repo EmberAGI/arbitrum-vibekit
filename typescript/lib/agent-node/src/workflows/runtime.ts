@@ -30,6 +30,7 @@ export class WorkflowRuntime {
       error?: unknown;
       validationErrors?: unknown[];
       firstYield?: unknown; // Stores first yield for dispatch-response access
+      paymentRequirements?: Record<string, unknown>; // Store payment requirements for verification
     }
   > = new Map();
   private executionListeners: Map<string, Map<string, Set<(...args: unknown[]) => void>>> =
@@ -424,10 +425,12 @@ export class WorkflowRuntime {
               inputSchema: undefined,
             };
 
+            // Store payment requirements in task state for later verification
             this.taskStates.set(execution.id, {
               state: to,
               workflowGenerator: generator,
               pauseInfo,
+              paymentRequirements: metadata, // Store payment metadata for verification
             });
 
             // Emit pause event with payment metadata
@@ -534,6 +537,7 @@ export class WorkflowRuntime {
         error?: unknown;
         validationErrors?: unknown[];
         firstYield?: unknown;
+        paymentRequirements?: Record<string, unknown>;
       }
     | undefined {
     return this.taskStates.get(taskId);
@@ -810,10 +814,12 @@ export class WorkflowRuntime {
               inputSchema: undefined,
             };
 
+            // Store payment requirements in task state for later verification
             this.taskStates.set(executionId, {
               state: to,
               workflowGenerator: generator,
               pauseInfo,
+              paymentRequirements: metadata, // Store payment metadata for verification
             });
 
             // Give time for pause handler to be registered
