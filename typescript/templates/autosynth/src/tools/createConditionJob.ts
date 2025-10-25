@@ -22,9 +22,10 @@ const CreateConditionJobInputSchema = z.object({
   targetContractAddress: z
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/)
-    .describe('Contract address to call when condition is met'),
-  targetFunction: z.string().min(1).describe('Function name to call on the target contract'),
-  abi: z.string().min(1).describe('Target contract ABI (JSON string)'),
+    .optional()
+    .describe('Contract address to call when condition is met (not required for Safe wallet mode)'),
+  targetFunction: z.string().min(1).optional().describe('Function name to call on the target contract (not required for Safe wallet mode)'),
+  abi: z.string().min(1).optional().describe('Target contract ABI (JSON string) (not required for Safe wallet mode)'),
   arguments: z.array(z.string()).default([]).describe('Static arguments for the function call'),
   recurring: z.boolean().default(false).describe('Whether the job should check condition repeatedly'),
   timeFrame: z.number().positive().default(36).describe('Job validity timeframe in hours'),
@@ -32,6 +33,8 @@ const CreateConditionJobInputSchema = z.object({
   dynamicArgumentsScriptUrl: z.string().optional().describe('URL for dynamic argument fetching script'),
   timezone: z.string().default('UTC').describe('Timezone for job execution'),
   userAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('User wallet address for signing transactions'),
+  walletMode: z.enum(['regular', 'safe']).default('regular').describe('Wallet mode: "regular" for EOA execution or "safe" for Safe wallet execution'),
+  safeAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional().describe('Safe wallet address (required when walletMode is "safe")'),
 });
 
 export const createConditionJobTool: VibkitToolDefinition<typeof CreateConditionJobInputSchema, any, TriggerXContext, any> = {
@@ -49,30 +52,57 @@ export const createConditionJobTool: VibkitToolDefinition<typeof CreateCondition
         throw new Error('valueSourceUrl is required for API-based conditions');
       }
 
+      // Validate Safe wallet mode requirements
+      if (input.walletMode === 'safe') {
+        if (!input.safeAddress) {
+          throw new Error('safeAddress is required when walletMode is "safe"');
+        }
+        if (!input.dynamicArgumentsScriptUrl) {
+          throw new Error('dynamicArgumentsScriptUrl is required for Safe wallet mode');
+        }
+      } else {
+        // Regular mode requires target contract details
+        if (!input.targetContractAddress) {
+          throw new Error('targetContractAddress is required for regular wallet mode');
+        }
+        if (!input.targetFunction) {
+          throw new Error('targetFunction is required for regular wallet mode');
+        }
+        if (!input.abi) {
+          throw new Error('abi is required for regular wallet mode');
+        }
+      }
+
       // Build job input matching the exact SDK example structure
       const jobInput: any = {
         jobType: JobType.Condition,
-        argType: input.dynamicArgumentsScriptUrl ? ArgType.Dynamic : ArgType.Static,
+        argType: input.walletMode === 'safe' ? ArgType.Dynamic : (input.dynamicArgumentsScriptUrl ? ArgType.Dynamic : ArgType.Static),
         jobTitle: input.jobTitle,
         timeFrame: input.timeFrame,
         timezone: input.timezone,
-        conditionType: input.conditionType,
+        conditionType: input.operator, // Map operator to conditionType for SDK compatibility
+        upperLimit: input.operator.includes('>') ? parseFloat(input.targetValue) : undefined,
+        lowerLimit: input.operator.includes('<') ? parseFloat(input.targetValue) : undefined,
         valueSourceType: input.valueSourceType,
-        valueSourceContractAddress: input.valueSourceContractAddress || '',
-        valueSourceFunction: input.valueSourceFunction || '',
         valueSourceUrl: input.valueSourceUrl || '',
-        operator: input.operator,
-        targetValue: input.targetValue,
         recurring: input.recurring,
         chainId: input.targetChainId,
-        targetContractAddress: input.targetContractAddress,
-        targetFunction: input.targetFunction,
-        abi: input.abi,
         isImua: false,
-        arguments: input.arguments,
+        arguments: input.walletMode === 'safe' ? [] : input.arguments,
         dynamicArgumentsScriptUrl: input.dynamicArgumentsScriptUrl || '',
         autotopupTG: true,
+        walletMode: input.walletMode,
       };
+
+      // Add target contract details for regular mode
+      if (input.walletMode === 'regular') {
+        jobInput.targetContractAddress = input.targetContractAddress;
+        jobInput.targetFunction = input.targetFunction;
+        jobInput.abi = input.abi;
+      } else {
+        // Safe mode - add Safe address
+        jobInput.safeAddress = input.safeAddress;
+      }
 
       console.log('📦 Preparing transaction data for user signing...');
 

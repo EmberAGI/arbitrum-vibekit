@@ -7,14 +7,15 @@ import { createJob } from 'sdk-triggerx';
 import { deleteJob  } from 'sdk-triggerx/dist/api/deleteJob.js';
 import { getJobDataById } from 'sdk-triggerx/dist/api/getJobDataById.js';
 import { TriggerXClient } from 'sdk-triggerx';
+import { createSafeWallet } from 'sdk-triggerx/dist/api/safeWallet.js';
 import { ethers } from 'ethers';
 
 export function AutoSynth({
   txPreview,
   jobData,
 }: {
-  txPreview: any; // TriggerX job preview
-  jobData: any;   // TriggerX job data containing jobInput
+  txPreview: any; // TriggerX job preview or Safe wallet transaction preview
+  jobData: any;   // TriggerX job data containing jobInput or Safe wallet data
 }) {
   console.log("[AutoSynth Component] Received txPreview:", JSON.stringify(txPreview, null, 2));
   console.log("[AutoSynth Component] Received jobData:", JSON.stringify(jobData, null, 2));
@@ -33,6 +34,12 @@ export function AutoSynth({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // --- Local state for Safe wallet creation ---
+  const [isCreatingSafe, setIsCreatingSafe] = useState(false);
+  const [safeSuccess, setSafeSuccess] = useState(false);
+  const [safeError, setSafeError] = useState<string | null>(null);
+  const [safeAddress, setSafeAddress] = useState<string | null>(null);
 
   const signAndCreateJob = async () => {
     if (!isConnected || !address || !jobData?.jobInput) {
@@ -94,6 +101,45 @@ export function AutoSynth({
     }
   };
 
+  const signAndCreateSafeWallet = async () => {
+    if (!isConnected || !address) {
+      setSafeError("Wallet not connected");
+      return;
+    }
+
+    try {
+      setIsCreatingSafe(true);
+      setSafeError(null);
+
+      // Check if we need to switch chain (TriggerX typically uses Arbitrum Sepolia - chain ID 421614)
+      const targetChainId = parseInt(txPreview?.chainId || '421614', 10);
+      if (chainId !== targetChainId) {
+        await switchChainAsync({ chainId: targetChainId });
+      }
+
+      // Get the user's signer from their connected wallet
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const signer = await provider.getSigner();
+
+      console.log('🔐 Creating Safe wallet with user signer...');
+      console.log('User address:', address);
+      console.log('Target chain:', targetChainId);
+
+      // Call the SDK to create the Safe wallet on the current signer network
+      const createdSafeAddress = await createSafeWallet(signer);
+
+      console.log('✅ Safe wallet created successfully:', createdSafeAddress);
+      setSafeAddress(createdSafeAddress);
+      setSafeSuccess(true);
+
+    } catch (err: any) {
+      console.error('❌ Error creating Safe wallet:', err);
+      setSafeError(err.message || 'Failed to create Safe wallet');
+    } finally {
+      setIsCreatingSafe(false);
+    }
+  };
+
   const signAndDeleteJob = async () => {
     try {
       setIsDeleting(true);
@@ -150,11 +196,17 @@ export function AutoSynth({
     }
   };
 
+  // Determine if this is Safe wallet creation or job creation
+  const isSafeWalletCreation = txPreview?.action === 'createSafeWallet';
+  const hasValidData = txPreview && (jobData || isSafeWalletCreation);
+
   return (
     <>
-      {txPreview && jobData && (
+      {hasValidData && (
         <div className="flex flex-col gap-2 p-8 bg-transparent shadow-md rounded-2xl text-white border-blue-200 border-2">
-          <h2 className="text-lg font-semibold mb-4">TriggerX Job Preview:</h2>
+          <h2 className="text-lg font-semibold mb-4">
+            {isSafeWalletCreation ? 'Safe Wallet Creation Preview:' : 'TriggerX Job Preview:'}
+          </h2>
           
           {/* Preview Rendering */}
           <div className="rounded-xl bg-zinc-700 p-4 flex flex-col gap-2">
@@ -170,6 +222,28 @@ export function AutoSynth({
                 <p className="font-normal w-full">
                   <span className="font-semibold">Chain:</span> {txPreview.chainId}
                 </p>
+              </>
+            ) : txPreview.action === 'createSafeWallet' ? (
+              <>
+                <p className="font-normal w-full">
+                  <span className="font-semibold">User Address:</span> {txPreview.userAddress === '0x0000000000000000000000000000000000000000' ? 'Will use connected wallet' : txPreview.userAddress}
+                </p>
+                <p className="font-normal w-full">
+                  <span className="font-semibold">Chain:</span> {txPreview.chainId} (Arbitrum Sepolia)
+                </p>
+                <p className="font-normal w-full text-sm text-gray-300">
+                  Creates a new Safe wallet with enhanced security features for automated job execution.
+                </p>
+                {jobData?.walletData && (
+                  <>
+                    <p className="font-normal w-full">
+                      <span className="font-semibold">Estimated Cost:</span> {jobData.walletData.estimatedCost} ETH
+                    </p>
+                    <p className="font-normal w-full text-sm text-gray-300">
+                      <span className="font-semibold">Description:</span> {jobData.walletData.description}
+                    </p>
+                  </>
+                )}
               </>
             ) : (
               <>
@@ -188,6 +262,14 @@ export function AutoSynth({
                 <p className="font-normal w-full">
                   <span className="font-semibold">Chain:</span> {txPreview.chainId}
                 </p>
+                {txPreview.walletMode && (
+                  <p className="font-normal w-full">
+                    <span className="font-semibold">Wallet Mode:</span> {txPreview.walletMode}
+                    {txPreview.walletMode === 'safe' && txPreview.safeAddress && (
+                      <span className="text-sm text-gray-300 block">Safe: {txPreview.safeAddress}</span>
+                    )}
+                  </p>
+                )}
                 {txPreview.timeInterval && (
                   <p className="font-normal w-full">
                     <span className="font-semibold">Time Interval:</span> {txPreview.timeInterval} seconds
@@ -207,32 +289,74 @@ export function AutoSynth({
             )}
           </div>
 
+          {/* Safe Wallet Configuration Prompt */}
+          {isSafeWalletCreation && (
+            <div className="mt-4 p-4 bg-blue-900 rounded-lg border border-blue-700">
+              <h3 className="text-lg font-semibold text-blue-200 mb-2">🔐 Safe Wallet Configuration</h3>
+              <div className="text-blue-100 space-y-2">
+                <p><strong>What this creates:</strong> A new Safe wallet with multi-signature capabilities</p>
+                <p><strong>Security features:</strong> Enhanced transaction validation and approval workflows</p>
+                <p><strong>Use case:</strong> Automated job execution with additional security layers</p>
+                <p><strong>Next steps:</strong> After creation, you can use this Safe wallet for secure job execution</p>
+              </div>
+            </div>
+          )}
+
           {isConnected ? (
             <>
-              {/* Success Status */}
+              {/* Job Success Status */}
               {isSuccess && (
                 <p className="p-2 rounded-2xl border-green-800 bg-green-200 w-full border-2 text-green-800">
                   Job Created Successfully! Job ID: {jobId}
                 </p>
               )}
+
+              {/* Safe Wallet Success Status */}
+              {safeSuccess && (
+                <p className="p-2 rounded-2xl border-green-800 bg-green-200 w-full border-2 text-green-800">
+                  Safe Wallet Created Successfully! Address: {safeAddress}
+                </p>
+              )}
               
-              {/* Creating Status */}
+              {/* Job Creating Status */}
               {isCreating && (
                 <p className="p-2 rounded-2xl border-gray-400 bg-gray-200 w-full border-2 text-slate-800">
                   Creating Job... Please sign the transaction in your wallet.
                 </p>
               )}
+
+              {/* Safe Wallet Creating Status */}
+              {isCreatingSafe && (
+                <p className="p-2 rounded-2xl border-blue-400 bg-blue-200 w-full border-2 text-blue-800">
+                  Creating Safe Wallet... Please sign the transaction in your wallet.
+                </p>
+              )}
               
-              {/* Error Status */}
+              {/* Job Error Status */}
               {error && (
                 <p className="p-2 rounded-2xl border-red-800 bg-red-400 w-full border-2 text-white break-words">
-                  Error: {error}
+                  Job Error: {error}
+                </p>
+              )}
+
+              {/* Safe Wallet Error Status */}
+              {safeError && (
+                <p className="p-2 rounded-2xl border-red-800 bg-red-400 w-full border-2 text-white break-words">
+                  Safe Wallet Error: {safeError}
+                </p>
+              )}
+
+              {/* Delete Error Status */}
+              {deleteError && (
+                <p className="p-2 rounded-2xl border-red-800 bg-red-400 w-full border-2 text-white break-words">
+                  Delete Error: {deleteError}
                 </p>
               )}
 
               {/* Action Buttons */}
               <div className="flex gap-3">
-                {txPreview?.action !== 'deleteJob' && (
+                {/* Job Creation Button */}
+                {txPreview?.action !== 'deleteJob' && txPreview?.action !== 'createSafeWallet' && (
                   <button
                     className="mt-4 bg-blue-700 text-white py-2 px-4 rounded-full disabled:opacity-50"
                     type="button"
@@ -246,6 +370,24 @@ export function AutoSynth({
                       : "Sign & Create Job"}
                   </button>
                 )}
+
+                {/* Safe Wallet Creation Button */}
+                {txPreview?.action === 'createSafeWallet' && (
+                  <button
+                    className="mt-4 bg-green-700 text-white py-2 px-4 rounded-full disabled:opacity-50"
+                    type="button"
+                    onClick={signAndCreateSafeWallet}
+                    disabled={isCreatingSafe || safeSuccess}
+                  >
+                    {isCreatingSafe
+                      ? "Creating Safe Wallet..."
+                      : safeSuccess
+                      ? "Safe Wallet Created"
+                      : "Sign & Create Safe Wallet"}
+                  </button>
+                )}
+
+                {/* Job Deletion Button */}
                 {txPreview?.action === 'deleteJob' && (
                   <button
                     className="mt-4 bg-red-700 text-white py-2 px-4 rounded-full disabled:opacity-50"

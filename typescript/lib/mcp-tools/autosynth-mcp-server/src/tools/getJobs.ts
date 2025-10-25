@@ -35,11 +35,11 @@ export async function getJobs(params: z.infer<typeof GetJobsSchema>, triggerxCli
         const userData = await getUserData(triggerxClient, 'demo-user'); // Note: Real user address should come from frontend
         console.error('User data:', JSON.stringify(userData, null, 2));
         
-        if (userData && userData.job_ids && userData.job_ids.length > 0) {
-          jobs = { userData, jobIds: userData.job_ids };
-          console.error('Found job IDs via getUserData:', userData.job_ids);
+        if (userData && userData.data && userData.data.job_ids && userData.data.job_ids.length > 0) {
+          jobs = { userData: userData.data, jobIds: userData.data.job_ids };
+          console.error('Found job IDs via getUserData:', userData.data.job_ids);
         } else {
-          jobs = { userData };
+          jobs = { userData: userData.data };
           console.error('No job IDs found in user data');
         }
       } catch (userDataError) {

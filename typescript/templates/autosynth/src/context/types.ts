@@ -8,6 +8,7 @@ import type { Signer } from 'ethers';
 export interface TriggerXContext {
   triggerxClient: TriggerXClient;
   supportedChains: string[];
+  signer?: Signer;
 }
 
 export interface AutoSynthContext extends TriggerXContext {

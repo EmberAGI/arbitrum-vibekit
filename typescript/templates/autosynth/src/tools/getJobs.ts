@@ -60,11 +60,13 @@ export const getJobsTool: VibkitToolDefinition<typeof GetJobsInputSchema, any, T
           const userData = await getUserData(context.custom.triggerxClient, 'demo-user'); // Note: Real user address should come from frontend
           console.log('👤 [getJobs] User data:', JSON.stringify(userData, null, 2));
           
-          if (userData && userData.job_ids && userData.job_ids.length > 0) {
-            jobs = { userData, jobIds: userData.job_ids };
-            console.log('✅ [getJobs] Found job IDs via getUserData:', userData.job_ids);
+          // Handle SDK response structure - userData is wrapped in a response object
+          const actualUserData = (userData as any).data || userData;
+          if (actualUserData && actualUserData.job_ids && actualUserData.job_ids.length > 0) {
+            jobs = { userData: actualUserData, jobIds: actualUserData.job_ids };
+            console.log('✅ [getJobs] Found job IDs via getUserData:', actualUserData.job_ids);
           } else {
-            jobs = { userData };
+            jobs = { userData: actualUserData };
             console.log('ℹ️ [getJobs] No job IDs found in user data');
           }
         } catch (userDataError) {

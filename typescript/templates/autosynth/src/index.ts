@@ -9,6 +9,7 @@ import { Agent, type AgentConfig, createProviderSelector, getAvailableProviders 
 import { jobManagementSkill } from './skills/jobManagement.js';
 import { jobListingSkill } from './skills/jobListingSkill.js';
 import { scheduleAssistantSkill } from './skills/scheduleAssistant.js';
+import { safeWalletSkill } from './skills/safeWalletSkill.js';
 import { contextProvider } from './context/provider.js';
 import type { TriggerXContext } from './context/types.js';
 
@@ -40,7 +41,7 @@ export const agentConfig: AgentConfig = {
   name: process.env.AGENT_NAME || 'AutoSynth',
   version: process.env.AGENT_VERSION || '1.0.0',
   description: process.env.AGENT_DESCRIPTION || 'Automated job scheduling with time, event, and condition triggers',
-  skills: [jobListingSkill, jobManagementSkill, scheduleAssistantSkill],
+  skills: [jobListingSkill, jobManagementSkill, scheduleAssistantSkill, safeWalletSkill],
   url: process.env.AGENT_URL || 'localhost',
   capabilities: {
     streaming: false,
@@ -80,6 +81,7 @@ agent
     console.log('  - Multi-chain support');
     console.log('  - Dynamic argument fetching');
     console.log('  - Job management and monitoring');
+    console.log('  - Safe wallet integration for enhanced security');
     // Removed Safe/Zodiac features to keep automation generic
   })
   .catch((error) => {

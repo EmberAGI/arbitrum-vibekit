@@ -47,6 +47,10 @@ export interface JobInput {
   dynamicArgumentsScriptUrl: string;
   isImua: boolean;
 
+  // Safe wallet fields
+  walletMode?: 'regular' | 'safe';
+  safeAddress?: string;
+
   // Time-based fields
   scheduleTypes?: ScheduleType[];
   timeInterval?: number;
@@ -78,6 +82,7 @@ export interface UserData {
   address: string;
   jobCount: number;
   totalSpent: number;
+  job_ids?: string[];
 }
 
 export interface CreateJobResult {
@@ -85,4 +90,19 @@ export interface CreateJobResult {
   jobId?: string;
   transactionHash?: string;
   error?: string;
+}
+
+export interface SafeWalletResult {
+  success: boolean;
+  safeAddress?: string;
+  transactionHash?: string;
+  error?: string;
+}
+
+export interface SafeWalletInfo {
+  address: string;
+  chainId: string;
+  owners: string[];
+  threshold: number;
+  isModuleEnabled: boolean;
 }

@@ -48,7 +48,7 @@
     "typescript-eslint": "^8.32.1",
     "vitest": "catalog:",
     "c8": "catalog:",
-    "sdk-triggerx": "^0.1.16"
+    "sdk-triggerx": "^0.1.19"
   },
   "dependencies": {
     "@google-a2a/types": "workspace:*",

@@ -9,6 +9,7 @@ Automated job scheduling agent with time, event, and condition-based triggers us
 - **Time-based Jobs**: Schedule tasks using intervals, cron expressions, or specific times
 - **Event-based Jobs**: Trigger automation when smart contract events occur
 - **Condition-based Jobs**: Execute when API or contract conditions are met
+- **Safe Wallet Integration**: Enhanced security with Safe (Gnosis Safe) wallet support
 - **Multi-chain Support**: Works across EVM-compatible blockchains
 - **Dynamic Arguments**: Fetch execution parameters from external scripts (IPFS)
 - **Job Management**: Create, list, monitor, and delete automated jobs
@@ -222,12 +223,15 @@ Execute when external conditions are met:
 
 - **jobManagement**: Create, list, get, and delete automated jobs
 - **scheduleAssistant**: Get help with scheduling patterns and automation
+- **safeWalletManagement**: Create and manage Safe wallets for enhanced security
 
 ### Tools
 
-- **createTimeJob**: Create time-based scheduled jobs
-- **createEventJob**: Create event-triggered jobs
-- **createConditionJob**: Create condition-based jobs
+- **createTimeJob**: Create time-based scheduled jobs (supports Safe wallet mode)
+- **createEventJob**: Create event-triggered jobs (supports Safe wallet mode)
+- **createConditionJob**: Create condition-based jobs (supports Safe wallet mode)
+- **createSafeWallet**: Create a new Safe wallet for enhanced security
+- **getSafeWalletInfo**: Get information about existing Safe wallets
 - **getJobs**: Retrieve all jobs or specific job by ID
 - **deleteJob**: Delete a job by ID
 - **getUserData**: Get user statistics and job count
@@ -237,6 +241,46 @@ Execute when external conditions are met:
 - Time-based jobs: ~0.1 ETH per execution
 - Event-based jobs: ~0.2 ETH per execution
 - Condition-based jobs: ~0.3 ETH per execution
+
+## Safe Wallet Integration
+
+AutoSynth now supports Safe (Gnosis Safe) wallets for enhanced security in automated job execution.
+
+### Benefits of Safe Wallet Mode
+- **Enhanced Security**: Multi-signature capabilities and modular architecture
+- **Access Controls**: Fine-grained permission management
+- **Secure Execution**: Jobs execute via the TriggerX Safe Module
+
+### Quick Safe Wallet Setup
+
+1. **Create a Safe Wallet**
+```typescript
+import { createSafeWallet } from 'sdk-triggerx';
+const safeAddress = await createSafeWallet(signer);
+```
+
+2. **Create Jobs with Safe Mode**
+```typescript
+const jobInput = {
+  jobType: 'time',
+  walletMode: 'safe',           // Enable Safe mode
+  safeAddress: safeAddress,     // Your Safe wallet address
+  argType: 'dynamic',           // Required for Safe mode
+  dynamicArgumentsScriptUrl: 'https://ipfs.../script', // Required
+  // ... other job parameters
+};
+```
+
+### Key Differences: Regular vs Safe Mode
+
+| Feature | Regular Mode | Safe Mode |
+|---------|-------------|-----------|
+| **Execution** | Direct EOA | Safe Module |
+| **Security** | Standard | Enhanced Multi-sig |
+| **Arguments** | Static/Dynamic | Dynamic Only |
+| **Target Contract** | Required in job | Via IPFS Script |
+
+> 📖 **Detailed Guide**: See `SAFE_WALLET_INTEGRATION.md` for comprehensive documentation and examples.
 
 ## Supported Chains
 

@@ -214,7 +214,7 @@ export const MessageRenderer = ({
             />
           )
         ) : (() => {
-          const isAutoSynth = toolName.includes('autosynth') || toolName.includes('createTimeJob') || toolName.includes('job-management-skill') || getArtifact()?.name === 'triggerx-job-plan';
+          const isAutoSynth = toolName.includes('autosynth') || toolName.includes('createTimeJob') || toolName.includes('job-management-skill') || toolName.includes('createSafeWallet') || getArtifact()?.name === 'triggerx-job-plan' || getArtifact()?.name === 'safe-wallet-creation';
           console.log('[MessageRenderer] AutoSynth condition check:', {
             toolName,
             isAutoSynth,
@@ -226,7 +226,7 @@ export const MessageRenderer = ({
           toolInvocationResult && (
             <AutoSynth
               txPreview={getKeyFromResult('txPreview') || txPreview}
-              jobData={getKeyFromResult('jobData')}
+              jobData={getKeyFromResult('jobData') || getArtifact()?.parts?.[0]?.data}
             />
           )
         ) : (

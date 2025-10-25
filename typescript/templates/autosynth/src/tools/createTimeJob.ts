@@ -16,9 +16,10 @@ const CreateTimeJobInputSchema = z.object({
   targetContractAddress: z
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/)
-    .describe('Contract address to call'),
-  targetFunction: z.string().min(1).describe('Function name to call on the contract'),
-  abi: z.string().min(1).describe('Contract ABI (JSON string)'),
+    .optional()
+    .describe('Contract address to call (not required for Safe wallet mode)'),
+  targetFunction: z.string().min(1).optional().describe('Function name to call on the contract (not required for Safe wallet mode)'),
+  abi: z.string().min(1).optional().describe('Contract ABI (JSON string) (not required for Safe wallet mode)'),
   arguments: z.array(z.string()).default([]).describe('Static arguments for the function call'),
   scheduleType: z.enum(['interval', 'cron', 'specific']).describe('Type of time-based scheduling: "interval" for recurring intervals, "cron" for cron expressions, or "specific" for one-time execution'),
   timeInterval: z.number().positive().optional().describe('Interval in seconds (for interval scheduling)'),
@@ -29,6 +30,8 @@ const CreateTimeJobInputSchema = z.object({
   dynamicArgumentsScriptUrl: z.string().default('').describe('URL for dynamic argument fetching script'),
   timezone: z.string().default('UTC').describe('Timezone for scheduling'),
   userAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('User wallet address for signing transactions'),
+  walletMode: z.enum(['regular', 'safe']).default('regular').describe('Wallet mode: "regular" for EOA execution or "safe" for Safe wallet execution'),
+  safeAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional().describe('Safe wallet address (required when walletMode is "safe")'),
 });
 
 // Define TriggerX Job Preview Schema
@@ -74,23 +77,52 @@ export const createTimeJobTool: VibkitToolDefinition<typeof CreateTimeJobInputSc
         throw new Error('specificSchedule is required for specific time scheduling');
       }
 
+      // Validate Safe wallet mode requirements
+      if (input.walletMode === 'safe') {
+        if (!input.safeAddress) {
+          throw new Error('safeAddress is required when walletMode is "safe"');
+        }
+        if (!input.dynamicArgumentsScriptUrl) {
+          throw new Error('dynamicArgumentsScriptUrl is required for Safe wallet mode');
+        }
+      } else {
+        // Regular mode requires target contract details
+        if (!input.targetContractAddress) {
+          throw new Error('targetContractAddress is required for regular wallet mode');
+        }
+        if (!input.targetFunction) {
+          throw new Error('targetFunction is required for regular wallet mode');
+        }
+        if (!input.abi) {
+          throw new Error('abi is required for regular wallet mode');
+        }
+      }
+
       // Build job input matching the exact SDK structure
       const jobInput: any = {
         jobType: JobType.Time,
-        argType: ArgType.Static,
+        argType: input.walletMode === 'safe' ? ArgType.Dynamic : ArgType.Static,
         jobTitle: input.jobTitle,
         timeFrame: input.timeFrame,
         scheduleType: input.scheduleType,
         timezone: input.timezone,
         chainId: input.chainId,
-        targetContractAddress: input.targetContractAddress,
-        targetFunction: input.targetFunction,
-        abi: input.abi,
         isImua: false,
-        arguments: input.arguments,
+        arguments: input.walletMode === 'safe' ? [] : input.arguments,
         dynamicArgumentsScriptUrl: input.dynamicArgumentsScriptUrl,
         autotopupTG: true,
+        walletMode: input.walletMode,
       };
+
+      // Add target contract details for regular mode
+      if (input.walletMode === 'regular') {
+        jobInput.targetContractAddress = input.targetContractAddress;
+        jobInput.targetFunction = input.targetFunction;
+        jobInput.abi = input.abi;
+      } else {
+        // Safe mode - add Safe address
+        jobInput.safeAddress = input.safeAddress;
+      }
 
       // Only include the relevant scheduling parameter based on the selected schedule type
       if (input.scheduleType === 'interval') {
@@ -108,9 +140,11 @@ export const createTimeJobTool: VibkitToolDefinition<typeof CreateTimeJobInputSc
         action: 'createTimeJob' as const,
         jobTitle: input.jobTitle,
         scheduleType: input.scheduleType,
-        targetContract: input.targetContractAddress,
-        targetFunction: input.targetFunction,
+        targetContract: input.targetContractAddress || 'Safe Module',
+        targetFunction: input.targetFunction || 'execJobFromHub',
         chainId: input.chainId,
+        walletMode: input.walletMode,
+        safeAddress: input.safeAddress,
         timeInterval: input.timeInterval,
         cronExpression: input.cronExpression,
         specificSchedule: input.specificSchedule,
@@ -139,7 +173,7 @@ export const createTimeJobTool: VibkitToolDefinition<typeof CreateTimeJobInputSc
             role: 'agent',
             messageId: `msg-${Date.now()}`,
             kind: 'message',
-            parts: [{ kind: 'text', text: 'Job configuration ready. Please sign to create the automated job.' }],
+            parts: [{ kind: 'text', text: `Job configuration ready for ${input.walletMode} wallet mode. Please sign to create the automated job.` }],
           },
         },
         artifacts: [
