@@ -410,6 +410,30 @@ export class WorkflowRuntime {
             emit('pause', pauseInfo);
             return; // Exit without completing
           }
+          case 'payment-required': {
+            const { message, metadata } = yieldValue;
+            const to = 'input-required'; // Payment required becomes input-required state
+
+            ensureTransition(execution.id, 'working', to as TaskState);
+            execution.state = to;
+
+            const pauseInfo: PauseInfo = {
+              state: to,
+              message,
+              // No input schema for payment - handled via metadata
+              inputSchema: undefined,
+            };
+
+            this.taskStates.set(execution.id, {
+              state: to,
+              workflowGenerator: generator,
+              pauseInfo,
+            });
+
+            // Emit pause event with payment metadata
+            emit('pause', { ...pauseInfo, metadata });
+            return; // Exit without completing
+          }
           case 'reject': {
             const { reason } = yieldValue;
             ensureTransition(execution.id, execution.state, 'rejected');
@@ -770,6 +794,32 @@ export class WorkflowRuntime {
             // Give time for pause handler to be registered
             await new Promise((resolve) => process.nextTick(resolve));
             emit('pause', pauseInfo);
+            return; // Exit without completing
+          }
+          case 'payment-required': {
+            const { message, metadata } = yieldValue;
+            const to = 'input-required'; // Payment required becomes input-required state
+
+            ensureTransition(executionId, 'working', to as TaskState);
+            execution.state = to;
+
+            const pauseInfo: PauseInfo = {
+              state: to,
+              message,
+              // No input schema for payment - handled via metadata
+              inputSchema: undefined,
+            };
+
+            this.taskStates.set(executionId, {
+              state: to,
+              workflowGenerator: generator,
+              pauseInfo,
+            });
+
+            // Give time for pause handler to be registered
+            await new Promise((resolve) => process.nextTick(resolve));
+            // Emit pause event with payment metadata
+            emit('pause', { ...pauseInfo, metadata });
             return; // Exit without completing
           }
           case 'status-update': {

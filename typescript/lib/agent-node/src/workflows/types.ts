@@ -1,5 +1,11 @@
 import type { TaskStatusUpdateEvent, TaskState } from '@a2a-js/sdk';
 import { z } from 'zod';
+import {
+  X402_REQUIREMENTS_KEY,
+  X402_STATUS_KEY,
+  x402RequirementsSchema,
+  x402StatusSchmea,
+} from './x402-types.js';
 
 export interface WorkflowContext {
   contextId: string;
@@ -38,6 +44,15 @@ const WorkflowStateInterruptedSchema = z.object({
   artifact: z.unknown().optional(), // Optional Artifact for context/preview
 });
 
+const WorkflowStatePaymentRequiredSchema = z.object({
+  type: z.literal('payment-required'),
+  message: z.string(),
+  metadata: z.object({
+    [X402_STATUS_KEY]: x402StatusSchmea,
+    [X402_REQUIREMENTS_KEY]: x402RequirementsSchema,
+  }),
+});
+
 const WorkflowStateRejectSchema = z.object({
   type: z.literal('reject'),
   reason: z.string(),
@@ -55,6 +70,7 @@ export const WorkflowStateSchema = z.discriminatedUnion('type', [
   WorkflowStateInterruptedSchema,
   WorkflowStateRejectSchema,
   WorkflowStateDispatchResponseSchema,
+  WorkflowStatePaymentRequiredSchema,
 ]);
 
 // Derive TypeScript type from Zod schema

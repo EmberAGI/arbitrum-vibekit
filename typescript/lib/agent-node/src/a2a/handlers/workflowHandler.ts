@@ -492,8 +492,13 @@ export class WorkflowHandler {
             taskId: execution.id,
             pauseInfo,
           });
-          const workflowPauseInfo = pauseInfo as WorkflowEvent;
+          const workflowPauseInfo = pauseInfo as WorkflowEvent & {
+            metadata?: Record<string, unknown>;
+          };
           const parts: Part[] = [];
+          let messageMetadata: Record<string, unknown> = {};
+
+          // Handle input schema for regular interruptions
           if (
             workflowPauseInfo?.message &&
             workflowPauseInfo?.inputSchema &&
@@ -503,10 +508,20 @@ export class WorkflowHandler {
               workflowPauseInfo.inputSchema as z.ZodObject<Record<string, z.ZodTypeAny>>,
               { target: 'draft-7' },
             );
+            messageMetadata = { schema: jsonSchema, mimeType: 'application/json' };
+          }
+
+          // Handle payment metadata for payment-required states
+          if (workflowPauseInfo?.metadata) {
+            messageMetadata = { ...messageMetadata, ...workflowPauseInfo.metadata };
+          }
+
+          // Add message part with appropriate metadata
+          if (workflowPauseInfo?.message) {
             parts.push({
               kind: 'text',
               text: workflowPauseInfo.message,
-              metadata: { schema: jsonSchema, mimeType: 'application/json' },
+              ...(Object.keys(messageMetadata).length > 0 && { metadata: messageMetadata }),
             });
           }
 
@@ -524,6 +539,7 @@ export class WorkflowHandler {
                 contextId: workflowContextId,
                 role: 'agent',
                 parts,
+                ...(Object.keys(messageMetadata).length > 0 && { metadata: messageMetadata }),
               },
             },
             final: false,
