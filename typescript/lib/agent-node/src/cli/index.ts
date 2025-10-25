@@ -19,6 +19,7 @@ import {
   bundleCommand,
   registerCommand,
   updateRegistryCommand,
+  chatCommand,
 } from './commands/index.js';
 
 interface CliArgs {
@@ -57,9 +58,20 @@ function printHelp(): void {
 Agent Configuration CLI
 
 Usage:
-  agent <command> [options]
+  agent [command] [options]
+
+Default Behavior (no command):
+  Smart-start chat mode: If an agent is reachable at --url (or default),
+  attach to it. Otherwise, start a local server and attach to it.
+  In chat mode, default LOG_LEVEL=ERROR. Use --log-dir to write JSONL logs.
 
 Commands:
+  chat                    Connect to a running agent (client-only, never starts server)
+    --url <url>           Agent URL (default: http://127.0.0.1:3000)
+    --verbose             Stream reasoning and show artifact contents
+    --inline-summary <ms> Enable inline artifact summaries (throttle interval)
+    --log-dir <dir>       Write structured logs to daily JSONL files in <dir>
+
   init                    Initialize a new config workspace
     --target <dir>        Target directory (default: ./config)
     --force               Overwrite existing directory
@@ -74,11 +86,14 @@ Commands:
     --config-dir <dir>    Config directory (default: ./config)
     --verbose             Show detailed diagnostics
 
-  run                     Run the agent server
+  run                     Run the agent server (headless by default)
     --config-dir <dir>    Config directory (default: ./config)
     --dev                 Enable hot reload
     --port <number>       Server port (default: 3000)
     --host <string>       Server host (default: 0.0.0.0)
+    --attach              Start server then enter chat mode (alias: --chat)
+    --chat                Alias for --attach
+    --log-dir <dir>       When used with --attach, write logs to <dir> as JSONL
 
   bundle                  Export deployment bundle
     --config-dir <dir>    Config directory (default: ./config)
@@ -129,6 +144,17 @@ async function main(): Promise<void> {
 
   try {
     switch (command) {
+      case 'chat':
+        await chatCommand({
+          url: options['url'] as string | undefined,
+          verbose: options['verbose'] as boolean | undefined,
+          inlineSummaryInterval: options['inline-summary']
+            ? Number(options['inline-summary'])
+            : undefined,
+          logDir: options['log-dir'] as string | undefined,
+        });
+        break;
+
       case 'init':
         await initCommand({
           target: options['target'] as string | undefined,
@@ -165,6 +191,9 @@ async function main(): Promise<void> {
           dev: options['dev'] as boolean | undefined,
           port: options['port'] ? Number(options['port']) : undefined,
           host: options['host'] as string | undefined,
+          attach: options['attach'] as boolean | undefined,
+          chat: options['chat'] as boolean | undefined,
+          logDir: options['log-dir'] as string | undefined,
         });
         break;
 
@@ -200,9 +229,38 @@ async function main(): Promise<void> {
         break;
 
       case 'help':
-      case undefined:
         printHelp();
         break;
+
+      case undefined: {
+        // Smart-start: attach if reachable, else start then attach
+        const { isAgentReachable } = await import('./chat/utils.js');
+        const baseUrl = (options['url'] as string | undefined) ?? 'http://127.0.0.1:3000';
+
+        const reachable = await isAgentReachable(baseUrl);
+
+        if (reachable) {
+          // Agent is reachable: attach chat mode (client-only)
+          await chatCommand({
+            url: baseUrl,
+            verbose: options['verbose'] as boolean | undefined,
+            inlineSummaryInterval: options['inline-summary']
+              ? Number(options['inline-summary'])
+              : undefined,
+            logDir: options['log-dir'] as string | undefined,
+          });
+        } else {
+          // Agent not reachable: start local server then attach
+          await runCommand({
+            configDir: options['config-dir'] as string | undefined,
+            dev: options['dev'] as boolean | undefined,
+            port: options['port'] ? Number(options['port']) : undefined,
+            host: options['host'] as string | undefined,
+            attach: true, // Enable attach mode
+          });
+        }
+        break;
+      }
 
       default:
         logger.error(`Unknown command: ${command}`);
