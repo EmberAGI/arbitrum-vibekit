@@ -63,15 +63,22 @@ export interface RunOptions {
   dev?: boolean;
   port?: number;
   host?: string;
+  attach?: boolean;
+  chat?: boolean; // Alias for attach
+  logDir?: string; // Optional file logging directory when attaching chat
 }
 
 export async function runCommand(options: RunOptions = {}): Promise<void> {
   const configDir = resolve(process.cwd(), options.configDir ?? 'config');
   const dev = options.dev ?? false;
+  const shouldAttach = options.attach ?? options.chat ?? false;
 
   cliOutput.print(`Starting agent server from \`${configDir}\``);
   if (dev) {
     cliOutput.info('Development mode enabled (hot reload active)');
+  }
+  if (shouldAttach) {
+    cliOutput.info('Chat mode will be enabled after server starts');
   }
 
   // Initialize config workspace
@@ -91,13 +98,20 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
   });
 
   const addressInfo = server.address();
+  let serverUrl = '';
   if (addressInfo && typeof addressInfo !== 'string') {
+    const host = addressInfo.address === '::' ? 'localhost' : addressInfo.address;
+    serverUrl = `http://${host}:${addressInfo.port}`;
+
     cliOutput.blank();
-    cliOutput.success(`Server running at \`http://${addressInfo.address}:${addressInfo.port}\``);
-    cliOutput.success(
-      `Agent card: \`http://${addressInfo.address}:${addressInfo.port}/.well-known/agent-card.json\``,
-    );
-    cliOutput.success(`A2A endpoint: \`http://${addressInfo.address}:${addressInfo.port}/a2a\``);
+    cliOutput.success(`Server running at \`${serverUrl}\``);
+    cliOutput.success(`Agent card: \`${serverUrl}/.well-known/agent-card.json\``);
+    cliOutput.success(`A2A endpoint: \`${serverUrl}/a2a\``);
+
+    if (shouldAttach) {
+      cliOutput.blank();
+      cliOutput.info('Entering chat mode...');
+    }
   }
 
   // Setup graceful shutdown
@@ -117,24 +131,81 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
     cliOutput.success('Server shutdown complete');
   };
 
-  const handleSignal = (_signal: NodeJS.Signals): void => {
-    void shutdown()
-      .catch((error) => {
-        cliOutput.error('Error during shutdown');
-        if (error instanceof Error) {
-          cliOutput.error(error.message);
+  // If attach mode, enter chat then shutdown
+  if (shouldAttach) {
+    try {
+      // Dynamic import to avoid circular dependencies
+      const { ChatClient } = await import('../chat/client.js');
+      const { StreamRenderer } = await import('../chat/renderer.js');
+      const { ChatRepl } = await import('../chat/repl.js');
+      const { setDefaultLogLevel } = await import('../chat/utils.js');
+      const { Logger } = await import('../../utils/logger.js');
+
+      // Set default log level to ERROR in chat mode
+      setDefaultLogLevel('ERROR');
+
+      // Setup file logging if requested
+      if (options.logDir) {
+        try {
+          await Logger.setFileSink(options.logDir);
+          if ((process.env['LOG_STRUCTURED'] ?? 'false').toLowerCase() !== 'true') {
+            process.env['LOG_STRUCTURED'] = 'true';
+          }
+        } catch {
+          // ignore sink failures
         }
-      })
-      .finally(() => {
-        process.exit(0);
+      }
+
+      // Create chat client
+      const client = await ChatClient.fromUrl(serverUrl);
+
+      // Create renderer
+      const renderer = new StreamRenderer({
+        colors: true,
+        verbose: false,
       });
-  };
 
-  process.on('SIGINT', handleSignal);
-  process.on('SIGTERM', handleSignal);
+      // Create and start REPL with shutdown callback
+      const repl = new ChatRepl({
+        client,
+        renderer,
+        showConnectionInfo: false, // Already shown above
+        onExit: async () => {
+          await shutdown();
+        },
+      });
 
-  // Keep process alive
-  await new Promise(() => {
-    // Wait indefinitely
-  });
+      const exitCode = await repl.start();
+      process.exit(exitCode);
+    } catch (error) {
+      cliOutput.error('Failed to start chat mode');
+      if (error instanceof Error) {
+        cliOutput.error(error.message);
+      }
+      await shutdown();
+      process.exit(1);
+    }
+  } else {
+    // Non-interactive mode: setup signal handlers and wait
+    const handleSignal = (_signal: NodeJS.Signals): void => {
+      void shutdown()
+        .catch((error) => {
+          cliOutput.error('Error during shutdown');
+          if (error instanceof Error) {
+            cliOutput.error(error.message);
+          }
+        })
+        .finally(() => {
+          process.exit(0);
+        });
+    };
+
+    process.on('SIGINT', handleSignal);
+    process.on('SIGTERM', handleSignal);
+
+    // Keep process alive
+    await new Promise(() => {
+      // Wait indefinitely
+    });
+  }
 }
