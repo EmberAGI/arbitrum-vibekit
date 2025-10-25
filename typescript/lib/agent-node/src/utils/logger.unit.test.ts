@@ -1,3 +1,65 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { Logger } from './logger.js';
+
+describe('Logger file sink (behavior)', () => {
+  let dir: string;
+  const originalStructured = process.env['LOG_STRUCTURED'];
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'agent-logger-'));
+    process.env['LOG_STRUCTURED'] = 'true';
+  });
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    if (originalStructured === undefined) delete process.env['LOG_STRUCTURED'];
+    else process.env['LOG_STRUCTURED'] = originalStructured;
+  });
+
+  it('writes a JSONL entry when structured logging is enabled', async () => {
+    await Logger.setFileSink(dir);
+    const log = Logger.getInstance('TEST');
+    log.info('hello world', { event: 'test' });
+
+    // Give the stream a tick to flush
+    await new Promise((r) => setTimeout(r, 10));
+
+    const filename = new Date().toISOString().slice(0, 10); /* YYYY-MM-DD */
+    const filePath = join(dir, `${filename}.jsonl`);
+    const content = readFileSync(filePath, 'utf-8');
+    const [line] = content.trim().split('\n');
+    const parsed = JSON.parse(line);
+
+    expect(parsed.level).toBe('INFO');
+    expect(parsed.message).toBe('hello world');
+    expect(parsed.namespace).toBe('TEST');
+    expect(parsed.event).toBe('test');
+  });
+
+  it('appends multiple lines across calls', async () => {
+    await Logger.setFileSink(dir);
+    const log = Logger.getInstance('TEST');
+    log.info('first');
+    log.warn('second');
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const filename = new Date().toISOString().slice(0, 10);
+    const filePath = join(dir, `${filename}.jsonl`);
+    const lines = readFileSync(filePath, 'utf-8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l));
+    expect(lines.length).toBeGreaterThanOrEqual(2);
+    expect(lines[0].message).toBe('first');
+    expect(lines[1].message).toBe('second');
+  });
+});
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { Logger, LogLevel } from './logger.js';
