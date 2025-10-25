@@ -6,6 +6,21 @@
   "engines": {
     "node": ">=22.0.0"
   },
+  "bin": {
+    "agent": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./cli": "./dist/cli.js",
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
   "files": [
     "dist"
   ],
