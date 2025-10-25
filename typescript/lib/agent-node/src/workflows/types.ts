@@ -24,6 +24,7 @@ export type WorkflowStatus = TaskStatusUpdateEvent['status'];
 const WorkflowStateStatusUpdateSchema = z.object({
   type: z.literal('status-update'),
   message: z.union([z.array(z.unknown()), z.string()]).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 const WorkflowStateArtifactSchema = z.object({
@@ -150,14 +151,25 @@ export interface ToolMetadata {
 }
 
 /**
+ * Payment receipt data
+ */
+export interface PaymentReceipt {
+  success: boolean;
+  transaction?: string;
+  network?: string;
+  payer?: string;
+}
+
+/**
  * Payment settlement object returned to workflow after payment is validated
  */
 export interface PaymentSettlement {
   /**
    * Settle the payment with the facilitator
-   * This should be called by the workflow after receiving the settlement object
+   * @param message - Optional custom message for payment completion (defaults to "Payment successful")
+   * @returns Promise that resolves with receipt data that should be yielded in a status-update
    */
-  settlePayment: () => Promise<void>;
+  settlePayment: (message: string) => Promise<WorkflowState>;
   /**
    * The verified payer address
    */

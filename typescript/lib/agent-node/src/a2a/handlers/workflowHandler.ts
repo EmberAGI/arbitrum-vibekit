@@ -27,13 +27,14 @@ import { canonicalizeName } from '../../config/validators/tool-validator.js';
 import { Logger } from '../../utils/logger.js';
 import { verifyPayment, settlePayment } from '../../utils/ap2/x402-server.js';
 import type { WorkflowRuntime } from '../../workflows/runtime.js';
-import type { PaymentSettlement } from '../../workflows/types.js';
+import type { PaymentSettlement, WorkflowState } from '../../workflows/types.js';
 import {
   X402_STATUS_KEY,
   X402_REQUIREMENTS_KEY,
   X402_PAYMENT_PAYLOAD_KEY,
   x402StatusSchmea,
   x402PaymentPayloadSchema,
+  X402_RECEIPTS_KEY,
 } from '../../workflows/x402-types.js';
 import type { ContextManager } from '../sessions/manager.js';
 import type { ActiveTask, TaskState, WorkflowEvent } from '../types.js';
@@ -362,10 +363,18 @@ export class WorkflowHandler {
 
       // Create settlement object that the workflow will receive
       const settlement: PaymentSettlement = {
-        settlePayment: async () => {
+        settlePayment: async (customMessage: string): Promise<WorkflowState> => {
           this.logger.debug('[PAYMENT] Settling payment', { taskId });
-          await settlePayment(payloadParsed.payload, paymentRequirements);
+          const receipt = await settlePayment(payloadParsed.payload, paymentRequirements);
           this.logger.debug('[PAYMENT] Payment settled successfully', { taskId });
+          return {
+            type: 'status-update',
+            message: customMessage,
+            metadata: {
+              [X402_STATUS_KEY]: 'payment-completed',
+              [X402_RECEIPTS_KEY]: [receipt],
+            },
+          };
         },
         payer: verificationResult.payer,
         metadata: {
@@ -607,6 +616,7 @@ export class WorkflowHandler {
               contextId: workflowContextId,
               status: workflowUpdate.status,
               final: false,
+              ...(workflowUpdate.metadata && { metadata: workflowUpdate.metadata }),
             };
 
             hasStatusEvent = true;
@@ -622,6 +632,7 @@ export class WorkflowHandler {
                 message: workflowUpdate.message,
               } as TaskStatus,
               final: false,
+              ...(workflowUpdate.metadata && { metadata: workflowUpdate.metadata }),
             };
 
             hasStatusEvent = true;

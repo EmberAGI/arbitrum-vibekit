@@ -24,6 +24,11 @@ export const X402_REQUIREMENTS_KEY = 'x402.payment.required';
 export const X402_PAYMENT_PAYLOAD_KEY = 'x402.payment.payload';
 
 /**
+ * Key for x402 payment receipts in metadata
+ */
+export const X402_RECEIPTS_KEY = 'x402.payment.receipts';
+
+/**
  * Payment scheme options - uses a flexible record schema that infers to PaymentRequirements type
  */
 export const PaymentRequirementsSchema: z.ZodType<PaymentRequirements> = z.any().refine(
@@ -85,3 +90,15 @@ export const x402PaymentPayloadSchema = z.object({
   network: NetworkSchema,
   payload: PayloadPaymentSchema,
 });
+
+/**
+ * Payment receipt schema
+ */
+export const PaymentReceiptSchema = z.object({
+  success: z.boolean(),
+  transaction: z.string().optional(),
+  network: z.string().optional(),
+  payer: z.string().optional(),
+});
+
+export type PaymentReceipt = z.infer<typeof PaymentReceiptSchema>;
