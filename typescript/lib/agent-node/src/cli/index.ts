@@ -71,6 +71,7 @@ Commands:
     --verbose             Stream reasoning and show artifact contents
     --inline-summary <ms> Enable inline artifact summaries (throttle interval)
     --log-dir <dir>       Write structured logs to daily JSONL files in <dir>
+    --respect-log-level   Respect LOG_LEVEL from env (do not force ERROR)
 
   init                    Initialize a new config workspace
     --target <dir>        Target directory (default: ./config)
@@ -94,6 +95,7 @@ Commands:
     --attach              Start server then enter chat mode (alias: --chat)
     --chat                Alias for --attach
     --log-dir <dir>       When used with --attach, write logs to <dir> as JSONL
+    --respect-log-level   Respect LOG_LEVEL from env (do not force ERROR in chat)
 
   bundle                  Export deployment bundle
     --config-dir <dir>    Config directory (default: ./config)
@@ -142,6 +144,12 @@ async function main(): Promise<void> {
   const { command, options } = parseArgs();
   const logger = Logger.getInstance('CLI');
 
+  // Handle global --help and -h flags
+  if (command === '--help' || command === '-h' || options['help'] || options['h']) {
+    printHelp();
+    return;
+  }
+
   try {
     switch (command) {
       case 'chat':
@@ -152,6 +160,7 @@ async function main(): Promise<void> {
             ? Number(options['inline-summary'])
             : undefined,
           logDir: options['log-dir'] as string | undefined,
+          respectLogLevel: options['respect-log-level'] as boolean | undefined,
         });
         break;
 
@@ -194,6 +203,7 @@ async function main(): Promise<void> {
           attach: options['attach'] as boolean | undefined,
           chat: options['chat'] as boolean | undefined,
           logDir: options['log-dir'] as string | undefined,
+          respectLogLevel: options['respect-log-level'] as boolean | undefined,
         });
         break;
 
@@ -248,6 +258,7 @@ async function main(): Promise<void> {
               ? Number(options['inline-summary'])
               : undefined,
             logDir: options['log-dir'] as string | undefined,
+            respectLogLevel: options['respect-log-level'] as boolean | undefined,
           });
         } else {
           // Agent not reachable: start local server then attach
