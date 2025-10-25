@@ -53,6 +53,47 @@ The CLI uses the following dependencies for clean, user-friendly output:
 
 These dependencies are automatically installed when you run `pnpm install`.
 
+### Chat Mode (Terminal)
+
+Chat is the default experience for the CLI and supports smart-start behavior.
+
+Basics:
+
+```bash
+# Smart-start (default): attach to running agent, else start local then attach
+pnpm cli
+
+# Client-only chat to a specific URL (never starts a server)
+pnpm cli chat --url http://127.0.0.1:3000
+
+# Start the server and then attach chat
+pnpm cli run --attach
+```
+
+Logging behavior in chat:
+
+- Default: chat forces `LOG_LEVEL=ERROR` for console output to keep the stream clean.
+- `--respect-log-level`: opt out; respect `LOG_LEVEL` from your environment.
+- `--log-dir <dir>`: write daily JSONL logs to `<dir>` and suppress all console logs during chat.
+  - File logs always honor your environment `LOG_LEVEL`.
+  - Console remains clean; streamed assistant text is printed to stdout only.
+
+Examples:
+
+```bash
+# Clean chat + file-only logs that honor .env LOG_LEVEL
+pnpm cli --log-dir ./logs
+
+# Client-only with file logs and environment log level
+pnpm cli chat --url http://127.0.0.1:3000 --log-dir ./logs
+
+# Respect environment log level in console (do not force ERROR)
+pnpm cli --respect-log-level
+
+# Start server then attach with file-only logs
+pnpm cli run --attach --log-dir ./logs
+```
+
 ### Environment Setup
 
 Copy the example environment file:
