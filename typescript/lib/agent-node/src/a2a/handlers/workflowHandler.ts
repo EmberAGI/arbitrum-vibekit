@@ -406,7 +406,14 @@ export class WorkflowHandler {
             message: customMessage,
             metadata: {
               [X402_STATUS_KEY]: 'payment-completed',
-              [X402_RECEIPTS_KEY]: [receipt],
+              [X402_RECEIPTS_KEY]: [
+                {
+                  transaction: receipt.transaction,
+                  success: receipt.success,
+                  network: paymentRequirements.network,
+                  payer: receipt.payer,
+                },
+              ],
             },
           };
         },
