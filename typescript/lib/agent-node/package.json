@@ -1,7 +1,7 @@
 {
-  "name": "agent-node",
+  "name": "@emberai/agent-node",
   "version": "0.2.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
@@ -24,6 +24,53 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "beta"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EmberAGI/arbitrum-vibekit.git",
+    "directory": "typescript/lib/agent-node"
+  },
+  "release": {
+    "branches": [
+      {
+        "name": "build/agent-node-release",
+        "channel": "beta",
+        "prerelease": "beta"
+      },
+      "main"
+    ],
+    "plugins": [
+      [
+        "@semantic-release/commit-analyzer",
+        {
+          "preset": "conventionalcommits"
+        }
+      ],
+      [
+        "@semantic-release/npm",
+        {
+          "npmPublish": true
+        }
+      ],
+      [
+        "@semantic-release/git",
+        {
+          "assets": [
+            "CHANGELOG.md",
+            "package.json"
+          ],
+          "message": "chore(release): agent-node-v${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+        }
+      ],
+      [
+        "@semantic-release/github",
+        {}
+      ]
+    ]
+  },
   "dependencies": {
     "@a2a-js/sdk": "^0.3.3",
     "@ai-sdk/openai": "^2.0.42",
