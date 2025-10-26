@@ -12,7 +12,9 @@ import type {
   WorkflowContext,
   WorkflowPlugin,
   WorkflowState,
+  PaymentSettlement,
 } from '../../../src/workflows/types.js';
+import { requireFixturePaymentMessage, createPaymentRequirements } from './utils/payment.js';
 
 import { createClients } from './utils/clients.js';
 
@@ -127,7 +129,14 @@ const plugin: WorkflowPlugin = {
       },
     };
 
-    // Request for initial parameters
+    // Request payment before collecting user strategy parameters
+    console.log('[Workflow] Requesting payment for strategy execution (fixture)...');
+    const paymentSettlement = (yield requireFixturePaymentMessage(
+      'Payment required to execute strategy',
+      createPaymentRequirements(account.address),
+    )) as PaymentSettlement;
+
+    // Request for initial parameters (wallet + amount) AFTER payment submission
     console.log('[Workflow] Pausing for user input (wallet + amount)...');
     const userWalletAndAmount = (yield {
       type: 'interrupted',
@@ -249,6 +258,12 @@ const plugin: WorkflowPlugin = {
       type: 'status-update',
       message: 'Signed delegations received. Simulating some work with progress updates...',
     };
+
+    // Settle payment (fixture keeps logic simple, no real settlement side-effects)
+    yield await paymentSettlement.settlePayment(
+      'Payment completed. Thank you for using the USDAi Points Trading Strategy (fixture)!',
+      true,
+    );
 
     yield {
       type: 'artifact',

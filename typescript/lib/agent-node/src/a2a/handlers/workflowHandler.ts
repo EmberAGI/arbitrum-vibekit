@@ -25,9 +25,21 @@ import z from 'zod';
 
 import { canonicalizeName } from '../../config/validators/tool-validator.js';
 import { Logger } from '../../utils/logger.js';
+import { verifyPayment, settlePayment } from '../../utils/ap2/x402-server.js';
 import type { WorkflowRuntime } from '../../workflows/runtime.js';
+import type { PaymentSettlement, WorkflowState } from '../../workflows/types.js';
+import {
+  X402_STATUS_KEY,
+  X402_REQUIREMENTS_KEY,
+  X402_PAYMENT_PAYLOAD_KEY,
+  x402StatusSchmea,
+  x402PaymentPayloadSchema,
+  X402_RECEIPTS_KEY,
+  x402RequirementsSchema,
+} from '../../workflows/x402-types.js';
 import type { ContextManager } from '../sessions/manager.js';
 import type { ActiveTask, TaskState, WorkflowEvent } from '../types.js';
+import { findMatchingPaymentRequirements } from 'x402/shared';
 
 /**
  * Type guards
@@ -137,6 +149,7 @@ export class WorkflowHandler {
     messageData: unknown,
     taskState: TaskState,
     eventBus: ExecutionEventBus,
+    metadata: Record<string, unknown>,
   ): Promise<void> {
     this.logger.debug('resumeWorkflow called', {
       taskId,
@@ -169,25 +182,38 @@ export class WorkflowHandler {
     }
 
     try {
-      // Resume the workflow with the input
-      const input = messageData ?? messageContent;
+      // Check if this is a payment response and create settlement object
+      const paymentResult = await this.handlePaymentResponse(
+        taskState,
+        taskId,
+        contextId,
+        metadata,
+        eventBus,
+      );
+
+      // If payment handling encountered an error, it returns null and already handled the error
+      // We should not continue with the resume in this case
+      if (paymentResult === null) {
+        this.logger.debug('[RESUME] Payment handling failed, aborting resume', { taskId });
+        return;
+      }
+
+      // Resume the workflow with the appropriate input
+      // If settlement object exists (paymentResult is PaymentSettlement), pass it
+      // Otherwise use the original input (paymentResult is undefined)
+      const input = paymentResult ?? messageData ?? messageContent;
 
       // Use execution.resume() instead of calling generator.next() directly
       // This ensures event listeners (set up in dispatchWorkflow) are triggered
-      this.logger.debug('[RESUME] About to call execution.resume()', { taskId, input });
+      this.logger.debug('[RESUME] About to call execution.resume()', {
+        taskId,
+        hasSettlement: !!paymentResult,
+      });
       const resumeResult = await execution.resume(input);
       this.logger.debug('[RESUME] execution.resume() returned', {
         taskId,
         valid: resumeResult.valid,
       });
-
-      let responseMetadata: Record<string, unknown> | undefined;
-      if (resumeResult && typeof resumeResult === 'object' && 'metadata' in resumeResult) {
-        const metadataCandidate = (resumeResult as { metadata?: unknown }).metadata;
-        if (metadataCandidate && typeof metadataCandidate === 'object') {
-          responseMetadata = metadataCandidate as Record<string, unknown>;
-        }
-      }
 
       // Handle resume result
       if (!resumeResult.valid) {
@@ -221,7 +247,6 @@ export class WorkflowHandler {
       }
 
       // Validation succeeded - publish working status with metadata
-      const metadata = responseMetadata ?? execution.metadata;
       if (metadata) {
         const task: Task = {
           kind: 'task',
@@ -270,6 +295,167 @@ export class WorkflowHandler {
     }
 
     this.logger.debug('resumeWorkflow finished', { taskId, contextId });
+  }
+
+  private async handlePaymentResponse(
+    taskState: TaskState,
+    taskId: string,
+    contextId: string,
+    metadata: Record<string, unknown>,
+    eventBus: ExecutionEventBus,
+  ): Promise<PaymentSettlement | undefined | null> {
+    if (taskState.state !== 'input-required') {
+      return undefined;
+    }
+    const currentTaskState = this.workflowRuntime?.getTaskState(taskId);
+
+    // Check if this task was paused for payment
+    const paymentStatus = metadata[X402_STATUS_KEY];
+    if (!paymentStatus) {
+      return undefined;
+    }
+
+    try {
+      const status = await x402StatusSchmea.parseAsync(paymentStatus);
+      if (status === 'payment-rejected') {
+        throw new Error('[PAYMENT] Payment rejected for task');
+      }
+
+      if (status !== 'payment-submitted') {
+        throw new Error('[PAYMENT] Payment inconsistency, should be rejected or submitted');
+      }
+
+      const paymentPayload = metadata[X402_PAYMENT_PAYLOAD_KEY];
+      if (!paymentPayload) {
+        throw new Error('[PAYMENT] Payment payload missing for submitted payment');
+      }
+
+      const payloadParsed = await x402PaymentPayloadSchema.parseAsync(paymentPayload);
+
+      // Extract payment requirements that were stored when the task was paused for payment
+      const paymentRequirementsMetadata = currentTaskState?.paymentRequirements;
+      if (!paymentRequirementsMetadata) {
+        throw new Error('[PAYMENT] No payment requirements found for task');
+      }
+
+      // Extract the payment requirements from the stored metadata
+      const paymentRequirementsRaw = paymentRequirementsMetadata[X402_REQUIREMENTS_KEY];
+      if (!paymentRequirementsRaw) {
+        throw new Error('[PAYMENT] Invalid payment requirements in task state');
+      }
+
+      // Parse and validate the payment requirements
+      const paymentRequirementsValue =
+        await x402RequirementsSchema.parseAsync(paymentRequirementsRaw);
+      const paymentRequirements = findMatchingPaymentRequirements(
+        paymentRequirementsValue.accepts,
+        payloadParsed,
+      );
+      if (!paymentRequirements) {
+        throw new Error('[PAYMENT] No accepted payment requirements found');
+      }
+
+      // Verify the payment using the stored requirements
+      this.logger.debug('[PAYMENT] Verifying payment', { taskId });
+      const verificationResult = await verifyPayment(payloadParsed, paymentRequirements);
+
+      if (!verificationResult.isValid) {
+        this.logger.debug('[PAYMENT] Payment verification failed', { verificationResult, taskId });
+        const reason = verificationResult.invalidReason || 'Unknown verification error';
+        throw new Error(`[PAYMENT] Payment verification failed: ${reason}`);
+      }
+
+      this.logger.debug('[PAYMENT] Payment verification successful', {
+        taskId,
+        payer: verificationResult.payer,
+      });
+
+      // Create settlement object that the workflow will receive
+      const settlement: PaymentSettlement = {
+        settlePayment: async (
+          customMessage: string,
+          debugMode?: boolean,
+        ): Promise<WorkflowState> => {
+          this.logger.debug('[PAYMENT] Settling payment', { taskId });
+          if (debugMode) {
+            console.log(
+              '[DEBUG PAYMENT] Settlement called with message:',
+              customMessage,
+              'and requirements',
+              paymentRequirements,
+            );
+            return {
+              type: 'status-update',
+              message: customMessage,
+              metadata: {
+                [X402_STATUS_KEY]: 'payment-completed',
+                [X402_RECEIPTS_KEY]: [
+                  {
+                    transaction: '0x1234',
+                    success: true,
+                    network: paymentRequirements.network,
+                  },
+                ],
+              },
+            };
+          }
+          const receipt = await settlePayment(payloadParsed, paymentRequirements);
+          this.logger.debug('[PAYMENT] Payment settled successfully', { taskId });
+          return {
+            type: 'status-update',
+            message: customMessage,
+            metadata: {
+              [X402_STATUS_KEY]: 'payment-completed',
+              [X402_RECEIPTS_KEY]: [receipt],
+            },
+          };
+        },
+        payer: verificationResult.payer,
+        metadata: {
+          paymentPayload: payloadParsed,
+          paymentRequirements,
+        },
+      };
+
+      return settlement;
+    } catch (error) {
+      this.logger.debug((error as Error).toString?.() ?? String(error), { taskId });
+      const errorMessage: Message = {
+        kind: 'message',
+        messageId: uuidv7(),
+        contextId,
+        role: 'agent',
+        parts: [
+          {
+            kind: 'text',
+            text: 'Payment was rejected. Workflow cannot continue.',
+          } as TextPart,
+        ],
+      };
+
+      eventBus.publish(errorMessage);
+
+      // Publish failed status
+      const statusUpdate: TaskStatusUpdateEvent = {
+        kind: 'status-update',
+        taskId,
+        contextId,
+        status: {
+          state: 'failed',
+          message: {
+            kind: 'message',
+            messageId: uuidv7(),
+            contextId,
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Payment rejected' } as TextPart],
+          },
+        },
+        final: true,
+      };
+      eventBus.publish(statusUpdate);
+      eventBus.finished();
+      return null; // Return null to indicate error was handled
+    }
   }
 
   /**
@@ -464,6 +650,7 @@ export class WorkflowHandler {
               contextId: workflowContextId,
               status: workflowUpdate.status,
               final: false,
+              ...(workflowUpdate.metadata && { metadata: workflowUpdate.metadata }),
             };
 
             hasStatusEvent = true;
@@ -479,6 +666,7 @@ export class WorkflowHandler {
                 message: workflowUpdate.message,
               } as TaskStatus,
               final: false,
+              ...(workflowUpdate.metadata && { metadata: workflowUpdate.metadata }),
             };
 
             hasStatusEvent = true;
@@ -492,8 +680,13 @@ export class WorkflowHandler {
             taskId: execution.id,
             pauseInfo,
           });
-          const workflowPauseInfo = pauseInfo as WorkflowEvent;
+          const workflowPauseInfo = pauseInfo as WorkflowEvent & {
+            metadata?: Record<string, unknown>;
+          };
           const parts: Part[] = [];
+          let messageMetadata: Record<string, unknown> = {};
+
+          // Handle input schema for regular interruptions
           if (
             workflowPauseInfo?.message &&
             workflowPauseInfo?.inputSchema &&
@@ -503,10 +696,20 @@ export class WorkflowHandler {
               workflowPauseInfo.inputSchema as z.ZodObject<Record<string, z.ZodTypeAny>>,
               { target: 'draft-7' },
             );
+            messageMetadata = { schema: jsonSchema, mimeType: 'application/json' };
+          }
+
+          // Handle payment metadata for payment-required states
+          if (workflowPauseInfo?.metadata) {
+            messageMetadata = { ...messageMetadata, ...workflowPauseInfo.metadata };
+          }
+
+          // Add message part with appropriate metadata
+          if (workflowPauseInfo?.message) {
             parts.push({
               kind: 'text',
               text: workflowPauseInfo.message,
-              metadata: { schema: jsonSchema, mimeType: 'application/json' },
+              ...(Object.keys(messageMetadata).length > 0 && { metadata: messageMetadata }),
             });
           }
 
@@ -524,6 +727,7 @@ export class WorkflowHandler {
                 contextId: workflowContextId,
                 role: 'agent',
                 parts,
+                ...(Object.keys(messageMetadata).length > 0 && { metadata: messageMetadata }),
               },
             },
             final: false,

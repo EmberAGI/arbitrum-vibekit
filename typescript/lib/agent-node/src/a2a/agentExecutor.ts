@@ -69,8 +69,11 @@ class A2AAgentExecutor implements AgentExecutor {
     }
 
     // Extract message content and data
-    const { content: messageContent, data: messageData } =
-      this.messageHandler.extractMessageParts(userMessage);
+    const {
+      content: messageContent,
+      data: messageData,
+      metadata,
+    } = this.messageHandler.extractMessageParts(userMessage);
 
     // Delegate to message handler for routing and processing
     await this.messageHandler.handleMessage(
@@ -79,6 +82,7 @@ class A2AAgentExecutor implements AgentExecutor {
       messageContent,
       messageData,
       eventBus,
+      metadata,
     );
   }
 
