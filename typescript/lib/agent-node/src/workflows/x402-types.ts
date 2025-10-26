@@ -31,9 +31,26 @@ export const X402_RECEIPTS_KEY = 'x402.payment.receipts';
 /**
  * Payment scheme options - uses a flexible record schema that infers to PaymentRequirements type
  */
-export const PaymentRequirementsSchema: z.ZodType<PaymentRequirements> = z.any().refine(
-  (data) => x402PaymentRequirementsSchema.safeParse(data).success, // Using payment requirements directly doesn't work
-);
+// We wrap the upstream x402 schema so we can (a) coerce its type to our local PaymentRequirements
+// and (b) surface ALL underlying validation issues instead of a single opaque custom error.
+// Using a simple refine() only emits one generic issue; superRefine lets us replay nested issues
+// which dramatically improves debuggability when an element inside `accepts` is malformed.
+export const PaymentRequirementsSchema: z.ZodType<PaymentRequirements> = z
+  .any()
+  .superRefine((data, ctx) => {
+    const parsed = x402PaymentRequirementsSchema.safeParse(data);
+    if (!parsed.success) {
+      // Replay every underlying issue so callers see the precise field failures.
+      for (const issue of parsed.error.issues) {
+        // ctx.addIssue only accepts a subset of issue codes; fall back to 'custom' when outside the allowed set.
+        ctx.addIssue({
+          code: 'custom',
+          message: `[x402] ${issue.code}: ${issue.message}`,
+          path: issue.path, // Will be automatically prefixed by parent path (e.g., accepts.[index])
+        });
+      }
+    }
+  });
 
 /**
  * Status values for x402 payments
@@ -55,8 +72,9 @@ export const x402VersionSchema = z.union([z.literal(1)]);
  */
 export const x402RequirementsSchema = z.object({
   x402Version: x402VersionSchema,
-  accepts: PaymentRequirementsSchema,
+  accepts: z.array(PaymentRequirementsSchema),
 });
+export type X402Requirements = z.infer<typeof x402RequirementsSchema>;
 
 /**
  * EIP3009 Authorization interface schema
@@ -76,20 +94,25 @@ export const EIP3009AuthorizationSchema = z.object({
 export const NetworkSchema: z.ZodType<Network> = z
   .any()
   .refine((data) => x402NetworkSchema.safeParse(data).success);
-
-export const PayloadPaymentSchema: z.ZodType<PaymentPayload> = z
-  .any()
-  .refine((data) => x402PayloadPaymentSchema.safeParse(data).success);
-
-/**
- * x402 payment payload schema
- */
-export const x402PaymentPayloadSchema = z.object({
-  x402Version: x402VersionSchema,
-  scheme: z.string(),
-  network: NetworkSchema,
-  payload: PayloadPaymentSchema,
+// We wrap the upstream x402 payload schema just like payment requirements so we can
+// (a) coerce its type locally and (b) surface ALL nested validation issues instead of one.
+// Using superRefine lets us replay each issue with a clear prefix for easier debugging.
+export const PayloadPaymentSchema: z.ZodType<PaymentPayload> = z.any().superRefine((data, ctx) => {
+  const parsed = x402PayloadPaymentSchema.safeParse(data);
+  if (!parsed.success) {
+    for (const issue of parsed.error.issues) {
+      ctx.addIssue({
+        code: 'custom',
+        // Mirror formatting used in PaymentRequirementsSchema for consistency
+        message: `[x402] ${issue.code}: ${issue.message}`,
+        path: issue.path,
+      });
+    }
+  }
 });
+
+export const x402PaymentPayloadSchema: z.ZodType<PaymentPayload> = PayloadPaymentSchema;
+export type X402PaymentPayload = PaymentPayload;
 
 /**
  * Payment receipt schema

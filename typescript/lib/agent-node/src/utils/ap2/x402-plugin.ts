@@ -35,7 +35,7 @@ export function requirePaymentMessage(
       [X402_STATUS_KEY]: 'payment-required',
       [X402_REQUIREMENTS_KEY]: {
         x402Version: 1,
-        accepts: requirements,
+        accepts: [requirements],
       },
     },
   };

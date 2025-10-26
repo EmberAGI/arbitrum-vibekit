@@ -169,7 +169,7 @@ export interface PaymentSettlement {
    * @param message - Optional custom message for payment completion (defaults to "Payment successful")
    * @returns Promise that resolves with receipt data that should be yielded in a status-update
    */
-  settlePayment: (message: string) => Promise<WorkflowState>;
+  settlePayment: (message: string, debugMode?: boolean) => Promise<WorkflowState>;
   /**
    * The verified payer address
    */
