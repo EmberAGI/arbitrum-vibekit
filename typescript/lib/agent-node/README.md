@@ -2,7 +2,7 @@
 
 **A modern agent framework for the agentic economy**
 
-Agent Node enables building autonomous AI agents that can communicate with other agents, execute complex workflows, and perform transactions. It's a complete implementation of the [A2A (Agent-to-Agent) protocol](https://a2a.co) with integrated AI capabilities, workflow orchestration, and blockchain wallet support.
+Agent Node enables building autonomous AI agents that can communicate with other agents, execute complex workflows, and perform transactions. It's a complete implementation of the [A2A (Agent-to-Agent) protocol](https://a2a.co) with integrated AI capabilities, workflow orchestration, blockchain wallet support, and HTTP-native payment infrastructure via X402 for autonomous agent commerce.
 
 ## Features
 
@@ -13,6 +13,8 @@ Agent Node provides a complete framework for building autonomous AI agents with 
 - **Workflow Orchestration**: Generator-based workflow system with pause/resume capabilities
 - **MCP Integration**: Model Context Protocol support for dynamic tool/resource access
 - **Blockchain Support**: Embedded EOA wallet with multi-chain transaction signing
+- **X402 Payment Protocol**: HTTP-native payment infrastructure enabling autonomous agent transactions and micropayment-based service models
+- **On-Chain Registration**: EIP-8004 compliant agent identity registration on Ethereum
 - **Skills Framework**: Modular skill composition with isolated tool/resource scoping
 - **Type-Safe**: Full TypeScript support with Zod schema validation
 
@@ -41,7 +43,7 @@ The agent CLI is available after installation:
 
 **Note**: If `tsx` is not found in your PATH, use `pnpm exec tsx` or `npx tsx` instead to run the locally installed version.
 
-See [CLI Reference](#cli-reference) for all available commands.
+See [CLI Commands](#cli-commands) for all available commands.
 
 ### CLI Dependencies
 
@@ -55,13 +57,7 @@ These dependencies are automatically installed when you run `pnpm install`.
 
 ### Environment Setup
 
-Copy the example environment file:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` to configure:
+Create a `.env` file in the agent-node directory to configure:
 
 ```bash
 # AI Provider API Keys (at least one required)
@@ -74,9 +70,16 @@ HYPERBOLIC_API_KEY=your_hyperbolic_key
 ETH_RPC_URL=https://eth.merkle.io
 ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc
 
+# On-Chain Registration (optional, for EIP-8004 registration)
+PINATA_JWT=your_pinata_jwt_token
+PINATA_GATEWAY=your_pinata_gateway_url
+
 # Server Configuration
 PORT=3000
 HOST=0.0.0.0
+
+# Public Endpoint (recommended for production)
+A2A_BASE_URL=https://your-domain.com
 ```
 
 ## Quick Start
@@ -94,8 +97,12 @@ This creates a `config/` directory with:
 - `agent.md` - Base agent configuration and system prompt
 - `agent.manifest.json` - Skill composition settings
 - `skills/` - Directory for skill modules
+  - `general-assistant.md` - General assistant skill
+  - `ember-onchain-actions.md` - On-chain actions skill
 - `mcp.json` - MCP server registry
 - `workflow.json` - Workflow plugin registry
+- `workflows/` - Custom workflow implementations
+  - `example-workflow.ts` - Example workflow demonstrating pause/resume
 
 #### 2. Customize Your Agent
 
@@ -150,7 +157,7 @@ pnpm start
 The server exposes:
 
 - **A2A Endpoint**: `http://localhost:3000/a2a` (JSON-RPC)
-- **Agent Card**: `http://localhost:3000/.well-known/agent-card.json`
+- **Agent Card**: `http://localhost:3000/.well-known/agent.json` (also available at `/agent-card.json`)
 - **Health Check**: POST to `/a2a` with `{"jsonrpc": "2.0", "method": "health", "id": 1}`
 
 Example message request:
@@ -179,7 +186,7 @@ curl -X POST http://localhost:3000/a2a \
 ```typescript
 import { A2AClient } from '@a2a-js/sdk/client';
 
-const client = await A2AClient.fromCardUrl('http://localhost:3000/.well-known/agent-card.json');
+const client = await A2AClient.fromCardUrl('http://localhost:3000/.well-known/agent.json');
 
 const response = await client.sendMessage({
   message: {
@@ -206,8 +213,10 @@ config-workspace/
 ├── skills/                  # Modular skill definitions
 │   ├── skill-1.md
 │   └── skill-2.md
-├── mcp.json                # MCP server registry
-└── workflow.json           # Workflow registry
+├── mcp.json                 # MCP server registry
+├── workflow.json            # Workflow registry
+└── workflows/               # Custom workflow implementations
+    └── example-workflow.ts
 ```
 
 ### Agent Definition (agent.md)
@@ -366,6 +375,16 @@ MCP (Model Context Protocol) provides dynamic tools:
 - **HTTP & Stdio**: Support for both transport types
 - **Namespacing**: Tool names prefixed with server namespace
 
+### X402 Payment Protocol
+
+Agent Node integrates the X402 protocol for internet-native payments between agents:
+
+- **HTTP 402 Standard**: Leverages HTTP 402 "Payment Required" status code for seamless payment flows
+- **Autonomous Commerce**: Agents can transact with each other without human intervention
+- **Micropayments**: Support for fractional payments enabling pay-per-use service models
+- **Rapid Settlement**: On-chain payment verification with ~2 second settlement times
+- **Tool & Workflow Monetization**: Enable pay-per-call pricing for agent services and workflows
+
 ## Creating Workflows
 
 For a comprehensive guide on building workflows, see **[Workflow Creation Guide](docs/WORKFLOW-CREATION-GUIDE.md)**.
@@ -453,7 +472,120 @@ pnpm cli print-config
 
 # Create deployment bundle - Creates a production-ready deployment package
 pnpm cli bundle
+
+# Register agent on-chain - Register your agent using EIP-8004 standard (requires PINATA_JWT)
+pnpm cli register --name "My Agent" --description "Agent description" --url "https://myagent.com" --chain-id 11155111
+
+# Update agent registry - Update existing on-chain registration
+pnpm cli update-registry --agent-id 123 --name "My Agent" --description "Updated description" --url "https://myagent.com" --chain-id 11155111
 ```
+
+## On-Chain Agent Registration
+
+Agent Node supports on-chain agent registration using the [EIP-8004 standard](https://eips.ethereum.org/EIPS/eip-8004), which provides a decentralized registry for AI agents.
+
+### Why Register On-Chain?
+
+- **Discoverability**: Make your agent discoverable through on-chain registries
+- **Verifiable Identity**: Establish cryptographic proof of agent ownership
+- **Interoperability**: Enable other systems to verify and interact with your agent
+- **Standards Compliance**: Follow the EIP-8004 Agent Identity standard
+
+### Prerequisites
+
+To register your agent, you'll need:
+
+1. **Pinata Account**: For IPFS file uploads
+   - Sign up at [pinata.cloud](https://pinata.cloud)
+   - Get your JWT token from API Keys section
+   - Configure your gateway URL
+2. **Environment Variables**:
+
+   ```bash
+   PINATA_JWT=your_pinata_jwt_token
+   PINATA_GATEWAY=your_pinata_gateway_url
+   ```
+
+3. **Wallet with ETH**: To pay for transaction fees on your chosen chain
+
+### Supported Chains
+
+- **Sepolia** (chainId: 11155111) - Ethereum testnet
+- More chains coming soon
+
+### Registration Process
+
+#### 1. Register New Agent
+
+```bash
+pnpm cli register \
+  --name "My Trading Agent" \
+  --description "Autonomous DeFi trading agent" \
+  --url "https://myagent.example.com" \
+  --chain-id 11155111 \
+  --version "1.0.0" \
+  --image "https://example.com/agent-image.png"
+```
+
+**What happens:**
+
+1. Creates EIP-8004 compliant registration file
+2. Uploads registration file to IPFS via Pinata
+3. Generates transaction data for on-chain registration
+4. Opens browser with transaction signing interface
+5. Records your agent ID after successful transaction
+
+#### 2. Update Existing Registration
+
+```bash
+pnpm cli update-registry \
+  --agent-id 123 \
+  --name "My Trading Agent" \
+  --description "Updated: Now supports GMX v2" \
+  --url "https://myagent.example.com" \
+  --chain-id 11155111 \
+  --version "2.0.0"
+```
+
+**Note**: You must own the agent (same wallet that registered it) to update the registry.
+
+### EIP-8004 Registration Format
+
+The registration file follows EIP-8004 standard:
+
+```json
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "My Trading Agent",
+  "description": "Autonomous DeFi trading agent",
+  "image": "https://example.com/agent-image.png",
+  "endpoints": [
+    {
+      "name": "A2A",
+      "endpoint": "https://myagent.example.com/.well-known/agent-card.json",
+      "version": "1.0.0"
+    }
+  ],
+  "registrations": [
+    {
+      "agentId": 123,
+      "agentRegistry": "eip155:11155111:0x8004a6090Cd10A7288092483047B097295Fb8847"
+    }
+  ],
+  "supportedTrust": []
+}
+```
+
+### Identity Registry Contract
+
+The agent identity registry contract is deployed at:
+
+- **Sepolia**: `0x8004a6090Cd10A7288092483047B097295Fb8847`
+
+The contract implements:
+
+- `register(string ipfsUri)` - Register new agent
+- `setAgentUri(uint256 agentId, string ipfsUri)` - Update existing registration
 
 ## Development
 
@@ -476,11 +608,11 @@ Starts server with:
 pnpm typecheck
 
 # Linting
-pnpm lint:check
-pnpm lint:fix
+pnpm lint          # Check code formatting and linting
+pnpm lint:fix      # Auto-fix formatting and linting issues
 
 # All quality checks
-pnpm precommit
+pnpm precommit     # Run lint, typecheck, and tests
 ```
 
 ### Project Commands
@@ -520,6 +652,13 @@ pnpm test:coverage
 
 # Specific pattern
 pnpm test:grep -- "pattern"
+
+# Test with UI interface
+pnpm test:ui
+
+# CI test suites
+pnpm test:ci        # Unit + integration (for regular CI)
+pnpm test:ci:main   # Unit + integration + e2e (for main branch)
 ```
 
 ### Recording Mocks
@@ -531,6 +670,13 @@ pnpm test:record-mocks
 ```
 
 This records real API calls to `tests/mocks/data/` for deterministic testing.
+
+### Additional Test Utilities
+
+```bash
+# Upgrade test wallet with ETH
+pnpm test:upgrade-wallet
+```
 
 ### Mock Structure
 
@@ -622,7 +768,7 @@ COPY --from=builder /deploy .
 EXPOSE 3000
 
 # Run the application
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/server-loader.js"]
 ```
 
 **Key features:**
@@ -728,16 +874,9 @@ agent.example.com {
 }
 ```
 
-## License
+## Additional Resources
 
-See `LICENSE` file in repository root.
-
-## Contributing
-
-See `CONTRIBUTING.md` for development guidelines.
-
-## Support
-
-- **Issues**: https://github.com/your-org/agent-node/issues
-- **Docs**: https://docs.yourproject.com
+- **Workflow Creation Guide**: See [docs/WORKFLOW-CREATION-GUIDE.md](docs/WORKFLOW-CREATION-GUIDE.md) for comprehensive workflow development documentation
+- **Deployment Guide**: See [DEPLOY.md](DEPLOY.md) for VPS deployment with HTTPS
 - **A2A Protocol**: https://a2a.co
+- **MCP Documentation**: https://modelcontextprotocol.io
