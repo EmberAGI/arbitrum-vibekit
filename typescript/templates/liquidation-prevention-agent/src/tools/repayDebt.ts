@@ -12,9 +12,8 @@ import { TransactionPlan, TransactionPlanSchema, RepayResponseSchema } from 'emb
 import { parseUserPreferences } from '../utils/userPreferences.js';
 import { resolveTokenInfo, isTokenSymbol } from '../utils/tokenResolver.js';
 import { withHooks, transactionSigningAfterHook, transactionValidationBeforeHook } from '../hooks/index.js';
-import { roundToTokenDecimals, isValidTokenPrecision } from '../utils/decimalPrecision.js';
 
-// Input schema for repayDebt tool (supports both tokenAddress and tokenSymbol)
+// Input schema for repayDebt tool (updated for new createLendingRepay tool)
 const RepayDebtParams = z.object({
   tokenAddress: z.string().optional().describe('The debt token contract address to repay (alternative to tokenSymbol)'),
   tokenSymbol: z.string().optional().describe('The debt token symbol to repay (e.g., USDC, DAI, ETH - alternative to tokenAddress)'),
@@ -76,30 +75,6 @@ const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Liqui
       const tokenIdentifier = args.tokenSymbol || finalTokenAddress;
       console.log(`💸 Repaying debt: ${args.amount} of ${tokenIdentifier} for user ${args.userAddress}`);
       
-      // Get token decimals from resolved token info for precision handling
-      let tokenDecimals = 18; // Default to 18 decimals
-      if (args.tokenSymbol && context.custom.tokenMap) {
-        try {
-          const tokenInfo = resolveTokenInfo(
-            context.custom.tokenMap,
-            args.tokenSymbol,
-            args.chainId
-          );
-          tokenDecimals = tokenInfo.decimals;
-          console.log(`🔢 Token ${args.tokenSymbol} has ${tokenDecimals} decimals`);
-        } catch (error) {
-          console.warn(`⚠️ Could not get decimals for ${args.tokenSymbol}, using default 18`);
-        }
-      }
-      
-      // Round amount to appropriate decimal precision to prevent ethers.js errors
-      let processedAmount = args.amount;
-      if (args.amount !== "max" && !isValidTokenPrecision(args.amount, tokenDecimals)) {
-        const originalAmount = args.amount;
-        processedAmount = roundToTokenDecimals(args.amount, tokenDecimals);
-        console.log(`🔄 Rounded amount from ${originalAmount} to ${processedAmount} (${tokenDecimals} decimals)`);
-      }
-      
       if (userPrefs.targetHealthFactor) {
         console.log(`🎯 Target Health Factor: ${userPrefs.targetHealthFactor}`);
       }
@@ -111,16 +86,26 @@ const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Liqui
         throw new Error('Ember MCP client not found in context');
       }
 
-      // Call the Ember MCP server's lendingRepay tool to get transaction plan
+      console.log("calling createLendingRepay..........!!!");
+      console.log("finalTokenAddress..........!!:", finalTokenAddress);
+      console.log("finalChainId..........!!:", finalChainId);
+      console.log("args.amount..........!!:", args.amount);
+      console.log("args.userAddress..........!!:", args.userAddress);
+      console.log("args.tokenSymbol..........!!:", args.tokenSymbol);
+      console.log("args.tokenAddress..........!!:", args.tokenAddress);
+      console.log("args.chainId..........!!:", args.chainId);
+      
+      // Determine the token symbol to send to the new API
+      const repayToken = args.tokenSymbol || finalTokenAddress;
+      
+      // Call the Ember MCP server's createLendingRepay tool to get transaction plan
       const result = await emberClient.callTool({
-        name: 'lendingRepay',
+        name: 'createLendingRepay',
         arguments: {
-          tokenUid: {
-            chainId: finalChainId,
-            address: finalTokenAddress,
-          },
-          amount: processedAmount, // Use the precision-adjusted amount
           walletAddress: args.userAddress,
+          amount: args.amount, // Use original human-readable amount - tool handles decimals
+          repayChain: finalChainId,
+          repayToken: repayToken,
         },
       });
 
@@ -135,9 +120,43 @@ const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Liqui
 
       // Parse and validate the repay response from MCP
       console.log('📋 Parsing repay response from MCP...');
-      const repayResp = parseMcpToolResponsePayload(result, RepayResponseSchema);
-      const { transactions } = repayResp;
+      
+      // Handle the new response format with structuredContent
+      let transactions: any[] = [];
+      if (result.content && Array.isArray(result.content)) {
+        // Check if there's structured content
+        const structuredContent = result.content.find((item: any) => item.type === 'text' && item.text);
+        if (structuredContent) {
+          try {
+            const parsedContent = JSON.parse(structuredContent.text);
+            if (parsedContent.structuredContent && parsedContent.structuredContent.transactions) {
+              transactions = parsedContent.structuredContent.transactions;
+            }
+          } catch (parseError) {
+            console.warn('⚠️ Could not parse structured content, trying direct access');
+          }
+        }
+      }
+      
+      // Fallback: try to access transactions directly from result
+      if (transactions.length === 0 && result.content) {
+        try {
+          // Try to find transactions in the response structure
+          const content = Array.isArray(result.content) ? result.content[0] : result.content;
+          if (content && typeof content === 'object' && content.structuredContent && content.structuredContent.transactions) {
+            transactions = content.structuredContent.transactions;
+          }
+        } catch (error) {
+          console.warn('⚠️ Could not extract transactions from response');
+        }
+      }
+      
       console.log(`📋 Received ${transactions.length} transaction(s) to execute`);
+      
+      // Validate that we have transactions to execute
+      if (transactions.length === 0) {
+        throw new Error('No transactions received from createLendingRepay tool');
+      }
 
       // Return transaction data for withHooks execution
       console.log(`📋 Prepared ${transactions.length} transaction(s) for secure execution via withHooks`);
@@ -145,7 +164,7 @@ const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Liqui
       return {
         transactions,
         tokenIdentifier,
-        amount: processedAmount, // Return the processed amount
+        amount: args.amount, // Return the original human-readable amount
         operation: 'repay-debt'
       };
 
