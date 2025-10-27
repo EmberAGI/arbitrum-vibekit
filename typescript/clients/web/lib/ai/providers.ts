@@ -12,13 +12,13 @@ import {
   chatModel,
   reasoningModel,
   titleModel,
-} from './models.test';
+} from './models.mock';
 
 const openRouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-export const openRouterProvider = isTestEnvironment
+export const openRouterProvider: any = isTestEnvironment
   ? customProvider({
       languageModels: {
         'chat-model': chatModel,
@@ -34,21 +34,21 @@ export const openRouterProvider = isTestEnvironment
             exclude: true,
             effort: 'low',
           },
-        }),
+        }) as any,
         'chat-model-medium': openRouter('google/gemini-2.5-pro-preview', {
           reasoning: {
             effort: 'medium',
           },
-        }),
-        'title-model': openRouter('google/gemini-2.5-flash'),
-        'artifact-model': openRouter('google/gemini-2.5-flash'),
+        }) as any,
+        'title-model': openRouter('google/gemini-2.5-flash') as any,
+        'artifact-model': openRouter('google/gemini-2.5-flash') as any,
       },
       imageModels: {
-        'small-model': xai.image('grok-2-image'),
+        'small-model': xai.image('grok-2-image') as any,
       },
     });
 
-export const grokProvider = isTestEnvironment
+export const grokProvider: any = isTestEnvironment
   ? customProvider({
       languageModels: {
         'chat-model': chatModel,
@@ -59,15 +59,15 @@ export const grokProvider = isTestEnvironment
     })
   : customProvider({
       languageModels: {
-        'chat-model': xai('grok-2-1212'),
+        'chat-model': xai('grok-2-1212') as any,
         'chat-model-reasoning': wrapLanguageModel({
-          model: groq('deepseek-r1-distill-llama-70b'),
+          model: groq('deepseek-r1-distill-llama-70b') as any,
           middleware: extractReasoningMiddleware({ tagName: 'think' }),
-        }),
-        'title-model': xai('grok-2-1212'),
-        'artifact-model': xai('grok-2-1212'),
+        }) as any,
+        'title-model': xai('grok-2-1212') as any,
+        'artifact-model': xai('grok-2-1212') as any,
       },
       imageModels: {
-        'small-model': xai.image('grok-2-image'),
+        'small-model': xai.image('grok-2-image') as any,
       },
     });

@@ -1,0 +1,15 @@
+dev.emberai.xyz {
+    # Automatic HTTPS with Let's Encrypt
+    reverse_proxy app:3000
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+
+    # Enable compression
+    encode gzip
+}

@@ -8,7 +8,7 @@ This guide provides comprehensive testing strategies for verifying that the Coin
 
 ```bash
 # Navigate to the MCP server directory
-cd arbitrum-vibekit/typescript/lib/mcp-tools/coingecko-mcp-server
+cd arbitrum-vibekit/typescript/lib/community-mcp-tools/coingecko-mcp-server
 
 # Install dependencies
 pnpm install
@@ -21,6 +21,7 @@ pnpm dev
 ```
 
 You should see output like:
+
 ```
 CoinGecko MCP Server is running on port 3011
 Initializing stdio transport...
@@ -47,16 +48,21 @@ node manual-mcp-test.js --interactive
 The `manual-mcp-test.js` script provides several testing modes:
 
 #### Quick Test Mode
+
 ```bash
 node manual-mcp-test.js
 ```
+
 This runs all tests automatically and reports results.
 
 #### Interactive Mode
+
 ```bash
 node manual-mcp-test.js --interactive
 ```
+
 This provides an interactive interface where you can:
+
 - `test` - Run all tests
 - `chart BTC 7` - Generate a BTC chart for 7 days
 - `tokens` - Get list of supported tokens
@@ -81,7 +87,7 @@ Test the MCP server directly:
 
 ```bash
 # Navigate to MCP server directory
-cd arbitrum-vibekit/typescript/lib/mcp-tools/coingecko-mcp-server
+cd arbitrum-vibekit/typescript/lib/community-mcp-tools/coingecko-mcp-server
 
 # Run the test script
 node test-mcp.js
@@ -92,6 +98,7 @@ node test-mcp.js
 ### 1. Server Connectivity
 
 **Test**: Verify the MCP server starts and accepts connections
+
 ```bash
 # Check if server is running
 curl http://localhost:3011/sse
@@ -102,6 +109,7 @@ curl http://localhost:3011/sse
 ### 2. Tool Discovery
 
 **Test**: Verify tools are discoverable
+
 ```bash
 # Use the manual test script
 node manual-mcp-test.js
@@ -112,6 +120,7 @@ node manual-mcp-test.js
 ### 3. Chart Generation
 
 **Test**: Generate a price chart
+
 ```bash
 # Interactive mode
 node manual-mcp-test.js --interactive
@@ -123,6 +132,7 @@ node manual-mcp-test.js --interactive
 ### 4. Error Handling
 
 **Test**: Try invalid tokens
+
 ```bash
 # Interactive mode
 node manual-mcp-test.js --interactive
@@ -134,6 +144,7 @@ node manual-mcp-test.js --interactive
 ### 5. Web Client Integration
 
 **Test**: Use the web interface
+
 1. Start the web client
 2. Navigate to the chat interface
 3. Send message: "Generate a price chart for BTC over 7 days"
@@ -149,6 +160,7 @@ node manual-mcp-test.js --interactive
 
 **Symptoms**: Server fails to start or crashes
 **Solutions**:
+
 ```bash
 # Check if port 3002 is in use
 lsof -i :3011
@@ -157,7 +169,7 @@ lsof -i :3011
 kill -9 <PID>
 
 # Check dependencies
-cd arbitrum-vibekit/typescript/lib/mcp-tools/coingecko-mcp-server
+cd arbitrum-vibekit/typescript/lib/community-mcp-tools/coingecko-mcp-server
 pnpm install
 ```
 
@@ -165,12 +177,13 @@ pnpm install
 
 **Symptoms**: "Connection refused" errors
 **Solutions**:
+
 ```bash
 # Verify server is running
 ps aux | grep coingecko-mcp-server
 
 # Check server logs
-cd arbitrum-vibekit/typescript/lib/mcp-tools/coingecko-mcp-server
+cd arbitrum-vibekit/typescript/lib/community-mcp-tools/coingecko-mcp-server
 pnpm dev 2>&1 | tee server.log
 ```
 
@@ -178,6 +191,7 @@ pnpm dev 2>&1 | tee server.log
 
 **Symptoms**: Chart data received but not displayed
 **Solutions**:
+
 - Check browser console for errors
 - Verify `PriceChart` component is working
 - Check if MCP response format matches expected format
@@ -186,6 +200,7 @@ pnpm dev 2>&1 | tee server.log
 
 **Symptoms**: API errors or timeouts
 **Solutions**:
+
 - Check CoinGecko API status
 - Verify retry logic is working
 - Check server logs for rate limit messages
@@ -267,12 +282,14 @@ watch -n 1 'ps aux | grep coingecko-mcp-server'
 ## 📝 Test Checklist
 
 ### Pre-Testing Setup
+
 - [ ] MCP server builds successfully
 - [ ] Dependencies installed
 - [ ] Port 3011 available
 - [ ] Web client configured
 
 ### Basic Functionality
+
 - [ ] Server starts without errors
 - [ ] Tools are discoverable
 - [ ] Chart generation works
@@ -280,6 +297,7 @@ watch -n 1 'ps aux | grep coingecko-mcp-server'
 - [ ] HTTP endpoint accessible
 
 ### Integration Testing
+
 - [ ] Web client connects to MCP server
 - [ ] Chart requests work through web interface
 - [ ] Charts render correctly
@@ -287,12 +305,14 @@ watch -n 1 'ps aux | grep coingecko-mcp-server'
 - [ ] Multiple requests work
 
 ### Performance Testing
+
 - [ ] Response times are acceptable
 - [ ] Memory usage is stable
 - [ ] Concurrent requests work
 - [ ] Network failures handled gracefully
 
 ### User Experience
+
 - [ ] Charts are interactive
 - [ ] Loading states work
 - [ ] Error messages are clear
@@ -327,4 +347,4 @@ For ongoing development, consider:
 3. **Health checks**: Implement endpoint health monitoring
 4. **Performance tracking**: Monitor response times and errors
 
-This testing guide ensures your CoinGecko MCP server integration is robust and ready for production use. 
+This testing guide ensures your CoinGecko MCP server integration is robust and ready for production use.

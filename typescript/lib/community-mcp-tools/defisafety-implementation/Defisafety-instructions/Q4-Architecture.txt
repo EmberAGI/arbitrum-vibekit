@@ -1,0 +1,20 @@
+Q4: Is the protocol's software architecture clearly documented?
+Weight: 8%
+
+Purpose: Assess whether the documentation includes a system architecture description for the protocol. This means an explanation of how the smart contracts or components interact, possibly accompanied by diagrams or specific details of the design. A documented architecture helps users and auditors understand the overall structure (e.g. which contracts do what, how funds flow, how modules relate).
+
+Where to Look: In the documentation or whitepaper, look for sections titled "Architecture", "System Design", "Overview", or similar. Some projects include diagrams (like flowcharts or component diagrams) or dedicated pages explaining contract relationships. If not explicitly labeled, see if the whitepaper or docs have paragraphs describing how different contracts or functions work together. Key terms to search: architecture, design, diagram, overview, modules, interactions.
+
+Scoring Criteria: This is effectively Yes/No (full points if yes, 0 if no), since the question is posed as a binary in the official process:
+
+    100% (Yes): The documentation contains a clear description of the protocol's architecture. This could be a written description of each major contract's role and how they call each other, or a visual diagram illustrating components and their relationships. Ideally, it should detail "code modules + how they work/how they interact." If a diagram is present and explained, that definitely qualifies for full marks.
+
+    0% (No): There is no section or cohesive description of the architecture. If you cannot find any high-level explanation of how the system's parts fit together (beyond maybe individual function docs), then this scores 0. (Also, per DeFiSafety, if the project had no whitepaper from Q3, this question would automatically be 0 by dependency.)
+
+Answer Format:
+
+    If yes: "Yes – the documentation includes an architecture overview. For example, there is a diagram and section explaining how the contracts (e.g. Vault, Strategy, Token) interact with each other. This provides a clear picture of the system design. Score: 100%."
+
+    If no: "No – there is no dedicated architecture description or diagram in the docs. Score: 0%."
+
+If partial (for instance, only a very brief description but not detailed), since this is a Yes/No question, you typically lean toward 0% if it doesn't meet the standard of clarity. You can mention: "Documentation only gives a basic overview in passing and lacks a proper architecture section, so this does not fulfill the criteria – Score: 0%." Always cite where you expected to find it or evidence of absence (e.g., "the docs have no section on architecture").

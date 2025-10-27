@@ -1,7 +1,7 @@
 'use client';
 
-import type { Attachment, UIMessage } from 'ai';
-import { useChat } from '@ai-sdk/react';
+import { useChat, type Message } from '@ai-sdk/react';
+import type { UIMessage } from 'ai';
 import { useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { ChatHeader } from '@/components/chat-header';
@@ -17,16 +17,23 @@ import { useAccount } from 'wagmi';
 import { useSession } from 'next-auth/react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 
+// Legacy Attachment type for local state (AI SDK v5 removed this)
+type Attachment = {
+  url: string;
+  name: string;
+  contentType: string;
+};
+
 export function Chat({
   id,
   initialMessages,
   selectedChatModel,
-  selectedVisibilityType,
+  selectedVisibilityType: _selectedVisibilityType,
   isReadonly,
   selectedChatAgent: initialChatAgent,
 }: {
   id: string;
-  initialMessages: Array<UIMessage>;
+  initialMessages: Array<Message>;
   selectedChatModel: string;
   selectedVisibilityType: VisibilityType;
   isReadonly: boolean;
@@ -95,7 +102,7 @@ export function Chat({
           chatId={id}
           status={status}
           votes={votes}
-          messages={messages}
+          messages={messages.filter((m) => m.role !== 'data') as Array<UIMessage>}
           setMessages={setMessages}
           reload={reload}
           isReadonly={isReadonly}
@@ -113,7 +120,7 @@ export function Chat({
               stop={stop}
               attachments={attachments}
               setAttachments={setAttachments}
-              messages={messages}
+              messages={messages.filter((m) => m.role !== 'data') as Array<UIMessage>}
               setMessages={setMessages}
               append={append}
               selectedAgentId={selectedChatAgent}
@@ -132,7 +139,7 @@ export function Chat({
         attachments={attachments}
         setAttachments={setAttachments}
         append={append}
-        messages={messages}
+        messages={messages.filter((m) => m.role !== 'data') as Array<UIMessage>}
         setMessages={setMessages}
         reload={reload}
         votes={votes}

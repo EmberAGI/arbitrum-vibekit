@@ -1,0 +1,40 @@
+{
+  "metadata": {
+    "service": "openrouter",
+    "endpoint": "/api/v1/chat/completions",
+    "method": "POST",
+    "recordedAt": "2025-10-17T22:11:03.882Z"
+  },
+  "request": {
+    "headers": {
+      "Authorization": "***"
+    },
+    "body": {
+      "model": "non-existent-model/xyz-123",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Test gateway timeout"
+        }
+      ],
+      "stream": false
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "date": "Fri, 17 Oct 2025 22:11:03 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "cf-ray": "9903212d2f1fda48-EWR",
+      "access-control-allow-origin": "*",
+      "vary": "Accept-Encoding",
+      "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+      "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "server": "cloudflare"
+    },
+    "rawBody": "eyJlcnJvciI6eyJtZXNzYWdlIjoibm9uLWV4aXN0ZW50LW1vZGVsL3h5ei0xMjMgaXMgbm90IGEgdmFsaWQgbW9kZWwgSUQiLCJjb2RlIjo0MDB9LCJ1c2VyX2lkIjoidXNlcl8yajZ2UjlUZE5GS1lFR2dONlRKYjl4WmQ1RUoifQ=="
+  }
+}

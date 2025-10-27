@@ -9,16 +9,15 @@ import {
   tokenResolutionHook,
   balanceCheckHook,
   responseParserHook,
-  composeBeforeHooks,
 } from './hooks.js';
 import {
   BorrowResponseSchema,
   RepayResponseSchema,
   SupplyResponseSchema,
   WithdrawResponseSchema,
-} from 'ember-schemas';
-import type { AgentContext } from 'arbitrum-vibekit-core';
-import type { Task, Message } from '@google-a2a/types';
+} from '@emberai/arbitrum-vibekit-core/ember-schemas';
+import type { AgentContext } from '@emberai/arbitrum-vibekit-core';
+import type { Task, Message } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 import type { LendingAgentContext } from '../agent.js';
 import type { TokenInfo } from './types.js';
 

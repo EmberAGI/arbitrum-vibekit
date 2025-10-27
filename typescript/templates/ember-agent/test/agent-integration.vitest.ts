@@ -62,7 +62,7 @@ describe('Agent Integration', () => {
   });
 
   it('should be able to create agent with current configuration', async () => {
-    const { Agent } = await import('arbitrum-vibekit-core');
+    const { Agent } = await import('@emberai/arbitrum-vibekit-core');
     const { agentConfig } = await import('../src/config.js');
 
     // This should not throw an error
@@ -75,7 +75,7 @@ describe('Agent Integration', () => {
   });
 
   it('should have MCP server with registered tools', async () => {
-    const { Agent } = await import('arbitrum-vibekit-core');
+    const { Agent } = await import('@emberai/arbitrum-vibekit-core');
     const { agentConfig } = await import('../src/config.js');
 
     const agent = Agent.create(agentConfig);
@@ -88,7 +88,7 @@ describe('Agent Integration', () => {
   });
 
   it('should validate framework requirements', async () => {
-    const { Agent, defineSkill } = await import('arbitrum-vibekit-core');
+    const { Agent } = await import('@emberai/arbitrum-vibekit-core');
 
     // Test that agent creation fails without skills
     const emptyConfig = {

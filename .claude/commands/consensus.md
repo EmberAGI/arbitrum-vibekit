@@ -1,17 +1,8 @@
 ---
-description: "Form a consensus answer using multiple AI models (o3, claude-opus-4, gemini-2.5-pro)"
-allowed-tools:
-  [
-    "Task",
-    "mcp__openrouter__chat_completion",
-    "TodoWrite",
-    "Read",
-    "Glob",
-    "Grep",
-  ]
-argument-hint: "<topic/problem/question to analyze>"
+description: >-
+  Form a consensus answer using multiple AI models (o3, claude-opus-4,
+  gemini-2.5-pro)
 ---
-
 # Consensus Command
 
 Runs **SIX parallel Tasks** to get intuition + analysis from three AI models.

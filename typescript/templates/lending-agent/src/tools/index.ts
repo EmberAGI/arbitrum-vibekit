@@ -22,4 +22,4 @@ export {
   BorrowRepaySupplyWithdrawSchema,
   GetWalletLendingPositionsSchema,
   AskEncyclopediaSchema,
-} from 'ember-schemas';
+} from '@emberai/arbitrum-vibekit-core/ember-schemas';

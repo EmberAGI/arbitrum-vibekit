@@ -4,8 +4,8 @@
  */
 
 import { z } from 'zod';
-import type { VibkitToolDefinition } from 'arbitrum-vibekit-core';
-import { createSuccessTask, withHooks } from 'arbitrum-vibekit-core';
+import type { VibkitToolDefinition } from '@emberai/arbitrum-vibekit-core';
+import { createSuccessTask, withHooks } from '@emberai/arbitrum-vibekit-core';
 import type { HelloContext } from '../context/types.js';
 import { timestampHook, logHook } from '../hooks/index.js';
 

@@ -90,8 +90,7 @@ export const PriceChart = ({
 
   // Create area path for gradient fill
   const areaPath =
-    pathData +
-    ` L ${getX(maxTimestamp)},${padding + chartHeight} L ${getX(minTimestamp)},${padding + chartHeight} Z`;
+    `${pathData} L ${getX(maxTimestamp)},${padding + chartHeight} L ${getX(minTimestamp)},${padding + chartHeight} Z`;
 
   // Generate Y-axis labels
   const yAxisLabels = [];
@@ -130,7 +129,7 @@ export const PriceChart = ({
 
     // Find the closest data point
     let closestPoint = null;
-    let minDistance = Infinity;
+    let minDistance = Number.POSITIVE_INFINITY;
 
     data.prices.forEach(([timestamp, price]) => {
       const x = getX(timestamp);
@@ -213,8 +212,8 @@ export const PriceChart = ({
         </defs>
 
         {/* Y-axis grid lines and labels */}
-        {yAxisLabels.map((label, i) => (
-          <g key={i}>
+        {yAxisLabels.map((label) => (
+          <g key={`y-${label.price}`}>
             <line
               x1={padding}
               y1={label.y}
@@ -239,8 +238,8 @@ export const PriceChart = ({
         ))}
 
         {/* X-axis grid lines and labels */}
-        {xAxisLabels.map((label, i) => (
-          <g key={i}>
+        {xAxisLabels.map((label) => (
+          <g key={`x-${label.x}`}>
             <line
               x1={label.x}
               y1={padding}
@@ -280,14 +279,14 @@ export const PriceChart = ({
         />
 
         {/* Data points */}
-        {data.prices.map(([timestamp, price], i) => {
+        {data.prices.map(([timestamp, price]) => {
           const x = getX(timestamp);
           const y = getY(price);
           const isHovered =
             hoveredPoint && hoveredPoint.x === x && hoveredPoint.y === y;
 
           return (
-            <g key={i}>
+            <g key={timestamp}>
               <circle
                 cx={x}
                 cy={y}
@@ -295,7 +294,7 @@ export const PriceChart = ({
                 fill="#667eea"
                 stroke="white"
                 strokeWidth="2"
-                data-testid={`data-point-${i}`}
+                data-testid={`data-point-${timestamp}`}
                 style={{
                   transition: 'r 0.2s ease, filter 0.2s ease',
                   filter: isHovered ? 'url(#glow)' : 'none',

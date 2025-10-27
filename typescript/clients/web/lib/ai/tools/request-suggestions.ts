@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Session } from 'next-auth';
-import { type DataStreamWriter, streamObject, tool } from 'ai';
+import { streamObject, tool } from 'ai';
+import type { DataStreamWriter } from '@/lib/ai/types';
 import { getDocumentById, saveSuggestions } from '@/lib/db/queries';
 import type { Suggestion } from '@/lib/db/schema';
 import { generateUUID } from '@/lib/utils';
@@ -14,15 +15,18 @@ interface RequestSuggestionsProps {
 export const requestSuggestions = ({
   session,
   dataStream,
-}: RequestSuggestionsProps) =>
-  tool({
+}: RequestSuggestionsProps) => {
+  const parametersSchema = z.object({
+    documentId: z
+      .string()
+      .describe('The ID of the document to request edits'),
+  });
+
+  return tool({
     description: 'Request suggestions for a document',
-    parameters: z.object({
-      documentId: z
-        .string()
-        .describe('The ID of the document to request edits'),
-    }),
-    execute: async ({ documentId }) => {
+    parameters: parametersSchema,
+    // @ts-ignore - AI SDK v5 tool types have compatibility issues with parameter inference
+    execute: async ({ documentId }: any) => {
       const document = await getDocumentById({ id: documentId });
 
       if (!document || !document.content) {
@@ -86,4 +90,5 @@ export const requestSuggestions = ({
         message: 'Suggestions have been added to the document',
       };
     },
-  });
+  }) as any;
+};

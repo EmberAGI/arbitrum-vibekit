@@ -18,12 +18,11 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@google-a2a/types": "workspace:*",
     "@langchain/core": "^0.3.59",
     "@langchain/langgraph": "^0.3.3",
     "@modelcontextprotocol/sdk": "catalog:",
     "ai": "catalog:",
-    "arbitrum-vibekit-core": "workspace:*",
+    "@emberai/arbitrum-vibekit-core": "catalog:",
     "dotenv": "catalog:",
     "zod": "catalog:"
   },

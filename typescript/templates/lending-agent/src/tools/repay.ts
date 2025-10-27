@@ -1,9 +1,9 @@
-import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
-import type { Task, Message, DataPart } from '@google-a2a/types';
-import { TaskState } from '@google-a2a/types';
+import type { VibkitToolDefinition } from '@emberai/arbitrum-vibekit-core';
+import { parseMcpToolResponsePayload } from '@emberai/arbitrum-vibekit-core';
+import type { Task, DataPart } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
+import { TaskState } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 import type { LendingAgentContext } from '../agent.js';
-import { BorrowRepaySupplyWithdrawSchema, RepayResponseSchema } from 'ember-schemas';
+import { BorrowRepaySupplyWithdrawSchema, RepayResponseSchema } from '@emberai/arbitrum-vibekit-core/ember-schemas';
 import type { LendingTransactionArtifact, LendingPreview, TokenInfo } from './types.js';
 import { createTaskId, findTokenInfo } from './utils.js';
 
@@ -80,7 +80,7 @@ export const repayBase: VibkitToolDefinition<
           });
 
           // Parse and validate the MCP response
-          const repayResp = parseMcpToolResponsePayload(toolResult, RepayResponseSchema);
+          const repayResp = parseMcpToolResponsePayload(toolResult, RepayResponseSchema) as any;
           const { transactions } = repayResp;
 
           // Build artifact

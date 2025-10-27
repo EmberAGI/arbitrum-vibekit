@@ -1,0 +1,22 @@
+Q2: Does the protocol have a public source code repository (e.g. GitHub)?
+Weight: 3%
+
+Purpose: Confirm that the project's code is open-source and accessible in a public repository. A public repository (on GitHub, GitLab, etc.) containing the smart contract code is essential for transparency. It allows anyone to review the code, track development history, and verify that the deployed contracts match the code. Without it, the protocol's transparency and credibility are significantly reduced.
+
+Where to Look: Check the documentation or the website footer for mentions of "GitHub" or "Source Code". Many projects link their GitHub on the website or docs home. You can also search the web for "<Project Name> GitHub". In documentation, look for a "Developer" section or any mention of code repositories. If the project is not open-source, there may be no mention of GitHub at all.
+
+Scoring Criteria: This is a Yes/No question:
+
+    100% (Yes): The protocol does have a public repository with its smart contract code. Even if the repo is just used for code releases (and not active development), if it's publicly visible, this scores full marks. The presence of a GitHub repository with contract code qualifies as Yes.
+
+    0% (No): No public smart contract repository can be found – the code is closed-source or not disclosed. In this case, the score is 0 and note that any questions requiring repository info (development history, tests, etc.) would automatically fail due to lack of public code access.
+
+Answer Format: State if a public repo exists and cite evidence:
+
+    "Yes – the project's smart contract code is openly available on GitHub (e.g., at github.com/ProjectName/contracts). Score: 100%."
+
+Or:
+
+    "No – there is no public repository for the smart contracts (no GitHub link or source code found). Score: 0%."
+
+If applicable, mention that the absence of a public repo means certain other assessments (like development activity or test verification) cannot be performed. Always provide a source – for example, link to a docs page stating the code is closed-source, or note the lack of any reference to a repository in the documentation.

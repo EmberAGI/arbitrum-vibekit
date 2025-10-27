@@ -3,7 +3,7 @@
  * Demonstrates the withHooks utility
  */
 
-import type { HookFunction } from 'arbitrum-vibekit-core';
+import type { HookFunction } from '@emberai/arbitrum-vibekit-core';
 import type { HelloContext } from '../context/types.js';
 
 /**

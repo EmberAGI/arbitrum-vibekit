@@ -1,6 +1,6 @@
 'use client';
 
-import type { Attachment, UIMessage } from 'ai';
+import type { UIMessage } from 'ai';
 import cx from 'classnames';
 import type React from 'react';
 import {
@@ -24,6 +24,13 @@ import { SuggestedActions } from './suggested-actions';
 import equal from 'fast-deep-equal';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import { AgentSelector } from './ui/agent-chips';
+
+// Legacy Attachment type for local state (AI SDK v5 removed this)
+type Attachment = {
+  url: string;
+  name: string;
+  contentType: string;
+};
 
 function PureMultimodalInput({
   chatId,
@@ -155,8 +162,10 @@ function PureMultimodalInput({
       }
       const { error } = await response.json();
       toast.error(error);
+      return undefined;
     } catch (error) {
       toast.error('Failed to upload file, please try again!');
+      return undefined;
     }
   };
 

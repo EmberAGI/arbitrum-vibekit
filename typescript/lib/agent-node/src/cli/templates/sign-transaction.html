@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign Agent Registration Transaction</title>
+    <script src="https://cdn.jsdelivr.net/npm/viem@2.21.54/dist/viem.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell,
+          sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      .container {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        padding: 40px;
+        max-width: 600px;
+        width: 100%;
+      }
+
+      h1 {
+        color: #333;
+        margin-bottom: 10px;
+        font-size: 28px;
+      }
+
+      .subtitle {
+        color: #666;
+        margin-bottom: 30px;
+        font-size: 14px;
+      }
+
+      .info-box {
+        background: #f7f9fc;
+        border-left: 4px solid #667eea;
+        padding: 15px;
+        margin-bottom: 25px;
+        border-radius: 4px;
+      }
+
+      .info-box strong {
+        color: #333;
+        display: block;
+        margin-bottom: 5px;
+      }
+
+      .info-box code {
+        background: #e1e8ed;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        word-break: break-all;
+      }
+
+      .status {
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        display: none;
+      }
+
+      .status.info {
+        background: #e3f2fd;
+        color: #1976d2;
+        border: 1px solid #90caf9;
+      }
+
+      .status.success {
+        background: #e8f5e9;
+        color: #388e3c;
+        border: 1px solid #81c784;
+      }
+
+      .status.error {
+        background: #ffebee;
+        color: #c62828;
+        border: 1px solid #ef5350;
+      }
+
+      button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 14px 32px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        width: 100%;
+        transition:
+          transform 0.2s,
+          box-shadow 0.2s;
+      }
+
+      button:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .tx-hash {
+        margin-top: 20px;
+        padding: 15px;
+        background: #f7f9fc;
+        border-radius: 8px;
+        word-break: break-all;
+      }
+
+      .tx-hash a {
+        color: #667eea;
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      .tx-hash a:hover {
+        text-decoration: underline;
+      }
+
+      .loader {
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #667eea;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        animation: spin 1s linear infinite;
+        display: inline-block;
+        margin-right: 10px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🤖 Register Your Agent</h1>
+      <p class="subtitle">Sign the registration transaction with your wallet</p>
+
+      <div id="agentInfo" class="info-box">
+        <strong>Agent Details:</strong>
+        <div id="agentDetails">Loading...</div>
+      </div>
+
+      <div id="status" class="status"></div>
+
+      <button id="connectButton" onclick="connectWallet()">
+        Connect Wallet & Sign Transaction
+      </button>
+
+      <div id="txHashContainer" style="display: none" class="tx-hash">
+        <strong>Transaction Hash:</strong><br />
+        <a id="txHashLink" target="_blank"></a>
+      </div>
+    </div>
+
+    <script>
+      let walletClient = null;
+      let txData = null;
+
+      // Parse URL parameters
+      function parseParams() {
+        const params = new URLSearchParams(window.location.search);
+        const to = params.get('to');
+        const data = params.get('data');
+        const chainId = params.get('chainId');
+        const agentName = params.get('agentName');
+
+        if (!to || !data || !chainId) {
+          showStatus('Missing required parameters (to, data, chainId)', 'error');
+          document.getElementById('connectButton').disabled = true;
+          return null;
+        }
+
+        return { to, data, chainId: parseInt(chainId), agentName };
+      }
+
+      // Display agent information
+      function displayAgentInfo(params) {
+        const detailsDiv = document.getElementById('agentDetails');
+        if (params.agentName) {
+          detailsDiv.innerHTML = `
+                    <p style="margin-bottom: 10px;"><strong>Name:</strong> ${params.agentName}</p>
+                    <p style="margin-bottom: 10px;"><strong>Chain ID:</strong> ${params.chainId}</p>
+                    <p style="margin-bottom: 10px;"><strong>Registry Contract:</strong><br><code>${params.to}</code></p>
+                `;
+        } else {
+          detailsDiv.innerHTML = `
+                    <p style="margin-bottom: 10px;"><strong>Chain ID:</strong> ${params.chainId}</p>
+                    <p style="margin-bottom: 10px;"><strong>Contract:</strong><br><code>${params.to}</code></p>
+                `;
+        }
+      }
+
+      // Show status message
+      function showStatus(message, type = 'info') {
+        const statusDiv = document.getElementById('status');
+        statusDiv.className = `status ${type}`;
+        statusDiv.innerHTML = message;
+        statusDiv.style.display = 'block';
+      }
+
+      // Get block explorer URL
+      function getExplorerUrl(chainId, txHash) {
+        const explorers = {
+          1: 'https://etherscan.io',
+          11155111: 'https://sepolia.etherscan.io',
+          42161: 'https://arbiscan.io',
+          421614: 'https://sepolia.arbiscan.io',
+        };
+        const baseUrl = explorers[chainId] || 'https://etherscan.io';
+        return `${baseUrl}/tx/${txHash}`;
+      }
+
+      // Connect wallet and sign transaction
+      async function connectWallet() {
+        const button = document.getElementById('connectButton');
+        button.disabled = true;
+
+        try {
+          // Check if MetaMask is installed
+          if (!window.ethereum) {
+            showStatus('Please install MetaMask or another Web3 wallet', 'error');
+            button.disabled = false;
+            return;
+          }
+
+          showStatus('<span class="loader"></span> Connecting to wallet...', 'info');
+
+          // Request account access
+          const accounts = await window.ethereum.request({
+            method: 'eth_requestAccounts',
+          });
+
+          const account = accounts[0];
+          showStatus(`Connected: ${account.slice(0, 6)}...${account.slice(-4)}`, 'success');
+
+          // Switch to correct chain if needed
+          const currentChainId = await window.ethereum.request({
+            method: 'eth_chainId',
+          });
+          const currentChainIdDecimal = parseInt(currentChainId, 16);
+
+          if (currentChainIdDecimal !== txData.chainId) {
+            showStatus('<span class="loader"></span> Switching to correct network...', 'info');
+            try {
+              await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: `0x${txData.chainId.toString(16)}` }],
+              });
+            } catch (switchError) {
+              showStatus(`Please switch to chain ID ${txData.chainId} manually`, 'error');
+              button.disabled = false;
+              return;
+            }
+          }
+
+          // Send transaction
+          showStatus(
+            '<span class="loader"></span> Please confirm the transaction in your wallet...',
+            'info',
+          );
+
+          const transactionParameters = {
+            from: account,
+            to: txData.to,
+            data: txData.data,
+          };
+
+          const txHash = await window.ethereum.request({
+            method: 'eth_sendTransaction',
+            params: [transactionParameters],
+          });
+
+          showStatus(
+            `<span class="loader"></span> Transaction submitted! Waiting for confirmation...`,
+            'info',
+          );
+
+          // Display transaction hash
+          const txHashContainer = document.getElementById('txHashContainer');
+          const txHashLink = document.getElementById('txHashLink');
+          txHashLink.href = getExplorerUrl(txData.chainId, txHash);
+          txHashLink.textContent = txHash;
+          txHashContainer.style.display = 'block';
+
+          // Wait for transaction receipt
+          const receipt = await waitForTransaction(txHash);
+
+          // Extract and display agent ID
+          const agentId = decodeAgentId(receipt);
+          if (agentId !== null) {
+            showStatus(
+              `✅ Transaction confirmed! Your agent has been registered.<br><strong>Agent ID: ${agentId}</strong>`,
+              'success',
+            );
+            // Send agent ID back to the server
+            try {
+              await fetch('/callback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ agentId }),
+              });
+            } catch (error) {
+              console.log('Could not send agent ID to server:', error);
+            }
+          } else {
+            showStatus('✅ Transaction confirmed! Your agent has been registered.', 'success');
+          }
+          button.textContent = 'Registration Complete';
+        } catch (error) {
+          console.error('Error:', error);
+          let errorMessage = 'Transaction failed';
+
+          if (error.code === 4001) {
+            errorMessage = 'Transaction rejected by user';
+          } else if (error.message) {
+            errorMessage = error.message;
+          }
+
+          showStatus(`❌ ${errorMessage}`, 'error');
+          button.disabled = false;
+          button.textContent = 'Try Again';
+        }
+      }
+
+      // Decode agent ID from transaction receipt
+      function decodeAgentId(receipt) {
+        try {
+          // The Registered event has the agentId as the second topic (first indexed parameter)
+          // Event signature: Registered(uint256 indexed agentId, string tokenURI, address indexed owner)
+          for (const log of receipt.logs) {
+            // Check if this log has topics (indicating indexed parameters)
+            if (log.topics && log.topics.length >= 2) {
+              // The second topic is the indexed agentId
+              const agentIdHex = log.topics[1];
+              if (agentIdHex) {
+                // Convert hex to decimal
+                const agentId = parseInt(agentIdHex, 16);
+                return agentId;
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error decoding agent ID:', error);
+        }
+        return null;
+      }
+
+      // Wait for transaction to be mined
+      async function waitForTransaction(txHash) {
+        return new Promise((resolve, reject) => {
+          const checkTransaction = async () => {
+            try {
+              const receipt = await window.ethereum.request({
+                method: 'eth_getTransactionReceipt',
+                params: [txHash],
+              });
+
+              if (receipt !== null) {
+                if (receipt.status === '0x1') {
+                  resolve(receipt);
+                } else {
+                  reject(new Error('Transaction failed'));
+                }
+              } else {
+                setTimeout(checkTransaction, 2000);
+              }
+            } catch (error) {
+              reject(error);
+            }
+          };
+          checkTransaction();
+        });
+      }
+
+      // Initialize on page load
+      window.addEventListener('DOMContentLoaded', () => {
+        txData = parseParams();
+        if (txData) {
+          displayAgentInfo(txData);
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,5 +1,5 @@
 name: 🤖 New Agent Template
-description: Propose a new agent template for the templates directory
+description: Propose a new agent template for the community directory
 title: "[New Agent Template]: "
 labels: ["enhancement", "agent-template"]
 assignees: []
@@ -7,7 +7,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for proposing a new agent template! Templates help developers quickly build DeFi agents.
+        Thanks for proposing a new agent template! Templates help developers quickly build DeFi agents. 
+        Note that all agent templates must be created in the `typescript/community/` directory.
 
   - type: input
     id: agent-name
@@ -109,6 +110,8 @@ body:
         - label: I have clearly described the agent's purpose and functionality
           required: true
         - label: I have identified the required protocols and integrations
+          required: true
+        - label: I understand this agent will be created in the typescript/community/ directory
           required: true
         - label: I will wait for the Vibekit team to approve this issue before continuing to implementation
           required: true

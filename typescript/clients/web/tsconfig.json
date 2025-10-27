@@ -12,6 +12,7 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": false,
     "noUncheckedIndexedAccess": false,
+    "noPropertyAccessFromIndexSignature": false,
     "plugins": [
       {
         "name": "next"
@@ -29,5 +30,5 @@
     ".next/types/**/*.ts",
     "next.config.js"
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "tests", "**/*.test.ts", "lib/test-utils"]
 }

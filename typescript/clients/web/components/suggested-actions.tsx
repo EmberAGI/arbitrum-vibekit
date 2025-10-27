@@ -12,7 +12,7 @@ interface SuggestedActionsProps {
   selectedAgentId?: string;
 }
 
-interface SuggestedAction {
+export interface SuggestedAction {
   title: string;
   label: string;
   action: string;

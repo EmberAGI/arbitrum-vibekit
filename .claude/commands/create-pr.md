@@ -1,9 +1,8 @@
 ---
-description: "Create a new branch and draft PR, analyzing git status to properly handle modified vs new files"
-allowed-tools: ["Bash", "Read", "Task"]
-argument-hint: "<branch-name> <pr-title>"
+description: >-
+  Create a new branch and draft PR, analyzing git status to properly handle
+  modified vs new files
 ---
-
 # Create Pull Request
 
 Create a new feature branch and draft pull request following the project's PR-based workflow. All changes must be merged via PR - direct commits to main are not allowed.
@@ -41,7 +40,6 @@ Examples:
 Think harder about the following steps to ensure thorough analysis and proper execution:
 
 1. Parse arguments: $ARGUMENTS
-
    - Extract branch name (first argument)
    - Extract PR title (remaining arguments)
    - If no arguments provided, intelligently generate them:
@@ -60,7 +58,6 @@ Think harder about the following steps to ensure thorough analysis and proper ex
      - Keep descriptions concise but descriptive
 
 2. **IMPORTANT: First check and report current state**:
-
    - Run `git status --porcelain` and analyze the output:
      - `M` = Modified existing file
      - `A` = Added to index
@@ -84,7 +81,6 @@ Think harder about the following steps to ensure thorough analysis and proper ex
      - Without changes: Create PR from existing commits
 
 3. Handle branch creation:
-
    - If on main:
      - First fetch latest changes: `git fetch origin main`
      - Create and switch to new branch from origin/main
@@ -92,7 +88,6 @@ Think harder about the following steps to ensure thorough analysis and proper ex
    - Ensure branch name follows conventions
 
 4. Commit any uncommitted changes (if they exist):
-
    - **VERIFY FIRST**: For any files marked as "new" in git status:
      - Use LS to check if parent directories already exist
      - Use Read to check if files are truly new or modifications

@@ -5,19 +5,18 @@
  */
 
 import 'dotenv/config';
-import { Agent, type AgentConfig, createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
+import { Agent, type AgentConfig, createProviderSelector, getAvailableProviders } from '@emberai/arbitrum-vibekit-core';
 import { greetSkill } from './skills/greet.js';
 import { getTimeSkill } from './skills/getTime.js';
 import { echoSkill } from './skills/echo.js';
 import { contextProvider } from './context/provider.js';
-import type { HelloContext } from './context/types.js';
 
 // Provider selector initialization
 const providers = createProviderSelector({
-  openRouterApiKey: process.env.OPENROUTER_API_KEY,
-  openaiApiKey: process.env.OPENAI_API_KEY,
-  xaiApiKey: process.env.XAI_API_KEY,
-  hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
+  openRouterApiKey: process.env['OPENROUTER_API_KEY'],
+  openaiApiKey: process.env['OPENAI_API_KEY'],
+  xaiApiKey: process.env['XAI_API_KEY'],
+  hyperbolicApiKey: process.env['HYPERBOLIC_API_KEY'],
 });
 
 const available = getAvailableProviders(providers);
@@ -26,20 +25,20 @@ if (available.length === 0) {
   process.exit(1);
 }
 
-const preferred = process.env.AI_PROVIDER || available[0]!;
+const preferred = process.env['AI_PROVIDER'] || available[0]!;
 const selectedProvider = providers[preferred as keyof typeof providers];
 if (!selectedProvider) {
   console.error(`Preferred provider '${preferred}' not available. Available: ${available.join(', ')}`);
   process.exit(1);
 }
 
-const modelOverride = process.env.AI_MODEL;
+const modelOverride = process.env['AI_MODEL'];
 
 // Export agent configuration for testing
 export const agentConfig: AgentConfig = {
-  name: process.env.AGENT_NAME || 'Hello Quickstart Agent',
-  version: process.env.AGENT_VERSION || '1.0.0',
-  description: process.env.AGENT_DESCRIPTION || 'A comprehensive example demonstrating all v2 framework features',
+  name: process.env['AGENT_NAME'] || 'Hello Quickstart Agent',
+  version: process.env['AGENT_VERSION'] || '1.0.0',
+  description: process.env['AGENT_DESCRIPTION'] || 'A comprehensive example demonstrating all v2 framework features',
   skills: [greetSkill, getTimeSkill, echoSkill],
   url: 'localhost',
   capabilities: {
@@ -54,15 +53,15 @@ export const agentConfig: AgentConfig = {
 // Configure the agent
 const agent = Agent.create(agentConfig, {
   // Runtime options
-  cors: process.env.ENABLE_CORS !== 'false',
-  basePath: process.env.BASE_PATH || undefined,
+  cors: process.env['ENABLE_CORS'] !== 'false',
+  basePath: process.env['BASE_PATH'] || undefined,
   llm: {
     model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(),
   },
 });
 
 // Start the agent
-const PORT = parseInt(process.env.PORT || '3007', 10);
+const PORT = parseInt(process.env['PORT'] || '3007', 10);
 
 agent
   .start(PORT, contextProvider)

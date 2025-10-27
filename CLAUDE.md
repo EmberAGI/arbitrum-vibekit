@@ -1,109 +1,7 @@
-# CLAUDE.md
+Please also reference the following documents as needed:
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Project Overview
-
-Arbitrum Vibekit is a polyglot toolkit for building smart, autonomous DeFi agents using the Model Context Protocol (MCP). It enables "vibe coding" - AI-assisted development where developers guide AI through natural language to build DeFi agents that can perform complex on-chain operations.
-
-## Key Commands
-
-### Development Commands
-
-```bash
-pnpm install
-pnpm build
-pnpm lint:check
-pnpm lint:fix
-pnpm test
-pnpm test:vitest
-pnpm test:anvil
-pnpm test:coverage
-pnpm test:watch
-pnpm test:grep -- "pattern"
-pnpm vitest run path/to/test.vitest.ts
-pnpm mocha 'dist/test/**/*.test.js' --grep "test name"
-pnpm start:anvil
-pnpm start:mainnet
-docker compose up
-docker compose build
-docker compose down
-```
-
-### Agent Development Commands
-
-```bash
-pnpm dev
-pnpm build
-pnpm test
-```
-
-## Architecture & Framework
-
-### V2 Framework (Current)
-
-- **Location**: `typescript/templates/` - Production-ready agent templates
-- **Core Library**: `arbitrum-vibekit-core` - V2 framework with skills, tools, hooks, context providers
-- **Architecture**: Skills-first design where skills expose capabilities and contain tools for implementation
-- **Transport**: StreamableHTTP (default) with SSE backwards compatibility
-- **Key Pattern**: LLM orchestration - let AI route intents to appropriate tools
-
-### Legacy Architecture
-
-- **Location**: `typescript/examples/` - Older patterns, use templates for new development
-- **Note**: Examples use older architecture, always prefer V2 templates
-
-### Core Concepts
-
-1. **Skills**: High-level capabilities exposed as MCP tools (e.g., "Lending Operations")
-2. **Tools**: Internal actions that implement skills (e.g., supply, borrow, repay)
-3. **Hooks**: Cross-cutting concerns (logging, validation, transformation)
-4. **Context Providers**: Shared state and dependencies across tools
-5. **MCP Integration**: Every agent is an MCP server and can consume other MCP tools
-
-### Testing Strategy
-
-- **Vitest**: For V2 agents in templates
-  - Unit tests: `*.unit.test.ts`
-  - Integration tests: `*.int.test.ts`
-  - Live tests: `*.live.test.ts`
-- **Mocha**: For legacy agents in examples
-- **Note**: We are migrating from Mocha to Vitest. All new tests should be written for Vitest
-- **Integration Tests**: Use real MCP connections and LLM calls
-- **Unit Tests**: Mock external dependencies
-
-### Key Dependencies
-
-- **AI**: Vercel AI SDK with provider selector (OpenRouter, OpenAI, xAI, Anthropic)
-- **MCP**: @modelcontextprotocol/sdk with StreamableHTTP transport
-- **Blockchain**: Viem for Ethereum interactions
-- **Build**: pnpm workspace, TypeScript with ESM modules
-
-### Environment Configuration
-
-Required environment variables:
-
-- `EMBER_ENDPOINT`: MCP endpoint for Ember API
-- `RPC_URL`: EVM RPC endpoint
-- `AUTH_SECRET`: For web frontend authentication
-- AI Provider keys: `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`, etc.
-
-### Docker Integration
-
-- Agents are containerized with Dockerfile and Dockerfile.prod
-- Configure in `compose.yml` and `agents-config.ts` for web frontend
-- Each agent runs on its own port (3001-3010 range)
-
-## Development Standards
-
-### Best Practices
-
-1. Always use pnpm (never npm)
-2. Use workspace protocol (`workspace:*`) for internal dependencies
-3. Follow ESM module patterns (use `.js` extensions in imports)
-4. Create skills with LLM orchestration (avoid manual handlers)
-5. Use TypeScript strict mode and proper error handling
-6. Test with real MCP connections when possible
+@.claude/memories/msw-handlers.md description: "MSW handler rules for integration test fidelity" globs: "**/tests/mocks/**/*"
+## Development Guidelines
 
 ### Package Management
 
@@ -112,53 +10,6 @@ Required environment variables:
 - Never manually edit `package.json` dependencies - use pnpm commands
 - For CI/CD, use non-interactive flags: `pnpm install --frozen-lockfile`
 
-### Code Quality Guidelines
-
-- Don't create files unless necessary (prefer editing existing)
-- Don't use relative imports for workspace packages
-- Don't create documentation files unless requested
-- Don't bypass LLM orchestration for cost savings
-- Never use `--force` flags (e.g., `git push --force`) without explicit approval
-- Don't wrap code in try/catch blocks only to add context - propagate errors directly
-- Avoid trivial comments that merely restate the next line of code
-- Never redefine existing interfaces - always import and reuse
-- Never produce mocks instead of real implementations
-- Don't create value/type aliases for compatibility - update call sites to use true names
-- When refactoring, update import paths rather than maintaining compatibility aliases
-- **NEVER use `any` type** - use proper types, `unknown`, or type assertions with `as`
-- Never use `.passthrough()` with Zod schemas
-
-### Code Quality Validation
-
-- **ALWAYS run `pnpm lint:check` and `pnpm build` after writing or modifying any code**
-- This ensures:
-  - Code follows project standards:
-    - TypeScript type safety (no `any` types)
-    - ESLint rules (unused variables, naming conventions)
-    - Prettier formatting (consistent code style)
-  - Code compiles successfully:
-    - TypeScript compilation passes
-    - Import paths are correct (requires `.js` extensions for relative imports)
-    - No type errors
-- If lint check fails, use `pnpm lint:fix` to auto-fix issues where possible
-- If build fails, fix compilation errors (missing imports, type errors, etc.)
-- Manually fix any remaining errors before considering the task complete
-- Never commit or submit code that doesn't pass both `pnpm lint:check` and `pnpm build`
-
-### Error Handling
-
-- If you encounter missing environment variables, prompt the user to fill them
-- Don't mock missing environment variables or external services
-- Use structured retry strategy for failures:
-  - First attempt: Debug and fix the immediate issue
-  - Second attempt: Try alternative approach if first fails
-  - Third attempt: Document issue and escalate to user
-- Document recurring issues in code comments for future reference
-
-### Problem-Solving Strategy
-
-- It's good that you try a couple of times using your internal intelligence, but after you fail a couple of times you should search online for answers
-
 ### TypeScript Configuration
 
 - Target: ES2022 with NodeNext module resolution
@@ -166,12 +17,133 @@ Required environment variables:
 - Source maps for debugging
 - Use `tsx` for development execution (already configured in dev scripts)
 
-### Git Commit Guidelines
+### Testing Approach
 
-- Follow conventional commit format (e.g., `feat:`, `fix:`, `docs:`)
-- **DO NOT add Claude Code attribution footer** to commits
-- **DO NOT include** "🤖 Generated with Claude Code" or "Co-Authored-By: Claude" lines
-- Keep commit messages clean and professional without AI attribution
+- Unit tests mirror source directory structure
+- Use Vitest for testing framework (migrating from Mocha)
+- Follow Test-Driven Development (TDD) practices
+- For detailed testing guidelines, see `docs/testing-strategy.md` and the TDD agents
+
+### Working with Test Infrastructure and Code
+
+When modifying test infrastructure (MSW handlers, test utilities, mock data):
+
+- **ALWAYS read** `.claude/agents/tdd-test-writer.md` FIRST for requirements and patterns
+- This includes creating new handlers, updating existing ones, or adding mock utilities
+
+When implementing or modifying code (whether making tests pass or any other changes):
+
+- **ALWAYS read** `.claude/agents/test-driven-coder.md` FIRST for implementation patterns
+
+### Environment Configuration
+
+- Copy `.env.example` to `.env` for local development
+- Required: API keys for providers (Dune, Birdeye, etc.)
+- Chain configurations in environment variables
+- **Node.js native environment variable loading** - we do NOT use the `dotenv` package
+  - Node.js 20.6+ supports native `.env` file loading via the `--env-file` flag
+  - Integration and e2e test scripts use `tsx --env-file=.env.test` to load test environment variables
+  - See `package.json` scripts: `test:int`, `test:e2e`, and `test:record-mocks`
+  - No need to manually call `dotenv/config` or import `dotenv`
+
+### Docker Development
+
+- `compose.local.yaml` for local development with Memgraph
+- `compose-tests.yaml` for test environment
+- `compose.yaml` for production deployment
+
+### Managing Commands, Subagents, and Rules
+
+**Source of truth**: `.rulesync/` directory - never edit generated `.claude/` or `.cursor/` files
+
+**Workflow**:
+
+1. Create/edit files in `.rulesync/{commands,subagents,rules}/`
+2. Run `pnpm sync:rules` to generate to `.claude/` and `.cursor/`
+
+**Frontmatter formats**:
+
+Commands (`.rulesync/commands/*.md`):
+
+```yaml
+---
+description: 'Brief description'
+targets: ['*']
+allowed-tools: ['Bash', 'Read', 'Write', 'Edit', 'Grep', 'Glob', 'Task']
+argument-hint: '(optional) argument hint'
+---
+```
+
+Subagents (`.rulesync/subagents/*.md`):
+
+```yaml
+---
+name: agent-name
+targets: ['*']
+description: When to use this agent
+claudecode:
+  model: sonnet # or opus
+  color: green
+---
+```
+
+Rules (`.rulesync/rules/*.md`):
+
+```yaml
+---
+root: true # for root.md only
+targets: ['*']
+description: 'Rule description'
+globs: ['**/*']
+---
+```
+
+**Config**: `rulesync.jsonc` controls targets (cursor, claudecode) and features (rules, commands, subagents)
+
+## Code Quality Standards
+
+### General Best Practices
+
+- Never use `--force` flags (e.g., `git push --force`) without explicit approval
+- Don't wrap code in try/catch blocks only to add context - propagate errors directly
+- Avoid trivial comments that merely restate the next line of code
+- Never redefine existing interfaces - always import and reuse
+- Never produce mocks instead of real implementations
+- **NEVER use `any` type** - use proper types, `unknown`, or type assertions with `as`
+- Never use `.passthrough()` with Zod schemas
+
+### Refactoring and Breaking Changes
+
+**CRITICAL: NEVER maintain backwards compatibility. This is an internal codebase, not a public library.**
+
+When refactoring:
+- ✅ Update ALL call sites immediately
+- ✅ Make breaking changes directly
+- ❌ NO compatibility aliases, re-exports, or type aliases (e.g., `type OldName = NewName`)
+- ❌ NO deprecation warnings or transition periods
+- ❌ NO keeping old names/paths alongside new ones
+
+```typescript
+// ❌ WRONG
+export const newName = () => { /* ... */ };
+export const oldName = newName; // NO!
+
+// ✅ CORRECT - rename and update all call sites
+export const newName = () => { /* ... */ };
+```
+
+### Schema Validation (Zod)
+
+- Always validate external API inputs/outputs at application boundaries (adapters/clients in `src/`) using `zod`.
+- Do not run schema validation in tests' MSW handlers or mock loaders; handlers must replay recorded responses unmodified.
+- Optional: run mock drift/shape checks in CI or as a separate developer command, not during test runtime.
+- Prefer a single `zod` major version across the workspace to avoid version conflicts.
+
+### Decision Documentation
+
+- Document significant architectural and implementation decisions in `/docs/rationales.md`
+- **User approval required**: Always ask user before adding entries to rationales.md
+- For detailed guidelines on what to document, see the Documentation Agent
 
 ### Pull Request Workflow
 
@@ -181,65 +153,186 @@ Required environment variables:
 - Keep PRs focused on a single feature or fix
 - Update PR description with summary and test plan before marking ready for review
 
+### Error Handling
 
-## DeFi Domain Terminology
+- Don't mock missing environment variables or external services - prompt user to fill them instead
+- Follow the troubleshooting strategy below for all failures
+- Document recurring issues in code comments for future reference
 
-### Consistent Language
+### Troubleshooting Strategy
 
-When working with this codebase, use these consistent terms across all documentation, code, and tests:
+**Important**: Never use sub-agents for troubleshooting - handle issues directly. The agent instructions below are also mandatory reading for their respective domains:
 
-- **Swap**: Token exchange operations
-- **Liquidity**: Providing or removing liquidity from pools
-- **Slippage**: Price movement tolerance during execution
-- **Gas**: Transaction fees on blockchain networks
-- **Bridge**: Cross-chain token transfers
+- **For test troubleshooting**: Read `.claude/agents/tdd-test-writer.md` for guidance on test infrastructure, MSW handlers, mock strategy, and testing patterns
+- **For code troubleshooting**: Read `.claude/agents/test-driven-coder.md` for guidance on implementation patterns, TDD workflow, and code requirements
 
-### Common Scenario Categories
+**Three-Attempt Rule**:
 
-When creating tests, documentation, or handling errors, consider these standard categories:
+1. **First attempt**: Debug and fix the immediate issue (document in scratchpad)
+2. **Second attempt**: Try alternative approach if first fails (update scratchpad with learnings)
+3. **Third attempt**: Search online for answers, then document findings and escalate to user if still blocked
 
-- **Token Operations**
-- **DeFi Operations**
-- **Cross-chain Operations**
-- **Common Error Scenarios**
+**Scratchpad Documentation**: The scratchpad (`.vibecode/<BRANCH>/scratchpad.md`) is your active thinking space for tracking all evidence, assumptions, and attempts.
 
-## Rationales.md Management
+**Setup**: Get branch with `git branch --show-current`, then either:
 
-**IMPORTANT**: Architectural decisions must be actively managed and documented.
+- Create new scratchpad at `.vibecode/<BRANCH>/scratchpad.md` if it doesn't exist
+- Update existing scratchpad if already present
+- Replace slashes with dashes: `add/graph-v2` → `.vibecode/add-graph-v2/scratchpad.md`
 
-- Document all significant architectural and implementation decisions in `development/rationales.md`
-- **User approval required**: Always ask user before adding entries to rationales.md
-- Use chronological entries with this format:
+**When to update**:
 
-  ```markdown
-  ## [ISO 8601 DateTime] - [Decision Title]
+- Before each attempt at solving a problem
+- After each attempt with results and learnings
+- When discovering patterns, API contracts, or assumptions
+- When collecting evidence from logs, tests, or code
 
-  - **What**: The decision made
-  - **Why**: Rationale and requirements driving it
-  - **Alternatives**: Other options considered and why rejected
-  - **Trade-offs**: Pros/cons of the chosen approach
-  ```
+**Scratchpad Template**:
 
-- **Include** decisions about:
-  - Technology/library selections (e.g., MSW vs Nock, Zod for validation)
-  - Architectural patterns (e.g., plugin system design, testing strategies)
-  - Data flow and state management approaches
-  - API design choices and contracts
-  - Performance optimizations that affect code structure
-  - Security implementations
-- **Exclude** decisions about:
-  - Task ordering or development sequencing
-  - Team processes or workflows
-  - Documentation structure (unless it affects code organization)
-  - Temporary implementation details
-  - Style preferences without technical impact
-- Not every decision needs documentation - only those that future developers need to understand the codebase
+```markdown
+# Troubleshooting: [Issue/Feature Name]
+
+Branch: [current] | Updated: [timestamp]
+
+## Current Focus
+
+Working on: [specific problem/test]
+Approach: [current attempt]
+
+## Evidence Collected
+
+- [Facts discovered from code/tests/logs]
+- [API responses, error messages]
+- [Patterns observed in similar code]
+
+## Assumptions
+
+- [What I'm assuming about expected behavior]
+- [Hypotheses about root causes]
+
+## Attempts Log
+
+[timestamp] Attempt 1: [what tried] → [result]
+[timestamp] Attempt 2: [what tried] → [result]
+[timestamp] Attempt 3: [what tried] → [result]
+
+## Discovered Patterns
+
+- [API contracts, conventions, requirements]
+
+## Blockers/Questions
+
+- [Issues needing user input or clarification]
+
+## Resolution (when solved)
+
+### Root Cause
+
+[What actually caused the issue]
+
+### Solution
+
+[What fixed it and why]
+
+### Learnings
+
+[Key insights for future reference]
+```
+
+### Debugging Tests
+
+- **Console logs are suppressed during tests by default**. To see console.log/console.error output:
+  - Run tests with `DEBUG_TESTS=1` environment variable: `DEBUG_TESTS=1 pnpm test:int`
+  - This is essential when debugging failing tests to see adapter logs and error messages
+  - The suppression is configured in `tests/setup/vitest.setup.ts`
+- **View mock file contents**: Use `pnpm view:mock <service> <mock-name>` to decode and display mock data
+  - Example: `pnpm view:mock squid squid-route-1-137-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48-0x2791bca1f2de4661ed88a30c99a7a9449aa84174`
+  - The service parameter is the provider name (e.g., squid, dune, birdeye)
+  - The mock-name is the filename without the .json extension
+  - This utility decodes the base64-encoded raw response body and displays it in a readable format
+
+### Mock Recording
+
+- **Record API mocks**: Use `pnpm test:record-mocks` to record real API responses for integration tests
+  - Records all provider API responses to `tests/mocks/data/`
+  - Requires API keys in `.env` (see `.env.example`)
+  - For detailed mock recording instructions, see the TDD test writer agent
+
+### Code Quality Validation
+
+- **ALWAYS run `pnpm lint` and `pnpm build` after writing or modifying any code**
+- This ensures:
+  - Code follows project standards:
+    - TypeScript type safety
+    - ESLint rules (unused variables, naming conventions)
+    - Prettier formatting (consistent code style)
+  - Code compiles successfully:
+    - TypeScript compilation passes
+    - Import paths are correct (requires `.js` extensions for relative imports)
+    - No type errors
+- If lint check fails, use `pnpm lint:fix` to auto-fix issues where possible
+- If build fails, fix compilation errors (missing imports, type errors, etc.)
+- Manually fix any remaining errors before considering the task complete
+- Never commit or submit code that doesn't pass both `pnpm lint` and `pnpm build`
+
+### Git Commit Guidelines
+
+- Follow Angular commit message conventions (as detailed in the create-pr command)
+- **DO NOT add Claude Code attribution** to commits (no "🤖 Generated with Claude Code" or "Co-Authored-By: Claude")
+- Keep commit messages clean and professional
 
 ## Important Documentation
 
 - `README.md` - Setup instructions and project overview
-- `CONTRIBUTIONS.md` - Contribution guidelines
-- `development/rationales.md` - Centralized architectural decision log
-- `typescript/lib/arbitrum-vibekit-core/README.md` - Core framework documentation
-- `typescript/templates/README.md` - V2 agent templates guide
+- `docs/rationales.md` - Architectural and implementation decision log
 
+## Common Development Commands
+
+### Building and Running
+
+- `pnpm build` - Build TypeScript to JavaScript
+- `pnpm dev` - Run in development mode with hot reloading
+- `pnpm start` - Run the built application
+- `pnpm clean` - Remove node_modules
+
+### Testing
+
+- `pnpm test` - Run all tests (excluding e2e tests)
+- `pnpm test:unit` - Run unit tests only (\*.unit.test.ts)
+- `pnpm test:int` - Run integration tests only (\*.int.test.ts)
+- `pnpm test:e2e` - Run end-to-end tests (\*.e2e.test.ts)
+- `pnpm test:ci` - Run tests for CI/CD (unit + integration)
+- `pnpm test:watch` - Run tests in watch mode
+- `pnpm test:coverage` - Run tests with coverage report
+- `pnpm test:mocha` - Run existing Mocha tests
+- `pnpm test:record-mocks` - Record real API responses for integration test mocks
+
+**Running Specific Tests**:
+
+```bash
+# Run a single test file
+pnpm test:int tests/parallel-workflow-dispatch.int.test.ts
+
+# Run multiple files matching a pattern (shell glob)
+pnpm test:int tests/*workflow*.int.test.ts
+
+# Run files in a subdirectory matching a pattern
+pnpm test:int tests/integration/*a2a*.int.test.ts
+
+# Run specific test(s) by name within a file
+pnpm test:int tests/file.int.test.ts -t "test name pattern"
+
+# Combine file glob with test name filter
+pnpm test:int tests/*workflow*.int.test.ts -t "should handle pause"
+```
+
+**Note**: We are migrating from Mocha to Vitest. All new tests should be written for Vitest. The project follows Test-Driven Development principles - see the TDD agents and `docs/testing-strategy.md` for detailed testing guidelines.
+
+### Code Quality
+
+- `pnpm lint` - Check code formatting and linting
+- `pnpm lint:fix` - Automatically fix formatting and linting issues
+
+### Database Management
+
+- `pnpm wipe:graph` - Clear the Memgraph database

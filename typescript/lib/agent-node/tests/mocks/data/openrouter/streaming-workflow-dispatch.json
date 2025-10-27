@@ -1,0 +1,64 @@
+{
+  "metadata": {
+    "service": "openrouter",
+    "endpoint": "/api/v1/chat/completions",
+    "method": "POST",
+    "recordedAt": "2025-10-17T22:10:58.573Z"
+  },
+  "request": {
+    "headers": {
+      "Authorization": "***"
+    },
+    "body": {
+      "model": "openai/gpt-4o-mini",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are an AI agent that can dispatch workflows. Use the dispatch_workflow_* tools to start workflows when requested."
+        },
+        {
+          "role": "user",
+          "content": "Execute USDai strategy workflow"
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "dispatch_workflow_usdai_points_trading_strateg",
+            "description": "Dispatch the usdai-points-trading-strateg workflow",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "params": {
+                  "type": "object",
+                  "description": "Optional parameters for the workflow"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto",
+      "stream": true
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 17 Oct 2025 22:10:58 GMT",
+      "content-type": "text/event-stream",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "cf-ray": "990320fc4ac8da48-EWR",
+      "access-control-allow-origin": "*",
+      "cache-control": "no-cache",
+      "vary": "Accept-Encoding",
+      "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+      "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "server": "cloudflare"
+    },
+    "rawBody": "OiBPUEVOUk9VVEVSIFBST0NFU1NJTkcKCjogT1BFTlJPVVRFUiBQUk9DRVNTSU5HCgo6IE9QRU5ST1VURVIgUFJPQ0VTU0lORwoKOiBPUEVOUk9VVEVSIFBST0NFU1NJTkcKCjogT1BFTlJPVVRFUiBQUk9DRVNTSU5HCgpkYXRhOiB7ImlkIjoiZ2VuLTE3NjA3MzkwNTYtNlBkN21xMUVXSW5QRmJaN3I5NmoiLCJwcm92aWRlciI6Ik9wZW5BSSIsIm1vZGVsIjoib3BlbmFpL2dwdC00by1taW5pIiwib2JqZWN0IjoiY2hhdC5jb21wbGV0aW9uLmNodW5rIiwiY3JlYXRlZCI6MTc2MDczOTA1NiwiY2hvaWNlcyI6W3siaW5kZXgiOjAsImRlbHRhIjp7InJvbGUiOiJhc3Npc3RhbnQiLCJjb250ZW50IjpudWxsLCJ0b29sX2NhbGxzIjpbeyJpbmRleCI6MCwiaWQiOiJjYWxsX0E3eGl5TWxWSGFQZE9qR3FYb3U1NHRldiIsInR5cGUiOiJmdW5jdGlvbiIsImZ1bmN0aW9uIjp7Im5hbWUiOiJkaXNwYXRjaF93b3JrZmxvd191c2RhaV9wb2ludHNfdHJhZGluZ19zdHJhdGVnIiwiYXJndW1lbnRzIjoiIn19XX0sImZpbmlzaF9yZWFzb24iOm51bGwsIm5hdGl2ZV9maW5pc2hfcmVhc29uIjpudWxsLCJsb2dwcm9icyI6bnVsbH1dLCJzeXN0ZW1fZmluZ2VycHJpbnQiOiJmcF81NjBhZjZlNTU5In0KCmRhdGE6IHsiaWQiOiJnZW4tMTc2MDczOTA1Ni02UGQ3bXExRVdJblBGYlo3cjk2aiIsInByb3ZpZGVyIjoiT3BlbkFJIiwibW9kZWwiOiJvcGVuYWkvZ3B0LTRvLW1pbmkiLCJvYmplY3QiOiJjaGF0LmNvbXBsZXRpb24uY2h1bmsiLCJjcmVhdGVkIjoxNzYwNzM5MDU2LCJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsicm9sZSI6ImFzc2lzdGFudCIsImNvbnRlbnQiOm51bGwsInRvb2xfY2FsbHMiOlt7ImluZGV4IjowLCJmdW5jdGlvbiI6eyJhcmd1bWVudHMiOiJ7fSJ9LCJ0eXBlIjoiZnVuY3Rpb24ifV19LCJmaW5pc2hfcmVhc29uIjpudWxsLCJuYXRpdmVfZmluaXNoX3JlYXNvbiI6bnVsbCwibG9ncHJvYnMiOm51bGx9XSwic3lzdGVtX2ZpbmdlcnByaW50IjoiZnBfNTYwYWY2ZTU1OSJ9CgpkYXRhOiB7ImlkIjoiZ2VuLTE3NjA3MzkwNTYtNlBkN21xMUVXSW5QRmJaN3I5NmoiLCJwcm92aWRlciI6Ik9wZW5BSSIsIm1vZGVsIjoib3BlbmFpL2dwdC00by1taW5pIiwib2JqZWN0IjoiY2hhdC5jb21wbGV0aW9uLmNodW5rIiwiY3JlYXRlZCI6MTc2MDczOTA1NiwiY2hvaWNlcyI6W3siaW5kZXgiOjAsImRlbHRhIjp7InJvbGUiOiJhc3Npc3RhbnQiLCJjb250ZW50IjoiIn0sImZpbmlzaF9yZWFzb24iOiJ0b29sX2NhbGxzIiwibmF0aXZlX2ZpbmlzaF9yZWFzb24iOiJ0b29sX2NhbGxzIiwibG9ncHJvYnMiOm51bGx9XSwic3lzdGVtX2ZpbmdlcnByaW50IjoiZnBfNTYwYWY2ZTU1OSJ9CgpkYXRhOiB7ImlkIjoiZ2VuLTE3NjA3MzkwNTYtNlBkN21xMUVXSW5QRmJaN3I5NmoiLCJwcm92aWRlciI6Ik9wZW5BSSIsIm1vZGVsIjoib3BlbmFpL2dwdC00by1taW5pIiwib2JqZWN0IjoiY2hhdC5jb21wbGV0aW9uLmNodW5rIiwiY3JlYXRlZCI6MTc2MDczOTA1NiwiY2hvaWNlcyI6W3siaW5kZXgiOjAsImRlbHRhIjp7InJvbGUiOiJhc3Npc3RhbnQiLCJjb250ZW50IjoiIn0sImZpbmlzaF9yZWFzb24iOm51bGwsIm5hdGl2ZV9maW5pc2hfcmVhc29uIjpudWxsLCJsb2dwcm9icyI6bnVsbH1dLCJ1c2FnZSI6eyJwcm9tcHRfdG9rZW5zIjo4MywiY29tcGxldGlvbl90b2tlbnMiOjE3LCJ0b3RhbF90b2tlbnMiOjEwMCwicHJvbXB0X3Rva2Vuc19kZXRhaWxzIjp7ImNhY2hlZF90b2tlbnMiOjAsImF1ZGlvX3Rva2VucyI6MH0sImNvbXBsZXRpb25fdG9rZW5zX2RldGFpbHMiOnsicmVhc29uaW5nX3Rva2VucyI6MH19fQoKZGF0YTogW0RPTkVdCgo="
+  }
+}

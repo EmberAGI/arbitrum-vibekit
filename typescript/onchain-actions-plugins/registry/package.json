@@ -21,8 +21,10 @@
     "@aave/math-utils": "^1.32.1",
     "@bgd-labs/aave-address-book": "^4.10.0",
     "@gmx-io/sdk": "^1.2.1",
-    "ethers": "^5.7.2",
-    "zod": "catalog:"
+    "ethers": "^5.7.2"
+  },
+  "peerDependencies": {
+    "zod": "^3.0.0 || ^4.0.0"
   },
   "devDependencies": {
     "tsup": "^8.0.0"
@@ -40,7 +42,7 @@
   "release": {
     "branches": [
       {
-        "name": "add/plugins",
+        "name": "feat/liquidity-schemas",
         "channel": "alpha",
         "prerelease": "alpha"
       },

@@ -1,0 +1,52 @@
+{
+  "metadata": {
+    "service": "openai",
+    "endpoint": "/v1/responses",
+    "method": "POST",
+    "recordedAt": "2025-10-17T22:11:15.665Z"
+  },
+  "request": {
+    "headers": {
+      "Authorization": "***"
+    },
+    "body": {
+      "model": "gpt-4o-mini",
+      "input": [
+        {
+          "role": "user",
+          "content": "Test default model"
+        }
+      ],
+      "stream": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 17 Oct 2025 22:11:15 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "x-ratelimit-limit-requests": "5000",
+      "x-ratelimit-limit-tokens": "4000000",
+      "x-ratelimit-remaining-requests": "4999",
+      "x-ratelimit-remaining-tokens": "3999971",
+      "x-ratelimit-reset-requests": "12ms",
+      "x-ratelimit-reset-tokens": "0s",
+      "openai-version": "2020-10-01",
+      "openai-organization": "user-czwnm8soq9cbtddqxyizzpoh",
+      "openai-project": "proj_mVtRGfnKkS8u5RP2AKKTlmH2",
+      "x-request-id": "req_ff572ea0078f439a99f7faff89b0e808",
+      "openai-processing-ms": "1552",
+      "x-envoy-upstream-service-time": "1560",
+      "cf-cache-status": "DYNAMIC",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+      "x-content-type-options": "nosniff",
+      "server": "cloudflare",
+      "cf-ray": "9903216c9bd2a304-YUL",
+      "content-encoding": "br",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "rawBody": "MdgZACD76j73v0yqSuQAuUATDRv5KYkCDSjPlnuXu+v/v59LfSEuhHr/3p2YRE0m90+siVi0tupApNIJjUzlYGuKGZK21zngF5BnU01/4O0FAOceLaDncDiT9FVm8qJIq84MRWZMWQ9pO5g0NaWpk6aua0rSLOv6Oh8oHwy+uACgtH+5U7SAtspQxuYw/wT3jhQtJFVpqqwxVd5OKChpDMxEeX8VGJ6bhhYGWgOL2Bzy3hEtWP4rADzoZI8WcIiFHy8A/xtcZe/Fo4U9risCSXKlW5ytTtDA2dIHZ9ll/7HRtZOoR1SnsvD3AhVZXUcr5Fc36XlFCzge+jKXl9u8zy9Tk+YvTfUyqV3lsH1o4adLnGPYJeNuYTwFzTDkHzZFYUzR1tSkQz/U3QFIPj0Pfh/gEGhkYVGhBwWywh8zjGccH5oFxsXXigBKJImPBrTw87fCeauMh5f2A2BPLeBXhcC8Bdga6+FT4mPPMAH+AxVQDgoE439kEOyHr+CLxLWHUyIMHoqATTxDZz8FaiUqXE2kMPxqHVrX8ydUH1ZD4D2Spatl2NlrP/fwdJZR3TTvDEQzvoBZ9220bTf6xUMJIvtx/aZrfQU/WGFjWHa5gkmu4Ct0tAOFMAeFU+I9DJTif8gwdj70skada2KnXV+G/xfFS/AgT+vKaz7a1UfqsCqkdOyUOc4jOf50eNkOdR11E7uFz1wmG8LlE49sLpcmfDYAhrht5FsjD6MDDaynW9twcJiZk7g+ot6pTIG9KkeFBRXPjqQqbwd70ihyJK/MCYkjsm5vEL/RPZqwkKmgqPhvdfo/9q2EWU+azPVz3OoHx2vfJHOHEKaogkKSv/uocrisVhlBzWGnz8e94wR4GpoDtWuxk0V2ohON815rRiTmhYwWMHQVuq+qb1xr3M1bwlrmjbAgNmYAAcgDT/6NBaJgKpowNomhx9/bWKknJbRw+//y3wAD"
+  }
+}

@@ -1,6 +1,7 @@
-import { type DataStreamWriter, tool } from 'ai';
+import { tool } from 'ai';
 import type { Session } from 'next-auth';
 import { z } from 'zod';
+import type { DataStreamWriter } from '@/lib/ai/types';
 import { getDocumentById } from '@/lib/db/queries';
 import { documentHandlersByArtifactKind } from '@/lib/artifacts/server';
 
@@ -9,16 +10,19 @@ interface UpdateDocumentProps {
   dataStream: DataStreamWriter;
 }
 
-export const updateDocument = ({ session, dataStream }: UpdateDocumentProps) =>
-  tool({
+export const updateDocument = ({ session, dataStream }: UpdateDocumentProps) => {
+  const parametersSchema = z.object({
+    id: z.string().describe('The ID of the document to update'),
+    description: z
+      .string()
+      .describe('The description of changes that need to be made'),
+  });
+
+  return tool({
     description: 'Update a document with the given description.',
-    parameters: z.object({
-      id: z.string().describe('The ID of the document to update'),
-      description: z
-        .string()
-        .describe('The description of changes that need to be made'),
-    }),
-    execute: async ({ id, description }) => {
+    parameters: parametersSchema,
+    // @ts-ignore - AI SDK v5 tool types have compatibility issues with parameter inference
+    execute: async ({ id, description }: any) => {
       const document = await getDocumentById({ id });
 
       if (!document) {
@@ -57,4 +61,5 @@ export const updateDocument = ({ session, dataStream }: UpdateDocumentProps) =>
         content: 'The document has been updated successfully.',
       };
     },
-  });
+  }) as any;
+};

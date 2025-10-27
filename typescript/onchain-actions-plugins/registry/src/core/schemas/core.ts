@@ -49,7 +49,7 @@ export type TransactionPlan = z.infer<typeof TransactionPlanSchema>;
 export const TransactionPlanErrorSchema = z.object({
   code: z.string(),
   message: z.string(),
-  details: z.record(z.string()),
+  details: z.record(z.string(), z.string()),
 });
 export type TransactionPlanError = z.infer<typeof TransactionPlanErrorSchema>;
 

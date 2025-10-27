@@ -1,0 +1,57 @@
+{
+  "metadata": {
+    "service": "openrouter",
+    "endpoint": "/api/v1/chat/completions",
+    "method": "POST",
+    "recordedAt": "2025-10-19T00:00:00.000Z"
+  },
+  "request": {
+    "headers": {
+      "Authorization": "***"
+    },
+    "body": {
+      "model": "openai/gpt-4o-mini",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are an AI agent that can dispatch workflows. Use the dispatch_workflow_* tools to start workflows when requested."
+        },
+        {
+          "role": "user",
+          "content": "Execute USDai strategy workflow"
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "dispatch_workflow_usdai_points_trading_strateg",
+            "description": "Dispatch the usdai-points-trading-strateg workflow",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "params": {
+                  "type": "object",
+                  "description": "Optional parameters for the workflow"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto",
+      "stream": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Sat, 19 Oct 2025 00:00:00 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "access-control-allow-origin": "*"
+    },
+    "rawBody": "H4sIAAAAAAAAA+1UXW/aMBT9K5e3Tp0hBAhtJZ4gpkITSN2kMVVIrnOJrBw7sp1SlPLfd+3wUdh4aKftpe/JOedenWsbvhMqYPbdbHf13c1uO79/MDertpwu/rRb26c5fcrn33egkVD54khEQp/C+Nd3EHQiiwDJgfLWvG9D2Rzkfa86TRAk15+kZ0iu3dzc2jRE0+YwcPDQcSnrckzuvgVYW8CGMuQ/Gi6wMYUXC+l7twgM73heFSI90kMihOAUqNPGJQhYLf6Z5GfdNL5pGskShDOdZY+QA1L+CBL+E8bR/q1KBrwRP9cBgURDnow/hfxtbb8++hS2S6LTx1v2qbA6V/PxGM3e3y+f788ql1a725e/IJBAHqzWQzAv2E5POcPLKmtpEV2krWvfPmdd4/xWOWlY5dx0obWgHPtk9tqR6j+yQxAGzwbyOUPyMrUYx0/j+CyQzxyk32FUkuTRr+9so2qu3LQZzdY3EOiPYNOUgB0qJW7JV8i7cgFz/Kwjf7FKKItOY/mmxC/BpUK69mlgoK21dEdNN4To3jE4c+YP1pSjV/lOhsb+P66zHPLk2quvAAAA//8DAJwEWgggBgAA"
+  }
+}

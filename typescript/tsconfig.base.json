@@ -1,42 +1,43 @@
 {
   "compilerOptions": {
     /* Base Options */
-    "esModuleInterop": true,
-    "skipLibCheck": true,
     "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
     "allowJs": true,
     "resolveJsonModule": true,
     "moduleDetection": "force",
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "composite": true,
-    "declaration": true,
-    "declarationMap": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
 
     /* Strictness */
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
 
-    /* If NOT transpiling with TypeScript */
-    // "moduleResolution": "Bundler",
-    // "module": "ESNext",
-    // "noEmit": true,
-
-    /* If transpiling with TypeScript */
-    "module": "NodeNext",
+    /* Build Options */
+    "incremental": true,
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
     "sourceMap": true,
+
     /* Path resolution */
     "baseUrl": "./",
-    
-    /* Output directories */
-    "outDir": "dist",
 
-    /* Lib */
-    "lib": [
-      "es2022"
-      // "dom", // Uncomment if you need DOM types (e.g., for frontend)
-      // "dom.iterable" // Uncomment if you need DOM iterable types
-    ]
+    /* Output directories */
+    "outDir": "dist"
   }
 }

@@ -1,9 +1,9 @@
-import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
-import type { Task, Message, DataPart } from '@google-a2a/types';
-import { TaskState } from '@google-a2a/types';
+import type { VibkitToolDefinition } from '@emberai/arbitrum-vibekit-core';
+import { parseMcpToolResponsePayload } from '@emberai/arbitrum-vibekit-core';
+import type { Task, Message } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
+import { TaskState } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 import type { LendingAgentContext } from '../agent.js';
-import { GetWalletLendingPositionsSchema, GetWalletLendingPositionsResponseSchema, type LendingPosition } from 'ember-schemas';
+import { GetWalletLendingPositionsSchema, GetWalletLendingPositionsResponseSchema } from '@emberai/arbitrum-vibekit-core/ember-schemas';
 import { createTaskId } from './utils.js';
 
 export const getUserPositionsBase: VibkitToolDefinition<
@@ -14,7 +14,7 @@ export const getUserPositionsBase: VibkitToolDefinition<
   name: 'get-user-positions-base',
   description: 'Get a summary of your current lending and borrowing positions.',
   parameters: GetWalletLendingPositionsSchema,
-  execute: async (args, context) => {
+  execute: async (_args, context) => {
     if (!context.mcpClients?.['ember-mcp-tool-server']) {
       throw new Error('MCP client not available');
     }

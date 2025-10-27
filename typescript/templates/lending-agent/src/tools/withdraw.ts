@@ -1,12 +1,12 @@
-import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
-import type { Task, Message, DataPart } from '@google-a2a/types';
-import { TaskState } from '@google-a2a/types';
+import type { VibkitToolDefinition } from '@emberai/arbitrum-vibekit-core';
+import { parseMcpToolResponsePayload } from '@emberai/arbitrum-vibekit-core';
+import type { Task } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
+import { TaskState } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 import type { LendingAgentContext } from '../agent.js';
-import { BorrowRepaySupplyWithdrawSchema, WithdrawResponseSchema } from 'ember-schemas';
-import type { LendingTransactionArtifact, LendingPreview, TokenInfo } from './types.js';
+import { BorrowRepaySupplyWithdrawSchema, WithdrawResponseSchema } from '@emberai/arbitrum-vibekit-core/ember-schemas';
+import type { LendingPreview, TokenInfo } from './types.js';
 import { createTaskId, findTokenInfo } from './utils.js';
-import type { TransactionPlan } from 'ember-schemas';
+import type { TransactionPlan } from '@emberai/arbitrum-vibekit-core/ember-schemas';
 
 export const withdrawBase: VibkitToolDefinition<
   typeof BorrowRepaySupplyWithdrawSchema,
@@ -79,7 +79,7 @@ export const withdrawBase: VibkitToolDefinition<
           });
 
           // Parse and validate the MCP response
-          const withdrawResp = parseMcpToolResponsePayload(toolResult, WithdrawResponseSchema);
+          const withdrawResp = parseMcpToolResponsePayload(toolResult, WithdrawResponseSchema) as any;
           const validatedTxPlan: TransactionPlan[] = withdrawResp.transactions;
 
           const txPreview: LendingPreview = {

@@ -1,5 +1,5 @@
-import { Agent, getAvailableProviders, createProviderSelector } from 'arbitrum-vibekit-core';
-import type { AgentRuntimeOptions } from 'arbitrum-vibekit-core';
+import { Agent, getAvailableProviders, createProviderSelector } from '@emberai/arbitrum-vibekit-core';
+import type { AgentRuntimeOptions } from '@emberai/arbitrum-vibekit-core';
 import { agentConfig } from './agent.js';
 import { loadTokenMapFromMcp } from './tokenMap.js';
 

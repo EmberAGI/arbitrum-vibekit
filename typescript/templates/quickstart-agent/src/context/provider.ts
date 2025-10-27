@@ -50,7 +50,7 @@ export async function contextProvider(deps: { mcpClients: Record<string, Client>
     loadedAt: new Date(),
     metadata: {
       mcpServersConnected: Object.keys(mcpClients).length,
-      environment: process.env.NODE_ENV || 'development',
+      environment: process.env['NODE_ENV'] || 'development',
     },
   };
 

@@ -1,9 +1,8 @@
 ---
-description: "Review and commit changes in logical batches following Angular commit conventions"
-allowed-tools: ["Bash", "Read", "Task"]
-argument-hint: "(optional) specific file pattern or directory to focus on"
+description: >-
+  Review and commit changes in logical batches following Angular commit
+  conventions
 ---
-
 # Batch Commit Changes - Angular Convention
 
 Review all current uncommitted changes and commit them in logical, atomic batches following [Angular's commit message conventions](https://github.com/angular/angular/blob/main/contributing-docs/commit-message-guidelines.md).
@@ -19,6 +18,7 @@ Review all current uncommitted changes and commit them in logical, atomic batche
 ```
 
 ### Allowed Types
+
 - **build**: Changes affecting build system or external dependencies (e.g., pnpm, docker, tsconfig)
 - **ci**: Changes to CI configuration files and scripts
 - **docs**: Documentation only changes
@@ -30,6 +30,7 @@ Review all current uncommitted changes and commit them in logical, atomic batche
 - **chore**: Other changes that don't modify src or test files
 
 ### Scope Guidelines
+
 - Use the affected module/component name that best describes the area of change
 - Scope should be noun describing the section of codebase affected
 - For changes affecting multiple areas, omit the scope
@@ -50,12 +51,14 @@ Review all current uncommitted changes and commit them in logical, atomic batche
 - Keep scopes consistent once established (check `git log --oneline` for patterns)
 
 ### Subject Rules
+
 - Use imperative, present tense: "change" not "changed" nor "changes"
 - Don't capitalize the first letter
 - No period (.) at the end
 - Maximum 50 characters
 
 ### Body Guidelines
+
 - Use imperative, present tense
 - Explain the motivation for the change
 - Contrast this with previous behavior

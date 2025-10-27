@@ -16,16 +16,19 @@ const tokenMap: Record<string, string> = {
   OP: 'optimism', // Optimism
 };
 
+const parametersSchema = z.object({
+  token: z.string().describe('The symbol of the token, e.g., BTC, ETH.'),
+  days: z
+    .number()
+    .describe('The number of days of historical data to chart.'),
+});
+
 export const generateChart = tool({
   description:
     'Generate a price chart for a cryptocurrency over a specified number of days.',
-  parameters: z.object({
-    token: z.string().describe('The symbol of the token, e.g., BTC, ETH.'),
-    days: z
-      .number()
-      .describe('The number of days of historical data to chart.'),
-  }),
-  execute: async ({ token, days }: { token: string; days: number }) => {
+  parameters: parametersSchema,
+  // @ts-ignore - AI SDK v5 tool types have compatibility issues with parameter inference
+  execute: async ({ token, days }: any) => {
     const tokenId = tokenMap[token.toUpperCase()];
     if (!tokenId) {
       return { error: `Token "${token}" is not supported.` };
@@ -52,4 +55,4 @@ export const generateChart = tool({
       return { error: 'Failed to fetch chart data' }; // Return an appropriate error response
     }
   },
-});
+}) as any;

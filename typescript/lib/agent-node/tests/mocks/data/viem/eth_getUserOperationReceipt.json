@@ -1,0 +1,25 @@
+{
+  "metadata": {
+    "service": "viem",
+    "endpoint": "/",
+    "method": "POST",
+    "recordedAt": "2025-10-19T01:00:00.000Z"
+  },
+  "request": {
+    "headers": {},
+    "body": {
+      "jsonrpc": "2.0",
+      "method": "eth_getUserOperationReceipt",
+      "params": ["0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef12345678"],
+      "id": 1
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Sat, 19 Oct 2025 01:00:00 GMT",
+      "content-type": "application/json"
+    },
+    "rawBody": "eyJqc29ucnBjIjoiMi4wIiwiaWQiOjEsInJlc3VsdCI6eyJ1c2VyT3BIYXN0aCI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2NzgiLCJlbnRyeVBvaW50IjoiMHgwMDAwMDAwMDcxNzI3ZGU3ZTBiZmMxN2RjYjQyNjZjNWU3MzQzYWNjZWZmMmYwNTIiLCJzZW5kZXIiOiIweGFiY2RlZjEyMzQ1Njc4OTAiLCJub25jZSI6IjB4MCIsInBheW1hc3RlciI6IjB4MCIsImFjdHVhbEdhc0Nvc3QiOiIweDEwMDAwMDAwMDAwMDAwMCIsImFjdHVhbEdhc1VzZWQiOiIweDEwMDAwIiwic3VjY2VzcyI6dHJ1ZSwicmVjZWlwdCI6eyJ0cmFuc2FjdGlvbkhhc2giOiIweDEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTAiLCJ0cmFuc2FjdGlvbkluZGV4IjoiMHgxIiwiYmxvY2tIYXNoIjoiMHg5ODc2NTQzMjEwYWJjZGVmOTg3NjU0MzIxMGFiY2RlZjk4NzY1NDMyMTBhYmNkZWY5ODc2NTQzMjEwIiwiYmxvY2tOdW1iZXIiOiIweDEwMDAwMCIsImZyb20iOiIweGFiY2RlZjEyMzQ1Njc4OTAiLCJ0byI6IjB4MTIzNDU2Nzg5MGFiY2RlZiIsImN1bXVsYXRpdmVHYXNVc2VkIjoiMHgxMDAwMCIsImdhc1VzZWQiOiIweDEwMDAwIiwibG9ncyI6W10sImxvZ3NCbG9vbSI6IjB4MCIsInN0YXR1cyI6IjB4MSIsImVmZmVjdGl2ZUdhc1ByaWNlIjoiMHgzYjlhY2EwMCJ9LCJsb2dzIjpbXX19"
+  }
+}

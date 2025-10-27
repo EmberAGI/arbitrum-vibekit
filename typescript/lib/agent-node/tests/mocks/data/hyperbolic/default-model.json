@@ -1,0 +1,38 @@
+{
+  "metadata": {
+    "service": "hyperbolic",
+    "endpoint": "/v1/chat/completions",
+    "method": "POST",
+    "recordedAt": "2025-10-17T22:11:35.613Z"
+  },
+  "request": {
+    "headers": {
+      "Authorization": "***"
+    },
+    "body": {
+      "model": "meta-llama/Llama-3.2-3B-Instruct",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Test default model"
+        }
+      ],
+      "stream": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 17 Oct 2025 22:11:35 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "server": "cloudflare",
+      "x-inference-request-id": "565917d2-b2cc-465c-ab0c-350ead34268c",
+      "cf-cache-status": "DYNAMIC",
+      "content-encoding": "gzip",
+      "cf-ray": "990321d4ca156c99-EWR"
+    },
+    "rawBody": "H4sIAAAAAAAA/+1XzW7bRhB+lQF9qNJSrH7iuhLgS1u3NWoHQWO0AqKAXpFDk9Fyl9ldxmYMv3tmdslIkXPIJUAQ5CKKM/PN/wcM76Mqj5aR/nPz3/H/z8ZPa3v3z9l4sZjMZ9P8+GSTo5hvFlEc6c1rzByZZqVwSabrRqKrtCJVZlA4JDfTk18mJ/PFZHEcR7XOUZJ5jU6MpRS1+PmCf8fzZDae/zY+V9aZljwSvtRVhjZavryPKpXjXbSckAO0VtxgtLyPjJb0jIS1lXVCeYxWDhXnc6XBoXXgSoQcC9FKBz54DLcICjEHp2Gr9C3cUupBB51uQRgEgwUaU6kbMkrgbyQRi62uEfBOcJUWdAElwRmTCRXC5VVBSEohOLRQKXjeuVKr5Vqt1dHREUwTuCJTdi7golIoDPyLN4YKo8bBJePY9gLdDxas6DjhUrylFMBWHBpkQJkdKqTvjCBNDiTwqebCiYR9XV9fNz4LSgHO60YbRz3IuJemI3cbI0yFdq0Ko2uwW0nuVeKdphYljZiDVAHoo6RcbmobWbkDVEguDRn1kFDmrsrDQOhMldnBukahUvumpZbnKc1Bm7XqVaqtmw6EBdX4fsJfqNDQnoWCjVA5+eW610o1SXhPLI17NHmyVis4hZ2YH6PpZBLDlHQd6ebwE8zgR1jR82M7tTPksC+48LBcFIumTMvk++LHqnK/DfzfoqO2rlKvjGHl+xZDNwg6L6DQh10drUgZQxBU7/B0kszivsCU9t3h6dNZn83vnmqfXKc6rFOYxumjQYx6D1cc3dezD0gKzmMvVf7TIy7FFqGhCVV+OajILuVXChKwvW4USu5RZ2+FbDnX/VAWGfRo6KPuQ7PYF3loiJJuVKyjSzKGF8EYzth4Cffk52EdPfHbPpBttk+2PzCrfFOuDOJnES0fEI4RXxHJfD696VAWV9VPlhnznWFfgmEf79ABuz45iW+dYvN9ij3D1ghJD3erzfazOKYCRPWQr4hkIbN0yKwHXV48/86yL8yygzU6oNn+BL5ldp0rQJGVfGhSNLs7Pf0NywfpMJ1HVy5sut0cacL7PApzLZG8h2KCjYUGTaFNLVSG0FqWDgttW0qDtpVrhL5G8DUmdHU7rWWaCSn5WH8VRzRFqzly+uEeV62UD3FUUEK2TIMBXenW6YYcSH3TGL2xvR25aIcjn+R141Knt6hIP/+Vwzli5SChLwu++4cPj518Mn14eA8A9nK4yAwAAA=="
+  }
+}

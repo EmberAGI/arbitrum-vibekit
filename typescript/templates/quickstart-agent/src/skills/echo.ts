@@ -4,8 +4,8 @@
  */
 
 import { z } from 'zod';
-import { defineSkill, createSuccessTask, createErrorTask, createArtifact, VibkitError } from 'arbitrum-vibekit-core';
-import type { Task } from '@google-a2a/types';
+import { defineSkill, createSuccessTask, createErrorTask, createArtifact, VibkitError } from '@emberai/arbitrum-vibekit-core';
+import type { Task } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 
 // Input schema
 const EchoInputSchema = z.object({

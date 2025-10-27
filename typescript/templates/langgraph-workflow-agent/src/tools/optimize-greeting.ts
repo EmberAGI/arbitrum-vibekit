@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
-import { createSuccessTask, createErrorTask } from 'arbitrum-vibekit-core';
+import type { VibkitToolDefinition, AgentContext } from '@emberai/arbitrum-vibekit-core';
+import { createSuccessTask, createErrorTask } from '@emberai/arbitrum-vibekit-core';
 import { runGreetingWorkflow } from '../workflow/index.js';
 
 // Input schema for the tool

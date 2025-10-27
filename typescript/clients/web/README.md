@@ -79,13 +79,6 @@ From the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typ
 docker compose up
 ```
 
-> [!NOTE]  
-> If you get a `permission denied error`, try running the above command with `sudo`:
->
-> ```bash
-> sudo docker compose up
-> ```
-
 > [!WARNING]
 > If you previously ran `docker compose up` with an older version of this repository and encounter frontend errors or database-related errors in the `docker service logs`, follow these steps:
 >
@@ -158,7 +151,7 @@ services:
   # liquidity-agent-no-wallet:
   #   build:
   #     context: ./
-  #     dockerfile: examples/liquidity-agent-no-wallet/Dockerfile
+  #     dockerfile: community/liquidity-agent-no-wallet/Dockerfile
   #   container_name: vibekit-liquidity-agent-no-wallet
   #   env_file:
   #     - .env
@@ -169,7 +162,7 @@ services:
   # pendle-agent:
   #   build:
   #     context: ./
-  #     dockerfile: examples/pendle-agent/Dockerfile
+  #     dockerfile: community/pendle-agent/Dockerfile
   #   container_name: vibekit-pendle-agent
   #   env_file:
   #     - .env
@@ -268,5 +261,3 @@ This configuration allows the frontend to dynamically discover, list, and connec
 ## Contributing
 
 We welcome contributions from the community! If you'd like to help improve Vibekit, please check out our [Contribution Guidelines](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md).
-
-To show our appreciation, we have launched an [incentive program](https://docs.google.com/forms/d/e/1FAIpQLSe-GF7UcUOuyEMsgnVpLFrG_W83RAchaPPqOCD83pZaZXskgw/viewform) that rewards [valuable contributions](https://github.com/orgs/EmberAGI/projects/13) to the Vibekit. Checkout our [blog post](https://www.emberai.xyz/blog/introducing-arbitrum-vibekit-and-the-trailblazer-fund-2-0) to learn more!

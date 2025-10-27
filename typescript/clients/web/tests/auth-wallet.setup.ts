@@ -42,7 +42,7 @@ setup('authenticate with improved wallet mock', async ({ page }) => {
       isConnected: () => true,
       selectedAddress: '0x1234567890123456789012345678901234567890',
       chainId: '0xa4b1', // Example: Arbitrum One chain ID
-      request: async ({ method, params }: any) => {
+      request: async ({ method, params: _params }: any) => {
         switch (method) {
           case 'eth_requestAccounts':
           case 'eth_accounts':

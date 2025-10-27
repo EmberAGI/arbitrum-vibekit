@@ -1,0 +1,95 @@
+# Node dependencies
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Diagnostic reports (https://nodejs.org/api/report.html)
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Build outputs
+build/
+dist/
+out/
+.temporary/
+.tmp/
+.temp/
+.cache/
+
+# Framework outputs
+.next/
+.nuxt/
+.svelte-kit/
+.storybook-out/
+.vercel/
+.netlify/
+serverless/
+
+# TypeScript
+*.tsbuildinfo
+
+# Test workspaces
+/config/
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.test.example
+
+# IDE/editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+
+# Tooling caches
+.eslintcache
+.stylelintcache
+.turbo/
+.parcel-cache/
+.sass-cache/
+
+# Node REPL history
+.node_repl_history
+
+# Optional npm cache directory
+.npm/
+
+# PNPM store (local)
+.pnpm-store/
+pnpm-store/
+
+# Yarn integrity file
+.yarn-integrity
+
+# Yarn v2+ (Berry)
+.yarn/*
+!.yarn/releases
+!.yarn/plugins
+!.yarn/sdks
+!.yarn/versions
+
+# Lockfiles (keep tracked)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml

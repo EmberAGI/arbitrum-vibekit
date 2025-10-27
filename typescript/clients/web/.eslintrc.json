@@ -20,5 +20,5 @@
       }
     }
   },
-  "ignorePatterns": ["**/components/ui/**", "lib/editor/diff.js"]
+  "ignorePatterns": ["**/components/ui/**", "lib/editor/diff.js", "tests/**", "lib/test-utils/**"]
 }

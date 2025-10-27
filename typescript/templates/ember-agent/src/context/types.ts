@@ -4,7 +4,7 @@
  */
 
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { LanguageModelV1 } from 'ai';
+import type { LanguageModel } from 'ai';
 import type { Address } from 'viem';
 
 /**
@@ -28,7 +28,7 @@ export interface EmberContext {
   userAddress?: Address;
 
   // AI provider for LLM operations
-  llmModel: LanguageModelV1;
+  llmModel: LanguageModel;
 
   // Environment configuration
   config: {

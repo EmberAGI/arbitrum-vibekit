@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TokenIdentifierSchema, TransactionPlanSchema } from './core.js';
+import { TokenIdentifierSchema, TokenSchema, TransactionPlanSchema } from './core.js';
 
 export const LimitedLiquidityProvisionRangeSchema = z.object({
   minPrice: z.string(),
@@ -25,52 +25,58 @@ export const LiquidityPositionRangeSchema = z.object({
 });
 export type LiquidityPositionRange = z.infer<typeof LiquidityPositionRangeSchema>;
 
+export const LiquiditySuppliedTokenSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  suppliedAmount: z.string(),
+  owedTokens: z.string(),
+});
+export type LiquiditySuppliedToken = z.infer<typeof LiquiditySuppliedTokenSchema>;
+
 export const LiquidityPositionSchema = z.object({
-  tokenId: z.string(),
-  poolAddress: z.string(),
+  poolIdentifier: TokenIdentifierSchema,
   operator: z.string(),
-  token0: TokenIdentifierSchema,
-  token1: TokenIdentifierSchema,
-  tokensOwed0: z.string(),
-  tokensOwed1: z.string(),
-  amount0: z.string(),
-  amount1: z.string(),
-  symbol0: z.string(),
-  symbol1: z.string(),
+  suppliedTokens: z.array(LiquiditySuppliedTokenSchema),
   price: z.string(),
   providerId: z.string(),
   positionRange: LiquidityPositionRangeSchema.optional(),
 });
 export type LiquidityPosition = z.infer<typeof LiquidityPositionSchema>;
 
+export const LiquidityPoolTokens = z.object({
+  tokenUid: TokenIdentifierSchema,
+});
+export type LiquidityPoolTokens = z.infer<typeof LiquidityPoolTokens>;
+
 export const LiquidityPoolSchema = z.object({
-  token0: TokenIdentifierSchema,
-  token1: TokenIdentifierSchema,
-  symbol0: z.string(),
-  symbol1: z.string(),
+  identifier: TokenIdentifierSchema,
+  tokens: z.array(LiquidityPoolTokens),
   price: z.string(),
   providerId: z.string(),
 });
 export type LiquidityPool = z.infer<typeof LiquidityPoolSchema>;
 
+export const LiquidityPayTokensSchema = z.object({
+  token: TokenSchema,
+  supplyAmount: z.bigint(),
+});
+export type LiquidityPayTokens = z.infer<typeof LiquidityPayTokensSchema>;
+
 export const SupplyLiquidityRequestSchema = z.object({
-  token0: TokenIdentifierSchema,
-  token1: TokenIdentifierSchema,
-  amount0: z.bigint(),
-  amount1: z.bigint(),
-  range: LiquidityProvisionRangeSchema,
   walletAddress: z.string(),
+  poolToken: TokenSchema,
+  payTokens: z.array(LiquidityPayTokensSchema),
+  range: LiquidityProvisionRangeSchema.optional(),
 });
 export type SupplyLiquidityRequest = z.infer<typeof SupplyLiquidityRequestSchema>;
 
 export const SupplyLiquidityResponseSchema = z.object({
   transactions: z.array(TransactionPlanSchema),
-  chainId: z.string(),
+  poolIdentifier: TokenIdentifierSchema,
 });
 export type SupplyLiquidityResponse = z.infer<typeof SupplyLiquidityResponseSchema>;
 
 export const WithdrawLiquidityRequestSchema = z.object({
-  tokenId: z.string(),
+  poolToken: TokenSchema,
   walletAddress: z.string(),
 });
 export type WithdrawLiquidityRequest = z.infer<typeof WithdrawLiquidityRequestSchema>;

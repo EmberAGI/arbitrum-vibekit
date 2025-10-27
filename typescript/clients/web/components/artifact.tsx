@@ -1,4 +1,4 @@
-import type { Attachment, UIMessage } from 'ai';
+import type { UIMessage } from 'ai';
 import { formatDistance } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -9,6 +9,13 @@ import {
   useEffect,
   useState,
 } from 'react';
+
+// Legacy Attachment type for local state (AI SDK v5 removed this)
+type Attachment = {
+  url: string;
+  name: string;
+  contentType: string;
+};
 import useSWR, { useSWRConfig } from 'swr';
 import { useDebounceCallback, useWindowSize } from 'usehooks-ts';
 import type { Document, Vote } from '@/lib/db/schema';

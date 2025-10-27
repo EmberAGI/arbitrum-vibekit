@@ -1,5 +1,6 @@
-import { tool, type CoreTool } from 'ai';
+import { tool } from 'ai';
 import { z } from 'zod';
+import type { CoreTool } from '@/lib/ai/types';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { cookies } from 'next/headers';
@@ -102,7 +103,8 @@ async function getTool(serverUrl: string) {
       const aiTool = tool({
         description: mcptool.description,
         parameters: convertToZodSchema(mcptool.inputSchema),
-        execute: async (args) => {
+        // @ts-ignore - AI SDK v5 tool types have compatibility issues with parameter inference
+        execute: async (args: Record<string, unknown>) => {
           console.log('Executing tool:', mcptool.name);
           console.log('Arguments:', args);
           console.log('MCP Client:', mcpClient);
@@ -116,7 +118,7 @@ async function getTool(serverUrl: string) {
           const toolResult = { status: 'completed', result: result };
           return toolResult;
         },
-      });
+      }) as any;
       // Add the tool to the accumulator object, using its name as the key
       acc[mcptool.name] = aiTool;
       return acc;

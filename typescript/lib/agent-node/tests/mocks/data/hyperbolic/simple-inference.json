@@ -1,0 +1,38 @@
+{
+  "metadata": {
+    "service": "hyperbolic",
+    "endpoint": "/v1/chat/completions",
+    "method": "POST",
+    "recordedAt": "2025-10-17T22:11:18.410Z"
+  },
+  "request": {
+    "headers": {
+      "Authorization": "***"
+    },
+    "body": {
+      "model": "meta-llama/Llama-3.2-3B-Instruct",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Hello"
+        }
+      ],
+      "stream": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 17 Oct 2025 22:11:18 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "server": "cloudflare",
+      "x-inference-request-id": "e9a34e8c-34d3-49ad-b32c-02ed25e5324d",
+      "cf-cache-status": "DYNAMIC",
+      "content-encoding": "gzip",
+      "cf-ray": "990321847a0c6c99-EWR"
+    },
+    "rawBody": "H4sIAAAAAAAA/z2QwW7CMAyGX6XzuWUtBVp6mcSkCaSdd5mmKqQeDXPjqnG1IcS7zx2DSyLZnz//8hlcAxXwy/4ta4tkWfjnzTFZr9N8npXLsikWTblAiIH3R7SiqG2NzCx3PaE49tqyAxpB1WTFKi3ydVqUMXTcICneoZiEyHTm8XV6k3w2T/JNsvNBhlGNOt+ysxigej+D8w3+QJWqAEMwB4TqDAOT/mBCcEGM/5thL+inPFsk4odoy9+RNT7aRVcsOvEYCTfm9KS4MFNtDdG05SMGTRzYO3+o7yI/El1i+HTehba+AqoPwr0KiA/9wPvwz6livKXTetdLLfyFXvv5alonhu6VxWrKezvYvZyll8svbLqbmH8BAAA="
+  }
+}

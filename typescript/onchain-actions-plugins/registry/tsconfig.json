@@ -5,7 +5,8 @@
     "declaration": true,
     "declarationMap": true,
     "rootDir": "./src",
-    "composite": false
+    "composite": false,
+    "incremental": false
   },
   "include": ["src"]
 }

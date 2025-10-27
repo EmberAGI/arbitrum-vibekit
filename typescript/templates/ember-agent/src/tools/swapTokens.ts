@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { type VibkitToolDefinition } from 'arbitrum-vibekit-core';
-import type { Task, Message } from '@google-a2a/types';
+import { type VibkitToolDefinition } from '@emberai/arbitrum-vibekit-core';
+import type { Task } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 import type { EmberContext, TokenInfo } from '../context/types.js';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
+import { parseMcpToolResponsePayload } from '@emberai/arbitrum-vibekit-core';
 import { SwapTokensResponseSchema, type SwapTokensResponse, type TransactionPlan } from 'ember-api';
 import {
   parseUnits,
@@ -14,7 +14,7 @@ import {
 } from 'viem';
 import { arbitrum } from 'viem/chains';
 import Erc20Abi from '@openzeppelin/contracts/build/contracts/ERC20.json' with { type: 'json' };
-import { TaskState } from '@google-a2a/types';
+import { TaskState } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 import { composeBeforeHooks } from './hooks.js';
 import { withHooks } from './withHooks.js';
 
@@ -401,7 +401,7 @@ const checkBalanceHook = async (args: any, context: any): Promise<any | Task> =>
 const formatSwapResponseHook = async (rawResponse: any, context: any, args: any): Promise<Task> => {
   console.log('[ResponseFormat] Formatting swap response...');
 
-  const { userAddress, fromToken, toToken, amount, fromTokenDetail, toTokenDetail, atomicAmount } =
+  const { userAddress, fromToken, toToken, amount, fromTokenDetail, atomicAmount } =
     args;
 
   try {

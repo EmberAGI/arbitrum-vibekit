@@ -1,6 +1,11 @@
-import type { Attachment } from 'ai';
-
 import { LoaderIcon } from './icons';
+
+// Legacy Attachment type for local state (AI SDK v5 removed this)
+type Attachment = {
+  url: string;
+  name: string;
+  contentType: string;
+};
 
 export const PreviewAttachment = ({
   attachment,

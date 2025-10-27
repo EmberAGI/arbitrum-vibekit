@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
-    "arbitrum-vibekit-core": "workspace:*",
+    "@emberai/arbitrum-vibekit-core": "catalog:",
     "zod": "catalog:"
   }
 }

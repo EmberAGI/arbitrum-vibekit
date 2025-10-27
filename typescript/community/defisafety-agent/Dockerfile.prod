@@ -1,0 +1,77 @@
+FROM node:20-alpine AS builder
+
+# Install Chrome dependencies and Chromium
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
+
+# Tell Puppeteer to use the installed Chromium
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Set working directory
+WORKDIR /app
+
+# Copy workspace files
+COPY pnpm-workspace.yaml ./
+COPY pnpm-lock.yaml ./
+COPY tsconfig.base.json ./
+COPY package.json ./
+
+# Copy lib packages
+COPY lib ./lib
+
+# Copy agent files
+COPY templates/defisafety-agent ./templates/defisafety-agent
+
+# Install dependencies
+RUN pnpm install --no-frozen-lockfile
+
+# Build the workspace
+RUN pnpm -r build
+
+# Production stage
+FROM node:20-alpine
+
+# Install Chrome dependencies and Chromium for the production stage
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
+
+# Tell Puppeteer to use the installed Chromium
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+# Copy built files and dependencies
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/lib ./lib
+COPY --from=builder /app/templates/defisafety-agent ./templates/defisafety-agent
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/pnpm-workspace.yaml ./
+
+# Set working directory to agent
+WORKDIR /app/templates/defisafety-agent
+
+# Expose port
+EXPOSE 3010
+
+# Start the agent
+CMD ["node", "dist/index.js"]

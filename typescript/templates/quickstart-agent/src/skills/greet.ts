@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import { defineSkill } from 'arbitrum-vibekit-core';
+import { defineSkill } from '@emberai/arbitrum-vibekit-core';
 import { getFormalGreetingTool } from '../tools/getFormalGreeting.js';
 import { getCasualGreetingTool } from '../tools/getCasualGreeting.js';
 import { getLocalizedGreetingTool } from '../tools/getLocalizedGreeting.js';
@@ -20,14 +20,6 @@ const GreetInputSchema = z.object({
   name: z.string().min(1).describe('Name of the person to greet'),
   style: z.enum(['formal', 'casual', 'localized']).describe('Greeting style'),
   language: z.string().optional().describe('Language code for localized greetings'),
-});
-
-// Output schema
-const GreetOutputSchema = z.object({
-  greeting: z.string().describe('The generated greeting'),
-  style: z.string().describe('The style used'),
-  language: z.string().optional().describe('Language used if localized'),
-  timestamp: z.string().optional().describe('When the greeting was generated'),
 });
 
 export const greetSkill = defineSkill({

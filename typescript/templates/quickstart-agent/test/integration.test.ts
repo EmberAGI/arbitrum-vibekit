@@ -11,12 +11,9 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import {
   Agent,
-  AgentConfig,
-  type StdioMcpConfig,
   createProviderSelector,
   getAvailableProviders,
-} from 'arbitrum-vibekit-core';
-import * as http from 'http';
+} from '@emberai/arbitrum-vibekit-core';
 import { spawn, type ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs/promises';
@@ -36,10 +33,10 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
 
     // Create the agent with test configuration using provider selector
     const providers = createProviderSelector({
-      openRouterApiKey: process.env.OPENROUTER_API_KEY || 'test-api-key',
-      openaiApiKey: process.env.OPENAI_API_KEY,
-      xaiApiKey: process.env.XAI_API_KEY,
-      hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
+      openRouterApiKey: process.env['OPENROUTER_API_KEY'] || 'test-api-key',
+      openaiApiKey: process.env['OPENAI_API_KEY'],
+      xaiApiKey: process.env['XAI_API_KEY'],
+      hyperbolicApiKey: process.env['HYPERBOLIC_API_KEY'],
     });
 
     const available = getAvailableProviders(providers);
@@ -381,10 +378,10 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
 
       // Create a new agent with context using provider selector
       const contextProviders = createProviderSelector({
-        openRouterApiKey: process.env.OPENROUTER_API_KEY || 'test-api-key',
-        openaiApiKey: process.env.OPENAI_API_KEY,
-        xaiApiKey: process.env.XAI_API_KEY,
-        hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
+        openRouterApiKey: process.env['OPENROUTER_API_KEY'] || 'test-api-key',
+        openaiApiKey: process.env['OPENAI_API_KEY'],
+        xaiApiKey: process.env['XAI_API_KEY'],
+        hyperbolicApiKey: process.env['HYPERBOLIC_API_KEY'],
       });
       const contextAvailable = getAvailableProviders(contextProviders);
       const contextProvider = contextProviders[contextAvailable[0] as keyof typeof contextProviders];
@@ -542,7 +539,7 @@ describe('Hello Quickstart Agent - Vibekit Framework Integration Tests', () => {
           env: {
             ...process.env,
             PORT: '3458', // Use a different port to avoid conflicts
-            OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || 'test-api-key',
+            OPENROUTER_API_KEY: process.env['OPENROUTER_API_KEY'] || 'test-api-key',
             ENABLE_CORS: 'true',
             BASE_PATH: '/api/v1',
           },

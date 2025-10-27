@@ -5,13 +5,13 @@
  */
 
 import 'dotenv/config';
-import { Agent, createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
+import { Agent, createProviderSelector, getAvailableProviders } from '@emberai/arbitrum-vibekit-core';
 import { contextProvider } from './context/provider.js';
 import { agentConfig } from './config.js';
 
 // Skills - implemented and planned
-import { swappingSkill } from './skills/swapping.js';
-import { documentationSkill } from './skills/documentation.js';
+// import { swappingSkill } from './skills/swapping.js';
+// import { documentationSkill } from './skills/documentation.js';
 // import { lendingSkill } from './skills/lending.js';
 // import { liquiditySkill } from './skills/liquidity.js';
 // import { pendleSkill } from './skills/pendle.js';
@@ -65,7 +65,7 @@ async function startAgent() {
   try {
     await agent.start(PORT, async deps => {
       // The context provider needs the LLM model from the agent configuration
-      const llmModel = selectedProvider!(modelOverride);
+      const llmModel = selectedProvider!(modelOverride) as any;
       return contextProvider({ ...deps, llmModel });
     });
 

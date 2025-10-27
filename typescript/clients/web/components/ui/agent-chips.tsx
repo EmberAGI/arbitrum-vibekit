@@ -9,7 +9,7 @@ import { saveChatAgentAsCookie } from '@/app/(chat)/actions';
 
 export function AgentSelector({
   selectedAgentId,
-  className,
+  className: _className,
   onAgentChange,
 }: {
   selectedAgentId: string;
@@ -17,11 +17,6 @@ export function AgentSelector({
 } & React.ComponentProps<typeof Button>) {
   const [optimisticAgentId, setOptimisticAgentId] =
     useOptimistic(selectedAgentId);
-
-  const selectedChatAgent = useMemo(
-    () => chatAgents.find((chatAgent) => chatAgent.id === optimisticAgentId),
-    [optimisticAgentId],
-  );
 
   const options = useMemo(
     () =>

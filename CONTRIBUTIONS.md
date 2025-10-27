@@ -7,7 +7,7 @@ Thanks for your interest in contributing to Vibekit! This guide explains how to 
 Before you start your work, checkout [open issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) to see if someone is already working on the same topic. For any changes or new features, create an issue first to avoid duplicate work.
 
 > [!NOTE]  
-> Duplicate contributions will not get integrated or rewarded.
+> Duplicate contributions will not get integrated.
 
 ## Types of Contributions
 
@@ -32,7 +32,7 @@ Vibekit supports DeFi protocol integrations through the Ember Plugin System.
 
 1. **Create an Issue**: Navigate to the [issue board](https://github.com/EmberAGI/arbitrum-vibekit/issues) to [create a new issue](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=protocol_integration.yml) detailing the protocol you intend to integrate. Make sure that a similar issue is not already created by someone else.
 
-2. **Review Plugin Documentation**: Check the comprehensive [Ember Plugin System documentation](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/onchain-actions-plugins/README.md) for detailed implementation guidelines, architecture overview, and code examples.
+2. **Review Plugin Documentation**: Check the comprehensive [Ember Plugin System documentation](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/onchain-actions-plugins/registry/README.md) for detailed implementation guidelines, architecture overview, and code examples.
 
 3. **Wait For Your Issue To Be Approved By The Team**: A team member will comment on your issue to let you know it is approved for contribution.
 
@@ -52,9 +52,6 @@ Vibekit supports DeFi protocol integrations through the Ember Plugin System.
 
 ## Development Workflow
 
-> [!NOTE]  
-> All contributions must follow this unified development process. Any other type of contribution will not get integrated or rewarded.
-
 ### 1. Fork & Clone the Repository
 
 - **Fork the Repository:** Create your own copy of the [Vibekit repository](https://github.com/EmberAGI/arbitrum-vibekit).
@@ -63,7 +60,7 @@ Vibekit supports DeFi protocol integrations through the Ember Plugin System.
 ### 2. Implement Changes
 
 - Create a new branch for your work
-- Implement your bug fix, protocol integration, or new functionality
+- Implement your bug fix, protocol integration, or new functionality. If you are contributing an agent template, make sure to create it in the [`community`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community) directory.
 - Ensure your code follows existing patterns and conventions
 
 ### 3. Create Documentation
@@ -74,7 +71,7 @@ Vibekit supports DeFi protocol integrations through the Ember Plugin System.
 
 ### 4. Add Example Usage
 
-- Consider adding an agent to the [templates directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates) to showcase your new features.
+- Consider adding an agent to the [community directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community) to showcase your new features.
 
 - Consider integrating your agent into the [Vibekit UI](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web) to demo your agent's capabilities.
 

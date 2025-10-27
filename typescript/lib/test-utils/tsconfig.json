@@ -4,7 +4,8 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "composite": true,
-    "verbatimModuleSyntax": false
+    "verbatimModuleSyntax": false,
+    "noPropertyAccessFromIndexSignature": false
   },
   "include": ["src/**/*"],
   "exclude": ["./dist", "node_modules"]

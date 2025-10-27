@@ -1,6 +1,6 @@
 'use server';
 
-import { generateText, type Message } from 'ai';
+import { generateText, type UIMessage as Message } from 'ai';
 import { cookies } from 'next/headers';
 
 import {

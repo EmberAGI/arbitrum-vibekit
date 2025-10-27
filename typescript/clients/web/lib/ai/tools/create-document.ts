@@ -1,6 +1,7 @@
 import { generateUUID } from '@/lib/utils';
-import { type DataStreamWriter, tool } from 'ai';
+import { tool } from 'ai';
 import { z } from 'zod';
+import type { DataStreamWriter } from '@/lib/ai/types';
 import type { Session } from 'next-auth';
 import {
   artifactKinds,
@@ -12,15 +13,18 @@ interface CreateDocumentProps {
   dataStream: DataStreamWriter;
 }
 
-export const createDocument = ({ session, dataStream }: CreateDocumentProps) =>
-  tool({
+export const createDocument = ({ session, dataStream }: CreateDocumentProps) => {
+  const parametersSchema = z.object({
+    title: z.string(),
+    kind: z.enum(artifactKinds),
+  });
+
+  return tool({
     description:
       'Create a document for a writing or content creation activities. This tool will call other functions that will generate the contents of the document based on the title and kind.',
-    parameters: z.object({
-      title: z.string(),
-      kind: z.enum(artifactKinds),
-    }),
-    execute: async ({ title, kind }) => {
+    parameters: parametersSchema,
+    // @ts-ignore - AI SDK v5 tool types have compatibility issues with parameter inference
+    execute: async ({ title, kind }: any) => {
       const id = generateUUID();
 
       dataStream.writeData({
@@ -68,4 +72,5 @@ export const createDocument = ({ session, dataStream }: CreateDocumentProps) =>
         content: 'A document was created and is now visible to the user.',
       };
     },
-  });
+  }) as any;
+};

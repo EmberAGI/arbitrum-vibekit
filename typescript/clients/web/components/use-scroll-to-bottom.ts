@@ -25,6 +25,7 @@ export function useScrollToBottom<T extends HTMLElement>(): [
 
       return () => observer.disconnect();
     }
+    return undefined;
   }, []);
 
   return [containerRef, endRef];

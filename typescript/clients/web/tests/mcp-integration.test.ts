@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { spawn } from 'child_process';
-import path from 'path';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
 
 // Test configuration
 const MCP_SERVER_PORT = 3011;
@@ -15,7 +15,7 @@ async function startMcpServer(): Promise<any> {
       [
         path.join(
           __dirname,
-          '../../../lib/mcp-tools/coingecko-mcp-server/dist/stdio-server.js',
+          '../../../lib/community-mcp-tools/coingecko-mcp-server/dist/stdio-server.js',
         ),
       ],
       {
@@ -67,7 +67,7 @@ async function testMcpServerDirectly(serverProcess: any) {
       },
     };
 
-    const requestStr = JSON.stringify(testRequest) + '\n';
+    const requestStr = `${JSON.stringify(testRequest)}\n`;
 
     // Set up response listener before sending request
     const timeout = setTimeout(() => {

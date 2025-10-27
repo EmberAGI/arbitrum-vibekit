@@ -1,7 +1,6 @@
 import type { UIMessage } from 'ai';
 import {
-  createDataStreamResponse,
-  appendResponseMessages,
+  convertToModelMessages,
   smoothStream,
   streamText,
 } from 'ai';
@@ -14,9 +13,7 @@ import {
   saveMessages,
 } from '@/lib/db/queries';
 import {
-  generateUUID,
   getMostRecentUserMessage,
-  getTrailingMessageId,
 } from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
 // import { createDocument } from '@/lib/ai/tools/create-document';
@@ -37,7 +34,7 @@ const ContextSchema = z.object({
 });
 type Context = z.infer<typeof ContextSchema>;
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   try {
@@ -58,7 +55,7 @@ export async function POST(request: Request) {
     const validationResult = ContextSchema.safeParse(context);
 
     if (!validationResult.success) {
-      return new Response(JSON.stringify(validationResult.error.errors), {
+      return new Response(JSON.stringify(validationResult.error.issues), {
         status: 400,
         headers: {
           'Content-Type': 'application/json',
@@ -107,6 +104,18 @@ export async function POST(request: Request) {
     }
 
     try {
+      // Extract file attachments from message parts (v5 represents files as parts)
+      const fileAttachments = userMessage.parts
+        .filter((part): part is { type: 'file'; mediaType: string; filename?: string; url: string } =>
+          part.type === 'file'
+        )
+        .map((part) => ({
+          url: part.url,
+          name: part.filename ?? 'file',
+          size: 0, // Size not available in UIMessage parts
+          type: part.mediaType,
+        }));
+
       await saveMessages({
         messages: [
           {
@@ -114,7 +123,7 @@ export async function POST(request: Request) {
             id: userMessage.id,
             role: 'user',
             parts: userMessage.parts,
-            attachments: userMessage.experimental_attachments ?? [],
+            attachments: fileAttachments,
             createdAt: new Date(),
           },
         ],
@@ -124,7 +133,7 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    let dynamicTools;
+    let dynamicTools: Awaited<ReturnType<typeof getDynamicTools>>;
     try {
       dynamicTools = await getDynamicTools();
     } catch (error) {
@@ -132,102 +141,103 @@ export async function POST(request: Request) {
       dynamicTools = {};
     }
 
-    return createDataStreamResponse({
-      execute: (dataStream) => {
-        console.log('[ROUTE] Executing stream...');
+    console.log('[ROUTE] Executing stream...');
 
-        try {
-          const model = openRouterProvider.languageModel(selectedChatModel);
+    try {
+      const model = openRouterProvider.languageModel(selectedChatModel);
 
-          const systemPromptText = systemPrompt({
-            selectedChatModel,
-            walletAddress: validatedContext.walletAddress,
-          });
+      const systemPromptText = systemPrompt({
+        selectedChatModel,
+        walletAddress: validatedContext.walletAddress,
+      });
 
-          const result = streamText({
-            model,
-            system: systemPromptText,
-            messages,
-            maxSteps: 20,
-            experimental_transform: smoothStream({ chunking: 'word' }),
-            experimental_generateMessageId: generateUUID,
-            tools: {
-              //getWeather,
-              //createDocument: createDocument({ session, dataStream }),
-              //updateDocument: updateDocument({ session, dataStream }),
-              //requestSuggestions: requestSuggestions({
-              //  session,
-              //  dataStream,
-              //}),
-              ...dynamicTools,
-              // generateChart, // Now handled by MCP server via dynamicTools
-            },
-            onFinish: async ({ response }) => {
-              console.log('🔍 [ROUTE] StreamText finished');
-              if (session.user?.id) {
-                try {
-                  const assistantId = getTrailingMessageId({
-                    messages: response.messages.filter(
-                      (message) => message.role === 'assistant',
-                    ),
-                  });
+      const result = streamText({
+        model,
+        system: systemPromptText,
+        messages: convertToModelMessages(messages),
+        // maxSteps: 20, // TODO: Check if this parameter still exists in v5
+        experimental_transform: smoothStream({ chunking: 'word' }),
+        // experimental_generateMessageId: generateUUID, // TODO: Check if this exists in v5
+        tools: {
+          //getWeather,
+          //createDocument: createDocument({ session }),
+          //updateDocument: updateDocument({ session }),
+          //requestSuggestions: requestSuggestions({ session }),
+          ...(dynamicTools as any),
+          // generateChart, // Now handled by MCP server via dynamicTools
+        },
+        experimental_telemetry: {
+          isEnabled: isProductionEnvironment,
+          functionId: 'stream-text',
+        },
+      });
 
-                  if (!assistantId) {
-                    throw new Error('No assistant message found!');
-                  }
+      return result.toUIMessageStreamResponse({
+        sendReasoning: true,
+        onFinish: async ({ messages }) => {
+          console.log('🔍 [ROUTE] StreamText finished');
+          if (session.user?.id) {
+            try {
+              // Find the assistant message(s) in the UI messages
+              const assistantMessages = messages.filter(
+                (message) => message.role === 'assistant',
+              );
 
-                  const [, assistantMessage] = appendResponseMessages({
-                    messages: [userMessage],
-                    responseMessages: response.messages,
-                  });
-
-                  await saveMessages({
-                    messages: [
-                      {
-                        id: assistantId,
-                        chatId: id,
-                        role: assistantMessage.role,
-                        parts: assistantMessage.parts,
-                        attachments:
-                          assistantMessage.experimental_attachments ?? [],
-                        createdAt: new Date(),
-                      },
-                    ],
-                  });
-                } catch (saveError) {
-                  console.error(
-                    '[ROUTE] Failed to save assistant response:',
-                    saveError,
-                  );
-                }
+              if (assistantMessages.length === 0) {
+                throw new Error('No assistant message found!');
               }
-            },
-            experimental_telemetry: {
-              isEnabled: isProductionEnvironment,
-              functionId: 'stream-text',
-            },
-          });
 
-          result.mergeIntoDataStream(dataStream, {
-            sendReasoning: true,
-          });
-        } catch (streamError) {
-          console.error('[ROUTE] Stream error details:', {
-            name: streamError instanceof Error ? streamError.name : 'Unknown',
-            message:
-              streamError instanceof Error
-                ? streamError.message
-                : String(streamError),
-            stack: streamError instanceof Error ? streamError.stack : undefined,
-          });
-          throw streamError;
-        }
-      },
-      onError: (error: unknown) => {
-        console.error('[ROUTE] DataStream error:', error);
-        return `${error}`;
-      },
-    });
+              // Get the last assistant message
+              const lastAssistantMessage = assistantMessages[assistantMessages.length - 1];
+
+              if (!lastAssistantMessage) {
+                throw new Error('No assistant message found!');
+              }
+
+              // Extract file attachments from message parts (v5 represents files as parts)
+              const assistantFileAttachments = lastAssistantMessage.parts
+                .filter((part): part is { type: 'file'; mediaType: string; filename?: string; url: string } =>
+                  part.type === 'file'
+                )
+                .map((part) => ({
+                  url: part.url,
+                  name: part.filename ?? 'file',
+                  size: 0, // Size not available in UIMessage parts
+                  type: part.mediaType,
+                }));
+
+              await saveMessages({
+                messages: [
+                  {
+                    id: lastAssistantMessage.id,
+                    chatId: id,
+                    role: lastAssistantMessage.role,
+                    parts: lastAssistantMessage.parts,
+                    attachments: assistantFileAttachments,
+                    createdAt: new Date(),
+                  },
+                ],
+              });
+            } catch (saveError) {
+              console.error(
+                '[ROUTE] Failed to save assistant response:',
+                saveError,
+              );
+            }
+          }
+        },
+      });
+    } catch (streamError) {
+      console.error('[ROUTE] Stream error details:', {
+        name: streamError instanceof Error ? streamError.name : 'Unknown',
+        message:
+          streamError instanceof Error
+            ? streamError.message
+            : String(streamError),
+        stack: streamError instanceof Error ? streamError.stack : undefined,
+      });
+      throw streamError;
+    }
   } catch (error) {
     console.error('[ROUTE] Main POST error:', error);
     const JSONerror = JSON.stringify(error, null, 2);

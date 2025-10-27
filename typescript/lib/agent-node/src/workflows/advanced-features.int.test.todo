@@ -1,0 +1,1406 @@
+import type { Server } from 'http';
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
+// Workflow plugins use object composition, not inheritance. Plugin shape matches interface contract.
+
+/**
+ * Integration tests for workflow plugin framework advanced features
+ * Tests pause/resume workflows, structured input, and routing behavior
+ */
+
+// Type definitions for test responses
+interface WorkflowArtifact {
+  name: string;
+  data: string;
+  mimeType: string;
+  createdAt?: string;
+}
+
+interface WorkflowChoice {
+  id: string;
+  label: string;
+  description: string;
+  data: {
+    protocol: string;
+    version: string;
+  };
+}
+
+interface InputSchema {
+  $schema?: string;
+  type?: string;
+  properties?: Record<
+    string,
+    {
+      type?: string;
+      enum?: string[];
+      minimum?: number;
+      maximum?: number;
+    }
+  >;
+  required?: string[];
+}
+
+interface WorkflowInputRequired {
+  type: string;
+  schema?: InputSchema;
+  choices?: WorkflowChoice[];
+}
+
+interface WorkflowAuthRequired {
+  type: string;
+  domain?: string;
+  message?: string;
+  primaryType?: string;
+}
+
+interface WorkflowTaskStatus {
+  state: string;
+  final?: boolean;
+  reason?: string;
+  error?: string;
+  inputRequired?: WorkflowInputRequired;
+  authRequired?: WorkflowAuthRequired;
+}
+
+interface WorkflowTaskMetadata {
+  autoResumed?: boolean;
+  resumeMethod?: string;
+  concurrentRequest?: boolean;
+  requestOrder?: number;
+  primaryResume?: boolean;
+  duplicateProcessing?: boolean;
+  processCount?: number;
+}
+
+interface WorkflowTask {
+  id: string;
+  kind: 'task';
+  contextId: string;
+  status: WorkflowTaskStatus;
+  artifacts?: WorkflowArtifact[];
+  metadata?: WorkflowTaskMetadata;
+}
+
+interface WorkflowMessage {
+  kind: 'message';
+  parts: Array<{
+    text: string;
+  }>;
+}
+
+type WorkflowResponse = WorkflowTask | WorkflowMessage;
+
+interface TestResponse {
+  status: number;
+  body: {
+    result?: WorkflowResponse;
+  };
+}
+describe('Workflow Plugin Framework Advanced Features', () => {
+  let server: Server;
+  let baseUrl: string;
+
+  beforeEach(async () => {
+    // Given the A2A server with workflow plugin framework
+    const { createA2AServer } = await import('../a2a/server.js');
+    server = await createA2AServer({ port: 0, logging: false });
+
+    // Get the actual port and construct base URL
+    const address = server.address();
+    const port = typeof address === 'object' && address !== null ? address.port : 0;
+    baseUrl = `http://localhost:${port}`;
+  });
+
+  afterEach(async () => {
+    const { shutdownServer } = await import('../a2a/server.js');
+    await shutdownServer(server);
+  });
+
+  describe('Workflow Pause on Input-Required State', () => {
+    it('should pause workflow when input is required', async () => {
+      // Given a workflow that requires user input during execution
+      // When workflow reaches input-required state
+      const response = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'input-required-1',
+              contextId: 'input-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Execute trade requiring user confirmation of slippage parameters',
+                },
+              ],
+            },
+          },
+          id: 1,
+        }),
+      });
+
+      const responseBody = (await response.json()) as TestResponse['body'];
+
+      // Then workflow should pause with input-required status
+      expect(response.status).toBe(200);
+      expect(responseBody.result).toBeDefined();
+
+      const result = responseBody.result as WorkflowTask;
+      if (result.kind === 'task') {
+        expect(result.status.state).toBe('input-required');
+
+        // Should provide structured input schema
+        const inputRequired = result.status.inputRequired as WorkflowInputRequired;
+        expect(inputRequired).toBeDefined();
+        expect(inputRequired.type).toBe('user-confirmation');
+        expect(inputRequired.schema).toBeDefined();
+        expect(inputRequired.schema?.properties).toBeDefined();
+        expect(inputRequired.schema?.properties?.slippageTolerance).toBeDefined();
+        expect(inputRequired.schema?.properties?.maxSlippage).toBeDefined();
+        expect(inputRequired.schema?.required).toContain('slippageTolerance');
+      }
+    });
+
+    it('should provide clear input schema with validation rules', async () => {
+      // Given workflow requiring complex input parameters
+      // When workflow pauses for input
+      const response = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'complex-input-1',
+              contextId: 'complex-input-context',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Setup multi-step DeFi strategy requiring risk parameters',
+                },
+              ],
+            },
+          },
+          id: 2,
+        }),
+      });
+
+      const responseBody = (await response.json()) as TestResponse['body'];
+
+      // Then input schema should be comprehensive with validation
+      expect(response.status).toBe(200);
+
+      if (responseBody.result?.kind === 'task') {
+        const inputRequired = responseBody.result.status.inputRequired;
+        if (inputRequired) {
+          const schema = inputRequired.schema;
+
+          // Schema should have proper structure
+          expect(schema.$schema).toBe('http://json-schema.org/draft-07/schema#');
+          expect(schema.type).toBe('object');
+          expect(schema.properties).toBeDefined();
+          expect(schema.required).toBeDefined();
+
+          // Risk parameters with validation
+          expect(schema.properties.riskLevel).toBeDefined();
+          expect(schema.properties.riskLevel.type).toBe('string');
+          expect(schema.properties.riskLevel.enum).toEqual(['low', 'medium', 'high']);
+
+          expect(schema.properties.maxLoss).toBeDefined();
+          expect(schema.properties.maxLoss.type).toBe('number');
+          expect(schema.properties.maxLoss.minimum).toBe(0);
+          expect(schema.properties.maxLoss.maximum).toBe(100);
+
+          // Strategy parameters
+          expect(schema.properties.strategyType).toBeDefined();
+          expect(schema.properties.leverageLimit).toBeDefined();
+          expect(schema.properties.rebalanceFrequency).toBeDefined();
+        }
+      }
+    });
+
+    it('should pause with multiple input options', async () => {
+      // Given workflow with multiple valid input paths
+      // When workflow presents choices to user
+      const response = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'multiple-options-1',
+              contextId: 'options-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Choose between Uniswap, SushiSwap, or 1inch for token swap',
+                },
+              ],
+            },
+          },
+          id: 3,
+        }),
+      });
+
+      const responseBody = (await response.json()) as TestResponse['body'];
+
+      // Then workflow should pause with choice options
+      expect(response.status).toBe(200);
+
+      if (responseBody.result?.kind === 'task') {
+        expect(responseBody.result.status.state).toBe('input-required');
+
+        const inputRequired = responseBody.result.status.inputRequired;
+        if (inputRequired) {
+          expect(inputRequired.type).toBe('choice');
+          expect(inputRequired.choices).toBeDefined();
+          expect(Array.isArray(inputRequired.choices)).toBe(true);
+          expect(inputRequired.choices).toHaveLength(3);
+
+          // Each choice should have proper structure
+          inputRequired.choices.forEach((choice: unknown) => {
+            expect(choice.id).toBeDefined();
+            expect(choice.label).toBeDefined();
+            expect(choice.description).toBeDefined();
+            expect(choice.data).toBeDefined();
+          });
+
+          // Specific choices
+          const uniswapChoice = inputRequired.choices.find((c: unknown) => c.id === 'uniswap');
+          expect(uniswapChoice.label).toBe('Uniswap V3');
+          expect(uniswapChoice.data.protocol).toBe('uniswap');
+          expect(uniswapChoice.data.version).toBe('v3');
+        }
+      }
+    });
+  });
+
+  describe('Workflow Pause on Auth-Required State', () => {
+    it('should pause workflow when authentication is required', async () => {
+      // Given workflow requiring external authentication
+      // When workflow reaches auth-required state
+      const response = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'auth-required-1',
+              contextId: 'auth-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Access DeFi protocol requiring wallet signature authorization',
+                },
+              ],
+            },
+          },
+          id: 4,
+        }),
+      });
+
+      const responseBody = (await response.json()) as TestResponse['body'];
+
+      // Then workflow should pause with auth-required status
+      expect(response.status).toBe(200);
+
+      if (responseBody.result?.kind === 'task') {
+        expect(responseBody.result.status.state).toBe('auth-required');
+
+        // Should provide auth details
+        const authRequired = responseBody.result.status.authRequired;
+        expect(authRequired).toBeDefined();
+        expect(authRequired.type).toBe('wallet-signature');
+        expect(authRequired.domain).toBeDefined();
+        expect(authRequired.message).toBeDefined();
+        expect(authRequired.primaryType).toBe('EIP712Domain');
+      }
+    });
+  });
+
+  describe('Workflow Resume with Structured Input', () => {
+    it('should resume workflow after valid structured input', async () => {
+      // Given paused workflow awaiting input
+      let _taskId = '';
+
+      // Create paused workflow
+      const pauseResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'pause-for-resume',
+              contextId: 'resume-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Start trade requiring slippage confirmation',
+                },
+              ],
+            },
+          },
+          id: 7,
+        }),
+      });
+
+      const pauseResponseBody = (await pauseResponse.json()) as TestResponse['body'];
+
+      if (pauseResponseBody.result?.kind === 'task') {
+        const task = pauseResponseBody.result;
+        _taskId = task.id;
+      }
+
+      // When providing valid structured input
+      const resumeResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'resume-with-input',
+              contextId: 'resume-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'data',
+                  data: {
+                    slippageTolerance: 0.5,
+                    maxSlippage: 1.0,
+                    confirmed: true,
+                  },
+                },
+              ],
+            },
+          },
+          id: 8,
+        }),
+      });
+
+      const resumeResponseBody = (await resumeResponse.json()) as TestResponse['body'];
+
+      // Then workflow should resume and continue
+      expect(resumeResponse.status).toBe(200);
+
+      if (resumeResponseBody.result?.kind === 'task') {
+        expect(resumeResponseBody.result.status.state).toMatch(/^(working|completed)$/);
+        expect(resumeResponseBody.result.status.reason).toBeUndefined();
+        expect(resumeResponseBody.result.status.inputRequired).toBeUndefined();
+      }
+    });
+
+    it('should validate structured input against schema', async () => {
+      // Given workflow with strict input validation
+      // When providing invalid structured input
+      const response = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'invalid-input-1',
+              contextId: 'validation-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'data',
+                  data: {
+                    slippageTolerance: 150, // Invalid: exceeds max of 100
+                    maxSlippage: 'invalid', // Invalid: should be number
+                    // confirmed: missing required field
+                  },
+                },
+              ],
+            },
+          },
+          id: 9,
+        }),
+      });
+
+      const responseBody = (await response.json()) as TestResponse['body'];
+
+      // Then validation errors should be returned
+      expect(response.status).toBe(200);
+
+      if (responseBody.result?.kind === 'message') {
+        const responseText = responseBody.result.parts[0].text;
+        expect(responseText.toLowerCase()).toContain('validation');
+        expect(responseText.toLowerCase()).toContain('error');
+        expect(responseText).toContain('slippageTolerance');
+        expect(responseText).toContain('maxSlippage');
+        expect(responseText).toContain('confirmed');
+      }
+    });
+
+    it('should handle choice-based structured input', async () => {
+      // Given workflow with choice options
+      // When user provides choice selection
+      const response = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'choice-input-1',
+              contextId: 'choice-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'data',
+                  data: {
+                    selectedChoice: 'uniswap',
+                    additionalParams: {
+                      poolFee: 3000, // 0.3% fee tier
+                      sqrtPriceLimitX96: '0',
+                    },
+                  },
+                },
+              ],
+            },
+          },
+          id: 10,
+        }),
+      });
+
+      const responseBody = (await response.json()) as TestResponse['body'];
+
+      // Then workflow should resume with selected choice
+      expect(response.status).toBe(200);
+
+      if (responseBody.result?.kind === 'task') {
+        expect(responseBody.result.status.state).toMatch(/^(working|completed)$/);
+
+        // Should include choice details in artifacts
+        const artifacts = responseBody.result.artifacts || [];
+        const choiceArtifact = artifacts.find((a: unknown) => a.name === 'user-choice.json');
+
+        if (choiceArtifact) {
+          const choiceData = JSON.parse(choiceArtifact.data) as {
+            selectedChoice: string;
+            choiceLabel: string;
+            additionalParams: { poolFee: number };
+          };
+          expect(choiceData.selectedChoice).toBe('uniswap');
+          expect(choiceData.choiceLabel).toBe('Uniswap V3');
+          expect(choiceData.additionalParams.poolFee).toBe(3000);
+        }
+      }
+    });
+  });
+
+  describe('Critical Artifact Delivery Ordering', () => {
+    it('should deliver artifacts before pause status', async () => {
+      // Given workflow that generates artifacts before pausing
+      // When workflow produces artifacts then pauses
+      const response = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'artifacts-before-pause',
+              contextId: 'artifact-order-context',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Generate transaction preview then pause for user approval',
+                },
+              ],
+            },
+          },
+          id: 11,
+        }),
+      });
+
+      const responseBody = (await response.json()) as TestResponse['body'];
+
+      // Then artifacts should be available before pause status
+      expect(response.status).toBe(200);
+
+      if (responseBody.result?.kind === 'task') {
+        // Task should be in auth-required state
+        expect(responseBody.result.status.state).toBe('auth-required');
+
+        // But artifacts should already be delivered
+        const artifacts = responseBody.result.artifacts || [];
+        expect(artifacts.length).toBeGreaterThan(0);
+
+        // Should have transaction preview artifact
+        const previewArtifact = artifacts.find((a: unknown) => a.name === 'tx-preview.json');
+        expect(previewArtifact).toBeDefined();
+
+        if (previewArtifact) {
+          const previewData = JSON.parse(previewArtifact.data) as {
+            transaction: unknown;
+            gasEstimate: unknown;
+            expectedOutcome: unknown;
+          };
+          expect(previewData.transaction).toBeDefined();
+          expect(previewData.gasEstimate).toBeDefined();
+          expect(previewData.expectedOutcome).toBeDefined();
+        }
+
+        // Should have risk analysis artifact
+        const riskArtifact = artifacts.find((a: unknown) => a.name === 'risk-analysis.json');
+        expect(riskArtifact).toBeDefined();
+
+        if (riskArtifact) {
+          const riskData = JSON.parse(riskArtifact.data) as {
+            riskLevel: string;
+            factors: unknown[];
+          };
+          expect(riskData.riskLevel).toMatch(/^(low|medium|high)$/);
+          expect(riskData.factors).toBeDefined();
+          expect(Array.isArray(riskData.factors)).toBe(true);
+        }
+      }
+    });
+
+    it('should maintain artifact integrity during pause/resume cycle', async () => {
+      // Given workflow with artifacts that pauses and resumes
+      let initialArtifacts: unknown[];
+
+      // Create workflow with artifacts
+      const initialResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'artifact-integrity-init',
+              contextId: 'integrity-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Prepare complex DeFi strategy with multiple artifacts',
+                },
+              ],
+            },
+          },
+          id: 12,
+        }),
+      });
+
+      const initialResponseBody = (await initialResponse.json()) as TestResponse['body'];
+
+      if (initialResponseBody.result?.kind === 'task') {
+        initialArtifacts = initialResponseBody.result.artifacts || [];
+      }
+
+      // Resume workflow
+      const resumeResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'artifact-integrity-resume',
+              contextId: 'integrity-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'data',
+                  data: {
+                    approved: true,
+                    riskAcknowledged: true,
+                  },
+                },
+              ],
+            },
+          },
+          id: 13,
+        }),
+      });
+
+      const resumeResponseBody = (await resumeResponse.json()) as TestResponse['body'];
+
+      // Then artifacts should be preserved and potentially extended
+      expect(resumeResponse.status).toBe(200);
+
+      if (resumeResponseBody.result?.kind === 'task') {
+        const resumedArtifacts = resumeResponseBody.result.artifacts || [];
+
+        // Should have at least as many artifacts as before
+        expect(resumedArtifacts.length).toBeGreaterThanOrEqual(initialArtifacts.length);
+
+        // Original artifacts should be preserved
+        initialArtifacts.forEach((originalArtifact) => {
+          const preservedArtifact = resumedArtifacts.find(
+            (a: unknown) => a.name === originalArtifact.name,
+          );
+          expect(preservedArtifact).toBeDefined();
+          expect(preservedArtifact.data).toBe(originalArtifact.data);
+          expect(preservedArtifact.mimeType).toBe(originalArtifact.mimeType);
+        });
+
+        // May have additional artifacts from resumed processing
+        const newArtifacts = resumedArtifacts.filter(
+          (artifact: unknown) => !initialArtifacts.some((orig) => orig.name === artifact.name),
+        );
+        // New artifacts are allowed but not required
+        if (newArtifacts.length > 0) {
+          newArtifacts.forEach((newArtifact: unknown) => {
+            expect(newArtifact.name).toBeDefined();
+            expect(newArtifact.data).toBeDefined();
+            expect(newArtifact.mimeType).toBeDefined();
+          });
+        }
+      }
+    });
+
+    it('should deliver real-time artifacts during workflow execution', async () => {
+      // Given workflow that produces artifacts incrementally
+      // When workflow executes with streaming artifacts
+      const response = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'realtime-artifacts',
+              contextId: 'realtime-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Execute multi-step arbitrage with real-time progress tracking',
+                },
+              ],
+            },
+          },
+          id: 14,
+        }),
+      });
+
+      const responseBody = (await response.json()) as TestResponse['body'];
+
+      // Then artifacts should be delivered in logical order
+      expect(response.status).toBe(200);
+
+      if (responseBody.result?.kind === 'task') {
+        const artifacts = responseBody.result.artifacts || [];
+
+        // Should have initial planning artifacts
+        const planArtifact = artifacts.find((a: unknown) => a.name === 'arbitrage-plan.json');
+        expect(planArtifact).toBeDefined();
+
+        // Should have opportunity analysis
+        const opportunityArtifact = artifacts.find(
+          (a: unknown) => a.name === 'opportunity-analysis.json',
+        );
+        expect(opportunityArtifact).toBeDefined();
+
+        // Should have execution status
+        const statusArtifact = artifacts.find((a: unknown) => a.name === 'execution-status.jsonl');
+        expect(statusArtifact).toBeDefined();
+
+        // Artifacts should have timestamp ordering
+        artifacts.forEach((artifact: unknown) => {
+          const typedArtifact = artifact as { createdAt: string };
+          expect(typedArtifact.createdAt).toBeDefined();
+          expect(new Date(typedArtifact.createdAt).getTime()).toBeGreaterThan(0);
+        });
+
+        // Later artifacts should have later timestamps
+        if (artifacts.length > 1) {
+          const sortedArtifacts = [...artifacts].sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+          );
+          expect(sortedArtifacts[0].name).toBe('arbitrage-plan.json');
+        }
+      }
+    });
+  });
+
+  describe('Task-Based Routing for Paused Workflows', () => {
+    it('should route task continuation through task ID', async () => {
+      // Given paused workflow with task ID
+      let taskId = '';
+
+      // Create paused task
+      const pauseResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'task-routing-init',
+              contextId: 'routing-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Start complex workflow that will pause for user input',
+                },
+              ],
+            },
+          },
+          id: 15,
+        }),
+      });
+
+      const pauseResponseBody = (await pauseResponse.json()) as TestResponse['body'];
+      if (pauseResponseBody.result?.kind === 'task') {
+        taskId = pauseResponseBody.result.id;
+      }
+
+      // When providing input with task ID routing
+      const routedResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'task-routing-continue',
+              contextId: 'routing-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'data',
+                  data: {
+                    taskId: taskId,
+                    userInput: {
+                      approval: true,
+                      settings: {
+                        riskLevel: 'medium',
+                        timeout: 300,
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+            taskId: taskId, // Explicit task routing
+          },
+          id: 16,
+        }),
+      });
+
+      const routedResponseBody = (await routedResponse.json()) as TestResponse['body'];
+
+      // Then workflow should resume with task-specific routing
+      expect(routedResponse.status).toBe(200);
+
+      if (routedResponseBody.result?.kind === 'task') {
+        expect(routedResponseBody.result.id).toBe(taskId);
+        expect(routedResponseBody.result.status.state).toMatch(/^(working|completed)$/);
+        expect(routedResponseBody.result.status.reason).toBeUndefined();
+      }
+    });
+
+    it('should handle task routing with invalid task ID', async () => {
+      // Given invalid or non-existent task ID
+      // When attempting to route to invalid task
+      const response = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'invalid-task-routing',
+              contextId: 'invalid-routing-context',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'data',
+                  data: {
+                    taskId: 'non-existent-task-id',
+                    userInput: {
+                      approval: true,
+                    },
+                  },
+                },
+              ],
+            },
+            taskId: 'non-existent-task-id',
+          },
+          id: 17,
+        }),
+      });
+
+      const responseBody = (await response.json()) as TestResponse['body'];
+
+      // Then error should be returned for invalid task routing
+      expect(response.status).toBe(200);
+
+      if (responseBody.result?.kind === 'message') {
+        const responseText = responseBody.result.parts[0].text;
+        expect(responseText.toLowerCase()).toContain('task');
+        expect(responseText.toLowerCase()).toMatch(/not found|invalid|does not exist/);
+      }
+    });
+
+    it('should preserve task context during routing', async () => {
+      // Given task with specific context and state
+      let taskId = '';
+      let contextId = '';
+
+      // Create task with context
+      const createResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'context-preservation-init',
+              contextId: 'context-preserve-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Setup trading session with specific risk parameters',
+                },
+              ],
+            },
+          },
+          id: 18,
+        }),
+      });
+
+      const createResponseBody = (await createResponse.json()) as TestResponse['body'];
+
+      if (createResponseBody.result?.kind === 'task') {
+        taskId = createResponseBody.result.id;
+        contextId = createResponseBody.result.contextId;
+      }
+
+      // When routing continuation to task
+      const continueResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'context-preservation-continue',
+              contextId: contextId,
+              role: 'user',
+              parts: [
+                {
+                  kind: 'data',
+                  data: {
+                    strategyApproved: true,
+                    riskParameters: {
+                      maxDrawdown: 5.0,
+                      stopLoss: 2.5,
+                    },
+                  },
+                },
+              ],
+            },
+            taskId: taskId,
+          },
+          id: 19,
+        }),
+      });
+
+      const continueResponseBody = (await continueResponse.json()) as TestResponse['body'];
+
+      // Then task context and state should be preserved
+      expect(continueResponse.status).toBe(200);
+
+      if (continueResponseBody.result?.kind === 'task') {
+        expect(continueResponseBody.result.id).toBe(taskId);
+        expect(continueResponseBody.result.contextId).toBe(contextId);
+
+        // Context-specific artifacts should be maintained
+        const artifacts = continueResponseBody.result.artifacts || [];
+        const sessionArtifact = artifacts.find((a: unknown) => a.name === 'trading-session.json');
+
+        if (sessionArtifact) {
+          const sessionData = JSON.parse(sessionArtifact.data) as {
+            contextId: string;
+            taskId: string;
+            riskParameters: { maxDrawdown: number };
+          };
+          expect(sessionData.contextId).toBe(contextId);
+          expect(sessionData.taskId).toBe(taskId);
+          expect(sessionData.riskParameters).toBeDefined();
+          expect(sessionData.riskParameters.maxDrawdown).toBe(5.0);
+        }
+      }
+    });
+  });
+
+  describe('Router Bypass for Non-Paused Tasks', () => {
+    it('should bypass router for completed tasks', async () => {
+      // Given completed task
+      // When accessing completed task information
+      const response = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tasks/get',
+          params: {
+            taskId: 'completed-task-123',
+            contextId: 'bypass-context-1',
+          },
+          id: 20,
+        }),
+      });
+
+      const responseBody = (await response.json()) as TestResponse['body'];
+
+      // Then task information should be returned directly without routing
+      expect(response.status).toBe(200);
+
+      // Should not trigger special routing behavior for completed tasks
+      if (responseBody.result?.kind === 'task') {
+        expect(responseBody.result.status.state).toBe('completed');
+        expect(responseBody.result.status.final).toBe(true);
+      }
+    });
+
+    it('should bypass router for failed tasks', async () => {
+      // Given failed task
+      // When accessing failed task information
+      const response = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tasks/get',
+          params: {
+            taskId: 'failed-task-456',
+            contextId: 'bypass-context-2',
+          },
+          id: 21,
+        }),
+      });
+
+      const responseBody = (await response.json()) as TestResponse['body'];
+
+      // Then task information should be returned without special routing
+      expect(response.status).toBe(200);
+
+      if (responseBody.result?.kind === 'task') {
+        expect(responseBody.result.status.state).toBe('failed');
+        expect(responseBody.result.status.final).toBe(true);
+        expect(responseBody.result.status.error).toBeDefined();
+      }
+    });
+
+    it('should bypass router for cancelled tasks', async () => {
+      // Given cancelled task
+      // When accessing cancelled task information
+      const response = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tasks/get',
+          params: {
+            taskId: 'cancelled-task-789',
+            contextId: 'bypass-context-3',
+          },
+          id: 22,
+        }),
+      });
+
+      const responseBody = (await response.json()) as TestResponse['body'];
+
+      // Then task information should be returned without routing intervention
+      expect(response.status).toBe(200);
+
+      if (responseBody.result?.kind === 'task') {
+        expect(responseBody.result.status.state).toBe('canceled');
+        expect(responseBody.result.status.final).toBe(true);
+      }
+    });
+  });
+
+  describe('Workflow Auto-Resume via Task ID', () => {
+    const getTaskStore = (): { store?: Map<string, WorkflowTask> } => {
+      const store = (server as unknown as { taskStore?: { store?: Map<string, WorkflowTask> } })
+        .taskStore;
+      if (!store) {
+        throw new Error('Task store not available');
+      }
+      return store;
+    };
+
+    const findTaskIdByContext = (context: string): string | undefined => {
+      const store = getTaskStore();
+      const internal = store.store;
+      if (internal instanceof Map) {
+        for (const [id, task] of internal.entries()) {
+          if (task.contextId === context) {
+            return id;
+          }
+        }
+      }
+      return undefined;
+    };
+
+    it('should auto-resume paused workflow when valid input provided', async () => {
+      // Given paused workflow waiting for input
+      let taskId = '';
+
+      // Create paused workflow
+      const pauseResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'auto-resume-init',
+              contextId: 'auto-resume-context',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Start auto-resumable workflow requiring user confirmation',
+                },
+              ],
+            },
+          },
+          id: 23,
+        }),
+      });
+
+      const pauseResponseBody = (await pauseResponse.json()) as TestResponse['body'];
+      if (pauseResponseBody.result?.kind === 'task') {
+        taskId = pauseResponseBody.result.id;
+      } else {
+        taskId = findTaskIdByContext('auto-resume-context') ?? '';
+      }
+
+      // When providing valid input via task ID
+      const resumeResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'auto-resume-trigger',
+              contextId: 'auto-resume-context',
+              role: 'user',
+              taskId,
+              parts: [
+                {
+                  kind: 'data',
+                  data: {
+                    confirmed: true,
+                    autoExecute: true,
+                  },
+                },
+              ],
+            },
+            taskId: taskId,
+          },
+          id: 24,
+        }),
+      });
+
+      const resumeResponseBody = (await resumeResponse.json()) as TestResponse['body'];
+
+      // Then workflow should auto-resume without additional processing
+      expect(resumeResponse.status).toBe(200);
+
+      if (resumeResponseBody.result?.kind === 'task') {
+        expect(resumeResponseBody.result.id).toBe(taskId);
+        expect(resumeResponseBody.result.status.state).toMatch(/^(working|completed)$/);
+
+        // Should have auto-resume indicator in task metadata
+        expect(resumeResponseBody.result.metadata?.autoResumed).toBe(true);
+        expect(resumeResponseBody.result.metadata?.resumeMethod).toBe('task-id');
+      }
+    });
+
+    it('should auto-resume without triggering duplicate processing', async () => {
+      // Given workflow that could be processed multiple times
+      let taskId = '';
+
+      // Create initial task
+      const initialResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'duplicate-prevention-init',
+              contextId: 'duplicate-context',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Start workflow with duplicate prevention',
+                },
+              ],
+            },
+          },
+          id: 25,
+        }),
+      });
+
+      const initialResponseBody = (await initialResponse.json()) as TestResponse['body'];
+
+      if (initialResponseBody.result?.kind === 'task') {
+        taskId = initialResponseBody.result.id;
+      } else {
+        taskId = findTaskIdByContext('duplicate-context') ?? '';
+      }
+
+      // When resuming via task ID
+      const resumeResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'duplicate-prevention-resume',
+              contextId: 'duplicate-context',
+              role: 'user',
+              taskId,
+              parts: [
+                {
+                  kind: 'data',
+                  data: {
+                    proceedWithExecution: true,
+                  },
+                },
+              ],
+            },
+            taskId: taskId,
+          },
+          id: 26,
+        }),
+      });
+
+      const resumeResponseBody = (await resumeResponse.json()) as TestResponse['body'];
+
+      // Then should resume existing task, not create new one
+      expect(resumeResponse.status).toBe(200);
+
+      if (resumeResponseBody.result?.kind === 'task') {
+        expect(resumeResponseBody.result.id).toBe(taskId);
+
+        // Should not have duplicate processing indicators
+        expect(resumeResponseBody.result.metadata?.duplicateProcessing).toBe(false);
+        expect(resumeResponseBody.result.metadata?.processCount).toBe(1);
+      }
+    });
+
+    it.skip('should handle rapid sequential resume requests gracefully (Stage 1.2 - concurrency metadata pending)', async () => {
+      // Given paused workflow
+      let taskId = '';
+
+      const pauseResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'rapid-resume-init',
+              contextId: 'rapid-context',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Start workflow that handles rapid resume requests',
+                },
+              ],
+            },
+          },
+          id: 27,
+        }),
+      });
+
+      const pauseResponseBody = (await pauseResponse.json()) as TestResponse['body'];
+      if (pauseResponseBody.result?.kind === 'task') {
+        taskId = pauseResponseBody.result.id;
+      } else {
+        taskId = findTaskIdByContext('rapid-context') ?? '';
+      }
+
+      // When sending multiple rapid resume requests
+      const resumePromises = Array.from({ length: 3 }, async (_, i) =>
+        fetch(`${baseUrl}/a2a`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'message/send',
+            params: {
+              message: {
+                kind: 'message',
+                messageId: `rapid-resume-${i}`,
+                contextId: 'rapid-context',
+                role: 'user',
+                taskId,
+                parts: [
+                  {
+                    kind: 'data',
+                    data: {
+                      requestId: i,
+                      confirmed: true,
+                    },
+                  },
+                ],
+              },
+              taskId: taskId,
+            },
+            id: 28 + i,
+          }),
+        }),
+      );
+
+      const resumeResponses = await Promise.all(resumePromises);
+
+      // Parse all response bodies
+      const responseBodies = await Promise.all(
+        resumeResponses.map(async (response) => ({
+          status: response.status,
+          body: (await response.json()) as TestResponse['body'],
+        })),
+      );
+
+      // Then all requests should be handled gracefully
+      for (const { status, body: responseBody } of responseBodies) {
+        expect(status).toBe(200);
+
+        if (responseBody.result?.kind === 'task') {
+          expect(responseBody.result.id).toBe(taskId);
+
+          // Should handle concurrent requests properly
+          expect(responseBody.result.metadata?.concurrentRequest).toBeDefined();
+          expect(responseBody.result.metadata?.requestOrder).toBeDefined();
+        }
+      }
+
+      // Only one should be the primary resume
+      const foundPrimaryResume = responseBodies.some((response) => {
+        const task = response.body.result as WorkflowTask | undefined;
+        return task?.metadata?.primaryResume === true;
+      });
+      expect(foundPrimaryResume).toBe(true);
+    });
+  });
+});

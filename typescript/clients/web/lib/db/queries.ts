@@ -22,7 +22,7 @@ import type { ArtifactKind } from '@/components/artifact';
 // https://authjs.dev/reference/adapter/drizzle
 
 // biome-ignore lint: Forbidden non-null assertion.
-const client = postgres(process.env.POSTGRES_URL!);
+const client = postgres(process.env['POSTGRES_URL']!);
 const db = drizzle(client);
 
 export async function getUser(address: string): Promise<Array<User>> {
@@ -360,6 +360,7 @@ export async function deleteMessagesByChatIdAfterTimestamp({
           and(eq(message.chatId, chatId), inArray(message.id, messageIds)),
         );
     }
+    return undefined;
   } catch (error) {
     console.error(
       'Failed to delete messages by id after timestamp from database',

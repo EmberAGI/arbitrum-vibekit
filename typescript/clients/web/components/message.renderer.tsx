@@ -48,7 +48,7 @@ export const MessageRenderer = ({
 
   if (type === 'reasoning') {
     return (
-      <MessageReasoning isLoading={isLoading} reasoning={part.reasoning} />
+      <MessageReasoning isLoading={isLoading} reasoning={part.text} />
     );
   }
 
@@ -102,11 +102,11 @@ export const MessageRenderer = ({
     );
   }
 
-  if (type === 'tool-invocation' && part.toolInvocation.state === 'call') {
-    const { toolInvocation } = part;
-    const { toolName, toolCallId, args } = toolInvocation;
+  if (type === 'tool-call') {
+    const toolCall = part as unknown as { toolName: string; toolCallId: string; input: unknown };
+    const { toolName, toolCallId, input: args } = toolCall;
 
-    console.log('toolInvocation', toolInvocation);
+    console.log('tool-call', toolCall);
     return (
       <div
         key={toolCallId}
@@ -119,21 +119,21 @@ export const MessageRenderer = ({
         {toolName.endsWith('getWeather') ? (
           <Weather />
         ) : toolName.endsWith('createDocument') ? (
-          <DocumentPreview isReadonly={isReadonly} args={args} />
+          <DocumentPreview isReadonly={isReadonly} args={args as never} />
         ) : toolName === 'updateDocument' ? (
-          <DocumentToolCall type="update" args={args} isReadonly={isReadonly} />
+          <DocumentToolCall type="update" args={args as never} isReadonly={isReadonly} />
         ) : toolName.endsWith('requestSuggestions') ? (
           <DocumentToolCall
             type="request-suggestions"
-            args={args}
+            args={args as never}
             isReadonly={isReadonly}
           />
         ) : toolName.endsWith('generate_chart') ||
           toolName === 'coingecko-generate_chart' ? (
           <div className="flex items-center gap-3 p-4 border border-blue-200 rounded-lg bg-blue-50">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
             <p className="text-blue-700">
-              Generating price chart for {args.token}...
+              Generating price chart for {(args as { token?: string }).token}...
             </p>
           </div>
         ) : toolName.endsWith('askSwapAgent') ? (
@@ -161,9 +161,9 @@ export const MessageRenderer = ({
     );
   }
 
-  if (type === 'tool-invocation' && part.toolInvocation.state === 'result') {
-    const { toolInvocation } = part;
-    const { result, toolCallId, toolName } = toolInvocation;
+  if (type === 'tool-result') {
+    const toolResult = part as unknown as { output: unknown; toolCallId: string; toolName: string };
+    const { output: result, toolCallId, toolName } = toolResult;
 
     // // Handle local generateChart tool (legacy)
     // if (toolName.endsWith('generateChart')) {
@@ -176,7 +176,8 @@ export const MessageRenderer = ({
       toolName === 'coingecko-generate_chart'
     ) {
       try {
-        const mcpResultString = result?.result?.content?.[0]?.text;
+        const resultData = result as { result?: { content?: Array<{ text?: string }> } };
+        const mcpResultString = resultData?.result?.content?.[0]?.text;
         if (mcpResultString) {
           const chartData = JSON.parse(mcpResultString);
           console.log('🔍 [MCP Chart] Parsed chart data:', chartData);
@@ -192,10 +193,11 @@ export const MessageRenderer = ({
       }
     }
 
-    const toolInvocationParsableString = result?.result?.content?.[0]?.text
-      ? result?.result?.content?.[0]?.text
-      : result?.result?.content?.[0]?.resource?.text;
-    const toolInvocationResult = result?.result?.content?.[0]
+    const resultData = result as { result?: { content?: Array<{ text?: string; resource?: { text?: string } }> } };
+    const toolInvocationParsableString = resultData?.result?.content?.[0]?.text
+      ? resultData?.result?.content?.[0]?.text
+      : resultData?.result?.content?.[0]?.resource?.text;
+    const toolInvocationResult = resultData?.result?.content?.[0]
       ? JSON.parse(
           toolInvocationParsableString ||
             '{Error: An error occurred while parsing the result}',
@@ -220,19 +222,19 @@ export const MessageRenderer = ({
     return (
       <div key={toolCallId}>
         {toolName.endsWith('getWeather') ? (
-          <Weather weatherAtLocation={result} />
+          <Weather weatherAtLocation={result as never} />
         ) : toolName.endsWith('createDocument') ? (
-          <DocumentPreview isReadonly={isReadonly} result={result} />
+          <DocumentPreview isReadonly={isReadonly} result={result as never} />
         ) : toolName.endsWith('updateDocument') ? (
           <DocumentToolResult
             type="update"
-            result={result}
+            result={result as never}
             isReadonly={isReadonly}
           />
         ) : toolName.endsWith('requestSuggestions') ? (
           <DocumentToolResult
             type="request-suggestions"
-            result={result}
+            result={result as never}
             isReadonly={isReadonly}
           />
         ) : toolName.endsWith('askSwapAgent') ? (
@@ -271,4 +273,7 @@ export const MessageRenderer = ({
       </div>
     );
   }
+
+  // Default return for unhandled part types
+  return null;
 };

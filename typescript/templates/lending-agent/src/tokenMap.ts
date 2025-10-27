@@ -2,9 +2,9 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import {
   LendingGetCapabilitiesResponseSchema,
   type LendingGetCapabilitiesResponse,
-  type TokenInfo,
   type LendingAgentCapability,
-} from 'ember-schemas';
+} from '@emberai/arbitrum-vibekit-core/ember-schemas';
+import type { TokenInfo } from './tools/types.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 

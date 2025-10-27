@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Agent, createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
+import { Agent, createProviderSelector, getAvailableProviders } from '@emberai/arbitrum-vibekit-core';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { agentConfig } from '../src/config.js';
 import { contextProvider } from '../src/context/provider.js';
-import type { Task, TextPart } from '@google-a2a/types';
+import type { Task, TextPart } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 
 describe.skip('Ember Agent E2E Swapping Integration', () => {
   let agent: ReturnType<typeof Agent.create>;
@@ -34,7 +34,7 @@ describe.skip('Ember Agent E2E Swapping Integration', () => {
     const availableProviders = getAvailableProviders(providers);
     const selectedProviderKey = availableProviders[0] as keyof typeof providers;
     const selectedProvider = providers[selectedProviderKey]!;
-    const llmModel = selectedProvider();
+    const llmModel = selectedProvider() as any;
 
     // Create and start the agent
     agent = Agent.create(agentConfig, {

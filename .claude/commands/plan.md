@@ -1,10 +1,6 @@
 ---
 description: Create a comprehensive plan for implementing user requirements
-allowed-tools:
-  ["Bash", "Read", "Write", "Edit", "LS", "Grep", "Glob", "Task", "TodoWrite"]
-argument-hint: "(optional) specific feature or area to plan"
 ---
-
 # AI Planner - Strategic Planning and Analysis
 
 Think harder about the user's requirements and create a comprehensive Product Requirements Document (PRD). You are the **Planner** in a multi-agent workflow, responsible for high-level analysis and creating a complete specification that the Executor can implement independently.
@@ -31,7 +27,12 @@ git branch --show-current
 
 Create `.vibecode/<BRANCH>/prd.md` (replace slashes with dashes in branch names).
 
-**Important**: The PRD is created once and should not be modified during execution. It serves as the stable specification.
+**Important**:
+
+- The PRD is created during planning and can be modified until marked ready
+- Once execution begins, the PRD becomes **permanently read-only**
+- The Executor will track any deviations in the scratchpad, not modify the PRD
+- This preserves the original plan for comparison with actual implementation
 
 ### 3. Analyze Requirements
 
@@ -62,25 +63,31 @@ Planner: Claude Code
 ## Requirements Analysis
 
 ### Functional Requirements
+
 [What the system must do]
 
 ### Non-Functional Requirements
+
 [Performance, security, scalability requirements]
 
 ### Out of Scope
+
 [Explicitly state what won't be included]
 
 ## Technical Analysis
 
 ### Constraints and Assumptions
+
 [Technical limitations, dependencies, assumptions]
 
 ### Integration Points
+
 [How this fits with existing systems]
 
 ## Task Breakdown
 
 ### T1: [Task Name]
+
 - **ID**: T1
 - **Description**: [Detailed description of what needs to be done]
 - **Acceptance Criteria**:
@@ -92,6 +99,7 @@ Planner: Claude Code
 - **Edge Cases**: [Special scenarios to handle]
 
 ### T2: [Task Name]
+
 - **ID**: T2
 - **Description**: [Detailed description]
 - **Acceptance Criteria**:
@@ -103,29 +111,35 @@ Planner: Claude Code
 ## Implementation Guidelines
 
 ### Architecture Decisions
+
 [Key technical choices and rationale]
 
 ### Testing Strategy
+
 [How each component should be tested]
 
 ### Error Handling
+
 [Expected errors and how to handle them]
 
 ## Risk Assessment
 
-| Risk | Probability | Impact | Mitigation |
-|------|------------|--------|------------|
+| Risk               | Probability     | Impact          | Mitigation       |
+| ------------------ | --------------- | --------------- | ---------------- |
 | [Risk description] | High/Medium/Low | High/Medium/Low | [How to address] |
 
 ## Appendix
 
 ### API Specifications
+
 [If applicable, detailed API contracts]
 
 ### Data Models
+
 [If applicable, data structures and schemas]
 
 ---
+
 **PRD Status**: Ready for Execution
 **Next Step**: Use `/execute` command to begin implementation
 ```
@@ -144,11 +158,13 @@ Planner: Claude Code
 Every significant architectural choice must be recorded in TWO places:
 
 1. **In the PRD**: Brief rationale for immediate context
-2. **In `development/rationales.md`**: Detailed entry with user approval:
-   - Present the decision and ask: "Should I add this architectural decision to `development/rationales.md`?"
+2. **In `/docs/rationales.md`**: Detailed entry with user approval:
+   - Present the decision and ask: "Should I add this architectural decision to `/docs/rationales.md`?"
    - If approved, add entry following this format:
+
    ```markdown
    ## [ISO 8601 DateTime] - [Decision Title]
+
    - **What**: The decision made
    - **Why**: Rationale and requirements driving it
    - **Alternatives**: Other options considered and why rejected
@@ -156,6 +172,7 @@ Every significant architectural choice must be recorded in TWO places:
    ```
 
 Decisions worthy of documentation (not exhaustive):
+
 - Technology/library selections with long-term impact
 - Core architectural patterns (sync vs async, monolithic vs modular)
 - Trade-offs affecting maintainability or performance
@@ -206,6 +223,7 @@ The planning phase creates a two-file structure:
 ```
 
 **Why this separation?**
+
 - **PRD**: Clean, stable specification that won't change during implementation
 - **Scratchpad**: Executor's workspace for notes, progress, debugging
 
@@ -230,4 +248,9 @@ Planner:
 
 ## Next Steps
 
-After plan approval, use `/execute` command to begin implementation.
+After plan approval:
+
+1. The PRD becomes **permanently read-only**
+2. Use `/execute` command to begin implementation
+3. The Executor will create a scratchpad for tracking progress
+4. Any deviations from the PRD will be documented in the scratchpad, not the PRD

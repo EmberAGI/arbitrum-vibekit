@@ -59,19 +59,32 @@ const PurePreviewMessage = ({
           )}
 
           <div className="flex flex-col gap-4 w-full">
-            {message.experimental_attachments && (
-              <div
-                data-testid={`message-attachments`}
-                className="flex flex-row justify-end gap-2"
-              >
-                {message.experimental_attachments.map((attachment) => (
-                  <PreviewAttachment
-                    key={attachment.url}
-                    attachment={attachment}
-                  />
-                ))}
-              </div>
-            )}
+            {(() => {
+              // Extract file parts from message.parts
+              const fileAttachments = message.parts
+                .filter((part): part is { type: 'file'; url: string; mediaType: string; filename?: string } =>
+                  part.type === 'file'
+                )
+                .map((part) => ({
+                  url: part.url,
+                  name: part.filename ?? 'file',
+                  contentType: part.mediaType,
+                }));
+
+              return fileAttachments.length > 0 ? (
+                <div
+                  data-testid={`message-attachments`}
+                  className="flex flex-row justify-end gap-2"
+                >
+                  {fileAttachments.map((attachment) => (
+                    <PreviewAttachment
+                      key={attachment.url}
+                      attachment={attachment}
+                    />
+                  ))}
+                </div>
+              ) : null;
+            })()}
 
             {message.parts?.map((part, index) => (
               <MessageRenderer

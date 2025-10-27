@@ -239,7 +239,7 @@ export const DataValidationHelpers = {
     // Remove any invalid data points
     const validPrices = data.prices.filter(
       (price: [number, number]) =>
-        !isNaN(price[0]) && !isNaN(price[1]) && isFinite(price[1]),
+        !Number.isNaN(price[0]) && !Number.isNaN(price[1]) && Number.isFinite(price[1]),
     );
 
     return { prices: validPrices };

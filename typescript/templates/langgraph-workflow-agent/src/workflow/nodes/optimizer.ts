@@ -1,11 +1,11 @@
-import { generateObject, type LanguageModelV1 } from 'ai';
+import { generateObject, type LanguageModel } from 'ai';
 import type { GreetingState } from '../state.js';
 import { OPTIMIZE_STRATEGY_PROMPT } from '../prompts/optimizer.js';
 import { optimizerStrategySchema } from '../schemas.js';
 
 export async function optimizerNode(
   state: GreetingState,
-  model: LanguageModelV1
+  model: LanguageModel
 ): Promise<Partial<GreetingState>> {
   try {
     const prompt = OPTIMIZE_STRATEGY_PROMPT.replace(
@@ -23,7 +23,7 @@ export async function optimizerNode(
       prompt,
       schema: optimizerStrategySchema,
       temperature: 0.4,
-      maxTokens: 300,
+      maxOutputTokens: 300,
     });
 
     // Update state based on strategy decision
