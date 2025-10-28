@@ -357,6 +357,7 @@ export class WorkflowHandler {
 
       // Verify the payment using the stored requirements
       this.logger.debug('[PAYMENT] Verifying payment', { taskId });
+
       const verificationResult = await verifyPayment(payloadParsed, paymentRequirements);
 
       if (!verificationResult.isValid) {
@@ -406,14 +407,7 @@ export class WorkflowHandler {
             message: customMessage,
             metadata: {
               [X402_STATUS_KEY]: 'payment-completed',
-              [X402_RECEIPTS_KEY]: [
-                {
-                  transaction: receipt.transaction,
-                  success: receipt.success,
-                  network: paymentRequirements.network,
-                  payer: receipt.payer,
-                },
-              ],
+              [X402_RECEIPTS_KEY]: [receipt],
             },
           };
         },
