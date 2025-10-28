@@ -4,7 +4,7 @@
  */
 
 import type { Message, Part } from '@a2a-js/sdk';
-import { A2AClient } from '@a2a-js/sdk/client';
+import type { A2AClient as A2AClientInstance } from '@a2a-js/sdk/client';
 import { v4 as uuidv4 } from 'uuid';
 
 import type { ArtifactUpdateEvent, StatusUpdateEvent } from '../../client/index.js';
@@ -20,12 +20,23 @@ export interface StreamEvent {
   data: ArtifactUpdateEvent | StatusUpdateEvent | unknown;
 }
 
+type A2AClientStatic = typeof import('@a2a-js/sdk/client').A2AClient;
+
+let cachedA2AClient: Promise<A2AClientStatic> | undefined;
+
+async function loadA2AClient(): Promise<A2AClientStatic> {
+  if (!cachedA2AClient) {
+    cachedA2AClient = import('@a2a-js/sdk/client').then((module) => module.A2AClient);
+  }
+  return cachedA2AClient;
+}
+
 export class ChatClient {
-  private client: A2AClient;
+  private client: A2AClientInstance;
   private contextId?: string;
   private baseUrl: string;
 
-  private constructor(client: A2AClient, baseUrl: string) {
+  private constructor(client: A2AClientInstance, baseUrl: string) {
     this.client = client;
     this.baseUrl = baseUrl;
   }
@@ -39,6 +50,7 @@ export class ChatClient {
     const normalizedUrl = baseUrl.replace(/\/$/, '');
     const cardUrl = `${normalizedUrl}/.well-known/agent-card.json`;
 
+    const A2AClient = await loadA2AClient();
     const client = await A2AClient.fromCardUrl(cardUrl);
     return new ChatClient(client, normalizedUrl);
   }
