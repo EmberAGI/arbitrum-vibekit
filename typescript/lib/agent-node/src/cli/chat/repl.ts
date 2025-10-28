@@ -40,6 +40,10 @@ export class ChatRepl {
   private renderer: StreamRenderer;
   private rl: readline.Interface | undefined;
   private options: Required<ReplOptions>;
+  private startResolve: ((code: number) => void) | undefined;
+  private exitHandled = false;
+  private hasClosedReadline = false;
+  private promptFn: (() => void) | undefined;
 
   constructor(options: ReplOptions) {
     this.client = options.client;
@@ -84,32 +88,30 @@ export class ChatRepl {
       terminal: true,
     });
 
-    // Handle exit signals
-    let exitRequested = false;
-    const handleExit = async (): Promise<void> => {
-      if (exitRequested) return;
-      exitRequested = true;
+    this.promptFn = this.rl.prompt.bind(this.rl);
 
-      console.log('\n' + pc.dim('Exiting chat...'));
-      this.rl?.close();
-
-      try {
-        await this.options.onExit();
-      } catch (error) {
-        console.error(pc.red('Error during exit:'), error);
-      }
-    };
+    this.exitHandled = false;
+    this.hasClosedReadline = false;
+    this.startResolve = undefined;
 
     this.rl.on('SIGINT', () => {
-      void handleExit();
+      if (!this.hasClosedReadline) {
+        this.hasClosedReadline = true;
+        this.rl?.close();
+      }
+      void this.finalizeExit(0);
     });
 
     this.rl.on('close', () => {
-      void handleExit();
+      void this.finalizeExit(0);
     });
 
     // Main REPL loop
     return new Promise<number>((resolve) => {
+      this.startResolve = (code: number) => {
+        resolve(code);
+      };
+
       if (!this.rl) {
         resolve(1);
         return;
@@ -120,7 +122,7 @@ export class ChatRepl {
 
         // Skip empty input
         if (!trimmedInput) {
-          this.rl?.prompt();
+          this.promptFn?.();
           return;
         }
 
@@ -147,15 +149,11 @@ export class ChatRepl {
         }
 
         // Show prompt for next input
-        this.rl?.prompt();
-      });
-
-      this.rl.on('close', () => {
-        resolve(0); // Normal exit
+        this.promptFn?.();
       });
 
       // Show initial prompt
-      this.rl.prompt();
+      this.promptFn?.();
     });
   }
 
@@ -163,7 +161,37 @@ export class ChatRepl {
    * Stop the REPL
    */
   stop(): void {
-    this.rl?.close();
+    if (!this.hasClosedReadline) {
+      this.hasClosedReadline = true;
+      this.rl?.close();
+    }
+    void this.finalizeExit(0);
+  }
+
+  private async finalizeExit(code = 0): Promise<void> {
+    if (this.exitHandled) {
+      return;
+    }
+
+    this.exitHandled = true;
+
+    if (!this.hasClosedReadline) {
+      this.hasClosedReadline = true;
+      this.rl?.close();
+    }
+
+    console.log('\n' + pc.dim('Exiting chat...'));
+
+    try {
+      await this.options.onExit();
+    } catch (error) {
+      console.error(pc.red('Error during exit:'), error);
+    } finally {
+      this.rl = undefined;
+      const resolve = this.startResolve;
+      this.startResolve = undefined;
+      resolve?.(code);
+    }
   }
 }
 
