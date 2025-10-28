@@ -126,13 +126,13 @@ export const chatAgents = [
       {
         title: 'Create time-based job',
         label: 'daily at 9 AM (EOA)',
-        action: 'Create a time-based job (regular wallet) that runs daily at 9 AM, timezone UTC, chainId 421614, targetContractAddress 0x<contract>, targetFunction helloWorld, arguments ["3"], abi <abi-json-string>',
+        action: 'Create a time-based job (regular wallet) that runs daily at 9 AM',
       },
       {
         title: 'Create time job (Safe)',
         label: 'interval every 60s',
         action:
-          'Create a time-based job with Safe wallet mode: title "safe-time-job-example", schedule interval 60 seconds, timezone UTC, chainId 421614, Safe address <your_safe_address>, dynamic arguments URL https://ipfs.io/ipfs/<your-hash>',
+          'Create a time-based job with Safe wallet mode',
       },
       {
         title: 'List my jobs',
