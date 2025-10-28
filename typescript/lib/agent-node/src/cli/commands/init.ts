@@ -98,7 +98,7 @@ You are a general-purpose assistant skill. Your role is to help users accomplish
 - Executing workflows for multi-step operations
 
 When a task requires multiple coordinated steps, you can leverage the example workflow which demonstrates:
-- Progress tracking and status updates
+- Status updates and lifecycle management
 - Artifact generation for structured outputs
 - User interaction and confirmation flows
 - Structured result aggregation
@@ -152,10 +152,13 @@ When executing transactions:
 Be precise, security-conscious, and user-friendly in all blockchain interactions.
 `;
 
-const SAMPLE_WORKFLOW_TS = `import type { Artifact, Message } from '@a2a-js/sdk';
-import { z } from 'zod';
-
-import type { WorkflowPlugin, WorkflowContext, WorkflowState } from '../../src/workflows/types.js';
+const SAMPLE_WORKFLOW_TS = `import {
+  z,
+  type Artifact,
+  type WorkflowContext,
+  type WorkflowPlugin,
+  type WorkflowState,
+} from '@emberai/agent-node/workflow';
 
 const plugin: WorkflowPlugin = {
   id: 'example-workflow',
@@ -173,20 +176,9 @@ const plugin: WorkflowPlugin = {
     const { message = 'Hello from example workflow!', count = 1 } = context.parameters ?? {};
 
     // Status: Starting workflow
-    const startMessage: Message = {
-      kind: 'message',
-      messageId: 'status-start',
-      contextId: context.contextId,
-      role: 'agent',
-      parts: [{ kind: 'text', text: 'Starting example workflow processing...' }],
-    };
-
     yield {
-      type: 'status',
-      status: {
-        state: 'working',
-        message: startMessage,
-      },
+      type: 'status-update',
+      message: 'Starting example workflow processing...',
     };
 
     // Artifact 1: Initial configuration summary
@@ -208,14 +200,8 @@ const plugin: WorkflowPlugin = {
     };
     yield { type: 'artifact', artifact: configArtifact };
 
-    // Simulate some work with progress updates
+    // Simulate some work
     for (let i = 0; i < (count as number); i++) {
-      yield {
-        type: 'progress',
-        current: i + 1,
-        total: count as number,
-      };
-
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
@@ -238,20 +224,10 @@ const plugin: WorkflowPlugin = {
     yield { type: 'artifact', artifact: processingArtifact };
 
     // Pause for user confirmation
-    const pauseMessage: Message = {
-      kind: 'message',
-      messageId: 'pause-confirmation',
-      contextId: context.contextId,
-      role: 'agent',
-      parts: [{ kind: 'text', text: 'Please confirm to proceed with final step' }],
-    };
-
     const userInput = (yield {
-      type: 'pause',
-      status: {
-        state: 'input-required',
-        message: pauseMessage,
-      },
+      type: 'interrupted',
+      reason: 'input-required',
+      message: 'Please confirm to proceed with final step',
       inputSchema: z.object({
         confirmed: z.boolean(),
         notes: z.string().optional(),
@@ -263,20 +239,9 @@ const plugin: WorkflowPlugin = {
     }) as { confirmed?: boolean; notes?: string; timestamp?: string } | undefined;
 
     // Continue after confirmation
-    const continueMessage: Message = {
-      kind: 'message',
-      messageId: 'status-continue',
-      contextId: context.contextId,
-      role: 'agent',
-      parts: [{ kind: 'text', text: 'Finalizing workflow...' }],
-    };
-
     yield {
-      type: 'status',
-      status: {
-        state: 'working',
-        message: continueMessage,
-      },
+      type: 'status-update',
+      message: 'Finalizing workflow...',
     };
 
     // Artifact 3: Final result with user confirmation
@@ -301,20 +266,9 @@ const plugin: WorkflowPlugin = {
     yield { type: 'artifact', artifact: finalArtifact };
 
     // Final status
-    const completeMessage: Message = {
-      kind: 'message',
-      messageId: 'status-complete',
-      contextId: context.contextId,
-      role: 'agent',
-      parts: [{ kind: 'text', text: 'Workflow completed successfully' }],
-    };
-
     yield {
-      type: 'status',
-      status: {
-        state: 'completed',
-        message: completeMessage,
-      },
+      type: 'status-update',
+      message: 'Workflow completed successfully',
     };
 
     // Return structured result
@@ -496,8 +450,7 @@ Supported transport types:
 Example workflow plugin (TypeScript ESM):
 
 \`\`\`typescript
-import type { WorkflowPlugin } from '../../src/workflows/types.js';
-import { z } from 'zod';
+import { z, type WorkflowPlugin } from '@emberai/agent-node/workflow';
 
 const plugin: WorkflowPlugin = {
   id: 'my-workflow',
@@ -506,13 +459,12 @@ const plugin: WorkflowPlugin = {
   version: '1.0.0',
   inputSchema: z.object({ /* ... */ }),
   async *execute(context) {
-    // Yield status updates, artifacts, and progress
-    yield { type: 'status', status: { state: 'working', message: /* ... */ } };
+    // Yield status updates and artifacts
+    yield { type: 'status-update', message: 'Processing...' };
     yield { type: 'artifact', artifact: /* ... */ };
-    yield { type: 'progress', current: 1, total: 10 };
 
     // Optionally pause for user input
-    const input = yield { type: 'pause', inputSchema: /* ... */ };
+    const input = yield { type: 'interrupted', reason: 'input-required', message: /* ... */, inputSchema: /* ... */ };
 
     return { success: true };
   },
@@ -524,7 +476,6 @@ export default plugin;
 The included \`example-workflow\` demonstrates:
 - Status updates and lifecycle management
 - Multiple artifact generation
-- Progress tracking
 - User confirmation pauses with schema validation
 
 ## Tool Naming Convention
