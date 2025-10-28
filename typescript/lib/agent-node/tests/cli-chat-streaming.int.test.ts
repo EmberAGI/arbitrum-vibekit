@@ -3,9 +3,9 @@
  * Tests end-to-end artifact streaming, assembly, and rendering
  */
 
+import type { Part } from '@a2a-js/sdk';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import type { Part } from '@a2a-js/sdk';
 
 import { ChatClient } from '../src/cli/chat/client.js';
 import { StreamRenderer } from '../src/cli/chat/renderer.js';

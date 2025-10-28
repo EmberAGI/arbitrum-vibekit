@@ -1,9 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Interface as ReadlineInterface } from 'node:readline';
 
-import { ChatRepl, isTTYSupported } from './repl.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import type { ChatClient } from './client.js';
 import type { StreamRenderer } from './renderer.js';
+import { ChatRepl, isTTYSupported } from './repl.js';
 
 // Mock readline module at top level
 vi.mock('node:readline', () => ({

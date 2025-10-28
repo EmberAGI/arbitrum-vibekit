@@ -1,10 +1,10 @@
 import { existsSync } from 'node:fs';
-import process from 'node:process';
 import { resolve } from 'node:path';
+import process from 'node:process';
 
 import { createA2AServer } from './a2a/server.js';
-import { initFromConfigWorkspace, type AgentConfigHandle } from './config/runtime/init.js';
 import { resolveConfigDirectory } from './config/runtime/config-dir.js';
+import { initFromConfigWorkspace, type AgentConfigHandle } from './config/runtime/init.js';
 import { serviceConfig } from './config.js';
 import { Logger } from './utils/logger.js';
 

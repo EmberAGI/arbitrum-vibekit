@@ -3,8 +3,8 @@
  * Displays composed agent configuration with redacted secrets
  */
 
-import { URL } from 'node:url';
 import { resolve } from 'node:path';
+import { URL } from 'node:url';
 
 import { loadAgentConfig } from '../../config/orchestrator.js';
 import { resolveConfigDirectory } from '../../config/runtime/config-dir.js';

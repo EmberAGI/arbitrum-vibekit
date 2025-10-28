@@ -6,12 +6,12 @@
 import process from 'node:process';
 
 import { createA2AServer } from '../../a2a/server.js';
+import { resolveConfigDirectory } from '../../config/runtime/config-dir.js';
 import { initFromConfigWorkspace } from '../../config/runtime/init.js';
 import type { HotReloadEvent } from '../../config/runtime/init.js';
-import { resolveConfigDirectory } from '../../config/runtime/config-dir.js';
 import { serviceConfig } from '../../config.js';
-import { cliOutput } from '../output.js';
 import { Logger } from '../../utils/logger.js';
+import { cliOutput } from '../output.js';
 
 const NativePromise: PromiseConstructor = global.Promise;
 

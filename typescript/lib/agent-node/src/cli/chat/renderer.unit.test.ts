@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { StreamRenderer } from './renderer.js';
 import type { ArtifactUpdateEvent, StatusUpdateEvent } from '../../client/index.js';
+
+import { StreamRenderer } from './renderer.js';
 
 function textArtifactUpdate(
   id: string,

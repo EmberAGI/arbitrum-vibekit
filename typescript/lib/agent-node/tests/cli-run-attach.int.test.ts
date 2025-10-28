@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { runCommand } from '../src/cli/commands/run.js';
+
 import { createTestConfigWorkspace } from './utils/test-config-workspace.js';
 
 // Mock server and chat components to avoid actual server startup and REPL interaction
