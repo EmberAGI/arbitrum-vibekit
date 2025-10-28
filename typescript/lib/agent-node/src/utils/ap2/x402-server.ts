@@ -23,10 +23,10 @@ export async function verifyPayment(
 }
 
 /**
- * Verify payment using the configured facilitator
- * @param paymentPayload - The payment payload to verify
- * @param requirements - The payment requirements to verify against
- * @returns Promise with verification result
+ * Settle payment using the configured facilitator
+ * @param paymentPayload - The payment payload to settle
+ * @param requirements - The payment requirements to settle against
+ * @returns Promise with settlement result
  */
 export async function settlePayment(
   paymentPayload: PaymentPayload,
