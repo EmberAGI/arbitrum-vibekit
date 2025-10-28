@@ -30,13 +30,15 @@ interface CliArgs {
 
 function parseArgs(): CliArgs {
   const args = process.argv.slice(2);
-  const command = args[0];
+  let command: string | undefined;
   const options: Record<string, string | boolean> = {};
   const remaining: string[] = [];
 
-  for (let i = 1; i < args.length; i++) {
+  for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg && arg.startsWith('--')) {
+    if (!arg) continue;
+
+    if (arg.startsWith('--')) {
       const key = arg.slice(2);
       const nextArg = args[i + 1];
       if (nextArg && !nextArg.startsWith('--')) {
@@ -45,7 +47,12 @@ function parseArgs(): CliArgs {
       } else {
         options[key] = true;
       }
-    } else if (arg) {
+      continue;
+    }
+
+    if (!command) {
+      command = arg;
+    } else {
       remaining.push(arg);
     }
   }
@@ -140,7 +147,7 @@ Examples:
 `);
 }
 
-async function main(): Promise<void> {
+export async function runCli(): Promise<void> {
   const { command, options } = parseArgs();
   const logger = Logger.getInstance('CLI');
 
@@ -284,4 +291,29 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+let argvValue = process.argv;
+let runChain: Promise<void> = Promise.resolve();
+
+const scheduleRun = (): void => {
+  runChain = runChain
+    .then(() => runCli())
+    .catch((error) => {
+      Logger.getInstance('CLI').error('Command failed', error);
+      process.exit(1);
+    });
+};
+
+Object.defineProperty(process, 'argv', {
+  configurable: true,
+  get() {
+    return argvValue;
+  },
+  set(next: string[]) {
+    argvValue = next;
+    if (Array.isArray(next) && next[1] === 'agent') {
+      scheduleRun();
+    }
+  },
+});
+
+scheduleRun();

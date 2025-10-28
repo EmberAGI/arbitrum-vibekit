@@ -192,33 +192,33 @@ export class CliOutput {
         idx = end + 1;
       }
 
-      console.log(pc.cyan('✓'), rendered);
+      console.log(`${pc.cyan('✓')} ${rendered}`);
       return;
     }
 
     // No code present: simple output
-    console.log(pc.cyan('✓'), message);
+    console.log(`${pc.cyan('✓')} ${message}`);
   }
 
   /**
    * Print an error message with magenta X
    */
   error(message: string): void {
-    console.error(pc.magenta('✗'), message);
+    console.error(`${pc.magenta('✗')} ${message}`);
   }
 
   /**
    * Print a warning message with yellow indicator
    */
   warn(message: string): void {
-    console.warn(pc.yellow('⚠'), message);
+    console.warn(`${pc.yellow('⚠')} ${message}`);
   }
 
   /**
    * Print an info message with blue indicator
    */
   info(message: string): void {
-    console.log(pc.blue('ℹ'), message);
+    console.log(`${pc.blue('ℹ')} ${message}`);
   }
 
   /**
