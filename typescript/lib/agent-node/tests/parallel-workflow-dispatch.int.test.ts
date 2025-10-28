@@ -16,8 +16,8 @@ import { z } from 'zod';
 import { createAgentExecutor } from '../src/a2a/agentExecutor.js';
 import type { ContextManager } from '../src/a2a/sessions/manager.js';
 import type { AIService } from '../src/ai/service.js';
-import { WorkflowRuntime } from '../src/workflows/runtime.js';
-import type { WorkflowPlugin, WorkflowContext, WorkflowState } from '../src/workflows/types.js';
+import { WorkflowRuntime } from '../src/workflow/runtime.js';
+import type { WorkflowPlugin, WorkflowContext, WorkflowState } from '../src/workflow/types.js';
 
 import { createSimpleRequestContext } from './utils/factories/index.js';
 import { waitForReferenceTaskId, pollUntilContextHasTask } from './utils/lifecycle.js';

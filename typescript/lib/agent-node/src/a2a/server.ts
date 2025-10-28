@@ -21,7 +21,7 @@ import { AIService } from '../ai/service.js';
 import type { AgentConfigHandle, HotReloadHandler } from '../config/runtime/init.js';
 import type { ServiceConfig } from '../config.js';
 import { Logger } from '../utils/logger.js';
-import { WorkflowRuntime } from '../workflows/runtime.js';
+import { WorkflowRuntime } from '../workflow/runtime.js';
 
 import { createAgentExecutor } from './agentExecutor.js';
 import { ContextManager } from './sessions/manager.js';

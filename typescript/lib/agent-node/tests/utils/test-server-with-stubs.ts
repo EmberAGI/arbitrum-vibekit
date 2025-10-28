@@ -17,7 +17,7 @@ import { AIService } from '../../src/ai/service.js';
 import { initFromConfigWorkspace, type AgentConfigHandle } from '../../src/config/runtime/init.js';
 import type { ServiceConfig } from '../../src/config.js';
 import { Logger } from '../../src/utils/logger.js';
-import { WorkflowRuntime } from '../../src/workflows/runtime.js';
+import { WorkflowRuntime } from '../../src/workflow/runtime.js';
 
 import { createTestConfigWorkspace } from './test-config-workspace.js';
 

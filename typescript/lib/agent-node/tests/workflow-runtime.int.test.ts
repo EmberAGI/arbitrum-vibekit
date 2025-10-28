@@ -10,7 +10,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 
 import type { EffectiveWorkflow } from '../src/config/composers/effective-set-composer.js';
 import { WorkflowPluginLoader } from '../src/config/runtime/workflow-loader.js';
-import type { WorkflowState } from '../src/workflows/types.js';
+import type { WorkflowState } from '../src/workflow/types.js';
 
 import { createTestConfigWorkspace } from './utils/test-config-workspace.js';
 

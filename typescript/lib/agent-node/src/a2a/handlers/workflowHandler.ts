@@ -25,7 +25,7 @@ import z from 'zod';
 
 import { canonicalizeName } from '../../config/validators/tool-validator.js';
 import { Logger } from '../../utils/logger.js';
-import type { WorkflowRuntime } from '../../workflows/runtime.js';
+import type { WorkflowRuntime } from '../../workflow/runtime.js';
 import type { ContextManager } from '../sessions/manager.js';
 import type { ActiveTask, TaskState, WorkflowEvent } from '../types.js';
 

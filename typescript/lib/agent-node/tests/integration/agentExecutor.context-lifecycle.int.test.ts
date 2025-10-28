@@ -14,7 +14,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createAgentExecutor } from '../../src/a2a/agentExecutor.js';
 import { ContextManager } from '../../src/a2a/sessions/manager.js';
 import type { AIService } from '../../src/ai/service.js';
-import { WorkflowRuntime } from '../../src/workflows/runtime.js';
+import { WorkflowRuntime } from '../../src/workflow/runtime.js';
 import { createSimpleRequestContext } from '../utils/factories/index.js';
 import { waitForWorkflowState } from '../utils/lifecycle.js';
 import { StubAIService } from '../utils/mocks/ai-service.mock.js';

@@ -10,8 +10,8 @@ import { z } from 'zod';
 
 import { WorkflowHandler } from '../../src/a2a/handlers/workflowHandler.js';
 import { ContextManager } from '../../src/a2a/sessions/manager.js';
-import { WorkflowRuntime } from '../../src/workflows/runtime.js';
-import type { WorkflowPlugin, WorkflowContext, WorkflowState } from '../../src/workflows/types.js';
+import { WorkflowRuntime } from '../../src/workflow/runtime.js';
+import type { WorkflowPlugin, WorkflowContext, WorkflowState } from '../../src/workflow/types.js';
 
 // Minimal pause-only workflow plugin
 const pauseOnlyPlugin: WorkflowPlugin = {

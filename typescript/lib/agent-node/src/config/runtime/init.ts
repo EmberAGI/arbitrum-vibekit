@@ -10,7 +10,7 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Tool } from 'ai';
 
 import { Logger } from '../../utils/logger.js';
-import type { WorkflowRuntime } from '../../workflows/runtime.js';
+import type { WorkflowRuntime } from '../../workflow/runtime.js';
 import { composeAgentCard } from '../composers/card-composer.js';
 import { composeEffectiveSets, type EffectiveSets } from '../composers/effective-set-composer.js';
 import { composePrompt, type ComposedPrompt } from '../composers/prompt-composer.js';
