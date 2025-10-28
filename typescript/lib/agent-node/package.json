@@ -42,7 +42,7 @@
       },
       "main"
     ],
-    "tagFormat": "${npmPackage}@${version}",
+    "tagFormat": "@emberai/agent-node@${version}",
     "plugins": [
       [
         "@semantic-release/commit-analyzer",

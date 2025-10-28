@@ -49,7 +49,7 @@
       },
       "main"
     ],
-    "tagFormat": "${npmPackage}@${version}",
+    "tagFormat": "@emberai/onchain-actions-registry@${version}",
     "plugins": [
       [
         "@semantic-release/commit-analyzer",
