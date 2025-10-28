@@ -9,6 +9,7 @@ import { createConditionJob, CreateConditionJobSchema } from './tools/createCond
 import { getJobs, GetJobsSchema } from './tools/getJobs.js';
 import { deleteJob, DeleteJobSchema } from './tools/deleteJob.js';
 import { getUserDataTool, GetUserDataSchema } from './tools/getUserData.js';
+import { getSafeWalletInfo, GetSafeWalletInfoSchema } from './tools/getSafeWalletInfo.js';
 
 export async function createServer(triggerxClient: TriggerXClient) {
   const server = new McpServer({
@@ -104,6 +105,29 @@ export async function createServer(triggerxClient: TriggerXClient) {
       } catch (error) {
         console.error(`getJobs: failed to retrieve jobs: ${(error as Error).message}`);
         throw new Error(`failed to retrieve jobs: ${(error as Error).message}`);
+      }
+    },
+  );
+
+  // Register getSafeWalletInfo tool
+  server.tool(
+    'getSafeWalletInfo',
+    'Validate Safe wallet address format (no on-chain checks)',
+    GetSafeWalletInfoSchema.shape,
+    async (params) => {
+      try {
+        const result = await getSafeWalletInfo(params);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        console.error(`getSafeWalletInfo: failed: ${(error as Error).message}`);
+        throw new Error(`failed to get safe wallet info: ${(error as Error).message}`);
       }
     },
   );

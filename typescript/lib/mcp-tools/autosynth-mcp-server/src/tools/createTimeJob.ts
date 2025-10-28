@@ -4,16 +4,18 @@
  */
 
 import { z } from 'zod';
-import { JobType, ArgType } from 'sdk-triggerx';
+import { JobType, ArgType, TriggerXClient, createJob } from 'sdk-triggerx';
+import { ethers } from 'ethers';
 
 const CreateTimeJobSchema = z.object({
   jobTitle: z.string().min(1).describe('Title for the scheduled job'),
   targetContractAddress: z
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/)
-    .describe('Contract address to call'),
-  targetFunction: z.string().min(1).describe('Function name to call on the contract'),
-  abi: z.string().min(1).describe('Contract ABI (JSON string)'),
+    .optional()
+    .describe('Contract address to call (NOT required for Safe wallet mode)'),
+  targetFunction: z.string().min(1).optional().describe('Function name to call on the contract (auto-set to "execJobFromHub" for Safe mode)'),
+  abi: z.string().min(1).optional().describe('Contract ABI (JSON string) - not needed for Safe mode'),
   arguments: z.array(z.string()).default([]).describe('Static arguments for the function call'),
   scheduleType: z.enum(['interval', 'cron', 'specific']).describe('Type of time-based scheduling: "interval" for recurring intervals, "cron" for cron expressions, or "specific" for one-time execution'),
   timeInterval: z.number().positive().optional().describe('Interval in seconds (for interval scheduling)'),
@@ -21,14 +23,17 @@ const CreateTimeJobSchema = z.object({
   specificSchedule: z.string().optional().describe('Specific datetime (for one-time scheduling)'),
   timeFrame: z.number().positive().default(36).describe('Job validity timeframe in hours'),
   chainId: z.string().default('421614').describe('Target blockchain chain ID (Arbitrum Sepolia)'),
-  dynamicArgumentsScriptUrl: z.string().default('').describe('URL for dynamic argument fetching script'),
+  dynamicArgumentsScriptUrl: z.string().default('').describe('URL for dynamic argument fetching script (REQUIRED for Safe mode)'),
   timezone: z.string().default('UTC').describe('Timezone for scheduling'),
   userAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('User wallet address for signing transactions'),
+  walletMode: z.enum(['regular','safe']).default('regular').describe('Wallet mode. Use "safe" to execute via Safe wallet'),
+  safeAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional().describe('Safe wallet address (required for Safe mode)'),
+  autotopupTG: z.boolean().default(true).describe('Whether to automatically top up TG balance if low'),
 });
 
 export async function createTimeJob(params: z.infer<typeof CreateTimeJobSchema>) {
   try {
-    console.log(' CreateTimeJob executing with input:', JSON.stringify(params, null, 2));
+    console.error(' CreateTimeJob executing with input:', JSON.stringify(params, null, 2));
     
     // Validate scheduling parameters for each type
     if (params.scheduleType === 'interval' && !params.timeInterval) {
@@ -42,21 +47,24 @@ export async function createTimeJob(params: z.infer<typeof CreateTimeJobSchema>)
     }
 
     // Build job input matching the exact SDK structure
+    const isSafe = params.walletMode === 'safe' || !!params.safeAddress;
     const jobInput: any = {
       jobType: JobType.Time,
-      argType: ArgType.Static,
+      argType: isSafe ? ArgType.Dynamic : ArgType.Static,
       jobTitle: params.jobTitle,
       timeFrame: params.timeFrame,
       scheduleType: params.scheduleType,
       timezone: params.timezone,
       chainId: params.chainId,
-      targetContractAddress: params.targetContractAddress,
-      targetFunction: params.targetFunction,
-      abi: params.abi,
+      targetContractAddress: isSafe ? undefined : params.targetContractAddress,
+      targetFunction: isSafe ? 'execJobFromHub' : params.targetFunction,
+      abi: isSafe ? undefined : params.abi,
       isImua: false,
-      arguments: params.arguments,
+      arguments: isSafe ? [] : params.arguments,
       dynamicArgumentsScriptUrl: params.dynamicArgumentsScriptUrl,
-      autotopupTG: true,
+      autotopupTG: params.autotopupTG,
+      walletMode: isSafe ? 'safe' : 'regular',
+      safeAddress: isSafe ? params.safeAddress : undefined,
     };
 
     // Only include the relevant scheduling parameter based on the selected schedule type
@@ -68,9 +76,60 @@ export async function createTimeJob(params: z.infer<typeof CreateTimeJobSchema>)
       jobInput.specificSchedule = params.specificSchedule;
     }
 
-    console.log(' Preparing transaction data for user signing...');
+    // Decide signing mode (server-side signing if env credentials exist)
+    const apiKey = process.env.NEXT_PUBLIC_TRIGGERX_API_KEY;
+    const rpcUrl = process.env.MCP_RPC_URL;
+    const privateKey = process.env.MCP_PRIVATE_KEY;
+    const shouldAutosign = !!(rpcUrl && privateKey && apiKey);
 
-    // Create transaction preview
+    if (shouldAutosign) {
+      console.error(' 🔑 Using server-side signer (env) to create job');
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
+      const wallet = new ethers.Wallet(privateKey as string, provider);
+      const triggerxClient = new TriggerXClient(apiKey!);
+
+      const result = await createJob(triggerxClient, {
+        jobInput,
+        signer: wallet,
+      });
+
+      console.error(' ✅ Job created (server-side):', result);
+      if ((result as any)?.success === false) {
+        const error = (result as any)?.error || 'Failed to create job via server signer';
+        const errorCode = (result as any)?.errorCode;
+        const httpStatusCode = (result as any)?.httpStatusCode;
+        
+        // Provide specific error messages for common issues
+        let specificError = error;
+        if (errorCode === 'BALANCE_ERROR' && error.includes('top up TG balance')) {
+          specificError = 'Failed to top up TG balance. Either fund your TG balance on TriggerX or set autotopupTG: false to skip auto top-up.';
+        } else if (httpStatusCode === 400) {
+          specificError = 'Bad request to TriggerX API. Check your job parameters, API key, and Safe wallet configuration.';
+        } else if (errorCode === 'NONCE_EXPIRED') {
+          specificError = 'Transaction nonce expired. This usually happens with network congestion or timing issues. Please retry.';
+        }
+        
+        return {
+          success: false,
+          error: specificError,
+          errorCode,
+          httpStatusCode,
+          data: { result },
+        } as any;
+      }
+      return {
+        success: true,
+        message: 'Time-based job created via server signer',
+        data: {
+          jobId: (result as any)?.jobId || (result as any)?.id || (result as any)?.data?.jobId || 'unknown',
+          result,
+        },
+      };
+    }
+
+    console.error(' 📝 No server signer (or Safe mode); returning artifact for client-side signing');
+
+    // Create transaction preview (for client-side signing)
     const txPreview = {
       action: 'createTimeJob' as const,
       jobTitle: params.jobTitle,
@@ -83,17 +142,14 @@ export async function createTimeJob(params: z.infer<typeof CreateTimeJobSchema>)
       specificSchedule: params.specificSchedule,
     };
 
-    // Create transaction artifact for user signing
     const txArtifact = {
       txPreview,
       jobData: {
         jobInput,
         requiresUserSignature: true,
-        estimatedCost: '0.01', // Placeholder - can be calculated based on actual costs
+        estimatedCost: '0.01',
       },
     };
-
-    console.log(' Transaction artifact prepared for user signing');
 
     return {
       success: true,
@@ -102,7 +158,27 @@ export async function createTimeJob(params: z.infer<typeof CreateTimeJobSchema>)
     };
   } catch (error) {
     console.error(' CreateTimeJob error:', error);
-    throw new Error(`Failed to create time job: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    
+    // Handle specific error types
+    let errorMessage = 'Unknown error';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      
+      // Handle timeout errors
+      if (error.message.includes('timeout') || error.message.includes('TIMEOUT')) {
+        errorMessage = 'Request timed out. Try using a faster RPC endpoint or reducing the complexity of your dynamic arguments script.';
+      }
+      // Handle network errors
+      else if (error.message.includes('network') || error.message.includes('NETWORK_ERROR')) {
+        errorMessage = 'Network error. Check your RPC endpoint and internet connection.';
+      }
+      // Handle RPC errors
+      else if (error.message.includes('SERVER_ERROR') || error.message.includes('403')) {
+        errorMessage = 'RPC endpoint error. Ensure your RPC provider supports Arbitrum Sepolia and your API key is valid.';
+      }
+    }
+    
+    throw new Error(`Failed to create time job: ${errorMessage}`);
   }
 }
 

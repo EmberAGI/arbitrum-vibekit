@@ -17,8 +17,8 @@ export async function deleteJob(params: z.infer<typeof DeleteJobSchema>, trigger
   try {
     console.log('🗑️ [MCP] DeleteJob executing with input:', JSON.stringify(params, null, 2));
 
-    const rpcUrl = process.env.RPC_URL;
-    const privateKey = process.env.PRIVATE_KEY;
+    const rpcUrl = process.env.MCP_RPC_URL;
+    const privateKey = process.env.MCP_PRIVATE_KEY;
     if (!rpcUrl || !privateKey) {
       throw new Error('RPC_URL and PRIVATE_KEY must be configured in environment to delete jobs on-chain');
     }

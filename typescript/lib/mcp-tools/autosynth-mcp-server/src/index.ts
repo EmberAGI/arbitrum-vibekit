@@ -18,6 +18,12 @@ async function main() {
   app.use(express.json());
 
   app.use(cors());
+  
+  // Set server timeout to 5 minutes for long-running operations
+  app.use((req, res, next) => {
+    res.setTimeout(300000); // 5 minutes
+    next();
+  });
   app.use(function (req, _res, next) {
     console.error(`${req.method} ${req.url}`);
     next();
@@ -45,6 +51,9 @@ async function main() {
   app.get('/sse', async (_req, res) => {
     console.error('Received SSE connection');
 
+    // Set longer timeout for SSE connections (5 minutes)
+    res.setTimeout(300000);
+    
     const transport = new SSEServerTransport('/messages', res);
     transports[transport.sessionId] = transport;
 
@@ -54,6 +63,9 @@ async function main() {
   app.post('/messages', async (req, res) => {
     const sessionId = req.query.sessionId as string;
     console.error(`Received message for session: ${sessionId}`);
+    
+    // Set longer timeout for message processing (5 minutes)
+    res.setTimeout(300000);
 
     let bodyBuffer = Buffer.alloc(0);
 
@@ -126,6 +138,7 @@ async function main() {
         { name: 'getJobs', description: 'Retrieve all jobs or specific job by ID' },
         { name: 'deleteJob', description: 'Delete a specific job by ID' },
         { name: 'getUserData', description: 'Get user statistics and job count' },
+        { name: 'getSafeWalletInfo', description: 'Validate Safe wallet address format (no on-chain checks)' },
       ],
     });
   });
