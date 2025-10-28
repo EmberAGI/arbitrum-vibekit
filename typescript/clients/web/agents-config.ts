@@ -119,9 +119,25 @@ export const chatAgents = [
     description: 'Automated job scheduling with time, event, and condition triggers',
     suggestedActions: [
       {
+        title: 'Create Safe wallet',
+        label: 'on Arbitrum Sepolia',
+        action: 'Create a Safe wallet on Arbitrum Sepolia (421614) with one owner',
+      },
+      {
         title: 'Create time-based job',
-        label: 'for daily execution',
-        action: 'Create a time-based job that runs daily at 9 AM',
+        label: 'daily at 9 AM (EOA)',
+        action: 'Create a time-based job (regular wallet) that runs daily at 9 AM, timezone UTC, chainId 421614, targetContractAddress 0x<contract>, targetFunction helloWorld, arguments ["3"], abi <abi-json-string>',
+      },
+      {
+        title: 'Create time job (Safe)',
+        label: 'interval every 60s',
+        action:
+          'Create a time-based job with Safe wallet mode: title "safe-time-job-example", schedule interval 60 seconds, timezone UTC, chainId 421614, Safe address <your_safe_address>, dynamic arguments URL https://ipfs.io/ipfs/<your-hash>',
+      },
+      {
+        title: 'List my jobs',
+        label: 'and their status',
+        action: 'Show me all my automated jobs and their current status',
       },
       {
         title: 'Set up event trigger',
@@ -129,9 +145,9 @@ export const chatAgents = [
         action: 'Create an event-based job that triggers when a Transfer event occurs',
       },
       {
-        title: 'List my jobs',
-        label: 'and their status',
-        action: 'Show me all my automated jobs and their current status',
+        title: 'Help with job creation',
+        label: 'general requirements',
+        action: 'What are the required fields to create time, event, and condition jobs (EOA vs Safe)?',
       },
       {
         title: 'Help with scheduling',

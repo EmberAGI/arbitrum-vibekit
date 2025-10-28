@@ -23,23 +23,23 @@ const CreateConditionJobInputSchema = z.object({
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/)
     .optional()
-    .describe('Contract address to call when condition is met (not required for Safe wallet mode)'),
-  targetFunction: z.string().min(1).optional().describe('Function name to call on the target contract (not required for Safe wallet mode)'),
-  abi: z.string().min(1).optional().describe('Target contract ABI (JSON string) (not required for Safe wallet mode)'),
-  arguments: z.array(z.string()).default([]).describe('Static arguments for the function call'),
+    .describe('Contract address to call when condition is met (NOT required for Safe wallet mode - SDK auto-sets Safe Module)'),
+  targetFunction: z.string().min(1).optional().describe('Function name to call on target contract (NOT required for Safe wallet mode - SDK uses execJobFromHub)'),
+  abi: z.string().min(1).optional().describe('Target contract ABI JSON string (NOT required for Safe wallet mode - SDK handles Safe Module ABI)'),
+  arguments: z.array(z.string()).default([]).describe('Static arguments for function call (NOT allowed in Safe wallet mode - use dynamicArgumentsScriptUrl)'),
   recurring: z.boolean().default(false).describe('Whether the job should check condition repeatedly'),
   timeFrame: z.number().positive().default(36).describe('Job validity timeframe in hours'),
   targetChainId: z.string().default('421614').describe('Target blockchain chain ID'),
-  dynamicArgumentsScriptUrl: z.string().optional().describe('URL for dynamic argument fetching script'),
+  dynamicArgumentsScriptUrl: z.string().optional().describe('URL for dynamic argument fetching script (REQUIRED for Safe wallet mode)'),
   timezone: z.string().default('UTC').describe('Timezone for job execution'),
   userAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('User wallet address for signing transactions'),
   walletMode: z.enum(['regular', 'safe']).default('regular').describe('Wallet mode: "regular" for EOA execution or "safe" for Safe wallet execution'),
-  safeAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional().describe('Safe wallet address (required when walletMode is "safe")'),
+  safeAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional().describe('Safe wallet address (REQUIRED when walletMode is "safe" - must be created first)'),
 });
 
 export const createConditionJobTool: VibkitToolDefinition<typeof CreateConditionJobInputSchema, any, TriggerXContext, any> = {
   name: 'createConditionJob',
-  description: 'Create a condition-based automated job that triggers when specified conditions are met',
+  description: 'Create a condition-based automated job that triggers when specified conditions are met. For Safe wallet mode: requires existing Safe wallet (create first), dynamicArgumentsScriptUrl (IPFS script), and NO static arguments. For regular mode: requires targetContractAddress, targetFunction, and abi.',
   parameters: CreateConditionJobInputSchema,
   execute: async (input, context) => {
     console.log('📊 CreateConditionJob tool executing with input:', JSON.stringify(input, null, 2));
@@ -52,13 +52,17 @@ export const createConditionJobTool: VibkitToolDefinition<typeof CreateCondition
         throw new Error('valueSourceUrl is required for API-based conditions');
       }
 
-      // Validate Safe wallet mode requirements
+      // Validate Safe wallet mode requirements based on SDK documentation
       if (input.walletMode === 'safe') {
         if (!input.safeAddress) {
-          throw new Error('safeAddress is required when walletMode is "safe"');
+          throw new Error('safeAddress is required when walletMode is "safe". Please create a Safe wallet first using the createSafeWallet tool.');
         }
         if (!input.dynamicArgumentsScriptUrl) {
-          throw new Error('dynamicArgumentsScriptUrl is required for Safe wallet mode');
+          throw new Error('dynamicArgumentsScriptUrl is required for Safe wallet mode. Safe wallets only support dynamic arguments (ArgType.Dynamic).');
+        }
+        // Safe mode doesn't allow static arguments - they must come from IPFS script
+        if (input.arguments && input.arguments.length > 0) {
+          throw new Error('Static arguments are not allowed in Safe wallet mode. All parameters must come from dynamicArgumentsScriptUrl.');
         }
       } else {
         // Regular mode requires target contract details

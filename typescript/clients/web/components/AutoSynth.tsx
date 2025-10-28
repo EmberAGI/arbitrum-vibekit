@@ -80,18 +80,73 @@ export function AutoSynth({
       });
 
       console.log('📥 TriggerX SDK response:', result);
+      console.log('📥 TriggerX SDK response type:', typeof result);
+      console.log('📥 TriggerX SDK response keys:', result ? Object.keys(result) : 'null');
+      console.log('📦 Full result structure:', JSON.stringify(result, null, 2));
 
-      // Extract job ID from the response
-      const extractedJobId =
-        (result as any)?.jobId ||
-        (result as any)?.id ||
-        (result as any)?.data?.jobId ||
-        (Array.isArray((result as any)?.data?.job_ids) && (result as any).data.job_ids.length > 0 && (result as any).data.job_ids[0]) ||
-        'unknown';
+      // Check if the SDK call actually succeeded
+      if ((result as any)?.success === false) {
+        console.error('❌ SDK returned failure');
+        const errorMessage = (result as any)?.error || 'Failed to create job';
+        const errorDetails = (result as any)?.details || {};
+        console.error('Error details:', errorDetails);
+        
+        // Provide more specific error messages
+        if (errorMessage.includes('Safe wallet')) {
+          const safeAddr = jobData.jobInput.safeAddress;
+          const originalError = errorDetails?.originalError;
+          
+          // Check if this is a "missing node" error (Safe doesn't exist on chain)
+          if (originalError?.shortMessage?.includes('missing') || originalError?.info?.error?.data?.message?.includes('not available')) {
+            throw new Error(`Safe wallet ${safeAddr} cannot be found on Arbitrum Sepolia. The Safe may not exist yet or needs to be created first. Please create the Safe wallet first using the "Create Safe Wallet" option, then create your job.`);
+          }
+          
+          throw new Error(`Safe wallet configuration failed. Please ensure your Safe wallet (${safeAddr}) exists on Arbitrum Sepolia and has proper owners and modules. Original error: ${errorMessage}`);
+        }
+        throw new Error(errorMessage);
+      }
+
+      // Extract job ID from the response - check multiple possible structures
+      let extractedJobId = 'unknown';
+      let transactionHash = null;
+      
+      if (typeof result === 'object' && result !== null) {
+        // Try different possible structures for jobId
+        extractedJobId = 
+          (result as any)?.jobId ||
+          (result as any)?.id ||
+          (result as any)?.job_id ||
+          (result as any)?.job?.id ||
+          (result as any)?.data?.jobId ||
+          (result as any)?.data?.job_id ||
+          (result as any)?.data?.id ||
+          (result as any)?.data?.job?.id ||
+          ((result as any)?.data?.job_ids && Array.isArray((result as any).data.job_ids) && (result as any).data.job_ids.length > 0 && (result as any).data.job_ids[0]) ||
+          ((result as any)?.result?.jobId) ||
+          ((result as any)?.result?.id) ||
+          'unknown';
+          
+        // Try to extract transaction hash for verification
+        transactionHash = 
+          (result as any)?.transactionHash ||
+          (result as any)?.hash ||
+          (result as any)?.txHash ||
+          (result as any)?.data?.transactionHash ||
+          null;
+      }
+
+      // If jobId is still unknown but we have a transaction hash, use that
+      if (extractedJobId === 'unknown' && transactionHash) {
+        console.log('⚠️ No jobId found, but transaction hash available:', transactionHash);
+      }
 
       setJobId(extractedJobId);
       setIsSuccess(true);
-      console.log('✅ Job created successfully with ID:', extractedJobId);
+      console.log('✅ Job created successfully!');
+      console.log('📌 Job ID:', extractedJobId);
+      if (transactionHash) {
+        console.log('🔗 Transaction hash:', transactionHash);
+      }
 
     } catch (err: any) {
       console.error('❌ Error creating job:', err);
@@ -251,13 +306,13 @@ export function AutoSynth({
                   <span className="font-semibold">Job Title:</span> {txPreview.jobTitle}
                 </p>
                 <p className="font-normal w-full">
-                  <span className="font-semibold">Schedule Types:</span> {txPreview.scheduleTypes?.join(', ')}
+                  <span className="font-semibold">Schedule Type:</span> {txPreview.scheduleType || txPreview.scheduleTypes?.join(', ')}
                 </p>
                 <p className="font-normal w-full">
-                  <span className="font-semibold">Target Contract:</span> {txPreview.targetContract}
+                  <span className="font-semibold">Target Contract:</span> {txPreview.targetContract || 'Safe Module'}
                 </p>
                 <p className="font-normal w-full">
-                  <span className="font-semibold">Function:</span> {txPreview.targetFunction}
+                  <span className="font-semibold">Function:</span> {txPreview.targetFunction || 'execJobFromHub'}
                 </p>
                 <p className="font-normal w-full">
                   <span className="font-semibold">Chain:</span> {txPreview.chainId}
@@ -294,10 +349,22 @@ export function AutoSynth({
             <div className="mt-4 p-4 bg-blue-900 rounded-lg border border-blue-700">
               <h3 className="text-lg font-semibold text-blue-200 mb-2">🔐 Safe Wallet Configuration</h3>
               <div className="text-blue-100 space-y-2">
-                <p><strong>What this creates:</strong> A new Safe wallet with multi-signature capabilities</p>
+                <p><strong>What this creates:</strong> A new Safe wallet with one owner</p>
                 <p><strong>Security features:</strong> Enhanced transaction validation and approval workflows</p>
                 <p><strong>Use case:</strong> Automated job execution with additional security layers</p>
                 <p><strong>Next steps:</strong> After creation, you can use this Safe wallet for secure job execution</p>
+              </div>
+            </div>
+          )}
+
+          {/* Safe Wallet Job Configuration Prompt */}
+          {txPreview?.walletMode === 'safe' && !isSafeWalletCreation && (
+            <div className="mt-4 p-4 bg-green-900 rounded-lg border border-green-700">
+              <h3 className="text-lg font-semibold text-green-200 mb-2">🛡️ Safe Wallet Job Configuration</h3>
+              <div className="text-green-100 space-y-2">
+                <p><strong>Execution Mode:</strong> Job will execute through Safe wallet with enhanced security</p>
+                <p><strong>Dynamic Arguments:</strong> All parameters come from IPFS script for secure execution</p>
+                <p><strong>Safe Address:</strong> {txPreview.safeAddress}</p>
               </div>
             </div>
           )}

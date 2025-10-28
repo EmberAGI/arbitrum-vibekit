@@ -141,24 +141,52 @@ export const MessageRenderer = ({
     const { toolInvocation } = part;
     const { result, toolCallId, toolName } = toolInvocation;
     console.log('[MessageRenderer] Tool result - toolName:', toolName);
-    console.log('[MessageRenderer] Tool result - result:', result);
-    const content0 = result?.result?.content && Array.isArray(result?.result?.content)
-      ? result?.result?.content?.[0]
-      : undefined;
-    const toolInvocationParsableString = content0?.text
-      ? content0.text
-      : content0?.resource?.text
-        ? content0.resource.text
+    console.log('[MessageRenderer] Tool result - full result:', JSON.stringify(result, null, 2));
+    // Handle MCP response structure: result.content[0].resource.text
+    let rawContent = result?.result?.content?.[0];
+    
+    const toolInvocationParsableString = rawContent?.text
+      ? rawContent.text
+      : rawContent?.resource?.text
+        ? rawContent.resource.text
         : typeof result?.result === 'string'
           ? result.result
-          : JSON.stringify(result?.result ?? {});
+          : result?.result
+            ? JSON.stringify(result.result)
+            : '';
+    
+    console.log('[MessageRenderer] Parsable string:', toolInvocationParsableString);
+    
     let toolInvocationResult: any = null;
-    try {
-      toolInvocationResult = toolInvocationParsableString
-        ? JSON.parse(toolInvocationParsableString)
-        : null;
-    } catch (_e) {
-      // Fallback to wrapping raw content as JSON
+    
+    // First try: Parse as JSON string
+    if (toolInvocationParsableString) {
+      try {
+        toolInvocationResult = JSON.parse(toolInvocationParsableString);
+      } catch (_e) {
+        console.log('[MessageRenderer] JSON parse failed');
+      }
+    }
+    
+    // Second try: If result is already an object, use it directly
+    if (!toolInvocationResult && result?.result && typeof result.result === 'object' && !Array.isArray(result.result)) {
+      console.log('[MessageRenderer] Using result as object directly');
+      toolInvocationResult = result.result;
+    }
+    
+    // Third try: Check if result.content[0].resource exists with text
+    if (!toolInvocationResult && result?.result?.content?.[0]?.resource?.text) {
+      console.log('[MessageRenderer] Extracting from MCP resource format');
+      try {
+        toolInvocationResult = JSON.parse(result.result.content[0].resource.text);
+      } catch (_e) {
+        console.log('[MessageRenderer] Failed to parse resource text');
+      }
+    }
+    
+    // Fallback
+    if (!toolInvocationResult) {
+      console.log('[MessageRenderer] No result found, creating raw wrapper');
       toolInvocationResult = { raw: result?.result };
     }
     const getKeyFromResult = (key: string) =>
@@ -168,9 +196,11 @@ export const MessageRenderer = ({
     const txPlan = getKeyFromResult('txPlan');
     const txPreview = getKeyFromResult('txPreview');
     
-    console.log('[MessageRenderer] Parsed toolInvocationResult:', toolInvocationResult);
-    console.log('[MessageRenderer] txPreview:', txPreview);
-    console.log('[MessageRenderer] jobData:', getKeyFromResult('jobData'));
+    console.log('[MessageRenderer] Parsed toolInvocationResult:', JSON.stringify(toolInvocationResult, null, 2));
+    console.log('[MessageRenderer] Artifacts:', toolInvocationResult?.artifacts);
+    console.log('[MessageRenderer] txPreview from artifact:', txPreview);
+    console.log('[MessageRenderer] jobData from artifact:', getKeyFromResult('jobData'));
+    console.log('[MessageRenderer] Raw data in artifact parts:', toolInvocationResult?.artifacts?.[0]?.parts?.[0]?.data);
 
     const getParts = () =>
       Array.isArray(toolInvocationResult?.artifacts)
