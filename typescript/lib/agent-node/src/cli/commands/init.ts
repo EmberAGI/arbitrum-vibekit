@@ -3,10 +3,13 @@
  * Scaffolds a new config workspace with sample files
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, mkdirSync, writeFileSync, copyFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { cliOutput } from '../output.js';
+
+const envExamplePath = fileURLToPath(new URL('../../../.env.example', import.meta.url));
 
 export interface InitOptions {
   target?: string;
@@ -597,14 +600,24 @@ export function initCommand(options: InitOptions = {}): Promise<void> {
       cliOutput.success('Created `workflows/` directory');
       cliOutput.success('Created `workflows/example-workflow.ts`');
 
+      // Copy .env.example to .env
+      const envPath = resolve(dirname(targetDir), '.env');
+      if (existsSync(envPath) && !options.force) {
+        cliOutput.info('Skipped `.env` (already exists, use --force to overwrite)');
+      } else {
+        copyFileSync(envExamplePath, envPath);
+        cliOutput.success('Created `.env`');
+      }
+
       cliOutput.blank();
       cliOutput.print('Config workspace initialized successfully!', 'cyan');
       cliOutput.blank();
       cliOutput.print('**Next steps:**');
-      cliOutput.print('  1. Edit `config/agent.md` to customize your agent');
-      cliOutput.print('  2. Customize `config/skills/general-assistant.md` or add more skills');
-      cliOutput.print('  3. Run: `pnpm agent doctor`');
-      cliOutput.print('  4. Run: `pnpm agent run --dev`');
+      cliOutput.print('  1. Review `.env` and add your API keys');
+      cliOutput.print('  2. Edit `config/agent.md` to customize your agent');
+      cliOutput.print('  3. Customize `config/skills/general-assistant.md` or add more skills');
+      cliOutput.print('  4. Run: `pnpm agent doctor`');
+      cliOutput.print('  5. Run: `pnpm agent run --dev`');
 
       resolvePromise();
     } catch (error) {
