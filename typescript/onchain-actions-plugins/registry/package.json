@@ -27,6 +27,7 @@
     "zod": "^3.0.0 || ^4.0.0"
   },
   "devDependencies": {
+    "@semantic-release/exec": "^7.1.0",
     "tsup": "^8.0.0"
   },
   "license": "MIT",
@@ -48,6 +49,7 @@
       },
       "main"
     ],
+    "tagFormat": "${npmPackage}@${version}",
     "plugins": [
       [
         "@semantic-release/commit-analyzer",
