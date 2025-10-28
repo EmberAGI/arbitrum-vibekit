@@ -14,6 +14,7 @@ import { loadMCPRegistry } from '../../config/loaders/mcp-loader.js';
 import { loadSkills } from '../../config/loaders/skill-loader.js';
 import { loadWorkflowRegistry } from '../../config/loaders/workflow-loader.js';
 import { loadAgentConfig } from '../../config/orchestrator.js';
+import { resolveConfigDirectory } from '../../config/runtime/config-dir.js';
 import {
   extractGuardrails,
   extractToolPolicies,
@@ -97,7 +98,7 @@ export interface DoctorOptions {
 }
 
 export async function doctorCommand(options: DoctorOptions = {}): Promise<void> {
-  const configDir = resolve(process.cwd(), options.configDir ?? 'config');
+  const { configDir } = resolveConfigDirectory(options.configDir);
   const manifestPath = resolve(configDir, 'agent.manifest.json');
 
   cliOutput.print('Running configuration diagnostics...');

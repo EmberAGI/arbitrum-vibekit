@@ -3,10 +3,11 @@
  * Displays composed agent configuration with redacted secrets
  */
 
-import { resolve } from 'node:path';
 import { URL } from 'node:url';
+import { resolve } from 'node:path';
 
 import { loadAgentConfig } from '../../config/orchestrator.js';
+import { resolveConfigDirectory } from '../../config/runtime/config-dir.js';
 import {
   extractGuardrails,
   extractToolPolicies,
@@ -55,7 +56,7 @@ function redactSecrets(obj: unknown): unknown {
 }
 
 export async function printConfigCommand(options: PrintConfigOptions = {}): Promise<void> {
-  const configDir = resolve(process.cwd(), options.configDir ?? 'config');
+  const { configDir } = resolveConfigDirectory(options.configDir);
   const manifestPath = resolve(configDir, 'agent.manifest.json');
   const promptMode = options.prompt ?? 'summary';
 
