@@ -67,8 +67,11 @@ export async function chatCommand(options: ChatOptions = {}): Promise<void> {
 
     cliOutput.success(`Connected to agent at \`${baseUrl}\``);
 
-    // Create renderer
-    const renderer = new StreamRenderer({
+    // Create renderer (allow tests to spy on constructor)
+    const StreamRendererCtor =
+      (StreamRenderer.prototype.constructor as typeof StreamRenderer | undefined) ??
+      StreamRenderer;
+    const renderer = new StreamRendererCtor({
       colors: true,
       verbose: options.verbose ?? false,
       inlineSummaryInterval: options.inlineSummaryInterval,
@@ -87,16 +90,24 @@ export async function chatCommand(options: ChatOptions = {}): Promise<void> {
   } catch (error) {
     cliOutput.error('Failed to connect to agent');
 
-    if (error instanceof Error) {
-      cliOutput.error(error.message);
+    const message =
+      error instanceof Error
+        ? error.message || error.toString()
+        : typeof error === 'string'
+          ? error
+          : JSON.stringify(error);
+    cliOutput.error(message);
 
-      // Check for common connection errors
-      if (error.message.includes('fetch') || error.message.includes('ECONNREFUSED')) {
-        cliOutput.blank();
-        cliOutput.info(
-          `No agent is running at \`${baseUrl}\`. Try starting one with \`agent run\` first.`,
-        );
-      }
+    const normalizedMessage = message.toLowerCase();
+    if (
+      normalizedMessage.includes('fetch') ||
+      normalizedMessage.includes('econnrefused') ||
+      normalizedMessage.includes('timeout') ||
+      normalizedMessage.includes('connection')
+    ) {
+      cliOutput.error(
+        `No agent is running at ${baseUrl}. Try starting one with agent run before reconnecting.`,
+      );
     }
 
     process.exit(1);
