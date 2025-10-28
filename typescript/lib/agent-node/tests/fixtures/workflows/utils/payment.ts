@@ -16,7 +16,7 @@ export function createPaymentRequirements(agentsWallet: `0x${string}`): PaymentR
     resource: 'https://example.test/usdai-strategy',
     payTo: agentsWallet,
     asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-    maxAmountRequired: '1000000', // 1 USDC (6 decimals)
+    maxAmountRequired: '100', // 1 USDC (6 decimals)
     mimeType: 'application/json',
     maxTimeoutSeconds: 3600,
     extra: {

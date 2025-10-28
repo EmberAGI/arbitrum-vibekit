@@ -1,6 +1,8 @@
 import { PaymentPayload, PaymentRequirements, Resource } from 'x402/types';
 import { useFacilitator } from 'x402/verify';
 
+import { serviceConfig } from '../../config.js';
+
 /**
  * Verify payment using the configured facilitator
  * @param paymentPayload - The payment payload to verify
@@ -11,9 +13,9 @@ export async function verifyPayment(
   paymentPayload: PaymentPayload,
   requirements: PaymentRequirements,
 ) {
-  const facilitatorUrl = process.env['X402_FACILITATOR_URL'];
+  const facilitatorUrl = serviceConfig.x402.facilitatorUrl;
   if (!facilitatorUrl) {
-    throw new Error('X402_FACILITATOR_URL environment variable is not configured');
+    throw new Error('X402_FACILITATOR_URL is not configured');
   }
 
   const { verify } = useFacilitator({ url: facilitatorUrl as Resource });
@@ -30,9 +32,9 @@ export async function settlePayment(
   paymentPayload: PaymentPayload,
   requirements: PaymentRequirements,
 ) {
-  const facilitatorUrl = process.env['X402_FACILITATOR_URL'];
+  const facilitatorUrl = serviceConfig.x402.facilitatorUrl;
   if (!facilitatorUrl) {
-    throw new Error('X402_FACILITATOR_URL environment variable is not configured');
+    throw new Error('X402_FACILITATOR_URL is not configured');
   }
 
   const { settle } = useFacilitator({ url: facilitatorUrl as Resource });
