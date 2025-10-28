@@ -42,6 +42,11 @@ import type { ActiveTask, TaskState, WorkflowEvent } from '../types.js';
 import { findMatchingPaymentRequirements } from 'x402/shared';
 
 /**
+ * Result type for operations that can succeed or fail
+ */
+type Result<T, E = Error> = { isSuccess: true; value: T } | { isSuccess: false; error: E };
+
+/**
  * Type guards
  */
 function hasEventEmitter(
@@ -191,23 +196,25 @@ export class WorkflowHandler {
         eventBus,
       );
 
-      // If payment handling encountered an error, it returns null and already handled the error
-      // We should not continue with the resume in this case
-      if (paymentResult === null) {
-        this.logger.debug('[RESUME] Payment handling failed, aborting resume', { taskId });
+      // If payment handling encountered an error, we should not continue with the resume
+      if (!paymentResult.isSuccess) {
+        this.logger.debug('[RESUME] Payment handling failed, aborting resume', {
+          taskId,
+          error: paymentResult.error,
+        });
         return;
       }
 
       // Resume the workflow with the appropriate input
-      // If settlement object exists (paymentResult is PaymentSettlement), pass it
-      // Otherwise use the original input (paymentResult is undefined)
-      const input = paymentResult ?? messageData ?? messageContent;
+      // If settlement object exists (paymentResult.value is PaymentSettlement), pass it
+      // Otherwise use the original input (paymentResult.value is undefined)
+      const input = paymentResult.value ?? messageData ?? messageContent;
 
       // Use execution.resume() instead of calling generator.next() directly
       // This ensures event listeners (set up in dispatchWorkflow) are triggered
       this.logger.debug('[RESUME] About to call execution.resume()', {
         taskId,
-        hasSettlement: !!paymentResult,
+        hasSettlement: !!paymentResult.value,
       });
       const resumeResult = await execution.resume(input);
       this.logger.debug('[RESUME] execution.resume() returned', {
@@ -303,16 +310,16 @@ export class WorkflowHandler {
     contextId: string,
     metadata: Record<string, unknown>,
     eventBus: ExecutionEventBus,
-  ): Promise<PaymentSettlement | undefined | null> {
+  ): Promise<Result<PaymentSettlement | undefined, string>> {
     if (taskState.state !== 'input-required') {
-      return undefined;
+      return { isSuccess: true, value: undefined };
     }
     const currentTaskState = this.workflowRuntime?.getTaskState(taskId);
 
     // Check if this task was paused for payment
     const paymentStatus = metadata[X402_STATUS_KEY];
     if (!paymentStatus) {
-      return undefined;
+      return { isSuccess: true, value: undefined };
     }
 
     try {
@@ -418,7 +425,7 @@ export class WorkflowHandler {
         },
       };
 
-      return settlement;
+      return { isSuccess: true, value: settlement };
     } catch (error) {
       this.logger.debug((error as Error).toString?.() ?? String(error), { taskId });
       const errorMessage: Message = {
@@ -455,7 +462,9 @@ export class WorkflowHandler {
       };
       eventBus.publish(statusUpdate);
       eventBus.finished();
-      return null; // Return null to indicate error was handled
+
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      return { isSuccess: false, error: errorMsg };
     }
   }
 
