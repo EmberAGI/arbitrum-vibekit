@@ -370,7 +370,7 @@ NODE_ENV=development pnpm start
 View the composed configuration:
 
 \`\`\`bash
-pnpm agent print-config
+npx -y @emberai/agent-node print-config
 \`\`\`
 
 ### Validate Configuration
@@ -378,7 +378,7 @@ pnpm agent print-config
 Check for errors and conflicts:
 
 \`\`\`bash
-pnpm agent doctor
+npx -y @emberai/agent-node doctor
 \`\`\`
 
 ## Environment Variables
@@ -567,8 +567,8 @@ export function initCommand(options: InitOptions = {}): Promise<void> {
       cliOutput.print('  1. Review `.env` and add your API keys');
       cliOutput.print('  2. Edit `config/agent.md` to customize your agent');
       cliOutput.print('  3. Customize `config/skills/general-assistant.md` or add more skills');
-      cliOutput.print('  4. Run: `pnpm agent doctor`');
-      cliOutput.print('  5. Run: `pnpm agent run --dev`');
+      cliOutput.print('  4. Run: `npx -y @emberai/agent-node doctor`');
+      cliOutput.print('  5. Run: `npx -y @emberai/agent-node run --dev`');
 
       resolvePromise();
     } catch (error) {

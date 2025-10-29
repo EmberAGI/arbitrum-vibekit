@@ -16,7 +16,7 @@ async function main(): Promise<void> {
   const manifestPath = resolve(configRoot, 'agent.manifest.json');
   if (!existsSync(manifestPath)) {
     throw new Error(
-      `Config workspace not found at ${configRoot}. Run "pnpm agent init" to scaffold the configuration workspace before starting the server.`,
+      `Config workspace not found at ${configRoot}. Run "npx -y @emberai/agent-node init" to scaffold the configuration workspace before starting the server.`,
     );
   }
 
