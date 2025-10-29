@@ -242,6 +242,87 @@ export class CliOutput {
 }
 
 /**
+ * Show the startup effect with styled "AAGENT NODEE" text
+ */
+export function showStartupEffect(): void {
+  // Detect terminal color capability
+  const supportsTruecolor = /truecolor|24bit/i.test(process.env['COLORTERM'] ?? '');
+  const supports256 = /256color/i.test(process.env['TERM'] ?? '') || supportsTruecolor;
+
+  // Define colors for each styling mode
+  let cyanBg: string;
+  let cyanText: string;
+  let darkPurpleBg: string;
+  let lightPurpleText: string;
+  let magentaBg: string;
+  let magentaText: string;
+  const reset = '\x1b[0m';
+
+  if (supportsTruecolor) {
+    // 24-bit RGB colors
+    cyanBg = '\x1b[48;2;0;188;212m'; // Cyan background
+    cyanText = '\x1b[38;2;0;188;212m'; // Cyan text
+    darkPurpleBg = '\x1b[48;2;67;7;100m'; // Dark purple background
+    lightPurpleText = '\x1b[38;2;200;162;255m'; // Light purple text
+    magentaBg = '\x1b[48;2;236;64;122m'; // Magenta background
+    magentaText = '\x1b[38;2;236;64;122m'; // Magenta text
+  } else if (supports256) {
+    // 256-color mode
+    cyanBg = '\x1b[48;5;51m'; // Cyan background
+    cyanText = '\x1b[38;5;51m'; // Cyan text
+    darkPurpleBg = '\x1b[48;5;54m'; // Dark purple background
+    lightPurpleText = '\x1b[38;5;183m'; // Light purple text
+    magentaBg = '\x1b[48;5;201m'; // Magenta background
+    magentaText = '\x1b[38;5;201m'; // Magenta text
+  } else {
+    // 16-color fallback
+    cyanBg = '\x1b[46m'; // Cyan background
+    cyanText = '\x1b[96m'; // Bright cyan text
+    darkPurpleBg = '\x1b[45m'; // Magenta background (closest to purple)
+    lightPurpleText = '\x1b[95m'; // Bright magenta text (closest to light purple)
+    magentaBg = '\x1b[45m'; // Magenta background
+    magentaText = '\x1b[95m'; // Bright magenta text
+  }
+
+  // Build the styled text character by character
+  // Text includes spaces for empty boxes: " AAGENT NODEE "
+  const text = ' AAGENT NODEE ';
+  let styledText = '';
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    if (i === 0) {
+      // First space - empty cyan box
+      styledText += `${cyanBg} ${reset}`;
+    } else if (i === 1) {
+      // 'A' - cyan text on purple background
+      styledText += `${darkPurpleBg}${cyanText}${char}${reset}`;
+    } else if (i >= 2 && i <= 11) {
+      // 'AGENT NODE' - light purple text on dark purple background
+      styledText += `${darkPurpleBg}${lightPurpleText}${char}${reset}`;
+    } else if (i === 12) {
+      // 'E' - magenta text on purple background
+      styledText += `${darkPurpleBg}${magentaText}${char}${reset}`;
+    } else if (i === 13) {
+      // Last space - empty magenta box
+      styledText += `${magentaBg} ${reset}`;
+    }
+  }
+
+  // Center the text based on terminal width
+  const terminalWidth = process.stdout.columns || 80;
+  const textLength = text.length; // Visual length without ANSI codes
+  const padding = Math.max(0, Math.floor((terminalWidth - textLength) / 2));
+  const paddingStr = ' '.repeat(padding);
+
+  // Output with blank lines for visual separation
+  process.stdout.write('\n');
+  process.stdout.write(paddingStr + styledText + '\n');
+  process.stdout.write('\n');
+}
+
+/**
  * Default CLI output instance for convenient importing
  */
 export const cliOutput = new CliOutput();

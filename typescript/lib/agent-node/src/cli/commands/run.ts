@@ -141,8 +141,7 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
     process.env['LOG_LEVEL'] = 'ERROR';
   }
 
-  const temporarilyForceErrorLevel =
-    !shouldAttach && process.env['LOG_LEVEL'] !== 'ERROR';
+  const temporarilyForceErrorLevel = !shouldAttach && process.env['LOG_LEVEL'] !== 'ERROR';
   if (temporarilyForceErrorLevel) {
     process.env['LOG_LEVEL'] = 'ERROR';
   }
@@ -177,6 +176,10 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
     if (shouldAttach) {
       cliOutput.blank();
       cliOutput.info('Entering chat mode...');
+
+      // Show startup effect when entering chat mode
+      const { showStartupEffect } = await import('../output.js');
+      showStartupEffect();
     }
   }
 

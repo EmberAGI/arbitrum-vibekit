@@ -9,7 +9,7 @@ import { Logger } from '../../utils/logger.js';
 import { ChatClient } from '../chat/client.js';
 import { StreamRenderer } from '../chat/renderer.js';
 import { ChatRepl } from '../chat/repl.js';
-import { cliOutput } from '../output.js';
+import { cliOutput, showStartupEffect } from '../output.js';
 
 export interface ChatOptions {
   /**
@@ -41,6 +41,9 @@ export interface ChatOptions {
 export async function chatCommand(options: ChatOptions = {}): Promise<void> {
   const baseUrl = options.url ?? 'http://127.0.0.1:3000';
 
+  // Show startup effect when CLI starts
+  showStartupEffect();
+
   try {
     // Force ERROR by default unless user explicitly opts to respect env
     if (!options.respectLogLevel) {
@@ -69,8 +72,7 @@ export async function chatCommand(options: ChatOptions = {}): Promise<void> {
 
     // Create renderer (allow tests to spy on constructor)
     const StreamRendererCtor =
-      (StreamRenderer.prototype.constructor as typeof StreamRenderer | undefined) ??
-      StreamRenderer;
+      (StreamRenderer.prototype.constructor as typeof StreamRenderer | undefined) ?? StreamRenderer;
     const renderer = new StreamRendererCtor({
       colors: true,
       verbose: options.verbose ?? false,
