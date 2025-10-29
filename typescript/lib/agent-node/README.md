@@ -34,7 +34,7 @@ pnpm install
 
 The agent CLI is available after installation:
 
-- **Development**: `pnpm cli <command>` or `tsx src/cli/loader.ts <command>`
+- **Development**: `npx -y @emberai/agent-node <command>` or `tsx src/cli/loader.ts <command>`
 - **Production**: `node dist/cli/loader.js <command>` (after running `pnpm build`)
 
 **Environment Variable Loading**: The CLI automatically loads `.env` and `.env.local` files from the current directory using Node.js native `process.loadEnvFile()`. The loader entry point ensures environment variables are available before the application initializes. No need to manually specify `--env-file` flags.
@@ -61,13 +61,13 @@ Basics:
 
 ```bash
 # Smart-start (default): attach to running agent, else start local then attach
-pnpm cli
+npx -y @emberai/agent-node
 
 # Client-only chat to a specific URL (never starts a server)
-pnpm cli chat --url http://127.0.0.1:3000
+npx -y @emberai/agent-node chat --url http://127.0.0.1:3000
 
 # Start the server and then attach chat
-pnpm cli run --attach
+npx -y @emberai/agent-node run --attach
 ```
 
 Logging behavior in chat:
@@ -82,16 +82,16 @@ Examples:
 
 ```bash
 # Clean chat + file-only logs that honor .env LOG_LEVEL
-pnpm cli --log-dir ./logs
+npx -y @emberai/agent-node --log-dir ./logs
 
 # Client-only with file logs and environment log level
-pnpm cli chat --url http://127.0.0.1:3000 --log-dir ./logs
+npx -y @emberai/agent-node chat --url http://127.0.0.1:3000 --log-dir ./logs
 
 # Respect environment log level in console (do not force ERROR)
-pnpm cli --respect-log-level
+npx -y @emberai/agent-node --respect-log-level
 
 # Start server then attach with file-only logs
-pnpm cli run --attach --log-dir ./logs
+npx -y @emberai/agent-node run --attach --log-dir ./logs
 ```
 
 ### Environment Setup
@@ -127,7 +127,7 @@ HOST=0.0.0.0
 #### 1. Initialize Config Workspace
 
 ```bash
-pnpm cli init
+npx -y @emberai/agent-node init
 ```
 
 This creates a `config/` directory with:
@@ -145,7 +145,7 @@ Edit `config/agent.md` to define your agent's personality and capabilities. Add 
 #### 3. Validate Configuration
 
 ```bash
-pnpm cli doctor
+npx -y @emberai/agent-node doctor
 ```
 
 Checks for configuration errors, missing references, and policy conflicts.
@@ -155,7 +155,7 @@ Checks for configuration errors, missing references, and policy conflicts.
 Development mode (with hot reload):
 
 ```bash
-pnpm cli run --dev
+npx -y @emberai/agent-node run --dev
 ```
 
 Production mode:
@@ -481,19 +481,19 @@ The Agent CLI provides essential commands for managing your agent throughout its
 
 ```bash
 # Initialize agent configuration - Creates a new agent configuration workspace with sample files
-pnpm cli init
+npx -y @emberai/agent-node init
 
 # Run agent in development mode - Starts your agent with hot reload for development
-pnpm cli run --dev
+npx -y @emberai/agent-node run --dev
 
 # Validate configuration - Checks your configuration for errors and missing references
-pnpm cli doctor
+npx -y @emberai/agent-node doctor
 
 # View composed configuration - Shows your composed agent configuration in readable format
-pnpm cli print-config
+npx -y @emberai/agent-node print-config
 
 # Create deployment bundle - Creates a production-ready deployment package
-pnpm cli bundle
+npx -y @emberai/agent-node bundle
 ```
 
 ## Development
@@ -696,13 +696,13 @@ Before running with Docker, you must initialize the configuration workspace:
 
 ```bash
 # Initialize config directory
-pnpm cli init
+npx -y @emberai/agent-node init
 
 # Customize your agent
 # Edit config/agent.md, add skills to config/skills/, etc.
 
 # Validate configuration
-pnpm cli doctor
+npx -y @emberai/agent-node doctor
 ```
 
 **Running with Docker Compose:**
@@ -737,7 +737,7 @@ volumes:
 - Matches how agent-node runs natively (`npx agent-node --config-dir=./config`)
 - Standard Docker volume mount pattern for configuration
 
-**Important:** The `config/` directory must exist before starting containers. If you see "Config workspace not found" errors, run `pnpm cli init` first.
+**Important:** The `config/` directory must exist before starting containers. If you see "Config workspace not found" errors, run `npx -y @emberai/agent-node init` first.
 
 ### Environment Variables
 
