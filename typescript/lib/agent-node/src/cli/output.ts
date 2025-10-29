@@ -246,6 +246,11 @@ export class CliOutput {
  * Returns a Promise that resolves when the animation is complete
  */
 export async function showStartupEffect(): Promise<void> {
+  // Skip animation in test environments or when no TTY is available
+  if (process.env['VITEST'] || !process.stdout.isTTY) {
+    return;
+  }
+
   // Animation timing constant
   const GLITCH_INTERVAL_MS = 10;
 
