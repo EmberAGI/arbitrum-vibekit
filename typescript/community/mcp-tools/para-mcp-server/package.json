@@ -7,10 +7,19 @@
     "build": "xmcp build && next build",
     "start": "next start",
     "lint": "biome check",
-    "format": "biome format --write"
+    "format": "biome format --write",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@getpara/server-sdk": "^1.18.1",
+    "@getpara/web-sdk": "^1.18.1",
+    "drizzle-kit": "^0.25.0",
+    "drizzle-orm": "^0.34.0",
     "next": "16.0.0",
+    "postgres": "^3.4.4",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "xmcp": "^0.3.5",
