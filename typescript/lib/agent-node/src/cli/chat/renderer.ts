@@ -31,6 +31,7 @@ export class StreamRenderer {
   private options: Required<RendererOptions>;
   private lastInlineSummaryTime: Map<string, number> = new Map();
   private textResponseBuffer = '';
+  private hasShownAgentPrefix = false;
 
   constructor(options: RendererOptions = {}) {
     this.options = {
@@ -107,6 +108,12 @@ export class StreamRenderer {
       .filter((p): p is { kind: 'text'; text: string } => p.kind === 'text' && 'text' in p)
       .map((p) => p.text)
       .join('');
+
+    // Add agent prefix on first output
+    if (!this.hasShownAgentPrefix && text) {
+      process.stdout.write('⦿ ');
+      this.hasShownAgentPrefix = true;
+    }
 
     // Only render new content
     if (text.startsWith(this.textResponseBuffer)) {
@@ -204,6 +211,7 @@ export class StreamRenderer {
     this.assembler.reset();
     this.lastInlineSummaryTime.clear();
     this.textResponseBuffer = '';
+    this.hasShownAgentPrefix = false;
   }
 
   /**
