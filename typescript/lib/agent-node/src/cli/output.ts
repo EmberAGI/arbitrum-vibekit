@@ -242,9 +242,13 @@ export class CliOutput {
 }
 
 /**
- * Show the startup effect with styled "AAGENT NODEE" text
+ * Show the startup effect with styled "/AGENT NODEΞ" text
+ * Returns a Promise that resolves when the animation is complete
  */
-export function showStartupEffect(): void {
+export async function showStartupEffect(): Promise<void> {
+  // Animation timing constant
+  const GLITCH_INTERVAL_MS = 10;
+
   // Detect terminal color capability
   const supportsTruecolor = /truecolor|24bit/i.test(process.env['COLORTERM'] ?? '');
   const supports256 = /256color/i.test(process.env['TERM'] ?? '') || supportsTruecolor;
@@ -284,42 +288,161 @@ export function showStartupEffect(): void {
     magentaText = '\x1b[95m'; // Bright magenta text
   }
 
-  // Build the styled text character by character
-  // Text includes spaces for empty boxes: " AAGENT NODEE "
-  const text = ' AAGENT NODEE ';
-  let styledText = '';
+  // Calculate line width same as user input (with -2 margin and max 98)
+  const terminalWidth = process.stdout.columns || 82; // 82 so default becomes 80 after margin
+  const lineWidth = Math.min(terminalWidth - 2, 98); // Safety margin of 2, max 98
 
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
+  // Text includes spaces for empty boxes: " /AGENT NODEΞ "
+  const centerText = ' /AGENT NODEΞ ';
+  const centerTextLength = centerText.length;
+  const leftPadding = Math.floor((lineWidth - centerTextLength) / 2);
 
-    if (i === 0) {
-      // First space - empty cyan box
-      styledText += `${cyanBg} ${reset}`;
-    } else if (i === 1) {
-      // 'A' - cyan text on purple background
-      styledText += `${darkPurpleBg}${cyanText}${char}${reset}`;
-    } else if (i >= 2 && i <= 11) {
-      // 'AGENT NODE' - light purple text on dark purple background
-      styledText += `${darkPurpleBg}${lightPurpleText}${char}${reset}`;
-    } else if (i === 12) {
-      // 'E' - magenta text on purple background
-      styledText += `${darkPurpleBg}${magentaText}${char}${reset}`;
-    } else if (i === 13) {
-      // Last space - empty magenta box
-      styledText += `${magentaBg} ${reset}`;
+  // Helper function to generate random colors using exact final state colors
+  const getRandomColor = () => {
+    // Use the exact same colors that appear in the final display
+    const colorPairs = [
+      { bg: cyanBg, fg: cyanText }, // Cyan on cyan
+      { bg: cyanBg, fg: lightPurpleText }, // Light purple on cyan
+      { bg: darkPurpleBg, fg: cyanText }, // Cyan on purple (like 'A')
+      { bg: darkPurpleBg, fg: lightPurpleText }, // Light purple on purple (like 'GENT NODE')
+      { bg: darkPurpleBg, fg: magentaText }, // Magenta on purple (like 'E')
+      { bg: magentaBg, fg: magentaText }, // Magenta on magenta
+    ];
+    const index = Math.floor(Math.random() * colorPairs.length);
+    const pair = colorPairs[index]!; // Safe because array is never empty
+    return { bg: pair.bg, fg: pair.fg };
+  };
+
+  // Helper function to get random printable ASCII character
+  const getRandomChar = () => {
+    const chars =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?';
+    return chars[Math.floor(Math.random() * chars.length)];
+  };
+
+  // Track which positions are fixed across all three lines
+  const totalPositions = lineWidth * 3; // Three full lines
+  const fixed = new Array(totalPositions).fill(false);
+  let fixedCount = 0;
+
+  // Function to get the final character and style for a given position
+  const getFinalCharAndStyle = (lineIndex: number, charIndex: number) => {
+    if (lineIndex === 1) {
+      // Middle line with centered "AGENT NODE"
+      if (charIndex < leftPadding || charIndex >= leftPadding + centerTextLength) {
+        // Padding spaces with no background
+        return ` `;
+      }
+      // Character from centerText
+      const textIndex = charIndex - leftPadding;
+      const char = centerText[textIndex];
+
+      if (textIndex === 0) {
+        // First space - empty cyan box
+        return `${cyanBg} ${reset}`;
+      } else if (textIndex === 1) {
+        // '/' - cyan text on purple background
+        return `${darkPurpleBg}${cyanText}${char}${reset}`;
+      } else if (textIndex >= 2 && textIndex <= 11) {
+        // 'AGENT NODE' - light purple text on dark purple background
+        return `${darkPurpleBg}${lightPurpleText}${char}${reset}`;
+      } else if (textIndex === 12) {
+        // 'Ξ' - magenta text on purple background
+        return `${darkPurpleBg}${magentaText}${char}${reset}`;
+      } else if (textIndex === 13) {
+        // Last space - empty magenta box
+        return `${magentaBg} ${reset}`;
+      }
     }
-  }
+    // Top and bottom lines - empty with no background
+    return ` `;
+  };
 
-  // Center the text based on terminal width
-  const terminalWidth = process.stdout.columns || 80;
-  const textLength = text.length; // Visual length without ANSI codes
-  const padding = Math.max(0, Math.floor((terminalWidth - textLength) / 2));
-  const paddingStr = ' '.repeat(padding);
+  // Function to build all three lines
+  const buildFrame = () => {
+    const lines = [];
+    for (let lineIndex = 0; lineIndex < 3; lineIndex++) {
+      let line = '';
+      for (let charIndex = 0; charIndex < lineWidth; charIndex++) {
+        const position = lineIndex * lineWidth + charIndex;
+        if (fixed[position]) {
+          // Show correct styling for fixed positions
+          line += getFinalCharAndStyle(lineIndex, charIndex);
+        } else {
+          // Random colors and characters for unfixed positions
+          const colors = getRandomColor();
+          const displayChar = getRandomChar();
+          line += `${colors.bg}${colors.fg}${displayChar}${reset}`;
+        }
+      }
+      lines.push(line);
+    }
+    return lines;
+  };
 
-  // Output with blank lines for visual separation
-  process.stdout.write('\n');
-  process.stdout.write(paddingStr + styledText + '\n');
-  process.stdout.write('\n');
+  // Wrap animation in a Promise
+  return new Promise<void>((resolve) => {
+    // Animation loop
+    const animationInterval = setInterval(() => {
+      // Move cursor up 3 lines to overwrite previous frame
+      process.stdout.write('\x1b[3A');
+
+      // Build and display current frame (3 lines)
+      const lines = buildFrame();
+      lines.forEach((line) => {
+        // Clear line and display new content
+        process.stdout.write('\x1b[2K\r' + line + '\n');
+      });
+
+      // Fix 1-2 random positions that aren't already fixed
+      const unfixedIndices = [];
+      for (let i = 0; i < totalPositions; i++) {
+        if (!fixed[i]) unfixedIndices.push(i);
+      }
+
+      if (unfixedIndices.length > 0) {
+        // Fix 1-2 positions
+        const toFixCount = Math.min(unfixedIndices.length, Math.random() < 0.5 ? 1 : 2);
+        for (let i = 0; i < toFixCount; i++) {
+          const randomIndex = Math.floor(Math.random() * unfixedIndices.length);
+          const positionToFix = unfixedIndices[randomIndex];
+          if (positionToFix !== undefined) {
+            fixed[positionToFix] = true;
+            fixedCount++;
+            unfixedIndices.splice(randomIndex, 1);
+          }
+        }
+      }
+
+      // Check if all positions are fixed
+      if (fixedCount >= totalPositions) {
+        clearInterval(animationInterval);
+        // Move cursor up to overwrite glitched lines
+        process.stdout.write('\x1b[3A');
+
+        // Final render with correct styling
+        for (let lineIndex = 0; lineIndex < 3; lineIndex++) {
+          let line = '';
+          for (let charIndex = 0; charIndex < lineWidth; charIndex++) {
+            line += getFinalCharAndStyle(lineIndex, charIndex);
+          }
+          process.stdout.write('\x1b[2K\r' + line + '\n');
+        }
+
+        // Add blank line after for spacing
+        process.stdout.write('\n');
+
+        // Resolve the Promise when animation is complete
+        resolve();
+      }
+    }, GLITCH_INTERVAL_MS);
+
+    // Initial display of three lines
+    const initialLines = buildFrame();
+    initialLines.forEach((line) => {
+      process.stdout.write(line + '\n');
+    });
+  });
 }
 
 /**

@@ -42,7 +42,7 @@ export async function chatCommand(options: ChatOptions = {}): Promise<void> {
   const baseUrl = options.url ?? 'http://127.0.0.1:3000';
 
   // Show startup effect when CLI starts
-  showStartupEffect();
+  await showStartupEffect();
 
   try {
     // Force ERROR by default unless user explicitly opts to respect env

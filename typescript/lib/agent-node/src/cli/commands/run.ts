@@ -179,7 +179,7 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
 
       // Show startup effect when entering chat mode
       const { showStartupEffect } = await import('../output.js');
-      showStartupEffect();
+      await showStartupEffect();
     }
   }
 
