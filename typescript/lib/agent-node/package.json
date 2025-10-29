@@ -20,8 +20,8 @@
       "import": "./dist/client/index.js"
     },
     "./workflow": {
-      "types": "./dist/workflow/public.d.ts",
-      "import": "./dist/workflow/public.js"
+      "types": "./dist/workflows/public.d.ts",
+      "import": "./dist/workflows/public.js"
     }
   },
   "types": "./dist/index.d.ts",
