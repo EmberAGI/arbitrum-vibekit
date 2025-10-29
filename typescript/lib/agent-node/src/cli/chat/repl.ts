@@ -44,6 +44,7 @@ export class ChatRepl {
   private exitHandled = false;
   private hasClosedReadline = false;
   private promptFn: (() => void) | undefined;
+  private lineWidth = 80; // Display width for styled messages, set at startup
 
   constructor(options: ReplOptions) {
     this.client = options.client;
@@ -90,6 +91,10 @@ export class ChatRepl {
 
     this.promptFn = this.rl.prompt.bind(this.rl);
 
+    // Calculate display width once at startup for consistency
+    const terminalWidth = process.stdout.columns || 82; // 82 so default becomes 80 after margin
+    this.lineWidth = Math.min(terminalWidth - 2, 98); // Safety margin of 2, max 98
+
     this.exitHandled = false;
     this.hasClosedReadline = false;
     this.startResolve = undefined;
@@ -117,7 +122,7 @@ export class ChatRepl {
         return;
       }
 
-      this.rl.on('line', async (input: string) => {
+      this.rl.on('line', (input: string) => {
         const trimmedInput = input.trim();
 
         // Skip empty input
@@ -126,30 +131,35 @@ export class ChatRepl {
           return;
         }
 
-        try {
-          // Reset renderer for new message
-          this.renderer.reset();
+        // Display user message with styled background
+        this.displayUserMessage(trimmedInput);
 
-          // Send message and process stream
-          const stream = this.client.sendMessage(trimmedInput);
+        void (async () => {
+          try {
+            // Reset renderer for new message
+            this.renderer.reset();
 
-          for await (const event of stream) {
-            if (event.kind === 'artifact-update' && isArtifactUpdateEvent(event.data)) {
-              this.renderer.processArtifactUpdate(event.data);
-            } else if (event.kind === 'status-update' && isStatusUpdateEvent(event.data)) {
-              this.renderer.processStatusUpdate(event.data);
+            // Send message and process stream
+            const stream = this.client.sendMessage(trimmedInput);
+
+            for await (const event of stream) {
+              if (event.kind === 'artifact-update' && isArtifactUpdateEvent(event.data)) {
+                this.renderer.processArtifactUpdate(event.data);
+              } else if (event.kind === 'status-update' && isStatusUpdateEvent(event.data)) {
+                this.renderer.processStatusUpdate(event.data);
+              }
+              // Filter out tool events and unknown events (don't pollute main chat)
             }
-            // Filter out tool events and unknown events (don't pollute main chat)
+
+            // Ensure newline after response
+            console.log();
+          } catch (error) {
+            console.error(pc.red('Error:'), error);
           }
 
-          // Ensure newline after response
-          console.log();
-        } catch (error) {
-          console.error(pc.red('Error:'), error);
-        }
-
-        // Show prompt for next input
-        this.promptFn?.();
+          // Show prompt for next input
+          this.promptFn?.();
+        })();
       });
 
       // Show initial prompt
@@ -166,6 +176,40 @@ export class ChatRepl {
       this.rl?.close();
     }
     void this.finalizeExit(0);
+  }
+
+  /**
+   * Display user message with styled background
+   */
+  private displayUserMessage(message: string): void {
+    // ANSI escape codes
+    const grayBg = '\x1b[48;5;236m'; // Dark gray background
+    const whiteText = '\x1b[97m'; // White text
+    const reset = '\x1b[0m'; // Reset all styling
+    const moveUp = '\x1b[1A'; // Move cursor up one line
+    const clearLine = '\x1b[2K'; // Clear entire line
+    const cursorToStart = '\x1b[0G'; // Move cursor to start of line
+
+    // Use pre-calculated width from startup
+    const lineWidth = this.lineWidth;
+    const blankLine = ' '.repeat(lineWidth);
+
+    // Move up to the original input line and clear it
+    process.stdout.write(`${moveUp}${clearLine}${cursorToStart}`);
+
+    // Display blank gray line
+    console.log(`${grayBg}${blankLine}${reset}`);
+
+    // Display user message with gray background, padded to full width
+    const userLine = `> ${message}`;
+    const padding = ' '.repeat(Math.max(0, lineWidth - userLine.length));
+    console.log(`${grayBg}${whiteText}${userLine}${padding}${reset}`);
+
+    // Display blank gray line
+    console.log(`${grayBg}${blankLine}${reset}`);
+
+    // Add empty line for spacing
+    console.log();
   }
 
   private async finalizeExit(code = 0): Promise<void> {

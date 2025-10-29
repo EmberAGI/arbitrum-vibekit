@@ -112,14 +112,12 @@ export class StreamRenderer {
     if (text.startsWith(this.textResponseBuffer)) {
       const newContent = text.slice(this.textResponseBuffer.length);
       if (newContent) {
-        const output = this.options.colors ? pc.green(newContent) : newContent;
-        process.stdout.write(output);
+        process.stdout.write(newContent);
         this.textResponseBuffer = text;
       }
     } else {
       // Full replacement (shouldn't happen with append, but handle it)
-      const output = this.options.colors ? pc.green(text) : text;
-      process.stdout.write('\n' + output);
+      process.stdout.write('\n' + text);
       this.textResponseBuffer = text;
     }
   }
