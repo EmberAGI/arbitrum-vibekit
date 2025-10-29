@@ -111,7 +111,7 @@ export class StreamRenderer {
 
     // Add agent prefix on first output
     if (!this.hasShownAgentPrefix && text) {
-      process.stdout.write('⦿ ');
+      process.stdout.write('⦿  ');
       this.hasShownAgentPrefix = true;
     }
 

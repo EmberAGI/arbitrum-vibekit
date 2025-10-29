@@ -85,7 +85,7 @@ export class ChatRepl {
     this.rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
-      prompt: pc.cyan('> '),
+      prompt: pc.cyan('>  '),
       terminal: true,
     });
 
@@ -201,7 +201,7 @@ export class ChatRepl {
     console.log(`${grayBg}${blankLine}${reset}`);
 
     // Display user message with gray background, padded to full width
-    const userLine = `> ${message}`;
+    const userLine = `>  ${message}`;
     const padding = ' '.repeat(Math.max(0, lineWidth - userLine.length));
     console.log(`${grayBg}${whiteText}${userLine}${padding}${reset}`);
 
