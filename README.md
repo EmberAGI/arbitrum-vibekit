@@ -27,7 +27,7 @@ Welcome to Vibekit, the polyglot toolkit for vibe coding smart, autonomous DeFi 
 
 - **Agent-to-Agent (A2A) Communication**: Built-in protocol support enabling seamless collaboration and communication between multiple agents
 
-- **EIP-8004 On-Chain Registration**: Decentralized agent identity registration on Ethereum following the EIP-8004 standard, enabling verifiable agent ownership, discoverability through on-chain registries, and standards-compliant interoperability
+- **EIP-8004 On-Chain Registration**: Decentralized agent identity registration following the EIP-8004 standard, enabling verifiable agent ownership, discoverability through on-chain registries, and cross-platform compatibility
 
 - **Composable DeFi Workflows**: Workflow system enabling multi-step operations with pause/resume capabilities, allowing agents to orchestrate complex DeFi strategies across protocols
 
