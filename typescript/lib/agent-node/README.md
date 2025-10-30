@@ -57,6 +57,10 @@ The configuration workspace contains several key files that define your agent's 
 
 #### 1. Initialize Config Workspace
 
+
+> [!NOTE]
+> You can initialize agent node anywhere on your system. To take advantage of the tools that Vibekit offers, we recommend creating your agent node in the [community agent directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community/agents).
+
 ```bash
 npx -y @emberai/agent-node init
 ```
@@ -148,6 +152,9 @@ Workflows are multi-step operations with these key characteristics:
 - **Pause Points**: Request user input or authorization
 - **Validation**: Zod schemas validate resume inputs
 - **Tool Exposure**: Only `dispatch_workflow_*` tools exposed to AI (no resume)
+
+> [!NOTE]
+> The `config/workflows/` directory and example workflow files are created automatically when you initialize your agent configuration using `pnpm cli init`.
 
 For a complete example implementation, see [`config/workflows/example-workflow.ts`](config/workflows/example-workflow.ts) which demonstrates pause/resume capabilities, status updates, and user input validation.
 
