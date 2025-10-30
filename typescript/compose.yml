@@ -2,12 +2,12 @@ services:
   lending-agent-no-wallet:
     build:
       context: ./
-      dockerfile: community/lending-agent-no-wallet/Dockerfile
+      dockerfile: community/agents/lending-agent-no-wallet/Dockerfile
     container_name: vibekit-lending-agent-no-wallet
     env_file:
       - path: .env
         required: true
-      - path: community/lending-agent-no-wallet/.env
+      - path: community/agents/lending-agent-no-wallet/.env
         required: false
     ports:
       - 3001:3001
@@ -16,12 +16,12 @@ services:
   swapping-agent-no-wallet:
     build:
       context: ./
-      dockerfile: community/swapping-agent-no-wallet/Dockerfile
+      dockerfile: community/agents/swapping-agent-no-wallet/Dockerfile
     container_name: vibekit-swapping-agent-no-wallet
     env_file:
       - path: .env
         required: true
-      - path: community/swapping-agent-no-wallet/.env
+      - path: community/agents/swapping-agent-no-wallet/.env
         required: false
     ports:
       - 3005:3005
@@ -30,7 +30,7 @@ services:
   coingecko-mcp-server:
     build:
       context: ./
-      dockerfile: lib/community-mcp-tools/coingecko-mcp-server/Dockerfile
+      dockerfile: community/mcp-tools/coingecko-mcp-server/Dockerfile
     container_name: vibekit-coingecko-mcp-server
     env_file:
       - path: .env
@@ -100,12 +100,12 @@ services:
   # liquidity-agent-no-wallet:
   #   build:
   #     context: ./
-  #     dockerfile: community/liquidity-agent-no-wallet/Dockerfile
+  #     dockerfile: community/agents/liquidity-agent-no-wallet/Dockerfile
   #   container_name: vibekit-liquidity-agent-no-wallet
   #   env_file:
   #     - path: .env
   #       required: true
-  #     - path: community/liquidity-agent-no-wallet/.env
+  #     - path: community/agents/liquidity-agent-no-wallet/.env
   #       required: false
   #   ports:
   #     - 3002:3002
@@ -114,12 +114,12 @@ services:
   # pendle-agent:
   #   build:
   #     context: ./
-  #     dockerfile: community/pendle-agent/Dockerfile
+  #     dockerfile: community/agents/pendle-agent/Dockerfile
   #   container_name: vibekit-pendle-agent
   #   env_file:
   #     - path: .env
   #       required: true
-  #     - path: community/pendle-agent/.env
+  #     - path: community/agents/pendle-agent/.env
   #       required: false
   #   ports:
   #     - 3003:3003
@@ -128,12 +128,12 @@ services:
   # swapping-agent:
   #   build:
   #     context: ./
-  #     dockerfile: community/swapping-agent/Dockerfile
+  #     dockerfile: community/agents/swapping-agent/Dockerfile
   #   container_name: vibekit-swapping-agent
   #   env_file:
   #     - path: .env
   #       required: true
-  #     - path: community/swapping-agent/.env
+  #     - path: community/agents/swapping-agent/.env
   #       required: false
   #   ports:
   #     - 3004:3004

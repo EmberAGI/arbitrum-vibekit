@@ -8,7 +8,7 @@ This guide provides comprehensive testing strategies for verifying that the Coin
 
 ```bash
 # Navigate to the MCP server directory
-cd arbitrum-vibekit/typescript/lib/community-mcp-tools/coingecko-mcp-server
+cd arbitrum-vibekit/typescript/community/mcp-tools/coingecko-mcp-server
 
 # Install dependencies
 pnpm install
@@ -87,7 +87,7 @@ Test the MCP server directly:
 
 ```bash
 # Navigate to MCP server directory
-cd arbitrum-vibekit/typescript/lib/community-mcp-tools/coingecko-mcp-server
+cd arbitrum-vibekit/typescript/community/mcp-tools/coingecko-mcp-server
 
 # Run the test script
 node test-mcp.js
@@ -169,7 +169,7 @@ lsof -i :3011
 kill -9 <PID>
 
 # Check dependencies
-cd arbitrum-vibekit/typescript/lib/community-mcp-tools/coingecko-mcp-server
+cd arbitrum-vibekit/typescript/community/mcp-tools/coingecko-mcp-server
 pnpm install
 ```
 
@@ -183,7 +183,7 @@ pnpm install
 ps aux | grep coingecko-mcp-server
 
 # Check server logs
-cd arbitrum-vibekit/typescript/lib/community-mcp-tools/coingecko-mcp-server
+cd arbitrum-vibekit/typescript/community/mcp-tools/coingecko-mcp-server
 pnpm dev 2>&1 | tee server.log
 ```
 

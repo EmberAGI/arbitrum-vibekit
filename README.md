@@ -52,13 +52,14 @@ arbitrum-vibekit/
 │   ├── clients/                    # Client applications
 │   │   └── web/                    # Vibekit frontend
 │   ├── templates/                  # Official Vibekit agent templates
-│   ├── community/                  # Community-contributed agent templates
+│   ├── community/                  # Community contributions
+│   │   ├── agents/                 # Community-contributed agent templates
+│   │   └── mcp-tools/              # Community MCP tool server implementations
 │   ├── lib/                        # Core framework libraries such as MCP tools, Ember API, etc.
 │   │   ├── a2a-types/              # Agent-to-Agent type definitions
 │   │   ├── agent-node/             # Agent Node framework (v3.0+) - Config-driven A2A-compliant agents with X402 payments
 │   │   ├── ember-api/              # Ember AI API client
 │   │   ├── ember-schemas/          # Schema definitions
-│   │   ├── community-mcp-tools/   # Community MCP tool server implementations
 │   │   └── test-utils/             # Testing utilities and helpers
 │   └── onchain-actions-plugins/    # Ember plugin system
 ├── CHANGELOG.md
@@ -74,11 +75,9 @@ arbitrum-vibekit/
 
 - **[`templates/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates)**: Official Vibekit agent templates featuring production-ready implementations with skills, tools, hooks, and modern deployment patterns. These serve as reference implementations for building your own agents.
 
-- **[`community/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community)**: Community-contributed agent templates and external integrations. This is where developers can contribute their own specialized agents to expand Vibekit's ecosystem.
+- **[`community/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community)**: Community contributions including agent templates and MCP tool server implementations. This is where developers can contribute their own specialized agents and tools to expand Vibekit's ecosystem.
 
 - **[`clients/web`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web)**: Vibekit web frontend, featuring wallet integration, agent chat interface, and real-time MCP communication for DeFi agent interactions.
-
-- **[`community-mcp-tools`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/community-mcp-tools)**: Community MCP tool server implementations, providing standardized external data access through the Model Context Protocol.
 
 - **[`onchain-actions-plugins/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/onchain-actions-plugins)**: The Ember Plugin System providing a registry for on-chain action plugins and smart contract integrations with extensible architecture for adding new blockchain protocols.
 
