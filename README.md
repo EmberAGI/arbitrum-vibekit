@@ -23,11 +23,13 @@ Welcome to Vibekit, the polyglot toolkit for vibe coding smart, autonomous DeFi 
 
 - **Model Context Protocol (MCP)**: Standardized integration layer for connecting agents with tools and external data sources, enabling modular and extensible agent capabilities
 
-- **Agent-to-Agent (A2A) Communication**: Built-in protocol support enabling seamless collaboration and communication between multiple agents
-
 - **X402 Payment Protocol**: HTTP-native payment infrastructure for autonomous agent commerce, supporting micropayments and service monetization
 
-- **Composable DeFi Workflows**: Generator-based workflow system enabling multi-step operations with pause/resume capabilities, allowing agents to orchestrate complex DeFi strategies across protocols
+- **Agent-to-Agent (A2A) Communication**: Built-in protocol support enabling seamless collaboration and communication between multiple agents
+
+- **EIP-8004 On-Chain Registration**: Decentralized agent identity registration on Ethereum following the EIP-8004 standard, enabling verifiable agent ownership, discoverability through on-chain registries, and standards-compliant interoperability
+
+- **Composable DeFi Workflows**: Workflow system enabling multi-step operations with pause/resume capabilities, allowing agents to orchestrate complex DeFi strategies across protocols
 
 - **Ember Plugin System**: Modular architecture for DeFi protocols with standardized entity mapping, comprehensive type safety, and intelligent routing for optimized execution across multiple protocols
 
