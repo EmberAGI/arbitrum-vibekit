@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f97316;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ea580c;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="48" fill="url(#grad)"/>
+  
+  <!-- Network nodes representing MCP connectivity -->
+  <circle cx="50" cy="25" r="6" fill="white" opacity="0.9"/>
+  <circle cx="30" cy="45" r="6" fill="white" opacity="0.9"/>
+  <circle cx="70" cy="45" r="6" fill="white" opacity="0.9"/>
+  <circle cx="50" cy="65" r="6" fill="white" opacity="0.9"/>
+  
+  <!-- Connection lines -->
+  <line x1="50" y1="25" x2="30" y2="45" stroke="white" stroke-width="2" opacity="0.7"/>
+  <line x1="50" y1="25" x2="70" y2="45" stroke="white" stroke-width="2" opacity="0.7"/>
+  <line x1="30" y1="45" x2="50" y2="65" stroke="white" stroke-width="2" opacity="0.7"/>
+  <line x1="70" y1="45" x2="50" y2="65" stroke="white" stroke-width="2" opacity="0.7"/>
+  <line x1="30" y1="45" x2="70" y2="45" stroke="white" stroke-width="2" opacity="0.7"/>
+  
+  <!-- Central "P" for Para -->
+  <text x="50" y="88" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="white" text-anchor="middle">P</text>
+</svg>
