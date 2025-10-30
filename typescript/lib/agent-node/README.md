@@ -41,14 +41,14 @@ config-workspace/
 
 The configuration workspace contains several key files that define your agent's behavior:
 
-- **[`config/agent.md`](config/agent.md)** - Base agent configuration including system prompt, model settings, and A2A protocol card definition
-- **[`config/skills/`](config/skills/)** - Modular skill definitions that compose your agent's capabilities:
-  - [`general-assistant.md`](config/skills/general-assistant.md) - General assistant capabilities
-  - [`ember-onchain-actions.md`](config/skills/ember-onchain-actions.md) - On-chain DeFi operations
-- **[`config/agent.manifest.json`](config/agent.manifest.json)** - Skill composition and workflow selection settings
-- **[`config/mcp.json`](config/mcp.json)** - MCP server registry for dynamic tool/resource access
-- **[`config/workflow.json`](config/workflow.json)** - Workflow plugin registry
-- **[`config/workflows/`](config/workflows/)** - Custom workflow implementations
+- **`config/agent.md`** - Base agent configuration including system prompt, model settings, and A2A protocol card definition
+- **`config/skills/`** - Modular skill definitions that compose your agent's capabilities:
+  - `general-assistant.md` - General assistant capabilities
+  - `ember-onchain-actions.md` - On-chain DeFi operations
+- **`config/agent.manifest.json`** - Skill composition and workflow selection settings
+- **`config/mcp.json`** - MCP server registry for dynamic tool/resource access
+- **`config/workflow.json`** - Workflow plugin registry
+- **`config/workflows/`** - Custom workflow implementations
 
 
 ## Quick Start
@@ -156,7 +156,7 @@ Workflows are multi-step operations with these key characteristics:
 > [!NOTE]
 > The `config/workflows/` directory and example workflow files are created automatically when you initialize your agent configuration using `pnpm cli init`.
 
-For a complete example implementation, see [`config/workflows/example-workflow.ts`](config/workflows/example-workflow.ts) which demonstrates pause/resume capabilities, status updates, and user input validation.
+For a complete example implementation, see `config/workflows/example-workflow.ts`which demonstrates pause/resume capabilities, status updates, and user input validation.
 
 ### MCP Integration
 
@@ -325,19 +325,6 @@ pnpm cli update-registry --agent-id 123 --name "My Agent" --description "Updated
 cd lib/agent-node
 pnpm install
 ```
-
-### CLI Access
-
-The agent CLI is available after installation:
-
-- **Development**: `pnpm cli <command>` or `tsx src/cli/loader.ts <command>`
-- **Production**: `node dist/cli/loader.js <command>` (after running `pnpm build`)
-
-**Environment Variable Loading**: The CLI automatically loads `.env` and `.env.local` files from the current directory using Node.js native `process.loadEnvFile()`. The loader entry point ensures environment variables are available before the application initializes. No need to manually specify `--env-file` flags.
-
-**Note**: If `tsx` is not found in your PATH, use `pnpm exec tsx` or `npx tsx` instead to run the locally installed version.
-
-See [CLI Commands](#cli-commands) for all available commands.
 
 ### CLI Dependencies
 
