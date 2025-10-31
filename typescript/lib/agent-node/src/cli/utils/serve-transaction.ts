@@ -14,7 +14,7 @@ export type ServeTransactionPageParams = {
   data: string;
   chainId: number;
   agentName?: string;
-  onAgentIdReceived?: (agentId: number) => void;
+  onAgentIdReceived?: (agentId: number | string) => void;
 };
 
 /**
@@ -41,8 +41,11 @@ export async function serveTransactionSigningPage(
         req.on('end', () => {
           try {
             const data = JSON.parse(body);
-            if (data.agentId && params.onAgentIdReceived) {
-              params.onAgentIdReceived(data.agentId);
+            if (params.onAgentIdReceived) {
+              const agentId = extractAgentId(data);
+              if (agentId !== null) {
+                params.onAgentIdReceived(agentId);
+              }
             }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true }));
@@ -89,6 +92,60 @@ export async function serveTransactionSigningPage(
 
     // Keep server alive - user will need to manually close it or it will close with the process
   });
+}
+
+function extractAgentId(payload: unknown): number | string | null {
+  if (payload === null || typeof payload !== 'object') {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const candidates: unknown[] = [record['agentId'], record['agentIdDecimal'], record['agentIdHex']];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeAgentIdValue(candidate);
+    if (normalized !== null) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+function normalizeAgentIdValue(value: unknown): number | string | null {
+  if (typeof value === 'number') {
+    if (Number.isSafeInteger(value) && value > 0) {
+      return value;
+    }
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+    if (/^0x[0-9a-fA-F]+$/.test(trimmed)) {
+      try {
+        return BigInt(trimmed).toString(10);
+      } catch {
+        return null;
+      }
+    }
+    if (/^\d+$/.test(trimmed)) {
+      try {
+        const asBigInt = BigInt(trimmed);
+        if (asBigInt <= BigInt(Number.MAX_SAFE_INTEGER)) {
+          return Number(asBigInt);
+        }
+        return asBigInt.toString(10);
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  return null;
 }
 
 /**
