@@ -4,8 +4,8 @@
  */
 
 import { existsSync, readFileSync, rmSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
 
 import matter from 'gray-matter';
 import { describe, it, expect, afterEach } from 'vitest';
@@ -92,7 +92,7 @@ describe('Init Command Integration', () => {
 
       expect(parsed.data['ai']).toBeDefined();
       expect(parsed.data['ai']['modelProvider']).toBe('openrouter');
-      expect(parsed.data['ai']['model']).toBe('anthropic/claude-sonnet-4.5');
+      expect(parsed.data['ai']['model']).toBe('openai/gpt-5');
       expect(parsed.data['ai']['params']).toBeDefined();
       expect(parsed.data['ai']['params']['temperature']).toBe(0.7);
       expect(parsed.data['ai']['params']['maxTokens']).toBe(4096);

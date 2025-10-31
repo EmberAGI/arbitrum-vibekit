@@ -44,7 +44,7 @@ card:
 
 ai:
   modelProvider: openrouter
-  model: anthropic/claude-sonnet-4.5
+  model: openai/gpt-5
   params:
     temperature: 0.7
     maxTokens: 4096

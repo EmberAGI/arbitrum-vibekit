@@ -97,7 +97,7 @@ The test sends a natural language message to the A2A server, which requires the 
          "Authorization": "***"
        },
        "body": {
-         "model": "anthropic/claude-sonnet-4.5",
+         "model": "openai/gpt-5",
          "messages": [
            {
              "role": "user",

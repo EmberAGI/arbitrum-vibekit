@@ -4,13 +4,15 @@
 
 import { readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
+
 import matter from 'gray-matter';
 import prompts from 'prompts';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-import * as registrationUtils from '../utils/registration.js';
-import { registerCommand } from './register.js';
 import { createTestConfigWorkspace } from '../../../tests/utils/test-config-workspace.js';
+import * as registrationUtils from '../utils/registration.js';
+
+import { registerCommand } from './register.js';
 
 vi.mock('prompts', () => ({
   default: vi.fn(),
@@ -30,7 +32,7 @@ describe('registerCommand (from-config) - Agent Card URL composition', () => {
     }
     parsed.data['ai'] = {
       modelProvider: 'openrouter',
-      model: 'anthropic/claude-sonnet-4.5',
+      model: 'openai/gpt-5',
       params: { temperature: 0.7, maxTokens: 4096 },
     };
     writeFileSync(agentMdPath, matter.stringify(parsed.content, parsed.data));

@@ -3,13 +3,14 @@
  */
 
 import { readFileSync, rmSync, writeFileSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
 
 import matter from 'gray-matter';
 import { describe, it, expect, afterEach } from 'vitest';
 
 import { printConfigCommand } from '../src/cli/commands/print-config.js';
+
 import { createTestConfigWorkspace } from './utils/test-config-workspace.js';
 
 describe('print-config ERC-8004 visibility', () => {
@@ -36,7 +37,7 @@ describe('print-config ERC-8004 visibility', () => {
       if (parsedAi.data['model']) delete parsedAi.data['model'];
       parsedAi.data['ai'] = {
         modelProvider: 'openrouter',
-        model: 'anthropic/claude-sonnet-4.5',
+        model: 'openai/gpt-5',
         params: { temperature: 0.7, maxTokens: 4096 },
       };
       writeFileSync(agentMdPath, matter.stringify(parsedAi.content, parsedAi.data));

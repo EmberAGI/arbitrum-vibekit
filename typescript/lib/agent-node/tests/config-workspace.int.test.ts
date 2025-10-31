@@ -705,7 +705,7 @@ card:
 
 ai:
   modelProvider: openrouter
-  model: anthropic/claude-sonnet-4.5
+  model: openai/gpt-5
 ---
 
 Base agent prompt.
