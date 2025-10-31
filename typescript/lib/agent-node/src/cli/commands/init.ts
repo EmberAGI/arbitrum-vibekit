@@ -3,9 +3,11 @@
  * Scaffolds a new config workspace with sample files
  */
 
-import { existsSync, mkdirSync, writeFileSync, copyFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, copyFileSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import prompts from 'prompts';
 
 import { cliOutput } from '../output.js';
 
@@ -14,35 +16,118 @@ const envExamplePath = fileURLToPath(new URL('../../../.env.example', import.met
 export interface InitOptions {
   target?: string;
   force?: boolean;
+  yes?: boolean;
+  nonInteractive?: boolean;
 }
 
-const SAMPLE_AGENT_MD = `---
+// AI Provider configurations with model suggestions
+const AI_PROVIDERS = {
+  openrouter: {
+    label: 'OpenRouter (recommended)',
+    defaultModel: 'anthropic/claude-sonnet-4.5',
+    envKey: 'OPENROUTER_API_KEY',
+    models: [
+      'anthropic/claude-sonnet-4.5',
+      'anthropic/claude-opus-4',
+      'openai/gpt-4o',
+      'google/gemini-pro',
+    ],
+  },
+  anthropic: {
+    label: 'Anthropic',
+    defaultModel: 'claude-sonnet-4.5',
+    envKey: 'ANTHROPIC_API_KEY',
+    models: ['claude-sonnet-4.5', 'claude-opus-4', 'claude-3-5-sonnet-20241022'],
+  },
+  openai: {
+    label: 'OpenAI',
+    defaultModel: 'gpt-4o',
+    envKey: 'OPENAI_API_KEY',
+    models: ['gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+  },
+} as const;
+
+// Chain configurations
+const CHAINS = {
+  1: { name: 'Ethereum Mainnet', shortName: 'Ethereum' },
+  8453: { name: 'Base', shortName: 'Base' },
+  11155111: { name: 'Ethereum Sepolia', shortName: 'Sepolia' },
+  42161: { name: 'Arbitrum One', shortName: 'Arbitrum' },
+} as const;
+
+type ProviderKey = keyof typeof AI_PROVIDERS;
+
+/**
+ * Interface for collected init configuration
+ */
+interface InitConfig {
+  agentName: string;
+  agentDescription: string;
+  agentVersion: string;
+  providerName?: string;
+  providerUrl?: string;
+  agentBaseUrl: string;
+  aiProvider: ProviderKey;
+  aiModel: string;
+  aiTemperature: number;
+  aiMaxTokens: number;
+  aiReasoning: string;
+  enableErc8004: boolean;
+  canonicalChain: number;
+  mirrorChains: number[];
+  operatorAddress?: string;
+  secrets: Record<string, string>;
+}
+
+/**
+ * Generate agent.md content from collected configuration
+ */
+function generateAgentMd(config: InitConfig): string {
+  const erc8004Block = config.enableErc8004
+    ? `
+# ERC-8004 configuration
+erc8004:
+  enabled: true
+  canonical:
+    chainId: ${config.canonicalChain}${config.operatorAddress ? `\n    operatorAddress: '${config.operatorAddress}'` : '\n    # operatorAddress: \'0x...\' # optional, used to compute canonicalCaip10'}
+  mirrors:${config.mirrorChains.map((chain) => `\n    - { chainId: ${chain} }`).join('')}
+  identityRegistries:
+    '1': '0x0000000000000000000000000000000000000000'
+    '8453': '0x0000000000000000000000000000000000000000'
+    '11155111': '0x8004a6090Cd10A7288092483047B097295Fb8847'
+    '42161': '0x0000000000000000000000000000000000000000'
+`
+    : '';
+
+  return `---
 version: 1
 card:
   protocolVersion: '0.3.0'
-  name: 'My Agent'
-  description: 'An AI agent built with the config-driven composition system'
-  url: 'http://localhost:3000/a2a'
-  version: '1.0.0'
+  name: '${config.agentName}'
+  description: '${config.agentDescription}'
+  url: '${config.agentBaseUrl}/a2a'
+  version: '${config.agentVersion}'
   capabilities:
     streaming: true
-    pushNotifications: false
-  provider:
-    name: 'Ember AI'
-    url: 'https://emberai.xyz/'
+    pushNotifications: false${config.providerName ? `\n  provider:\n    name: '${config.providerName}'${config.providerUrl ? `\n    url: '${config.providerUrl}'` : ''}` : ''}
   defaultInputModes: ['text/plain', 'application/json']
   defaultOutputModes: ['application/json', 'text/plain']
 
-# Agent-level model configuration (default for all skills)
-model:
-  provider: openrouter
-  name: anthropic/claude-sonnet-4.5
+# Agent-level AI configuration (default for all skills)
+ai:
+  modelProvider: ${config.aiProvider}
+  model: ${config.aiModel}
   params:
-    temperature: 0.7
-    maxTokens: 4096
+    temperature: ${config.aiTemperature}
+    maxTokens: ${config.aiMaxTokens}
     topP: 1.0
-    reasoning: low
----
+    reasoning: ${config.aiReasoning}
+
+# Agent Card hosting configuration
+routing:
+  agentCardPath: '/.well-known/agent-card.json'
+  # agentCardOrigin: 'https://example.com' # optional origin override
+${erc8004Block}---
 
 You are a helpful AI agent with modular skills.
 
@@ -55,6 +140,7 @@ Your primary purpose is to assist users with their requests using the tools and 
 - Maintain conversation context across messages
 - Follow the specific instructions provided by activated skills
 `;
+}
 
 const SAMPLE_GENERAL_SKILL = `---
 skill:
@@ -79,10 +165,10 @@ mcp:
 workflows:
   include: ['example-workflow']
 
-# Optional: Uncomment to override model for this skill
-# model:
-#   provider: openrouter
-#   name: anthropic/claude-sonnet-4.5
+# Optional: Uncomment to override AI model for this skill
+# ai:
+#   modelProvider: openrouter
+#   model: anthropic/claude-sonnet-4.5
 #   params:
 #     temperature: 0.7
 #     reasoning: low
@@ -124,10 +210,10 @@ mcp:
   servers:
     - name: ember_onchain_actions
       allowedTools: [createSwap, possibleSwaps]
-# Optional: Uncomment to override model for this skill
-# model:
-#   provider: openrouter
-#   name: anthropic/claude-sonnet-4.5
+# Optional: Uncomment to override AI model for this skill
+# ai:
+#   modelProvider: openrouter
+#   model: anthropic/claude-sonnet-4.5
 #   params:
 #     temperature: 0.7
 #     reasoning: low
@@ -511,68 +597,334 @@ Tool names must be unique across all MCP servers.
 - Verify workflow plugin exports default
 `;
 
-export function initCommand(options: InitOptions = {}): Promise<void> {
-  return new Promise<void>((resolvePromise, rejectPromise) => {
-    try {
-      const targetDir = resolve(process.cwd(), options.target ?? 'config');
+export async function initCommand(options: InitOptions = {}): Promise<void> {
+  try {
+    const targetDir = resolve(process.cwd(), options.target ?? 'config');
 
-      // Check if target already exists
-      if (existsSync(targetDir) && !options.force) {
-        throw new Error(
-          `Directory already exists: ${targetDir}\nUse --force to overwrite existing directory`,
-        );
+    // Check if target already exists
+    if (existsSync(targetDir) && !options.force) {
+      throw new Error(
+        `Directory already exists: ${targetDir}\nUse --force to overwrite existing directory`,
+      );
+    }
+
+    const isInteractive =
+      !options.yes && !options.nonInteractive && process.stdin.isTTY && process.stdout.isTTY;
+
+    let config: InitConfig;
+
+    if (isInteractive) {
+      // Interactive mode - collect configuration via prompts
+      cliOutput.print('\n🚀 Welcome to Agent Node Setup!\n', 'cyan');
+      cliOutput.print('Let\'s configure your agent step by step.\n');
+
+      const responses = await prompts([
+        // Agent basics
+        {
+          type: 'text',
+          name: 'agentName',
+          message: 'Agent name:',
+          initial: 'My Agent',
+        },
+        {
+          type: 'text',
+          name: 'agentDescription',
+          message: 'Agent description:',
+          initial: 'An AI agent built with the config-driven composition system',
+        },
+        {
+          type: 'text',
+          name: 'agentVersion',
+          message: 'Agent version:',
+          initial: '1.0.0',
+        },
+        {
+          type: 'text',
+          name: 'providerName',
+          message: 'Provider name (optional):',
+          initial: 'Ember AI',
+        },
+        {
+          type: 'text',
+          name: 'providerUrl',
+          message: 'Provider URL (optional):',
+          initial: 'https://emberai.xyz/',
+        },
+        {
+          type: 'text',
+          name: 'agentBaseUrl',
+          message: 'Public base URL:',
+          initial: 'http://localhost:3000',
+        },
+
+        // AI configuration
+        {
+          type: 'select',
+          name: 'aiProvider',
+          message: 'AI provider:',
+          choices: Object.entries(AI_PROVIDERS).map(([key, value]) => ({
+            title: value.label,
+            value: key,
+          })),
+          initial: 0, // openrouter
+        },
+        {
+          type: 'autocomplete',
+          name: 'aiModel',
+          message: 'AI model:',
+          choices: (prev: ProviderKey) =>
+            AI_PROVIDERS[prev].models.map((model) => ({ title: model, value: model })),
+          initial: (prev: ProviderKey) => AI_PROVIDERS[prev].defaultModel,
+        },
+        {
+          type: 'text',
+          name: 'aiTemperature',
+          message: 'Temperature (0.0-2.0):',
+          initial: '0.7',
+          validate: (value: string) => {
+            const num = parseFloat(value);
+            return num >= 0 && num <= 2 ? true : 'Must be between 0.0 and 2.0';
+          },
+        },
+        {
+          type: 'text',
+          name: 'aiMaxTokens',
+          message: 'Max tokens:',
+          initial: '4096',
+          validate: (value: string) => {
+            const num = parseInt(value);
+            return num > 0 ? true : 'Must be positive';
+          },
+        },
+        {
+          type: 'select',
+          name: 'aiReasoning',
+          message: 'Reasoning level:',
+          choices: [
+            { title: 'low', value: 'low' },
+            { title: 'medium', value: 'medium' },
+            { title: 'high', value: 'high' },
+          ],
+          initial: 0,
+        },
+
+        // API keys
+        {
+          type: (_prev, _values) => 'password',
+          name: 'providerApiKey',
+          message: (_prev, values) =>
+            `${AI_PROVIDERS[values['aiProvider'] as ProviderKey].envKey} (press Enter to skip):`,
+        },
+        {
+          type: 'password',
+          name: 'pinataJwt',
+          message: 'PINATA_JWT (for IPFS uploads, press Enter to skip):',
+        },
+        {
+          type: 'text',
+          name: 'pinataGateway',
+          message: 'PINATA_GATEWAY (press Enter to skip):',
+        },
+
+        // ERC-8004 configuration
+        {
+          type: 'confirm',
+          name: 'enableErc8004',
+          message: 'Enable ERC-8004 agent registration?',
+          initial: true,
+        },
+        {
+          type: (prev) => (prev ? 'select' : null),
+          name: 'canonicalChain',
+          message: 'Canonical chain for ERC-8004:',
+          choices: Object.entries(CHAINS).map(([id, info]) => ({
+            title: info.name,
+            value: parseInt(id),
+          })),
+          initial: 3, // Arbitrum One
+        },
+        {
+          type: (_prev, values) => (values['enableErc8004'] ? 'multiselect' : null),
+          name: 'mirrorChains',
+          message: 'Mirror chains (use Space to select, Enter to confirm):',
+          choices: (_prev, values) =>
+            Object.entries(CHAINS)
+              .filter(([id]) => parseInt(id) !== values['canonicalChain'])
+              .map(([id, info]) => ({
+                title: info.name,
+                value: parseInt(id),
+                selected: parseInt(id) === 1 || parseInt(id) === 8453, // Default: Ethereum + Base
+              })),
+        },
+        {
+          type: (_prev, values) => (values['enableErc8004'] ? 'text' : null),
+          name: 'operatorAddress',
+          message: 'Operator address (optional, for CAIP-10):',
+          validate: (value: string) => {
+            if (!value) return true;
+            return /^0x[a-fA-F0-9]{40}$/.test(value) ? true : 'Must be a valid Ethereum address';
+          },
+        },
+      ]);
+
+      // Handle user cancellation (Ctrl+C)
+      if (Object.keys(responses).length === 0) {
+        cliOutput.print('\n❌ Setup cancelled by user\n');
+        return;
       }
 
-      cliOutput.print(`Initializing config workspace at ${targetDir}`);
+      // Build config from responses
+      const selectedProvider = (responses['aiProvider'] as ProviderKey) || 'openrouter';
+      config = {
+        agentName: responses['agentName'] || 'My Agent',
+        agentDescription:
+          responses['agentDescription'] ||
+          'An AI agent built with the config-driven composition system',
+        agentVersion: responses['agentVersion'] || '1.0.0',
+        providerName: responses['providerName'] || undefined,
+        providerUrl: responses['providerUrl'] || undefined,
+        agentBaseUrl: responses['agentBaseUrl'] || 'http://localhost:3000',
+        aiProvider: selectedProvider,
+        aiModel: responses['aiModel'] || AI_PROVIDERS[selectedProvider].defaultModel,
+        aiTemperature: parseFloat(responses['aiTemperature'] || '0.7'),
+        aiMaxTokens: parseInt(responses['aiMaxTokens'] || '4096'),
+        aiReasoning: responses['aiReasoning'] || 'low',
+        enableErc8004: responses['enableErc8004'] ?? true,
+        canonicalChain: responses['canonicalChain'] || 42161,
+        mirrorChains: responses['mirrorChains'] || [],
+        operatorAddress: responses['operatorAddress'] || undefined,
+        secrets: {},
+      };
 
-      // Create directory structure
-      mkdirSync(targetDir, { recursive: true });
-      mkdirSync(resolve(targetDir, 'skills'), { recursive: true });
-      mkdirSync(resolve(targetDir, 'workflows'), { recursive: true });
+      // Collect secrets
+      if (responses['providerApiKey']) {
+        config.secrets[AI_PROVIDERS[config.aiProvider].envKey] = responses['providerApiKey'];
+      }
+      if (responses['pinataJwt']) {
+        config.secrets['PINATA_JWT'] = responses['pinataJwt'];
+      }
+      if (responses['pinataGateway']) {
+        config.secrets['PINATA_GATEWAY'] = responses['pinataGateway'];
+      }
+    } else {
+      // Non-interactive mode - use defaults
+      config = {
+        agentName: 'My Agent',
+        agentDescription: 'An AI agent built with the config-driven composition system',
+        agentVersion: '1.0.0',
+        providerName: 'Ember AI',
+        providerUrl: 'https://emberai.xyz/',
+        agentBaseUrl: 'http://localhost:3000',
+        aiProvider: 'openrouter',
+        aiModel: 'anthropic/claude-sonnet-4.5',
+        aiTemperature: 0.7,
+        aiMaxTokens: 4096,
+        aiReasoning: 'low',
+        enableErc8004: true,
+        canonicalChain: 42161,
+        mirrorChains: [1, 8453],
+        operatorAddress: undefined,
+        secrets: {},
+      };
+    }
 
-      // Write sample files
-      writeFileSync(resolve(targetDir, 'agent.md'), SAMPLE_AGENT_MD);
-      writeFileSync(resolve(targetDir, 'agent.manifest.json'), SAMPLE_MANIFEST);
-      writeFileSync(resolve(targetDir, 'mcp.json'), SAMPLE_MCP_JSON);
-      writeFileSync(resolve(targetDir, 'workflow.json'), SAMPLE_WORKFLOW_JSON);
-      writeFileSync(resolve(targetDir, 'README.md'), SAMPLE_README);
-      writeFileSync(resolve(targetDir, 'skills', 'general-assistant.md'), SAMPLE_GENERAL_SKILL);
-      writeFileSync(resolve(targetDir, 'skills', 'ember-onchain-actions.md'), SAMPLE_EMBER_SKILL);
-      writeFileSync(resolve(targetDir, 'workflows', 'example-workflow.ts'), SAMPLE_WORKFLOW_TS);
+    cliOutput.print(`\n📁 Initializing config workspace at ${targetDir}\n`);
 
-      cliOutput.success('Created `agent.md`');
-      cliOutput.success('Created `agent.manifest.json`');
-      cliOutput.success('Created `mcp.json`');
-      cliOutput.success('Created `workflow.json`');
-      cliOutput.success('Created `README.md`');
-      cliOutput.success('Created `skills/` directory');
-      cliOutput.success('Created `skills/general-assistant.md`');
-      cliOutput.success('Created `skills/ember-onchain-actions.md`');
-      cliOutput.success('Created `workflows/` directory');
-      cliOutput.success('Created `workflows/example-workflow.ts`');
+    // Create directory structure
+    mkdirSync(targetDir, { recursive: true });
+    mkdirSync(resolve(targetDir, 'skills'), { recursive: true });
+    mkdirSync(resolve(targetDir, 'workflows'), { recursive: true });
 
-      // Copy .env.example to .env
-      const envPath = resolve(dirname(targetDir), '.env');
-      if (existsSync(envPath) && !options.force) {
-        cliOutput.info('Skipped `.env` (already exists, use --force to overwrite)');
+    // Write files using generated content
+    writeFileSync(resolve(targetDir, 'agent.md'), generateAgentMd(config));
+    writeFileSync(resolve(targetDir, 'agent.manifest.json'), SAMPLE_MANIFEST);
+    writeFileSync(resolve(targetDir, 'mcp.json'), SAMPLE_MCP_JSON);
+    writeFileSync(resolve(targetDir, 'workflow.json'), SAMPLE_WORKFLOW_JSON);
+    writeFileSync(resolve(targetDir, 'README.md'), SAMPLE_README);
+    writeFileSync(resolve(targetDir, 'skills', 'general-assistant.md'), SAMPLE_GENERAL_SKILL);
+    writeFileSync(resolve(targetDir, 'skills', 'ember-onchain-actions.md'), SAMPLE_EMBER_SKILL);
+    writeFileSync(resolve(targetDir, 'workflows', 'example-workflow.ts'), SAMPLE_WORKFLOW_TS);
+
+    cliOutput.success('Created `agent.md`');
+    cliOutput.success('Created `agent.manifest.json`');
+    cliOutput.success('Created `mcp.json`');
+    cliOutput.success('Created `workflow.json`');
+    cliOutput.success('Created `README.md`');
+    cliOutput.success('Created `skills/` directory');
+    cliOutput.success('Created `skills/general-assistant.md`');
+    cliOutput.success('Created `skills/ember-onchain-actions.md`');
+    cliOutput.success('Created `workflows/` directory');
+    cliOutput.success('Created `workflows/example-workflow.ts`');
+
+    // Handle .env file
+    const envPath = resolve(dirname(targetDir), '.env');
+    let existingEnv = '';
+
+    if (existsSync(envPath)) {
+      if (!options.force) {
+        cliOutput.info('`.env` already exists, appending new secrets...');
+        existingEnv = readFileSync(envPath, 'utf-8');
       } else {
         copyFileSync(envExamplePath, envPath);
-        cliOutput.success('Created `.env`');
+        existingEnv = readFileSync(envPath, 'utf-8');
+        cliOutput.success('Created `.env` (overwritten with --force)');
       }
-
-      cliOutput.blank();
-      cliOutput.print('Config workspace initialized successfully!', 'cyan');
-      cliOutput.blank();
-      cliOutput.print('**Next steps:**');
-      cliOutput.print('  1. Review `.env` and add your API keys');
-      cliOutput.print('  2. Edit `config/agent.md` to customize your agent');
-      cliOutput.print('  3. Customize `config/skills/general-assistant.md` or add more skills');
-      cliOutput.print('  4. Run: `npx -y @emberai/agent-node doctor`');
-      cliOutput.print('  5. Run: `npx -y @emberai/agent-node run --dev`');
-
-      resolvePromise();
-    } catch (error) {
-      rejectPromise(error instanceof Error ? error : new Error(String(error)));
+    } else {
+      copyFileSync(envExamplePath, envPath);
+      existingEnv = readFileSync(envPath, 'utf-8');
+      cliOutput.success('Created `.env`');
     }
-  });
+
+    // Append secrets and placeholders
+    const secretsToWrite: string[] = [];
+
+    // Add collected secrets
+    for (const [key, value] of Object.entries(config.secrets)) {
+      if (!existingEnv.includes(`${key}=`)) {
+        secretsToWrite.push(`${key}=${value}`);
+      }
+    }
+
+    // Add placeholders for missing keys
+    const placeholders = [
+      'OPENROUTER_API_KEY',
+      'ANTHROPIC_API_KEY',
+      'OPENAI_API_KEY',
+      'PINATA_JWT',
+      'PINATA_GATEWAY',
+    ];
+
+    for (const placeholder of placeholders) {
+      if (!existingEnv.includes(`${placeholder}=`) && !config.secrets[placeholder]) {
+        secretsToWrite.push(`${placeholder}=`);
+      }
+    }
+
+    if (secretsToWrite.length > 0) {
+      const updated =
+        existingEnv && !existingEnv.endsWith('\n')
+          ? `${existingEnv}\n${secretsToWrite.join('\n')}\n`
+          : `${existingEnv}${secretsToWrite.join('\n')}\n`;
+      writeFileSync(envPath, updated);
+      cliOutput.success(
+        `Updated \`.env\` with ${Object.keys(config.secrets).length} secret(s) and ${secretsToWrite.length - Object.keys(config.secrets).length} placeholder(s)`,
+      );
+    }
+
+    cliOutput.blank();
+    cliOutput.print('✅ Config workspace initialized successfully!', 'cyan');
+    cliOutput.blank();
+    cliOutput.print('**Next steps:**');
+    if (Object.keys(config.secrets).length < placeholders.length) {
+      cliOutput.print('  1. Review `.env` and add any missing API keys');
+    } else {
+      cliOutput.print('  1. Review `config/agent.md` to verify your configuration');
+    }
+    cliOutput.print('  2. Customize `config/skills/general-assistant.md` or add more skills');
+    cliOutput.print('  3. Run: `npx -y @emberai/agent-node doctor`');
+    cliOutput.print('  4. Run: `npx -y @emberai/agent-node run --dev`');
+    cliOutput.blank();
+  } catch (error) {
+    throw error instanceof Error ? error : new Error(String(error));
+  }
 }
