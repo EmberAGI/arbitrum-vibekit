@@ -76,7 +76,7 @@ interface WorkspaceSnapshot {
 
 const DEFAULT_AGENT_MODEL = {
   provider: 'openrouter',
-  name: 'anthropic/claude-sonnet-4.5',
+  name: 'openai/gpt-5',
   params: {
     temperature: 0.7,
     topP: 1.0,

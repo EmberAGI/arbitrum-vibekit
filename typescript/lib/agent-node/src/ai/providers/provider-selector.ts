@@ -31,7 +31,7 @@ export interface ProviderSelector {
 // ============================================================================
 
 export const DEFAULT_MODELS = {
-  openrouter: 'anthropic/claude-sonnet-4.5',
+  openrouter: 'openai/gpt-5',
   openai: 'gpt-5-mini',
   xai: 'grok-4-fast-reasoning',
   hyperbolic: 'openai/gpt-oss-120b',
@@ -56,7 +56,7 @@ export const DEFAULT_MODELS = {
  *
  * // Use OpenRouter
  * if (selector.openrouter) {
- *   const model = selector.openrouter('anthropic/claude-sonnet-4.5');
+ *   const model = selector.openrouter('openai/gpt-5');
  *   // Use with Vercel AI SDK...
  * }
  * ```

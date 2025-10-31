@@ -24,26 +24,26 @@ export interface InitOptions {
 const AI_PROVIDERS = {
   openrouter: {
     label: 'OpenRouter (recommended)',
-    defaultModel: 'anthropic/claude-sonnet-4.5',
+    defaultModel: 'openai/gpt-5',
     envKey: 'OPENROUTER_API_KEY',
     models: [
-      'anthropic/claude-sonnet-4.5',
+      'openai/gpt-5',
       'anthropic/claude-opus-4',
-      'openai/gpt-4o',
-      'google/gemini-pro',
+      'google/gemini-2.5-flash',
+      'x-ai/grok-4-fast',
     ],
   },
   anthropic: {
     label: 'Anthropic',
     defaultModel: 'claude-sonnet-4.5',
     envKey: 'ANTHROPIC_API_KEY',
-    models: ['claude-sonnet-4.5', 'claude-opus-4', 'claude-3-5-sonnet-20241022'],
+    models: ['claude-sonnet-4.5', 'claude-opus-4-1', 'claude-haiku-4-5'],
   },
   openai: {
     label: 'OpenAI',
     defaultModel: 'gpt-4o',
     envKey: 'OPENAI_API_KEY',
-    models: ['gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+    models: ['gpt-5', 'gpt-5-mini', 'gpt-4.1'],
   },
 } as const;
 
@@ -178,7 +178,7 @@ workflows:
 # Optional: Uncomment to override AI model for this skill
 # ai:
 #   modelProvider: openrouter
-#   model: anthropic/claude-sonnet-4.5
+#   model: openai/gpt-5
 #   params:
 #     temperature: 0.7
 #     reasoning: low
@@ -223,7 +223,7 @@ mcp:
 # Optional: Uncomment to override AI model for this skill
 # ai:
 #   modelProvider: openrouter
-#   model: anthropic/claude-sonnet-4.5
+#   model: openai/gpt-5
 #   params:
 #     temperature: 0.7
 #     reasoning: low
@@ -789,7 +789,7 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
         providerUrl: 'https://emberai.xyz/',
         agentBaseUrl: 'http://localhost:3000',
         aiProvider: 'openrouter',
-        aiModel: 'anthropic/claude-sonnet-4.5',
+        aiModel: 'openai/gpt-5',
         enableErc8004: true,
         canonicalChain: 42161,
         mirrorChains: [1, 8453],

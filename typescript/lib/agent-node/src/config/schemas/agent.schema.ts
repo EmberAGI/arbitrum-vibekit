@@ -57,7 +57,7 @@ export const ModelParamsSchema = z.object({
 
 export const ModelConfigSchema = z.object({
   provider: AIConfigSchema.shape.provider.default('openrouter'),
-  name: z.string().default('anthropic/claude-sonnet-4.5'),
+  name: z.string().default('openai/gpt-5'),
   params: ModelParamsSchema.optional(),
 });
 
@@ -69,7 +69,7 @@ export const ModelConfigSchema = z.object({
 export const AIModelConfigSchema = z
   .object({
     modelProvider: AIConfigSchema.shape.provider.default('openrouter'),
-    model: z.string().default('anthropic/claude-sonnet-4.5'),
+    model: z.string().default('openai/gpt-5'),
     params: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
