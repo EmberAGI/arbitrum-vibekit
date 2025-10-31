@@ -4,14 +4,16 @@
 
 import { readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
+
 import matter from 'gray-matter';
 import prompts from 'prompts';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
+import { createTestConfigWorkspace } from '../../../tests/utils/test-config-workspace.js';
 import * as registrationUtils from '../utils/registration.js';
 import * as serveTransactionUtils from '../utils/serve-transaction.js';
+
 import { updateRegistryCommand } from './update-registry.js';
-import { createTestConfigWorkspace } from '../../../tests/utils/test-config-workspace.js';
 
 vi.mock('prompts', () => ({
   default: vi.fn(),
@@ -29,7 +31,7 @@ describe('updateRegistryCommand (from-config) - URL composition and chain target
     }
     parsed.data['ai'] = {
       modelProvider: 'openrouter',
-      model: 'anthropic/claude-sonnet-4.5',
+      model: 'openai/gpt-5',
       params: { temperature: 0.7, maxTokens: 4096 },
     };
     writeFileSync(agentMdPath, matter.stringify(parsed.content, parsed.data));
@@ -168,7 +170,7 @@ describe('updateRegistryCommand (from-config) - URL composition and chain target
         if (callCount === 3) {
           throw new Error('TEST_ABORT');
         }
-        return originalBuilder(...(args as Parameters<typeof originalBuilder>));
+        return originalBuilder(...(args));
       });
 
     vi.spyOn(registrationUtils, 'createIpfsFile').mockResolvedValue('ipfs://dummy');

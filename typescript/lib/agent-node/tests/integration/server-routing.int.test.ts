@@ -1,9 +1,9 @@
-import type { Server } from 'http';
-
 import { readFileSync, rmSync, writeFileSync } from 'fs';
+import type { Server } from 'http';
 import { join } from 'path';
-import { describe, it, expect, afterEach } from 'vitest';
+
 import matter from 'gray-matter';
+import { describe, it, expect, afterEach } from 'vitest';
 
 import { createA2AServer } from '../../src/a2a/server.js';
 import { initFromConfigWorkspace, type AgentConfigHandle } from '../../src/config/runtime/init.js';
@@ -23,7 +23,7 @@ describe('A2A Server - routing.agentCardPath and card.url composition', () => {
       if (server!.listening) resolve();
       else server!.once('listening', () => resolve());
     });
-    const address = server!.address();
+    const address = server.address();
     baseUrl = `http://localhost:${typeof address === 'object' ? address?.port : 0}`;
   };
 
@@ -52,7 +52,7 @@ describe('A2A Server - routing.agentCardPath and card.url composition', () => {
       if (parsedAi.data['model']) delete parsedAi.data['model'];
       parsedAi.data['ai'] = {
         modelProvider: 'openrouter',
-        model: 'anthropic/claude-sonnet-4.5',
+        model: 'openai/gpt-5',
         params: { temperature: 0.7, maxTokens: 4096 },
       };
       writeFileSync(agentMdPath, matter.stringify(parsedAi.content, parsedAi.data));
@@ -74,7 +74,7 @@ describe('A2A Server - routing.agentCardPath and card.url composition', () => {
       if (parsedAi.data['model']) delete parsedAi.data['model'];
       parsedAi.data['ai'] = {
         modelProvider: 'openrouter',
-        model: 'anthropic/claude-sonnet-4.5',
+        model: 'openai/gpt-5',
         params: { temperature: 0.7, maxTokens: 4096 },
       };
       writeFileSync(agentMdPath, matter.stringify(parsedAi.content, parsedAi.data));

@@ -4,8 +4,8 @@
  */
 
 import { writeFileSync, rmSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
 
 import { describe, it, expect, afterEach } from 'vitest';
 
