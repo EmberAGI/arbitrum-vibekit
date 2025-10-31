@@ -237,28 +237,34 @@ describe('agent chat command (integration)', () => {
       setFileSinkSpy.mockRestore();
     });
 
-    it('creates daily JSONL log files when file logging is enabled', async () => {
-      // Given: logDir option and real file sink (not mocked)
+    it('creates structured log files when file logging is enabled', async () => {
+      // Given: structured logging is enabled with a log directory
       const logDir = join(tempDir, 'logs');
-
-      // When: running chat command with logDir (mock setup only, not full REPL)
       const { Logger } = await import('../src/utils/logger.js');
       await Logger.setFileSink(logDir);
       process.env['LOG_STRUCTURED'] = 'true';
 
+      // When: logging messages
       const log = Logger.getInstance('TEST');
       log.info('test message');
 
       // Give the stream time to flush
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // Then: should create JSONL file with today's date
-      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-      const logFilePath = join(logDir, `${today}.jsonl`);
-      const logContent = readFileSync(logFilePath, 'utf-8');
+      // Then: should create a JSONL file with structured log entries
+      const { readdirSync, readFileSync } = await import('fs');
+      const files = readdirSync(logDir).filter(f => f.endsWith('.jsonl'));
+      expect(files.length).toBe(1);
 
+      const logContent = readFileSync(join(logDir, files[0]), 'utf-8');
       expect(logContent).toContain('test message');
       expect(logContent).toContain('"level":"INFO"');
+
+      // Verify it's valid JSONL format
+      const lines = logContent.trim().split('\n');
+      lines.forEach(line => {
+        expect(() => JSON.parse(line)).not.toThrow();
+      });
     });
   });
 

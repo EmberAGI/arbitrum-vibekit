@@ -703,9 +703,9 @@ card:
   defaultInputModes: ['text/plain']
   defaultOutputModes: ['application/json']
 
-model:
-  provider: openrouter
-  name: anthropic/claude-sonnet-4.5
+ai:
+  modelProvider: openrouter
+  model: anthropic/claude-sonnet-4.5
 ---
 
 Base agent prompt.

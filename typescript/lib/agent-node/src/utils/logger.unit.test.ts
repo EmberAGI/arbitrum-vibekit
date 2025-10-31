@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -21,40 +21,52 @@ describe('Logger file sink (behavior)', () => {
     else process.env['LOG_STRUCTURED'] = originalStructured;
   });
 
-  it('writes a JSONL entry when structured logging is enabled', async () => {
+  it('writes structured logs to a file when enabled', async () => {
+    // Given: structured logging is enabled and a file sink is configured
     await Logger.setFileSink(dir);
     const log = Logger.getInstance('TEST');
+
+    // When: logging messages with metadata
     log.info('hello world', { event: 'test' });
 
     // Give the stream a tick to flush
     await new Promise((r) => setTimeout(r, 10));
 
-    const filename = new Date().toISOString().slice(0, 10); /* YYYY-MM-DD */
-    const filePath = join(dir, `${filename}.jsonl`);
-    const content = readFileSync(filePath, 'utf-8');
+    // Then: logs should be written to a JSONL file in the configured directory
+    const files = readdirSync(dir).filter(f => f.endsWith('.jsonl'));
+    expect(files.length).toBe(1);
+
+    const content = readFileSync(join(dir, files[0]), 'utf-8');
     const [line] = content.trim().split('\n');
     const parsed = JSON.parse(line);
 
+    // Verify the logged content contains expected fields
     expect(parsed.level).toBe('INFO');
     expect(parsed.message).toBe('hello world');
     expect(parsed.namespace).toBe('TEST');
     expect(parsed.event).toBe('test');
   });
 
-  it('appends multiple lines across calls', async () => {
+  it('appends multiple log entries to the same file', async () => {
+    // Given: structured logging is enabled
     await Logger.setFileSink(dir);
     const log = Logger.getInstance('TEST');
+
+    // When: logging multiple messages
     log.info('first');
     log.warn('second');
 
     await new Promise((r) => setTimeout(r, 10));
 
-    const filename = new Date().toISOString().slice(0, 10);
-    const filePath = join(dir, `${filename}.jsonl`);
-    const lines = readFileSync(filePath, 'utf-8')
+    // Then: all logs should be in the same file as separate JSONL entries
+    const files = readdirSync(dir).filter(f => f.endsWith('.jsonl'));
+    expect(files.length).toBe(1);
+
+    const lines = readFileSync(join(dir, files[0]), 'utf-8')
       .trim()
       .split('\n')
       .map((l) => JSON.parse(l));
+
     expect(lines.length).toBeGreaterThanOrEqual(2);
     expect(lines[0].message).toBe('first');
     expect(lines[1].message).toBe('second');
