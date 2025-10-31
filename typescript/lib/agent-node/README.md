@@ -249,7 +249,7 @@ card:
 
 ai:
   modelProvider: openrouter
-  model: anthropic/claude-sonnet-4.5
+  model: openai/gpt-5
 ---
 
 You are an AI agent that helps users with...

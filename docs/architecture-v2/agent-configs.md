@@ -38,7 +38,7 @@ card:
 # Agent-level AI configuration (default for all skills)
 ai:
   modelProvider: openrouter
-  model: anthropic/claude-sonnet-4.5
+  model: openai/gpt-5
   params:
     temperature: 0.7
     maxTokens: 4096
@@ -111,7 +111,7 @@ You are a DeFi trading agent specialized in providing insights and executing tra
 ```yaml
 ai:
   modelProvider: openrouter
-  model: anthropic/claude-sonnet-4.5
+  model: openai/gpt-5
   params:
     temperature: 0.7
     maxTokens: 4096
@@ -408,7 +408,7 @@ card:
 
 ai:
   modelProvider: openrouter
-  model: anthropic/claude-sonnet-4.5
+  model: openai/gpt-5
   params:
     temperature: 0.7
     maxTokens: 4096
@@ -443,7 +443,7 @@ card:
 
 ai:
   modelProvider: openrouter
-  model: anthropic/claude-sonnet-4.5
+  model: openai/gpt-5
   params:
     temperature: 0.7
     maxTokens: 4096
@@ -490,7 +490,7 @@ card:
 
 ai:
   modelProvider: openrouter
-  model: anthropic/claude-sonnet-4.5
+  model: openai/gpt-5
   params:
     temperature: 0.7
     maxTokens: 4096
