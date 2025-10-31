@@ -178,7 +178,7 @@ export async function createA2AServer(config: ServerConfig): Promise<Server> {
   const a2aApp = new A2AExpressApp(requestHandler);
   a2aApp.setupRoutes(app, a2aPath);
 
-  app.get('/.well-known/agent-card.json', (req: Request, res: Response) => {
+  const agentCardHandler = (req: Request, res: Response): void => {
     const { origin, path } = resolveBaseComponents({
       agentCard: agentConfig.agentCard,
       runtimePath: config.serviceConfig.a2a.path ?? a2aPath,
@@ -191,22 +191,23 @@ export async function createA2AServer(config: ServerConfig): Promise<Server> {
       ...agentConfig.agentCard,
       url: cardUrl,
     });
-  });
+  };
 
-  app.get('/.well-known/agent.json', (req: Request, res: Response) => {
-    const { origin, path } = resolveBaseComponents({
-      agentCard: agentConfig.agentCard,
-      runtimePath: config.serviceConfig.a2a.path ?? a2aPath,
-      req,
+  const configuredAgentCardPath =
+    agentConfig.routing?.agentCardPath ?? '/.well-known/agent-card.json';
+
+  // Serve Agent Card at configured path
+  app.get(configuredAgentCardPath, agentCardHandler);
+
+  // Maintain compatibility alias and optional redirect from default path
+  if (configuredAgentCardPath !== '/.well-known/agent-card.json') {
+    app.get('/.well-known/agent-card.json', (_req: Request, res: Response) => {
+      res.redirect(308, configuredAgentCardPath);
     });
-    const forwardedPrefix = req.get('x-forwarded-prefix') ?? '';
-    const combinedPath = combineWithPrefix(forwardedPrefix, path);
-    const cardUrl = combinedPath === '/' ? origin : `${origin}${combinedPath}`;
-    res.json({
-      ...agentConfig.agentCard,
-      url: cardUrl,
-    });
-  });
+  }
+
+  // Additional legacy alias
+  app.get('/.well-known/agent.json', agentCardHandler);
 
   registerAdditionalRoutes(app, a2aPath);
 
