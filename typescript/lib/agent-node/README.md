@@ -269,9 +269,9 @@ card:
     name: 'My Company'
     url: 'https://example.com'
 
-model:
-  provider: openrouter
-  name: anthropic/claude-sonnet-4.5
+ai:
+  modelProvider: openrouter
+  model: anthropic/claude-sonnet-4.5
 ---
 
 You are an AI agent that helps users with...

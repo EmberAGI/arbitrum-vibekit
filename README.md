@@ -208,6 +208,127 @@ The Quickstart Agent is now accessible through the web frontend:
 > [!TIP]
 > To learn more about Vibekit's agent configurations, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web#agent-configuration).
 
+## 🔗 ERC-8004 Agent Registration
+
+Vibekit now supports [ERC-8004](https://eips.ethereum.org/EIPS/eip-8004) agent registration, enabling on-chain identity and discovery for your AI agents.
+
+### What is ERC-8004?
+
+ERC-8004 is an Ethereum standard for registering AI agents on-chain, providing:
+- **Canonical Identity**: A primary chain where your agent's identity is registered
+- **Multi-Chain Discovery**: Mirror registrations for broad ecosystem reach
+- **Trust Frameworks**: Verifiable agent capabilities and certifications
+- **IPFS Metadata**: Decentralized storage for agent metadata
+
+### Getting Started with ERC-8004
+
+The agent-node framework includes built-in ERC-8004 support through the config-driven workspace:
+
+#### 1. Initialize with ERC-8004 Support
+
+When creating a new agent, the interactive `agent init` wizard guides you through ERC-8004 configuration:
+
+```bash
+cd typescript/lib/agent-node
+npx -y @emberai/agent-node init
+```
+
+The wizard will prompt you to:
+- Enable ERC-8004 registration (default: yes)
+- Select canonical chain (default: Arbitrum One)
+- Choose mirror chains (default: Ethereum + Base)
+- Optionally provide operator address for CAIP-10
+
+#### 2. Configure in agent.md
+
+Your `config/agent.md` includes an `erc8004` frontmatter block:
+
+```yaml
+erc8004:
+  enabled: true
+  canonical:
+    chainId: 42161  # Arbitrum One
+    operatorAddress: '0x...'  # Optional, for CAIP-10
+  mirrors:
+    - { chainId: 1 }      # Ethereum
+    - { chainId: 8453 }   # Base
+  identityRegistries:
+    '42161': '0x0000000000000000000000000000000000000000'  # Registry addresses
+    # ... other chains
+```
+
+#### 3. Register Your Agent On-Chain
+
+```bash
+# Register on canonical chain and mirrors (default)
+npx -y @emberai/agent-node register --from-config
+
+# Register on a specific chain only
+npx -y @emberai/agent-node register --from-config --chain 42161
+```
+
+The command will:
+1. Upload agent metadata to IPFS via Pinata
+2. Open a browser for transaction signing
+3. Automatically persist `agentId` and `registrationUri` to config
+
+#### 4. Update Registration
+
+```bash
+# Update all registered chains
+npx -y @emberai/agent-node update-registry --from-config
+
+# Update a specific chain
+npx -y @emberai/agent-node update-registry --from-config --chain 42161
+
+# Use CLI overrides (will prompt to persist)
+npx -y @emberai/agent-node update-registry --from-config --version 2.0.0
+```
+
+### Agent Card Extension
+
+When ERC-8004 is enabled, your Agent Card automatically includes an extension for discovery:
+
+```json
+{
+  "capabilities": {
+    "extensions": [
+      {
+        "uri": "https://eips.ethereum.org/EIPS/eip-8004",
+        "description": "ERC-8004 discovery/trust",
+        "required": false,
+        "params": {
+          "canonicalCaip10": "eip155:42161:0x...",
+          "identityRegistry": "eip155:42161:0x...",
+          "registrationUri": "ipfs://Qm...",
+          "supportedTrust": [...]
+        }
+      }
+    ]
+  }
+}
+```
+
+### Validate Configuration
+
+Use the `doctor` command to validate your ERC-8004 configuration:
+
+```bash
+npx -y @emberai/agent-node doctor
+```
+
+This checks for:
+- Valid chain IDs and registry addresses
+- Missing operator address (warns if CAIP-10 cannot be formed)
+- Zero-address registry placeholders
+- Correct extension composition
+
+### Learn More
+
+- **Configuration Examples**: See [`docs/architecture-v2/agent-configs.md`](./docs/architecture-v2/agent-configs.md) for comprehensive examples
+- **Architectural Decisions**: Read [`docs/rationales.md`](./docs/rationales.md) for design rationale
+- **ERC-8004 Specification**: https://eips.ethereum.org/EIPS/eip-8004
+
 ## 🤖 LLM Guides
 
 ### `.rulesync` Configuration
