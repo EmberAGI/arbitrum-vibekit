@@ -83,6 +83,8 @@ Commands:
   init                    Initialize a new config workspace
     --target <dir>        Target directory (default: ./config)
     --force               Overwrite existing directory
+    --yes                 Non-interactive mode with sensible defaults
+    --non-interactive     Alias for --yes
 
   print-config            Display composed configuration
     --config-dir <dir>    Config directory (default: ./config)
@@ -110,21 +112,25 @@ Commands:
     --format <json|yaml>  Output format (default: json)
 
   register                Register agent on-chain using EIP-8004
-    --name <name>         Agent name (required)
-    --description <desc>  Agent description (required)
-    --url <url>           Agent URL (required)
-    --chain-id <id>       Chain ID (required, e.g., 11155111 for Sepolia)
-    --version <version>   Agent version (default: 1.0.0)
-    --image <url>         Agent image URL
+    --all                 Register canonical + mirrors (default: true)
+    --chain <id>          Target a single chain ID (overrides --all)
+    --config-dir <dir>    Config directory (default: ./config)
+    --name <name>         Override: agent name
+    --description <desc>  Override: agent description
+    --url <url>           Override: A2A URL (card.url)
+    --version <version>   Override: agent version (default: 1.0.0)
+    --image <url>         Override: agent image URL
 
   update-registry         Update agent registry on-chain using EIP-8004
-    --agent-id <id>       Agent ID (required)
-    --name <name>         Agent name (required)
-    --description <desc>  Agent description (required)
-    --url <url>           Agent URL (required)
-    --chain-id <id>       Chain ID (required, e.g., 11155111 for Sepolia)
-    --version <version>   Agent version (default: 1.0.0)
-    --image <url>         Agent image URL
+    --all                 Update canonical + mirrors (default: true)
+    --chain <id>          Target a single chain ID
+    --config-dir <dir>    Config directory (default: ./config)
+    --agent-id <id>       Override: agent ID (per-chain if omitted in config)
+    --name <name>         Override: agent name
+    --description <desc>  Override: agent description
+    --url <url>           Override: A2A URL (card.url)
+    --version <version>   Override: agent version (default: 1.0.0)
+    --image <url>         Override: agent image URL
 
   help                    Show this help message
 
@@ -175,6 +181,8 @@ export async function runCli(): Promise<void> {
         await initCommand({
           target: options['target'] as string | undefined,
           force: options['force'] as boolean | undefined,
+          yes: options['yes'] as boolean | undefined,
+          nonInteractive: options['non-interactive'] as boolean | undefined,
         });
         break;
 
@@ -230,6 +238,9 @@ export async function runCli(): Promise<void> {
           chainId: options['chain-id'] as string | undefined,
           version: options['version'] as string | undefined,
           image: options['image'] as string | undefined,
+          all: options['all'] as boolean | undefined,
+          chain: options['chain'] as string | undefined,
+          configDir: options['config-dir'] as string | undefined,
         });
         break;
 
@@ -242,6 +253,9 @@ export async function runCli(): Promise<void> {
           chainId: options['chain-id'] as string | undefined,
           version: options['version'] as string | undefined,
           image: options['image'] as string | undefined,
+          all: options['all'] as boolean | undefined,
+          chain: options['chain'] as string | undefined,
+          configDir: options['config-dir'] as string | undefined,
         });
         break;
 

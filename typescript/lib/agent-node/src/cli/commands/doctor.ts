@@ -24,6 +24,8 @@ import {
   validateMCPServers,
   validateWorkflows,
 } from '../../config/validators/conflict-validator.js';
+import { validateERC8004Config } from '../../config/validators/erc8004-validator.js';
+import { validateRoutingConfig } from '../../config/validators/routing-validator.js';
 import { cliOutput } from '../output.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -86,6 +88,42 @@ function readJsonFile(filePath: string): unknown {
   return JSON.parse(readFileSync(filePath, 'utf-8')) as unknown;
 }
 
+/**
+ * Check for deprecated fields in frontmatter (breaking changes)
+ * @param frontmatter - Raw frontmatter object
+ * @param source - Source description for error messages
+ * @returns Array of error messages for deprecated fields
+ */
+function checkDeprecatedFields(frontmatter: unknown, source: string): string[] {
+  const errors: string[] = [];
+
+  if (!isRecord(frontmatter)) {
+    return errors;
+  }
+
+  // Check for deprecated 'model' field (replaced by 'ai')
+  if ('model' in frontmatter) {
+    errors.push(
+      `Deprecated field "model" found in ${source}. ` +
+        'Use "ai" instead (breaking change in this version). ' +
+        'Update frontmatter: rename "model" → "ai", "provider" → "modelProvider", "name" → "model".',
+    );
+  }
+
+  // Check for deprecated 'model' in nested 'ai' object (incorrect field names)
+  if (isRecord(frontmatter['ai'])) {
+    const ai = frontmatter['ai'];
+    if ('provider' in ai || 'name' in ai) {
+      errors.push(
+        `Deprecated fields in ${source} "ai" block. ` +
+          'Use "modelProvider" instead of "provider" and "model" instead of "name".',
+      );
+    }
+  }
+
+  return errors;
+}
+
 function appendUnknownKeyWarnings(warnings: string[], source: string, unknownKeys: string[]): void {
   for (const key of unknownKeys) {
     warnings.push(`Unknown ${source} key: ${key}`);
@@ -120,11 +158,19 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<void> 
     const agentPath = resolve(configDir, 'agent.md');
     const agentBase = loadAgentBase(agentPath);
     const agentMatter = matter(readFileSync(agentPath, 'utf-8'));
-    appendUnknownKeyWarnings(
-      warnings,
-      'agent frontmatter',
-      collectUnknownKeys(agentMatter.data, agentBase.frontmatter),
-    );
+
+    // Check for deprecated fields (errors, not warnings - breaking changes)
+    const agentDeprecatedErrors = checkDeprecatedFields(agentMatter.data, 'agent.md');
+    errors.push(...agentDeprecatedErrors);
+
+    // Check for unknown keys (strict schema enforcement)
+    const agentUnknownKeys = collectUnknownKeys(agentMatter.data, agentBase.frontmatter);
+    if (agentUnknownKeys.length > 0) {
+      // Unknown keys are now errors due to strict schemas
+      for (const key of agentUnknownKeys) {
+        errors.push(`Unknown agent frontmatter key: ${key}`);
+      }
+    }
 
     if (!agentBase.frontmatter.card.name) {
       errors.push('Agent card missing required field: `name`');
@@ -134,6 +180,30 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<void> 
     }
     if (!agentBase.body || agentBase.body.length === 0) {
       warnings.push('Agent base has empty system prompt');
+    }
+
+    // 2.1. Validate ERC-8004 configuration
+    cliOutput.success('Checking ERC-8004 configuration...');
+    if (agentBase.frontmatter.erc8004) {
+      const erc8004Result = validateERC8004Config(
+        agentBase.frontmatter.erc8004,
+        agentBase.frontmatter.card.url,
+        process.env['NODE_ENV'],
+      );
+      errors.push(...erc8004Result.errors);
+      warnings.push(...erc8004Result.warnings);
+    } else {
+      cliOutput.print('  ERC-8004 not configured (optional)');
+    }
+
+    // 2.2. Validate routing configuration
+    cliOutput.success('Checking routing configuration...');
+    if (agentBase.frontmatter.routing) {
+      const routingResult = validateRoutingConfig(agentBase.frontmatter.routing);
+      errors.push(...routingResult.errors);
+      warnings.push(...routingResult.warnings);
+    } else {
+      cliOutput.print('  Routing not configured (using defaults)');
     }
 
     // 3. Validate skills
@@ -146,11 +216,20 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<void> 
 
     for (const skill of skills) {
       const skillMatter = matter(readFileSync(skill.path, 'utf-8'));
-      appendUnknownKeyWarnings(
-        warnings,
-        `skill ${skill.frontmatter.skill.id} frontmatter`,
-        collectUnknownKeys(skillMatter.data, skill.frontmatter),
-      );
+      const skillSource = `skill ${skill.frontmatter.skill.id || skill.path}`;
+
+      // Check for deprecated fields (errors, not warnings - breaking changes)
+      const skillDeprecatedErrors = checkDeprecatedFields(skillMatter.data, skillSource);
+      errors.push(...skillDeprecatedErrors);
+
+      // Check for unknown keys (strict schema enforcement)
+      const skillUnknownKeys = collectUnknownKeys(skillMatter.data, skill.frontmatter);
+      if (skillUnknownKeys.length > 0) {
+        // Unknown keys are now errors due to strict schemas
+        for (const key of skillUnknownKeys) {
+          errors.push(`Unknown ${skillSource} frontmatter key: ${key}`);
+        }
+      }
 
       if (!skill.frontmatter.skill.id) {
         errors.push(`Skill ${skill.path} missing required field: \`id\``);
@@ -382,6 +461,47 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<void> 
             `  - ${workflowId} (${workflowEntry.enabled === false ? 'disabled' : 'enabled'}) → unused`,
           );
         }
+      }
+
+      // ERC-8004 Extension Detection
+      cliOutput.blank();
+      cliOutput.print('**ERC-8004 Status:**');
+      const erc8004Extension = cardWithExtensions.capabilities?.extensions?.find(
+        (ext) => ext.uri === 'https://eips.ethereum.org/EIPS/eip-8004',
+      );
+
+      if (erc8004Extension) {
+        cliOutput.success('Extension present: yes');
+
+        if (erc8004Extension.params && typeof erc8004Extension.params === 'object') {
+          const params = erc8004Extension.params as Record<string, unknown>;
+
+          if (typeof params['canonicalCaip10'] === 'string') {
+            cliOutput.print(`  Canonical CAIP-10: \`${params['canonicalCaip10']}\``);
+          } else {
+            cliOutput.print('  Canonical CAIP-10: not configured');
+          }
+
+          if (typeof params['identityRegistry'] === 'string') {
+            cliOutput.print(`  Identity Registry: \`${params['identityRegistry']}\``);
+          } else {
+            cliOutput.print('  Identity Registry: not configured');
+          }
+
+          if (typeof params['registrationUri'] === 'string') {
+            cliOutput.print(`  Registration URI: \`${params['registrationUri']}\``);
+          } else {
+            cliOutput.print('  Registration URI: not available');
+          }
+
+          if (Array.isArray(params['supportedTrust']) && params['supportedTrust'].length > 0) {
+            cliOutput.print(`  Supported Trust: ${params['supportedTrust'].length} entries`);
+          }
+        } else {
+          cliOutput.print('  Extension params: none');
+        }
+      } else {
+        cliOutput.print('  Extension present: no');
       }
     }
 
