@@ -892,7 +892,7 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
     }
     cliOutput.print('  2. Customize `config/skills/general-assistant.md` or add more skills');
     cliOutput.print('  3. Run: `npx -y @emberai/agent-node doctor`');
-    cliOutput.print('  4. Run: `npx -y @emberai/agent-node run --dev`');
+    cliOutput.print('  4. Run: `npx -y @emberai/agent-node`');
     cliOutput.blank();
   } catch (error) {
     throw error instanceof Error ? error : new Error(String(error));

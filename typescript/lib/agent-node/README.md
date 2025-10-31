@@ -16,6 +16,79 @@ Agent Node provides a complete framework for building autonomous AI agents with 
 - **Skills Framework**: Modular skill composition with isolated tool/resource scoping
 - **Type-Safe**: Full TypeScript support with Zod schema validation
 
+## Quick Start in 60 Seconds
+
+### Using the CLI
+
+#### 1. Initialize Config Workspace
+
+```bash
+npx -y @emberai/agent-node init
+```
+
+This creates a `config/` directory with:
+
+- `agent.md` - Base agent configuration and system prompt
+- `agent.manifest.json` - Skill composition settings
+- `skills/` - Directory for skill modules
+- `mcp.json` - MCP server registry
+- `workflow.json` - Workflow plugin registry
+
+#### 2. Run the Server
+
+Smart-start chat mode (connects to running agent or starts new server):
+
+```bash
+npx -y @emberai/agent-node
+```
+
+#### 3. Time to Profit!
+
+### Customize Your Agent
+
+The `init` command created a working agent with sensible defaults. Here's what you can customize:
+
+**Agent Configuration** (`config/agent.md`):
+
+- **YAML frontmatter** → Constructs your A2A agent card (name, description, URL, AI model, capabilities)
+- **Markdown section** → Main system prompt that defines your agent's personality and behavior
+- The `init` command configured basic settings; customize the name, model, and system prompt to fit your use case
+
+**Skills** (`config/skills/*.md`):
+
+- **YAML frontmatter** → Adds capabilities to your A2A agent card (skill metadata, MCP tool access, model overrides)
+- **Markdown section** → Additional instructions specific to this skill
+- The `init` command created two sample skills (`general-assistant`, `ember-onchain-actions`); add your own or modify these
+
+**Skill Manifest** (`config/agent.manifest.json`):
+
+- Controls which skills are loaded and how they're composed together
+- Lists paths to skill files, references to registries (mcp.json, workflow.json), and merge policies
+- Add new skill paths to the `skills` array when you create new skill files
+
+**MCP Servers** (`config/mcp.json`):
+
+- Registers MCP servers for dynamic tool access (stdio or HTTP transport)
+- The `init` command configured `fetch` (HTTP fetching) and `ember_onchain_actions` (blockchain operations)
+- Add your own MCP servers and reference them in skill frontmatter
+
+**Workflows** (`config/workflows/*.ts`):
+
+- Workflows are scripts the agent can run to manage A2A Task lifecycles (same concept as [Anthropic's workflows](https://www.anthropic.com/engineering/building-effective-agents))
+- Build multi-step operations as TypeScript generator functions with pause/resume capabilities
+- The `init` command created an `example-workflow` demonstrating status updates, artifacts, and user confirmation
+- Register new workflows in `config/workflow.json` and reference them in skill configurations
+
+**Validate Your Configuration**:
+
+After making changes, validate your configuration:
+
+```bash
+npx -y @emberai/agent-node doctor
+```
+
+This checks for configuration errors, missing references, and policy conflicts.
+
 ## Installation
 
 ### Prerequisites
@@ -120,102 +193,7 @@ PORT=3000
 HOST=0.0.0.0
 ```
 
-## Quick Start
-
-### Using the CLI (Recommended)
-
-#### 1. Initialize Config Workspace
-
-```bash
-npx -y @emberai/agent-node init
-```
-
-This creates a `config/` directory with:
-
-- `agent.md` - Base agent configuration and system prompt
-- `agent.manifest.json` - Skill composition settings
-- `skills/` - Directory for skill modules
-- `mcp.json` - MCP server registry
-- `workflow.json` - Workflow plugin registry
-
-#### 2. Customize Your Agent
-
-Edit `config/agent.md` to define your agent's personality and capabilities. Add skills in `config/skills/`.
-
-#### 3. Validate Configuration
-
-```bash
-npx -y @emberai/agent-node doctor
-```
-
-Checks for configuration errors, missing references, and policy conflicts.
-
-#### 4. Run the Server
-
-Development mode (with hot reload):
-
-```bash
-npx -y @emberai/agent-node run --dev
-```
-
-Production mode:
-
-```bash
-node dist/cli/loader.js run
-```
-
-### Using pnpm Scripts (Alternative)
-
-#### 1. Build the Project
-
-```bash
-pnpm build
-```
-
-#### 2. Start the Server
-
-Development mode (with hot reload):
-
-```bash
-pnpm dev
-```
-
-Production mode:
-
-```bash
-pnpm start
-```
-
-### Testing the Server
-
-The server exposes:
-
-- **A2A Endpoint**: `http://localhost:3000/a2a` (JSON-RPC)
-- **Agent Card**: `http://localhost:3000/.well-known/agent-card.json`
-- **Health Check**: POST to `/a2a` with `{"jsonrpc": "2.0", "method": "health", "id": 1}`
-
-Example message request:
-
-```bash
-curl -X POST http://localhost:3000/a2a \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "message/send",
-    "params": {
-      "message": {
-        "kind": "message",
-        "messageId": "msg-1",
-        "contextId": "ctx-demo",
-        "role": "user",
-        "parts": [{"kind": "text", "text": "What is 2+2?"}]
-      }
-    },
-    "id": 1
-  }'
-```
-
-### Connecting with A2A SDK
+## Connecting with A2A SDK
 
 ```typescript
 import { A2AClient } from '@a2a-js/sdk/client';
