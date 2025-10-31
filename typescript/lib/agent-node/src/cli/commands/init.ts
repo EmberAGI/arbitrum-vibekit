@@ -832,7 +832,7 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
 
     if (existsSync(envPath)) {
       if (!options.force) {
-        cliOutput.info('`.env` already exists, appending new secrets...');
+        cliOutput.info('`.env` already exists, updating with new secrets...');
         existingEnv = readFileSync(envPath, 'utf-8');
       } else {
         copyFileSync(envExamplePath, envPath);
@@ -845,13 +845,52 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
       cliOutput.success('Created `.env`');
     }
 
-    // Append secrets and placeholders
-    const secretsToWrite: string[] = [];
+    // Parse existing env to identify keys with values
+    const existingKeys = new Map<string, string>();
+    const envLines = existingEnv.split('\n');
+    for (const line of envLines) {
+      const match = line.match(/^([^#=\s]+)\s*=\s*(.*)/);
+      if (match && match[1]) {
+        const key = match[1];
+        const value = match[2] || '';
+        existingKeys.set(key, value);
+      }
+    }
 
-    // Add collected secrets
+    // Build updated env content
+    const updatedLines: string[] = [];
+    const processedKeys = new Set<string>();
+    let hasUpdates = false;
+
+    // Process existing lines, updating empty values with wizard inputs
+    for (const line of envLines) {
+      const match = line.match(/^([^#=\s]+)\s*=\s*(.*)/);
+      if (match && match[1]) {
+        const key = match[1];
+        const existingValue = match[2] || '';
+        processedKeys.add(key);
+
+        // Check if we have a new value from the wizard for this key
+        if (config.secrets[key] && (!existingValue || existingValue.trim() === '')) {
+          // Replace empty value with wizard input
+          updatedLines.push(`${key}=${config.secrets[key]}`);
+          hasUpdates = true;
+        } else {
+          // Keep existing line as-is (preserves non-empty values)
+          updatedLines.push(line);
+        }
+      } else {
+        // Keep non-key lines (comments, empty lines) as-is
+        updatedLines.push(line);
+      }
+    }
+
+    // Add new keys from wizard that don't exist in file
+    const newKeys: string[] = [];
     for (const [key, value] of Object.entries(config.secrets)) {
-      if (!existingEnv.includes(`${key}=`)) {
-        secretsToWrite.push(`${key}=${value}`);
+      if (!processedKeys.has(key)) {
+        newKeys.push(`${key}=${value}`);
+        hasUpdates = true;
       }
     }
 
@@ -865,20 +904,43 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
     ];
 
     for (const placeholder of placeholders) {
-      if (!existingEnv.includes(`${placeholder}=`) && !config.secrets[placeholder]) {
-        secretsToWrite.push(`${placeholder}=`);
+      if (!processedKeys.has(placeholder) && !config.secrets[placeholder]) {
+        newKeys.push(`${placeholder}=`);
+        hasUpdates = true;
       }
     }
 
-    if (secretsToWrite.length > 0) {
-      const updated =
-        existingEnv && !existingEnv.endsWith('\n')
-          ? `${existingEnv}\n${secretsToWrite.join('\n')}\n`
-          : `${existingEnv}${secretsToWrite.join('\n')}\n`;
-      writeFileSync(envPath, updated);
-      cliOutput.success(
-        `Updated \`.env\` with ${Object.keys(config.secrets).length} secret(s) and ${secretsToWrite.length - Object.keys(config.secrets).length} placeholder(s)`,
-      );
+    if (hasUpdates) {
+      // Combine updated lines with new keys
+      let finalContent = updatedLines.join('\n');
+      if (newKeys.length > 0) {
+        // Ensure proper line ending before appending new keys
+        if (!finalContent.endsWith('\n')) {
+          finalContent += '\n';
+        }
+        finalContent += newKeys.join('\n') + '\n';
+      }
+
+      writeFileSync(envPath, finalContent);
+
+      // Count what was actually updated/added
+      const updatedCount = Object.entries(config.secrets).filter(
+        ([key, value]) => value && existingKeys.has(key) && !existingKeys.get(key)
+      ).length;
+      const addedCount = Object.entries(config.secrets).filter(
+        ([key, value]) => value && !existingKeys.has(key)
+      ).length;
+      const placeholderCount = placeholders.filter(
+        p => !processedKeys.has(p) && !config.secrets[p]
+      ).length;
+
+      if (updatedCount > 0 || addedCount > 0 || placeholderCount > 0) {
+        const parts: string[] = [];
+        if (updatedCount > 0) parts.push(`${updatedCount} updated`);
+        if (addedCount > 0) parts.push(`${addedCount} added`);
+        if (placeholderCount > 0) parts.push(`${placeholderCount} placeholder(s)`);
+        cliOutput.success(`Updated \`.env\` (${parts.join(', ')})`);
+      }
     }
 
     cliOutput.blank();
