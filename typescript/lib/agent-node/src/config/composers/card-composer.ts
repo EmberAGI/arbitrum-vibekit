@@ -5,6 +5,7 @@
 
 import type { AgentCard } from '@a2a-js/sdk';
 
+import { formatCaip2, formatCaip10 } from '../../utils/caip.js';
 import type { LoadedAgentBase } from '../loaders/agent-loader.js';
 import type { LoadedSkill } from '../loaders/skill-loader.js';
 import type {
@@ -14,6 +15,7 @@ import type {
   GuardrailConfig,
   GuardrailValue,
   ToolPolicyList,
+  ERC8004Config,
 } from '../schemas/agent.schema.js';
 import type { MergePolicy } from '../schemas/manifest.schema.js';
 import { validateAgentCard } from '../validators/a2a-validator.js';
@@ -506,6 +508,108 @@ function transformProvider(
 }
 
 /**
+ * Build ERC-8004 extension if enabled
+ * @param erc8004Config - ERC-8004 configuration from agent base
+ * @returns Extension object or undefined if not enabled
+ */
+function buildERC8004Extension(erc8004Config: ERC8004Config | undefined): AgentExtension | undefined {
+  if (!erc8004Config || !erc8004Config.enabled) {
+    return undefined;
+  }
+
+  const extension: AgentExtension = {
+    uri: 'https://eips.ethereum.org/EIPS/eip-8004',
+    description: 'ERC-8004 discovery/trust',
+    required: false,
+  };
+
+  // Build params object with derived values
+  const params: Record<string, unknown> = {};
+
+  // Compute canonicalCaip10 if canonical chain and operator address are provided
+  if (erc8004Config.canonical?.chainId && erc8004Config.canonical?.operatorAddress) {
+    try {
+      params['canonicalCaip10'] = formatCaip10(
+        erc8004Config.canonical.chainId,
+        erc8004Config.canonical.operatorAddress,
+      );
+    } catch {
+      // Skip if invalid - will be caught by validator
+    }
+  }
+
+  // Compute identityRegistry CAIP-2 reference if available
+  if (erc8004Config.canonical?.chainId && erc8004Config.identityRegistries) {
+    const chainId = String(erc8004Config.canonical.chainId);
+    const registryAddress = erc8004Config.identityRegistries[chainId];
+    if (registryAddress) {
+      try {
+        params['identityRegistry'] = formatCaip2(erc8004Config.canonical.chainId, registryAddress);
+      } catch {
+        // Skip if invalid
+      }
+    }
+  }
+
+  // Add registrationUri if available (from registrations for canonical chain)
+  if (erc8004Config.canonical?.chainId && erc8004Config.registrations) {
+    const chainId = String(erc8004Config.canonical.chainId);
+    const registration = erc8004Config.registrations[chainId];
+    if (registration?.registrationUri) {
+      params['registrationUri'] = registration.registrationUri;
+    }
+  }
+
+  // Add supportedTrust if provided
+  if (erc8004Config.supportedTrust && erc8004Config.supportedTrust.length > 0) {
+    params['supportedTrust'] = erc8004Config.supportedTrust;
+  }
+
+  // Only add params if we have any
+  if (Object.keys(params).length > 0) {
+    extension.params = params;
+  }
+
+  return extension;
+}
+
+/**
+ * Inject ERC-8004 extension into capabilities if enabled
+ * @param capabilities - Merged capabilities from base and skills
+ * @param erc8004Config - ERC-8004 configuration
+ * @returns Capabilities with ERC-8004 extension injected
+ */
+function injectERC8004Extension(
+  capabilities: AgentCapabilities,
+  erc8004Config: ERC8004Config | undefined,
+): AgentCapabilities {
+  const extension = buildERC8004Extension(erc8004Config);
+  if (!extension) {
+    return capabilities;
+  }
+
+  const result = deepClone(capabilities);
+  if (!result.extensions) {
+    result.extensions = [];
+  }
+
+  // Check if ERC-8004 extension already exists (avoid duplicates)
+  const existingIndex = result.extensions.findIndex(
+    (ext) => ext.uri === 'https://eips.ethereum.org/EIPS/eip-8004',
+  );
+
+  if (existingIndex >= 0) {
+    // Replace existing
+    result.extensions[existingIndex] = extension;
+  } else {
+    // Add new
+    result.extensions.push(extension);
+  }
+
+  return result;
+}
+
+/**
  * Compose agent card from base and skills
  * @param agentBase - Loaded agent base
  * @param skills - Array of loaded skills in manifest order
@@ -571,13 +675,19 @@ export function composeAgentCard(
     mergedGuardrails,
   );
 
+  // Inject ERC-8004 extension if enabled
+  const capabilitiesWithERC8004 = injectERC8004Extension(
+    capabilitiesWithPolicies,
+    agentBase.frontmatter.erc8004,
+  );
+
   const composedCard: AgentCard = {
     protocolVersion: baseCard.protocolVersion,
     name: baseCard.name,
     description: baseCard.description,
     url: baseCard.url,
     version: baseCard.version,
-    capabilities: capabilitiesWithPolicies as AgentCard['capabilities'],
+    capabilities: capabilitiesWithERC8004 as AgentCard['capabilities'],
     provider: transformProvider(baseCard.provider),
     defaultInputModes: Array.from(defaultInputModes),
     defaultOutputModes: Array.from(defaultOutputModes),

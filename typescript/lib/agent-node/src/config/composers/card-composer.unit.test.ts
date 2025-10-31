@@ -216,4 +216,372 @@ describe('composeAgentCard', () => {
       expect(result.defaultOutputModes).toContain('image');
     });
   });
+
+  describe('ERC-8004 extension composition', () => {
+    it('should not include ERC-8004 extension when not configured', () => {
+      // Given: agent base without erc8004 config
+      const mergePolicy: MergePolicy = {};
+
+      // When: composing the agent card
+      const result = composeAgentCard(baseAgent, [], mergePolicy);
+
+      // Then: no ERC-8004 extension should be present
+      const erc8004Ext = result.capabilities?.extensions?.find(
+        (ext) => ext.uri === 'https://eips.ethereum.org/EIPS/eip-8004',
+      );
+      expect(erc8004Ext).toBeUndefined();
+    });
+
+    it('should not include ERC-8004 extension when enabled is false', () => {
+      // Given: agent base with erc8004.enabled=false
+      const agentWithErc8004Disabled: LoadedAgentBase = {
+        ...baseAgent,
+        frontmatter: {
+          ...baseAgent.frontmatter,
+          erc8004: {
+            enabled: false,
+            canonical: { chainId: 42161 },
+            mirrors: [],
+            identityRegistries: {},
+            registrations: {},
+            supportedTrust: [],
+          },
+        },
+      };
+      const mergePolicy: MergePolicy = {};
+
+      // When: composing the agent card
+      const result = composeAgentCard(agentWithErc8004Disabled, [], mergePolicy);
+
+      // Then: no ERC-8004 extension should be present
+      const erc8004Ext = result.capabilities?.extensions?.find(
+        (ext) => ext.uri === 'https://eips.ethereum.org/EIPS/eip-8004',
+      );
+      expect(erc8004Ext).toBeUndefined();
+    });
+
+    it('should include ERC-8004 extension when enabled', () => {
+      // Given: agent base with erc8004.enabled=true
+      const agentWithErc8004: LoadedAgentBase = {
+        ...baseAgent,
+        frontmatter: {
+          ...baseAgent.frontmatter,
+          erc8004: {
+            enabled: true,
+            canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+            mirrors: [{ chainId: 1 }, { chainId: 8453 }],
+            identityRegistries: {
+              '42161': '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+            },
+            registrations: {},
+            supportedTrust: [],
+          },
+        },
+      };
+      const mergePolicy: MergePolicy = {};
+
+      // When: composing the agent card
+      const result = composeAgentCard(agentWithErc8004, [], mergePolicy);
+
+      // Then: ERC-8004 extension should be present
+      const erc8004Ext = result.capabilities?.extensions?.find(
+        (ext) => ext.uri === 'https://eips.ethereum.org/EIPS/eip-8004',
+      );
+      expect(erc8004Ext).toBeDefined();
+      expect(erc8004Ext?.uri).toBe('https://eips.ethereum.org/EIPS/eip-8004');
+      expect(erc8004Ext?.description).toBe('ERC-8004 discovery/trust');
+      expect(erc8004Ext?.required).toBe(false);
+    });
+
+    it('should include canonicalCaip10 in extension params when operator address is present', () => {
+      // Given: agent with canonical chain and operator address
+      const agentWithErc8004: LoadedAgentBase = {
+        ...baseAgent,
+        frontmatter: {
+          ...baseAgent.frontmatter,
+          erc8004: {
+            enabled: true,
+            canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+            mirrors: [],
+            identityRegistries: {},
+            registrations: {},
+            supportedTrust: [],
+          },
+        },
+      };
+      const mergePolicy: MergePolicy = {};
+
+      // When: composing the agent card
+      const result = composeAgentCard(agentWithErc8004, [], mergePolicy);
+
+      // Then: extension should include canonicalCaip10 param
+      const erc8004Ext = result.capabilities?.extensions?.find(
+        (ext) => ext.uri === 'https://eips.ethereum.org/EIPS/eip-8004',
+      );
+      expect(erc8004Ext?.params).toHaveProperty('canonicalCaip10');
+      expect((erc8004Ext?.params as { canonicalCaip10: string })?.canonicalCaip10).toBe(
+        'eip155:42161:0x1234567890123456789012345678901234567890',
+      );
+    });
+
+    it('should not include canonicalCaip10 when operator address is missing', () => {
+      // Given: agent with canonical chain but no operator address
+      const agentWithErc8004: LoadedAgentBase = {
+        ...baseAgent,
+        frontmatter: {
+          ...baseAgent.frontmatter,
+          erc8004: {
+            enabled: true,
+            canonical: { chainId: 42161 },
+            mirrors: [],
+            identityRegistries: {},
+            registrations: {},
+            supportedTrust: [],
+          },
+        },
+      };
+      const mergePolicy: MergePolicy = {};
+
+      // When: composing the agent card
+      const result = composeAgentCard(agentWithErc8004, [], mergePolicy);
+
+      // Then: extension should not include canonicalCaip10 param
+      const erc8004Ext = result.capabilities?.extensions?.find(
+        (ext) => ext.uri === 'https://eips.ethereum.org/EIPS/eip-8004',
+      );
+      // When no params are set, the params field is omitted entirely
+      expect(erc8004Ext?.params).toBeUndefined();
+    });
+
+    it('should include identityRegistry in extension params when available', () => {
+      // Given: agent with identity registry for canonical chain
+      const agentWithErc8004: LoadedAgentBase = {
+        ...baseAgent,
+        frontmatter: {
+          ...baseAgent.frontmatter,
+          erc8004: {
+            enabled: true,
+            canonical: { chainId: 42161 },
+            mirrors: [],
+            identityRegistries: {
+              '42161': '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+            },
+            registrations: {},
+            supportedTrust: [],
+          },
+        },
+      };
+      const mergePolicy: MergePolicy = {};
+
+      // When: composing the agent card
+      const result = composeAgentCard(agentWithErc8004, [], mergePolicy);
+
+      // Then: extension should include identityRegistry CAIP-2 param
+      const erc8004Ext = result.capabilities?.extensions?.find(
+        (ext) => ext.uri === 'https://eips.ethereum.org/EIPS/eip-8004',
+      );
+      expect(erc8004Ext?.params).toHaveProperty('identityRegistry');
+      expect((erc8004Ext?.params as { identityRegistry: string })?.identityRegistry).toBe(
+        'eip155:42161:0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+      );
+    });
+
+    it('should not include identityRegistry when not configured for canonical chain', () => {
+      // Given: agent with identity registries but not for canonical chain
+      const agentWithErc8004: LoadedAgentBase = {
+        ...baseAgent,
+        frontmatter: {
+          ...baseAgent.frontmatter,
+          erc8004: {
+            enabled: true,
+            canonical: { chainId: 42161 },
+            mirrors: [],
+            identityRegistries: {
+              '1': '0x1111111111111111111111111111111111111111',
+              '8453': '0x2222222222222222222222222222222222222222',
+            },
+            registrations: {},
+            supportedTrust: [],
+          },
+        },
+      };
+      const mergePolicy: MergePolicy = {};
+
+      // When: composing the agent card
+      const result = composeAgentCard(agentWithErc8004, [], mergePolicy);
+
+      // Then: extension should not include identityRegistry param
+      const erc8004Ext = result.capabilities?.extensions?.find(
+        (ext) => ext.uri === 'https://eips.ethereum.org/EIPS/eip-8004',
+      );
+      // When no params are set, the params field is omitted entirely
+      expect(erc8004Ext?.params).toBeUndefined();
+    });
+
+    it('should include registrationUri when available for canonical chain', () => {
+      // Given: agent with registration data for canonical chain
+      const agentWithErc8004: LoadedAgentBase = {
+        ...baseAgent,
+        frontmatter: {
+          ...baseAgent.frontmatter,
+          erc8004: {
+            enabled: true,
+            canonical: { chainId: 42161 },
+            mirrors: [],
+            identityRegistries: {},
+            registrations: {
+              '42161': {
+                agentId: 123,
+                registrationUri: 'ipfs://QmTest123456789',
+              },
+            },
+            supportedTrust: [],
+          },
+        },
+      };
+      const mergePolicy: MergePolicy = {};
+
+      // When: composing the agent card
+      const result = composeAgentCard(agentWithErc8004, [], mergePolicy);
+
+      // Then: extension should include registrationUri param
+      const erc8004Ext = result.capabilities?.extensions?.find(
+        (ext) => ext.uri === 'https://eips.ethereum.org/EIPS/eip-8004',
+      );
+      expect(erc8004Ext?.params).toHaveProperty('registrationUri');
+      expect((erc8004Ext?.params as { registrationUri: string })?.registrationUri).toBe(
+        'ipfs://QmTest123456789',
+      );
+    });
+
+    it('should not include registrationUri when not available', () => {
+      // Given: agent without registration data
+      const agentWithErc8004: LoadedAgentBase = {
+        ...baseAgent,
+        frontmatter: {
+          ...baseAgent.frontmatter,
+          erc8004: {
+            enabled: true,
+            canonical: { chainId: 42161 },
+            mirrors: [],
+            identityRegistries: {},
+            registrations: {},
+            supportedTrust: [],
+          },
+        },
+      };
+      const mergePolicy: MergePolicy = {};
+
+      // When: composing the agent card
+      const result = composeAgentCard(agentWithErc8004, [], mergePolicy);
+
+      // Then: extension should not include registrationUri param
+      const erc8004Ext = result.capabilities?.extensions?.find(
+        (ext) => ext.uri === 'https://eips.ethereum.org/EIPS/eip-8004',
+      );
+      // When no params are set, the params field is omitted entirely
+      expect(erc8004Ext?.params).toBeUndefined();
+    });
+
+    it('should include supportedTrust when configured', () => {
+      // Given: agent with supportedTrust array
+      const agentWithErc8004: LoadedAgentBase = {
+        ...baseAgent,
+        frontmatter: {
+          ...baseAgent.frontmatter,
+          erc8004: {
+            enabled: true,
+            canonical: { chainId: 42161 },
+            mirrors: [],
+            identityRegistries: {},
+            registrations: {},
+            supportedTrust: ['dns', 'ens', 'lens'],
+          },
+        },
+      };
+      const mergePolicy: MergePolicy = {};
+
+      // When: composing the agent card
+      const result = composeAgentCard(agentWithErc8004, [], mergePolicy);
+
+      // Then: extension should include supportedTrust param
+      const erc8004Ext = result.capabilities?.extensions?.find(
+        (ext) => ext.uri === 'https://eips.ethereum.org/EIPS/eip-8004',
+      );
+      expect(erc8004Ext?.params).toHaveProperty('supportedTrust');
+      expect((erc8004Ext?.params as { supportedTrust: string[] })?.supportedTrust).toEqual([
+        'dns',
+        'ens',
+        'lens',
+      ]);
+    });
+
+    it('should not include supportedTrust when empty', () => {
+      // Given: agent with empty supportedTrust array
+      const agentWithErc8004: LoadedAgentBase = {
+        ...baseAgent,
+        frontmatter: {
+          ...baseAgent.frontmatter,
+          erc8004: {
+            enabled: true,
+            canonical: { chainId: 42161 },
+            mirrors: [],
+            identityRegistries: {},
+            registrations: {},
+            supportedTrust: [],
+          },
+        },
+      };
+      const mergePolicy: MergePolicy = {};
+
+      // When: composing the agent card
+      const result = composeAgentCard(agentWithErc8004, [], mergePolicy);
+
+      // Then: extension should not include supportedTrust param
+      const erc8004Ext = result.capabilities?.extensions?.find(
+        (ext) => ext.uri === 'https://eips.ethereum.org/EIPS/eip-8004',
+      );
+      // When no params are set, the params field is omitted entirely
+      expect(erc8004Ext?.params).toBeUndefined();
+    });
+
+    it('should include all params when fully configured', () => {
+      // Given: agent with complete ERC-8004 configuration
+      const agentWithErc8004: LoadedAgentBase = {
+        ...baseAgent,
+        frontmatter: {
+          ...baseAgent.frontmatter,
+          erc8004: {
+            enabled: true,
+            canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+            mirrors: [{ chainId: 1 }, { chainId: 8453 }],
+            identityRegistries: {
+              '42161': '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+            },
+            registrations: {
+              '42161': {
+                agentId: 456,
+                registrationUri: 'ipfs://QmFullConfig',
+              },
+            },
+            supportedTrust: ['dns', 'ens'],
+          },
+        },
+      };
+      const mergePolicy: MergePolicy = {};
+
+      // When: composing the agent card
+      const result = composeAgentCard(agentWithErc8004, [], mergePolicy);
+
+      // Then: extension should include all params
+      const erc8004Ext = result.capabilities?.extensions?.find(
+        (ext) => ext.uri === 'https://eips.ethereum.org/EIPS/eip-8004',
+      );
+      expect(erc8004Ext?.params).toBeDefined();
+      expect(erc8004Ext?.params).toHaveProperty('canonicalCaip10');
+      expect(erc8004Ext?.params).toHaveProperty('identityRegistry');
+      expect(erc8004Ext?.params).toHaveProperty('registrationUri');
+      expect(erc8004Ext?.params).toHaveProperty('supportedTrust');
+    });
+  });
 });
