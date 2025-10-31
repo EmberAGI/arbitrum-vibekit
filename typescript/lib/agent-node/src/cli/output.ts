@@ -297,8 +297,8 @@ export async function showStartupEffect(): Promise<void> {
   const terminalWidth = process.stdout.columns || 82; // 82 so default becomes 80 after margin
   const lineWidth = Math.min(terminalWidth - 2, 98); // Safety margin of 2, max 98
 
-  // Text includes spaces for empty boxes: " /AGENT NODEΞ "
-  const centerText = ' /AGENT NODEΞ ';
+  // Text includes bracket characters: "▐/AGENT NODEΞ▌"
+  const centerText = '▐/AGENT NODEΞ▌';
   const centerTextLength = centerText.length;
   const leftPadding = Math.floor((lineWidth - centerTextLength) / 2);
 
@@ -343,20 +343,20 @@ export async function showStartupEffect(): Promise<void> {
       const char = centerText[textIndex];
 
       if (textIndex === 0) {
-        // First space - empty cyan box
-        return `${cyanBg} ${reset}`;
+        // First character '▐' - cyan text with no background
+        return `${cyanText}${char}${reset}`;
       } else if (textIndex === 1) {
         // '/' - cyan text on purple background
         return `${darkPurpleBg}${cyanText}${char}${reset}`;
       } else if (textIndex >= 2 && textIndex <= 11) {
-        // 'AGENT NODE' - light purple text on dark purple background
-        return `${darkPurpleBg}${lightPurpleText}${char}${reset}`;
+        // 'AGENT NODE' - bold light purple text on dark purple background
+        return `${darkPurpleBg}\x1b[1m${lightPurpleText}${char}${reset}`;
       } else if (textIndex === 12) {
         // 'Ξ' - magenta text on purple background
         return `${darkPurpleBg}${magentaText}${char}${reset}`;
       } else if (textIndex === 13) {
-        // Last space - empty magenta box
-        return `${magentaBg} ${reset}`;
+        // Last character '▌' - magenta text with no background
+        return `${magentaText}${char}${reset}`;
       }
     }
     // Top and bottom lines - empty with no background
