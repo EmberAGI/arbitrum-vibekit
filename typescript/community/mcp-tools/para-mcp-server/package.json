@@ -14,8 +14,10 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@getpara/react-sdk": "^1.18.1",
     "@getpara/server-sdk": "^1.18.1",
     "@getpara/web-sdk": "^1.18.1",
+    "@tanstack/react-query": "^5.74.4",
     "drizzle-kit": "^0.25.0",
     "drizzle-orm": "^0.34.0",
     "next": "16.0.0",

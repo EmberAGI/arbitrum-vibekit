@@ -1,41 +1,27 @@
 import { NextResponse } from "next/server";
-import { getParaClient } from "@/lib/para-client";
+import { revalidateTag } from "next/cache";
 
 export async function POST(request: Request) {
   try {
-    const { userShare } = await request.json();
-
-    if (!userShare) {
-      return NextResponse.json(
-        { error: "User share is required" },
-        { status: 400 },
-      );
+    // Accept flexible payloads. We don't rely on recoverySecret here.
+    // Clients may send { pregenId } (preferred) or { walletId } or nothing.
+    let pregenId: string | undefined;
+    let walletId: string | undefined;
+    try {
+      const body = await request.json();
+      pregenId = body?.pregenId;
+      walletId = body?.walletId;
+    } catch {
+      // no JSON body provided; proceed with generic revalidation
     }
 
-    // Initialize Para client
-    const para = getParaClient();
+    // Invalidate cached wallet details so subsequent loads refresh
+    revalidateTag("pregen-wallet");
+    if (pregenId) revalidateTag(`pregen-wallet:${pregenId}`);
+    // Optionally, if you tag by walletId elsewhere, revalidate here too
+    if (walletId) revalidateTag(`pregen-wallet:wallet:${walletId}`);
 
-    // Check if user is fully authenticated
-    const isAuthenticated = await para.isFullyLoggedIn();
-
-    if (!isAuthenticated) {
-      return NextResponse.json(
-        { error: "User must be fully authenticated with Para" },
-        { status: 401 },
-      );
-    }
-
-    // Load the user share into Para client
-    await para.setUserShare(userShare);
-
-    // Claim the pregenerated wallet
-    const recoverySecret = await para.claimPregenWallets();
-
-    return NextResponse.json({
-      success: true,
-      recoverySecret,
-      message: "Wallet claimed successfully",
-    });
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error claiming wallet:", error);
 
