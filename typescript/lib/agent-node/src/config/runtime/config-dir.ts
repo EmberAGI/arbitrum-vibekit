@@ -52,9 +52,9 @@ card:
   defaultInputModes: ['text/plain']
   defaultOutputModes: ['application/json']
 
-model:
-  provider: openrouter
-  name: anthropic/claude-sonnet-3.5
+ai:
+  modelProvider: openrouter
+  model: anthropic/claude-sonnet-3.5
   params:
     temperature: 0.7
     maxTokens: 2048
