@@ -47,6 +47,15 @@ const AI_PROVIDERS = {
   },
 } as const;
 
+const DEFAULT_MODEL_PARAMS = {
+  temperature: 0.7,
+  maxTokens: 4096,
+  topP: 1.0,
+  reasoning: 'low',
+} as const;
+
+const DEFAULT_AGENT_VERSION = '1.0.0';
+
 // Chain configurations
 const CHAINS = {
   1: { name: 'Ethereum Mainnet', shortName: 'Ethereum' },
@@ -69,9 +78,6 @@ interface InitConfig {
   agentBaseUrl: string;
   aiProvider: ProviderKey;
   aiModel: string;
-  aiTemperature: number;
-  aiMaxTokens: number;
-  aiReasoning: string;
   enableErc8004: boolean;
   canonicalChain: number;
   mirrorChains: number[];
@@ -89,8 +95,12 @@ function generateAgentMd(config: InitConfig): string {
 erc8004:
   enabled: true
   canonical:
-    chainId: ${config.canonicalChain}${config.operatorAddress ? `\n    operatorAddress: '${config.operatorAddress}'` : '\n    # operatorAddress: \'0x...\' # optional, used to compute canonicalCaip10'}
-  mirrors:${config.mirrorChains.map((chain) => `\n    - { chainId: ${chain} }`).join('')}
+    chainId: ${config.canonicalChain}${config.operatorAddress ? `\n    operatorAddress: '${config.operatorAddress}'` : "\n    # operatorAddress: '0x...' # optional, used to compute canonicalCaip10"}
+  mirrors:${
+    config.mirrorChains.length > 0
+      ? config.mirrorChains.map((chain) => `\n    - { chainId: ${chain} }`).join('')
+      : ' []'
+  }
   identityRegistries:
     '1': '0x0000000000000000000000000000000000000000'
     '8453': '0x0000000000000000000000000000000000000000'
@@ -118,10 +128,10 @@ ai:
   modelProvider: ${config.aiProvider}
   model: ${config.aiModel}
   params:
-    temperature: ${config.aiTemperature}
-    maxTokens: ${config.aiMaxTokens}
-    topP: 1.0
-    reasoning: ${config.aiReasoning}
+    temperature: ${DEFAULT_MODEL_PARAMS.temperature}
+    maxTokens: ${DEFAULT_MODEL_PARAMS.maxTokens}
+    topP: ${DEFAULT_MODEL_PARAMS.topP}
+    reasoning: ${DEFAULT_MODEL_PARAMS.reasoning}
 
 # Agent Card hosting configuration
 routing:
@@ -616,7 +626,7 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
     if (isInteractive) {
       // Interactive mode - collect configuration via prompts
       cliOutput.print('\n🚀 Welcome to Agent Node Setup!\n', 'cyan');
-      cliOutput.print('Let\'s configure your agent step by step.\n');
+      cliOutput.print("Let's configure your agent step by step.\n");
 
       const responses = await prompts([
         // Agent basics
@@ -631,12 +641,6 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
           name: 'agentDescription',
           message: 'Agent description:',
           initial: 'An AI agent built with the config-driven composition system',
-        },
-        {
-          type: 'text',
-          name: 'agentVersion',
-          message: 'Agent version:',
-          initial: '1.0.0',
         },
         {
           type: 'text',
@@ -676,37 +680,6 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
             AI_PROVIDERS[prev].models.map((model) => ({ title: model, value: model })),
           initial: (prev: ProviderKey) => AI_PROVIDERS[prev].defaultModel,
         },
-        {
-          type: 'text',
-          name: 'aiTemperature',
-          message: 'Temperature (0.0-2.0):',
-          initial: '0.7',
-          validate: (value: string) => {
-            const num = parseFloat(value);
-            return num >= 0 && num <= 2 ? true : 'Must be between 0.0 and 2.0';
-          },
-        },
-        {
-          type: 'text',
-          name: 'aiMaxTokens',
-          message: 'Max tokens:',
-          initial: '4096',
-          validate: (value: string) => {
-            const num = parseInt(value);
-            return num > 0 ? true : 'Must be positive';
-          },
-        },
-        {
-          type: 'select',
-          name: 'aiReasoning',
-          message: 'Reasoning level:',
-          choices: [
-            { title: 'low', value: 'low' },
-            { title: 'medium', value: 'medium' },
-            { title: 'high', value: 'high' },
-          ],
-          initial: 0,
-        },
 
         // API keys
         {
@@ -714,16 +687,6 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
           name: 'providerApiKey',
           message: (_prev, values) =>
             `${AI_PROVIDERS[values['aiProvider'] as ProviderKey].envKey} (press Enter to skip):`,
-        },
-        {
-          type: 'password',
-          name: 'pinataJwt',
-          message: 'PINATA_JWT (for IPFS uploads, press Enter to skip):',
-        },
-        {
-          type: 'text',
-          name: 'pinataGateway',
-          message: 'PINATA_GATEWAY (press Enter to skip):',
         },
 
         // ERC-8004 configuration
@@ -759,11 +722,22 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
         {
           type: (_prev, values) => (values['enableErc8004'] ? 'text' : null),
           name: 'operatorAddress',
-          message: 'Operator address (optional, for CAIP-10):',
+          message:
+            "Operator address (wallet that controls the agent's identity, optional for CAIP-10):",
           validate: (value: string) => {
             if (!value) return true;
             return /^0x[a-fA-F0-9]{40}$/.test(value) ? true : 'Must be a valid Ethereum address';
           },
+        },
+        {
+          type: (_prev, values) => (values['enableErc8004'] ? 'password' : null),
+          name: 'pinataJwt',
+          message: 'PINATA_JWT (for IPFS uploads, press Enter to skip):',
+        },
+        {
+          type: (_prev, values) => (values['enableErc8004'] ? 'text' : null),
+          name: 'pinataGateway',
+          message: 'PINATA_GATEWAY (press Enter to skip):',
         },
       ]);
 
@@ -780,15 +754,12 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
         agentDescription:
           responses['agentDescription'] ||
           'An AI agent built with the config-driven composition system',
-        agentVersion: responses['agentVersion'] || '1.0.0',
+        agentVersion: DEFAULT_AGENT_VERSION,
         providerName: responses['providerName'] || undefined,
         providerUrl: responses['providerUrl'] || undefined,
         agentBaseUrl: responses['agentBaseUrl'] || 'http://localhost:3000',
         aiProvider: selectedProvider,
         aiModel: responses['aiModel'] || AI_PROVIDERS[selectedProvider].defaultModel,
-        aiTemperature: parseFloat(responses['aiTemperature'] || '0.7'),
-        aiMaxTokens: parseInt(responses['aiMaxTokens'] || '4096'),
-        aiReasoning: responses['aiReasoning'] || 'low',
         enableErc8004: responses['enableErc8004'] ?? true,
         canonicalChain: responses['canonicalChain'] || 42161,
         mirrorChains: responses['mirrorChains'] || [],
@@ -800,26 +771,25 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
       if (responses['providerApiKey']) {
         config.secrets[AI_PROVIDERS[config.aiProvider].envKey] = responses['providerApiKey'];
       }
-      if (responses['pinataJwt']) {
-        config.secrets['PINATA_JWT'] = responses['pinataJwt'];
-      }
-      if (responses['pinataGateway']) {
-        config.secrets['PINATA_GATEWAY'] = responses['pinataGateway'];
+      if (config.enableErc8004) {
+        if (responses['pinataJwt']) {
+          config.secrets['PINATA_JWT'] = responses['pinataJwt'];
+        }
+        if (responses['pinataGateway']) {
+          config.secrets['PINATA_GATEWAY'] = responses['pinataGateway'];
+        }
       }
     } else {
       // Non-interactive mode - use defaults
       config = {
         agentName: 'My Agent',
         agentDescription: 'An AI agent built with the config-driven composition system',
-        agentVersion: '1.0.0',
+        agentVersion: DEFAULT_AGENT_VERSION,
         providerName: 'Ember AI',
         providerUrl: 'https://emberai.xyz/',
         agentBaseUrl: 'http://localhost:3000',
         aiProvider: 'openrouter',
         aiModel: 'anthropic/claude-sonnet-4.5',
-        aiTemperature: 0.7,
-        aiMaxTokens: 4096,
-        aiReasoning: 'low',
         enableErc8004: true,
         canonicalChain: 42161,
         mirrorChains: [1, 8453],
