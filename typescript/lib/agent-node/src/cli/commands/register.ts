@@ -13,6 +13,8 @@ import {
   isSupportedChain,
   buildRegistrationFileForRegister,
   createIpfsFile,
+  getPendingUri,
+  savePendingUri,
 } from '../utils/registration.js';
 import { serveTransactionSigningPage, openBrowser } from '../utils/serve-transaction.js';
 
@@ -29,6 +31,7 @@ export type RegisterCommandOptions = {
   all?: boolean;
   configDir?: string;
   chain?: string;
+  forceNewUpload?: boolean;
 };
 
 /**
@@ -140,16 +143,33 @@ export async function registerCommand(options: RegisterCommandOptions): Promise<
     console.log('Agent Card URL:', agentCardUrl);
     console.log('Chain ID:', chain);
 
-    // Compose Agent Card URL for registration
-    const registrationFileContents = buildRegistrationFileForRegister(
-      name,
-      description,
-      image || 'https://example.com/agent-image.png',
-      version || '1.0.0',
-      agentCardUrl,
-      chain,
-    );
-    const ipfsUri = await createIpfsFile(registrationFileContents);
+    const chainKey = String(chain);
+    let ipfsUri: string;
+
+    // Check for existing pending URI from previous attempt
+    const existingPendingUri = getPendingUri(agentPath, chainKey, false);
+
+    if (existingPendingUri && !options.forceNewUpload) {
+      console.log('\n📎 Resuming with existing IPFS URI from previous attempt:', existingPendingUri);
+      console.log('ℹ️  Use --force-new-upload to create a fresh registration file');
+      ipfsUri = existingPendingUri;
+    } else {
+      // Compose Agent Card URL for registration
+      console.log('\n📤 Uploading registration to IPFS...');
+      const registrationFileContents = buildRegistrationFileForRegister(
+        name,
+        description,
+        image || 'https://example.com/agent-image.png',
+        version || '1.0.0',
+        agentCardUrl,
+        chain,
+      );
+      ipfsUri = await createIpfsFile(registrationFileContents);
+
+      // Save URI immediately after upload for retry if needed
+      savePendingUri(agentPath, chainKey, ipfsUri, false);
+      console.log('💾 IPFS URI saved for retry if needed');
+    }
 
     const callData = encodeFunctionData({
       abi: IDENTITY_REGISTRY_ABI,
@@ -163,9 +183,10 @@ export async function registerCommand(options: RegisterCommandOptions): Promise<
       data: callData,
       chainId: chain,
       agentName: name,
-      onAgentIdReceived: (agentId: number) => {
+      onAgentIdReceived: (agentId: number | string) => {
         console.log('\n🎉 Agent registered successfully!');
-        console.log(`📋 Agent ID: ${agentId}`);
+        const agentIdDisplay = typeof agentId === 'number' ? agentId.toString(10) : agentId;
+        console.log(`📋 Agent ID: ${agentIdDisplay}`);
 
         // Persist agentId and registrationUri to config
         try {
@@ -176,14 +197,25 @@ export async function registerCommand(options: RegisterCommandOptions): Promise<
           data['erc8004']['registrations'] = data['erc8004']['registrations'] ?? {};
           const chainKey = String(chain);
           const existing = data['erc8004']['registrations'][chainKey] ?? {};
-          existing.agentId = agentId;
+          const parsedAgentId =
+            typeof agentId === 'number' ? agentId : Number.parseInt(agentId, 10);
+          if (Number.isSafeInteger(parsedAgentId) && parsedAgentId > 0) {
+            existing.agentId = parsedAgentId;
+          } else if (typeof agentId === 'string') {
+            console.log(
+              `\n⚠️  Agent ID ${agentId} exceeds JavaScript safe integer range. Update agent.md manually if you need to track it.`,
+            );
+          }
           existing.registrationUri = ipfsUri;
+          // Remove pending URI now that registration is successful
+          delete existing.pendingRegistrationUri;
           data['erc8004']['registrations'][chainKey] = existing;
           const updated = matter.stringify(parsed.content, data);
           writeFileSync(agentPath, updated, 'utf-8');
           console.log(
             `\n📝 Persisted agentId and registrationUri for chain ${chain} to agent.md`,
           );
+          console.log('🧹 Cleaned up pending registration data');
         } catch (err) {
           console.log(
             `\n⚠️  Failed to persist registration data for chain ${chain}: ${err instanceof Error ? err.message : String(err)}`,

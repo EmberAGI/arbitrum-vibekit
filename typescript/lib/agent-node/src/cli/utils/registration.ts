@@ -1,3 +1,5 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import matter from 'gray-matter';
 import { PinataSDK } from 'pinata';
 
 /**
@@ -171,4 +173,100 @@ export async function createIpfsFile(fileContents: unknown): Promise<string> {
 
   // Return the IPFS URI
   return `ipfs://${upload.cid}`;
+}
+
+/**
+ * Saves a pending IPFS URI to agent.md for later retry.
+ * @param agentPath Path to the agent.md file
+ * @param chainKey The chain ID as a string
+ * @param uri The IPFS URI to save
+ * @param isUpdate Whether this is for an update (vs initial registration)
+ */
+export function savePendingUri(agentPath: string, chainKey: string, uri: string, isUpdate = false): void {
+  const agentRaw = readFileSync(agentPath, 'utf-8');
+  const parsed = matter(agentRaw);
+  const data = parsed.data as Record<string, any>;
+
+  // Ensure ERC8004 structure exists
+  data['erc8004'] = data['erc8004'] ?? {};
+  data['erc8004']['registrations'] = data['erc8004']['registrations'] ?? {};
+
+  // Get or create registration entry for this chain
+  const existing = data['erc8004']['registrations'][chainKey] ?? {};
+
+  // Save the pending URI
+  if (isUpdate) {
+    existing.pendingUpdateUri = uri;
+  } else {
+    existing.pendingRegistrationUri = uri;
+  }
+
+  data['erc8004']['registrations'][chainKey] = existing;
+
+  // Write back to file
+  const updated = matter.stringify(parsed.content, data);
+  writeFileSync(agentPath, updated, 'utf-8');
+}
+
+/**
+ * Gets a pending IPFS URI from agent.md if one exists.
+ * @param agentPath Path to the agent.md file
+ * @param chainKey The chain ID as a string
+ * @param isUpdate Whether to look for update URI (vs registration URI)
+ * @returns The pending URI if found, undefined otherwise
+ */
+export function getPendingUri(agentPath: string, chainKey: string, isUpdate = false): string | undefined {
+  try {
+    const agentRaw = readFileSync(agentPath, 'utf-8');
+    const parsed = matter(agentRaw);
+    const data = parsed.data as Record<string, any>;
+
+    const registrations = data?.['erc8004']?.['registrations'];
+    if (!registrations || !registrations[chainKey]) {
+      return undefined;
+    }
+
+    const entry = registrations[chainKey];
+    return isUpdate ? entry.pendingUpdateUri : entry.pendingRegistrationUri;
+  } catch (err) {
+    // File might not exist or have valid structure
+    return undefined;
+  }
+}
+
+/**
+ * Clears a pending IPFS URI from agent.md after successful registration.
+ * @param agentPath Path to the agent.md file
+ * @param chainKey The chain ID as a string
+ * @param isUpdate Whether to clear update URI (vs registration URI)
+ */
+export function clearPendingUri(agentPath: string, chainKey: string, isUpdate = false): void {
+  try {
+    const agentRaw = readFileSync(agentPath, 'utf-8');
+    const parsed = matter(agentRaw);
+    const data = parsed.data as Record<string, any>;
+
+    const registrations = data?.['erc8004']?.['registrations'];
+    if (!registrations || !registrations[chainKey]) {
+      return;
+    }
+
+    const entry = registrations[chainKey];
+    if (isUpdate) {
+      delete entry.pendingUpdateUri;
+    } else {
+      delete entry.pendingRegistrationUri;
+    }
+
+    // Clean up empty objects if needed
+    if (Object.keys(entry).length === 0) {
+      delete registrations[chainKey];
+    }
+
+    // Write back to file
+    const updated = matter.stringify(parsed.content, data);
+    writeFileSync(agentPath, updated, 'utf-8');
+  } catch (err) {
+    // Ignore errors - might not exist
+  }
 }

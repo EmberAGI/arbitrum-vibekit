@@ -13,6 +13,8 @@ import {
   isSupportedChain,
   buildRegistrationFile,
   createIpfsFile,
+  getPendingUri,
+  savePendingUri,
 } from '../utils/registration.js';
 import { serveTransactionSigningPage, openBrowser } from '../utils/serve-transaction.js';
 
@@ -30,6 +32,7 @@ export type UpdateRegistryCommandOptions = {
   image?: string;
   all?: boolean;
   configDir?: string;
+  forceNewUpload?: boolean;
 };
 
 /**
@@ -156,20 +159,38 @@ export async function updateRegistryCommand(options: UpdateRegistryCommandOption
       );
     }
 
-    // Build registration file
-    const registrationFileContents = buildRegistrationFile(
-      name,
-      description,
-      image || 'https://example.com/agent-image.png',
-      version || '1.0.0',
-      agentCardUrl,
-      chain,
-      perChainAgentId,
-    );
+    const chainKey = String(chain);
+    let ipfsUri: string;
 
-    // Upload to IPFS
-    const ipfsUri = await createIpfsFile(registrationFileContents);
-    console.log(`\n✅ Chain ${chain}: registration file uploaded to IPFS: ${ipfsUri}`);
+    // Check for existing pending update URI from previous attempt
+    const existingPendingUri = getPendingUri(agentPath, chainKey, true);
+
+    if (existingPendingUri && !options.forceNewUpload) {
+      console.log(`\n📎 Chain ${chain}: Resuming with existing IPFS URI from previous attempt:`, existingPendingUri);
+      console.log('ℹ️  Use --force-new-upload to create a fresh registration file');
+      ipfsUri = existingPendingUri;
+    } else {
+      // Build registration file
+      console.log(`\n📤 Chain ${chain}: Uploading registration to IPFS...`);
+      const registrationFileContents = buildRegistrationFile(
+        name,
+        description,
+        image || 'https://example.com/agent-image.png',
+        version || '1.0.0',
+        agentCardUrl,
+        chain,
+        perChainAgentId,
+      );
+
+      // Upload to IPFS
+      ipfsUri = await createIpfsFile(registrationFileContents);
+
+      // Save URI immediately after upload for retry if needed
+      savePendingUri(agentPath, chainKey, ipfsUri, true);
+      console.log(`💾 Chain ${chain}: IPFS URI saved for retry if needed`);
+    }
+
+    console.log(`✅ Chain ${chain}: registration file ready: ${ipfsUri}`);
 
     // Encode and serve transaction signing page
     const callData = encodeFunctionData({
@@ -183,9 +204,35 @@ export async function updateRegistryCommand(options: UpdateRegistryCommandOption
       data: callData,
       chainId: chain,
       agentName: name,
-      onAgentIdReceived: (receivedAgentId: number) => {
+      onAgentIdReceived: (receivedAgentId: number | string) => {
         console.log('\n🎉 Agent registry updated successfully!');
-        console.log(`📋 Agent ID: ${receivedAgentId}`);
+        const agentIdDisplay =
+          typeof receivedAgentId === 'number' ? receivedAgentId.toString(10) : receivedAgentId;
+        console.log(`📋 Agent ID: ${agentIdDisplay}`);
+
+        // Persist the updated registrationUri and clean up pending URI
+        try {
+          const agentRaw = readFileSync(agentPath, 'utf-8');
+          const parsed = matter(agentRaw);
+          const data = parsed.data as Record<string, any>;
+          data['erc8004'] = data['erc8004'] ?? {};
+          data['erc8004']['registrations'] = data['erc8004']['registrations'] ?? {};
+          const chainKey = String(chain);
+          const existing = data['erc8004']['registrations'][chainKey] ?? {};
+          existing.registrationUri = ipfsUri;
+          // Remove pending update URI now that update is successful
+          delete existing.pendingUpdateUri;
+          data['erc8004']['registrations'][chainKey] = existing;
+          const updated = matter.stringify(parsed.content, data);
+          writeFileSync(agentPath, updated, 'utf-8');
+          console.log(`\n📝 Persisted updated registrationUri for chain ${chain} to agent.md`);
+          console.log('🧹 Cleaned up pending update data');
+        } catch (err) {
+          console.log(
+            `\n⚠️  Failed to persist update data for chain ${chain}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+
         console.log('\n   You can now close this terminal with Ctrl+C\n');
       },
     });

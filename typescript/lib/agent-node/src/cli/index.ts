@@ -120,6 +120,7 @@ Commands:
     --url <url>           Override: A2A URL (card.url)
     --version <version>   Override: agent version (default: 1.0.0)
     --image <url>         Override: agent image URL
+    --force-new-upload    Force new IPFS upload (ignore cached URI)
 
   update-registry         Update agent registry on-chain using EIP-8004
     --all                 Update canonical + mirrors (default: true)
@@ -131,6 +132,7 @@ Commands:
     --url <url>           Override: A2A URL (card.url)
     --version <version>   Override: agent version (default: 1.0.0)
     --image <url>         Override: agent image URL
+    --force-new-upload    Force new IPFS upload (ignore cached URI)
 
   help                    Show this help message
 
@@ -241,6 +243,7 @@ export async function runCli(): Promise<void> {
           all: options['all'] as boolean | undefined,
           chain: options['chain'] as string | undefined,
           configDir: options['config-dir'] as string | undefined,
+          forceNewUpload: options['force-new-upload'] as boolean | undefined,
         });
         break;
 
@@ -256,6 +259,7 @@ export async function runCli(): Promise<void> {
           all: options['all'] as boolean | undefined,
           chain: options['chain'] as string | undefined,
           configDir: options['config-dir'] as string | undefined,
+          forceNewUpload: options['force-new-upload'] as boolean | undefined,
         });
         break;
 

@@ -110,12 +110,15 @@ export const ERC8004MirrorConfigSchema = z
 /**
  * ERC-8004 Registration Entry
  * Stores per-chain registration data (agentId, registrationUri)
+ * Also stores pending URIs for failed transactions that can be resumed
  * Strict mode: rejects unknown keys
  */
 export const ERC8004RegistrationEntrySchema = z
   .object({
     agentId: z.number().int().positive().optional(),
     registrationUri: z.string().optional(),
+    pendingRegistrationUri: z.string().optional(),
+    pendingUpdateUri: z.string().optional(),
   })
   .strict();
 
