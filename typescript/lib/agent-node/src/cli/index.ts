@@ -20,6 +20,7 @@ import {
   registerCommand,
   updateRegistryCommand,
   chatCommand,
+  recoverIdCommand,
 } from './commands/index.js';
 
 interface CliArgs {
@@ -133,6 +134,11 @@ Commands:
     --version <version>   Override: agent version (default: 1.0.0)
     --image <url>         Override: agent image URL
     --force-new-upload    Force new IPFS upload (ignore cached URI)
+
+  recover-id              Recover agent ID from blockchain for pending registrations
+    --config-dir <dir>    Config directory (default: ./config)
+    --chain <id>          Target a specific chain ID (otherwise all pending)
+    --tx-hash <hash>      Specific transaction hash to check
 
   help                    Show this help message
 
@@ -260,6 +266,14 @@ export async function runCli(): Promise<void> {
           chain: options['chain'] as string | undefined,
           configDir: options['config-dir'] as string | undefined,
           forceNewUpload: options['force-new-upload'] as boolean | undefined,
+        });
+        break;
+
+      case 'recover-id':
+        await recoverIdCommand({
+          configDir: options['config-dir'] as string | undefined,
+          chain: options['chain'] as string | undefined,
+          txHash: options['tx-hash'] as string | undefined,
         });
         break;
 
