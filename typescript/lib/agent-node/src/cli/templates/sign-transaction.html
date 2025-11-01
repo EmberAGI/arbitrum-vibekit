@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sign Agent Registration Transaction</title>
-    <script src="https://cdn.jsdelivr.net/npm/viem@2.21.54/dist/viem.min.js"></script>
     <style>
       * {
         margin: 0;
@@ -178,21 +177,39 @@
         <a id="txHashLink" target="_blank"></a>
       </div>
     </div>
-    <script>
+    <script type="module">
+      import { createPublicClient, createWalletClient, custom, defineChain, parseEventLogs, parseAbiItem } from 'https://esm.sh/viem@2.38.5';
+
       let walletClient = null;
       let publicClient = null;
       let txData = null;
       let injectedProvider = null;
+      const announcedProviders = [];
 
-      const viemLib = window.viem || {};
-      const { createWalletClient, createPublicClient, custom, defineChain } = viemLib;
-      const viemErrors = viemLib.errors ?? {};
-      const { UserRejectedRequestError, ChainNotConfiguredError } = viemErrors;
+      window.addEventListener('eip6963:announceProvider', (event) => {
+        const { provider, info } = event.detail;
+        announcedProviders.push({ provider, info });
+        if (!injectedProvider || info?.rdns === 'io.metamask') {
+          injectedProvider = provider;
+        }
+      });
+
+      window.dispatchEvent(new Event('eip6963:requestProvider'));
 
       function resolveInjectedProvider() {
         if (injectedProvider) {
           return injectedProvider;
         }
+        if (announcedProviders.length > 0) {
+          const metamask = announcedProviders.find(({ info }) => info?.rdns === 'io.metamask');
+          if (metamask) {
+            injectedProvider = metamask.provider;
+            return injectedProvider;
+          }
+          injectedProvider = announcedProviders[0]?.provider ?? null;
+          return injectedProvider;
+        }
+
         if (window.ethereum?.providers && Array.isArray(window.ethereum.providers)) {
           const metamaskProvider = window.ethereum.providers.find(
             (provider) => provider && provider.isMetaMask,
@@ -631,15 +648,22 @@
             throw new Error('Unable to wait for transaction receipt with the current viem client.');
           }
 
-          const agentIdInfo = decodeAgentId(receipt);
+          const agentIdInfo = await decodeAgentId(receipt, accounts[0], txData.to);
           if (agentIdInfo !== null) {
             const agentIdDisplay = agentIdInfo.decimal;
             const agentIdHex = agentIdInfo.hex;
+            const source = agentIdInfo.source === 'historical' ? ' (retrieved from historical logs)' : '';
             const statusMessage =
               agentIdInfo.isSafeInteger
-                ? `✅ Transaction confirmed! Your agent has been registered.<br><strong>Agent ID: ${agentIdDisplay}</strong>`
-                : `✅ Transaction confirmed! Your agent has been registered.<br><strong>Agent ID: ${agentIdDisplay}</strong><br><small>Hex: ${agentIdHex}</small>`;
+                ? `✅ Transaction confirmed! Your agent has been registered.<br><strong>Agent ID: ${agentIdDisplay}</strong>${source}<br><br>✅ Registration complete. You can now close this page.`
+                : `✅ Transaction confirmed! Your agent has been registered.<br><strong>Agent ID: ${agentIdDisplay}</strong><br><small>Hex: ${agentIdHex}</small>${source}<br><br>✅ Registration complete. You can now close this page.`;
             showStatus(statusMessage, 'success');
+
+            // Log transaction details for debugging
+            console.log('Transaction hash:', txHash);
+            console.log('Agent ID:', agentIdDisplay);
+            console.log('Source:', agentIdInfo.source);
+
             try {
               await fetch('/callback', {
                 method: 'POST',
@@ -648,16 +672,44 @@
                   agentId: agentIdInfo.isSafeInteger ? agentIdInfo.toNumber() : agentIdDisplay,
                   agentIdHex,
                   agentIdDecimal: agentIdDisplay,
+                  txHash,
                 }),
               });
             } catch (error) {
               console.log('Could not send agent ID to server:', error);
             }
           } else {
-            showStatus('✅ Transaction confirmed! Your agent has been registered.', 'success');
+            // No agent ID found - show warning instead of silent success
+            const explorerUrl = getExplorerUrl(txData.chainId, txHash);
+            showStatus(
+              `⚠️ Transaction confirmed but agent ID not found.<br>
+              Transaction hash: <a href="${explorerUrl}" target="_blank">${txHash.slice(0, 10)}...</a><br>
+              <button onclick="window.location.reload()">Search Again</button><br><br>
+              Registration complete. You can close this page. Check your terminal for recovery instructions.`,
+              'error'
+            );
+
+            // Log full receipt for debugging
+            console.error('Failed to retrieve agent ID. Transaction receipt:', receipt);
+            console.log('Transaction hash:', txHash);
+
+            // Still send callback with pending flag
+            try {
+              await fetch('/callback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  pendingAgentId: true,
+                  txHash,
+                }),
+              });
+            } catch (error) {
+              console.log('Could not send pending status to server:', error);
+            }
           }
 
-          button.textContent = 'Registration Complete';
+          button.textContent = 'Close';
+          button.onclick = () => window.close();
         } catch (error) {
           console.error('Error:', error);
           let errorMessage = 'Transaction failed';
@@ -686,29 +738,103 @@
         }
       }
 
-      // Decode agent ID from transaction receipt
-      function decodeAgentId(receipt) {
+      window.connectWallet = connectWallet;
+
+      // Decode agent ID from transaction receipt with fallback to historical logs
+      async function decodeAgentId(receipt, account, contractAddress) {
         try {
-          // The Registered event has the agentId as the second topic (first indexed parameter)
-          // Event signature: Registered(uint256 indexed agentId, string tokenURI, address indexed owner)
-          for (const log of receipt.logs) {
-            // Check if this log has topics (indicating indexed parameters)
-            if (Array.isArray(log.topics) && log.topics.length >= 2) {
-              // The second topic is the indexed agentId
-              const agentIdHex = log.topics[1];
-              if (typeof agentIdHex === 'string' && agentIdHex.length > 0) {
-                const normalizedHex = agentIdHex.startsWith('0x') ? agentIdHex : `0x${agentIdHex}`;
-                const agentIdBigInt = BigInt(normalizedHex);
-                const isSafeInteger = agentIdBigInt <= BigInt(Number.MAX_SAFE_INTEGER);
-                return {
-                  hex: normalizedHex,
-                  decimal: agentIdBigInt.toString(10),
-                  isSafeInteger,
-                  toNumber: () => Number(agentIdBigInt),
-                };
-              }
-            }
+          // Define the Registered event ABI
+          const registeredEventAbi = {
+            anonymous: false,
+            inputs: [
+              {
+                indexed: true,
+                internalType: 'uint256',
+                name: 'agentId',
+                type: 'uint256',
+              },
+              {
+                indexed: false,
+                internalType: 'string',
+                name: 'tokenURI',
+                type: 'string',
+              },
+              {
+                indexed: true,
+                internalType: 'address',
+                name: 'owner',
+                type: 'address',
+              },
+            ],
+            name: 'Registered',
+            type: 'event',
+          };
+
+          // First, try to parse the logs from the receipt
+          const parsedLogs = parseEventLogs({
+            abi: [registeredEventAbi],
+            logs: receipt.logs,
+          });
+
+          // Find the Registered event in the parsed logs
+          const registeredEvent = parsedLogs.find((log) => log.eventName === 'Registered');
+
+          if (registeredEvent && registeredEvent.args.agentId !== undefined) {
+            console.log('Found agent ID in transaction receipt');
+            const agentIdBigInt = BigInt(registeredEvent.args.agentId);
+            const isSafeInteger = agentIdBigInt <= BigInt(Number.MAX_SAFE_INTEGER);
+            return {
+              hex: `0x${agentIdBigInt.toString(16)}`,
+              decimal: agentIdBigInt.toString(10),
+              isSafeInteger,
+              toNumber: () => Number(agentIdBigInt),
+              source: 'receipt',
+            };
           }
+
+          // Fallback: Query historical logs if not found in receipt
+          console.log('Agent ID not found in receipt, querying historical logs...');
+          showStatus('<span class="loader"></span> Searching for agent ID in historical logs...', 'info');
+
+          if (!publicClient) {
+            console.error('Public client not available for historical query');
+            return null;
+          }
+
+          // Parse the event signature for getLogs
+          const registeredEventSignature = parseAbiItem(
+            'event Registered(uint256 indexed agentId, string tokenURI, address indexed owner)'
+          );
+
+          // Query historical logs for this owner
+          const logs = await publicClient.getLogs({
+            address: contractAddress,
+            event: registeredEventSignature,
+            args: {
+              owner: account,
+            },
+            fromBlock: BigInt(0), // Could optimize with deployment block
+            toBlock: 'latest',
+          });
+
+          if (logs && logs.length > 0) {
+            // Use the most recent registration (last in array)
+            const mostRecentLog = logs[logs.length - 1];
+            const agentIdBigInt = BigInt(mostRecentLog.args.agentId);
+            const isSafeInteger = agentIdBigInt <= BigInt(Number.MAX_SAFE_INTEGER);
+
+            console.log(`Found ${logs.length} agent(s) for this owner, using most recent: ${agentIdBigInt.toString()}`);
+
+            return {
+              hex: `0x${agentIdBigInt.toString(16)}`,
+              decimal: agentIdBigInt.toString(10),
+              isSafeInteger,
+              toNumber: () => Number(agentIdBigInt),
+              source: 'historical',
+            };
+          }
+
+          console.log('No agents found for this owner in historical logs');
         } catch (error) {
           console.error('Error decoding agent ID:', error);
         }

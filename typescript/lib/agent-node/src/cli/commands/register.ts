@@ -183,10 +183,13 @@ export async function registerCommand(options: RegisterCommandOptions): Promise<
       data: callData,
       chainId: chain,
       agentName: name,
-      onAgentIdReceived: (agentId: number | string) => {
+      onAgentIdReceived: (agentId: number | string, txHash?: string) => {
         console.log('\n🎉 Agent registered successfully!');
         const agentIdDisplay = typeof agentId === 'number' ? agentId.toString(10) : agentId;
         console.log(`📋 Agent ID: ${agentIdDisplay}`);
+        if (txHash) {
+          console.log(`📋 Transaction hash: ${txHash}`);
+        }
 
         // Persist agentId and registrationUri to config
         try {
@@ -199,7 +202,7 @@ export async function registerCommand(options: RegisterCommandOptions): Promise<
           const existing = data['erc8004']['registrations'][chainKey] ?? {};
           const parsedAgentId =
             typeof agentId === 'number' ? agentId : Number.parseInt(agentId, 10);
-          if (Number.isSafeInteger(parsedAgentId) && parsedAgentId > 0) {
+          if (Number.isSafeInteger(parsedAgentId) && parsedAgentId >= 0) {
             existing.agentId = parsedAgentId;
           } else if (typeof agentId === 'string') {
             console.log(
@@ -207,8 +210,12 @@ export async function registerCommand(options: RegisterCommandOptions): Promise<
             );
           }
           existing.registrationUri = ipfsUri;
-          // Remove pending URI now that registration is successful
+          if (txHash) {
+            existing.txHash = txHash;
+          }
+          // Remove pending flags if they exist
           delete existing.pendingRegistrationUri;
+          delete existing.pendingAgentId;
           data['erc8004']['registrations'][chainKey] = existing;
           const updated = matter.stringify(parsed.content, data);
           writeFileSync(agentPath, updated, 'utf-8');
@@ -219,6 +226,42 @@ export async function registerCommand(options: RegisterCommandOptions): Promise<
         } catch (err) {
           console.log(
             `\n⚠️  Failed to persist registration data for chain ${chain}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+
+        console.log('\n   You can now close this terminal with Ctrl+C\n');
+      },
+      onPendingAgentId: (txHash: string) => {
+        console.log('\n⚠️  Transaction confirmed but agent ID could not be retrieved.');
+        console.log(`📋 Transaction hash: ${txHash}`);
+        console.log('\nThe agent was likely registered successfully, but we could not extract the ID.');
+        console.log('You can:');
+        console.log('  1. Run `agent recover-id` to retry retrieval');
+        console.log('  2. Check the transaction on a block explorer');
+
+        // Persist pending status to config
+        try {
+          const agentRaw = readFileSync(agentPath, 'utf-8');
+          const parsed = matter(agentRaw);
+          const data = parsed.data as Record<string, any>;
+          data['erc8004'] = data['erc8004'] ?? {};
+          data['erc8004']['registrations'] = data['erc8004']['registrations'] ?? {};
+          const chainKey = String(chain);
+          const existing = data['erc8004']['registrations'][chainKey] ?? {};
+          existing.registrationUri = ipfsUri;
+          existing.pendingAgentId = true;
+          existing.txHash = txHash;
+          // Remove old pending URI flag
+          delete existing.pendingRegistrationUri;
+          data['erc8004']['registrations'][chainKey] = existing;
+          const updated = matter.stringify(parsed.content, data);
+          writeFileSync(agentPath, updated, 'utf-8');
+          console.log(
+            `\n📝 Saved registration with pending agent ID status to agent.md`,
+          );
+        } catch (err) {
+          console.log(
+            `\n⚠️  Failed to persist pending status for chain ${chain}: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
 

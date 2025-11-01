@@ -14,7 +14,8 @@ export type ServeTransactionPageParams = {
   data: string;
   chainId: number;
   agentName?: string;
-  onAgentIdReceived?: (agentId: number | string) => void;
+  onAgentIdReceived?: (agentId: number | string, txHash?: string) => void;
+  onPendingAgentId?: (txHash: string) => void;
 };
 
 /**
@@ -41,12 +42,23 @@ export async function serveTransactionSigningPage(
         req.on('end', () => {
           try {
             const data = JSON.parse(body);
-            if (params.onAgentIdReceived) {
+            const record = data as Record<string, unknown>;
+
+            // Check if this is a pending agent ID callback
+            if (record['pendingAgentId'] === true && record['txHash']) {
+              if (params.onPendingAgentId) {
+                params.onPendingAgentId(String(record['txHash']));
+              }
+            } else {
+              // Try to extract agent ID
               const agentId = extractAgentId(data);
-              if (agentId !== null) {
-                params.onAgentIdReceived(agentId);
+              const txHash = record['txHash'] ? String(record['txHash']) : undefined;
+
+              if (agentId !== null && params.onAgentIdReceived) {
+                params.onAgentIdReceived(agentId, txHash);
               }
             }
+
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true }));
           } catch (error) {
@@ -114,7 +126,7 @@ function extractAgentId(payload: unknown): number | string | null {
 
 function normalizeAgentIdValue(value: unknown): number | string | null {
   if (typeof value === 'number') {
-    if (Number.isSafeInteger(value) && value > 0) {
+    if (Number.isSafeInteger(value) && value >= 0) {
       return value;
     }
     return null;
