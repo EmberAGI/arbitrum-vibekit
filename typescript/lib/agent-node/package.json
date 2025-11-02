@@ -128,14 +128,16 @@
     "msw": "^2.11.2",
     "prettier": "catalog:",
     "rimraf": "^6.0.1",
+    "rollup-plugin-copy": "^3.5.0",
     "supertest": "^7.1.4",
+    "tsdown": "^0.15.12",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "scripts": {
     "dev": "tsx watch src/server-loader.ts",
-    "build": "rimraf dist .tsbuildinfo && tsc -p tsconfig.build.json",
+    "build": "rimraf .tsbuildinfo && tsdown",
     "start": "node dist/server-loader.js",
     "cli": "tsx src/cli/loader.ts",
     "client": "tsx src/a2aClient.ts",
