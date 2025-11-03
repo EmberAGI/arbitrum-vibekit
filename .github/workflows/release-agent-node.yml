@@ -1,0 +1,55 @@
+name: Release agent-node
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/agent-node-release
+      - main
+    paths:
+      - 'typescript/lib/agent-node/**'
+      - '.github/workflows/release-agent-node.yml'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: typescript
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup test environment
+        working-directory: typescript/lib/agent-node
+        run: cp .env.test.example .env.test
+
+      - name: Build agent-node
+        run: pnpm --filter @emberai/agent-node build
+
+      - name: Run tests
+        run: pnpm --filter @emberai/agent-node test:ci
+
+      - name: Release agent-node
+        working-directory: typescript/lib/agent-node
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm exec semantic-release
