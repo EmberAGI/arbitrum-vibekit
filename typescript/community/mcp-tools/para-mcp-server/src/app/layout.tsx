@@ -16,7 +16,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Para MCP Server",
-  description: "Model Context Protocol server for Para - providing AI assistants with blockchain interaction capabilities",
+  description:
+    "Model Context Protocol server for Para - providing AI assistants with blockchain interaction capabilities",
 };
 
 export default function RootLayout({

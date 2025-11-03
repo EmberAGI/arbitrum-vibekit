@@ -40,11 +40,16 @@ export default function ClaimPregenWallet() {
       let authed = await para.isFullyLoggedIn();
       if (!authed) {
         const url = await para.refreshSession({ shouldOpenPopup: true });
-        const popupRef = openPopup({ url, target: "para-login", type: "LOGIN_PASSKEY" });
+        const popupRef = openPopup({
+          url,
+          target: "para-login",
+          type: "LOGIN_PASSKEY",
+        });
         await para.waitForLoginAndSetup({ popupWindow: popupRef?.window });
         authed = await para.isFullyLoggedIn();
       }
-      if (!authed) throw new Error("Login failed. Please complete Para authentication.");
+      if (!authed)
+        throw new Error("Login failed. Please complete Para authentication.");
 
       setIsLoggedIn(true);
       setStatus("idle");
@@ -52,7 +57,9 @@ export default function ClaimPregenWallet() {
     } catch (err) {
       setIsLoggedIn(false);
       setStatus("error");
-      setMessage(err instanceof Error ? err.message : "Failed to login with Para");
+      setMessage(
+        err instanceof Error ? err.message : "Failed to login with Para",
+      );
     }
   };
 
@@ -82,7 +89,10 @@ export default function ClaimPregenWallet() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ userShare, recoverySecret: claimedRecoverySecret }),
+        body: JSON.stringify({
+          userShare,
+          recoverySecret: claimedRecoverySecret,
+        }),
       });
 
       const data = await response.json();
@@ -92,7 +102,9 @@ export default function ClaimPregenWallet() {
 
       setStatus("success");
       setMessage("Wallet claimed successfully!");
-      setRecoverySecret(claimedRecoverySecret);
+      if (claimedRecoverySecret) {
+        setRecoverySecret(claimedRecoverySecret);
+      }
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "An error occurred");
@@ -140,14 +152,16 @@ export default function ClaimPregenWallet() {
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={handleClaim}
-            disabled={status === "loading" || isLoggedIn !== true}
-            className="flex h-12 items-center justify-center rounded-md bg-zinc-900 px-6 font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
-          >
-            {status === "loading" ? "Claiming..." : "Claim Wallet"}
-          </button>
+          {status !== "success" && (
+            <button
+              type="button"
+              onClick={handleClaim}
+              disabled={status === "loading" || isLoggedIn !== true}
+              className="flex h-12 items-center justify-center rounded-md bg-zinc-900 px-6 font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              {status === "loading" ? "Claiming..." : "Claim Wallet"}
+            </button>
+          )}
 
           {message && (
             <div

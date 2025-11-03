@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "npx setup-para",
     "dev": "xmcp dev & next dev -p 3012",
     "build": "xmcp build && next build",
     "start": "next start",
@@ -14,9 +15,9 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@getpara/react-sdk": "^1.18.1",
-    "@getpara/server-sdk": "^1.18.1",
-    "@getpara/web-sdk": "^1.18.1",
+    "@getpara/react-sdk": "2.0.0-alpha.68",
+    "@getpara/server-sdk": "2.0.0-alpha.68",
+    "@getpara/web-sdk": "2.0.0-alpha.68",
     "@tanstack/react-query": "^5.74.4",
     "drizzle-kit": "^0.25.0",
     "drizzle-orm": "^0.34.0",

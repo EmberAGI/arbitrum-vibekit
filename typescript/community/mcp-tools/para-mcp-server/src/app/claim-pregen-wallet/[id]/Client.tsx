@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useClient, useModal, ParaModal, useLogout, useAccount } from "@getpara/react-sdk";
+import {
+  useClient,
+  useModal,
+  ParaModal,
+  useLogout,
+  useAccount,
+} from "@getpara/react-sdk";
 import Link from "next/link";
 
 export type PregenWallet = {
@@ -30,6 +36,7 @@ export default function ClaimPregenWalletClient({
   const [claimMessage, setClaimMessage] = useState("");
   const [recoverySecret, setRecoverySecret] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const [isClaimed, setIsClaimed] = useState(wallet?.claimed ?? false);
   const claimApiUrl = "/claim-pregen-wallet/api";
   const para = useClient();
   const { openModal } = useModal();
@@ -66,15 +73,18 @@ export default function ClaimPregenWalletClient({
     setClaimMessage("");
     try {
       if (!para) throw new Error("Para client not ready");
-      let authed = await para.isFullyLoggedIn();
+      const authed = await para.isFullyLoggedIn();
       if (!authed) {
         // Open Para's built-in auth modal instead of email-specific login URL
         openModal();
         setClaimStatus("idle");
-        setClaimMessage("Please complete Para authentication in the modal, then try again.");
+        setClaimMessage(
+          "Please complete Para authentication in the modal, then try again.",
+        );
         return;
       }
-      if (!authed) throw new Error("Login failed. Please complete Para authentication.");
+      if (!authed)
+        throw new Error("Login failed. Please complete Para authentication.");
 
       // Post-login email check: show mismatch error AFTER successful login
       setIsLoggedIn(true);
@@ -99,7 +109,9 @@ export default function ClaimPregenWalletClient({
     } catch (err) {
       setIsLoggedIn(false);
       setClaimStatus("error");
-      setClaimMessage(err instanceof Error ? err.message : "Failed to login with Para");
+      setClaimMessage(
+        err instanceof Error ? err.message : "Failed to login with Para",
+      );
     }
   };
 
@@ -117,12 +129,14 @@ export default function ClaimPregenWalletClient({
       if (!para) throw new Error("Para client not ready");
 
       // Ensure user is logged in with Para first (double-check)
-      let isAuthenticated = await para.isFullyLoggedIn();
+      const isAuthenticated = await para.isFullyLoggedIn();
       if (!isAuthenticated) {
         // Trigger the Para modal and stop the claim until the user finishes login
         openModal();
         setClaimStatus("idle");
-        setClaimMessage("Please complete Para login in the modal to continue claiming.");
+        setClaimMessage(
+          "Please complete Para login in the modal to continue claiming.",
+        );
         return;
       }
 
@@ -149,11 +163,23 @@ export default function ClaimPregenWalletClient({
       const response = await fetch(claimApiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pregenId: wallet?.id, walletId: wallet?.walletId }),
+        body: JSON.stringify({
+          pregenId: wallet?.id,
+          walletId: wallet?.walletId,
+        }),
       });
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || "Failed to finalize wallet claim");
+      }
+
+      // Verify wallet is claimed by checking the API
+      if (wallet?.id) {
+        const checkResponse = await fetch(`/api/pregen-wallets/${wallet.id}`);
+        if (checkResponse.ok) {
+          const walletData = await checkResponse.json();
+          setIsClaimed(walletData.claimed ?? false);
+        }
       }
 
       setClaimStatus("success");
@@ -190,7 +216,8 @@ export default function ClaimPregenWalletClient({
             Claim Pregenerated Wallet
           </h1>
           <p className="text-zinc-600 dark:text-zinc-400">
-            Follow the steps below to authenticate with Para and claim your pregenerated wallet.
+            Follow the steps below to authenticate with Para and claim your
+            pregenerated wallet.
           </p>
         </div>
 
@@ -213,10 +240,12 @@ export default function ClaimPregenWalletClient({
                 <span className="font-medium">Type:</span> {wallet.type}
               </div>
               <div>
-                <span className="font-medium">Created:</span> {wallet.createdAt || "—"}
+                <span className="font-medium">Created:</span>{" "}
+                {wallet.createdAt || "—"}
               </div>
               <div>
-                <span className="font-medium">Claimed:</span> {wallet.claimed ? "Yes" : "No"}
+                <span className="font-medium">Claimed:</span>{" "}
+                {wallet.claimed ? "Yes" : "No"}
               </div>
             </div>
           ) : (
@@ -227,10 +256,13 @@ export default function ClaimPregenWalletClient({
         {/* Login helper */}
         <div className="rounded-md border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-900/20">
           <p className="text-sm text-amber-800 dark:text-amber-300">
-            You must be fully authenticated with Para before claiming. If your app has a dedicated login flow, please log in first, then return to this page.
+            You must be fully authenticated with Para before claiming. If your
+            app has a dedicated login flow, please log in first, then return to
+            this page.
           </p>
           <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-            The claim API will return 401 if not authenticated. After logging in, reload this page and proceed.
+            The claim API will return 401 if not authenticated. After logging
+            in, reload this page and proceed.
           </p>
         </div>
 
@@ -264,14 +296,16 @@ export default function ClaimPregenWalletClient({
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={handleClaim}
-            disabled={claimStatus === "loading" || isLoggedIn !== true}
-            className="flex h-12 items-center justify-center rounded-md bg-zinc-900 px-6 font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
-          >
-            {claimStatus === "loading" ? "Claiming..." : "Claim Wallet"}
-          </button>
+          {!isClaimed && claimStatus !== "success" && (
+            <button
+              type="button"
+              onClick={handleClaim}
+              disabled={claimStatus === "loading" || isLoggedIn !== true}
+              className="flex h-12 items-center justify-center rounded-md bg-zinc-900 px-6 font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              {claimStatus === "loading" ? "Claiming..." : "Claim Wallet"}
+            </button>
+          )}
 
           {isLoggedIn === true && (
             <button
@@ -290,8 +324,8 @@ export default function ClaimPregenWalletClient({
                 claimStatus === "success"
                   ? "bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-400"
                   : claimStatus === "error"
-                  ? "bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-400"
-                  : ""
+                    ? "bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-400"
+                    : ""
               }`}
             >
               <p className="font-medium">{claimMessage}</p>
@@ -302,7 +336,8 @@ export default function ClaimPregenWalletClient({
                     {recoverySecret}
                   </code>
                   <p className="text-xs">
-                    Save this recovery secret in a secure location. You'll need it to recover your wallet.
+                    Save this recovery secret in a secure location. You'll need
+                    it to recover your wallet.
                   </p>
                 </div>
               )}
@@ -317,12 +352,18 @@ export default function ClaimPregenWalletClient({
           <ul className="list-inside list-disc space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
             <li>You must be fully authenticated with Para</li>
             <li>The user share must match your authenticated identifier</li>
-            <li>After claiming, Para manages the wallet through your authentication</li>
+            <li>
+              After claiming, Para manages the wallet through your
+              authentication
+            </li>
             <li>Store your recovery secret securely for wallet recovery</li>
           </ul>
           <p className="mt-3 text-xs text-zinc-500">
-            If you already have a different claim link, you can return to the generic page:{" "}
-            <Link className="underline" href="/claim-pregen-wallet">/claim-pregen-wallet</Link>
+            If you already have a different claim link, you can return to the
+            generic page:{" "}
+            <Link className="underline" href="/claim-pregen-wallet">
+              /claim-pregen-wallet
+            </Link>
           </p>
         </div>
       </main>

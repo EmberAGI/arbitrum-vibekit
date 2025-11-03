@@ -23,7 +23,9 @@ export const schema = {
     .string()
     .email()
     .optional()
-    .describe("Email used when the pregenerated wallet was created (used if id is not provided)"),
+    .describe(
+      "Email used when the pregenerated wallet was created (used if id is not provided)",
+    ),
 } satisfies Record<string, z.ZodTypeAny>;
 
 // Define tool metadata
@@ -81,7 +83,9 @@ export default async function getClaimUrl({
       const [row] = await db
         .select({ id: pregenWallets.id, email: pregenWallets.email })
         .from(pregenWallets)
-        .where(and(eq(pregenWallets.email, email), isNull(pregenWallets.claimedAt)))
+        .where(
+          and(eq(pregenWallets.email, email), isNull(pregenWallets.claimedAt)),
+        )
         .limit(1);
       if (row) target = row as any;
     }
@@ -93,7 +97,7 @@ export default async function getClaimUrl({
     const base = resolveBaseUrl();
     if (!base) {
       throw new Error(
-        "Base URL is not configured. Ensure Vercel environment variables (VERCEL_URL/VERCEL_BRANCH_URL/VERCEL_PROJECT_PRODUCTION_URL) are set."
+        "Base URL is not configured. Ensure Vercel environment variables (VERCEL_URL/VERCEL_BRANCH_URL/VERCEL_PROJECT_PRODUCTION_URL) are set.",
       );
     }
 
@@ -114,7 +118,8 @@ export default async function getClaimUrl({
   } catch (error) {
     const result = {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to generate claim URL",
+      error:
+        error instanceof Error ? error.message : "Failed to generate claim URL",
     };
 
     return {
