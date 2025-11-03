@@ -45,7 +45,7 @@ jobs:
         run: pnpm --filter @emberai/agent-node build
 
       - name: Run tests
-        run: DEBUG_TESTS=1 pnpm --filter @emberai/agent-node test:ci
+        run: pnpm --filter @emberai/agent-node test:ci
 
       - name: Release agent-node
         working-directory: typescript/lib/agent-node
