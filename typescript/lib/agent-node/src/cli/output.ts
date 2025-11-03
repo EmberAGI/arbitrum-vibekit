@@ -251,8 +251,37 @@ export async function showStartupEffect(): Promise<void> {
     return;
   }
 
-  // Animation timing constant
-  const GLITCH_INTERVAL_MS = 10;
+  // Animation timing configuration
+  const ANIMATION_CONFIG = {
+    mode: 'positions-only' as 'positions-only' | 'both', // Easy switch to Option 2
+    targetDurationMs: 1000,
+    intervalMs: 25, // Constant for Option 1, starting value for Option 2
+    intervalRange: { min: 15, max: 35 }, // For future Option 2
+    positionsRange: { start: 10, end: 2 },
+  } as const;
+
+  // Easing function for smooth animation transitions
+  function easeOutCubic(t: number): number {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
+  // Calculate how many positions to fix based on animation progress
+  function calculatePositionsToFix(progress: number, config: typeof ANIMATION_CONFIG): number {
+    const easedProgress = easeOutCubic(progress);
+    const { start, end } = config.positionsRange;
+    return Math.max(1, Math.round(start - (start - end) * easedProgress));
+  }
+
+  // Calculate interval delay (for future Option 2: eased interval timing)
+  function _calculateInterval(progress: number, config: typeof ANIMATION_CONFIG): number {
+    if (config.mode === 'positions-only') {
+      return config.intervalMs; // Constant interval for Option 1
+    }
+    // Option 2: eased interval
+    const easedProgress = easeOutCubic(progress);
+    const { min, max } = config.intervalRange;
+    return Math.round(min + (max - min) * easedProgress);
+  }
 
   // Detect terminal color capability
   const supportsTruecolor = /truecolor|24bit/i.test(process.env['COLORTERM'] ?? '');
@@ -320,8 +349,7 @@ export async function showStartupEffect(): Promise<void> {
 
   // Helper function to get random printable ASCII character
   const getRandomChar = () => {
-    const chars =
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?';
+    const chars = 'ⴰⴱⴲⴳⴴⴵⴶⴷⴸⴹⴺⴻⴼⴽⴾⴿⵀⵁⵂⵃⵄⵅⵆⵇⵈⵉⵊⵋⵌⵍⵎⵏⵐⵑⵒⵓⵔⵕⵖⵗⵘⵙⵚⵛⵜⵝⵞⵟⵠⵡⵢⵣⵤⵥⵦⵧⵯ';
     return chars[Math.floor(Math.random() * chars.length)];
   };
 
@@ -406,8 +434,12 @@ export async function showStartupEffect(): Promise<void> {
       }
 
       if (unfixedIndices.length > 0) {
-        // Fix 1-2 positions
-        const toFixCount = Math.min(unfixedIndices.length, Math.random() < 0.5 ? 1 : 2);
+        // Calculate positions to fix based on eased progress
+        const progress = fixedCount / totalPositions;
+        const toFixCount = Math.min(
+          unfixedIndices.length,
+          calculatePositionsToFix(progress, ANIMATION_CONFIG),
+        );
         for (let i = 0; i < toFixCount; i++) {
           const randomIndex = Math.floor(Math.random() * unfixedIndices.length);
           const positionToFix = unfixedIndices[randomIndex];
@@ -440,7 +472,7 @@ export async function showStartupEffect(): Promise<void> {
         // Resolve the Promise when animation is complete
         resolve();
       }
-    }, GLITCH_INTERVAL_MS);
+    }, ANIMATION_CONFIG.intervalMs); // For Option 2: replace with setTimeout and _calculateInterval()
 
     // Initial display of three lines
     const initialLines = buildFrame();
