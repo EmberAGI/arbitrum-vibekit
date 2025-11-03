@@ -7,8 +7,8 @@ on:
       - build/agent-node-release
       - main
     paths:
-      - 'typescript/lib/agent-node/**'
-      - '.github/workflows/release-agent-node.yml'
+      - "typescript/lib/agent-node/**"
+      - ".github/workflows/release-agent-node.yml"
 
 jobs:
   release:
@@ -45,7 +45,7 @@ jobs:
         run: pnpm --filter @emberai/agent-node build
 
       - name: Run tests
-        run: pnpm --filter @emberai/agent-node test:ci
+        run: DEBUG_TESTS=1 pnpm --filter @emberai/agent-node test:ci
 
       - name: Release agent-node
         working-directory: typescript/lib/agent-node
