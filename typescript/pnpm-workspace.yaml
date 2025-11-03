@@ -1,5 +1,6 @@
 packages:
   - 'lib/**/*'
+  - 'community/**/*'
   - 'examples/*'
   - 'templates/*'
   - 'clients/*'

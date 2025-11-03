@@ -17,7 +17,21 @@
 
 Welcome to Vibekit, the polyglot toolkit for vibe coding smart, autonomous DeFi agents that can perform complex on-chain operations. Whether you're automating trades, managing liquidity, or integrating with blockchain data, Vibekit makes it simple to create intelligent agents that understand natural language and execute sophisticated workflows.
 
-At its core, Vibekit uses the Model Context Protocol (MCP) to standardize how agents connect with tools and data, with built-in Agent2Agent (A2A) integration enabling seamless collaboration. The Ember Plugin System extends this foundation with a modular architecture for DeFi protocols, providing standardized entity mapping, comprehensive type safety, and intelligent routing for optimized execution across multiple protocols.
+### Core Features
+
+- **Agent Node Framework**: Modern config-driven framework with full A2A protocol compliance, generator-based workflows, and embedded wallet support for building production-ready autonomous agents
+
+- **Model Context Protocol (MCP)**: Standardized integration layer for connecting agents with tools and external data sources, enabling modular and extensible agent capabilities
+
+- **X402 Payment Protocol**: HTTP-native payment infrastructure for autonomous agent commerce, supporting micropayments and service monetization
+
+- **Agent-to-Agent (A2A) Communication**: Built-in protocol support enabling seamless collaboration and communication between multiple agents
+
+- **EIP-8004 On-Chain Registration**: Decentralized agent identity registration following the EIP-8004 standard, enabling verifiable agent ownership, discoverability through on-chain registries, and cross-platform compatibility
+
+- **Composable DeFi Workflows**: Workflow system enabling multi-step operations with pause/resume capabilities, allowing agents to orchestrate complex DeFi strategies across protocols
+
+- **Ember Plugin System**: Modular architecture for DeFi protocols with standardized entity mapping, comprehensive type safety, and intelligent routing for optimized execution across multiple protocols
 
 Here's an overview of how everything fits together:
 
@@ -40,13 +54,14 @@ arbitrum-vibekit/
 │   ├── clients/                    # Client applications
 │   │   └── web/                    # Vibekit frontend
 │   ├── templates/                  # Official Vibekit agent templates
-│   ├── community/                  # Community-contributed agent templates
+│   ├── community/                  # Community contributions
+│   │   ├── agents/                 # Community-contributed agent templates
+│   │   └── mcp-tools/              # Community MCP tool server implementations
 │   ├── lib/                        # Core framework libraries such as MCP tools, Ember API, etc.
 │   │   ├── a2a-types/              # Agent-to-Agent type definitions
-│   │   ├── agent-node/             # Agent Node framework (v3.0+) - Config-driven A2A-compliant agents
+│   │   ├── agent-node/             # Agent Node framework (v3.0+) - Config-driven A2A-compliant agents with X402 payments
 │   │   ├── ember-api/              # Ember AI API client
 │   │   ├── ember-schemas/          # Schema definitions
-│   │   ├── community-mcp-tools/   # Community MCP tool server implementations
 │   │   └── test-utils/             # Testing utilities and helpers
 │   └── onchain-actions-plugins/    # Ember plugin system
 ├── CHANGELOG.md
@@ -58,15 +73,13 @@ arbitrum-vibekit/
 
 ### Key Directories
 
-- **[`agent-node/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node)**: The modern config-driven agent framework with full A2A protocol compliance, generator-based workflows, and embedded wallet support. This is the recommended framework for building new agents.
+- **[`agent-node/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node)**: The modern config-driven agent framework with full A2A protocol compliance, generator-based workflows, embedded wallet support, and X402 payment protocol integration for autonomous agent commerce. This is the recommended framework for building new agents.
 
 - **[`templates/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates)**: Official Vibekit agent templates featuring production-ready implementations with skills, tools, hooks, and modern deployment patterns. These serve as reference implementations for building your own agents.
 
-- **[`community/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community)**: Community-contributed agent templates and external integrations. This is where developers can contribute their own specialized agents to expand Vibekit's ecosystem.
+- **[`community/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community)**: Community contributions including agent templates and MCP tool server implementations. This is where developers can contribute their own specialized agents and tools to expand Vibekit's ecosystem.
 
 - **[`clients/web`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web)**: Vibekit web frontend, featuring wallet integration, agent chat interface, and real-time MCP communication for DeFi agent interactions.
-
-- **[`community-mcp-tools`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/community-mcp-tools)**: Community MCP tool server implementations, providing standardized external data access through the Model Context Protocol.
 
 - **[`onchain-actions-plugins/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/onchain-actions-plugins)**: The Ember Plugin System providing a registry for on-chain action plugins and smart contract integrations with extensible architecture for adding new blockchain protocols.
 

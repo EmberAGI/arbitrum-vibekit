@@ -1,0 +1,66 @@
+{
+  "tools": [
+    {
+      "name": "place-investment-order",
+      "description": "Place a new investment order in a Centrifuge pool",
+      "parameters": {
+        "investorAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "poolId": "1",
+        "trancheType": "Senior",
+        "amount": "1000.00",
+        "network": "arbitrum",
+        "slippageTolerance": 2
+      }
+    },
+    {
+      "name": "yield-optimization",
+      "description": "Find optimal yield opportunities across all pools",
+      "parameters": {
+        "investorAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "riskTolerance": "medium",
+        "investmentAmount": "50000",
+        "networks": ["arbitrum", "ethereum"]
+      }
+    },
+    {
+      "name": "transaction-history",
+      "description": "Get complete transaction history for an investor",
+      "parameters": {
+        "investorAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "limit": 10,
+        "includeFailed": false
+      }
+    },
+    {
+      "name": "investment-performance-tracking",
+      "description": "Track investment performance with detailed metrics",
+      "parameters": {
+        "investorAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "period": "30d",
+        "includeBenchmarks": true
+      }
+    },
+    {
+      "name": "risk-alert-system",
+      "description": "Monitor portfolio for risk alerts and thresholds",
+      "parameters": {
+        "investorAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "alertThresholds": {
+          "riskScore": 80,
+          "liquidityScore": 20,
+          "yieldDeviation": 10
+        },
+        "notificationChannels": ["email", "push"]
+      }
+    },
+    {
+      "name": "yield-comparison-tool",
+      "description": "Compare yields across multiple pools",
+      "parameters": {
+        "poolIds": ["1", "2"],
+        "comparisonPeriod": "90d",
+        "includeRiskAdjusted": true
+      }
+    }
+  ]
+}

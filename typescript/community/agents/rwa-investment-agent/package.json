@@ -1,0 +1,57 @@
+{
+  "name": "rwa-investment-agent",
+  "version": "1.0.0",
+  "description": "AI agent for Real World Asset (RWA) investment and portfolio management",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "docker:compose:up": "docker compose up --build --no-log-prefix",
+    "docker:compose:down": "docker compose down"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "arbitrum-vibekit-core": "workspace:*",
+    "ember-api": "workspace:*",
+    "ember-schemas": "workspace:*",
+    "@google-a2a/types": "workspace:*",
+    "@ai-sdk/openai": "catalog:",
+    "ai": "catalog:",
+    "cors": "catalog:",
+    "dotenv": "catalog:",
+    "express": "catalog:",
+    "viem": "catalog:",
+    "zod": "catalog:",
+    "axios": "^1.6.0",
+    "ethers": "^6.8.0",
+    "graphql-request": "catalog:"
+  },
+  "devDependencies": {
+    "@types/cors": "catalog:",
+    "@types/express": "catalog:",
+    "@types/node": "catalog:",
+    "prettier": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "keywords": [
+    "rwa",
+    "real-world-assets",
+    "tokenization",
+    "defi",
+    "ai-agent",
+    "mcp",
+    "arbitrum-vibekit",
+    "centrifuge",
+    "maple-finance",
+    "institutional-finance"
+  ]
+}
