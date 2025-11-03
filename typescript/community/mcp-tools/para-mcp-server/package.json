@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "postinstall": "npx setup-para",
     "dev": "xmcp dev & next dev -p 3012",
     "build": "xmcp build && next build",
     "start": "next start",
