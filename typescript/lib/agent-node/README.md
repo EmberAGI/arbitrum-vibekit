@@ -33,11 +33,13 @@ npx -y @emberai/agent-node init
 
 This creates a `config/` directory with:
 
-- `agent.md` - Base agent configuration and system prompt
+- `agent.md` - Base agent configuration including system prompt, model settings, A2A protocol card definition, and EIP-8004 registration details
 - `agent.manifest.json` - Skill composition settings
-- `skills/` - Directory for skill modules
+- `skills/` - Directory for skill modules (includes sample skills)
+- `workflows/` - Directory for custom workflow implementations (includes example workflow)
 - `mcp.json` - MCP server registry
 - `workflow.json` - Workflow plugin registry
+- `README.md` - Config workspace documentation
 
 #### 2. Run the Server
 
@@ -49,50 +51,8 @@ npx -y @emberai/agent-node
 
 #### 3. Time to Profit!
 
-### Customize Your Agent
-
-The `init` command created a working agent with sensible defaults. Here's what you can customize:
-
-**Agent Configuration** (`config/agent.md`):
-
-- **YAML frontmatter** → Constructs your A2A agent card (name, description, URL, AI model, capabilities)
-- **Markdown section** → Main system prompt that defines your agent's personality and behavior
-- The `init` command configured basic settings; customize the name, model, and system prompt to fit your use case
-
-**Skills** (`config/skills/*.md`):
-
-- **YAML frontmatter** → Adds capabilities to your A2A agent card (skill metadata, MCP tool access, model overrides)
-- **Markdown section** → Additional instructions specific to this skill
-- The `init` command created two sample skills (`general-assistant`, `ember-onchain-actions`); add your own or modify these
-
-**Skill Manifest** (`config/agent.manifest.json`):
-
-- Controls which skills are loaded and how they're composed together
-- Lists paths to skill files, references to registries (mcp.json, workflow.json), and merge policies
-- Add new skill paths to the `skills` array when you create new skill files
-
-**MCP Servers** (`config/mcp.json`):
-
-- Registers MCP servers for dynamic tool access (stdio or HTTP transport)
-- The `init` command configured `fetch` (HTTP fetching) and `ember_onchain_actions` (blockchain operations)
-- Add your own MCP servers and reference them in skill frontmatter
-
-**Workflows** (`config/workflows/*.ts`):
-
-- Workflows are scripts the agent can run to manage A2A Task lifecycles (same concept as [Anthropic's workflows](https://www.anthropic.com/engineering/building-effective-agents))
-- Build multi-step operations as TypeScript generator functions with pause/resume capabilities
-- The `init` command created an `example-workflow` demonstrating status updates, artifacts, and user confirmation
-- Register new workflows in `config/workflow.json` and reference them in skill configurations
-
-**Validate Your Configuration**:
-
-After making changes, validate your configuration:
-
-```bash
-npx -y @emberai/agent-node doctor
-```
-
-This checks for configuration errors, missing references, and policy conflicts.
+> [!TIP]
+> Ready to customize your agent? See the [Configuration](#configuration) section below to learn about agent.md, skills, MCP servers, and workflows.
 
 ## Configuration
 
@@ -115,26 +75,129 @@ config-workspace/
 
 ### Configuration Files
 
-The configuration workspace contains several key files that define your agent's behavior:
+The configuration workspace contains several key files that define your agent's behavior.
 
-- **`config/agent.md`** - Base agent configuration including system prompt, model settings, A2A protocol card definition, and EIP-8004 registration details
-- **`config/skills/`** - Modular skill definitions that compose your agent's capabilities:
-  - `general-assistant.md` - General assistant capabilities
-  - `ember-onchain-actions.md` - On-chain DeFi operations
-- **`config/agent.manifest.json`** - Skill composition and workflow selection settings
-- **`config/mcp.json`** - MCP server registry for dynamic tool/resource access
-- **`config/workflow.json`** - Workflow plugin registry
-- **`config/workflows/`** - Custom workflow implementations
+#### Agent Definition (`agent.md`)
 
-### CLI Dependencies
+Base agent configuration including system prompt, model settings, A2A protocol card definition, and EIP-8004 registration details:
 
-The CLI uses the following dependencies for clean, user-friendly output:
+```markdown
+---
+version: 1
+card:
+  protocolVersion: '0.3.0'
+  name: 'My Agent'
+  description: 'An autonomous AI agent'
+  url: 'http://localhost:3000/a2a'
+  version: '1.0.0'
+  capabilities:
+    streaming: true
+    pushNotifications: false
+  provider:
+    name: 'My Company'
+    url: 'https://example.com'
 
-- **picocolors** - Terminal colors (lightweight, fast)
-- **ora** - Spinners for long-running operations
-- **prompts** - Interactive CLI features
+ai:
+  modelProvider: openrouter
+  model: openai/gpt-5
+---
 
-These dependencies are automatically installed when you run `pnpm install`.
+You are an AI agent that helps users with...
+```
+
+#### Skills (`skills/*.md`)
+
+Modular skill definitions that compose your agent's capabilities. The `init` command creates two sample skills:
+
+- `general-assistant.md` - General assistant capabilities
+- `ember-onchain-actions.md` - On-chain DeFi operations
+
+Example skill structure:
+
+```markdown
+---
+skill:
+  id: token-swap
+  name: 'Token Swap Skill'
+  description: 'Execute token swaps on DEXes'
+  tags: [defi, swap]
+
+mcp:
+  servers:
+    - name: ember-onchain
+      allowedTools: [createSwap, getSwapQuote]
+---
+
+You can help users swap tokens using the createSwap tool...
+```
+
+#### Skill Manifest (`agent.manifest.json`)
+
+Skill composition and workflow selection settings:
+
+```json
+{
+  "version": "1.0",
+  "skills": ["token-swap", "wallet-management"],
+  "enabledWorkflows": ["approve-and-swap"]
+}
+```
+
+#### MCP Registry (`mcp.json`)
+
+MCP server registry for dynamic tool/resource access:
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    },
+    "ember-onchain": {
+      "type": "http",
+      "url": "https://api.emberai.xyz/mcp",
+      "headers": {
+        "Authorization": "$env:EMBER_API_KEY"
+      }
+    }
+  }
+}
+```
+
+#### Workflow Registry (`workflow.json`)
+
+Workflow plugin registry:
+
+```json
+{
+  "workflows": [
+    {
+      "id": "example-workflow",
+      "from": "./workflows/example-workflow.ts",
+      "enabled": true,
+      "config": {
+        "mode": "default"
+      }
+    }
+  ]
+}
+```
+
+#### Workflows (`workflows/*.ts`)
+
+Custom workflow implementations. Workflows are multi-step operations that manage A2A Task lifecycles (same concept as [Anthropic's workflows](https://www.anthropic.com/engineering/building-effective-agents)). The `init` command creates an `example-workflow.ts` demonstrating status updates, artifacts, and user confirmation. For detailed workflow documentation, see the [Workflows](#workflows) section under Core Concepts.
+
+#### Validate Your Configuration
+
+After making changes, validate your configuration:
+
+```bash
+npx -y @emberai/agent-node doctor
+```
+
+This checks for configuration errors, missing references, and policy conflicts.
 
 ### Chat Mode (Terminal)
 
@@ -227,99 +290,6 @@ const response = await client.sendMessage({
 });
 
 console.log(response);
-```
-
-## Configuration
-
-### Workspace Structure
-
-Agent Node uses a file-based configuration workspace:
-
-```
-config-workspace/
-├── agent.md                 # Base agent + model config
-├── agent.manifest.json      # Skill/server selection
-├── skills/                  # Modular skill definitions
-│   ├── skill-1.md
-│   └── skill-2.md
-├── mcp.json                # MCP server registry
-└── workflow.json           # Workflow registry
-```
-
-### Agent Definition (agent.md)
-
-```markdown
----
-version: 1
-card:
-  protocolVersion: '0.3.0'
-  name: 'My Agent'
-  description: 'An autonomous AI agent'
-  url: 'http://localhost:3000/a2a'
-  version: '1.0.0'
-  capabilities:
-    streaming: true
-    pushNotifications: false
-  provider:
-    name: 'My Company'
-    url: 'https://example.com'
-
-ai:
-  modelProvider: openrouter
-  model: openai/gpt-5
----
-
-You are an AI agent that helps users with...
-```
-
-### Skills (skills/\*.md)
-
-```markdown
----
-skill:
-  id: token-swap
-  name: 'Token Swap Skill'
-  description: 'Execute token swaps on DEXes'
-  tags: [defi, swap]
-
-mcp:
-  servers:
-    - name: ember-onchain
-      allowedTools: [createSwap, getSwapQuote]
----
-
-You can help users swap tokens using the createSwap tool...
-```
-
-### Manifest (agent.manifest.json)
-
-```json
-{
-  "version": "1.0",
-  "skills": ["token-swap", "wallet-management"],
-  "enabledWorkflows": ["approve-and-swap"]
-}
-```
-
-### MCP Registry (mcp.json)
-
-```json
-{
-  "mcpServers": {
-    "playwright": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["@playwright/mcp@latest"]
-    },
-    "ember-onchain": {
-      "type": "http",
-      "url": "https://api.emberai.xyz/mcp",
-      "headers": {
-        "Authorization": "$env:EMBER_API_KEY"
-      }
-    }
-  }
-}
 ```
 
 ## Core Concepts
@@ -480,6 +450,7 @@ npx -y @emberai/agent-node register \
 ```
 
 **Options:**
+
 - `--chain <chainId>`: Target a specific chain (overrides --all)
 - `--all`: Register on canonical + mirror chains (default: true)
 - `--force-new-upload`: Force new IPFS upload (ignores cached URI from previous attempts)
