@@ -636,21 +636,46 @@ export class WorkflowHandler {
 
       let aborted = false;
       const completionResult = execution.waitForCompletion();
-      if (!completionResult || typeof (completionResult as { then?: unknown }).then !== 'function') {
+      const thenCandidate = completionResult && (completionResult as { then?: unknown }).then;
+      const thenType = typeof thenCandidate;
+      if (!completionResult || thenType !== 'function') {
         const completionMetadata =
           completionResult && typeof completionResult === 'object'
             ? Object.keys(completionResult as Record<string, unknown>)
             : undefined;
-        this.logger.error('waitForCompletion returned non-promise value', {
+        this.logger.error('waitForCompletion returned non-thenable value', {
           executionId: execution.id,
+          pluginId: execution.pluginId,
           resultType: typeof completionResult,
+          resultConstructor:
+            completionResult && typeof completionResult === 'object'
+              ? (completionResult as { constructor?: { name?: string } }).constructor?.name
+              : undefined,
           resultKeys: completionMetadata,
+          thenType,
         });
         throw new TypeError(
-          `Workflow execution ${execution.id} returned non-promise from waitForCompletion`,
+          `Workflow execution ${execution.id} returned non-thenable from waitForCompletion`,
         );
       }
-      const completionPromise = Promise.resolve(completionResult);
+
+      const completionPromise = new Promise<unknown>((resolve, reject) => {
+        try {
+          (thenCandidate as (onFulfilled: unknown, onRejected: unknown) => unknown).call(
+            completionResult,
+            resolve,
+            reject,
+          );
+        } catch (error) {
+          this.logger.error('waitForCompletion then invocation threw', error, {
+            executionId: execution.id,
+            pluginId: execution.pluginId,
+            resultType: typeof completionResult,
+            thenType,
+          });
+          reject(error);
+        }
+      });
       const abortPromise = new Promise<void>((resolve) => {
         const onAbort = (): void => {
           aborted = true;
