@@ -256,7 +256,7 @@ export async function showStartupEffect(): Promise<void> {
     mode: 'both' as 'positions-only' | 'both', // Option 2: ease both interval and positions
     intervalMs: 25, // Constant for Option 1
     intervalRange: { min: 20, max: 100 }, // For Option 2: eased interval timing
-    positionsRange: { start: 30, end: 5 },
+    positionsRange: { start: 40, end: 5 },
   } as const;
 
   // Easing function for smooth animation transitions
