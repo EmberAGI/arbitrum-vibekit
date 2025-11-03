@@ -253,11 +253,10 @@ export async function showStartupEffect(): Promise<void> {
 
   // Animation timing configuration
   const ANIMATION_CONFIG = {
-    mode: 'positions-only' as 'positions-only' | 'both', // Easy switch to Option 2
-    targetDurationMs: 1000,
-    intervalMs: 25, // Constant for Option 1, starting value for Option 2
-    intervalRange: { min: 15, max: 35 }, // For future Option 2
-    positionsRange: { start: 10, end: 2 },
+    mode: 'both' as 'positions-only' | 'both', // Option 2: ease both interval and positions
+    intervalMs: 25, // Constant for Option 1
+    intervalRange: { min: 20, max: 100 }, // For Option 2: eased interval timing
+    positionsRange: { start: 30, end: 5 },
   } as const;
 
   // Easing function for smooth animation transitions
@@ -265,20 +264,42 @@ export async function showStartupEffect(): Promise<void> {
     return 1 - Math.pow(1 - t, 3);
   }
 
+  // Calculate progress remapped to only the positions that need resolution
+  function getRemappedProgress(
+    fixedCount: number,
+    totalPositions: number,
+    config: typeof ANIMATION_CONFIG,
+  ): number {
+    const initialFixed = config.positionsRange.start;
+    const totalToResolve = totalPositions - initialFixed;
+    const resolved = fixedCount - initialFixed;
+    return Math.max(0, Math.min(1, resolved / totalToResolve));
+  }
+
   // Calculate how many positions to fix based on animation progress
-  function calculatePositionsToFix(progress: number, config: typeof ANIMATION_CONFIG): number {
-    const easedProgress = easeOutCubic(progress);
+  function calculatePositionsToFix(
+    fixedCount: number,
+    totalPositions: number,
+    config: typeof ANIMATION_CONFIG,
+  ): number {
+    const remappedProgress = getRemappedProgress(fixedCount, totalPositions, config);
+    const easedProgress = easeOutCubic(remappedProgress);
     const { start, end } = config.positionsRange;
     return Math.max(1, Math.round(start - (start - end) * easedProgress));
   }
 
-  // Calculate interval delay (for future Option 2: eased interval timing)
-  function _calculateInterval(progress: number, config: typeof ANIMATION_CONFIG): number {
+  // Calculate interval delay (Option 2: eased interval timing)
+  function calculateInterval(
+    fixedCount: number,
+    totalPositions: number,
+    config: typeof ANIMATION_CONFIG,
+  ): number {
     if (config.mode === 'positions-only') {
       return config.intervalMs; // Constant interval for Option 1
     }
-    // Option 2: eased interval
-    const easedProgress = easeOutCubic(progress);
+    // Option 2: eased interval with remapped progress
+    const remappedProgress = getRemappedProgress(fixedCount, totalPositions, config);
+    const easedProgress = easeOutCubic(remappedProgress);
     const { min, max } = config.intervalRange;
     return Math.round(min + (max - min) * easedProgress);
   }
@@ -355,8 +376,20 @@ export async function showStartupEffect(): Promise<void> {
 
   // Track which positions are fixed across all three lines
   const totalPositions = lineWidth * 3; // Three full lines
+  // Initialize with random N positions already fixed
+  const initialFixedCount = Math.min(ANIMATION_CONFIG.positionsRange.start, totalPositions);
   const fixed = new Array(totalPositions).fill(false);
-  let fixedCount = 0;
+  // Randomly select which positions to pre-fix using Fisher-Yates shuffle
+  const allIndices = Array.from({ length: totalPositions }, (_, i) => i);
+  for (let i = allIndices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [allIndices[i], allIndices[j]] = [allIndices[j]!, allIndices[i]!];
+  }
+  const preFixedIndices = allIndices.slice(0, initialFixedCount);
+  preFixedIndices.forEach((i) => {
+    fixed[i] = true;
+  });
+  let fixedCount = initialFixedCount;
 
   // Function to get the final character and style for a given position
   const getFinalCharAndStyle = (lineIndex: number, charIndex: number) => {
@@ -415,8 +448,14 @@ export async function showStartupEffect(): Promise<void> {
 
   // Wrap animation in a Promise
   return new Promise<void>((resolve) => {
-    // Animation loop
-    const animationInterval = setInterval(() => {
+    // Initial display of three lines
+    const initialLines = buildFrame();
+    initialLines.forEach((line) => {
+      process.stdout.write(line + '\n');
+    });
+
+    // Recursive animation function with dynamic interval timing
+    const animate = (): void => {
       // Move cursor up 3 lines to overwrite previous frame
       process.stdout.write('\x1b[3A');
 
@@ -427,7 +466,7 @@ export async function showStartupEffect(): Promise<void> {
         process.stdout.write('\x1b[2K\r' + line + '\n');
       });
 
-      // Fix 1-2 random positions that aren't already fixed
+      // Fix positions based on eased progress
       const unfixedIndices = [];
       for (let i = 0; i < totalPositions; i++) {
         if (!fixed[i]) unfixedIndices.push(i);
@@ -435,10 +474,9 @@ export async function showStartupEffect(): Promise<void> {
 
       if (unfixedIndices.length > 0) {
         // Calculate positions to fix based on eased progress
-        const progress = fixedCount / totalPositions;
         const toFixCount = Math.min(
           unfixedIndices.length,
-          calculatePositionsToFix(progress, ANIMATION_CONFIG),
+          calculatePositionsToFix(fixedCount, totalPositions, ANIMATION_CONFIG),
         );
         for (let i = 0; i < toFixCount; i++) {
           const randomIndex = Math.floor(Math.random() * unfixedIndices.length);
@@ -453,7 +491,6 @@ export async function showStartupEffect(): Promise<void> {
 
       // Check if all positions are fixed
       if (fixedCount >= totalPositions) {
-        clearInterval(animationInterval);
         // Move cursor up to overwrite glitched lines
         process.stdout.write('\x1b[3A');
 
@@ -471,14 +508,16 @@ export async function showStartupEffect(): Promise<void> {
 
         // Resolve the Promise when animation is complete
         resolve();
+      } else {
+        // Schedule next frame with dynamic interval based on progress
+        const nextDelay = calculateInterval(fixedCount, totalPositions, ANIMATION_CONFIG);
+        setTimeout(animate, nextDelay);
       }
-    }, ANIMATION_CONFIG.intervalMs); // For Option 2: replace with setTimeout and _calculateInterval()
+    };
 
-    // Initial display of three lines
-    const initialLines = buildFrame();
-    initialLines.forEach((line) => {
-      process.stdout.write(line + '\n');
-    });
+    // Start animation with initial delay
+    const initialDelay = calculateInterval(fixedCount, totalPositions, ANIMATION_CONFIG);
+    setTimeout(animate, initialDelay);
   });
 }
 
