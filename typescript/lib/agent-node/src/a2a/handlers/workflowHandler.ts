@@ -635,7 +635,22 @@ export class WorkflowHandler {
       const abortController = new AbortController();
 
       let aborted = false;
-      const completionPromise = Promise.resolve(execution.waitForCompletion());
+      const completionResult = execution.waitForCompletion();
+      if (!completionResult || typeof (completionResult as { then?: unknown }).then !== 'function') {
+        const completionMetadata =
+          completionResult && typeof completionResult === 'object'
+            ? Object.keys(completionResult as Record<string, unknown>)
+            : undefined;
+        this.logger.error('waitForCompletion returned non-promise value', {
+          executionId: execution.id,
+          resultType: typeof completionResult,
+          resultKeys: completionMetadata,
+        });
+        throw new TypeError(
+          `Workflow execution ${execution.id} returned non-promise from waitForCompletion`,
+        );
+      }
+      const completionPromise = Promise.resolve(completionResult);
       const abortPromise = new Promise<void>((resolve) => {
         const onAbort = (): void => {
           aborted = true;
