@@ -14,9 +14,10 @@ import type {
   WorkflowState,
   PaymentSettlement,
 } from '../../../src/workflows/types.js';
-import { requireFixturePaymentMessage, createPaymentRequirements } from './utils/payment.js';
 
 import { createClients } from './utils/clients.js';
+import { requireFixturePaymentMessage, createPaymentRequirements } from './utils/payment.js';
+
 
 // Constants
 const USDAI_TOKEN = {

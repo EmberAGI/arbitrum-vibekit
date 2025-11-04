@@ -1,4 +1,4 @@
-import { PaymentPayload, PaymentRequirements, Resource } from 'x402/types';
+import type { PaymentPayload, PaymentRequirements, Resource } from 'x402/types';
 import { useFacilitator } from 'x402/verify';
 
 import { serviceConfig } from '../../config.js';

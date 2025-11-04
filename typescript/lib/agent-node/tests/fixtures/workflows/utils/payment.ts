@@ -1,6 +1,7 @@
 import type { PaymentRequirements } from 'x402/types';
-import { X402_REQUIREMENTS_KEY, X402_STATUS_KEY } from '../../../../src/workflows/x402-types.js';
+
 import type { WorkflowState } from '../../../../src/workflows/types.js';
+import { X402_REQUIREMENTS_KEY, X402_STATUS_KEY } from '../../../../src/workflows/x402-types.js';
 
 /**
  * Local (test-fixture) version of createPaymentRequirements to avoid importing

@@ -1,5 +1,6 @@
 import type { TaskStatusUpdateEvent, TaskState } from '@a2a-js/sdk';
 import { z } from 'zod';
+
 import {
   X402_REQUIREMENTS_KEY,
   X402_STATUS_KEY,
