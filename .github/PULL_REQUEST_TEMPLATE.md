@@ -31,7 +31,7 @@ Code Quality
 
 - [ ] Code follows project conventions and style guidelines
 - [ ] TypeScript compilation passes (`pnpm build`)
-- [ ] Linting passes (`pnpm lint:check`)
+- [ ] Linting passes (`pnpm lint`)
 - [ ] All tests pass (`pnpm test`)
 - [ ] No `any` types introduced
 - [ ] Error handling implemented appropriately
