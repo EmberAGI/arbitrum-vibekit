@@ -52,6 +52,14 @@ Documentation scraping and evaluation tool using RAG (Retrieval Augmented Genera
 
 Real-world asset (RWA) investment platform integration providing access to Centrifuge's tokenized credit pools. Enables agents to discover pools, analyze yields, assess risks, track performance, and manage investment orders for institutional-grade credit opportunities.
 
+### Tatum MCP Server
+
+**Directory**: [`tatum-mcp-server/`](./tatum-mcp-server/)
+
+**Client agents**: Available to all agents through standardized blockchain data access
+
+Arbitrum blockchain data access through Tatum's high-performance RPC gateway. Provides real-time blockchain information with human-readable formatting including blocks, transactions, balances, and event logs. Features comprehensive security with allow-listed RPC methods and automatic decimal conversions.
+
 ## Build Your MCP Tool
 
 By contributing new MCP tools, you expand the capabilities available to all Vibekit agents. Your tools can enable new DeFi strategies or enhance existing functionality.
