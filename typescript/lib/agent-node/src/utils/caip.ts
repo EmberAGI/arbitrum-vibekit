@@ -78,9 +78,7 @@ export function parseCaip2(caip: string): Caip2 {
   const parts = caip.split(':');
 
   if (parts.length !== 3) {
-    throw new Error(
-      `Invalid CAIP-2 format: "${caip}". Expected format: namespace:chainId:address`,
-    );
+    throw new Error(`Invalid CAIP-2 format: "${caip}". Expected format: namespace:chainId:address`);
   }
 
   const namespace = parts[0];

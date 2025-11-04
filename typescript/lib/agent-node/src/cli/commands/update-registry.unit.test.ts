@@ -41,7 +41,9 @@ describe('updateRegistryCommand (from-config) - URL composition and chain target
     for (const dir of tempDirs) {
       try {
         rmSync(dir, { recursive: true, force: true });
-      } catch {}
+      } catch {
+        // Ignore cleanup errors
+      }
     }
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -170,7 +172,7 @@ describe('updateRegistryCommand (from-config) - URL composition and chain target
         if (callCount === 3) {
           throw new Error('TEST_ABORT');
         }
-        return originalBuilder(...(args));
+        return originalBuilder(...args);
       });
 
     vi.spyOn(registrationUtils, 'createIpfsFile').mockResolvedValue('ipfs://dummy');

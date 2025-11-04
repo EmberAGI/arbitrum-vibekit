@@ -6,10 +6,8 @@
 import type { Part } from '@a2a-js/sdk';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-
 import { ChatClient } from '../src/cli/chat/client.js';
 import { StreamRenderer } from '../src/cli/chat/renderer.js';
-import { ChatRepl } from '../src/cli/chat/repl.js';
 import type { ArtifactUpdateEvent, StatusUpdateEvent } from '../src/client/index.js';
 
 // Mock A2A SDK client

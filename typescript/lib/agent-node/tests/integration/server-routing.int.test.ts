@@ -39,7 +39,9 @@ describe('A2A Server - routing.agentCardPath and card.url composition', () => {
     if (configDir) {
       try {
         rmSync(configDir, { recursive: true, force: true });
-      } catch {}
+      } catch {
+        // Ignore cleanup errors
+      }
     }
   });
 

@@ -42,7 +42,9 @@ describe('registerCommand (from-config) - Agent Card URL composition', () => {
     for (const dir of tempDirs) {
       try {
         rmSync(dir, { recursive: true, force: true });
-      } catch {}
+      } catch {
+        // Ignore cleanup errors
+      }
     }
     vi.restoreAllMocks();
     vi.clearAllMocks();

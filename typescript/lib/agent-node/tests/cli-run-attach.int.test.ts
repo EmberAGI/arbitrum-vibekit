@@ -440,7 +440,7 @@ describe('agent run --attach command (integration)', () => {
       const originalPromise = Promise;
       global.Promise = class TestPromise<T> extends originalPromise<T> {
         constructor(
-          executor: (resolve: (value: T) => void, reject: (reason: unknown) => void) => void,
+          _executor: (resolve: (value: T) => void, reject: (reason: unknown) => void) => void,
         ) {
           // Don't call executor for indefinite wait promise
           super((resolve) => {
@@ -484,9 +484,7 @@ describe('agent run --attach command (integration)', () => {
       await runCommand({ configDir: tempConfigDir, attach: true });
 
       // Then: should log error and shut down
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to start chat'),
-      );
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to start chat'));
 
       // And should exit with error code
       expect(process.exit).toHaveBeenCalledWith(1);

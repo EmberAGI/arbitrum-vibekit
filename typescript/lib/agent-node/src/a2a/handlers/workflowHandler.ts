@@ -85,6 +85,16 @@ function extractErrorDetails(error: unknown): {
   };
 }
 
+const isPromiseLike = (value: unknown): value is PromiseLike<unknown> => {
+  if (typeof value !== 'object' && typeof value !== 'function') {
+    return false;
+  }
+  if (value === null) {
+    return false;
+  }
+  return typeof (value as { then?: unknown }).then === 'function';
+};
+
 /**
  * Handles workflow-related operations for the agent executor
  */
@@ -636,11 +646,9 @@ export class WorkflowHandler {
 
       let aborted = false;
       const completionResult = execution.waitForCompletion();
-      const thenCandidate = completionResult && (completionResult as { then?: unknown }).then;
-      const thenType = typeof thenCandidate;
-      if (!completionResult || thenType !== 'function') {
+      if (!isPromiseLike(completionResult)) {
         const completionMetadata =
-          completionResult && typeof completionResult === 'object'
+          typeof completionResult === 'object' && completionResult !== null
             ? Object.keys(completionResult as Record<string, unknown>)
             : undefined;
         this.logger.error('waitForCompletion returned non-thenable value', {
@@ -648,33 +656,27 @@ export class WorkflowHandler {
           pluginId: execution.pluginId,
           resultType: typeof completionResult,
           resultConstructor:
-            completionResult && typeof completionResult === 'object'
+            typeof completionResult === 'object' && completionResult !== null
               ? (completionResult as { constructor?: { name?: string } }).constructor?.name
               : undefined,
           resultKeys: completionMetadata,
-          thenType,
+          thenType:
+            typeof completionResult === 'object' && completionResult !== null
+              ? typeof (completionResult as { then?: unknown }).then
+              : undefined,
         });
         throw new TypeError(
           `Workflow execution ${execution.id} returned non-thenable from waitForCompletion`,
         );
       }
 
-      const completionPromise = new Promise<unknown>((resolve, reject) => {
-        try {
-          (thenCandidate as (onFulfilled: unknown, onRejected: unknown) => unknown).call(
-            completionResult,
-            resolve,
-            reject,
-          );
-        } catch (error) {
-          this.logger.error('waitForCompletion then invocation threw', error, {
-            executionId: execution.id,
-            pluginId: execution.pluginId,
-            resultType: typeof completionResult,
-            thenType,
-          });
-          reject(error);
-        }
+      const completionPromise = Promise.resolve(completionResult).catch((error) => {
+        this.logger.error('waitForCompletion rejected', error, {
+          executionId: execution.id,
+          pluginId: execution.pluginId,
+          resultType: typeof completionResult,
+        });
+        throw error instanceof Error ? error : new Error(String(error));
       });
       const abortPromise = new Promise<void>((resolve) => {
         const onAbort = (): void => {

@@ -112,7 +112,9 @@ describe('Routing Configuration Validator', () => {
         'Custom Agent Card path configured: "/api/v1/.well-known/agent-card.json"',
       );
       expect(result.warnings[0]).toContain('Default is "/.well-known/agent-card.json"');
-      expect(result.warnings[0]).toContain('Ensure your deployment serves the Agent Card at this path');
+      expect(result.warnings[0]).toContain(
+        'Ensure your deployment serves the Agent Card at this path',
+      );
     });
 
     it('should warn when using different custom Agent Card path', () => {
@@ -127,7 +129,9 @@ describe('Routing Configuration Validator', () => {
       // Then: should warn about customization
       expect(result.errors).toEqual([]);
       expect(result.warnings).toHaveLength(1);
-      expect(result.warnings[0]).toContain('Custom Agent Card path configured: "/custom/agent-info.json"');
+      expect(result.warnings[0]).toContain(
+        'Custom Agent Card path configured: "/custom/agent-info.json"',
+      );
     });
 
     it('should allow root path', () => {
@@ -159,9 +163,13 @@ describe('Routing Configuration Validator', () => {
       // Then: should warn about custom override
       expect(result.errors).toEqual([]);
       expect(result.warnings).toHaveLength(1);
-      expect(result.warnings[0]).toContain('Custom Agent Card origin configured: "https://api.example.com"');
+      expect(result.warnings[0]).toContain(
+        'Custom Agent Card origin configured: "https://api.example.com"',
+      );
       expect(result.warnings[0]).toContain('Default behavior uses the origin from `card.url`');
-      expect(result.warnings[0]).toContain('Ensure this override matches your deployment configuration');
+      expect(result.warnings[0]).toContain(
+        'Ensure this override matches your deployment configuration',
+      );
     });
 
     it('should warn for custom origin with port', () => {
@@ -176,7 +184,9 @@ describe('Routing Configuration Validator', () => {
       // Then: should warn about custom override (valid origin with port)
       expect(result.errors).toEqual([]);
       expect(result.warnings).toHaveLength(1);
-      expect(result.warnings[0]).toContain('Custom Agent Card origin configured: "https://api.example.com:8080"');
+      expect(result.warnings[0]).toContain(
+        'Custom Agent Card origin configured: "https://api.example.com:8080"',
+      );
     });
 
     it('should error when agentCardOrigin includes path', () => {
@@ -190,8 +200,12 @@ describe('Routing Configuration Validator', () => {
 
       // Then: should error about including path
       expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]).toContain('Invalid agentCardOrigin: "https://api.example.com/api/v1"');
-      expect(result.errors[0]).toContain('Must be an origin only (scheme + host + optional port), without path');
+      expect(result.errors[0]).toContain(
+        'Invalid agentCardOrigin: "https://api.example.com/api/v1"',
+      );
+      expect(result.errors[0]).toContain(
+        'Must be an origin only (scheme + host + optional port), without path',
+      );
       expect(result.errors[0]).toContain('Example: "https://example.com"');
     });
 
@@ -266,7 +280,9 @@ describe('Routing Configuration Validator', () => {
       // Then: should warn about custom override but not error
       expect(result.errors).toEqual([]);
       expect(result.warnings).toHaveLength(1);
-      expect(result.warnings[0]).toContain('Custom Agent Card origin configured: "http://localhost:3000"');
+      expect(result.warnings[0]).toContain(
+        'Custom Agent Card origin configured: "http://localhost:3000"',
+      );
     });
   });
 
@@ -284,7 +300,9 @@ describe('Routing Configuration Validator', () => {
       // Then: should return errors for both fields
       expect(result.errors).toHaveLength(2);
       expect(result.errors[0]).toContain('Invalid agentCardPath: "invalid-path"');
-      expect(result.errors[1]).toContain('Invalid agentCardOrigin: "https://api.example.com/with/path"');
+      expect(result.errors[1]).toContain(
+        'Invalid agentCardOrigin: "https://api.example.com/with/path"',
+      );
     });
 
     it('should warn for custom path and custom origin together', () => {

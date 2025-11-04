@@ -178,7 +178,14 @@
       </div>
     </div>
     <script type="module">
-      import { createPublicClient, createWalletClient, custom, defineChain, parseEventLogs, parseAbiItem } from 'https://esm.sh/viem@2.38.5';
+      import {
+        createPublicClient,
+        createWalletClient,
+        custom,
+        defineChain,
+        parseEventLogs,
+        parseAbiItem,
+      } from 'https://esm.sh/viem@2.38.5';
 
       let walletClient = null;
       let publicClient = null;
@@ -245,7 +252,12 @@
           },
           blockExplorers:
             metadata.blockExplorerUrls.length > 0
-              ? { default: { name: `${metadata.chainName} Explorer`, url: metadata.blockExplorerUrls[0] } }
+              ? {
+                  default: {
+                    name: `${metadata.chainName} Explorer`,
+                    url: metadata.blockExplorerUrls[0],
+                  },
+                }
               : undefined,
         });
       }
@@ -420,7 +432,10 @@
           ensureWalletClient(txData?.chainId ?? 1);
         }
         if (!walletClient) {
-          showStatus('Wallet client is not available. Ensure MetaMask is installed and try again.', 'error');
+          showStatus(
+            'Wallet client is not available. Ensure MetaMask is installed and try again.',
+            'error',
+          );
           button.disabled = false;
           button.textContent = 'Try Again';
           return null;
@@ -652,11 +667,11 @@
           if (agentIdInfo !== null) {
             const agentIdDisplay = agentIdInfo.decimal;
             const agentIdHex = agentIdInfo.hex;
-            const source = agentIdInfo.source === 'historical' ? ' (retrieved from historical logs)' : '';
-            const statusMessage =
-              agentIdInfo.isSafeInteger
-                ? `✅ Transaction confirmed! Your agent has been registered.<br><strong>Agent ID: ${agentIdDisplay}</strong>${source}<br><br>✅ Registration complete. You can now close this page.`
-                : `✅ Transaction confirmed! Your agent has been registered.<br><strong>Agent ID: ${agentIdDisplay}</strong><br><small>Hex: ${agentIdHex}</small>${source}<br><br>✅ Registration complete. You can now close this page.`;
+            const source =
+              agentIdInfo.source === 'historical' ? ' (retrieved from historical logs)' : '';
+            const statusMessage = agentIdInfo.isSafeInteger
+              ? `✅ Transaction confirmed! Your agent has been registered.<br><strong>Agent ID: ${agentIdDisplay}</strong>${source}<br><br>✅ Registration complete. You can now close this page.`
+              : `✅ Transaction confirmed! Your agent has been registered.<br><strong>Agent ID: ${agentIdDisplay}</strong><br><small>Hex: ${agentIdHex}</small>${source}<br><br>✅ Registration complete. You can now close this page.`;
             showStatus(statusMessage, 'success');
 
             // Log transaction details for debugging
@@ -686,7 +701,7 @@
               Transaction hash: <a href="${explorerUrl}" target="_blank">${txHash.slice(0, 10)}...</a><br>
               <button onclick="window.location.reload()">Search Again</button><br><br>
               Registration complete. You can close this page. Check your terminal for recovery instructions.`,
-              'error'
+              'error',
             );
 
             // Log full receipt for debugging
@@ -794,7 +809,10 @@
 
           // Fallback: Query historical logs if not found in receipt
           console.log('Agent ID not found in receipt, querying historical logs...');
-          showStatus('<span class="loader"></span> Searching for agent ID in historical logs...', 'info');
+          showStatus(
+            '<span class="loader"></span> Searching for agent ID in historical logs...',
+            'info',
+          );
 
           if (!publicClient) {
             console.error('Public client not available for historical query');
@@ -803,7 +821,7 @@
 
           // Parse the event signature for getLogs
           const registeredEventSignature = parseAbiItem(
-            'event Registered(uint256 indexed agentId, string tokenURI, address indexed owner)'
+            'event Registered(uint256 indexed agentId, string tokenURI, address indexed owner)',
           );
 
           // Query historical logs for this owner
@@ -823,7 +841,9 @@
             const agentIdBigInt = BigInt(mostRecentLog.args.agentId);
             const isSafeInteger = agentIdBigInt <= BigInt(Number.MAX_SAFE_INTEGER);
 
-            console.log(`Found ${logs.length} agent(s) for this owner, using most recent: ${agentIdBigInt.toString()}`);
+            console.log(
+              `Found ${logs.length} agent(s) for this owner, using most recent: ${agentIdBigInt.toString()}`,
+            );
 
             return {
               hex: `0x${agentIdBigInt.toString(16)}`,

@@ -379,7 +379,7 @@ describe('Init Command Integration', () => {
 
       // Modify a file to verify overwrite
       const agentMdPath = join(tempDir, 'agent.md');
-      const originalContent = readFileSync(agentMdPath, 'utf-8');
+      const _originalContent = readFileSync(agentMdPath, 'utf-8');
 
       // When: running init again with --force
       await initCommand({ target: tempDir, yes: true, force: true });

@@ -182,7 +182,9 @@ describe('Registration Utilities', () => {
       );
 
       // Then: endpoint should be the Agent Card URL
-      expect(result.endpoints[0]?.endpoint).toBe('https://cdn.example.com/.well-known/agent-card.json');
+      expect(result.endpoints[0]?.endpoint).toBe(
+        'https://cdn.example.com/.well-known/agent-card.json',
+      );
     });
 
     it('should build CAIP-2 agentRegistry reference for Ethereum mainnet', () => {
@@ -326,7 +328,9 @@ describe('Registration Utilities', () => {
       );
 
       // Then: endpoint should be the Agent Card URL
-      expect(result.endpoints[0]?.endpoint).toBe('https://cdn.custom.com/api/.well-known/agent-card.json');
+      expect(result.endpoints[0]?.endpoint).toBe(
+        'https://cdn.custom.com/api/.well-known/agent-card.json',
+      );
     });
 
     it('should have correct EIP-8004 registration type', () => {

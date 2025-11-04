@@ -3,7 +3,6 @@
  */
 
 import { readFileSync, rmSync, writeFileSync } from 'fs';
-import { tmpdir } from 'os';
 import { join } from 'path';
 
 import matter from 'gray-matter';
@@ -20,7 +19,9 @@ describe('print-config ERC-8004 visibility', () => {
     for (const dir of tempDirs) {
       try {
         rmSync(dir, { recursive: true, force: true });
-      } catch {}
+      } catch {
+        // Ignore cleanup errors
+      }
     }
     tempDirs.length = 0;
   });

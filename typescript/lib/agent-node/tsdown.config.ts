@@ -1,5 +1,5 @@
-import copy from 'rollup-plugin-copy'
-import { defineConfig } from 'tsdown'
+import copy from 'rollup-plugin-copy';
+import { defineConfig } from 'tsdown';
 
 export default defineConfig({
   // Entry point - use glob pattern to include all source files except tests
@@ -41,4 +41,4 @@ export default defineConfig({
 
   // Target ES2022 (matching tsconfig)
   target: 'es2022',
-})
+});

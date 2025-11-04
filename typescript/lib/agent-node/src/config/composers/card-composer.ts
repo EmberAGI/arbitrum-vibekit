@@ -512,7 +512,9 @@ function transformProvider(
  * @param erc8004Config - ERC-8004 configuration from agent base
  * @returns Extension object or undefined if not enabled
  */
-function buildERC8004Extension(erc8004Config: ERC8004Config | undefined): AgentExtension | undefined {
+function buildERC8004Extension(
+  erc8004Config: ERC8004Config | undefined,
+): AgentExtension | undefined {
   if (!erc8004Config || !erc8004Config.enabled) {
     return undefined;
   }

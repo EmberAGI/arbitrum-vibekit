@@ -158,7 +158,10 @@ describe('ERC-8004 Configuration Validator', () => {
       // Given: local card URL and production environment
       const config: ERC8004Config = {
         enabled: true,
-        canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+        canonical: {
+          chainId: 42161,
+          operatorAddress: '0x1234567890123456789012345678901234567890',
+        },
         mirrors: [],
         identityRegistries: {},
         registrations: {},
@@ -182,7 +185,10 @@ describe('ERC-8004 Configuration Validator', () => {
       // Given: local card URL and development environment
       const config: ERC8004Config = {
         enabled: true,
-        canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+        canonical: {
+          chainId: 42161,
+          operatorAddress: '0x1234567890123456789012345678901234567890',
+        },
         mirrors: [],
         identityRegistries: {},
         registrations: {},
@@ -234,7 +240,10 @@ describe('ERC-8004 Configuration Validator', () => {
       // Given: public card URL and production environment
       const config: ERC8004Config = {
         enabled: true,
-        canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+        canonical: {
+          chainId: 42161,
+          operatorAddress: '0x1234567890123456789012345678901234567890',
+        },
         mirrors: [],
         identityRegistries: {},
         registrations: {},
@@ -260,7 +269,10 @@ describe('ERC-8004 Configuration Validator', () => {
       // Given: identity registries with zero addresses
       const config: ERC8004Config = {
         enabled: true,
-        canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+        canonical: {
+          chainId: 42161,
+          operatorAddress: '0x1234567890123456789012345678901234567890',
+        },
         mirrors: [],
         identityRegistries: {
           '1': '0x0000000000000000000000000000000000000000',
@@ -288,7 +300,10 @@ describe('ERC-8004 Configuration Validator', () => {
       // Given: identity registries with real addresses (no zero-address)
       const config: ERC8004Config = {
         enabled: true,
-        canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+        canonical: {
+          chainId: 42161,
+          operatorAddress: '0x1234567890123456789012345678901234567890',
+        },
         mirrors: [],
         identityRegistries: {
           '1': '0x1111111111111111111111111111111111111111',
@@ -342,7 +357,10 @@ describe('ERC-8004 Configuration Validator', () => {
       // Given: no mirrors configured
       const config: ERC8004Config = {
         enabled: true,
-        canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+        canonical: {
+          chainId: 42161,
+          operatorAddress: '0x1234567890123456789012345678901234567890',
+        },
         mirrors: [],
         identityRegistries: {},
         registrations: {},
@@ -355,7 +373,9 @@ describe('ERC-8004 Configuration Validator', () => {
 
       // Then: should warn about missing mirrors
       expect(result.errors).toEqual([]);
-      expect(result.warnings).toContainEqual(expect.stringContaining('No mirror chains configured'));
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining('No mirror chains configured'),
+      );
       expect(result.warnings).toContainEqual(
         expect.stringContaining('Consider adding `erc8004.mirrors`'),
       );
@@ -365,7 +385,10 @@ describe('ERC-8004 Configuration Validator', () => {
       // Given: mirrors configured
       const config: ERC8004Config = {
         enabled: true,
-        canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+        canonical: {
+          chainId: 42161,
+          operatorAddress: '0x1234567890123456789012345678901234567890',
+        },
         mirrors: [{ chainId: 1 }, { chainId: 8453 }],
         identityRegistries: {},
         registrations: {},
@@ -378,7 +401,9 @@ describe('ERC-8004 Configuration Validator', () => {
 
       // Then: should not warn about missing mirrors
       expect(result.errors).toEqual([]);
-      const mirrorWarnings = result.warnings.filter((w) => w.includes('No mirror chains configured'));
+      const mirrorWarnings = result.warnings.filter((w) =>
+        w.includes('No mirror chains configured'),
+      );
       expect(mirrorWarnings).toHaveLength(0);
     });
 
@@ -386,7 +411,10 @@ describe('ERC-8004 Configuration Validator', () => {
       // Given: mirror with chainId = 0
       const config: ERC8004Config = {
         enabled: true,
-        canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+        canonical: {
+          chainId: 42161,
+          operatorAddress: '0x1234567890123456789012345678901234567890',
+        },
         mirrors: [{ chainId: 0 }],
         identityRegistries: {},
         registrations: {},
@@ -407,7 +435,10 @@ describe('ERC-8004 Configuration Validator', () => {
       // Given: mirror with negative chainId
       const config: ERC8004Config = {
         enabled: true,
-        canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+        canonical: {
+          chainId: 42161,
+          operatorAddress: '0x1234567890123456789012345678901234567890',
+        },
         mirrors: [{ chainId: 1 }, { chainId: -5 }],
         identityRegistries: {},
         registrations: {},
@@ -427,7 +458,10 @@ describe('ERC-8004 Configuration Validator', () => {
       // Given: mirror with float chainId
       const config: ERC8004Config = {
         enabled: true,
-        canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+        canonical: {
+          chainId: 42161,
+          operatorAddress: '0x1234567890123456789012345678901234567890',
+        },
         mirrors: [{ chainId: 1.5 }],
         identityRegistries: {},
         registrations: {},
@@ -447,7 +481,10 @@ describe('ERC-8004 Configuration Validator', () => {
       // Given: multiple mirrors with invalid chainIds
       const config: ERC8004Config = {
         enabled: true,
-        canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+        canonical: {
+          chainId: 42161,
+          operatorAddress: '0x1234567890123456789012345678901234567890',
+        },
         mirrors: [{ chainId: 0 }, { chainId: -1 }, { chainId: 8453 }], // Two invalid, one valid
         identityRegistries: {},
         registrations: {},
@@ -490,7 +527,9 @@ describe('ERC-8004 Configuration Validator', () => {
       expect(result.warnings).toContainEqual(
         expect.stringContaining('Canonical operator address not configured'),
       );
-      expect(result.warnings).toContainEqual(expect.stringContaining('No mirror chains configured'));
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining('No mirror chains configured'),
+      );
       expect(result.warnings).toContainEqual(
         expect.stringContaining('Identity registries use zero-address placeholders'),
       );
@@ -500,7 +539,10 @@ describe('ERC-8004 Configuration Validator', () => {
       // Given: fully valid ERC-8004 config
       const config: ERC8004Config = {
         enabled: true,
-        canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+        canonical: {
+          chainId: 42161,
+          operatorAddress: '0x1234567890123456789012345678901234567890',
+        },
         mirrors: [{ chainId: 1 }, { chainId: 8453 }],
         identityRegistries: {
           '1': '0x1111111111111111111111111111111111111111',

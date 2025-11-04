@@ -1,6 +1,31 @@
 import { readFileSync, writeFileSync } from 'node:fs';
+
 import matter from 'gray-matter';
 import { PinataSDK } from 'pinata';
+
+/**
+ * Type definitions for agent frontmatter data
+ */
+interface RegistrationEntry {
+  pendingRegistrationUri?: string;
+  pendingUpdateUri?: string;
+  registrationUri?: string;
+  agentId?: string;
+  agentIdString?: string;
+  txHash?: string;
+  pendingAgentId?: string;
+  image?: string;
+  [key: string]: unknown; // Allow additional properties
+}
+
+interface ERC8004Data {
+  registrations?: Record<string, RegistrationEntry>;
+}
+
+interface AgentFrontmatterData {
+  erc8004?: ERC8004Data;
+  [key: string]: unknown; // Allow additional properties
+}
 
 /**
  * Zero address placeholder for undeployed contracts
@@ -182,17 +207,26 @@ export async function createIpfsFile(fileContents: unknown): Promise<string> {
  * @param uri The IPFS URI to save
  * @param isUpdate Whether this is for an update (vs initial registration)
  */
-export function savePendingUri(agentPath: string, chainKey: string, uri: string, isUpdate = false): void {
+export function savePendingUri(
+  agentPath: string,
+  chainKey: string,
+  uri: string,
+  isUpdate = false,
+): void {
   const agentRaw = readFileSync(agentPath, 'utf-8');
   const parsed = matter(agentRaw);
-  const data = parsed.data as Record<string, any>;
+  const data = parsed.data as AgentFrontmatterData;
 
   // Ensure ERC8004 structure exists
-  data['erc8004'] = data['erc8004'] ?? {};
-  data['erc8004']['registrations'] = data['erc8004']['registrations'] ?? {};
+  if (!data.erc8004) {
+    data.erc8004 = {};
+  }
+  if (!data.erc8004.registrations) {
+    data.erc8004.registrations = {};
+  }
 
   // Get or create registration entry for this chain
-  const existing = data['erc8004']['registrations'][chainKey] ?? {};
+  const existing = data.erc8004.registrations[chainKey] ?? {};
 
   // Save the pending URI
   if (isUpdate) {
@@ -201,7 +235,7 @@ export function savePendingUri(agentPath: string, chainKey: string, uri: string,
     existing.pendingRegistrationUri = uri;
   }
 
-  data['erc8004']['registrations'][chainKey] = existing;
+  data.erc8004.registrations[chainKey] = existing;
 
   // Write back to file
   const updated = matter.stringify(parsed.content, data);
@@ -215,20 +249,24 @@ export function savePendingUri(agentPath: string, chainKey: string, uri: string,
  * @param isUpdate Whether to look for update URI (vs registration URI)
  * @returns The pending URI if found, undefined otherwise
  */
-export function getPendingUri(agentPath: string, chainKey: string, isUpdate = false): string | undefined {
+export function getPendingUri(
+  agentPath: string,
+  chainKey: string,
+  isUpdate = false,
+): string | undefined {
   try {
     const agentRaw = readFileSync(agentPath, 'utf-8');
     const parsed = matter(agentRaw);
-    const data = parsed.data as Record<string, any>;
+    const data = parsed.data as AgentFrontmatterData;
 
-    const registrations = data?.['erc8004']?.['registrations'];
+    const registrations = data?.erc8004?.registrations;
     if (!registrations || !registrations[chainKey]) {
       return undefined;
     }
 
     const entry = registrations[chainKey];
     return isUpdate ? entry.pendingUpdateUri : entry.pendingRegistrationUri;
-  } catch (err) {
+  } catch (_err) {
     // File might not exist or have valid structure
     return undefined;
   }
@@ -244,9 +282,9 @@ export function clearPendingUri(agentPath: string, chainKey: string, isUpdate = 
   try {
     const agentRaw = readFileSync(agentPath, 'utf-8');
     const parsed = matter(agentRaw);
-    const data = parsed.data as Record<string, any>;
+    const data = parsed.data as AgentFrontmatterData;
 
-    const registrations = data?.['erc8004']?.['registrations'];
+    const registrations = data?.erc8004?.registrations;
     if (!registrations || !registrations[chainKey]) {
       return;
     }
@@ -266,7 +304,7 @@ export function clearPendingUri(agentPath: string, chainKey: string, isUpdate = 
     // Write back to file
     const updated = matter.stringify(parsed.content, data);
     writeFileSync(agentPath, updated, 'utf-8');
-  } catch (err) {
+  } catch (_err) {
     // Ignore errors - might not exist
   }
 }

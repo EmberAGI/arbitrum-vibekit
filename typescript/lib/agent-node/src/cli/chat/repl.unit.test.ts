@@ -131,7 +131,8 @@ describe('ChatRepl', () => {
         prompt: vi.fn(),
       };
 
-      const { createInterface } = await import('node:readline'); (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
+      const { createInterface } = await import('node:readline');
+      (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
         mockRl as unknown as ReadlineInterface,
       );
 
@@ -139,10 +140,7 @@ describe('ChatRepl', () => {
       await repl.start();
 
       // Then: should display connection info
-      expect(consoleLogSpy).toHaveBeenCalledWith(
-        expect.anything(),
-        'http://localhost:3000',
-      );
+      expect(consoleLogSpy).toHaveBeenCalledWith(expect.anything(), 'http://localhost:3000');
     });
 
     it('hides connection info when showConnectionInfo is false', async () => {
@@ -162,7 +160,8 @@ describe('ChatRepl', () => {
         prompt: vi.fn(),
       };
 
-      const { createInterface } = await import('node:readline'); (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
+      const { createInterface } = await import('node:readline');
+      (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
         mockRl as unknown as ReadlineInterface,
       );
 
@@ -194,7 +193,8 @@ describe('ChatRepl', () => {
         prompt: vi.fn(),
       };
 
-      const { createInterface } = await import('node:readline'); (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
+      const { createInterface } = await import('node:readline');
+      (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
         mockRl as unknown as ReadlineInterface,
       );
 
@@ -233,7 +233,8 @@ describe('ChatRepl', () => {
         prompt: vi.fn(),
       };
 
-      const { createInterface } = await import('node:readline'); (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
+      const { createInterface } = await import('node:readline');
+      (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
         mockRl as unknown as ReadlineInterface,
       );
 
@@ -303,7 +304,8 @@ describe('ChatRepl', () => {
         prompt: vi.fn(),
       };
 
-      const { createInterface } = await import('node:readline'); (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
+      const { createInterface } = await import('node:readline');
+      (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
         mockRl as unknown as ReadlineInterface,
       );
 
@@ -370,7 +372,8 @@ describe('ChatRepl', () => {
         prompt: vi.fn(),
       };
 
-      const { createInterface } = await import('node:readline'); (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
+      const { createInterface } = await import('node:readline');
+      (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
         mockRl as unknown as ReadlineInterface,
       );
 
@@ -410,11 +413,11 @@ describe('ChatRepl', () => {
         onExit: onExitSpy,
       });
 
-      let closeCallback: (() => void) | undefined;
+      let _closeCallback: (() => void) | undefined;
       const mockRl = {
         on: vi.fn((event: string, callback: () => void) => {
           if (event === 'close') {
-            closeCallback = callback;
+            _closeCallback = callback;
             setImmediate(callback);
           }
           return mockRl;
@@ -423,7 +426,8 @@ describe('ChatRepl', () => {
         prompt: vi.fn(),
       };
 
-      const { createInterface } = await import('node:readline'); (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
+      const { createInterface } = await import('node:readline');
+      (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
         mockRl as unknown as ReadlineInterface,
       );
 
@@ -453,7 +457,8 @@ describe('ChatRepl', () => {
         prompt: vi.fn(),
       };
 
-      const { createInterface } = await import('node:readline'); (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
+      const { createInterface } = await import('node:readline');
+      (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
         mockRl as unknown as ReadlineInterface,
       );
 
@@ -488,7 +493,8 @@ describe('ChatRepl', () => {
         prompt: vi.fn(),
       };
 
-      const { createInterface } = await import('node:readline'); (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
+      const { createInterface } = await import('node:readline');
+      (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
         mockRl as unknown as ReadlineInterface,
       );
 
@@ -533,7 +539,8 @@ describe('ChatRepl', () => {
         prompt: vi.fn(),
       };
 
-      const { createInterface } = await import('node:readline'); (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
+      const { createInterface } = await import('node:readline');
+      (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
         mockRl as unknown as ReadlineInterface,
       );
 
@@ -577,7 +584,8 @@ describe('ChatRepl', () => {
         prompt: vi.fn(),
       };
 
-      const { createInterface } = await import('node:readline'); (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
+      const { createInterface } = await import('node:readline');
+      (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
         mockRl as unknown as ReadlineInterface,
       );
 
@@ -585,10 +593,7 @@ describe('ChatRepl', () => {
       const exitCode = await repl.start();
 
       // Then: should log error but still complete
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.any(Error),
-      );
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.anything(), expect.any(Error));
 
       // And should still return success exit code (error in cleanup, not REPL itself)
       expect(exitCode).toBe(0);
@@ -611,7 +616,8 @@ describe('ChatRepl', () => {
         prompt: vi.fn(),
       };
 
-      const { createInterface } = await import('node:readline'); (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
+      const { createInterface } = await import('node:readline');
+      (createInterface as ReturnType<typeof vi.fn>).mockReturnValue(
         mockRl as unknown as ReadlineInterface,
       );
 

@@ -2,6 +2,8 @@ export { z } from 'zod';
 
 export type { Artifact, Message } from '@a2a-js/sdk';
 
+export { WorkflowRuntime } from './runtime.js';
+
 export {
   WorkflowStateSchema,
   type PauseInfo,

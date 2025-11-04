@@ -35,7 +35,10 @@ describe('Agent Card ERC-8004 Extension Integration', () => {
     registrations?: Record<string, { agentId?: number; registrationUri?: string }>;
     supportedTrust?: string[];
   }): string {
-    const tempDir = join(tmpdir(), `agent-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    const tempDir = join(
+      tmpdir(),
+      `agent-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
     mkdirSync(tempDir, { recursive: true });
     tempDirs.push(tempDir);
 
@@ -144,7 +147,10 @@ Test agent prompt.
       // Given: agent config with ERC-8004 enabled
       const configDir = createConfigWithErc8004({
         enabled: true,
-        canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+        canonical: {
+          chainId: 42161,
+          operatorAddress: '0x1234567890123456789012345678901234567890',
+        },
       });
       const manifestPath = join(configDir, 'agent.manifest.json');
 
@@ -167,7 +173,10 @@ Test agent prompt.
       // Given: ERC-8004 config with canonical chain and operator address
       const configDir = createConfigWithErc8004({
         enabled: true,
-        canonical: { chainId: 42161, operatorAddress: '0xabcdef1234567890abcdef1234567890abcdef12' },
+        canonical: {
+          chainId: 42161,
+          operatorAddress: '0xabcdef1234567890abcdef1234567890abcdef12',
+        },
       });
       const manifestPath = join(configDir, 'agent.manifest.json');
 
@@ -395,7 +404,10 @@ Test agent prompt.
       // Given: complete ERC-8004 configuration
       const configDir = createConfigWithErc8004({
         enabled: true,
-        canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+        canonical: {
+          chainId: 42161,
+          operatorAddress: '0x1234567890123456789012345678901234567890',
+        },
         mirrors: [{ chainId: 1 }, { chainId: 8453 }],
         identityRegistries: {
           '42161': '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
@@ -428,8 +440,12 @@ Test agent prompt.
 
       // Verify param values
       const params = erc8004Ext?.params as Record<string, unknown>;
-      expect(params['canonicalCaip10']).toBe('eip155:42161:0x1234567890123456789012345678901234567890');
-      expect(params['identityRegistry']).toBe('eip155:42161:0xabcdefabcdefabcdefabcdefabcdefabcdefabcd');
+      expect(params['canonicalCaip10']).toBe(
+        'eip155:42161:0x1234567890123456789012345678901234567890',
+      );
+      expect(params['identityRegistry']).toBe(
+        'eip155:42161:0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+      );
       expect(params['registrationUri']).toBe('ipfs://QmFullConfig');
       expect(params['supportedTrust']).toEqual(['dns', 'ens']);
     });
@@ -438,7 +454,10 @@ Test agent prompt.
       // Given: fully configured ERC-8004 setup
       const configDir = createConfigWithErc8004({
         enabled: true,
-        canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+        canonical: {
+          chainId: 42161,
+          operatorAddress: '0x1234567890123456789012345678901234567890',
+        },
         mirrors: [{ chainId: 1 }],
         identityRegistries: {
           '42161': '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',

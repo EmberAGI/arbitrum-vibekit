@@ -3,7 +3,7 @@
  * Tests client-only chat mode connecting to a running agent
  */
 
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -189,7 +189,9 @@ describe('agent chat command (integration)', () => {
       // Mock Logger.setFileSink
       const { Logger } = await import('../src/utils/logger.js');
       const setFileSinkSpy = vi.spyOn(Logger, 'setFileSink').mockResolvedValue();
-      const setConsoleEnabledSpy = vi.spyOn(Logger, 'setConsoleEnabled').mockImplementation(() => {});
+      const setConsoleEnabledSpy = vi
+        .spyOn(Logger, 'setConsoleEnabled')
+        .mockImplementation(() => {});
 
       // When: running chat command with logDir
       await chatCommand({ logDir });
@@ -253,7 +255,7 @@ describe('agent chat command (integration)', () => {
 
       // Then: should create a JSONL file with structured log entries
       const { readdirSync, readFileSync } = await import('fs');
-      const files = readdirSync(logDir).filter(f => f.endsWith('.jsonl'));
+      const files = readdirSync(logDir).filter((f) => f.endsWith('.jsonl'));
       expect(files.length).toBe(1);
 
       const logContent = readFileSync(join(logDir, files[0]), 'utf-8');
@@ -262,7 +264,7 @@ describe('agent chat command (integration)', () => {
 
       // Verify it's valid JSONL format
       const lines = logContent.trim().split('\n');
-      lines.forEach(line => {
+      lines.forEach((line) => {
         expect(() => JSON.parse(line)).not.toThrow();
       });
     });

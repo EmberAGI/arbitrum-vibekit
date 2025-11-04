@@ -268,7 +268,10 @@ describe('composeAgentCard', () => {
           ...baseAgent.frontmatter,
           erc8004: {
             enabled: true,
-            canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+            canonical: {
+              chainId: 42161,
+              operatorAddress: '0x1234567890123456789012345678901234567890',
+            },
             mirrors: [{ chainId: 1 }, { chainId: 8453 }],
             identityRegistries: {
               '42161': '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
@@ -301,7 +304,10 @@ describe('composeAgentCard', () => {
           ...baseAgent.frontmatter,
           erc8004: {
             enabled: true,
-            canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+            canonical: {
+              chainId: 42161,
+              operatorAddress: '0x1234567890123456789012345678901234567890',
+            },
             mirrors: [],
             identityRegistries: {},
             registrations: {},
@@ -553,7 +559,10 @@ describe('composeAgentCard', () => {
           ...baseAgent.frontmatter,
           erc8004: {
             enabled: true,
-            canonical: { chainId: 42161, operatorAddress: '0x1234567890123456789012345678901234567890' },
+            canonical: {
+              chainId: 42161,
+              operatorAddress: '0x1234567890123456789012345678901234567890',
+            },
             mirrors: [{ chainId: 1 }, { chainId: 8453 }],
             identityRegistries: {
               '42161': '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',

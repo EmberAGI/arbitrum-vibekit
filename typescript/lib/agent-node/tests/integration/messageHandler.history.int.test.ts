@@ -11,6 +11,8 @@ import type { TaskStatusUpdateEvent } from '@a2a-js/sdk';
 import { InMemoryTaskStore } from '@a2a-js/sdk/server';
 import { describe, it, expect, beforeEach } from 'vitest';
 
+import type { AIHandler } from '../../src/a2a/handlers/aiHandler.js';
+import type { MessageHandler } from '../../src/a2a/handlers/messageHandler.js';
 import { ContextManager } from '../../src/a2a/sessions/manager.js';
 import type { AIService } from '../../src/ai/service.js';
 import { WorkflowRuntime } from '../../src/workflow/runtime.js';
@@ -29,10 +31,8 @@ describe('MessageHandler History Integration', () => {
   let eventBusManager: RecordingEventBusManager;
   let workflowRuntime: WorkflowRuntime;
   let taskStore: InMemoryTaskStore;
-  let messageHandler: InstanceType<
-    typeof import('../../src/a2a/handlers/messageHandler.js').MessageHandler
-  >;
-  let aiHandler: InstanceType<typeof import('../../src/a2a/handlers/aiHandler.js').AIHandler>;
+  let messageHandler: MessageHandler;
+  let aiHandler: AIHandler;
 
   beforeEach(async () => {
     // Use real ContextManager for history testing

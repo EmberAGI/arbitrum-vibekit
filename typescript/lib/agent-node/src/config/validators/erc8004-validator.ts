@@ -115,7 +115,9 @@ export function validateERC8004Config(
       if (!mirror) continue;
 
       if (!Number.isInteger(mirror.chainId) || mirror.chainId <= 0) {
-        errors.push(`Invalid mirror chainId at index ${i}: ${mirror.chainId}. Must be a positive integer.`);
+        errors.push(
+          `Invalid mirror chainId at index ${i}: ${mirror.chainId}. Must be a positive integer.`,
+        );
       }
     }
   }
