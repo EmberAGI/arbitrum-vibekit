@@ -19,7 +19,7 @@
     "docker:compose:up": "docker compose up --build --no-log-prefix",
     "docker:compose:build": "docker compose build --no-cache",
     "docker:compose:down": "docker compose down",
-    "lint": "pnpm -r --filter '!./community/**' run lint",
+    "lint": "pnpm -r --filter '!./community/**' --filter '!test-utils' run lint",
     "lint:fix": "pnpm recursive run lint:fix",
     "test": "pnpm run test:ci",
     "test:ci": "pnpm --filter '!monorepo-root' --workspace-concurrency=1 --sort run test:ci && pnpm run test:anvil",
