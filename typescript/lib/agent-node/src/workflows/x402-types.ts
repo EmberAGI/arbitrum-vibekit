@@ -1,10 +1,11 @@
+import type {
+  PaymentRequirements,
+  Network,
+  PaymentPayload} from 'x402/types';
 import {
   NetworkSchema as x402NetworkSchema,
-  PaymentRequirements,
   PaymentRequirementsSchema as x402PaymentRequirementsSchema,
-  Network,
-  PaymentPayloadSchema as x402PayloadPaymentSchema,
-  PaymentPayload,
+  PaymentPayloadSchema as x402PayloadPaymentSchema
 } from 'x402/types';
 import { z } from 'zod';
 
@@ -27,6 +28,51 @@ export const X402_PAYMENT_PAYLOAD_KEY = 'x402.payment.payload';
  * Key for x402 payment receipts in metadata
  */
 export const X402_RECEIPTS_KEY = 'x402.payment.receipts';
+
+/**
+ * Key for x402 payment error code in metadata
+ */
+export const X402_ERROR_KEY = 'x402.payment.error';
+
+/**
+ * Key for x402 payment failure stage in metadata
+ */
+export const X402_FAILURE_STAGE_KEY = 'x402.payment.failure_stage';
+
+/**
+ * Failure stages for x402 payment processing
+ */
+export type X402FailureStage =
+  | 'requirements-load'
+  | 'payload-parse'
+  | 'verify'
+  | 'settle'
+  | 'internal-error';
+
+/**
+ * Payment failure receipt following x402 spec
+ */
+export interface X402FailureReceipt {
+  success: false;
+  errorReason: string;
+  network?: string;
+  transaction?: string;
+}
+
+/**
+ * Complete failure metadata structure following x402 spec
+ */
+export interface X402FailureMetadata extends Record<string, unknown> {
+  [X402_STATUS_KEY]: 'payment-failed';
+  [X402_ERROR_KEY]: string;
+  [X402_FAILURE_STAGE_KEY]: X402FailureStage;
+  [X402_RECEIPTS_KEY]: X402FailureReceipt[];
+  http_status?: number;
+  facilitator_url?: string;
+  facilitator_response?: unknown;
+  payment_requirements?: PaymentRequirements;
+  payment_payload?: PaymentPayload;
+}
 
 /**
  * Payment scheme options - uses a flexible record schema that infers to PaymentRequirements type
