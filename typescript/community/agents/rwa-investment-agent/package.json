@@ -14,7 +14,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "docker:compose:up": "docker compose up --build --no-log-prefix",
-    "docker:compose:down": "docker compose down"
+    "docker:compose:down": "docker compose down",
+    "test:ci": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:",

@@ -12,7 +12,8 @@
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
-    "inspect:npx": "pnpm run build && pnpm dlx @modelcontextprotocol/inspector node ./dist/index.js"
+    "inspect:npx": "pnpm run build && pnpm dlx @modelcontextprotocol/inspector node ./dist/index.js",
+    "test:ci": "echo \"No CI tests defined for ${npm_package_name}\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
@@ -29,5 +30,3 @@
     "typescript": "catalog:"
   }
 }
-
-

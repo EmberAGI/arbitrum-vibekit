@@ -15,7 +15,8 @@
     "lint:fix": "eslint src --fix",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "watch": "nodemon --watch 'src/**/*.ts' --exec 'tsx' src/index.ts"
+    "watch": "nodemon --watch 'src/**/*.ts' --exec 'tsx' src/index.ts",
+    "test:ci": "echo \"No CI tests defined for ${npm_package_name}\""
   },
   "keywords": [
     "mcp",

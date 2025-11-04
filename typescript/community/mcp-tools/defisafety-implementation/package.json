@@ -10,7 +10,8 @@
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "clean": "rimraf dist",
-    "test": "vitest"
+    "test": "vitest",
+    "test:ci": "vitest run --passWithNoTests"
   },
   "keywords": [
     "mcp",

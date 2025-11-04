@@ -17,7 +17,8 @@
     "docker:compose:up": "docker compose up --build --no-log-prefix",
     "docker:compose:down": "docker compose down",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\"",
+    "test:ci": "echo \"No CI tests defined for ${npm_package_name}\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
