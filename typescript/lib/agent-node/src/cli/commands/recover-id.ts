@@ -1,17 +1,18 @@
-import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import matter from 'gray-matter';
 import {
   createPublicClient,
   http,
   parseAbiItem,
   type Address,
+  type Chain,
   type PublicClient,
 } from 'viem';
 
 import { loadAgentBase } from '../../config/loaders/agent-loader.js';
 import { resolveConfigDirectory } from '../../config/runtime/config-dir.js';
+import type { ERC8004RegistrationEntry } from '../../config/schemas/agent.schema.js';
+import { ensureErc8004Config, updateAgentFrontmatter } from '../utils/frontmatter.js';
 import { CONTRACT_ADDRESSES, isSupportedChain } from '../utils/registration.js';
 
 /**
@@ -26,8 +27,8 @@ export type RecoverIdCommandOptions = {
 /**
  * Get chain configuration for viem.
  */
-function getChainConfig(chainId: number) {
-  const chainConfigs: Record<number, any> = {
+function getChainConfig(chainId: number): Chain | undefined {
+  const chainConfigs: Record<number, Chain> = {
     1: {
       id: 1,
       name: 'Ethereum Mainnet',
@@ -159,7 +160,7 @@ export async function recoverIdCommand(options: RecoverIdCommandOptions): Promis
 
   // Find chains with pending agent IDs
   const pendingChains = Object.entries(registrations).filter(
-    ([, reg]: [string, any]) => reg.pendingAgentId === true,
+    ([, reg]) => reg.pendingAgentId === true,
   );
 
   if (pendingChains.length === 0) {
@@ -181,7 +182,6 @@ export async function recoverIdCommand(options: RecoverIdCommandOptions): Promis
 
   // Process each chain
   for (const [chainKey, registration] of chainsToRecover) {
-    const reg = registration as any;
     const chainId = parseInt(chainKey);
     if (!isSupportedChain(chainId)) {
       console.log(`⚠️  Skipping unsupported chain ${chainKey}`);
@@ -210,10 +210,10 @@ export async function recoverIdCommand(options: RecoverIdCommandOptions): Promis
     // We'll need to get this from the transaction if available
     let ownerAddress: Address | null = null;
 
-    if (reg.txHash) {
+    if (registration.txHash) {
       try {
         const tx = await client.getTransaction({
-          hash: reg.txHash as `0x${string}`,
+          hash: registration.txHash as `0x${string}`,
         });
         ownerAddress = tx.from;
         console.log(`Using owner address from transaction: ${ownerAddress}`);
@@ -232,7 +232,7 @@ export async function recoverIdCommand(options: RecoverIdCommandOptions): Promis
       client,
       contractAddress,
       ownerAddress,
-      reg.txHash || options.txHash,
+      registration.txHash || options.txHash,
     );
 
     if (result) {
@@ -241,37 +241,31 @@ export async function recoverIdCommand(options: RecoverIdCommandOptions): Promis
 
       // Update configuration
       try {
-        const agentRaw = readFileSync(agentPath, 'utf-8');
-        const parsed = matter(agentRaw);
-        const data = parsed.data as Record<string, any>;
+        updateAgentFrontmatter(agentPath, (draft) => {
+          const erc8004Config = ensureErc8004Config(draft);
+          const existing: ERC8004RegistrationEntry = erc8004Config.registrations[chainKey] ?? {};
+          const parsedAgentId = Number(agentId);
 
-        data['erc8004'] = data['erc8004'] ?? {};
-        data['erc8004']['registrations'] = data['erc8004']['registrations'] ?? {};
+          if (Number.isSafeInteger(parsedAgentId) && parsedAgentId >= 0) {
+            existing.agentId = parsedAgentId;
+          } else {
+            console.log(
+              `⚠️  Agent ID ${agentId} exceeds JavaScript safe integer range. Storing as string.`,
+            );
+            existing.agentIdString = agentId;
+          }
 
-        const existing = data['erc8004']['registrations'][chainKey] ?? {};
-        const parsedAgentId = Number(agentId);
+          // Update txHash if we found a different one
+          if (result.txHash && result.txHash !== existing.txHash) {
+            existing.txHash = result.txHash;
+          }
 
-        if (Number.isSafeInteger(parsedAgentId) && parsedAgentId >= 0) {
-          existing.agentId = parsedAgentId;
-        } else {
-          console.log(
-            `⚠️  Agent ID ${agentId} exceeds JavaScript safe integer range. Storing as string.`,
-          );
-          existing.agentIdString = agentId;
-        }
+          // Remove pending flag
+          delete existing.pendingAgentId;
 
-        // Update txHash if we found a different one
-        if (result.txHash && result.txHash !== existing.txHash) {
-          existing.txHash = result.txHash;
-        }
-
-        // Remove pending flag
-        delete existing.pendingAgentId;
-
-        data['erc8004']['registrations'][chainKey] = existing;
-
-        const updated = matter.stringify(parsed.content, data);
-        writeFileSync(agentPath, updated, 'utf-8');
+          erc8004Config.registrations[chainKey] = existing;
+          return draft;
+        });
 
         console.log(`📝 Updated agent.md with recovered agent ID`);
       } catch (err) {
@@ -281,7 +275,7 @@ export async function recoverIdCommand(options: RecoverIdCommandOptions): Promis
       }
     } else {
       console.log(`❌ Could not recover agent ID for chain ${chainKey}`);
-      console.log(`   Transaction hash: ${reg.txHash || 'Not available'}`);
+      console.log(`   Transaction hash: ${registration.txHash || 'Not available'}`);
       console.log('   Please check the transaction on a block explorer');
     }
   }

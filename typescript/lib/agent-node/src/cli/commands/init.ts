@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, writeFileSync, copyFileSync, readFileSync } from
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import prompts from 'prompts';
+import prompts, { type PromptObject } from 'prompts';
 
 import { cliOutput } from '../output.js';
 
@@ -83,6 +83,23 @@ interface InitConfig {
   mirrorChains: number[];
   operatorAddress?: string;
   secrets: Record<string, string>;
+}
+
+interface InitPromptResponses {
+  agentName?: string;
+  agentDescription?: string;
+  providerName?: string;
+  providerUrl?: string;
+  agentBaseUrl?: string;
+  aiProvider?: ProviderKey;
+  aiModel?: string;
+  providerApiKey?: string;
+  enableErc8004?: boolean;
+  canonicalChain?: number;
+  mirrorChains?: number[];
+  operatorAddress?: string;
+  pinataJwt?: string;
+  pinataGateway?: string;
 }
 
 /**
@@ -628,7 +645,7 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
       cliOutput.print('\n🚀 Welcome to Agent Node Setup!\n', 'cyan');
       cliOutput.print("Let's configure your agent step by step.\n");
 
-      const responses = await prompts([
+      const questions: Array<PromptObject<InitPromptResponses>> = [
         // Agent basics
         {
           type: 'text',
@@ -685,8 +702,8 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
         {
           type: (_prev, _values) => 'password',
           name: 'providerApiKey',
-          message: (_prev, values) =>
-            `${AI_PROVIDERS[values['aiProvider'] as ProviderKey].envKey} (press Enter to skip):`,
+          message: (_prev, values: InitPromptResponses) =>
+            `${AI_PROVIDERS[values?.aiProvider ?? 'openrouter'].envKey} (press Enter to skip):`,
         },
 
         // ERC-8004 configuration
@@ -702,25 +719,29 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
           message: 'Canonical chain for ERC-8004:',
           choices: Object.entries(CHAINS).map(([id, info]) => ({
             title: info.name,
-            value: parseInt(id),
+            value: parseInt(id, 10),
           })),
           initial: 3, // Arbitrum One
         },
         {
-          type: (_prev, values) => (values['enableErc8004'] ? 'multiselect' : null),
+          type: (_prev, values: InitPromptResponses) =>
+            values?.enableErc8004 ? 'multiselect' : null,
           name: 'mirrorChains',
           message: 'Mirror chains (use Space to select, Enter to confirm):',
-          choices: (_prev, values) =>
+          choices: (_prev, values: InitPromptResponses) =>
             Object.entries(CHAINS)
-              .filter(([id]) => parseInt(id) !== values['canonicalChain'])
+              .filter(([id]) => {
+                const canonical = values?.canonicalChain;
+                return canonical === undefined || parseInt(id, 10) !== canonical;
+              })
               .map(([id, info]) => ({
                 title: info.name,
-                value: parseInt(id),
-                selected: parseInt(id) === 1 || parseInt(id) === 8453, // Default: Ethereum + Base
+                value: parseInt(id, 10),
+                selected: parseInt(id, 10) === 1 || parseInt(id, 10) === 8453, // Default: Ethereum + Base
               })),
         },
         {
-          type: (_prev, values) => (values['enableErc8004'] ? 'text' : null),
+          type: (_prev, values: InitPromptResponses) => (values?.enableErc8004 ? 'text' : null),
           name: 'operatorAddress',
           message:
             "Operator address (wallet that controls the agent's identity, optional for CAIP-10):",
@@ -730,16 +751,18 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
           },
         },
         {
-          type: (_prev, values) => (values['enableErc8004'] ? 'password' : null),
+          type: (_prev, values: InitPromptResponses) => (values?.enableErc8004 ? 'password' : null),
           name: 'pinataJwt',
           message: 'PINATA_JWT (for IPFS uploads, press Enter to skip):',
         },
         {
-          type: (_prev, values) => (values['enableErc8004'] ? 'text' : null),
+          type: (_prev, values: InitPromptResponses) => (values?.enableErc8004 ? 'text' : null),
           name: 'pinataGateway',
           message: 'PINATA_GATEWAY (press Enter to skip):',
         },
-      ]);
+      ];
+
+      const responses: InitPromptResponses = await prompts<InitPromptResponses>(questions);
 
       // Handle user cancellation (Ctrl+C)
       if (Object.keys(responses).length === 0) {
@@ -748,35 +771,51 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
       }
 
       // Build config from responses
-      const selectedProvider = (responses['aiProvider'] as ProviderKey) || 'openrouter';
+      const {
+        agentName,
+        agentDescription,
+        providerName,
+        providerUrl,
+        agentBaseUrl,
+        aiProvider,
+        aiModel,
+        providerApiKey,
+        enableErc8004,
+        canonicalChain,
+        mirrorChains,
+        operatorAddress,
+        pinataJwt,
+        pinataGateway,
+      } = responses;
+
+      const selectedProvider = aiProvider ?? 'openrouter';
       config = {
-        agentName: responses['agentName'] || 'My Agent',
+        agentName: agentName || 'My Agent',
         agentDescription:
-          responses['agentDescription'] ||
-          'An AI agent built with the config-driven composition system',
+          agentDescription || 'An AI agent built with the config-driven composition system',
         agentVersion: DEFAULT_AGENT_VERSION,
-        providerName: responses['providerName'] || undefined,
-        providerUrl: responses['providerUrl'] || undefined,
-        agentBaseUrl: responses['agentBaseUrl'] || 'http://localhost:3000',
+        providerName: providerName || undefined,
+        providerUrl: providerUrl || undefined,
+        agentBaseUrl: agentBaseUrl || 'http://localhost:3000',
         aiProvider: selectedProvider,
-        aiModel: responses['aiModel'] || AI_PROVIDERS[selectedProvider].defaultModel,
-        enableErc8004: responses['enableErc8004'] ?? true,
-        canonicalChain: responses['canonicalChain'] || 42161,
-        mirrorChains: responses['mirrorChains'] || [],
-        operatorAddress: responses['operatorAddress'] || undefined,
+        aiModel: aiModel || AI_PROVIDERS[selectedProvider].defaultModel,
+        enableErc8004: enableErc8004 ?? true,
+        canonicalChain: canonicalChain ?? 42161,
+        mirrorChains: mirrorChains ?? [],
+        operatorAddress: operatorAddress || undefined,
         secrets: {},
       };
 
       // Collect secrets
-      if (responses['providerApiKey']) {
-        config.secrets[AI_PROVIDERS[config.aiProvider].envKey] = responses['providerApiKey'];
+      if (providerApiKey) {
+        config.secrets[AI_PROVIDERS[config.aiProvider].envKey] = providerApiKey;
       }
       if (config.enableErc8004) {
-        if (responses['pinataJwt']) {
-          config.secrets['PINATA_JWT'] = responses['pinataJwt'];
+        if (pinataJwt) {
+          config.secrets['PINATA_JWT'] = pinataJwt;
         }
-        if (responses['pinataGateway']) {
-          config.secrets['PINATA_GATEWAY'] = responses['pinataGateway'];
+        if (pinataGateway) {
+          config.secrets['PINATA_GATEWAY'] = pinataGateway;
         }
       }
     } else {
@@ -925,13 +964,13 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
 
       // Count what was actually updated/added
       const updatedCount = Object.entries(config.secrets).filter(
-        ([key, value]) => value && existingKeys.has(key) && !existingKeys.get(key)
+        ([key, value]) => value && existingKeys.has(key) && !existingKeys.get(key),
       ).length;
       const addedCount = Object.entries(config.secrets).filter(
-        ([key, value]) => value && !existingKeys.has(key)
+        ([key, value]) => value && !existingKeys.has(key),
       ).length;
       const placeholderCount = placeholders.filter(
-        p => !processedKeys.has(p) && !config.secrets[p]
+        (p) => !processedKeys.has(p) && !config.secrets[p],
       ).length;
 
       if (updatedCount > 0 || addedCount > 0 || placeholderCount > 0) {

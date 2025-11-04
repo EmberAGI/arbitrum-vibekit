@@ -1,13 +1,13 @@
-import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import matter from 'gray-matter';
 import prompts from 'prompts';
 import { encodeFunctionData } from 'viem';
 
 import { loadAgentBase } from '../../config/loaders/agent-loader.js';
 import { resolveConfigDirectory } from '../../config/runtime/config-dir.js';
+import type { ERC8004RegistrationEntry } from '../../config/schemas/agent.schema.js';
 import { IDENTITY_REGISTRY_ABI } from '../abi/identity.js';
+import { ensureErc8004Config, updateAgentFrontmatter } from '../utils/frontmatter.js';
 import {
   CONTRACT_ADDRESSES,
   isSupportedChain,
@@ -44,12 +44,12 @@ export async function registerCommand(options: RegisterCommandOptions): Promise<
   const agentPath = resolve(configDir, 'agent.md');
   const agentBase = loadAgentBase(agentPath);
 
-  const fm = agentBase.frontmatter;
-  const name = options.name ?? fm.card.name;
-  const description = options.description ?? fm.card.description;
-  const version = options.version ?? fm.card.version;
-  const image = options.image ?? fm.erc8004?.image ?? '';
-  const a2aUrl = options.url ?? fm.card.url;
+  let frontmatter = agentBase.frontmatter;
+  let name = options.name ?? frontmatter.card.name;
+  let description = options.description ?? frontmatter.card.description;
+  let version = options.version ?? frontmatter.card.version;
+  let image = options.image ?? frontmatter.erc8004?.image ?? '';
+  const a2aUrl = options.url ?? frontmatter.card.url;
 
   // Compose Agent Card URL using routing overrides
   let origin: string;
@@ -58,8 +58,8 @@ export async function registerCommand(options: RegisterCommandOptions): Promise<
   } catch {
     throw new Error(`Invalid agent card.url: ${a2aUrl}`);
   }
-  const agentCardOrigin = fm.routing?.agentCardOrigin ?? origin;
-  const agentCardPath = fm.routing?.agentCardPath ?? '/.well-known/agent-card.json';
+  const agentCardOrigin = frontmatter.routing?.agentCardOrigin ?? origin;
+  const agentCardPath = frontmatter.routing?.agentCardPath ?? '/.well-known/agent-card.json';
   const agentCardUrl = `${agentCardOrigin}${agentCardPath}`;
 
   // Check for overrides and prompt to persist
@@ -86,21 +86,26 @@ export async function registerCommand(options: RegisterCommandOptions): Promise<
 
     if (response.persist) {
       try {
-        const agentRaw = readFileSync(agentPath, 'utf-8');
-        const parsed = matter(agentRaw);
-        const data = parsed.data as Record<string, any>;
-
-        if (options.name) data['card'] = { ...data['card'], name: options.name };
-        if (options.description)
-          data['card'] = { ...data['card'], description: options.description };
-        if (options.version) data['card'] = { ...data['card'], version: options.version };
-        if (options.image) {
-          data['erc8004'] = data['erc8004'] ?? {};
-          data['erc8004']['image'] = options.image;
-        }
-
-        const updated = matter.stringify(parsed.content, data);
-        writeFileSync(agentPath, updated, 'utf-8');
+        frontmatter = updateAgentFrontmatter(agentPath, (draft) => {
+          if (options.name) {
+            draft.card = { ...draft.card, name: options.name };
+          }
+          if (options.description) {
+            draft.card = { ...draft.card, description: options.description };
+          }
+          if (options.version) {
+            draft.card = { ...draft.card, version: options.version };
+          }
+          if (options.image) {
+            const erc8004Config = ensureErc8004Config(draft);
+            erc8004Config.image = options.image;
+          }
+          return draft;
+        });
+        name = frontmatter.card.name;
+        description = frontmatter.card.description;
+        version = frontmatter.card.version;
+        image = frontmatter.erc8004?.image ?? '';
         console.log('✅ Overrides persisted to agent.md\n');
       } catch (err) {
         console.log(
@@ -111,8 +116,8 @@ export async function registerCommand(options: RegisterCommandOptions): Promise<
   }
 
   // Determine chain set: canonical + optional mirrors, or specific chain via --chain
-  const canonicalId = fm.erc8004?.canonical?.chainId;
-  const mirrors = fm.erc8004?.mirrors ?? [];
+  const canonicalId = frontmatter.erc8004?.canonical?.chainId;
+  const mirrors = frontmatter.erc8004?.mirrors ?? [];
   let chains: number[] = [];
   if (options.chain) {
     const targetChain = parseInt(options.chain);
@@ -150,7 +155,10 @@ export async function registerCommand(options: RegisterCommandOptions): Promise<
     const existingPendingUri = getPendingUri(agentPath, chainKey, false);
 
     if (existingPendingUri && !options.forceNewUpload) {
-      console.log('\n📎 Resuming with existing IPFS URI from previous attempt:', existingPendingUri);
+      console.log(
+        '\n📎 Resuming with existing IPFS URI from previous attempt:',
+        existingPendingUri,
+      );
       console.log('ℹ️  Use --force-new-upload to create a fresh registration file');
       ipfsUri = existingPendingUri;
     } else {
@@ -193,35 +201,38 @@ export async function registerCommand(options: RegisterCommandOptions): Promise<
 
         // Persist agentId and registrationUri to config
         try {
-          const agentRaw = readFileSync(agentPath, 'utf-8');
-          const parsed = matter(agentRaw);
-          const data = parsed.data as Record<string, any>;
-          data['erc8004'] = data['erc8004'] ?? {};
-          data['erc8004']['registrations'] = data['erc8004']['registrations'] ?? {};
           const chainKey = String(chain);
-          const existing = data['erc8004']['registrations'][chainKey] ?? {};
           const parsedAgentId =
             typeof agentId === 'number' ? agentId : Number.parseInt(agentId, 10);
-          if (Number.isSafeInteger(parsedAgentId) && parsedAgentId >= 0) {
-            existing.agentId = parsedAgentId;
-          } else if (typeof agentId === 'string') {
+          const isSafeAgentId = Number.isSafeInteger(parsedAgentId) && parsedAgentId >= 0;
+          if (!isSafeAgentId && typeof agentId === 'string') {
             console.log(
               `\n⚠️  Agent ID ${agentId} exceeds JavaScript safe integer range. Update agent.md manually if you need to track it.`,
             );
           }
-          existing.registrationUri = ipfsUri;
-          if (txHash) {
-            existing.txHash = txHash;
-          }
-          // Remove pending flags if they exist
-          delete existing.pendingRegistrationUri;
-          delete existing.pendingAgentId;
-          data['erc8004']['registrations'][chainKey] = existing;
-          const updated = matter.stringify(parsed.content, data);
-          writeFileSync(agentPath, updated, 'utf-8');
-          console.log(
-            `\n📝 Persisted agentId and registrationUri for chain ${chain} to agent.md`,
-          );
+
+          frontmatter = updateAgentFrontmatter(agentPath, (draft) => {
+            const erc8004Config = ensureErc8004Config(draft);
+            const registrations = erc8004Config.registrations;
+            const existing: ERC8004RegistrationEntry = {
+              ...(registrations[chainKey] ?? {}),
+            };
+
+            if (isSafeAgentId) {
+              existing.agentId = parsedAgentId;
+            }
+            existing.registrationUri = ipfsUri;
+            if (txHash) {
+              existing.txHash = txHash;
+            }
+            delete existing.pendingRegistrationUri;
+            delete existing.pendingAgentId;
+
+            registrations[chainKey] = existing;
+            return draft;
+          });
+
+          console.log(`\n📝 Persisted agentId and registrationUri for chain ${chain} to agent.md`);
           console.log('🧹 Cleaned up pending registration data');
         } catch (err) {
           console.log(
@@ -234,31 +245,30 @@ export async function registerCommand(options: RegisterCommandOptions): Promise<
       onPendingAgentId: (txHash: string) => {
         console.log('\n⚠️  Transaction confirmed but agent ID could not be retrieved.');
         console.log(`📋 Transaction hash: ${txHash}`);
-        console.log('\nThe agent was likely registered successfully, but we could not extract the ID.');
+        console.log(
+          '\nThe agent was likely registered successfully, but we could not extract the ID.',
+        );
         console.log('You can:');
         console.log('  1. Run `agent recover-id` to retry retrieval');
         console.log('  2. Check the transaction on a block explorer');
 
         // Persist pending status to config
         try {
-          const agentRaw = readFileSync(agentPath, 'utf-8');
-          const parsed = matter(agentRaw);
-          const data = parsed.data as Record<string, any>;
-          data['erc8004'] = data['erc8004'] ?? {};
-          data['erc8004']['registrations'] = data['erc8004']['registrations'] ?? {};
           const chainKey = String(chain);
-          const existing = data['erc8004']['registrations'][chainKey] ?? {};
-          existing.registrationUri = ipfsUri;
-          existing.pendingAgentId = true;
-          existing.txHash = txHash;
-          // Remove old pending URI flag
-          delete existing.pendingRegistrationUri;
-          data['erc8004']['registrations'][chainKey] = existing;
-          const updated = matter.stringify(parsed.content, data);
-          writeFileSync(agentPath, updated, 'utf-8');
-          console.log(
-            `\n📝 Saved registration with pending agent ID status to agent.md`,
-          );
+          frontmatter = updateAgentFrontmatter(agentPath, (draft) => {
+            const erc8004Config = ensureErc8004Config(draft);
+            const registrations = erc8004Config.registrations;
+            const existing: ERC8004RegistrationEntry = {
+              ...(registrations[chainKey] ?? {}),
+            };
+            existing.registrationUri = ipfsUri;
+            existing.pendingAgentId = true;
+            existing.txHash = txHash;
+            delete existing.pendingRegistrationUri;
+            registrations[chainKey] = existing;
+            return draft;
+          });
+          console.log(`\n📝 Saved registration with pending agent ID status to agent.md`);
         } catch (err) {
           console.log(
             `\n⚠️  Failed to persist pending status for chain ${chain}: ${err instanceof Error ? err.message : String(err)}`,
@@ -277,7 +287,7 @@ export async function registerCommand(options: RegisterCommandOptions): Promise<
       await openBrowser(url);
       console.log('\n✨ Please complete the transaction in your browser.');
       console.log('   Press Ctrl+C to close the server when done.\n');
-    } catch (error) {
+    } catch (_error) {
       console.log('\n⚠️  Could not open browser automatically.');
       console.log('   Please open this URL manually:', url);
       console.log('   Press Ctrl+C to close the server when done.\n');

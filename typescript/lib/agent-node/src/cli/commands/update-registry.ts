@@ -1,13 +1,13 @@
-import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import matter from 'gray-matter';
 import prompts from 'prompts';
 import { encodeFunctionData } from 'viem';
 
 import { loadAgentBase } from '../../config/loaders/agent-loader.js';
 import { resolveConfigDirectory } from '../../config/runtime/config-dir.js';
+import type { ERC8004RegistrationEntry } from '../../config/schemas/agent.schema.js';
 import { IDENTITY_REGISTRY_ABI } from '../abi/identity.js';
+import { ensureErc8004Config, updateAgentFrontmatter } from '../utils/frontmatter.js';
 import {
   CONTRACT_ADDRESSES,
   isSupportedChain,
@@ -87,21 +87,16 @@ export async function updateRegistryCommand(options: UpdateRegistryCommandOption
 
     if (response.persist) {
       try {
-        const agentRaw = readFileSync(agentPath, 'utf-8');
-        const parsed = matter(agentRaw);
-        const data = parsed.data as Record<string, any>;
-
-        if (options.name) data['card'] = { ...data['card'], name: options.name };
-        if (options.description)
-          data['card'] = { ...data['card'], description: options.description };
-        if (options.version) data['card'] = { ...data['card'], version: options.version };
-        if (options.image) {
-          data['erc8004'] = data['erc8004'] ?? {};
-          data['erc8004']['image'] = options.image;
-        }
-
-        const updated = matter.stringify(parsed.content, data);
-        writeFileSync(agentPath, updated, 'utf-8');
+        updateAgentFrontmatter(agentPath, (draft) => {
+          if (options.name) draft.card.name = options.name;
+          if (options.description) draft.card.description = options.description;
+          if (options.version) draft.card.version = options.version;
+          if (options.image) {
+            const erc8004Config = ensureErc8004Config(draft);
+            erc8004Config.image = options.image;
+          }
+          return draft;
+        });
         console.log('✅ Overrides persisted to agent.md\n');
       } catch (err) {
         console.log(
@@ -166,7 +161,10 @@ export async function updateRegistryCommand(options: UpdateRegistryCommandOption
     const existingPendingUri = getPendingUri(agentPath, chainKey, true);
 
     if (existingPendingUri && !options.forceNewUpload) {
-      console.log(`\n📎 Chain ${chain}: Resuming with existing IPFS URI from previous attempt:`, existingPendingUri);
+      console.log(
+        `\n📎 Chain ${chain}: Resuming with existing IPFS URI from previous attempt:`,
+        existingPendingUri,
+      );
       console.log('ℹ️  Use --force-new-upload to create a fresh registration file');
       ipfsUri = existingPendingUri;
     } else {
@@ -212,19 +210,16 @@ export async function updateRegistryCommand(options: UpdateRegistryCommandOption
 
         // Persist the updated registrationUri and clean up pending URI
         try {
-          const agentRaw = readFileSync(agentPath, 'utf-8');
-          const parsed = matter(agentRaw);
-          const data = parsed.data as Record<string, any>;
-          data['erc8004'] = data['erc8004'] ?? {};
-          data['erc8004']['registrations'] = data['erc8004']['registrations'] ?? {};
-          const chainKey = String(chain);
-          const existing = data['erc8004']['registrations'][chainKey] ?? {};
-          existing.registrationUri = ipfsUri;
-          // Remove pending update URI now that update is successful
-          delete existing.pendingUpdateUri;
-          data['erc8004']['registrations'][chainKey] = existing;
-          const updated = matter.stringify(parsed.content, data);
-          writeFileSync(agentPath, updated, 'utf-8');
+          updateAgentFrontmatter(agentPath, (draft) => {
+            const erc8004Config = ensureErc8004Config(draft);
+            const chainKey = String(chain);
+            const existing: ERC8004RegistrationEntry = erc8004Config.registrations[chainKey] ?? {};
+            existing.registrationUri = ipfsUri;
+            // Remove pending update URI now that update is successful
+            delete existing.pendingUpdateUri;
+            erc8004Config.registrations[chainKey] = existing;
+            return draft;
+          });
           console.log(`\n📝 Persisted updated registrationUri for chain ${chain} to agent.md`);
           console.log('🧹 Cleaned up pending update data');
         } catch (err) {
@@ -243,7 +238,7 @@ export async function updateRegistryCommand(options: UpdateRegistryCommandOption
       await openBrowser(url);
       console.log('\n✨ Please complete the transaction in your browser.');
       console.log('   Press Ctrl+C to close the server when done.\n');
-    } catch (error) {
+    } catch (_error) {
       console.log('\n⚠️  Could not open browser automatically.');
       console.log('   Please open this URL manually:', url);
       console.log('   Press Ctrl+C to close the server when done.\n');
@@ -251,19 +246,16 @@ export async function updateRegistryCommand(options: UpdateRegistryCommandOption
 
     // Persist registrationUri back to config
     try {
-      const agentRaw = readFileSync(agentPath, 'utf-8');
-      const parsed = matter(agentRaw);
-      const data = parsed.data as Record<string, any>;
-      data['erc8004'] = data['erc8004'] ?? {};
-      data['erc8004']['registrations'] = data['erc8004']['registrations'] ?? {};
-      const existing = data['erc8004']['registrations'][perChainKey] ?? {};
-      existing.registrationUri = ipfsUri;
-      if (typeof perChainAgentId === 'number') {
-        existing.agentId = perChainAgentId;
-      }
-      data['erc8004']['registrations'][perChainKey] = existing;
-      const updated = matter.stringify(parsed.content, data);
-      writeFileSync(agentPath, updated, 'utf-8');
+      updateAgentFrontmatter(agentPath, (draft) => {
+        const erc8004Config = ensureErc8004Config(draft);
+        const existing: ERC8004RegistrationEntry = erc8004Config.registrations[perChainKey] ?? {};
+        existing.registrationUri = ipfsUri;
+        if (typeof perChainAgentId === 'number') {
+          existing.agentId = perChainAgentId;
+        }
+        erc8004Config.registrations[perChainKey] = existing;
+        return draft;
+      });
       console.log(`\n📝 Persisted registrationUri for chain ${chain} to agent.md`);
     } catch {
       console.log(`\n⚠️  Failed to persist registrationUri for chain ${chain} to agent.md`);
