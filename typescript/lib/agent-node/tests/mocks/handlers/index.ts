@@ -3,6 +3,7 @@ import { onchainActionsHandlers } from './onchain-actions.js';
 import { openaiHandlers } from './openai.js';
 import { openrouterHandlers } from './openrouter.js';
 import { viemHandlers } from './viem.js';
+import { x402FacilitatorHandlers } from './x402-facilitator.js';
 import { xaiHandlers } from './xai.js';
 
 // Export all handlers for MSW
@@ -14,4 +15,5 @@ export const handlers = [
   ...hyperbolicHandlers,
   ...viemHandlers,
   ...onchainActionsHandlers,
+  ...x402FacilitatorHandlers,
 ];
