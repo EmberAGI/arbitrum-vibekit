@@ -4,10 +4,12 @@
  */
 
 import type { Message, Part } from '@a2a-js/sdk';
-import type { A2AClient as A2AClientInstance } from '@a2a-js/sdk/client';
+import type {
+  A2AClient as A2AClientInstance,
+  A2AClient as A2AClientStatic,
+} from '@a2a-js/sdk/client';
 import { v4 as uuidv4 } from 'uuid';
 
-import type { ArtifactUpdateEvent, StatusUpdateEvent } from '../../client/index.js';
 import { isArtifactUpdateEvent, isStatusUpdateEvent } from '../../client/index.js';
 
 export interface ChatMessage {
@@ -17,14 +19,12 @@ export interface ChatMessage {
 
 export interface StreamEvent {
   kind: 'artifact-update' | 'status-update' | 'unknown';
-  data: ArtifactUpdateEvent | StatusUpdateEvent | unknown;
+  data: unknown;
 }
 
-type A2AClientStatic = typeof import('@a2a-js/sdk/client').A2AClient;
+let cachedA2AClient: Promise<typeof A2AClientStatic> | undefined;
 
-let cachedA2AClient: Promise<A2AClientStatic> | undefined;
-
-async function loadA2AClient(): Promise<A2AClientStatic> {
+async function loadA2AClient(): Promise<typeof A2AClientStatic> {
   if (!cachedA2AClient) {
     cachedA2AClient = import('@a2a-js/sdk/client').then((module) => module.A2AClient);
   }

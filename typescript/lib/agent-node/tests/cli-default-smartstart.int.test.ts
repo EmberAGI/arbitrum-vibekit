@@ -7,13 +7,13 @@ import { rmSync } from 'node:fs';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+import type * as ChatUtils from '../src/cli/chat/utils.js';
+
 import { createTestConfigWorkspace } from './utils/test-config-workspace.js';
 
 // Mock components
 vi.mock('../src/cli/chat/utils.js', async () => {
-  const actual = await vi.importActual<typeof import('../src/cli/chat/utils.js')>(
-    '../src/cli/chat/utils.js',
-  );
+  const actual = await vi.importActual<typeof ChatUtils>('../src/cli/chat/utils.js');
   return {
     ...actual,
     isAgentReachable: vi.fn(),
@@ -329,13 +329,11 @@ describe('agent default command (smart-start integration)', () => {
     it('performs reachability check with reasonable timeout', async () => {
       // Given: isAgentReachable mock
       const { isAgentReachable } = await import('../src/cli/chat/utils.js');
-      (isAgentReachable as ReturnType<typeof vi.fn>).mockImplementation(
-        async (url: string) => {
-          // Simulate checking with timeout
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          return false;
-        },
-      );
+      (isAgentReachable as ReturnType<typeof vi.fn>).mockImplementation(async (_url: string) => {
+        // Simulate checking with timeout
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return false;
+      });
 
       // When: running default command
       process.argv = ['node', 'agent'];
@@ -354,9 +352,7 @@ describe('agent default command (smart-start integration)', () => {
     it('handles reachability check errors gracefully', async () => {
       // Given: isAgentReachable that throws
       const { isAgentReachable } = await import('../src/cli/chat/utils.js');
-      (isAgentReachable as ReturnType<typeof vi.fn>).mockRejectedValue(
-        new Error('Network error'),
-      );
+      (isAgentReachable as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Network error'));
 
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 

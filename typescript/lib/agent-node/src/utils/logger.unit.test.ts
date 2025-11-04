@@ -2,9 +2,9 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-import { Logger } from './logger.js';
+import { Logger, LogLevel } from './logger.js';
 
 describe('Logger file sink (behavior)', () => {
   let dir: string;
@@ -33,7 +33,7 @@ describe('Logger file sink (behavior)', () => {
     await new Promise((r) => setTimeout(r, 10));
 
     // Then: logs should be written to a JSONL file in the configured directory
-    const files = readdirSync(dir).filter(f => f.endsWith('.jsonl'));
+    const files = readdirSync(dir).filter((f) => f.endsWith('.jsonl'));
     expect(files.length).toBe(1);
 
     const content = readFileSync(join(dir, files[0]), 'utf-8');
@@ -59,7 +59,7 @@ describe('Logger file sink (behavior)', () => {
     await new Promise((r) => setTimeout(r, 10));
 
     // Then: all logs should be in the same file as separate JSONL entries
-    const files = readdirSync(dir).filter(f => f.endsWith('.jsonl'));
+    const files = readdirSync(dir).filter((f) => f.endsWith('.jsonl'));
     expect(files.length).toBe(1);
 
     const lines = readFileSync(join(dir, files[0]), 'utf-8')
@@ -72,10 +72,6 @@ describe('Logger file sink (behavior)', () => {
     expect(lines[1].message).toBe('second');
   });
 });
-
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-
-import { Logger, LogLevel } from './logger.js';
 
 describe('Logger', () => {
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
