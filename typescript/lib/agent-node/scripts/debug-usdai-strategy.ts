@@ -8,28 +8,31 @@ import {
   type Delegation,
 } from '@metamask/delegation-toolkit';
 import { v7 as uuidv7 } from 'uuid';
-import { LocalAccount, type Hex } from 'viem';
+import type { LocalAccount} from 'viem';
+import { type Hex } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { createPaymentHeader } from 'x402/client';
+import { exact } from 'x402/schemes';
+import type { PaymentRequirements } from 'x402/types';
 
 import type { AgentConfigHandle } from '../src/config/runtime/init.js';
 import { WorkflowRuntime } from '../src/workflows/runtime.js';
+import type {
+  X402PaymentPayload,
+  X402Requirements} from '../src/workflows/x402-types.js';
+import {
+  X402_REQUIREMENTS_KEY,
+  X402_STATUS_KEY,
+  X402_PAYMENT_PAYLOAD_KEY,
+  X402_RECEIPTS_KEY
+} from '../src/workflows/x402-types.js';
 import usdaiStrategyWorkflow from '../tests/fixtures/workflows/usdai-strategy.js';
 import { get7702TestAccount, getTestChainId } from '../tests/utils/lifecycle-test-helpers.js';
 import {
   cleanupTestServer,
   createTestA2AServerWithStubs,
 } from '../tests/utils/test-server-with-stubs.js';
-import { PaymentRequirements } from 'x402/types';
-import {
-  X402PaymentPayload,
-  X402_REQUIREMENTS_KEY,
-  X402_STATUS_KEY,
-  X402_PAYMENT_PAYLOAD_KEY,
-  X402_RECEIPTS_KEY,
-  X402Requirements,
-} from '../src/workflows/x402-types.js';
-import { createPaymentHeader } from 'x402/client';
-import { privateKeyToAccount } from 'viem/accounts';
-import { exact } from 'x402/schemes';
+
 
 export async function createPayload(
   signer: LocalAccount,

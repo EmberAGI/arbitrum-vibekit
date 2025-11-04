@@ -1,12 +1,13 @@
 import { encodeFunctionData } from 'viem';
+
 import { IDENTITY_REGISTRY_ABI } from '../abi/identity.js';
-import { serveTransactionSigningPage, openBrowser } from '../utils/serve-transaction.js';
 import {
   CONTRACT_ADDRESSES,
   isSupportedChain,
   buildRegistrationFile,
   createIpfsFile,
 } from '../utils/registration.js';
+import { serveTransactionSigningPage, openBrowser } from '../utils/serve-transaction.js';
 
 /**
  * Options for registering an agent.
