@@ -21,11 +21,19 @@ import {
   type TaskStore,
 } from '@a2a-js/sdk/server';
 import { v7 as uuidv7 } from 'uuid';
+import { findMatchingPaymentRequirements } from 'x402/shared';
 import z from 'zod';
 
+import { serviceConfig } from '../../config.js';
 import { canonicalizeName } from '../../config/validators/tool-validator.js';
-import { Logger } from '../../utils/logger.js';
+import {
+  buildFailureMetadata,
+  extractFailureCode,
+  formatFailureMessage,
+  type FailureContext,
+} from '../../utils/ap2/x402-errors.js';
 import { verifyPayment, settlePayment } from '../../utils/ap2/x402-server.js';
+import { Logger } from '../../utils/logger.js';
 import type { WorkflowRuntime } from '../../workflows/runtime.js';
 import type { PaymentSettlement, WorkflowState } from '../../workflows/types.js';
 import {
@@ -36,10 +44,10 @@ import {
   x402PaymentPayloadSchema,
   X402_RECEIPTS_KEY,
   x402RequirementsSchema,
+  type X402FailureStage,
 } from '../../workflows/x402-types.js';
 import type { ContextManager } from '../sessions/manager.js';
 import type { ActiveTask, TaskState, WorkflowEvent } from '../types.js';
-import { findMatchingPaymentRequirements } from 'x402/shared';
 
 /**
  * Result type for operations that can succeed or fail
@@ -322,7 +330,14 @@ export class WorkflowHandler {
       return { isSuccess: true, value: undefined };
     }
 
+    // Track failure context throughout the try block
+    const failureContext: FailureContext = {
+      facilitatorUrl: serviceConfig.x402?.facilitatorUrl,
+    };
+    let failureStage: X402FailureStage = 'internal-error';
+
     try {
+      failureStage = 'payload-parse';
       const status = await x402StatusSchmea.parseAsync(paymentStatus);
       if (status === 'payment-rejected') {
         throw new Error('[PAYMENT] Payment rejected for task');
@@ -338,8 +353,10 @@ export class WorkflowHandler {
       }
 
       const payloadParsed = await x402PaymentPayloadSchema.parseAsync(paymentPayload);
+      failureContext.paymentPayload = payloadParsed;
 
       // Extract payment requirements that were stored when the task was paused for payment
+      failureStage = 'requirements-load';
       const paymentRequirementsMetadata = currentTaskState?.paymentRequirements;
       if (!paymentRequirementsMetadata) {
         throw new Error('[PAYMENT] No payment requirements found for task');
@@ -361,15 +378,34 @@ export class WorkflowHandler {
       if (!paymentRequirements) {
         throw new Error('[PAYMENT] No accepted payment requirements found');
       }
+      failureContext.paymentRequirements = paymentRequirements;
 
       // Verify the payment using the stored requirements
+      failureStage = 'verify';
       this.logger.debug('[PAYMENT] Verifying payment', { taskId });
 
-      const verificationResult = await verifyPayment(payloadParsed, paymentRequirements);
+      let verificationResult;
+      try {
+        verificationResult = await verifyPayment(payloadParsed, paymentRequirements);
+      } catch (verifyError) {
+        // Capture facilitator error details if available
+        if (verifyError && typeof verifyError === 'object') {
+          const errorObj = verifyError as Record<string, unknown>;
+          if (typeof errorObj['status'] === 'number') {
+            failureContext.httpStatus = errorObj['status'];
+          }
+          if (errorObj['response'] !== undefined) {
+            failureContext.facilitatorResponse = errorObj['response'];
+          }
+        }
+        throw verifyError;
+      }
 
       if (!verificationResult.isValid) {
         this.logger.debug('[PAYMENT] Payment verification failed', { verificationResult, taskId });
         const reason = verificationResult.invalidReason || 'Unknown verification error';
+        // Attach verification result as facilitator response for metadata
+        failureContext.facilitatorResponse = verificationResult;
         throw new Error(`[PAYMENT] Payment verification failed: ${reason}`);
       }
 
@@ -407,6 +443,7 @@ export class WorkflowHandler {
               },
             };
           }
+          // Settlement failures will be handled by the workflow
           const receipt = await settlePayment(payloadParsed, paymentRequirements);
           this.logger.debug('[PAYMENT] Payment settled successfully', { taskId });
           return {
@@ -427,7 +464,25 @@ export class WorkflowHandler {
 
       return { isSuccess: true, value: settlement };
     } catch (error) {
-      this.logger.debug((error as Error).toString?.() ?? String(error), { taskId });
+      // Build structured failure metadata
+      const failureMetadata = buildFailureMetadata(failureStage, error, failureContext);
+      const failureCode = extractFailureCode(
+        error,
+        failureContext.httpStatus,
+        failureContext.facilitatorResponse,
+        failureStage,
+      );
+      const errorReason = error instanceof Error ? error.message : String(error);
+      const formattedMessage = formatFailureMessage(failureStage, errorReason, failureCode);
+
+      // Log error at ERROR level with context
+      this.logger.error('[PAYMENT] Payment failed', error, {
+        taskId,
+        stage: failureStage,
+        code: failureCode,
+      });
+
+      // Publish conversational error message
       const errorMessage: Message = {
         kind: 'message',
         messageId: uuidv7(),
@@ -436,14 +491,13 @@ export class WorkflowHandler {
         parts: [
           {
             kind: 'text',
-            text: 'Payment was rejected. Workflow cannot continue.',
+            text: `${formattedMessage}. Workflow cannot continue.`,
           } as TextPart,
         ],
       };
-
       eventBus.publish(errorMessage);
 
-      // Publish failed status
+      // Publish failed status with structured metadata
       const statusUpdate: TaskStatusUpdateEvent = {
         kind: 'status-update',
         taskId,
@@ -455,10 +509,11 @@ export class WorkflowHandler {
             messageId: uuidv7(),
             contextId,
             role: 'agent',
-            parts: [{ kind: 'text', text: 'Payment rejected' } as TextPart],
+            parts: [{ kind: 'text', text: formattedMessage } as TextPart],
           },
         },
         final: true,
+        metadata: failureMetadata,
       };
       eventBus.publish(statusUpdate);
       eventBus.finished();
