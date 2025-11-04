@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "private": true,
   "bin": {
-    "allora-mcp-server": "./dist/index.js"
+    "allora-mcp-server": "./bin/allora-mcp-server.js"
   },
   "scripts": {
     "prepare": "pnpm build",
