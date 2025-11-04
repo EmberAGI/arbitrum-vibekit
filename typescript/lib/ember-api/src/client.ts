@@ -1,8 +1,9 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { parseMcpToolResponsePayload } from '@emberai/arbitrum-vibekit-core';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { z } from 'zod';
+
 import {
   // Import response schemas for validation (as values)
   GetChainsResponseSchema,
@@ -60,7 +61,7 @@ import type {
 } from './schemas/index.js';
 
 export interface EmberClient {
-  close(): void;
+  close(): Promise<void>;
   getChains(request: GetChainsRequest): Promise<GetChainsResponse>;
   getTokens(request: GetTokensRequest): Promise<GetTokensResponse>;
   getCapabilities(request: GetCapabilitiesRequest): Promise<GetCapabilitiesResponse>;
@@ -117,8 +118,8 @@ export class EmberMcpClient implements EmberClient {
     await this.client.connect(this.transport);
   }
 
-  close(): void {
-    this.client.close();
+  async close(): Promise<void> {
+    await this.client.close();
   }
 
   private async callTool<TRequest, TResponse>(

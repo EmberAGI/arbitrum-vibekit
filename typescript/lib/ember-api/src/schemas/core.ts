@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import { ChainTypeSchema, TransactionTypeSchema } from './enums.js';
 
 export const TokenIdentifierSchema = z.object({
