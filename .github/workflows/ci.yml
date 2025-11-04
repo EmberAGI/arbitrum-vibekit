@@ -45,4 +45,4 @@ jobs:
 
       - name: Run tests
         working-directory: ./typescript
-        run: pnpm run test:vitest
+        run: pnpm run test:ci
