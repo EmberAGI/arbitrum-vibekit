@@ -166,7 +166,7 @@ export class Logger {
    */
   static async setFileSink(directory: string): Promise<void> {
     const { existsSync, mkdirSync, createWriteStream } = await import('node:fs');
-    const { join } = await import('node:path');
+    const path = await import('node:path');
 
     if (!existsSync(directory)) {
       mkdirSync(directory, { recursive: true });
@@ -177,7 +177,7 @@ export class Logger {
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const dd = String(now.getDate()).padStart(2, '0');
     const filename = `${yyyy}-${mm}-${dd}.jsonl`;
-    const filePath = join(directory, filename);
+    const filePath = path.join(directory, filename);
 
     const stream = createWriteStream(filePath, { flags: 'a' });
     Logger.fileSink = (line: string) => {

@@ -36,23 +36,30 @@ export async function serveTransactionSigningPage(
       // Handle callback endpoint for agent ID
       if (req.method === 'POST' && req.url === '/callback') {
         let body = '';
-        req.on('data', (chunk) => {
-          body += chunk.toString();
+        req.on('data', (chunk: Buffer | string) => {
+          body += typeof chunk === 'string' ? chunk : chunk.toString();
         });
         req.on('end', () => {
           try {
-            const data = JSON.parse(body);
+            const data: unknown = JSON.parse(body);
             const record = data as Record<string, unknown>;
 
             // Check if this is a pending agent ID callback
             if (record['pendingAgentId'] === true && record['txHash']) {
               if (params.onPendingAgentId) {
-                params.onPendingAgentId(String(record['txHash']));
+                const txHashValue = record['txHash'];
+                if (typeof txHashValue === 'string' || typeof txHashValue === 'number') {
+                  params.onPendingAgentId(String(txHashValue));
+                }
               }
             } else {
               // Try to extract agent ID
               const agentId = extractAgentId(data);
-              const txHash = record['txHash'] ? String(record['txHash']) : undefined;
+              const txHashValue = record['txHash'];
+              const txHash =
+                txHashValue && (typeof txHashValue === 'string' || typeof txHashValue === 'number')
+                  ? String(txHashValue)
+                  : undefined;
 
               if (agentId !== null && params.onAgentIdReceived) {
                 params.onAgentIdReceived(agentId, txHash);
@@ -61,7 +68,7 @@ export async function serveTransactionSigningPage(
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true }));
-          } catch (error) {
+          } catch (_error) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid request' }));
           }
@@ -187,6 +194,7 @@ export async function openBrowser(url: string): Promise<void> {
   try {
     await execAsync(command);
   } catch (error) {
-    throw new Error(`Failed to open browser: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to open browser: ${errorMessage}`);
   }
 }
