@@ -116,9 +116,11 @@ export const ERC8004MirrorConfigSchema = z
 export const ERC8004RegistrationEntrySchema = z
   .object({
     agentId: z.number().int().positive().optional(),
+    agentIdString: z.string().optional(), // For BigInt agent IDs exceeding JS safe integer range
     registrationUri: z.string().optional(),
     pendingRegistrationUri: z.string().optional(),
     pendingUpdateUri: z.string().optional(),
+    pendingAgentId: z.boolean().optional(), // Recovery flag for pending agent ID
     txHash: z.string().optional(),
   })
   .strict();
