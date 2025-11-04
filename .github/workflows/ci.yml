@@ -43,6 +43,39 @@ jobs:
         run: |
           cp .env.example .env
 
+      - name: Create agent-node test env file
+        working-directory: ./typescript/lib/agent-node
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          HYPERBOLIC_API_KEY: ${{ secrets.HYPERBOLIC_API_KEY }}
+          A2A_TEST_7702_PRIVATE_KEY: ${{ secrets.A2A_TEST_7702_PRIVATE_KEY }}
+          A2A_TEST_AGENT_NODE_PRIVATE_KEY: ${{ secrets.A2A_TEST_AGENT_NODE_PRIVATE_KEY }}
+          A2A_TEST_CHAIN_ID: ${{ vars.A2A_TEST_CHAIN_ID }}
+          A2A_TEST_7702_ADDRESS: ${{ vars.A2A_TEST_7702_ADDRESS }}
+          A2A_TEST_RPC_URL: ${{ vars.A2A_TEST_RPC_URL }}
+        run: |
+          cat <<EOF > .env.test
+          OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-your-openrouter-api-key-here}
+          OPENAI_API_KEY=${OPENAI_API_KEY:-your-openai-api-key-here}
+          XAI_API_KEY=${XAI_API_KEY:-your-xai-api-key-here}
+          HYPERBOLIC_API_KEY=${HYPERBOLIC_API_KEY:-your-hyperbolic-api-key-here}
+
+          A2A_TEST_7702_PRIVATE_KEY=${A2A_TEST_7702_PRIVATE_KEY:-0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+          A2A_TEST_AGENT_NODE_PRIVATE_KEY=${A2A_TEST_AGENT_NODE_PRIVATE_KEY:-0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb}
+
+          A2A_TEST_CHAIN_ID=${A2A_TEST_CHAIN_ID:-42161}
+          EOF
+
+          if [ -n "${A2A_TEST_7702_ADDRESS:-}" ]; then
+            echo "A2A_TEST_7702_ADDRESS=${A2A_TEST_7702_ADDRESS}" >> .env.test
+          fi
+
+          if [ -n "${A2A_TEST_RPC_URL:-}" ]; then
+            echo "A2A_TEST_RPC_URL=${A2A_TEST_RPC_URL}" >> .env.test
+          fi
+
       - name: Run tests
         working-directory: ./typescript
         run: pnpm run test:ci
