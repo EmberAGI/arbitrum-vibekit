@@ -14,9 +14,9 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@getpara/react-sdk": "2.0.0-alpha.68",
-    "@getpara/server-sdk": "2.0.0-alpha.68",
-    "@getpara/web-sdk": "2.0.0-alpha.68",
+    "@getpara/react-sdk": "2.0.0-alpha.69",
+    "@getpara/server-sdk": "2.0.0-alpha.69",
+    "@getpara/web-sdk": "2.0.0-alpha.69",
     "@tanstack/react-query": "^5.74.4",
     "drizzle-kit": "^0.25.0",
     "drizzle-orm": "^0.34.0",
