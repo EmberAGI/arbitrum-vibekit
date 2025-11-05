@@ -1,6 +1,6 @@
 {
   "name": "@emberai/onchain-actions-registry",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Registry for plugins compatible with Ember to execute DeFi actions.",
   "type": "module",
   "main": "dist/index.cjs",
@@ -59,20 +59,16 @@
         }
       ],
       [
+        "@semantic-release/release-notes-generator",
+        {
+          "preset": "conventionalcommits"
+        }
+      ],
+      [
         "@semantic-release/npm",
         {
           "npmPublish": true,
           "pkgRoot": ".npm-publish"
-        }
-      ],
-      [
-        "@semantic-release/git",
-        {
-          "assets": [
-            "CHANGELOG.md",
-            "package.json"
-          ],
-          "message": "chore(release): onchain-actions-registry-v${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
         }
       ],
       [
