@@ -16,7 +16,7 @@ import type { privateKeyToAccount } from 'viem/accounts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { AgentConfigHandle } from '../../src/config/runtime/init.js';
-import { WorkflowRuntime } from '../../src/workflows/runtime.js';
+import { WorkflowRuntime } from '../../src/workflow/runtime.js';
 import usdaiStrategyWorkflow from '../fixtures/workflows/usdai-strategy.js';
 import { createClients } from '../fixtures/workflows/utils/clients.js';
 import { get7702TestAccount, getTestChainId } from '../utils/lifecycle-test-helpers.js';

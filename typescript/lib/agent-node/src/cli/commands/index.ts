@@ -10,3 +10,5 @@ export { runCommand, type RunOptions } from './run.js';
 export { bundleCommand, type BundleOptions } from './bundle.js';
 export { registerCommand, type RegisterCommandOptions } from './register.js';
 export { updateRegistryCommand, type UpdateRegistryCommandOptions } from './update-registry.js';
+export { chatCommand, type ChatOptions } from './chat.js';
+export { recoverIdCommand, type RecoverIdCommandOptions } from './recover-id.js';

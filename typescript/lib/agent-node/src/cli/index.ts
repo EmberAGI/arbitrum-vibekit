@@ -19,6 +19,8 @@ import {
   bundleCommand,
   registerCommand,
   updateRegistryCommand,
+  chatCommand,
+  recoverIdCommand,
 } from './commands/index.js';
 
 interface CliArgs {
@@ -29,13 +31,15 @@ interface CliArgs {
 
 function parseArgs(): CliArgs {
   const args = process.argv.slice(2);
-  const command = args[0];
+  let command: string | undefined;
   const options: Record<string, string | boolean> = {};
   const remaining: string[] = [];
 
-  for (let i = 1; i < args.length; i++) {
+  for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg && arg.startsWith('--')) {
+    if (!arg) continue;
+
+    if (arg.startsWith('--')) {
       const key = arg.slice(2);
       const nextArg = args[i + 1];
       if (nextArg && !nextArg.startsWith('--')) {
@@ -44,7 +48,12 @@ function parseArgs(): CliArgs {
       } else {
         options[key] = true;
       }
-    } else if (arg) {
+      continue;
+    }
+
+    if (!command) {
+      command = arg;
+    } else {
       remaining.push(arg);
     }
   }
@@ -57,12 +66,26 @@ function printHelp(): void {
 Agent Configuration CLI
 
 Usage:
-  agent <command> [options]
+  agent [command] [options]
+
+Default Behavior (no command):
+  Smart-start chat mode: If an agent is reachable at --url (or default),
+  attach to it. Otherwise, start a local server and attach to it.
+  In chat mode, default LOG_LEVEL=ERROR. Use --log-dir to write JSONL logs.
 
 Commands:
+  chat                    Connect to a running agent (client-only, never starts server)
+    --url <url>           Agent URL (default: http://127.0.0.1:3000)
+    --verbose             Stream reasoning and show artifact contents
+    --inline-summary <ms> Enable inline artifact summaries (throttle interval)
+    --log-dir <dir>       Write structured logs to daily JSONL files in <dir>
+    --respect-log-level   Respect LOG_LEVEL from env (do not force ERROR)
+
   init                    Initialize a new config workspace
     --target <dir>        Target directory (default: ./config)
     --force               Overwrite existing directory
+    --yes                 Non-interactive mode with sensible defaults
+    --non-interactive     Alias for --yes
 
   print-config            Display composed configuration
     --config-dir <dir>    Config directory (default: ./config)
@@ -74,11 +97,15 @@ Commands:
     --config-dir <dir>    Config directory (default: ./config)
     --verbose             Show detailed diagnostics
 
-  run                     Run the agent server
+  run                     Run the agent server (headless by default)
     --config-dir <dir>    Config directory (default: ./config)
     --dev                 Enable hot reload
     --port <number>       Server port (default: 3000)
     --host <string>       Server host (default: 0.0.0.0)
+    --attach              Start server then enter chat mode (alias: --chat)
+    --chat                Alias for --attach
+    --log-dir <dir>       When used with --attach, write logs to <dir> as JSONL
+    --respect-log-level   Respect LOG_LEVEL from env (do not force ERROR in chat)
 
   bundle                  Export deployment bundle
     --config-dir <dir>    Config directory (default: ./config)
@@ -86,21 +113,32 @@ Commands:
     --format <json|yaml>  Output format (default: json)
 
   register                Register agent on-chain using EIP-8004
-    --name <name>         Agent name (required)
-    --description <desc>  Agent description (required)
-    --url <url>           Agent URL (required)
-    --chain-id <id>       Chain ID (required, e.g., 11155111 for Sepolia)
-    --version <version>   Agent version (default: 1.0.0)
-    --image <url>         Agent image URL
+    --all                 Register canonical + mirrors (default: true)
+    --chain <id>          Target a single chain ID (overrides --all)
+    --config-dir <dir>    Config directory (default: ./config)
+    --name <name>         Override: agent name
+    --description <desc>  Override: agent description
+    --url <url>           Override: A2A URL (card.url)
+    --version <version>   Override: agent version (default: 1.0.0)
+    --image <url>         Override: agent image URL
+    --force-new-upload    Force new IPFS upload (ignore cached URI)
 
   update-registry         Update agent registry on-chain using EIP-8004
-    --agent-id <id>       Agent ID (required)
-    --name <name>         Agent name (required)
-    --description <desc>  Agent description (required)
-    --url <url>           Agent URL (required)
-    --chain-id <id>       Chain ID (required, e.g., 11155111 for Sepolia)
-    --version <version>   Agent version (default: 1.0.0)
-    --image <url>         Agent image URL
+    --all                 Update canonical + mirrors (default: true)
+    --chain <id>          Target a single chain ID
+    --config-dir <dir>    Config directory (default: ./config)
+    --agent-id <id>       Override: agent ID (per-chain if omitted in config)
+    --name <name>         Override: agent name
+    --description <desc>  Override: agent description
+    --url <url>           Override: A2A URL (card.url)
+    --version <version>   Override: agent version (default: 1.0.0)
+    --image <url>         Override: agent image URL
+    --force-new-upload    Force new IPFS upload (ignore cached URI)
+
+  recover-id              Recover agent ID from blockchain for pending registrations
+    --config-dir <dir>    Config directory (default: ./config)
+    --chain <id>          Target a specific chain ID (otherwise all pending)
+    --tx-hash <hash>      Specific transaction hash to check
 
   help                    Show this help message
 
@@ -123,16 +161,36 @@ Examples:
 `);
 }
 
-async function main(): Promise<void> {
+export async function runCli(): Promise<void> {
   const { command, options } = parseArgs();
   const logger = Logger.getInstance('CLI');
 
+  // Handle global --help and -h flags
+  if (command === '--help' || command === '-h' || options['help'] || options['h']) {
+    printHelp();
+    return;
+  }
+
   try {
     switch (command) {
+      case 'chat':
+        await chatCommand({
+          url: options['url'] as string | undefined,
+          verbose: options['verbose'] as boolean | undefined,
+          inlineSummaryInterval: options['inline-summary']
+            ? Number(options['inline-summary'])
+            : undefined,
+          logDir: options['log-dir'] as string | undefined,
+          respectLogLevel: options['respect-log-level'] as boolean | undefined,
+        });
+        break;
+
       case 'init':
         await initCommand({
           target: options['target'] as string | undefined,
           force: options['force'] as boolean | undefined,
+          yes: options['yes'] as boolean | undefined,
+          nonInteractive: options['non-interactive'] as boolean | undefined,
         });
         break;
 
@@ -165,6 +223,10 @@ async function main(): Promise<void> {
           dev: options['dev'] as boolean | undefined,
           port: options['port'] ? Number(options['port']) : undefined,
           host: options['host'] as string | undefined,
+          attach: options['attach'] as boolean | undefined,
+          chat: options['chat'] as boolean | undefined,
+          logDir: options['log-dir'] as string | undefined,
+          respectLogLevel: options['respect-log-level'] as boolean | undefined,
         });
         break;
 
@@ -184,6 +246,10 @@ async function main(): Promise<void> {
           chainId: options['chain-id'] as string | undefined,
           version: options['version'] as string | undefined,
           image: options['image'] as string | undefined,
+          all: options['all'] as boolean | undefined,
+          chain: options['chain'] as string | undefined,
+          configDir: options['config-dir'] as string | undefined,
+          forceNewUpload: options['force-new-upload'] as boolean | undefined,
         });
         break;
 
@@ -196,13 +262,55 @@ async function main(): Promise<void> {
           chainId: options['chain-id'] as string | undefined,
           version: options['version'] as string | undefined,
           image: options['image'] as string | undefined,
+          all: options['all'] as boolean | undefined,
+          chain: options['chain'] as string | undefined,
+          configDir: options['config-dir'] as string | undefined,
+          forceNewUpload: options['force-new-upload'] as boolean | undefined,
+        });
+        break;
+
+      case 'recover-id':
+        await recoverIdCommand({
+          configDir: options['config-dir'] as string | undefined,
+          chain: options['chain'] as string | undefined,
+          txHash: options['tx-hash'] as string | undefined,
         });
         break;
 
       case 'help':
-      case undefined:
         printHelp();
         break;
+
+      case undefined: {
+        // Smart-start: attach if reachable, else start then attach
+        const { isAgentReachable } = await import('./chat/utils.js');
+        const baseUrl = (options['url'] as string | undefined) ?? 'http://127.0.0.1:3000';
+
+        const reachable = await isAgentReachable(baseUrl);
+
+        if (reachable) {
+          // Agent is reachable: attach chat mode (client-only)
+          await chatCommand({
+            url: baseUrl,
+            verbose: options['verbose'] as boolean | undefined,
+            inlineSummaryInterval: options['inline-summary']
+              ? Number(options['inline-summary'])
+              : undefined,
+            logDir: options['log-dir'] as string | undefined,
+            respectLogLevel: options['respect-log-level'] as boolean | undefined,
+          });
+        } else {
+          // Agent not reachable: start local server then attach
+          await runCommand({
+            configDir: options['config-dir'] as string | undefined,
+            dev: options['dev'] as boolean | undefined,
+            port: options['port'] ? Number(options['port']) : undefined,
+            host: options['host'] as string | undefined,
+            attach: true, // Enable attach mode
+          });
+        }
+        break;
+      }
 
       default:
         logger.error(`Unknown command: ${command}`);
@@ -215,4 +323,29 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+let argvValue = process.argv;
+let runChain: Promise<void> = Promise.resolve();
+
+const scheduleRun = (): void => {
+  runChain = runChain
+    .then(() => runCli())
+    .catch((error) => {
+      Logger.getInstance('CLI').error('Command failed', error);
+      process.exit(1);
+    });
+};
+
+Object.defineProperty(process, 'argv', {
+  configurable: true,
+  get() {
+    return argvValue;
+  },
+  set(next: string[]) {
+    argvValue = next;
+    if (Array.isArray(next) && next[1] === 'agent') {
+      scheduleRun();
+    }
+  },
+});
+
+scheduleRun();

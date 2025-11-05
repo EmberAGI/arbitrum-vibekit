@@ -11,7 +11,7 @@ import { v7 as uuidv7 } from 'uuid';
 import type { Hex } from 'viem';
 
 import type { AgentConfigHandle } from '../src/config/runtime/init.js';
-import { WorkflowRuntime } from '../src/workflows/runtime.js';
+import { WorkflowRuntime } from '../src/workflow/runtime.js';
 import usdaiStrategyWorkflow from '../tests/fixtures/workflows/usdai-strategy.js';
 import { get7702TestAccount, getTestChainId } from '../tests/utils/lifecycle-test-helpers.js';
 import {

@@ -15,25 +15,33 @@ async function main() {
     next();
   });
 
-  const tatumApiKey = process.env.TATUM_API_KEY;
+  const tatumApiKey = process.env['TATUM_API_KEY'];
   if (!tatumApiKey) {
     console.error('TATUM_API_KEY is required');
     process.exit(1);
   }
-  const chain = process.env.TATUM_CHAIN || 'arbitrum-one-mainnet';
+  const chain = process.env['TATUM_CHAIN'] || 'arbitrum-one-mainnet';
 
   const server = await createServer({ tatumApiKey, chain });
 
   const transports: Record<string, SSEServerTransport> = {};
   app.get('/sse', async (_req: Request, res: Response) => {
     const transport = new SSEServerTransport('/messages', res);
-    transports[transport.sessionId] = transport;
+    const sessionId = transport['sessionId'];
+    if (typeof sessionId !== 'string') {
+      throw new TypeError('SSE transport did not expose a string sessionId');
+    }
+    transports[sessionId] = transport;
     await server.connect(transport);
   });
 
   app.post('/messages', async (req: Request, res: Response) => {
-    const sessionId = req.query.sessionId as string;
-    const transport = transports[sessionId];
+    const sessionIdParam = req.query['sessionId'];
+    if (typeof sessionIdParam !== 'string') {
+      res.status(400).send('sessionId query parameter is required');
+      return;
+    }
+    const transport = transports[sessionIdParam];
     if (!transport) {
       res.status(400).send('No transport for sessionId');
       return;
@@ -60,7 +68,7 @@ async function main() {
     });
   });
 
-  const PORT = process.env.PORT || 3010;
+  const PORT = process.env['PORT'] || 3010;
   app.listen(PORT, () => console.error(`Tatum MCP server listening on ${PORT}`));
 
   const stdioTransport = new StdioServerTransport();
@@ -71,5 +79,3 @@ async function main() {
 }
 
 main().catch(() => process.exit(-1));
-
-

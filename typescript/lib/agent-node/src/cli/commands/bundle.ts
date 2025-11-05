@@ -7,6 +7,7 @@ import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { loadAgentConfig } from '../../config/orchestrator.js';
+import { resolveConfigDirectory } from '../../config/runtime/config-dir.js';
 import { cliOutput } from '../output.js';
 
 export interface BundleOptions {
@@ -40,7 +41,7 @@ function redactEnvRefs(obj: unknown): unknown {
 }
 
 export async function bundleCommand(options: BundleOptions = {}): Promise<void> {
-  const configDir = resolve(process.cwd(), options.configDir ?? 'config');
+  const { configDir } = resolveConfigDirectory(options.configDir);
   const manifestPath = resolve(configDir, 'agent.manifest.json');
   const outputPath = resolve(process.cwd(), options.output ?? 'agent-bundle.json');
 

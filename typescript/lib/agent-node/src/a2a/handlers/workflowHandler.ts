@@ -25,7 +25,7 @@ import z from 'zod';
 
 import { canonicalizeName } from '../../config/validators/tool-validator.js';
 import { Logger } from '../../utils/logger.js';
-import type { WorkflowRuntime } from '../../workflows/runtime.js';
+import type { WorkflowRuntime } from '../../workflow/runtime.js';
 import type { ContextManager } from '../sessions/manager.js';
 import type { ActiveTask, TaskState, WorkflowEvent } from '../types.js';
 
@@ -84,6 +84,16 @@ function extractErrorDetails(error: unknown): {
     },
   };
 }
+
+const isPromiseLike = (value: unknown): value is PromiseLike<unknown> => {
+  if (typeof value !== 'object' && typeof value !== 'function') {
+    return false;
+  }
+  if (value === null) {
+    return false;
+  }
+  return typeof (value as { then?: unknown }).then === 'function';
+};
 
 /**
  * Handles workflow-related operations for the agent executor
@@ -635,7 +645,39 @@ export class WorkflowHandler {
       const abortController = new AbortController();
 
       let aborted = false;
-      const completionPromise = Promise.resolve(execution.waitForCompletion());
+      const completionResult = execution.waitForCompletion();
+      if (!isPromiseLike(completionResult)) {
+        const completionMetadata =
+          typeof completionResult === 'object' && completionResult !== null
+            ? Object.keys(completionResult as Record<string, unknown>)
+            : undefined;
+        this.logger.error('waitForCompletion returned non-thenable value', {
+          executionId: execution.id,
+          pluginId: execution.pluginId,
+          resultType: typeof completionResult,
+          resultConstructor:
+            typeof completionResult === 'object' && completionResult !== null
+              ? (completionResult as { constructor?: { name?: string } }).constructor?.name
+              : undefined,
+          resultKeys: completionMetadata,
+          thenType:
+            typeof completionResult === 'object' && completionResult !== null
+              ? typeof (completionResult as { then?: unknown }).then
+              : undefined,
+        });
+        throw new TypeError(
+          `Workflow execution ${execution.id} returned non-thenable from waitForCompletion`,
+        );
+      }
+
+      const completionPromise = Promise.resolve(completionResult).catch((error) => {
+        this.logger.error('waitForCompletion rejected', error, {
+          executionId: execution.id,
+          pluginId: execution.pluginId,
+          resultType: typeof completionResult,
+        });
+        throw error instanceof Error ? error : new Error(String(error));
+      });
       const abortPromise = new Promise<void>((resolve) => {
         const onAbort = (): void => {
           aborted = true;

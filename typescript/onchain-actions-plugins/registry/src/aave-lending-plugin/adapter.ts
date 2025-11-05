@@ -1,9 +1,3 @@
-import { Chain } from './chain.js';
-import { type AAVEMarket, getMarket } from './market.js';
-import { UserSummary } from './userSummary.js';
-import { populateTransaction } from './populateTransaction.js';
-import { getUiPoolDataProviderImpl, type IUiPoolDataProvider } from './dataProvider.js';
-import { ethers, type PopulatedTransaction, utils } from 'ethers';
 import {
   Pool,
   PoolBundle,
@@ -11,6 +5,8 @@ import {
   type ReservesDataHumanized,
   type ReserveDataHumanized,
 } from '@aave/contract-helpers';
+import { ethers, type PopulatedTransaction, utils } from 'ethers';
+
 import {
   type TransactionPlan,
   type BorrowTokensRequest,
@@ -26,7 +22,12 @@ import {
   type GetWalletLendingPositionsRequest,
   type Token,
 } from '../core/index.js';
-import { ur } from 'zod/v4/locales';
+
+import { Chain } from './chain.js';
+import { getUiPoolDataProviderImpl, type IUiPoolDataProvider } from './dataProvider.js';
+import { type AAVEMarket, getMarket } from './market.js';
+import { populateTransaction } from './populateTransaction.js';
+import { UserSummary } from './userSummary.js';
 
 export type EModeCategory = 'default' | 'stablecoins';
 
@@ -333,7 +334,7 @@ export class AAVEAdapter {
     return new UserSummary(userReservesResponse, reservesResponse);
   }
 
-  private async borrow(asset: string, amount: string, from: string): Promise<AAVEAction> {
+  private borrow(asset: string, amount: string, from: string): Promise<AAVEAction> {
     // validate
     ethers.utils.getAddress(asset);
     ethers.utils.getAddress(from);
@@ -347,7 +348,7 @@ export class AAVEAdapter {
       interestRateMode: InterestRate.Variable,
     });
 
-    return [tx];
+    return Promise.resolve([tx]);
   }
 
   private async createApproval({

@@ -14,14 +14,13 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "docker:compose:up": "docker compose up --build --no-log-prefix",
-    "docker:compose:down": "docker compose down"
+    "docker:compose:down": "docker compose down",
+    "test:ci": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
-    "arbitrum-vibekit-core": "workspace:*",
+    "@emberai/arbitrum-vibekit-core": "catalog:",
     "ember-api": "workspace:*",
-    "ember-schemas": "workspace:*",
-    "@google-a2a/types": "workspace:*",
     "@ai-sdk/openai": "catalog:",
     "ai": "catalog:",
     "cors": "catalog:",

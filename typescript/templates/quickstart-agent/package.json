@@ -14,7 +14,8 @@
     "test:run": "NODE_OPTIONS=\"--no-warnings\" tsx node_modules/mocha/bin/mocha --exit --timeout 120000 'test/**/*.test.ts'",
     "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\"",
+    "test:ci": "echo \"Skipping CI tests for ${npm_package_name}\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:",

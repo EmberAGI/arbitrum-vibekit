@@ -1,7 +1,7 @@
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -14,7 +14,8 @@ export type ServeTransactionPageParams = {
   data: string;
   chainId: number;
   agentName?: string;
-  onAgentIdReceived?: (agentId: number) => void;
+  onAgentIdReceived?: (agentId: number | string, txHash?: string) => void;
+  onPendingAgentId?: (txHash: string) => void;
 };
 
 /**
@@ -35,18 +36,39 @@ export async function serveTransactionSigningPage(
       // Handle callback endpoint for agent ID
       if (req.method === 'POST' && req.url === '/callback') {
         let body = '';
-        req.on('data', (chunk) => {
-          body += chunk.toString();
+        req.on('data', (chunk: Buffer | string) => {
+          body += typeof chunk === 'string' ? chunk : chunk.toString();
         });
         req.on('end', () => {
           try {
-            const data = JSON.parse(body);
-            if (data.agentId && params.onAgentIdReceived) {
-              params.onAgentIdReceived(data.agentId);
+            const data: unknown = JSON.parse(body);
+            const record = data as Record<string, unknown>;
+
+            // Check if this is a pending agent ID callback
+            if (record['pendingAgentId'] === true && record['txHash']) {
+              if (params.onPendingAgentId) {
+                const txHashValue = record['txHash'];
+                if (typeof txHashValue === 'string' || typeof txHashValue === 'number') {
+                  params.onPendingAgentId(String(txHashValue));
+                }
+              }
+            } else {
+              // Try to extract agent ID
+              const agentId = extractAgentId(data);
+              const txHashValue = record['txHash'];
+              const txHash =
+                txHashValue && (typeof txHashValue === 'string' || typeof txHashValue === 'number')
+                  ? String(txHashValue)
+                  : undefined;
+
+              if (agentId !== null && params.onAgentIdReceived) {
+                params.onAgentIdReceived(agentId, txHash);
+              }
             }
+
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true }));
-          } catch (error) {
+          } catch (_error) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid request' }));
           }
@@ -91,6 +113,60 @@ export async function serveTransactionSigningPage(
   });
 }
 
+function extractAgentId(payload: unknown): number | string | null {
+  if (payload === null || typeof payload !== 'object') {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const candidates: unknown[] = [record['agentId'], record['agentIdDecimal'], record['agentIdHex']];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeAgentIdValue(candidate);
+    if (normalized !== null) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+function normalizeAgentIdValue(value: unknown): number | string | null {
+  if (typeof value === 'number') {
+    if (Number.isSafeInteger(value) && value >= 0) {
+      return value;
+    }
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+    if (/^0x[0-9a-fA-F]+$/.test(trimmed)) {
+      try {
+        return BigInt(trimmed).toString(10);
+      } catch {
+        return null;
+      }
+    }
+    if (/^\d+$/.test(trimmed)) {
+      try {
+        const asBigInt = BigInt(trimmed);
+        if (asBigInt <= BigInt(Number.MAX_SAFE_INTEGER)) {
+          return Number(asBigInt);
+        }
+        return asBigInt.toString(10);
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  return null;
+}
+
 /**
  * Opens a URL in the default browser using platform-specific commands.
  * @param url The URL to open
@@ -118,6 +194,7 @@ export async function openBrowser(url: string): Promise<void> {
   try {
     await execAsync(command);
   } catch (error) {
-    throw new Error(`Failed to open browser: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to open browser: ${errorMessage}`);
   }
 }

@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { ChainSchema, TokenSchema } from './core.js';
+
 import { CapabilitySchema } from './capabilities.js';
+import { ChainSchema, TokenSchema } from './core.js';
 import { CapabilityTypeSchema } from './enums.js';
 
 export const GetChainsRequestSchema = z.object({

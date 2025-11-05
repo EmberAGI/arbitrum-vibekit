@@ -16,7 +16,8 @@
     "dev": "tsx src/index.ts",
     "watch": "nodemon --watch 'src/**/*.ts' --exec 'tsx' src/index.ts",
     "test": "tsx test-mcp.ts",
-    "test:mcp": "pnpm build && tsx test-mcp.ts"
+    "test:mcp": "pnpm build && tsx test-mcp.ts",
+    "test:ci": "echo \"No CI tests defined for ${npm_package_name}\""
   },
   "keywords": [
     "mcp",
@@ -46,4 +47,4 @@
   "devDependencies": {
     "tsx": "catalog:"
   }
-} 
+}

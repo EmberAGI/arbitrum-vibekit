@@ -74,7 +74,8 @@ describe('CLI Commands Integration Tests', () => {
       expect(agentMd).toContain('version: 1');
       expect(agentMd).toContain('card:');
       expect(agentMd).toContain("protocolVersion: '0.3.0'");
-      expect(agentMd).toContain('model:');
+      expect(agentMd).toContain('ai:');
+      expect(agentMd).toContain('modelProvider:');
       expect(agentMd).toContain('You are a helpful AI agent');
     });
 

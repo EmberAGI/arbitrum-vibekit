@@ -1,10 +1,10 @@
-import { WorkflowRuntime } from '../../../src/workflows/runtime.js';
+import { WorkflowRuntime } from '../../../src/workflow/runtime.js';
 import type {
   ResumeResult,
   WorkflowExecution,
   WorkflowPlugin,
   PauseInfo,
-} from '../../../src/workflows/types.js';
+} from '../../../src/workflow/types.js';
 
 type TaskStateRecord = {
   state: string;

@@ -7,7 +7,7 @@ import {
 } from '@a2a-js/sdk/server';
 
 import type { AIService } from '../ai/service.js';
-import type { WorkflowRuntime } from '../workflows/runtime.js';
+import type { WorkflowRuntime } from '../workflow/runtime.js';
 
 import { AIHandler } from './handlers/aiHandler.js';
 import { MessageHandler } from './handlers/messageHandler.js';

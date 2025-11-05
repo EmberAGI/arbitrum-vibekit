@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import process from 'node:process';
 
 import { createA2AServer } from './a2a/server.js';
+import { resolveConfigDirectory } from './config/runtime/config-dir.js';
 import { initFromConfigWorkspace, type AgentConfigHandle } from './config/runtime/init.js';
 import { serviceConfig } from './config.js';
 import { Logger } from './utils/logger.js';
@@ -11,15 +12,15 @@ async function main(): Promise<void> {
   const logger = Logger.getInstance('Server');
 
   // Check for config workspace
-  const configRoot = resolve(process.cwd(), 'config');
+  const { configDir: configRoot } = resolveConfigDirectory();
   const manifestPath = resolve(configRoot, 'agent.manifest.json');
   if (!existsSync(manifestPath)) {
     throw new Error(
-      'Config workspace not found at ./config. Run "pnpm agent init" to scaffold the configuration workspace before starting the server.',
+      `Config workspace not found at ${configRoot}. Run "npx -y @emberai/agent-node init" to scaffold the configuration workspace before starting the server.`,
     );
   }
 
-  logger.info('Using config workspace from ./config');
+  logger.info(`Using config workspace from ${configRoot}`);
 
   const agentConfigHandle: AgentConfigHandle = await initFromConfigWorkspace({
     root: configRoot,

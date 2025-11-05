@@ -1,4 +1,3 @@
-import type { SwapActionCallback, SwapActions } from './swap.js';
 import type {
   LendingActions,
   LendingBorrowCallback,
@@ -17,6 +16,7 @@ import type {
   PerpetualsCreateLongPositionCallback,
   PerpetualsCreateShortPositionCallback,
 } from './perpetuals.js';
+import type { SwapActionCallback, SwapActions } from './swap.js';
 
 /**
  * The possible actions an ember plugin can perform.

@@ -13,7 +13,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { AIHandler } from '../../src/a2a/handlers/aiHandler.js';
 import { ContextManager } from '../../src/a2a/sessions/manager.js';
 import type { AIService } from '../../src/ai/service.js';
-import { WorkflowRuntime } from '../../src/workflows/runtime.js';
+import { WorkflowRuntime } from '../../src/workflow/runtime.js';
 import { waitForWorkflowState } from '../utils/lifecycle.js';
 import { StubAIService } from '../utils/mocks/ai-service.mock.js';
 import { RecordingEventBusManager } from '../utils/mocks/event-bus.mock.js';

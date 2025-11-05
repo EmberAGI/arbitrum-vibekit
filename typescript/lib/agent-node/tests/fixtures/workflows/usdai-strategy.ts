@@ -12,7 +12,7 @@ import type {
   WorkflowContext,
   WorkflowPlugin,
   WorkflowState,
-} from '../../../src/workflows/types.js';
+} from '../../../src/workflow/types.js';
 
 import { createClients } from './utils/clients.js';
 

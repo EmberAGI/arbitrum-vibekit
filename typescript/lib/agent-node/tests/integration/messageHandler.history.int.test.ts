@@ -11,9 +11,11 @@ import type { TaskStatusUpdateEvent } from '@a2a-js/sdk';
 import { InMemoryTaskStore } from '@a2a-js/sdk/server';
 import { describe, it, expect, beforeEach } from 'vitest';
 
+import type { AIHandler } from '../../src/a2a/handlers/aiHandler.js';
+import type { MessageHandler } from '../../src/a2a/handlers/messageHandler.js';
 import { ContextManager } from '../../src/a2a/sessions/manager.js';
 import type { AIService } from '../../src/ai/service.js';
-import { WorkflowRuntime } from '../../src/workflows/runtime.js';
+import { WorkflowRuntime } from '../../src/workflow/runtime.js';
 import { waitForWorkflowState } from '../utils/lifecycle.js';
 import { StubAIService } from '../utils/mocks/ai-service.mock.js';
 import { RecordingEventBusManager } from '../utils/mocks/event-bus.mock.js';
@@ -29,8 +31,8 @@ describe('MessageHandler History Integration', () => {
   let eventBusManager: RecordingEventBusManager;
   let workflowRuntime: WorkflowRuntime;
   let taskStore: InMemoryTaskStore;
-  let messageHandler: InstanceType<typeof import('../../src/a2a/handlers/messageHandler.js').MessageHandler>;
-  let aiHandler: InstanceType<typeof import('../../src/a2a/handlers/aiHandler.js').AIHandler>;
+  let messageHandler: MessageHandler;
+  let aiHandler: AIHandler;
 
   beforeEach(async () => {
     // Use real ContextManager for history testing
@@ -52,11 +54,7 @@ describe('MessageHandler History Integration', () => {
       taskStore,
     );
 
-    aiHandler = new AIHandler(
-      aiService as unknown as AIService,
-      workflowHandler,
-      contextManager,
-    );
+    aiHandler = new AIHandler(aiService as unknown as AIService, workflowHandler, contextManager);
 
     messageHandler = new MessageHandler(workflowHandler, aiHandler);
   });
@@ -106,13 +104,7 @@ describe('MessageHandler History Integration', () => {
     const eventBus2 = eventBusManager.createOrGetByTaskId(task2Id);
 
     // When: Second message (no existing task state)
-    await messageHandler.handleMessage(
-      task2Id,
-      contextId,
-      'Second message',
-      undefined,
-      eventBus2,
-    );
+    await messageHandler.handleMessage(task2Id, contextId, 'Second message', undefined, eventBus2);
 
     // Wait for second turn to complete
     await waitForWorkflowState(
@@ -224,13 +216,7 @@ describe('MessageHandler History Integration', () => {
     const eventBus = eventBusManager.createOrGetByTaskId(taskId);
 
     // When: Handle message with content
-    await messageHandler.handleMessage(
-      taskId,
-      contextId,
-      'Text content',
-      undefined,
-      eventBus,
-    );
+    await messageHandler.handleMessage(taskId, contextId, 'Text content', undefined, eventBus);
 
     await waitForWorkflowState(
       () => getStatusUpdates(eventBusManager.getRecordingBus(taskId)),
@@ -254,7 +240,7 @@ describe('MessageHandler History Integration', () => {
     contextManager.createContextWithId(contextId);
 
     // Given: A simple workflow that pauses
-    const { WorkflowRuntime: Runtime } = await import('../../src/workflows/runtime.js');
+    const { WorkflowRuntime: Runtime } = await import('../../src/workflow/runtime.js');
     const runtime = new Runtime();
 
     const pausingWorkflow = {

@@ -116,17 +116,17 @@ Test prompt`;
     expect(result.frontmatter.workflows?.overrides?.['workflow-a']?.config?.timeout).toBe(5000);
   });
 
-  it('should load skill with model override', () => {
-    // Given a skill with model override
+  it('should load skill with AI override', () => {
+    // Given a skill with AI override
     const skillPath = join(testDir, 'skill.md');
     const skillContent = `---
 skill:
   id: test-skill
   name: Test Skill
   description: Test
-model:
-  provider: anthropic
-  name: claude-opus-4
+ai:
+  modelProvider: anthropic
+  model: claude-opus-4
   params:
     temperature: 0.7
     reasoning: high
@@ -139,11 +139,11 @@ Test prompt`;
     // When loading
     const result = loadSkill(skillPath);
 
-    // Then should include model override
-    expect(result.frontmatter.model?.provider).toBe('anthropic');
-    expect(result.frontmatter.model?.name).toBe('claude-opus-4');
-    expect(result.frontmatter.model?.params?.temperature).toBe(0.7);
-    expect(result.frontmatter.model?.params?.reasoning).toBe('high');
+    // Then should include AI override
+    expect(result.frontmatter.ai?.modelProvider).toBe('anthropic');
+    expect(result.frontmatter.ai?.model).toBe('claude-opus-4');
+    expect(result.frontmatter.ai?.params?.['temperature']).toBe(0.7);
+    expect(result.frontmatter.ai?.params?.['reasoning']).toBe('high');
   });
 
   it('should load skill with A2A fields (tags, examples, modes)', () => {
@@ -315,48 +315,33 @@ Test`;
     expect(() => loadSkill(skillPath)).toThrow(/Failed to load skill/);
   });
 
-  it('should throw error for invalid model reasoning value', () => {
-    // Given a skill with invalid reasoning value
+  it('should accept AI params as flexible key-value pairs', () => {
+    // Given a skill with various AI params (new schema accepts any params)
     const skillPath = join(testDir, 'skill.md');
     const skillContent = `---
 skill:
   id: test-skill
   name: Test Skill
   description: Test
-model:
+ai:
   params:
     reasoning: invalid-value
----
-
-Test`;
-
-    writeFileSync(skillPath, skillContent);
-
-    // When loading
-    // Then should throw validation error
-    expect(() => loadSkill(skillPath)).toThrow(/Failed to load skill/);
-  });
-
-  it('should throw error for temperature out of range', () => {
-    // Given a skill with temperature > 2
-    const skillPath = join(testDir, 'skill.md');
-    const skillContent = `---
-skill:
-  id: test-skill
-  name: Test Skill
-  description: Test
-model:
-  params:
     temperature: 3.0
+    customParam: someValue
 ---
 
 Test`;
 
     writeFileSync(skillPath, skillContent);
 
-    // When loading
-    // Then should throw validation error
-    expect(() => loadSkill(skillPath)).toThrow(/Failed to load skill/);
+    // When loading with the new flexible schema
+    const result = loadSkill(skillPath);
+
+    // Then should accept any params without validation
+    expect(result.frontmatter.ai?.params).toBeDefined();
+    expect(result.frontmatter.ai?.params).toHaveProperty('reasoning', 'invalid-value');
+    expect(result.frontmatter.ai?.params).toHaveProperty('temperature', 3.0);
+    expect(result.frontmatter.ai?.params).toHaveProperty('customParam', 'someValue');
   });
 });
 
