@@ -51,8 +51,145 @@ npx -y @emberai/agent-node
 
 #### 3. Time to Profit!
 
+You can now build and execute any DeFi strategy through simple conversation with your agent node.
+
 > [!TIP]
 > Ready to customize your agent? See the [Configuration](#configuration) section below to learn about agent.md, skills, MCP servers, and workflows.
+
+## On-Chain Agent Registration
+
+Agent Node supports on-chain agent registration using the [EIP-8004 standard](https://eips.ethereum.org/EIPS/eip-8004), which provides a decentralized registry for AI agents.
+
+### Why Register On-Chain?
+
+- **Discoverability**: Make your agent discoverable through on-chain registries
+- **Verifiable Identity**: Establish cryptographic proof of agent ownership
+- **Interoperability**: Enable other systems to verify and interact with your agent
+- **Standards Compliance**: Follow the EIP-8004 Agent Identity standard
+
+### Prerequisites
+
+To register your agent, you'll need:
+
+1. **Pinata Account**: For IPFS file uploads
+   - Sign up at [pinata.cloud](https://pinata.cloud)
+   - Get your JWT token from API Keys section
+   - Configure your gateway URL
+2. **Environment Variables**:
+
+   ```bash
+   PINATA_JWT=your_pinata_jwt_token
+   PINATA_GATEWAY=your_pinata_gateway_url
+   ```
+
+3. **Wallet with ETH**: To pay for transaction fees on your chosen chain
+
+### Supported Chains
+
+- **Sepolia** (chainId: 11155111) - Ethereum testnet
+- More chains coming soon
+
+### Registration Workflow
+
+#### Configuration During Init
+
+When you run `npx -y @emberai/agent-node init`, you'll be prompted with optional EIP-8004 registration configuration:
+
+- **Enable ERC-8004**: Choose whether to enable on-chain registration
+- **Canonical Chain**: Select the primary chain for registration (e.g., Arbitrum One, Ethereum, Base)
+- **Mirror Chains**: Optionally select additional chains for multi-chain discovery
+- **Operator Address**: Optional wallet address that controls the agent identity (CAIP-10 format)
+- **Pinata Credentials**: JWT token and gateway URL for IPFS uploads
+
+These settings are saved to your `agent.md` frontmatter in the `erc8004` section.
+
+#### Registering Your Agent
+
+Once configured, register your agent on-chain:
+
+```bash
+npx -y @emberai/agent-node register
+```
+
+Optionally override specific fields:
+
+```bash
+npx -y @emberai/agent-node register \
+  --name "My Trading Agent" \
+  --description "Autonomous DeFi trading agent" \
+  --url "https://myagent.example.com" \
+  --version "1.0.0" \
+  --image "https://example.com/agent-image.png" \
+  --chain 11155111
+```
+
+**Options:**
+
+- `--chain <chainId>`: Target a specific chain (overrides --all)
+- `--all`: Register on canonical + mirror chains (default: true)
+- `--force-new-upload`: Force new IPFS upload (ignores cached URI from previous attempts)
+
+**What happens:**
+
+1. Loads ERC-8004 configuration from `agent.md`
+2. Builds EIP-8004 compliant registration file (name, description, A2A endpoint)
+3. Uploads registration file to IPFS via Pinata
+4. Saves IPFS URI to `agent.md` for retry capability
+5. Encodes `register(ipfsUri)` smart contract transaction
+6. Opens browser on localhost:3456 with transaction signing interface
+7. After successful transaction, extracts and saves `agentId` to `agent.md`
+
+#### Updating Registration
+
+To update your existing registration:
+
+```bash
+npx -y @emberai/agent-node update-registry \
+  --agent-id 123 \
+  --description "Updated: Now supports GMX v2" \
+  --version "2.0.0"
+```
+
+**Note**: You must own the agent (same wallet that registered it) to update. The command calls `setAgentUri(agentId, newIpfsUri)` on the registry contract.
+
+### EIP-8004 Registration Format
+
+The registration file follows EIP-8004 standard:
+
+```json
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "My Trading Agent",
+  "description": "Autonomous DeFi trading agent",
+  "image": "https://example.com/agent-image.png",
+  "endpoints": [
+    {
+      "name": "A2A",
+      "endpoint": "https://myagent.example.com/.well-known/agent-card.json",
+      "version": "1.0.0"
+    }
+  ],
+  "registrations": [
+    {
+      "agentId": 123,
+      "agentRegistry": "eip155:11155111:0x8004a6090Cd10A7288092483047B097295Fb8847"
+    }
+  ],
+  "supportedTrust": []
+}
+```
+
+### Identity Registry Contract
+
+The agent identity registry contract is deployed at:
+
+- **Sepolia**: `0x8004a6090Cd10A7288092483047B097295Fb8847`
+
+The contract implements:
+
+- `register(string ipfsUri)` - Register new agent
+- `setAgentUri(uint256 agentId, string ipfsUri)` - Update existing registration
+
 
 ## Configuration
 
@@ -189,8 +326,6 @@ Workflow plugin registry:
 
 Custom workflow implementations. Workflows are multi-step operations that manage A2A Task lifecycles (same concept as [Anthropic's workflows](https://www.anthropic.com/engineering/building-effective-agents)). The `init` command creates an `example-workflow.ts` demonstrating status updates, artifacts, and user confirmation. For detailed workflow documentation, see the [Workflows](#workflows) section under Core Concepts.
 
-#### Validate Your Configuration
-
 After making changes, validate your configuration:
 
 ```bash
@@ -198,179 +333,6 @@ npx -y @emberai/agent-node doctor
 ```
 
 This checks for configuration errors, missing references, and policy conflicts.
-
-### Chat Mode (Terminal)
-
-Chat is the default experience for the CLI and supports smart-start behavior.
-
-Basics:
-
-```bash
-# Smart-start (default): attach to running agent, else start local then attach
-npx -y @emberai/agent-node
-
-# Client-only chat to a specific URL (never starts a server)
-npx -y @emberai/agent-node chat --url http://127.0.0.1:3000
-
-# Start the server and then attach chat
-npx -y @emberai/agent-node run --attach
-```
-
-Logging behavior in chat:
-
-- Default: chat forces `LOG_LEVEL=ERROR` for console output to keep the stream clean.
-- `--respect-log-level`: opt out; respect `LOG_LEVEL` from your environment.
-- `--log-dir <dir>`: write daily JSONL logs to `<dir>` and suppress all console logs during chat.
-  - File logs always honor your environment `LOG_LEVEL`.
-  - Console remains clean; streamed assistant text is printed to stdout only.
-
-Examples:
-
-```bash
-# Clean chat + file-only logs that honor .env LOG_LEVEL
-npx -y @emberai/agent-node --log-dir ./logs
-
-# Client-only with file logs and environment log level
-npx -y @emberai/agent-node chat --url http://127.0.0.1:3000 --log-dir ./logs
-
-# Respect environment log level in console (do not force ERROR)
-npx -y @emberai/agent-node --respect-log-level
-
-# Start server then attach with file-only logs
-npx -y @emberai/agent-node run --attach --log-dir ./logs
-```
-
-### Environment Setup
-
-Copy the example environment file:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` to configure:
-
-```bash
-# AI Provider API Keys (at least one required)
-OPENROUTER_API_KEY=your_openrouter_key
-OPENAI_API_KEY=your_openai_key
-XAI_API_KEY=your_xai_key
-HYPERBOLIC_API_KEY=your_hyperbolic_key
-
-# Blockchain RPC URLs (optional, for wallet features)
-ETH_RPC_URL=https://eth.merkle.io
-ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc
-
-# On-Chain Registration (optional, for EIP-8004 registration)
-PINATA_JWT=your_pinata_jwt_token
-PINATA_GATEWAY=your_pinata_gateway_url
-
-# Server Configuration
-PORT=3000
-HOST=0.0.0.0
-
-# Public Endpoint (recommended for production)
-A2A_BASE_URL=https://your-domain.com
-```
-
-## Connecting with A2A SDK
-
-```typescript
-import { A2AClient } from '@a2a-js/sdk/client';
-
-const client = await A2AClient.fromCardUrl('http://localhost:3000/.well-known/agent.json');
-
-const response = await client.sendMessage({
-  message: {
-    kind: 'message',
-    messageId: 'msg-1',
-    role: 'user',
-    parts: [{ kind: 'text', text: 'Hello agent!' }],
-  },
-});
-
-console.log(response);
-```
-
-## Core Concepts
-
-### Sessions
-
-Sessions provide conversation isolation using `contextId`:
-
-- **Server-Generated**: Omit `contextId` to create new session
-- **Client-Provided**: Reattach to existing session with `contextId`
-- **Isolation**: Tasks, messages, and state are session-scoped
-- **Persistence**: Sessions persist for agent uptime
-
-### Tasks
-
-Tasks represent async operations:
-
-- **Creation**: AI tool calls automatically create tasks
-- **States**: `submitted`, `working`, `input-required`, `auth-required`, `completed`, `failed`, `canceled`
-- **Streaming**: Subscribe to task updates via `message/stream` with `taskId`
-- **Artifacts**: Tasks emit structured data artifacts on completion
-
-### Workflows
-
-Workflows are multi-step operations:
-
-- **Generator Functions**: Use `yield` for status updates and pauses
-- **Pause Points**: Request user input or authorization
-- **Validation**: Zod schemas validate resume inputs
-- **Tool Exposure**: Only `dispatch_workflow_*` tools exposed to AI (no resume)
-
-Example workflow:
-
-```typescript
-export const swapWorkflow: WorkflowPlugin = {
-  id: 'token_swap',
-  name: 'Token Swap',
-  inputSchema: z.object({
-    fromToken: z.string(),
-    toToken: z.string(),
-    amount: z.string(),
-  }),
-
-  async *execute(context) {
-    // Step 1: Get quote
-    yield { type: 'status', status: { state: 'working', message: 'Getting quote...' } };
-    const quote = await getQuote(context.parameters);
-
-    // Step 2: Request approval
-    const approval = yield {
-      type: 'pause',
-      status: {
-        state: 'auth-required',
-        message: {
-          /* A2A message */
-        },
-      },
-      inputSchema: z.object({ approved: z.boolean() }),
-    };
-
-    if (!approval.approved) {
-      throw new Error('User rejected swap');
-    }
-
-    // Step 3: Execute swap
-    yield { type: 'status', status: { message: 'Executing swap...' } };
-    const txHash = await executeSwap(quote);
-
-    return { txHash, status: 'success' };
-  },
-};
-```
-
-### MCP Integration
-
-MCP (Model Context Protocol) provides dynamic tools:
-
-- **Server Discovery**: Skills select MCP servers from registry
-- **Tool Scoping**: Each skill specifies allowed tools
-- **HTTP & Stdio**: Support for both transport types
-- **Namespacing**: Tool names prefixed with server namespace
 
 ### X402 Payment Protocol
 
@@ -381,140 +343,6 @@ Agent Node integrates the X402 protocol for internet-native payments between age
 - **Micropayments**: Support for fractional payments enabling pay-per-use service models
 - **Rapid Settlement**: On-chain payment verification with ~2 second settlement times
 - **Tool & Workflow Monetization**: Enable pay-per-call pricing for agent services and workflows
-
-## On-Chain Agent Registration
-
-Agent Node supports on-chain agent registration using the [EIP-8004 standard](https://eips.ethereum.org/EIPS/eip-8004), which provides a decentralized registry for AI agents.
-
-### Why Register On-Chain?
-
-- **Discoverability**: Make your agent discoverable through on-chain registries
-- **Verifiable Identity**: Establish cryptographic proof of agent ownership
-- **Interoperability**: Enable other systems to verify and interact with your agent
-- **Standards Compliance**: Follow the EIP-8004 Agent Identity standard
-
-### Prerequisites
-
-To register your agent, you'll need:
-
-1. **Pinata Account**: For IPFS file uploads
-   - Sign up at [pinata.cloud](https://pinata.cloud)
-   - Get your JWT token from API Keys section
-   - Configure your gateway URL
-2. **Environment Variables**:
-
-   ```bash
-   PINATA_JWT=your_pinata_jwt_token
-   PINATA_GATEWAY=your_pinata_gateway_url
-   ```
-
-3. **Wallet with ETH**: To pay for transaction fees on your chosen chain
-
-### Supported Chains
-
-- **Sepolia** (chainId: 11155111) - Ethereum testnet
-- More chains coming soon
-
-### Registration Workflow
-
-#### Configuration During Init
-
-When you run `npx -y @emberai/agent-node init`, you'll be prompted with optional EIP-8004 registration configuration:
-
-- **Enable ERC-8004**: Choose whether to enable on-chain registration
-- **Canonical Chain**: Select the primary chain for registration (e.g., Arbitrum One, Ethereum, Base)
-- **Mirror Chains**: Optionally select additional chains for multi-chain discovery
-- **Operator Address**: Optional wallet address that controls the agent identity (CAIP-10 format)
-- **Pinata Credentials**: JWT token and gateway URL for IPFS uploads
-
-These settings are saved to your `agent.md` frontmatter in the `erc8004` section.
-
-#### Registering Your Agent
-
-Once configured, register your agent on-chain:
-
-```bash
-npx -y @emberai/agent-node register
-```
-
-Optionally override specific fields:
-
-```bash
-npx -y @emberai/agent-node register \
-  --name "My Trading Agent" \
-  --description "Autonomous DeFi trading agent" \
-  --url "https://myagent.example.com" \
-  --version "1.0.0" \
-  --image "https://example.com/agent-image.png" \
-  --chain 11155111
-```
-
-**Options:**
-
-- `--chain <chainId>`: Target a specific chain (overrides --all)
-- `--all`: Register on canonical + mirror chains (default: true)
-- `--force-new-upload`: Force new IPFS upload (ignores cached URI from previous attempts)
-
-**What happens:**
-
-1. Loads ERC-8004 configuration from `agent.md`
-2. Builds EIP-8004 compliant registration file (name, description, A2A endpoint)
-3. Uploads registration file to IPFS via Pinata
-4. Saves IPFS URI to `agent.md` for retry capability
-5. Encodes `register(ipfsUri)` smart contract transaction
-6. Opens browser on localhost:3456 with transaction signing interface
-7. After successful transaction, extracts and saves `agentId` to `agent.md`
-
-#### Updating Registration
-
-To update your existing registration:
-
-```bash
-npx -y @emberai/agent-node update-registry \
-  --agent-id 123 \
-  --description "Updated: Now supports GMX v2" \
-  --version "2.0.0"
-```
-
-**Note**: You must own the agent (same wallet that registered it) to update. The command calls `setAgentUri(agentId, newIpfsUri)` on the registry contract.
-
-### EIP-8004 Registration Format
-
-The registration file follows EIP-8004 standard:
-
-```json
-{
-  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
-  "name": "My Trading Agent",
-  "description": "Autonomous DeFi trading agent",
-  "image": "https://example.com/agent-image.png",
-  "endpoints": [
-    {
-      "name": "A2A",
-      "endpoint": "https://myagent.example.com/.well-known/agent-card.json",
-      "version": "1.0.0"
-    }
-  ],
-  "registrations": [
-    {
-      "agentId": 123,
-      "agentRegistry": "eip155:11155111:0x8004a6090Cd10A7288092483047B097295Fb8847"
-    }
-  ],
-  "supportedTrust": []
-}
-```
-
-### Identity Registry Contract
-
-The agent identity registry contract is deployed at:
-
-- **Sepolia**: `0x8004a6090Cd10A7288092483047B097295Fb8847`
-
-The contract implements:
-
-- `register(string ipfsUri)` - Register new agent
-- `setAgentUri(uint256 agentId, string ipfsUri)` - Update existing registration
 
 ## Creating Workflows
 
@@ -584,13 +412,18 @@ const plugin: WorkflowPlugin = {
 
 See the [Workflow Creation Guide](docs/WORKFLOW-CREATION-GUIDE.md) for complete documentation, patterns, and examples.
 
-## CLI Commands
+## CLI Commands & Chat Interface
 
-The Agent CLI provides essential commands for managing your agent throughout its lifecycle:
+The Agent CLI provides essential commands for managing your agent throughout its lifecycle, with chat as the default interactive experience.
+
+### Core Commands
 
 ```bash
 # Initialize agent configuration - Creates a new agent configuration workspace with sample files
 npx -y @emberai/agent-node init
+
+# Smart-start chat (default) - Attach to running agent, else start local then attach
+npx -y @emberai/agent-node
 
 # Run agent in development mode - Starts your agent with hot reload for development
 npx -y @emberai/agent-node run --dev
@@ -609,6 +442,45 @@ npx -y @emberai/agent-node register
 
 # Update agent registry - Update existing on-chain registration
 npx -y @emberai/agent-node update-registry --agent-id 123
+```
+
+### Chat Interface Options
+
+Chat supports smart-start behavior and flexible logging configurations:
+
+```bash
+# Smart-start (default): attach to running agent, else start local then attach
+npx -y @emberai/agent-node
+
+# Client-only chat to a specific URL (never starts a server)
+npx -y @emberai/agent-node chat --url http://127.0.0.1:3000
+
+# Start the server and then attach chat
+npx -y @emberai/agent-node run --attach
+```
+
+### Logging Configuration
+
+- **Default**: Chat forces `LOG_LEVEL=ERROR` for console output to keep the stream clean
+- **`--respect-log-level`**: Opt out; respect `LOG_LEVEL` from your environment
+- **`--log-dir <dir>`**: Write daily JSONL logs to `<dir>` and suppress all console logs during chat
+  - File logs always honor your environment `LOG_LEVEL`
+  - Console remains clean; streamed assistant text is printed to stdout only
+
+**Logging Examples:**
+
+```bash
+# Clean chat + file-only logs that honor .env LOG_LEVEL
+npx -y @emberai/agent-node --log-dir ./logs
+
+# Client-only with file logs and environment log level
+npx -y @emberai/agent-node chat --url http://127.0.0.1:3000 --log-dir ./logs
+
+# Respect environment log level in console (do not force ERROR)
+npx -y @emberai/agent-node --respect-log-level
+
+# Start server then attach with file-only logs
+npx -y @emberai/agent-node run --attach --log-dir ./logs
 ```
 
 ## Development
@@ -855,48 +727,5 @@ volumes:
 - Matches how agent-node runs natively (`npx agent-node --config-dir=./config`)
 - Standard Docker volume mount pattern for configuration
 
-**Important:** The `config/` directory must exist before starting containers. If you see "Config workspace not found" errors, run `npx -y @emberai/agent-node init` first.
-
-### Environment Variables
-
-Production deployment requires:
-
-```bash
-# Required
-OPENROUTER_API_KEY=***     # Or other AI provider key
-PORT=3000
-HOST=0.0.0.0
-
-# Optional
-NODE_ENV=production
-LOG_LEVEL=info
-```
-
-### Health Checks
-
-- **Endpoint**: `POST /a2a` with `{"jsonrpc": "2.0", "method": "health", "id": 1}`
-- **Expected**: `200 OK` with `{"jsonrpc": "2.0", "result": {...}, "id": 1}`
-
-### Reverse Proxy (Caddy)
-
-Example `Caddyfile`:
-
-```caddyfile
-agent.example.com {
-    reverse_proxy localhost:3000
-}
-```
-
-## License
-
-See `LICENSE` file in repository root.
-
-## Contributing
-
-See `CONTRIBUTING.md` for development guidelines.
-
-## Support
-
-- **Issues**: https://github.com/your-org/agent-node/issues
-- **Docs**: https://docs.yourproject.com
-- **A2A Protocol**: https://a2a.co
+> [!IMPORTANT]
+> The `config/` directory must exist before starting containers. If you see "Config workspace not found" errors, run `npx -y @emberai/agent-node init` first.
