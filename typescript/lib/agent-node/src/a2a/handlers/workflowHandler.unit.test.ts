@@ -6,7 +6,7 @@ import type { ExecutionEventBus } from '@a2a-js/sdk/server';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { RecordingEventBus } from '../../../tests/utils/mocks/event-bus.mock.js';
-import type { WorkflowRuntime } from '../../workflows/runtime.js';
+import type { WorkflowRuntime } from '../../workflow/runtime.js';
 import { ContextManager } from '../sessions/manager.js';
 
 type MockedFn<T extends (...args: unknown[]) => unknown> = ReturnType<typeof vi.fn<T>>;

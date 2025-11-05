@@ -16,16 +16,16 @@ import { exact } from 'x402/schemes';
 import type { PaymentRequirements } from 'x402/types';
 
 import type { AgentConfigHandle } from '../src/config/runtime/init.js';
-import { WorkflowRuntime } from '../src/workflows/runtime.js';
+import { WorkflowRuntime } from '../src/workflow/runtime.js';
 import type {
   X402PaymentPayload,
-  X402Requirements} from '../src/workflows/x402-types.js';
+  X402Requirements} from '../src/workflow/x402-types.js';
 import {
   X402_REQUIREMENTS_KEY,
   X402_STATUS_KEY,
   X402_PAYMENT_PAYLOAD_KEY,
   X402_RECEIPTS_KEY
-} from '../src/workflows/x402-types.js';
+} from '../src/workflow/x402-types.js';
 import usdaiStrategyWorkflow from '../tests/fixtures/workflows/usdai-strategy.js';
 import { get7702TestAccount, getTestChainId } from '../tests/utils/lifecycle-test-helpers.js';
 import {

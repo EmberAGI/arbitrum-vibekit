@@ -45,6 +45,19 @@ export const SkillModelOverrideSchema = z.object({
     .optional(),
 });
 
+/**
+ * Skill AI Override Schema (replaces SkillModelOverrideSchema)
+ * New naming convention per PRD: ai.modelProvider, ai.model, ai.params
+ * Strict mode: rejects unknown keys (e.g., deprecated 'provider', 'name')
+ */
+export const SkillAIOverrideSchema = z
+  .object({
+    modelProvider: z.string().optional(),
+    model: z.string().optional(),
+    params: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+
 export const SkillA2AFieldsSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -58,18 +71,25 @@ export const SkillA2AFieldsSchema = z.object({
   guardrails: GuardrailConfigSchema.optional(),
 });
 
-export const SkillFrontmatterSchema = z.object({
-  skill: SkillA2AFieldsSchema,
-  model: SkillModelOverrideSchema.optional(),
-  mcp: SkillMCPConfigSchema.optional(),
-  workflows: SkillWorkflowsConfigSchema.optional(),
-});
+/**
+ * Skill Frontmatter Schema
+ * Strict mode: rejects unknown keys (e.g., deprecated 'model')
+ */
+export const SkillFrontmatterSchema = z
+  .object({
+    skill: SkillA2AFieldsSchema,
+    ai: SkillAIOverrideSchema.optional(),
+    mcp: SkillMCPConfigSchema.optional(),
+    workflows: SkillWorkflowsConfigSchema.optional(),
+  })
+  .strict();
 
 export type SkillMCPServerSelection = z.infer<typeof SkillMCPServerSelectionSchema>;
 export type SkillWorkflowOverride = z.infer<typeof SkillWorkflowOverrideSchema>;
 export type SkillWorkflowsConfig = z.infer<typeof SkillWorkflowsConfigSchema>;
 export type SkillMCPConfig = z.infer<typeof SkillMCPConfigSchema>;
 export type SkillModelOverride = z.infer<typeof SkillModelOverrideSchema>;
+export type SkillAIOverride = z.infer<typeof SkillAIOverrideSchema>;
 export type SkillA2AFields = z.infer<typeof SkillA2AFieldsSchema>;
 export type SkillFrontmatter = z.infer<typeof SkillFrontmatterSchema>;
 export type SkillCapabilities = AgentCapabilities;

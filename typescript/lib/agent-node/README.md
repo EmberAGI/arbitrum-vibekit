@@ -2,7 +2,7 @@
 
 **A modern agent framework for the agentic economy**
 
-Agent Node enables building autonomous AI agents that can communicate with other agents, execute complex workflows, and perform transactions. It's a complete implementation of the [A2A (Agent-to-Agent) protocol](https://a2a.co) with integrated AI capabilities, workflow orchestration, and blockchain wallet support.
+Agent Node enables building autonomous AI agents that can communicate with other agents, execute complex workflows, and perform transactions. It's a complete implementation of the [A2A (Agent-to-Agent) protocol](https://a2a.co) with integrated AI capabilities, workflow orchestration, blockchain wallet support, and HTTP-native payment infrastructure via X402 for autonomous agent commerce.
 
 ## Features
 
@@ -13,45 +13,232 @@ Agent Node provides a complete framework for building autonomous AI agents with 
 - **Workflow Orchestration**: Generator-based workflow system with pause/resume capabilities
 - **MCP Integration**: Model Context Protocol support for dynamic tool/resource access
 - **Blockchain Support**: Embedded EOA wallet with multi-chain transaction signing
+- **X402 Payment Protocol**: HTTP-native payment infrastructure enabling autonomous agent transactions and micropayment-based service models
+- **On-Chain Registration**: EIP-8004 compliant agent identity registration on Ethereum
 - **Skills Framework**: Modular skill composition with isolated tool/resource scoping
 - **Type-Safe**: Full TypeScript support with Zod schema validation
 
-## Installation
+## Quick Start in 60 Seconds
 
-### Prerequisites
+### Using the CLI
 
-- Node.js >= 22.0.0
-- pnpm (recommended) or npm
+> [!NOTE]
+> You can initialize agent node anywhere on your system. To take advantage of the tools that Vibekit offers, we recommend creating your agent node in the [community agent directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community/agents).
 
-### Install Dependencies
+#### 1. Initialize Config Workspace
 
 ```bash
-cd lib/agent-node
-pnpm install
+npx -y @emberai/agent-node init
 ```
 
-### CLI Access
+This creates a `config/` directory with:
 
-The agent CLI is available after installation:
+- `agent.md` - Base agent configuration including system prompt, model settings, A2A protocol card definition, and EIP-8004 registration details
+- `agent.manifest.json` - Skill composition settings
+- `skills/` - Directory for skill modules (includes sample skills)
+- `workflows/` - Directory for custom workflow implementations (includes example workflow)
+- `mcp.json` - MCP server registry
+- `workflow.json` - Workflow plugin registry
+- `README.md` - Config workspace documentation
 
-- **Development**: `pnpm cli <command>` or `tsx src/cli/loader.ts <command>`
-- **Production**: `node dist/cli/loader.js <command>` (after running `pnpm build`)
+#### 2. Run the Server
 
-**Environment Variable Loading**: The CLI automatically loads `.env` and `.env.local` files from the current directory using Node.js native `process.loadEnvFile()`. The loader entry point ensures environment variables are available before the application initializes. No need to manually specify `--env-file` flags.
+Smart-start chat mode (connects to running agent or starts new server):
 
-**Note**: If `tsx` is not found in your PATH, use `pnpm exec tsx` or `npx tsx` instead to run the locally installed version.
+```bash
+npx -y @emberai/agent-node
+```
 
-See [CLI Reference](#cli-reference) for all available commands.
+#### 3. Time to Profit!
 
-### CLI Dependencies
+> [!TIP]
+> Ready to customize your agent? See the [Configuration](#configuration) section below to learn about agent.md, skills, MCP servers, and workflows.
 
-The CLI uses the following dependencies for clean, user-friendly output:
+## Configuration
 
-- **picocolors** - Terminal colors (lightweight, fast)
-- **ora** - Spinners for long-running operations
-- **prompts** - _(future)_ For interactive CLI features when needed
+### Workspace Structure
 
-These dependencies are automatically installed when you run `pnpm install`.
+Agent Node uses a file-based configuration workspace:
+
+```
+config-workspace/
+├── agent.md                 # Base agent + model config
+├── agent.manifest.json      # Skill/server selection
+├── skills/                  # Modular skill definitions
+│   ├── skill-1.md
+│   └── skill-2.md
+├── mcp.json                 # MCP server registry
+├── workflow.json            # Workflow registry
+└── workflows/               # Custom workflow implementations
+    └── example-workflow.ts
+```
+
+### Configuration Files
+
+The configuration workspace contains several key files that define your agent's behavior.
+
+#### Agent Definition (`agent.md`)
+
+Base agent configuration including system prompt, model settings, A2A protocol card definition, and EIP-8004 registration details:
+
+```markdown
+---
+version: 1
+card:
+  protocolVersion: '0.3.0'
+  name: 'My Agent'
+  description: 'An autonomous AI agent'
+  url: 'http://localhost:3000/a2a'
+  version: '1.0.0'
+  capabilities:
+    streaming: true
+    pushNotifications: false
+  provider:
+    name: 'My Company'
+    url: 'https://example.com'
+
+ai:
+  modelProvider: openrouter
+  model: openai/gpt-5
+---
+
+You are an AI agent that helps users with...
+```
+
+#### Skills (`skills/*.md`)
+
+Modular skill definitions that compose your agent's capabilities. The `init` command creates two sample skills:
+
+- `general-assistant.md` - General assistant capabilities
+- `ember-onchain-actions.md` - On-chain DeFi operations
+
+Example skill structure:
+
+```markdown
+---
+skill:
+  id: token-swap
+  name: 'Token Swap Skill'
+  description: 'Execute token swaps on DEXes'
+  tags: [defi, swap]
+
+mcp:
+  servers:
+    - name: ember-onchain
+      allowedTools: [createSwap, getSwapQuote]
+---
+
+You can help users swap tokens using the createSwap tool...
+```
+
+#### Skill Manifest (`agent.manifest.json`)
+
+Skill composition and workflow selection settings:
+
+```json
+{
+  "version": "1.0",
+  "skills": ["token-swap", "wallet-management"],
+  "enabledWorkflows": ["approve-and-swap"]
+}
+```
+
+#### MCP Registry (`mcp.json`)
+
+MCP server registry for dynamic tool/resource access:
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    },
+    "ember-onchain": {
+      "type": "http",
+      "url": "https://api.emberai.xyz/mcp",
+      "headers": {
+        "Authorization": "$env:EMBER_API_KEY"
+      }
+    }
+  }
+}
+```
+
+#### Workflow Registry (`workflow.json`)
+
+Workflow plugin registry:
+
+```json
+{
+  "workflows": [
+    {
+      "id": "example-workflow",
+      "from": "./workflows/example-workflow.ts",
+      "enabled": true,
+      "config": {
+        "mode": "default"
+      }
+    }
+  ]
+}
+```
+
+#### Workflows (`workflows/*.ts`)
+
+Custom workflow implementations. Workflows are multi-step operations that manage A2A Task lifecycles (same concept as [Anthropic's workflows](https://www.anthropic.com/engineering/building-effective-agents)). The `init` command creates an `example-workflow.ts` demonstrating status updates, artifacts, and user confirmation. For detailed workflow documentation, see the [Workflows](#workflows) section under Core Concepts.
+
+#### Validate Your Configuration
+
+After making changes, validate your configuration:
+
+```bash
+npx -y @emberai/agent-node doctor
+```
+
+This checks for configuration errors, missing references, and policy conflicts.
+
+### Chat Mode (Terminal)
+
+Chat is the default experience for the CLI and supports smart-start behavior.
+
+Basics:
+
+```bash
+# Smart-start (default): attach to running agent, else start local then attach
+npx -y @emberai/agent-node
+
+# Client-only chat to a specific URL (never starts a server)
+npx -y @emberai/agent-node chat --url http://127.0.0.1:3000
+
+# Start the server and then attach chat
+npx -y @emberai/agent-node run --attach
+```
+
+Logging behavior in chat:
+
+- Default: chat forces `LOG_LEVEL=ERROR` for console output to keep the stream clean.
+- `--respect-log-level`: opt out; respect `LOG_LEVEL` from your environment.
+- `--log-dir <dir>`: write daily JSONL logs to `<dir>` and suppress all console logs during chat.
+  - File logs always honor your environment `LOG_LEVEL`.
+  - Console remains clean; streamed assistant text is printed to stdout only.
+
+Examples:
+
+```bash
+# Clean chat + file-only logs that honor .env LOG_LEVEL
+npx -y @emberai/agent-node --log-dir ./logs
+
+# Client-only with file logs and environment log level
+npx -y @emberai/agent-node chat --url http://127.0.0.1:3000 --log-dir ./logs
+
+# Respect environment log level in console (do not force ERROR)
+npx -y @emberai/agent-node --respect-log-level
+
+# Start server then attach with file-only logs
+npx -y @emberai/agent-node run --attach --log-dir ./logs
+```
 
 ### Environment Setup
 
@@ -74,112 +261,24 @@ HYPERBOLIC_API_KEY=your_hyperbolic_key
 ETH_RPC_URL=https://eth.merkle.io
 ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc
 
+# On-Chain Registration (optional, for EIP-8004 registration)
+PINATA_JWT=your_pinata_jwt_token
+PINATA_GATEWAY=your_pinata_gateway_url
+
 # Server Configuration
 PORT=3000
 HOST=0.0.0.0
+
+# Public Endpoint (recommended for production)
+A2A_BASE_URL=https://your-domain.com
 ```
 
-## Quick Start
-
-### Using the CLI (Recommended)
-
-#### 1. Initialize Config Workspace
-
-```bash
-pnpm cli init
-```
-
-This creates a `config/` directory with:
-
-- `agent.md` - Base agent configuration and system prompt
-- `agent.manifest.json` - Skill composition settings
-- `skills/` - Directory for skill modules
-- `mcp.json` - MCP server registry
-- `workflow.json` - Workflow plugin registry
-
-#### 2. Customize Your Agent
-
-Edit `config/agent.md` to define your agent's personality and capabilities. Add skills in `config/skills/`.
-
-#### 3. Validate Configuration
-
-```bash
-pnpm cli doctor
-```
-
-Checks for configuration errors, missing references, and policy conflicts.
-
-#### 4. Run the Server
-
-Development mode (with hot reload):
-
-```bash
-pnpm cli run --dev
-```
-
-Production mode:
-
-```bash
-node dist/cli/loader.js run
-```
-
-### Using pnpm Scripts (Alternative)
-
-#### 1. Build the Project
-
-```bash
-pnpm build
-```
-
-#### 2. Start the Server
-
-Development mode (with hot reload):
-
-```bash
-pnpm dev
-```
-
-Production mode:
-
-```bash
-pnpm start
-```
-
-### Testing the Server
-
-The server exposes:
-
-- **A2A Endpoint**: `http://localhost:3000/a2a` (JSON-RPC)
-- **Agent Card**: `http://localhost:3000/.well-known/agent-card.json`
-- **Health Check**: POST to `/a2a` with `{"jsonrpc": "2.0", "method": "health", "id": 1}`
-
-Example message request:
-
-```bash
-curl -X POST http://localhost:3000/a2a \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "message/send",
-    "params": {
-      "message": {
-        "kind": "message",
-        "messageId": "msg-1",
-        "contextId": "ctx-demo",
-        "role": "user",
-        "parts": [{"kind": "text", "text": "What is 2+2?"}]
-      }
-    },
-    "id": 1
-  }'
-```
-
-### Connecting with A2A SDK
+## Connecting with A2A SDK
 
 ```typescript
 import { A2AClient } from '@a2a-js/sdk/client';
 
-const client = await A2AClient.fromCardUrl('http://localhost:3000/.well-known/agent-card.json');
+const client = await A2AClient.fromCardUrl('http://localhost:3000/.well-known/agent.json');
 
 const response = await client.sendMessage({
   message: {
@@ -191,99 +290,6 @@ const response = await client.sendMessage({
 });
 
 console.log(response);
-```
-
-## Configuration
-
-### Workspace Structure
-
-Agent Node uses a file-based configuration workspace:
-
-```
-config-workspace/
-├── agent.md                 # Base agent + model config
-├── agent.manifest.json      # Skill/server selection
-├── skills/                  # Modular skill definitions
-│   ├── skill-1.md
-│   └── skill-2.md
-├── mcp.json                # MCP server registry
-└── workflow.json           # Workflow registry
-```
-
-### Agent Definition (agent.md)
-
-```markdown
----
-version: 1
-card:
-  protocolVersion: '0.3.0'
-  name: 'My Agent'
-  description: 'An autonomous AI agent'
-  url: 'http://localhost:3000/a2a'
-  version: '1.0.0'
-  capabilities:
-    streaming: true
-    pushNotifications: false
-  provider:
-    name: 'My Company'
-    url: 'https://example.com'
-
-model:
-  provider: openrouter
-  name: anthropic/claude-sonnet-4.5
----
-
-You are an AI agent that helps users with...
-```
-
-### Skills (skills/\*.md)
-
-```markdown
----
-skill:
-  id: token-swap
-  name: 'Token Swap Skill'
-  description: 'Execute token swaps on DEXes'
-  tags: [defi, swap]
-
-mcp:
-  servers:
-    - name: ember-onchain
-      allowedTools: [createSwap, getSwapQuote]
----
-
-You can help users swap tokens using the createSwap tool...
-```
-
-### Manifest (agent.manifest.json)
-
-```json
-{
-  "version": "1.0",
-  "skills": ["token-swap", "wallet-management"],
-  "enabledWorkflows": ["approve-and-swap"]
-}
-```
-
-### MCP Registry (mcp.json)
-
-```json
-{
-  "mcpServers": {
-    "playwright": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["@playwright/mcp@latest"]
-    },
-    "ember-onchain": {
-      "type": "http",
-      "url": "https://api.emberai.xyz/mcp",
-      "headers": {
-        "Authorization": "$env:EMBER_API_KEY"
-      }
-    }
-  }
-}
 ```
 
 ## Core Concepts
@@ -366,6 +372,150 @@ MCP (Model Context Protocol) provides dynamic tools:
 - **HTTP & Stdio**: Support for both transport types
 - **Namespacing**: Tool names prefixed with server namespace
 
+### X402 Payment Protocol
+
+Agent Node integrates the X402 protocol for internet-native payments between agents:
+
+- **HTTP 402 Standard**: Leverages HTTP 402 "Payment Required" status code for seamless payment flows
+- **Autonomous Commerce**: Agents can transact with each other without human intervention
+- **Micropayments**: Support for fractional payments enabling pay-per-use service models
+- **Rapid Settlement**: On-chain payment verification with ~2 second settlement times
+- **Tool & Workflow Monetization**: Enable pay-per-call pricing for agent services and workflows
+
+## On-Chain Agent Registration
+
+Agent Node supports on-chain agent registration using the [EIP-8004 standard](https://eips.ethereum.org/EIPS/eip-8004), which provides a decentralized registry for AI agents.
+
+### Why Register On-Chain?
+
+- **Discoverability**: Make your agent discoverable through on-chain registries
+- **Verifiable Identity**: Establish cryptographic proof of agent ownership
+- **Interoperability**: Enable other systems to verify and interact with your agent
+- **Standards Compliance**: Follow the EIP-8004 Agent Identity standard
+
+### Prerequisites
+
+To register your agent, you'll need:
+
+1. **Pinata Account**: For IPFS file uploads
+   - Sign up at [pinata.cloud](https://pinata.cloud)
+   - Get your JWT token from API Keys section
+   - Configure your gateway URL
+2. **Environment Variables**:
+
+   ```bash
+   PINATA_JWT=your_pinata_jwt_token
+   PINATA_GATEWAY=your_pinata_gateway_url
+   ```
+
+3. **Wallet with ETH**: To pay for transaction fees on your chosen chain
+
+### Supported Chains
+
+- **Sepolia** (chainId: 11155111) - Ethereum testnet
+- More chains coming soon
+
+### Registration Workflow
+
+#### Configuration During Init
+
+When you run `npx -y @emberai/agent-node init`, you'll be prompted with optional EIP-8004 registration configuration:
+
+- **Enable ERC-8004**: Choose whether to enable on-chain registration
+- **Canonical Chain**: Select the primary chain for registration (e.g., Arbitrum One, Ethereum, Base)
+- **Mirror Chains**: Optionally select additional chains for multi-chain discovery
+- **Operator Address**: Optional wallet address that controls the agent identity (CAIP-10 format)
+- **Pinata Credentials**: JWT token and gateway URL for IPFS uploads
+
+These settings are saved to your `agent.md` frontmatter in the `erc8004` section.
+
+#### Registering Your Agent
+
+Once configured, register your agent on-chain:
+
+```bash
+npx -y @emberai/agent-node register
+```
+
+Optionally override specific fields:
+
+```bash
+npx -y @emberai/agent-node register \
+  --name "My Trading Agent" \
+  --description "Autonomous DeFi trading agent" \
+  --url "https://myagent.example.com" \
+  --version "1.0.0" \
+  --image "https://example.com/agent-image.png" \
+  --chain 11155111
+```
+
+**Options:**
+
+- `--chain <chainId>`: Target a specific chain (overrides --all)
+- `--all`: Register on canonical + mirror chains (default: true)
+- `--force-new-upload`: Force new IPFS upload (ignores cached URI from previous attempts)
+
+**What happens:**
+
+1. Loads ERC-8004 configuration from `agent.md`
+2. Builds EIP-8004 compliant registration file (name, description, A2A endpoint)
+3. Uploads registration file to IPFS via Pinata
+4. Saves IPFS URI to `agent.md` for retry capability
+5. Encodes `register(ipfsUri)` smart contract transaction
+6. Opens browser on localhost:3456 with transaction signing interface
+7. After successful transaction, extracts and saves `agentId` to `agent.md`
+
+#### Updating Registration
+
+To update your existing registration:
+
+```bash
+npx -y @emberai/agent-node update-registry \
+  --agent-id 123 \
+  --description "Updated: Now supports GMX v2" \
+  --version "2.0.0"
+```
+
+**Note**: You must own the agent (same wallet that registered it) to update. The command calls `setAgentUri(agentId, newIpfsUri)` on the registry contract.
+
+### EIP-8004 Registration Format
+
+The registration file follows EIP-8004 standard:
+
+```json
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "My Trading Agent",
+  "description": "Autonomous DeFi trading agent",
+  "image": "https://example.com/agent-image.png",
+  "endpoints": [
+    {
+      "name": "A2A",
+      "endpoint": "https://myagent.example.com/.well-known/agent-card.json",
+      "version": "1.0.0"
+    }
+  ],
+  "registrations": [
+    {
+      "agentId": 123,
+      "agentRegistry": "eip155:11155111:0x8004a6090Cd10A7288092483047B097295Fb8847"
+    }
+  ],
+  "supportedTrust": []
+}
+```
+
+### Identity Registry Contract
+
+The agent identity registry contract is deployed at:
+
+- **Sepolia**: `0x8004a6090Cd10A7288092483047B097295Fb8847`
+
+The contract implements:
+
+- `register(string ipfsUri)` - Register new agent
+- `setAgentUri(uint256 agentId, string ipfsUri)` - Update existing registration
+
 ## Creating Workflows
 
 For a comprehensive guide on building workflows, see **[Workflow Creation Guide](docs/WORKFLOW-CREATION-GUIDE.md)**.
@@ -440,22 +590,31 @@ The Agent CLI provides essential commands for managing your agent throughout its
 
 ```bash
 # Initialize agent configuration - Creates a new agent configuration workspace with sample files
-pnpm cli init
+npx -y @emberai/agent-node init
 
 # Run agent in development mode - Starts your agent with hot reload for development
-pnpm cli run --dev
+npx -y @emberai/agent-node run --dev
 
 # Validate configuration - Checks your configuration for errors and missing references
-pnpm cli doctor
+npx -y @emberai/agent-node doctor
 
 # View composed configuration - Shows your composed agent configuration in readable format
-pnpm cli print-config
+npx -y @emberai/agent-node print-config
 
 # Create deployment bundle - Creates a production-ready deployment package
-pnpm cli bundle
+npx -y @emberai/agent-node bundle
+
+# Register agent on-chain - Register your agent using EIP-8004 standard (requires PINATA_JWT)
+npx -y @emberai/agent-node register
+
+# Update agent registry - Update existing on-chain registration
+npx -y @emberai/agent-node update-registry --agent-id 123
 ```
 
 ## Development
+
+> [!NOTE]
+> For development work on the agent-node library itself, you can use `pnpm cli <command>` instead of `npx -y @emberai/agent-node <command>` to run commands directly from the source code.
 
 ### Development Server
 
@@ -655,13 +814,13 @@ Before running with Docker, you must initialize the configuration workspace:
 
 ```bash
 # Initialize config directory
-pnpm cli init
+npx -y @emberai/agent-node init
 
 # Customize your agent
 # Edit config/agent.md, add skills to config/skills/, etc.
 
 # Validate configuration
-pnpm cli doctor
+npx -y @emberai/agent-node doctor
 ```
 
 **Running with Docker Compose:**
@@ -696,7 +855,7 @@ volumes:
 - Matches how agent-node runs natively (`npx agent-node --config-dir=./config`)
 - Standard Docker volume mount pattern for configuration
 
-**Important:** The `config/` directory must exist before starting containers. If you see "Config workspace not found" errors, run `pnpm cli init` first.
+**Important:** The `config/` directory must exist before starting containers. If you see "Config workspace not found" errors, run `npx -y @emberai/agent-node init` first.
 
 ### Environment Variables
 

@@ -3,14 +3,31 @@
  * Runs the agent server with optional dev mode (hot reload)
  */
 
-import { resolve } from 'node:path';
 import process from 'node:process';
 
 import { createA2AServer } from '../../a2a/server.js';
+import { resolveConfigDirectory } from '../../config/runtime/config-dir.js';
 import { initFromConfigWorkspace } from '../../config/runtime/init.js';
 import type { HotReloadEvent } from '../../config/runtime/init.js';
 import { serviceConfig } from '../../config.js';
+import { Logger } from '../../utils/logger.js';
 import { cliOutput } from '../output.js';
+
+const NativePromise: PromiseConstructor = global.Promise;
+
+async function withNativePromise<T>(fn: () => Promise<T>): Promise<T> {
+  const currentPromise = global.Promise;
+  if (currentPromise === NativePromise) {
+    return fn();
+  }
+
+  global.Promise = NativePromise;
+  try {
+    return await fn();
+  } finally {
+    global.Promise = currentPromise;
+  }
+}
 
 function summarizeHotReload(updated: HotReloadEvent['updated']): string[] {
   const summary: string[] = [];
@@ -63,41 +80,107 @@ export interface RunOptions {
   dev?: boolean;
   port?: number;
   host?: string;
+  attach?: boolean;
+  chat?: boolean; // Alias for attach
+  logDir?: string; // Optional file logging directory when attaching chat
+  respectLogLevel?: boolean; // Opt out of forcing ERROR in chat
 }
 
 export async function runCommand(options: RunOptions = {}): Promise<void> {
-  const configDir = resolve(process.cwd(), options.configDir ?? 'config');
+  const { configDir } = resolveConfigDirectory(options.configDir);
   const dev = options.dev ?? false;
+  const shouldAttach = options.attach ?? options.chat ?? false;
+  const signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
+  const originalLogLevel = process.env['LOG_LEVEL'];
 
   cliOutput.print(`Starting agent server from \`${configDir}\``);
   if (dev) {
     cliOutput.info('Development mode enabled (hot reload active)');
   }
+  if (shouldAttach) {
+    cliOutput.info('Chat mode will be enabled after server starts');
+  }
+
+  // Preconfigure logging BEFORE server initialization when attaching chat
+  if (shouldAttach) {
+    if (options.logDir) {
+      try {
+        await Logger.setFileSink(options.logDir);
+        process.env['LOG_STRUCTURED'] = 'true';
+        // Suppress console logs for clean chat output (stdout reserved for stream)
+        Logger.setConsoleEnabled(false);
+      } catch {
+        // Do not block server startup on logging preconfiguration failures
+      }
+    }
+
+    if (!options.respectLogLevel) {
+      // Force ERROR by default for console (suppressed if logDir set)
+      process.env['LOG_LEVEL'] = 'ERROR';
+    } else {
+      // Ensure a default if none was provided in env
+      const { setDefaultLogLevel } = await import('../chat/utils.js');
+      setDefaultLogLevel('ERROR');
+    }
+  }
 
   // Initialize config workspace
-  const agentConfigHandle = await initFromConfigWorkspace({
-    root: configDir,
-    dev,
-  });
+  const agentConfigHandle = await withNativePromise(() =>
+    initFromConfigWorkspace({
+      root: configDir,
+      dev,
+    }),
+  );
   agentConfigHandle.onHotReload((event) => {
     const updates = summarizeHotReload(event.updated);
     cliOutput.info(`Hot reload: ${updates.join(', ')}`);
   });
 
+  if (shouldAttach && !options.respectLogLevel) {
+    // Reassert enforced log level in case init mutated environment
+    process.env['LOG_LEVEL'] = 'ERROR';
+  }
+
+  const temporarilyForceErrorLevel = !shouldAttach && process.env['LOG_LEVEL'] !== 'ERROR';
+  if (temporarilyForceErrorLevel) {
+    process.env['LOG_LEVEL'] = 'ERROR';
+  }
+
   // Create server with service and agent config
-  const server = await createA2AServer({
-    serviceConfig,
-    agentConfig: agentConfigHandle,
-  });
+  const server = await withNativePromise(() =>
+    createA2AServer({
+      serviceConfig,
+      agentConfig: agentConfigHandle,
+    }),
+  );
+
+  if (temporarilyForceErrorLevel) {
+    if (originalLogLevel === undefined) {
+      delete process.env['LOG_LEVEL'];
+    } else {
+      process.env['LOG_LEVEL'] = originalLogLevel;
+    }
+  }
 
   const addressInfo = server.address();
+  let serverUrl = '';
   if (addressInfo && typeof addressInfo !== 'string') {
+    const host = addressInfo.address === '::' ? 'localhost' : addressInfo.address;
+    serverUrl = `http://${host}:${addressInfo.port}`;
+
     cliOutput.blank();
-    cliOutput.success(`Server running at \`http://${addressInfo.address}:${addressInfo.port}\``);
-    cliOutput.success(
-      `Agent card: \`http://${addressInfo.address}:${addressInfo.port}/.well-known/agent-card.json\``,
-    );
-    cliOutput.success(`A2A endpoint: \`http://${addressInfo.address}:${addressInfo.port}/a2a\``);
+    cliOutput.success(`Server running at \`${serverUrl}\``);
+    cliOutput.success(`Agent card: \`${serverUrl}/.well-known/agent-card.json\``);
+    cliOutput.success(`A2A endpoint: \`${serverUrl}/a2a\``);
+
+    if (shouldAttach) {
+      cliOutput.blank();
+      cliOutput.info('Entering chat mode...');
+
+      // Show startup effect when entering chat mode
+      const { showStartupEffect } = await import('../output.js');
+      await showStartupEffect();
+    }
   }
 
   // Setup graceful shutdown
@@ -115,9 +198,12 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
       });
     });
     cliOutput.success('Server shutdown complete');
+    for (const signal of signals) {
+      process.off(signal, handleSignal);
+    }
   };
 
-  const handleSignal = (_signal: NodeJS.Signals): void => {
+  function handleSignal(_signal: NodeJS.Signals): void {
     void shutdown()
       .catch((error) => {
         cliOutput.error('Error during shutdown');
@@ -128,13 +214,74 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
       .finally(() => {
         process.exit(0);
       });
-  };
+  }
 
-  process.on('SIGINT', handleSignal);
-  process.on('SIGTERM', handleSignal);
+  // If attach mode, enter chat then shutdown
+  if (shouldAttach) {
+    try {
+      // Dynamic import to avoid circular dependencies
+      const { ChatClient } = await import('../chat/client.js');
+      const { StreamRenderer } = await import('../chat/renderer.js');
+      const { ChatRepl } = await import('../chat/repl.js');
+      const { setDefaultLogLevel } = await import('../chat/utils.js');
+      const { Logger } = await import('../../utils/logger.js');
 
-  // Keep process alive
-  await new Promise(() => {
-    // Wait indefinitely
-  });
+      // Force ERROR by default unless user explicitly opts to respect env
+      if (!options.respectLogLevel) {
+        process.env['LOG_LEVEL'] = 'ERROR';
+      } else {
+        // Ensure default if none set
+        setDefaultLogLevel('ERROR');
+      }
+
+      // Setup file logging if requested
+      if (options.logDir) {
+        try {
+          await Logger.setFileSink(options.logDir);
+          process.env['LOG_STRUCTURED'] = 'true';
+          // Suppress console logs entirely for clean chat output
+          Logger.setConsoleEnabled(false);
+        } catch {
+          // ignore sink failures
+        }
+      }
+
+      // Create chat client
+      const client = await ChatClient.fromUrl(serverUrl);
+
+      // Create renderer
+      const StreamRendererCtor =
+        (StreamRenderer.prototype.constructor as typeof StreamRenderer | undefined) ??
+        StreamRenderer;
+      const renderer = new StreamRendererCtor({
+        colors: true,
+        verbose: false,
+      });
+
+      // Create and start REPL with shutdown callback
+      const repl = new ChatRepl({
+        client,
+        renderer,
+        showConnectionInfo: false, // Already shown above
+        onExit: async () => {
+          await shutdown();
+        },
+      });
+
+      const exitCode = await repl.start();
+      process.exit(exitCode);
+    } catch (error) {
+      cliOutput.error('Failed to start chat mode');
+      if (error instanceof Error) {
+        cliOutput.error(error.message);
+      }
+      await shutdown();
+      process.exit(1);
+    }
+  } else {
+    for (const signal of signals) {
+      process.on(signal, handleSignal);
+    }
+    return;
+  }
 }

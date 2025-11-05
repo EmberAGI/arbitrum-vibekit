@@ -54,10 +54,10 @@ card:
   defaultInputModes: ['text/plain', 'application/json']
   defaultOutputModes: ['application/json']
 
-# Agent-level model configuration (default for all skills)
-model:
-  provider: anthropic # openai, anthropic, google, etc.
-  name: claude-sonnet-4.5
+# Agent-level AI configuration (default for all skills)
+ai:
+  modelProvider: anthropic # openrouter, openai, anthropic, google, etc.
+  model: claude-sonnet-4.5
   params:
     temperature: 0.7
     maxTokens: 4096
@@ -94,10 +94,10 @@ skill:
   inputModes: ['application/pdf', 'image/png']
   outputModes: ['application/json']
 
-  # Extension: Model override (optional, overrides agent-level config)
-  model:
-    provider: openai
-    name: gpt-5-mini
+  # Extension: AI override (optional, overrides agent-level config)
+  ai:
+    modelProvider: openai
+    model: gpt-5-mini
     params:
       temperature: 0.0 # Deterministic extraction
       reasoning: none

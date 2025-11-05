@@ -31,6 +31,8 @@ export class Logger {
   private logLevel: LogLevel;
   private namespace?: string;
   private structured: boolean;
+  private static fileSink: ((line: string) => void) | undefined;
+  private static consoleEnabled = true;
 
   private constructor(namespace?: string) {
     this.namespace = namespace;
@@ -80,7 +82,12 @@ export class Logger {
           : {}),
         ...(context?.['error'] ? { error: context['error'] } : {}),
       };
-      return JSON.stringify(entry);
+      const json = JSON.stringify(entry);
+      // Write to file sink if configured
+      if (Logger.fileSink) {
+        Logger.fileSink(json);
+      }
+      return json;
     }
     const prefix = this.namespace ? `[${this.namespace}]` : '';
     const contextStr = context ? ` ${JSON.stringify(context)}` : '';
@@ -93,19 +100,22 @@ export class Logger {
 
   debug(message: string, context?: LogContext): void {
     if (this.shouldLog(LogLevel.DEBUG)) {
-      console.log(this.formatMessage('DEBUG', message, context));
+      const line = this.formatMessage('DEBUG', message, context);
+      if (Logger.consoleEnabled) console.log(line);
     }
   }
 
   info(message: string, context?: LogContext): void {
     if (this.shouldLog(LogLevel.INFO)) {
-      console.log(this.formatMessage('INFO', message, context));
+      const line = this.formatMessage('INFO', message, context);
+      if (Logger.consoleEnabled) console.log(line);
     }
   }
 
   warn(message: string, context?: LogContext): void {
     if (this.shouldLog(LogLevel.WARN)) {
-      console.warn(this.formatMessage('WARN', message, context));
+      const line = this.formatMessage('WARN', message, context);
+      if (Logger.consoleEnabled) console.warn(line);
     }
   }
 
@@ -123,7 +133,8 @@ export class Logger {
             : error,
       };
 
-      console.error(this.formatMessage('ERROR', message, errorContext));
+      const line = this.formatMessage('ERROR', message, errorContext);
+      if (Logger.consoleEnabled) console.error(line);
     }
   }
 
@@ -147,6 +158,40 @@ export class Logger {
    */
   setStructured(enabled: boolean): void {
     this.structured = enabled;
+  }
+
+  /**
+   * Configure a daily JSONL file sink directory. This does not affect console logging.
+   * Creates the directory if it does not exist. Subsequent calls are idempotent.
+   */
+  static async setFileSink(directory: string): Promise<void> {
+    const { existsSync, mkdirSync, createWriteStream } = await import('node:fs');
+    const path = await import('node:path');
+
+    if (!existsSync(directory)) {
+      mkdirSync(directory, { recursive: true });
+    }
+
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const filename = `${yyyy}-${mm}-${dd}.jsonl`;
+    const filePath = path.join(directory, filename);
+
+    const stream = createWriteStream(filePath, { flags: 'a' });
+    Logger.fileSink = (line: string) => {
+      try {
+        stream.write(line + '\n');
+      } catch {
+        // Swallow file sink errors to avoid impacting console output
+      }
+    };
+  }
+
+  /** Enable or disable console output globally (file sink unaffected). */
+  static setConsoleEnabled(enabled: boolean): void {
+    Logger.consoleEnabled = enabled;
   }
 }
 

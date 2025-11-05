@@ -1,14 +1,79 @@
 {
-  "name": "agent-node",
-  "version": "0.2.0",
-  "private": true,
+  "name": "@emberai/agent-node",
+  "version": "0.0.0",
+  "private": false,
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
   },
+  "bin": {
+    "agent": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./cli": "./dist/cli.js",
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js"
+    },
+    "./workflow": {
+      "types": "./dist/workflow/public.d.ts",
+      "import": "./dist/workflow/public.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    ".env.example"
   ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "beta"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EmberAGI/arbitrum-vibekit.git",
+    "directory": "typescript/lib/agent-node"
+  },
+  "release": {
+    "branches": [
+      {
+        "name": "build/agent-node-release",
+        "channel": "beta",
+        "prerelease": "beta"
+      },
+      "main"
+    ],
+    "tagFormat": "@emberai/agent-node@${version}",
+    "plugins": [
+      [
+        "@semantic-release/commit-analyzer",
+        {
+          "preset": "conventionalcommits"
+        }
+      ],
+      [
+        "@semantic-release/release-notes-generator",
+        {
+          "preset": "conventionalcommits"
+        }
+      ],
+      [
+        "@semantic-release/exec",
+        {
+          "prepareCmd": "pnpm pkg set version=${nextRelease.version}",
+          "publishCmd": "pnpm publish --no-git-checks --access public --tag ${nextRelease.channel || 'latest'}"
+        }
+      ],
+      [
+        "@semantic-release/github",
+        {}
+      ]
+    ]
+  },
   "dependencies": {
     "@a2a-js/sdk": "^0.3.3",
     "@ai-sdk/openai": "^2.0.42",
@@ -29,6 +94,7 @@
     "permissionless": "^0.2.57",
     "picocolors": "^1.1.1",
     "pinata": "^2.5.1",
+    "prompts": "^2.4.2",
     "uuid": "^13.0.0",
     "viem": "^2.37.9",
     "ws": "^8.18.3",
@@ -41,6 +107,7 @@
     "@types/express": "^5.0.3",
     "@types/json-schema": "^7.0.15",
     "@types/node": "catalog:",
+    "@types/prompts": "^2.4.9",
     "@types/supertest": "^6.0.3",
     "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.44.0",
@@ -58,14 +125,16 @@
     "msw": "^2.11.2",
     "prettier": "catalog:",
     "rimraf": "^6.0.1",
+    "rollup-plugin-copy": "^3.5.0",
     "supertest": "^7.1.4",
+    "tsdown": "^0.15.12",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "scripts": {
     "dev": "tsx watch src/server-loader.ts",
-    "build": "rimraf dist .tsbuildinfo && tsc -p tsconfig.build.json",
+    "build": "rimraf .tsbuildinfo && tsdown",
     "start": "node dist/server-loader.js",
     "cli": "tsx src/cli/loader.ts",
     "client": "tsx src/a2aClient.ts",
@@ -82,10 +151,10 @@
     "test:ui": "vitest --ui",
     "test:record-mocks": "tsx --env-file=.env tests/utils/record-mocks.ts",
     "test:upgrade-wallet": "tsx --env-file=.env.test scripts/upgrade-test-wallet.ts",
-    "test:ci": "pnpm test:unit && pnpm test:int",
+    "test:ci": "pnpm test:unit && LOG_LEVEL=error pnpm test:int",
     "test:ci:main": "pnpm test:unit && pnpm test:int && pnpm test:e2e",
     "precommit": "pnpm lint && pnpm typecheck && pnpm test",
-    "ci": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test:ci && pnpm build",
+    "ci": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && LOG_LEVEL=debug pnpm test:ci && pnpm build",
     "ci:main": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test:ci:main && pnpm build"
   }
 }

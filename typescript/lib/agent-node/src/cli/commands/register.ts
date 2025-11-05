@@ -1,85 +1,22 @@
+import { resolve } from 'node:path';
+
+import prompts from 'prompts';
 import { encodeFunctionData } from 'viem';
 
+import { loadAgentBase } from '../../config/loaders/agent-loader.js';
+import { resolveConfigDirectory } from '../../config/runtime/config-dir.js';
+import type { ERC8004RegistrationEntry } from '../../config/schemas/agent.schema.js';
 import { IDENTITY_REGISTRY_ABI } from '../abi/identity.js';
+import { ensureErc8004Config, updateAgentFrontmatter } from '../utils/frontmatter.js';
 import {
   CONTRACT_ADDRESSES,
   isSupportedChain,
-  buildRegistrationFile,
+  buildRegistrationFileForRegister,
   createIpfsFile,
+  getPendingUri,
+  savePendingUri,
 } from '../utils/registration.js';
 import { serveTransactionSigningPage, openBrowser } from '../utils/serve-transaction.js';
-
-/**
- * Options for registering an agent.
- */
-export type RegisterOptions = {
-  agentName: string;
-  agentDescription: string;
-  agentUrl: string;
-  chainId: string;
-  agentVersion?: string;
-  agentImage?: string;
-};
-
-/**
- * Command to register an agent using EIP-8004 standard.
- * @param options
- */
-export async function registerAgentUsing8004(options: RegisterOptions) {
-  const chainId = parseInt(options.chainId);
-  if (!isSupportedChain(chainId)) {
-    throw new Error(`Unsupported chain ID: ${options.chainId}`);
-  }
-
-  const registrationFileContents = buildRegistrationFile(
-    options.agentName,
-    options.agentDescription,
-    options.agentImage || 'https://example.com/agent-image.png',
-    options.agentVersion || '1.0.0',
-    options.agentUrl,
-    chainId,
-  );
-  const ipfsUri = await createIpfsFile(registrationFileContents);
-
-  const callData = encodeFunctionData({
-    abi: IDENTITY_REGISTRY_ABI,
-    functionName: 'register',
-    args: [ipfsUri],
-  });
-
-  // Serve the transaction signing page
-  const url = await serveTransactionSigningPage({
-    to: CONTRACT_ADDRESSES[chainId].identity,
-    data: callData,
-    chainId,
-    agentName: options.agentName,
-    onAgentIdReceived: (agentId: number) => {
-      console.log('\n🎉 Agent registered successfully!');
-      console.log(`📋 Agent ID: ${agentId}`);
-      console.log('\n   You can now close this terminal with Ctrl+C\n');
-    },
-  });
-
-  console.log('\n✅ Registration file uploaded to IPFS:', ipfsUri);
-  console.log('\n🌐 Opening browser to sign transaction...');
-  console.log('📋 Transaction URL:', url);
-
-  try {
-    await openBrowser(url);
-    console.log('\n✨ Please complete the transaction in your browser.');
-    console.log('   Press Ctrl+C to close the server when done.\n');
-  } catch (error) {
-    console.log('\n⚠️  Could not open browser automatically.');
-    console.log('   Please open this URL manually:', url);
-    console.log('   Press Ctrl+C to close the server when done.\n');
-  }
-
-  // Keep the process alive so the server stays running
-  return new Promise(() => {
-    // This promise never resolves, keeping the server alive
-    // User will need to manually terminate with Ctrl+C
-  });
-}
 
 /**
  * CLI command options for registering an agent.
@@ -91,45 +28,275 @@ export type RegisterCommandOptions = {
   chainId?: string;
   version?: string;
   image?: string;
+  all?: boolean;
+  configDir?: string;
+  chain?: string;
+  forceNewUpload?: boolean;
 };
 
 /**
  * CLI wrapper for the register command.
+ * Registers an agent on-chain using configuration from agent.md.
  * @param options Command line options
  */
 export async function registerCommand(options: RegisterCommandOptions): Promise<void> {
-  // Validate required options
-  if (!options.name) {
-    throw new Error('Agent name is required. Use --name <agent-name>');
+  const { configDir } = resolveConfigDirectory(options.configDir);
+  const agentPath = resolve(configDir, 'agent.md');
+  const agentBase = loadAgentBase(agentPath);
+
+  let frontmatter = agentBase.frontmatter;
+  let name = options.name ?? frontmatter.card.name;
+  let description = options.description ?? frontmatter.card.description;
+  let version = options.version ?? frontmatter.card.version;
+  let image = options.image ?? frontmatter.erc8004?.image ?? '';
+  const a2aUrl = options.url ?? frontmatter.card.url;
+
+  // Compose Agent Card URL using routing overrides
+  let origin: string;
+  try {
+    origin = new URL(a2aUrl).origin;
+  } catch {
+    throw new Error(`Invalid agent card.url: ${a2aUrl}`);
   }
-  if (!options.description) {
-    throw new Error('Agent description is required. Use --description <description>');
-  }
-  if (!options.url) {
-    throw new Error('Agent URL is required. Use --url <agent-url>');
-  }
-  if (!options.chainId) {
-    throw new Error('Chain ID is required. Use --chain-id <chain-id>');
+  const agentCardOrigin = frontmatter.routing?.agentCardOrigin ?? origin;
+  const agentCardPath = frontmatter.routing?.agentCardPath ?? '/.well-known/agent-card.json';
+  const agentCardUrl = `${agentCardOrigin}${agentCardPath}`;
+
+  // Check for overrides and prompt to persist
+  const hasOverrides =
+    options.name || options.description || options.version || options.image || options.url;
+
+  if (hasOverrides && process.stdin.isTTY && process.stdout.isTTY) {
+    const overridesList: string[] = [];
+    if (options.name) overridesList.push(`name: "${options.name}"`);
+    if (options.description) overridesList.push(`description: "${options.description}"`);
+    if (options.version) overridesList.push(`version: "${options.version}"`);
+    if (options.image) overridesList.push(`image: "${options.image}"`);
+    if (options.url) overridesList.push(`url: "${options.url}"`);
+
+    console.log('\n📝 Override flags detected:');
+    overridesList.forEach((override) => console.log(`   - ${override}`));
+
+    const response = await prompts({
+      type: 'confirm',
+      name: 'persist',
+      message: 'Persist these overrides to agent.md?',
+      initial: true,
+    });
+
+    if (response.persist) {
+      try {
+        frontmatter = updateAgentFrontmatter(agentPath, (draft) => {
+          if (options.name) {
+            draft.card = { ...draft.card, name: options.name };
+          }
+          if (options.description) {
+            draft.card = { ...draft.card, description: options.description };
+          }
+          if (options.version) {
+            draft.card = { ...draft.card, version: options.version };
+          }
+          if (options.image) {
+            const erc8004Config = ensureErc8004Config(draft);
+            erc8004Config.image = options.image;
+          }
+          return draft;
+        });
+        name = frontmatter.card.name;
+        description = frontmatter.card.description;
+        version = frontmatter.card.version;
+        image = frontmatter.erc8004?.image ?? '';
+        console.log('✅ Overrides persisted to agent.md\n');
+      } catch (err) {
+        console.log(
+          `⚠️  Failed to persist overrides: ${err instanceof Error ? err.message : String(err)}\n`,
+        );
+      }
+    }
   }
 
-  console.log('\n🤖 Registering agent...');
-  console.log('Name:', options.name);
-  console.log('Description:', options.description);
-  console.log('URL:', options.url);
-  console.log('Chain ID:', options.chainId);
-  if (options.version) {
-    console.log('Version:', options.version);
+  // Determine chain set: canonical + optional mirrors, or specific chain via --chain
+  const canonicalId = frontmatter.erc8004?.canonical?.chainId;
+  const mirrors = frontmatter.erc8004?.mirrors ?? [];
+  let chains: number[] = [];
+  if (options.chain) {
+    const targetChain = parseInt(options.chain);
+    if (isNaN(targetChain)) {
+      throw new Error(`Invalid chain ID: ${options.chain}`);
+    }
+    chains = [targetChain];
+  } else {
+    if (typeof canonicalId === 'number') chains.push(canonicalId);
+    if (options.all !== false) {
+      for (const m of mirrors) {
+        if (typeof m?.chainId === 'number') chains.push(m.chainId);
+      }
+    }
   }
-  if (options.image) {
-    console.log('Image:', options.image);
+  if (chains.length === 0) {
+    throw new Error('No chains configured in erc8004. Set canonical and/or mirrors.');
   }
 
-  await registerAgentUsing8004({
-    agentName: options.name,
-    agentDescription: options.description,
-    agentUrl: options.url,
-    chainId: options.chainId,
-    agentVersion: options.version,
-    agentImage: options.image,
-  });
+  for (const chain of chains) {
+    if (!isSupportedChain(chain)) {
+      throw new Error(`Unsupported chain ID in config: ${chain}`);
+    }
+
+    console.log('\n🤖 Registering agent from config...');
+    console.log('Name:', name);
+    console.log('Description:', description);
+    console.log('Agent Card URL:', agentCardUrl);
+    console.log('Chain ID:', chain);
+
+    const chainKey = String(chain);
+    let ipfsUri: string;
+
+    // Check for existing pending URI from previous attempt
+    const existingPendingUri = getPendingUri(agentPath, chainKey, false);
+
+    if (existingPendingUri && !options.forceNewUpload) {
+      console.log(
+        '\n📎 Resuming with existing IPFS URI from previous attempt:',
+        existingPendingUri,
+      );
+      console.log('ℹ️  Use --force-new-upload to create a fresh registration file');
+      ipfsUri = existingPendingUri;
+    } else {
+      // Compose Agent Card URL for registration
+      console.log('\n📤 Uploading registration to IPFS...');
+      const registrationFileContents = buildRegistrationFileForRegister(
+        name,
+        description,
+        image || 'https://example.com/agent-image.png',
+        version || '1.0.0',
+        agentCardUrl,
+        chain,
+      );
+      ipfsUri = await createIpfsFile(registrationFileContents);
+
+      // Save URI immediately after upload for retry if needed
+      savePendingUri(agentPath, chainKey, ipfsUri, false);
+      console.log('💾 IPFS URI saved for retry if needed');
+    }
+
+    const callData = encodeFunctionData({
+      abi: IDENTITY_REGISTRY_ABI,
+      functionName: 'register',
+      args: [ipfsUri],
+    });
+
+    // Serve the transaction signing page with persistence callback
+    const url = await serveTransactionSigningPage({
+      to: CONTRACT_ADDRESSES[chain].identity,
+      data: callData,
+      chainId: chain,
+      agentName: name,
+      onAgentIdReceived: (agentId: number | string, txHash?: string) => {
+        console.log('\n🎉 Agent registered successfully!');
+        const agentIdDisplay = typeof agentId === 'number' ? agentId.toString(10) : agentId;
+        console.log(`📋 Agent ID: ${agentIdDisplay}`);
+        if (txHash) {
+          console.log(`📋 Transaction hash: ${txHash}`);
+        }
+
+        // Persist agentId and registrationUri to config
+        try {
+          const chainKey = String(chain);
+          const parsedAgentId =
+            typeof agentId === 'number' ? agentId : Number.parseInt(agentId, 10);
+          const isSafeAgentId = Number.isSafeInteger(parsedAgentId) && parsedAgentId >= 0;
+          if (!isSafeAgentId && typeof agentId === 'string') {
+            console.log(
+              `\n⚠️  Agent ID ${agentId} exceeds JavaScript safe integer range. Update agent.md manually if you need to track it.`,
+            );
+          }
+
+          frontmatter = updateAgentFrontmatter(agentPath, (draft) => {
+            const erc8004Config = ensureErc8004Config(draft);
+            const registrations = erc8004Config.registrations;
+            const existing: ERC8004RegistrationEntry = {
+              ...(registrations[chainKey] ?? {}),
+            };
+
+            if (isSafeAgentId) {
+              existing.agentId = parsedAgentId;
+            }
+            existing.registrationUri = ipfsUri;
+            if (txHash) {
+              existing.txHash = txHash;
+            }
+            delete existing.pendingRegistrationUri;
+            delete existing.pendingAgentId;
+
+            registrations[chainKey] = existing;
+            return draft;
+          });
+
+          console.log(`\n📝 Persisted agentId and registrationUri for chain ${chain} to agent.md`);
+          console.log('🧹 Cleaned up pending registration data');
+        } catch (err) {
+          console.log(
+            `\n⚠️  Failed to persist registration data for chain ${chain}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+
+        console.log('\n   You can now close this terminal with Ctrl+C\n');
+      },
+      onPendingAgentId: (txHash: string) => {
+        console.log('\n⚠️  Transaction confirmed but agent ID could not be retrieved.');
+        console.log(`📋 Transaction hash: ${txHash}`);
+        console.log(
+          '\nThe agent was likely registered successfully, but we could not extract the ID.',
+        );
+        console.log('You can:');
+        console.log('  1. Run `agent recover-id` to retry retrieval');
+        console.log('  2. Check the transaction on a block explorer');
+
+        // Persist pending status to config
+        try {
+          const chainKey = String(chain);
+          frontmatter = updateAgentFrontmatter(agentPath, (draft) => {
+            const erc8004Config = ensureErc8004Config(draft);
+            const registrations = erc8004Config.registrations;
+            const existing: ERC8004RegistrationEntry = {
+              ...(registrations[chainKey] ?? {}),
+            };
+            existing.registrationUri = ipfsUri;
+            existing.pendingAgentId = true;
+            existing.txHash = txHash;
+            delete existing.pendingRegistrationUri;
+            registrations[chainKey] = existing;
+            return draft;
+          });
+          console.log(`\n📝 Saved registration with pending agent ID status to agent.md`);
+        } catch (err) {
+          console.log(
+            `\n⚠️  Failed to persist pending status for chain ${chain}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+
+        console.log('\n   You can now close this terminal with Ctrl+C\n');
+      },
+    });
+
+    console.log('\n✅ Registration file uploaded to IPFS:', ipfsUri);
+    console.log('\n🌐 Opening browser to sign transaction...');
+    console.log('📋 Transaction URL:', url);
+
+    try {
+      await openBrowser(url);
+      console.log('\n✨ Please complete the transaction in your browser.');
+      console.log('   Press Ctrl+C to close the server when done.\n');
+    } catch (_error) {
+      console.log('\n⚠️  Could not open browser automatically.');
+      console.log('   Please open this URL manually:', url);
+      console.log('   Press Ctrl+C to close the server when done.\n');
+    }
+
+    // Keep the process alive so the server stays running
+    await new Promise(() => {
+      // This promise never resolves, keeping the server alive
+      // User will need to manually terminate with Ctrl+C
+    });
+  }
 }

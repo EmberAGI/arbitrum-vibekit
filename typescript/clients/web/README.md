@@ -151,7 +151,7 @@ services:
   # liquidity-agent-no-wallet:
   #   build:
   #     context: ./
-  #     dockerfile: community/liquidity-agent-no-wallet/Dockerfile
+  #     dockerfile: community/agents/liquidity-agent-no-wallet/Dockerfile
   #   container_name: vibekit-liquidity-agent-no-wallet
   #   env_file:
   #     - .env
@@ -162,7 +162,7 @@ services:
   # pendle-agent:
   #   build:
   #     context: ./
-  #     dockerfile: community/pendle-agent/Dockerfile
+  #     dockerfile: community/agents/pendle-agent/Dockerfile
   #   container_name: vibekit-pendle-agent
   #   env_file:
   #     - .env

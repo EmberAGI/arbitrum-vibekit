@@ -13,7 +13,7 @@ import type {
   WorkflowPlugin,
   WorkflowState,
   PaymentSettlement,
-} from '../../../src/workflows/types.js';
+} from '../../../src/workflow/types.js';
 
 import { createClients } from './utils/clients.js';
 import { requireFixturePaymentMessage, createPaymentRequirements } from './utils/payment.js';

@@ -12,7 +12,8 @@
     "build": "tsc -b",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
-    "format": "prettier --write \"src/**/*.ts\""
+    "format": "prettier --write \"src/**/*.ts\"",
+    "test:ci": "echo \"No CI tests defined for ${npm_package_name}\""
   },
   "devDependencies": {
     "@types/node": "catalog:",

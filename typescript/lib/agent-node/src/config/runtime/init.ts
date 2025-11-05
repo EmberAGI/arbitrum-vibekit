@@ -10,7 +10,7 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Tool } from 'ai';
 
 import { Logger } from '../../utils/logger.js';
-import type { WorkflowRuntime } from '../../workflows/runtime.js';
+import type { WorkflowRuntime } from '../../workflow/runtime.js';
 import { composeAgentCard } from '../composers/card-composer.js';
 import { composeEffectiveSets, type EffectiveSets } from '../composers/effective-set-composer.js';
 import { composePrompt, type ComposedPrompt } from '../composers/prompt-composer.js';
@@ -19,9 +19,9 @@ import { loadManifest } from '../loaders/manifest-loader.js';
 import { loadMCPRegistry, type LoadedMCPRegistry } from '../loaders/mcp-loader.js';
 import { loadSkills, type LoadedSkill } from '../loaders/skill-loader.js';
 import { loadWorkflowRegistry, type LoadedWorkflowRegistry } from '../loaders/workflow-loader.js';
-import type { ModelConfig } from '../schemas/agent.schema.js';
+import type { ModelConfig, AIModelConfig, RoutingConfig } from '../schemas/agent.schema.js';
 import type { AgentManifest } from '../schemas/manifest.schema.js';
-import type { SkillModelOverride } from '../schemas/skill.schema.js';
+import type { SkillModelOverride, SkillAIOverride } from '../schemas/skill.schema.js';
 
 import { MCPInstantiator, type MCPServerInstance } from './mcp-instantiator.js';
 import { loadTools, closeAllMCPClients } from './tool-loader.js';
@@ -76,7 +76,7 @@ interface WorkspaceSnapshot {
 
 const DEFAULT_AGENT_MODEL = {
   provider: 'openrouter',
-  name: 'anthropic/claude-sonnet-4.5',
+  name: 'openai/gpt-5',
   params: {
     temperature: 0.7,
     topP: 1.0,
@@ -84,6 +84,78 @@ const DEFAULT_AGENT_MODEL = {
     reasoning: 'low' as const,
   },
 } as const;
+
+/**
+ * Converts AIModelConfig (from frontmatter) to ModelConfig (runtime format)
+ * Maps: modelProvider → provider, model → name
+ */
+function convertAIModelConfig(ai: AIModelConfig | undefined): ModelConfig | undefined {
+  if (!ai) {
+    return undefined;
+  }
+
+  const config: ModelConfig = {
+    provider: ai.modelProvider,
+    name: ai.model,
+  };
+
+  // Only add params if we have valid values
+  if (ai.params && typeof ai.params === 'object') {
+    const params: Partial<NonNullable<ModelConfig['params']>> = {};
+
+    if (typeof ai.params['temperature'] === 'number') {
+      params.temperature = ai.params['temperature'];
+    }
+    if (typeof ai.params['topP'] === 'number') {
+      params.topP = ai.params['topP'];
+    }
+    if (typeof ai.params['maxTokens'] === 'number') {
+      params.maxTokens = ai.params['maxTokens'];
+    }
+    if (
+      ai.params['reasoning'] === 'none' ||
+      ai.params['reasoning'] === 'low' ||
+      ai.params['reasoning'] === 'medium' ||
+      ai.params['reasoning'] === 'high'
+    ) {
+      params.reasoning = ai.params['reasoning'];
+    }
+
+    // Only assign params if we have at least one value
+    if (Object.keys(params).length > 0) {
+      config.params = params as NonNullable<ModelConfig['params']>;
+    }
+  }
+
+  return config;
+}
+
+/**
+ * Converts SkillAIOverride (from frontmatter) to SkillModelOverride (runtime format)
+ */
+function convertSkillAIOverride(ai: SkillAIOverride | undefined): SkillModelOverride | undefined {
+  if (!ai) {
+    return undefined;
+  }
+
+  return {
+    provider: ai.modelProvider,
+    name: ai.model,
+    params: ai.params
+      ? {
+          temperature:
+            typeof ai.params['temperature'] === 'number' ? ai.params['temperature'] : undefined,
+          reasoning:
+            ai.params['reasoning'] === 'none' ||
+            ai.params['reasoning'] === 'low' ||
+            ai.params['reasoning'] === 'medium' ||
+            ai.params['reasoning'] === 'high'
+              ? ai.params['reasoning']
+              : undefined,
+        }
+      : undefined,
+  };
+}
 
 function resolveAgentModel(model: ModelConfig | undefined): ModelConfig {
   const provider = model?.provider ?? DEFAULT_AGENT_MODEL.provider;
@@ -125,15 +197,18 @@ function buildModelConfig(
   agentBase: ReturnType<typeof loadAgentBase>,
   skills: LoadedSkill[],
 ): ModelConfigRuntime {
-  const agentModel = resolveAgentModel(agentBase.frontmatter.model);
+  // Convert AIModelConfig (from frontmatter) to ModelConfig (runtime)
+  const convertedAgentModel = convertAIModelConfig(agentBase.frontmatter.ai);
+  const agentModel = resolveAgentModel(convertedAgentModel);
   const skillModelOverrides = new Map<string, SkillModelOverride>();
 
   for (const skill of skills) {
-    if (skill.frontmatter.model) {
-      skillModelOverrides.set(
-        skill.frontmatter.skill.id,
-        cloneSkillModelOverride(skill.frontmatter.model),
-      );
+    // Convert SkillAIOverride (from frontmatter) to SkillModelOverride (runtime)
+    if (skill.frontmatter.ai) {
+      const converted = convertSkillAIOverride(skill.frontmatter.ai);
+      if (converted) {
+        skillModelOverrides.set(skill.frontmatter.skill.id, cloneSkillModelOverride(converted));
+      }
     }
   }
 
@@ -227,6 +302,7 @@ export interface AgentConfig {
   models: ModelConfigRuntime;
   tools: Map<string, Tool>;
   mcpClients: Map<string, Client>;
+  routing?: RoutingConfig;
 }
 
 export interface AgentConfigHandle {
@@ -318,6 +394,7 @@ export async function initFromConfigWorkspace(options: InitOptions): Promise<Age
     models: currentSnapshot.models,
     tools,
     mcpClients,
+    routing: currentSnapshot.agentBase.frontmatter.routing,
   };
 
   const hotReloadHandlers: HotReloadHandler[] = [];
@@ -533,6 +610,7 @@ export async function initFromConfigWorkspace(options: InitOptions): Promise<Age
     agentConfig.effectiveSets = nextSnapshot.effectiveSets;
     agentConfig.workflowPlugins = new Map(workflowLoader.getPlugins());
     agentConfig.mcpInstances = mcpInstantiator.getInstances();
+    agentConfig.routing = nextSnapshot.agentBase.frontmatter.routing;
     currentSnapshot = nextSnapshot;
 
     await notifyHotReload({ change, config: agentConfig, updated });

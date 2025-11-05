@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { createCoreToolFromMCP } from '../../ai/adapters.js';
 import { workflowToCoreTools } from '../../ai/adapters.js';
 import { Logger } from '../../utils/logger.js';
-import { WorkflowRuntime } from '../../workflows/runtime.js';
+import { WorkflowRuntime } from '../../workflow/runtime.js';
 import { canonicalizeName } from '../validators/tool-validator.js';
 
 import type { MCPServerInstance } from './mcp-instantiator.js';

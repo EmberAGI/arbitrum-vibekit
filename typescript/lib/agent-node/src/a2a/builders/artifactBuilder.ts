@@ -2,7 +2,7 @@
  * Artifact message builder for A2A Agent Executor
  */
 
-import type { WorkflowExecution } from '../../workflows/types.js';
+import type { WorkflowExecution } from '../../workflow/types.js';
 
 /**
  * Builds a descriptive message text for an artifact

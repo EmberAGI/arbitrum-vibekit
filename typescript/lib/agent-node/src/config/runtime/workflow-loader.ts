@@ -4,12 +4,13 @@
  * Supports both TypeScript (.ts) and JavaScript (.js) workflows via jiti
  */
 
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 import { createJiti } from 'jiti';
 
 import { Logger } from '../../utils/logger.js';
-import type { WorkflowPlugin } from '../../workflows/types.js';
+import type { WorkflowPlugin } from '../../workflow/types.js';
 import type { EffectiveWorkflow } from '../composers/effective-set-composer.js';
 
 function assertWorkflowModuleHasDefault(
@@ -75,9 +76,18 @@ export class WorkflowPluginLoader {
     try {
       this.logger.debug(`Loading workflow plugin: ${workflow.id}`, { path: modulePath });
 
+      // Resolve the package root for alias configuration
+      const currentDir = dirname(fileURLToPath(import.meta.url));
+      const packageRoot = resolve(currentDir, '../../..');
+
       // Use jiti for dynamic import - handles both .ts and .js files
+      // Configure aliases to resolve @emberai/agent-node imports in user workflows
       const jiti = createJiti(import.meta.url, {
         interopDefault: true,
+        alias: {
+          '@emberai/agent-node/workflow': resolve(packageRoot, 'dist/workflow/public.js'),
+          '@emberai/agent-node': resolve(packageRoot, 'dist/index.js'),
+        },
       });
 
       const module = await jiti.import(modulePath);

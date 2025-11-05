@@ -6,8 +6,11 @@ beforeAll(() => {
   // Set test environment flag
   process.env['NODE_ENV'] = 'test';
 
-  // Suppress console output during tests unless explicitly testing console
-  if (!process.env['DEBUG_TESTS']) {
+  // Control console output during tests via LOG_LEVEL
+  // Supported values: 'none' (default), 'error', 'warn', 'debug'
+  const logLevel = process.env['LOG_LEVEL'] || 'none';
+
+  if (logLevel !== 'debug') {
     // Store original methods for restoration
     global.originalConsole = {
       log: console.log,
@@ -16,11 +19,30 @@ beforeAll(() => {
       debug: console.debug,
     };
 
-    // Override console methods
-    console.log = () => {};
-    console.error = () => {};
-    console.warn = () => {};
-    console.debug = () => {};
+    // Suppress console methods based on log level
+    switch (logLevel) {
+      case 'error':
+        // Show only errors
+        console.log = () => {};
+        console.warn = () => {};
+        console.debug = () => {};
+        // Keep console.error enabled
+        break;
+      case 'warn':
+        // Show errors and warnings
+        console.log = () => {};
+        console.debug = () => {};
+        // Keep console.error and console.warn enabled
+        break;
+      case 'none':
+      default:
+        // Suppress everything
+        console.log = () => {};
+        console.error = () => {};
+        console.warn = () => {};
+        console.debug = () => {};
+        break;
+    }
   }
 });
 

@@ -1,6 +1,7 @@
-import { z } from 'zod';
-import { TransactionPlanSchema, TokenIdentifierSchema } from './core.js';
 import { DecreasePositionSwapType, OrderType } from '@gmx-io/sdk/types/orders';
+import { z } from 'zod';
+
+import { TransactionPlanSchema, TokenIdentifierSchema } from './core.js';
 
 // Enums
 export const DecreasePositionSwapTypeSchema = z.nativeEnum(DecreasePositionSwapType);

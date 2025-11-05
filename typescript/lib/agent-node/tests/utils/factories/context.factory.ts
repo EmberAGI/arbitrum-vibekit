@@ -1,7 +1,7 @@
 import type { Message } from '@a2a-js/sdk';
 import type { RequestContext } from '@a2a-js/sdk/server';
 
-import type { ResumeResult, WorkflowExecution } from '../../../src/workflows/types.js';
+import type { ResumeResult, WorkflowExecution } from '../../../src/workflow/types.js';
 
 /**
  * Factory for creating test RequestContext objects

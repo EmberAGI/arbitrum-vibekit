@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sign Agent Registration Transaction</title>
-    <script src="https://cdn.jsdelivr.net/npm/viem@2.21.54/dist/viem.min.js"></script>
     <style>
       * {
         margin: 0;
@@ -178,10 +177,200 @@
         <a id="txHashLink" target="_blank"></a>
       </div>
     </div>
+    <script type="module">
+      import {
+        createPublicClient,
+        createWalletClient,
+        custom,
+        defineChain,
+        parseEventLogs,
+        parseAbiItem,
+      } from 'https://esm.sh/viem@2.38.5';
 
-    <script>
       let walletClient = null;
+      let publicClient = null;
       let txData = null;
+      let injectedProvider = null;
+      const announcedProviders = [];
+
+      window.addEventListener('eip6963:announceProvider', (event) => {
+        const { provider, info } = event.detail;
+        announcedProviders.push({ provider, info });
+        if (!injectedProvider || info?.rdns === 'io.metamask') {
+          injectedProvider = provider;
+        }
+      });
+
+      window.dispatchEvent(new Event('eip6963:requestProvider'));
+
+      function resolveInjectedProvider() {
+        if (injectedProvider) {
+          return injectedProvider;
+        }
+        if (announcedProviders.length > 0) {
+          const metamask = announcedProviders.find(({ info }) => info?.rdns === 'io.metamask');
+          if (metamask) {
+            injectedProvider = metamask.provider;
+            return injectedProvider;
+          }
+          injectedProvider = announcedProviders[0]?.provider ?? null;
+          return injectedProvider;
+        }
+
+        if (window.ethereum?.providers && Array.isArray(window.ethereum.providers)) {
+          const metamaskProvider = window.ethereum.providers.find(
+            (provider) => provider && provider.isMetaMask,
+          );
+          if (metamaskProvider) {
+            injectedProvider = metamaskProvider;
+            return injectedProvider;
+          }
+          injectedProvider = window.ethereum.providers[0];
+          return injectedProvider;
+        }
+        injectedProvider = window.ethereum ?? null;
+        return injectedProvider;
+      }
+
+      function buildViemChain(chainId) {
+        if (!defineChain) {
+          return null;
+        }
+        const metadata = CHAIN_METADATA[chainId];
+        if (!metadata) {
+          return null;
+        }
+        const networkName = metadata.chainName.toLowerCase().replace(/\s+/g, '-');
+        return defineChain({
+          id: chainId,
+          name: metadata.chainName,
+          network: networkName,
+          nativeCurrency: metadata.nativeCurrency,
+          rpcUrls: {
+            default: { http: metadata.rpcUrls },
+            public: { http: metadata.rpcUrls },
+          },
+          blockExplorers:
+            metadata.blockExplorerUrls.length > 0
+              ? {
+                  default: {
+                    name: `${metadata.chainName} Explorer`,
+                    url: metadata.blockExplorerUrls[0],
+                  },
+                }
+              : undefined,
+        });
+      }
+
+      function ensureWalletClient(chainId) {
+        if (!custom) {
+          return;
+        }
+
+        const provider = resolveInjectedProvider();
+        if (!provider) {
+          return;
+        }
+
+        const chainConfig = buildViemChain(chainId);
+
+        if (!walletClient && createWalletClient) {
+          walletClient = createWalletClient({
+            chain: chainConfig ?? undefined,
+            transport: custom(provider),
+          });
+        }
+
+        if (!publicClient && createPublicClient) {
+          publicClient = createPublicClient({
+            chain: chainConfig ?? undefined,
+            transport: custom(provider),
+          });
+        }
+      }
+
+      async function isWalletUnlocked() {
+        const provider = resolveInjectedProvider();
+        const metaMask = provider?._metamask;
+        if (metaMask && typeof metaMask.isUnlocked === 'function') {
+          try {
+            return await metaMask.isUnlocked();
+          } catch (error) {
+            console.log('Could not determine MetaMask lock state:', error);
+          }
+        }
+        return true;
+      }
+
+      function isUserRejected(error) {
+        let current = error;
+        while (current) {
+          if (typeof current?.code === 'number' && current.code === 4001) {
+            return true;
+          }
+          if (UserRejectedRequestError && current instanceof UserRejectedRequestError) {
+            return true;
+          }
+          current = current?.cause;
+        }
+        return false;
+      }
+
+      function isRequestPending(error) {
+        let current = error;
+        while (current) {
+          if (typeof current?.code === 'number' && current.code === -32002) {
+            return true;
+          }
+          current = current?.cause;
+        }
+        return false;
+      }
+
+      function isChainNotConfigured(error) {
+        let current = error;
+        while (current) {
+          if (typeof current?.code === 'number' && current.code === 4902) {
+            return true;
+          }
+          if (ChainNotConfiguredError && current instanceof ChainNotConfiguredError) {
+            return true;
+          }
+          current = current?.cause;
+        }
+        return false;
+      }
+
+      const CHAIN_METADATA = {
+        1: {
+          chainId: '0x1',
+          chainName: 'Ethereum Mainnet',
+          nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+          rpcUrls: ['https://rpc.ankr.com/eth'],
+          blockExplorerUrls: ['https://etherscan.io'],
+        },
+        11155111: {
+          chainId: '0xaa36a7',
+          chainName: 'Sepolia Testnet',
+          nativeCurrency: { name: 'Sepolia Ether', symbol: 'ETH', decimals: 18 },
+          rpcUrls: ['https://rpc.sepolia.org'],
+          blockExplorerUrls: ['https://sepolia.etherscan.io'],
+        },
+        42161: {
+          chainId: '0xa4b1',
+          chainName: 'Arbitrum One',
+          nativeCurrency: { name: 'Arbitrum Ether', symbol: 'ETH', decimals: 18 },
+          rpcUrls: ['https://arb1.arbitrum.io/rpc'],
+          blockExplorerUrls: ['https://arbiscan.io'],
+        },
+        421614: {
+          chainId: '0x66eee',
+          chainName: 'Arbitrum Sepolia',
+          nativeCurrency: { name: 'Arbitrum Sepolia Ether', symbol: 'ETH', decimals: 18 },
+          rpcUrls: ['https://sepolia-rollup.arbitrum.io/rpc'],
+          blockExplorerUrls: ['https://sepolia.arbiscan.io'],
+        },
+      };
 
       // Parse URL parameters
       function parseParams() {
@@ -237,64 +426,221 @@
         return `${baseUrl}/tx/${txHash}`;
       }
 
+      // Request access to wallet accounts, handling common provider edge cases
+      async function requestWalletAccounts(button) {
+        if (!walletClient) {
+          ensureWalletClient(txData?.chainId ?? 1);
+        }
+        if (!walletClient) {
+          showStatus(
+            'Wallet client is not available. Ensure MetaMask is installed and try again.',
+            'error',
+          );
+          button.disabled = false;
+          button.textContent = 'Try Again';
+          return null;
+        }
+
+        const unlocked = await isWalletUnlocked();
+        if (!unlocked) {
+          showStatus(
+            'MetaMask appears to be locked. You may see an unlock prompt shortly; if not, open the MetaMask extension and unlock it manually.',
+            'info',
+          );
+        }
+
+        let addresses = [];
+
+        if (typeof walletClient.getAddresses === 'function') {
+          try {
+            addresses = await walletClient.getAddresses();
+          } catch (error) {
+            console.log('walletClient.getAddresses failed:', error);
+          }
+        }
+
+        if (Array.isArray(addresses) && addresses.length > 0) {
+          return addresses;
+        }
+
+        if (typeof walletClient.requestAddresses === 'function') {
+          try {
+            addresses = await walletClient.requestAddresses();
+          } catch (error) {
+            if (isRequestPending(error)) {
+              showStatus(
+                'A MetaMask request is already pending. Open MetaMask and finish the request, then click Try Again.',
+                'error',
+              );
+              button.disabled = false;
+              button.textContent = 'Try Again';
+              return null;
+            }
+            if (isUserRejected(error)) {
+              showStatus(
+                'MetaMask blocked the connection. Open the extension, select an account, approve the request, then click Try Again.',
+                'error',
+              );
+            } else if (error instanceof Error && error.message) {
+              showStatus(`Failed to connect to wallet: ${error.message}`, 'error');
+            } else {
+              showStatus('Failed to connect to wallet.', 'error');
+            }
+            button.disabled = false;
+            button.textContent = 'Try Again';
+            return null;
+          }
+        }
+
+        if (Array.isArray(addresses) && addresses.length > 0) {
+          return addresses;
+        }
+
+        showStatus(
+          'MetaMask did not expose any accounts yet. Open the MetaMask extension, unlock/select an account, approve the connection, then click Try Again.',
+          'error',
+        );
+        button.disabled = false;
+        button.textContent = 'Try Again';
+        return null;
+      }
+
+      async function ensureCorrectChain(button, chainId) {
+        if (!walletClient) {
+          showStatus('Wallet client is not available. Refresh and try again.', 'error');
+          button.disabled = false;
+          button.textContent = 'Try Again';
+          return false;
+        }
+
+        try {
+          const currentChainId = await walletClient.getChainId();
+          if (typeof currentChainId === 'number' && currentChainId === chainId) {
+            return true;
+          }
+        } catch (error) {
+          console.log('Could not determine current chain ID:', error);
+        }
+
+        try {
+          await walletClient.switchChain({ id: chainId });
+          return true;
+        } catch (error) {
+          if (isChainNotConfigured(error)) {
+            return await addChainWithMetadata(button, chainId);
+          }
+          if (isUserRejected(error)) {
+            showStatus(
+              'Network switch was rejected. Approve the network prompt in MetaMask, then click Try Again.',
+              'error',
+            );
+          } else if (isRequestPending(error)) {
+            showStatus(
+              'A network switch request is already pending. Open MetaMask and finish it, then click Try Again.',
+              'error',
+            );
+          } else if (error instanceof Error && error.message) {
+            showStatus(`Unable to switch networks automatically: ${error.message}`, 'error');
+          } else {
+            showStatus(
+              `Unable to switch networks automatically. Switch to chain ID ${chainId} in your wallet, then try again.`,
+              'error',
+            );
+          }
+          button.disabled = false;
+          button.textContent = 'Try Again';
+          return false;
+        }
+      }
+
+      async function addChainWithMetadata(button, chainId) {
+        if (!walletClient || typeof walletClient.addChain !== 'function') {
+          showStatus(
+            `This network (chain ID ${chainId}) is not configured in MetaMask. Add it manually, then try again.`,
+            'error',
+          );
+          button.disabled = false;
+          button.textContent = 'Try Again';
+          return false;
+        }
+
+        const chainConfig = buildViemChain(chainId);
+        if (!chainConfig) {
+          showStatus(
+            `Chain metadata for ${chainId} is unavailable. Add it to your wallet manually, then try again.`,
+            'error',
+          );
+          button.disabled = false;
+          button.textContent = 'Try Again';
+          return false;
+        }
+
+        try {
+          await walletClient.addChain({ chain: chainConfig });
+          await walletClient.switchChain({ id: chainId });
+          return true;
+        } catch (error) {
+          if (isUserRejected(error)) {
+            showStatus(
+              'Network addition was rejected. Approve the prompt in MetaMask, then click Try Again.',
+              'error',
+            );
+          } else if (isRequestPending(error)) {
+            showStatus(
+              'A MetaMask request is already pending. Open MetaMask and finish it, then click Try Again.',
+              'error',
+            );
+          } else if (error instanceof Error && error.message) {
+            showStatus(`Could not add the network automatically: ${error.message}`, 'error');
+          } else {
+            showStatus('Could not add the network automatically.', 'error');
+          }
+          button.disabled = false;
+          button.textContent = 'Try Again';
+          return false;
+        }
+      }
+
       // Connect wallet and sign transaction
       async function connectWallet() {
         const button = document.getElementById('connectButton');
         button.disabled = true;
 
         try {
-          // Check if MetaMask is installed
-          if (!window.ethereum) {
-            showStatus('Please install MetaMask or another Web3 wallet', 'error');
+          ensureWalletClient(txData?.chainId ?? 1);
+
+          if (!walletClient) {
+            showStatus('Could not initialise wallet client. Refresh and try again.', 'error');
             button.disabled = false;
+            button.textContent = 'Try Again';
             return;
           }
 
           showStatus('<span class="loader"></span> Connecting to wallet...', 'info');
 
-          // Request account access
-          const accounts = await window.ethereum.request({
-            method: 'eth_requestAccounts',
-          });
-
-          const account = accounts[0];
-          showStatus(`Connected: ${account.slice(0, 6)}...${account.slice(-4)}`, 'success');
-
-          // Switch to correct chain if needed
-          const currentChainId = await window.ethereum.request({
-            method: 'eth_chainId',
-          });
-          const currentChainIdDecimal = parseInt(currentChainId, 16);
-
-          if (currentChainIdDecimal !== txData.chainId) {
-            showStatus('<span class="loader"></span> Switching to correct network...', 'info');
-            try {
-              await window.ethereum.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: `0x${txData.chainId.toString(16)}` }],
-              });
-            } catch (switchError) {
-              showStatus(`Please switch to chain ID ${txData.chainId} manually`, 'error');
-              button.disabled = false;
-              return;
-            }
+          const accounts = await requestWalletAccounts(button);
+          if (!accounts || accounts.length === 0) {
+            return;
           }
 
-          // Send transaction
+          const account = String(accounts[0]);
+          showStatus(`Connected: ${account.slice(0, 6)}...${account.slice(-4)}`, 'success');
+
+          showStatus('<span class="loader"></span> Switching to correct network...', 'info');
+          const chainReady = await ensureCorrectChain(button, txData.chainId);
+          if (!chainReady) {
+            return;
+          }
+
           showStatus(
             '<span class="loader"></span> Please confirm the transaction in your wallet...',
             'info',
           );
 
-          const transactionParameters = {
-            from: account,
+          const txHash = await walletClient.sendTransaction({
+            account: accounts[0],
             to: txData.to,
             data: txData.data,
-          };
-
-          const txHash = await window.ethereum.request({
-            method: 'eth_sendTransaction',
-            params: [transactionParameters],
           });
 
           showStatus(
@@ -302,44 +648,102 @@
             'info',
           );
 
-          // Display transaction hash
           const txHashContainer = document.getElementById('txHashContainer');
           const txHashLink = document.getElementById('txHashLink');
           txHashLink.href = getExplorerUrl(txData.chainId, txHash);
           txHashLink.textContent = txHash;
           txHashContainer.style.display = 'block';
 
-          // Wait for transaction receipt
-          const receipt = await waitForTransaction(txHash);
+          let receipt;
+          if (publicClient && typeof publicClient.waitForTransactionReceipt === 'function') {
+            receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+          } else if (walletClient && typeof walletClient.waitForTransactionReceipt === 'function') {
+            receipt = await walletClient.waitForTransactionReceipt({ hash: txHash });
+          } else {
+            throw new Error('Unable to wait for transaction receipt with the current viem client.');
+          }
 
-          // Extract and display agent ID
-          const agentId = decodeAgentId(receipt);
-          if (agentId !== null) {
-            showStatus(
-              `✅ Transaction confirmed! Your agent has been registered.<br><strong>Agent ID: ${agentId}</strong>`,
-              'success',
-            );
-            // Send agent ID back to the server
+          const agentIdInfo = await decodeAgentId(receipt, accounts[0], txData.to);
+          if (agentIdInfo !== null) {
+            const agentIdDisplay = agentIdInfo.decimal;
+            const agentIdHex = agentIdInfo.hex;
+            const source =
+              agentIdInfo.source === 'historical' ? ' (retrieved from historical logs)' : '';
+            const statusMessage = agentIdInfo.isSafeInteger
+              ? `✅ Transaction confirmed! Your agent has been registered.<br><strong>Agent ID: ${agentIdDisplay}</strong>${source}<br><br>✅ Registration complete. You can now close this page.`
+              : `✅ Transaction confirmed! Your agent has been registered.<br><strong>Agent ID: ${agentIdDisplay}</strong><br><small>Hex: ${agentIdHex}</small>${source}<br><br>✅ Registration complete. You can now close this page.`;
+            showStatus(statusMessage, 'success');
+
+            // Log transaction details for debugging
+            console.log('Transaction hash:', txHash);
+            console.log('Agent ID:', agentIdDisplay);
+            console.log('Source:', agentIdInfo.source);
+
             try {
               await fetch('/callback', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ agentId }),
+                body: JSON.stringify({
+                  agentId: agentIdInfo.isSafeInteger ? agentIdInfo.toNumber() : agentIdDisplay,
+                  agentIdHex,
+                  agentIdDecimal: agentIdDisplay,
+                  txHash,
+                }),
               });
             } catch (error) {
               console.log('Could not send agent ID to server:', error);
             }
           } else {
-            showStatus('✅ Transaction confirmed! Your agent has been registered.', 'success');
+            // No agent ID found - show warning instead of silent success
+            const explorerUrl = getExplorerUrl(txData.chainId, txHash);
+            showStatus(
+              `⚠️ Transaction confirmed but agent ID not found.<br>
+              Transaction hash: <a href="${explorerUrl}" target="_blank">${txHash.slice(0, 10)}...</a><br>
+              <button onclick="window.location.reload()">Search Again</button><br><br>
+              Registration complete. You can close this page. Check your terminal for recovery instructions.`,
+              'error',
+            );
+
+            // Log full receipt for debugging
+            console.error('Failed to retrieve agent ID. Transaction receipt:', receipt);
+            console.log('Transaction hash:', txHash);
+
+            // Still send callback with pending flag
+            try {
+              await fetch('/callback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  pendingAgentId: true,
+                  txHash,
+                }),
+              });
+            } catch (error) {
+              console.log('Could not send pending status to server:', error);
+            }
           }
-          button.textContent = 'Registration Complete';
+
+          button.textContent = 'Close';
+          button.onclick = () => window.close();
         } catch (error) {
           console.error('Error:', error);
           let errorMessage = 'Transaction failed';
 
-          if (error.code === 4001) {
-            errorMessage = 'Transaction rejected by user';
-          } else if (error.message) {
+          if (isUserRejected(error)) {
+            errorMessage =
+              'Wallet request was rejected. Please approve the prompts in your wallet and try again.';
+          } else if (isRequestPending(error)) {
+            errorMessage =
+              'A wallet request is already pending. Open your wallet extension and finish that request, then try again.';
+          } else if (error?.code === 4100) {
+            errorMessage = 'Your wallet is locked. Unlock it, then click Try Again.';
+          } else if (
+            typeof error?.message === 'string' &&
+            error.message.toLowerCase().includes('wallet must has at least one account')
+          ) {
+            errorMessage =
+              'No wallet account available. Unlock your wallet or create an account, then try again.';
+          } else if (error instanceof Error && error.message) {
             errorMessage = error.message;
           }
 
@@ -349,54 +753,112 @@
         }
       }
 
-      // Decode agent ID from transaction receipt
-      function decodeAgentId(receipt) {
+      window.connectWallet = connectWallet;
+
+      // Decode agent ID from transaction receipt with fallback to historical logs
+      async function decodeAgentId(receipt, account, contractAddress) {
         try {
-          // The Registered event has the agentId as the second topic (first indexed parameter)
-          // Event signature: Registered(uint256 indexed agentId, string tokenURI, address indexed owner)
-          for (const log of receipt.logs) {
-            // Check if this log has topics (indicating indexed parameters)
-            if (log.topics && log.topics.length >= 2) {
-              // The second topic is the indexed agentId
-              const agentIdHex = log.topics[1];
-              if (agentIdHex) {
-                // Convert hex to decimal
-                const agentId = parseInt(agentIdHex, 16);
-                return agentId;
-              }
-            }
+          // Define the Registered event ABI
+          const registeredEventAbi = {
+            anonymous: false,
+            inputs: [
+              {
+                indexed: true,
+                internalType: 'uint256',
+                name: 'agentId',
+                type: 'uint256',
+              },
+              {
+                indexed: false,
+                internalType: 'string',
+                name: 'tokenURI',
+                type: 'string',
+              },
+              {
+                indexed: true,
+                internalType: 'address',
+                name: 'owner',
+                type: 'address',
+              },
+            ],
+            name: 'Registered',
+            type: 'event',
+          };
+
+          // First, try to parse the logs from the receipt
+          const parsedLogs = parseEventLogs({
+            abi: [registeredEventAbi],
+            logs: receipt.logs,
+          });
+
+          // Find the Registered event in the parsed logs
+          const registeredEvent = parsedLogs.find((log) => log.eventName === 'Registered');
+
+          if (registeredEvent && registeredEvent.args.agentId !== undefined) {
+            console.log('Found agent ID in transaction receipt');
+            const agentIdBigInt = BigInt(registeredEvent.args.agentId);
+            const isSafeInteger = agentIdBigInt <= BigInt(Number.MAX_SAFE_INTEGER);
+            return {
+              hex: `0x${agentIdBigInt.toString(16)}`,
+              decimal: agentIdBigInt.toString(10),
+              isSafeInteger,
+              toNumber: () => Number(agentIdBigInt),
+              source: 'receipt',
+            };
           }
+
+          // Fallback: Query historical logs if not found in receipt
+          console.log('Agent ID not found in receipt, querying historical logs...');
+          showStatus(
+            '<span class="loader"></span> Searching for agent ID in historical logs...',
+            'info',
+          );
+
+          if (!publicClient) {
+            console.error('Public client not available for historical query');
+            return null;
+          }
+
+          // Parse the event signature for getLogs
+          const registeredEventSignature = parseAbiItem(
+            'event Registered(uint256 indexed agentId, string tokenURI, address indexed owner)',
+          );
+
+          // Query historical logs for this owner
+          const logs = await publicClient.getLogs({
+            address: contractAddress,
+            event: registeredEventSignature,
+            args: {
+              owner: account,
+            },
+            fromBlock: BigInt(0), // Could optimize with deployment block
+            toBlock: 'latest',
+          });
+
+          if (logs && logs.length > 0) {
+            // Use the most recent registration (last in array)
+            const mostRecentLog = logs[logs.length - 1];
+            const agentIdBigInt = BigInt(mostRecentLog.args.agentId);
+            const isSafeInteger = agentIdBigInt <= BigInt(Number.MAX_SAFE_INTEGER);
+
+            console.log(
+              `Found ${logs.length} agent(s) for this owner, using most recent: ${agentIdBigInt.toString()}`,
+            );
+
+            return {
+              hex: `0x${agentIdBigInt.toString(16)}`,
+              decimal: agentIdBigInt.toString(10),
+              isSafeInteger,
+              toNumber: () => Number(agentIdBigInt),
+              source: 'historical',
+            };
+          }
+
+          console.log('No agents found for this owner in historical logs');
         } catch (error) {
           console.error('Error decoding agent ID:', error);
         }
         return null;
-      }
-
-      // Wait for transaction to be mined
-      async function waitForTransaction(txHash) {
-        return new Promise((resolve, reject) => {
-          const checkTransaction = async () => {
-            try {
-              const receipt = await window.ethereum.request({
-                method: 'eth_getTransactionReceipt',
-                params: [txHash],
-              });
-
-              if (receipt !== null) {
-                if (receipt.status === '0x1') {
-                  resolve(receipt);
-                } else {
-                  reject(new Error('Transaction failed'));
-                }
-              } else {
-                setTimeout(checkTransaction, 2000);
-              }
-            } catch (error) {
-              reject(error);
-            }
-          };
-          checkTransaction();
-        });
       }
 
       // Initialize on page load
