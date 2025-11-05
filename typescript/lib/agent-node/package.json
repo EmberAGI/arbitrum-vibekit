@@ -1,6 +1,6 @@
 {
   "name": "@emberai/agent-node",
-  "version": "1.0.0-beta.11",
+  "version": "0.0.0",
   "private": false,
   "type": "module",
   "engines": {
@@ -56,20 +56,16 @@
         }
       ],
       [
+        "@semantic-release/release-notes-generator",
+        {
+          "preset": "conventionalcommits"
+        }
+      ],
+      [
         "@semantic-release/exec",
         {
           "prepareCmd": "pnpm pkg set version=${nextRelease.version}",
           "publishCmd": "pnpm publish --no-git-checks --access public --tag ${nextRelease.channel || 'latest'}"
-        }
-      ],
-      [
-        "@semantic-release/git",
-        {
-          "assets": [
-            "CHANGELOG.md",
-            "package.json"
-          ],
-          "message": "chore(release): agent-node-v${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
         }
       ],
       [
