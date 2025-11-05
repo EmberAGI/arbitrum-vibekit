@@ -150,10 +150,10 @@
     "test:ui": "vitest --ui",
     "test:record-mocks": "tsx --env-file=.env tests/utils/record-mocks.ts",
     "test:upgrade-wallet": "tsx --env-file=.env.test scripts/upgrade-test-wallet.ts",
-    "test:ci": "pnpm test:unit && pnpm test:int",
+    "test:ci": "pnpm test:unit && LOG_LEVEL=error pnpm test:int",
     "test:ci:main": "pnpm test:unit && pnpm test:int && pnpm test:e2e",
     "precommit": "pnpm lint && pnpm typecheck && pnpm test",
-    "ci": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && DEBUG_TESTS=1 pnpm test:ci && pnpm build",
+    "ci": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && LOG_LEVEL=debug pnpm test:ci && pnpm build",
     "ci:main": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test:ci:main && pnpm build"
   }
 }
