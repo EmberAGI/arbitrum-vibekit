@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - build/agent-node-release
+      - next
       - main
     paths:
       - "typescript/lib/agent-node/**"
