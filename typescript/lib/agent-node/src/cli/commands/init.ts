@@ -18,6 +18,7 @@ export interface InitOptions {
   force?: boolean;
   yes?: boolean;
   nonInteractive?: boolean;
+  noInstall?: boolean;
 }
 
 // AI Provider configurations with model suggestions
@@ -393,6 +394,90 @@ const plugin: WorkflowPlugin = {
       userConfirmed: userInput?.confirmed ?? false,
       artifactsGenerated: 3,
       completedAt: new Date().toISOString(),
+    };
+  },
+};
+
+export default plugin;
+`;
+
+const SAMPLE_PACKAGE_WORKFLOW_TS = `import {
+  z,
+  type WorkflowContext,
+  type WorkflowPlugin,
+  type WorkflowState,
+} from '@emberai/agent-node/workflow';
+
+const plugin: WorkflowPlugin = {
+  id: 'sample-package',
+  name: 'Sample Package Workflow',
+  description: 'A sample workflow demonstrating per-workflow dependencies',
+  version: '1.0.0',
+
+  inputSchema: z.object({
+    message: z.string().optional().default('Hello from sample-package!'),
+  }),
+
+  async *execute(context: WorkflowContext): AsyncGenerator<WorkflowState, unknown, unknown> {
+    const { message } = context.parameters ?? { message: 'Hello from sample-package!' };
+
+    yield {
+      type: 'status-update',
+      message: 'Processing with package dependencies...',
+    };
+
+    // This workflow can have its own dependencies via package.json
+    // For example: lodash, axios, date-fns, etc.
+
+    yield {
+      type: 'status-update',
+      message: 'Workflow completed',
+    };
+
+    return {
+      success: true,
+      message,
+      note: 'This workflow has its own node_modules directory',
+    };
+  },
+};
+
+export default plugin;
+`;
+
+const SAMPLE_PACKAGE_JSON = `{
+  "name": "sample-package-workflow",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "zod": "^3.24.1"
+  }
+}
+`;
+
+const SAMPLE_SIMPLE_WORKFLOW_JS = `/**
+ * Simple JavaScript workflow without package.json
+ * Demonstrates that workflows don't need dependencies
+ */
+
+const plugin = {
+  id: 'simple-script',
+  name: 'Simple Script',
+  description: 'A simple workflow without dependencies',
+  version: '1.0.0',
+
+  inputSchema: null, // No validation needed
+
+  async *execute(context) {
+    yield {
+      type: 'status-update',
+      message: 'Hello from simple-script!',
+    };
+
+    return {
+      success: true,
+      message: 'This workflow has no dependencies',
     };
   },
 };
@@ -852,6 +937,27 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
     writeFileSync(resolve(targetDir, 'README.md'), SAMPLE_README);
     writeFileSync(resolve(targetDir, 'skills', 'general-assistant.md'), SAMPLE_GENERAL_SKILL);
     writeFileSync(resolve(targetDir, 'skills', 'ember-onchain-actions.md'), SAMPLE_EMBER_SKILL);
+
+    // Create new workflow structure
+    // 1. sample-package/ with package.json and src/index.ts
+    mkdirSync(resolve(targetDir, 'workflows', 'sample-package', 'src'), { recursive: true });
+    writeFileSync(
+      resolve(targetDir, 'workflows', 'sample-package', 'package.json'),
+      SAMPLE_PACKAGE_JSON,
+    );
+    writeFileSync(
+      resolve(targetDir, 'workflows', 'sample-package', 'src', 'index.ts'),
+      SAMPLE_PACKAGE_WORKFLOW_TS,
+    );
+
+    // 2. simple-script/ with hello.js
+    mkdirSync(resolve(targetDir, 'workflows', 'simple-script'), { recursive: true });
+    writeFileSync(
+      resolve(targetDir, 'workflows', 'simple-script', 'hello.js'),
+      SAMPLE_SIMPLE_WORKFLOW_JS,
+    );
+
+    // 3. Keep example-workflow.ts for backward compatibility
     writeFileSync(resolve(targetDir, 'workflows', 'example-workflow.ts'), SAMPLE_WORKFLOW_TS);
 
     cliOutput.success('Created `agent.md`');
@@ -863,7 +969,9 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
     cliOutput.success('Created `skills/general-assistant.md`');
     cliOutput.success('Created `skills/ember-onchain-actions.md`');
     cliOutput.success('Created `workflows/` directory');
-    cliOutput.success('Created `workflows/example-workflow.ts`');
+    cliOutput.success('Created `workflows/sample-package/` (with package.json)');
+    cliOutput.success('Created `workflows/simple-script/hello.js`');
+    cliOutput.success('Created `workflows/example-workflow.ts` (legacy)');
 
     // Handle .env file
     const envPath = resolve(dirname(targetDir), '.env');
@@ -979,6 +1087,26 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
         if (addedCount > 0) parts.push(`${addedCount} added`);
         if (placeholderCount > 0) parts.push(`${placeholderCount} placeholder(s)`);
         cliOutput.success(`Updated \`.env\` (${parts.join(', ')})`);
+      }
+    }
+
+    // Install workflow dependencies unless --no-install is set
+    if (!options.noInstall) {
+      try {
+        cliOutput.blank();
+        cliOutput.info('Installing workflow dependencies...');
+        const { workflowInstallCommand } = await import('./workflow-install.js');
+        await workflowInstallCommand(undefined, {
+          configDir: targetDir,
+          all: true,
+          frozenLockfile: false,
+          quiet: false,
+        });
+      } catch (error) {
+        cliOutput.warn('Failed to install workflow dependencies');
+        if (error instanceof Error) {
+          cliOutput.warn(error.message);
+        }
       }
     }
 
