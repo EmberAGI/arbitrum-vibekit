@@ -131,5 +131,3 @@ const plugin: WorkflowPlugin = {
 };
 
 export default plugin;
-
-
