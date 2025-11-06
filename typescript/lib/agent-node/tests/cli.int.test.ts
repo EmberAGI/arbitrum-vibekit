@@ -13,6 +13,7 @@ import { bundleCommand } from '../src/cli/commands/bundle.js';
 import { doctorCommand } from '../src/cli/commands/doctor.js';
 import { initCommand } from '../src/cli/commands/init.js';
 import { printConfigCommand } from '../src/cli/commands/print-config.js';
+import { workflowInstallCommand } from '../src/cli/commands/workflow-install.js';
 
 import { createTestConfigWorkspace } from './utils/test-config-workspace.js';
 
@@ -793,6 +794,154 @@ describe('CLI Commands Integration Tests', () => {
       const bundle = JSON.parse(readFileSync(outputPath, 'utf-8'));
       expect(bundle.workflows).toBeDefined();
       expect(Array.isArray(bundle.workflows)).toBe(true);
+    });
+  });
+
+  describe('agent workflow install', () => {
+    it('should install workflow dependencies', async () => {
+      // Given: a config workspace with workflows
+      const configDir = createTestConfigWorkspace({
+        agentName: 'Workflow Install Test Agent',
+        skills: [],
+      });
+      tempDirs.push(configDir);
+
+      // Create a workflow with package.json
+      const workflowDir = join(configDir, 'workflows', 'test-workflow');
+      const { mkdirSync } = await import('fs');
+      mkdirSync(workflowDir, { recursive: true });
+      writeFileSync(
+        join(workflowDir, 'package.json'),
+        JSON.stringify({
+          name: 'test-workflow',
+          version: '1.0.0',
+          main: 'index.js',
+        }),
+      );
+      writeFileSync(join(workflowDir, 'index.js'), 'module.exports = {};');
+
+      // When: running workflow install command
+      await workflowInstallCommand(undefined, { configDir });
+
+      // Then: workflow should have node_modules
+      expect(existsSync(join(workflowDir, 'node_modules'))).toBe(true);
+      expect(existsSync(join(workflowDir, 'pnpm-lock.yaml'))).toBe(true);
+    });
+
+    it('should install specific workflow by name', async () => {
+      // Given: a config workspace with multiple workflows
+      const configDir = createTestConfigWorkspace({
+        agentName: 'Workflow Name Test Agent',
+        skills: [],
+      });
+      tempDirs.push(configDir);
+
+      // Create two workflows
+      const { mkdirSync } = await import('fs');
+
+      const workflow1Dir = join(configDir, 'workflows', 'workflow-one');
+      mkdirSync(workflow1Dir, { recursive: true });
+      writeFileSync(
+        join(workflow1Dir, 'package.json'),
+        JSON.stringify({ name: 'workflow-one', version: '1.0.0' }),
+      );
+      writeFileSync(join(workflow1Dir, 'index.js'), 'module.exports = {};');
+
+      const workflow2Dir = join(configDir, 'workflows', 'workflow-two');
+      mkdirSync(workflow2Dir, { recursive: true });
+      writeFileSync(
+        join(workflow2Dir, 'package.json'),
+        JSON.stringify({ name: 'workflow-two', version: '1.0.0' }),
+      );
+      writeFileSync(join(workflow2Dir, 'index.js'), 'module.exports = {};');
+
+      // When: installing specific workflow
+      await workflowInstallCommand('workflow-one', { configDir });
+
+      // Then: only workflow-one should have node_modules
+      expect(existsSync(join(workflow1Dir, 'node_modules'))).toBe(true);
+      expect(existsSync(join(workflow2Dir, 'node_modules'))).toBe(false);
+    });
+
+    it('should handle --all flag to install all workflows', async () => {
+      // Given: a config workspace with multiple workflows
+      const configDir = createTestConfigWorkspace({
+        agentName: 'Workflow All Test Agent',
+        skills: [],
+      });
+      tempDirs.push(configDir);
+
+      // Create two workflows
+      const { mkdirSync } = await import('fs');
+
+      const workflow1Dir = join(configDir, 'workflows', 'workflow-alpha');
+      mkdirSync(workflow1Dir, { recursive: true });
+      writeFileSync(
+        join(workflow1Dir, 'package.json'),
+        JSON.stringify({ name: 'workflow-alpha', version: '1.0.0' }),
+      );
+      writeFileSync(join(workflow1Dir, 'index.js'), 'module.exports = {};');
+
+      const workflow2Dir = join(configDir, 'workflows', 'workflow-beta');
+      mkdirSync(workflow2Dir, { recursive: true });
+      writeFileSync(
+        join(workflow2Dir, 'package.json'),
+        JSON.stringify({ name: 'workflow-beta', version: '1.0.0' }),
+      );
+      writeFileSync(join(workflow2Dir, 'index.js'), 'module.exports = {};');
+
+      // When: installing with --all flag
+      await workflowInstallCommand(undefined, { configDir, all: true });
+
+      // Then: both workflows should have node_modules
+      expect(existsSync(join(workflow1Dir, 'node_modules'))).toBe(true);
+      expect(existsSync(join(workflow2Dir, 'node_modules'))).toBe(true);
+    });
+
+    it('should skip workflows without package.json', async () => {
+      // Given: a config workspace with mixed workflows
+      const configDir = createTestConfigWorkspace({
+        agentName: 'Workflow Skip Test Agent',
+        skills: [],
+      });
+      tempDirs.push(configDir);
+
+      // Create workflow with package.json
+      const { mkdirSync } = await import('fs');
+
+      const packageWorkflowDir = join(configDir, 'workflows', 'with-package');
+      mkdirSync(packageWorkflowDir, { recursive: true });
+      writeFileSync(
+        join(packageWorkflowDir, 'package.json'),
+        JSON.stringify({ name: 'with-package', version: '1.0.0' }),
+      );
+      writeFileSync(join(packageWorkflowDir, 'index.js'), 'module.exports = {};');
+
+      // Create workflow without package.json (simple script)
+      const simpleWorkflowDir = join(configDir, 'workflows', 'simple-script');
+      mkdirSync(simpleWorkflowDir, { recursive: true });
+      writeFileSync(join(simpleWorkflowDir, 'index.js'), 'module.exports = {};');
+
+      // When: installing all workflows
+      await workflowInstallCommand(undefined, { configDir });
+
+      // Then: only package workflow should have node_modules
+      expect(existsSync(join(packageWorkflowDir, 'node_modules'))).toBe(true);
+      expect(existsSync(join(simpleWorkflowDir, 'node_modules'))).toBe(false);
+    });
+
+    it('should warn and return when no installable workflows exist', async () => {
+      // Given: a config workspace
+      const configDir = createTestConfigWorkspace({
+        agentName: 'Workflow Error Test Agent',
+        skills: [],
+      });
+      tempDirs.push(configDir);
+
+      // When/Then: installing a named workflow with no installables should resolve (no throw)
+      await expect(
+        workflowInstallCommand('does-not-exist', { configDir }),
+      ).resolves.toBeUndefined();
     });
   });
 });

@@ -56,6 +56,14 @@ describe('Init Command Integration', () => {
       expect(existsSync(join(tempDir, 'skills', 'ember-onchain-actions.md'))).toBe(true);
       expect(existsSync(join(tempDir, 'workflows'))).toBe(true);
       expect(existsSync(join(tempDir, 'workflows', 'example-workflow.ts'))).toBe(true);
+
+      // New workflow scaffolds
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package'))).toBe(true);
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package', 'package.json'))).toBe(true);
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package', 'src', 'index.ts'))).toBe(
+        true,
+      );
+      expect(existsSync(join(tempDir, 'workflows', 'simple-script', 'hello.js'))).toBe(true);
     });
 
     it('should create .env file in parent directory', async () => {
@@ -403,13 +411,90 @@ describe('Init Command Integration', () => {
     });
   });
 
+  describe('new workflow scaffolds', () => {
+    it('should create sample-package workflow with correct structure', async () => {
+      // Given: temp directory
+      const tempDir = createTempDir();
+
+      // When: running init
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
+
+      // Then: sample-package should have correct structure
+      const packageJsonPath = join(tempDir, 'workflows', 'sample-package', 'package.json');
+      const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+      expect(packageJson.name).toBe('sample-package-workflow');
+      expect(packageJson.version).toBe('1.0.0');
+      expect(packageJson.main).toBe('src/index.ts');
+      expect(packageJson.type).toBe('module');
+
+      const indexTsPath = join(tempDir, 'workflows', 'sample-package', 'src', 'index.ts');
+      const indexTsContent = readFileSync(indexTsPath, 'utf-8');
+      // Should reference WorkflowPlugin types
+      expect(indexTsContent).toContain('WorkflowPlugin');
+      expect(indexTsContent).toContain('export default plugin');
+    });
+
+    it('should create simple-script workflow with correct structure', async () => {
+      // Given: temp directory
+      const tempDir = createTempDir();
+
+      // When: running init
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
+
+      // Then: simple-script should have correct structure
+      const helloJsPath = join(tempDir, 'workflows', 'simple-script', 'hello.js');
+      const helloJsContent = readFileSync(helloJsPath, 'utf-8');
+      expect(helloJsContent).toContain('export default plugin');
+      expect(helloJsContent).toContain("id: 'simple-script'");
+      expect(helloJsContent).toContain('Hello from simple-script!');
+
+      // Should NOT have package.json (simple script)
+      expect(existsSync(join(tempDir, 'workflows', 'simple-script', 'package.json'))).toBe(false);
+    });
+  });
+
+  describe('workflow auto-install behavior', () => {
+    it('should auto-install workflow dependencies by default', async () => {
+      // Given: temp directory
+      const tempDir = createTempDir();
+
+      // When: running init without --no-install
+      await initCommand({ target: tempDir, yes: true });
+
+      // Then: workflow dependencies should be installed
+      // Check that package workflows have node_modules
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package', 'node_modules'))).toBe(true);
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package', 'pnpm-lock.yaml'))).toBe(true);
+    });
+
+    it('should skip auto-install with --no-install flag', async () => {
+      // Given: temp directory and --no-install flag
+      const tempDir = createTempDir();
+
+      // When: running init with --no-install
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
+
+      // Then: workflow dependencies should NOT be installed
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package', 'node_modules'))).toBe(false);
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package', 'pnpm-lock.yaml'))).toBe(
+        false,
+      );
+
+      // But workflow files should still be scaffolded
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package', 'package.json'))).toBe(true);
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package', 'src', 'index.ts'))).toBe(
+        true,
+      );
+    });
+  });
+
   describe('.env placeholders', () => {
     it('should append provider and Pinata placeholders to .env when not provided', async () => {
       // Given: temp directory
       const tempDir = createTempDir();
 
       // When: running init in non-interactive mode
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true }); // Add noInstall to speed up test
 
       // Then: .env should be created in parent with placeholders
       const envPath = join(tempDir, '..', '.env');
