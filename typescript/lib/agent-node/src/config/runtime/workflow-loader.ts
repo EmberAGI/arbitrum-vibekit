@@ -81,8 +81,9 @@ export class WorkflowPluginLoader {
       const packageRoot = resolve(currentDir, '../../..');
 
       // Use jiti for dynamic import - handles both .ts and .js files
+      // Use workflow entry path as base for resolution (allows per-workflow node_modules)
       // Configure aliases to resolve @emberai/agent-node imports in user workflows
-      const jiti = createJiti(import.meta.url, {
+      const jiti = createJiti(modulePath, {
         interopDefault: true,
         alias: {
           '@emberai/agent-node/workflow': resolve(packageRoot, 'dist/workflow/public.js'),
