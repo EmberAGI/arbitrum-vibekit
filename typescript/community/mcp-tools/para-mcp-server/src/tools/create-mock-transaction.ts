@@ -1,32 +1,31 @@
-import { type Address, encodeFunctionData, type Hex, parseUnits } from "viem";
+import { experimental_createMCPClient } from "@ai-sdk/mcp";
+import type { Address, Hex } from "viem";
 import type { InferSchema } from "xmcp";
 import { z } from "zod";
 import { requestContext } from "@/app/mcp/route";
 
 export const schema = {
-  fromTokenAmount: z
+  amount: z.string().describe("Amount of the source token (e.g., '1')"),
+  amountType: z
+    .enum(["exactIn", "exactOut"])
+    .default("exactIn")
+    .describe("Type of amount: 'exactIn' or 'exactOut'"),
+  fromChain: z.string().describe("Source blockchain (e.g., 'arbitrum')"),
+  fromToken: z.string().describe("Symbol of the source token (e.g., 'ETH')"),
+  toChain: z.string().describe("Destination blockchain (e.g., 'arbitrum')"),
+  toToken: z
+    .string()
+    .describe("Symbol of the destination token (e.g., 'USDC')"),
+  walletAddress: z.string().describe("Wallet address for the swap transaction"),
+  slippageTolerance: z
     .string()
     .optional()
-    .describe("Amount of the source token (e.g., '10.0')"),
-  fromTokenSymbol: z
+    .default("0.5")
+    .describe("Slippage tolerance percentage (e.g., '0.5')"),
+  expiration: z
     .string()
     .optional()
-    .describe("Symbol of the source token (e.g., 'USDC')"),
-  toTokenSymbol: z
-    .string()
-    .optional()
-    .describe("Symbol of the destination token (e.g., 'ETH')"),
-  transactionType: z
-    .enum(["transfer", "swap"])
-    .optional()
-    .default("swap")
-    .describe(
-      "Type of transaction: 'transfer' for simple ETH transfer, 'swap' for token swap",
-    ),
-  recipientAddress: z
-    .string()
-    .optional()
-    .describe("Recipient address for transfer (required for transfer type)"),
+    .describe("Transaction expiration time in seconds from now"),
 } satisfies Record<string, z.ZodTypeAny>;
 
 function isOpenAIClient(): boolean {
@@ -58,150 +57,131 @@ export const metadata = {
 };
 
 export default async function createMockTransaction({
-  fromTokenAmount = "10.0",
-  fromTokenSymbol = "USDC",
-  toTokenSymbol = "ETH",
-  transactionType = "swap",
-  recipientAddress,
+  amount,
+  amountType = "exactIn",
+  fromChain,
+  fromToken,
+  toChain,
+  toToken,
+  walletAddress,
+  slippageTolerance = "0.5",
+  expiration,
 }: InferSchema<typeof schema>) {
+  let client:
+    | Awaited<ReturnType<typeof experimental_createMCPClient>>
+    | undefined;
   try {
-    const chainId = "42161"; // Arbitrum
-    const fromTokenAddress =
-      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" as Address; // USDC on Arbitrum
-    const toTokenAddress =
-      "0x0000000000000000000000000000000000000000" as Address; // ETH (native)
+    // Create MCP client to connect to Ember
+    client = await experimental_createMCPClient({
+      transport: {
+        type: "http",
+        url: "https://api.emberai.xyz/mcp",
+      },
+    });
 
-    let txPlan: Array<{
-      to: Address;
-      data: Hex;
-      value: string;
-      chainId: string;
-    }> = [];
+    // Get the tools from the MCP server
+    const tools = await client.tools();
 
-    if (transactionType === "transfer") {
-      // Simple ETH transfer
-      if (!recipientAddress) {
-        throw new Error("recipientAddress is required for transfer type");
-      }
-      const recipient = recipientAddress as Address;
-      const amountInWei = parseUnits(fromTokenAmount || "1.0", 18);
-
-      txPlan = [
-        {
-          to: recipient,
-          data: "0x" as Hex, // Empty data for simple transfer
-          value: amountInWei.toString(),
-          chainId,
-        },
-      ];
-
-      const txPreview = {
-        fromTokenAmount: fromTokenAmount || "1.0",
-        fromTokenSymbol: "ETH",
-        fromTokenAddress: "0x0000000000000000000000000000000000000000",
-        fromChain: "arbitrum",
-        toTokenAmount: fromTokenAmount || "1.0",
-        toTokenSymbol: "ETH",
-        toTokenAddress: "0x0000000000000000000000000000000000000000",
-        toChain: "arbitrum",
-        recipientAddress: recipient,
-      };
-
-      const result = {
-        artifacts: [
-          {
-            name: "transaction-preview",
-            parts: [
-              {
-                data: {
-                  txPreview,
-                  txPlan,
-                },
-              },
-            ],
-          },
-        ],
-      };
-
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
-    } else {
-      // Token swap using encodeFunctionData
-      const amountIn = parseUnits(fromTokenAmount, 6); // USDC has 6 decimals
-      const amountOutMin = parseUnits("0.003", 18); // Minimum ETH out
-
-      // Encode swap function call for Uniswap V2 Router
-      const swapData = encodeFunctionData({
-        abi: [
-          {
-            name: "swapExactTokensForETH",
-            type: "function",
-            stateMutability: "nonpayable",
-            inputs: [
-              { name: "amountIn", type: "uint256" },
-              { name: "amountOutMin", type: "uint256" },
-              { name: "path", type: "address[]" },
-              { name: "to", type: "address" },
-              { name: "deadline", type: "uint256" },
-            ],
-            outputs: [{ name: "amounts", type: "uint256[]" }],
-          },
-        ],
-        functionName: "swapExactTokensForETH",
-        args: [
-          amountIn,
-          amountOutMin,
-          [fromTokenAddress, toTokenAddress],
-          "0x0000000000000000000000000000000000000000" as Address,
-          BigInt(Math.floor(Date.now() / 1000) + 3600), // deadline: 1 hour from now
-        ],
-      });
-
-      // Uniswap V2 Router address on Arbitrum
-      const routerAddress =
-        "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24" as Address;
-
-      txPlan = [
-        {
-          to: routerAddress,
-          data: swapData,
-          value: "0",
-          chainId,
-        },
-      ];
-
-      const txPreview = {
-        fromTokenAmount,
-        fromTokenSymbol,
-        fromTokenAddress,
-        fromChain: "arbitrum",
-        toTokenAmount: "0.003",
-        toTokenSymbol,
-        toTokenAddress,
-        toChain: "arbitrum",
-      };
-
-      const result = {
-        artifacts: [
-          {
-            name: "transaction-preview",
-            parts: [
-              {
-                data: {
-                  txPreview,
-                  txPlan,
-                },
-              },
-            ],
-          },
-        ],
-      };
-
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
+    // Find the createSwap tool
+    const createSwapTool = tools.createSwap;
+    if (!createSwapTool) {
+      throw new Error("createSwap tool not found in Ember MCP");
     }
+
+    // Call the createSwap tool with input parameters
+    const swapResult = await createSwapTool.execute(
+      {
+        amount,
+        amountType,
+        fromChain,
+        fromToken,
+        toChain,
+        toToken,
+        walletAddress,
+        slippageTolerance,
+        ...(expiration && { expiration }),
+      },
+      {
+        toolCallId: "swap-call-1",
+        messages: [],
+      },
+    );
+
+    // Extract structured content from the swap result
+    const swapData = swapResult as {
+      structuredContent?: unknown;
+    };
+
+    if (!swapData.structuredContent) {
+      throw new Error("No structuredContent in swap result");
+    }
+
+    const structuredContent = swapData.structuredContent as {
+      fromToken: {
+        tokenUid: { address: string; chainId: string };
+        symbol: string;
+      };
+      toToken: {
+        tokenUid: { address: string; chainId: string };
+        symbol: string;
+      };
+      displayFromAmount: string;
+      displayToAmount: string;
+      transactions: Array<{
+        to: string;
+        data: string;
+        value: string;
+        chainId: string;
+      }>;
+    };
+
+    // Extract transactions from Ember response
+    const transactions = structuredContent.transactions;
+    if (!transactions || !Array.isArray(transactions)) {
+      throw new Error("No transactions in structuredContent");
+    }
+
+    // Convert Ember's transactions to txPlan format
+    const txPlan = transactions.map(
+      (tx: { to: string; data: string; value: string; chainId: string }) => ({
+        to: tx.to as Address,
+        data: tx.data as Hex,
+        value: tx.value,
+        chainId: tx.chainId,
+      }),
+    );
+
+    // Build txPreview from structured content
+    const txPreview = {
+      fromTokenAmount: structuredContent.displayFromAmount,
+      fromTokenSymbol: structuredContent.fromToken.symbol,
+      fromTokenAddress: structuredContent.fromToken.tokenUid.address,
+      fromChain,
+      toTokenAmount: structuredContent.displayToAmount,
+      toTokenSymbol: structuredContent.toToken.symbol,
+      toTokenAddress: structuredContent.toToken.tokenUid.address,
+      toChain,
+    };
+
+    const result = {
+      artifacts: [
+        {
+          name: "transaction-preview",
+          parts: [
+            {
+              data: {
+                txPreview,
+                txPlan,
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+    };
   } catch (error) {
     const result = {
       success: false,
@@ -214,5 +194,10 @@ export default async function createMockTransaction({
     return {
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
     };
+  } finally {
+    // Always close the MCP client
+    if (client) {
+      await client.close();
+    }
   }
 }
