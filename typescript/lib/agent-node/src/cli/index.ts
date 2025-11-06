@@ -144,12 +144,18 @@ Commands:
     --chain <id>          Target a specific chain ID (otherwise all pending)
     --tx-hash <hash>      Specific transaction hash to check
 
-  workflow                Manage workflow dependencies
+  workflow                Manage workflows
     install [name]        Install dependencies for workflow packages
       --all               Install all workflows (default if no name provided)
       --config-dir <dir>  Config directory (default: ./config)
       --frozen-lockfile   Use frozen lockfile (for CI/CD)
       --quiet             Suppress progress output
+    discover              Discover workflows and optionally sync workflow.json
+      --config-dir <dir>  Config directory (default: ./config)
+      --sync              Write proposed changes to workflow.json
+      --dry-run           Show proposed changes without writing
+      --prune             Remove registry entries not found on disk
+      --disabled          Add new entries as disabled
 
   help                    Show this help message
 
@@ -301,9 +307,19 @@ export async function runCli(): Promise<void> {
             frozenLockfile: options['frozen-lockfile'] as boolean | undefined,
             quiet: options['quiet'] as boolean | undefined,
           });
+        } else if (subcommand === 'discover') {
+          await (
+            await import('./commands/index.js')
+          ).workflowDiscoverCommand({
+            configDir: options['config-dir'] as string | undefined,
+            sync: options['sync'] as boolean | undefined,
+            dryRun: options['dry-run'] as boolean | undefined,
+            prune: options['prune'] as boolean | undefined,
+            disabled: options['disabled'] as boolean | undefined,
+          });
         } else {
           logger.error(`Unknown workflow subcommand: ${subcommand ?? '(none)'}`);
-          logger.info('Available subcommands: install');
+          logger.info('Available subcommands: install, discover');
           process.exit(1);
         }
         break;
