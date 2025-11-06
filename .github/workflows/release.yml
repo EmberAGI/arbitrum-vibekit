@@ -4,7 +4,11 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - add/plugins
+      - next
+      - main
+    paths:
+      - "typescript/onchain-actions-plugins/**"
+      - ".github/workflows/release.yml"
 
 jobs:
   release:

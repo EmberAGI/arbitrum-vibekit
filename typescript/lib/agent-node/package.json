@@ -31,7 +31,7 @@
   ],
   "publishConfig": {
     "access": "public",
-    "tag": "beta"
+    "tag": "next"
   },
   "repository": {
     "type": "git",
@@ -40,12 +40,12 @@
   },
   "release": {
     "branches": [
+      "main",
       {
-        "name": "build/agent-node-release",
-        "channel": "beta",
-        "prerelease": "beta"
-      },
-      "main"
+        "name": "next",
+        "channel": "next",
+        "prerelease": "next"
+      }
     ],
     "tagFormat": "@emberai/agent-node@${version}",
     "plugins": [
