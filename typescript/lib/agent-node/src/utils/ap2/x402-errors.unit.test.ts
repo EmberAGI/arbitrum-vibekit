@@ -1,18 +1,19 @@
 import { describe, it, expect } from 'vitest';
 
 import {
-  extractFailureCode,
-  buildFailureMetadata,
-  formatFailureMessage,
-  type FailureContext,
-} from './x402-errors.js';
-import {
   X402_STATUS_KEY,
   X402_ERROR_KEY,
   X402_FAILURE_STAGE_KEY,
   X402_RECEIPTS_KEY,
   type X402FailureStage,
 } from '../../workflows/x402-types.js';
+
+import {
+  extractFailureCode,
+  buildFailureMetadata,
+  formatFailureMessage,
+  type FailureContext,
+} from './x402-errors.js';
 
 describe('extractFailureCode()', () => {
   describe('Priority 1: Facilitator response parsing', () => {

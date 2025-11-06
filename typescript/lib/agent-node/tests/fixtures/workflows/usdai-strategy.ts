@@ -12,12 +12,10 @@ import type {
   WorkflowContext,
   WorkflowPlugin,
   WorkflowState,
-  PaymentSettlement,
 } from '../../../src/workflow/types.js';
 
 import { createClients } from './utils/clients.js';
 import { requireFixturePaymentMessage, createPaymentRequirements } from './utils/payment.js';
-
 
 // Constants
 const USDAI_TOKEN = {
@@ -130,12 +128,22 @@ const plugin: WorkflowPlugin = {
       },
     };
 
-    // Request payment before collecting user strategy parameters
-    console.log('[Workflow] Requesting payment for strategy execution (fixture)...');
-    const paymentSettlement = (yield requireFixturePaymentMessage(
-      'Payment required to execute strategy',
-      createPaymentRequirements(account.address),
-    )) as PaymentSettlement;
+    // Optional payment step (default OFF for this fixture)
+    const paymentRequired = process.env['A2A_TEST_REQUIRE_X402_PAYMENT'] === '1';
+    let paymentSettlement:
+      | { settlePayment: (message: string, debugMode?: boolean) => Promise<WorkflowState> }
+      | undefined;
+    if (paymentRequired) {
+      console.log('[Workflow] Requesting payment for strategy execution (fixture)...');
+      paymentSettlement = (yield requireFixturePaymentMessage(
+        'Payment required to execute strategy',
+        createPaymentRequirements(account.address),
+      )) as {
+        settlePayment: (message: string, debugMode?: boolean) => Promise<WorkflowState>;
+      };
+    } else {
+      console.log('[Workflow] Skipping payment step (test config)');
+    }
 
     // Request for initial parameters (wallet + amount) AFTER payment submission
     console.log('[Workflow] Pausing for user input (wallet + amount)...');
@@ -260,11 +268,13 @@ const plugin: WorkflowPlugin = {
       message: 'Signed delegations received. Simulating some work with progress updates...',
     };
 
-    // Settle payment (fixture keeps logic simple, no real settlement side-effects)
-    yield await paymentSettlement.settlePayment(
-      'Payment completed. Thank you for using the USDAi Points Trading Strategy (fixture)!',
-      true,
-    );
+    // Settle payment only when enabled
+    if (paymentRequired && paymentSettlement) {
+      yield await paymentSettlement.settlePayment(
+        'Payment completed. Thank you for using the USDAi Points Trading Strategy (fixture)!',
+        true,
+      );
+    }
 
     yield {
       type: 'artifact',

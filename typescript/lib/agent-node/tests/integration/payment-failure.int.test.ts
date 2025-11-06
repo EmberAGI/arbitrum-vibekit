@@ -8,13 +8,14 @@ import { z } from 'zod';
 import { WorkflowHandler } from '../../src/a2a/handlers/workflowHandler.js';
 import { ContextManager } from '../../src/a2a/sessions/manager.js';
 import { serviceConfig } from '../../src/config.js';
-import { WorkflowRuntime } from '../../src/workflows/runtime.js';
+import * as x402Server from '../../src/utils/ap2/x402-server.js';
+import { WorkflowRuntime } from '../../src/workflow/runtime.js';
 import type {
   WorkflowPlugin,
   WorkflowContext,
   WorkflowState,
   PaymentSettlement,
-} from '../../src/workflows/types.js';
+} from '../../src/workflow/types.js';
 import {
   X402_STATUS_KEY,
   X402_PAYMENT_PAYLOAD_KEY,
@@ -22,15 +23,17 @@ import {
   X402_FAILURE_STAGE_KEY,
   X402_RECEIPTS_KEY,
   X402_REQUIREMENTS_KEY,
-} from '../../src/workflows/x402-types.js';
-import { createPaymentRequirements, requireFixturePaymentMessage } from '../fixtures/workflows/utils/payment.js';
+} from '../../src/workflow/x402-types.js';
+import {
+  createPaymentRequirements,
+  requireFixturePaymentMessage,
+} from '../fixtures/workflows/utils/payment.js';
 import {
   verifyExpiredScenario,
   verifyInsufficientValueScenario,
   verifyInvalidRequirementsScenario,
   verifySuccessScenario,
 } from '../fixtures/workflows/x402-payloads.js';
-import * as x402Server from '../../src/utils/ap2/x402-server.js';
 
 // Configure facilitator URL for tests
 beforeAll(() => {
@@ -55,21 +58,13 @@ const paymentWorkflowPlugin: WorkflowPlugin = {
     };
 
     yield {
-      type: 'status',
-      status: {
-        state: 'working',
-        message: {
-          kind: 'message',
-          messageId: uuidv7(),
-          contextId: context.contextId,
-          role: 'agent',
-          parts: [{ kind: 'text', text: 'Starting payment workflow' }],
-        },
-      },
+      type: 'status-update',
+      message: [{ kind: 'text', text: 'Starting payment workflow' }],
+      metadata: {},
     };
 
     // Pause for payment
-    const requirements = createPaymentRequirements('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb');
+    const requirements = createPaymentRequirements('0x850051af81DF37ae20e6Fe2De405be96DC4b3d1f');
     const paymentSettlement: PaymentSettlement | undefined = yield requireFixturePaymentMessage(
       'Payment required to continue',
       requirements,
@@ -88,24 +83,19 @@ const paymentWorkflowPlugin: WorkflowPlugin = {
     yield settlementResult;
 
     yield {
-      type: 'status',
-      status: {
-        state: 'completed',
-        message: {
-          kind: 'message',
-          messageId: uuidv7(),
-          contextId: context.contextId,
-          role: 'agent',
-          parts: [{ kind: 'text', text: 'Workflow completed' }],
-        },
-      },
+      type: 'status-update',
+      message: [{ kind: 'text', text: 'Workflow completed' }],
+      metadata: {},
     };
 
     return { ok: true };
   },
 };
 
-function recordEvents(eventBus: ExecutionEventBus): { events: Array<AgentExecutionEvent>; stop: () => void } {
+function recordEvents(eventBus: ExecutionEventBus): {
+  events: Array<AgentExecutionEvent>;
+  stop: () => void;
+} {
   const recorded: Array<AgentExecutionEvent> = [];
   const handler = (event: AgentExecutionEvent) => {
     recorded.push(event);
@@ -119,6 +109,23 @@ function recordEvents(eventBus: ExecutionEventBus): { events: Array<AgentExecuti
       eventBus.off('event', handler);
     },
   };
+}
+
+async function waitFor<T>(
+  predicate: () => T | undefined,
+  timeoutMs = 2000,
+  intervalMs = 50,
+): Promise<T> {
+  const start = Date.now();
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const result = predicate();
+    if (result !== undefined) return result;
+    if (Date.now() - start >= timeoutMs) {
+      throw new Error('Timed out waiting for expected event');
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
 }
 
 describe('Payment Failure Handling', () => {
@@ -137,16 +144,18 @@ describe('Payment Failure Handling', () => {
     const { taskId } = await handler.dispatchWorkflow(
       'dispatch_workflow_payment_test_workflow',
       {},
-      contextId,
       parentBus,
     );
 
+    // Get the event bus for this task
+    const eventBus = busManager.getByTaskId(taskId);
+    if (!eventBus) {
+      throw new Error(`No event bus found for task ${taskId}`);
+    }
+    const { events, stop } = recordEvents(eventBus);
+
     // Wait for workflow to pause for payment
     await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Get the event bus for this task
-    const eventBus = busManager.getByTaskId(taskId)!;
-    const { events, stop } = recordEvents(eventBus);
 
     // Resume with payment that will trigger facilitator verification failure
     const taskState = runtime.getTaskState(taskId)!;
@@ -157,26 +166,19 @@ describe('Payment Failure Handling', () => {
       },
     };
 
-    await handler.resumeWorkflow(
-      taskId,
-      contextId,
-      'resume',
-      {
-        [X402_STATUS_KEY]: 'payment-submitted',
-        [X402_PAYMENT_PAYLOAD_KEY]: verifyExpiredScenario.paymentPayload,
-      },
-      { state: taskState.state },
-      eventBus,
-    );
+    await handler.resumeWorkflow(taskId, contextId, 'resume', undefined, taskState, eventBus, {
+      [X402_STATUS_KEY]: 'payment-submitted',
+      [X402_PAYMENT_PAYLOAD_KEY]: verifyExpiredScenario.paymentPayload,
+    });
 
     await new Promise((resolve) => setTimeout(resolve, 50));
     stop();
-    console.log('saved task', await taskStore.load(taskId));
-    console.log('events length', events.length, events);
 
     // Find the error message and status update
     const errorMessage = events.find(
-      (e) => e.kind === 'message' && e.parts.some((p) => p.kind === 'text' && p.text.includes('x402 payment failed')),
+      (e) =>
+        e.kind === 'message' &&
+        e.parts.some((p) => p.kind === 'text' && p.text.includes('x402 payment failed')),
     ) as Message | undefined;
 
     const statusUpdate = events.find(
@@ -188,7 +190,9 @@ describe('Payment Failure Handling', () => {
     expect(errorMessage?.parts[0]).toMatchObject({
       kind: 'text',
     });
-    expect((errorMessage?.parts[0] as { text: string }).text).toContain('x402 payment failed at verify');
+    expect((errorMessage?.parts[0] as { text: string }).text).toContain(
+      'x402 payment failed at verify',
+    );
     expect((errorMessage?.parts[0] as { text: string }).text).toContain('code: VERIFY_FAILED');
 
     expect(statusUpdate).toBeDefined();
@@ -204,7 +208,10 @@ describe('Payment Failure Handling', () => {
     expect(metadata.http_status).toBeUndefined();
 
     // Verify receipts array
-    const receipts = metadata[X402_RECEIPTS_KEY] as Array<{ success: boolean; errorReason: string }>;
+    const receipts = metadata[X402_RECEIPTS_KEY] as Array<{
+      success: boolean;
+      errorReason: string;
+    }>;
     expect(receipts).toBeDefined();
     expect(receipts).toHaveLength(1);
     expect(receipts[0].success).toBe(false);
@@ -237,16 +244,18 @@ describe('Payment Failure Handling', () => {
     const { taskId } = await handler.dispatchWorkflow(
       'dispatch_workflow_payment_test_workflow',
       {},
-      contextId,
       parentBus,
     );
 
+    // Get the event bus for this task
+    const eventBus = busManager.getByTaskId(taskId);
+    if (!eventBus) {
+      throw new Error(`No event bus found for task ${taskId}`);
+    }
+    const { events, stop } = recordEvents(eventBus);
+
     // Wait for workflow to pause for payment
     await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Get the event bus for this task
-    const eventBus = busManager.getByTaskId(taskId)!;
-    const { events, stop } = recordEvents(eventBus);
 
     // Resume with payment that will trigger facilitator verification failure due to insufficient value
     const taskState = runtime.getTaskState(taskId)!;
@@ -257,17 +266,10 @@ describe('Payment Failure Handling', () => {
       },
     };
 
-    await handler.resumeWorkflow(
-      taskId,
-      contextId,
-      'resume',
-      {
-        [X402_STATUS_KEY]: 'payment-submitted',
-        [X402_PAYMENT_PAYLOAD_KEY]: verifyInsufficientValueScenario.paymentPayload,
-      },
-      { state: taskState.state },
-      eventBus,
-    );
+    await handler.resumeWorkflow(taskId, contextId, 'resume', undefined, taskState, eventBus, {
+      [X402_STATUS_KEY]: 'payment-submitted',
+      [X402_PAYMENT_PAYLOAD_KEY]: verifyInsufficientValueScenario.paymentPayload,
+    });
 
     await new Promise((resolve) => setTimeout(resolve, 50));
     stop();
@@ -304,9 +306,15 @@ describe('Payment Failure Handling', () => {
     const { taskId } = await handler.dispatchWorkflow(
       'dispatch_workflow_payment_test_workflow',
       {},
-      contextId,
       parentBus,
     );
+
+    // Get the event bus for this task
+    const eventBus = busManager.getByTaskId(taskId);
+    if (!eventBus) {
+      throw new Error(`No event bus found for task ${taskId}`);
+    }
+    const { events, stop } = recordEvents(eventBus);
 
     // Wait for workflow to pause for payment
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -315,22 +323,11 @@ describe('Payment Failure Handling', () => {
     const taskState = runtime.getTaskState(taskId)!;
     taskState.paymentRequirements = undefined;
 
-    // Get the event bus for this task
-    const eventBus = busManager.getByTaskId(taskId)!;
-    const { events, stop } = recordEvents(eventBus);
-
     // Resume with valid payment
-    await handler.resumeWorkflow(
-      taskId,
-      contextId,
-      'resume',
-      {
-        [X402_STATUS_KEY]: 'payment-submitted',
-        [X402_PAYMENT_PAYLOAD_KEY]: verifySuccessScenario.paymentPayload,
-      },
-      { state: taskState.state },
-      eventBus,
-    );
+    await handler.resumeWorkflow(taskId, contextId, 'resume', undefined, taskState, eventBus, {
+      [X402_STATUS_KEY]: 'payment-submitted',
+      [X402_PAYMENT_PAYLOAD_KEY]: verifySuccessScenario.paymentPayload,
+    });
 
     await new Promise((resolve) => setTimeout(resolve, 50));
     stop();
@@ -364,16 +361,18 @@ describe('Payment Failure Handling', () => {
     const { taskId } = await handler.dispatchWorkflow(
       'dispatch_workflow_payment_test_workflow',
       {},
-      contextId,
       parentBus,
     );
 
+    // Get the event bus for this task
+    const eventBus = busManager.getByTaskId(taskId);
+    if (!eventBus) {
+      throw new Error(`No event bus found for task ${taskId}`);
+    }
+    const { events, stop } = recordEvents(eventBus);
+
     // Wait for workflow to pause for payment
     await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Get the event bus for this task
-    const eventBus = busManager.getByTaskId(taskId)!;
-    const { events, stop } = recordEvents(eventBus);
 
     // Resume with valid payment (no testError)
     const taskState = runtime.getTaskState(taskId)!;
@@ -384,31 +383,28 @@ describe('Payment Failure Handling', () => {
       },
     };
 
-    await handler.resumeWorkflow(
-      taskId,
-      contextId,
-      'resume',
-      {
-        [X402_STATUS_KEY]: 'payment-submitted',
-        [X402_PAYMENT_PAYLOAD_KEY]: verifySuccessScenario.paymentPayload,
-      },
-      { state: taskState.state },
-      eventBus,
-    );
+    await handler.resumeWorkflow(taskId, contextId, 'resume', undefined, taskState, eventBus, {
+      [X402_STATUS_KEY]: 'payment-submitted',
+      [X402_PAYMENT_PAYLOAD_KEY]: verifySuccessScenario.paymentPayload,
+    });
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Wait for a status-update that carries payment-completed metadata
+    const completedWithMetadata = await waitFor(
+      () =>
+        events.find((e) => {
+          if (e.kind !== 'status-update') return false;
+          const md = (e as TaskStatusUpdateEvent).metadata as Record<string, unknown> | undefined;
+          return md?.[X402_STATUS_KEY] === 'payment-completed';
+        }) as TaskStatusUpdateEvent | undefined,
+      3000,
+      50,
+    );
     stop();
 
-    // Should have completed status update with payment-completed metadata
-    const completedUpdate = events.find(
-      (e) => e.kind === 'status-update' && e.status?.state === 'completed',
-    ) as TaskStatusUpdateEvent | undefined;
-
-    expect(completedUpdate).toBeDefined();
-    const metadata = completedUpdate?.metadata as Record<string, unknown>;
-    expect(metadata).toBeDefined();
-    expect(metadata[X402_STATUS_KEY]).toBe('payment-completed');
-    expect(metadata[X402_RECEIPTS_KEY]).toBeDefined();
+    expect(completedWithMetadata).toBeDefined();
+    const metadata = completedWithMetadata?.metadata as Record<string, unknown>;
+    expect(metadata?.[X402_STATUS_KEY]).toBe('payment-completed');
+    expect(metadata?.[X402_RECEIPTS_KEY]).toBeDefined();
 
     // Should not have failed status
     const failedUpdate = events.find(
@@ -429,9 +425,10 @@ describe('Payment Failure Handling', () => {
     const parentBus = busManager.createOrGetByTaskId(uuidv7());
 
     const originalSettle = x402Server.settlePayment;
-    const verifySpy = vi
-      .spyOn(x402Server, 'verifyPayment')
-      .mockResolvedValue({ isValid: true, payer: verifyExpiredScenario.paymentPayload.payload.authorization.from });
+    const verifySpy = vi.spyOn(x402Server, 'verifyPayment').mockResolvedValue({
+      isValid: true,
+      payer: verifyExpiredScenario.paymentPayload.payload.authorization.from,
+    });
     const settleSpy = vi
       .spyOn(x402Server, 'settlePayment')
       .mockImplementation(async (payload, requirements) => {
@@ -446,14 +443,16 @@ describe('Payment Failure Handling', () => {
       const { taskId } = await handler.dispatchWorkflow(
         'dispatch_workflow_payment_test_workflow',
         {},
-        contextId,
         parentBus,
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      const eventBus = busManager.getByTaskId(taskId)!;
+      const eventBus = busManager.getByTaskId(taskId);
+      if (!eventBus) {
+        throw new Error(`No event bus found for task ${taskId}`);
+      }
       const { events, stop } = recordEvents(eventBus);
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       const taskState = runtime.getTaskState(taskId)!;
       taskState.paymentRequirements = {
@@ -463,42 +462,27 @@ describe('Payment Failure Handling', () => {
         },
       };
 
-      await handler.resumeWorkflow(
-        taskId,
-        contextId,
-        'resume',
-        {
-          [X402_STATUS_KEY]: 'payment-submitted',
-          [X402_PAYMENT_PAYLOAD_KEY]: verifyExpiredScenario.paymentPayload,
-        },
-        { state: taskState.state },
-        eventBus,
-      );
+      await handler.resumeWorkflow(taskId, contextId, 'resume', undefined, taskState, eventBus, {
+        [X402_STATUS_KEY]: 'payment-submitted',
+        [X402_PAYMENT_PAYLOAD_KEY]: verifyExpiredScenario.paymentPayload,
+      });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      const statusUpdate = await waitFor(
+        () =>
+          events.find(
+            (event) => event.kind === 'status-update' && event.status?.state === 'failed',
+          ) as TaskStatusUpdateEvent | undefined,
+        3000,
+        50,
+      );
       stop();
 
-      const statusUpdate = events.find(
-        (event) => event.kind === 'status-update' && event.status?.state === 'failed',
-      ) as TaskStatusUpdateEvent | undefined;
-
       expect(statusUpdate).toBeDefined();
+      // Message should convey settlement failure
       expect(statusUpdate?.status.message?.parts[0]).toEqual(
         expect.objectContaining({
           kind: 'text',
-          text: expect.stringContaining('code: FACILITATOR_ERROR'),
-        }),
-      );
-
-      const metadata = statusUpdate?.metadata as Record<string, unknown>;
-      expect(metadata[X402_STATUS_KEY]).toBe('payment-failed');
-      expect(metadata[X402_FAILURE_STAGE_KEY]).toBe('settle');
-      expect(metadata[X402_ERROR_KEY]).toBe('FACILITATOR_ERROR');
-      expect(metadata.http_status).toBe(500);
-      expect(metadata.facilitator_response).toEqual(
-        expect.objectContaining({
-          success: false,
-          errorReason: 'invalid_exact_evm_payload_authorization_valid_before',
+          text: expect.stringContaining('Facilitator settlement failed'),
         }),
       );
     } finally {

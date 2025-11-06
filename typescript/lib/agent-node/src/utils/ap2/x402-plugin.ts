@@ -1,7 +1,7 @@
 import type { PaymentRequirements } from 'x402/types';
 
-import type { WorkflowState } from '../../workflows/types.js';
-import { X402_REQUIREMENTS_KEY, X402_STATUS_KEY } from '../../workflows/x402-types.js';
+import type { WorkflowState } from '../../workflow/types.js';
+import { X402_REQUIREMENTS_KEY, X402_STATUS_KEY } from '../../workflow/x402-types.js';
 
 /**
  * Creates a payment required workflow state message for x402 payment requests.

@@ -8,7 +8,7 @@ import {
   type X402FailureStage,
   type X402FailureMetadata,
   type X402FailureReceipt,
-} from '../../workflows/x402-types.js';
+} from '../../workflow/x402-types.js';
 
 /**
  * Context information for building failure metadata

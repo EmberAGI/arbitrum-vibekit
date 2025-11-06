@@ -58,7 +58,7 @@ export const verifyExpiredScenario: X402Scenario = {
         value: '0',
         validAfter: '1762264415',
         validBefore: '1762265005',
-        nonce: '0x42c93eefaa124e09a747dbcdde19b5b86cc55e8bc9d1ce6ebb14993343214f',
+        nonce: '0xb4957e077b07da13f9aa4a53cadb04cb425e79ecbd201ae62e7bb48659e159a7',
       },
     },
   },
@@ -110,6 +110,7 @@ export const verifyInvalidRequirementsScenario: X402Scenario = {
     asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
     maxAmountRequired: '100',
     mimeType: 'application/json',
+    maxTimeoutSeconds: 3600,
   },
 };
 

@@ -24,8 +24,8 @@ import { v7 as uuidv7 } from 'uuid';
 import { findMatchingPaymentRequirements } from 'x402/shared';
 import z from 'zod';
 
-import { serviceConfig } from '../../config.js';
 import { canonicalizeName } from '../../config/validators/tool-validator.js';
+import { serviceConfig } from '../../config.js';
 import {
   buildFailureMetadata,
   extractFailureCode,
