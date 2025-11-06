@@ -571,6 +571,7 @@ describe('WorkflowHandler - pause and artifact streaming', () => {
       { data: 'test' },
       taskState!,
       eventBus as unknown as ExecutionEventBus,
+      {},
     );
 
     // Wait for artifacts to be emitted

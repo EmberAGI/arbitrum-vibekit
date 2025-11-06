@@ -98,6 +98,7 @@
     "uuid": "^13.0.0",
     "viem": "^2.37.9",
     "ws": "^8.18.3",
+    "x402": "^0.6.6",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -140,6 +141,7 @@
     "clean": "rimraf node_modules dist .tsbuildinfo",
     "lint": "eslint . && prettier --check .",
     "lint:fix": "eslint . --fix && prettier --write .",
+    "lint:config": "eslint config/ && prettier --check config/",
     "typecheck": "tsc --noEmit",
     "test": "pnpm test:unit && pnpm test:int",
     "test:unit": "vitest run --config vitest.config.unit.ts",
@@ -153,7 +155,7 @@
     "test:ci": "pnpm test:unit && LOG_LEVEL=error pnpm test:int",
     "test:ci:main": "pnpm test:unit && pnpm test:int && pnpm test:e2e",
     "precommit": "pnpm lint && pnpm typecheck && pnpm test",
-    "ci": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && LOG_LEVEL=debug pnpm test:ci && pnpm build",
+    "ci": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test:ci && pnpm build",
     "ci:main": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test:ci:main && pnpm build"
   }
 }

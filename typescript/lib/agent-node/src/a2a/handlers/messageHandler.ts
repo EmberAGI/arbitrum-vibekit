@@ -30,6 +30,7 @@ export class MessageHandler {
     messageContent: string,
     messageData: unknown,
     eventBus: ExecutionEventBus,
+    metadata: Record<string, unknown>,
   ): Promise<void> {
     this.logger.debug('handleMessage invoked', {
       requestTaskId: taskId,
@@ -89,6 +90,7 @@ export class MessageHandler {
             messageData,
             taskState,
             effectiveEventBus,
+            metadata,
           );
           return;
         } catch (error) {
@@ -113,10 +115,15 @@ export class MessageHandler {
   /**
    * Extracts message content and data from a user message
    */
-  extractMessageParts(userMessage: Message): { content: string; data: unknown } {
+  extractMessageParts(userMessage: Message): {
+    content: string;
+    data: unknown;
+    metadata: Record<string, unknown>;
+  } {
     let messageContent = '';
     let messageData: unknown = undefined;
 
+    const metadata = userMessage.metadata ?? {};
     if ('parts' in userMessage && Array.isArray(userMessage.parts)) {
       const textPart = userMessage.parts.find((p: Part) => p.kind === 'text');
       const dataPart = userMessage.parts.find((p: Part) => p.kind === 'data');
@@ -127,6 +134,6 @@ export class MessageHandler {
       messageContent = 'content' in userMessage ? String(userMessage.content) : '';
     }
 
-    return { content: messageContent, data: messageData };
+    return { content: messageContent, data: messageData, metadata };
   }
 }

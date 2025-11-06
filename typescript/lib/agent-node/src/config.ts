@@ -48,6 +48,11 @@ export const ServiceConfigSchema = z.object({
   agent: z.object({
     maxSteps: z.number().int().positive().default(100),
   }),
+
+  // X402 payment configuration
+  x402: z.object({
+    facilitatorUrl: z.string().optional(),
+  }),
 });
 
 export type ServiceConfig = z.infer<typeof ServiceConfigSchema>;
@@ -95,6 +100,9 @@ class ConfigManager {
       },
       agent: {
         maxSteps: this.parseNumber(process.env['AGENT_MAX_STEPS']),
+      },
+      x402: {
+        facilitatorUrl: process.env['X402_FACILITATOR_URL'],
       },
     };
 

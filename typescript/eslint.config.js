@@ -32,7 +32,8 @@ export default tseslint.config(
       "**/*.d.ts",
       "**/coverage/**",
       "clients/web/**",
-      "src/proto/"
+      "src/proto/",
+      "lib/agent-node/config/**"
     ]
   },
   eslint.configs.recommended,
