@@ -6,7 +6,7 @@ import {
   X402_FAILURE_STAGE_KEY,
   X402_RECEIPTS_KEY,
   type X402FailureStage,
-} from '../../workflows/x402-types.js';
+} from '../../workflow/x402-types.js';
 
 import {
   extractFailureCode,
