@@ -43,8 +43,9 @@ const rpcHandler = async ({ request }: { request: Request }) => {
   }
 
   const mockKey = computeMockKey(body);
+  const logLevel = process.env['LOG_LEVEL'] || 'none';
 
-  if (process.env['DEBUG_TESTS']) {
+  if (logLevel === 'debug') {
     console.log(`[MSW viem handler] Attempting to load mock: ${mockKey}`);
   }
 
@@ -52,13 +53,13 @@ const rpcHandler = async ({ request }: { request: Request }) => {
   // If mock is missing, test will fail with clear error message
   try {
     const response = await createResponseFromMock(mockKey, 'viem');
-    if (process.env['DEBUG_TESTS']) {
+    if (logLevel === 'debug') {
       console.log(`[MSW viem handler] Successfully loaded mock: ${mockKey}`);
     }
     return response;
   } catch (error) {
     // Log error for debugging and return 500 with details
-    if (process.env['DEBUG_TESTS']) {
+    if (logLevel !== 'none') {
       console.error(`[MSW viem handler] Failed to load mock: ${mockKey}`, error);
       console.error(`[MSW viem handler] Error stack:`, (error as Error).stack);
     }

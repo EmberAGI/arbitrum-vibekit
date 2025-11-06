@@ -1,6 +1,6 @@
 {
   "name": "@emberai/agent-node",
-  "version": "1.0.0-beta.11",
+  "version": "0.0.0",
   "private": false,
   "type": "module",
   "engines": {
@@ -56,20 +56,16 @@
         }
       ],
       [
+        "@semantic-release/release-notes-generator",
+        {
+          "preset": "conventionalcommits"
+        }
+      ],
+      [
         "@semantic-release/exec",
         {
           "prepareCmd": "pnpm pkg set version=${nextRelease.version}",
           "publishCmd": "pnpm publish --no-git-checks --access public --tag ${nextRelease.channel || 'latest'}"
-        }
-      ],
-      [
-        "@semantic-release/git",
-        {
-          "assets": [
-            "CHANGELOG.md",
-            "package.json"
-          ],
-          "message": "chore(release): agent-node-v${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
         }
       ],
       [
@@ -154,10 +150,10 @@
     "test:ui": "vitest --ui",
     "test:record-mocks": "tsx --env-file=.env tests/utils/record-mocks.ts",
     "test:upgrade-wallet": "tsx --env-file=.env.test scripts/upgrade-test-wallet.ts",
-    "test:ci": "pnpm test:unit && pnpm test:int",
+    "test:ci": "pnpm test:unit && LOG_LEVEL=error pnpm test:int",
     "test:ci:main": "pnpm test:unit && pnpm test:int && pnpm test:e2e",
     "precommit": "pnpm lint && pnpm typecheck && pnpm test",
-    "ci": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && DEBUG_TESTS=1 pnpm test:ci && pnpm build",
+    "ci": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && LOG_LEVEL=debug pnpm test:ci && pnpm build",
     "ci:main": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test:ci:main && pnpm build"
   }
 }

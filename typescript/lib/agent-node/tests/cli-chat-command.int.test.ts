@@ -246,27 +246,35 @@ describe('agent chat command (integration)', () => {
       await Logger.setFileSink(logDir);
       process.env['LOG_STRUCTURED'] = 'true';
 
-      // When: logging messages
-      const log = Logger.getInstance('TEST');
-      log.info('test message');
+      // Ensure INFO logs are allowed even if CI sets LOG_LEVEL=error
+      const prevLevel = process.env['LOG_LEVEL'];
+      process.env['LOG_LEVEL'] = 'INFO';
+      try {
+        // When: logging messages
+        const log = Logger.getInstance('TEST');
+        log.info('test message');
 
-      // Give the stream time to flush
-      await new Promise((resolve) => setTimeout(resolve, 50));
+        // Give the stream time to flush
+        await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // Then: should create a JSONL file with structured log entries
-      const { readdirSync, readFileSync } = await import('fs');
-      const files = readdirSync(logDir).filter((f) => f.endsWith('.jsonl'));
-      expect(files.length).toBe(1);
+        // Then: should create a JSONL file with structured log entries
+        const { readdirSync, readFileSync } = await import('fs');
+        const files = readdirSync(logDir).filter((f) => f.endsWith('.jsonl'));
+        expect(files.length).toBe(1);
 
-      const logContent = readFileSync(join(logDir, files[0]), 'utf-8');
-      expect(logContent).toContain('test message');
-      expect(logContent).toContain('"level":"INFO"');
+        const logContent = readFileSync(join(logDir, files[0]), 'utf-8');
+        expect(logContent).toContain('test message');
+        expect(logContent).toContain('"level":"INFO"');
 
-      // Verify it's valid JSONL format
-      const lines = logContent.trim().split('\n');
-      lines.forEach((line) => {
-        expect(() => JSON.parse(line)).not.toThrow();
-      });
+        // Verify it's valid JSONL format
+        const lines = logContent.trim().split('\n');
+        lines.forEach((line) => {
+          expect(() => JSON.parse(line)).not.toThrow();
+        });
+      } finally {
+        if (prevLevel === undefined) delete process.env['LOG_LEVEL'];
+        else process.env['LOG_LEVEL'] = prevLevel;
+      }
     });
   });
 
