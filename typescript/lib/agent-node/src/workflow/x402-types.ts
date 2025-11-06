@@ -1,11 +1,8 @@
-import type {
-  PaymentRequirements,
-  Network,
-  PaymentPayload} from 'x402/types';
+import type { PaymentRequirements, Network, PaymentPayload } from 'x402/types';
 import {
   NetworkSchema as x402NetworkSchema,
   PaymentRequirementsSchema as x402PaymentRequirementsSchema,
-  PaymentPayloadSchema as x402PayloadPaymentSchema
+  PaymentPayloadSchema as x402PayloadPaymentSchema,
 } from 'x402/types';
 import { z } from 'zod';
 

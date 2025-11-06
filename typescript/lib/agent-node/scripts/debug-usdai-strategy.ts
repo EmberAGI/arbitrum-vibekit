@@ -8,7 +8,7 @@ import {
   type Delegation,
 } from '@metamask/delegation-toolkit';
 import { v7 as uuidv7 } from 'uuid';
-import type { LocalAccount} from 'viem';
+import type { LocalAccount } from 'viem';
 import { type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { createPaymentHeader } from 'x402/client';
@@ -17,14 +17,12 @@ import type { PaymentRequirements } from 'x402/types';
 
 import type { AgentConfigHandle } from '../src/config/runtime/init.js';
 import { WorkflowRuntime } from '../src/workflow/runtime.js';
-import type {
-  X402PaymentPayload,
-  X402Requirements} from '../src/workflow/x402-types.js';
+import type { X402PaymentPayload, X402Requirements } from '../src/workflow/x402-types.js';
 import {
   X402_REQUIREMENTS_KEY,
   X402_STATUS_KEY,
   X402_PAYMENT_PAYLOAD_KEY,
-  X402_RECEIPTS_KEY
+  X402_RECEIPTS_KEY,
 } from '../src/workflow/x402-types.js';
 import usdaiStrategyWorkflow from '../tests/fixtures/workflows/usdai-strategy.js';
 import { get7702TestAccount, getTestChainId } from '../tests/utils/lifecycle-test-helpers.js';
@@ -32,7 +30,6 @@ import {
   cleanupTestServer,
   createTestA2AServerWithStubs,
 } from '../tests/utils/test-server-with-stubs.js';
-
 
 export async function createPayload(
   signer: LocalAccount,

@@ -147,7 +147,12 @@ export function buildFailureMetadata(
   context: FailureContext = {},
 ): X402FailureMetadata {
   const errorReason = extractErrorReason(error);
-  const failureCode = extractFailureCode(error, context.httpStatus, context.facilitatorResponse, stage);
+  const failureCode = extractFailureCode(
+    error,
+    context.httpStatus,
+    context.facilitatorResponse,
+    stage,
+  );
 
   // Build failure receipt following x402 spec
   const receipt: X402FailureReceipt = {
@@ -198,6 +203,10 @@ export function buildFailureMetadata(
  * @param code - Failure code
  * @returns Formatted message string
  */
-export function formatFailureMessage(stage: X402FailureStage, reason: string, code: string): string {
+export function formatFailureMessage(
+  stage: X402FailureStage,
+  reason: string,
+  code: string,
+): string {
   return `x402 payment failed at ${stage}: ${reason} (code: ${code})`;
 }
