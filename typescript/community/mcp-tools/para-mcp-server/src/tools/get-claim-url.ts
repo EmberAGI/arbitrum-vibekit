@@ -1,10 +1,10 @@
+import { and, eq, isNull } from "drizzle-orm";
 import type { InferSchema } from "xmcp";
 import { z } from "zod";
+import { requestContext } from "@/app/mcp/route";
+import { baseURL as rawBaseURL } from "@/config/baseUrl";
 import { db } from "@/db";
 import { pregenWallets } from "@/db/schema";
-import { and, eq, isNull } from "drizzle-orm";
-import { baseURL as rawBaseURL } from "@/config/baseUrl";
-import { requestContext } from "@/app/mcp/route";
 
 // Helper to check if client is OpenAI
 function isOpenAIClient(): boolean {

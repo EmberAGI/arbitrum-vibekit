@@ -1,14 +1,32 @@
+import { type Address, encodeFunctionData, type Hex, parseUnits } from "viem";
 import type { InferSchema } from "xmcp";
 import { z } from "zod";
 import { requestContext } from "@/app/mcp/route";
-import { encodeFunctionData, parseUnits, type Address, type Hex } from "viem";
 
 export const schema = {
-  fromTokenAmount: z.string().optional().describe("Amount of the source token (e.g., '10.0')"),
-  fromTokenSymbol: z.string().optional().describe("Symbol of the source token (e.g., 'USDC')"),
-  toTokenSymbol: z.string().optional().describe("Symbol of the destination token (e.g., 'ETH')"),
-  transactionType: z.enum(["transfer", "swap"]).optional().default("swap").describe("Type of transaction: 'transfer' for simple ETH transfer, 'swap' for token swap"),
-  recipientAddress: z.string().optional().describe("Recipient address for transfer (required for transfer type)"),
+  fromTokenAmount: z
+    .string()
+    .optional()
+    .describe("Amount of the source token (e.g., '10.0')"),
+  fromTokenSymbol: z
+    .string()
+    .optional()
+    .describe("Symbol of the source token (e.g., 'USDC')"),
+  toTokenSymbol: z
+    .string()
+    .optional()
+    .describe("Symbol of the destination token (e.g., 'ETH')"),
+  transactionType: z
+    .enum(["transfer", "swap"])
+    .optional()
+    .default("swap")
+    .describe(
+      "Type of transaction: 'transfer' for simple ETH transfer, 'swap' for token swap",
+    ),
+  recipientAddress: z
+    .string()
+    .optional()
+    .describe("Recipient address for transfer (required for transfer type)"),
 } satisfies Record<string, z.ZodTypeAny>;
 
 function isOpenAIClient(): boolean {
@@ -48,10 +66,17 @@ export default async function createMockTransaction({
 }: InferSchema<typeof schema>) {
   try {
     const chainId = "42161"; // Arbitrum
-    const fromTokenAddress = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" as Address; // USDC on Arbitrum
-    const toTokenAddress = "0x0000000000000000000000000000000000000000" as Address; // ETH (native)
+    const fromTokenAddress =
+      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" as Address; // USDC on Arbitrum
+    const toTokenAddress =
+      "0x0000000000000000000000000000000000000000" as Address; // ETH (native)
 
-    let txPlan: Array<{ to: Address; data: Hex; value: string; chainId: string }> = [];
+    let txPlan: Array<{
+      to: Address;
+      data: Hex;
+      value: string;
+      chainId: string;
+    }> = [];
 
     if (transactionType === "transfer") {
       // Simple ETH transfer
@@ -120,9 +145,7 @@ export default async function createMockTransaction({
               { name: "to", type: "address" },
               { name: "deadline", type: "uint256" },
             ],
-            outputs: [
-              { name: "amounts", type: "uint256[]" },
-            ],
+            outputs: [{ name: "amounts", type: "uint256[]" }],
           },
         ],
         functionName: "swapExactTokensForETH",
@@ -136,7 +159,8 @@ export default async function createMockTransaction({
       });
 
       // Uniswap V2 Router address on Arbitrum
-      const routerAddress = "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24" as Address;
+      const routerAddress =
+        "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24" as Address;
 
       txPlan = [
         {

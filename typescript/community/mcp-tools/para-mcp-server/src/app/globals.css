@@ -24,3 +24,12 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+/* Para wallet modal should sit at the top of wallet layers */
+html {
+  --wcm-z-index: 60;
+}
+
+/* RainbowKit modal should appear above the connect overlay but below Para */
+[data-rk][role="dialog"][aria-modal="true"] {
+  z-index: 55;
+}

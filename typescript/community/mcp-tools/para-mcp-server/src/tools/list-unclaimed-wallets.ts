@@ -1,8 +1,8 @@
+import { isNull } from "drizzle-orm";
 import type { InferSchema } from "xmcp";
+import { requestContext } from "@/app/mcp/route";
 import { db } from "@/db";
 import { pregenWallets } from "@/db/schema";
-import { isNull } from "drizzle-orm";
-import { requestContext } from "@/app/mcp/route";
 
 // Define the schema for tool parameters (no parameters needed)
 export const schema = {} as const;

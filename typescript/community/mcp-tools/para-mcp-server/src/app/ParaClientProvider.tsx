@@ -1,8 +1,8 @@
 "use client";
 
-import { type PropsWithChildren, useMemo, useState } from "react";
 import { ParaProvider } from "@getpara/react-sdk";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { type PropsWithChildren, useMemo, useState } from "react";
 
 export function ParaClientProvider({ children }: PropsWithChildren) {
   const [queryClient] = useState(() => new QueryClient());

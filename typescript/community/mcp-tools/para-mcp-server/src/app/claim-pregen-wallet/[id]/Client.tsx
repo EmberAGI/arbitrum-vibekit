@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import {
-  useClient,
-  useModal,
   ParaModal,
-  useLogout,
   useAccount,
+  useClient,
+  useLogout,
+  useModal,
 } from "@getpara/react-sdk";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 export type PregenWallet = {
   id: string;

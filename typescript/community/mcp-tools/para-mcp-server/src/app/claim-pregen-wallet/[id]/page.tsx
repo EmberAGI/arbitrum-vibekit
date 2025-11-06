@@ -1,9 +1,9 @@
+import { eq } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
-import ClaimPregenWalletClient from "./Client";
-import type { PregenWallet } from "./Client";
 import { db } from "@/db";
 import { pregenWallets } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import type { PregenWallet } from "./Client";
+import ClaimPregenWalletClient from "./Client";
 
 export const dynamic = "force-dynamic";
 // Cached DB fetch by id so we don't requery repeatedly for the same id

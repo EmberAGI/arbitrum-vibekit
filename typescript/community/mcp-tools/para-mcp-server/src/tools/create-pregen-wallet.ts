@@ -1,9 +1,9 @@
 import type { InferSchema } from "xmcp";
 import { z } from "zod";
+import { requestContext } from "@/app/mcp/route";
 import { db } from "@/db";
 import { pregenWallets } from "@/db/schema";
 import { getParaServerClient } from "@/lib/para-server-client";
-import { requestContext } from "@/app/mcp/route";
 
 // Define the schema for tool parameters
 export const schema = {

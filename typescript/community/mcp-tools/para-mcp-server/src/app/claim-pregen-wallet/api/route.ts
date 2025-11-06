@@ -1,9 +1,8 @@
-import { NextResponse } from "next/server";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { revalidateTag } from "next/cache";
+import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { pregenWallets } from "@/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
-import { sql } from "drizzle-orm";
 
 export async function POST(request: Request) {
   try {

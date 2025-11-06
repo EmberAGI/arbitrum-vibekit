@@ -1,7 +1,7 @@
 "use client";
 
+import { openPopup, useClient } from "@getpara/react-sdk";
 import { useEffect, useState } from "react";
-import { useClient, openPopup } from "@getpara/react-sdk";
 
 export default function ClaimPregenWallet() {
   const [userShare, setUserShare] = useState("");

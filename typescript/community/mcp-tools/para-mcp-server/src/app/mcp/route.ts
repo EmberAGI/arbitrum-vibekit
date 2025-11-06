@@ -1,6 +1,6 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { xmcpHandler } from "@xmcp/adapter";
 import type { NextRequest } from "next/server";
-import { AsyncLocalStorage } from "async_hooks";
 
 // Create async local storage for request context
 export const requestContext = new AsyncLocalStorage<{

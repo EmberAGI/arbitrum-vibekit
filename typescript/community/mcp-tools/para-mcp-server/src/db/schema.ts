@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 export const pregenWallets = pgTable("pregen_wallets", {
   id: uuid("id").primaryKey().defaultRandom(),
