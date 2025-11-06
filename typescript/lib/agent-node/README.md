@@ -1,6 +1,7 @@
-# Agent Node
+# @emberai/agent-node
 
-**A modern agent framework for the agentic economy**
+[![npm version](https://img.shields.io/npm/v/@emberai/agent-node.svg)](https://www.npmjs.com/package/@emberai/agent-node)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/LICENSE)
 
 Agent Node enables building autonomous AI agents that can communicate with other agents, execute complex workflows, and perform transactions. It's a complete implementation of the [A2A (Agent-to-Agent) protocol](https://a2a.co) with integrated AI capabilities, workflow orchestration, blockchain wallet support, and HTTP-native payment infrastructure via X402 for autonomous agent commerce.
 
@@ -28,7 +29,7 @@ Agent Node provides a complete framework for building autonomous AI agents with 
 #### 1. Initialize Config Workspace
 
 ```bash
-npx -y @emberai/agent-node init
+npx -y @emberai/agent-node@latest init
 ```
 
 This creates a `config/` directory with:
@@ -46,7 +47,7 @@ This creates a `config/` directory with:
 Smart-start chat mode (connects to running agent or starts new server):
 
 ```bash
-npx -y @emberai/agent-node
+npx -y @emberai/agent-node@latest
 ```
 
 #### 3. Time to Profit!
@@ -93,7 +94,7 @@ To register your agent, you'll need:
 
 #### Configuration During Init
 
-When you run `npx -y @emberai/agent-node init`, you'll be prompted with optional EIP-8004 registration configuration:
+When you run `npx -y @emberai/agent-node@latest init`, you'll be prompted with optional EIP-8004 registration configuration:
 
 - **Enable ERC-8004**: Choose whether to enable on-chain registration
 - **Canonical Chain**: Select the primary chain for registration (e.g., Arbitrum One, Ethereum, Base)
@@ -108,13 +109,13 @@ These settings are saved to your `agent.md` frontmatter in the `erc8004` section
 Once configured, register your agent on-chain:
 
 ```bash
-npx -y @emberai/agent-node register
+npx -y @emberai/agent-node@latest register
 ```
 
 Optionally override specific fields:
 
 ```bash
-npx -y @emberai/agent-node register \
+npx -y @emberai/agent-node@latest register \
   --name "My Trading Agent" \
   --description "Autonomous DeFi trading agent" \
   --url "https://myagent.example.com" \
@@ -144,7 +145,7 @@ npx -y @emberai/agent-node register \
 To update your existing registration:
 
 ```bash
-npx -y @emberai/agent-node update-registry \
+npx -y @emberai/agent-node@latest update-registry \
   --agent-id 123 \
   --description "Updated: Now supports GMX v2" \
   --version "2.0.0"
@@ -329,7 +330,7 @@ Custom workflow implementations. Workflows are multi-step operations that manage
 After making changes, validate your configuration:
 
 ```bash
-npx -y @emberai/agent-node doctor
+npx -y @emberai/agent-node@latest doctor
 ```
 
 This checks for configuration errors, missing references, and policy conflicts.
@@ -420,28 +421,28 @@ The Agent CLI provides essential commands for managing your agent throughout its
 
 ```bash
 # Initialize agent configuration - Creates a new agent configuration workspace with sample files
-npx -y @emberai/agent-node init
+npx -y @emberai/agent-node@latest init
 
 # Smart-start chat (default) - Attach to running agent, else start local then attach
-npx -y @emberai/agent-node
+npx -y @emberai/agent-node@latest
 
 # Run agent in development mode - Starts your agent with hot reload for development
-npx -y @emberai/agent-node run --dev
+npx -y @emberai/agent-node@latest run --dev
 
 # Validate configuration - Checks your configuration for errors and missing references
-npx -y @emberai/agent-node doctor
+npx -y @emberai/agent-node@latest doctor
 
 # View composed configuration - Shows your composed agent configuration in readable format
-npx -y @emberai/agent-node print-config
+npx -y @emberai/agent-node@latest print-config
 
 # Create deployment bundle - Creates a production-ready deployment package
-npx -y @emberai/agent-node bundle
+npx -y @emberai/agent-node@latest bundle
 
 # Register agent on-chain - Register your agent using EIP-8004 standard (requires PINATA_JWT)
-npx -y @emberai/agent-node register
+npx -y @emberai/agent-node@latest register
 
 # Update agent registry - Update existing on-chain registration
-npx -y @emberai/agent-node update-registry --agent-id 123
+npx -y @emberai/agent-node@latest update-registry --agent-id 123
 ```
 
 ### Chat Interface Options
@@ -450,13 +451,13 @@ Chat supports smart-start behavior and flexible logging configurations:
 
 ```bash
 # Smart-start (default): attach to running agent, else start local then attach
-npx -y @emberai/agent-node
+npx -y @emberai/agent-node@latest
 
 # Client-only chat to a specific URL (never starts a server)
-npx -y @emberai/agent-node chat --url http://127.0.0.1:3000
+npx -y @emberai/agent-node@latest chat --url http://127.0.0.1:3000
 
 # Start the server and then attach chat
-npx -y @emberai/agent-node run --attach
+npx -y @emberai/agent-node@latest run --attach
 ```
 
 ### Logging Configuration
@@ -471,261 +472,25 @@ npx -y @emberai/agent-node run --attach
 
 ```bash
 # Clean chat + file-only logs that honor .env LOG_LEVEL
-npx -y @emberai/agent-node --log-dir ./logs
+npx -y @emberai/agent-node@latest --log-dir ./logs
 
 # Client-only with file logs and environment log level
-npx -y @emberai/agent-node chat --url http://127.0.0.1:3000 --log-dir ./logs
+npx -y @emberai/agent-node@latest chat --url http://127.0.0.1:3000 --log-dir ./logs
 
 # Respect environment log level in console (do not force ERROR)
-npx -y @emberai/agent-node --respect-log-level
+npx -y @emberai/agent-node@latest --respect-log-level
 
 # Start server then attach with file-only logs
-npx -y @emberai/agent-node run --attach --log-dir ./logs
+npx -y @emberai/agent-node@latest run --attach --log-dir ./logs
 ```
 
-## Development
+## License
 
-> [!NOTE]
-> For development work on the agent-node library itself, you can use `pnpm cli <command>` instead of `npx -y @emberai/agent-node <command>` to run commands directly from the source code.
+MIT © [EmberAGI](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/LICENSE)
 
-### Development Server
+## Links
 
-```bash
-pnpm dev
-```
-
-Starts server with:
-
-- Hot reload on file changes
-- Environment variable loading from `.env`
-- Config workspace watching (when enabled)
-
-### Code Quality
-
-```bash
-# Type checking
-pnpm typecheck
-
-# Linting
-pnpm lint:check
-pnpm lint:fix
-
-# All quality checks
-pnpm precommit
-```
-
-### Project Commands
-
-```bash
-pnpm build          # Build TypeScript to dist/
-pnpm clean          # Remove node_modules and build artifacts
-pnpm start          # Run production build
-```
-
-## Testing
-
-Agent Node uses Vitest with MSW (Mock Service Worker) for HTTP mocking.
-
-### Test Types
-
-- **Unit Tests** (`*.unit.test.ts`): Isolated component testing
-- **Integration Tests** (`*.int.test.ts`): Component interaction testing with mocked HTTP
-- **E2E Tests** (`*.e2e.test.ts`): Full server testing with real AI providers
-
-### Running Tests
-
-```bash
-# All tests (unit + integration)
-pnpm test
-
-# By type
-pnpm test:unit
-pnpm test:int
-pnpm test:e2e
-
-# Watch mode
-pnpm test:watch
-
-# Coverage
-pnpm test:coverage
-
-# Specific pattern
-pnpm test:grep -- "pattern"
-```
-
-### Recording Mocks
-
-Integration tests use recorded API responses:
-
-```bash
-pnpm test:record-mocks
-```
-
-This records real API calls to `tests/mocks/data/` for deterministic testing.
-
-### Mock Structure
-
-```
-tests/
-├── mocks/
-│   ├── data/                # Recorded responses
-│   │   ├── openrouter/
-│   │   ├── openai/
-│   │   └── [service]/
-│   ├── handlers/            # MSW request handlers
-│   │   ├── openrouter.ts
-│   │   └── index.ts
-│   └── utils/              # Mock utilities
-│
-├── utils/                   # Test helpers
-│   ├── test-server.ts      # Server setup
-│   ├── test-config-workspace.ts
-│   └── factories/          # Test data factories
-│
-└── setup/                   # Vitest config
-    ├── vitest.base.setup.ts
-    ├── vitest.unit.setup.ts
-    └── msw.setup.ts
-```
-
-### Test Organization
-
-Tests mirror source structure:
-
-```
-src/a2a/server.ts         → src/a2a/server.unit.test.ts
-src/workflows/runtime.ts  → src/workflows/runtime.unit.test.ts
-```
-
-Integration tests go in `tests/integration/`:
-
-```
-tests/integration/a2a.int.test.ts
-tests/integration/wallet.int.test.ts
-```
-
-## Deployment
-
-### Production Build
-
-```bash
-pnpm build
-```
-
-Output: `dist/` directory with compiled JavaScript
-
-### Docker
-
-#### Multi-Stage Dockerfile
-
-The project includes a production-ready multi-stage Dockerfile:
-
-```dockerfile
-# Build and deploy stage
-FROM node:22-alpine AS builder
-
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@10.17.0 --activate
-
-WORKDIR /workspace
-
-# Copy entire workspace
-COPY . .
-
-# Install all dependencies
-RUN pnpm install --frozen-lockfile
-
-# Build (clean is handled by build script)
-RUN pnpm --filter=agent-node build
-
-# Deploy to isolated directory with production dependencies only
-RUN pnpm --filter=agent-node --prod deploy /deploy
-
-# Production stage - minimal runtime image
-FROM node:22-alpine
-
-WORKDIR /app
-
-# Copy deployed package from builder stage
-COPY --from=builder /deploy .
-
-# Expose port
-EXPOSE 3000
-
-# Run the application
-CMD ["node", "dist/server.js"]
-```
-
-**Key features:**
-
-- Multi-stage build for smaller final image
-- Uses pnpm workspaces with `--filter=agent-node`
-- Production dependencies only in final image
-- Node.js 22 Alpine for minimal size
-
-#### Docker Compose
-
-Two compose files are provided for different use cases:
-
-**Development (`docker-compose.yaml`):**
-
-- Direct port exposure on localhost:3000
-- Single app service
-- Ideal for local development and testing
-
-**Production (`docker-compose.prod.yaml`):**
-
-- Caddy reverse proxy with automatic HTTPS
-- Exposes ports 80/443
-- Automatic SSL certificate management via Let's Encrypt
-- Security headers and gzip compression
-
-**Prerequisites:**
-
-Before running with Docker, you must initialize the configuration workspace:
-
-```bash
-# Initialize config directory
-npx -y @emberai/agent-node init
-
-# Customize your agent
-# Edit config/agent.md, add skills to config/skills/, etc.
-
-# Validate configuration
-npx -y @emberai/agent-node doctor
-```
-
-**Running with Docker Compose:**
-
-```bash
-# Development mode
-docker compose -f docker-compose.yaml up
-
-# Production mode (requires domain configured in Caddyfile)
-docker compose -f docker-compose.prod.yaml up -d
-
-# View logs
-docker compose -f docker-compose.yaml logs -f
-
-# Stop services
-docker compose -f docker-compose.yaml down
-```
-
-**Configuration Volume Mounting:**
-
-Both compose files mount the `config/` directory as a read-only volume:
-
-```yaml
-volumes:
-  - ./config:/app/config:ro
-```
-
-**Benefits of this approach:**
-
-- Config changes don't require image rebuilds
-- Edit workflows and skills without restarting containers
-- Matches how agent-node runs natively (`npx agent-node --config-dir=./config`)
-- Standard Docker volume mount pattern for configuration
-
-> [!IMPORTANT]
-> The `config/` directory must exist before starting containers. If you see "Config workspace not found" errors, run `npx -y @emberai/agent-node init` first.
+- [NPM Package](https://www.npmjs.com/package/@emberai/agent-node)
+- [GitHub Repository](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node)
+- [Ember Website](https://www.emberai.xyz/)
+- [Ember X](https://x.com/EmberAGI)
