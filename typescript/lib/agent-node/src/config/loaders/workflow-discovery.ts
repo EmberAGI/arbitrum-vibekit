@@ -4,7 +4,7 @@
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
-import { resolve, join } from 'path';
+import { join } from 'path';
 
 import type { WorkflowEntry } from '../schemas/workflow.schema.js';
 
