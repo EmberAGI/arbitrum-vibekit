@@ -1,3 +1,4 @@
+// Configuration module for agent-node service
 import { z } from 'zod';
 
 import { Logger } from './utils/logger.js';
