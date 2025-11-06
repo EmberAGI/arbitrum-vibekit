@@ -31,7 +31,6 @@ import {
 import {
   verifyExpiredScenario,
   verifyInsufficientValueScenario,
-  verifyInvalidRequirementsScenario,
   verifySuccessScenario,
 } from '../fixtures/workflows/x402-payloads.js';
 
@@ -51,7 +50,7 @@ const paymentWorkflowPlugin: WorkflowPlugin = {
   version: '1.0.0',
   description: 'Test workflow that pauses for payment',
   inputSchema: z.object({}).optional(),
-  async *execute(context: WorkflowContext): AsyncGenerator<WorkflowState, unknown, unknown> {
+  async *execute(_context: WorkflowContext): AsyncGenerator<WorkflowState, unknown, unknown> {
     yield {
       type: 'dispatch-response',
       parts: [],
@@ -393,7 +392,7 @@ describe('Payment Failure Handling', () => {
       () =>
         events.find((e) => {
           if (e.kind !== 'status-update') return false;
-          const md = (e as TaskStatusUpdateEvent).metadata as Record<string, unknown> | undefined;
+          const md = e.metadata;
           return md?.[X402_STATUS_KEY] === 'payment-completed';
         }) as TaskStatusUpdateEvent | undefined,
       3000,
