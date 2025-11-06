@@ -5,7 +5,7 @@ async function testCompleteFlow() {
   let client;
   try {
     console.log("=== TESTING COMPLETE CREATE MOCK TRANSACTION FLOW ===\n");
-    
+
     console.log("Creating MCP client...");
     client = await experimental_createMCPClient({
       transport: {
@@ -43,7 +43,7 @@ async function testCompleteFlow() {
     });
 
     console.log("\n=== PROCESSING RESULT (FIXED LOGIC) ===");
-    
+
     // Extract structured content from the swap result (FIXED)
     const swapData = swapResult as {
       structuredContent?: unknown;
@@ -123,7 +123,9 @@ async function testCompleteFlow() {
 
     console.log("\n=== SUCCESS! ===");
     console.log("Transaction preview:");
-    console.log(`  Swap ${txPreview.fromTokenAmount} ${txPreview.fromTokenSymbol} → ${txPreview.toTokenAmount} ${txPreview.toTokenSymbol}`);
+    console.log(
+      `  Swap ${txPreview.fromTokenAmount} ${txPreview.fromTokenSymbol} → ${txPreview.toTokenAmount} ${txPreview.toTokenSymbol}`,
+    );
     console.log(`  Chain: ${txPreview.fromChain}`);
     console.log(`\nTransaction plan:`);
     txPlan.forEach((tx, idx) => {
@@ -133,7 +135,6 @@ async function testCompleteFlow() {
       console.log(`    Data length: ${tx.data.length} bytes`);
       console.log(`    Chain ID: ${tx.chainId}`);
     });
-
   } catch (error) {
     console.error("\n=== ERROR ===");
     console.error(error);

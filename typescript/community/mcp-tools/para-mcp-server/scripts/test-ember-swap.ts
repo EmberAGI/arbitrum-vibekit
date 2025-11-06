@@ -34,13 +34,10 @@ async function testEmberSwap() {
     console.log(JSON.stringify(input, null, 2));
 
     console.log("\nExecuting createSwap...");
-    const swapResult = await createSwapTool.execute(
-      input,
-      {
-        toolCallId: "swap-call-1",
-        messages: [],
-      },
-    );
+    const swapResult = await createSwapTool.execute(input, {
+      toolCallId: "swap-call-1",
+      messages: [],
+    });
 
     console.log("\n=== RAW SWAP RESULT ===");
     console.log(JSON.stringify(swapResult, null, 2));
@@ -56,7 +53,7 @@ async function testEmberSwap() {
     };
     console.log("\nContent exists:", !!swapData.content);
     console.log("Content length:", swapData.content?.length);
-    
+
     if (swapData.content) {
       console.log("\n=== CONTENT ITEMS ===");
       swapData.content.forEach((item, idx) => {

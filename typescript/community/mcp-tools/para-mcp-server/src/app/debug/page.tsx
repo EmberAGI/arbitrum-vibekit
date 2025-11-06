@@ -12,7 +12,11 @@ import {
   useWaitForTransactionReceipt,
   WagmiProvider,
 } from "wagmi";
-import { useCapabilities, useSendCalls, useCallsStatus } from "wagmi/experimental";
+import {
+  useCapabilities,
+  useSendCalls,
+  useCallsStatus,
+} from "wagmi/experimental";
 import { queryClient, wagmiConfig } from "./wagmi-config";
 import "@rainbow-me/rainbowkit/styles.css";
 
@@ -101,10 +105,13 @@ function FaucetRequest() {
             <strong>Current Balance:</strong>{" "}
             {balanceData ? (
               <span className="font-mono text-green-600 dark:text-green-400">
-                {parseFloat(balanceData.formatted).toFixed(6)} {balanceData.symbol}
+                {parseFloat(balanceData.formatted).toFixed(6)}{" "}
+                {balanceData.symbol}
               </span>
             ) : (
-              <span className="text-zinc-500 dark:text-zinc-400">Loading...</span>
+              <span className="text-zinc-500 dark:text-zinc-400">
+                Loading...
+              </span>
             )}
           </p>
         </div>
@@ -171,8 +178,12 @@ function TransferForm() {
   }, [availableCapabilities, chainId]);
 
   // Use sendCalls for smart wallet transactions with paymaster support
-  const { data: callsId, sendCalls, isPending: isSendCallsPending } = useSendCalls();
-  
+  const {
+    data: callsId,
+    sendCalls,
+    isPending: isSendCallsPending,
+  } = useSendCalls();
+
   // Check status of the calls
   const { data: callsStatus } = useCallsStatus({
     id: callsId?.id as string,
@@ -182,11 +193,16 @@ function TransferForm() {
   });
 
   // Fallback to regular sendTransaction for non-smart wallets
-  const { data: txHash, sendTransaction, isPending: isSendPending } = useSendTransaction();
+  const {
+    data: txHash,
+    sendTransaction,
+    isPending: isSendPending,
+  } = useSendTransaction();
 
-  const { isLoading: isConfirming, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({
-    hash: txHash,
-  });
+  const { isLoading: isConfirming, isSuccess: isTxSuccess } =
+    useWaitForTransactionReceipt({
+      hash: txHash,
+    });
 
   const isPending = isSendCallsPending || isSendPending;
   const isSuccess = isTxSuccess || callsStatus?.status === "success";
