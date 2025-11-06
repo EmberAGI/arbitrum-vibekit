@@ -1,0 +1,12 @@
+{
+  "workflows": [
+    {
+      "id": "example-workflow",
+      "from": "./workflows/example-workflow.ts",
+      "enabled": true,
+      "config": {
+        "mode": "default"
+      }
+    }
+  ]
+}
