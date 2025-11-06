@@ -1,4 +1,10 @@
-import type { PaymentPayload, PaymentRequirements, Resource } from 'x402/types';
+import type {
+  PaymentPayload,
+  PaymentRequirements,
+  Resource,
+  SettleResponse,
+  VerifyResponse,
+} from 'x402/types';
 import { useFacilitator } from 'x402/verify';
 
 import { serviceConfig } from '../../config.js';
@@ -12,7 +18,7 @@ import { serviceConfig } from '../../config.js';
 export async function verifyPayment(
   paymentPayload: PaymentPayload,
   requirements: PaymentRequirements,
-) {
+): Promise<VerifyResponse> {
   const facilitatorUrl = serviceConfig.x402.facilitatorUrl;
   if (!facilitatorUrl) {
     throw new Error('X402_FACILITATOR_URL is not configured');
@@ -31,7 +37,7 @@ export async function verifyPayment(
 export async function settlePayment(
   paymentPayload: PaymentPayload,
   requirements: PaymentRequirements,
-) {
+): Promise<SettleResponse> {
   const facilitatorUrl = serviceConfig.x402.facilitatorUrl;
   if (!facilitatorUrl) {
     throw new Error('X402_FACILITATOR_URL is not configured');
