@@ -13,21 +13,34 @@ type VerifyBody = {
 function classifyVerifyRequest(
   body: VerifyBody,
 ): 'success' | 'expired' | 'insufficientValue' | 'invalidRequirements' | 'unknown' {
-  const payload = (body?.paymentPayload as Record<string, any> | undefined) ?? undefined;
-  const requirements = (body?.paymentRequirements as Record<string, any> | undefined) ?? undefined;
-  const auth =
-    (payload?.['payload']?.['authorization'] as Record<string, any> | undefined) ?? undefined;
+  const payload = (body?.paymentPayload as unknown) ?? undefined;
+  const requirements = (body?.paymentRequirements as unknown) ?? undefined;
 
-  if (payload?.['payload']?.['transaction']) {
+  const isObject = (v: unknown): v is Record<string, unknown> =>
+    typeof v === 'object' && v !== null;
+  const get = (obj: unknown, key: string): unknown => (isObject(obj) ? obj[key] : undefined);
+  const auth = isObject(get(payload, 'payload'))
+    ? get(get(payload, 'payload'), 'authorization')
+    : undefined;
+
+  if (
+    isObject(get(payload, 'payload')) &&
+    get(get(payload, 'payload'), 'transaction') !== undefined
+  ) {
     return 'invalidRequirements';
   }
-  if (auth?.['value'] === '10' && requirements?.['maxAmountRequired'] === '100') {
+  if (
+    isObject(auth) &&
+    String(auth['value']) === '10' &&
+    isObject(requirements) &&
+    String(requirements['maxAmountRequired']) === '100'
+  ) {
     return 'insufficientValue';
   }
-  if (auth?.['validBefore'] === '1762265005') {
+  if (isObject(auth) && String(auth['validBefore']) === '1762265005') {
     return 'expired';
   }
-  if (auth?.['validBefore'] === '1762268567') {
+  if (isObject(auth) && String(auth['validBefore']) === '1762268567') {
     return 'success';
   }
   return 'unknown';
