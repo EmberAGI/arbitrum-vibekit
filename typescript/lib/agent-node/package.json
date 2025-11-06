@@ -141,6 +141,7 @@
     "clean": "rimraf node_modules dist .tsbuildinfo",
     "lint": "eslint . && prettier --check .",
     "lint:fix": "eslint . --fix && prettier --write .",
+    "lint:config": "eslint config/ && prettier --check config/",
     "typecheck": "tsc --noEmit",
     "test": "pnpm test:unit && pnpm test:int",
     "test:unit": "vitest run --config vitest.config.unit.ts",
