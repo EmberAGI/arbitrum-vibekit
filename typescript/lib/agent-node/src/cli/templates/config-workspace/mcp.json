@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "fetch": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["mcp-fetch-server"],
+      "env": {
+        "DEFAULT_LIMIT": "50000"
+      }
+    },
+    "ember_onchain_actions": {
+      "type": "http",
+      "url": "https://api.emberai.xyz/mcp",
+      "headers": {
+        "X-Ember-Api-Version": "current"
+      }
+    }
+  }
+}
+
+
