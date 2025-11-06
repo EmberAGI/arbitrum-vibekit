@@ -34,7 +34,7 @@
   "license": "MIT",
   "publishConfig": {
     "access": "public",
-    "tag": "alpha"
+    "tag": "next"
   },
   "repository": {
     "type": "git",
@@ -43,12 +43,12 @@
   },
   "release": {
     "branches": [
+      "main",
       {
-        "name": "feat/liquidity-schemas",
-        "channel": "alpha",
-        "prerelease": "alpha"
-      },
-      "main"
+        "name": "next-onchain-actions",
+        "channel": "next",
+        "prerelease": "next"
+      }
     ],
     "tagFormat": "@emberai/onchain-actions-registry@${version}",
     "plugins": [
