@@ -19,6 +19,7 @@ import { loadManifest } from '../loaders/manifest-loader.js';
 import { loadMCPRegistry, type LoadedMCPRegistry } from '../loaders/mcp-loader.js';
 import { loadSkills, type LoadedSkill } from '../loaders/skill-loader.js';
 import { loadWorkflowRegistry, type LoadedWorkflowRegistry } from '../loaders/workflow-loader.js';
+import { discoverWorkflows, mergeWorkflows } from '../loaders/workflow-discovery.js';
 import type { ModelConfig, AIModelConfig, RoutingConfig } from '../schemas/agent.schema.js';
 import type { AgentManifest } from '../schemas/manifest.schema.js';
 import type { SkillModelOverride, SkillAIOverride } from '../schemas/skill.schema.js';
@@ -327,6 +328,14 @@ export async function initFromConfigWorkspace(options: InitOptions): Promise<Age
 
     const mcpRegistry = loadMCPRegistry(mcpRegistryPath);
     const workflowRegistry = loadWorkflowRegistry(workflowRegistryPath);
+    // Discover workflows from filesystem and merge with registry (registry takes precedence)
+    const workflowsDir = resolve(manifestDir, 'workflows');
+    const discovered = discoverWorkflows(workflowsDir);
+    const mergedWorkflows = mergeWorkflows(workflowRegistry.registry.workflows, discovered);
+    const mergedWorkflowRegistry: LoadedWorkflowRegistry = {
+      registry: { workflows: mergedWorkflows },
+      path: workflowRegistry.path,
+    };
     const agentPath = resolve(configRoot, 'agent.md');
     const agentBase = loadAgentBase(agentPath);
     const skills = loadSkills(manifest.skills, manifestDir);
@@ -334,7 +343,7 @@ export async function initFromConfigWorkspace(options: InitOptions): Promise<Age
     const prompt = composePrompt(agentBase, skills);
     const mergePolicy = manifest.merge ?? { card: undefined };
     const agentCard = composeAgentCard(agentBase, skills, mergePolicy);
-    const effectiveSets = composeEffectiveSets(mcpRegistry, workflowRegistry, skills);
+    const effectiveSets = composeEffectiveSets(mcpRegistry, mergedWorkflowRegistry, skills);
     const models = buildModelConfig(agentBase, skills);
 
     return {
@@ -343,7 +352,7 @@ export async function initFromConfigWorkspace(options: InitOptions): Promise<Age
       agentBase,
       skills,
       mcpRegistry,
-      workflowRegistry,
+      workflowRegistry: mergedWorkflowRegistry,
       prompt,
       agentCard,
       effectiveSets,

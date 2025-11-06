@@ -18,6 +18,7 @@ import { loadAgentBase } from './loaders/agent-loader.js';
 import { loadManifest } from './loaders/manifest-loader.js';
 import { loadMCPRegistry } from './loaders/mcp-loader.js';
 import { loadSkills } from './loaders/skill-loader.js';
+import { discoverWorkflows, mergeWorkflows } from './loaders/workflow-discovery.js';
 import { loadWorkflowRegistry } from './loaders/workflow-loader.js';
 
 /**
@@ -51,6 +52,21 @@ export function loadAgentConfig(manifestPath: string): Promise<ComposedAgentConf
     const mcpRegistry = loadMCPRegistry(mcpRegistryPath);
     const workflowRegistry = loadWorkflowRegistry(workflowRegistryPath);
 
+    // Discover workflows from filesystem
+    const workflowsDir = resolve(manifestDir, 'workflows');
+    const discovered = discoverWorkflows(workflowsDir);
+
+    // Merge discovered workflows with registry (registry takes precedence)
+    const mergedWorkflows = mergeWorkflows(workflowRegistry.registry.workflows, discovered);
+
+    // Create merged registry
+    const mergedRegistry = {
+      registry: {
+        workflows: mergedWorkflows,
+      },
+      path: workflowRegistry.path,
+    };
+
     // Load agent base
     const agentPath = resolve(manifestDir, 'agent.md');
     const agentBase = loadAgentBase(agentPath);
@@ -64,7 +80,7 @@ export function loadAgentConfig(manifestPath: string): Promise<ComposedAgentConf
     const card = composeAgentCard(agentBase, skills, mergePolicy);
 
     // Compose effective sets
-    const effectiveSets = composeEffectiveSets(mcpRegistry, workflowRegistry, skills);
+    const effectiveSets = composeEffectiveSets(mcpRegistry, mergedRegistry, skills);
 
     return {
       prompt,
