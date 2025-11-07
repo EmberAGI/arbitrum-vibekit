@@ -1,8 +1,8 @@
 {
   "workflows": [
     {
-      "id": "example-workflow",
-      "from": "./workflows/example-workflow.ts",
+      "id": "sample-package-workflow",
+      "from": "./workflows/sample-package/src/index.ts",
       "enabled": true,
       "config": {
         "mode": "default"
@@ -10,5 +10,3 @@
     }
   ]
 }
-
-
