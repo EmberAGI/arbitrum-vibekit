@@ -41,7 +41,7 @@ export const metadata = {
   get description() {
     const isOpenAI = isOpenAIClient();
     if (isOpenAI) {
-      return "Generate a mock transaction preview with transaction plan for testing purposes.";
+      return "Generate a mock preview with plan for testing purposes.";
     }
     return "Generate a mock transaction preview with transaction plan for testing purposes. Returns a transaction preview showing token swap details and a transaction plan with raw transaction data.";
   },

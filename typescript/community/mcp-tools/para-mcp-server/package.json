@@ -18,6 +18,7 @@
     "@coinbase/cdp-sdk": "^1.38.5",
     "@getpara/react-sdk": "2.0.0-alpha.69",
     "@getpara/server-sdk": "2.0.0-alpha.69",
+    "@getpara/viem-v2-integration": "2.0.0-alpha.69",
     "@getpara/wagmi-v2-integration": "2.0.0-alpha.69",
     "@getpara/web-sdk": "2.0.0-alpha.69",
     "@rainbow-me/rainbowkit": "^2.0.0",

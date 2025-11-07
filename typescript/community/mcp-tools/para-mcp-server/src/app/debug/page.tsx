@@ -13,9 +13,9 @@ import {
   WagmiProvider,
 } from "wagmi";
 import {
+  useCallsStatus,
   useCapabilities,
   useSendCalls,
-  useCallsStatus,
 } from "wagmi/experimental";
 import { queryClient, wagmiConfig } from "./wagmi-config";
 import "@rainbow-me/rainbowkit/styles.css";

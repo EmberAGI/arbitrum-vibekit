@@ -34,7 +34,9 @@ async function createPregenWallet() {
 
     if (hasWallet) {
       console.log(`\n⚠️  Wallet already exists for ${email}`);
-      console.log("Use a different email or check existing wallet in database\n");
+      console.log(
+        "Use a different email or check existing wallet in database\n",
+      );
       return;
     }
 
@@ -51,10 +53,10 @@ async function createPregenWallet() {
 
     // Try to get userShare - it might be in the result or need to be fetched
     let userShare: string | null | undefined;
-    let wallet: any = result;
+    const wallet: any = result;
 
     // Check if userShare is part of the result
-    if (result && typeof result === 'object' && 'userShare' in result) {
+    if (result && typeof result === "object" && "userShare" in result) {
       userShare = (result as any).userShare;
       console.log("Found userShare in wallet response");
     } else {
@@ -69,11 +71,15 @@ async function createPregenWallet() {
     }
 
     if (!userShare) {
-      throw new Error("Failed to retrieve user share from Para. Check if the API key has the correct permissions.");
+      throw new Error(
+        "Failed to retrieve user share from Para. Check if the API key has the correct permissions.",
+      );
     }
 
     if (!wallet.address || !wallet.type || !wallet.id) {
-      throw new Error("Wallet creation incomplete - missing required properties");
+      throw new Error(
+        "Wallet creation incomplete - missing required properties",
+      );
     }
 
     // Store in database
@@ -91,7 +97,9 @@ async function createPregenWallet() {
       .values(insertValues)
       .returning();
 
-    console.log("\n✅ SUCCESS! Pregenerated wallet created and saved to database:\n");
+    console.log(
+      "\n✅ SUCCESS! Pregenerated wallet created and saved to database:\n",
+    );
     console.log("Wallet Details:");
     console.log(`  Database ID: ${created.id}`);
     console.log(`  Email: ${created.email}`);
@@ -103,16 +111,12 @@ async function createPregenWallet() {
     console.log(`  Claimed: ${created.claimedAt ? "Yes" : "No"}`);
 
     console.log("\n📝 Next Steps:");
-    console.log(
-      "  1. ✅ Wallet saved to database with encrypted userShare",
-    );
+    console.log("  1. ✅ Wallet saved to database with encrypted userShare");
     console.log(
       "  2. Fund the wallet address with ETH for gas and any tokens needed",
     );
     console.log("  3. Use the wallet for transactions via the Para SDK");
-    console.log(
-      "  4. User can claim the wallet later using the claim flow",
-    );
+    console.log("  4. User can claim the wallet later using the claim flow");
     console.log(
       "\n⚠️  IMPORTANT: The userShare is stored securely in the database!",
     );
@@ -133,5 +137,7 @@ async function createPregenWallet() {
 
 // Run the script
 // Note: Must run with --env-file flag to load environment variables
-console.log("Usage: pnpm exec tsx --env-file=.env scripts/create-pregen-wallet.ts [email@example.com]\n");
+console.log(
+  "Usage: pnpm exec tsx --env-file=.env scripts/create-pregen-wallet.ts [email@example.com]\n",
+);
 createPregenWallet();

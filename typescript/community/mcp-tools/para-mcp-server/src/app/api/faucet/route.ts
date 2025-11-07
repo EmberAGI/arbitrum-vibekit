@@ -1,5 +1,5 @@
-import { type NextRequest, NextResponse } from "next/server";
 import { CdpClient } from "@coinbase/cdp-sdk";
+import { type NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
   try {
