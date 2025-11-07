@@ -3,28 +3,83 @@
 [![npm version](https://img.shields.io/npm/v/@emberai/agent-node.svg)](https://www.npmjs.com/package/@emberai/agent-node)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/LICENSE)
 
-Agent Node enables building autonomous AI agents that can communicate with other agents, execute complex workflows, and perform transactions. It's a complete implementation of the [A2A (Agent-to-Agent) protocol](https://a2a.co) with integrated AI capabilities, workflow orchestration, blockchain wallet support, and HTTP-native payment infrastructure via X402 for autonomous agent commerce.
+Agent Node is a complete implementation of the [A2A (Agent-to-Agent) protocol](https://a2a.co) with integrated AI capabilities, workflow orchestration, blockchain wallet support, and HTTP-native payment infrastructure via X402 for autonomous agent commerce.
 
 ## Features
 
-Agent Node provides a complete framework for building autonomous AI agents with these core capabilities:
+Agent Node provides a complete framework for building autonomous AI agents with the following core capabilities:
 
 - **A2A Protocol Compliance**: Full implementation of the Agent-to-Agent communication protocol (v0.3.0)
-- **Multi-Provider AI**: Flexible AI provider selection (OpenRouter, OpenAI, xAI, Hyperbolic)
 - **Workflow Orchestration**: Generator-based workflow system with pause/resume capabilities
 - **MCP Integration**: Model Context Protocol support for dynamic tool/resource access
 - **Blockchain Support**: Embedded EOA wallet with multi-chain transaction signing
-- **X402 Payment Protocol**: HTTP-native payment infrastructure enabling autonomous agent transactions and micropayment-based service models
+- **X402 Payment Protocol**: HTTP-native payment infrastructure leveraging HTTP 402 "Payment Required" status code for seamless autonomous agent commerce, micropayments, and pay-per-call tool/workflow monetization with ~2 second settlement times
 - **On-Chain Registration**: EIP-8004 compliant agent identity registration on Ethereum
 - **Skills Framework**: Modular skill composition with isolated tool/resource scoping
+- **Multi-Provider AI**: Flexible AI provider selection (OpenRouter, OpenAI, xAI, Hyperbolic)
 - **Type-Safe**: Full TypeScript support with Zod schema validation
 
-## Quick Start in 60 Seconds
+## Configuration
+
+### Workspace Structure
+
+Agent Node uses a file-based configuration workspace:
+
+```
+config-workspace/
+├── agent.md                 # Base agent + model config
+├── agent.manifest.json      # Skill/server selection
+├── skills/                  # Modular skill definitions
+│   ├── general-assistant.md
+│   └── ember-onchain-actions.md
+├── workflows/               # Custom workflow implementations
+│   ├── example-workflow.ts
+│   ├── usdai-strategy.ts
+│   └── utils/               # Workflow utility functions
+├── mcp.json                 # MCP server registry
+├── workflow.json            # Workflow registry
+└── README.md                # Config workspace documentation
+```
+
+### Configuration Files
+
+The configuration workspace contains several key files that define your agent's behavior.
+
+#### Agent Definition (`agent.md`)
+
+Base agent configuration including system prompt, model settings, A2A protocol card definition, and EIP-8004 registration details. See the generated `config/agent.md` file for the complete structure and examples.
+
+#### Skills (`skills/*.md`)
+
+Modular skill definitions that compose your agent's capabilities. The `init` command creates two sample skills:
+
+- `general-assistant.md` - General assistant capabilities
+- `ember-onchain-actions.md` - On-chain DeFi operations
+
+See the generated files in `config/skills/` for complete examples and structure.
+
+#### Skill Manifest (`agent.manifest.json`)
+
+Skill composition and workflow selection settings. See the generated `config/agent.manifest.json` file for the complete structure.
+
+#### MCP Registry (`mcp.json`)
+
+MCP server registry for dynamic tool/resource access. See the generated `config/mcp.json` file for configuration examples.
+
+#### Workflow Registry (`workflow.json`)
+
+Workflow plugin registry. See the generated `config/workflow.json` file for configuration examples.
+
+#### Workflows (`workflows/*.ts`)
+
+Custom workflow implementations for multi-step operations that manage A2A Task lifecycles. The `init` command generates example workflows (`example-workflow.ts` and `usdai-strategy.ts`) along with utility functions. Refer to the generated files in `config/workflows/` for working examples and see the [Creating Workflows](#creating-workflows) section for comprehensive documentation.
+
+## Quickstart in 60 Seconds
 
 ### Using the CLI
 
 > [!NOTE]
-> You can initialize agent node anywhere on your system. To take advantage of the tools that Vibekit offers, we recommend creating your agent node in the [community agent directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community/agents).
+> You can initialize Agent Node anywhere on your system. To take advantage of Vibekit's offered tools and capabilities, we recommend creating your agent node in the [community agent directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community/agents).
 
 #### 1. Initialize Config Workspace
 
@@ -32,12 +87,15 @@ Agent Node provides a complete framework for building autonomous AI agents with 
 npx -y @emberai/agent-node@latest init
 ```
 
+> [!NOTE]
+> During initialization, you'll be prompted with optional EIP-8004 registration configuration for on-chain agent identity. See [On-Chain Agent Registration](#on-chain-agent-registration) for details on these prompts.
+
 This creates a `config/` directory with:
 
 - `agent.md` - Base agent configuration including system prompt, model settings, A2A protocol card definition, and EIP-8004 registration details
 - `agent.manifest.json` - Skill composition settings
-- `skills/` - Directory for skill modules (includes sample skills)
-- `workflows/` - Directory for custom workflow implementations (includes example workflow)
+- `skills/` - Directory for skill modules (includes `general-assistant.md` and `ember-onchain-actions.md`)
+- `workflows/` - Directory for custom workflow implementations (includes `example-workflow.ts`, `usdai-strategy.ts`, and utility functions)
 - `mcp.json` - MCP server registry
 - `workflow.json` - Workflow plugin registry
 - `README.md` - Config workspace documentation
@@ -52,10 +110,10 @@ npx -y @emberai/agent-node@latest
 
 #### 3. Time to Profit!
 
-You can now build and execute any DeFi strategy through simple conversation with your agent node.
+You can now build and execute any DeFi strategy through simple conversation with the Agent Node.
 
 > [!TIP]
-> Ready to customize your agent? See the [Configuration](#configuration) section below to learn about agent.md, skills, MCP servers, and workflows.
+> Ready to customize your agent? See the [Configuration](#configuration) section below to learn about agent configurations.
 
 ## On-Chain Agent Registration
 
@@ -130,15 +188,6 @@ npx -y @emberai/agent-node@latest register \
 - `--all`: Register on canonical + mirror chains (default: true)
 - `--force-new-upload`: Force new IPFS upload (ignores cached URI from previous attempts)
 
-**What happens:**
-
-1. Loads ERC-8004 configuration from `agent.md`
-2. Builds EIP-8004 compliant registration file (name, description, A2A endpoint)
-3. Uploads registration file to IPFS via Pinata
-4. Saves IPFS URI to `agent.md` for retry capability
-5. Encodes `register(ipfsUri)` smart contract transaction
-6. Opens browser on localhost:3456 with transaction signing interface
-7. After successful transaction, extracts and saves `agentId` to `agent.md`
 
 #### Updating Registration
 
@@ -151,199 +200,9 @@ npx -y @emberai/agent-node@latest update-registry \
   --version "2.0.0"
 ```
 
-**Note**: You must own the agent (same wallet that registered it) to update. The command calls `setAgentUri(agentId, newIpfsUri)` on the registry contract.
+> [!NOTE]
+> Only the wallet that originally registered the agent can update its registration. This command calls `setAgentUri(agentId, newIpfsUri)` on the registry contract to update the agent's metadata.
 
-### EIP-8004 Registration Format
-
-The registration file follows EIP-8004 standard:
-
-```json
-{
-  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
-  "name": "My Trading Agent",
-  "description": "Autonomous DeFi trading agent",
-  "image": "https://example.com/agent-image.png",
-  "endpoints": [
-    {
-      "name": "A2A",
-      "endpoint": "https://myagent.example.com/.well-known/agent-card.json",
-      "version": "1.0.0"
-    }
-  ],
-  "registrations": [
-    {
-      "agentId": 123,
-      "agentRegistry": "eip155:11155111:0x8004a6090Cd10A7288092483047B097295Fb8847"
-    }
-  ],
-  "supportedTrust": []
-}
-```
-
-### Identity Registry Contract
-
-The agent identity registry contract is deployed at:
-
-- **Sepolia**: `0x8004a6090Cd10A7288092483047B097295Fb8847`
-
-The contract implements:
-
-- `register(string ipfsUri)` - Register new agent
-- `setAgentUri(uint256 agentId, string ipfsUri)` - Update existing registration
-
-
-## Configuration
-
-### Workspace Structure
-
-Agent Node uses a file-based configuration workspace:
-
-```
-config-workspace/
-├── agent.md                 # Base agent + model config
-├── agent.manifest.json      # Skill/server selection
-├── skills/                  # Modular skill definitions
-│   ├── skill-1.md
-│   └── skill-2.md
-├── mcp.json                 # MCP server registry
-├── workflow.json            # Workflow registry
-└── workflows/               # Custom workflow implementations
-    └── example-workflow.ts
-```
-
-### Configuration Files
-
-The configuration workspace contains several key files that define your agent's behavior.
-
-#### Agent Definition (`agent.md`)
-
-Base agent configuration including system prompt, model settings, A2A protocol card definition, and EIP-8004 registration details:
-
-```markdown
----
-version: 1
-card:
-  protocolVersion: '0.3.0'
-  name: 'My Agent'
-  description: 'An autonomous AI agent'
-  url: 'http://localhost:3000/a2a'
-  version: '1.0.0'
-  capabilities:
-    streaming: true
-    pushNotifications: false
-  provider:
-    name: 'My Company'
-    url: 'https://example.com'
-
-ai:
-  modelProvider: openrouter
-  model: openai/gpt-5
----
-
-You are an AI agent that helps users with...
-```
-
-#### Skills (`skills/*.md`)
-
-Modular skill definitions that compose your agent's capabilities. The `init` command creates two sample skills:
-
-- `general-assistant.md` - General assistant capabilities
-- `ember-onchain-actions.md` - On-chain DeFi operations
-
-Example skill structure:
-
-```markdown
----
-skill:
-  id: token-swap
-  name: 'Token Swap Skill'
-  description: 'Execute token swaps on DEXes'
-  tags: [defi, swap]
-
-mcp:
-  servers:
-    - name: ember-onchain
-      allowedTools: [createSwap, getSwapQuote]
----
-
-You can help users swap tokens using the createSwap tool...
-```
-
-#### Skill Manifest (`agent.manifest.json`)
-
-Skill composition and workflow selection settings:
-
-```json
-{
-  "version": "1.0",
-  "skills": ["token-swap", "wallet-management"],
-  "enabledWorkflows": ["approve-and-swap"]
-}
-```
-
-#### MCP Registry (`mcp.json`)
-
-MCP server registry for dynamic tool/resource access:
-
-```json
-{
-  "mcpServers": {
-    "playwright": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["@playwright/mcp@latest"]
-    },
-    "ember-onchain": {
-      "type": "http",
-      "url": "https://api.emberai.xyz/mcp",
-      "headers": {
-        "Authorization": "$env:EMBER_API_KEY"
-      }
-    }
-  }
-}
-```
-
-#### Workflow Registry (`workflow.json`)
-
-Workflow plugin registry:
-
-```json
-{
-  "workflows": [
-    {
-      "id": "example-workflow",
-      "from": "./workflows/example-workflow.ts",
-      "enabled": true,
-      "config": {
-        "mode": "default"
-      }
-    }
-  ]
-}
-```
-
-#### Workflows (`workflows/*.ts`)
-
-Custom workflow implementations. Workflows are multi-step operations that manage A2A Task lifecycles (same concept as [Anthropic's workflows](https://www.anthropic.com/engineering/building-effective-agents)). The `init` command creates an `example-workflow.ts` demonstrating status updates, artifacts, and user confirmation. For detailed workflow documentation, see the [Workflows](#workflows) section under Core Concepts.
-
-After making changes, validate your configuration:
-
-```bash
-npx -y @emberai/agent-node@latest doctor
-```
-
-This checks for configuration errors, missing references, and policy conflicts.
-
-### X402 Payment Protocol
-
-Agent Node integrates the X402 protocol for internet-native payments between agents:
-
-- **HTTP 402 Standard**: Leverages HTTP 402 "Payment Required" status code for seamless payment flows
-- **Autonomous Commerce**: Agents can transact with each other without human intervention
-- **Micropayments**: Support for fractional payments enabling pay-per-use service models
-- **Rapid Settlement**: On-chain payment verification with ~2 second settlement times
-- **Tool & Workflow Monetization**: Enable pay-per-call pricing for agent services and workflows
 
 ## Creating Workflows
 
@@ -410,8 +269,6 @@ const plugin: WorkflowPlugin = {
 - **Artifacts** - Emit structured data throughout execution
 - **State Machine** - Enforced transitions: `working` → `input-required` → `completed`
 - **Type Safety** - Zod schemas validate inputs automatically
-
-See the [Workflow Creation Guide](docs/WORKFLOW-CREATION-GUIDE.md) for complete documentation, patterns, and examples.
 
 ## CLI Commands & Chat Interface
 
