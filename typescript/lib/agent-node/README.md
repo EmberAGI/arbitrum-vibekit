@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@emberai/agent-node.svg)](https://www.npmjs.com/package/@emberai/agent-node)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/LICENSE)
 
-Agent Node is a complete implementation of the [A2A (Agent-to-Agent) protocol](https://a2a.co) with integrated AI capabilities, workflow orchestration, blockchain wallet support, and HTTP-native payment infrastructure via X402 for autonomous agent commerce.
+Agent Node is a complete implementation of the A2A (Agent-to-Agent) protocol with integrated AI capabilities, workflow orchestration, blockchain wallet support, and HTTP-native payment infrastructure via X402 for autonomous agent commerce.
 
 ## Features
 
@@ -113,7 +113,7 @@ npx -y @emberai/agent-node@latest
 You can now build and execute any DeFi strategy through simple conversation with the Agent Node.
 
 > [!TIP]
-> Ready to customize your agent? See the [Configuration](#configuration) section below to learn about agent configurations.
+> Ready to customize your agent? See the [Configuration](#configuration) section above to learn about agent configurations and modify necessary files.
 
 ## On-Chain Agent Registration
 
