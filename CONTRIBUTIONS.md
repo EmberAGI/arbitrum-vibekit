@@ -6,7 +6,7 @@ Thanks for your interest in contributing to Vibekit! This guide explains how to 
 
 Before you start your work, checkout [open issues](https://github.com/EmberAGI/arbitrum-vibekit/issues) to see if someone is already working on the same topic. For any changes or new features, create an issue first to avoid duplicate work.
 
-> [!NOTE]  
+> [!NOTE]
 > Duplicate contributions will not get integrated.
 
 ## Types of Contributions
@@ -27,7 +27,7 @@ We welcome several types of contributions, all of which follow the same developm
 
 Vibekit supports DeFi protocol integrations through the Ember Plugin System.
 
-> [!NOTE]  
+> [!NOTE]
 > All protocol support and on-chain executions must be implemented through the [Ember Plugin System](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/onchain-actions-plugins). Contributions that bypass this step will not be integrated or rewarded.
 
 1. **Create an Issue**: Navigate to the [issue board](https://github.com/EmberAGI/arbitrum-vibekit/issues) to [create a new issue](https://github.com/EmberAGI/arbitrum-vibekit/issues/new?template=protocol_integration.yml) detailing the protocol you intend to integrate. Make sure that a similar issue is not already created by someone else.
@@ -77,10 +77,11 @@ Vibekit supports DeFi protocol integrations through the Ember Plugin System.
 
 ### 5. Provide Comprehensive Testing
 
-- Ensure your implementation includes thorough testing coverage
-- Run existing tests to make sure you haven't broken anything
-- Add new tests for your functionality
-- Testing is a key quality metric we evaluate
+- See [TESTING.md](./TESTING.md) for comprehensive testing patterns, strategies, and best practices
+- Your implementation should include appropriate unit, integration, and E2E tests
+- Make sure you haven't broken anything by running `pnpm test`
+- Follow the established patterns for your test type (unit/integration/E2E)
+- Testing is a key quality metric we evaluate, well-tested contributions are prioritized
 
 ### 6. Submit Your Pull Request
 
