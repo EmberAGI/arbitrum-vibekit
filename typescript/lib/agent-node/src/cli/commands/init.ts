@@ -175,6 +175,15 @@ export function renderAgentMdTemplate(tpl: string, config: InitConfig): string {
 }
 
 /**
+ * Remove TypeScript suppression comments from template content.
+ */
+function stripTsSuppressions(content: string): string {
+  return content
+    .replace(/^[ \t]*\/\/[ \t]*@ts-ignore.*\n/gm, '')
+    .replace(/^[ \t]*\/\/[ \t]*@ts-expect-error.*\n/gm, '');
+}
+
+/**
  * Helper to load template files relative to this module URL.
  */
 function loadTemplate(rel: string): string {
@@ -430,21 +439,22 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
       resolve(targetDir, 'skills', 'ember-onchain-actions.md'),
       loadTemplate('../templates/config-workspace/skills/ember-onchain-actions.md'),
     );
-    writeFileSync(
-      resolve(targetDir, 'workflows', 'example-workflow.ts'),
-      loadTemplate('../templates/config-workspace/workflows/example-workflow.ts'),
-    );
-    // Optional samples
+    // Workflow samples
     mkdirSync(resolve(targetDir, 'workflows', 'sample-package', 'src'), { recursive: true });
     mkdirSync(resolve(targetDir, 'workflows', 'simple-script'), { recursive: true });
     writeFileSync(
       resolve(targetDir, 'workflows', 'sample-package', 'package.json'),
       loadTemplate('../templates/config-workspace/workflows/sample-package/package.json'),
     );
-    writeFileSync(
-      resolve(targetDir, 'workflows', 'sample-package', 'src', 'index.ts'),
-      loadTemplate('../templates/config-workspace/workflows/sample-package/src/index.ts'),
-    );
+    {
+      const sampleIndex = loadTemplate(
+        '../templates/config-workspace/workflows/sample-package/src/index.ts',
+      );
+      writeFileSync(
+        resolve(targetDir, 'workflows', 'sample-package', 'src', 'index.ts'),
+        stripTsSuppressions(sampleIndex),
+      );
+    }
     writeFileSync(
       resolve(targetDir, 'workflows', 'simple-script', 'hello.js'),
       loadTemplate('../templates/config-workspace/workflows/simple-script/hello.js'),
@@ -459,7 +469,8 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
     cliOutput.success('Created `skills/general-assistant.md`');
     cliOutput.success('Created `skills/ember-onchain-actions.md`');
     cliOutput.success('Created `workflows/` directory');
-    cliOutput.success('Created `workflows/example-workflow.ts`');
+    cliOutput.success('Created `workflows/sample-package/` TypeScript workflow');
+    cliOutput.success('Created `workflows/simple-script/` JavaScript workflow');
 
     // Handle .env file
     const envPath = resolve(dirname(targetDir), '.env');
