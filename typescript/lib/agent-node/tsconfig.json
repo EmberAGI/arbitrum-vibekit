@@ -5,8 +5,11 @@
     "outDir": "dist",
     "composite": true,
     "baseUrl": ".",
-    "verbatimModuleSyntax": false
+    "verbatimModuleSyntax": false,
+    "paths": {
+      "@emberai/agent-node/workflow": ["src/workflow/public.ts"]
+    }
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "tests/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
