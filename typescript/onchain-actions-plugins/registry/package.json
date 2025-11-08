@@ -48,7 +48,13 @@
         "name": "next",
         "channel": "next",
         "prerelease": "next"
-      }
+      },
+      {
+        "name": "feat/token-uids-in-queries",
+        "channel": "alpha",
+        "prerelease": "alpha"
+      },
+      "main"
     ],
     "tagFormat": "@emberai/onchain-actions-registry@${version}",
     "plugins": [
