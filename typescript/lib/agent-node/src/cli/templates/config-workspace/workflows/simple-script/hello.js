@@ -40,7 +40,7 @@ export default {
       },
     };
 
-    // Return a final result (can be any value)
-    return { message: 'hello', completed: true };
+    // Return a final result
+    return 'hello completed';
   },
 };

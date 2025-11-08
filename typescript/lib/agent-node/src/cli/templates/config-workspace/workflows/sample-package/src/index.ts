@@ -6,9 +6,29 @@ import {
   z,
   type Artifact,
   type WorkflowContext,
+  type WorkflowReturn,
   type WorkflowPlugin,
   type WorkflowState,
 } from '@emberai/agent-node/workflow';
+
+const confirmationInputSchema = z.object({
+  confirmed: z.boolean(),
+  notes: z.string().optional(),
+  timestamp: z
+    .string()
+    .regex(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}/, 'Must be ISO 8601 timestamp format')
+    .optional(),
+});
+
+type ConfirmationInput = z.infer<typeof confirmationInputSchema>;
+
+const signatureInputSchema = z.object({
+  signature: z.string(),
+});
+
+type SignatureInput = z.infer<typeof signatureInputSchema>;
+
+type WorkflowInput = ConfirmationInput | SignatureInput;
 
 const plugin: WorkflowPlugin = {
   id: 'example-workflow',
@@ -22,7 +42,9 @@ const plugin: WorkflowPlugin = {
     count: z.number().int().positive().optional().default(1),
   }),
 
-  async *execute(context: WorkflowContext): AsyncGenerator<WorkflowState, unknown, unknown> {
+  async *execute(
+    context: WorkflowContext,
+  ): AsyncGenerator<WorkflowState, WorkflowReturn, WorkflowInput> {
     const { message = 'Hello from example workflow!', count = 1 } = context.parameters ?? {};
 
     // First yield (optional): provide a repsonse for the tool call that dispatched this workflow
@@ -89,15 +111,10 @@ const plugin: WorkflowPlugin = {
       type: 'interrupted',
       reason: 'input-required',
       message: 'Please confirm to proceed with final step',
-      inputSchema: z.object({
-        confirmed: z.boolean(),
-        notes: z.string().optional(),
-        timestamp: z
-          .string()
-          .regex(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}/, 'Must be ISO 8601 timestamp format')
-          .optional(),
-      }),
+      inputSchema: confirmationInputSchema,
     }) as { confirmed?: boolean; notes?: string; timestamp?: string } | undefined;
+    const signatureResult = userInput ? signatureInputSchema.safeParse(userInput) : undefined;
+    const signature = signatureResult?.success ? signatureResult.data.signature : undefined;
 
     // Continue after confirmation
     yield {
@@ -119,6 +136,7 @@ const plugin: WorkflowPlugin = {
             confirmed: userInput?.confirmed ?? false,
             userNotes: userInput?.notes,
             userTimestamp: userInput?.timestamp,
+            signature,
             completedAt: new Date().toISOString(),
           }),
         },
@@ -132,8 +150,12 @@ const plugin: WorkflowPlugin = {
       message: 'Workflow completed successfully',
     };
 
-    // When the workflow returns, it is considered completed. Return values are ignored.
-    return; // optional, but recommended for clarity
+    // When the workflow returns, it is considered completed.
+    // You can optionally return a message or data:
+    // return 'Processing completed successfully';
+    // return { message: 'Done', data: { itemCount: 10 } };
+    // or just return nothing:
+    return;
   },
 };
 

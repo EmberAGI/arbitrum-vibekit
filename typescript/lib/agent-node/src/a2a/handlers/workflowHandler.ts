@@ -433,6 +433,7 @@ export class WorkflowHandler {
       };
 
       // Set up event handlers immediately; publish after first task persistence completes
+      let completionMessage: string | undefined;
       if (hasEventEmitter(execution)) {
         this.logger.debug('Setting up event handlers for workflow', { taskId: execution.id });
 
@@ -602,6 +603,11 @@ export class WorkflowHandler {
 
           publishChildEvent(rejectedUpdate);
         });
+
+        // Store completion message if provided
+        execution.on('completion-message', (message: string) => {
+          completionMessage = message;
+        });
       }
 
       // Create task event for the new workflow
@@ -762,6 +768,16 @@ export class WorkflowHandler {
               contextId: workflowContextId,
               status: {
                 state: 'completed',
+                // Include message if one was provided
+                ...(completionMessage && {
+                  message: {
+                    kind: 'message',
+                    messageId: uuidv7(),
+                    contextId: workflowContextId,
+                    role: 'agent',
+                    parts: [{ kind: 'text', text: completionMessage } as TextPart],
+                  },
+                }),
               },
               final: true,
             };

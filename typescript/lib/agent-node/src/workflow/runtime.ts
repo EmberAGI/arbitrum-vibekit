@@ -8,6 +8,7 @@ import type {
   WorkflowPlugin,
   WorkflowContext,
   WorkflowExecution,
+  WorkflowReturn,
   WorkflowTool,
   ToolMetadata,
   PauseInfo,
@@ -248,19 +249,26 @@ export class WorkflowRuntime {
       state: 'working',
       context: fullContext,
       startedAt: new Date(),
-      waitForCompletion: async (): Promise<unknown> => {
-        return new Promise<unknown>((resolve) => {
+      waitForCompletion: async (): Promise<WorkflowReturn> => {
+        const isTerminalState = (state: TaskState | undefined): boolean => {
+          return (
+            state === 'completed' ||
+            state === 'failed' ||
+            state === 'canceled' ||
+            state === 'rejected'
+          );
+        };
+
+        return new Promise<WorkflowReturn>((resolve) => {
           const checkCompletion = (): void => {
-            const exec = this.executions.get(executionId);
-            if (
-              exec &&
-              (exec.state === 'completed' || exec.state === 'failed' || exec.state === 'canceled')
-            ) {
-              resolve(exec.result);
-            } else {
-              setTimeout(checkCompletion, 100);
+            if (isTerminalState(execution.state)) {
+              resolve(execution.result);
+              return;
             }
+
+            setTimeout(checkCompletion, 100);
           };
+
           checkCompletion();
         });
       },
@@ -306,7 +314,7 @@ export class WorkflowRuntime {
   ): Promise<void> {
     try {
       const generator = plugin.execute(context);
-      let result: unknown;
+      let result: WorkflowReturn;
 
       // Initialize task state
       this.taskStates.set(execution.id, {
@@ -438,6 +446,21 @@ export class WorkflowRuntime {
       execution.result = result;
       const currentState = execution.state;
       const targetState: TaskState = this.isShuttingDown ? 'canceled' : 'completed';
+
+      // Extract and emit completion message only for successful completion
+      if (targetState === 'completed' && result) {
+        let completionMessage: string | undefined;
+        if (typeof result === 'string') {
+          completionMessage = result;
+        } else if (typeof result === 'object' && 'message' in result) {
+          completionMessage = (result as { message?: string }).message;
+        }
+
+        if (completionMessage) {
+          emit('completion-message', completionMessage);
+        }
+      }
+
       if (currentState !== targetState) {
         ensureTransition(execution.id, currentState, targetState);
       }
@@ -806,6 +829,21 @@ export class WorkflowRuntime {
       execution.result = result.value;
       const currentState = execution.state;
       const targetState: TaskState = this.isShuttingDown ? 'canceled' : 'completed';
+
+      // Extract and emit completion message only for successful completion
+      if (targetState === 'completed' && result.value) {
+        let completionMessage: string | undefined;
+        if (typeof result.value === 'string') {
+          completionMessage = result.value;
+        } else if (typeof result.value === 'object' && 'message' in result.value) {
+          completionMessage = (result.value as { message?: string }).message;
+        }
+
+        if (completionMessage) {
+          emit('completion-message', completionMessage);
+        }
+      }
+
       if (currentState !== targetState) {
         ensureTransition(executionId, currentState, targetState);
       }

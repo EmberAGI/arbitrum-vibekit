@@ -60,6 +60,12 @@ export const WorkflowStateSchema = z.discriminatedUnion('type', [
 // Derive TypeScript type from Zod schema
 export type WorkflowState = z.infer<typeof WorkflowStateSchema>;
 
+// New type for workflow return values
+export type WorkflowReturn =
+  | string // Simple message
+  | { message?: string; data?: unknown } // Structured return
+  | void; // No return
+
 export interface WorkflowPlugin {
   id: string;
   name: string;
@@ -70,7 +76,7 @@ export interface WorkflowPlugin {
   // Optional timeout in milliseconds for getting dispatch response from first yield
   // Default: 500ms. Set higher if workflow needs to make API calls before first yield.
   dispatchResponseTimeout?: number;
-  execute: (context: WorkflowContext) => AsyncGenerator<WorkflowState, unknown, unknown>;
+  execute: (context: WorkflowContext) => AsyncGenerator<WorkflowState, WorkflowReturn, unknown>;
 }
 
 export interface WorkflowExecution {
@@ -78,12 +84,12 @@ export interface WorkflowExecution {
   pluginId: string;
   state: TaskState;
   context: WorkflowContext;
-  result?: unknown;
+  result?: WorkflowReturn;
   error?: Error;
   startedAt: Date;
   completedAt?: Date;
   metadata?: Record<string, unknown>;
-  waitForCompletion: () => Promise<unknown>;
+  waitForCompletion: () => Promise<WorkflowReturn>;
   on: (event: string, handler: (...args: unknown[]) => void) => WorkflowExecution;
   getError: () => Error | undefined;
   getPauseInfo: () => PauseInfo | undefined;
