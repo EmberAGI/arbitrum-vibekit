@@ -12,6 +12,10 @@ export function ParaClientProvider({ children }: PropsWithChildren) {
     return { apiKey };
   }, []);
 
+  // TODO: Re-enable Coinbase Smart Wallet connector once proper CDP integration is implemented
+  // The connector needs to be properly integrated with CDP SDK and return serializable objects
+  // For now, Para Modal will show default wallet options
+
   return (
     <QueryClientProvider client={queryClient}>
       <ParaProvider

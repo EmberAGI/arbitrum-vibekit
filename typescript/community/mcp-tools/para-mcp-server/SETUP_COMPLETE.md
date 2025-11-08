@@ -108,6 +108,13 @@ pnpm dev
 
 ## Usage
 
+### Chat route with Para Modal
+
+- Visit `/chat` to open the app route powered by Para Modal v2 alpha
+- Click "Connect wallet" to open the Para Modal
+- Coinbase Smart Wallet option is provided via an external wallet connector
+- Disconnect using the "Disconnect" button
+
 ### Creating a Pregenerated Wallet
 
 Via MCP tool:
@@ -331,6 +338,7 @@ FROM pregen_wallets;
 
 - [Para Documentation](https://docs.getpara.com)
 - [Para Server SDK](https://docs.getpara.com/v2/server/guides/pregen)
+- [Coinbase Smart Wallet (CDP)](https://docs.cdp.coinbase.com/embedded-wallets/evm-features/smart-accounts)
 - [Drizzle ORM](https://orm.drizzle.team)
 - [Next.js Documentation](https://nextjs.org/docs)
 
