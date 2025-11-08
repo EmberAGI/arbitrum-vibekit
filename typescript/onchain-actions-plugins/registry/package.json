@@ -50,7 +50,7 @@
         "prerelease": "next"
       },
       {
-        "name": "feat/token-uids-in-queries",
+        "name": "feat/breaking-change-lending",
         "channel": "alpha",
         "prerelease": "alpha"
       },
