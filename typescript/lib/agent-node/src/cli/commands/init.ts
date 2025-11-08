@@ -47,13 +47,6 @@ const AI_PROVIDERS = {
   },
 } as const;
 
-const DEFAULT_MODEL_PARAMS = {
-  temperature: 0.7,
-  maxTokens: 4096,
-  topP: 1.0,
-  reasoning: 'low',
-} as const;
-
 const DEFAULT_AGENT_VERSION = '1.0.0';
 
 // Chain configurations
@@ -117,7 +110,7 @@ export function renderAgentMdTemplate(tpl: string, config: InitConfig): string {
     __PROVIDER_NAME__: config.providerName ?? '',
     __PROVIDER_URL__: config.providerUrl ?? '',
   };
-  let rendered = tpl.replace(/__([A-Z0-9_]+)__/g, (_m, key) => {
+  let rendered = tpl.replace(/__([A-Z0-9_]+)__/g, (_m: string, key: string) => {
     const v = baseMap[`__${key}__`];
     return v !== undefined ? v : `__${key}__`;
   });
@@ -127,7 +120,7 @@ export function renderAgentMdTemplate(tpl: string, config: InitConfig): string {
     const PROVIDER_BLOCK =
       /^[ \t]*#\s*PROVIDER:START[^\n]*\n([\s\S]*?)^[ \t]*#\s*PROVIDER:END[^\n]*\n?/m;
     if (config.providerName) {
-      rendered = rendered.replace(PROVIDER_BLOCK, (_m, inner) => {
+      rendered = rendered.replace(PROVIDER_BLOCK, (_m: string, inner: string) => {
         let block = inner;
         if (!config.providerUrl) {
           block = block.replace(/^[ \t]*url:\s*['"].*?['"].*\n/m, '');
@@ -159,7 +152,7 @@ export function renderAgentMdTemplate(tpl: string, config: InitConfig): string {
     // Uncomment lines within ERC8004 block by removing a single leading "# " or "#"
     rendered = rendered.replace(
       /^[ \t]*#\s*ERC8004:START[^\n]*\n([\s\S]*?)^[ \t]*#\s*ERC8004:END[^\n]*\n?/m,
-      (_m, inner) => {
+      (_m: string, inner: string) => {
         const uncommented = inner
           .split('\n')
           .map((line: string) => line.replace(/^[ \t]*# ?/, ''))
