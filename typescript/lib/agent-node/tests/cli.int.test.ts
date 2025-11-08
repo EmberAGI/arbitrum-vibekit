@@ -54,7 +54,11 @@ describe('CLI Commands Integration Tests', () => {
       // Then: template skill and workflow files should be created
       expect(existsSync(join(targetDir, 'skills', 'general-assistant.md'))).toBe(true);
       expect(existsSync(join(targetDir, 'skills', 'ember-onchain-actions.md'))).toBe(true);
-      expect(existsSync(join(targetDir, 'workflows', 'example-workflow.ts'))).toBe(true);
+      expect(existsSync(join(targetDir, 'workflows', 'sample-package'))).toBe(true);
+      expect(existsSync(join(targetDir, 'workflows', 'sample-package', 'src', 'index.ts'))).toBe(
+        true,
+      );
+      expect(existsSync(join(targetDir, 'workflows', 'sample-package', 'package.json'))).toBe(true);
     });
 
     it('should create valid agent.md with frontmatter', async () => {
@@ -224,8 +228,8 @@ describe('CLI Commands Integration Tests', () => {
       expect(workflowJson.workflows).toBeDefined();
       expect(Array.isArray(workflowJson.workflows)).toBe(true);
       expect(workflowJson.workflows.length).toBe(1);
-      expect(workflowJson.workflows[0].id).toBe('example-workflow');
-      expect(workflowJson.workflows[0].from).toBe('./workflows/example-workflow.ts');
+      expect(workflowJson.workflows[0].id).toBe('sample-package-workflow');
+      expect(workflowJson.workflows[0].from).toBe('./workflows/sample-package/src/index.ts');
       expect(workflowJson.workflows[0].enabled).toBe(true);
     });
 
