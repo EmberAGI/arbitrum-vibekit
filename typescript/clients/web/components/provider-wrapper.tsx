@@ -18,6 +18,10 @@ import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import React, { useMemo } from 'react';
 import { RainbowKitSiweNextAuthProvider } from '@rainbow-me/rainbowkit-siwe-next-auth';
 import { getParaWallet } from '@getpara/rainbowkit-wallet';
+import {
+  coinbaseWallet,
+  walletConnectWallet
+} from '@rainbow-me/rainbowkit/wallets';
 import { createConfig, http } from 'wagmi';
 import { Environment } from '@getpara/web-sdk';
 
@@ -37,12 +41,16 @@ export function ProviderWrapper({ children }: { children: React.ReactNode }) {
       appName: 'Arbitrum VibeKit',
     });
 
-    // Configure connectors with Para wallet
+    // Configure connectors with Para wallet and popular wallets
     const connectors = connectorsForWallets(
       [
         {
           groupName: 'Social Login',
           wallets: [paraWallet],
+        },
+        {
+          groupName: 'Popular',
+          wallets: [coinbaseWallet, walletConnectWallet],
         },
       ],
       {
@@ -55,8 +63,10 @@ export function ProviderWrapper({ children }: { children: React.ReactNode }) {
       connectors,
       chains: [arbitrum, mainnet],
       transports: {
-        [arbitrum.id]: http(),
         [mainnet.id]: http()
+        [arbitrum.id]: http(),
+        [mainnet.id]: http(),
+        [baseSepolia.id]: http()
       },
       ssr: true,
       storage: createStorage({ storage: cookieStorage }),
