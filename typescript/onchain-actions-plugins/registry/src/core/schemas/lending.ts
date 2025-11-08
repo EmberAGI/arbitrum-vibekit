@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-import { FeeBreakdownSchema, TransactionPlanSchema, TokenSchema } from './core.js';
+import {
+  FeeBreakdownSchema,
+  TransactionPlanSchema,
+  TokenSchema,
+  TokenIdentifierSchema,
+} from './core.js';
 
 export const BorrowTokensRequestSchema = z.object({
   borrowToken: TokenSchema,
@@ -56,15 +61,6 @@ export const WithdrawTokensResponseSchema = z.object({
 });
 export type WithdrawTokensResponse = z.infer<typeof WithdrawTokensResponseSchema>;
 
-export const TokenPositionSchema = z.object({
-  underlyingToken: TokenSchema,
-  borrowRate: z.string(),
-  supplyBalance: z.string(),
-  borrowBalance: z.string(),
-  valueUsd: z.string(),
-});
-export type TokenPosition = z.infer<typeof TokenPositionSchema>;
-
 export const GetWalletLendingPositionsRequestSchema = z.object({
   walletAddress: z.string(),
 });
@@ -73,7 +69,7 @@ export type GetWalletLendingPositionsRequest = z.infer<
 >;
 
 export const LendTokenDetailSchema = z.object({
-  token: TokenSchema,
+  tokenUid: TokenIdentifierSchema,
   underlyingBalance: z.string(),
   underlyingBalanceUsd: z.string(),
   variableBorrows: z.string(),
