@@ -1,7 +1,8 @@
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { describe, it, expect } from 'vitest';
+
 import matter from 'gray-matter';
+import { describe, it, expect } from 'vitest';
 
 import { renderAgentMdTemplate } from '../../src/cli/commands/init.js';
 
@@ -151,5 +152,3 @@ describe('renderAgentMdTemplate', () => {
     expect(parsed.data['erc8004']['mirrors']).toEqual([]);
   });
 });
-
-

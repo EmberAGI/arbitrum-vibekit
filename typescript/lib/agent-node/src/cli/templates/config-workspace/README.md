@@ -82,7 +82,6 @@ skill:
   workflows:
     include: ['example-workflow']
 ---
-
 You are the My Skill. You specialize in...
 ```
 
@@ -130,6 +129,7 @@ export default plugin;
 ```
 
 The included `example-workflow` demonstrates:
+
 - Status updates and lifecycle management
 - Multiple artifact generation
 - User confirmation pauses with schema validation
@@ -139,7 +139,7 @@ The included `example-workflow` demonstrates:
 All MCP tools follow the canonical naming format:
 
 - **Format**: `server_name__tool_name` (double underscore separator)
-- **Allowed characters**: lowercase letters (a-z), digits (0-9), underscores (_)
+- **Allowed characters**: lowercase letters (a-z), digits (0-9), underscores (\_)
 - **Example**: `fetch__fetch_json`, `ember_onchain_actions__swap_tokens`
 
 Tool names must be unique across all MCP servers.
@@ -165,5 +165,3 @@ Tool names must be unique across all MCP servers.
 - Verify `enabled: true` in workflow entry
 - Check skill includes workflow ID in `workflows.include`
 - Verify workflow plugin exports default
-
-
