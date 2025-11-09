@@ -322,7 +322,7 @@ describe('Init Command Integration', () => {
       // When: running init
       await initCommand({ target: tempDir, yes: true });
 
-      // Then: workflow.json should have example workflow
+      // Then: workflow.json should include the sample workflow entry
       const workflowPath = join(tempDir, 'workflow.json');
       const workflowContent = readFileSync(workflowPath, 'utf-8');
       const workflow = JSON.parse(workflowContent);
@@ -349,7 +349,7 @@ describe('Init Command Integration', () => {
       expect(workflowTsContent).toContain('import');
       expect(workflowTsContent).toContain('WorkflowPlugin');
       expect(workflowTsContent).toContain('export default plugin');
-      expect(workflowTsContent).toContain("id: 'example-workflow'");
+      expect(workflowTsContent).toContain("id: 'sample-package-workflow'");
     });
   });
 

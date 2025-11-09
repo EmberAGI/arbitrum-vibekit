@@ -158,7 +158,7 @@ describe('CLI Commands Integration Tests', () => {
       // Validate workflow integration (active by default)
       expect(skillContent).toContain('# Workflow integration');
       expect(skillContent).toContain('workflows:');
-      expect(skillContent).toContain("include: ['example-workflow']");
+      expect(skillContent).toContain("include: ['sample-package-workflow']");
     });
 
     it('should create ember skill with valid frontmatter and MCP integration', async () => {
@@ -223,7 +223,7 @@ describe('CLI Commands Integration Tests', () => {
       expect(mcpJson.mcpServers.ember_onchain_actions.type).toBe('http');
       expect(mcpJson.mcpServers.ember_onchain_actions.url).toBe('https://api.emberai.xyz/mcp');
 
-      // Then: workflow registry should contain example-workflow
+      // Then: workflow registry should contain sample-package-workflow
       const workflowJson = JSON.parse(readFileSync(join(targetDir, 'workflow.json'), 'utf-8'));
       expect(workflowJson.workflows).toBeDefined();
       expect(Array.isArray(workflowJson.workflows)).toBe(true);

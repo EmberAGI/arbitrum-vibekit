@@ -31,7 +31,7 @@ type SignatureInput = z.infer<typeof signatureInputSchema>;
 type WorkflowInput = ConfirmationInput | SignatureInput;
 
 const plugin: WorkflowPlugin = {
-  id: 'example-workflow',
+  id: 'sample-package-workflow',
   name: 'Example Workflow',
   description:
     'A comprehensive workflow example demonstrating A2A patterns, pause/resume, multiple artifacts, and lifecycle management',
