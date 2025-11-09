@@ -63,6 +63,8 @@ export type WithdrawTokensResponse = z.infer<typeof WithdrawTokensResponseSchema
 
 export const GetWalletLendingPositionsRequestSchema = z.object({
   walletAddress: z.string(),
+  chainId: z.string().optional(),
+  tokenAddress: z.string().optional(),
 });
 export type GetWalletLendingPositionsRequest = z.infer<
   typeof GetWalletLendingPositionsRequestSchema
