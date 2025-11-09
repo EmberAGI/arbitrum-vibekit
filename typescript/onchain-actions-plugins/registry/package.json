@@ -59,11 +59,6 @@
         "channel": "next",
         "prerelease": "next"
       },
-      {
-        "name": "feat/breaking-change-lending",
-        "channel": "alpha",
-        "prerelease": "alpha"
-      },
       "main"
     ],
     "tagFormat": "@emberai/onchain-actions-registry@${version}",
