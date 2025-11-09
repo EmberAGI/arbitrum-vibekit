@@ -4,14 +4,25 @@
   "description": "Registry for plugins compatible with Ember to execute DeFi actions.",
   "type": "module",
   "main": "dist/index.cjs",
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "module": "dist/index.mjs",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
   "files": [
     "dist"
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "tsup",
+    "build": "tsdown",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\"",
@@ -21,15 +32,14 @@
     "@aave/contract-helpers": "^1.32.1",
     "@aave/math-utils": "^1.32.1",
     "@bgd-labs/aave-address-book": "^4.10.0",
-    "@gmx-io/sdk": "^1.2.1",
     "ethers": "^5.7.2"
   },
   "peerDependencies": {
-    "zod": "^3.0.0 || ^4.0.0"
+    "zod": "^3.0.0"
   },
   "devDependencies": {
     "@semantic-release/exec": "^7.1.0",
-    "tsup": "^8.0.0"
+    "tsdown": "^0.16.1"
   },
   "license": "MIT",
   "publishConfig": {
@@ -48,7 +58,8 @@
         "name": "next",
         "channel": "next",
         "prerelease": "next"
-      }
+      },
+      "main"
     ],
     "tagFormat": "@emberai/onchain-actions-registry@${version}",
     "plugins": [

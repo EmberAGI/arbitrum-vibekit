@@ -2,12 +2,6 @@ import { z } from 'zod';
 
 import { TokenIdentifierSchema, TokenSchema, TransactionPlanSchema } from './core.js';
 
-export const LimitedLiquidityProvisionRangeSchema = z.object({
-  minPrice: z.string(),
-  maxPrice: z.string(),
-});
-export type LimitedLiquidityProvisionRange = z.infer<typeof LimitedLiquidityProvisionRangeSchema>;
-
 export const LiquidityProvisionRangeSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('full'),
