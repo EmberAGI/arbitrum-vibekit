@@ -1,4 +1,10 @@
-import { type Chain, createPublicClient, formatEther, formatUnits, http } from "viem";
+import {
+  type Chain,
+  createPublicClient,
+  formatEther,
+  formatUnits,
+  http,
+} from "viem";
 import { arbitrum, arbitrumSepolia, base, baseSepolia } from "viem/chains";
 import type { InferSchema } from "xmcp";
 import { z } from "zod";
@@ -45,9 +51,9 @@ const BASE_SEPOLIA_TOKENS = [
 
 // Supported networks mapping
 const SUPPORTED_NETWORKS: Record<string, Chain> = {
-  "base": base,
+  base: base,
   "base-sepolia": baseSepolia,
-  "arbitrum": arbitrum,
+  arbitrum: arbitrum,
   "arbitrum-sepolia": arbitrumSepolia,
 };
 

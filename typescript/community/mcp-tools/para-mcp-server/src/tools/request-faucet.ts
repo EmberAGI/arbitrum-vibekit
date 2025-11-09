@@ -21,7 +21,9 @@ export const schema = {
     ),
   token: z
     .enum(["eth", "usdc", "eurc", "cbbtc"])
-    .describe("The token to request from the faucet. Supported tokens: eth (native), usdc (ERC-20), eurc (ERC-20), cbbtc (ERC-20)"),
+    .describe(
+      "The token to request from the faucet. Supported tokens: eth (native), usdc (ERC-20), eurc (ERC-20), cbbtc (ERC-20)",
+    ),
 } satisfies Record<string, z.ZodTypeAny>;
 
 // Define tool metadata
