@@ -4,7 +4,8 @@
  */
 
 import { spawn } from 'child_process';
-import { resolve } from 'path';
+import { createRequire } from 'module';
+import { dirname, resolve } from 'path';
 
 import { getInstallableWorkflows } from '../../config/loaders/workflow-discovery.js';
 import { resolveConfigDirectory } from '../../config/runtime/config-dir.js';
@@ -23,6 +24,43 @@ interface InstallResult {
   error?: string;
 }
 
+const moduleRequire = createRequire(import.meta.url);
+const pnpmExePackagePath = moduleRequire.resolve('@pnpm/exe/package.json');
+const pnpmExePackageDir = dirname(pnpmExePackagePath);
+const pnpmExeRequire = createRequire(resolve(pnpmExePackageDir, 'package.json'));
+
+function resolveBundledPnpmBinary(): string {
+  const platform =
+    process.platform === 'win32'
+      ? 'win'
+      : process.platform === 'darwin'
+        ? 'macos'
+        : process.platform;
+  const arch = platform === 'win' && process.arch === 'ia32' ? 'x86' : process.arch;
+  const packageName = `@pnpm/${platform}-${arch}`;
+
+  try {
+    const optionalPackageJsonPath = pnpmExeRequire.resolve(`${packageName}/package.json`);
+    const optionalPackageDir = dirname(optionalPackageJsonPath);
+    const optionalPackageJson = pnpmExeRequire(optionalPackageJsonPath) as {
+      bin?: string | Record<string, string>;
+    };
+    const binaryRelativePath =
+      typeof optionalPackageJson.bin === 'string'
+        ? optionalPackageJson.bin
+        : (optionalPackageJson.bin?.['pnpm'] ?? (platform === 'win' ? 'pnpm.exe' : 'pnpm'));
+
+    return resolve(optionalPackageDir, binaryRelativePath);
+  } catch (error) {
+    const details = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Bundled pnpm binary not available for platform ${platform}-${arch}: ${details}`,
+    );
+  }
+}
+
+const BUNDLED_PNPM_BINARY = resolveBundledPnpmBinary();
+
 /**
  * Install dependencies for a single workflow
  * @param workflowPath - Absolute path to workflow directory
@@ -34,15 +72,15 @@ function installWorkflowDependencies(
   frozenLockfile: boolean,
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const args = ['install'];
+    const args = ['install', '--ignore-workspace'];
     if (frozenLockfile) {
       args.push('--frozen-lockfile');
     }
 
-    const child = spawn('pnpm', args, {
+    const child = spawn(BUNDLED_PNPM_BINARY, args, {
       cwd: workflowPath,
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell: true,
+      shell: false,
     });
 
     let stdout = '';
@@ -101,9 +139,7 @@ export async function workflowInstallCommand(
     if (toInstall.length === 0) {
       const error = new Error(`Workflow "${workflowName}" not found or not installable`);
       cliOutput.error(error.message);
-      cliOutput.info(
-        `Available installable workflows: ${installable.map((w) => w.id).join(', ')}`,
-      );
+      cliOutput.info(`Available installable workflows: ${installable.map((w) => w.id).join(', ')}`);
       throw error;
     }
   }

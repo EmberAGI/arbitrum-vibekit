@@ -83,6 +83,7 @@
     "@metamask/delegation-toolkit": "^0.13.0",
     "@modelcontextprotocol/sdk": "catalog:",
     "@openrouter/ai-sdk-provider": "^1.2.0",
+    "@pnpm/exe": "^10.20.0",
     "ai": "catalog:",
     "ajv": "^8.17.1",
     "cors": "^2.8.5",
