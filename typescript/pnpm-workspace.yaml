@@ -1,10 +1,12 @@
 packages:
-  - 'lib/**/*'
-  - 'community/**/*'
+  - 'lib/*'
+  - 'community/*/*'
   - 'examples/*'
   - 'templates/*'
   - 'clients/*'
-  - 'onchain-actions-plugins/**/*'
+  - 'onchain-actions-plugins/*'
+  - '!**/dist/**'
+  - '!**/node_modules/**'
 
 catalog:
   # Core dependencies
