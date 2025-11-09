@@ -1530,13 +1530,13 @@ importers:
         version: 1.36.2(bignumber.js@9.3.1)(tslib@2.8.1)
       '@bgd-labs/aave-address-book':
         specifier: ^4.10.0
-        version: 4.32.0(viem@2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.11))
+        version: 4.32.0(viem@2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76))
       ethers:
         specifier: ^5.7.2
         version: 5.8.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       zod:
-        specifier: ^3.0.0 || ^4.0.0
-        version: 4.1.11
+        specifier: ^3.0.0
+        version: 3.25.76
     devDependencies:
       '@semantic-release/exec':
         specifier: ^7.1.0
@@ -12491,9 +12491,9 @@ snapshots:
 
   '@bcoe/v8-coverage@1.0.2': {}
 
-  '@bgd-labs/aave-address-book@4.32.0(viem@2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.11))':
+  '@bgd-labs/aave-address-book@4.32.0(viem@2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76))':
     dependencies:
-      viem: 2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.11)
+      viem: 2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76)
 
   '@biomejs/biome@1.9.4':
     optionalDependencies:
