@@ -308,9 +308,7 @@ export async function runCli(): Promise<void> {
             quiet: options['quiet'] as boolean | undefined,
           });
         } else if (subcommand === 'discover') {
-          await (
-            await import('./commands/index.js')
-          ).workflowDiscoverCommand({
+          (await import('./commands/index.js')).workflowDiscoverCommand({
             configDir: options['config-dir'] as string | undefined,
             sync: options['sync'] as boolean | undefined,
             dryRun: options['dry-run'] as boolean | undefined,

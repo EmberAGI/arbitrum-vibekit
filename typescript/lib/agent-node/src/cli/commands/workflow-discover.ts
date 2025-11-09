@@ -23,9 +23,9 @@ export interface WorkflowDiscoverOptions {
   disabled?: boolean;
 }
 
-export async function workflowDiscoverCommand(
+export function workflowDiscoverCommand(
   options: WorkflowDiscoverOptions = {},
-): Promise<void> {
+): void {
   const { configDir } = resolveConfigDirectory(options.configDir);
   const workflowsDir = resolve(configDir, 'workflows');
   const workflowRegistryPath = resolve(configDir, 'workflow.json');
@@ -100,7 +100,6 @@ export async function workflowDiscoverCommand(
   // Apply changes
   const next: WorkflowEntry[] = [];
   // Keep all retained; if prune, drop those marked for removal
-  const retainedSet = new Set(retained.map((r) => r.id));
   const removalSet = new Set(removals.map((r) => r.id));
   for (const entry of retained) {
     if (!options.prune || !removalSet.has(entry.id)) {

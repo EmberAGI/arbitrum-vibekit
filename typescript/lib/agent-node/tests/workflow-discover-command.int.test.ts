@@ -1,5 +1,4 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
 import { join } from 'path';
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -50,7 +49,7 @@ describe('workflow discover command integration', () => {
     writeFileSync(join(workflowsDir, 'b', 'workflow.ts'), 'export default { id: "b" }', 'utf-8');
 
     // When: running discover with --sync (no --prune)
-    await workflowDiscoverCommand({ configDir, sync: true });
+    workflowDiscoverCommand({ configDir, sync: true });
 
     // Then: registry should contain existing + new additions
     const next = JSON.parse(readFileSync(registryPath, 'utf-8')) as {
@@ -86,7 +85,7 @@ describe('workflow discover command integration', () => {
     writeFileSync(join(workflowsDir, 'c', 'index.ts'), 'export default { id: "c" }', 'utf-8');
 
     // When
-    await workflowDiscoverCommand({ configDir, sync: true, disabled: true });
+    workflowDiscoverCommand({ configDir, sync: true, disabled: true });
 
     // Then
     const next = JSON.parse(readFileSync(join(configDir, 'workflow.json'), 'utf-8')) as {
@@ -120,7 +119,7 @@ describe('workflow discover command integration', () => {
     writeFileSync(join(workflowsDir, 'd', 'index.ts'), 'export default { id: "d" }', 'utf-8');
 
     // When
-    await workflowDiscoverCommand({ configDir, sync: true, prune: true });
+    workflowDiscoverCommand({ configDir, sync: true, prune: true });
 
     // Then
     const next = JSON.parse(readFileSync(registryPath, 'utf-8')) as {
@@ -147,7 +146,7 @@ describe('workflow discover command integration', () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     // When
-    await workflowDiscoverCommand({ configDir, sync: true, dryRun: true });
+    workflowDiscoverCommand({ configDir, sync: true, dryRun: true });
 
     // Then: registry unchanged
     const now = readFileSync(registryPath, 'utf-8');
