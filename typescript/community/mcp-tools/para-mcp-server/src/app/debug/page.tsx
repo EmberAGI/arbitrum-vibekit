@@ -1,0 +1,580 @@
+"use client";
+
+import "@rainbow-me/rainbowkit/styles.css";
+import "@getpara/react-sdk/styles.css";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useAccount, useBalance, useDisconnect, useChainId } from "wagmi";
+import { arbitrum, arbitrumSepolia, base, baseSepolia } from "wagmi/chains";
+import { useState, useMemo } from "react";
+import { useMcp } from "use-mcp/react";
+
+// Type for JSON Schema properties
+type JsonSchemaProperty = {
+  type: string;
+  description?: string;
+  enum?: string[];
+  pattern?: string;
+  format?: string;
+  default?: unknown;
+};
+
+type JsonSchema = {
+  type: string;
+  properties?: Record<string, JsonSchemaProperty>;
+  required?: string[];
+  additionalProperties?: boolean;
+};
+import { WagmiProvider, createConfig, http } from "wagmi";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { RainbowKitProvider, darkTheme, connectorsForWallets } from "@rainbow-me/rainbowkit";
+import { walletConnectWallet,coinbaseWallet } from "@rainbow-me/rainbowkit/wallets";
+import { paraConnector } from "@getpara/wagmi-v2-integration";
+import Para, { Environment } from "@getpara/web-sdk";
+
+const CHAINS = [arbitrum, arbitrumSepolia, base, baseSepolia];
+
+const queryClient = new QueryClient();
+
+// Initialize Para client
+const para = new Para(
+  (process.env.NEXT_PUBLIC_PARA_ENVIRONMENT || "BETA") === "BETA"
+    ? Environment.BETA
+    : Environment.PRODUCTION,
+  process.env.NEXT_PUBLIC_PARA_API_KEY || "",
+);
+
+// Create Para connector
+const paraConn = paraConnector({
+  para,
+  chains: CHAINS as [typeof arbitrum, typeof arbitrumSepolia, typeof base, typeof baseSepolia],
+  appName: "Para MCP Server",
+  options: {},
+  queryClient,
+});
+
+// Create connectors for RainbowKit wallets
+const rainbowKitConnectors = connectorsForWallets(
+  [
+    {
+      groupName: "Popular",
+      wallets: [walletConnectWallet, coinbaseWallet],
+    },
+  ],
+  {
+    appName: "Para MCP Server",
+    projectId: "4b49e5e63b9f6253943b470873b47208",
+  },
+);
+
+// Create Wagmi config with Para connector and RainbowKit wallets
+const wagmiConfig = createConfig({
+  connectors: [paraConn as any, ...rainbowKitConnectors],
+  chains: CHAINS as [typeof arbitrum, typeof arbitrumSepolia, typeof base, typeof baseSepolia],
+  transports: {
+    [arbitrum.id]: http(),
+    [arbitrumSepolia.id]: http(),
+    [base.id]: http(),
+    [baseSepolia.id]: http(),
+  },
+  ssr: true,
+});
+
+function ChatInner() {
+  const { address, isConnected } = useAccount();
+  const chainId = useChainId();
+  const { disconnect } = useDisconnect();
+
+  const [selectedChainId, setSelectedChainId] = useState<number>(42161);
+  const [showToolsList, setShowToolsList] = useState<boolean>(false);
+  const [toolFormValues, setToolFormValues] = useState<Record<string, Record<string, unknown>>>({});
+  const [toolCallResults, setToolCallResults] = useState<Record<string, { loading: boolean; result?: unknown; error?: string }>>({});
+
+  // Get MCP server URL from current domain + /mcp
+  const mcpUrl = useMemo(() => {
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}/mcp`;
+    }
+    return process.env.NEXT_PUBLIC_MCP_URL || "http://localhost:3012/mcp";
+  }, []);
+
+  // Connect to MCP server
+  const {
+    state: mcpState,
+    tools,
+    resources,
+    prompts,
+    error: mcpError,
+    retry: retryMcp,
+    authenticate: authenticateMcp,
+    callTool,
+  } = useMcp({
+    url: mcpUrl,
+    clientName: "Para MCP Server Debug",
+    autoReconnect: true,
+  });
+
+  // Get balance for the selected chain
+  const { data: balance, isLoading: isLoadingBalance, refetch } = useBalance({
+    address,
+    chainId: selectedChainId,
+  });
+
+  const handleRefreshBalance = async () => {
+    await refetch();
+  };
+
+  // Format balance from wei to ETH
+  const formatBalance = (balanceWei: bigint | undefined) => {
+    if (!balanceWei) return "0";
+    const ethBalance = Number(balanceWei) / 1e18;
+    return ethBalance.toFixed(6);
+  };
+
+  const selectedChain = CHAINS.find((c) => c.id === selectedChainId) || CHAINS[0];
+
+  // Handle tool form value changes
+  const handleToolFormChange = (toolName: string, fieldName: string, value: unknown) => {
+    setToolFormValues((prev) => ({
+      ...prev,
+      [toolName]: {
+        ...prev[toolName],
+        [fieldName]: value,
+      },
+    }));
+  };
+
+  // Handle tool call
+  const handleCallTool = async (toolName: string) => {
+    setToolCallResults((prev) => ({
+      ...prev,
+      [toolName]: { loading: true },
+    }));
+
+    try {
+      const formData = toolFormValues[toolName] || {};
+      const result = await callTool(toolName, formData);
+      setToolCallResults((prev) => ({
+        ...prev,
+        [toolName]: { loading: false, result },
+      }));
+    } catch (error) {
+      setToolCallResults((prev) => ({
+        ...prev,
+        [toolName]: {
+          loading: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        },
+      }));
+    }
+  };
+
+  // Render form field based on schema property
+  const renderFormField = (
+    toolName: string,
+    fieldName: string,
+    property: JsonSchemaProperty,
+    isRequired: boolean,
+  ) => {
+    const value = toolFormValues[toolName]?.[fieldName] ?? "";
+
+    if (property.enum) {
+      // Render select for enum fields
+      return (
+        <div key={fieldName} className="space-y-1">
+          <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+            {fieldName}
+            {isRequired && <span className="text-red-500">*</span>}
+            {property.description && (
+              <span className="text-gray-500 dark:text-gray-500 ml-1">
+                ({property.description})
+              </span>
+            )}
+          </label>
+          <select
+            value={String(value)}
+            onChange={(e) => handleToolFormChange(toolName, fieldName, e.target.value)}
+            className="w-full px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            required={isRequired}
+          >
+            <option value="">Select...</option>
+            {property.enum.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+
+    // Render input for string fields
+    return (
+      <div key={fieldName} className="space-y-1">
+        <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+          {fieldName}
+          {isRequired && <span className="text-red-500">*</span>}
+          {property.description && (
+            <span className="text-gray-500 dark:text-gray-500 ml-1">
+              ({property.description})
+            </span>
+          )}
+        </label>
+        <input
+          type={property.format === "uri" ? "url" : "text"}
+          value={String(value)}
+          onChange={(e) => handleToolFormChange(toolName, fieldName, e.target.value)}
+          pattern={property.pattern}
+          placeholder={property.description || fieldName}
+          className="w-full px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          required={isRequired}
+        />
+        {property.pattern && (
+          <div className="text-xs text-gray-500 dark:text-gray-500">
+            Pattern: {property.pattern}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Render form based on input schema
+  const renderToolForm = (tool: { name: string; inputSchema?: unknown }) => {
+    if (!tool.inputSchema) return null;
+
+    try {
+      const schema = tool.inputSchema as JsonSchema;
+      if (schema.type !== "object" || !schema.properties) return null;
+
+      const properties = schema.properties;
+      const required = schema.required || [];
+      const callState = toolCallResults[tool.name];
+
+      return (
+        <div className="mt-3 pt-3 border-t border-gray-300 dark:border-gray-600">
+          <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Call Tool
+          </div>
+          <div className="space-y-2">
+            {Object.entries(properties).map(([fieldName, property]) =>
+              renderFormField(tool.name, fieldName, property, required.includes(fieldName)),
+            )}
+            <button
+              type="button"
+              onClick={() => handleCallTool(tool.name)}
+              disabled={callState?.loading || mcpState !== "ready"}
+              className="w-full mt-2 px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {callState?.loading ? "Calling..." : `Call ${tool.name}`}
+            </button>
+            {callState?.result !== undefined && (() => {
+              // Extract content[0].text if available
+              const result = callState.result as { content?: Array<{ type: string; text: string }> };
+              let displayText = "";
+
+              if (result?.content && Array.isArray(result.content) && result.content.length > 0 && result.content[0]?.text) {
+                const textContent = result.content[0].text;
+                // Try to parse as JSON for pretty printing, fallback to raw text
+                try {
+                  const parsed = JSON.parse(textContent);
+                  displayText = JSON.stringify(parsed, null, 2);
+                } catch {
+                  displayText = textContent;
+                }
+              } else {
+                // Fallback to full result if content structure is different
+                displayText = JSON.stringify(callState.result, null, 2);
+              }
+
+              return (
+                <details className="mt-2">
+                  <summary className="text-xs text-gray-500 dark:text-gray-500 cursor-pointer">
+                    Result
+                  </summary>
+                  <pre className="mt-2 text-xs bg-green-50 dark:bg-green-900/20 p-2 rounded overflow-auto border border-green-200 dark:border-green-800">
+                    {displayText}
+                  </pre>
+                </details>
+              );
+            })()}
+            {callState?.error && (
+              <div className="mt-2 p-2 text-xs bg-red-50 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400">
+                Error: {callState.error}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    } catch (error) {
+      return null;
+    }
+  };
+
+  return (
+    <div className="max-w-xl mx-auto p-6 space-y-4">
+      <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Debug</h1>
+
+      {!isConnected ? (
+        <div className="flex justify-center">
+          <ConnectButton />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <ConnectButton />
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-sm text-gray-600 dark:text-gray-400">Connected address:</div>
+            <div className="font-mono break-all text-gray-900 dark:text-gray-100 text-sm">
+              {address || "Loading..."}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-sm text-gray-600 dark:text-gray-400">Current Chain ID:</div>
+            <div className="font-mono text-gray-900 dark:text-gray-100 text-sm">{chainId}</div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-sm text-gray-600 dark:text-gray-400">Chain:</div>
+            <select
+              value={selectedChainId}
+              onChange={(e) => setSelectedChainId(Number(e.target.value))}
+              className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {CHAINS.map((chain) => (
+                <option key={chain.id} value={chain.id}>
+                  {chain.name} ({chain.id})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                Balance on {selectedChain.name}:
+              </div>
+              <button
+                type="button"
+                onClick={handleRefreshBalance}
+                disabled={isLoadingBalance}
+                className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoadingBalance ? "Refreshing..." : "Refresh"}
+              </button>
+            </div>
+            <div className="font-mono text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {isLoadingBalance ? "Loading..." : `${formatBalance(balance?.value)} ETH`}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="w-full px-4 py-2 rounded bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50"
+            onClick={() => disconnect()}
+          >
+            Disconnect
+          </button>
+        </div>
+      )}
+
+      {/* MCP Tools List - Always visible regardless of wallet connection */}
+      <div className="mt-8 pt-8 border-t border-gray-300 dark:border-gray-600 space-y-4">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+          MCP Server Tools
+        </h2>
+
+        {/* MCP Connection Status */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-600 dark:text-gray-400">MCP Server Status:</div>
+            <div
+              className={`text-sm font-medium ${
+                mcpState === "ready"
+                  ? "text-green-600 dark:text-green-400"
+                  : mcpState === "failed"
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-yellow-600 dark:text-yellow-400"
+              }`}
+            >
+              {mcpState === "ready"
+                ? "Connected"
+                : mcpState === "failed"
+                  ? "Failed"
+                  : mcpState === "connecting" || mcpState === "loading"
+                    ? "Connecting..."
+                    : mcpState === "pending_auth" || mcpState === "authenticating"
+                      ? "Authenticating..."
+                      : "Disconnected"}
+            </div>
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-500 font-mono">
+            {mcpUrl}
+          </div>
+          {mcpError && (
+            <div className="text-sm text-red-600 dark:text-red-400">
+              Error: {mcpError}
+            </div>
+          )}
+          {(mcpState === "failed" || mcpState === "pending_auth") && (
+            <div className="flex gap-2">
+              {mcpState === "failed" && (
+                <button
+                  type="button"
+                  onClick={retryMcp}
+                  className="text-xs px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  Retry Connection
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={authenticateMcp}
+                className="text-xs px-3 py-1 rounded bg-gray-600 text-white hover:bg-gray-700"
+              >
+                Authenticate
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Tools List */}
+        {mcpState === "ready" && (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Available Tools ({tools.length})
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowToolsList(!showToolsList)}
+                  className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                >
+                  {showToolsList ? "Hide" : "Show"}
+                </button>
+              </div>
+              {showToolsList && (
+                <>
+                  {tools.length > 0 ? (
+                    <div className="space-y-2">
+                      {tools.map((tool) => (
+                        <div
+                          key={tool.name}
+                          className="p-3 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                        >
+                          <div className="font-mono text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            {tool.name}
+                          </div>
+                          {tool.description && (
+                            <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                              {tool.description}
+                            </div>
+                          )}
+                          {tool.inputSchema && (
+                            <>
+                              <details className="mt-2">
+                                <summary className="text-xs text-gray-500 dark:text-gray-500 cursor-pointer">
+                                  Input Schema
+                                </summary>
+                                <pre className="mt-2 text-xs bg-gray-100 dark:bg-gray-900 p-2 rounded overflow-auto">
+                                  {JSON.stringify(tool.inputSchema, null, 2)}
+                                </pre>
+                              </details>
+                              {renderToolForm(tool)}
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500 dark:text-gray-500">
+                      No tools available
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Resources List */}
+            {resources.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Available Resources ({resources.length})
+                </div>
+                <div className="space-y-1">
+                  {resources.map((resource) => (
+                    <div
+                      key={resource.uri}
+                      className="p-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                    >
+                      <div className="font-mono text-xs text-gray-900 dark:text-gray-100">
+                        {resource.uri}
+                      </div>
+                      {resource.name && (
+                        <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                          {resource.name}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Prompts List */}
+            {prompts.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Available Prompts ({prompts.length})
+                </div>
+                <div className="space-y-1">
+                  {prompts.map((prompt) => (
+                    <div
+                      key={prompt.name}
+                      className="p-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                    >
+                      <div className="font-mono text-xs font-semibold text-gray-900 dark:text-gray-100">
+                        {prompt.name}
+                      </div>
+                      {prompt.description && (
+                        <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                          {prompt.description}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {mcpState !== "ready" && mcpState !== "failed" && (
+          <div className="text-sm text-gray-500 dark:text-gray-500">
+            Connecting to MCP server...
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <WagmiProvider config={wagmiConfig}>
+      <QueryClientProvider client={queryClient}>
+        <RainbowKitProvider
+          theme={darkTheme({
+            accentColor: "#4E76A9",
+            accentColorForeground: "#fff",
+          })}
+          initialChain={arbitrum}
+        >
+          <ChatInner />
+        </RainbowKitProvider>
+      </QueryClientProvider>
+    </WagmiProvider>
+  );
+}
