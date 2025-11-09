@@ -3,7 +3,7 @@ import { defineConfig } from 'tsdown';
 
 export default defineConfig({
   // Entry point - use glob pattern to include all source files except tests
-  entry: ['src/**/*.ts', '!src/**/*.test.ts'],
+  entry: ['src/**/*.ts', '!src/**/*.test.ts', '!src/cli/templates/**/*.ts'],
 
   // Unbundle mode - preserves directory structure like tsc
   unbundle: true,
@@ -31,8 +31,12 @@ export default defineConfig({
     copy({
       targets: [
         {
-          src: 'src/cli/templates/*',
+          src: 'src/cli/templates/**',
           dest: 'dist/cli/templates',
+        },
+        {
+          src: '.env.example',
+          dest: 'dist',
         },
       ],
       hook: 'writeBundle', // Copy after bundle is written

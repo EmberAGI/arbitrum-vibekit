@@ -319,14 +319,14 @@ describe('Init Command Integration', () => {
       expect(mcp.mcpServers.ember_onchain_actions.type).toBe('http');
     });
 
-    it('should create workflow.json with example workflow', async () => {
+    it('should create workflow.json with sample package workflow', async () => {
       // Given: temp directory
       const tempDir = createTempDir();
 
       // When: running init
       await initCommand({ target: tempDir, yes: true });
 
-      // Then: workflow.json should have example workflow
+      // Then: workflow.json should include the sample workflow entry
       const workflowPath = join(tempDir, 'workflow.json');
       const workflowContent = readFileSync(workflowPath, 'utf-8');
       const workflow = JSON.parse(workflowContent);
@@ -334,26 +334,26 @@ describe('Init Command Integration', () => {
       expect(workflow.workflows).toBeDefined();
       expect(Array.isArray(workflow.workflows)).toBe(true);
       expect(workflow.workflows).toHaveLength(1);
-      expect(workflow.workflows[0]?.id).toBe('example-workflow');
-      expect(workflow.workflows[0]?.from).toBe('./workflows/example-workflow.ts');
+      expect(workflow.workflows[0]?.id).toBe('sample-package-workflow');
+      expect(workflow.workflows[0]?.from).toBe('./workflows/sample-package/src/index.ts');
       expect(workflow.workflows[0]?.enabled).toBe(true);
     });
 
-    it('should create example-workflow.ts with valid TypeScript', async () => {
+    it('should create sample package workflow with valid TypeScript', async () => {
       // Given: temp directory
       const tempDir = createTempDir();
 
       // When: running init
       await initCommand({ target: tempDir, yes: true });
 
-      // Then: example-workflow.ts should exist and contain valid structure
-      const workflowTsPath = join(tempDir, 'workflows', 'example-workflow.ts');
+      // Then: sample package workflow should exist and contain valid structure
+      const workflowTsPath = join(tempDir, 'workflows', 'sample-package', 'src', 'index.ts');
       const workflowTsContent = readFileSync(workflowTsPath, 'utf-8');
 
       expect(workflowTsContent).toContain('import');
       expect(workflowTsContent).toContain('WorkflowPlugin');
       expect(workflowTsContent).toContain('export default plugin');
-      expect(workflowTsContent).toContain("id: 'example-workflow'");
+      expect(workflowTsContent).toContain("id: 'sample-package-workflow'");
     });
   });
 

@@ -48,13 +48,6 @@ const AI_PROVIDERS = {
   },
 } as const;
 
-const DEFAULT_MODEL_PARAMS = {
-  temperature: 0.7,
-  maxTokens: 4096,
-  topP: 1.0,
-  reasoning: 'low',
-} as const;
-
 const DEFAULT_AGENT_VERSION = '1.0.0';
 
 // Chain configurations
@@ -104,610 +97,92 @@ interface InitPromptResponses {
 }
 
 /**
- * Generate agent.md content from collected configuration
+ * Render `agent.md` template with placeholders and ERC-8004 toggle.
  */
-function generateAgentMd(config: InitConfig): string {
-  const erc8004Block = config.enableErc8004
-    ? `
-# ERC-8004 configuration
-erc8004:
-  enabled: true
-  canonical:
-    chainId: ${config.canonicalChain}${config.operatorAddress ? `\n    operatorAddress: '${config.operatorAddress}'` : "\n    # operatorAddress: '0x...' # optional, used to compute canonicalCaip10"}
-  mirrors:${
-    config.mirrorChains.length > 0
-      ? config.mirrorChains.map((chain) => `\n    - { chainId: ${chain} }`).join('')
-      : ' []'
-  }
-  identityRegistries:
-    '1': '0x0000000000000000000000000000000000000000'
-    '8453': '0x0000000000000000000000000000000000000000'
-    '11155111': '0x8004a6090Cd10A7288092483047B097295Fb8847'
-    '42161': '0x0000000000000000000000000000000000000000'
-`
-    : '';
+export function renderAgentMdTemplate(tpl: string, config: InitConfig): string {
+  // Basic replacements
+  const baseMap: Record<string, string> = {
+    __AGENT_NAME__: config.agentName,
+    __AGENT_DESCRIPTION__: config.agentDescription,
+    __AGENT_VERSION__: config.agentVersion,
+    __AGENT_BASE_URL__: config.agentBaseUrl,
+    __AI_PROVIDER__: String(config.aiProvider),
+    __AI_MODEL__: String(config.aiModel),
+    __PROVIDER_NAME__: config.providerName ?? '',
+    __PROVIDER_URL__: config.providerUrl ?? '',
+  };
+  let rendered = tpl.replace(/__([A-Z0-9_]+)__/g, (_m: string, key: string) => {
+    const v = baseMap[`__${key}__`];
+    return v !== undefined ? v : `__${key}__`;
+  });
 
-  return `---
-version: 1
-card:
-  protocolVersion: '0.3.0'
-  name: '${config.agentName}'
-  description: '${config.agentDescription}'
-  url: '${config.agentBaseUrl}/a2a'
-  version: '${config.agentVersion}'
-  capabilities:
-    streaming: true
-    pushNotifications: false${config.providerName ? `\n  provider:\n    name: '${config.providerName}'${config.providerUrl ? `\n    url: '${config.providerUrl}'` : ''}` : ''}
-  defaultInputModes: ['text/plain', 'application/json']
-  defaultOutputModes: ['application/json', 'text/plain']
-
-# Agent-level AI configuration (default for all skills)
-ai:
-  modelProvider: ${config.aiProvider}
-  model: ${config.aiModel}
-  params:
-    temperature: ${DEFAULT_MODEL_PARAMS.temperature}
-    maxTokens: ${DEFAULT_MODEL_PARAMS.maxTokens}
-    topP: ${DEFAULT_MODEL_PARAMS.topP}
-    reasoning: ${DEFAULT_MODEL_PARAMS.reasoning}
-
-# Agent Card hosting configuration
-routing:
-  agentCardPath: '/.well-known/agent-card.json'
-  # agentCardOrigin: 'https://example.com' # optional origin override
-${erc8004Block}---
-
-You are a helpful AI agent with modular skills.
-
-Your primary purpose is to assist users with their requests using the tools and capabilities available to you.
-
-## Core Instructions
-
-- Be helpful, accurate, and concise
-- Use available tools when appropriate
-- Maintain conversation context across messages
-- Follow the specific instructions provided by activated skills
-`;
-}
-
-const SAMPLE_GENERAL_SKILL = `---
-skill:
-  id: general-assistant
-  name: General Assistant
-  description: 'A general-purpose skill for helping users with common tasks'
-  tags: [general, assistant]
-  examples:
-    - 'Help me with a task'
-    - 'Answer my questions'
-    - 'Execute example workflow'
-  inputModes: ['text/plain']
-  outputModes: ['text/plain', 'application/json']
-
-# MCP server integration
-mcp:
-  servers:
-    - name: fetch
-      allowedTools: [fetch_json, fetch_txt, fetch_markdown]
-
-# Workflow integration
-workflows:
-  include: ['example-workflow']
-
-# Optional: Uncomment to override AI model for this skill
-# ai:
-#   modelProvider: openrouter
-#   model: openai/gpt-5
-#   params:
-#     temperature: 0.7
-#     reasoning: low
-
----
-
-You are a general-purpose assistant skill. Your role is to help users accomplish their goals by:
-
-- Answering questions clearly and accurately
-- Breaking down complex tasks into manageable steps
-- Providing helpful suggestions and guidance
-- Using available tools and resources effectively
-- Executing workflows for multi-step operations
-
-When a task requires multiple coordinated steps, you can leverage the example workflow which demonstrates:
-- Status updates and lifecycle management
-- Artifact generation for structured outputs
-- User interaction and confirmation flows
-- Structured result aggregation
-
-Always be helpful, clear, and professional in your responses.
-`;
-
-const SAMPLE_EMBER_SKILL = `---
-skill:
-  id: ember-onchain-actions
-  name: Ember Onchain Actions
-  description: 'Execute blockchain transactions and queries using Ember AI'
-  tags: [blockchain, web3, transactions]
-  examples:
-    - 'Swap tokens on Arbitrum'
-    - 'Check my wallet balance'
-    - 'Bridge assets across chains'
-  inputModes: ['text/plain', 'application/json']
-  outputModes: ['text/plain', 'application/json']
-
-# MCP server integration
-mcp:
-  servers:
-    - name: ember_onchain_actions
-      allowedTools: [createSwap, possibleSwaps]
-# Optional: Uncomment to override AI model for this skill
-# ai:
-#   modelProvider: openrouter
-#   model: openai/gpt-5
-#   params:
-#     temperature: 0.7
-#     reasoning: low
-
----
-
-You are the Ember Onchain Actions skill. Your role is to help users interact with blockchain networks by:
-
-- Executing token swaps and transfers
-- Querying wallet balances and transaction history
-- Bridging assets across different blockchain networks
-- Providing real-time blockchain data and insights
-
-Use the Ember AI MCP server tools to perform blockchain operations safely and efficiently.
-
-When executing transactions:
-- Always confirm transaction details with the user before execution
-- Provide clear explanations of gas fees and expected outcomes
-- Monitor transaction status and provide updates
-- Handle errors gracefully and suggest alternatives when needed
-
-Be precise, security-conscious, and user-friendly in all blockchain interactions.
-`;
-
-const SAMPLE_WORKFLOW_TS = `import {
-  z,
-  type Artifact,
-  type WorkflowContext,
-  type WorkflowPlugin,
-  type WorkflowState,
-} from '@emberai/agent-node/workflow';
-
-const plugin: WorkflowPlugin = {
-  id: 'example-workflow',
-  name: 'Example Workflow',
-  description:
-    'A comprehensive workflow example demonstrating A2A patterns, pause/resume, multiple artifacts, and lifecycle management',
-  version: '1.0.0',
-
-  inputSchema: z.object({
-    message: z.string().optional(),
-    count: z.number().int().positive().optional().default(1),
-  }),
-
-  async *execute(context: WorkflowContext): AsyncGenerator<WorkflowState, unknown, unknown> {
-    const { message = 'Hello from example workflow!', count = 1 } = context.parameters ?? {};
-
-    // Status: Starting workflow
-    yield {
-      type: 'status-update',
-      message: 'Starting example workflow processing...',
-    };
-
-    // Artifact 1: Initial configuration summary
-    const configArtifact: Artifact = {
-      artifactId: 'config-summary',
-      name: 'config-summary.json',
-      description: 'Workflow configuration and parameters',
-      parts: [
-        {
-          kind: 'text',
-          text: JSON.stringify({
-            workflowId: context.taskId,
-            message,
-            count,
-            startedAt: new Date().toISOString(),
-          }),
-        },
-      ],
-    };
-    yield { type: 'artifact', artifact: configArtifact };
-
-    // Simulate some work
-    for (let i = 0; i < (count as number); i++) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+  // Provider block toggle
+  {
+    const PROVIDER_BLOCK =
+      /^[ \t]*#\s*PROVIDER:START[^\n]*\n([\s\S]*?)^[ \t]*#\s*PROVIDER:END[^\n]*\n?/m;
+    if (config.providerName) {
+      rendered = rendered.replace(PROVIDER_BLOCK, (_m: string, inner: string) => {
+        let block = inner;
+        if (!config.providerUrl) {
+          block = block.replace(/^[ \t]*url:\s*['"].*?['"].*\n/m, '');
+        }
+        return block;
+      });
+    } else {
+      rendered = rendered.replace(PROVIDER_BLOCK, '');
     }
-
-    // Artifact 2: Processing result
-    const processingArtifact: Artifact = {
-      artifactId: 'processing-result',
-      name: 'processing-result.json',
-      description: 'Intermediate processing results',
-      parts: [
-        {
-          kind: 'text',
-          text: JSON.stringify({
-            status: 'processed',
-            iterations: count,
-            processedAt: new Date().toISOString(),
-          }),
-        },
-      ],
-    };
-    yield { type: 'artifact', artifact: processingArtifact };
-
-    // Pause for user confirmation
-    const userInput = (yield {
-      type: 'interrupted',
-      reason: 'input-required',
-      message: 'Please confirm to proceed with final step',
-      inputSchema: z.object({
-        confirmed: z.boolean(),
-        notes: z.string().optional(),
-        timestamp: z
-          .string()
-          .regex(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}/, 'Must be ISO 8601 timestamp format')
-          .optional(),
-      }),
-    }) as { confirmed?: boolean; notes?: string; timestamp?: string } | undefined;
-
-    // Continue after confirmation
-    yield {
-      type: 'status-update',
-      message: 'Finalizing workflow...',
-    };
-
-    // Artifact 3: Final result with user confirmation
-    const finalArtifact: Artifact = {
-      artifactId: 'final-result',
-      name: 'final-result.json',
-      description: 'Final workflow result including user confirmation',
-      parts: [
-        {
-          kind: 'text',
-          text: JSON.stringify({
-            message,
-            count,
-            confirmed: userInput?.confirmed ?? false,
-            userNotes: userInput?.notes,
-            userTimestamp: userInput?.timestamp,
-            completedAt: new Date().toISOString(),
-          }),
-        },
-      ],
-    };
-    yield { type: 'artifact', artifact: finalArtifact };
-
-    // Final status
-    yield {
-      type: 'status-update',
-      message: 'Workflow completed successfully',
-    };
-
-    // Return structured result
-    return {
-      success: true,
-      workflowId: context.taskId,
-      message,
-      count,
-      userConfirmed: userInput?.confirmed ?? false,
-      artifactsGenerated: 3,
-      completedAt: new Date().toISOString(),
-    };
-  },
-};
-
-export default plugin;
-`;
-
-const SAMPLE_PACKAGE_WORKFLOW_TS = `import {
-  z,
-  type WorkflowContext,
-  type WorkflowPlugin,
-  type WorkflowState,
-} from '@emberai/agent-node/workflow';
-
-const plugin: WorkflowPlugin = {
-  id: 'sample-package',
-  name: 'Sample Package Workflow',
-  description: 'A sample workflow demonstrating per-workflow dependencies',
-  version: '1.0.0',
-
-  inputSchema: z.object({
-    message: z.string().optional().default('Hello from sample-package!'),
-  }),
-
-  async *execute(context: WorkflowContext): AsyncGenerator<WorkflowState, unknown, unknown> {
-    const { message } = context.parameters ?? { message: 'Hello from sample-package!' };
-
-    yield {
-      type: 'status-update',
-      message: 'Processing with package dependencies...',
-    };
-
-    // This workflow can have its own dependencies via package.json
-    // For example: lodash, axios, date-fns, etc.
-
-    yield {
-      type: 'status-update',
-      message: 'Workflow completed',
-    };
-
-    return {
-      success: true,
-      message,
-      note: 'This workflow has its own node_modules directory',
-    };
-  },
-};
-
-export default plugin;
-`;
-
-const SAMPLE_PACKAGE_JSON = `{
-  "name": "sample-package-workflow",
-  "version": "1.0.0",
-  "type": "module",
-  "main": "src/index.ts",
-  "dependencies": {
-    "zod": "^3.24.1"
   }
-}
-`;
 
-const SAMPLE_SIMPLE_WORKFLOW_JS = `/**
- * Simple JavaScript workflow without package.json
- * Demonstrates that workflows don't need dependencies
+  // ERC-8004 block handling
+  if (config.enableErc8004) {
+    const mirrors =
+      config.mirrorChains.length > 0
+        ? config.mirrorChains.map((c) => `- { chainId: ${c} }`).join('\n    ')
+        : '[]';
+
+    const operatorLine = config.operatorAddress
+      ? `operatorAddress: '${config.operatorAddress}'`
+      : `## operatorAddress: '0x...' # optional, used to compute canonicalCaip10`;
+
+    // Fill ERC placeholders inside commented block
+    rendered = rendered
+      .replace(/__ERC8004_CANONICAL_CHAIN__/g, String(config.canonicalChain))
+      .replace(/__ERC8004_MIRRORS__/g, mirrors)
+      .replace(/__OPERATOR_ADDRESS_LINE__/g, operatorLine);
+
+    // Uncomment lines within ERC8004 block by removing a single leading "# " or "#"
+    rendered = rendered.replace(
+      /^[ \t]*#\s*ERC8004:START[^\n]*\n([\s\S]*?)^[ \t]*#\s*ERC8004:END[^\n]*\n?/m,
+      (_m: string, inner: string) => {
+        const uncommented = inner
+          .split('\n')
+          .map((line: string) => line.replace(/^[ \t]*# ?/, ''))
+          .join('\n');
+        return `${uncommented}`;
+      },
+    );
+  } else {
+    // Leave the commented block for discoverability
+  }
+
+  return rendered;
+}
+
+/**
+ * Remove TypeScript suppression comments from template content.
  */
-
-const plugin = {
-  id: 'simple-script',
-  name: 'Simple Script',
-  description: 'A simple workflow without dependencies',
-  version: '1.0.0',
-
-  inputSchema: null, // No validation needed
-
-  async *execute(context) {
-    yield {
-      type: 'status-update',
-      message: 'Hello from simple-script!',
-    };
-
-    return {
-      success: true,
-      message: 'This workflow has no dependencies',
-    };
-  },
-};
-
-export default plugin;
-`;
-
-const SAMPLE_MANIFEST = `{
-  "version": 1,
-  "skills": [
-    "./skills/general-assistant.md",
-    "./skills/ember-onchain-actions.md"
-  ],
-  "registries": {
-    "mcp": "./mcp.json",
-    "workflows": "./workflow.json"
-  },
-  "merge": {
-    "card": {
-      "capabilities": "union",
-      "toolPolicies": "intersect",
-      "guardrails": "tightest"
-    }
-  }
+function stripTsSuppressions(content: string): string {
+  return content
+    .replace(/^[ \t]*\/\/[ \t]*@ts-ignore.*\n/gm, '')
+    .replace(/^[ \t]*\/\/[ \t]*@ts-expect-error.*\n/gm, '');
 }
-`;
 
-const SAMPLE_MCP_JSON = `{
-  "mcpServers": {
-    "fetch": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["mcp-fetch-server"],
-      "env": {
-        "DEFAULT_LIMIT": "50000"
-      }
-    },
-    "ember_onchain_actions": {
-      "type": "http",
-      "url": "https://api.emberai.xyz/mcp",
-      "headers": {
-        "X-Ember-Api-Version": "current"
-      }
-    }
-  }
+/**
+ * Helper to load template files relative to this module URL.
+ */
+function loadTemplate(rel: string): string {
+  return readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf-8');
 }
-`;
-
-const SAMPLE_WORKFLOW_JSON = `{
-  "workflows": [
-    {
-      "id": "example-workflow",
-      "from": "./workflows/example-workflow.ts",
-      "enabled": true,
-      "config": {
-        "mode": "default"
-      }
-    }
-  ]
-}
-`;
-
-const SAMPLE_README = `# Agent Configuration
-
-This directory contains the config workspace for your agent.
-
-## Structure
-
-- \`agent.md\` - Agent base with A2A card and system prompt
-- \`agent.manifest.json\` - Skill ordering and merge policies
-- \`skills/\` - Individual skill markdown files
-- \`mcp.json\` - MCP server registry
-- \`workflow.json\` - Workflow plugin registry
-- \`workflows/\` - Custom workflow plugin implementations
-
-## Usage
-
-### Development
-
-Start the server with hot reload:
-
-\`\`\`bash
-NODE_ENV=development pnpm start
-\`\`\`
-
-### Print Configuration
-
-View the composed configuration:
-
-\`\`\`bash
-npx -y @emberai/agent-node print-config
-\`\`\`
-
-### Validate Configuration
-
-Check for errors and conflicts:
-
-\`\`\`bash
-npx -y @emberai/agent-node doctor
-\`\`\`
-
-## Environment Variables
-
-MCP servers may reference environment variables using the \`$env:VAR_NAME\` syntax in their configuration. For example:
-
-\`\`\`json
-{
-  "mcpServers": {
-    "my_server": {
-      "type": "http",
-      "url": "https://api.example.com/mcp",
-      "headers": {
-        "Authorization": "Bearer $env:MY_API_KEY"
-      }
-    }
-  }
-}
-\`\`\`
-
-Add required variables to your \`.env\` file:
-
-\`\`\`bash
-MY_API_KEY=your-api-key-here
-\`\`\`
-
-## Adding Skills
-
-1. Create a new skill file in \`skills/\` directory
-2. Add the skill path to \`agent.manifest.json\` skills array
-3. The skill will be automatically composed into the agent
-
-Example skill structure:
-
-\`\`\`yaml
----
-skill:
-  id: my-skill
-  name: My Skill
-  description: 'What this skill does'
-  mcp:
-    servers:
-      - name: fetch
-        allowedTools: [fetch__fetch_json]
-  workflows:
-    include: ['example-workflow']
----
-
-You are the My Skill. You specialize in...
-\`\`\`
-
-## Adding MCP Servers
-
-1. Add server configuration to \`mcp.json\`
-2. Reference the server in skill frontmatter MCP config
-3. Allowed tools can be scoped per skill
-
-Supported transport types:
-
-- **stdio**: Local process communication (e.g., \`npx mcp-fetch-server\`)
-- **http**: Remote HTTP servers (e.g., \`https://api.emberai.xyz/mcp\`)
-
-## Adding Workflows
-
-1. Create a workflow plugin in \`workflows/\` directory
-2. Add workflow entry to \`workflow.json\`
-3. Reference the workflow in skill frontmatter workflow config
-
-Example workflow plugin (TypeScript ESM):
-
-\`\`\`typescript
-import { z, type WorkflowPlugin } from '@emberai/agent-node/workflow';
-
-const plugin: WorkflowPlugin = {
-  id: 'my-workflow',
-  name: 'My Workflow',
-  description: 'What this workflow does',
-  version: '1.0.0',
-  inputSchema: z.object({ /* ... */ }),
-  async *execute(context) {
-    // Yield status updates and artifacts
-    yield { type: 'status-update', message: 'Processing...' };
-    yield { type: 'artifact', artifact: /* ... */ };
-
-    // Optionally pause for user input
-    const input = yield { type: 'interrupted', reason: 'input-required', message: /* ... */, inputSchema: /* ... */ };
-
-    return { success: true };
-  },
-};
-
-export default plugin;
-\`\`\`
-
-The included \`example-workflow\` demonstrates:
-- Status updates and lifecycle management
-- Multiple artifact generation
-- User confirmation pauses with schema validation
-
-## Tool Naming Convention
-
-All MCP tools follow the canonical naming format:
-
-- **Format**: \`server_name__tool_name\` (double underscore separator)
-- **Allowed characters**: lowercase letters (a-z), digits (0-9), underscores (_)
-- **Example**: \`fetch__fetch_json\`, \`ember_onchain_actions__swap_tokens\`
-
-Tool names must be unique across all MCP servers.
-
-## Troubleshooting
-
-### Hot Reload Not Working
-
-- Ensure you started with \`NODE_ENV=development pnpm start\`
-- Check file watcher permissions
-- Verify no syntax errors in modified files
-
-### MCP Server Connection Failed
-
-- Check server command is installed (\`npx\` packages)
-- Verify environment variables are set
-- Check server logs for errors
-- For HTTP servers, verify URL is accessible
-
-### Workflow Not Found
-
-- Ensure workflow is listed in \`workflow.json\`
-- Verify \`enabled: true\` in workflow entry
-- Check skill includes workflow ID in \`workflows.include\`
-- Verify workflow plugin exports default
-`;
 
 export async function initCommand(options: InitOptions = {}): Promise<void> {
   try {
@@ -929,36 +404,55 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
     mkdirSync(resolve(targetDir, 'skills'), { recursive: true });
     mkdirSync(resolve(targetDir, 'workflows'), { recursive: true });
 
-    // Write files using generated content
-    writeFileSync(resolve(targetDir, 'agent.md'), generateAgentMd(config));
-    writeFileSync(resolve(targetDir, 'agent.manifest.json'), SAMPLE_MANIFEST);
-    writeFileSync(resolve(targetDir, 'mcp.json'), SAMPLE_MCP_JSON);
-    writeFileSync(resolve(targetDir, 'workflow.json'), SAMPLE_WORKFLOW_JSON);
-    writeFileSync(resolve(targetDir, 'README.md'), SAMPLE_README);
-    writeFileSync(resolve(targetDir, 'skills', 'general-assistant.md'), SAMPLE_GENERAL_SKILL);
-    writeFileSync(resolve(targetDir, 'skills', 'ember-onchain-actions.md'), SAMPLE_EMBER_SKILL);
+    // Write files from templates
+    const agentTemplate = loadTemplate('../templates/config-workspace/agent.md');
+    const agentMd = renderAgentMdTemplate(agentTemplate, config);
+    writeFileSync(resolve(targetDir, 'agent.md'), agentMd);
 
-    // Create new workflow structure
-    // 1. sample-package/ with package.json and src/index.ts
+    writeFileSync(
+      resolve(targetDir, 'agent.manifest.json'),
+      loadTemplate('../templates/config-workspace/agent.manifest.json'),
+    );
+    writeFileSync(
+      resolve(targetDir, 'mcp.json'),
+      loadTemplate('../templates/config-workspace/mcp.json'),
+    );
+    writeFileSync(
+      resolve(targetDir, 'workflow.json'),
+      loadTemplate('../templates/config-workspace/workflow.json'),
+    );
+    writeFileSync(
+      resolve(targetDir, 'README.md'),
+      loadTemplate('../templates/config-workspace/README.md'),
+    );
+    writeFileSync(
+      resolve(targetDir, 'skills', 'general-assistant.md'),
+      loadTemplate('../templates/config-workspace/skills/general-assistant.md'),
+    );
+    writeFileSync(
+      resolve(targetDir, 'skills', 'ember-onchain-actions.md'),
+      loadTemplate('../templates/config-workspace/skills/ember-onchain-actions.md'),
+    );
+    // Workflow samples
     mkdirSync(resolve(targetDir, 'workflows', 'sample-package', 'src'), { recursive: true });
-    writeFileSync(
-      resolve(targetDir, 'workflows', 'sample-package', 'package.json'),
-      SAMPLE_PACKAGE_JSON,
-    );
-    writeFileSync(
-      resolve(targetDir, 'workflows', 'sample-package', 'src', 'index.ts'),
-      SAMPLE_PACKAGE_WORKFLOW_TS,
-    );
-
-    // 2. simple-script/ with hello.js
     mkdirSync(resolve(targetDir, 'workflows', 'simple-script'), { recursive: true });
     writeFileSync(
-      resolve(targetDir, 'workflows', 'simple-script', 'hello.js'),
-      SAMPLE_SIMPLE_WORKFLOW_JS,
+      resolve(targetDir, 'workflows', 'sample-package', 'package.json'),
+      loadTemplate('../templates/config-workspace/workflows/sample-package/package.json'),
     );
-
-    // 3. Keep example-workflow.ts for backward compatibility
-    writeFileSync(resolve(targetDir, 'workflows', 'example-workflow.ts'), SAMPLE_WORKFLOW_TS);
+    {
+      const sampleIndex = loadTemplate(
+        '../templates/config-workspace/workflows/sample-package/src/index.ts',
+      );
+      writeFileSync(
+        resolve(targetDir, 'workflows', 'sample-package', 'src', 'index.ts'),
+        stripTsSuppressions(sampleIndex),
+      );
+    }
+    writeFileSync(
+      resolve(targetDir, 'workflows', 'simple-script', 'hello.js'),
+      loadTemplate('../templates/config-workspace/workflows/simple-script/hello.js'),
+    );
 
     cliOutput.success('Created `agent.md`');
     cliOutput.success('Created `agent.manifest.json`');
@@ -969,9 +463,8 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
     cliOutput.success('Created `skills/general-assistant.md`');
     cliOutput.success('Created `skills/ember-onchain-actions.md`');
     cliOutput.success('Created `workflows/` directory');
-    cliOutput.success('Created `workflows/sample-package/` (with package.json)');
-    cliOutput.success('Created `workflows/simple-script/hello.js`');
-    cliOutput.success('Created `workflows/example-workflow.ts` (legacy)');
+    cliOutput.success('Created `workflows/sample-package/` TypeScript workflow');
+    cliOutput.success('Created `workflows/simple-script/` JavaScript workflow');
 
     // Handle .env file
     const envPath = resolve(dirname(targetDir), '.env');

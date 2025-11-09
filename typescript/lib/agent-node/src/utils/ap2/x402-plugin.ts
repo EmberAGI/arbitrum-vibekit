@@ -1,33 +1,43 @@
-import { z } from 'zod';
+import type { PaymentRequirements } from 'x402/types';
 
 import type { WorkflowState } from '../../workflow/types.js';
+import { X402_REQUIREMENTS_KEY, X402_STATUS_KEY } from '../../workflow/x402-types.js';
 
 /**
- * Placeholder for payment request functionality
- * This will be implemented when AP2 protocol support is added
+ * Creates a payment required workflow state message for x402 payment requests.
+ * Plugin developers can use this helper to request payment for agent tools.
+ *
+ * When yielded, the workflow will pause and wait for payment. After payment is validated,
+ * the generator receives a PaymentSettlement object with a settlePayment() method.
+ *
+ * @param message - Human-readable message explaining why payment is required
+ * @param requirements - Payment requirements specification from x402/types
+ * @returns WorkflowState object with payment-required type
+ *
+ * @example
+ * ```typescript
+ * const settlement = (yield requirePaymentMessage(
+ *   'Payment required to execute trade',
+ *   paymentRequirements
+ * )) as PaymentSettlement;
+ *
+ * // After payment is validated, settle it
+ * await settlement.settlePayment();
+ * ```
  */
 export function requirePaymentMessage(
   message: string,
-  _requirements: unknown,
+  requirements: PaymentRequirements,
 ): WorkflowState {
-  // Placeholder implementation - returns an interrupted state for payment
-  // Using z.object({}) as a placeholder schema until AP2 protocol is implemented
   return {
-    type: 'interrupted',
-    reason: 'auth-required',
-    message: message,
-    inputSchema: z.object({
-      // TODO: Implement proper payment schema when AP2 protocol is added
-      placeholder: z.string().optional(),
-    }),
+    type: 'payment-required',
+    message,
+    metadata: {
+      [X402_STATUS_KEY]: 'payment-required',
+      [X402_REQUIREMENTS_KEY]: {
+        x402Version: 1,
+        accepts: [requirements],
+      },
+    },
   };
-}
-
-// Payment settlement type placeholder
-export interface PaymentSettlement {
-  payer: string;
-  amount: string;
-  currency: string;
-  transactionHash?: string;
-  settlePayment: (message: string, debug?: boolean) => Promise<WorkflowState>;
 }
