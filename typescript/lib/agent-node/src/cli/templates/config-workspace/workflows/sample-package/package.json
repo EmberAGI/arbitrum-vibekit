@@ -2,5 +2,8 @@
   "name": "sample-workflow-package",
   "version": "1.0.0",
   "type": "module",
-  "main": "src/index.ts"
+  "main": "src/index.ts",
+  "dependencies": {
+    "@emberai/agent-node": "^1.0.0"
+  }
 }
