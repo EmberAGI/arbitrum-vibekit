@@ -19,7 +19,7 @@ mcp:
 
 # Workflow integration
 workflows:
-  include: ['example-workflow']
+  include: ['sample-package-workflow']
 # Optional: Uncomment to override AI model for this skill
 # ai:
 #   modelProvider: openrouter
