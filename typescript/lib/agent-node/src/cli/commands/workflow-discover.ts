@@ -23,9 +23,7 @@ export interface WorkflowDiscoverOptions {
   disabled?: boolean;
 }
 
-export function workflowDiscoverCommand(
-  options: WorkflowDiscoverOptions = {},
-): void {
+export function workflowDiscoverCommand(options: WorkflowDiscoverOptions = {}): void {
   const { configDir } = resolveConfigDirectory(options.configDir);
   const workflowsDir = resolve(configDir, 'workflows');
   const workflowRegistryPath = resolve(configDir, 'workflow.json');

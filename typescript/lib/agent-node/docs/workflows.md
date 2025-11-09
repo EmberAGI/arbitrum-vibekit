@@ -278,6 +278,7 @@ workflows/
 **Symptom**: "Workflow 'x' not found" error
 
 **Solutions**:
+
 - Verify workflow directory has a valid entry point
 - Check `workflow.json` if using explicit registry
 - Ensure workflow is referenced in skill `workflows.include`
@@ -287,6 +288,7 @@ workflows/
 **Symptom**: "Cannot find module 'xyz'" error
 
 **Solutions**:
+
 - Run `agent workflow install --all` to install dependencies
 - Check `package.json` includes the missing module
 - Verify `node_modules` directory exists in workflow folder
@@ -296,6 +298,7 @@ workflows/
 **Symptom**: Relative imports failing
 
 **Solutions**:
+
 - Use `.js` extensions for relative imports (ESM requirement)
 - Verify `type: "module"` in package.json
 - Check jiti is resolving from workflow directory
@@ -305,6 +308,7 @@ workflows/
 **Symptom**: Lock file conflicts in CI
 
 **Solutions**:
+
 - Use `--frozen-lockfile` in CI
 - Commit `pnpm-lock.yaml` files for each workflow
 - Ensure workflows are outside workspace globs
@@ -314,16 +318,19 @@ workflows/
 ### From Flat Files to Packages
 
 1. **Create workflow directory**:
+
    ```bash
    mkdir -p config/workflows/my-workflow/src
    ```
 
 2. **Move existing file**:
+
    ```bash
    mv config/workflows/my-workflow.ts config/workflows/my-workflow/src/index.ts
    ```
 
 3. **Add package.json** (if dependencies needed):
+
    ```json
    {
      "name": "my-workflow",
@@ -334,6 +341,7 @@ workflows/
    ```
 
 4. **Install dependencies**:
+
    ```bash
    agent workflow install my-workflow
    ```

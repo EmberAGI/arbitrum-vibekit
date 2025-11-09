@@ -79,7 +79,9 @@ describe('workflow-install command', () => {
       const promise = workflowInstallCommand(workflowName, { configDir });
 
       // Then it throws with helpful error
-      await expect(promise).rejects.toThrow(`Workflow "${workflowName}" not found or not installable`);
+      await expect(promise).rejects.toThrow(
+        `Workflow "${workflowName}" not found or not installable`,
+      );
       expect(mockCliOutput.error).toHaveBeenCalledWith(
         `Workflow "${workflowName}" not found or not installable`,
       );
@@ -247,9 +249,7 @@ describe('workflow-install command', () => {
 
       // Then it attempts both installations
       expect(mockSpawn).toHaveBeenCalledTimes(2);
-      expect(mockCliOutput.error).toHaveBeenCalledWith(
-        expect.stringContaining('✗ workflow-1'),
-      );
+      expect(mockCliOutput.error).toHaveBeenCalledWith(expect.stringContaining('✗ workflow-1'));
       expect(mockCliOutput.success).toHaveBeenCalledWith('    ✓ workflow-2');
     });
 
@@ -326,9 +326,7 @@ describe('workflow-install command', () => {
       let callCount3 = 0;
       mockSpawn.mockImplementation(() => {
         callCount3++;
-        return callCount3 === 1
-          ? createMockChildProcess(0)
-          : createMockChildProcess(1);
+        return callCount3 === 1 ? createMockChildProcess(0) : createMockChildProcess(1);
       });
 
       // When installing all workflows

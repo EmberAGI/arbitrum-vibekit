@@ -15,7 +15,6 @@ import {
   mergeWorkflows,
 } from './workflow-discovery.js';
 
-
 describe('workflow-discovery', () => {
   let testDir: string;
   let workflowsDir: string;
@@ -60,10 +59,7 @@ describe('workflow-discovery', () => {
       // Given a workflow with package.json defining main field
       const workflowDir = join(workflowsDir, 'package-workflow');
       mkdirSync(workflowDir, { recursive: true });
-      writeFileSync(
-        join(workflowDir, 'package.json'),
-        JSON.stringify({ main: 'lib/entry.js' }),
-      );
+      writeFileSync(join(workflowDir, 'package.json'), JSON.stringify({ main: 'lib/entry.js' }));
       mkdirSync(join(workflowDir, 'lib'), { recursive: true });
       writeFileSync(join(workflowDir, 'lib', 'entry.js'), 'export default {}');
 
@@ -206,10 +202,7 @@ describe('workflow-discovery', () => {
 
       const workflow2 = join(workflowsDir, 'workflow-2');
       mkdirSync(workflow2);
-      writeFileSync(
-        join(workflow2, 'package.json'),
-        JSON.stringify({ main: 'dist/main.js' }),
-      );
+      writeFileSync(join(workflow2, 'package.json'), JSON.stringify({ main: 'dist/main.js' }));
       mkdirSync(join(workflow2, 'dist'));
       writeFileSync(join(workflow2, 'dist', 'main.js'), 'export default {}');
 
@@ -222,7 +215,7 @@ describe('workflow-discovery', () => {
 
       // Then it discovers all workflows
       expect(result).toHaveLength(3);
-      const ids = result.map(w => w.id).sort();
+      const ids = result.map((w) => w.id).sort();
       expect(ids).toEqual(['workflow-1', 'workflow-2', 'workflow-3']);
     });
   });
@@ -232,10 +225,7 @@ describe('workflow-discovery', () => {
       // Given a workflow with package.json main and other entry points
       const workflowDir = join(workflowsDir, 'test-workflow');
       mkdirSync(workflowDir, { recursive: true });
-      writeFileSync(
-        join(workflowDir, 'package.json'),
-        JSON.stringify({ main: 'custom/entry.js' }),
-      );
+      writeFileSync(join(workflowDir, 'package.json'), JSON.stringify({ main: 'custom/entry.js' }));
       mkdirSync(join(workflowDir, 'custom'), { recursive: true });
       writeFileSync(join(workflowDir, 'custom', 'entry.js'), 'export default {}');
       writeFileSync(join(workflowDir, 'index.ts'), 'export default {}'); // Should be ignored
@@ -501,7 +491,7 @@ describe('workflow-discovery', () => {
       const result = mergeWorkflows(registryWorkflows, discovered);
 
       // Then registry takes precedence for shared workflows
-      const sharedWorkflow = result.find(w => w.id === 'shared-workflow');
+      const sharedWorkflow = result.find((w) => w.id === 'shared-workflow');
       expect(sharedWorkflow).toEqual({
         id: 'shared-workflow',
         from: 'registry/path.ts',
@@ -510,7 +500,7 @@ describe('workflow-discovery', () => {
 
       // And both unique workflows are included
       expect(result).toHaveLength(3);
-      const ids = result.map(w => w.id).sort();
+      const ids = result.map((w) => w.id).sort();
       expect(ids).toEqual(['discovered-only', 'registry-only', 'shared-workflow']);
     });
 
