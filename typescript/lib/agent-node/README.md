@@ -70,7 +70,7 @@ config-workspace/
 ├── mcp.json                 # MCP server registry
 ├── workflow.json            # Workflow registry
 └── workflows/               # Custom workflow implementations
-    └── example-workflow.ts
+    └── sample-package-workflow.ts
 ```
 
 ### Configuration Files
@@ -174,8 +174,8 @@ Workflow plugin registry:
 {
   "workflows": [
     {
-      "id": "example-workflow",
-      "from": "./workflows/example-workflow.ts",
+      "id": "sample-package-workflow",
+      "from": "./workflows/sample-package-workflow.ts",
       "enabled": true,
       "config": {
         "mode": "default"
@@ -187,7 +187,7 @@ Workflow plugin registry:
 
 #### Workflows (`workflows/*.ts`)
 
-Custom workflow implementations. Workflows are multi-step operations that manage A2A Task lifecycles (same concept as [Anthropic's workflows](https://www.anthropic.com/engineering/building-effective-agents)). The `init` command creates an `example-workflow.ts` demonstrating status updates, artifacts, and user confirmation. For detailed workflow documentation, see the [Workflows](#workflows) section under Core Concepts.
+Custom workflow implementations. Workflows are multi-step operations that manage A2A Task lifecycles (same concept as [Anthropic's workflows](https://www.anthropic.com/engineering/building-effective-agents)). The `init` command creates a `sample-package-workflow.ts` demonstrating status updates, artifacts, and user confirmation. For detailed workflow documentation, see the [Workflows](#workflows) section under Core Concepts.
 
 #### Validate Your Configuration
 

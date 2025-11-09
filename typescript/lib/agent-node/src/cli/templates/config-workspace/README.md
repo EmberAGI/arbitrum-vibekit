@@ -80,7 +80,7 @@ skill:
       - name: fetch
         allowedTools: [fetch__fetch_json]
   workflows:
-    include: ['example-workflow']
+    include: ['sample-package-workflow']
 ---
 You are the My Skill. You specialize in...
 ```
@@ -128,7 +128,7 @@ const plugin: WorkflowPlugin = {
 export default plugin;
 ```
 
-The included `example-workflow` demonstrates:
+The included `sample-package-workflow` demonstrates:
 
 - Status updates and lifecycle management
 - Multiple artifact generation
