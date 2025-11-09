@@ -55,7 +55,11 @@ describe('Init Command Integration', () => {
       expect(existsSync(join(tempDir, 'skills', 'general-assistant.md'))).toBe(true);
       expect(existsSync(join(tempDir, 'skills', 'ember-onchain-actions.md'))).toBe(true);
       expect(existsSync(join(tempDir, 'workflows'))).toBe(true);
-      expect(existsSync(join(tempDir, 'workflows', 'example-workflow.ts'))).toBe(true);
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package'))).toBe(true);
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package', 'src', 'index.ts'))).toBe(
+        true,
+      );
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package', 'package.json'))).toBe(true);
     });
 
     it('should create .env file in parent directory', async () => {
@@ -311,7 +315,7 @@ describe('Init Command Integration', () => {
       expect(mcp.mcpServers.ember_onchain_actions.type).toBe('http');
     });
 
-    it('should create workflow.json with example workflow', async () => {
+    it('should create workflow.json with sample package workflow', async () => {
       // Given: temp directory
       const tempDir = createTempDir();
 
@@ -326,20 +330,20 @@ describe('Init Command Integration', () => {
       expect(workflow.workflows).toBeDefined();
       expect(Array.isArray(workflow.workflows)).toBe(true);
       expect(workflow.workflows).toHaveLength(1);
-      expect(workflow.workflows[0]?.id).toBe('example-workflow');
-      expect(workflow.workflows[0]?.from).toBe('./workflows/example-workflow.ts');
+      expect(workflow.workflows[0]?.id).toBe('sample-package-workflow');
+      expect(workflow.workflows[0]?.from).toBe('./workflows/sample-package/src/index.ts');
       expect(workflow.workflows[0]?.enabled).toBe(true);
     });
 
-    it('should create example-workflow.ts with valid TypeScript', async () => {
+    it('should create sample package workflow with valid TypeScript', async () => {
       // Given: temp directory
       const tempDir = createTempDir();
 
       // When: running init
       await initCommand({ target: tempDir, yes: true });
 
-      // Then: example-workflow.ts should exist and contain valid structure
-      const workflowTsPath = join(tempDir, 'workflows', 'example-workflow.ts');
+      // Then: sample package workflow should exist and contain valid structure
+      const workflowTsPath = join(tempDir, 'workflows', 'sample-package', 'src', 'index.ts');
       const workflowTsContent = readFileSync(workflowTsPath, 'utf-8');
 
       expect(workflowTsContent).toContain('import');

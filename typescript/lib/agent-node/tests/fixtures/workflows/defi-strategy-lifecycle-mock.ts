@@ -295,15 +295,17 @@ const plugin: WorkflowPlugin = {
 
     // Return structured result
     return {
-      success: true,
-      workflowId: context.taskId,
-      intent,
-      walletAddress: walletAmountInput.walletAddress,
-      amount: walletAmountInput.amount,
-      chainId,
-      delegationsSigned: signedDelegationsInput.delegations.length,
-      artifactsGenerated: 9,
-      completedAt: new Date('2025-01-15T10:02:00.000Z').toISOString(),
+      data: {
+        success: true,
+        workflowId: context.taskId,
+        intent,
+        walletAddress: walletAmountInput.walletAddress,
+        amount: walletAmountInput.amount,
+        chainId,
+        delegationsSigned: signedDelegationsInput.delegations.length,
+        artifactsGenerated: 9,
+        completedAt: new Date('2025-01-15T10:02:00.000Z').toISOString(),
+      },
     };
   },
 };

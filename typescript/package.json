@@ -29,7 +29,7 @@
     "start:anvil": "pnpm run lint:require-submodule && npx tsx test/start-anvil.ts",
     "start:mainnet": "pnpm run lint:require-submodule && npx tsx test/start-mainnet.ts",
     "release": "multi-semantic-release --sequential --packages \"lib/ember-plugin-registry\" --ignore-private-packages",
-    "sync:rules": "cd .. && npx rulesync generate"
+    "sync:rules": "cd .. && pnpm exec rulesync generate"
   },
   "keywords": [],
   "author": "",
@@ -68,7 +68,7 @@
     "prettier": "^3.5.3",
     "prool": "^0.0.24",
     "rimraf": "^6.0.1",
-    "rulesync": "^2.2.0",
+    "rulesync": "^3.14.0",
     "semantic-release": "^24.2.7",
     "tsx": "^4.6.2",
     "typescript": "^5.8.3",

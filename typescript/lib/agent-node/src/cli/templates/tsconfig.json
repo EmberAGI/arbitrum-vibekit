@@ -1,0 +1,14 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "tsBuildInfoFile": "./.tsbuildinfo",
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "paths": {
+      "@emberai/agent-node/workflow": ["./.lint/workflow-module.d.ts"]
+    }
+  },
+  "include": ["./**/*.ts", "./.lint/**/*.ts"],
+  "exclude": ["node_modules"]
+}
