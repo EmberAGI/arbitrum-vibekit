@@ -8,6 +8,7 @@ import { arbitrum, arbitrumSepolia, base, baseSepolia } from "wagmi/chains";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useMcp } from "use-mcp/react";
 import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
 
 // Type for JSON Schema properties
 type JsonSchemaProperty = {
@@ -121,10 +122,12 @@ function ChatInner() {
 
   // Chatbox state using Vercel AI SDK v6
   const chatHelpers = useChat({
-    api: "/api/chat",
-    headers: {
-      "X-MCP-URL": mcpUrl,
-    },
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      headers: () => ({
+        "X-MCP-URL": mcpUrl,
+      }),
+    }),
   });
 
   const chatMessages = chatHelpers.messages;

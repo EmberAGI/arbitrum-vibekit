@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   try {
     const { messages } = await req.json();
     const mcpUrl = req.headers.get("X-MCP-URL");
-
+console.log("mcpUrl", mcpUrl);
     // Connect to MCP server and get tools
     let mcpTools = {};
     if (mcpUrl) {
