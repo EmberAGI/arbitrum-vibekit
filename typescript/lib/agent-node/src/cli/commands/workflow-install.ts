@@ -151,9 +151,7 @@ export async function workflowInstallCommand(
   // Install each workflow
   const results: InstallResult[] = [];
   for (const workflow of toInstall) {
-    if (!options.quiet) {
-      cliOutput.print(`  Installing ${workflow.id}...`);
-    }
+    const spinner = !options.quiet ? cliOutput.spinner(`Installing ${workflow.id}...`) : null;
 
     try {
       await installWorkflowDependencies(workflow.absolutePath, options.frozenLockfile ?? false);
@@ -161,9 +159,7 @@ export async function workflowInstallCommand(
         workflowId: workflow.id,
         success: true,
       });
-      if (!options.quiet) {
-        cliOutput.success(`    ✓ ${workflow.id}`);
-      }
+      spinner?.succeed(workflow.id);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       results.push({
@@ -171,9 +167,7 @@ export async function workflowInstallCommand(
         success: false,
         error: errorMessage,
       });
-      if (!options.quiet) {
-        cliOutput.error(`    ✗ ${workflow.id}: ${errorMessage}`);
-      }
+      spinner?.fail(`${workflow.id}: ${errorMessage}`);
     }
   }
 
