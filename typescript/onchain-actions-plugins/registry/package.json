@@ -11,7 +11,7 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "tsup",
+    "build": "tsdown",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\"",
@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@semantic-release/exec": "^7.1.0",
-    "tsup": "^8.0.0"
+    "tsdown": "^0.16.1"
   },
   "license": "MIT",
   "publishConfig": {
