@@ -8,7 +8,15 @@ import { arbitrum, arbitrumSepolia, base, baseSepolia } from "wagmi/chains";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useMcp } from "use-mcp/react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import {
+  DefaultChatTransport,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+} from "ai";
+import ReactMarkdown from "react-markdown";
+import type {
+  ChatAddToolApproveResponseFunction,
+  DynamicToolUIPart,
+} from "ai";
 
 // Type for JSON Schema properties
 type JsonSchemaProperty = {
@@ -98,6 +106,97 @@ const wagmiConfig = createConfig({
   ssr: true,
 });
 
+function DynamicToolWithApprovalView({
+  invocation,
+  addToolApprovalResponse,
+}: {
+  invocation: DynamicToolUIPart;
+  addToolApprovalResponse: ChatAddToolApproveResponseFunction;
+}) {
+  switch (invocation.state) {
+    case "approval-requested":
+      return (
+        <div className="text-gray-500">
+          <div className="mb-2 bg-gray-600 rounded-xl border border-gray-900 shadow-lg">
+            <pre className="overflow-x-auto p-4 text-sm text-gray-100 whitespace-pre-wrap">
+              <div className="pb-2 font-semibold">
+                Execute tool &quot;{invocation.toolName}&quot;
+              </div>
+              {JSON.stringify(invocation.input, null, 2)}
+            </pre>
+          </div>
+          <div>
+            <button
+              className="px-4 py-2 mr-2 text-white bg-blue-500 rounded transition-colors hover:bg-blue-600"
+              onClick={() =>
+                addToolApprovalResponse({
+                  id: invocation.approval.id,
+                  approved: true,
+                })
+              }
+            >
+              Approve
+            </button>
+            <button
+              className="px-4 py-2 text-white bg-red-500 rounded transition-colors hover:bg-red-600"
+              onClick={() =>
+                addToolApprovalResponse({
+                  id: invocation.approval.id,
+                  approved: false,
+                })
+              }
+            >
+              Deny
+            </button>
+          </div>
+        </div>
+      );
+    case "approval-responded":
+      return (
+        <div className="text-gray-500">
+          <div className="mb-2 bg-gray-600 rounded-xl border border-gray-900 shadow-lg">
+            <pre className="overflow-x-auto p-4 text-sm text-gray-100 whitespace-pre-wrap">
+              <div className="pb-2 font-semibold">
+                Execute tool &quot;{invocation.toolName}&quot;
+              </div>
+              {JSON.stringify(invocation.input, null, 2)}
+              <div className="font-semibold">
+                {invocation.approval.approved ? "Approved" : "Denied"}
+              </div>
+            </pre>
+          </div>
+        </div>
+      );
+    case "output-available": {
+      const isPreliminary = invocation.preliminary ?? false;
+      return (
+        <div className="text-gray-500">
+          <div className="mb-2 bg-gray-600 rounded-xl border border-gray-900 shadow-lg">
+            <pre className="overflow-x-auto p-4 text-sm text-gray-100 whitespace-pre-wrap">
+              <div className="pb-2 font-semibold">
+                {isPreliminary ? "Executing" : "Executed"} tool &quot;
+                {invocation.toolName}&quot;
+              </div>
+              {JSON.stringify(invocation.input, null, 2)}
+              <div className="pt-2 pb-2 font-semibold">Output:</div>
+              {JSON.stringify(invocation.output, null, 2)}
+            </pre>
+          </div>
+        </div>
+      );
+    }
+    case "output-denied":
+      return (
+        <div className="text-red-500">
+          Tool {invocation.toolName} with input {JSON.stringify(invocation.input)}
+          execution denied.
+        </div>
+      );
+    case "output-error":
+      return <div className="text-red-500">Error: {invocation.errorText}</div>;
+  }
+}
+
 function ChatInner() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
@@ -120,23 +219,24 @@ function ChatInner() {
     return process.env.NEXT_PUBLIC_MCP_URL || "http://localhost:3012/mcp";
   }, []);
 
-  // Chatbox state using Vercel AI SDK v6
-  const chatHelpers = useChat({
+  // Chatbox state using Vercel AI SDK v6 with tool approval flow
+  const {
+    messages: chatMessages,
+    status: chatStatus,
+    error: chatError,
+    sendMessage: sendChatMessage,
+    addToolApprovalResponse,
+  } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
       headers: () => ({
         "X-MCP-URL": mcpUrl,
       }),
     }),
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
   });
 
-  const chatMessages = chatHelpers.messages;
-  const chatStatus = chatHelpers.status;
-  const chatError = chatHelpers.error;
-  const isChatLoading = chatStatus !== 'ready';
-
-  // Access sendMessage from chatHelpers
-  const sendChatMessage = (chatHelpers as any).sendMessage;
+  const isChatLoading = chatStatus !== "ready";
 
   // Local input state to ensure typing works regardless of hook internals
   const [localChatInput, setLocalChatInput] = useState("");
@@ -779,8 +879,69 @@ function ChatInner() {
                   >
                     <div className="text-sm whitespace-pre-wrap break-words">
                       {message.parts.map((part, index) => {
-                        if (part.type === "text") {
-                          return <span key={index}>{part.text}</span>;
+                        if ((part as unknown as { type: string }).type === "text") {
+                          return (
+                            <ReactMarkdown
+                              key={index}
+                              className="markdown-content"
+                              components={{
+                                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                                h1: ({ children }) => <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0">{children}</h1>,
+                                h2: ({ children }) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h2>,
+                                h3: ({ children }) => <h3 className="text-sm font-bold mb-1 mt-2 first:mt-0">{children}</h3>,
+                                ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                                ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                                li: ({ children }) => <li className="ml-2">{children}</li>,
+                                code: ({ children, className, ...props }) => {
+                                  const inline = (props as { inline?: boolean }).inline;
+                                  if (inline) {
+                                    return (
+                                      <code className="bg-gray-200 dark:bg-gray-800 px-1 py-0.5 rounded text-xs font-mono">
+                                        {children}
+                                      </code>
+                                    );
+                                  }
+                                  return (
+                                    <code className="block bg-gray-200 dark:bg-gray-800 p-2 rounded text-xs font-mono overflow-x-auto mb-2">
+                                      {children}
+                                    </code>
+                                  );
+                                },
+                                pre: ({ children }) => <pre className="mb-2">{children}</pre>,
+                                blockquote: ({ children }) => (
+                                  <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-3 italic my-2">
+                                    {children}
+                                  </blockquote>
+                                ),
+                                a: ({ children, href }) => (
+                                  <a
+                                    href={href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="underline hover:no-underline"
+                                  >
+                                    {children}
+                                  </a>
+                                ),
+                                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                                em: ({ children }) => <em className="italic">{children}</em>,
+                              }}
+                            >
+                              {part.text}
+                            </ReactMarkdown>
+                          );
+                        }
+                        if (
+                          (part as unknown as { type: string }).type ===
+                          "dynamic-tool"
+                        ) {
+                          return (
+                            <DynamicToolWithApprovalView
+                              key={index}
+                              invocation={part as unknown as DynamicToolUIPart}
+                              addToolApprovalResponse={addToolApprovalResponse}
+                            />
+                          );
                         }
                         return null;
                       })}

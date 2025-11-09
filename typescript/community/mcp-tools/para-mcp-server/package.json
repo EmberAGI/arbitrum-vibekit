@@ -33,6 +33,7 @@
     "postgres": "^3.4.4",
     "react": "19.2.0",
     "react-dom": "19.2.0",
+    "react-markdown": "^9.0.1",
     "use-mcp": "^0.0.21",
     "viem": "^2.0.0",
     "wagmi": "^2.0.0",

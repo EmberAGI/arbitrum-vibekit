@@ -1,5 +1,5 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { streamText, convertToModelMessages } from "ai";
+import { createAgentUIStreamResponse, ToolLoopAgent } from "ai";
 import { experimental_createMCPClient } from "@ai-sdk/mcp";
 
 const provider = createOpenAICompatible({
@@ -14,9 +14,9 @@ export async function POST(req: Request) {
   try {
     const { messages } = await req.json();
     const mcpUrl = req.headers.get("X-MCP-URL");
-console.log("mcpUrl", mcpUrl);
+
     // Connect to MCP server and get tools
-    let mcpTools = {};
+    let mcpTools: Record<string, unknown> = {};
     if (mcpUrl) {
       try {
         const client = await experimental_createMCPClient({
@@ -27,24 +27,33 @@ console.log("mcpUrl", mcpUrl);
         });
 
         // Get MCP tools and they will be automatically converted to AI SDK tool format
-        mcpTools = await client.tools();
+        const rawTools = await client.tools();
+        // Wrap tools to require approval before execution
+        mcpTools = Object.fromEntries(
+          Object.entries(rawTools as Record<string, any>).map(([name, tool]) => [
+            name,
+            { ...tool, needsApproval: true },
+          ]),
+        );
       } catch (mcpError) {
         console.error("MCP connection error:", mcpError);
         // Continue without MCP tools if connection fails
       }
     }
 
-    const result = streamText({
+    // Create agent with tool approval gating.
+    const agent = new ToolLoopAgent({
       model,
-      messages: convertToModelMessages(messages),
-      tools: mcpTools,
-      system: `You are a helpful assistant that can interact with MCP (Model Context Protocol) tools.
-When users ask about tools or want to call tools, you can use the available MCP tools to help them.
-Available MCP tools: ${Object.keys(mcpTools).join(", ") || "none"}
-Be concise and helpful in your responses.`,
+      tools: mcpTools as any,
+      // Ensure the model does not retry denied tool executions
+      instructions:
+        "When a tool execution is not approved by the user, do not retry it. Just say that the tool execution was not approved.",
     });
 
-    return result.toUIMessageStreamResponse();
+    return createAgentUIStreamResponse({
+      agent,
+      messages,
+    });
   } catch (error) {
     console.error("Chat API error:", error);
     return new Response(
@@ -59,3 +68,4 @@ Be concise and helpful in your responses.`,
     );
   }
 }
+
