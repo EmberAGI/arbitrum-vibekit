@@ -34,12 +34,13 @@ type JsonSchema = {
   required?: string[];
   additionalProperties?: boolean;
 };
-import { WagmiProvider, createConfig, http } from "wagmi";
+import { WagmiProvider, createConfig, http, useSendTransaction, useSwitchChain, useReadContract } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   RainbowKitProvider,
   darkTheme,
   connectorsForWallets,
+  useConnectModal,
 } from "@rainbow-me/rainbowkit";
 import {
   walletConnectWallet,
@@ -47,8 +48,31 @@ import {
 } from "@rainbow-me/rainbowkit/wallets";
 import { paraConnector } from "@getpara/wagmi-v2-integration";
 import Para, { Environment } from "@getpara/web-sdk";
+import { encodeFunctionData, parseUnits, isAddress } from "viem";
+import type { Abi } from "viem";
 
 const CHAINS = [arbitrum, arbitrumSepolia, base, baseSepolia];
+
+// USDC token address on Base Sepolia
+const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+
+// ERC-20 ABI for balanceOf
+const ERC20_ABI = [
+  {
+    constant: true,
+    inputs: [{ name: "_owner", type: "address" }],
+    name: "balanceOf",
+    outputs: [{ name: "balance", type: "uint256" }],
+    type: "function",
+  },
+  {
+    constant: true,
+    inputs: [],
+    name: "decimals",
+    outputs: [{ name: "", type: "uint8" }],
+    type: "function",
+  },
+] as const;
 
 const queryClient = new QueryClient();
 
@@ -105,6 +129,278 @@ const wagmiConfig = createConfig({
   },
   ssr: true,
 });
+
+// Transaction Preview Component
+function TransactionPreviewComponent({
+  txPreview,
+}: {
+  txPreview: Array<{
+    to: string;
+    data: string;
+    value: string;
+    chainId: string;
+  }>;
+}) {
+  const { address, isConnected, chainId: currentChainId } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
+  const { sendTransaction, isPending, isSuccess, error, data: txHash } = useSendTransaction();
+
+  const handleSignTransaction = async () => {
+    if (!txPreview || txPreview.length === 0) return;
+
+    const tx = txPreview[0];
+    const targetChainId = Number.parseInt(tx.chainId);
+
+    try {
+      // Switch chain if needed
+      if (currentChainId !== targetChainId) {
+        await switchChainAsync({ chainId: targetChainId });
+      }
+
+      // Send transaction
+      sendTransaction({
+        to: tx.to as `0x${string}`,
+        data: tx.data as `0x${string}`,
+        value: BigInt(tx.value),
+        chainId: targetChainId,
+      });
+    } catch (err) {
+      console.error("Transaction error:", err);
+    }
+  };
+
+  return (
+    <div className="mt-4 space-y-3">
+      <div className="text-sm font-semibold text-gray-100">Transaction Preview</div>
+
+      {/* Transaction Details */}
+      <div className="space-y-2">
+        {txPreview.map((tx, index) => (
+          <div
+            key={index}
+            className="p-3 bg-gray-700 rounded-lg border border-gray-600 text-xs"
+          >
+            <div className="space-y-1">
+              <div>
+                <span className="text-gray-400">To:</span>{" "}
+                <span className="text-gray-100 font-mono">{tx.to}</span>
+              </div>
+              <div>
+                <span className="text-gray-400">Value:</span>{" "}
+                <span className="text-gray-100">{tx.value} wei</span>
+              </div>
+              <div>
+                <span className="text-gray-400">Chain ID:</span>{" "}
+                <span className="text-gray-100">{tx.chainId}</span>
+              </div>
+              {tx.data && tx.data !== "0x" && (
+                <div>
+                  <span className="text-gray-400">Data:</span>{" "}
+                  <span className="text-gray-100 font-mono break-all">{tx.data}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Status Messages */}
+      {isSuccess && (
+        <div className="p-2 rounded-lg border-2 border-green-800 bg-green-200 text-green-800">
+          Transaction Successful! Hash: {txHash}
+        </div>
+      )}
+      {isPending && (
+        <div className="p-2 rounded-lg border-2 border-gray-400 bg-gray-200 text-slate-800">
+          Signing Transaction...
+        </div>
+      )}
+      {error && (
+        <div className="p-2 rounded-lg border-2 border-red-800 bg-red-400 text-white break-words">
+          Error: {(error as Error).message || JSON.stringify(error, null, 2)}
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      {isConnected ? (
+        <button
+          type="button"
+          onClick={handleSignTransaction}
+          disabled={isPending || isSuccess}
+          className="w-full mt-2 px-4 py-2 rounded-full bg-cyan-700 text-white hover:bg-cyan-800 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isPending ? "Signing..." : isSuccess ? "Signed" : "Sign Transaction"}
+        </button>
+      ) : (
+        <div className="p-2 flex rounded-lg border-2 border-gray-400 bg-gray-200 flex-col">
+          <div className="mb-2 text-red-500">Please connect your wallet to sign</div>
+          <ConnectButton />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Simple USDC transfer form for Base Sepolia
+function BaseSepoliaUsdcTransfer() {
+  const { address, isConnected, chainId } = useAccount();
+  const { openConnectModal } = useConnectModal();
+  const { switchChainAsync } = useSwitchChain();
+  const { sendTransaction, isPending, isSuccess, error, data: txHash } = useSendTransaction();
+
+  const [recipient, setRecipient] = useState("");
+  const [amount, setAmount] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  // Fetch USDC balance on Base Sepolia for connected user
+  const { data: usdcBal, isLoading: loadingBal, refetch: refetchBal } = useReadContract({
+    address: USDC_BASE_SEPOLIA,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    chainId: baseSepolia.id,
+    query: { enabled: !!address },
+  });
+
+  const formatUsdc = (bal: bigint | undefined) => {
+    if (!bal) return "0.00";
+    return (Number(bal) / 1e6).toFixed(2);
+  };
+
+  const handleSend = async () => {
+    setLocalError(null);
+    if (!isConnected) {
+      openConnectModal?.();
+      return;
+    }
+    if (!recipient || !isAddress(recipient)) {
+      setLocalError("Enter a valid recipient address");
+      return;
+    }
+    let value: bigint;
+    try {
+      value = parseUnits(amount || "0", 6);
+    } catch {
+      setLocalError("Enter a valid amount");
+      return;
+    }
+    if (value <= 0n) {
+      setLocalError("Amount must be greater than 0");
+      return;
+    }
+
+    try {
+      if (chainId !== baseSepolia.id) {
+        await switchChainAsync({ chainId: baseSepolia.id });
+      }
+
+      const data = encodeFunctionData({
+        abi: [
+          {
+            name: "transfer",
+            type: "function",
+            stateMutability: "nonpayable",
+            inputs: [
+              { name: "_to", type: "address" },
+              { name: "_value", type: "uint256" },
+            ],
+            outputs: [{ name: "", type: "bool" }],
+          },
+        ] as unknown as Abi,
+        functionName: "transfer",
+        args: [recipient as `0x${string}`, value],
+      });
+
+      sendTransaction({
+        to: USDC_BASE_SEPOLIA as `0x${string}`,
+        data,
+        value: 0n,
+        chainId: baseSepolia.id,
+      });
+
+      // Clear amount after sending, refresh balance
+      setAmount("");
+      refetchBal();
+    } catch (e) {
+      console.error("USDC transfer error:", e);
+      setLocalError((e as Error).message || "Failed to send");
+    }
+  };
+
+  return (
+    <div className="mt-8 p-4 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">USDC Transfer (Base Sepolia)</div>
+        <div className="text-xs text-gray-600 dark:text-gray-300">
+          {loadingBal ? (
+            <span>Loading balance…</span>
+          ) : (
+            <span>Balance: {formatUsdc(usdcBal as bigint | undefined)} USDC</span>
+          )}
+          <button
+            type="button"
+            onClick={() => refetchBal()}
+            className="ml-2 text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-xs text-gray-600 dark:text-gray-300">Recipient Address</label>
+          <input
+            type="text"
+            value={recipient}
+            onChange={(e) => setRecipient(e.target.value)}
+            placeholder="0x…"
+            className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-gray-600 dark:text-gray-300">Amount (USDC)</label>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "" || /^\d*\.?\d*$/.test(v)) setAmount(v);
+            }}
+            placeholder="0.00"
+            className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+        </div>
+      </div>
+
+      {localError && (
+        <div className="mt-3 p-2 rounded border border-red-700 bg-red-100 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-300">
+          {localError}
+        </div>
+      )}
+      {error && (
+        <div className="mt-3 p-2 rounded border border-red-700 bg-red-100 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-300 break-words">
+          Error: {(error as Error).message || JSON.stringify(error)}
+        </div>
+      )}
+      {isSuccess && txHash && (
+        <div className="mt-3 p-2 rounded border border-green-800 bg-green-100 dark:bg-green-900/20 text-sm text-green-800 dark:text-green-300 break-words">
+          Sent! Tx: {txHash}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={!isConnected ? openConnectModal : handleSend}
+        disabled={isPending}
+        className="w-full mt-4 px-4 py-2 rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {!isConnected ? "Connect Wallet" : isPending ? "Sending…" : isSuccess ? "Sent" : "Send USDC"}
+      </button>
+    </div>
+  );
+}
 
 function DynamicToolWithApprovalView({
   invocation,
@@ -169,6 +465,83 @@ function DynamicToolWithApprovalView({
       );
     case "output-available": {
       const isPreliminary = invocation.preliminary ?? false;
+
+      // Parse the output to extract content[0].text if available
+      const output = invocation.output as {
+        content?: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      let displayContent = "";
+      let hasError = output.isError ?? false;
+      let parsedData: unknown = null;
+
+      if (hasError) {
+        // Display error from content[0].text
+        if (output.content?.[0]?.text) {
+          displayContent = output.content[0].text;
+        } else {
+          displayContent = JSON.stringify(invocation.output, null, 2);
+        }
+      } else {
+        // Parse and display the content[0].text JSON
+        if (output.content?.[0]?.text) {
+          try {
+            parsedData = JSON.parse(output.content[0].text);
+            displayContent = JSON.stringify(parsedData, null, 2);
+          } catch {
+            // If parsing fails, display as-is
+            displayContent = output.content[0].text;
+          }
+        } else {
+          // Fallback to full output if structure is different
+          displayContent = JSON.stringify(invocation.output, null, 2);
+        }
+      }
+
+      // Special handling for create-transaction-preview tool
+      if (invocation.toolName === "create-transaction-preview" && parsedData && !hasError) {
+        const txData = parsedData as {
+          artifacts?: Array<{
+            name: string;
+            parts: Array<{
+              data: {
+                txPreview?: Array<{
+                  to: string;
+                  data: string;
+                  value: string;
+                  chainId: string;
+                }>;
+                txPlan?: Array<{
+                  to: string;
+                  data: string;
+                  value: string;
+                  chainId: string;
+                }>;
+              };
+            }>;
+          }>;
+        };
+
+        const txPreview = txData.artifacts?.[0]?.parts?.[0]?.data?.txPreview;
+
+        if (txPreview && txPreview.length > 0) {
+          return (
+            <div className="text-gray-500">
+              <div className="mb-2 bg-gray-600 rounded-xl border border-gray-900 shadow-lg">
+                <div className="p-4">
+                  <div className="pb-2 font-semibold text-gray-100">
+                    {isPreliminary ? "Executing" : "Executed"} tool &quot;
+                    {invocation.toolName}&quot;
+                  </div>
+                  <TransactionPreviewComponent txPreview={txPreview} />
+                </div>
+              </div>
+            </div>
+          );
+        }
+      }
+
       return (
         <div className="text-gray-500">
           <div className="mb-2 bg-gray-600 rounded-xl border border-gray-900 shadow-lg">
@@ -178,8 +551,12 @@ function DynamicToolWithApprovalView({
                 {invocation.toolName}&quot;
               </div>
               {JSON.stringify(invocation.input, null, 2)}
-              <div className="pt-2 pb-2 font-semibold">Output:</div>
-              {JSON.stringify(invocation.output, null, 2)}
+              <div className={`pt-2 pb-2 font-semibold ${hasError ? "text-red-400" : ""}`}>
+                {hasError ? "Error:" : "Output:"}
+              </div>
+              <div className={hasError ? "text-red-300" : ""}>
+                {displayContent}
+              </div>
             </pre>
           </div>
         </div>
@@ -305,8 +682,27 @@ function ChatInner() {
     chainId: selectedChainId,
   });
 
+  // Get USDC balance on Base Sepolia
+  const {
+    data: usdcBalance,
+    isLoading: isLoadingUsdcBalance,
+    refetch: refetchUsdcBalance,
+  } = useReadContract({
+    address: USDC_BASE_SEPOLIA,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    chainId: baseSepolia.id,
+    query: {
+      enabled: !!address && selectedChainId === baseSepolia.id,
+    },
+  });
+
   const handleRefreshBalance = async () => {
     await refetch();
+    if (selectedChainId === baseSepolia.id) {
+      await refetchUsdcBalance();
+    }
   };
 
   // Format balance from wei to ETH
@@ -314,6 +710,13 @@ function ChatInner() {
     if (!balanceWei) return "0";
     const ethBalance = Number(balanceWei) / 1e18;
     return ethBalance.toFixed(6);
+  };
+
+  // Format USDC balance (6 decimals)
+  const formatUsdcBalance = (balanceRaw: bigint | undefined) => {
+    if (!balanceRaw) return "0";
+    const usdcBalance = Number(balanceRaw) / 1e6;
+    return usdcBalance.toFixed(2);
   };
 
   const selectedChain =
@@ -632,6 +1035,23 @@ function ChatInner() {
             </div>
           </div>
 
+          {/* USDC Balance on Base Sepolia */}
+          {selectedChainId === baseSepolia.id && (
+            <div className="space-y-2">
+              <div className="text-sm text-gray-600 dark:text-gray-200">
+                USDC Balance on {selectedChain.name}:
+              </div>
+              <div className="font-mono text-lg font-semibold text-gray-900 dark:text-gray-100">
+                {isLoadingUsdcBalance
+                  ? "Loading..."
+                  : `${formatUsdcBalance(usdcBalance as bigint | undefined)} USDC`}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                Token: {USDC_BASE_SEPOLIA}
+              </div>
+            </div>
+          )}
+
           <button
             type="button"
             className="w-full px-4 py-2 rounded bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50"
@@ -641,6 +1061,8 @@ function ChatInner() {
           </button>
         </div>
       )}
+
+      <BaseSepoliaUsdcTransfer />
 
       {/* MCP Tools List - Always visible regardless of wallet connection */}
       <div className="mt-8 pt-8 border-t border-gray-300 dark:border-gray-600 space-y-4">
@@ -655,13 +1077,12 @@ function ChatInner() {
               MCP Server Status:
             </div>
             <div
-              className={`text-sm font-medium ${
-                mcpState === "ready"
-                  ? "text-green-600 dark:text-green-400"
-                  : mcpState === "failed"
-                    ? "text-red-600 dark:text-red-400"
-                    : "text-yellow-600 dark:text-yellow-400"
-              }`}
+              className={`text-sm font-medium ${mcpState === "ready"
+                ? "text-green-600 dark:text-green-400"
+                : mcpState === "failed"
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-yellow-600 dark:text-yellow-400"
+                }`}
             >
               {mcpState === "ready"
                 ? "Connected"
@@ -670,7 +1091,7 @@ function ChatInner() {
                   : mcpState === "connecting" || mcpState === "loading"
                     ? "Connecting..."
                     : mcpState === "pending_auth" ||
-                        mcpState === "authenticating"
+                      mcpState === "authenticating"
                       ? "Authenticating..."
                       : "Disconnected"}
             </div>
@@ -871,11 +1292,10 @@ function ChatInner() {
                   className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                      message.role === "user"
-                        ? "bg-orange-600 text-white"
-                        : "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    }`}
+                    className={`max-w-[80%] rounded-lg px-4 py-2 ${message.role === "user"
+                      ? "bg-orange-600 text-white"
+                      : "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      }`}
                   >
                     <div className="text-sm whitespace-pre-wrap break-words">
                       {message.parts.map((part, index) => {
