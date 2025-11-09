@@ -40,7 +40,7 @@ describe('CLI Commands Integration Tests', () => {
       tempDirs.push(targetDir);
 
       // When: running init command
-      await initCommand({ target: targetDir });
+      await initCommand({ target: targetDir, noInstall: true });
 
       // Then: all required files should be created
       expect(existsSync(targetDir)).toBe(true);
@@ -71,7 +71,7 @@ describe('CLI Commands Integration Tests', () => {
       tempDirs.push(targetDir);
 
       // When: running init command
-      await initCommand({ target: targetDir });
+      await initCommand({ target: targetDir, noInstall: true });
 
       // Then: agent.md should have valid frontmatter
       const agentMd = readFileSync(join(targetDir, 'agent.md'), 'utf-8');
@@ -93,7 +93,7 @@ describe('CLI Commands Integration Tests', () => {
       tempDirs.push(targetDir);
 
       // When: running init command
-      await initCommand({ target: targetDir });
+      await initCommand({ target: targetDir, noInstall: true });
 
       // Then: manifest should have valid structure with both template skills
       const manifestPath = join(targetDir, 'agent.manifest.json');
@@ -126,7 +126,7 @@ describe('CLI Commands Integration Tests', () => {
       tempDirs.push(targetDir);
 
       // When: running init command
-      await initCommand({ target: targetDir });
+      await initCommand({ target: targetDir, noInstall: true });
 
       // Then: template skill should have valid frontmatter and content
       const skillPath = join(targetDir, 'skills', 'general-assistant.md');
@@ -171,7 +171,7 @@ describe('CLI Commands Integration Tests', () => {
       tempDirs.push(targetDir);
 
       // When: running init command
-      await initCommand({ target: targetDir });
+      await initCommand({ target: targetDir, noInstall: true });
 
       // Then: ember skill should have valid frontmatter and content
       const skillPath = join(targetDir, 'skills', 'ember-onchain-actions.md');
@@ -206,7 +206,7 @@ describe('CLI Commands Integration Tests', () => {
       tempDirs.push(targetDir);
 
       // When: running init command
-      await initCommand({ target: targetDir });
+      await initCommand({ target: targetDir, noInstall: true });
 
       // Then: MCP registry should contain default servers (fetch stdio and ember_onchain_actions http)
       const mcpJson = JSON.parse(readFileSync(join(targetDir, 'mcp.json'), 'utf-8'));
@@ -241,11 +241,13 @@ describe('CLI Commands Integration Tests', () => {
         `test-init-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       );
       tempDirs.push(targetDir);
-      await initCommand({ target: targetDir });
+      await initCommand({ target: targetDir, noInstall: true });
 
       // When: running init command again without force
       // Then: should throw error
-      await expect(initCommand({ target: targetDir })).rejects.toThrow(/already exists/);
+      await expect(initCommand({ target: targetDir, noInstall: true })).rejects.toThrow(
+        /already exists/,
+      );
     });
 
     it('should overwrite when using force flag', async () => {
@@ -255,14 +257,14 @@ describe('CLI Commands Integration Tests', () => {
         `test-init-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       );
       tempDirs.push(targetDir);
-      await initCommand({ target: targetDir });
+      await initCommand({ target: targetDir, noInstall: true });
 
       // Modify a file
       const agentMdPath = join(targetDir, 'agent.md');
       const originalContent = readFileSync(agentMdPath, 'utf-8');
 
       // When: running init command with force
-      await initCommand({ target: targetDir, force: true });
+      await initCommand({ target: targetDir, force: true, noInstall: true });
 
       // Then: files should be reset to defaults
       const newContent = readFileSync(agentMdPath, 'utf-8');

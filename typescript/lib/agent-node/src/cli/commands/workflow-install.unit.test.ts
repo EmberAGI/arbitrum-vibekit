@@ -43,6 +43,42 @@ function createMockChildProcess(exitCode: number | null = 0, errorMsg?: string) 
   return mockProcess;
 }
 
+type SpawnCall = Parameters<typeof spawn>;
+
+function expectWorkflowInstallInvocation(
+  call: SpawnCall | undefined,
+  {
+    workflowPath,
+    frozenLockfile = false,
+  }: {
+    workflowPath: string;
+    frozenLockfile?: boolean;
+  },
+) {
+  expect(call).toBeDefined();
+  if (!call) {
+    return;
+  }
+
+  const [command, args, options] = call;
+  expect(typeof command).toBe('string');
+
+  const normalizedArgs = args ? [...args] : [];
+  expect(normalizedArgs).toEqual(expect.arrayContaining(['install', '--ignore-workspace']));
+
+  if (frozenLockfile) {
+    expect(normalizedArgs).toContain('--frozen-lockfile');
+  } else {
+    expect(normalizedArgs).not.toContain('--frozen-lockfile');
+  }
+
+  expect(options).toEqual(
+    expect.objectContaining({
+      cwd: workflowPath,
+    }),
+  );
+}
+
 describe('workflow-install command', () => {
   let testDir: string;
   let configDir: string;
@@ -132,24 +168,8 @@ describe('workflow-install command', () => {
 
       // Then it installs both workflows
       expect(mockSpawn).toHaveBeenCalledTimes(2);
-      expect(mockSpawn).toHaveBeenCalledWith(
-        'pnpm',
-        ['install'],
-        expect.objectContaining({
-          cwd: workflow1,
-          stdio: ['ignore', 'pipe', 'pipe'],
-          shell: true,
-        }),
-      );
-      expect(mockSpawn).toHaveBeenCalledWith(
-        'pnpm',
-        ['install'],
-        expect.objectContaining({
-          cwd: workflow2,
-          stdio: ['ignore', 'pipe', 'pipe'],
-          shell: true,
-        }),
-      );
+      expectWorkflowInstallInvocation(mockSpawn.mock.calls[0], { workflowPath: workflow1 });
+      expectWorkflowInstallInvocation(mockSpawn.mock.calls[1], { workflowPath: workflow2 });
       expect(mockCliOutput.success).toHaveBeenCalledWith('    ✓ workflow-1');
       expect(mockCliOutput.success).toHaveBeenCalledWith('    ✓ workflow-2');
     });
@@ -190,13 +210,7 @@ describe('workflow-install command', () => {
 
       // Then it only installs that workflow
       expect(mockSpawn).toHaveBeenCalledTimes(1);
-      expect(mockSpawn).toHaveBeenCalledWith(
-        'pnpm',
-        ['install'],
-        expect.objectContaining({
-          cwd: workflow1,
-        }),
-      );
+      expectWorkflowInstallInvocation(mockSpawn.mock.calls[0], { workflowPath: workflow1 });
       expect(mockCliOutput.success).toHaveBeenCalledWith('    ✓ workflow-1');
       expect(mockCliOutput.success).not.toHaveBeenCalledWith('    ✓ workflow-2');
     });
@@ -214,13 +228,10 @@ describe('workflow-install command', () => {
       await workflowInstallCommand(undefined, { configDir, frozenLockfile: true });
 
       // Then it passes the flag to pnpm
-      expect(mockSpawn).toHaveBeenCalledWith(
-        'pnpm',
-        ['install', '--frozen-lockfile'],
-        expect.objectContaining({
-          cwd: workflow1,
-        }),
-      );
+      expectWorkflowInstallInvocation(mockSpawn.mock.calls[0], {
+        workflowPath: workflow1,
+        frozenLockfile: true,
+      });
     });
 
     it('should continue on error (does not stop at first failure)', async () => {
