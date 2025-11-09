@@ -1,0 +1,48 @@
+{
+  "metadata": {
+    "service": "x402-facilitator",
+    "endpoint": "/settle",
+    "method": "POST",
+    "recordedAt": "2025-11-04T14:06:34.402Z"
+  },
+  "request": {
+    "body": {
+      "x402Version": 1,
+      "paymentPayload": {
+        "x402Version": 1,
+        "scheme": "exact",
+        "network": "base-sepolia",
+        "payload": {
+          "signature": "0x47859970f51ec1a6791f398a3a552a6fa4bc570c6b7a6136f712a694e0e82f4723ce487033978b74a752586208bae83718835c1312751e4563e2176549e551481b",
+          "authorization": {
+            "from": "0x850051af81DF37ae20e6Fe2De405be96DC4b3d1f",
+            "to": "0x850051af81DF37ae20e6Fe2De405be96DC4b3d1f",
+            "value": "0",
+            "validAfter": "1762264367",
+            "validBefore": "1762268567",
+            "nonce": "0xb4957e077b07da13f9aa4a53cadb04cb425e79ecbd201ae62e7bb48659e159a7"
+          }
+        }
+      },
+      "paymentRequirements": {
+        "scheme": "exact",
+        "network": "base-sepolia",
+        "description": "Test",
+        "resource": "https://example.test/resource",
+        "payTo": "0x850051af81DF37ae20e6Fe2De405be96DC4b3d1f",
+        "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "mimeType": "application/json",
+        "maxTimeoutSeconds": 3600,
+        "extra": {
+          "name": "USDC",
+          "version": "2"
+        },
+        "maxAmountRequired": "0"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "rawBody": "eyJzdWNjZXNzIjp0cnVlLCJ0cmFuc2FjdGlvbiI6IjB4MTQyY2FmOTAzMzZlMGNiYWZjZWJmNTllZjMyYzU3NmRiNGM5Nzg0ZGZjNzI2MzY0YmQ3MzNhNGQwOWYyNDg2YyIsIm5ldHdvcmsiOiJiYXNlLXNlcG9saWEiLCJwYXllciI6IjB4ODUwMDUxYWY4MURGMzdhZTIwZTZGZTJEZTQwNWJlOTZEQzRiM2QxZiJ9"
+  }
+}

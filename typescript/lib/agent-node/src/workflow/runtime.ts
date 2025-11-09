@@ -31,6 +31,7 @@ export class WorkflowRuntime {
       error?: unknown;
       validationErrors?: unknown[];
       firstYield?: unknown; // Stores first yield for dispatch-response access
+      paymentRequirements?: Record<string, unknown>; // Store payment requirements for verification
     }
   > = new Map();
   private executionListeners: Map<string, Map<string, Set<(...args: unknown[]) => void>>> =
@@ -418,6 +419,32 @@ export class WorkflowRuntime {
             emit('pause', pauseInfo);
             return; // Exit without completing
           }
+          case 'payment-required': {
+            const { message, metadata } = yieldValue;
+            const to = 'input-required'; // Payment required becomes input-required state
+
+            ensureTransition(execution.id, 'working', to as TaskState);
+            execution.state = to;
+
+            const pauseInfo: PauseInfo = {
+              state: to,
+              message,
+              // No input schema for payment - handled via metadata
+              inputSchema: undefined,
+            };
+
+            // Store payment requirements in task state for later verification
+            this.taskStates.set(execution.id, {
+              state: to,
+              workflowGenerator: generator,
+              pauseInfo,
+              paymentRequirements: metadata, // Store payment metadata for verification
+            });
+
+            // Emit pause event with payment metadata
+            emit('pause', { ...pauseInfo, metadata });
+            return; // Exit without completing
+          }
           case 'reject': {
             const { reason } = yieldValue;
             ensureTransition(execution.id, execution.state, 'rejected');
@@ -533,6 +560,7 @@ export class WorkflowRuntime {
         error?: unknown;
         validationErrors?: unknown[];
         firstYield?: unknown;
+        paymentRequirements?: Record<string, unknown>;
       }
     | undefined {
     return this.taskStates.get(taskId);
@@ -793,6 +821,34 @@ export class WorkflowRuntime {
             // Give time for pause handler to be registered
             await new Promise((resolve) => process.nextTick(resolve));
             emit('pause', pauseInfo);
+            return; // Exit without completing
+          }
+          case 'payment-required': {
+            const { message, metadata } = yieldValue;
+            const to = 'input-required'; // Payment required becomes input-required state
+
+            ensureTransition(executionId, 'working', to as TaskState);
+            execution.state = to;
+
+            const pauseInfo: PauseInfo = {
+              state: to,
+              message,
+              // No input schema for payment - handled via metadata
+              inputSchema: undefined,
+            };
+
+            // Store payment requirements in task state for later verification
+            this.taskStates.set(executionId, {
+              state: to,
+              workflowGenerator: generator,
+              pauseInfo,
+              paymentRequirements: metadata, // Store payment metadata for verification
+            });
+
+            // Give time for pause handler to be registered
+            await new Promise((resolve) => process.nextTick(resolve));
+            // Emit pause event with payment metadata
+            emit('pause', { ...pauseInfo, metadata });
             return; // Exit without completing
           }
           case 'status-update': {
