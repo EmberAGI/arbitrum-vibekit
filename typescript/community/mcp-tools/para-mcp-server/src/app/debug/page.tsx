@@ -5,7 +5,7 @@ import "@getpara/react-sdk/styles.css";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useBalance, useDisconnect, useChainId } from "wagmi";
 import { arbitrum, arbitrumSepolia, base, baseSepolia } from "wagmi/chains";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useMcp } from "use-mcp/react";
 
 // Type for JSON Schema properties
@@ -89,6 +89,42 @@ function ChatInner() {
   const [toolFormValues, setToolFormValues] = useState<Record<string, Record<string, unknown>>>({});
   const [toolCallResults, setToolCallResults] = useState<Record<string, { loading: boolean; result?: unknown; error?: string }>>({});
 
+  // Dark mode state - initialize from localStorage or default to false
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("darkMode");
+      return saved === "true";
+    }
+    return false;
+  });
+
+  // Initialize dark mode on mount
+  useEffect(() => {
+    const html = document.documentElement;
+    const saved = localStorage.getItem("darkMode");
+    if (saved === "true") {
+      html.classList.add("dark");
+    } else {
+      html.classList.remove("dark");
+    }
+  }, []);
+
+  // Toggle dark mode and persist to localStorage
+  useEffect(() => {
+    const html = document.documentElement;
+    if (isDarkMode) {
+      html.classList.add("dark");
+      localStorage.setItem("darkMode", "true");
+    } else {
+      html.classList.remove("dark");
+      localStorage.setItem("darkMode", "false");
+    }
+  }, [isDarkMode]);
+
+  const toggleDarkMode = () => {
+    setIsDarkMode((prev) => !prev);
+  };
+
   // Get MCP server URL from current domain + /mcp
   const mcpUrl = useMemo(() => {
     if (typeof window !== "undefined") {
@@ -105,6 +141,7 @@ function ChatInner() {
     prompts,
     error: mcpError,
     retry: retryMcp,
+    disconnect: disconnectMcp,
     authenticate: authenticateMcp,
     callTool,
   } = useMcp({
@@ -193,7 +230,7 @@ function ChatInner() {
           <select
             value={String(value)}
             onChange={(e) => handleToolFormChange(toolName, fieldName, e.target.value)}
-            className="w-full px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-orange-500"
             required={isRequired}
           >
             <option value="">Select...</option>
@@ -225,7 +262,7 @@ function ChatInner() {
           onChange={(e) => handleToolFormChange(toolName, fieldName, e.target.value)}
           pattern={property.pattern}
           placeholder={property.description || fieldName}
-          className="w-full px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-orange-500"
           required={isRequired}
         />
         {property.pattern && (
@@ -262,7 +299,7 @@ function ChatInner() {
               type="button"
               onClick={() => handleCallTool(tool.name)}
               disabled={callState?.loading || mcpState !== "ready"}
-              className="w-full mt-2 px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full mt-2 px-3 py-1.5 text-xs rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {callState?.loading ? "Calling..." : `Call ${tool.name}`}
             </button>
@@ -311,7 +348,25 @@ function ChatInner() {
 
   return (
     <div className="max-w-xl mx-auto p-6 space-y-4">
-      <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Debug</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Debug</h1>
+        <button
+          type="button"
+          onClick={toggleDarkMode}
+          className="px-3 py-2 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+          aria-label="Toggle dark mode"
+        >
+          {isDarkMode ? (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+            </svg>
+          )}
+        </button>
+      </div>
 
       {!isConnected ? (
         <div className="flex justify-center">
@@ -412,6 +467,24 @@ function ChatInner() {
           <div className="text-xs text-gray-500 dark:text-gray-500 font-mono">
             {mcpUrl}
           </div>
+          <div className="flex gap-2 mt-2">
+            <button
+              type="button"
+              onClick={retryMcp}
+              disabled={mcpState === "ready" || mcpState === "connecting" || mcpState === "loading"}
+              className="text-xs px-3 py-1 rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={disconnectMcp}
+              disabled={mcpState !== "ready"}
+              className="text-xs px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Disconnect
+            </button>
+          </div>
           {mcpError && (
             <div className="text-sm text-red-600 dark:text-red-400">
               Error: {mcpError}
@@ -423,7 +496,7 @@ function ChatInner() {
                 <button
                   type="button"
                   onClick={retryMcp}
-                  className="text-xs px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+                  className="text-xs px-3 py-1 rounded bg-orange-600 text-white hover:bg-orange-700"
                 >
                   Retry Connection
                 </button>
@@ -567,7 +640,7 @@ export default function ChatPage() {
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
           theme={darkTheme({
-            accentColor: "#4E76A9",
+            accentColor: "#FF6B35",
             accentColorForeground: "#fff",
           })}
           initialChain={arbitrum}

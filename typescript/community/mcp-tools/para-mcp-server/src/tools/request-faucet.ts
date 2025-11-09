@@ -15,13 +15,13 @@ export const schema = {
     .string()
     .describe("The blockchain address to receive faucet tokens"),
   network: z
-    .string()
+    .enum(["base-sepolia", "ethereum-sepolia"])
     .describe(
-      "The network to request faucet tokens on (e.g., 'base-sepolia', 'base-mainnet')",
+      "The network to request faucet tokens on. Supported networks: base-sepolia, ethereum-sepolia",
     ),
   token: z
-    .string()
-    .describe("The token to request from the faucet (e.g., 'eth', 'usdc')"),
+    .enum(["eth", "usdc", "eurc", "cbbtc"])
+    .describe("The token to request from the faucet. Supported tokens: eth (native), usdc (ERC-20), eurc (ERC-20), cbbtc (ERC-20)"),
 } satisfies Record<string, z.ZodTypeAny>;
 
 // Define tool metadata
