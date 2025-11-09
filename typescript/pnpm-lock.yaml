@@ -603,7 +603,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.2.0
-        version: 1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4(vitest@3.2.4))(terser@5.44.0)
+        version: 1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4)(terser@5.44.0)
 
   community/agents/lending-agent-no-wallet:
     dependencies:
@@ -1250,7 +1250,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.2.0
-        version: 1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4(vitest@3.2.4))(terser@5.44.0)
+        version: 1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4)(terser@5.44.0)
 
   community/mcp-tools/tatum-mcp-server:
     dependencies:
@@ -1451,9 +1451,9 @@ importers:
 
   lib/agent-node/config/workflows/sample-package:
     dependencies:
-      zod:
-        specifier: 'catalog:'
-        version: 4.1.11
+      '@emberai/agent-node':
+        specifier: ^1.0.0
+        version: 1.0.0(@cfworker/json-schema@4.1.1)(bufferutil@4.0.9)(ox@0.8.6(typescript@5.9.3)(zod@4.1.12))(react@19.1.1)(typescript@5.9.3)(utf-8-validate@5.0.10)
 
   lib/agent-node/dist/cli/templates: {}
 
@@ -1463,7 +1463,11 @@ importers:
 
   lib/agent-node/dist/cli/templates/workflows/sample-package: {}
 
-  lib/agent-node/src/cli/templates/config-workspace/workflows/sample-package: {}
+  lib/agent-node/src/cli/templates/config-workspace/workflows/sample-package:
+    dependencies:
+      '@emberai/agent-node':
+        specifier: ^1.0.0
+        version: 1.0.0(@cfworker/json-schema@4.1.1)(bufferutil@4.0.9)(ox@0.8.6(typescript@5.9.3)(zod@4.1.12))(react@19.1.1)(typescript@5.9.3)(utf-8-validate@5.0.10)
 
   lib/ember-api:
     dependencies:
@@ -2325,6 +2329,11 @@ packages:
     engines: {bun: '>=1', deno: '>=2', node: '>=16'}
     peerDependencies:
       '@noble/ciphers': ^1.0.0
+
+  '@emberai/agent-node@1.0.0':
+    resolution: {integrity: sha512-LhBUoMnLJvgg/QLLkgcIDSR+DKqFZtGUKJOx03k18Ujl5YH58Mu53orGrtdvGhoxOyPSI0ZJvQEH+2L+jPZqKg==}
+    engines: {node: '>=22.0.0'}
+    hasBin: true
 
   '@emberai/arbitrum-vibekit-core@0.1.2':
     resolution: {integrity: sha512-pqorIUpbJ9ruqTHqsAHxeKfC2+bhek8xs89vXBIf1vc+Qvcxfe+2HEe9U/QYfMM6vaqmOexwfkIq4zvm8i8meQ==}
@@ -12798,6 +12807,12 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.10(zod@4.1.11)
       zod: 4.1.11
 
+  '@ai-sdk/gateway@1.0.32(zod@4.1.12)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.10(zod@4.1.12)
+      zod: 4.1.12
+
   '@ai-sdk/groq@1.2.9(zod@4.1.11)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
@@ -12822,6 +12837,12 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.10(zod@4.1.11)
       zod: 4.1.11
 
+  '@ai-sdk/openai-compatible@1.0.19(zod@4.1.12)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.10(zod@4.1.12)
+      zod: 4.1.12
+
   '@ai-sdk/openai@1.3.24(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
@@ -12839,6 +12860,12 @@ snapshots:
       '@ai-sdk/provider': 2.0.0
       '@ai-sdk/provider-utils': 3.0.10(zod@4.1.11)
       zod: 4.1.11
+
+  '@ai-sdk/openai@2.0.42(zod@4.1.12)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.10(zod@4.1.12)
+      zod: 4.1.12
 
   '@ai-sdk/provider-utils@1.0.2(zod@3.25.76)':
     dependencies:
@@ -12894,6 +12921,13 @@ snapshots:
       '@standard-schema/spec': 1.0.0
       eventsource-parser: 3.0.6
       zod: 4.1.11
+
+  '@ai-sdk/provider-utils@3.0.10(zod@4.1.12)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@standard-schema/spec': 1.0.0
+      eventsource-parser: 3.0.6
+      zod: 4.1.12
 
   '@ai-sdk/provider@0.0.12':
     dependencies:
@@ -12975,6 +13009,13 @@ snapshots:
       '@ai-sdk/provider': 2.0.0
       '@ai-sdk/provider-utils': 3.0.10(zod@4.1.11)
       zod: 4.1.11
+
+  '@ai-sdk/xai@2.0.23(zod@4.1.12)':
+    dependencies:
+      '@ai-sdk/openai-compatible': 1.0.19(zod@4.1.12)
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.10(zod@4.1.12)
+      zod: 4.1.12
 
   '@alloc/quick-lru@5.2.0': {}
 
@@ -13498,6 +13539,42 @@ snapshots:
   '@ecies/ciphers@0.2.4(@noble/ciphers@1.3.0)':
     dependencies:
       '@noble/ciphers': 1.3.0
+
+  '@emberai/agent-node@1.0.0(@cfworker/json-schema@4.1.1)(bufferutil@4.0.9)(ox@0.8.6(typescript@5.9.3)(zod@4.1.12))(react@19.1.1)(typescript@5.9.3)(utf-8-validate@5.0.10)':
+    dependencies:
+      '@a2a-js/sdk': 0.3.4(express@5.1.0)
+      '@ai-sdk/openai': 2.0.42(zod@4.1.12)
+      '@ai-sdk/provider-utils': 3.0.10(zod@4.1.12)
+      '@ai-sdk/xai': 2.0.23(zod@4.1.12)
+      '@hyperbolic/ai-sdk-provider': 0.1.3(react@19.1.1)
+      '@metamask/delegation-toolkit': 0.13.0(viem@2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12))
+      '@modelcontextprotocol/sdk': 1.21.1(@cfworker/json-schema@4.1.1)
+      '@openrouter/ai-sdk-provider': 1.2.0(ai@5.0.59(zod@4.1.12))(zod@4.1.12)
+      ai: 5.0.59(zod@4.1.12)
+      ajv: 8.17.1
+      cors: 2.8.5
+      express: 5.1.0
+      gray-matter: 4.0.3
+      jiti: 2.6.1
+      json-schema-to-zod: 2.6.1
+      ora: 9.0.0
+      permissionless: 0.2.57(ox@0.8.6(typescript@5.9.3)(zod@4.1.12))(viem@2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12))
+      picocolors: 1.1.1
+      pinata: 2.5.1(react@19.1.1)
+      prompts: 2.4.2
+      uuid: 13.0.0
+      viem: 2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12)
+      ws: 8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      zod: 4.1.12
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - bufferutil
+      - ox
+      - react
+      - react-dom
+      - supports-color
+      - typescript
+      - utf-8-validate
 
   '@emberai/arbitrum-vibekit-core@0.1.2(bufferutil@4.0.9)(react@19.1.1)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76)':
     dependencies:
@@ -14780,6 +14857,18 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@metamask/delegation-toolkit@0.13.0(viem@2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12))':
+    dependencies:
+      '@metamask/7715-permission-types': 0.3.0
+      '@metamask/delegation-abis': 0.11.0
+      '@metamask/delegation-core': 0.2.0
+      '@metamask/delegation-deployments': 0.12.0
+      buffer: 6.0.3
+      viem: 2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12)
+      webauthn-p256: 0.0.10
+    transitivePeerDependencies:
+      - supports-color
+
   '@metamask/eth-json-rpc-provider@1.0.1':
     dependencies:
       '@metamask/json-rpc-engine': 7.3.3
@@ -15284,6 +15373,11 @@ snapshots:
     dependencies:
       ai: 5.0.59(zod@4.1.11)
       zod: 4.1.11
+
+  '@openrouter/ai-sdk-provider@1.2.0(ai@5.0.59(zod@4.1.12))(zod@4.1.12)':
+    dependencies:
+      ai: 5.0.59(zod@4.1.12)
+      zod: 4.1.12
 
   '@opentelemetry/api@1.9.0': {}
 
@@ -17842,6 +17936,11 @@ snapshots:
       typescript: 5.9.3
       zod: 4.1.11
 
+  abitype@1.1.0(typescript@5.9.3)(zod@4.1.12):
+    optionalDependencies:
+      typescript: 5.9.3
+      zod: 4.1.12
+
   abort-controller@3.0.0:
     dependencies:
       event-target-shim: 5.0.1
@@ -17927,6 +18026,14 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.10(zod@4.1.11)
       '@opentelemetry/api': 1.9.0
       zod: 4.1.11
+
+  ai@5.0.59(zod@4.1.12):
+    dependencies:
+      '@ai-sdk/gateway': 1.0.32(zod@4.1.12)
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.10(zod@4.1.12)
+      '@opentelemetry/api': 1.9.0
+      zod: 4.1.12
 
   ajv-formats@3.0.1(ajv@8.17.1):
     optionalDependencies:
@@ -23090,6 +23197,22 @@ snapshots:
     transitivePeerDependencies:
       - zod
 
+  ox@0.8.6(typescript@5.9.3)(zod@4.1.12):
+    dependencies:
+      '@adraffy/ens-normalize': 1.11.1
+      '@noble/ciphers': 1.3.0
+      '@noble/curves': 1.9.7
+      '@noble/hashes': 1.8.0
+      '@scure/bip32': 1.7.0
+      '@scure/bip39': 1.6.0
+      abitype: 1.1.0(typescript@5.9.3)(zod@4.1.12)
+      eventemitter3: 5.0.1
+    optionalDependencies:
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - zod
+    optional: true
+
   ox@0.9.6(typescript@5.4.2)(zod@4.1.11):
     dependencies:
       '@adraffy/ens-normalize': 1.11.1
@@ -23144,6 +23267,21 @@ snapshots:
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
       abitype: 1.1.0(typescript@5.9.3)(zod@4.1.11)
+      eventemitter3: 5.0.1
+    optionalDependencies:
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - zod
+
+  ox@0.9.6(typescript@5.9.3)(zod@4.1.12):
+    dependencies:
+      '@adraffy/ens-normalize': 1.11.1
+      '@noble/ciphers': 1.3.0
+      '@noble/curves': 1.9.1
+      '@noble/hashes': 1.8.0
+      '@scure/bip32': 1.7.0
+      '@scure/bip39': 1.6.0
+      abitype: 1.1.0(typescript@5.9.3)(zod@4.1.12)
       eventemitter3: 5.0.1
     optionalDependencies:
       typescript: 5.9.3
@@ -23354,6 +23492,12 @@ snapshots:
     optionalDependencies:
       ox: 0.8.6(typescript@5.9.3)(zod@4.1.11)
 
+  permissionless@0.2.57(ox@0.8.6(typescript@5.9.3)(zod@4.1.12))(viem@2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12)):
+    dependencies:
+      viem: 2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12)
+    optionalDependencies:
+      ox: 0.8.6(typescript@5.9.3)(zod@4.1.12)
+
   pg-int8@1.0.1: {}
 
   pg-numeric@1.0.2: {}
@@ -23478,9 +23622,9 @@ snapshots:
       hono: 4.9.11
       idb-keyval: 6.2.2
       mipd: 0.0.7(typescript@5.9.3)
-      ox: 0.9.6(typescript@5.9.3)(zod@4.1.11)
+      ox: 0.9.6(typescript@5.9.3)(zod@4.1.12)
       viem: 2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.11)
-      zod: 4.1.11
+      zod: 4.1.12
       zustand: 5.0.8(@types/react@18.3.26)(react@19.0.0-rc-45804af1-20241021)(use-sync-external-store@1.4.0(react@19.0.0-rc-45804af1-20241021))
     optionalDependencies:
       '@tanstack/react-query': 5.90.2(react@19.0.0-rc-45804af1-20241021)
@@ -25875,6 +26019,23 @@ snapshots:
       - utf-8-validate
       - zod
 
+  viem@2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12):
+    dependencies:
+      '@noble/curves': 1.9.1
+      '@noble/hashes': 1.8.0
+      '@scure/bip32': 1.7.0
+      '@scure/bip39': 1.6.0
+      abitype: 1.1.0(typescript@5.9.3)(zod@4.1.12)
+      isows: 1.0.7(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))
+      ox: 0.9.6(typescript@5.9.3)(zod@4.1.12)
+      ws: 8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+    optionalDependencies:
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+      - zod
+
   vite-node@1.6.1(@types/node@20.19.21)(terser@5.44.0):
     dependencies:
       cac: 6.7.14
@@ -25940,7 +26101,7 @@ snapshots:
       tsx: 4.20.6
       yaml: 2.8.1
 
-  vitest@1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4(vitest@3.2.4))(terser@5.44.0):
+  vitest@1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4)(terser@5.44.0):
     dependencies:
       '@vitest/expect': 1.6.1
       '@vitest/runner': 1.6.1
