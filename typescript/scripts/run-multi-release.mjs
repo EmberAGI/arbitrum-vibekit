@@ -5,7 +5,9 @@ import fsPromises from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
+import createDebug from "debug";
 import multiSemanticRelease from "@anolilab/multi-semantic-release";
+import logger from "@anolilab/multi-semantic-release/lib/logger.js";
 
 const PACKAGE_DEFINITIONS = [
   {
@@ -41,6 +43,9 @@ const PACKAGE_LOOKUP = new Map(
 
 const DEFAULT_PACKAGE_IDS = PACKAGE_DEFINITIONS.map((pkg) => pkg.id);
 const LIST_DELIMITER = /[, ]/;
+const DEFAULT_DEBUG_SCOPES = ["msr:*", "semantic-release:*"];
+const DEBUG_SCOPE_ENV = "MSR_DEBUG_SCOPES";
+let loggerLevelPatched = false;
 
 const BOOLEAN_FLAGS = new Map([
   ["--dry-run", "dryRun"],
@@ -113,6 +118,59 @@ function setNestedOption(target, pathSegments, value) {
       cursor = cursor[key];
     }
   }
+}
+
+function addDebugNamespaces(scopes) {
+  const existing = createDebug.load();
+  const initialNamespaces = existing ? existing.split(/[\s,]+/) : [];
+  const namespaceSet = new Set(initialNamespaces.filter(Boolean));
+
+  scopes.filter(Boolean).forEach((scope) => namespaceSet.add(scope));
+
+  if (namespaceSet.size === 0) {
+    return;
+  }
+
+  createDebug.enable([...namespaceSet].join(","));
+}
+
+function patchLoggerLevel(scopes) {
+  if (loggerLevelPatched) {
+    return;
+  }
+
+  const descriptor = Object.getOwnPropertyDescriptor(logger.config, "level");
+
+  if (!descriptor?.set) {
+    return;
+  }
+
+  Object.defineProperty(logger.config, "level", {
+    configurable: descriptor.configurable ?? true,
+    enumerable: descriptor.enumerable ?? true,
+    get: descriptor.get ? descriptor.get.bind(logger.config) : undefined,
+    set(value) {
+      descriptor.set.call(logger.config, value);
+      addDebugNamespaces(scopes);
+    },
+  });
+
+  loggerLevelPatched = true;
+  addDebugNamespaces(scopes);
+}
+
+function maybeEnableVerboseMsrLogging(options) {
+  const rawScopes = process.env[DEBUG_SCOPE_ENV];
+  const shouldEnable = Boolean(options.debug || rawScopes);
+
+  if (!shouldEnable) {
+    return;
+  }
+
+  const scopes =
+    rawScopes && rawScopes.trim().length > 0 ? parseList(rawScopes) : DEFAULT_DEBUG_SCOPES;
+
+  patchLoggerLevel(scopes.length > 0 ? scopes : DEFAULT_DEBUG_SCOPES);
 }
 
 function normalizeValueToken(token, queue) {
@@ -357,6 +415,8 @@ async function writeSummaryFile(summaryFile, summary) {
 async function main() {
   const cwd = process.cwd();
   const { options, packageSpecs, summaryFile } = parseCliArguments(process.argv.slice(2), cwd);
+
+  maybeEnableVerboseMsrLogging(options);
 
   const resolvedPackages = resolvePackageSpecs(packageSpecs, cwd);
   const packageJsonPaths = resolvedPackages.map((pkg) => pkg.packageJsonPath);
