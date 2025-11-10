@@ -38,42 +38,6 @@
     "url": "git+https://github.com/EmberAGI/arbitrum-vibekit.git",
     "directory": "typescript/lib/agent-node"
   },
-  "release": {
-    "branches": [
-      "main",
-      {
-        "name": "next",
-        "channel": "next",
-        "prerelease": "next"
-      }
-    ],
-    "tagFormat": "@emberai/agent-node@${version}",
-    "plugins": [
-      [
-        "@semantic-release/commit-analyzer",
-        {
-          "preset": "conventionalcommits"
-        }
-      ],
-      [
-        "@semantic-release/release-notes-generator",
-        {
-          "preset": "conventionalcommits"
-        }
-      ],
-      [
-        "@semantic-release/exec",
-        {
-          "prepareCmd": "pnpm pkg set version=${nextRelease.version}",
-          "publishCmd": "pnpm publish --no-git-checks --access public --tag ${nextRelease.channel || 'latest'}"
-        }
-      ],
-      [
-        "@semantic-release/github",
-        {}
-      ]
-    ]
-  },
   "dependencies": {
     "@a2a-js/sdk": "^0.3.3",
     "@ai-sdk/openai": "^2.0.42",
@@ -128,7 +92,7 @@
     "rimraf": "^6.0.1",
     "rollup-plugin-copy": "^3.5.0",
     "supertest": "^7.1.4",
-    "tsdown": "^0.15.12",
+    "tsdown": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
