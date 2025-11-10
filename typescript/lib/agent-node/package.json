@@ -111,7 +111,7 @@
     "clean": "rimraf node_modules dist .tsbuildinfo",
     "prepack": "pnpm build",
     "postinstall": "node ./scripts/remove-local-pnpm-shim.mjs",
-    "lint": "eslint . && prettier --check .",
+    "lint": "eslint . --max-warnings=800 && prettier --check .",
     "lint:fix": "eslint . --fix && prettier --write .",
     "lint:config": "eslint config/ && prettier --check config/",
     "typecheck": "tsc --noEmit",
