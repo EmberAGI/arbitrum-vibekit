@@ -6,6 +6,7 @@ import type { Tool } from 'ai';
 import { z } from 'zod';
 
 import { Logger } from '../../utils/logger.js';
+import type { WorkflowReturn } from '../../workflow/types.js';
 import { workflowToCoreTools } from '../adapters.js';
 
 export interface WorkflowRuntime {
@@ -15,9 +16,9 @@ export interface WorkflowRuntime {
     id: string,
     args: unknown,
   ) => {
-    waitForCompletion?: () => Promise<void>;
+    waitForCompletion?: () => Promise<WorkflowReturn>;
     error?: unknown;
-    result?: unknown;
+    result?: WorkflowReturn;
     id: string;
     state: string;
   };
@@ -85,7 +86,7 @@ export class WorkflowToolManager {
   /**
    * Execute a workflow tool
    */
-  async executeWorkflow(toolName: string, args: unknown): Promise<unknown> {
+  async executeWorkflow(toolName: string, args: unknown): Promise<WorkflowReturn> {
     if (!this.workflowRuntime?.dispatch) {
       throw new Error('Workflow runtime not available');
     }
@@ -105,9 +106,9 @@ export class WorkflowToolManager {
       );
     }
 
-    const result = execution.result ?? { id: execution.id, state: execution.state };
+    // No fallback - return the actual workflow result (can be void)
     this.logger.debug('Workflow completed', { tool: toolName, ms: Date.now() - start });
-    return result;
+    return execution.result;
   }
 
   /**

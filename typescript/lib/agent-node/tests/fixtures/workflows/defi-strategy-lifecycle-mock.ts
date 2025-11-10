@@ -1,7 +1,11 @@
 import type { Artifact } from '@a2a-js/sdk';
 import { z } from 'zod';
 
-import type { WorkflowPlugin, WorkflowContext, WorkflowState } from '../../src/workflows/types.js';
+import type {
+  WorkflowPlugin,
+  WorkflowContext,
+  WorkflowState,
+} from '../../../src/workflow/types.js';
 
 /**
  * Mock workflow plugin for testing DeFi strategy lifecycle with A2A
@@ -291,15 +295,17 @@ const plugin: WorkflowPlugin = {
 
     // Return structured result
     return {
-      success: true,
-      workflowId: context.taskId,
-      intent,
-      walletAddress: walletAmountInput.walletAddress,
-      amount: walletAmountInput.amount,
-      chainId,
-      delegationsSigned: signedDelegationsInput.delegations.length,
-      artifactsGenerated: 9,
-      completedAt: new Date('2025-01-15T10:02:00.000Z').toISOString(),
+      data: {
+        success: true,
+        workflowId: context.taskId,
+        intent,
+        walletAddress: walletAmountInput.walletAddress,
+        amount: walletAmountInput.amount,
+        chainId,
+        delegationsSigned: signedDelegationsInput.delegations.length,
+        artifactsGenerated: 9,
+        completedAt: new Date('2025-01-15T10:02:00.000Z').toISOString(),
+      },
     };
   },
 };

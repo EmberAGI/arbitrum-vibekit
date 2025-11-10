@@ -721,7 +721,7 @@ agent init my-defi-agent
 # - config/mcp.json
 # - config/workflow.json
 # - config/skills/example-skill.md
-# - config/workflows/example-workflow.ts
+# - config/workflows/sample-package-workflow.ts
 # - .env.example
 ```
 

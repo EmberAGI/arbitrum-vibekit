@@ -9,3 +9,4 @@ export * from './manifest-loader.js';
 export * from './skill-loader.js';
 export * from './mcp-loader.js';
 export * from './workflow-loader.js';
+export * from './workflow-discovery.js';

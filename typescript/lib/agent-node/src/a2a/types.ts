@@ -42,6 +42,7 @@ export interface WorkflowEvent {
   message?: string;
   state?: string;
   inputSchema?: unknown;
+  metadata?: Record<string, unknown>;
 }
 
 /**

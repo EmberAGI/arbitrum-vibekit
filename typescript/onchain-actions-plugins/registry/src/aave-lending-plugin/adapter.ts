@@ -78,21 +78,21 @@ export class AAVEAdapter {
     const txs = await this.supply(
       this.normalizeTokenAddress(token),
       amount.toString(),
-      walletAddress
+      walletAddress,
     );
     return {
-      transactions: txs.map(t => transactionPlanFromEthers(this.chain.id.toString(), t)),
+      transactions: txs.map((t) => transactionPlanFromEthers(this.chain.id.toString(), t)),
     };
   }
 
   public async createWithdrawTransaction(
-    params: WithdrawTokensRequest
+    params: WithdrawTokensRequest,
   ): Promise<WithdrawTokensResponse> {
     const { tokenToWithdraw, amount, walletAddress } = params;
 
     // Find aToken he wants to withdraw from
     const alphaTokenAddress = (await this.getReserves()).reservesData.find(
-      reserve => reserve.underlyingAsset === tokenToWithdraw.tokenUid.address
+      (reserve) => reserve.underlyingAsset === tokenToWithdraw.tokenUid.address,
     )?.aTokenAddress;
     if (!alphaTokenAddress) {
       throw new Error('No position can generate the token to withdraw');
@@ -100,7 +100,7 @@ export class AAVEAdapter {
 
     const txs = await this.withdraw(alphaTokenAddress, amount, walletAddress, walletAddress);
     return {
-      transactions: txs.map(t => transactionPlanFromEthers(this.chain.id.toString(), t)),
+      transactions: txs.map((t) => transactionPlanFromEthers(this.chain.id.toString(), t)),
     };
   }
 
@@ -130,7 +130,7 @@ export class AAVEAdapter {
     return {
       liquidationThreshold: reserveLiquidationThreshold,
       currentBorrowApy: poolData.variableBorrowRate,
-      transactions: txs.map(t => transactionPlanFromEthers(this.chain.id.toString(), t)),
+      transactions: txs.map((t) => transactionPlanFromEthers(this.chain.id.toString(), t)),
     };
   }
 
@@ -140,25 +140,30 @@ export class AAVEAdapter {
     const normalizedAsset = this.normalizeTokenAddress(repayToken);
 
     // Choose repayment method based on useATokens flag
-    const txs = await this.repay(normalizedAsset, amount.toString(), from);
+    const txs = await this.repay(normalizedAsset, amount.toString(), from, repayToken.decimals);
 
     return {
-      transactions: txs.map(t => transactionPlanFromEthers(this.chain.id.toString(), t)),
+      transactions: txs.map((t) => transactionPlanFromEthers(this.chain.id.toString(), t)),
     };
   }
 
   public async createRepayTransactionWithATokens(
-    params: RepayTokensRequest
+    params: RepayTokensRequest,
   ): Promise<RepayTokensResponse> {
     const { repayToken, amount, walletAddress: from } = params;
 
     const normalizedAsset = this.normalizeTokenAddress(repayToken);
 
     // Choose repayment method based on useATokens flag
-    const txs = await this.repayWithATokens(normalizedAsset, amount.toString(), from);
+    const txs = await this.repayWithATokens(
+      normalizedAsset,
+      amount.toString(),
+      from,
+      repayToken.decimals,
+    );
 
     return {
-      transactions: txs.map(t => transactionPlanFromEthers(this.chain.id.toString(), t)),
+      transactions: txs.map((t) => transactionPlanFromEthers(this.chain.id.toString(), t)),
     };
   }
 
@@ -173,18 +178,6 @@ export class AAVEAdapter {
       POOL: this.market.POOL,
       WETH_GATEWAY: this.market.WETH_GATEWAY,
     });
-  }
-
-  private async getTokenData(address: string) {
-    let targetAddress = address;
-
-    // If address is AAVE's native token placeholder, find the corresponding wrapped native token address
-    if (address === AAVE_ETH_PLACEHOLDER) {
-      const poolData = await this.getPool(address);
-      targetAddress = poolData.tokenAddress; // This will be the wrapped native token address
-    }
-
-    return await this.getPoolBundle().erc20Service.getTokenData(targetAddress);
   }
 
   private getPoolDataProvider(): IUiPoolDataProvider {
@@ -220,7 +213,7 @@ export class AAVEAdapter {
 
       const wrappedNativeTokenReserve = reservesResponse.reservesData.find(
         (r: ReserveDataHumanized) =>
-          ethers.utils.getAddress(r.underlyingAsset) === configuredWrappedNativeToken
+          ethers.utils.getAddress(r.underlyingAsset) === configuredWrappedNativeToken,
       );
 
       if (!wrappedNativeTokenReserve) {
@@ -232,7 +225,7 @@ export class AAVEAdapter {
 
     const reserve = reservesResponse.reservesData.find(
       (r: ReserveDataHumanized) =>
-        ethers.utils.getAddress(r.underlyingAsset) === ethers.utils.getAddress(targetAsset)
+        ethers.utils.getAddress(r.underlyingAsset) === ethers.utils.getAddress(targetAsset),
     );
 
     if (!reserve) {
@@ -258,7 +251,7 @@ export class AAVEAdapter {
   }
 
   public async getUserSummary(
-    params: GetWalletLendingPositionsRequest
+    params: GetWalletLendingPositionsRequest,
   ): Promise<GetWalletLendingPositionsResponse> {
     const userSummaryResponse = await this._getUserSummary(params.walletAddress);
     const {
@@ -282,21 +275,11 @@ export class AAVEAdapter {
       variableBorrowsUSD,
       totalBorrows,
       totalBorrowsUSD,
-    } of userReservesData.filter(ur => ur.underlyingBalanceUSD !== '0')) {
-      const tokenData = await this.getTokenData(reserve.underlyingAsset);
+    } of userReservesData.filter((ur) => ur.underlyingBalanceUSD !== '0')) {
       userReservesFormatted.push({
-        token: {
-          // TODO: ideally we should populate this object somewhere else,
-          // returning only tokenUid in this adapter
-          tokenUid: {
-            address: reserve.underlyingAsset,
-            chainId: this.chain.id.toString(),
-          },
-          isNative: false,
-          name: tokenData.name,
-          symbol: tokenData.symbol,
-          decimals: tokenData.decimals,
-          isVetted: true, // assuming aave only lets really good assets in
+        tokenUid: {
+          address: reserve.underlyingAsset,
+          chainId: this.chain.id.toString(),
         },
         underlyingBalance,
         underlyingBalanceUsd: underlyingBalanceUSD,
@@ -408,16 +391,19 @@ export class AAVEAdapter {
     return (approvalTx ? [approvalTx] : []).concat([tx]);
   }
 
-  private async repay(asset: string, amount_formatted: string, from: string): Promise<AAVEAction> {
+  private async repay(
+    asset: string,
+    amount_formatted: string,
+    from: string,
+    tokenDecimals: number,
+  ): Promise<AAVEAction> {
     // validate
     ethers.utils.getAddress(asset);
     ethers.utils.getAddress(from);
 
     const bundle: PoolBundle = this.getPoolBundle();
 
-    const amount = utils
-      .parseUnits(amount_formatted, (await this.getTokenData(asset)).decimals)
-      .toString();
+    const amount = utils.parseUnits(amount_formatted, tokenDecimals).toString();
 
     const tx = bundle.repayTxBuilder.generateTxData({
       user: from,
@@ -437,30 +423,30 @@ export class AAVEAdapter {
     return (approvalTx ? [approvalTx] : []).concat([tx]);
   }
 
-  private async repayWithATokens(
+  private repayWithATokens(
     asset: string,
     amount_formatted: string,
-    from: string
+    from: string,
+    tokenDecimals: number,
   ): Promise<AAVEAction> {
     ethers.utils.getAddress(asset);
     ethers.utils.getAddress(from);
     const bundle = this.getPoolBundle();
-    const tokenData = await this.getTokenData(asset);
-    const amount = utils.parseUnits(amount_formatted, tokenData.decimals).toString();
+    const amount = utils.parseUnits(amount_formatted, tokenDecimals).toString();
     const tx = bundle.repayWithATokensTxBuilder.generateTxData({
       user: from,
       reserve: asset,
       amount,
       rateMode: InterestRate.Variable,
     });
-    return [tx];
+    return Promise.resolve([tx]);
   }
 
   private async withdraw(
     asset: string,
     amount: bigint,
     to: string,
-    from: string
+    from: string,
   ): Promise<AAVEAction> {
     ethers.utils.getAddress(asset);
     ethers.utils.getAddress(to);
@@ -484,7 +470,7 @@ export class AAVEAdapter {
 
 const transactionPlanFromEthers = (
   chainId: string,
-  tx: ethers.PopulatedTransaction
+  tx: ethers.PopulatedTransaction,
 ): TransactionPlan => {
   return {
     type: TransactionTypes.EVM_TX,

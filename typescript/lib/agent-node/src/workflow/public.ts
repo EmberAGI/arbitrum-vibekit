@@ -15,4 +15,5 @@ export {
   type WorkflowPlugin,
   type WorkflowState,
   type WorkflowTool,
+  type WorkflowReturn,
 } from './types.js';
