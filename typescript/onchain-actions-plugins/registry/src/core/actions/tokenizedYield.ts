@@ -11,10 +11,9 @@ import type {
   ClaimRewardsResponse,
   RedeemPtRequest,
   RedeemPtResponse,
+  SellPtResponse,
+  SellYtResponse,
 } from '../schemas/tokenizedYield.js';
-
-// NOTE: Sell PT / Sell YT currently have only request schemas. If/when response schemas
-// are introduced they should replace the void return types below for stronger typing.
 
 export type TokenizedYieldMintPtAndYtCallback = (
   request: MintPtAndYtRequest,
@@ -24,9 +23,9 @@ export type TokenizedYieldBuyPtCallback = (request: BuyPtRequest) => Promise<Buy
 
 export type TokenizedYieldBuyYtCallback = (request: BuyYtRequest) => Promise<BuyYtResponse>;
 
-export type TokenizedYieldSellPtCallback = (request: SellPtRequest) => Promise<void>; // placeholder until SellPt response schema exists
+export type TokenizedYieldSellPtCallback = (request: SellPtRequest) => Promise<SellPtResponse>;
 
-export type TokenizedYieldSellYtCallback = (request: SellYtRequest) => Promise<void>; // placeholder until SellYt response schema exists
+export type TokenizedYieldSellYtCallback = (request: SellYtRequest) => Promise<SellYtResponse>;
 
 export type TokenizedYieldClaimRewardsCallback = (
   request: ClaimRewardsRequest,

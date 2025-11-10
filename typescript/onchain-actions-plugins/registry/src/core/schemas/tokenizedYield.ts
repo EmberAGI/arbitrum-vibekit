@@ -81,6 +81,16 @@ export const SellPtRequestSchema = z.object({
 });
 export type SellPtRequest = z.infer<typeof SellPtRequestSchema>;
 
+export const SellPtResponseSchema = z.object({
+  tokenOut: TokenSchema.describe('Details of the token received from selling PT'),
+  exactAmountOut: z.string().describe('Exact amount of token received from selling PT'),
+  displayAmountOut: z.string().describe('Display amount of token received from selling PT'),
+  transactions: z
+    .array(TransactionPlanSchema)
+    .describe('Array of transaction plans required to complete the selling process'),
+});
+export type SellPtResponse = z.infer<typeof SellPtResponseSchema>;
+
 export const SellYtRequestSchema = z.object({
   walletAddress: z.string().describe("User's wallet address"),
   slippage: z
@@ -91,6 +101,16 @@ export const SellYtRequestSchema = z.object({
   amount: z.bigint().describe('Amount of Yield Token (YT) to be sold'),
 });
 export type SellYtRequest = z.infer<typeof SellYtRequestSchema>;
+
+export const SellYtResponseSchema = z.object({
+  tokenOut: TokenSchema.describe('Details of the token received from selling YT'),
+  exactAmountOut: z.string().describe('Exact amount of token received from selling YT'),
+  displayAmountOut: z.string().describe('Display amount of token received from selling YT'),
+  transactions: z
+    .array(TransactionPlanSchema)
+    .describe('Array of transaction plans required to complete the selling process'),
+});
+export type SellYtResponse = z.infer<typeof SellYtResponseSchema>;
 
 export const RedeemPtRequestSchema = z.object({
   walletAddress: z.string().describe("User's wallet address"),
