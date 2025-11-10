@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@emberai/agent-node.svg)](https://www.npmjs.com/package/@emberai/agent-node)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/LICENSE)
 
-Agent Node is a complete implementation of the A2A (Agent-to-Agent) protocol with integrated AI capabilities, workflow orchestration, blockchain wallet support, and HTTP-native payment infrastructure via X402 for autonomous agent commerce.
+Agent Node is a complete implementation of the A2A (Agent-to-Agent) protocol with integrated AI capabilities, workflow orchestration, blockchain wallet support, X402 payment protocol for agent commerce, and EIP-8004 compliant on-chain registration for decentralized agent identity. Create intelligent agents that understand natural language, execute complex DeFi strategies, communicate with other agents, and monetize their services autonomously.
 
 ## Features
 
@@ -95,12 +95,17 @@ Custom workflow implementations for multi-step operations that manage A2A Task l
 
 ## Quickstart in 60 Seconds
 
-### Using the CLI
+### Prerequisites
+
+Before you begin, ensure you have:
+
+1. Node.js 18+
+2. AI Provider API Key (from OpenRouter, OpenAI, xAI, or Hyperbolic)
+
+### 1. Initialize Config Workspace
 
 > [!NOTE]
 > You can initialize Agent Node anywhere on your system. To take advantage of Vibekit's offered tools and capabilities, we recommend creating your agent node in the [community agent directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community/agents).
-
-#### 1. Initialize Config Workspace
 
 ```bash
 npx -y @emberai/agent-node@latest init
@@ -114,12 +119,12 @@ This creates a `config/` directory with:
 - `agent.md` - Base agent configuration including system prompt, model settings, A2A protocol card definition, and EIP-8004 registration details
 - `agent.manifest.json` - Skill composition settings
 - `skills/` - Directory for skill modules (includes `general-assistant.md` and `ember-onchain-actions.md`)
-- `workflows/` - Directory for custom workflow implementations (includes `example-workflow.ts`, `usdai-strategy.ts`, and utility functions)
+- `workflows/` - Directory for custom workflow implementations (includes `sample-package/` and `simple-script/` examples)
 - `mcp.json` - MCP server registry
 - `workflow.json` - Workflow plugin registry
 - `README.md` - Config workspace documentation
 
-#### 2. Run the Server
+### 2. Run the Server
 
 Smart-start chat mode (connects to running agent or starts new server):
 
@@ -127,12 +132,12 @@ Smart-start chat mode (connects to running agent or starts new server):
 npx -y @emberai/agent-node@latest
 ```
 
-#### 3. Time to Profit!
+### 3. Time to Profit!
 
 You can now build and execute any DeFi strategy through simple conversation with the Agent Node.
 
 > [!TIP]
-> Ready to customize your agent? See the [Configuration](#configuration) section above to learn about agent configurations and modify necessary files.
+> Ready to customize your agent? Once you have Agent Node running, customizing your agent is as simple as editing configuration files. Your `config/` directory contains everything needed to define your agent's personality, capabilities, and behavior. See the [Configuration](#configuration) section above to learn about agent configurations and modify necessary files.
 
 ## On-Chain Agent Registration
 
@@ -169,7 +174,7 @@ To register your agent, you'll need:
 
 ### Registration Workflow
 
-#### Configuration During Init
+**1. Configuration During Init**
 
 When you run `npx -y @emberai/agent-node@latest init`, you'll be prompted with optional EIP-8004 registration configuration:
 
@@ -181,7 +186,7 @@ When you run `npx -y @emberai/agent-node@latest init`, you'll be prompted with o
 
 These settings are saved to your `agent.md` frontmatter in the `erc8004` section.
 
-#### Registering Your Agent
+**2. Registering Your Agent**
 
 Once configured, register your agent on-chain:
 
@@ -207,7 +212,8 @@ npx -y @emberai/agent-node@latest register \
 - `--all`: Register on canonical + mirror chains (default: true)
 - `--force-new-upload`: Force new IPFS upload (ignores cached URI from previous attempts)
 
-#### Updating Registration
+
+**3. Updating Registration**
 
 To update your existing registration:
 
@@ -223,69 +229,175 @@ npx -y @emberai/agent-node@latest update-registry \
 
 ## Creating Workflows
 
-For a comprehensive guide on building workflows, see **[Workflow Creation Guide](docs/WORKFLOW-CREATION-GUIDE.md)**.
+Workflows enable building complex multi-step operations that can pause for user input, request authorization, emit structured data, and track progress throughout execution. They use JavaScript async generator functions for sophisticated DeFi automation. Agent Node supports both package-based workflows with their own dependencies and simple script workflows.
 
-**Quick overview:**
+For more detailed documentation, see [Workflows as Packages](docs/workflows.md) for package-based workflow system with dependency management and [Workflow Creation Guide](docs/WORKFLOW-CREATION-GUIDE.md) for a comprehensive workflow development guide.
 
-Workflows are multi-step operations defined as async generator functions:
+### Key Concepts
+
+- **Generator-based**: Use `yield` for state updates, `return` for final result
+- **Interruptions**: Pause for user input (`input-required`) or authorization (`auth-required`)
+- **Status Updates**: Send progress messages with `type: 'status-update'`
+- **Artifacts**: Emit structured data throughout execution with `type: 'artifact'`
+- **State Machine**: Enforced transitions: `submitted` → `working` → `input-required`/`auth-required` → `completed`
+- **Type Safety**: Zod schemas validate inputs automatically
+- **Package Support**: Workflows can have their own dependencies and `package.json`
+
+### Quickstart
+
+Agent Node supports two types of workflows:
+
+1. **Package-based workflows**: Workflows with their own `package.json` and dependencies
+2. **Simple script workflows**: Plain TypeScript/JavaScript files without dependencies
+
+### Package-Based Workflow (Recommended)
+
+**Step 1: Create Directory Structure**
+
+```bash
+mkdir -p config/workflows/my-workflow/src
+cd config/workflows/my-workflow
+```
+
+**Step 2: Create package.json**
+
+```json
+{
+  "name": "my-workflow",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "zod": "^3.24.1"
+  }
+}
+```
+
+**Step 3: Install Dependencies**
+
+```bash
+pnpm install
+```
+
+**Step 4: Create Workflow Plugin**
+
+Create `src/index.ts`:
 
 ```typescript
+import {
+  z,
+  type WorkflowContext,
+  type WorkflowPlugin,
+  type WorkflowState,
+} from '@emberai/agent-node/workflow';
+
 const plugin: WorkflowPlugin = {
   id: 'my-workflow',
   name: 'My Workflow',
-  description: 'Description of workflow',
+  description: 'A workflow with its own dependencies',
   version: '1.0.0',
+
   inputSchema: z.object({
-    /* params */
+    message: z.string(),
   }),
 
-  async *execute(context: WorkflowContext) {
-    // Yield status updates
+  async *execute(context: WorkflowContext): AsyncGenerator<WorkflowState, unknown, unknown> {
+    const { message } = context.parameters ?? { message: '' };
+
     yield {
-      type: 'status',
-      status: {
-        state: 'working',
-        message: {
-          /* ... */
-        },
-      },
+      type: 'status-update',
+      message: 'Processing your request...',
     };
 
-    // Emit artifacts
+    // Simulate some work
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    return { success: true, message };
+  },
+};
+
+export default plugin;
+```
+
+**Step 5: Register Your Workflow**
+
+Add your workflow to `config/workflow.json`:
+
+```json
+{
+  "workflows": [
+    {
+      "id": "my-workflow",
+      "from": "./workflows/my-workflow/src/index.ts",
+      "enabled": true,
+      "config": {
+        "mode": "default"
+      }
+    }
+  ]
+}
+```
+
+**Step 6: Test Your Workflow**
+
+```bash
+npx -y @emberai/agent-node@latest doctor
+npx -y @emberai/agent-node@latest run --dev
+```
+
+### Simple Script Workflow
+
+**Step 1: Create `config/workflows/simple-task/task.js`:**
+
+```javascript
+const plugin = {
+  id: 'simple-task',
+  name: 'Simple Task',
+  description: 'A workflow without dependencies',
+  version: '1.0.0',
+
+  inputSchema: null,
+
+  async *execute(context) {
     yield {
-      type: 'artifact',
-      artifact: {
-        /* ... */
-      },
+      type: 'status-update',
+      message: 'Running simple task...',
     };
 
-    // Pause for input
-    const userInput = yield {
-      type: 'pause',
-      status: {
-        state: 'input-required',
-        message: {
-          /* ... */
-        },
-      },
-      inputSchema: z.object({
-        /* ... */
-      }),
-    };
-
-    // Return result
     return { success: true };
   },
 };
+
+export default plugin;
 ```
 
-**Key concepts:**
+**Step 2: Register Your Workflow**
 
-- **Generator-based** - Use `yield` for state updates, `return` for final result
-- **Pause/Resume** - Request user input or authorization at any point
-- **Artifacts** - Emit structured data throughout execution
-- **State Machine** - Enforced transitions: `working` → `input-required` → `completed`
-- **Type Safety** - Zod schemas validate inputs automatically
+Add your workflow to `config/workflow.json`:
+
+```json
+{
+  "workflows": [
+    {
+      "id": "simple-task",
+      "from": "./workflows/simple-task/task.js",
+      "enabled": true,
+      "config": {
+        "mode": "default"
+      }
+    }
+  ]
+}
+```
+
+**Step 3: Test Your Workflow**
+
+```bash
+npx -y @emberai/agent-node@latest doctor
+npx -y @emberai/agent-node@latest run --dev
+```
+
+Your workflow becomes available as `dispatch_workflow_my_workflow` and can be triggered through natural language conversation with your agent.
 
 ## CLI Commands & Chat Interface
 
