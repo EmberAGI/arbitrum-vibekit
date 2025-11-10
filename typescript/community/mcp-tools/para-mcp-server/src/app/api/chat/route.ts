@@ -30,10 +30,9 @@ export async function POST(req: Request) {
         const rawTools = await client.tools();
         // Wrap tools to require approval before execution
         mcpTools = Object.fromEntries(
-          Object.entries(rawTools as Record<string, any>).map(([name, tool]) => [
-            name,
-            { ...tool, needsApproval: true },
-          ]),
+          Object.entries(rawTools as Record<string, any>).map(
+            ([name, tool]) => [name, { ...tool, needsApproval: true }],
+          ),
         );
       } catch (mcpError) {
         console.error("MCP connection error:", mcpError);
@@ -68,4 +67,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

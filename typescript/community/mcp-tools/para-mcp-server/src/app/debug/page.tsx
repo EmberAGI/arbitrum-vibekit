@@ -1,7 +1,6 @@
 "use client";
 
 import "@rainbow-me/rainbowkit/styles.css";
-import "@getpara/react-sdk/styles.css";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useBalance, useDisconnect, useChainId } from "wagmi";
 import { arbitrum, arbitrumSepolia, base, baseSepolia } from "wagmi/chains";
@@ -13,11 +12,7 @@ import {
   lastAssistantMessageIsCompleteWithApprovalResponses,
 } from "ai";
 import ReactMarkdown from "react-markdown";
-import type {
-  ChatAddToolApproveResponseFunction,
-  DynamicToolUIPart,
-} from "ai";
-
+import type { ChatAddToolApproveResponseFunction, DynamicToolUIPart } from "ai";
 // Type for JSON Schema properties
 type JsonSchemaProperty = {
   type: string;
@@ -34,22 +29,18 @@ type JsonSchema = {
   required?: string[];
   additionalProperties?: boolean;
 };
-import { WagmiProvider, createConfig, http, useSendTransaction, useSwitchChain, useReadContract } from "wagmi";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
-  RainbowKitProvider,
-  darkTheme,
-  connectorsForWallets,
-  useConnectModal,
-} from "@rainbow-me/rainbowkit";
-import {
-  walletConnectWallet,
-  baseAccount,
-} from "@rainbow-me/rainbowkit/wallets";
-import { paraConnector } from "@getpara/wagmi-v2-integration";
-import Para, { Environment } from "@getpara/web-sdk";
+  useSendTransaction,
+  useSwitchChain,
+  useReadContract,
+  useWalletClient,
+} from "wagmi";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { encodeFunctionData, parseUnits, isAddress } from "viem";
 import type { Abi } from "viem";
+import axios from "axios";
+// @ts-ignore - x402-axios has dual package exports which may cause TS resolution issues
+import { withPaymentInterceptor } from "x402-axios";
 
 const CHAINS = [arbitrum, arbitrumSepolia, base, baseSepolia];
 
@@ -74,62 +65,6 @@ const ERC20_ABI = [
   },
 ] as const;
 
-const queryClient = new QueryClient();
-
-// Initialize Para client
-const para = new Para(
-  (process.env.NEXT_PUBLIC_PARA_ENVIRONMENT || "BETA") === "BETA"
-    ? Environment.BETA
-    : Environment.PRODUCTION,
-  process.env.NEXT_PUBLIC_PARA_API_KEY || "",
-);
-
-// Create Para connector
-const paraConn = paraConnector({
-  para,
-  chains: CHAINS as [
-    typeof arbitrum,
-    typeof arbitrumSepolia,
-    typeof base,
-    typeof baseSepolia,
-  ],
-  appName: "Para MCP Server",
-  options: {},
-  queryClient,
-});
-
-// Create connectors for RainbowKit wallets
-const rainbowKitConnectors = connectorsForWallets(
-  [
-    {
-      groupName: "Popular",
-      wallets: [walletConnectWallet, baseAccount],
-    },
-  ],
-  {
-    appName: "Para MCP Server",
-    projectId: "4b49e5e63b9f6253943b470873b47208",
-  },
-);
-
-// Create Wagmi config with Para connector and RainbowKit wallets
-const wagmiConfig = createConfig({
-  connectors: [paraConn as any, ...rainbowKitConnectors],
-  chains: CHAINS as [
-    typeof arbitrum,
-    typeof arbitrumSepolia,
-    typeof base,
-    typeof baseSepolia,
-  ],
-  transports: {
-    [arbitrum.id]: http(),
-    [arbitrumSepolia.id]: http(),
-    [base.id]: http(),
-    [baseSepolia.id]: http(),
-  },
-  ssr: true,
-});
-
 // Transaction Preview Component
 function TransactionPreviewComponent({
   txPreview,
@@ -141,9 +76,15 @@ function TransactionPreviewComponent({
     chainId: string;
   }>;
 }) {
-  const { address, isConnected, chainId: currentChainId } = useAccount();
+  const { isConnected, chainId: currentChainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
-  const { sendTransaction, isPending, isSuccess, error, data: txHash } = useSendTransaction();
+  const {
+    sendTransaction,
+    isPending,
+    isSuccess,
+    error,
+    data: txHash,
+  } = useSendTransaction();
 
   const handleSignTransaction = async () => {
     if (!txPreview || txPreview.length === 0) return;
@@ -157,7 +98,7 @@ function TransactionPreviewComponent({
         await switchChainAsync({ chainId: targetChainId });
       }
 
-      // Send transaction
+      // Send transaction using Wagmi
       sendTransaction({
         to: tx.to as `0x${string}`,
         data: tx.data as `0x${string}`,
@@ -171,7 +112,9 @@ function TransactionPreviewComponent({
 
   return (
     <div className="mt-4 space-y-3">
-      <div className="text-sm font-semibold text-gray-100">Transaction Preview</div>
+      <div className="text-sm font-semibold text-gray-100">
+        Transaction Preview
+      </div>
 
       {/* Transaction Details */}
       <div className="space-y-2">
@@ -196,7 +139,9 @@ function TransactionPreviewComponent({
               {tx.data && tx.data !== "0x" && (
                 <div>
                   <span className="text-gray-400">Data:</span>{" "}
-                  <span className="text-gray-100 font-mono break-all">{tx.data}</span>
+                  <span className="text-gray-100 font-mono break-all">
+                    {tx.data}
+                  </span>
                 </div>
               )}
             </div>
@@ -207,7 +152,7 @@ function TransactionPreviewComponent({
       {/* Status Messages */}
       {isSuccess && (
         <div className="p-2 rounded-lg border-2 border-green-800 bg-green-200 text-green-800">
-          Transaction Successful! Hash: {txHash}
+          Transaction Successful! Hash: {String(txHash ?? "")}
         </div>
       )}
       {isPending && (
@@ -217,7 +162,7 @@ function TransactionPreviewComponent({
       )}
       {error && (
         <div className="p-2 rounded-lg border-2 border-red-800 bg-red-400 text-white break-words">
-          Error: {(error as Error).message || JSON.stringify(error, null, 2)}
+          Error: {(error as Error)?.message || JSON.stringify(error, null, 2)}
         </div>
       )}
 
@@ -233,7 +178,9 @@ function TransactionPreviewComponent({
         </button>
       ) : (
         <div className="p-2 flex rounded-lg border-2 border-gray-400 bg-gray-200 flex-col">
-          <div className="mb-2 text-red-500">Please connect your wallet to sign</div>
+          <div className="mb-2 text-red-500">
+            Please connect your wallet to sign
+          </div>
           <ConnectButton />
         </div>
       )}
@@ -241,19 +188,25 @@ function TransactionPreviewComponent({
   );
 }
 
-// Simple USDC transfer form for Base Sepolia
+// Simple USDC transfer form for Base Sepolia with x402 gasless payment
 function BaseSepoliaUsdcTransfer() {
-  const { address, isConnected, chainId } = useAccount();
+  const { address, isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
-  const { switchChainAsync } = useSwitchChain();
-  const { sendTransaction, isPending, isSuccess, error, data: txHash } = useSendTransaction();
+  const { data: walletClient } = useWalletClient();
 
   const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
+  const [isPending, setIsPending] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
 
   // Fetch USDC balance on Base Sepolia for connected user
-  const { data: usdcBal, isLoading: loadingBal, refetch: refetchBal } = useReadContract({
+  const {
+    data: usdcBal,
+    isLoading: loadingBal,
+    refetch: refetchBal,
+  } = useReadContract({
     address: USDC_BASE_SEPOLIA,
     abi: ERC20_ABI,
     functionName: "balanceOf",
@@ -269,73 +222,92 @@ function BaseSepoliaUsdcTransfer() {
 
   const handleSend = async () => {
     setLocalError(null);
+    setIsSuccess(false);
+    setTxHash(null);
+
     if (!isConnected) {
       openConnectModal?.();
       return;
     }
+
+    if (!walletClient) {
+      setLocalError("Wallet client not available");
+      return;
+    }
+
     if (!recipient || !isAddress(recipient)) {
       setLocalError("Enter a valid recipient address");
       return;
     }
-    let value: bigint;
-    try {
-      value = parseUnits(amount || "0", 6);
-    } catch {
+
+    const amountFloat = parseFloat(amount || "0");
+    if (isNaN(amountFloat) || amountFloat <= 0) {
       setLocalError("Enter a valid amount");
       return;
     }
-    if (value <= 0n) {
-      setLocalError("Amount must be greater than 0");
-      return;
-    }
+
+    setIsPending(true);
 
     try {
-      if (chainId !== baseSepolia.id) {
-        await switchChainAsync({ chainId: baseSepolia.id });
+      // Create axios instance with x402 payment interceptor
+      const axiosInstance = withPaymentInterceptor(
+        axios.create(),
+        walletClient as unknown as Parameters<typeof withPaymentInterceptor>[1],
+      );
+
+      // Make request to the payment-gated API
+      const response = await axiosInstance.post(
+        "/api/usdc-pay",
+        {
+          to: recipient,
+          amount: amount,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      // Payment successful
+      setIsSuccess(true);
+      if (response.data?.transaction) {
+        setTxHash(response.data.transaction);
       }
 
-      const data = encodeFunctionData({
-        abi: [
-          {
-            name: "transfer",
-            type: "function",
-            stateMutability: "nonpayable",
-            inputs: [
-              { name: "_to", type: "address" },
-              { name: "_value", type: "uint256" },
-            ],
-            outputs: [{ name: "", type: "bool" }],
-          },
-        ] as unknown as Abi,
-        functionName: "transfer",
-        args: [recipient as `0x${string}`, value],
-      });
-
-      sendTransaction({
-        to: USDC_BASE_SEPOLIA as `0x${string}`,
-        data,
-        value: 0n,
-        chainId: baseSepolia.id,
-      });
-
-      // Clear amount after sending, refresh balance
-      setAmount("");
+      // Force refresh balance after payment
       refetchBal();
-    } catch (e) {
-      console.error("USDC transfer error:", e);
-      setLocalError((e as Error).message || "Failed to send");
+
+      // Reset form
+      setAmount("");
+    } catch (error) {
+      console.error("USDC transfer error:", error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : (error as { response?: { data?: { error?: string } } })?.response
+              ?.data?.error ||
+            (error as { message?: string })?.message ||
+            "Failed to process payment";
+      setLocalError(errorMessage);
+    } finally {
+      setIsPending(false);
     }
   };
 
   return (
     <div className="mt-8 p-4 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800">
       <div className="flex items-center justify-between mb-2">
-        <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">USDC Transfer (Base Sepolia)</div>
+        <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          USDC Transfer (Base Sepolia)
+        </div>
         <div className="text-xs text-gray-600 dark:text-gray-300">
           {loadingBal ? (
             <span>Loading balance…</span>
           ) : (
-            <span>Balance: {formatUsdc(usdcBal as bigint | undefined)} USDC</span>
+            <span>
+              Balance: {formatUsdc(usdcBal as bigint | undefined)} USDC
+            </span>
           )}
           <button
             type="button"
@@ -349,7 +321,9 @@ function BaseSepoliaUsdcTransfer() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="space-y-1">
-          <label className="text-xs text-gray-600 dark:text-gray-300">Recipient Address</label>
+          <label className="text-xs text-gray-600 dark:text-gray-300">
+            Recipient Address
+          </label>
           <input
             type="text"
             value={recipient}
@@ -359,7 +333,9 @@ function BaseSepoliaUsdcTransfer() {
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-gray-600 dark:text-gray-300">Amount (USDC)</label>
+          <label className="text-xs text-gray-600 dark:text-gray-300">
+            Amount (USDC)
+          </label>
           <input
             type="text"
             inputMode="decimal"
@@ -375,18 +351,13 @@ function BaseSepoliaUsdcTransfer() {
       </div>
 
       {localError && (
-        <div className="mt-3 p-2 rounded border border-red-700 bg-red-100 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-300">
-          {localError}
-        </div>
-      )}
-      {error && (
         <div className="mt-3 p-2 rounded border border-red-700 bg-red-100 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-300 break-words">
-          Error: {(error as Error).message || JSON.stringify(error)}
+          {localError}
         </div>
       )}
       {isSuccess && txHash && (
         <div className="mt-3 p-2 rounded border border-green-800 bg-green-100 dark:bg-green-900/20 text-sm text-green-800 dark:text-green-300 break-words">
-          Sent! Tx: {txHash}
+          Sent! Tx: {String(txHash ?? "")}
         </div>
       )}
 
@@ -396,7 +367,13 @@ function BaseSepoliaUsdcTransfer() {
         disabled={isPending}
         className="w-full mt-4 px-4 py-2 rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {!isConnected ? "Connect Wallet" : isPending ? "Sending…" : isSuccess ? "Sent" : "Send USDC"}
+        {!isConnected
+          ? "Connect Wallet"
+          : isPending
+            ? "Sending…"
+            : isSuccess
+              ? "Sent"
+              : "Send USDC"}
       </button>
     </div>
   );
@@ -500,7 +477,11 @@ function DynamicToolWithApprovalView({
       }
 
       // Special handling for create-transaction-preview tool
-      if (invocation.toolName === "create-transaction-preview" && parsedData && !hasError) {
+      if (
+        invocation.toolName === "create-transaction-preview" &&
+        parsedData &&
+        !hasError
+      ) {
         const txData = parsedData as {
           artifacts?: Array<{
             name: string;
@@ -551,7 +532,9 @@ function DynamicToolWithApprovalView({
                 {invocation.toolName}&quot;
               </div>
               {JSON.stringify(invocation.input, null, 2)}
-              <div className={`pt-2 pb-2 font-semibold ${hasError ? "text-red-400" : ""}`}>
+              <div
+                className={`pt-2 pb-2 font-semibold ${hasError ? "text-red-400" : ""}`}
+              >
                 {hasError ? "Error:" : "Output:"}
               </div>
               <div className={hasError ? "text-red-300" : ""}>
@@ -565,7 +548,8 @@ function DynamicToolWithApprovalView({
     case "output-denied":
       return (
         <div className="text-red-500">
-          Tool {invocation.toolName} with input {JSON.stringify(invocation.input)}
+          Tool {invocation.toolName} with input{" "}
+          {JSON.stringify(invocation.input)}
           execution denied.
         </div>
       );
@@ -970,7 +954,7 @@ function ChatInner() {
       </div>
 
       {!isConnected ? (
-        <div className="flex justify-center">
+        <div className="flex flex-col items-center gap-2">
           <ConnectButton />
         </div>
       ) : (
@@ -1077,12 +1061,13 @@ function ChatInner() {
               MCP Server Status:
             </div>
             <div
-              className={`text-sm font-medium ${mcpState === "ready"
-                ? "text-green-600 dark:text-green-400"
-                : mcpState === "failed"
-                  ? "text-red-600 dark:text-red-400"
-                  : "text-yellow-600 dark:text-yellow-400"
-                }`}
+              className={`text-sm font-medium ${
+                mcpState === "ready"
+                  ? "text-green-600 dark:text-green-400"
+                  : mcpState === "failed"
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-yellow-600 dark:text-yellow-400"
+              }`}
             >
               {mcpState === "ready"
                 ? "Connected"
@@ -1091,7 +1076,7 @@ function ChatInner() {
                   : mcpState === "connecting" || mcpState === "loading"
                     ? "Connecting..."
                     : mcpState === "pending_auth" ||
-                      mcpState === "authenticating"
+                        mcpState === "authenticating"
                       ? "Authenticating..."
                       : "Disconnected"}
             </div>
@@ -1292,28 +1277,56 @@ function ChatInner() {
                   className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-lg px-4 py-2 ${message.role === "user"
-                      ? "bg-orange-600 text-white"
-                      : "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                      }`}
+                    className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                      message.role === "user"
+                        ? "bg-orange-600 text-white"
+                        : "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    }`}
                   >
                     <div className="text-sm whitespace-pre-wrap break-words">
                       {message.parts.map((part, index) => {
-                        if ((part as unknown as { type: string }).type === "text") {
+                        if (
+                          (part as unknown as { type: string }).type === "text"
+                        ) {
                           return (
                             <ReactMarkdown
                               key={index}
                               className="markdown-content"
                               components={{
-                                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                                h1: ({ children }) => <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0">{children}</h1>,
-                                h2: ({ children }) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h2>,
-                                h3: ({ children }) => <h3 className="text-sm font-bold mb-1 mt-2 first:mt-0">{children}</h3>,
-                                ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                                ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                                li: ({ children }) => <li className="ml-2">{children}</li>,
+                                p: ({ children }) => (
+                                  <p className="mb-2 last:mb-0">{children}</p>
+                                ),
+                                h1: ({ children }) => (
+                                  <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0">
+                                    {children}
+                                  </h1>
+                                ),
+                                h2: ({ children }) => (
+                                  <h2 className="text-base font-bold mb-2 mt-3 first:mt-0">
+                                    {children}
+                                  </h2>
+                                ),
+                                h3: ({ children }) => (
+                                  <h3 className="text-sm font-bold mb-1 mt-2 first:mt-0">
+                                    {children}
+                                  </h3>
+                                ),
+                                ul: ({ children }) => (
+                                  <ul className="list-disc list-inside mb-2 space-y-1">
+                                    {children}
+                                  </ul>
+                                ),
+                                ol: ({ children }) => (
+                                  <ol className="list-decimal list-inside mb-2 space-y-1">
+                                    {children}
+                                  </ol>
+                                ),
+                                li: ({ children }) => (
+                                  <li className="ml-2">{children}</li>
+                                ),
                                 code: ({ children, className, ...props }) => {
-                                  const inline = (props as { inline?: boolean }).inline;
+                                  const inline = (props as { inline?: boolean })
+                                    .inline;
                                   if (inline) {
                                     return (
                                       <code className="bg-gray-200 dark:bg-gray-800 px-1 py-0.5 rounded text-xs font-mono">
@@ -1327,7 +1340,9 @@ function ChatInner() {
                                     </code>
                                   );
                                 },
-                                pre: ({ children }) => <pre className="mb-2">{children}</pre>,
+                                pre: ({ children }) => (
+                                  <pre className="mb-2">{children}</pre>
+                                ),
                                 blockquote: ({ children }) => (
                                   <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-3 italic my-2">
                                     {children}
@@ -1343,8 +1358,14 @@ function ChatInner() {
                                     {children}
                                   </a>
                                 ),
-                                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                                em: ({ children }) => <em className="italic">{children}</em>,
+                                strong: ({ children }) => (
+                                  <strong className="font-semibold">
+                                    {children}
+                                  </strong>
+                                ),
+                                em: ({ children }) => (
+                                  <em className="italic">{children}</em>
+                                ),
                               }}
                             >
                               {part.text}
@@ -1430,19 +1451,5 @@ function ChatInner() {
 }
 
 export default function ChatPage() {
-  return (
-    <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider
-          theme={darkTheme({
-            accentColor: "#FF6B35",
-            accentColorForeground: "#fff",
-          })}
-          initialChain={arbitrum}
-        >
-          <ChatInner />
-        </RainbowKitProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
-  );
+  return <ChatInner />;
 }
