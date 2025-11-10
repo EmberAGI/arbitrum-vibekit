@@ -39,7 +39,7 @@
   },
   "devDependencies": {
     "@semantic-release/exec": "^7.1.0",
-    "tsdown": "^0.16.1"
+    "tsdown": "catalog:"
   },
   "license": "MIT",
   "publishConfig": {

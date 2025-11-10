@@ -92,7 +92,7 @@
     "rimraf": "^6.0.1",
     "rollup-plugin-copy": "^3.5.0",
     "supertest": "^7.1.4",
-    "tsdown": "^0.15.12",
+    "tsdown": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
