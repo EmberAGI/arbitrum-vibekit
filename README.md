@@ -85,7 +85,7 @@ arbitrum-vibekit/
 
 ## ⚡ Quickstart
 
-[Agent Node](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node) is Vibekit's modern framework for building production-ready autonomous with no coding required. Simply chat with your agent in natural language to execute complex DeFi strategies, orchestrate multi-step operations, and communicate with other agents. Follow the steps below to get started:
+[Agent Node](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node) is Vibekit's modern framework for building production-ready autonomous agents with no coding required. Simply chat with your agent in natural language to execute complex DeFi strategies, orchestrate multi-step operations, and communicate with other agents. Follow the steps below to get started:
 
 ### Prerequisites
 
@@ -111,7 +111,7 @@ This creates a `config/` directory with:
 - `agent.md` - Base agent configuration including system prompt, model settings, A2A protocol card definition, and EIP-8004 registration details
 - `agent.manifest.json` - Skill composition settings
 - `skills/` - Directory for skill modules (includes `general-assistant.md` and `ember-onchain-actions.md`)
-- `workflows/` - Directory for custom workflow implementations (includes `example-workflow.ts`, `usdai-strategy.ts`, and utility functions)
+- `workflows/` - Directory for custom workflow implementations (includes `sample-package/` and `simple-script/` examples)
 - `mcp.json` - MCP server registry
 - `workflow.json` - Workflow plugin registry
 - `README.md` - Config workspace documentation
@@ -149,9 +149,9 @@ Once you have Agent Node running, customizing your agent is as simple as editing
 
 **`workflows/`** - Custom multi-step operations for complex strategies:
 
-- `example-workflow.ts`: Template for building your own workflows
-- `usdai-strategy.ts`: Sample yield farming strategy implementation
-- Create TypeScript files for sophisticated DeFi automation
+- `sample-package/`: Package-based workflow with dependencies and src/index.ts
+- `simple-script/`: Simple workflow without dependencies
+- Create package-based workflows for sophisticated DeFi automation with their own dependencies
 
 **`agent.manifest.json`**: Controls which skills and workflows are active
 
