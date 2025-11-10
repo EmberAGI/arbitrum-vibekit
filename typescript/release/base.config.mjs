@@ -1,3 +1,12 @@
+const EXTRA_BRANCHES = process.env.RELEASE_EXTRA_BRANCHES
+  ? process.env.RELEASE_EXTRA_BRANCHES.split(/[,\s]+/).map((entry) => entry.trim()).filter(Boolean)
+  : [];
+
+if (EXTRA_BRANCHES.length > 0) {
+  // eslint-disable-next-line no-console
+  console.log(`[release-config] Allowing extra release branches: ${EXTRA_BRANCHES.join(", ")}`);
+}
+
 const SHARED_BRANCHES = [
   "main",
   {
@@ -5,6 +14,7 @@ const SHARED_BRANCHES = [
     name: "next",
     prerelease: "next",
   },
+  ...EXTRA_BRANCHES,
 ];
 
 const CORE_PLUGINS = [
