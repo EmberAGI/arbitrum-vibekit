@@ -74,8 +74,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Fetch semantic-release notes
-        run: git fetch origin refs/notes/semantic-release:refs/notes/semantic-release || true
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -112,8 +110,3 @@ jobs:
           name: release-summary-${{ matrix.package.id }}
           path: typescript/release-summary-${{ matrix.package.id }}.json
           if-no-files-found: warn
-      - name: Push semantic-release notes
-        if: always()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: git push origin refs/notes/semantic-release
