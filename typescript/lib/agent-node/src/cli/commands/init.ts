@@ -18,6 +18,7 @@ export interface InitOptions {
   force?: boolean;
   yes?: boolean;
   nonInteractive?: boolean;
+  noInstall?: boolean;
 }
 
 // AI Provider configurations with model suggestions
@@ -579,6 +580,26 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
         if (addedCount > 0) parts.push(`${addedCount} added`);
         if (placeholderCount > 0) parts.push(`${placeholderCount} placeholder(s)`);
         cliOutput.success(`Updated \`.env\` (${parts.join(', ')})`);
+      }
+    }
+
+    // Install workflow dependencies unless --no-install is set
+    if (!options.noInstall) {
+      try {
+        cliOutput.blank();
+        cliOutput.info('Installing workflow dependencies...');
+        const { workflowInstallCommand } = await import('./workflow-install.js');
+        await workflowInstallCommand(undefined, {
+          configDir: targetDir,
+          all: true,
+          frozenLockfile: false,
+          quiet: false,
+        });
+      } catch (error) {
+        cliOutput.warn('Failed to install workflow dependencies');
+        if (error instanceof Error) {
+          cliOutput.warn(error.message);
+        }
       }
     }
 

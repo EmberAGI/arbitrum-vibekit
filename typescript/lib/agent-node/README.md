@@ -189,6 +189,9 @@ Workflow plugin registry:
 
 Custom workflow implementations. Workflows are multi-step operations that manage A2A Task lifecycles (same concept as [Anthropic's workflows](https://www.anthropic.com/engineering/building-effective-agents)). The `init` command creates a `sample-package-workflow.ts` demonstrating status updates, artifacts, and user confirmation. For detailed workflow documentation, see the [Workflows](#workflows) section under Core Concepts.
 
+> [!TIP]
+> New: Agent Node supports “Workflows as Packages” with per-workflow dependencies and automatic discovery/install. See [Workflows as Packages](./docs/workflows.md) for structure, module resolution, and CLI commands.
+
 #### Validate Your Configuration
 
 After making changes, validate your configuration:

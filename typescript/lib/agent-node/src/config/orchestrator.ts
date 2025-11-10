@@ -51,6 +51,9 @@ export function loadAgentConfig(manifestPath: string): Promise<ComposedAgentConf
     const mcpRegistry = loadMCPRegistry(mcpRegistryPath);
     const workflowRegistry = loadWorkflowRegistry(workflowRegistryPath);
 
+    // Use registry as the strict allow-list (no discovery merge at runtime)
+    const mergedRegistry = workflowRegistry;
+
     // Load agent base
     const agentPath = resolve(manifestDir, 'agent.md');
     const agentBase = loadAgentBase(agentPath);
@@ -64,7 +67,7 @@ export function loadAgentConfig(manifestPath: string): Promise<ComposedAgentConf
     const card = composeAgentCard(agentBase, skills, mergePolicy);
 
     // Compose effective sets
-    const effectiveSets = composeEffectiveSets(mcpRegistry, workflowRegistry, skills);
+    const effectiveSets = composeEffectiveSets(mcpRegistry, mergedRegistry, skills);
 
     return {
       prompt,

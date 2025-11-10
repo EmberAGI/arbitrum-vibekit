@@ -603,7 +603,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.2.0
-        version: 1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4)(terser@5.44.0)
+        version: 1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4(vitest@3.2.4))(terser@5.44.0)
 
   community/agents/lending-agent-no-wallet:
     dependencies:
@@ -1250,7 +1250,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.2.0
-        version: 1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4)(terser@5.44.0)
+        version: 1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4(vitest@3.2.4))(terser@5.44.0)
 
   community/mcp-tools/tatum-mcp-server:
     dependencies:
@@ -1312,6 +1312,9 @@ importers:
       '@openrouter/ai-sdk-provider':
         specifier: ^1.2.0
         version: 1.2.0(ai@5.0.59(zod@4.1.11))(zod@4.1.11)
+      '@pnpm/exe':
+        specifier: ^10.20.0
+        version: 10.20.0
       ai:
         specifier: 'catalog:'
         version: 5.0.59(zod@4.1.11)
@@ -3818,6 +3821,34 @@ packages:
     resolution: {integrity: sha512-htyl8TWnKL7K/ESFa1oW2UB5lVDxuF5DpM7tBi6Hu2LNL3mWkIzNLG6N4zoCUP1lCKNxWy/3iu8mS8MvToGd6w==}
     engines: {node: '>=12.22.0'}
 
+  '@pnpm/exe@10.20.0':
+    resolution: {integrity: sha512-2JGkOsaZFMXBkPbmK9Z/XIS6TyIvPb8EFzI8raO7FrnQxE7jmL+RBqXWL9ZOmV/qWrheQLlu4Np5xVpT+DhpBA==}
+    hasBin: true
+
+  '@pnpm/linux-arm64@10.20.0':
+    resolution: {integrity: sha512-CffGc1MLVtSjuBJUzma5FmJdnna+/DC3rCoXUVIney97tUIavlsMD8AE8fyqctzj6FkNSJLK0U6LucFMxOTf3g==}
+    cpu: [arm64]
+    os: [linux]
+    hasBin: true
+
+  '@pnpm/linux-x64@10.20.0':
+    resolution: {integrity: sha512-N9AmXa6jhsIteFlfXEl7zVzMIapZPsDakQiP0xJRe8bvT4vbgJeWLAb2DOoq2aAh5GEY9f0w4KBdXmqhku2olg==}
+    cpu: [x64]
+    os: [linux]
+    hasBin: true
+
+  '@pnpm/macos-arm64@10.20.0':
+    resolution: {integrity: sha512-ZMC6GpD42BJa8qOVARWMr5EgTq3gVNChOptgZSwW6XFewdP3QpFO/X2lflTRj7AIuM+GBN7OX/sPu5R+XjWu/g==}
+    cpu: [arm64]
+    os: [darwin]
+    hasBin: true
+
+  '@pnpm/macos-x64@10.20.0':
+    resolution: {integrity: sha512-Zm3Fg81b/um5tBMmlh8v1ucqD6tHtjg9qZNX2BqWt7f5ph/vqKs+PtD0G5suBihPGjzpemGjDRAO/1v5CCTzuw==}
+    cpu: [x64]
+    os: [darwin]
+    hasBin: true
+
   '@pnpm/network.ca-file@1.0.2':
     resolution: {integrity: sha512-YcPQ8a0jwYU9bTdJDpXjMi7Brhkr1mXsXrUJvjqM2mQDgkRiz8jFaQGOdaLxgjtUfQgZhKy/O3cG/YwmgKaxLA==}
     engines: {node: '>=12.22.0'}
@@ -3825,6 +3856,18 @@ packages:
   '@pnpm/npm-conf@2.3.1':
     resolution: {integrity: sha512-c83qWb22rNRuB0UaVCI0uRPNRr8Z0FWnEIvT47jiHAmOIUHbBOg5XvV7pM5x+rKn9HRpjxquDbXYSXr3fAKFcw==}
     engines: {node: '>=12'}
+
+  '@pnpm/win-arm64@10.20.0':
+    resolution: {integrity: sha512-GgE1Mu9WWAMBfGwnq/mBZuZruw3SsrQkAiGkiFgfiIbjwea+CH/t9w0gHxssBU/36A6dMnc/HBwD3/2/BfB6Tg==}
+    cpu: [arm64]
+    os: [win32]
+    hasBin: true
+
+  '@pnpm/win-x64@10.20.0':
+    resolution: {integrity: sha512-jyeZ1ASGFprDxUfQ76qLhviKj0tfF47TUYQaF7LoMR1a70fC9tZINPm8C8Ywone1Ng5vZBr4Rpi2OZd7NCoxiQ==}
+    cpu: [x64]
+    os: [win32]
+    hasBin: true
 
   '@polka/url@1.0.0-next.29':
     resolution: {integrity: sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==}
@@ -14732,6 +14775,27 @@ snapshots:
 
   '@pnpm/config.env-replace@1.1.0': {}
 
+  '@pnpm/exe@10.20.0':
+    optionalDependencies:
+      '@pnpm/linux-arm64': 10.20.0
+      '@pnpm/linux-x64': 10.20.0
+      '@pnpm/macos-arm64': 10.20.0
+      '@pnpm/macos-x64': 10.20.0
+      '@pnpm/win-arm64': 10.20.0
+      '@pnpm/win-x64': 10.20.0
+
+  '@pnpm/linux-arm64@10.20.0':
+    optional: true
+
+  '@pnpm/linux-x64@10.20.0':
+    optional: true
+
+  '@pnpm/macos-arm64@10.20.0':
+    optional: true
+
+  '@pnpm/macos-x64@10.20.0':
+    optional: true
+
   '@pnpm/network.ca-file@1.0.2':
     dependencies:
       graceful-fs: 4.2.10
@@ -14741,6 +14805,12 @@ snapshots:
       '@pnpm/config.env-replace': 1.1.0
       '@pnpm/network.ca-file': 1.0.2
       config-chain: 1.1.13
+
+  '@pnpm/win-arm64@10.20.0':
+    optional: true
+
+  '@pnpm/win-x64@10.20.0':
+    optional: true
 
   '@polka/url@1.0.0-next.29': {}
 
@@ -25665,7 +25735,7 @@ snapshots:
       tsx: 4.20.6
       yaml: 2.8.1
 
-  vitest@1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4)(terser@5.44.0):
+  vitest@1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4(vitest@3.2.4))(terser@5.44.0):
     dependencies:
       '@vitest/expect': 1.6.1
       '@vitest/runner': 1.6.1
