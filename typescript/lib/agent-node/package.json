@@ -7,27 +7,31 @@
     "node": ">=22.0.0"
   },
   "bin": {
-    "agent": "./dist/cli.js"
+    "agent": "./dist/cli.mjs"
   },
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/config/index.d.mts",
+      "import": "./dist/config/index.mjs"
     },
-    "./cli": "./dist/cli.js",
+    "./cli": {
+      "types": "./dist/cli.d.mts",
+      "import": "./dist/cli.mjs"
+    },
     "./client": {
-      "types": "./dist/client/index.d.ts",
-      "import": "./dist/client/index.js"
+      "types": "./dist/client/index.d.mts",
+      "import": "./dist/client/index.mjs"
     },
     "./workflow": {
-      "types": "./dist/workflow/public.d.ts",
-      "import": "./dist/workflow/public.js"
+      "types": "./dist/workflow/public.d.mts",
+      "import": "./dist/workflow/public.mjs"
     }
   },
-  "types": "./dist/index.d.ts",
+  "types": "./dist/config/index.d.mts",
   "files": [
     "dist",
-    ".env.example"
+    ".env.example",
+    "scripts/remove-local-pnpm-shim.mjs"
   ],
   "publishConfig": {
     "access": "public",
@@ -100,11 +104,12 @@
   "scripts": {
     "dev": "tsx watch src/server-loader.ts",
     "build": "rimraf .tsbuildinfo && tsdown",
-    "start": "node dist/server-loader.js",
-    "cli": "node dist/cli.js",
+    "start": "node dist/server-loader.mjs",
+    "cli": "node dist/cli.mjs",
     "cli:dev": "tsx src/cli/loader.ts",
     "client": "tsx src/a2aClient.ts",
     "clean": "rimraf node_modules dist .tsbuildinfo",
+    "prepack": "pnpm build",
     "postinstall": "node ./scripts/remove-local-pnpm-shim.mjs",
     "lint": "eslint . && prettier --check .",
     "lint:fix": "eslint . --fix && prettier --write .",

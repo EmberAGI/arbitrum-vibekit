@@ -86,8 +86,8 @@ export class WorkflowPluginLoader {
       const jiti = createJiti(modulePath, {
         interopDefault: true,
         alias: {
-          '@emberai/agent-node/workflow': resolve(packageRoot, 'dist/workflow/public.js'),
-          '@emberai/agent-node': resolve(packageRoot, 'dist/index.js'),
+          '@emberai/agent-node/workflow': resolve(packageRoot, 'dist/workflow/public.mjs'),
+          '@emberai/agent-node': resolve(packageRoot, 'dist/config/index.mjs'),
         },
       });
 
