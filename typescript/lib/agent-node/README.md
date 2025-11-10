@@ -212,7 +212,6 @@ npx -y @emberai/agent-node@latest register \
 - `--all`: Register on canonical + mirror chains (default: true)
 - `--force-new-upload`: Force new IPFS upload (ignores cached URI from previous attempts)
 
-
 **3. Updating Registration**
 
 To update your existing registration:
@@ -310,7 +309,7 @@ const plugin: WorkflowPlugin = {
     };
 
     // Simulate some work
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     return { success: true, message };
   },
