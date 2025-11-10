@@ -30,7 +30,8 @@
   "types": "./dist/config/index.d.mts",
   "files": [
     "dist",
-    ".env.example"
+    ".env.example",
+    "scripts/remove-local-pnpm-shim.mjs"
   ],
   "publishConfig": {
     "access": "public",
