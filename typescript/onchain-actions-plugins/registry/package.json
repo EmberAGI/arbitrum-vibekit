@@ -59,6 +59,11 @@
         "channel": "next",
         "prerelease": "next"
       },
+      {
+        "name": "feat/tokenized-yield-abstraction",
+        "channel": "alpha",
+        "prerelease": "alpha"
+      },
       "main"
     ],
     "tagFormat": "@emberai/onchain-actions-registry@${version}",
