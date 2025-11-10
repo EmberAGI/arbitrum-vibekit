@@ -85,7 +85,7 @@ arbitrum-vibekit/
 
 ## ⚡ Quickstart
 
-[Agent Node](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node) is Vibekit's modern framework for building production-ready autonomous with no coding required. It provides a complete implementation of the A2A protocol, integrated AI capabilities, workflow orchestration, an embedded blockchain wallet, X402 payment infrastructure for monetizing agent services, and EIP-8004 compliant on-chain registration for agent discoverability. Simply chat with your agent in natural language to execute complex DeFi strategies, orchestrate multi-step operations, and communicate with other agents. Follow the steps below to get started:
+[Agent Node](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node) is Vibekit's modern framework for building production-ready autonomous with no coding required. Simply chat with your agent in natural language to execute complex DeFi strategies, orchestrate multi-step operations, and communicate with other agents. Follow the steps below to get started:
 
 ### 1. Initialize Config Workspace
 
@@ -136,19 +136,21 @@ Once you have Agent Node running, customizing your agent is as simple as editing
 
 **`skills/`** - Modular capabilities that compose your agent's skillset:
 
-- `general-assistant.md` - Basic conversational and reasoning abilities
-- `ember-onchain-actions.md` - DeFi operations (swaps, lending, staking, etc.)
+- `general-assistant.md`: Basic conversational and reasoning abilities
+- `ember-onchain-actions.md`: DeFi operations (swaps, lending, staking, etc.)
 - Add custom skills by creating new `.md` files with specific tool access
 
 **`workflows/`** - Custom multi-step operations for complex strategies:
 
-- `example-workflow.ts` - Template for building your own workflows
-- `usdai-strategy.ts` - Sample yield farming strategy implementation
+- `example-workflow.ts`: Template for building your own workflows
+- `usdai-strategy.ts`: Sample yield farming strategy implementation
 - Create TypeScript files for sophisticated DeFi automation
 
-**`agent.manifest.json`** - Controls which skills and workflows are active
-**`mcp.json`** - Registry for Model Context Protocol servers and tools
-**`workflow.json`** - Registry for custom workflow plugins
+**`agent.manifest.json`**: Controls which skills and workflows are active
+
+**`mcp.json`**: Registry for Model Context Protocol servers and tools
+
+**`workflow.json`**: Registry for custom workflow plugins
 
 ### Advanced Configuration
 
