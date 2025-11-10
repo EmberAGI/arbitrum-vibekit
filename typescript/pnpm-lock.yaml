@@ -98,6 +98,11 @@ catalogs:
       specifier: ^4.0.0
       version: 4.1.12
 
+patchedDependencies:
+  '@anolilab/multi-semantic-release':
+    hash: 37fb738e9aae114d5abda608fb1e11ab03b55303eff8c81490efb4dc99ef338b
+    path: patches/@anolilab__multi-semantic-release.patch
+
 importers:
 
   .:
@@ -108,7 +113,7 @@ importers:
     devDependencies:
       '@anolilab/multi-semantic-release':
         specifier: ^2.0.8
-        version: 2.0.8(semantic-release@24.2.9(typescript@5.9.3))(typescript@5.9.3)
+        version: 2.0.8(patch_hash=37fb738e9aae114d5abda608fb1e11ab03b55303eff8c81490efb4dc99ef338b)(semantic-release@24.2.9(typescript@5.9.3))(typescript@5.9.3)
       '@commitlint/cli':
         specifier: ^19.8.1
         version: 19.8.1(@types/node@22.18.8)(typescript@5.9.3)
@@ -153,7 +158,7 @@ importers:
         version: 8.45.0(eslint@9.36.0(jiti@2.6.1))(typescript@5.9.3)
       '@viem/anvil':
         specifier: ^0.0.10
-        version: 0.0.10(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        version: 0.0.10(bufferutil@4.0.9)(debug@4.4.3)(utf-8-validate@5.0.10)
       c8:
         specifier: 'catalog:'
         version: 10.1.3
@@ -163,6 +168,9 @@ importers:
       conventional-changelog-conventionalcommits:
         specifier: ^9.1.0
         version: 9.1.0
+      debug:
+        specifier: ^4.4.3
+        version: 4.4.3(supports-color@5.5.0)
       dotenv:
         specifier: 'catalog:'
         version: 17.2.3
@@ -201,7 +209,7 @@ importers:
         version: 3.6.2
       prool:
         specifier: ^0.0.24
-        version: 0.0.24
+        version: 0.0.24(debug@4.4.3)
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -606,7 +614,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.2.0
-        version: 1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4(vitest@3.2.4))(terser@5.44.0)
+        version: 1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4)(terser@5.44.0)
 
   community/agents/lending-agent-no-wallet:
     dependencies:
@@ -834,7 +842,7 @@ importers:
         version: 5.0.59(zod@4.1.12)
       axios:
         specifier: ^1.6.0
-        version: 1.12.2
+        version: 1.12.2(debug@4.4.3)
       cors:
         specifier: 'catalog:'
         version: 2.8.5
@@ -1035,7 +1043,7 @@ importers:
         version: 1.21.1(@cfworker/json-schema@4.1.1)
       axios:
         specifier: ^1.9.0
-        version: 1.12.2
+        version: 1.12.2(debug@4.4.3)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -1253,7 +1261,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.2.0
-        version: 1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4(vitest@3.2.4))(terser@5.44.0)
+        version: 1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4)(terser@5.44.0)
 
   community/mcp-tools/tatum-mcp-server:
     dependencies:
@@ -1408,7 +1416,7 @@ importers:
         version: 3.2.4(vitest@3.2.4)
       axios:
         specifier: ^1.12.2
-        version: 1.12.2
+        version: 1.12.2(debug@4.4.3)
       eslint:
         specifier: 'catalog:'
         version: 9.36.0(jiti@2.6.1)
@@ -12003,7 +12011,7 @@ snapshots:
       '@jridgewell/gen-mapping': 0.3.13
       '@jridgewell/trace-mapping': 0.3.31
 
-  '@anolilab/multi-semantic-release@2.0.8(semantic-release@24.2.9(typescript@5.9.3))(typescript@5.9.3)':
+  '@anolilab/multi-semantic-release@2.0.8(patch_hash=37fb738e9aae114d5abda608fb1e11ab03b55303eff8c81490efb4dc99ef338b)(semantic-release@24.2.9(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
       '@semrel-extra/topo': 1.14.1
       blork: 9.3.0
@@ -13743,7 +13751,7 @@ snapshots:
       '@noble/hashes': 1.8.0
       '@scure/base': 1.2.6
       '@types/debug': 4.1.12
-      debug: 4.3.4
+      debug: 4.4.3(supports-color@5.5.0)
       pony-cause: 2.1.11
       semver: 7.7.3
       uuid: 9.0.1
@@ -16213,11 +16221,11 @@ snapshots:
     transitivePeerDependencies:
       - utf-8-validate
 
-  '@viem/anvil@0.0.10(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
+  '@viem/anvil@0.0.10(bufferutil@4.0.9)(debug@4.4.3)(utf-8-validate@5.0.10)':
     dependencies:
       execa: 7.2.0
       get-port: 6.1.2
-      http-proxy: 1.18.1
+      http-proxy: 1.18.1(debug@4.4.3)
       ws: 8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)
     transitivePeerDependencies:
       - bufferutil
@@ -17678,9 +17686,9 @@ snapshots:
 
   axe-core@4.11.0: {}
 
-  axios@1.12.2:
+  axios@1.12.2(debug@4.4.3):
     dependencies:
-      follow-redirects: 1.15.11
+      follow-redirects: 1.15.11(debug@4.4.3)
       form-data: 4.0.4
       proxy-from-env: 1.1.0
     transitivePeerDependencies:
@@ -19713,7 +19721,9 @@ snapshots:
 
   flatted@3.3.3: {}
 
-  follow-redirects@1.15.11: {}
+  follow-redirects@1.15.11(debug@4.4.3):
+    optionalDependencies:
+      debug: 4.4.3(supports-color@5.5.0)
 
   for-each@0.3.5:
     dependencies:
@@ -20149,10 +20159,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  http-proxy@1.18.1:
+  http-proxy@1.18.1(debug@4.4.3):
     dependencies:
       eventemitter3: 4.0.7
-      follow-redirects: 1.15.11
+      follow-redirects: 1.15.11(debug@4.4.3)
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug
@@ -22389,13 +22399,13 @@ snapshots:
       kleur: 3.0.3
       sisteransi: 1.0.5
 
-  prool@0.0.24:
+  prool@0.0.24(debug@4.4.3):
     dependencies:
       change-case: 5.4.4
       eventemitter3: 5.0.1
       execa: 9.6.0
       get-port: 7.1.0
-      http-proxy: 1.18.1
+      http-proxy: 1.18.1(debug@4.4.3)
       tar: 7.2.0
     transitivePeerDependencies:
       - debug
@@ -24428,7 +24438,7 @@ snapshots:
       tsx: 4.20.6
       yaml: 2.8.1
 
-  vitest@1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4(vitest@3.2.4))(terser@5.44.0):
+  vitest@1.6.1(@types/node@20.19.21)(@vitest/ui@3.2.4)(terser@5.44.0):
     dependencies:
       '@vitest/expect': 1.6.1
       '@vitest/runner': 1.6.1
