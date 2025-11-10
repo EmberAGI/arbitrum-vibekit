@@ -31,7 +31,7 @@
     "release": "node ./scripts/run-multi-release.mjs",
     "release:dry-run:main": "RELEASE_SIMULATE_BRANCH=main node --env-file=.env ./scripts/run-release-dry-run.mjs",
     "release:dry-run:next": "RELEASE_SIMULATE_BRANCH=next node --env-file=.env ./scripts/run-release-dry-run.mjs",
-    "sync:rules": "cd .. && pnpm exec rulesync generate"
+    "sync:rules": "(cd .. && ./typescript/node_modules/.bin/rulesync generate)"
   },
   "keywords": [],
   "author": "",
