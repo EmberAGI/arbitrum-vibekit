@@ -1,7 +1,7 @@
-import { AlloraAPIClient } from '@alloralabs/allora-sdk'
+import type { AlloraAPIClient } from '@alloralabs/allora-sdk'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { z } from 'zod'
 import pRetry, { AbortError } from 'p-retry'
+import { z } from 'zod'
 
 // Retry configuration for rate limiting
 const RETRY_CONFIG = {
