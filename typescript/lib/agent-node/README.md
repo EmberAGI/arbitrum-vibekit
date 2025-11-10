@@ -379,8 +379,8 @@ Add your workflow to `config/workflow.json`:
 {
   "workflows": [
     {
-      "id": "my-workflow",
-      "from": "./workflows/my-workflow/src/index.ts",
+      "id": "simple-task",
+      "from": "./workflows/simple-task/task.js",
       "enabled": true,
       "config": {
         "mode": "default"
