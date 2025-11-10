@@ -1,7 +1,7 @@
 ![Graphic](img/Banner.png)
 
 <p align="center">
-   &nbsp&nbsp <a href="https://docs.emberai.xyz/vibekit/introduction">Documentation </a> &nbsp&nbsp | &nbsp&nbsp <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/CONTRIBUTIONS.md"> Contributions </a> &nbsp&nbsp | &nbsp&nbsp <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates"> Agent Templates</a>  &nbsp&nbsp |  &nbsp&nbsp   <a href="https://www.emberai.xyz/"> Ember AI</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://discord.com/invite/bgxWQ2fSBR"> Support Discord </a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://t.me/EmberChat"> Ember Telegram</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://x.com/EmberAGI"> 𝕏 </a> &nbsp&nbsp
+   &nbsp&nbsp <a href="https://docs.emberai.xyz/vibekit/introduction">Documentation </a> &nbsp&nbsp | &nbsp&nbsp <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/CONTRIBUTIONS.md"> Contributions </a> &nbsp&nbsp | &nbsp&nbsp <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node"> Agent Node</a>  &nbsp&nbsp |  &nbsp&nbsp   <a href="https://www.emberai.xyz/"> Ember AI</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://discord.com/invite/bgxWQ2fSBR"> Support Discord </a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://t.me/EmberChat"> Ember Telegram</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://x.com/EmberAGI"> 𝕏 </a> &nbsp&nbsp
 </p>
 
 ## 🧭 Table of Contents
@@ -85,262 +85,83 @@ arbitrum-vibekit/
 
 ## ⚡ Quickstart
 
-Follow these steps to build and run DeFi agents:
+[Agent Node](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node) is Vibekit's modern framework for building production-ready autonomous agents with no coding required. Simply chat with your agent in natural language to execute complex DeFi strategies, orchestrate multi-step operations, and communicate with other agents. Follow the steps below to get started:
 
 ### Prerequisites
 
-Make sure you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) with Docker Compose v2.24 or greater installed on your system.
+Before you begin, ensure you have:
 
-> [!TIP]
-> If you are on an M-series Mac, you need to install Docker using the [dmg package](https://docs.docker.com/desktop/setup/install/mac-install/) supplied officially by Docker rather than through Homebrew or other means to avoid build issues.
+1. Node.js 18+
+2. AI Provider API Key (from OpenRouter, OpenAI, xAI, or Hyperbolic)
 
-### Get the Code
+### 1. Initialize Config Workspace
 
-To get started, clone the repository through command line or your preferred IDE:
-
-```
-git clone https://github.com/EmberAGI/arbitrum-vibekit.git &&
-cd arbitrum-vibekit
-```
-
-### Run DeFi Agents
-
-The swapping and lending agents start automatically when you launch the Vibekit frontend. Follow the steps below to get everything up and running.
-
-#### Configure Environment Variables
-
-Navigate to the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory and create a `.env` file by copying the `.env.example` and filling in the required values:
+> [!NOTE]
+> You can initialize Agent Node anywhere on your system. To take advantage of Vibekit's offered tools and capabilities, we recommend creating your agent node in the [community agent directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community/agents).
 
 ```bash
-cd typescript &&
-cp .env.example .env
+npx -y @emberai/agent-node@latest init
 ```
 
-At a minimum, you need:
+> [!NOTE]
+> During initialization, you'll be prompted with optional EIP-8004 registration configuration for on-chain agent identity. See the [Agent Node documentation](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node#on-chain-agent-registration) for details on these prompts.
 
-- Your preferred AI provider API key (e.g., `OPENROUTER_API_KEY`, `OPENAI_API_KEY`)
-- Generate a secure `AUTH_SECRET` (you can use https://generate-secret.vercel.app/32 or `openssl rand -base64 32`)
+This creates a `config/` directory with:
 
-#### Start Services:
+- `agent.md` - Base agent configuration including system prompt, model settings, A2A protocol card definition, and EIP-8004 registration details
+- `agent.manifest.json` - Skill composition settings
+- `skills/` - Directory for skill modules (includes `general-assistant.md` and `ember-onchain-actions.md`)
+- `workflows/` - Directory for custom workflow implementations (includes `sample-package/` and `simple-script/` examples)
+- `mcp.json` - MCP server registry
+- `workflow.json` - Workflow plugin registry
+- `README.md` - Config workspace documentation
+
+### 2. Run the Server
+
+Smart-start chat mode (connects to running agent or starts new server):
 
 ```bash
-# Start the web frontend and default agents
-docker compose up
+npx -y @emberai/agent-node@latest
 ```
 
-> [!WARNING]
-> If you previously ran `docker compose up` with an older version of Vibekit and encounter frontend or database-related errors, clear your browser cache and run the following command in your terminal:
->
-> ```bash
-> docker compose down && docker volume rm typescript_db_data && docker compose build web --no-cache && docker compose up
-> ```
+### 3. Time to Profit!
 
-#### Access the Web Interface:
-
-Once all services are running, open your browser and navigate to http://localhost:3000. To be able to chat with the agents, you need to connect your wallet first. Click on "Connect Wallet" to get started:
-
-<p align="left">
-  <img src="img/wallet.png" width="900px" alt="wallet"/>
-</p>
-
-After setting up your wallet, you'll see the Vibekit web interface where you can explore different agent capabilities:
-
-<p align="left">
-  <img src="img/frontend.png" width="900px" alt="frontend"/>
-</p>
+You can now build and execute any DeFi strategy through simple conversation with the Agent Node.
 
 ## 🔧 Build Your Own Agent
 
-To build your own agent, we recommend using our [Quickstart Agent template](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/quickstart-agent). It provides all the necessary boilerplate code so you can start building right away. Follow these steps to integrate and run the Quickstart Agent:
+Once you have Agent Node running, customizing your agent is as simple as editing configuration files. Your `config/` directory contains everything needed to define your agent's personality, capabilities, and behavior.
 
-### Enable the Quickstart Agent in the Frontend
+### Key Configuration Files
 
-In the [agents-config.ts](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/agents-config.ts) file, uncomment the agent's configuration in two places:
+**`agent.md`** - Your agent's core identity and system prompt. Modify this to:
 
-```typescript
-...
-  {
-    id: 'quickstart-agent-template' as const,
-    name: 'Quickstart',
-    description: 'Quickstart agent',
-    suggestedActions: [],
-  },
-...
-```
+- Define your agent's personality and expertise (trading specialist, yield farmer, etc.)
+- Set AI model preferences (OpenAI, Anthropic, xAI, etc.)
+- Configure A2A protocol card for agent-to-agent communication
+- Set up EIP-8004 on-chain registration details
 
-```typescript
-...
-  ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
-...
-```
+**`skills/`** - Modular capabilities that compose your agent's skillset:
 
-### Add the Agent to Docker Compose
+- `general-assistant.md`: Basic conversational and reasoning abilities
+- `ember-onchain-actions.md`: DeFi operations (swaps, lending, staking, etc.)
+- Add custom skills by creating new `.md` files with specific tool access
 
-In the [docker compose](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/compose.yml) file, uncomment the service definition for the Quickstart Agent:
+**`workflows/`** - Custom multi-step operations for complex strategies:
 
-```yaml
----
-quickstart-agent-template:
-  build:
-    context: ./
-    dockerfile: templates/quickstart-agent/Dockerfile
-  container_name: vibekit-quickstart-agent-template
-  env_file:
-    - path: .env
-      required: true
-    - path: templates/quickstart-agent/.env
-      required: false
-  ports:
-    - 3007:3007
-  restart: unless-stopped
-```
+- `sample-package/`: Package-based workflow with dependencies and src/index.ts
+- `simple-script/`: Simple workflow without dependencies
+- Create package-based workflows for sophisticated DeFi automation with their own dependencies
 
-### Configure the Agent's Environment
+**`agent.manifest.json`**: Controls which skills and workflows are active
 
-Navigate to the agent's directory and create a local `.env` by copying the`.env.example` file. Make sure to populate the `.env` file with your API keys and configurations:
+**`mcp.json`**: Registry for Model Context Protocol servers and tools
 
-```bash
-cd typescript/templates/quickstart-agent && cp .env.example .env
-```
+**`workflow.json`**: Registry for custom workflow plugins
 
-### Rebuild and Restart Services
+### Advanced Configuration
 
-Navigate to the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory, rebuild the web application and restart all services to apply the changes:
-
-```bash
-cd ../.. &&
-docker compose build web --no-cache && docker compose up
-```
-
-The Quickstart Agent is now accessible through the web frontend:
-
-<p align="left">
-  <img src="/img/quickstart-agent.png" width="900px" alt="quickstart-agent"/>
-</p>
-
-> [!TIP]
-> To learn more about Vibekit's agent configurations, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web#agent-configuration).
-
-## 🔗 ERC-8004 Agent Registration
-
-Vibekit now supports [ERC-8004](https://eips.ethereum.org/EIPS/eip-8004) agent registration, enabling on-chain identity and discovery for your AI agents.
-
-### What is ERC-8004?
-
-ERC-8004 is an Ethereum standard for registering AI agents on-chain, providing:
-- **Canonical Identity**: A primary chain where your agent's identity is registered
-- **Multi-Chain Discovery**: Mirror registrations for broad ecosystem reach
-- **Trust Frameworks**: Verifiable agent capabilities and certifications
-- **IPFS Metadata**: Decentralized storage for agent metadata
-
-### Getting Started with ERC-8004
-
-The agent-node framework includes built-in ERC-8004 support through the config-driven workspace:
-
-#### 1. Initialize with ERC-8004 Support
-
-When creating a new agent, the interactive `agent init` wizard guides you through ERC-8004 configuration:
-
-```bash
-cd typescript/lib/agent-node
-npx -y @emberai/agent-node init
-```
-
-The wizard will prompt you to:
-- Enable ERC-8004 registration (default: yes)
-- Select canonical chain (default: Arbitrum One)
-- Choose mirror chains (default: Ethereum + Base)
-- Optionally provide operator address for CAIP-10
-
-#### 2. Configure in agent.md
-
-Your `config/agent.md` includes an `erc8004` frontmatter block:
-
-```yaml
-erc8004:
-  enabled: true
-  canonical:
-    chainId: 42161  # Arbitrum One
-    operatorAddress: '0x...'  # Optional, for CAIP-10
-  mirrors:
-    - { chainId: 1 }      # Ethereum
-    - { chainId: 8453 }   # Base
-  identityRegistries:
-    '42161': '0x0000000000000000000000000000000000000000'  # Registry addresses
-    # ... other chains
-```
-
-#### 3. Register Your Agent On-Chain
-
-```bash
-# Register on canonical chain and mirrors (default)
-npx -y @emberai/agent-node register --from-config
-
-# Register on a specific chain only
-npx -y @emberai/agent-node register --from-config --chain 42161
-```
-
-The command will:
-1. Upload agent metadata to IPFS via Pinata
-2. Open a browser for transaction signing
-3. Automatically persist `agentId` and `registrationUri` to config
-
-#### 4. Update Registration
-
-```bash
-# Update all registered chains
-npx -y @emberai/agent-node update-registry --from-config
-
-# Update a specific chain
-npx -y @emberai/agent-node update-registry --from-config --chain 42161
-
-# Use CLI overrides (will prompt to persist)
-npx -y @emberai/agent-node update-registry --from-config --version 2.0.0
-```
-
-### Agent Card Extension
-
-When ERC-8004 is enabled, your Agent Card automatically includes an extension for discovery:
-
-```json
-{
-  "capabilities": {
-    "extensions": [
-      {
-        "uri": "https://eips.ethereum.org/EIPS/eip-8004",
-        "description": "ERC-8004 discovery/trust",
-        "required": false,
-        "params": {
-          "canonicalCaip10": "eip155:42161:0x...",
-          "identityRegistry": "eip155:42161:0x...",
-          "registrationUri": "ipfs://Qm...",
-          "supportedTrust": [...]
-        }
-      }
-    ]
-  }
-}
-```
-
-### Validate Configuration
-
-Use the `doctor` command to validate your ERC-8004 configuration:
-
-```bash
-npx -y @emberai/agent-node doctor
-```
-
-This checks for:
-- Valid chain IDs and registry addresses
-- Missing operator address (warns if CAIP-10 cannot be formed)
-- Zero-address registry placeholders
-- Correct extension composition
-
-### Learn More
-
-- **Configuration Examples**: See [`docs/architecture-v2/agent-configs.md`](./docs/architecture-v2/agent-configs.md) for comprehensive examples
-- **Architectural Decisions**: Read [`docs/rationales.md`](./docs/rationales.md) for design rationale
-- **ERC-8004 Specification**: https://eips.ethereum.org/EIPS/eip-8004
+For detailed configuration options, workflow creation, and advanced features like on-chain registration, see the comprehensive [Agent Node documentation](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node).
 
 ## 🤖 LLM Guides
 

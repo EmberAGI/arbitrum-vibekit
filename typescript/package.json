@@ -28,13 +28,16 @@
     "lint:require-submodule": "./scripts/require-submodule.sh",
     "start:anvil": "pnpm run lint:require-submodule && npx tsx test/start-anvil.ts",
     "start:mainnet": "pnpm run lint:require-submodule && npx tsx test/start-mainnet.ts",
-    "release": "multi-semantic-release --sequential --packages \"lib/ember-plugin-registry\" --ignore-private-packages",
-    "sync:rules": "cd .. && pnpm exec rulesync generate"
+    "release": "node ./scripts/run-multi-release.mjs",
+    "release:dry-run:main": "RELEASE_SIMULATE_BRANCH=main node --env-file=.env ./scripts/run-release-dry-run.mjs",
+    "release:dry-run:next": "RELEASE_SIMULATE_BRANCH=next node --env-file=.env ./scripts/run-release-dry-run.mjs",
+    "sync:rules": "(cd .. && ./typescript/node_modules/.bin/rulesync generate)"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@anolilab/multi-semantic-release": "^2.0.8",
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
     "@eslint/js": "catalog:",
@@ -53,6 +56,7 @@
     "c8": "catalog:",
     "chai": "^4.3.10",
     "conventional-changelog-conventionalcommits": "^9.1.0",
+    "debug": "^4.4.3",
     "dotenv": "catalog:",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
@@ -64,7 +68,6 @@
     "js-yaml": "^4.1.0",
     "mocha": "^10.2.0",
     "mocha-suppress-logs": "^0.5.1",
-    "multi-semantic-release": "^3.0.2",
     "prettier": "^3.5.3",
     "prool": "^0.0.24",
     "rimraf": "^6.0.1",
@@ -85,6 +88,9 @@
       "esbuild",
       "fsevents",
       "protobufjs"
-    ]
+    ],
+    "patchedDependencies": {
+      "@anolilab/multi-semantic-release": "patches/@anolilab__multi-semantic-release.patch"
+    }
   }
 }

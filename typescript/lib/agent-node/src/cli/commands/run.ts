@@ -84,6 +84,8 @@ export interface RunOptions {
   chat?: boolean; // Alias for attach
   logDir?: string; // Optional file logging directory when attaching chat
   respectLogLevel?: boolean; // Opt out of forcing ERROR in chat
+  noInstall?: boolean; // Skip automatic workflow dependency installation
+  frozenLockfile?: boolean; // Use frozen lockfile when installing workflow dependencies
 }
 
 export async function runCommand(options: RunOptions = {}): Promise<void> {
@@ -99,6 +101,25 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
   }
   if (shouldAttach) {
     cliOutput.info('Chat mode will be enabled after server starts');
+  }
+
+  // Auto-install workflow dependencies unless --no-install is set
+  if (!options.noInstall) {
+    try {
+      const { workflowInstallCommand } = await import('./workflow-install.js');
+      await workflowInstallCommand(undefined, {
+        configDir,
+        all: true,
+        frozenLockfile: options.frozenLockfile,
+        quiet: true,
+      });
+    } catch (error) {
+      // Don't block server startup if workflow install fails
+      cliOutput.warn('Failed to install workflow dependencies');
+      if (error instanceof Error) {
+        cliOutput.warn(error.message);
+      }
+    }
   }
 
   // Preconfigure logging BEFORE server initialization when attaching chat

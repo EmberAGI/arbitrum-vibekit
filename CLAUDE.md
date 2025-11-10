@@ -67,10 +67,10 @@ Commands (`.rulesync/commands/*.md`):
 
 ```yaml
 ---
-description: 'Brief description'
-targets: ['*']
-allowed-tools: ['Bash', 'Read', 'Write', 'Edit', 'Grep', 'Glob', 'Task']
-argument-hint: '(optional) argument hint'
+description: "Brief description"
+targets: ["*"]
+allowed-tools: ["Bash", "Read", "Write", "Edit", "Grep", "Glob", "Task"]
+argument-hint: "(optional) argument hint"
 ---
 ```
 
@@ -79,7 +79,7 @@ Subagents (`.rulesync/subagents/*.md`):
 ```yaml
 ---
 name: agent-name
-targets: ['*']
+targets: ["*"]
 description: When to use this agent
 claudecode:
   model: sonnet # or opus
@@ -92,9 +92,9 @@ Rules (`.rulesync/rules/*.md`):
 ```yaml
 ---
 root: true # for root.md only
-targets: ['*']
-description: 'Rule description'
-globs: ['**/*']
+targets: ["*"]
+description: "Rule description"
+globs: ["**/*"]
 ---
 ```
 
@@ -117,6 +117,7 @@ globs: ['**/*']
 **CRITICAL: NEVER maintain backwards compatibility. This is an internal codebase, not a public library.**
 
 When refactoring:
+
 - ✅ Update ALL call sites immediately
 - ✅ Make breaking changes directly
 - ❌ NO compatibility aliases, re-exports, or type aliases (e.g., `type OldName = NewName`)
@@ -125,11 +126,15 @@ When refactoring:
 
 ```typescript
 // ❌ WRONG
-export const newName = () => { /* ... */ };
+export const newName = () => {
+  /* ... */
+};
 export const oldName = newName; // NO!
 
 // ✅ CORRECT - rename and update all call sites
-export const newName = () => { /* ... */ };
+export const newName = () => {
+  /* ... */
+};
 ```
 
 ### Schema Validation (Zod)

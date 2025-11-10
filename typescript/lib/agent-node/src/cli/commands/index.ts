@@ -12,3 +12,5 @@ export { registerCommand, type RegisterCommandOptions } from './register.js';
 export { updateRegistryCommand, type UpdateRegistryCommandOptions } from './update-registry.js';
 export { chatCommand, type ChatOptions } from './chat.js';
 export { recoverIdCommand, type RecoverIdCommandOptions } from './recover-id.js';
+export { workflowInstallCommand, type WorkflowInstallOptions } from './workflow-install.js';
+export { workflowDiscoverCommand, type WorkflowDiscoverOptions } from './workflow-discover.js';

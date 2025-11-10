@@ -116,7 +116,7 @@ async function waitFor<T>(
   intervalMs = 50,
 ): Promise<T> {
   const start = Date.now();
-  // eslint-disable-next-line no-constant-condition
+
   while (true) {
     const result = predicate();
     if (result !== undefined) return result;
