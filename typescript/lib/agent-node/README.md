@@ -76,12 +76,10 @@ Custom workflow implementations for multi-step operations that manage A2A Task l
 
 ## Quickstart in 60 Seconds
 
-### Using the CLI
+### 1. Initialize Config Workspace
 
 > [!NOTE]
 > You can initialize Agent Node anywhere on your system. To take advantage of Vibekit's offered tools and capabilities, we recommend creating your agent node in the [community agent directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community/agents).
-
-#### 1. Initialize Config Workspace
 
 ```bash
 npx -y @emberai/agent-node@latest init
@@ -100,7 +98,7 @@ This creates a `config/` directory with:
 - `workflow.json` - Workflow plugin registry
 - `README.md` - Config workspace documentation
 
-#### 2. Run the Server
+### 2. Run the Server
 
 Smart-start chat mode (connects to running agent or starts new server):
 
@@ -108,12 +106,12 @@ Smart-start chat mode (connects to running agent or starts new server):
 npx -y @emberai/agent-node@latest
 ```
 
-#### 3. Time to Profit!
+### 3. Time to Profit!
 
 You can now build and execute any DeFi strategy through simple conversation with the Agent Node.
 
 > [!TIP]
-> Ready to customize your agent? See the [Configuration](#configuration) section above to learn about agent configurations and modify necessary files.
+> Ready to customize your agent? Once you have Agent Node running, customizing your agent is as simple as editing configuration files. Your `config/` directory contains everything needed to define your agent's personality, capabilities, and behavior. See the [Configuration](#configuration) section above to learn about agent configurations and modify necessary files.
 
 ## On-Chain Agent Registration
 
