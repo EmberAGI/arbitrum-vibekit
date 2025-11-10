@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@emberai/agent-node.svg)](https://www.npmjs.com/package/@emberai/agent-node)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/LICENSE)
 
-Agent Node is a complete implementation of the A2A (Agent-to-Agent) protocol with integrated AI capabilities, workflow orchestration, blockchain wallet support, and HTTP-native payment infrastructure via X402 for autonomous agent commerce.
+Agent Node is a complete implementation of the A2A (Agent-to-Agent) protocol with integrated AI capabilities, workflow orchestration, blockchain wallet support, X402 payment protocol for agent commerce, and EIP-8004 compliant on-chain registration for decentralized agent identity. Create intelligent agents that understand natural language, execute complex DeFi strategies, communicate with other agents, and monetize their services autonomously.
 
 ## Features
 
@@ -75,6 +75,13 @@ Workflow plugin registry. See the generated `config/workflow.json` file for conf
 Custom workflow implementations for multi-step operations that manage A2A Task lifecycles. The `init` command generates example workflows (`example-workflow.ts` and `usdai-strategy.ts`) along with utility functions. Refer to the generated files in `config/workflows/` for working examples and see the [Creating Workflows](#creating-workflows) section for comprehensive documentation.
 
 ## Quickstart in 60 Seconds
+
+### Prerequisites
+
+Before you begin, ensure you have:
+
+1. Node.js 18+
+2. AI Provider API Key (from OpenRouter, OpenAI, xAI, or Hyperbolic)
 
 ### 1. Initialize Config Workspace
 
@@ -148,7 +155,7 @@ To register your agent, you'll need:
 
 ### Registration Workflow
 
-#### Configuration During Init
+**1. Configuration During Init**
 
 When you run `npx -y @emberai/agent-node@latest init`, you'll be prompted with optional EIP-8004 registration configuration:
 
@@ -160,7 +167,7 @@ When you run `npx -y @emberai/agent-node@latest init`, you'll be prompted with o
 
 These settings are saved to your `agent.md` frontmatter in the `erc8004` section.
 
-#### Registering Your Agent
+**2. Registering Your Agent**
 
 Once configured, register your agent on-chain:
 
@@ -187,7 +194,7 @@ npx -y @emberai/agent-node@latest register \
 - `--force-new-upload`: Force new IPFS upload (ignores cached URI from previous attempts)
 
 
-#### Updating Registration
+**3. Updating Registration**
 
 To update your existing registration:
 
@@ -204,69 +211,110 @@ npx -y @emberai/agent-node@latest update-registry \
 
 ## Creating Workflows
 
-For a comprehensive guide on building workflows, see **[Workflow Creation Guide](docs/WORKFLOW-CREATION-GUIDE.md)**.
+Workflows enable building complex multi-step operations that can pause for user input, request authorization, emit structured data, and track progress throughout execution. They use JavaScript async generator functions for sophisticated DeFi automation.
 
-**Quick overview:**
+For comprehensive documentation, see [Workflow Creation Guide](docs/WORKFLOW-CREATION-GUIDE.md).
 
-Workflows are multi-step operations defined as async generator functions:
+### Quick Start: Create a Custom Workflow
+
+**Step 1: Create Your Workflow File**
+
+Create a workflow file in `config/workflows/`. The init command provides `example-workflow.ts` and `usdai-strategy.ts` as references:
 
 ```typescript
+import type { WorkflowPlugin, WorkflowContext } from '@emberai/agent-node/workflows';
+import { z } from 'zod';
+
 const plugin: WorkflowPlugin = {
   id: 'my-workflow',
   name: 'My Workflow',
-  description: 'Description of workflow',
+  description: 'A simple workflow example',
   version: '1.0.0',
+
   inputSchema: z.object({
-    /* params */
+    message: z.string(),
   }),
 
   async *execute(context: WorkflowContext) {
+    const { message } = context.parameters;
+
     // Yield status updates
     yield {
       type: 'status',
       status: {
         state: 'working',
         message: {
-          /* ... */
+          kind: 'message',
+          messageId: 'processing',
+          contextId: context.contextId,
+          role: 'agent',
+          parts: [{ kind: 'text', text: 'Processing your request...' }],
         },
       },
     };
 
-    // Emit artifacts
-    yield {
-      type: 'artifact',
-      artifact: {
-        /* ... */
-      },
-    };
-
-    // Pause for input
+    // Pause for user input
     const userInput = yield {
       type: 'pause',
       status: {
         state: 'input-required',
         message: {
-          /* ... */
+          kind: 'message',
+          messageId: 'confirmation',
+          contextId: context.contextId,
+          role: 'agent',
+          parts: [{ kind: 'text', text: 'Should I continue with this operation?' }],
         },
       },
       inputSchema: z.object({
-        /* ... */
+        confirmed: z.boolean(),
       }),
     };
 
-    // Return result
-    return { success: true };
+    // Return final result
+    return { success: userInput.confirmed, message };
   },
 };
+
+export default plugin;
 ```
 
-**Key concepts:**
+**Step 2: Register Your Workflow**
 
-- **Generator-based** - Use `yield` for state updates, `return` for final result
-- **Pause/Resume** - Request user input or authorization at any point
-- **Artifacts** - Emit structured data throughout execution
-- **State Machine** - Enforced transitions: `working` → `input-required` → `completed`
-- **Type Safety** - Zod schemas validate inputs automatically
+Add your workflow to `config/workflow.json`:
+
+```json
+{
+  "workflows": {
+    "my-workflow": "./workflows/my-workflow.ts"
+  }
+}
+```
+
+Enable it in `config/agent.manifest.json`:
+
+```json
+{
+  "enabledWorkflows": ["my-workflow"]
+}
+```
+
+**Step 3: Test Your Workflow**
+
+```bash
+npx -y @emberai/agent-node@latest doctor
+npx -y @emberai/agent-node@latest run --dev
+```
+
+Your workflow becomes available as `dispatch_workflow_my_workflow` and can be triggered through natural language conversation with your agent.
+
+### Key Concepts
+
+- **Generator-based**: Use `yield` for state updates, `return` for final result
+- **Pause/Resume**: Request user input or authorization at any point
+- **Artifacts**: Emit structured data throughout execution
+- **State Machine**: Enforced transitions: `working` → `input-required` → `completed`
+- **Type Safety**: Zod schemas validate inputs automatically
 
 ## CLI Commands & Chat Interface
 

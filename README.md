@@ -87,6 +87,13 @@ arbitrum-vibekit/
 
 [Agent Node](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node) is Vibekit's modern framework for building production-ready autonomous with no coding required. Simply chat with your agent in natural language to execute complex DeFi strategies, orchestrate multi-step operations, and communicate with other agents. Follow the steps below to get started:
 
+### Prerequisites
+
+Before you begin, ensure you have:
+
+1. Node.js 18+
+2. AI Provider API Key (from OpenRouter, OpenAI, xAI, or Hyperbolic)
+
 ### 1. Initialize Config Workspace
 
 > [!NOTE]
