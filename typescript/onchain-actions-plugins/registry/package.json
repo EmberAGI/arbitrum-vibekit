@@ -50,42 +50,5 @@
     "type": "git",
     "url": "git+https://github.com/EmberAGI/arbitrum-vibekit.git",
     "directory": "typescript/onchain-actions-plugins/registry"
-  },
-  "release": {
-    "branches": [
-      "main",
-      {
-        "name": "next",
-        "channel": "next",
-        "prerelease": "next"
-      },
-      "main"
-    ],
-    "tagFormat": "@emberai/onchain-actions-registry@${version}",
-    "plugins": [
-      [
-        "@semantic-release/commit-analyzer",
-        {
-          "preset": "conventionalcommits"
-        }
-      ],
-      [
-        "@semantic-release/release-notes-generator",
-        {
-          "preset": "conventionalcommits"
-        }
-      ],
-      [
-        "@semantic-release/npm",
-        {
-          "npmPublish": true,
-          "pkgRoot": ".npm-publish"
-        }
-      ],
-      [
-        "@semantic-release/github",
-        {}
-      ]
-    ]
   }
 }
