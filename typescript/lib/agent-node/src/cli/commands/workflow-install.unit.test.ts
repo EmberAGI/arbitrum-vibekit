@@ -19,7 +19,7 @@ vi.mock('../output.js', () => {
   };
 
   // Configure spinner to call success/error methods with formatted messages
-  mockCliOutput.spinner.mockImplementation((text: string) => ({
+  mockCliOutput.spinner.mockImplementation((_text: string) => ({
     succeed: vi.fn((message: string) => {
       mockCliOutput.success(`    ✓ ${message}`);
     }),

@@ -423,7 +423,7 @@ export class AAVEAdapter {
     return (approvalTx ? [approvalTx] : []).concat([tx]);
   }
 
-  private async repayWithATokens(
+  private repayWithATokens(
     asset: string,
     amount_formatted: string,
     from: string,
@@ -439,7 +439,7 @@ export class AAVEAdapter {
       amount,
       rateMode: InterestRate.Variable,
     });
-    return [tx];
+    return Promise.resolve([tx]);
   }
 
   private async withdraw(
