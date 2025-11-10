@@ -114,3 +114,36 @@ jobs:
           name: release-summary-${{ matrix.package.id }}
           path: typescript/release-summary-${{ matrix.package.id }}.json
           if-no-files-found: warn
+
+  sync-next:
+    name: Sync next branch
+    needs:
+      - prepare
+      - release
+    if: github.ref == 'refs/heads/main' && (needs.release.result == 'success' || needs.release.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fast-forward next to main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git fetch origin next
+          current_next="$(git rev-parse --verify origin/next)"
+          head_sha="$(git rev-parse HEAD)"
+
+          if [ "$current_next" = "$head_sha" ]; then
+            echo "next is already up to date with main"
+            exit 0
+          fi
+
+          if git merge-base --is-ancestor "$current_next" "$head_sha"; then
+            echo "Fast-forwarding next to $head_sha"
+            git push origin "$head_sha":next
+          else
+            echo "::warning::origin/next has diverged from main; skipping auto-sync. Please merge main into next manually."
+          fi
