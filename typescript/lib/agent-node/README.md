@@ -231,9 +231,7 @@ npx -y @emberai/agent-node@latest update-registry \
 
 Workflows enable building complex multi-step operations that can pause for user input, request authorization, emit structured data, and track progress throughout execution. They use JavaScript async generator functions for sophisticated DeFi automation. Agent Node supports both package-based workflows with their own dependencies and simple script workflows.
 
-For documentation, see:
-- [Workflows as Packages](docs/workflows.md): Package-based workflow system with dependency management
-- [Workflow Creation Guide](docs/WORKFLOW-CREATION-GUIDE.md): Comprehensive workflow development guide
+For more detailed documentation, see [Workflows as Packages](docs/workflows.md) for package-based workflow system with dependency management and [Workflow Creation Guide](docs/WORKFLOW-CREATION-GUIDE.md) for a comprehensive workflow development guide.
 
 ### Key Concepts
 
@@ -245,14 +243,14 @@ For documentation, see:
 - **Type Safety**: Zod schemas validate inputs automatically
 - **Package Support**: Workflows can have their own dependencies and `package.json`
 
-### Quick Start: Create a Custom Workflow
+### Quickstart
 
 Agent Node supports two types of workflows:
 
 1. **Package-based workflows**: Workflows with their own `package.json` and dependencies
 2. **Simple script workflows**: Plain TypeScript/JavaScript files without dependencies
 
-#### Package-Based Workflow (Recommended)
+### Package-Based Workflow (Recommended)
 
 **Step 1: Create Directory Structure**
 
@@ -347,7 +345,7 @@ npx -y @emberai/agent-node@latest doctor
 npx -y @emberai/agent-node@latest run --dev
 ```
 
-#### Simple Script Workflow
+### Simple Script Workflow
 
 **Step 1: Create `config/workflows/simple-task/task.js`:**
 
@@ -400,8 +398,6 @@ npx -y @emberai/agent-node@latest run --dev
 ```
 
 Your workflow becomes available as `dispatch_workflow_my_workflow` and can be triggered through natural language conversation with your agent.
-
-For detailed documentation on package-based workflows, see [Workflows as Packages](docs/workflows.md).
 
 ## CLI Commands & Chat Interface
 
