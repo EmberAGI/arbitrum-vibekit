@@ -8,15 +8,30 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Mock dependencies
 vi.mock('child_process');
-vi.mock('../output.js', () => ({
-  cliOutput: {
+vi.mock('../output.js', () => {
+  const mockCliOutput = {
     print: vi.fn(),
     success: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
     info: vi.fn(),
-  },
-}));
+    spinner: vi.fn(),
+  };
+
+  // Configure spinner to call success/error methods with formatted messages
+  mockCliOutput.spinner.mockImplementation((text: string) => ({
+    succeed: vi.fn((message: string) => {
+      mockCliOutput.success(`    ✓ ${message}`);
+    }),
+    fail: vi.fn((message: string) => {
+      mockCliOutput.error(`    ✗ ${message}`);
+    }),
+    start: vi.fn(),
+    stop: vi.fn(),
+  }));
+
+  return { cliOutput: mockCliOutput };
+});
 
 import { cliOutput } from '../output.js';
 
