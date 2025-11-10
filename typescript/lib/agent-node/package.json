@@ -105,6 +105,7 @@
     "cli:dev": "tsx src/cli/loader.ts",
     "client": "tsx src/a2aClient.ts",
     "clean": "rimraf node_modules dist .tsbuildinfo",
+    "prepack": "pnpm build",
     "postinstall": "node ./scripts/remove-local-pnpm-shim.mjs",
     "lint": "eslint . && prettier --check .",
     "lint:fix": "eslint . --fix && prettier --write .",
