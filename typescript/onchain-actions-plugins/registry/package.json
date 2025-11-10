@@ -53,7 +53,6 @@
   },
   "release": {
     "branches": [
-      "main",
       {
         "name": "next",
         "channel": "next",
@@ -61,8 +60,8 @@
       },
       {
         "name": "feat/tokenized-yield-abstraction",
-        "channel": "alpha",
-        "prerelease": "alpha"
+        "channel": "beta",
+        "prerelease": "beta"
       },
       "main"
     ],
