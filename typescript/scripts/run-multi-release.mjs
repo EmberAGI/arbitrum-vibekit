@@ -260,7 +260,7 @@ function parseCliArguments(argv, cwd) {
     }
 
     if (token === "--") {
-      break;
+      continue;
     }
 
     if (token === "--help") {

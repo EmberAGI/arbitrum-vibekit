@@ -30,4 +30,4 @@ COPY --from=builder /deploy .
 EXPOSE 3000
 
 # Run the application
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/server.mjs"]
