@@ -119,7 +119,7 @@ This creates a `config/` directory with:
 - `agent.md` - Base agent configuration including system prompt, model settings, A2A protocol card definition, and EIP-8004 registration details
 - `agent.manifest.json` - Skill composition settings
 - `skills/` - Directory for skill modules (includes `general-assistant.md` and `ember-onchain-actions.md`)
-- `workflows/` - Directory for custom workflow implementations (includes `example-workflow.ts`, `usdai-strategy.ts`, and utility functions)
+- `workflows/` - Directory for custom workflow implementations (includes `sample-package/` and `simple-script/` examples)
 - `mcp.json` - MCP server registry
 - `workflow.json` - Workflow plugin registry
 - `README.md` - Config workspace documentation
@@ -229,68 +229,144 @@ npx -y @emberai/agent-node@latest update-registry \
 
 ## Creating Workflows
 
-Workflows enable building complex multi-step operations that can pause for user input, request authorization, emit structured data, and track progress throughout execution. They use JavaScript async generator functions for sophisticated DeFi automation.
+Workflows enable building complex multi-step operations that can pause for user input, request authorization, emit structured data, and track progress throughout execution. They use JavaScript async generator functions for sophisticated DeFi automation. Agent Node supports both package-based workflows with their own dependencies and simple script workflows.
 
-For comprehensive documentation, see [Workflow Creation Guide](docs/WORKFLOW-CREATION-GUIDE.md).
+For documentation, see:
+- [Workflows as Packages](docs/workflows.md): Package-based workflow system with dependency management
+- [Workflow Creation Guide](docs/WORKFLOW-CREATION-GUIDE.md): Comprehensive workflow development guide
+
+### Key Concepts
+
+- **Generator-based**: Use `yield` for state updates, `return` for final result
+- **Interruptions**: Pause for user input (`input-required`) or authorization (`auth-required`)
+- **Status Updates**: Send progress messages with `type: 'status-update'`
+- **Artifacts**: Emit structured data throughout execution with `type: 'artifact'`
+- **State Machine**: Enforced transitions: `submitted` → `working` → `input-required`/`auth-required` → `completed`
+- **Type Safety**: Zod schemas validate inputs automatically
+- **Package Support**: Workflows can have their own dependencies and `package.json`
 
 ### Quick Start: Create a Custom Workflow
 
-**Step 1: Create Your Workflow File**
+Agent Node supports two types of workflows:
 
-Create a workflow file in `config/workflows/`. The init command provides `example-workflow.ts` and `usdai-strategy.ts` as references:
+1. **Package-based workflows**: Workflows with their own `package.json` and dependencies
+2. **Simple script workflows**: Plain TypeScript/JavaScript files without dependencies
+
+#### Package-Based Workflow (Recommended)
+
+**Step 1: Create Directory Structure**
+
+```bash
+mkdir -p config/workflows/my-workflow/src
+cd config/workflows/my-workflow
+```
+
+**Step 2: Create package.json**
+
+```json
+{
+  "name": "my-workflow",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "zod": "^3.24.1"
+  }
+}
+```
+
+**Step 3: Install Dependencies**
+
+```bash
+pnpm install
+```
+
+**Step 4: Create Workflow Plugin**
+
+Create `src/index.ts`:
 
 ```typescript
-import type { WorkflowPlugin, WorkflowContext } from '@emberai/agent-node/workflows';
-import { z } from 'zod';
+import {
+  z,
+  type WorkflowContext,
+  type WorkflowPlugin,
+  type WorkflowState,
+} from '@emberai/agent-node/workflow';
 
 const plugin: WorkflowPlugin = {
   id: 'my-workflow',
   name: 'My Workflow',
-  description: 'A simple workflow example',
+  description: 'A workflow with its own dependencies',
   version: '1.0.0',
 
   inputSchema: z.object({
     message: z.string(),
   }),
 
-  async *execute(context: WorkflowContext) {
-    const { message } = context.parameters;
+  async *execute(context: WorkflowContext): AsyncGenerator<WorkflowState, unknown, unknown> {
+    const { message } = context.parameters ?? { message: '' };
 
-    // Yield status updates
     yield {
-      type: 'status',
-      status: {
-        state: 'working',
-        message: {
-          kind: 'message',
-          messageId: 'processing',
-          contextId: context.contextId,
-          role: 'agent',
-          parts: [{ kind: 'text', text: 'Processing your request...' }],
-        },
-      },
+      type: 'status-update',
+      message: 'Processing your request...',
     };
 
-    // Pause for user input
-    const userInput = yield {
-      type: 'pause',
-      status: {
-        state: 'input-required',
-        message: {
-          kind: 'message',
-          messageId: 'confirmation',
-          contextId: context.contextId,
-          role: 'agent',
-          parts: [{ kind: 'text', text: 'Should I continue with this operation?' }],
-        },
-      },
-      inputSchema: z.object({
-        confirmed: z.boolean(),
-      }),
+    // Simulate some work
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    return { success: true, message };
+  },
+};
+
+export default plugin;
+```
+
+**Step 5: Register Your Workflow**
+
+Add your workflow to `config/workflow.json`:
+
+```json
+{
+  "workflows": [
+    {
+      "id": "my-workflow",
+      "from": "./workflows/my-workflow/src/index.ts",
+      "enabled": true,
+      "config": {
+        "mode": "default"
+      }
+    }
+  ]
+}
+```
+
+**Step 6: Test Your Workflow**
+
+```bash
+npx -y @emberai/agent-node@latest doctor
+npx -y @emberai/agent-node@latest run --dev
+```
+
+#### Simple Script Workflow
+
+**Step 1: Create `config/workflows/simple-task/task.js`:**
+
+```javascript
+const plugin = {
+  id: 'simple-task',
+  name: 'Simple Task',
+  description: 'A workflow without dependencies',
+  version: '1.0.0',
+
+  inputSchema: null,
+
+  async *execute(context) {
+    yield {
+      type: 'status-update',
+      message: 'Running simple task...',
     };
 
-    // Return final result
-    return { success: userInput.confirmed, message };
+    return { success: true };
   },
 };
 
@@ -303,17 +379,16 @@ Add your workflow to `config/workflow.json`:
 
 ```json
 {
-  "workflows": {
-    "my-workflow": "./workflows/my-workflow.ts"
-  }
-}
-```
-
-Enable it in `config/agent.manifest.json`:
-
-```json
-{
-  "enabledWorkflows": ["my-workflow"]
+  "workflows": [
+    {
+      "id": "my-workflow",
+      "from": "./workflows/my-workflow/src/index.ts",
+      "enabled": true,
+      "config": {
+        "mode": "default"
+      }
+    }
+  ]
 }
 ```
 
@@ -326,13 +401,7 @@ npx -y @emberai/agent-node@latest run --dev
 
 Your workflow becomes available as `dispatch_workflow_my_workflow` and can be triggered through natural language conversation with your agent.
 
-### Key Concepts
-
-- **Generator-based**: Use `yield` for state updates, `return` for final result
-- **Pause/Resume**: Request user input or authorization at any point
-- **Artifacts**: Emit structured data throughout execution
-- **State Machine**: Enforced transitions: `working` → `input-required` → `completed`
-- **Type Safety**: Zod schemas validate inputs automatically
+For detailed documentation on package-based workflows, see [Workflows as Packages](docs/workflows.md).
 
 ## CLI Commands & Chat Interface
 
