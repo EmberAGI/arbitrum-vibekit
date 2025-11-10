@@ -31,48 +31,12 @@
   ],
   "publishConfig": {
     "access": "public",
-    "tag": "beta"
+    "tag": "next"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/EmberAGI/arbitrum-vibekit.git",
     "directory": "typescript/lib/agent-node"
-  },
-  "release": {
-    "branches": [
-      {
-        "name": "build/agent-node-release",
-        "channel": "beta",
-        "prerelease": "beta"
-      },
-      "main"
-    ],
-    "tagFormat": "@emberai/agent-node@${version}",
-    "plugins": [
-      [
-        "@semantic-release/commit-analyzer",
-        {
-          "preset": "conventionalcommits"
-        }
-      ],
-      [
-        "@semantic-release/release-notes-generator",
-        {
-          "preset": "conventionalcommits"
-        }
-      ],
-      [
-        "@semantic-release/exec",
-        {
-          "prepareCmd": "pnpm pkg set version=${nextRelease.version}",
-          "publishCmd": "pnpm publish --no-git-checks --access public --tag ${nextRelease.channel || 'latest'}"
-        }
-      ],
-      [
-        "@semantic-release/github",
-        {}
-      ]
-    ]
   },
   "dependencies": {
     "@a2a-js/sdk": "^0.3.3",
@@ -83,6 +47,7 @@
     "@metamask/delegation-toolkit": "^0.13.0",
     "@modelcontextprotocol/sdk": "catalog:",
     "@openrouter/ai-sdk-provider": "^1.2.0",
+    "@pnpm/exe": "^10.20.0",
     "ai": "catalog:",
     "ajv": "^8.17.1",
     "cors": "^2.8.5",
@@ -98,6 +63,7 @@
     "uuid": "^13.0.0",
     "viem": "^2.37.9",
     "ws": "^8.18.3",
+    "x402": "^0.6.6",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -126,7 +92,7 @@
     "rimraf": "^6.0.1",
     "rollup-plugin-copy": "^3.5.0",
     "supertest": "^7.1.4",
-    "tsdown": "^0.15.12",
+    "tsdown": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
@@ -135,11 +101,14 @@
     "dev": "tsx watch src/server-loader.ts",
     "build": "rimraf .tsbuildinfo && tsdown",
     "start": "node dist/server-loader.js",
-    "cli": "tsx src/cli/loader.ts",
+    "cli": "node dist/cli.js",
+    "cli:dev": "tsx src/cli/loader.ts",
     "client": "tsx src/a2aClient.ts",
     "clean": "rimraf node_modules dist .tsbuildinfo",
+    "postinstall": "node ./scripts/remove-local-pnpm-shim.mjs",
     "lint": "eslint . && prettier --check .",
     "lint:fix": "eslint . --fix && prettier --write .",
+    "lint:config": "eslint config/ && prettier --check config/",
     "typecheck": "tsc --noEmit",
     "test": "pnpm test:unit && pnpm test:int",
     "test:unit": "vitest run --config vitest.config.unit.ts",
@@ -153,7 +122,7 @@
     "test:ci": "pnpm test:unit && LOG_LEVEL=error pnpm test:int",
     "test:ci:main": "pnpm test:unit && pnpm test:int && pnpm test:e2e",
     "precommit": "pnpm lint && pnpm typecheck && pnpm test",
-    "ci": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && LOG_LEVEL=debug pnpm test:ci && pnpm build",
+    "ci": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test:ci && pnpm build",
     "ci:main": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test:ci:main && pnpm build"
   }
 }

@@ -33,8 +33,12 @@ config-workspace/
 │   ├── general-assistant.md
 │   └── ember-onchain-actions.md
 ├── workflows/               # Custom workflow implementations
-│   ├── example-workflow.ts
-│   ├── usdai-strategy.ts
+│   └── sample-package/
+│       ├── src/
+│       │   └── index.ts
+│       └── package.json
+│   └── simple-script/
+│       └── hello.js
 │   └── utils/               # Workflow utility functions
 ├── mcp.json                 # MCP server registry
 ├── workflow.json            # Workflow registry
@@ -68,11 +72,26 @@ MCP server registry for dynamic tool/resource access. See the generated `config/
 
 #### Workflow Registry (`workflow.json`)
 
-Workflow plugin registry. See the generated `config/workflow.json` file for configuration examples.
+Workflow plugin registry:
+
+```json
+{
+  "workflows": [
+    {
+      "id": "sample-package-workflow",
+      "from": "./workflows/sample-package/src/index.ts",
+      "enabled": true,
+      "config": {
+        "mode": "default"
+      }
+    }
+  ]
+}
+```
 
 #### Workflows (`workflows/*.ts`)
 
-Custom workflow implementations for multi-step operations that manage A2A Task lifecycles. The `init` command generates example workflows (`example-workflow.ts` and `usdai-strategy.ts`) along with utility functions. Refer to the generated files in `config/workflows/` for working examples and see the [Creating Workflows](#creating-workflows) section for comprehensive documentation.
+Custom workflow implementations for multi-step operations that manage A2A Task lifecycles. The `init` command generates example workflows (`sample-package/` and `simple-script/`). Refer to the generated files in `config/workflows/` for working examples and see the [Creating Workflows](#creating-workflows) section for comprehensive documentation.
 
 ## Quickstart in 60 Seconds
 
@@ -188,7 +207,6 @@ npx -y @emberai/agent-node@latest register \
 - `--all`: Register on canonical + mirror chains (default: true)
 - `--force-new-upload`: Force new IPFS upload (ignores cached URI from previous attempts)
 
-
 #### Updating Registration
 
 To update your existing registration:
@@ -202,7 +220,6 @@ npx -y @emberai/agent-node@latest update-registry \
 
 > [!NOTE]
 > Only the wallet that originally registered the agent can update its registration. This command calls `setAgentUri(agentId, newIpfsUri)` on the registry contract to update the agent's metadata.
-
 
 ## Creating Workflows
 

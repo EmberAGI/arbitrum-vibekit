@@ -27,6 +27,17 @@ export function loadWorkflowRegistry(workflowPath: string): LoadedWorkflowRegist
     // Validate schema
     const registry = WorkflowRegistrySchema.parse(data);
 
+    // Enforce unique workflow IDs
+    const seen = new Set<string>();
+    for (const entry of registry.workflows) {
+      if (seen.has(entry.id)) {
+        throw new Error(
+          `Duplicate workflow id "${entry.id}" found in registry ${fullPath}. Workflow ids must be unique.`,
+        );
+      }
+      seen.add(entry.id);
+    }
+
     return {
       registry,
       path: fullPath,

@@ -4,10 +4,49 @@ This document records significant architectural and implementation decisions mad
 
 ## Table of Contents
 
+- [Release Workflow Modernization](#release-workflow-modernization)
 - [ERC-8004 Core Config Integration](#erc-8004-core-config-integration)
 - [Schema and Configuration](#schema-and-configuration)
 - [Agent Card Composition](#agent-card-composition)
 - [Registration Flow](#registration-flow)
+
+---
+
+## Release Workflow Modernization
+
+### Decision: Adopt `@anolilab/multi-semantic-release` with per-package isolation
+
+**Date**: 2025-11-10
+
+**Context**: Two separate GitHub workflows independently released `@emberai/agent-node` and `@emberai/onchain-actions-registry`. Each package ran plain semantic-release scoped only by path filters, so commits touching both packages caused cross-package version bumps. Maintenance overhead grew (duplicate YAML, divergent Node versions), and failures in one workflow obscured the other’s status.
+
+**Decision**:
+- Consolidate to a single release workflow that fans out into a per-package matrix (agent-node, registry).
+- Use `@anolilab/multi-semantic-release` as the orchestrator, invoked via `pnpm release -- --packages "<pkg>"` so each matrix job only publishes its target package.
+- Require Node 22, enable git-notes (`refs/notes/semantic-release`), and introduce `.multi-releaserc.cjs` plus `typescript/release.base.config.mjs` as shared config.
+- Keep GitHub releases per package; no combined changelog. Record the architectural shift in this document for future reference.
+
+**Rationale**:
+- Eliminates accidental version bumps by letting MSR scope commits per workspace.
+- Shared setup (checkout, pnpm install, build/test gates) runs once, reducing CI time versus two full workflows.
+- Matrix isolation ensures one package failing doesn’t block the other while still sharing caching/setup.
+- Actively maintained fork (`@anolilab/multi-semantic-release`, Oct 2025 publish) avoids the unmaintained 2023 PoC release.
+
+**Alternatives Considered**:
+- Keep dual workflows with semantic-release-monorepo plugin — rejected due to ongoing duplication and missing shared observability.
+- Roll our own pnpm-based detection loop in CI — rejected to avoid maintaining bespoke scripting when MSR already solves the orchestration problem.
+
+**Trade-offs**:
+- ✅ Consistent release policy across packages with minimal YAML.
+- ✅ Easier reruns via `workflow_dispatch` inputs to target specific packages.
+- ⚠️ MSR warns it layers on semantic-release internals, so we must monitor upstream changes and keep dry-run checks.
+- ⚠️ Adds dependency on git-notes; workflow must fetch/push additional refs.
+
+**Implementation**:
+- `.github/workflows/release.yml` — new consolidated workflow with per-package matrix, build/test gates, MSR invocation, git-notes fetch/push.
+- `typescript/package.json` — ensure `workspaces` field remains for semantic-release discovery; update `pnpm release` script.
+- `typescript/.multi-releaserc.cjs` (new) — configure `deps.bump`, package allowlist, `tagFormat`.
+- `docs/rationales.md` — this entry documenting the decision.
 
 ---
 

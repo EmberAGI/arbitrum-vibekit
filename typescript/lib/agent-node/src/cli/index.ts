@@ -21,6 +21,7 @@ import {
   updateRegistryCommand,
   chatCommand,
   recoverIdCommand,
+  workflowInstallCommand,
 } from './commands/index.js';
 
 interface CliArgs {
@@ -86,6 +87,7 @@ Commands:
     --force               Overwrite existing directory
     --yes                 Non-interactive mode with sensible defaults
     --non-interactive     Alias for --yes
+    --no-install          Skip workflow dependency installation
 
   print-config            Display composed configuration
     --config-dir <dir>    Config directory (default: ./config)
@@ -106,6 +108,8 @@ Commands:
     --chat                Alias for --attach
     --log-dir <dir>       When used with --attach, write logs to <dir> as JSONL
     --respect-log-level   Respect LOG_LEVEL from env (do not force ERROR in chat)
+    --no-install          Skip automatic workflow dependency installation
+    --frozen-lockfile     Use frozen lockfile when installing workflow dependencies
 
   bundle                  Export deployment bundle
     --config-dir <dir>    Config directory (default: ./config)
@@ -140,6 +144,19 @@ Commands:
     --chain <id>          Target a specific chain ID (otherwise all pending)
     --tx-hash <hash>      Specific transaction hash to check
 
+  workflow                Manage workflows
+    install [name]        Install dependencies for workflow packages
+      --all               Install all workflows (default if no name provided)
+      --config-dir <dir>  Config directory (default: ./config)
+      --frozen-lockfile   Use frozen lockfile (for CI/CD)
+      --quiet             Suppress progress output
+    discover              Discover workflows and optionally sync workflow.json
+      --config-dir <dir>  Config directory (default: ./config)
+      --sync              Write proposed changes to workflow.json
+      --dry-run           Show proposed changes without writing
+      --prune             Remove registry entries not found on disk
+      --disabled          Add new entries as disabled
+
   help                    Show this help message
 
 Environment:
@@ -162,7 +179,7 @@ Examples:
 }
 
 export async function runCli(): Promise<void> {
-  const { command, options } = parseArgs();
+  const { command, args, options } = parseArgs();
   const logger = Logger.getInstance('CLI');
 
   // Handle global --help and -h flags
@@ -191,6 +208,7 @@ export async function runCli(): Promise<void> {
           force: options['force'] as boolean | undefined,
           yes: options['yes'] as boolean | undefined,
           nonInteractive: options['non-interactive'] as boolean | undefined,
+          noInstall: options['no-install'] as boolean | undefined,
         });
         break;
 
@@ -227,6 +245,8 @@ export async function runCli(): Promise<void> {
           chat: options['chat'] as boolean | undefined,
           logDir: options['log-dir'] as string | undefined,
           respectLogLevel: options['respect-log-level'] as boolean | undefined,
+          noInstall: options['no-install'] as boolean | undefined,
+          frozenLockfile: options['frozen-lockfile'] as boolean | undefined,
         });
         break;
 
@@ -277,6 +297,32 @@ export async function runCli(): Promise<void> {
         });
         break;
 
+      case 'workflow': {
+        const subcommand = args[0];
+        if (subcommand === 'install') {
+          const workflowName = options['all'] ? undefined : args[1];
+          await workflowInstallCommand(workflowName, {
+            configDir: options['config-dir'] as string | undefined,
+            all: options['all'] as boolean | undefined,
+            frozenLockfile: options['frozen-lockfile'] as boolean | undefined,
+            quiet: options['quiet'] as boolean | undefined,
+          });
+        } else if (subcommand === 'discover') {
+          (await import('./commands/index.js')).workflowDiscoverCommand({
+            configDir: options['config-dir'] as string | undefined,
+            sync: options['sync'] as boolean | undefined,
+            dryRun: options['dry-run'] as boolean | undefined,
+            prune: options['prune'] as boolean | undefined,
+            disabled: options['disabled'] as boolean | undefined,
+          });
+        } else {
+          logger.error(`Unknown workflow subcommand: ${subcommand ?? '(none)'}`);
+          logger.info('Available subcommands: install, discover');
+          process.exit(1);
+        }
+        break;
+      }
+
       case 'help':
         printHelp();
         break;
@@ -307,6 +353,8 @@ export async function runCli(): Promise<void> {
             port: options['port'] ? Number(options['port']) : undefined,
             host: options['host'] as string | undefined,
             attach: true, // Enable attach mode
+            noInstall: options['no-install'] as boolean | undefined,
+            frozenLockfile: options['frozen-lockfile'] as boolean | undefined,
           });
         }
         break;

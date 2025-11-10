@@ -46,3 +46,4 @@ Thumbs.db
 # Project specific
 /onchain-actions/
 .vibecode/
+typescript/lib/agent-node/*.zip
