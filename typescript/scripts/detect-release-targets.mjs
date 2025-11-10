@@ -31,6 +31,7 @@ const PACKAGE_LOOKUP = new Map(
 );
 
 const LIST_DELIMITER = /[, ]/;
+const STABLE_BRANCHES = new Set(["main"]);
 
 function parseList(value) {
   return value
@@ -49,14 +50,42 @@ function runGit(args, cwd) {
   return { output: result.stdout.trim() };
 }
 
-function findLatestTag(pattern, cwd) {
-  const { output, error } = runGit(["describe", "--tags", "--match", pattern, "--abbrev=0"], cwd);
+function extractVersionFromTag(tag) {
+  const lastAt = tag.lastIndexOf("@");
 
-  if (error) {
+  if (lastAt === -1) {
+    return tag;
+  }
+
+  return tag.slice(lastAt + 1);
+}
+
+function isStableTag(tag) {
+  const version = extractVersionFromTag(tag);
+  return !version.includes("-");
+}
+
+function findLatestTag(pattern, cwd, options = {}) {
+  const { output, error } = runGit(["tag", "--merged", "HEAD", "--sort=-creatordate", "--list", pattern], cwd);
+
+  if (error || !output) {
     return null;
   }
 
-  return output;
+  const tags = output
+    .split("\n")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+
+  if (!tags.length) {
+    return null;
+  }
+
+  if (!options.filter) {
+    return tags[0];
+  }
+
+  return tags.find(options.filter) ?? null;
 }
 
 function detectChanges(sinceTag, targetPath, cwd) {
@@ -87,6 +116,43 @@ function resolvePackageList(specs) {
 
     return definition;
   });
+}
+
+function resolveBranchName(cwd) {
+  const simulateBranch = process.env.RELEASE_SIMULATE_BRANCH?.trim();
+  if (simulateBranch) {
+    return simulateBranch;
+  }
+
+  const githubRefName = process.env.GITHUB_REF_NAME?.trim();
+  if (githubRefName) {
+    return githubRefName;
+  }
+
+  const githubRef = process.env.GITHUB_REF?.trim();
+  if (githubRef?.startsWith("refs/heads/")) {
+    return githubRef.slice("refs/heads/".length);
+  }
+
+  const { output } = runGit(["rev-parse", "--abbrev-ref", "HEAD"], cwd);
+  if (output && output !== "HEAD") {
+    return output;
+  }
+
+  return null;
+}
+
+function resolveReleaseChannel(branchName) {
+  const override = process.env.RELEASE_CHANNEL?.trim()?.toLowerCase();
+  if (override === "stable" || override === "next") {
+    return override;
+  }
+
+  if (branchName && (STABLE_BRANCHES.has(branchName) || branchName.startsWith("release/"))) {
+    return "stable";
+  }
+
+  return "next";
 }
 
 async function main() {
@@ -128,11 +194,16 @@ async function main() {
   const forcedIds = new Set(overrideSpecs.map((spec) => resolvePackageList([spec])[0].id));
 
   const packagesToCheck = resolvePackageList(packageSpecs.length > 0 ? packageSpecs : PACKAGE_DEFINITIONS.map((pkg) => pkg.id));
+  const branchName = resolveBranchName(cwd);
+  const releaseChannel = resolveReleaseChannel(branchName);
+  const preferStableTags = releaseChannel === "stable";
 
   const packages = [];
 
   for (const pkg of packagesToCheck) {
-    const latestTag = findLatestTag(pkg.tagPattern, cwd);
+    const latestTag = findLatestTag(pkg.tagPattern, cwd, {
+      filter: preferStableTags ? isStableTag : undefined,
+    });
     const forced = forcedIds.has(pkg.id);
     const changed = forced || detectChanges(latestTag, pkg.workspace, cwd);
 
