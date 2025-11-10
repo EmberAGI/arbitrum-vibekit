@@ -28,13 +28,14 @@
     "lint:require-submodule": "./scripts/require-submodule.sh",
     "start:anvil": "pnpm run lint:require-submodule && npx tsx test/start-anvil.ts",
     "start:mainnet": "pnpm run lint:require-submodule && npx tsx test/start-mainnet.ts",
-    "release": "multi-semantic-release --sequential --packages \"lib/ember-plugin-registry\" --ignore-private-packages",
+    "release": "node ./scripts/run-multi-release.mjs",
     "sync:rules": "cd .. && pnpm exec rulesync generate"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@anolilab/multi-semantic-release": "^2.0.8",
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
     "@eslint/js": "catalog:",
@@ -64,7 +65,6 @@
     "js-yaml": "^4.1.0",
     "mocha": "^10.2.0",
     "mocha-suppress-logs": "^0.5.1",
-    "multi-semantic-release": "^3.0.2",
     "prettier": "^3.5.3",
     "prool": "^0.0.24",
     "rimraf": "^6.0.1",
