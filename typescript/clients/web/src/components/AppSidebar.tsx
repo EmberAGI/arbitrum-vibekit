@@ -44,7 +44,7 @@ interface AppSidebarProps {
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({
   isA2AConnected,
-  _isA2AConnecting,
+  isA2AConnecting: _isA2AConnecting,
   mcpConnectionStatus,
   mcpToolsCount,
   mcpPromptsCount,
@@ -60,8 +60,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   activeSessionId,
   sessionOrder,
   onSwitchSession,
-  _onCloseSession,
-  _onCreateSession,
+  onCloseSession: _onCloseSession,
+  onCreateSession: _onCreateSession,
 }) => {
   // Check if debug mode is enabled
   const isDebugMode = process.env.NEXT_PUBLIC_DEBUG_MODE === 'true';

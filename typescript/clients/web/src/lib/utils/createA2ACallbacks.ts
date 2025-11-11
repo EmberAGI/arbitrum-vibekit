@@ -9,7 +9,7 @@ import { A2AHandlerCallbacks } from '../handlers/BaseA2AHandler';
 import { SessionStatus, TaskState } from '@/lib/types/session';
 
 interface CreateCallbacksOptions {
-  _sessionId: string;
+  sessionId: string;
   sessions: Record<string, any>;
   sessionsWithCompleteDelegations: Set<string>;
   addMessageToSession: (sessionId: string, message: any) => string;
@@ -34,7 +34,7 @@ interface CreateCallbacksOptions {
 }
 
 export function createA2ACallbacks({
-  _sessionId,
+  sessionId: _sessionId,
   sessions,
   sessionsWithCompleteDelegations,
   addMessageToSession,
