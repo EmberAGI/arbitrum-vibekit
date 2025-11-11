@@ -1,21 +1,21 @@
 /**
  * Message Operations Module
- * 
+ *
  * Handles message CRUD operations for sessions
  */
 
-import React from "react";
-import { SessionState, SessionMessage } from "@/lib/types/session";
+import React from 'react';
+import { SessionState, SessionMessage } from '@/lib/types/session';
 
 export interface MessageOperations {
   addMessageToSession: (
     sessionId: string,
-    message: Omit<SessionMessage, "id" | "timestamp">
+    message: Omit<SessionMessage, 'id' | 'timestamp'>,
   ) => string;
   updateMessageInSession: (
     sessionId: string,
     messageId: string,
-    updates: Partial<SessionMessage>
+    updates: Partial<SessionMessage>,
   ) => void;
   clearSessionMessages: (sessionId: string) => void;
   removeDelegationMessages: (sessionId: string) => void;
@@ -23,23 +23,18 @@ export interface MessageOperations {
 
 export function createMessageOperations(
   state: SessionState,
-  setState: React.Dispatch<React.SetStateAction<SessionState>>
+  setState: React.Dispatch<React.SetStateAction<SessionState>>,
 ): MessageOperations {
   const addMessageToSession = (
     sessionId: string,
-    message: Omit<SessionMessage, "id" | "timestamp">
+    message: Omit<SessionMessage, 'id' | 'timestamp'>,
   ): string => {
-    const messageId = `msg-${Date.now()}-${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
+    const messageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     setState((prev) => {
       const session = prev.sessions[sessionId];
       if (!session) {
-        console.warn(
-          "[MessageOperations] Cannot add message to non-existent session:",
-          sessionId
-        );
+        console.warn('[MessageOperations] Cannot add message to non-existent session:', sessionId);
         return prev;
       }
 
@@ -69,7 +64,7 @@ export function createMessageOperations(
   const updateMessageInSession = (
     sessionId: string,
     messageId: string,
-    updates: Partial<SessionMessage>
+    updates: Partial<SessionMessage>,
   ) => {
     setState((prev) => {
       const session = prev.sessions[sessionId];
@@ -88,12 +83,11 @@ export function createMessageOperations(
               // (which means we're reconnecting and should replace, not merge)
               const existingArtifacts = msg.artifacts || {};
               const hasDelegations =
-                existingArtifacts["delegations-display"] ||
-                existingArtifacts["delegations-data"];
-              
+                existingArtifacts['delegations-display'] || existingArtifacts['delegations-data'];
+
               const receivingDelegations =
-                updates.artifacts?.["delegations-display"] ||
-                updates.artifacts?.["delegations-data"];
+                updates.artifacts?.['delegations-display'] ||
+                updates.artifacts?.['delegations-data'];
 
               let mergedArtifacts = {
                 ...existingArtifacts,
@@ -107,22 +101,22 @@ export function createMessageOperations(
                 mergedArtifacts = {
                   ...Object.fromEntries(
                     Object.entries(existingArtifacts).filter(
-                      ([key]) => key !== "delegations-display" && key !== "delegations-data"
-                    )
+                      ([key]) => key !== 'delegations-display' && key !== 'delegations-data',
+                    ),
                   ),
                   ...updates.artifacts,
                 };
               } else if (
                 hasDelegations &&
                 updates.artifacts &&
-                !updates.artifacts["delegations-display"] &&
-                !updates.artifacts["delegations-data"]
+                !updates.artifacts['delegations-display'] &&
+                !updates.artifacts['delegations-data']
               ) {
                 // If we had delegations before and they're being removed, preserve them
                 mergedArtifacts = {
                   ...updates.artifacts,
-                  "delegations-display": existingArtifacts["delegations-display"],
-                  "delegations-data": existingArtifacts["delegations-data"],
+                  'delegations-display': existingArtifacts['delegations-display'],
+                  'delegations-data': existingArtifacts['delegations-data'],
                 };
               }
 
@@ -130,9 +124,7 @@ export function createMessageOperations(
                 ...msg,
                 ...updates,
                 artifacts:
-                  Object.keys(mergedArtifacts).length > 0
-                    ? mergedArtifacts
-                    : msg.artifacts,
+                  Object.keys(mergedArtifacts).length > 0 ? mergedArtifacts : msg.artifacts,
               };
             }),
             updatedAt: new Date(),
@@ -147,8 +139,8 @@ export function createMessageOperations(
       const session = prev.sessions[sessionId];
       if (!session) {
         console.warn(
-          "[MessageOperations] Cannot clear messages from non-existent session:",
-          sessionId
+          '[MessageOperations] Cannot clear messages from non-existent session:',
+          sessionId,
         );
         return prev;
       }
@@ -172,18 +164,14 @@ export function createMessageOperations(
       const session = prev.sessions[sessionId];
       if (!session) {
         console.warn(
-          "[MessageOperations] Cannot remove delegation messages from non-existent session:",
-          sessionId
+          '[MessageOperations] Cannot remove delegation messages from non-existent session:',
+          sessionId,
         );
         return prev;
       }
 
       const filteredMessages = session.messages.filter(
-        (msg) =>
-          !(
-            msg.artifacts?.["delegations-display"] ||
-            msg.artifacts?.["delegations-data"]
-          )
+        (msg) => !(msg.artifacts?.['delegations-display'] || msg.artifacts?.['delegations-data']),
       );
 
       return {
@@ -207,4 +195,3 @@ export function createMessageOperations(
     removeDelegationMessages,
   };
 }
-

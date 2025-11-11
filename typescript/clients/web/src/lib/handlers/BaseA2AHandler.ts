@@ -1,36 +1,28 @@
 /**
  * Base A2A Handler
- * 
+ *
  * Common functionality shared between Chat and Workflow handlers
  */
 
-import { SessionStatus } from "@/lib/types/session";
+import { SessionStatus } from '@/lib/types/session';
 
 export interface A2AHandlerCallbacks {
   onMessage: (
     sessionId: string,
     messageId: string,
     content: string,
-    sender: "agent" | "agent-progress" | "agent-error",
-    updates?: any
+    sender: 'agent' | 'agent-progress' | 'agent-error',
+    updates?: any,
   ) => string;
-  onStatusUpdate: (
-    sessionId: string,
-    status: SessionStatus,
-    data?: any
-  ) => void;
+  onStatusUpdate: (sessionId: string, status: SessionStatus, data?: any) => void;
   onContextIdReceived: (sessionId: string, contextId: string) => void;
   onTaskReceived?: (sessionId: string, taskId: string, state: string) => void;
-  onTaskStateChanged?: (
-    sessionId: string,
-    taskId: string,
-    state: string
-  ) => void;
+  onTaskStateChanged?: (sessionId: string, taskId: string, state: string) => void;
   onChildTaskDetected?: (
     parentSessionId: string,
     childTaskId: string,
     contextId: string,
-    metadata?: any
+    metadata?: any,
   ) => void;
   onToolInvocation?: (sessionId: string, toolData: any) => void;
 }
@@ -54,10 +46,7 @@ export abstract class BaseA2AHandler {
   /**
    * Send a message to the A2A agent
    */
-  abstract sendMessage(
-    message: string,
-    metadata?: Record<string, string>
-  ): Promise<void>;
+  abstract sendMessage(message: string, metadata?: Record<string, string>): Promise<void>;
 
   /**
    * Reconnect to an existing stream
@@ -82,17 +71,12 @@ export abstract class BaseA2AHandler {
   /**
    * Common method to create A2A request payload
    */
-  protected createMessagePayload(
-    message: string,
-    metadata?: Record<string, string>
-  ): any {
-    const messageId = `msg-${Date.now()}-${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
+  protected createMessagePayload(message: string, metadata?: Record<string, string>): any {
+    const messageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     const payload: any = {
-      role: "user",
-      parts: [{ kind: "text", text: message }],
+      role: 'user',
+      parts: [{ kind: 'text', text: message }],
       messageId,
       metadata: metadata || {},
     };
@@ -108,15 +92,13 @@ export abstract class BaseA2AHandler {
    * Common method to create data payload for user interactions
    */
   protected createDataPayload(data: any, metadata?: Record<string, string>): any {
-    const messageId = `user-action-${Date.now()}-${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
+    const messageId = `user-action-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     return {
-      role: "user",
+      role: 'user',
       parts: [
         {
-          kind: "data",
+          kind: 'data',
           data: data,
         },
       ],
@@ -124,8 +106,8 @@ export abstract class BaseA2AHandler {
       contextId: this.config.contextId,
       metadata: {
         ...metadata,
-        userInteraction: "true",
-        interactionType: "component-response",
+        userInteraction: 'true',
+        interactionType: 'component-response',
       },
     };
   }
@@ -144,4 +126,3 @@ export abstract class BaseA2AHandler {
     return { ...this.config };
   }
 }
-

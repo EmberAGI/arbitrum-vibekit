@@ -29,18 +29,15 @@ This feature enables automatic reconnection to A2A streaming sessions that were 
 ### Modified Files
 
 1. **`src/lib/hooks/useA2ASession.ts`**
-
    - Added `reconnectToStream()` function
    - Sends empty message with `reconnect: true` metadata to resume stream
    - Uses existing `contextId` to identify the session on the server
 
 2. **`src/lib/hooks/useSessionManager.ts`**
-
    - Added `setSessionAgentEndpoint()` to store agent endpoint per session
    - Enables reconnection without global state
 
 3. **`src/app/page.tsx`**
-
    - Added reconnection logic in `handleSwitchSession()`
    - Added auto-reconnection on page load for incomplete sessions
    - Stores `agentEndpoint` in sessions when connecting or sending messages
@@ -67,12 +64,10 @@ This feature enables automatic reconnection to A2A streaming sessions that were 
 ### Test Case 1: Manual Reconnection by Switching Sessions
 
 1. **Setup:**
-
    - Start the application and connect to an A2A agent
    - Send a message that takes some time to complete (e.g., a complex task)
 
 2. **Create New Session:**
-
    - Click "New Session" in the sidebar while the first task is still running
    - This will switch to a new empty session
 
@@ -85,12 +80,10 @@ This feature enables automatic reconnection to A2A streaming sessions that were 
 ### Test Case 2: Automatic Reconnection on Page Reload
 
 1. **Setup:**
-
    - Start the application and connect to an A2A agent
    - Send a message that takes a long time to complete
 
 2. **Reload Page:**
-
    - Refresh the browser (Cmd+R / Ctrl+R)
    - The app will restore the session from localStorage
 
@@ -102,7 +95,6 @@ This feature enables automatic reconnection to A2A streaming sessions that were 
 ### Test Case 3: Multiple Sessions with Mixed States
 
 1. **Setup:**
-
    - Create multiple sessions
    - Start tasks in some sessions, leave others idle
 

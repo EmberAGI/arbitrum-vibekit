@@ -73,7 +73,7 @@ const sendToActiveTask = async (
   agentEndpoint: string,
   contextId: string,
   data: any,
-  metadata?: Record<string, string>
+  metadata?: Record<string, string>,
 ) => {
   // Sends user interaction data back to active task
   // Uses same contextId to continue in same conversation
@@ -134,7 +134,7 @@ export interface ToolResultRendererProps {
 The callback is automatically passed to custom components:
 
 ```typescript
-if (onUserAction && componentName !== "JsonViewer") {
+if (onUserAction && componentName !== 'JsonViewer') {
   componentProps = {
     ...componentProps,
     onUserAction, // Injected into component props
@@ -156,7 +156,7 @@ const handleUserAction = useCallback(
 
     await sendToActiveTask(activeSessionId, agentEndpoint, contextId, data);
   },
-  [activeSessionId, agentEndpoint, getSessionContextId, sendToActiveTask]
+  [activeSessionId, agentEndpoint, getSessionContextId, sendToActiveTask],
 );
 ```
 
@@ -247,10 +247,10 @@ interface YourComponentProps {
 ```typescript
 await onUserAction({
   // Required: Identify your component type
-  componentType: "your-component-name",
+  componentType: 'your-component-name',
 
   // Your response data (component-specific)
-  action: "approve" | "reject" | "submit",
+  action: 'approve' | 'reject' | 'submit',
 
   // Any additional data
   ...yourData,
@@ -396,20 +396,20 @@ The agent will receive the user's response as a new message in the same context:
 
 ```typescript
 // In your agent's message handler
-if (message.metadata?.userInteraction === "true") {
+if (message.metadata?.userInteraction === 'true') {
   // This is a user response to a previous interaction
   const userData = message.parts[0].data;
 
   // Process the user's response
-  if (userData.action === "signed") {
+  if (userData.action === 'signed') {
     // Continue with signed transaction
     await executeTransaction(userData.signature);
   }
 
   // Send completion response
   return {
-    kind: "status-update",
-    status: { state: "completed" },
+    kind: 'status-update',
+    status: { state: 'completed' },
     final: true,
   };
 }
@@ -425,7 +425,7 @@ Once the server standardizes the "awaiting input" flag, we can add:
 interface SessionMessage {
   // ... existing fields
   awaitingUserAction?: boolean;
-  awaitingActionType?: "signature" | "input" | "approval" | "custom";
+  awaitingActionType?: 'signature' | 'input' | 'approval' | 'custom';
 }
 ```
 
@@ -455,13 +455,13 @@ Define standardized payload formats for common interactions:
 
 ```typescript
 interface SignaturePayload {
-  type: "signature";
+  type: 'signature';
   transactionData: Transaction;
   requiredBy?: Date;
 }
 
 interface ApprovalPayload {
-  type: "approval";
+  type: 'approval';
   message: string;
   options: string[];
 }
@@ -516,8 +516,8 @@ if (!onUserAction) {
 try {
   await onUserAction(data);
 } catch (error) {
-  console.error("Failed to send user action:", error);
-  setError("Failed to send response. Please try again.");
+  console.error('Failed to send user action:', error);
+  setError('Failed to send response. Please try again.');
 }
 ```
 
@@ -526,7 +526,7 @@ try {
 ```typescript
 // In handleUserAction (page.tsx)
 if (!activeSessionId || !contextId) {
-  console.error("Cannot send - no active session");
+  console.error('Cannot send - no active session');
   return; // Gracefully fail
 }
 ```
@@ -582,17 +582,14 @@ onUserAction?: (data: any) => Promise<void>
 ## Files Modified
 
 1. **`src/lib/hooks/useA2ASession.ts`**
-
    - Added `sendToActiveTask` function
    - Added to return type
 
 2. **`src/components/ToolResultRenderer.tsx`**
-
    - Added `onUserAction` prop
    - Injects callback into component props
 
 3. **`src/app/page.tsx`**
-
    - Added `handleUserAction` callback
    - Wires to all `ToolResultRenderer` instances
    - Manages session context

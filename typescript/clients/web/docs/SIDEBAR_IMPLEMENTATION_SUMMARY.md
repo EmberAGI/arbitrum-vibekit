@@ -159,7 +159,6 @@ This sidebar filtering works seamlessly with the bidirectional communication sys
 ### Documentation
 
 4. **`SIDEBAR_SESSION_FILTERING.md`** (NEW)
-
    - Complete documentation
    - Implementation details
    - Testing scenarios

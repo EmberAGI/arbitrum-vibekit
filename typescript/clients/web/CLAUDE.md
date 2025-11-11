@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 EmberAi A2A Client - Next.js chat interface for Agent-to-Agent (A2A) communication with MCP integration. Enables real-time streaming conversations with A2A agents, workflow delegation, transaction signing, and DeFi strategy management.
 
 **Tech Stack:**
+
 - **Framework:** Next.js 15.5.2 (App Router, SSR enabled)
 - **UI:** React 19.1.0 • TypeScript 5 (strict mode)
 - **Styling:** Tailwind CSS v4 • shadcn/ui (New York style) • Radix UI primitives
@@ -26,12 +27,14 @@ Frontend (Next.js) ↔ MCP Proxy API ↔ MCP Server
 ### Core Patterns
 
 **1. Session Management** (src/lib/hooks/useSessionManager.ts)
+
 - Multi-session state in `sessionStorage` with 1s debounce auto-save
 - Types: `conversation` (user chats), `tool-execution` (workflows)
 - Each session stores: `contextId` (A2A session ID), `agentEndpoint`, `tasks[]`, `messages[]`
 - Temporary sessions: `isTemporary: true` (excluded from persistence)
 
 **2. A2A Protocol** (src/lib/hooks/useA2ASession.ts)
+
 - JSONRPC 2.0 over HTTP with SSE streaming
 - Methods:
   - `sendMessage()`: New user message → creates task
@@ -40,16 +43,19 @@ Frontend (Next.js) ↔ MCP Proxy API ↔ MCP Server
 - SSE events: `task`, `artifact-update`, `status-update` (detects child tasks via `referenceTaskIds`)
 
 **3. Child Task Workflow**
+
 - Agent dispatches workflow → `status-update` contains `referenceTaskIds[]`
 - `onChildTaskDetected` creates temporary tab → immediately calls `reconnectToStream(childTaskId)`
 - Child inherits parent's `contextId` + `agentEndpoint`
 
 **4. Artifacts**
+
 - Structured data in `message.artifacts: Record<artifactId, data>`
 - Append mode: `append: true` merges, `false` replaces
 - Rendered via `ToolResultRenderer` → `toolComponentLoader.ts` mapping
 
 **5. MCP Proxy** (src/app/api/mcp/route.ts)
+
 - Next.js API proxies frontend ↔ MCP server
 - Session-based transports via `mcp-session-id` header
 - Supports `streamable-http` and `stdio`
@@ -68,15 +74,18 @@ npm run lint            # Run linter
 ## Conventions
 
 ### TypeScript (Strict Mode)
+
 - Export prop interfaces as `{ComponentName}Props`
 - Use `import type` for types, `@/` alias for imports
 - No implicit `any`, explicit types required
 - File naming: Components (PascalCase), utils/hooks (camelCase)
 
 ### Client Directives
+
 Add `'use client';` for: React hooks, Browser APIs, event handlers, Web3 hooks
 
 ### Styling (Dark Mode Only)
+
 - **Primary:** `#FD6731` (EmberAi Orange)
 - **Backgrounds:** `#0a0a0a` → `#1a1a1a` → `#2a2a2a`
 - **Always use `cn()`** for className merging
@@ -85,6 +94,7 @@ Add `'use client';` for: React hooks, Browser APIs, event handlers, Web3 hooks
 ### Component Templates
 
 **Standard Component:**
+
 ```typescript
 'use client';
 
@@ -108,6 +118,7 @@ export function MyComponent({ title, onAction, className }: MyComponentProps) {
 ```
 
 **Radix UI Component (with variants):**
+
 ```typescript
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
@@ -126,6 +137,7 @@ Component.displayName = "Component";
 ```
 
 ### Best Practices
+
 - **Error handling:** Always try/catch async, prefix logs `[ComponentName]`
 - **Async:** Use async/await, `Promise.allSettled()` for parallel ops
 - **Performance:** `useMemo` for computations, `useCallback` for child props
@@ -134,17 +146,21 @@ Component.displayName = "Component";
 ## Key Code Patterns
 
 ### Reconnection on Load
+
 ```typescript
 // Auto-reconnect incomplete sessions (page.tsx:361)
 if (session.status === 'working' || session.status === 'waiting') {
   reconnectToStream({
-    sessionId, agentEndpoint: session.agentEndpoint,
-    contextId: session.contextId, taskId: getLatestIncompleteTaskId(sessionId)
+    sessionId,
+    agentEndpoint: session.agentEndpoint,
+    contextId: session.contextId,
+    taskId: getLatestIncompleteTaskId(sessionId),
   });
 }
 ```
 
 ### Child Task Detection
+
 ```typescript
 // useA2ASession.ts:478
 if (event.status?.message?.referenceTaskIds?.length > 0) {
@@ -153,6 +169,7 @@ if (event.status?.message?.referenceTaskIds?.length > 0) {
 ```
 
 ### Creating Tool Components
+
 1. Add `src/components/tools/YourTool.tsx` with `data` + `onUserAction` props
 2. Register in `src/lib/toolComponentLoader.ts`
 3. Export artifact from agent with matching `artifactId`
@@ -162,6 +179,7 @@ if (event.status?.message?.referenceTaskIds?.length > 0) {
 **Environment:** `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=required`
 
 **Tool Config** (src/config/tools.ts):
+
 ```typescript
 { id: "toolName", name: "Display Name", category: "categoryId",
   component: "ComponentName", enabled: true }
@@ -175,6 +193,7 @@ if (event.status?.message?.referenceTaskIds?.length > 0) {
 **Log Prefixes:** `[Main]` `[A2ASession]` `[SessionManager]` `[MCP Proxy]` `[MCP API]`
 
 **Common Issues:**
+
 - **Session not reconnecting:** Verify `contextId`, `taskId`, `agentEndpoint` stored
 - **Child task not appearing:** Check `referenceTaskIds` in status-update, `onChildTaskDetected` callback provided
 - **Artifacts not rendering:** Confirm `artifactId`, component registered in `toolComponentLoader.ts`

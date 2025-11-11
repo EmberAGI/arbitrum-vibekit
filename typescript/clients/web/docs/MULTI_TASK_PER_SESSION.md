@@ -30,12 +30,7 @@ export interface TaskInfo {
   error?: string;
 }
 
-export type TaskState =
-  | "pending"
-  | "working"
-  | "completed"
-  | "failed"
-  | "cancelled";
+export type TaskState = 'pending' | 'working' | 'completed' | 'failed' | 'cancelled';
 ```
 
 ### Session Structure
@@ -84,7 +79,7 @@ export interface Session {
 // Get the latest incomplete task
 function getLatestIncompleteTask(tasks: TaskInfo[]): TaskInfo | null {
   for (let i = tasks.length - 1; i >= 0; i--) {
-    if (tasks[i].state === "pending" || tasks[i].state === "working") {
+    if (tasks[i].state === 'pending' || tasks[i].state === 'working') {
       return tasks[i];
     }
   }
@@ -102,10 +97,7 @@ function findTaskById(tasks: TaskInfo[], taskId: string): TaskInfo | null {
 }
 
 // Create a new task info object
-function createTaskInfo(
-  taskId: string,
-  state: TaskState = "pending"
-): TaskInfo {
+function createTaskInfo(taskId: string, state: TaskState = 'pending'): TaskInfo {
   return {
     taskId,
     state,
@@ -138,11 +130,7 @@ interface A2ASessionConfig {
   onTaskReceived?: (sessionId: string, taskId: string, state: string) => void;
 
   // Called when a task's state changes
-  onTaskStateChanged?: (
-    sessionId: string,
-    taskId: string,
-    state: string
-  ) => void;
+  onTaskStateChanged?: (sessionId: string, taskId: string, state: string) => void;
 }
 ```
 
@@ -219,21 +207,18 @@ getLatestIncompleteTaskId() returns new task ID for any reconnection needs
 ### Conversation Flow
 
 1. **User sends "Hello"**
-
    - Task `task-001` created (state: pending)
    - Task transitions to working
    - Task completes (state: completed)
    - `session.tasks = [{ taskId: "task-001", state: "completed", ... }]`
 
 2. **User sends "What's the weather?"**
-
    - Task `task-002` created (state: pending)
    - Task transitions to working
    - Task completes (state: completed)
    - `session.tasks = [task-001, task-002]` (both completed)
 
 3. **User sends "Tell me more"**
-
    - Task `task-003` created (state: pending)
    - Task transitions to working
    - **User switches tabs before completion**
@@ -311,7 +296,7 @@ onTaskStateChanged: (sessionId, taskId, state) => {
 const session = sessions[sessionId];
 console.log(`Session has ${session.tasks.length} tasks`);
 
-const completedTasks = session.tasks.filter((t) => t.state === "completed");
+const completedTasks = session.tasks.filter((t) => t.state === 'completed');
 console.log(`${completedTasks.length} tasks completed`);
 
 const latestTask = session.tasks[session.tasks.length - 1];

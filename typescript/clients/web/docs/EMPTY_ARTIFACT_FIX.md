@@ -165,17 +165,14 @@ if (showLoading) {
 ## Files Modified
 
 1. **`src/lib/hooks/useA2ASession.ts`**
-
    - Removed empty data filter (2 locations)
    - Added `isLoading` flag calculation
    - Always store artifacts
 
 2. **`src/lib/types/session.ts`**
-
    - Added `isLoading?: boolean` to `ArtifactData`
 
 3. **`src/components/ToolResultRenderer.tsx`**
-
    - Added `resultIsEmpty` detection
    - Combined `isLoading` and `resultIsEmpty` into `showLoading`
    - Updated loading message based on state

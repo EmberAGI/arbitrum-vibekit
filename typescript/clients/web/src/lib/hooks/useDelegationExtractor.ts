@@ -1,5 +1,5 @@
-import { Delegation } from "@metamask/delegation-toolkit";
-import { useMemo } from "react";
+import { Delegation } from '@metamask/delegation-toolkit';
+import { useMemo } from 'react';
 
 export type DelegationData = {
   id: string;
@@ -22,7 +22,7 @@ function extractArtifactData(artifact: any): any[] {
   // Check for parts array structure (from A2A stream)
   if (artifact.parts && Array.isArray(artifact.parts)) {
     artifact.parts.forEach((part: any) => {
-      if (part.kind === "data" && part.data) {
+      if (part.kind === 'data' && part.data) {
         results.push(part.data);
       }
     });
@@ -33,7 +33,7 @@ function extractArtifactData(artifact: any): any[] {
   if (data) {
     if (Array.isArray(data)) {
       results.push(...data);
-    } else if (typeof data === "object") {
+    } else if (typeof data === 'object') {
       results.push(data);
     }
   }
@@ -45,9 +45,7 @@ function extractArtifactData(artifact: any): any[] {
  * Hook to extract and process delegation data from artifacts
  * Separates display data from signing data while preserving the original delegation structure
  */
-export function useDelegationExtractor(
-  artifacts?: Record<string, any>,
-): ExtractedDelegations {
+export function useDelegationExtractor(artifacts?: Record<string, any>): ExtractedDelegations {
   return useMemo(() => {
     const delegationsDisplay: any[] = [];
     const delegationsData: DelegationData[] = [];
@@ -60,26 +58,21 @@ export function useDelegationExtractor(
     }
 
     // Extract display data
-    if (artifacts["delegations-display"]) {
-      const displayItems = extractArtifactData(
-        artifacts["delegations-display"],
-      );
+    if (artifacts['delegations-display']) {
+      const displayItems = extractArtifactData(artifacts['delegations-display']);
       delegationsDisplay.push(...displayItems);
     }
 
     // Extract delegation data and transform to DelegationData format
-    if (artifacts["delegations-data"]) {
-      const dataItems = extractArtifactData(artifacts["delegations-data"]);
+    if (artifacts['delegations-data']) {
+      const dataItems = extractArtifactData(artifacts['delegations-data']);
 
       dataItems.forEach((item: any) => {
         try {
           // Skip if we've already seen this delegation ID (prevent duplicates)
           const delegationId = item.id;
           if (seenDelegationIds.has(delegationId)) {
-            console.warn(
-              "[useDelegationExtractor] Skipping duplicate delegation:",
-              delegationId
-            );
+            console.warn('[useDelegationExtractor] Skipping duplicate delegation:', delegationId);
             return;
           }
           seenDelegationIds.add(delegationId);
@@ -88,18 +81,14 @@ export function useDelegationExtractor(
           const delegationData: DelegationData = {
             id: delegationId,
             name: item.name || `Delegation ${delegationId}`,
-            description: item.description || "Delegation policy",
-            policy: item.policy || "No policy description available",
+            description: item.description || 'Delegation policy',
+            policy: item.policy || 'No policy description available',
             delegation: item.delegation, // DO NOT ALTER the delegation key structure
           };
 
           delegationsData.push(delegationData);
         } catch (error) {
-          console.error(
-            "[useDelegationExtractor] Error parsing delegation data:",
-            error,
-            item,
-          );
+          console.error('[useDelegationExtractor] Error parsing delegation data:', error, item);
         }
       });
     }

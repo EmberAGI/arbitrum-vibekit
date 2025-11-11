@@ -41,10 +41,8 @@ export interface SwapComponentProps {
 /**
  * Transform createSwap MCP response into Swaps component props
  */
-export function transformCreateSwapResponse(
-  mcpResponse: any
-): SwapComponentProps {
-  console.log("[transformCreateSwapResponse] Input:", mcpResponse);
+export function transformCreateSwapResponse(mcpResponse: any): SwapComponentProps {
+  console.log('[transformCreateSwapResponse] Input:', mcpResponse);
 
   // Handle different possible response structures
   const response = mcpResponse?.content?.[0]?.text
@@ -71,11 +69,11 @@ export function transformCreateSwapResponse(
       fromTokenAmount: data?.displayFromAmount || data?.fromAmount,
       fromTokenSymbol: data?.fromToken?.symbol,
       fromTokenAddress: data?.fromToken?.tokenUid?.address,
-      fromChain: data?.fromToken?.tokenUid?.chainId || "Unknown",
+      fromChain: data?.fromToken?.tokenUid?.chainId || 'Unknown',
       toTokenAmount: data?.displayToAmount || data?.toAmount,
       toTokenSymbol: data?.toToken?.symbol,
       toTokenAddress: data?.toToken?.tokenUid?.address,
-      toChain: data?.toToken?.tokenUid?.chainId || "Unknown",
+      toChain: data?.toToken?.tokenUid?.chainId || 'Unknown',
     },
     txPlan: txPlan,
     metadata: {
@@ -86,7 +84,7 @@ export function transformCreateSwapResponse(
     },
   };
 
-  console.log("[transformCreateSwapResponse] Output:", transformedData);
+  console.log('[transformCreateSwapResponse] Output:', transformedData);
   return transformedData;
 }
 
@@ -97,7 +95,7 @@ export function transformCreateSwapResponse(
  * @returns Transformed props for Lending component
  */
 export function transformLendingResponse(mcpResponse: any) {
-  console.log("[transformLendingResponse] Input:", mcpResponse);
+  console.log('[transformLendingResponse] Input:', mcpResponse);
 
   // Handle different possible response structures
   const response = mcpResponse?.content?.[0]?.text
@@ -120,7 +118,7 @@ export function transformLendingResponse(mcpResponse: any) {
 
   const transformedData = {
     txPreview: {
-      action: data?.action || "LEND",
+      action: data?.action || 'LEND',
       amount: data?.amount || data?.displayAmount,
       tokenName: data?.token?.symbol || data?.tokenSymbol,
       tokenAddress: data?.token?.tokenUid?.address || data?.tokenAddress,
@@ -143,7 +141,7 @@ export function transformLendingResponse(mcpResponse: any) {
     ...data, // Pass through any additional properties
   };
 
-  console.log("[transformLendingResponse] Output:", transformedData);
+  console.log('[transformLendingResponse] Output:', transformedData);
   return transformedData;
 }
 
@@ -154,7 +152,7 @@ export function transformLendingResponse(mcpResponse: any) {
  * @returns Transformed props for Liquidity component
  */
 export function transformLiquidityResponse(mcpResponse: any) {
-  console.log("[transformLiquidityResponse] Input:", mcpResponse);
+  console.log('[transformLiquidityResponse] Input:', mcpResponse);
 
   const response = mcpResponse?.content?.[0]?.text
     ? JSON.parse(mcpResponse.content[0].text)
@@ -180,13 +178,12 @@ export function transformLiquidityResponse(mcpResponse: any) {
     pools: data?.pools || null,
     txPreview: data?.txPreview ||
       data?.preview || {
-        action: data?.action || "ADD_LIQUIDITY",
+        action: data?.action || 'ADD_LIQUIDITY',
         token0Amount: data?.token0Amount || data?.displayToken0Amount,
         token0Symbol: data?.token0?.symbol,
         token1Amount: data?.token1Amount || data?.displayToken1Amount,
         token1Symbol: data?.token1?.symbol,
-        pairHandle:
-          data?.pairHandle || `${data?.token0?.symbol}/${data?.token1?.symbol}`,
+        pairHandle: data?.pairHandle || `${data?.token0?.symbol}/${data?.token1?.symbol}`,
         priceFrom: data?.priceFrom,
         priceTo: data?.priceTo,
       },
@@ -210,7 +207,7 @@ export function transformLiquidityResponse(mcpResponse: any) {
     ...data,
   };
 
-  console.log("[transformLiquidityResponse] Output:", transformedData);
+  console.log('[transformLiquidityResponse] Output:', transformedData);
   return transformedData;
 }
 
@@ -221,7 +218,7 @@ export function transformLiquidityResponse(mcpResponse: any) {
  * @returns Transformed props for Perpetuals component
  */
 export function transformPerpetualsResponse(mcpResponse: any) {
-  console.log("[transformPerpetualsResponse] Input:", mcpResponse);
+  console.log('[transformPerpetualsResponse] Input:', mcpResponse);
 
   const response = mcpResponse?.content?.[0]?.text
     ? JSON.parse(mcpResponse.content[0].text)
@@ -261,7 +258,7 @@ export function transformPerpetualsResponse(mcpResponse: any) {
     ...data,
   };
 
-  console.log("[transformPerpetualsResponse] Output:", transformedData);
+  console.log('[transformPerpetualsResponse] Output:', transformedData);
   return transformedData;
 }
 
@@ -272,7 +269,7 @@ export function transformPerpetualsResponse(mcpResponse: any) {
  * @returns Transformed props for Pendle component
  */
 export function transformPendleResponse(mcpResponse: any) {
-  console.log("[transformPendleResponse] Input:", mcpResponse);
+  console.log('[transformPendleResponse] Input:', mcpResponse);
 
   const response = mcpResponse?.content?.[0]?.text
     ? JSON.parse(mcpResponse.content[0].text)
@@ -317,7 +314,7 @@ export function transformPendleResponse(mcpResponse: any) {
     ...data,
   };
 
-  console.log("[transformPendleResponse] Output:", transformedData);
+  console.log('[transformPendleResponse] Output:', transformedData);
   return transformedData;
 }
 
@@ -326,7 +323,7 @@ export function transformPendleResponse(mcpResponse: any) {
  * Use this for simple tools that don't need transformation
  */
 export function passthroughTransformer(mcpResponse: any) {
-  console.log("[passthroughTransformer] Input:", mcpResponse);
+  console.log('[passthroughTransformer] Input:', mcpResponse);
 
   const response = mcpResponse?.content?.[0]?.text
     ? JSON.parse(mcpResponse.content[0].text)
@@ -345,7 +342,7 @@ export function passthroughTransformer(mcpResponse: any) {
     },
   };
 
-  console.log("[passthroughTransformer] Output:", transformedData);
+  console.log('[passthroughTransformer] Output:', transformedData);
   return transformedData;
 }
 
@@ -353,7 +350,7 @@ export function passthroughTransformer(mcpResponse: any) {
  * Transform strategy display artifact - pass through as-is since it's already in the correct format
  */
 export function transformStrategyDisplayResponse(data: any) {
-  console.log("[transformStrategyDisplayResponse] Input:", data);
+  console.log('[transformStrategyDisplayResponse] Input:', data);
   // Data is already in the correct format for StrategyInputDisplay component
   return data;
 }
@@ -418,13 +415,12 @@ export const transformers = {
   createPendlePosition: transformPendleResponse,
   perpetualLongPosition: transformPerpetualsResponse,
   perpetualShortPosition: transformPerpetualsResponse,
-  "strategy-input-display": transformStrategyDisplayResponse,
-  dispatch_workflow_usdai_points_trading_strateg:
-    transformWorkflowDispatchResponse,
-  "strategy-dashboard-display": transformStrategyDashboardResponse,
-  "transaction-history-display": transformTransactionHistoryResponse,
-  "strategy-settings-display": transformStrategySettingsResponse,
-  "strategy-policies-display": transformStrategyPoliciesResponse,
+  'strategy-input-display': transformStrategyDisplayResponse,
+  dispatch_workflow_usdai_points_trading_strateg: transformWorkflowDispatchResponse,
+  'strategy-dashboard-display': transformStrategyDashboardResponse,
+  'transaction-history-display': transformTransactionHistoryResponse,
+  'strategy-settings-display': transformStrategySettingsResponse,
+  'strategy-policies-display': transformStrategyPoliciesResponse,
   // Add more transformers as needed
 } as const;
 
@@ -435,8 +431,5 @@ export const transformers = {
  * @returns Transformation function or passthrough
  */
 export function getTransformer(toolName: string) {
-  return (
-    transformers[toolName as keyof typeof transformers] ||
-    passthroughTransformer
-  );
+  return transformers[toolName as keyof typeof transformers] || passthroughTransformer;
 }

@@ -1,13 +1,13 @@
-"use client";
+'use client';
 
-import React, { useState } from "react";
-import { Button } from "../../ui/button";
-import { Input } from "../../ui/input";
-import { useAccount } from "wagmi";
-import { StrategyInfo } from "./StrategyInfo";
+import React, { useState } from 'react';
+import { Button } from '../../ui/button';
+import { Input } from '../../ui/input';
+import { useAccount } from 'wagmi';
+import { StrategyInfo } from './StrategyInfo';
 
 interface Reward {
-  type: "points" | "apy";
+  type: 'points' | 'apy';
   multiplier?: number;
   percentage?: number;
   label: string;
@@ -26,10 +26,7 @@ interface StrategyConfigMomentProps {
   platformIconUri?: string;
   rewards?: Reward[];
   chains?: Chain[];
-  onUserAction?: (data: {
-    walletAddress: string;
-    amount: string;
-  }) => Promise<void>;
+  onUserAction?: (data: { walletAddress: string; amount: string }) => Promise<void>;
 }
 
 export function StrategyConfigMoment({
@@ -42,7 +39,7 @@ export function StrategyConfigMoment({
   chains = [],
   onUserAction,
 }: StrategyConfigMomentProps) {
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { address } = useAccount();
 
@@ -56,7 +53,7 @@ export function StrategyConfigMoment({
         amount,
       });
     } catch (error) {
-      console.error("Failed to submit strategy config:", error);
+      console.error('Failed to submit strategy config:', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -71,23 +68,19 @@ export function StrategyConfigMoment({
       platformIconUri={platformIconUri}
       primaryIconUri={platformIconUri}
       secondaryIconUri={tokenIconUri}
-      primaryAlt={protocol || "Platform"}
-      secondaryAlt={name || "Token"}
+      primaryAlt={protocol || 'Platform'}
+      secondaryAlt={name || 'Token'}
       rewards={rewards}
       chains={chains}
     >
       {/* Input with $ prefix and inline button */}
       <div className="relative flex-1">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 z-10">
-          $
-        </span>
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 z-10">$</span>
         <Input
           type="text"
           placeholder="123,123.00"
           value={amount}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-            setAmount(e.target.value)
-          }
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAmount(e.target.value)}
           className="bg-[#0a0a0a] border-gray-800/50 text-white pl-7 pr-12 focus:border-gray-700 focus:ring-1 focus:ring-gray-700 rounded-lg"
         />
         <Button
@@ -95,7 +88,7 @@ export function StrategyConfigMoment({
           disabled={!amount || isSubmitting}
           className="absolute right-1 top-1/2 -translate-y-1/2 bg-[#FD6731] hover:bg-[#FD6731]/90 text-white font-medium px-3 py-1.5 rounded-md transition-colors h-8 min-w-[2rem]"
         >
-          {isSubmitting ? "..." : "→"}
+          {isSubmitting ? '...' : '→'}
         </Button>
       </div>
     </StrategyInfo>

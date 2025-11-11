@@ -9,7 +9,6 @@ Child task sessions were not establishing their own A2A connections after being 
 The problem was a race condition with async state updates:
 
 1. When `handleChildTask()` creates a child session, it performs multiple state updates:
-
    - Creates new session
    - Sets contextId
    - Sets agentEndpoint

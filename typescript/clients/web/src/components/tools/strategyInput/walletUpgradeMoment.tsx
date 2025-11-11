@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import React from "react";
-import { StrategyInfo } from "./StrategyInfo";
-import { useUpgradeToSmartAccount } from "../../../hooks/useUpgradeToSmartAccount";
+import React from 'react';
+import { StrategyInfo } from './StrategyInfo';
+import { useUpgradeToSmartAccount } from '../../../hooks/useUpgradeToSmartAccount';
 
 interface Reward {
-  type: "points" | "apy";
+  type: 'points' | 'apy';
   multiplier?: number;
   percentage?: number;
   label: string;
@@ -46,8 +46,8 @@ export function WalletUpgradeMoment({
       platformIconUri={platformIconUri}
       primaryIconUri={platformIconUri}
       secondaryIconUri={tokenIconUri}
-      primaryAlt={protocol || "Platform"}
-      secondaryAlt={name || "Token"}
+      primaryAlt={protocol || 'Platform'}
+      secondaryAlt={name || 'Token'}
       rewards={rewards}
       chains={chains}
     >
@@ -62,21 +62,17 @@ export function WalletUpgradeMoment({
           </div>
         ) : (
           <div className="w-full bg-orange-950/30 border border-orange-800/50 rounded-lg p-4 text-center">
-            <div className="text-orange-400 font-medium mb-2">
-              Wallet Upgrade Required
-            </div>
+            <div className="text-orange-400 font-medium mb-2">Wallet Upgrade Required</div>
             <div className="text-sm text-gray-400 leading-relaxed">
-              Your wallet needs to be upgraded to a smart contract wallet to use
-              delegations. Please upgrade your wallet through MetaMask or
-              another compatible provider to continue.
+              Your wallet needs to be upgraded to a smart contract wallet to use delegations. Please
+              upgrade your wallet through MetaMask or another compatible provider to continue.
             </div>
           </div>
         )}
 
         {/* Upgrade Explanation */}
         <div className="text-xs text-gray-500 text-center">
-          Smart contract wallets enable secure delegation signing for advanced
-          DeFi strategies
+          Smart contract wallets enable secure delegation signing for advanced DeFi strategies
         </div>
       </div>
     </StrategyInfo>

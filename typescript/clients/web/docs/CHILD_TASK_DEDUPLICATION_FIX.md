@@ -54,18 +54,10 @@ Updated `handleChildTask` to check if a child task has already been processed:
 
 ```typescript
 const handleChildTask = useCallback(
-  (
-    parentSessionId: string,
-    childTaskId: string,
-    contextId: string,
-    metadata?: any
-  ) => {
+  (parentSessionId: string, childTaskId: string, contextId: string, metadata?: any) => {
     // Check if we've already processed this child task
     if (processedChildTasksRef.current.has(childTaskId)) {
-      console.log(
-        "[Main] Child task already processed, skipping:",
-        childTaskId
-      );
+      console.log('[Main] Child task already processed, skipping:', childTaskId);
       return;
     }
 
@@ -76,7 +68,7 @@ const handleChildTask = useCallback(
   },
   [
     /* dependencies */
-  ]
+  ],
 );
 ```
 
@@ -87,7 +79,7 @@ Added comprehensive logging throughout the child task handling pipeline:
 #### In `page.tsx`:
 
 ```typescript
-console.log("[Main] Preparing to resubscribe to child task:", {
+console.log('[Main] Preparing to resubscribe to child task:', {
   childSessionId,
   childTaskId,
   contextId,
@@ -95,27 +87,21 @@ console.log("[Main] Preparing to resubscribe to child task:", {
 });
 
 // After setTimeout
-console.log("[Main] Executing resubscribe to child task:", childTaskId);
+console.log('[Main] Executing resubscribe to child task:', childTaskId);
 ```
 
 #### In `useA2ASession.ts`:
 
 ```typescript
-console.log("[A2ASession] Resubscribing to task for session:", sessionId, {
+console.log('[A2ASession] Resubscribing to task for session:', sessionId, {
   taskId,
   contextId,
   agentEndpoint,
 });
 
-console.log(
-  "[A2ASession] Sending resubscribe request:",
-  JSON.stringify(request, null, 2)
-);
+console.log('[A2ASession] Sending resubscribe request:', JSON.stringify(request, null, 2));
 
-console.log(
-  "[A2ASession] Resubscribe response received, status:",
-  response.status
-);
+console.log('[A2ASession] Resubscribe response received, status:', response.status);
 ```
 
 ## Implementation Details
@@ -123,7 +109,6 @@ console.log(
 ### Files Modified
 
 1. **src/app/page.tsx**
-
    - Added `processedChildTasksRef` to track processed child tasks
    - Updated `handleChildTask` to check and mark processed tasks
    - Enhanced logging for child task creation and resubscription
@@ -258,7 +243,7 @@ When creating a child session, we were:
 Without `session.status = 'working'`, the auto-reconnect logic in `handleSwitchSession` wouldn't trigger because it checks:
 
 ```typescript
-if (session.status === "working" || session.status === "waiting") {
+if (session.status === 'working' || session.status === 'waiting') {
   // trigger reconnect
 }
 ```
@@ -269,10 +254,10 @@ Added `updateSessionStatus(childSessionId, 'working')` before switching to the c
 
 ```typescript
 // Add the child task to the session
-addTask(childSessionId, childTaskId, "working");
+addTask(childSessionId, childTaskId, 'working');
 
 // Set session status to 'working' so auto-reconnect triggers
-updateSessionStatus(childSessionId, "working");
+updateSessionStatus(childSessionId, 'working');
 
 // Switch to the new child task session - this triggers auto-reconnect
 switchSession(childSessionId);

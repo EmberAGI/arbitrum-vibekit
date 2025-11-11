@@ -66,15 +66,15 @@ const a2aEndpoint = agentCard.a2a?.endpoint || `${url}/a2a`;
 ```typescript
 // Send JSONRPC request
 const response = await fetch(a2aEndpoint, {
-  method: "POST",
+  method: 'POST',
   headers: {
-    "Content-Type": "application/json",
-    Accept: "text/event-stream",
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream',
   },
   body: JSON.stringify({
-    jsonrpc: "2.0",
+    jsonrpc: '2.0',
     id: messageId,
-    method: "message/stream",
+    method: 'message/stream',
     params: {
       message: {
         /* ... */
@@ -171,13 +171,11 @@ function MyComponent() {
 2. **Navigate to** `http://localhost:3000`
 
 3. **Connect**:
-
    - Enter URL: `https://dev.emberai.xyz`
    - Click "Connect"
    - You should see "Connected to A2A agent"
 
 4. **Send a message**:
-
    - Type a message (e.g., "Swap 1 ETH to USDC on Arbitrum")
    - Press Enter or click Send
    - Watch the streaming response appear word-by-word! ✨
@@ -203,16 +201,16 @@ The implementation handles three main event types from the A2A agent:
 Streams content word-by-word:
 
 ```typescript
-if (event.kind === "artifact-update") {
+if (event.kind === 'artifact-update') {
   const artifact = event.artifact;
 
-  if (artifact.name === "reasoning") {
+  if (artifact.name === 'reasoning') {
     // Append to reasoning text
     reasoningTextRef.current += part.text;
-  } else if (artifact.name === "text-response") {
+  } else if (artifact.name === 'text-response') {
     // Append to response text
     responseTextRef.current += part.text;
-  } else if (artifact.name === "tool-invocation") {
+  } else if (artifact.name === 'tool-invocation') {
     // Parse and display tool invocation
   }
 }
@@ -223,7 +221,7 @@ if (event.kind === "artifact-update") {
 Tracks task progress:
 
 ```typescript
-if (event.kind === "status-update" && event.final) {
+if (event.kind === 'status-update' && event.final) {
   // Task completed, mark streaming as done
   updateMessage(currentMessageIdRef.current, {
     isStreaming: false,
@@ -236,9 +234,9 @@ if (event.kind === "status-update" && event.final) {
 Initial task submission:
 
 ```typescript
-if (event.kind === "task") {
+if (event.kind === 'task') {
   // Task created with ID
-  addDebugLog("info", "Task created", { taskId: event.id });
+  addDebugLog('info', 'Task created', { taskId: event.id });
 }
 ```
 
@@ -250,7 +248,7 @@ Context IDs are automatically managed:
 // Only log when context ID actually changes
 if (event.contextId && event.contextId !== contextIdRef.current) {
   contextIdRef.current = event.contextId;
-  addDebugLog("info", "Context ID updated", { contextId: event.contextId });
+  addDebugLog('info', 'Context ID updated', { contextId: event.contextId });
 }
 
 // Include in next message
@@ -337,7 +335,7 @@ socket.on("task_complete", (data) => { ... });
 ```typescript
 // 1. Frontend connects directly to agent
 const response = await fetch(agentEndpoint, {
-  method: "POST",
+  method: 'POST',
   body: JSON.stringify(request),
 });
 

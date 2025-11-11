@@ -313,12 +313,12 @@ Define standard payload formats:
 
 ```typescript
 interface SignaturePayload {
-  type: "signature";
+  type: 'signature';
   transactionData: Transaction;
 }
 
 interface ApprovalPayload {
-  type: "approval";
+  type: 'approval';
   message: string;
 }
 ```

@@ -92,7 +92,6 @@ This session completed implementation of multi-session management, bidirectional
 **Implementation:**
 
 - **Action Required** section - Sessions awaiting user input
-
   - Red dot indicator
   - AlertCircle icon
   - Filtered by `status: 'waiting'` with `awaitingInput: true`
@@ -132,7 +131,6 @@ This session completed implementation of multi-session management, bidirectional
 **Implementation:**
 
 - **Top Section (Scrollable):**
-
   - Agent Activity (Action Required, Live)
   - New Session button
   - MCP Resources
@@ -327,27 +325,23 @@ This session completed implementation of multi-session management, bidirectional
 ### Potential Improvements
 
 1. **Visual Indicators**
-
    - Badge count on "Action Required" section
    - Timeout warnings for time-sensitive actions
    - Progress bars for multi-step interactions
 
 2. **Session Management**
-
    - Session search/filter
    - Session grouping by project
    - Session export/import
    - Session templates
 
 3. **Bidirectional Communication**
-
    - Standard payload schemas
    - Validation against inputSchema
    - Retry logic for failed sends
    - Offline queue for user actions
 
 4. **Performance**
-
    - Virtual scrolling for long session lists
    - Lazy load message history
    - Image optimization in artifacts

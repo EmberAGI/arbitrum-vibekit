@@ -5,7 +5,7 @@ import {
   ResourceTemplate,
   Prompt,
   ServerNotification,
-} from "@modelcontextprotocol/sdk/types.js";
+} from '@modelcontextprotocol/sdk/types.js';
 
 export interface MCPServer {
   name: string;
@@ -24,7 +24,7 @@ export interface MCPServerConfig {
 }
 
 export interface ConnectionState {
-  status: "disconnected" | "connecting" | "connected" | "error";
+  status: 'disconnected' | 'connecting' | 'connected' | 'error';
   server?: MCPServer;
   capabilities?: ServerCapabilities;
   tools: Tool[];
@@ -36,5 +36,4 @@ export interface ConnectionState {
   errorDetails?: any;
 }
 
-export type TransportType = "streamable-http" | "stdio";
-
+export type TransportType = 'streamable-http' | 'stdio';

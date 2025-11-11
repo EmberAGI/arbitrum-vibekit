@@ -4,9 +4,9 @@
  * Handles saving and loading sessions to/from localStorage with proper serialization
  */
 
-import { Session, SessionState } from "./types/session";
+import { Session, SessionState } from './types/session';
 
-const STORAGE_KEY = "ember-sessions";
+const STORAGE_KEY = 'ember-sessions';
 const MAX_SESSIONS = 50; // Limit stored sessions to prevent storage overflow
 
 /**
@@ -64,7 +64,7 @@ export function saveSessions(state: SessionState): void {
   try {
     // Filter out temporary sessions (e.g., child workflow tabs)
     const persistentSessionIds = state.sessionOrder.filter(
-      (id) => !state.sessions[id]?.isTemporary
+      (id) => !state.sessions[id]?.isTemporary,
     );
 
     // Limit number of sessions stored
@@ -86,26 +86,23 @@ export function saveSessions(state: SessionState): void {
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToStore));
     console.log(
-      "[SessionStorage] Saved sessions:",
+      '[SessionStorage] Saved sessions:',
       sessionIds.length,
-      "(excluded",
+      '(excluded',
       persistentSessionIds.length -
         sessionIds.length +
         state.sessionOrder.length -
         persistentSessionIds.length,
-      "temporary)"
+      'temporary)',
     );
   } catch (error) {
-    console.error("[SessionStorage] Failed to save sessions:", error);
+    console.error('[SessionStorage] Failed to save sessions:', error);
     // If quota exceeded, try clearing old sessions
-    if (error instanceof Error && error.name === "QuotaExceededError") {
+    if (error instanceof Error && error.name === 'QuotaExceededError') {
       try {
         clearOldSessions();
       } catch (clearError) {
-        console.error(
-          "[SessionStorage] Failed to clear old sessions:",
-          clearError
-        );
+        console.error('[SessionStorage] Failed to clear old sessions:', clearError);
       }
     }
   }
@@ -128,17 +125,11 @@ export function loadSessions(): SessionState | null {
       try {
         sessions[id] = deserializeSession(sessionData);
       } catch (error) {
-        console.error(
-          `[SessionStorage] Failed to deserialize session ${id}:`,
-          error
-        );
+        console.error(`[SessionStorage] Failed to deserialize session ${id}:`, error);
       }
     });
 
-    console.log(
-      "[SessionStorage] Loaded sessions:",
-      Object.keys(sessions).length
-    );
+    console.log('[SessionStorage] Loaded sessions:', Object.keys(sessions).length);
 
     return {
       sessions,
@@ -146,7 +137,7 @@ export function loadSessions(): SessionState | null {
       sessionOrder: data.sessionOrder || Object.keys(sessions),
     };
   } catch (error) {
-    console.error("[SessionStorage] Failed to load sessions:", error);
+    console.error('[SessionStorage] Failed to load sessions:', error);
     return null;
   }
 }
@@ -157,9 +148,9 @@ export function loadSessions(): SessionState | null {
 export function clearSessions(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
-    console.log("[SessionStorage] Cleared all sessions");
+    console.log('[SessionStorage] Cleared all sessions');
   } catch (error) {
-    console.error("[SessionStorage] Failed to clear sessions:", error);
+    console.error('[SessionStorage] Failed to clear sessions:', error);
   }
 }
 
@@ -201,7 +192,7 @@ export function saveSession(session: Session): void {
       saveSessions(state);
     }
   } catch (error) {
-    console.error("[SessionStorage] Failed to save single session:", error);
+    console.error('[SessionStorage] Failed to save single session:', error);
   }
 }
 
@@ -215,12 +206,11 @@ export function deleteSession(sessionId: string): void {
       delete state.sessions[sessionId];
       state.sessionOrder = state.sessionOrder.filter((id) => id !== sessionId);
       if (state.activeSessionId === sessionId) {
-        state.activeSessionId =
-          state.sessionOrder[state.sessionOrder.length - 1] || null;
+        state.activeSessionId = state.sessionOrder[state.sessionOrder.length - 1] || null;
       }
       saveSessions(state);
     }
   } catch (error) {
-    console.error("[SessionStorage] Failed to delete session:", error);
+    console.error('[SessionStorage] Failed to delete session:', error);
   }
 }

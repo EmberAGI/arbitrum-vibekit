@@ -37,7 +37,7 @@ export interface ArtifactData {
 
 export interface SessionMessage {
   id: string;
-  sender: "user" | "agent" | "agent-progress" | "agent-error";
+  sender: 'user' | 'agent' | 'agent-progress' | 'agent-error';
   content: string;
   timestamp: Date;
   // ... other properties

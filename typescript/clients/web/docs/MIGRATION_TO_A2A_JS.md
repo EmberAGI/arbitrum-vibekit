@@ -122,7 +122,6 @@ npm run dev
 2. Navigate to `http://localhost:3000`
 
 3. Connect to the agent:
-
    - Enter URL: `https://dev.emberai.xyz`
    - Click "Connect"
 

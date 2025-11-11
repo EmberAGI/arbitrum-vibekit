@@ -119,16 +119,13 @@ The Settings section is now a collapsible accordion that contains:
 The bottom section now has a consistent structure:
 
 1. **Settings** (collapsible)
-
    - Panel visibility toggles
 
 2. **Connections** (always visible)
-
    - Connection status indicators
    - Compact display of A2A and MCP status
 
 3. **Debug Console** (button)
-
    - One-click access
    - Badge shows log count
 
@@ -153,17 +150,14 @@ The bottom section now has a consistent structure:
 ### Benefits
 
 1. **Better Organization**
-
    - Tasks and activity at top (primary focus)
    - System controls at bottom (secondary access)
 
 2. **Reduced Scrolling**
-
    - System controls always visible at bottom
    - No need to scroll to access debug or wallet
 
 3. **Cleaner Layout**
-
    - Settings consolidated into one section
    - Related controls grouped together
    - Less visual clutter
@@ -203,7 +197,7 @@ const [isSettingsExpanded, setIsSettingsExpanded] = useState(false); // NEW
   </div>
 
   {/* Bottom Section (Fixed) */}
-  <div className="p-4 space-y-3" style={{ borderTop: "1px solid..." }}>
+  <div className="p-4 space-y-3" style={{ borderTop: '1px solid...' }}>
     {/* Settings Accordion */}
     {/* Connections Status */}
     {/* Debug Console */}
@@ -215,7 +209,6 @@ const [isSettingsExpanded, setIsSettingsExpanded] = useState(false); // NEW
 ## Files Modified
 
 1. **`src/components/AppSidebar.tsx`**
-
    - Restructured layout
    - Moved sections to bottom
    - Created Settings accordion

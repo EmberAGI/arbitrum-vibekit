@@ -57,7 +57,7 @@ interface Session {
 ```typescript
 interface SessionMessage {
   id: string;
-  sender: "user" | "agent" | "agent-progress" | "agent-error";
+  sender: 'user' | 'agent' | 'agent-progress' | 'agent-error';
   content: string;
   timestamp: Date;
   validationErrors?: string[];
@@ -140,7 +140,7 @@ await sendMessage(
     onToolInvocation, // Callback for tool invocations
   },
   messageText,
-  metadata
+  metadata,
 );
 ```
 
@@ -185,19 +185,16 @@ Shows all active conversations and completed tool executions:
 Integrated with session management:
 
 1. **Session Initialization**:
-
    - Uses `useSessionManager()` for state
    - Uses `useA2ASession()` for communication
    - Automatically loads saved sessions
 
 2. **Message Handling**:
-
    - Messages tied to specific sessions
    - Active session determines what's displayed
    - Switching sessions changes view instantly
 
 3. **Tool Invocation Detection**:
-
    - When `status-update` includes `referencedWorkflow`
    - Automatically creates new tool-execution session
    - Links to parent conversation session
@@ -249,14 +246,14 @@ Integrated with session management:
 
 ```typescript
 const STATUS_COLORS = {
-  idle: { bg: "gray", text: "gray-400", icon: "○" },
-  connecting: { bg: "blue", text: "blue-400", icon: "◐" },
-  active: { bg: "green", text: "green-400", icon: "●" },
-  working: { bg: "orange", text: "orange-400", icon: "◉" },
-  waiting: { bg: "yellow", text: "yellow-400", icon: "◎" },
-  completed: { bg: "green", text: "green-400", icon: "✓" },
-  error: { bg: "red", text: "red-400", icon: "✗" },
-  paused: { bg: "gray", text: "gray-400", icon: "❙❙" },
+  idle: { bg: 'gray', text: 'gray-400', icon: '○' },
+  connecting: { bg: 'blue', text: 'blue-400', icon: '◐' },
+  active: { bg: 'green', text: 'green-400', icon: '●' },
+  working: { bg: 'orange', text: 'orange-400', icon: '◉' },
+  waiting: { bg: 'yellow', text: 'yellow-400', icon: '◎' },
+  completed: { bg: 'green', text: 'green-400', icon: '✓' },
+  error: { bg: 'red', text: 'red-400', icon: '✗' },
+  paused: { bg: 'gray', text: 'gray-400', icon: '❙❙' },
 };
 ```
 
@@ -374,14 +371,14 @@ The application automatically:
 Enable verbose logging:
 
 ```typescript
-localStorage.setItem("DEBUG_SESSIONS", "true");
+localStorage.setItem('DEBUG_SESSIONS', 'true');
 ```
 
 Check session state in console:
 
 ```javascript
 // In browser console
-JSON.parse(localStorage.getItem("ember-sessions"));
+JSON.parse(localStorage.getItem('ember-sessions'));
 ```
 
 Debug logs show:
@@ -391,4 +388,3 @@ Debug logs show:
 - Tool execution session creation
 - Message additions/updates
 - Status changes
-

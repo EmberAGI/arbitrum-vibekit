@@ -1,15 +1,15 @@
 /**
  * A2A Handler Router
- * 
+ *
  * Routes A2A requests to appropriate handlers (Chat vs Workflow)
  */
 
-import { BaseA2AHandler, A2AHandlerConfig, A2AHandlerCallbacks } from "./BaseA2AHandler";
-import { ChatA2AHandler } from "./ChatA2AHandler";
-import { WorkflowA2AHandler } from "./WorkflowA2AHandler";
-import { Session } from "@/lib/types/session";
+import { BaseA2AHandler, A2AHandlerConfig, A2AHandlerCallbacks } from './BaseA2AHandler';
+import { ChatA2AHandler } from './ChatA2AHandler';
+import { WorkflowA2AHandler } from './WorkflowA2AHandler';
+import { Session } from '@/lib/types/session';
 
-export type HandlerType = "chat" | "workflow";
+export type HandlerType = 'chat' | 'workflow';
 
 /**
  * Determine handler type from session
@@ -17,29 +17,26 @@ export type HandlerType = "chat" | "workflow";
 export function getHandlerType(session: Session): HandlerType {
   // Workflows are identified by having a parentSessionId
   // or being of type "tool-execution"
-  if (session.parentSessionId || session.type === "tool-execution") {
-    return "workflow";
+  if (session.parentSessionId || session.type === 'tool-execution') {
+    return 'workflow';
   }
-  return "chat";
+  return 'chat';
 }
 
 /**
  * Create appropriate handler for a session
  */
-export function createA2AHandler(
-  session: Session,
-  callbacks: A2AHandlerCallbacks
-): BaseA2AHandler {
+export function createA2AHandler(session: Session, callbacks: A2AHandlerCallbacks): BaseA2AHandler {
   const handlerType = getHandlerType(session);
-  
+
   const config: A2AHandlerConfig = {
     sessionId: session.id,
-    agentEndpoint: session.agentEndpoint || "",
+    agentEndpoint: session.agentEndpoint || '',
     contextId: session.contextId,
     taskId: session.tasks.length > 0 ? session.tasks[session.tasks.length - 1].taskId : null,
   };
 
-  if (handlerType === "workflow") {
+  if (handlerType === 'workflow') {
     return new WorkflowA2AHandler(config, callbacks);
   }
 
@@ -62,11 +59,11 @@ export class A2AHandlerRouter {
     }
 
     const handler = this.handlers.get(session.id)!;
-    
+
     // Update handler config if session changed
     const config: A2AHandlerConfig = {
       sessionId: session.id,
-      agentEndpoint: session.agentEndpoint || "",
+      agentEndpoint: session.agentEndpoint || '',
       contextId: session.contextId,
       taskId: session.tasks.length > 0 ? session.tasks[session.tasks.length - 1].taskId : null,
     };
@@ -102,4 +99,3 @@ export class A2AHandlerRouter {
     this.handlers.clear();
   }
 }
-

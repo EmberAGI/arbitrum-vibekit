@@ -1,15 +1,15 @@
 /**
  * Helper function to create A2A callbacks
- * 
+ *
  * Creates standardized callbacks for A2A handlers
  */
 
-import { MutableRefObject } from "react";
-import { A2AHandlerCallbacks } from "../handlers/BaseA2AHandler";
-import { SessionStatus, TaskState } from "@/lib/types/session";
+import { MutableRefObject } from 'react';
+import { A2AHandlerCallbacks } from '../handlers/BaseA2AHandler';
+import { SessionStatus, TaskState } from '@/lib/types/session';
 
 interface CreateCallbacksOptions {
-  sessionId: string;
+  _sessionId: string;
   sessions: Record<string, any>;
   sessionsWithCompleteDelegations: Set<string>;
   addMessageToSession: (sessionId: string, message: any) => string;
@@ -19,13 +19,22 @@ interface CreateCallbacksOptions {
   addTask: (sessionId: string, taskId: string, state?: TaskState) => void;
   updateTaskState: (sessionId: string, taskId: string, state: TaskState, error?: string) => void;
   mapA2AStateToTaskState: (state: string) => TaskState;
-  onChildTaskDetected?: (parentSessionId: string, childTaskId: string, contextId: string, metadata?: any) => void;
-  addDebugLog?: (type: "info" | "success" | "warning" | "error", message: string, data?: any) => void;
+  onChildTaskDetected?: (
+    parentSessionId: string,
+    childTaskId: string,
+    contextId: string,
+    metadata?: any,
+  ) => void;
+  addDebugLog?: (
+    type: 'info' | 'success' | 'warning' | 'error',
+    message: string,
+    data?: any,
+  ) => void;
   lastMessageIdRef?: MutableRefObject<string | null>;
 }
 
 export function createA2ACallbacks({
-  sessionId,
+  _sessionId,
   sessions,
   sessionsWithCompleteDelegations,
   addMessageToSession,
@@ -42,18 +51,29 @@ export function createA2ACallbacks({
   return {
     onMessage: (msgSessionId, messageId, content, sender, updates) => {
       const justSubmittedDelegations = sessionsWithCompleteDelegations.has(msgSessionId);
-      const hasDashboardArtifacts = updates?.artifacts?.["strategy-dashboard-display"] ||
-        updates?.artifacts?.["transaction-history-display"] ||
-        updates?.artifacts?.["strategy-settings-display"] ||
-        updates?.artifacts?.["strategy-policies-display"];
+      const hasDashboardArtifacts =
+        updates?.artifacts?.['strategy-dashboard-display'] ||
+        updates?.artifacts?.['transaction-history-display'] ||
+        updates?.artifacts?.['strategy-settings-display'] ||
+        updates?.artifacts?.['strategy-policies-display'];
 
-      if (justSubmittedDelegations && messageId && (!updates?.artifacts || (!updates.artifacts["delegations-display"] && !updates.artifacts["delegations-data"])) && !hasDashboardArtifacts) {
-        console.log("[A2ACallbacks] BLOCKING update - preserving delegation artifacts after submission");
+      if (
+        justSubmittedDelegations &&
+        messageId &&
+        (!updates?.artifacts ||
+          (!updates.artifacts['delegations-display'] && !updates.artifacts['delegations-data'])) &&
+        !hasDashboardArtifacts
+      ) {
+        console.log(
+          '[A2ACallbacks] BLOCKING update - preserving delegation artifacts after submission',
+        );
         return messageId;
       }
 
       if (justSubmittedDelegations && hasDashboardArtifacts) {
-        console.log("[A2ACallbacks] Dashboard artifacts received - but keeping delegation flag until Continue is clicked");
+        console.log(
+          '[A2ACallbacks] Dashboard artifacts received - but keeping delegation flag until Continue is clicked',
+        );
       }
 
       let finalMessageId: string;
@@ -80,10 +100,10 @@ export function createA2ACallbacks({
     },
     onStatusUpdate: (msgSessionId, status, data) => {
       const taskState = data?.status?.state || data?.state;
-      if (taskState === "completed") {
-        updateSessionStatus(msgSessionId, "completed");
-      } else if (taskState === "failed" || taskState === "error") {
-        updateSessionStatus(msgSessionId, "error");
+      if (taskState === 'completed') {
+        updateSessionStatus(msgSessionId, 'completed');
+      } else if (taskState === 'failed' || taskState === 'error') {
+        updateSessionStatus(msgSessionId, 'error');
       } else {
         updateSessionStatus(msgSessionId, status);
       }
@@ -98,12 +118,12 @@ export function createA2ACallbacks({
             statusData: data,
           });
           if (addDebugLog) {
-            addDebugLog("info", "Task paused - awaiting user input", {
+            addDebugLog('info', 'Task paused - awaiting user input', {
               sessionId: msgSessionId,
               inputType: data.awaitingInputType,
             });
           }
-        } else if (status === "working" || status === "active") {
+        } else if (status === 'working' || status === 'active') {
           updateMessageInSession(msgSessionId, lastMessageId, {
             awaitingUserAction: false,
             statusData: undefined,
@@ -111,8 +131,8 @@ export function createA2ACallbacks({
         }
       } else if (data?.awaitingInput && addMessageToSession) {
         addMessageToSession(msgSessionId, {
-          sender: "agent",
-          content: data.statusMessage?.parts?.[0]?.text || "Awaiting input...",
+          sender: 'agent',
+          content: data.statusMessage?.parts?.[0]?.text || 'Awaiting input...',
           awaitingUserAction: true,
           statusData: data,
         });
@@ -121,7 +141,7 @@ export function createA2ACallbacks({
     onContextIdReceived: (msgSessionId, contextId) => {
       setSessionContextId(msgSessionId, contextId);
       if (addDebugLog) {
-        addDebugLog("success", "Context ID received for session", {
+        addDebugLog('success', 'Context ID received for session', {
           sessionId: msgSessionId,
           contextId,
         });
@@ -131,7 +151,7 @@ export function createA2ACallbacks({
       const taskState = mapA2AStateToTaskState(state);
       addTask(msgSessionId, taskId, taskState);
       if (addDebugLog) {
-        addDebugLog("success", "Task received for session", {
+        addDebugLog('success', 'Task received for session', {
           sessionId: msgSessionId,
           taskId,
           state: taskState,
@@ -142,14 +162,14 @@ export function createA2ACallbacks({
       const taskState = mapA2AStateToTaskState(state);
       updateTaskState(msgSessionId, taskId, taskState);
 
-      if (taskState === "completed") {
-        updateSessionStatus(msgSessionId, "completed");
-      } else if (taskState === "failed") {
-        updateSessionStatus(msgSessionId, "error");
+      if (taskState === 'completed') {
+        updateSessionStatus(msgSessionId, 'completed');
+      } else if (taskState === 'failed') {
+        updateSessionStatus(msgSessionId, 'error');
       }
 
       if (addDebugLog) {
-        addDebugLog("info", "Task state changed", {
+        addDebugLog('info', 'Task state changed', {
           sessionId: msgSessionId,
           taskId,
           state: taskState,
@@ -159,7 +179,7 @@ export function createA2ACallbacks({
     onChildTaskDetected: onChildTaskDetected,
     onToolInvocation: (msgSessionId, toolData) => {
       if (addDebugLog) {
-        addDebugLog("info", "Tool invocation detected", {
+        addDebugLog('info', 'Tool invocation detected', {
           sessionId: msgSessionId,
           toolData,
         });
@@ -167,4 +187,3 @@ export function createA2ACallbacks({
     },
   };
 }
-

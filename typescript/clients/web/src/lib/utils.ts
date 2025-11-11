@@ -1,5 +1,5 @@
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -23,7 +23,7 @@ export function shortenAddress(address: string): string {
 export function formatPercentage(input: string): string {
   const decimal = parseFloat(input);
   if (isNaN(decimal)) {
-    return "";
+    return '';
   }
   return `${(decimal * 100).toFixed(2)}%`;
 }

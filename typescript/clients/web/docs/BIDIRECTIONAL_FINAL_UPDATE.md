@@ -56,13 +56,10 @@ The bidirectional communication system is **complete and matches the A2A protoco
 **Detects `input-required` and `auth-required` states:**
 
 ```typescript
-if (event.kind === "status-update") {
-  if (
-    event.status?.state === "input-required" ||
-    event.status?.state === "auth-required"
-  ) {
+if (event.kind === 'status-update') {
+  if (event.status?.state === 'input-required' || event.status?.state === 'auth-required') {
     // Task is paused - awaiting user input
-    onStatusUpdate(sessionId, "waiting", {
+    onStatusUpdate(sessionId, 'waiting', {
       awaitingInput: true,
       awaitingInputType: state,
       inputSchema: event.inputSchema,
@@ -159,9 +156,7 @@ const handleSign = async () => {
         {
           "kind": "data",
           "data": {
-            "delegations": [
-              { "id": "approveUsdai", "signedDelegation": "0x..." }
-            ]
+            "delegations": [{ "id": "approveUsdai", "signedDelegation": "0x..." }]
           }
         }
       ],
@@ -268,14 +263,12 @@ export function DelegationSigner({ delegations, onUserAction }: Props) {
 ### Core Implementation
 
 1. **`src/lib/hooks/useA2ASession.ts`**
-
    - ✅ Changed `sendToActiveTask` to use `message/stream`
    - ✅ Added `input-required`/`auth-required` detection in `sendMessage`
    - ✅ Added `input-required`/`auth-required` detection in `reconnectToStream`
    - ✅ Updated function signature to accept callbacks
 
 2. **`src/app/page.tsx`**
-
    - ✅ Updated `handleUserAction` to pass callbacks to `sendToActiveTask`
    - ✅ Added `onMessage` callback for streaming responses
    - ✅ Added `onStatusUpdate` callback with await detection logic
@@ -295,7 +288,6 @@ export function DelegationSigner({ delegations, onUserAction }: Props) {
 ### Tool Configuration
 
 5. **`src/lib/toolComponentLoader.ts`**
-
    - ✅ Registered `InteractiveExample` component
 
 6. **`src/config/tools.ts`**
@@ -305,24 +297,19 @@ export function DelegationSigner({ delegations, onUserAction }: Props) {
 ### Documentation
 
 7. **`BIDIRECTIONAL_COMMUNICATION.md`**
-
    - ✅ Original comprehensive documentation
 
 8. **`BIDIRECTIONAL_QUICK_START.md`**
-
    - ✅ Updated with correct protocol flow
 
 9. **`BIDIRECTIONAL_IMPLEMENTATION_SUMMARY.md`**
-
    - ✅ Implementation details and status
 
 10. **`BIDIRECTIONAL_UPDATED_FLOW.md`** (NEW)
-
     - ✅ Detailed correct server flow
     - ✅ Examples with delegation signing
 
 11. **`BIDIRECTIONAL_CORRECTIONS_SUMMARY.md`** (NEW)
-
     - ✅ Before/after comparisons
     - ✅ Migration guide
 
@@ -365,20 +352,17 @@ export function DelegationSigner({ delegations, onUserAction }: Props) {
    ```
 
 4. **Verify UI:**
-
    - ✅ Component renders with delegations
    - ✅ Session shows "waiting" status
    - ✅ UI shows "Action Required"
    - ✅ Sign button enabled
 
 5. **User signs:**
-
    - ✅ Click "Sign All"
    - ✅ Wallet prompts appear
    - ✅ Signatures collected
 
 6. **Verify response sent:**
-
    - ✅ Console: `[A2ASession] Sending user interaction data`
    - ✅ Console: `[A2ASession] User interaction sent, processing stream...`
    - ✅ Method: `message/stream`

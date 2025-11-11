@@ -5,9 +5,9 @@
  * with persistence, context separation, and seamless switching
  */
 
-"use client";
+'use client';
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Session,
   SessionState,
@@ -16,11 +16,11 @@ import {
   CreateSessionOptions,
   generateSessionId,
   TaskState,
-} from "@/lib/types/session";
-import { saveSessions, loadSessions } from "@/lib/sessionStorage";
-import { createSessionOperations } from "./sessionOperations";
-import { createMessageOperations } from "./messageOperations";
-import { createTaskOperations } from "./taskOperations";
+} from '@/lib/types/session';
+import { saveSessions, loadSessions } from '@/lib/sessionStorage';
+import { createSessionOperations } from './sessionOperations';
+import { createMessageOperations } from './messageOperations';
+import { createTaskOperations } from './taskOperations';
 
 interface UseSessionManagerReturn {
   // Session management
@@ -33,22 +33,18 @@ interface UseSessionManagerReturn {
   createSession: (options: CreateSessionOptions) => string;
   switchSession: (sessionId: string) => void;
   closeSession: (sessionId: string) => void;
-  updateSessionStatus: (
-    sessionId: string,
-    status: SessionStatus,
-    force?: boolean
-  ) => void;
+  updateSessionStatus: (sessionId: string, status: SessionStatus, force?: boolean) => void;
   updateSessionTitle: (sessionId: string, title: string) => void;
 
   // Message management
   addMessageToSession: (
     sessionId: string,
-    message: Omit<SessionMessage, "id" | "timestamp">
+    message: Omit<SessionMessage, 'id' | 'timestamp'>,
   ) => string;
   updateMessageInSession: (
     sessionId: string,
     messageId: string,
-    updates: Partial<SessionMessage>
+    updates: Partial<SessionMessage>,
   ) => void;
   clearSessionMessages: (sessionId: string) => void;
   removeDelegationMessages: (sessionId: string) => void;
@@ -59,17 +55,8 @@ interface UseSessionManagerReturn {
   setSessionAgentEndpoint: (sessionId: string, agentEndpoint: string) => void;
 
   // Task management
-  addTask: (
-    sessionId: string,
-    taskId: string,
-    state?: TaskState
-  ) => void;
-  updateTaskState: (
-    sessionId: string,
-    taskId: string,
-    state: TaskState,
-    error?: string
-  ) => void;
+  addTask: (sessionId: string, taskId: string, state?: TaskState) => void;
+  updateTaskState: (sessionId: string, taskId: string, state: TaskState, error?: string) => void;
   getLatestIncompleteTaskId: (sessionId: string) => string | null;
 
   // Tool execution helpers
@@ -77,7 +64,7 @@ interface UseSessionManagerReturn {
     toolName: string,
     taskId: string,
     parentSessionId?: string,
-    metadata?: any
+    metadata?: any,
   ) => string;
 }
 
@@ -96,51 +83,44 @@ export function useSessionManager(): UseSessionManagerReturn {
   useEffect(() => {
     if (isInitializedRef.current) return;
 
-    console.log("[SessionManager] Initializing...");
+    console.log('[SessionManager] Initializing...');
     const loadedState = loadSessions();
 
     if (loadedState && Object.keys(loadedState.sessions).length > 0) {
       console.log(
-        "[SessionManager] Restored",
+        '[SessionManager] Restored',
         Object.keys(loadedState.sessions).length,
-        "sessions"
+        'sessions',
       );
 
       // Ensure at least one session is marked as main chat
-      const hasMainChat = Object.values(loadedState.sessions).some(
-        (session) => session.isMainChat
-      );
+      const hasMainChat = Object.values(loadedState.sessions).some((session) => session.isMainChat);
 
       if (!hasMainChat) {
         // Find the oldest conversation session and mark it as main chat
         const oldestConversation = Object.values(loadedState.sessions)
-          .filter((session) => session.type === "conversation")
-          .sort(
-            (a, b) =>
-              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          )[0];
+          .filter((session) => session.type === 'conversation')
+          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0];
 
         if (oldestConversation) {
           console.log(
-            "[SessionManager] Marking oldest conversation as main chat:",
-            oldestConversation.id
+            '[SessionManager] Marking oldest conversation as main chat:',
+            oldestConversation.id,
           );
           loadedState.sessions[oldestConversation.id].isMainChat = true;
-          loadedState.sessions[oldestConversation.id].title = "Chat";
+          loadedState.sessions[oldestConversation.id].title = 'Chat';
         }
       }
 
       setState(loadedState);
     } else {
       // Create initial conversation session (main chat)
-      console.log(
-        "[SessionManager] No saved sessions, creating initial conversation"
-      );
+      console.log('[SessionManager] No saved sessions, creating initial conversation');
       const initialSession: Session = {
-        id: generateSessionId("conversation"),
-        type: "conversation",
-        status: "idle",
-        title: "Chat",
+        id: generateSessionId('conversation'),
+        type: 'conversation',
+        status: 'idle',
+        title: 'Chat',
         createdAt: new Date(),
         updatedAt: new Date(),
         lastActivityAt: new Date(),
@@ -199,33 +179,26 @@ export function useSessionManager(): UseSessionManagerReturn {
   const taskOps = createTaskOperations(state, setState);
 
   const createToolExecutionSession = useCallback(
-    (
-      toolName: string,
-      taskId: string,
-      parentSessionId?: string,
-      metadata?: any
-    ): string => {
+    (toolName: string, taskId: string, parentSessionId?: string, metadata?: any): string => {
       const title = metadata?.workflowName || toolName;
 
       return sessionOps.createSession({
-        type: "tool-execution",
+        type: 'tool-execution',
         title,
         toolMetadata: {
           toolName,
           taskId,
           workflowName: metadata?.workflowName,
-          description: metadata?.description || "Tool execution",
+          description: metadata?.description || 'Tool execution',
           parentSessionId,
           startedAt: new Date(),
         },
       });
     },
-    [sessionOps]
+    [sessionOps],
   );
 
-  const activeSession = state.activeSessionId
-    ? state.sessions[state.activeSessionId]
-    : null;
+  const activeSession = state.activeSessionId ? state.sessions[state.activeSessionId] : null;
 
   return {
     sessions: state.sessions,

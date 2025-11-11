@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import React from "react";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { StrategyInfo } from "./StrategyInfo";
+import React from 'react';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { StrategyInfo } from './StrategyInfo';
 
 interface Reward {
-  type: "points" | "apy";
+  type: 'points' | 'apy';
   multiplier?: number;
   percentage?: number;
   label: string;
@@ -44,8 +44,8 @@ export function WalletConnectMoment({
       platformIconUri={platformIconUri}
       primaryIconUri={platformIconUri}
       secondaryIconUri={tokenIconUri}
-      primaryAlt={protocol || "Platform"}
-      secondaryAlt={name || "Token"}
+      primaryAlt={protocol || 'Platform'}
+      secondaryAlt={name || 'Token'}
       rewards={rewards}
       chains={chains}
     >
@@ -57,11 +57,11 @@ export function WalletConnectMoment({
           return (
             <div
               {...(!ready && {
-                "aria-hidden": true,
+                'aria-hidden': true,
                 style: {
                   opacity: 0,
-                  pointerEvents: "none",
-                  userSelect: "none",
+                  pointerEvents: 'none',
+                  userSelect: 'none',
                 },
               })}
             >

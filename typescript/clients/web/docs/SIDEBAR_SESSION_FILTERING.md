@@ -86,10 +86,8 @@ Both "Action Required" and "Live" sections are collapsible:
 const actionRequiredSessions = sessionOrder.filter((sessionId) => {
   const session = sessions[sessionId];
   return (
-    session?.status === "waiting" &&
-    session.messages?.some(
-      (msg: any) => msg.awaitingUserAction || msg.statusData?.awaitingInput
-    )
+    session?.status === 'waiting' &&
+    session.messages?.some((msg: any) => msg.awaitingUserAction || msg.statusData?.awaitingInput)
   );
 });
 
@@ -98,9 +96,9 @@ const liveSessions = sessionOrder.filter((sessionId) => {
   const session = sessions[sessionId];
   if (!session) return false;
   return (
-    (session.status === "working" ||
-      session.status === "active" ||
-      session.status === "connecting") &&
+    (session.status === 'working' ||
+      session.status === 'active' ||
+      session.status === 'connecting') &&
     !actionRequiredSessions.includes(sessionId)
   );
 });
@@ -147,7 +145,7 @@ onStatusUpdate: (sessionId, status, data) => {
         statusData: data,
       });
     }
-    addDebugLog("info", "Task paused - awaiting user input", {
+    addDebugLog('info', 'Task paused - awaiting user input', {
       sessionId,
       inputType: data.awaitingInputType,
     });
@@ -210,7 +208,6 @@ export interface Session {
 ## Files Modified
 
 1. **`src/components/AppSidebar.tsx`**
-
    - Added session filtering logic
    - Added "Agent Activity" header
    - Separated "Action Required" and "Live" sections
@@ -219,7 +216,6 @@ export interface Session {
    - Added subtitle display support
 
 2. **`src/lib/types/session.ts`**
-
    - Added `statusData` field to `SessionMessage`
    - Added `awaitingUserAction` flag to `SessionMessage`
    - Added `subtitle` field to `Session`
@@ -259,7 +255,6 @@ export interface Session {
    ```
 
 2. **Expected Sidebar Behavior:**
-
    - Session moves to "Action Required" section
    - Shows `<AlertCircle>` icon
    - Red dot appears on right side
@@ -281,7 +276,6 @@ export interface Session {
 ### Test Scenario 2: Multiple Sessions
 
 1. **Setup:**
-
    - Session A: Working on swap
    - Session B: Waiting for signature
    - Session C: Waiting for approval

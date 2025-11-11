@@ -9,7 +9,6 @@ Successfully redesigned all custom tool components to match the new polished des
 ### Transaction Components
 
 1. **`src/components/tools/Swaps.tsx`**
-
    - Complete redesign with orange theme
    - Structured sections: Header → From/To tokens → Status → Actions
    - Modern icons from lucide-react
@@ -18,7 +17,6 @@ Successfully redesigned all custom tool components to match the new polished des
    - Polished buttons with shadows
 
 2. **`src/components/tools/Lending.tsx`**
-
    - Matching design system
    - Header with TrendingUp icon
    - Clean amount display
@@ -35,7 +33,6 @@ Successfully redesigned all custom tool components to match the new polished des
 ### Utility Components
 
 4. **`src/components/tools/JsonViewer.tsx`**
-
    - Added orange-themed header
    - Gradient background borders
    - Maintains existing functionality
@@ -151,7 +148,7 @@ All status messages use this consistent pattern:
 ```tsx
 <button
   className="flex items-center justify-center gap-2 h-12 px-6 rounded-lg font-semibold transition-all duration-200 shadow-lg shadow-orange-500/20 hover:shadow-orange-500/30"
-  style={{ backgroundColor: "#FD6731" }}
+  style={{ backgroundColor: '#FD6731' }}
 >
   <Icon className="h-4 w-4" />
   Button Text

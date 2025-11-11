@@ -20,10 +20,7 @@ The application needs to detect these child tasks and automatically create appro
 Child tasks are detected in `status-update` events through the `referenceTaskIds` field:
 
 ```typescript
-if (
-  event.kind === "status-update" &&
-  event.status.message?.referenceTaskIds?.length
-) {
+if (event.kind === 'status-update' && event.status.message?.referenceTaskIds?.length) {
   const childTaskId = event.status.message.referenceTaskIds[0];
   console.log(`[Parent] childTaskId (workflow): ${childTaskId}`);
 }
@@ -42,7 +39,7 @@ interface A2ASessionConfig {
     parentSessionId: string,
     childTaskId: string,
     contextId: string,
-    metadata?: any
+    metadata?: any,
   ) => void;
 }
 ```
@@ -52,24 +49,17 @@ interface A2ASessionConfig {
 Both `sendMessage` and `reconnectToStream` now detect child tasks:
 
 ```typescript
-if (event.kind === "status-update") {
+if (event.kind === 'status-update') {
   // Detect child task (workflow) from referenceTaskIds
-  if (
-    event.status?.message?.referenceTaskIds &&
-    event.status.message.referenceTaskIds.length > 0
-  ) {
+  if (event.status?.message?.referenceTaskIds && event.status.message.referenceTaskIds.length > 0) {
     const childTaskId = event.status.message.referenceTaskIds[0];
-    console.log(
-      `[A2ASession] Child task detected in session ${sessionId}: ${childTaskId}`
-    );
+    console.log(`[A2ASession] Child task detected in session ${sessionId}: ${childTaskId}`);
 
     // Notify about child task detection
     if (onChildTaskDetected && contextId) {
       onChildTaskDetected(sessionId, childTaskId, contextId, {
-        workflowName:
-          event.status.message.metadata?.referencedWorkflow?.workflowName,
-        description:
-          event.status.message.metadata?.referencedWorkflow?.description,
+        workflowName: event.status.message.metadata?.referencedWorkflow?.workflowName,
+        description: event.status.message.metadata?.referencedWorkflow?.description,
         message: event.status.message,
       });
     }
@@ -92,17 +82,12 @@ Created `handleChildTask` function that:
 
 ```typescript
 const handleChildTask = useCallback(
-  (
-    parentSessionId: string,
-    childTaskId: string,
-    contextId: string,
-    metadata?: any
-  ) => {
-    const workflowName = metadata?.workflowName || "Workflow";
+  (parentSessionId: string, childTaskId: string, contextId: string, metadata?: any) => {
+    const workflowName = metadata?.workflowName || 'Workflow';
 
     // Create a new session for the child task
     const childSessionId = createSession({
-      type: "conversation",
+      type: 'conversation',
       title: workflowName,
     });
 
@@ -112,7 +97,7 @@ const handleChildTask = useCallback(
     setSessionAgentEndpoint(childSessionId, parentSession.agentEndpoint);
 
     // Add the child task
-    addTask(childSessionId, childTaskId, "working");
+    addTask(childSessionId, childTaskId, 'working');
 
     // Immediately resubscribe to get artifacts
     reconnectToStream({
@@ -128,7 +113,7 @@ const handleChildTask = useCallback(
   },
   [
     /* dependencies */
-  ]
+  ],
 );
 ```
 
@@ -359,7 +344,7 @@ Look for these log messages to track child task handling:
 
 ```typescript
 if (!parentSession) {
-  console.error("[Main] Parent session not found:", parentSessionId);
+  console.error('[Main] Parent session not found:', parentSessionId);
   return; // Abort child task creation
 }
 ```
@@ -368,7 +353,7 @@ if (!parentSession) {
 
 ```typescript
 if (!parentSession.agentEndpoint) {
-  console.warn("[Main] No agent endpoint for child task");
+  console.warn('[Main] No agent endpoint for child task');
   // Child session created but not connected
 }
 ```

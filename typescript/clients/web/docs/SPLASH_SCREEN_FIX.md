@@ -44,11 +44,7 @@ Added a `useEffect` that automatically manages splash screen visibility based on
 useEffect(() => {
   if (activeSession && activeSession.messages.length > 0) {
     setShowSplash(false);
-  } else if (
-    activeSession &&
-    activeSession.messages.length === 0 &&
-    !showSplash
-  ) {
+  } else if (activeSession && activeSession.messages.length === 0 && !showSplash) {
     setShowSplash(true);
   }
 }, [activeSession?.messages.length, activeSession?.id]);
@@ -81,7 +77,7 @@ const handleSwitchSession = useCallback(
   },
   [
     /* dependencies */
-  ]
+  ],
 );
 ```
 
@@ -92,8 +88,8 @@ When creating a new session, explicitly show the splash screen:
 ```typescript
 const handleCreateSession = () => {
   const newSessionId = createSession({
-    type: "conversation",
-    title: "New Conversation",
+    type: 'conversation',
+    title: 'New Conversation',
   });
   // New sessions have no messages, so show splash
   setShowSplash(true);

@@ -17,18 +17,15 @@ October 21, 2025
 #### Changes Made:
 
 1. **Capture ALL Data Artifacts** (not just `tool-call-*` artifacts)
-
    - Previously, only artifacts with IDs starting with `tool-call-` were captured
    - Now, ALL artifacts with `kind: "data"` parts are captured and stored
    - Workflow artifacts like `delegations-display`, `strategy-dashboard-display`, etc. are now properly captured
 
 2. **Improved Artifact Identification**
-
    - Tool-call artifacts: Use `toolName` extracted from `tool-call-{name}` format
    - Workflow artifacts: Use `artifactId` as the `toolName` for rendering
 
 3. **Fixed Append Mode Handling**
-
    - Properly checks `event.append` flag (not `artifact.append`)
    - When `append: false`: Clears existing artifact with the same ID
    - When `append: true`: Intelligently merges data:
@@ -81,27 +78,22 @@ Based on the success flow logs, the workflow dispatch process works as follows:
 The workflow streams various artifacts that are now properly captured:
 
 1. **Strategy Display** (`strategy-input-display`)
-
    - Initial strategy information
    - Token, chains, protocol, rewards data
 
 2. **Delegations Display** (`delegations-display`, `delegations-data`)
-
    - User-facing delegation descriptions
    - Raw delegation objects for signing
 
 3. **Dashboard Display** (`strategy-dashboard-display`)
-
    - Strategy performance metrics
    - Cumulative points, total value, etc.
 
 4. **Transaction History** (`transaction-history-display`, `append: true`)
-
    - Streamed transaction records
    - Appends new transactions as they occur
 
 5. **Settings Display** (`strategy-settings-display`)
-
    - Strategy configuration settings
    - Allocated amount, daily limits, preferred assets
 
@@ -115,7 +107,6 @@ All workflow artifacts are rendered using the `JsonViewer` component:
 
 1. Artifacts are stored in the message's `artifacts` map
 2. Each artifact has:
-
    - `artifactId`: Unique identifier
    - `toolName`: Display name (artifact ID for workflow artifacts)
    - `output`: The artifact data to render
@@ -132,7 +123,6 @@ All workflow artifacts are rendered using the `JsonViewer` component:
 ### Modified Files:
 
 1. `src/lib/hooks/useA2ASession.ts`
-
    - Enhanced artifact-update handling in `sendMessage()`
    - Enhanced artifact-update handling in `reconnectToStream()`
    - Fixed append mode logic for streaming artifacts
@@ -148,13 +138,11 @@ All workflow artifacts are rendered using the `JsonViewer` component:
 The workflow supports bidirectional communication via the existing implementation:
 
 1. **Input Required States**
-
    - Workflow pauses with `status: input-required`
    - Status message includes JSON schema for expected input
    - Session status updates to `waiting` with `awaitingInput: true`
 
 2. **User Interaction**
-
    - Custom components can trigger `onUserAction` callback
    - `sendToActiveTask()` sends user data to the active task
    - Uses `message/stream` with `kind: "data"` parts
@@ -172,19 +160,16 @@ The workflow supports bidirectional communication via the existing implementatio
 ### What Should Work:
 
 1. **Workflow Dispatch**
-
    - Parent task dispatches workflow
    - Child session tab is created automatically
    - Child session shows workflow name as title
 
 2. **Artifact Streaming**
-
    - All workflow artifacts are captured
    - Artifacts render in JsonViewer
    - Append mode properly accumulates data
 
 3. **Input-Required States**
-
    - Workflow pauses when input needed
    - JSON schema defines expected input format
    - UI can show input form based on schema
@@ -223,22 +208,18 @@ To test the implementation:
 ## Future Enhancements
 
 1. **Custom Artifact Components**
-
    - Create specialized UI components for common workflow artifacts
    - Examples: DelegationViewer, TransactionHistoryViewer, StrategyDashboard
 
 2. **Schema-Based Input Forms**
-
    - Auto-generate input forms from JSON schema
    - Validate user input against schema before sending
 
 3. **Workflow Progress Indicators**
-
    - Visual timeline of workflow stages
    - Progress bars for long-running operations
 
 4. **Artifact Actions**
-
    - Copy buttons for specific artifact data
    - Export artifact data to clipboard/file
    - Share workflow results

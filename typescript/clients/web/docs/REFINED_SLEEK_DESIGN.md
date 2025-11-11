@@ -82,9 +82,7 @@ Now properly structured with clear visual hierarchy:
   // Search input
   <Input className="bg-black/40 border-0 focus:ring-1 focus:ring-orange-500/30" />
   // Items
-  <div className={selectedIdx ? "bg-orange-500/20" : "hover:bg-white/5"}>
-    Item
-  </div>
+  <div className={selectedIdx ? 'bg-orange-500/20' : 'hover:bg-white/5'}>Item</div>
 </div>
 ```
 

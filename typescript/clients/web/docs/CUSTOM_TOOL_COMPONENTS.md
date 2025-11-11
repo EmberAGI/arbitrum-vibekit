@@ -145,7 +145,7 @@ src/
 ```typescript
 // ToolResultRenderer.tsx
 const toolConfig = getToolConfig(toolName); // Get tool configuration
-const componentName = toolConfig?.component || "JsonViewer"; // Default fallback
+const componentName = toolConfig?.component || 'JsonViewer'; // Default fallback
 const ToolComponent = getToolComponent(componentName); // Dynamic import
 ```
 
@@ -153,7 +153,7 @@ const ToolComponent = getToolComponent(componentName); // Dynamic import
 
 ```typescript
 // Transform raw MCP data into component-friendly format
-if (toolName === "createSwap" && componentName === "Swaps") {
+if (toolName === 'createSwap' && componentName === 'Swaps') {
   const transformedData = transformCreateSwapResponse(result);
   componentProps = transformedData;
 }
@@ -232,22 +232,20 @@ export function MyCustomTool({ toolData }: MyCustomToolProps) {
 Add your component to `src/lib/toolComponentLoader.ts`:
 
 ```typescript
-import { lazy } from "react";
+import { lazy } from 'react';
 
 const toolComponents = {
-  Swaps: lazy(() =>
-    import("@/components/tools/Swaps").then((m) => ({ default: m.Swaps }))
-  ),
+  Swaps: lazy(() => import('@/components/tools/Swaps').then((m) => ({ default: m.Swaps }))),
   JsonViewer: lazy(() =>
-    import("@/components/tools/JsonViewer").then((m) => ({
+    import('@/components/tools/JsonViewer').then((m) => ({
       default: m.JsonViewer,
-    }))
+    })),
   ),
   // Add your new component
   MyCustomTool: lazy(() =>
-    import("@/components/tools/MyCustomTool").then((m) => ({
+    import('@/components/tools/MyCustomTool').then((m) => ({
       default: m.MyCustomTool,
-    }))
+    })),
   ),
 };
 ```
@@ -260,11 +258,11 @@ Update `src/config/tools.ts` to map your MCP tool to the component:
 export const toolConfigs: ToolConfig[] = [
   // Existing configurations...
   {
-    id: "myToolId", // Must match MCP tool name exactly
-    name: "My Custom Tool",
-    description: "Description of what this tool does for users",
-    category: "custom", // Use existing category or add new one
-    component: "MyCustomTool", // Component name from toolComponentLoader
+    id: 'myToolId', // Must match MCP tool name exactly
+    name: 'My Custom Tool',
+    description: 'Description of what this tool does for users',
+    category: 'custom', // Use existing category or add new one
+    component: 'MyCustomTool', // Component name from toolComponentLoader
     enabled: true,
   },
 ];
@@ -278,10 +276,10 @@ If using a new category, add it to `toolCategories`:
 export const toolCategories: ToolCategory[] = [
   // Existing categories...
   {
-    id: "custom",
-    name: "Custom Tools",
-    description: "Custom tool implementations",
-    color: "indigo",
+    id: 'custom',
+    name: 'Custom Tools',
+    description: 'Custom tool implementations',
+    color: 'indigo',
   },
 ];
 ```
@@ -307,16 +305,16 @@ export interface ToolConfig {
 
 ```typescript
 // Get configuration for a specific tool
-const toolConfig = getToolConfig("createSwap");
+const toolConfig = getToolConfig('createSwap');
 
 // Get all tools in a category
-const swappingTools = getToolsByCategory("swapping");
+const swappingTools = getToolsByCategory('swapping');
 
 // Get category information
-const categoryInfo = getCategoryConfig("swapping");
+const categoryInfo = getCategoryConfig('swapping');
 
 // Get component name for a tool (with fallback)
-const componentName = getComponentForTool("createSwap"); // Returns 'Swaps' or 'JsonViewer'
+const componentName = getComponentForTool('createSwap'); // Returns 'Swaps' or 'JsonViewer'
 ```
 
 ---
@@ -449,10 +447,10 @@ Update the data transformation logic in `ToolResultRenderer.tsx`:
 ```typescript
 // Transform data for specific tools
 let componentProps = result;
-if (toolName === "createSwap" && componentName === "Swaps") {
+if (toolName === 'createSwap' && componentName === 'Swaps') {
   const transformedData = transformCreateSwapResponse(result);
   componentProps = transformedData;
-} else if (toolName === "lendToken" && componentName === "Lending") {
+} else if (toolName === 'lendToken' && componentName === 'Lending') {
   const transformedData = transformLendingResponse(result);
   componentProps = transformedData;
 }
@@ -679,7 +677,7 @@ interface SwapData {
 }
 
 // Use union types for known variants
-type ToolStatus = "idle" | "loading" | "success" | "error";
+type ToolStatus = 'idle' | 'loading' | 'success' | 'error';
 
 // Export interfaces for reuse
 export interface MyComponentProps {

@@ -12,22 +12,22 @@ User responses now use **`message/stream`** to continue the streaming task:
 
 ```typescript
 const request = {
-  jsonrpc: "2.0",
+  jsonrpc: '2.0',
   id: messageId,
-  method: "message/stream", // Streaming continuation
+  method: 'message/stream', // Streaming continuation
   params: {
     message: {
-      role: "user",
-      parts: [{ kind: "data", data: userData }],
+      role: 'user',
+      parts: [{ kind: 'data', data: userData }],
       contextId, // Same context continues the task
       messageId,
       metadata: {
-        userInteraction: "true",
-        interactionType: "component-response",
+        userInteraction: 'true',
+        interactionType: 'component-response',
       },
     },
     configuration: {
-      acceptedOutputModes: ["text/plain"],
+      acceptedOutputModes: ['text/plain'],
     },
   },
 };
@@ -38,13 +38,10 @@ const request = {
 The system now detects paused tasks via status updates:
 
 ```typescript
-if (event.kind === "status-update") {
-  if (
-    event.status?.state === "input-required" ||
-    event.status?.state === "auth-required"
-  ) {
+if (event.kind === 'status-update') {
+  if (event.status?.state === 'input-required' || event.status?.state === 'auth-required') {
     // Task is paused - awaiting user input
-    onStatusUpdate(sessionId, "waiting", {
+    onStatusUpdate(sessionId, 'waiting', {
       awaitingInput: true,
       awaitingInputType: event.status.state,
       inputSchema: event.inputSchema,
@@ -184,8 +181,8 @@ if (event.kind === "status-update") {
 ```typescript
 await onUserAction({
   delegations: [
-    { id: "approveUsdai", signedDelegation: "0x..." },
-    { id: "supplyPendle", signedDelegation: "0x..." },
+    { id: 'approveUsdai', signedDelegation: '0x...' },
+    { id: 'supplyPendle', signedDelegation: '0x...' },
   ],
 });
 ```
@@ -239,13 +236,13 @@ await onUserAction({
 ### Status Detection (useA2ASession.ts)
 
 ```typescript
-if (event.kind === "status-update") {
+if (event.kind === 'status-update') {
   if (event.status?.state) {
     const state = event.status.state;
 
-    if (state === "input-required" || state === "auth-required") {
-      console.log("[A2ASession] Task paused - awaiting user input:", state);
-      onStatusUpdate(sessionId, "waiting", {
+    if (state === 'input-required' || state === 'auth-required') {
+      console.log('[A2ASession] Task paused - awaiting user input:', state);
+      onStatusUpdate(sessionId, 'waiting', {
         awaitingInput: true,
         awaitingInputType: state,
         inputSchema: event.inputSchema,
@@ -254,12 +251,12 @@ if (event.kind === "status-update") {
     } else {
       // Normal status mapping
       const statusMap = {
-        pending: "waiting",
-        working: "working",
-        completed: "completed",
+        pending: 'waiting',
+        working: 'working',
+        completed: 'completed',
         // ...
       };
-      onStatusUpdate(sessionId, statusMap[state] || "active", event.status);
+      onStatusUpdate(sessionId, statusMap[state] || 'active', event.status);
     }
   }
 }
@@ -290,12 +287,12 @@ await sendToActiveTask(
   (sessionId, status, statusData) => {
     updateSessionStatus(sessionId, status);
     if (statusData?.awaitingInput) {
-      addDebugLog("info", "Task paused - awaiting user input", {
+      addDebugLog('info', 'Task paused - awaiting user input', {
         sessionId,
         inputType: statusData.awaitingInputType,
       });
     }
-  }
+  },
 );
 ```
 
@@ -359,18 +356,15 @@ export function DelegationSigner({
 ### Test with Mock Server Response
 
 1. **Artifact arrives:**
-
    - Component renders with data
    - User sees UI to interact
 
 2. **Status update arrives:**
-
    - Session status → "waiting"
    - awaitingInput → true
    - Component remains visible
 
 3. **User interacts:**
-
    - Component calls `onUserAction(data)`
    - Client sends via `message/stream`
 

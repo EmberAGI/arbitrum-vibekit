@@ -5,6 +5,7 @@
 **Critical Fix**: Removed the `setTimeout` delay and now call `reconnectToStream()` **immediately and synchronously** when a child task is detected.
 
 Previously:
+
 ```typescript
 setTimeout(() => {
     reconnectToStream({ ... });
@@ -12,6 +13,7 @@ setTimeout(() => {
 ```
 
 Now:
+
 ```typescript
 reconnectToStream({ ... }); // Called immediately
 ```
@@ -19,14 +21,17 @@ reconnectToStream({ ... }); // Called immediately
 ## How to Test
 
 ### Step 1: Open Browser Console
+
 Open DevTools (F12) and watch the console while testing.
 
 ### Step 2: Dispatch a Workflow
+
 Send a message that triggers a workflow dispatch (e.g., "execute USDAI strategy").
 
 ### Step 3: Watch for These Logs
 
 #### When Child Task is Detected:
+
 ```
 [Main] ===== CHILD TASK DETECTED =====
 [Main] Parent Session: session-conv-1234567890
@@ -36,6 +41,7 @@ Send a message that triggers a workflow dispatch (e.g., "execute USDAI strategy"
 ```
 
 #### Session Setup:
+
 ```
 [Main] ✅ Parent Agent Endpoint: https://dev.emberai.xyz/a2a
 [Main] ✅ Child Session Created: session-conv-9876543210
@@ -45,6 +51,7 @@ Send a message that triggers a workflow dispatch (e.g., "execute USDAI strategy"
 ```
 
 #### As Workflow Executes:
+
 ```
 [Main] 📩 Child task message received: { sessionId: 'session-conv-...', content: '...' }
 [Main] 📊 Child task status update: { sessionId: 'session-conv-...', status: 'working' }
@@ -55,6 +62,7 @@ Send a message that triggers a workflow dispatch (e.g., "execute USDAI strategy"
 ### Step 4: Check Child Tab
 
 The child tab should show:
+
 1. ✅ Tab created with workflow name
 2. ✅ Artifacts rendering (JsonViewer components)
 3. ✅ Status updates (if workflow pauses for input)
@@ -63,24 +71,32 @@ The child tab should show:
 ## Debugging Issues
 
 ### If No Child Tab Created
+
 Check console for:
+
 - `[Main] ===== CHILD TASK DETECTED =====` - if missing, parent isn't detecting child task
 - `[Main] ❌ Parent session not found` - if present, session lookup is failing
 
 ### If Tab Created But Empty
+
 Check console for:
+
 - `[Main] 🔌 Calling reconnectToStream NOW...` - if missing, reconnection isn't happening
 - `[Main] ✅ reconnectToStream called successfully` - if missing, call failed
 - Any error messages from `[A2ASession]` logs
 
 ### If reconnectToStream Not Called
+
 Check:
+
 - Is `reconnectToStream` in the dependency array of `handleChildTask`?
 - Are there any errors in the console before the reconnection attempt?
 - Is the parent session's agentEndpoint set correctly?
 
 ### If No Events Received
+
 Check:
+
 - Network tab - is there a POST request to `/a2a` with method `tasks/resubscribe`?
 - Response from A2A server - is it streaming events?
 - Look for `[A2ASession] Resubscribe Event:` logs in console
@@ -110,15 +126,19 @@ Check:
 ## Common Issues
 
 ### Issue: "reconnectToStream is not a function"
+
 **Solution**: Check that `reconnectToStream` is imported from `useA2ASession` and included in dependencies.
 
 ### Issue: "sessions[sessionId] is undefined" in callbacks
+
 **Solution**: This is expected - callbacks use fresh state from hooks, not captured state.
 
 ### Issue: Child tab shows but stays empty
+
 **Solution**: Check Network tab for A2A request. If request is made but no response, issue is server-side.
 
 ### Issue: Artifacts not rendering
+
 **Solution**: Check that artifacts are being added to message via `artifacts` field, not just `toolInvocation`.
 
 ## Success Criteria
@@ -129,4 +149,3 @@ Check:
 ✅ Console shows artifact/message events streaming in
 ✅ Child tab renders artifacts using JsonViewer
 ✅ Workflow can pause and resume with bidirectional communication
-

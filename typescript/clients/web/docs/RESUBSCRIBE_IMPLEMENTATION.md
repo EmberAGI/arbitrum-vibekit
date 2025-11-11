@@ -38,8 +38,8 @@ interface A2ASessionConfig {
 When a task is created during `sendMessage`, the task ID is now captured and stored:
 
 ```typescript
-if (event.kind === "task") {
-  console.log("[A2ASession] Task created:", event.id);
+if (event.kind === 'task') {
+  console.log('[A2ASession] Task created:', event.id);
 
   // Capture task ID for resubscription
   if (event.id && onTaskIdReceived) {
@@ -57,16 +57,16 @@ The reconnection logic now uses the proper A2A protocol method:
 
 ```typescript
 const request = {
-  jsonrpc: "2.0",
+  jsonrpc: '2.0',
   id: messageId,
-  method: "message/stream",
+  method: 'message/stream',
   params: {
     message: {
-      role: "user",
-      parts: [{ kind: "text", text: "" }], // Empty message
+      role: 'user',
+      parts: [{ kind: 'text', text: '' }], // Empty message
       messageId,
       contextId,
-      metadata: { reconnect: "true" },
+      metadata: { reconnect: 'true' },
     },
     // ...
   },
@@ -77,14 +77,14 @@ const request = {
 
 ```typescript
 const request = {
-  jsonrpc: "2.0",
+  jsonrpc: '2.0',
   id: requestId,
-  method: "tasks/resubscribe",
+  method: 'tasks/resubscribe',
   params: {
     id: taskId, // Task ID to resubscribe to
     metadata: {
       sessionId,
-      reconnect: "true",
+      reconnect: 'true',
     },
   },
 };
@@ -100,12 +100,7 @@ const setSessionTaskId = useCallback((sessionId: string, taskId: string) => {
     const session = prev.sessions[sessionId];
     if (!session) return prev;
 
-    console.log(
-      "[SessionManager] Set taskId for session",
-      sessionId,
-      ":",
-      taskId
-    );
+    console.log('[SessionManager] Set taskId for session', sessionId, ':', taskId);
 
     return {
       ...prev,
@@ -125,7 +120,7 @@ const getSessionTaskId = useCallback(
   (sessionId: string): string | null => {
     return state.sessions[sessionId]?.taskId || null;
   },
-  [state.sessions]
+  [state.sessions],
 );
 ```
 
@@ -162,14 +157,14 @@ await sendA2AMessage(
     // ... other callbacks
     onTaskIdReceived: (sessionId, taskId) => {
       setSessionTaskId(sessionId, taskId);
-      addDebugLog("success", "Task ID received for session", {
+      addDebugLog('success', 'Task ID received for session', {
         sessionId,
         taskId,
       });
     },
   },
   sanitizedMessage,
-  combinedMetadata
+  combinedMetadata,
 );
 ```
 
@@ -184,7 +179,7 @@ reconnectToStream({
   // ... other callbacks
   onTaskIdReceived: (sessionId, taskId) => {
     setSessionTaskId(sessionId, taskId);
-    addDebugLog("success", "Task ID received for session", {
+    addDebugLog('success', 'Task ID received for session', {
       sessionId,
       taskId,
     });
@@ -263,9 +258,9 @@ If a session doesn't have a task ID (e.g., old sessions or sessions created befo
 ```typescript
 if (!taskId) {
   console.warn(
-    "[A2ASession] Cannot resubscribe without taskId:",
+    '[A2ASession] Cannot resubscribe without taskId:',
     sessionId,
-    "- falling back to message/stream with contextId"
+    '- falling back to message/stream with contextId',
   );
   // If no taskId but we have contextId, fall back to old method
   if (!contextId) {
@@ -279,17 +274,14 @@ if (!taskId) {
 ### Test Reconnection
 
 1. **Start a long-running task**
-
    - Connect to an A2A agent
    - Send a message that takes time to complete
 
 2. **Switch sessions**
-
    - Create a new session while the task is running
    - Check debug logs for "Task ID received for session"
 
 3. **Switch back**
-
    - Return to the original session
    - Verify debug logs show: "[A2ASession] Resubscribing to task for session"
    - Confirm the method used is "tasks/resubscribe"

@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @plugin "tailwindcss-animate";
 
@@ -8,8 +8,8 @@
 :root,
 html,
 html.light,
-html[data-theme="light"],
-html[data-theme="auto"] {
+html[data-theme='light'],
+html[data-theme='auto'] {
   --background: 0 0% 10%;
   --foreground: 0 0% 95%;
   --card: 0 0% 10%;
@@ -239,7 +239,9 @@ body {
 
 /* Smooth transitions for content changes */
 .smooth-transition {
-  transition: opacity 0.25s ease-in-out, transform 0.25s ease-in-out;
+  transition:
+    opacity 0.25s ease-in-out,
+    transform 0.25s ease-in-out;
   will-change: opacity, transform;
 }
 

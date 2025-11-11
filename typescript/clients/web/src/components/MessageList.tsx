@@ -1,15 +1,15 @@
 /**
  * Message List Component
- * 
+ *
  * Renders messages for a session
  */
 
-import React from "react";
-import { MessageSquare, Bot, User, AlertCircle, Loader } from "lucide-react";
-import { StreamingMessage } from "@/components/StreamingMessage";
-import { ToolResultRenderer } from "@/components/ToolResultRenderer";
-import { WorkflowApprovalHandler } from "@/components/tools/WorkflowApprovalHandler";
-import { SessionMessage } from "@/lib/types/session";
+import React from 'react';
+import { MessageSquare, Bot, User, AlertCircle, Loader } from 'lucide-react';
+import { StreamingMessage } from '@/components/StreamingMessage';
+import { ToolResultRenderer } from '@/components/ToolResultRenderer';
+import { WorkflowApprovalHandler } from '@/components/tools/WorkflowApprovalHandler';
+import { SessionMessage } from '@/lib/types/session';
 
 interface MessageListProps {
   messages: SessionMessage[];
@@ -44,8 +44,8 @@ export function MessageList({
           <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
           <p>
             {isChildSession
-              ? "Loading workflow..."
-              : "No messages yet. Start chatting with the agent."}
+              ? 'Loading workflow...'
+              : 'No messages yet. Start chatting with the agent.'}
           </p>
         </div>
       </div>
@@ -66,16 +66,13 @@ export function MessageList({
                 <ToolResultRenderer
                   key={`tool-${message.id}`}
                   toolName={message.toolInvocation.toolName}
-                  result={
-                    message.toolInvocation.output ||
-                    message.toolInvocation.input
-                  }
+                  result={message.toolInvocation.output || message.toolInvocation.input}
                   onUserAction={onUserAction}
                   onNavigate={onNavigate}
                   workflowChildSessions={workflowChildSessions}
                   sessions={sessions}
                   sessionOrder={sessionOrder}
-                />
+                />,
               );
             }
 
@@ -84,20 +81,17 @@ export function MessageList({
               Object.values(message.artifacts)
                 .filter((artifact: any) => {
                   const overviewArtifacts = [
-                    "strategy-dashboard-display",
-                    "transaction-history-display",
-                    "strategy-settings-display",
-                    "strategy-policies-display",
+                    'strategy-dashboard-display',
+                    'transaction-history-display',
+                    'strategy-settings-display',
+                    'strategy-policies-display',
                   ];
 
                   if (overviewArtifacts.includes(artifact.artifactId)) {
                     return false;
                   }
 
-                  const skipArtifacts = [
-                    "delegations-display",
-                    "delegations-data",
-                  ];
+                  const skipArtifacts = ['delegations-display', 'delegations-data'];
                   if (skipArtifacts.includes(artifact.artifactId)) {
                     return false;
                   }
@@ -116,17 +110,15 @@ export function MessageList({
                       workflowChildSessions={workflowChildSessions}
                       sessions={sessions}
                       sessionOrder={sessionOrder}
-                    />
+                    />,
                   );
                 });
             }
 
             // Workflow Approval Handler
-            const hasDelegationDisplay =
-              message.artifacts?.["delegations-display"];
-            const hasDelegationData = message.artifacts?.["delegations-data"];
-            const hasAwaitingAction =
-              message.awaitingUserAction && message.statusData;
+            const hasDelegationDisplay = message.artifacts?.['delegations-display'];
+            const hasDelegationData = message.artifacts?.['delegations-data'];
+            const hasAwaitingAction = message.awaitingUserAction && message.statusData;
             const isCompleteDelegationSession = activeSessionId
               ? sessionsWithCompleteDelegations.has(activeSessionId)
               : false;
@@ -141,15 +133,12 @@ export function MessageList({
               artifacts.push(
                 <WorkflowApprovalHandler
                   key={`workflow-${message.id}`}
-                  schema={
-                    message.statusData?.statusMessage?.parts?.[0]?.metadata
-                      ?.schema
-                  }
+                  schema={message.statusData?.statusMessage?.parts?.[0]?.metadata?.schema}
                   statusMessage={message.statusData?.statusMessage}
                   artifacts={message.artifacts}
                   onUserAction={onUserAction}
                   onNavigateToParent={onNavigateToParent}
-                />
+                />,
               );
             }
 
@@ -171,12 +160,12 @@ export function MessageList({
         <div
           key={message.id}
           className={`flex items-start gap-3 message-fade-in ${
-            message.sender === "user" ? "justify-end" : "justify-start"
+            message.sender === 'user' ? 'justify-end' : 'justify-start'
           }`}
         >
-          {message.sender !== "user" && (
+          {message.sender !== 'user' && (
             <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0">
-              {message.sender === "agent-error" ? (
+              {message.sender === 'agent-error' ? (
                 <AlertCircle className="w-4 h-4 text-red-400" />
               ) : (
                 <Bot className="w-4 h-4 text-blue-400" />
@@ -207,10 +196,7 @@ export function MessageList({
               <div className="mt-2 component-fade-in">
                 <ToolResultRenderer
                   toolName={message.toolInvocation.toolName}
-                  result={
-                    message.toolInvocation.output ||
-                    message.toolInvocation.input
-                  }
+                  result={message.toolInvocation.output || message.toolInvocation.input}
                   onUserAction={onUserAction}
                   onNavigate={onNavigate}
                   workflowChildSessions={workflowChildSessions}
@@ -221,68 +207,55 @@ export function MessageList({
             )}
 
             {/* Multiple Artifacts */}
-            {message.artifacts &&
-              Object.keys(message.artifacts).length > 0 && (
-                <div className="mt-2 space-y-2 component-fade-in">
-                  {Object.values(message.artifacts)
-                    .filter((artifact: any) => {
-                      const overviewArtifacts = [
-                        "strategy-dashboard-display",
-                        "transaction-history-display",
-                        "strategy-settings-display",
-                        "strategy-policies-display",
-                      ];
+            {message.artifacts && Object.keys(message.artifacts).length > 0 && (
+              <div className="mt-2 space-y-2 component-fade-in">
+                {Object.values(message.artifacts)
+                  .filter((artifact: any) => {
+                    const overviewArtifacts = [
+                      'strategy-dashboard-display',
+                      'transaction-history-display',
+                      'strategy-settings-display',
+                      'strategy-policies-display',
+                    ];
 
-                      if (overviewArtifacts.includes(artifact.artifactId)) {
-                        return false;
-                      }
+                    if (overviewArtifacts.includes(artifact.artifactId)) {
+                      return false;
+                    }
 
-                      const skipArtifacts = [
-                        "delegations-display",
-                        "delegations-data",
-                      ];
-                      if (skipArtifacts.includes(artifact.artifactId)) {
-                        return false;
-                      }
+                    const skipArtifacts = ['delegations-display', 'delegations-data'];
+                    if (skipArtifacts.includes(artifact.artifactId)) {
+                      return false;
+                    }
 
-                      return true;
-                    })
-                    .map((artifact: any) => (
-                      <ToolResultRenderer
-                        key={artifact.artifactId}
-                        toolName={artifact.toolName}
-                        result={artifact.output || artifact.input}
-                        isLoading={artifact.isLoading}
-                        onUserAction={onUserAction}
-                        onNavigate={onNavigate}
-                        workflowChildSessions={workflowChildSessions}
-                        sessions={sessions}
-                        sessionOrder={sessionOrder}
-                      />
-                    ))}
-                </div>
-              )}
+                    return true;
+                  })
+                  .map((artifact: any) => (
+                    <ToolResultRenderer
+                      key={artifact.artifactId}
+                      toolName={artifact.toolName}
+                      result={artifact.output || artifact.input}
+                      isLoading={artifact.isLoading}
+                      onUserAction={onUserAction}
+                      onNavigate={onNavigate}
+                      workflowChildSessions={workflowChildSessions}
+                      sessions={sessions}
+                      sessionOrder={sessionOrder}
+                    />
+                  ))}
+              </div>
+            )}
 
             {/* Workflow Approval Handler */}
             {(() => {
-              const hasDelegationDisplay =
-                message.artifacts?.["delegations-display"];
-              const hasDelegationData =
-                message.artifacts?.["delegations-data"];
-              const hasAwaitingAction =
-                message.awaitingUserAction && message.statusData;
-              const shouldRender =
-                hasDelegationDisplay ||
-                hasDelegationData ||
-                hasAwaitingAction;
+              const hasDelegationDisplay = message.artifacts?.['delegations-display'];
+              const hasDelegationData = message.artifacts?.['delegations-data'];
+              const hasAwaitingAction = message.awaitingUserAction && message.statusData;
+              const shouldRender = hasDelegationDisplay || hasDelegationData || hasAwaitingAction;
 
               return shouldRender ? (
                 <div className="mt-2 component-fade-in">
                   <WorkflowApprovalHandler
-                    schema={
-                      message.statusData?.statusMessage?.parts?.[0]?.metadata
-                        ?.schema
-                    }
+                    schema={message.statusData?.statusMessage?.parts?.[0]?.metadata?.schema}
                     statusMessage={message.statusData?.statusMessage}
                     artifacts={message.artifacts}
                     onUserAction={onUserAction}
@@ -293,7 +266,7 @@ export function MessageList({
             })()}
 
             {/* Metadata */}
-            {message.sender !== "user" && (
+            {message.sender !== 'user' && (
               <div className="flex items-center justify-between px-4">
                 <span className="text-xs text-gray-400">
                   {message.timestamp.toLocaleTimeString()}
@@ -302,7 +275,7 @@ export function MessageList({
             )}
           </div>
 
-          {message.sender === "user" && (
+          {message.sender === 'user' && (
             <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
               <User className="w-4 h-4 text-white" />
             </div>
@@ -312,6 +285,3 @@ export function MessageList({
     </>
   );
 }
-
-
-

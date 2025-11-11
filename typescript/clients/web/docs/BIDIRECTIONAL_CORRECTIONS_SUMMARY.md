@@ -41,9 +41,9 @@ Accept: "text/event-stream"
 **After:**
 
 ```typescript
-if (state === "input-required" || state === "auth-required") {
-  console.log("[A2ASession] Task paused - awaiting user input:", state);
-  onStatusUpdate(sessionId, "waiting", {
+if (state === 'input-required' || state === 'auth-required') {
+  console.log('[A2ASession] Task paused - awaiting user input:', state);
+  onStatusUpdate(sessionId, 'waiting', {
     awaitingInput: true,
     awaitingInputType: state,
     inputSchema: event.inputSchema,
@@ -168,28 +168,23 @@ await onUserAction({ delegations: [...signed...] });
 **Expected Flow:**
 
 1. ✅ Artifact arrives with delegations
-
    - Component renders: `DelegationSigner`
    - Shows delegation details
 
 2. ✅ Status update arrives
-
    - `state: "input-required"`
    - Session status → `"waiting"`
    - `awaitingInput: true`
 
 3. ✅ User signs delegations
-
    - Component calls `onUserAction({ delegations: [...] })`
 
 4. ✅ Client sends via `message/stream`
-
    - Method: `"message/stream"`
    - Same `contextId`
    - Metadata: `userInteraction: "true"`
 
 5. ✅ Stream continues
-
    - Agent receives signed delegations
    - Task continues execution
    - More events arrive (artifacts, status updates)
@@ -217,7 +212,6 @@ await onUserAction({ delegations: [...signed...] });
 ### Core Implementation
 
 1. **`src/lib/hooks/useA2ASession.ts`**
-
    - Changed method to `message/stream`
    - Added `input-required`/`auth-required` detection (2 places)
    - Updated `sendToActiveTask` signature
@@ -231,13 +225,11 @@ await onUserAction({ delegations: [...signed...] });
 ### Documentation
 
 3. **`BIDIRECTIONAL_UPDATED_FLOW.md`** (NEW)
-
    - Complete server flow explanation
    - Example delegation signing scenario
    - Comparison table
 
 4. **`BIDIRECTIONAL_QUICK_START.md`** (UPDATED)
-
    - Added "Recent Update" section
    - Updated server-side flow section
    - Updated status to show completion
@@ -259,14 +251,7 @@ await onUserAction({ delegations: [...signed...] });
 await sendToActiveTask(sessionId, endpoint, contextId, data);
 
 // NEW
-await sendToActiveTask(
-  sessionId,
-  endpoint,
-  contextId,
-  data,
-  onMessage,
-  onStatusUpdate
-);
+await sendToActiveTask(sessionId, endpoint, contextId, data, onMessage, onStatusUpdate);
 ```
 
 **Change 2: No other changes needed!**

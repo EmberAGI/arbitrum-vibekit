@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef } from 'react';
 
 export interface CompletionState {
   completions: Record<string, string[]>;
@@ -14,9 +14,9 @@ export function useCompletionState(
     argName: string,
     value: string,
     context?: Record<string, string>,
-    signal?: AbortSignal
+    signal?: AbortSignal,
   ) => Promise<string[]>,
-  enabled: boolean = true
+  enabled: boolean = true,
 ) {
   const [completions, setCompletions] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
@@ -25,12 +25,7 @@ export function useCompletionState(
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
 
   const requestCompletions = useCallback(
-    async (
-      ref: any,
-      argName: string,
-      value: string,
-      context?: Record<string, string>
-    ) => {
+    async (ref: any, argName: string, value: string, context?: Record<string, string>) => {
       if (!enabled || !handleCompletion) {
         return;
       }
@@ -49,13 +44,7 @@ export function useCompletionState(
       setErrors((prev) => ({ ...prev, [argName]: null }));
 
       try {
-        const results = await handleCompletion(
-          ref,
-          argName,
-          value,
-          context,
-          controller.signal
-        );
+        const results = await handleCompletion(ref, argName, value, context, controller.signal);
 
         if (!controller.signal.aborted) {
           setCompletions((prev) => ({ ...prev, [argName]: results }));
@@ -64,7 +53,7 @@ export function useCompletionState(
         if (!controller.signal.aborted) {
           setErrors((prev) => ({
             ...prev,
-            [argName]: error.message || "Completion failed",
+            [argName]: error.message || 'Completion failed',
           }));
         }
       } finally {
@@ -74,7 +63,7 @@ export function useCompletionState(
         }
       }
     },
-    [enabled, handleCompletion]
+    [enabled, handleCompletion],
   );
 
   const clearError = useCallback((argName: string) => {
@@ -89,4 +78,3 @@ export function useCompletionState(
     clearError,
   };
 }
-
