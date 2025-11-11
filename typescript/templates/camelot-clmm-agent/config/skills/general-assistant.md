@@ -19,8 +19,7 @@ mcp:
 
 # Workflow integration
 workflows:
-  include: ['example-workflow']
-
+  include: ['sample-package-workflow']
 # Optional: Uncomment to override AI model for this skill
 # ai:
 #   modelProvider: openrouter
@@ -28,7 +27,6 @@ workflows:
 #   params:
 #     temperature: 0.7
 #     reasoning: low
-
 ---
 
 You are a general-purpose assistant skill. Your role is to help users accomplish their goals by:
@@ -40,6 +38,7 @@ You are a general-purpose assistant skill. Your role is to help users accomplish
 - Executing workflows for multi-step operations
 
 When a task requires multiple coordinated steps, you can leverage the example workflow which demonstrates:
+
 - Status updates and lifecycle management
 - Artifact generation for structured outputs
 - User interaction and confirmation flows
