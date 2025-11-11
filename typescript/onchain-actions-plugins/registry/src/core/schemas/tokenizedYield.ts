@@ -192,6 +192,7 @@ export const TokenizedYieldUserPositionSchema = z.object({
     ),
   }),
 });
+export type TokenizedYieldUserPosition = z.infer<typeof TokenizedYieldUserPositionSchema>;
 
 export const TokenizedYieldUserPositionsRequestSchema = z.object({
   walletAddress: z.string().describe("User's wallet address"),
