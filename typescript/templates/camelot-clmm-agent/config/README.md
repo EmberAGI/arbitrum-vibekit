@@ -80,9 +80,8 @@ skill:
       - name: fetch
         allowedTools: [fetch__fetch_json]
   workflows:
-    include: ['example-workflow']
+    include: ['sample-package-workflow']
 ---
-
 You are the My Skill. You specialize in...
 ```
 
@@ -129,7 +128,8 @@ const plugin: WorkflowPlugin = {
 export default plugin;
 ```
 
-The included `example-workflow` demonstrates:
+The included `sample-package-workflow` demonstrates:
+
 - Status updates and lifecycle management
 - Multiple artifact generation
 - User confirmation pauses with schema validation
@@ -139,7 +139,7 @@ The included `example-workflow` demonstrates:
 All MCP tools follow the canonical naming format:
 
 - **Format**: `server_name__tool_name` (double underscore separator)
-- **Allowed characters**: lowercase letters (a-z), digits (0-9), underscores (_)
+- **Allowed characters**: lowercase letters (a-z), digits (0-9), underscores (\_)
 - **Example**: `fetch__fetch_json`, `ember_onchain_actions__swap_tokens`
 
 Tool names must be unique across all MCP servers.
