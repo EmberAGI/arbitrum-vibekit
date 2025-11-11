@@ -17,11 +17,26 @@ import type {
   PerpetualsCreateShortPositionCallback,
 } from './perpetuals.js';
 import type { SwapActionCallback, SwapActions } from './swap.js';
+import type {
+  TokenizedYieldActions,
+  TokenizedYieldBuyPtCallback,
+  TokenizedYieldBuyYtCallback,
+  TokenizedYieldClaimRewardsCallback,
+  TokenizedYieldMintPtAndYtCallback,
+  TokenizedYieldRedeemPtCallback,
+  TokenizedYieldSellPtCallback,
+  TokenizedYieldSellYtCallback,
+} from './tokenizedYield.js';
 
 /**
  * The possible actions an ember plugin can perform.
  */
-export type Action = LendingActions | LiquidityActions | SwapActions | PerpetualsActions;
+export type Action =
+  | LendingActions
+  | LiquidityActions
+  | SwapActions
+  | PerpetualsActions
+  | TokenizedYieldActions;
 
 /**
  * Type mapping for action callbacks.
@@ -37,7 +52,15 @@ type CallbacksRecord = {
   'perpetuals-short': PerpetualsCreateShortPositionCallback;
   'perpetuals-long': PerpetualsCreateLongPositionCallback;
   'perpetuals-close': PerpetualsCloseOrdersCallback;
+  'tokenizedYield-mintPtAndYt': TokenizedYieldMintPtAndYtCallback;
+  'tokenizedYield-buyPt': TokenizedYieldBuyPtCallback;
+  'tokenizedYield-buyYt': TokenizedYieldBuyYtCallback;
+  'tokenizedYield-sellPt': TokenizedYieldSellPtCallback;
+  'tokenizedYield-sellYt': TokenizedYieldSellYtCallback;
+  'tokenizedYield-claimRewards': TokenizedYieldClaimRewardsCallback;
+  'tokenizedYield-redeemPt': TokenizedYieldRedeemPtCallback;
 };
+
 /**
  * Type mapping for action callbacks.
  */

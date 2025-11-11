@@ -61,9 +61,9 @@ describe('Workflow Runtime', () => {
         name: 'Test Plugin',
         description: 'A test workflow plugin',
         version: '1.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return { success: true };
+          return { data: { success: true } };
         },
       };
 
@@ -82,9 +82,9 @@ describe('Workflow Runtime', () => {
         id: 'my-example-workflow',
         name: 'Example Workflow',
         version: '1.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return { success: true };
+          return { data: { success: true } };
         },
       };
 
@@ -104,9 +104,9 @@ describe('Workflow Runtime', () => {
         id: 'api-integration-workflow',
         name: 'API Integration',
         version: '1.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return { success: true };
+          return { data: { success: true } };
         },
       };
 
@@ -125,9 +125,9 @@ describe('Workflow Runtime', () => {
         id: 'duplicate-check',
         name: 'First Plugin',
         version: '1.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return {};
+          return;
         },
       };
       runtime.register(plugin1);
@@ -137,9 +137,9 @@ describe('Workflow Runtime', () => {
         id: 'duplicate_check',
         name: 'Second Plugin',
         version: '2.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return {};
+          return;
         },
       };
 
@@ -153,18 +153,18 @@ describe('Workflow Runtime', () => {
         id: 'workflow-one',
         name: 'Workflow One',
         version: '1.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return {};
+          return;
         },
       };
       const plugin2: WorkflowPlugin = {
         id: 'workflow_two',
         name: 'Workflow Two',
         version: '1.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return {};
+          return;
         },
       };
 
@@ -184,9 +184,9 @@ describe('Workflow Runtime', () => {
         id: 'my-workflow',
         name: 'My Workflow',
         version: '1.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return {};
+          return;
         },
       };
       runtime.register(plugin);
@@ -211,9 +211,9 @@ describe('Workflow Runtime', () => {
         id: 'dispatch-test',
         name: 'Dispatch Test',
         version: '1.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return { success: true };
+          return { data: { success: true } };
         },
       };
       runtime.register(plugin);
@@ -244,9 +244,9 @@ describe('Workflow Runtime', () => {
         id: 'duplicate_plugin',
         name: 'Original',
         version: '1.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return {};
+          return;
         },
       };
       runtime.register(plugin);
@@ -256,9 +256,9 @@ describe('Workflow Runtime', () => {
         id: 'duplicate_plugin',
         name: 'Duplicate',
         version: '2.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return {};
+          return;
         },
       };
 
@@ -270,16 +270,13 @@ describe('Workflow Runtime', () => {
       // Given a workflow with missing required fields
       const invalidPlugin = {
         id: 'invalid',
-        // Missing required fields
-        execute: function* () {
-          yield { type: 'status-update', message: 'Working' };
-          return {};
-        },
+        version: '1.0.0',
+        // Missing required fields (name, execute)
       };
 
       // When attempting to register invalid workflow
       // Then registration should fail
-      expect(() => runtime.register(invalidPlugin as WorkflowPlugin)).toThrow();
+      expect(() => runtime.register(invalidPlugin as unknown as WorkflowPlugin)).toThrow();
     });
 
     it('should provide list of available workflows', (): void => {
@@ -288,18 +285,18 @@ describe('Workflow Runtime', () => {
         id: 'plugin_1',
         name: 'Plugin 1',
         version: '1.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return {};
+          return;
         },
       };
       const plugin2: WorkflowPlugin = {
         id: 'plugin_2',
         name: 'Plugin 2',
         version: '1.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return {};
+          return;
         },
       };
 
@@ -327,7 +324,7 @@ describe('Workflow Runtime', () => {
 
         async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return { result: 'success' };
+          return { data: { result: 'success' } };
         },
       };
       runtime.register(plugin);
@@ -353,7 +350,7 @@ describe('Workflow Runtime', () => {
           amount: z.number(),
           token: z.string().optional(),
         }),
-        *execute(context: WorkflowContext) {
+        async *execute(context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
           return context.parameters;
         },
@@ -383,9 +380,9 @@ describe('Workflow Runtime', () => {
         inputSchema: z.object({
           value: z.number(),
         }),
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return { result: 'completed' };
+          return { data: { result: 'completed' } };
         },
       };
       runtime.register(plugin);
@@ -417,9 +414,9 @@ describe('Workflow Runtime', () => {
         id: 'task_creating_workflow',
         name: 'Task Creating Workflow',
         version: '1.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return { result: 'completed' };
+          return { data: { result: 'completed' } };
         },
       };
       runtime.register(plugin);
@@ -446,10 +443,10 @@ describe('Workflow Runtime', () => {
         id: 'parameterized_workflow',
         name: 'Parameterized Workflow',
         version: '1.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           // Workflow receives and uses parameters
           yield { type: 'status-update', message: 'Working' };
-          return { processed: true };
+          return { data: { processed: true } };
         },
       };
       runtime.register(plugin);
@@ -464,8 +461,8 @@ describe('Workflow Runtime', () => {
       // Then workflow should execute with parameters
       // Test behavior: parameters are passed to workflow
       // Don't test internal parameter handling
-      const result = (await execution.waitForCompletion()) as { processed: boolean };
-      expect(result.processed).toBe(true);
+      const result = (await execution.waitForCompletion()) as { data: { processed: boolean } };
+      expect(result.data.processed).toBe(true);
     });
 
     it('should handle invalid workflow dispatch', (): void => {
@@ -494,7 +491,7 @@ describe('Workflow Runtime', () => {
           yield { type: 'status-update', message: 'Starting' };
           yield { type: 'status-update', message: 'Progress: 50%' };
           yield { type: 'status-update', message: 'Still working' };
-          return { completed: true };
+          return { data: { completed: true } };
         },
       };
       runtime.register(plugin);
@@ -506,7 +503,7 @@ describe('Workflow Runtime', () => {
       });
 
       execution.on('update', (update: unknown) => updates.push(update as WorkflowState));
-      const result = (await execution.waitForCompletion()) as { completed: boolean };
+      const result = (await execution.waitForCompletion()) as { data: { completed: boolean } };
 
       // Then all yields should be processed
       expect(updates.length).toBe(3);
@@ -516,7 +513,7 @@ describe('Workflow Runtime', () => {
         'status-update',
       ]);
       expect(updates[1]?.message).toBe('Progress: 50%');
-      expect(result.completed).toBe(true);
+      expect(result.data.completed).toBe(true);
     });
 
     it('should change task state when workflow pauses', async (): Promise<void> => {
@@ -536,7 +533,7 @@ describe('Workflow Runtime', () => {
             inputSchema: z.object({}),
           };
 
-          return { processed: input };
+          return { data: { processed: input } };
         },
       };
       runtime.register(plugin);
@@ -571,7 +568,7 @@ describe('Workflow Runtime', () => {
             message: 'Provide input',
             inputSchema: z.object({}),
           };
-          return { received: true };
+          return { data: { received: true } };
         },
       };
       runtime.register(plugin);
@@ -593,8 +590,10 @@ describe('Workflow Runtime', () => {
       // Don't test specific resume mechanics
       expect(resumeResult.valid).toBe(true);
 
-      const result = (await execution.waitForCompletion()) as { received: boolean };
-      expect(result.received).toBe(true);
+      const result = (await execution.waitForCompletion()) as {
+        data?: { received: boolean };
+      };
+      expect(result.data?.received).toBe(true);
       expect(execution.state).toBe('completed');
     });
 
@@ -615,7 +614,7 @@ describe('Workflow Runtime', () => {
             }),
           };
           const typedInput = input as { age: number };
-          return { age: typedInput.age };
+          return { data: { age: typedInput.age } };
         },
       };
       runtime.register(plugin);
@@ -703,7 +702,7 @@ describe('Workflow Runtime', () => {
               data: 'Operation completed',
             },
           };
-          return { success: true };
+          return { data: { success: true } };
         },
       };
       runtime.register(plugin);
@@ -765,7 +764,7 @@ describe('Workflow Runtime', () => {
             },
           };
 
-          return { completed: true };
+          return { data: { completed: true } };
         },
       };
       runtime.register(plugin);
@@ -871,7 +870,7 @@ describe('Workflow Runtime', () => {
             },
           };
 
-          return { completed: true };
+          return { data: { completed: true } };
         },
       };
       runtime.register(plugin);
@@ -935,7 +934,7 @@ describe('Workflow Runtime', () => {
           const delay = Math.random() * 50 + 10;
           yield { type: 'status-update', message: 'Working' };
           await new Promise<void>((resolve) => setTimeout(resolve, delay));
-          return { taskId: context.taskId };
+          return { data: { taskId: context.taskId } };
         },
       };
       runtime.register(plugin);
@@ -953,12 +952,12 @@ describe('Workflow Runtime', () => {
 
       // Then all should complete independently
       const results = (await Promise.all(executions.map((ex) => ex.waitForCompletion()))) as Array<{
-        taskId: string;
+        data?: { taskId: string };
       }>;
 
       expect(results.length).toBe(5);
       results.forEach((result, index) => {
-        expect(result.taskId).toBe(`task-concurrent-${index}`);
+        expect(result.data?.taskId).toBe(`task-concurrent-${index}`);
       });
     });
 
@@ -973,7 +972,7 @@ describe('Workflow Runtime', () => {
           const myValue = ++counter;
           yield { type: 'status-update', message: 'Working' };
           await new Promise<void>((resolve) => setTimeout(resolve, 20));
-          return { myValue, contextId: context.contextId };
+          return { data: { myValue, contextId: context.contextId } };
         },
       };
       runtime.register(plugin);
@@ -991,12 +990,12 @@ describe('Workflow Runtime', () => {
       const [result1, result2] = (await Promise.all([
         exec1.waitForCompletion(),
         exec2.waitForCompletion(),
-      ])) as Array<{ myValue: number; contextId: string }>;
+      ])) as Array<{ data?: { myValue: number; contextId: string } }>;
 
       // Then contexts should be isolated
-      expect(result1.contextId).toBe('ctx-iso-1');
-      expect(result2.contextId).toBe('ctx-iso-2');
-      expect(result1.myValue).not.toBe(result2.myValue);
+      expect(result1.data?.contextId).toBe('ctx-iso-1');
+      expect(result2.data?.contextId).toBe('ctx-iso-2');
+      expect(result1.data?.myValue).not.toBe(result2.data?.myValue);
     });
   });
 
@@ -1026,7 +1025,7 @@ describe('Workflow Runtime', () => {
           yield { type: 'status-update', message: 'Working' };
           yield { type: 'status-update', message: 'Progress: 100%' };
 
-          return { result: 'success' };
+          return { data: { result: 'success' } };
         },
       };
       runtime.register(plugin);
@@ -1038,7 +1037,9 @@ describe('Workflow Runtime', () => {
       });
 
       execution.on('update', (update: unknown) => statusUpdates.push(update as WorkflowState));
-      const result = (await execution.waitForCompletion()) as { result: string };
+      const result = (await execution.waitForCompletion()) as {
+        data?: { result: string };
+      };
 
       // Then all status yields should be processed without pausing
       expect(statusUpdates.length).toBe(6);
@@ -1048,7 +1049,7 @@ describe('Workflow Runtime', () => {
         messages.filter((msg) => typeof msg === 'string' && msg.startsWith('Progress')).length,
       ).toBe(3);
       expect(execution.state).toBe('completed');
-      expect(result.result).toBe('success');
+      expect(result.data?.result).toBe('success');
     });
 
     it('should distinguish pausing from non-pausing yields', async (): Promise<void> => {
@@ -1057,7 +1058,7 @@ describe('Workflow Runtime', () => {
         id: 'pause_status_test',
         name: 'Pause Status Test',
         version: '1.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           // Non-pausing status
           yield { type: 'status-update', message: 'Working' };
 
@@ -1076,7 +1077,7 @@ describe('Workflow Runtime', () => {
           // Non-pausing status after resume
           yield { type: 'status-update', message: 'Working' };
 
-          return { confirmed: typedInput.confirm };
+          return { data: { confirmed: typedInput.confirm } };
         },
       };
       runtime.register(plugin);
@@ -1221,7 +1222,7 @@ describe('Workflow Runtime', () => {
             }
 
             validInput = true;
-            return { deposited: typedInput.amount, token: typedInput.token };
+            return { data: { deposited: typedInput.amount, token: typedInput.token } };
           }
 
           throw new Error('Max validation attempts exceeded');
@@ -1261,9 +1262,11 @@ describe('Workflow Runtime', () => {
       await execution.resume({ amount: '1000', token: 'ETH' });
 
       // Then should complete
-      const result = (await execution.waitForCompletion()) as { deposited: string; token: string };
-      expect(result.deposited).toBe('1000');
-      expect(result.token).toBe('ETH');
+      const result = (await execution.waitForCompletion()) as {
+        data?: { deposited: string; token: string };
+      };
+      expect(result.data?.deposited).toBe('1000');
+      expect(result.data?.token).toBe('ETH');
     });
 
     it('should handle complex validation with Zod schemas', async (): Promise<void> => {
@@ -1325,7 +1328,7 @@ describe('Workflow Runtime', () => {
             throw new Error('No valid positions provided');
           }
 
-          return { positions: validPositions };
+          return { data: { positions: validPositions } };
         },
       };
       runtime.register(plugin);
@@ -1351,11 +1354,13 @@ describe('Workflow Runtime', () => {
 
       // Then only valid positions should be processed
       const finalResult = (await execution.waitForCompletion()) as {
-        positions: Array<{ market: string; size: string; leverage: number }>;
+        data?: { positions: Array<{ market: string; size: string; leverage: number }> };
       };
-      expect(finalResult.positions).toHaveLength(2);
-      expect(finalResult.positions[0]?.market).toBe('ETH-USD');
-      expect(finalResult.positions[1]?.market).toBe('LINK-USD');
+      const positions = finalResult.data?.positions;
+      expect(positions).toBeDefined();
+      expect(positions).toHaveLength(2);
+      expect(positions?.[0]?.market).toBe('ETH-USD');
+      expect(positions?.[1]?.market).toBe('LINK-USD');
     });
   });
 
@@ -1366,9 +1371,9 @@ describe('Workflow Runtime', () => {
         id: 'restricted_plugin',
         name: 'Restricted Plugin',
         version: '1.0.0',
-        *execute(_context: WorkflowContext) {
+        async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return { success: true };
+          return { data: { success: true } };
         },
       };
       runtime.register(plugin);
@@ -1427,7 +1432,7 @@ describe('Workflow Runtime', () => {
         async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
           await new Promise<void>((resolve) => setTimeout(resolve, 1000));
-          return { completed: true };
+          return { data: { completed: true } };
         },
       };
       runtime.register(plugin);
@@ -1453,7 +1458,7 @@ describe('Workflow Runtime', () => {
 
         async *execute(_context: WorkflowContext) {
           yield { type: 'status-update', message: 'Working' };
-          return { done: true };
+          return { data: { done: true } };
         },
       };
       runtime.register(plugin);
@@ -1493,7 +1498,7 @@ describe('Workflow Runtime', () => {
             }),
           });
 
-          return { received: true };
+          return { data: { received: true } };
         },
       };
       runtime.register(plugin);
@@ -1541,7 +1546,7 @@ describe('Workflow Runtime', () => {
           });
 
           yield { type: 'status-update', message: 'Working' };
-          return { completed: true };
+          return { data: { completed: true } };
         },
       };
       runtime.register(plugin);
@@ -1606,7 +1611,7 @@ describe('Workflow Runtime', () => {
             inputSchema: z.object({ second: z.string() }),
           });
 
-          return { done: true };
+          return { data: { done: true } };
         },
       };
       runtime.register(plugin);
@@ -1666,7 +1671,7 @@ describe('Workflow Runtime', () => {
             inputSchema: z.object({ taskId: z.string() }),
           });
 
-          return { taskId: context.taskId };
+          return { data: { taskId: context.taskId } };
         },
       };
       runtime.register(plugin);
@@ -1776,7 +1781,7 @@ describe('Workflow Runtime', () => {
             },
             inputSchema: z.object({}),
           });
-          return { done: true };
+          return { data: { done: true } };
         },
       };
       runtime.register(plugin);
@@ -1801,6 +1806,112 @@ describe('Workflow Runtime', () => {
       // Cleanup
       await execution.resume({});
       await execution.waitForCompletion();
+    });
+  });
+
+  describe('Completion Messages', () => {
+    it('should emit completion message when workflow returns a string', async (): Promise<void> => {
+      const plugin: WorkflowPlugin = {
+        id: 'test_plugin',
+        name: 'Test Plugin',
+        version: '1.0.0',
+        async *execute(_context: WorkflowContext) {
+          yield { type: 'status-update', message: 'Working' };
+          return 'Workflow completed successfully with 5 items processed';
+        },
+      };
+      runtime.register(plugin);
+
+      const execution = runtime.dispatch('test_plugin', {});
+      let completionMessage: string | undefined;
+
+      execution.on('completion-message', (message: unknown) => {
+        completionMessage = message as string;
+      });
+
+      await execution.waitForCompletion();
+
+      expect(completionMessage).toBe('Workflow completed successfully with 5 items processed');
+    });
+
+    it('should emit completion message when workflow returns object with message', async (): Promise<void> => {
+      const plugin: WorkflowPlugin = {
+        id: 'test_plugin',
+        name: 'Test Plugin',
+        version: '1.0.0',
+        async *execute(_context: WorkflowContext) {
+          yield { type: 'status-update', message: 'Working' };
+          return { message: 'Processing complete', data: { itemCount: 10 } };
+        },
+      };
+      runtime.register(plugin);
+
+      const execution = runtime.dispatch('test_plugin', {});
+      let completionMessage: string | undefined;
+
+      execution.on('completion-message', (message: unknown) => {
+        completionMessage = message as string;
+      });
+
+      const result = await execution.waitForCompletion();
+
+      expect(completionMessage).toBe('Processing complete');
+      expect((result as { message?: string; data?: unknown }).data).toEqual({ itemCount: 10 });
+    });
+
+    it('should not emit completion message when workflow returns void', async (): Promise<void> => {
+      const plugin: WorkflowPlugin = {
+        id: 'test_plugin',
+        name: 'Test Plugin',
+        version: '1.0.0',
+        async *execute(_context: WorkflowContext) {
+          yield { type: 'status-update', message: 'Working' };
+          return;
+        },
+      };
+      runtime.register(plugin);
+
+      const execution = runtime.dispatch('test_plugin', {});
+      let completionMessage: string | undefined;
+
+      execution.on('completion-message', (message: unknown) => {
+        completionMessage = message as string;
+      });
+
+      await execution.waitForCompletion();
+
+      expect(completionMessage).toBeUndefined();
+    });
+
+    it('should not emit completion message when workflow is canceled', async (): Promise<void> => {
+      const plugin: WorkflowPlugin = {
+        id: 'test_plugin',
+        name: 'Test Plugin',
+        version: '1.0.0',
+        async *execute(_context: WorkflowContext) {
+          yield { type: 'status-update', message: 'Working' };
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          return 'This should not be emitted';
+        },
+      };
+      runtime.register(plugin);
+
+      const execution = runtime.dispatch('test_plugin', {});
+      let completionMessage: string | undefined;
+
+      execution.on('completion-message', (message: unknown) => {
+        completionMessage = message as string;
+      });
+
+      // Start shutdown before completion
+      setTimeout(() => {
+        void runtime.shutdown();
+      }, 10);
+
+      await execution.waitForCompletion();
+
+      expect(execution.state).toBe('canceled');
+      expect(completionMessage).toBeUndefined();
     });
   });
 });

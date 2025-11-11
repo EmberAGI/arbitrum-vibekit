@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "service": "x402-facilitator",
+    "endpoint": "/verify",
+    "method": "POST",
+    "recordedAt": "2025-11-04T14:06:34.402Z"
+  },
+  "request": {
+    "body": {
+      "x402Version": 1,
+      "paymentPayload": {
+        "x402Version": 1,
+        "scheme": "exact",
+        "network": "base-sepolia",
+        "payload": {
+          "transaction": "0xdeadbeef"
+        }
+      },
+      "paymentRequirements": {
+        "scheme": "exact",
+        "network": "base-sepolia",
+        "description": "Test",
+        "resource": "https://example.test/resource",
+        "payTo": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+        "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "maxAmountRequired": "100",
+        "mimeType": "application/json"
+      }
+    }
+  },
+  "response": {
+    "status": 400,
+    "rawBody": "eyJpc1ZhbGlkIjpmYWxzZSwiaW52YWxpZFJlYXNvbiI6ImludmFsaWRfcGF5bWVudF9yZXF1aXJlbWVudHMiLCJwYXllciI6IiJ9"
+  }
+}

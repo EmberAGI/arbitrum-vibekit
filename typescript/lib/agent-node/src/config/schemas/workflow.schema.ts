@@ -10,6 +10,7 @@ export const WorkflowEntrySchema = z.object({
   from: z.string(),
   enabled: z.boolean().optional().default(true),
   config: z.record(z.string(), z.unknown()).optional(),
+  integrity: z.string().optional(),
 });
 
 export const WorkflowRegistrySchema = z.object({

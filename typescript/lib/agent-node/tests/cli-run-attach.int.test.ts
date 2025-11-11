@@ -436,19 +436,6 @@ describe('agent run --attach command (integration)', () => {
       // Given: process.on spy
       const processOnSpy = vi.spyOn(process, 'on');
 
-      // Setup to avoid hanging
-      const originalPromise = Promise;
-      global.Promise = class TestPromise<T> extends originalPromise<T> {
-        constructor(
-          _executor: (resolve: (value: T) => void, reject: (reason: unknown) => void) => void,
-        ) {
-          // Don't call executor for indefinite wait promise
-          super((resolve) => {
-            setImmediate(() => resolve(undefined as T));
-          });
-        }
-      } as typeof Promise;
-
       // When: running without attach
       const runPromise = runCommand({ configDir: tempConfigDir, attach: false });
 
@@ -464,7 +451,6 @@ describe('agent run --attach command (integration)', () => {
 
       // Cleanup
       processOnSpy.mockRestore();
-      global.Promise = originalPromise;
 
       void runPromise;
     });

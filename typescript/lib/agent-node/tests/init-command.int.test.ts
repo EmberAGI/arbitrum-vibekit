@@ -8,9 +8,15 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 
 import matter from 'gray-matter';
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 
 import { initCommand } from '../src/cli/commands/init.js';
+
+const workflowInstallMock = vi.fn(async () => {});
+
+vi.mock('../src/cli/commands/workflow-install.js', () => ({
+  workflowInstallCommand: workflowInstallMock,
+}));
 
 describe('Init Command Integration', () => {
   const tempDirs: string[] = [];
@@ -43,7 +49,7 @@ describe('Init Command Integration', () => {
       const tempDir = createTempDir();
 
       // When: running init with --yes
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
       // Then: all files should be created
       expect(existsSync(join(tempDir, 'agent.md'))).toBe(true);
@@ -55,7 +61,14 @@ describe('Init Command Integration', () => {
       expect(existsSync(join(tempDir, 'skills', 'general-assistant.md'))).toBe(true);
       expect(existsSync(join(tempDir, 'skills', 'ember-onchain-actions.md'))).toBe(true);
       expect(existsSync(join(tempDir, 'workflows'))).toBe(true);
-      expect(existsSync(join(tempDir, 'workflows', 'example-workflow.ts'))).toBe(true);
+
+      // New workflow scaffolds
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package'))).toBe(true);
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package', 'package.json'))).toBe(true);
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package', 'src', 'index.ts'))).toBe(
+        true,
+      );
+      expect(existsSync(join(tempDir, 'workflows', 'simple-script', 'hello.js'))).toBe(true);
     });
 
     it('should create .env file in parent directory', async () => {
@@ -65,7 +78,7 @@ describe('Init Command Integration', () => {
       const envPath = join(parentDir, '.env');
 
       // When: running init
-      await initCommand({ target: join(tempDir, 'config'), yes: true });
+      await initCommand({ target: join(tempDir, 'config'), yes: true, noInstall: true });
 
       // Then: .env should be created in parent
       expect(existsSync(envPath)).toBe(true);
@@ -83,7 +96,7 @@ describe('Init Command Integration', () => {
       const tempDir = createTempDir();
 
       // When: running init
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
       // Then: agent.md should include ai block
       const agentMdPath = join(tempDir, 'agent.md');
@@ -103,7 +116,7 @@ describe('Init Command Integration', () => {
       const tempDir = createTempDir();
 
       // When: running init
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
       // Then: agent.md should include routing block
       const agentMdPath = join(tempDir, 'agent.md');
@@ -119,7 +132,7 @@ describe('Init Command Integration', () => {
       const tempDir = createTempDir();
 
       // When: running init
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
       // Then: agent.md should include erc8004 block
       const agentMdPath = join(tempDir, 'agent.md');
@@ -135,7 +148,7 @@ describe('Init Command Integration', () => {
       const tempDir = createTempDir();
 
       // When: running init
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
       // Then: canonical chain should be Arbitrum One
       const agentMdPath = join(tempDir, 'agent.md');
@@ -151,7 +164,7 @@ describe('Init Command Integration', () => {
       const tempDir = createTempDir();
 
       // When: running init
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
       // Then: mirrors should include Ethereum and Base
       const agentMdPath = join(tempDir, 'agent.md');
@@ -171,7 +184,7 @@ describe('Init Command Integration', () => {
       const tempDir = createTempDir();
 
       // When: running init
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
       // Then: identity registries should be prefilled
       const agentMdPath = join(tempDir, 'agent.md');
@@ -192,7 +205,7 @@ describe('Init Command Integration', () => {
       const tempDir = createTempDir();
 
       // When: running init
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
       // Then: card block should have correct structure
       const agentMdPath = join(tempDir, 'agent.md');
@@ -213,7 +226,7 @@ describe('Init Command Integration', () => {
       const tempDir = createTempDir();
 
       // When: running init
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
       // Then: agent.md body should have system prompt
       const agentMdPath = join(tempDir, 'agent.md');
@@ -231,7 +244,7 @@ describe('Init Command Integration', () => {
       const tempDir = createTempDir();
 
       // When: running init
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
       // Then: manifest should be valid JSON with correct structure
       const manifestPath = join(tempDir, 'agent.manifest.json');
@@ -259,7 +272,7 @@ describe('Init Command Integration', () => {
       const tempDir = createTempDir();
 
       // When: running init
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
       // Then: general-assistant.md should exist and be valid
       const skillPath = join(tempDir, 'skills', 'general-assistant.md');
@@ -277,7 +290,7 @@ describe('Init Command Integration', () => {
       const tempDir = createTempDir();
 
       // When: running init
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
       // Then: ember-onchain-actions.md should exist and be valid
       const skillPath = join(tempDir, 'skills', 'ember-onchain-actions.md');
@@ -297,7 +310,7 @@ describe('Init Command Integration', () => {
       const tempDir = createTempDir();
 
       // When: running init
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
       // Then: mcp.json should have default servers
       const mcpPath = join(tempDir, 'mcp.json');
@@ -311,14 +324,14 @@ describe('Init Command Integration', () => {
       expect(mcp.mcpServers.ember_onchain_actions.type).toBe('http');
     });
 
-    it('should create workflow.json with example workflow', async () => {
+    it('should create workflow.json with sample package workflow', async () => {
       // Given: temp directory
       const tempDir = createTempDir();
 
       // When: running init
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
-      // Then: workflow.json should have example workflow
+      // Then: workflow.json should include the sample workflow entry
       const workflowPath = join(tempDir, 'workflow.json');
       const workflowContent = readFileSync(workflowPath, 'utf-8');
       const workflow = JSON.parse(workflowContent);
@@ -326,26 +339,26 @@ describe('Init Command Integration', () => {
       expect(workflow.workflows).toBeDefined();
       expect(Array.isArray(workflow.workflows)).toBe(true);
       expect(workflow.workflows).toHaveLength(1);
-      expect(workflow.workflows[0]?.id).toBe('example-workflow');
-      expect(workflow.workflows[0]?.from).toBe('./workflows/example-workflow.ts');
+      expect(workflow.workflows[0]?.id).toBe('sample-package-workflow');
+      expect(workflow.workflows[0]?.from).toBe('./workflows/sample-package/src/index.ts');
       expect(workflow.workflows[0]?.enabled).toBe(true);
     });
 
-    it('should create example-workflow.ts with valid TypeScript', async () => {
+    it('should create sample package workflow with valid TypeScript', async () => {
       // Given: temp directory
       const tempDir = createTempDir();
 
       // When: running init
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
-      // Then: example-workflow.ts should exist and contain valid structure
-      const workflowTsPath = join(tempDir, 'workflows', 'example-workflow.ts');
+      // Then: sample package workflow should exist and contain valid structure
+      const workflowTsPath = join(tempDir, 'workflows', 'sample-package', 'src', 'index.ts');
       const workflowTsContent = readFileSync(workflowTsPath, 'utf-8');
 
       expect(workflowTsContent).toContain('import');
       expect(workflowTsContent).toContain('WorkflowPlugin');
       expect(workflowTsContent).toContain('export default plugin');
-      expect(workflowTsContent).toContain("id: 'example-workflow'");
+      expect(workflowTsContent).toContain("id: 'sample-package-workflow'");
     });
   });
 
@@ -355,7 +368,7 @@ describe('Init Command Integration', () => {
       const tempDir = createTempDir();
 
       // When: running init
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
       // Then: README should contain key sections
       const readmePath = join(tempDir, 'README.md');
@@ -375,14 +388,14 @@ describe('Init Command Integration', () => {
     it('should overwrite existing directory when --force is used', async () => {
       // Given: temp directory with existing init
       const tempDir = createTempDir();
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
       // Modify a file to verify overwrite
       const agentMdPath = join(tempDir, 'agent.md');
       const _originalContent = readFileSync(agentMdPath, 'utf-8');
 
       // When: running init again with --force
-      await initCommand({ target: tempDir, yes: true, force: true });
+      await initCommand({ target: tempDir, yes: true, force: true, noInstall: true });
 
       // Then: file should be overwritten (content reset to defaults)
       const newContent = readFileSync(agentMdPath, 'utf-8');
@@ -394,11 +407,97 @@ describe('Init Command Integration', () => {
     it('should throw error when directory exists without --force', async () => {
       // Given: temp directory with existing init
       const tempDir = createTempDir();
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
 
       // When/Then: running init again without --force should throw
-      await expect(initCommand({ target: tempDir, yes: true })).rejects.toThrow(
+      await expect(initCommand({ target: tempDir, yes: true, noInstall: true })).rejects.toThrow(
         'Directory already exists',
+      );
+    });
+  });
+
+  describe('new workflow scaffolds', () => {
+    it('should create sample-package workflow with correct structure', async () => {
+      // Given: temp directory
+      const tempDir = createTempDir();
+
+      // When: running init
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
+
+      // Then: sample-package should have correct structure
+      const packageJsonPath = join(tempDir, 'workflows', 'sample-package', 'package.json');
+      const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+      expect(packageJson.name).toBe('sample-workflow-package');
+      expect(packageJson.version).toBe('1.0.0');
+      expect(packageJson.main).toBe('src/index.ts');
+      expect(packageJson.type).toBe('module');
+
+      const indexTsPath = join(tempDir, 'workflows', 'sample-package', 'src', 'index.ts');
+      const indexTsContent = readFileSync(indexTsPath, 'utf-8');
+      // Should reference WorkflowPlugin types
+      expect(indexTsContent).toContain('WorkflowPlugin');
+      expect(indexTsContent).toContain('export default plugin');
+    });
+
+    it('should create simple-script workflow with correct structure', async () => {
+      // Given: temp directory
+      const tempDir = createTempDir();
+
+      // When: running init
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
+
+      // Then: simple-script should have correct structure
+      const helloJsPath = join(tempDir, 'workflows', 'simple-script', 'hello.js');
+      const helloJsContent = readFileSync(helloJsPath, 'utf-8');
+      expect(helloJsContent).toContain('export default {');
+      expect(helloJsContent).toContain("id: 'simple-hello'");
+      expect(helloJsContent).toContain('A minimal workflow example in JavaScript');
+      expect(helloJsContent).toContain("text: 'Starting example workflow processing...'");
+
+      // Should NOT have package.json (simple script)
+      expect(existsSync(join(tempDir, 'workflows', 'simple-script', 'package.json'))).toBe(false);
+    });
+  });
+
+  describe('workflow auto-install behavior', () => {
+    beforeEach(() => {
+      workflowInstallMock.mockClear();
+    });
+
+    it('should auto-install workflow dependencies by default', async () => {
+      // Given: temp directory
+      const tempDir = createTempDir();
+
+      // When: running init without --no-install
+      await initCommand({ target: tempDir, yes: true });
+
+      // Then: workflow installer should be invoked with defaults
+      expect(workflowInstallMock).toHaveBeenCalledTimes(1);
+      expect(workflowInstallMock).toHaveBeenCalledWith(
+        undefined,
+        expect.objectContaining({
+          configDir: tempDir,
+          all: true,
+          frozenLockfile: false,
+          quiet: false,
+        }),
+      );
+    });
+
+    it('should skip auto-install with --no-install flag', async () => {
+      // Given: temp directory and --no-install flag
+      const tempDir = createTempDir();
+
+      // When: running init with --no-install
+      await initCommand({ target: tempDir, yes: true, noInstall: true });
+
+      // Then: workflow installer should not run
+      expect(workflowInstallMock).not.toHaveBeenCalled();
+
+      // But workflow files should still be scaffolded
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package', 'package.json'))).toBe(true);
+      expect(existsSync(join(tempDir, 'workflows', 'sample-package', 'src', 'index.ts'))).toBe(
+        true,
       );
     });
   });
@@ -409,7 +508,7 @@ describe('Init Command Integration', () => {
       const tempDir = createTempDir();
 
       // When: running init in non-interactive mode
-      await initCommand({ target: tempDir, yes: true });
+      await initCommand({ target: tempDir, yes: true, noInstall: true }); // Add noInstall to speed up test
 
       // Then: .env should be created in parent with placeholders
       const envPath = join(tempDir, '..', '.env');

@@ -17,7 +17,8 @@ beforeAll(() => {
       }
 
       // Log unhandled request for debugging
-      if (process.env['DEBUG_TESTS']) {
+      const logLevel = process.env['LOG_LEVEL'] || 'none';
+      if (logLevel !== 'none') {
         console.error(`[MSW] Unhandled ${request.method} request to ${request.url}`);
       }
 

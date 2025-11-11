@@ -8,6 +8,7 @@ import type {
   WorkflowPlugin,
   WorkflowContext,
   WorkflowExecution,
+  WorkflowReturn,
   WorkflowTool,
   ToolMetadata,
   PauseInfo,
@@ -30,6 +31,7 @@ export class WorkflowRuntime {
       error?: unknown;
       validationErrors?: unknown[];
       firstYield?: unknown; // Stores first yield for dispatch-response access
+      paymentRequirements?: Record<string, unknown>; // Store payment requirements for verification
     }
   > = new Map();
   private executionListeners: Map<string, Map<string, Set<(...args: unknown[]) => void>>> =
@@ -248,19 +250,26 @@ export class WorkflowRuntime {
       state: 'working',
       context: fullContext,
       startedAt: new Date(),
-      waitForCompletion: async (): Promise<unknown> => {
-        return new Promise<unknown>((resolve) => {
+      waitForCompletion: async (): Promise<WorkflowReturn> => {
+        const isTerminalState = (state: TaskState | undefined): boolean => {
+          return (
+            state === 'completed' ||
+            state === 'failed' ||
+            state === 'canceled' ||
+            state === 'rejected'
+          );
+        };
+
+        return new Promise<WorkflowReturn>((resolve) => {
           const checkCompletion = (): void => {
-            const exec = this.executions.get(executionId);
-            if (
-              exec &&
-              (exec.state === 'completed' || exec.state === 'failed' || exec.state === 'canceled')
-            ) {
-              resolve(exec.result);
-            } else {
-              setTimeout(checkCompletion, 100);
+            if (isTerminalState(execution.state)) {
+              resolve(execution.result);
+              return;
             }
+
+            setTimeout(checkCompletion, 100);
           };
+
           checkCompletion();
         });
       },
@@ -306,7 +315,7 @@ export class WorkflowRuntime {
   ): Promise<void> {
     try {
       const generator = plugin.execute(context);
-      let result: unknown;
+      let result: WorkflowReturn;
 
       // Initialize task state
       this.taskStates.set(execution.id, {
@@ -410,6 +419,32 @@ export class WorkflowRuntime {
             emit('pause', pauseInfo);
             return; // Exit without completing
           }
+          case 'payment-required': {
+            const { message, metadata } = yieldValue;
+            const to = 'input-required'; // Payment required becomes input-required state
+
+            ensureTransition(execution.id, 'working', to as TaskState);
+            execution.state = to;
+
+            const pauseInfo: PauseInfo = {
+              state: to,
+              message,
+              // No input schema for payment - handled via metadata
+              inputSchema: undefined,
+            };
+
+            // Store payment requirements in task state for later verification
+            this.taskStates.set(execution.id, {
+              state: to,
+              workflowGenerator: generator,
+              pauseInfo,
+              paymentRequirements: metadata, // Store payment metadata for verification
+            });
+
+            // Emit pause event with payment metadata
+            emit('pause', { ...pauseInfo, metadata });
+            return; // Exit without completing
+          }
           case 'reject': {
             const { reason } = yieldValue;
             ensureTransition(execution.id, execution.state, 'rejected');
@@ -438,6 +473,21 @@ export class WorkflowRuntime {
       execution.result = result;
       const currentState = execution.state;
       const targetState: TaskState = this.isShuttingDown ? 'canceled' : 'completed';
+
+      // Extract and emit completion message only for successful completion
+      if (targetState === 'completed' && result) {
+        let completionMessage: string | undefined;
+        if (typeof result === 'string') {
+          completionMessage = result;
+        } else if (typeof result === 'object' && 'message' in result) {
+          completionMessage = (result as { message?: string }).message;
+        }
+
+        if (completionMessage) {
+          emit('completion-message', completionMessage);
+        }
+      }
+
       if (currentState !== targetState) {
         ensureTransition(execution.id, currentState, targetState);
       }
@@ -510,6 +560,7 @@ export class WorkflowRuntime {
         error?: unknown;
         validationErrors?: unknown[];
         firstYield?: unknown;
+        paymentRequirements?: Record<string, unknown>;
       }
     | undefined {
     return this.taskStates.get(taskId);
@@ -772,6 +823,34 @@ export class WorkflowRuntime {
             emit('pause', pauseInfo);
             return; // Exit without completing
           }
+          case 'payment-required': {
+            const { message, metadata } = yieldValue;
+            const to = 'input-required'; // Payment required becomes input-required state
+
+            ensureTransition(executionId, 'working', to as TaskState);
+            execution.state = to;
+
+            const pauseInfo: PauseInfo = {
+              state: to,
+              message,
+              // No input schema for payment - handled via metadata
+              inputSchema: undefined,
+            };
+
+            // Store payment requirements in task state for later verification
+            this.taskStates.set(executionId, {
+              state: to,
+              workflowGenerator: generator,
+              pauseInfo,
+              paymentRequirements: metadata, // Store payment metadata for verification
+            });
+
+            // Give time for pause handler to be registered
+            await new Promise((resolve) => process.nextTick(resolve));
+            // Emit pause event with payment metadata
+            emit('pause', { ...pauseInfo, metadata });
+            return; // Exit without completing
+          }
           case 'status-update': {
             emit('update', yieldValue);
             break;
@@ -806,6 +885,21 @@ export class WorkflowRuntime {
       execution.result = result.value;
       const currentState = execution.state;
       const targetState: TaskState = this.isShuttingDown ? 'canceled' : 'completed';
+
+      // Extract and emit completion message only for successful completion
+      if (targetState === 'completed' && result.value) {
+        let completionMessage: string | undefined;
+        if (typeof result.value === 'string') {
+          completionMessage = result.value;
+        } else if (typeof result.value === 'object' && 'message' in result.value) {
+          completionMessage = (result.value as { message?: string }).message;
+        }
+
+        if (completionMessage) {
+          emit('completion-message', completionMessage);
+        }
+      }
+
       if (currentState !== targetState) {
         ensureTransition(executionId, currentState, targetState);
       }

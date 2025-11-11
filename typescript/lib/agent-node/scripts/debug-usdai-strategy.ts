@@ -8,16 +8,39 @@ import {
   type Delegation,
 } from '@metamask/delegation-toolkit';
 import { v7 as uuidv7 } from 'uuid';
-import type { Hex } from 'viem';
+import type { LocalAccount } from 'viem';
+import { type Hex } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { createPaymentHeader } from 'x402/client';
+import { exact } from 'x402/schemes';
+import type { PaymentRequirements } from 'x402/types';
 
 import type { AgentConfigHandle } from '../src/config/runtime/init.js';
 import { WorkflowRuntime } from '../src/workflow/runtime.js';
+import type { X402PaymentPayload, X402Requirements } from '../src/workflow/x402-types.js';
+import {
+  X402_REQUIREMENTS_KEY,
+  X402_STATUS_KEY,
+  X402_PAYMENT_PAYLOAD_KEY,
+  X402_RECEIPTS_KEY,
+} from '../src/workflow/x402-types.js';
 import usdaiStrategyWorkflow from '../tests/fixtures/workflows/usdai-strategy.js';
 import { get7702TestAccount, getTestChainId } from '../tests/utils/lifecycle-test-helpers.js';
 import {
   cleanupTestServer,
   createTestA2AServerWithStubs,
 } from '../tests/utils/test-server-with-stubs.js';
+
+export async function createPayload(
+  signer: LocalAccount,
+  x402Version: number,
+  paymentRequirements: PaymentRequirements,
+): Promise<X402PaymentPayload> {
+  console.log('[Debug] Creating payment payload with requirements:', paymentRequirements);
+  const header = await createPaymentHeader(signer, x402Version, paymentRequirements);
+  const payload = exact.evm.decodePayment(header);
+  return payload;
+}
 
 type DelegationArtifactEntry = {
   id: string;
@@ -64,6 +87,7 @@ async function main(): Promise<void> {
   const delegationEnvironment = getDeleGatorEnvironment(chainId);
   console.log(`[Setup] Using test account: ${testAccount.address}`);
   console.log(`[Setup] Using DelegationManager: ${delegationEnvironment.DelegationManager}`);
+  const account = privateKeyToAccount(testPrivateKey);
 
   let server: Server | undefined;
   let agentConfigHandle: AgentConfigHandle | undefined;
@@ -149,8 +173,9 @@ async function main(): Promise<void> {
 
     // Track artifacts and pause handling state
     const artifacts: Artifact[] = [];
-    let firstPauseHandled = false;
-    let secondPauseHandled = false;
+    let paymentHandled = false;
+    let walletInputHandled = false;
+    let delegationSigningHandled = false;
 
     // Subscribe to workflow task stream
     console.log('\n[Client] Subscribing to workflow task stream...');
@@ -173,14 +198,119 @@ async function main(): Promise<void> {
         }
       }
 
-      // Handle first pause - wallet address + amount input
+      // Check for payment receipts in status updates
+      if (event.kind === 'status-update' && event.status.message?.metadata) {
+        const receipts = event.status.message.metadata[X402_RECEIPTS_KEY];
+        if (receipts) {
+          console.log('[Client] Payment receipts received:');
+          console.dir(receipts, { depth: null });
+        }
+      }
+
+      // Handle first pause - x402 payment signing
       if (
         (event.kind === 'task' || event.kind === 'status-update') &&
         event.status.state === 'input-required' &&
-        !firstPauseHandled
+        !paymentHandled
+      ) {
+        console.log('[Client] input-required (x402 payment):');
+        console.log('\n[Client] First pause: Sign x402 payment');
+
+        try {
+          // Extract payment requirements from task metadata
+          console.log('[Client] Extracting payment requirements from event...');
+          console.log('[Client] Event kind:', event.kind);
+          // For task events, metadata is nested inside status.message.metadata (NOT top-level event.metadata)
+          // Additionally, some producers may embed metadata on individual parts (e.g., parts[0].metadata)
+          const messageMetadata = event.status?.message?.metadata as
+            | Record<string, unknown>
+            | undefined;
+          const partWithMetadata = event.status?.message?.parts?.find(
+            (p: any) => p && typeof p === 'object' && p.metadata && typeof p.metadata === 'object',
+          ) as { metadata?: Record<string, unknown> } | undefined;
+          const taskMetadata = messageMetadata ?? partWithMetadata?.metadata;
+
+          console.log(
+            '[Client] messageMetadata keys:',
+            messageMetadata ? Object.keys(messageMetadata) : 'none',
+          );
+          if (partWithMetadata?.metadata) {
+            console.log('[Client] part metadata keys:', Object.keys(partWithMetadata.metadata));
+          }
+          console.log('[Client] Chosen metadata source:', taskMetadata ? 'found' : 'none');
+          if (!taskMetadata) {
+            throw new Error('No metadata found in payment-required event');
+          }
+
+          const paymentRequirementsRaw = taskMetadata[X402_REQUIREMENTS_KEY] as X402Requirements;
+          console.log(
+            '[Client] Payment requirements raw:',
+            paymentRequirementsRaw ? 'found' : 'not found',
+          );
+          if (!paymentRequirementsRaw) {
+            console.log('[Client] Available metadata keys:', Object.keys(taskMetadata));
+            throw new Error('No payment requirements found in metadata');
+          }
+
+          console.log('[Client] Payment requirements:');
+          console.dir(paymentRequirementsRaw, { depth: null });
+
+          console.log('[Client] Creating x402 payment payload...');
+          console.log('[Client] Using account:', account.address);
+          const paymentPayload = await createPayload(account, 1, paymentRequirementsRaw.accepts[0]);
+          console.log('[Client] Payment payload created successfully');
+          console.log('[Client] Payload:', paymentPayload);
+
+          paymentHandled = true;
+
+          console.log('[Client] Sending x402 payment message...');
+          console.log('[Client] Context ID:', contextId);
+          console.log('[Client] Task ID:', childTaskId);
+          // IMPORTANT: Payment metadata (status + payload) must be inside the message.metadata
+          // so that the server's MessageHandler.extractMessageParts() forwards it to
+          // WorkflowHandler.resumeWorkflow(..., metadata). Previously this script placed
+          // the keys at the top-level "metadata" field of sendMessage(), which is NOT
+          // read by the current server implementation—resulting in payment handling being skipped.
+          await client.sendMessage({
+            message: {
+              kind: 'message',
+              messageId: uuidv7(),
+              contextId,
+              taskId: childTaskId,
+              role: 'user',
+              metadata: {
+                [X402_STATUS_KEY]: 'payment-submitted',
+                [X402_PAYMENT_PAYLOAD_KEY]: paymentPayload,
+              },
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Here are the payment',
+                },
+              ],
+            },
+            configuration: {
+              blocking: false,
+            },
+          });
+          console.log('[Client] Payment message sent successfully');
+
+          continue;
+        } catch (error) {
+          console.error('[Client] Error handling payment:', error);
+          throw error;
+        }
+      }
+
+      // Handle second pause - wallet address + amount input
+      if (
+        (event.kind === 'task' || event.kind === 'status-update') &&
+        event.status.state === 'input-required' &&
+        paymentHandled &&
+        !walletInputHandled
       ) {
         console.log('[Client] input-required:');
-        console.log('\n[Client] First pause: Provide wallet address and amount');
+        console.log('\n[Client] Second pause: Provide wallet address and amount');
         console.log('Input schema expected:');
         console.log('  - walletAddress: string (0x...format)');
         console.log('  - amount: string (e.g., "1000")');
@@ -188,7 +318,7 @@ async function main(): Promise<void> {
         const walletAddress = '0x2D2c313EC7650995B193a34E16bE5B86eEdE872d'; // await prompt('Enter wallet address (0x...): ');
         const amount = '1.12'; // await prompt('Enter amount: ');
 
-        firstPauseHandled = true;
+        walletInputHandled = true;
 
         console.log('[Client] Sending wallet address and amount...');
         await client.sendMessage({
@@ -216,14 +346,15 @@ async function main(): Promise<void> {
         continue;
       }
 
-      // Handle second pause - delegation signing
+      // Handle third pause - delegation signing
       if (
         (event.kind === 'task' || event.kind === 'status-update') &&
         event.status.state === 'input-required' &&
-        firstPauseHandled &&
-        !secondPauseHandled
+        paymentHandled &&
+        walletInputHandled &&
+        !delegationSigningHandled
       ) {
-        console.log('\n[Client] Second pause: Sign delegations');
+        console.log('\n[Client] Third pause: Sign delegations');
 
         const delegationsArtifact = artifacts.find((a) => a.artifactId === 'delegations-data');
         if (!delegationsArtifact) {
@@ -296,7 +427,7 @@ async function main(): Promise<void> {
           },
         });
 
-        secondPauseHandled = true;
+        delegationSigningHandled = true;
         continue;
       }
 

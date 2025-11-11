@@ -1,6 +1,13 @@
 import type { TaskStatusUpdateEvent, TaskState } from '@a2a-js/sdk';
 import { z } from 'zod';
 
+import {
+  X402_REQUIREMENTS_KEY,
+  X402_STATUS_KEY,
+  x402RequirementsSchema,
+  x402StatusSchmea,
+} from './x402-types.js';
+
 export interface WorkflowContext {
   contextId: string;
   taskId: string;
@@ -18,6 +25,7 @@ export type WorkflowStatus = TaskStatusUpdateEvent['status'];
 const WorkflowStateStatusUpdateSchema = z.object({
   type: z.literal('status-update'),
   message: z.union([z.array(z.unknown()), z.string()]).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 const WorkflowStateArtifactSchema = z.object({
@@ -38,6 +46,15 @@ const WorkflowStateInterruptedSchema = z.object({
   artifact: z.unknown().optional(), // Optional Artifact for context/preview
 });
 
+const WorkflowStatePaymentRequiredSchema = z.object({
+  type: z.literal('payment-required'),
+  message: z.string(),
+  metadata: z.object({
+    [X402_STATUS_KEY]: x402StatusSchmea,
+    [X402_REQUIREMENTS_KEY]: x402RequirementsSchema,
+  }),
+});
+
 const WorkflowStateRejectSchema = z.object({
   type: z.literal('reject'),
   reason: z.string(),
@@ -55,10 +72,17 @@ export const WorkflowStateSchema = z.discriminatedUnion('type', [
   WorkflowStateInterruptedSchema,
   WorkflowStateRejectSchema,
   WorkflowStateDispatchResponseSchema,
+  WorkflowStatePaymentRequiredSchema,
 ]);
 
 // Derive TypeScript type from Zod schema
 export type WorkflowState = z.infer<typeof WorkflowStateSchema>;
+
+// New type for workflow return values
+export type WorkflowReturn =
+  | string // Simple message
+  | { message?: string; data?: unknown } // Structured return
+  | void; // No return
 
 export interface WorkflowPlugin {
   id: string;
@@ -70,7 +94,7 @@ export interface WorkflowPlugin {
   // Optional timeout in milliseconds for getting dispatch response from first yield
   // Default: 500ms. Set higher if workflow needs to make API calls before first yield.
   dispatchResponseTimeout?: number;
-  execute: (context: WorkflowContext) => AsyncGenerator<WorkflowState, unknown, unknown>;
+  execute: (context: WorkflowContext) => AsyncGenerator<WorkflowState, WorkflowReturn, unknown>;
 }
 
 export interface WorkflowExecution {
@@ -78,12 +102,12 @@ export interface WorkflowExecution {
   pluginId: string;
   state: TaskState;
   context: WorkflowContext;
-  result?: unknown;
+  result?: WorkflowReturn;
   error?: Error;
   startedAt: Date;
   completedAt?: Date;
   metadata?: Record<string, unknown>;
-  waitForCompletion: () => Promise<unknown>;
+  waitForCompletion: () => Promise<WorkflowReturn>;
   on: (event: string, handler: (...args: unknown[]) => void) => WorkflowExecution;
   getError: () => Error | undefined;
   getPauseInfo: () => PauseInfo | undefined;
@@ -131,4 +155,34 @@ export interface ToolMetadata {
   name: string;
   description: string;
   inputSchema?: z.ZodObject<Record<string, z.ZodTypeAny>>;
+}
+
+/**
+ * Payment receipt data
+ */
+export interface PaymentReceipt {
+  success: boolean;
+  transaction?: string;
+  network?: string;
+  payer?: string;
+}
+
+/**
+ * Payment settlement object returned to workflow after payment is validated
+ */
+export interface PaymentSettlement {
+  /**
+   * Settle the payment with the facilitator
+   * @param message - Optional custom message for payment completion (defaults to "Payment successful")
+   * @returns Promise that resolves with receipt data that should be yielded in a status-update
+   */
+  settlePayment: (message: string, debugMode?: boolean) => Promise<WorkflowState>;
+  /**
+   * The verified payer address
+   */
+  payer?: string;
+  /**
+   * Additional payment metadata
+   */
+  metadata?: Record<string, unknown>;
 }

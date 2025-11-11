@@ -131,7 +131,7 @@ export const MessageRenderer = ({
         ) : toolName.endsWith('generate_chart') ||
           toolName === 'coingecko-generate_chart' ? (
           <div className="flex items-center gap-3 p-4 border border-blue-200 rounded-lg bg-blue-50">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+            <div className="animate-spin rounded-full size-6 border-b-2 border-blue-600" />
             <p className="text-blue-700">
               Generating price chart for {(args as { token?: string }).token}...
             </p>

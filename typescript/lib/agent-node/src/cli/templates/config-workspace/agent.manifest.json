@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": ["./skills/general-assistant.md", "./skills/ember-onchain-actions.md"],
+  "registries": {
+    "mcp": "./mcp.json",
+    "workflows": "./workflow.json"
+  },
+  "merge": {
+    "card": {
+      "capabilities": "union",
+      "toolPolicies": "intersect",
+      "guardrails": "tightest"
+    }
+  }
+}

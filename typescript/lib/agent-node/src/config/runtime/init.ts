@@ -327,6 +327,8 @@ export async function initFromConfigWorkspace(options: InitOptions): Promise<Age
 
     const mcpRegistry = loadMCPRegistry(mcpRegistryPath);
     const workflowRegistry = loadWorkflowRegistry(workflowRegistryPath);
+    // Use registry as the strict allow-list (no discovery merge at runtime)
+    const mergedWorkflowRegistry: LoadedWorkflowRegistry = workflowRegistry;
     const agentPath = resolve(configRoot, 'agent.md');
     const agentBase = loadAgentBase(agentPath);
     const skills = loadSkills(manifest.skills, manifestDir);
@@ -334,7 +336,7 @@ export async function initFromConfigWorkspace(options: InitOptions): Promise<Age
     const prompt = composePrompt(agentBase, skills);
     const mergePolicy = manifest.merge ?? { card: undefined };
     const agentCard = composeAgentCard(agentBase, skills, mergePolicy);
-    const effectiveSets = composeEffectiveSets(mcpRegistry, workflowRegistry, skills);
+    const effectiveSets = composeEffectiveSets(mcpRegistry, mergedWorkflowRegistry, skills);
     const models = buildModelConfig(agentBase, skills);
 
     return {
@@ -343,7 +345,7 @@ export async function initFromConfigWorkspace(options: InitOptions): Promise<Age
       agentBase,
       skills,
       mcpRegistry,
-      workflowRegistry,
+      workflowRegistry: mergedWorkflowRegistry,
       prompt,
       agentCard,
       effectiveSets,
