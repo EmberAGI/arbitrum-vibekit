@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint . --max-warnings=800 && prettier --check .",
+    "lint:fix": "eslint . --fix && prettier --write ."
   },
   "dependencies": {
     "@a2a-js/sdk": "^0.3.4",
