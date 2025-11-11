@@ -14,6 +14,9 @@ import {
   walletConnectWallet,
   rainbowWallet,
 } from "@rainbow-me/rainbowkit/wallets";
+import { paraConnector } from "@getpara/wagmi-v2-integration";
+import Para, { Environment } from "@getpara/web-sdk";
+import { QueryClient } from "@tanstack/react-query";
 
 // Chains configuration - exported for use in components
 export const CHAINS = [
@@ -25,16 +28,41 @@ export const CHAINS = [
   baseSepolia,
 ] as const;
 
-// Configure wallet connectors
+// Initialize Para client for wagmi connector
+const para = new Para(
+  process.env.NEXT_PUBLIC_PARA_ENVIRONMENT === "PRODUCTION"
+    ? Environment.PRODUCTION
+    : Environment.BETA,
+  process.env.NEXT_PUBLIC_PARA_API_KEY || "",
+);
+
+// Create QueryClient for Para connector
+const queryClient = new QueryClient();
+
+// Create Para connector for wagmi
+const paraWagmiConnector = paraConnector({
+  para,
+  queryClient,
+  chains: [arbitrum, base, mainnet, optimism, polygon, baseSepolia],
+  appName: "Para MCP Server",
+  options: {},
+});
+
+// Configure wallet connectors for RainbowKit
 const connectors = connectorsForWallets(
   [
     {
-      groupName: "Popular",
+      groupName: "Recommended",
+      wallets: [
+        rainbowWallet,
+      ],
+    },
+    {
+      groupName: "Other Wallets",
       wallets: [
         baseAccount,
         metaMaskWallet,
         walletConnectWallet,
-        rainbowWallet,
       ],
     },
   ],
@@ -46,9 +74,9 @@ const connectors = connectorsForWallets(
   },
 );
 
-// Wagmi configuration
+// Wagmi configuration with Para connector + RainbowKit connectors
 export const wagmiConfig = createConfig({
-  connectors,
+  connectors: [paraWagmiConnector, ...connectors],
   chains: [arbitrum, base, mainnet, optimism, polygon, baseSepolia],
   transports: {
     [arbitrum.id]: http(),

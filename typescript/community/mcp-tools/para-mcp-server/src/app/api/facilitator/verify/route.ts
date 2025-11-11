@@ -61,12 +61,28 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
 
   console.log("[Facilitator Verify] Request payload:", JSON.stringify(body, null, 2));
+  
+  // Log signature and authorization details for debugging
+  if (body.paymentPayload?.payload?.signature) {
+    const sig = body.paymentPayload.payload.signature;
+    console.log("[Facilitator Verify] Signature length:", sig.length);
+    console.log("[Facilitator Verify] Signature (first 20 chars):", sig.substring(0, 20));
+    console.log("[Facilitator Verify] Signature (last 10 chars):", sig.substring(sig.length - 10));
+  }
+  
+  if (body.paymentPayload?.payload?.authorization) {
+    const auth = body.paymentPayload.payload.authorization;
+    console.log("[Facilitator Verify] Authorization from:", auth.from);
+    console.log("[Facilitator Verify] Authorization to:", auth.to);
+    console.log("[Facilitator Verify] Authorization value:", auth.value);
+    console.log("[Facilitator Verify] Authorization nonce:", auth.nonce);
+  }
 
   try {
     // Generate CDP Bearer token
     const bearerToken = await generateCDPBearerToken();
 
-    const response = await fetch("https://api.cdp.coinbase.com/platform/v2/x402/verify", {
+    const response = await fetch("https://facilitator.payai.network/verify", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     // Generate CDP Bearer token
     const bearerToken = await generateCDPBearerToken();
 
-    const response = await fetch("https://api.cdp.coinbase.com/platform/v2/x402/settle", {
+    const response = await fetch("https://facilitator.payai.network/settle", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

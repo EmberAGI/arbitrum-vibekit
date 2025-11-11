@@ -259,7 +259,7 @@ export default function ParaDebugPage() {
             </div>
 
             {/* USDC Transfer Component */}
-            <UsdcTransfer />
+            <UsdcTransfer address={address} isConnected={isConnected} />
 
             {/* MCP Chat Section */}
             <div className="mt-8 pt-8 border-t border-gray-300 dark:border-gray-600">
