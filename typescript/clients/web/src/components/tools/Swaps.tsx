@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { useAccount, useSwitchChain } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useTransactionExecutor } from "@/lib/hooks/useTransactionExecutor"; // Import the hook
-import type { TxPlan } from "@/lib/transactionUtils";
-import { ArrowRightLeft, CheckCircle, AlertCircle, Loader2, Wallet } from "lucide-react";
+import { useAccount, useSwitchChain } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useTransactionExecutor } from '@/lib/hooks/useTransactionExecutor'; // Import the hook
+import type { TxPlan } from '@/lib/transactionUtils';
+import { ArrowRightLeft, CheckCircle, Loader2 } from 'lucide-react';
 
 // Removed: useState, useEffect, useCallback, useMemo, viem imports, useSendTransaction
 // Removed: getChainById, withSafeDefaults, toBigInt, signTx, ensureReady, approveTransaction, signMainTransaction
@@ -17,8 +17,8 @@ export function Swaps({
   txPreview: any; // TODO: Define a proper TxPreview type
   txPlan: TxPlan | null; // Use imported type
 }) {
-  console.log("[Transaction Component] Rendering with txPlan:", txPlan);
-  console.log("[Transaction Component] Received txPreview:", txPreview);
+  console.log('[Transaction Component] Rendering with txPlan:', txPlan);
+  console.log('[Transaction Component] Received txPreview:', txPreview);
 
   // --- Use wagmi hooks directly needed by the component or passed to the hook ---
   const { address, isConnected, chainId } = useAccount();
@@ -80,9 +80,7 @@ export function Swaps({
             <div className="bg-black/30 rounded p-3">
               <div className="text-xs text-gray-500 mb-1">From</div>
               <div className="flex items-center justify-between">
-                <span className="text-xl font-bold text-white">
-                  {txPreview?.fromTokenAmount}
-                </span>
+                <span className="text-xl font-bold text-white">{txPreview?.fromTokenAmount}</span>
                 <span className="text-sm font-semibold text-orange-400">
                   {txPreview?.fromTokenSymbol?.toUpperCase()}
                 </span>
@@ -102,9 +100,7 @@ export function Swaps({
             <div className="bg-black/30 rounded p-3">
               <div className="text-xs text-gray-500 mb-1">To</div>
               <div className="flex items-center justify-between">
-                <span className="text-xl font-bold text-white">
-                  {txPreview?.toTokenAmount}
-                </span>
+                <span className="text-xl font-bold text-white">{txPreview?.toTokenAmount}</span>
                 <span className="text-sm font-semibold text-orange-400">
                   {txPreview?.toTokenSymbol?.toUpperCase()}
                 </span>
@@ -139,7 +135,9 @@ export function Swaps({
             {needsApproval && isApprovalPending && (
               <div className="flex items-center gap-2 text-xs text-blue-400">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                <span>Approving {approvalIndex + 1}/{totalApprovals}...</span>
+                <span>
+                  Approving {approvalIndex + 1}/{totalApprovals}...
+                </span>
               </div>
             )}
             {needsApproval && approvalError && (
@@ -158,13 +156,11 @@ export function Swaps({
                     onClick={approveNext}
                     disabled={!canApprove}
                   >
-                    {isApprovalPending ? (
-                      `Approving ${approvalIndex + 1}/${totalApprovals}`
-                    ) : isApprovalPhaseComplete ? (
-                      "Approved"
-                    ) : (
-                      `Approve ${approvalIndex + 1}/${totalApprovals}`
-                    )}
+                    {isApprovalPending
+                      ? `Approving ${approvalIndex + 1}/${totalApprovals}`
+                      : isApprovalPhaseComplete
+                        ? 'Approved'
+                        : `Approve ${approvalIndex + 1}/${totalApprovals}`}
                   </button>
                 )}
                 <button
@@ -174,7 +170,7 @@ export function Swaps({
                   onClick={executeMain}
                   disabled={!canExecute}
                 >
-                  {isTxPending ? "Executing..." : needsApproval ? "Execute" : "Sign"}
+                  {isTxPending ? 'Executing...' : needsApproval ? 'Execute' : 'Sign'}
                 </button>
               </div>
             ) : (

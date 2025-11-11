@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import React, { useState } from "react";
-import Image from "next/image";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import React, { useState } from 'react';
+import Image from 'next/image';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   Settings,
   ChevronDown,
@@ -13,14 +13,12 @@ import {
   Sparkles,
   Bug,
   MessageSquare,
-  X,
-  Plus,
   AlertCircle,
   Loader,
   Circle,
-} from "lucide-react";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { Session } from "@/lib/types/session";
+} from 'lucide-react';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { Session } from '@/lib/types/session';
 
 interface AppSidebarProps {
   isA2AConnected: boolean;
@@ -46,7 +44,7 @@ interface AppSidebarProps {
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({
   isA2AConnected,
-  isA2AConnecting,
+  _isA2AConnecting,
   mcpConnectionStatus,
   mcpToolsCount,
   mcpPromptsCount,
@@ -62,26 +60,21 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   activeSessionId,
   sessionOrder,
   onSwitchSession,
-  onCloseSession,
-  onCreateSession,
+  _onCloseSession,
+  _onCreateSession,
 }) => {
   // Check if debug mode is enabled
   const isDebugMode = process.env.NEXT_PUBLIC_DEBUG_MODE === 'true';
 
   const [isCapabilitiesExpanded, setIsCapabilitiesExpanded] = useState(false);
-  const [isActiveStrategiesExpanded, setIsActiveStrategiesExpanded] =
-    useState(true);
-  const [isCompletedStrategiesExpanded, setIsCompletedStrategiesExpanded] =
-    useState(false);
-  const [isBlockedStrategiesExpanded, setIsBlockedStrategiesExpanded] =
-    useState(true);
+  const [isActiveStrategiesExpanded, setIsActiveStrategiesExpanded] = useState(true);
+  const [isCompletedStrategiesExpanded, setIsCompletedStrategiesExpanded] = useState(false);
+  const [isBlockedStrategiesExpanded, setIsBlockedStrategiesExpanded] = useState(true);
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(false);
   const [isConnectionsExpanded, setIsConnectionsExpanded] = useState(false);
 
   // Find the main chat session
-  const mainChatSession = Object.values(sessions).find(
-    (session) => session.isMainChat
-  );
+  const mainChatSession = Object.values(sessions).find((session) => session.isMainChat);
 
   // Filter sessions by strategy state (excluding main chat)
   // Priority: completed > blocked > active (sessions should only appear in one category)
@@ -89,9 +82,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     const session = sessions[sessionId];
     if (!session || session.isMainChat) return false;
     // Completed state takes priority over everything else
-    const isCompleted = session.status === "completed";
+    const isCompleted = session.status === 'completed';
     if (isCompleted) {
-      console.log("[AppSidebar] Found completed session:", {
+      console.log('[AppSidebar] Found completed session:', {
         sessionId,
         title: session.title,
         status: session.status,
@@ -107,12 +100,10 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     if (completedStrategies.includes(sessionId)) return false;
     // Blocked: error, waiting for input, or paused
     return (
-      session.status === "error" ||
-      session.status === "waiting" ||
-      session.status === "paused" ||
-      session.messages?.some(
-        (msg: any) => msg.awaitingUserAction || msg.statusData?.awaitingInput
-      )
+      session.status === 'error' ||
+      session.status === 'waiting' ||
+      session.status === 'paused' ||
+      session.messages?.some((msg: any) => msg.awaitingUserAction || msg.statusData?.awaitingInput)
     );
   });
 
@@ -120,20 +111,22 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     const session = sessions[sessionId];
     if (!session || session.isMainChat) return false;
     // Skip if already categorized as completed or blocked
-    if (completedStrategies.includes(sessionId) || blockedStrategies.includes(sessionId)) return false;
+    if (completedStrategies.includes(sessionId) || blockedStrategies.includes(sessionId))
+      return false;
     // Active: working, active, connecting, or any other state
     return (
-      session.status === "working" ||
-      session.status === "active" ||
-      session.status === "connecting" ||
-      session.status === "idle"
+      session.status === 'working' ||
+      session.status === 'active' ||
+      session.status === 'connecting' ||
+      session.status === 'idle'
     );
   });
 
   // Determine category order based on blocked strategies
-  const categoryOrder = blockedStrategies.length > 0
-    ? ["blocked", "active", "completed"]
-    : ["active", "completed", "blocked"];
+  const categoryOrder =
+    blockedStrategies.length > 0
+      ? ['blocked', 'active', 'completed']
+      : ['active', 'completed', 'blocked'];
 
   const getSessionIcon = (session: Session) => {
     // Check if session is awaiting user input
@@ -141,13 +134,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       (msg: any) => msg.awaitingUserAction || msg.statusData?.awaitingInput,
     );
 
-    if (hasAwaitingInput || session.status === "waiting") {
+    if (hasAwaitingInput || session.status === 'waiting') {
       return <AlertCircle className="w-4 h-4" />;
     }
-    if (session.status === "working" || session.status === "connecting") {
+    if (session.status === 'working' || session.status === 'connecting') {
       return <Loader className="w-4 h-4 animate-spin" />;
     }
-    if (session.status === "completed") {
+    if (session.status === 'completed') {
       return <CheckCircle className="w-4 h-4" />;
     }
     return <Circle className="w-4 h-4" />;
@@ -157,15 +150,12 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     <div
       className="flex flex-col h-full w-[320px]"
       style={{
-        backgroundColor: "#2a2a2a",
-        borderRight: "1px solid rgba(255, 255, 255, 0.1)",
+        backgroundColor: '#2a2a2a',
+        borderRight: '1px solid rgba(255, 255, 255, 0.1)',
       }}
     >
       {/* Header */}
-      <div
-        className="p-4"
-        style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.1)" }}
-      >
+      <div className="p-4" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
         <div className="flex items-center gap-3">
           <Image src="/Logo (1).svg" alt="Ember Logo" width={32} height={32} />
           <div>
@@ -182,18 +172,15 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         {/* Platform Section */}
         <div>
           <div className="flex items-center gap-2 px-2 py-1 mb-2">
-            <span className="text-xs text-muted-foreground font-medium">
-              Platform
-            </span>
+            <span className="text-xs text-muted-foreground font-medium">Platform</span>
           </div>
           <div className="space-y-1">
             {/* Chat Button */}
             {mainChatSession && (
               <div
-                className={`flex items-center gap-2 p-2 rounded-md cursor-pointer group relative ${activeSessionId === mainChatSession.id
-                  ? "bg-muted"
-                  : "hover:bg-muted/50"
-                  }`}
+                className={`flex items-center gap-2 p-2 rounded-md cursor-pointer group relative ${
+                  activeSessionId === mainChatSession.id ? 'bg-muted' : 'hover:bg-muted/50'
+                }`}
                 onClick={() => onSwitchSession(mainChatSession.id)}
               >
                 {/* Active indicator - orange vertical line on the left */}
@@ -202,7 +189,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 )}
                 <MessageSquare className="w-4 h-4" />
                 <span className="text-sm font-medium">Chat</span>
-                {mainChatSession.status === "working" && (
+                {mainChatSession.status === 'working' && (
                   <Loader className="w-3 h-3 ml-auto animate-spin text-blue-400" />
                 )}
               </div>
@@ -213,7 +200,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-muted/50"
               onClick={() => {
                 // TODO: Implement strategies view
-                console.log("Strategies clicked");
+                console.log('Strategies clicked');
               }}
             >
               <svg
@@ -242,9 +229,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         {/* Agent Activity Header */}
         <div>
           <div className="flex items-center gap-2 px-2 py-1">
-            <span className="text-xs text-muted-foreground font-medium">
-              Agent Activity
-            </span>
+            <span className="text-xs text-muted-foreground font-medium">Agent Activity</span>
           </div>
         </div>
 
@@ -257,25 +242,25 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           let isExpanded: boolean;
           let setIsExpanded: (value: boolean) => void;
 
-          if (categoryType === "active") {
+          if (categoryType === 'active') {
             strategies = activeStrategies;
-            title = "Active Strategies";
-            iconClass = activeStrategies.length > 0 ? "text-teal-400" : "text-gray-500";
-            badgeColor = activeStrategies.length > 0 ? "bg-teal-500" : "bg-gray-600";
+            title = 'Active Strategies';
+            iconClass = activeStrategies.length > 0 ? 'text-teal-400' : 'text-gray-500';
+            badgeColor = activeStrategies.length > 0 ? 'bg-teal-500' : 'bg-gray-600';
             isExpanded = isActiveStrategiesExpanded;
             setIsExpanded = setIsActiveStrategiesExpanded;
-          } else if (categoryType === "completed") {
+          } else if (categoryType === 'completed') {
             strategies = completedStrategies;
-            title = "Completed Strategies";
-            iconClass = completedStrategies.length > 0 ? "text-blue-400" : "text-gray-500";
-            badgeColor = completedStrategies.length > 0 ? "bg-blue-400" : "bg-gray-600";
+            title = 'Completed Strategies';
+            iconClass = completedStrategies.length > 0 ? 'text-blue-400' : 'text-gray-500';
+            badgeColor = completedStrategies.length > 0 ? 'bg-blue-400' : 'bg-gray-600';
             isExpanded = isCompletedStrategiesExpanded;
             setIsExpanded = setIsCompletedStrategiesExpanded;
           } else {
             strategies = blockedStrategies;
-            title = "Blocked Strategies";
-            iconClass = blockedStrategies.length > 0 ? "text-amber-400" : "text-gray-500";
-            badgeColor = blockedStrategies.length > 0 ? "bg-amber-500" : "bg-gray-600";
+            title = 'Blocked Strategies';
+            iconClass = blockedStrategies.length > 0 ? 'text-amber-400' : 'text-gray-500';
+            badgeColor = blockedStrategies.length > 0 ? 'bg-amber-500' : 'bg-gray-600';
             isExpanded = isBlockedStrategiesExpanded;
             setIsExpanded = setIsBlockedStrategiesExpanded;
           }
@@ -291,24 +276,26 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     setIsExpanded(!isExpanded);
                   }
                 }}
-                className={`w-full ${isDisabled ? "cursor-not-allowed" : ""}`}
+                className={`w-full ${isDisabled ? 'cursor-not-allowed' : ''}`}
                 disabled={isDisabled}
               >
-                <div className={`flex items-center justify-between w-full p-2 rounded-md ${!isDisabled ? "hover:bg-muted/50" : ""}`}>
+                <div
+                  className={`flex items-center justify-between w-full p-2 rounded-md ${!isDisabled ? 'hover:bg-muted/50' : ''}`}
+                >
                   <div className="flex items-center gap-2">
-                    {categoryType === "active" && (
-                      <Loader className={`w-4 h-4 ${iconClass}`} />
-                    )}
-                    {categoryType === "completed" && (
+                    {categoryType === 'active' && <Loader className={`w-4 h-4 ${iconClass}`} />}
+                    {categoryType === 'completed' && (
                       <CheckCircle className={`w-4 h-4 ${iconClass}`} />
                     )}
-                    {categoryType === "blocked" && (
+                    {categoryType === 'blocked' && (
                       <AlertCircle className={`w-4 h-4 ${iconClass}`} />
                     )}
-                    <span className={`text-sm font-medium ${isDisabled ? "text-gray-500" : ""}`}>{title}</span>
+                    <span className={`text-sm font-medium ${isDisabled ? 'text-gray-500' : ''}`}>
+                      {title}
+                    </span>
                     <Badge
                       variant="secondary"
-                      className={`text-xs px-2 py-0.5 ${badgeColor} ${isDisabled ? "text-gray-400" : "text-white"} border-none`}
+                      className={`text-xs px-2 py-0.5 ${badgeColor} ${isDisabled ? 'text-gray-400' : 'text-white'} border-none`}
                     >
                       {strategies.length}
                     </Badge>
@@ -335,8 +322,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     return (
                       <div
                         key={sessionId}
-                        className={`flex items-center gap-2 p-2 rounded-md cursor-pointer group relative ${isActive ? "bg-muted" : "hover:bg-muted/50"
-                          }`}
+                        className={`flex items-center gap-2 p-2 rounded-md cursor-pointer group relative ${
+                          isActive ? 'bg-muted' : 'hover:bg-muted/50'
+                        }`}
                         onClick={() => onSwitchSession(sessionId)}
                       >
                         {/* Colored indicator line on the left */}
@@ -352,11 +340,11 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                             </div>
                             <div className="text-xs text-muted-foreground truncate">
                               {session.subtitle ||
-                                (categoryType === "active"
-                                  ? "Active"
-                                  : categoryType === "completed"
-                                    ? "Completed"
-                                    : "Blocked")}
+                                (categoryType === 'active'
+                                  ? 'Active'
+                                  : categoryType === 'completed'
+                                    ? 'Completed'
+                                    : 'Blocked')}
                             </div>
                           </div>
                         </div>
@@ -385,16 +373,10 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       </div>
 
       {/* Bottom Section */}
-      <div
-        className="p-4 space-y-3"
-        style={{ borderTop: "1px solid rgba(255, 255, 255, 0.1)" }}
-      >
+      <div className="p-4 space-y-3" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
         {/* Settings */}
         <div>
-          <button
-            onClick={() => setIsSettingsExpanded(!isSettingsExpanded)}
-            className="w-full"
-          >
+          <button onClick={() => setIsSettingsExpanded(!isSettingsExpanded)} className="w-full">
             <div className="flex items-center justify-between w-full hover:bg-muted/50 p-2 rounded-md">
               <div className="flex items-center gap-2">
                 <Settings className="w-4 h-4 text-muted-foreground" />
@@ -416,7 +398,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 className="w-full text-xs justify-start"
               >
                 <Settings className="w-3 h-3 mr-2" />
-                {showSettings ? "Hide" : "Show"} Settings Panel
+                {showSettings ? 'Hide' : 'Show'} Settings Panel
               </Button>
               <Button
                 onClick={onShowConnection}
@@ -425,7 +407,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 className="w-full text-xs justify-start"
               >
                 <Wifi className="w-3 h-3 mr-2" />
-                {showConnection ? "Hide" : "Show"} Connection Panel
+                {showConnection ? 'Hide' : 'Show'} Connection Panel
               </Button>
             </div>
           )}
@@ -447,20 +429,16 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   {!isConnectionsExpanded && (
                     <div className="flex items-center gap-1">
                       <Badge
-                        variant={isA2AConnected ? "success" : "secondary"}
+                        variant={isA2AConnected ? 'success' : 'secondary'}
                         className="text-xs px-1.5 py-0.5"
-                        style={{ border: "none", fontSize: "10px" }}
+                        style={{ border: 'none', fontSize: '10px' }}
                       >
                         A2A
                       </Badge>
                       <Badge
-                        variant={
-                          mcpConnectionStatus === "connected"
-                            ? "success"
-                            : "secondary"
-                        }
+                        variant={mcpConnectionStatus === 'connected' ? 'success' : 'secondary'}
                         className="text-xs px-1.5 py-0.5"
-                        style={{ border: "none", fontSize: "10px" }}
+                        style={{ border: 'none', fontSize: '10px' }}
                       >
                         MCP
                       </Badge>
@@ -482,44 +460,38 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     <Badge
                       variant="success"
                       className="text-xs flex items-center gap-1"
-                      style={{ border: "none" }}
+                      style={{ border: 'none' }}
                     >
                       <CheckCircle className="w-3 h-3" />
                       Connected
                     </Badge>
                   </div>
                 )}
-                {mcpConnectionStatus === "connected" && (
+                {mcpConnectionStatus === 'connected' && (
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">MCP</span>
                     <Badge
                       variant="success"
                       className="text-xs flex items-center gap-1"
-                      style={{ border: "none" }}
+                      style={{ border: 'none' }}
                     >
                       <CheckCircle className="w-3 h-3" />
                       Connected
                     </Badge>
                   </div>
                 )}
-                {mcpConnectionStatus === "connecting" && (
+                {mcpConnectionStatus === 'connecting' && (
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">MCP</span>
-                    <Badge
-                      variant="secondary"
-                      className="text-xs"
-                      style={{ border: "none" }}
-                    >
+                    <Badge variant="secondary" className="text-xs" style={{ border: 'none' }}>
                       Connecting...
                     </Badge>
                   </div>
                 )}
                 {!isA2AConnected &&
-                  mcpConnectionStatus !== "connected" &&
-                  mcpConnectionStatus !== "connecting" && (
-                    <div className="text-xs text-muted-foreground">
-                      No connections
-                    </div>
+                  mcpConnectionStatus !== 'connected' &&
+                  mcpConnectionStatus !== 'connecting' && (
+                    <div className="text-xs text-muted-foreground">No connections</div>
                   )}
               </div>
             )}
@@ -527,7 +499,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         )}
 
         {/* MCP Capabilities */}
-        {isDebugMode && mcpConnectionStatus === "connected" && (
+        {isDebugMode && mcpConnectionStatus === 'connected' && (
           <div>
             <button
               onClick={() => setIsCapabilitiesExpanded(!isCapabilitiesExpanded)}
@@ -541,12 +513,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 <div className="flex items-center gap-2">
                   <Badge
                     className="text-xs bg-orange-500/20 text-orange-400"
-                    style={{ border: "none" }}
+                    style={{ border: 'none' }}
                   >
-                    {mcpToolsCount +
-                      mcpPromptsCount +
-                      mcpResourcesCount +
-                      mcpTemplatesCount}
+                    {mcpToolsCount + mcpPromptsCount + mcpResourcesCount + mcpTemplatesCount}
                   </Badge>
                   {isCapabilitiesExpanded ? (
                     <ChevronDown className="w-4 h-4" />
@@ -560,45 +529,25 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               <div className="mt-2 space-y-2 pl-6">
                 <div className="flex items-center justify-between py-1">
                   <span className="text-xs text-muted-foreground">Tools</span>
-                  <Badge
-                    variant="secondary"
-                    className="text-xs"
-                    style={{ border: "none" }}
-                  >
+                  <Badge variant="secondary" className="text-xs" style={{ border: 'none' }}>
                     {mcpToolsCount}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between py-1">
                   <span className="text-xs text-muted-foreground">Prompts</span>
-                  <Badge
-                    variant="secondary"
-                    className="text-xs"
-                    style={{ border: "none" }}
-                  >
+                  <Badge variant="secondary" className="text-xs" style={{ border: 'none' }}>
                     {mcpPromptsCount}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between py-1">
-                  <span className="text-xs text-muted-foreground">
-                    Resources
-                  </span>
-                  <Badge
-                    variant="secondary"
-                    className="text-xs"
-                    style={{ border: "none" }}
-                  >
+                  <span className="text-xs text-muted-foreground">Resources</span>
+                  <Badge variant="secondary" className="text-xs" style={{ border: 'none' }}>
                     {mcpResourcesCount}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between py-1">
-                  <span className="text-xs text-muted-foreground">
-                    Templates
-                  </span>
-                  <Badge
-                    variant="secondary"
-                    className="text-xs"
-                    style={{ border: "none" }}
-                  >
+                  <span className="text-xs text-muted-foreground">Templates</span>
+                  <Badge variant="secondary" className="text-xs" style={{ border: 'none' }}>
                     {mcpTemplatesCount}
                   </Badge>
                 </div>
@@ -614,7 +563,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               onClick={onShowDebug}
               variant="outline"
               className="w-full justify-start text-left"
-              style={{ borderColor: "#404040", backgroundColor: "transparent" }}
+              style={{ borderColor: '#404040', backgroundColor: 'transparent' }}
             >
               <Bug className="w-4 h-4 mr-2 text-orange-500" />
               <span className="flex-1">Debug Console</span>
@@ -623,9 +572,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   variant="secondary"
                   className="ml-2"
                   style={{
-                    backgroundColor: "#FD6731",
-                    color: "white",
-                    border: "none",
+                    backgroundColor: '#FD6731',
+                    color: 'white',
+                    border: 'none',
                   }}
                 >
                   {debugLogsCount}
@@ -638,17 +587,14 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         {/* Separator */}
         <div
           style={{
-            borderTop: "1px solid rgba(255, 255, 255, 0.1)",
-            margin: "12px 0",
+            borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+            margin: '12px 0',
           }}
         />
 
         {/* Wallet Connect - Full Width */}
         <div className="w-full">
-          <div
-            style={{ width: "100%", textAlign: "center" }}
-            className="wallet-connect-wrapper"
-          >
+          <div style={{ width: '100%', textAlign: 'center' }} className="wallet-connect-wrapper">
             <ConnectButton />
           </div>
         </div>

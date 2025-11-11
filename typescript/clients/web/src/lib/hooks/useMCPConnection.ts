@@ -1,13 +1,9 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {
-  Tool,
-  Resource,
-  ResourceTemplate,
-  Prompt,
   ClientRequest,
   ListToolsResultSchema,
   ListResourcesResultSchema,
@@ -16,9 +12,9 @@ import {
   GetPromptResultSchema,
   CallToolResultSchema,
   CompleteResultSchema,
-} from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
-import { MCPServer, ConnectionState } from "@/lib/types/mcp";
+} from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+import { MCPServer, ConnectionState } from '@/lib/types/mcp';
 
 interface UseMCPConnectionReturn {
   connectionState: ConnectionState;
@@ -26,23 +22,20 @@ interface UseMCPConnectionReturn {
   disconnect: () => Promise<void>;
   getPrompt: (name: string, args?: Record<string, string>) => Promise<any>;
   callTool: (name: string, args: Record<string, unknown>) => Promise<any>;
-  makeRequest: <T extends z.ZodType>(
-    request: ClientRequest,
-    schema: T
-  ) => Promise<z.output<T>>;
+  makeRequest: <T extends z.ZodType>(request: ClientRequest, schema: T) => Promise<z.output<T>>;
   handleCompletion: (
-    ref: { type: "ref/prompt"; name: string },
+    ref: { type: 'ref/prompt'; name: string },
     argName: string,
     value: string,
     context?: Record<string, string>,
-    signal?: AbortSignal
+    _signal?: AbortSignal,
   ) => Promise<string[]>;
   completionsSupported: boolean;
 }
 
 export function useMCPConnection(): UseMCPConnectionReturn {
   const [connectionState, setConnectionState] = useState<ConnectionState>({
-    status: "disconnected",
+    status: 'disconnected',
     tools: [],
     resources: [],
     resourceTemplates: [],
@@ -60,19 +53,19 @@ export function useMCPConnection(): UseMCPConnectionReturn {
   }, [mcpClient]);
 
   const disconnect = useCallback(async () => {
-    console.log("[MCP] Disconnecting...");
+    console.log('[MCP] Disconnecting...');
 
     if (mcpClient) {
       try {
         await mcpClient.close();
       } catch (error) {
-        console.warn("[MCP] Error closing client:", error);
+        console.warn('[MCP] Error closing client:', error);
       }
     }
 
     setMcpClient(null);
     setConnectionState({
-      status: "disconnected",
+      status: 'disconnected',
       tools: [],
       resources: [],
       resourceTemplates: [],
@@ -86,10 +79,10 @@ export function useMCPConnection(): UseMCPConnectionReturn {
 
   const connect = useCallback(
     async (server: MCPServer) => {
-      console.log("[MCP] Connecting to server:", server);
+      console.log('[MCP] Connecting to server:', server);
 
       if (isConnectingRef.current) {
-        console.log("[MCP] Connection already in progress, skipping...");
+        console.log('[MCP] Connection already in progress, skipping...');
         return;
       }
 
@@ -101,7 +94,7 @@ export function useMCPConnection(): UseMCPConnectionReturn {
 
       setConnectionState((prev) => ({
         ...prev,
-        status: "connecting",
+        status: 'connecting',
         server,
         error: undefined,
       }));
@@ -109,16 +102,16 @@ export function useMCPConnection(): UseMCPConnectionReturn {
       try {
         const client = new Client(
           {
-            name: "ember-a2a-client",
-            version: "1.0.0",
+            name: 'ember-a2a-client',
+            version: '1.0.0',
           },
           {
             capabilities: {},
-          }
+          },
         );
 
         const proxyUrl = `/api/mcp?url=${encodeURIComponent(
-          server.url || ""
+          server.url || '',
         )}&transportType=${server.transport}`;
 
         const sessionId = crypto.randomUUID();
@@ -126,51 +119,43 @@ export function useMCPConnection(): UseMCPConnectionReturn {
         console.log(`[MCP] Generated new session ID: ${sessionId}`);
 
         const transport: any =
-          server.transport === "streamable-http" && server.url
-            ? new StreamableHTTPClientTransport(
-                new URL(proxyUrl, window.location.origin),
-                {
-                  requestInit: {
-                    headers: {
-                      "User-Agent": "Ember-A2A-Client/1.0",
-                      "Content-Type": "application/json",
-                      Accept: "text/event-stream, application/json",
-                      "mcp-session-id": sessionId,
-                    },
+          server.transport === 'streamable-http' && server.url
+            ? new StreamableHTTPClientTransport(new URL(proxyUrl, window.location.origin), {
+                requestInit: {
+                  headers: {
+                    'User-Agent': 'Ember-A2A-Client/1.0',
+                    'Content-Type': 'application/json',
+                    Accept: 'text/event-stream, application/json',
+                    'mcp-session-id': sessionId,
                   },
-                }
-              )
+                },
+              })
             : null;
 
         if (!transport) {
-          throw new Error(
-            `Transport type ${server.transport} not yet implemented`
-          );
+          throw new Error(`Transport type ${server.transport} not yet implemented`);
         }
 
-        console.log("[MCP] Connecting via proxy:", proxyUrl);
+        console.log('[MCP] Connecting via proxy:', proxyUrl);
         await client.connect(transport);
-        console.log("[MCP] Client connected successfully!");
+        console.log('[MCP] Client connected successfully!');
 
         const capabilities = client.getServerCapabilities();
-        console.log("[MCP] Server capabilities:", capabilities);
-        console.log(
-          "[MCP] Completions supported:",
-          !!capabilities?.completions
-        );
+        console.log('[MCP] Server capabilities:', capabilities);
+        console.log('[MCP] Completions supported:', !!capabilities?.completions);
 
         // Set completions support based on server capabilities
         if (capabilities?.completions) {
           setCompletionsSupported(true);
         } else {
           setCompletionsSupported(false);
-          console.warn("[MCP] Server does not support completions");
+          console.warn('[MCP] Server does not support completions');
         }
 
         setMcpClient(client);
         setConnectionState((prev) => ({
           ...prev,
-          status: "connected",
+          status: 'connected',
           capabilities,
           error: undefined,
         }));
@@ -179,64 +164,46 @@ export function useMCPConnection(): UseMCPConnectionReturn {
         try {
           const results = await Promise.allSettled([
             capabilities?.tools
-              ? client.request({ method: "tools/list" }, ListToolsResultSchema)
+              ? client.request({ method: 'tools/list' }, ListToolsResultSchema)
               : Promise.resolve({ tools: [] }),
             capabilities?.resources
-              ? client.request(
-                  { method: "resources/list" },
-                  ListResourcesResultSchema
-                )
+              ? client.request({ method: 'resources/list' }, ListResourcesResultSchema)
               : Promise.resolve({ resources: [] }),
             capabilities?.resources
               ? client.request(
-                  { method: "resources/templates/list" },
-                  ListResourceTemplatesResultSchema
+                  { method: 'resources/templates/list' },
+                  ListResourceTemplatesResultSchema,
                 )
               : Promise.resolve({ resourceTemplates: [] }),
             capabilities?.prompts
-              ? client.request(
-                  { method: "prompts/list" },
-                  ListPromptsResultSchema
-                )
+              ? client.request({ method: 'prompts/list' }, ListPromptsResultSchema)
               : Promise.resolve({ prompts: [] }),
           ]);
 
-          const [
-            toolsResult,
-            resourcesResult,
-            resourceTemplatesResult,
-            promptsResult,
-          ] = results;
+          const [toolsResult, resourcesResult, resourceTemplatesResult, promptsResult] = results;
 
           setConnectionState((prev) => ({
             ...prev,
-            tools:
-              toolsResult.status === "fulfilled" ? toolsResult.value.tools : [],
+            tools: toolsResult.status === 'fulfilled' ? toolsResult.value.tools : [],
             resources:
-              resourcesResult.status === "fulfilled"
-                ? resourcesResult.value.resources
-                : [],
+              resourcesResult.status === 'fulfilled' ? resourcesResult.value.resources : [],
             resourceTemplates:
-              resourceTemplatesResult.status === "fulfilled"
+              resourceTemplatesResult.status === 'fulfilled'
                 ? resourceTemplatesResult.value.resourceTemplates
                 : [],
-            prompts:
-              promptsResult.status === "fulfilled"
-                ? promptsResult.value.prompts
-                : [],
+            prompts: promptsResult.status === 'fulfilled' ? promptsResult.value.prompts : [],
           }));
         } catch (error) {
-          console.warn("[MCP] Error fetching initial lists:", error);
+          console.warn('[MCP] Error fetching initial lists:', error);
         }
 
         isConnectingRef.current = false;
       } catch (error: any) {
-        console.error("[MCP] Connection failed:", error);
-        const errorMessage =
-          error instanceof Error ? error.message : "Connection failed";
+        console.error('[MCP] Connection failed:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Connection failed';
 
         setConnectionState({
-          status: "error",
+          status: 'error',
           tools: [],
           resources: [],
           resourceTemplates: [],
@@ -248,71 +215,68 @@ export function useMCPConnection(): UseMCPConnectionReturn {
         isConnectingRef.current = false;
       }
     },
-    [disconnect, mcpClient, connectionState.server?.url]
+    [disconnect, mcpClient, connectionState.server?.url],
   );
 
   const makeRequest = useCallback(
-    async <T extends z.ZodType>(
-      request: ClientRequest,
-      schema: T
-    ): Promise<z.output<T>> => {
+    async <T extends z.ZodType>(request: ClientRequest, schema: T): Promise<z.output<T>> => {
       if (!mcpClient) {
-        throw new Error("Not connected to MCP server");
+        throw new Error('Not connected to MCP server');
       }
 
       try {
         const response = await mcpClient.request(request, schema);
         return response;
       } catch (error) {
-        console.error("[MCP] Request error:", error);
+        console.error('[MCP] Request error:', error);
         throw error;
       }
     },
-    [mcpClient]
+    [mcpClient],
   );
 
   const callTool = useCallback(
     async (name: string, args: Record<string, unknown>) => {
-      console.log("[MCP] Calling tool:", name, "with args:", args);
+      console.log('[MCP] Calling tool:', name, 'with args:', args);
 
       try {
         const result = await makeRequest(
-          { method: "tools/call", params: { name, arguments: args } },
-          CallToolResultSchema
+          { method: 'tools/call', params: { name, arguments: args } },
+          CallToolResultSchema,
         );
-        console.log("[MCP] Tool call completed:", result);
+        console.log('[MCP] Tool call completed:', result);
         return result;
       } catch (error) {
-        console.error("[MCP] Tool call failed:", error);
+        console.error('[MCP] Tool call failed:', error);
         throw error;
       }
     },
-    [makeRequest]
+    [makeRequest],
   );
 
   const getPrompt = useCallback(
     async (name: string, args: Record<string, string> = {}) => {
       if (!mcpClient) {
-        throw new Error("Not connected to MCP server");
+        throw new Error('Not connected to MCP server');
       }
       const result = await makeRequest(
-        { method: "prompts/get", params: { name, arguments: args } },
-        GetPromptResultSchema
+        { method: 'prompts/get', params: { name, arguments: args } },
+        GetPromptResultSchema,
       );
       return result;
     },
-    [mcpClient, makeRequest]
+    [mcpClient, makeRequest],
   );
 
   const handleCompletion = useCallback(
     async (
-      ref: { type: "ref/prompt"; name: string },
+      ref: { type: 'ref/prompt'; name: string },
       argName: string,
       value: string,
       context: Record<string, string> = {},
-      signal?: AbortSignal
+      _signal?: AbortSignal,
     ): Promise<string[]> => {
-      console.log("[MCP] handleCompletion called:", {
+      console.log('[MCP] handleCompletion called:', {
         ref,
         argName,
         value,
@@ -322,20 +286,20 @@ export function useMCPConnection(): UseMCPConnectionReturn {
       });
 
       if (!mcpClient) {
-        console.error("[MCP] Not connected to MCP server");
-        throw new Error("Not connected to MCP server");
+        console.error('[MCP] Not connected to MCP server');
+        throw new Error('Not connected to MCP server');
       }
 
       if (!completionsSupported) {
-        console.error("[MCP] Completions not supported by this server");
-        throw new Error("Completions not supported by this server");
+        console.error('[MCP] Completions not supported by this server');
+        throw new Error('Completions not supported by this server');
       }
 
       try {
-        console.log("[MCP] Making completion request...");
+        console.log('[MCP] Making completion request...');
         const result = await makeRequest(
           {
-            method: "completion/complete",
+            method: 'completion/complete',
             params: {
               ref,
               argument: {
@@ -345,32 +309,29 @@ export function useMCPConnection(): UseMCPConnectionReturn {
               context,
             },
           },
-          CompleteResultSchema
+          CompleteResultSchema,
         );
-        console.log("[MCP] Completion result:", result);
+        console.log('[MCP] Completion result:', result);
 
         // Handle different response structures
         // Some servers return { completions: [...] }
         // Others return { completion: { values: [...] } }
-        if (result.completion && "values" in result.completion) {
-          console.log(
-            "[MCP] Using completion.values:",
-            result.completion.values
-          );
+        if (result.completion && 'values' in result.completion) {
+          console.log('[MCP] Using completion.values:', result.completion.values);
           return result.completion.values as string[];
         } else if (result.completions) {
-          console.log("[MCP] Using completions:", result.completions);
+          console.log('[MCP] Using completions:', result.completions);
           return result.completions as string[];
         }
 
-        console.warn("[MCP] Unexpected completion result structure:", result);
+        console.warn('[MCP] Unexpected completion result structure:', result);
         return [];
       } catch (error) {
-        console.error("[MCP] Completion error:", error);
+        console.error('[MCP] Completion error:', error);
         throw error;
       }
     },
-    [mcpClient, makeRequest, completionsSupported]
+    [mcpClient, makeRequest, completionsSupported],
   );
 
   return {

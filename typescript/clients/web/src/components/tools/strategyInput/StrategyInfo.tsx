@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import React from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { StackedIcons } from "../../ui/StackedIcons";
+import React from 'react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { StackedIcons } from '../../ui/StackedIcons';
 
 interface Reward {
-  type: "points" | "apy";
+  type: 'points' | 'apy';
   multiplier?: number;
   percentage?: number;
   label: string;
@@ -36,8 +36,8 @@ export function StrategyInfo({
   name,
   subtitle,
   protocol,
-  tokenIconUri,
-  platformIconUri,
+  _tokenIconUri,
+  _platformIconUri,
   primaryIconUri,
   secondaryIconUri,
   primaryAlt,
@@ -47,8 +47,8 @@ export function StrategyInfo({
   children,
 }: StrategyInfoProps) {
   // Extract reward values
-  const pointsReward = rewards.find(r => r.type === 'points');
-  const apyReward = rewards.find(r => r.type === 'apy');
+  const pointsReward = rewards.find((r) => r.type === 'points');
+  const apyReward = rewards.find((r) => r.type === 'apy');
 
   return (
     <Card className="bg-[#2a2a2a] border-[#323232] rounded-xl overflow-hidden w-full component-fade-in">
@@ -60,15 +60,13 @@ export function StrategyInfo({
             <StackedIcons
               primaryIconUri={primaryIconUri}
               secondaryIconUri={secondaryIconUri}
-              primaryAlt={primaryAlt || protocol || "Platform"}
-              secondaryAlt={secondaryAlt || name || "Token"}
+              primaryAlt={primaryAlt || protocol || 'Platform'}
+              secondaryAlt={secondaryAlt || name || 'Token'}
             />
             <div className="flex-1 min-w-0">
               <h3 className="text-lg font-semibold text-white mb-1">{name}</h3>
               {(subtitle || protocol) && (
-                <p className="text-sm text-gray-400">
-                  by {subtitle || protocol}
-                </p>
+                <p className="text-sm text-gray-400">by {subtitle || protocol}</p>
               )}
             </div>
           </div>
@@ -80,9 +78,7 @@ export function StrategyInfo({
               {pointsReward && (
                 <div className="rounded-lg p-4 bg-[#1a1a1a] min-w-[120px]">
                   <div className="text-sm text-gray-400 mb-2">{pointsReward.label}</div>
-                  <div className="text-3xl font-bold text-white">
-                    {pointsReward.multiplier}x
-                  </div>
+                  <div className="text-3xl font-bold text-white">{pointsReward.multiplier}x</div>
                 </div>
               )}
 
@@ -90,9 +86,7 @@ export function StrategyInfo({
               {apyReward && (
                 <div className="rounded-lg p-4 bg-[#1a1a1a] min-w-[120px]">
                   <div className="text-sm text-gray-400 mb-2">{apyReward.label}</div>
-                  <div className="text-3xl font-bold text-white">
-                    {apyReward.percentage}%
-                  </div>
+                  <div className="text-3xl font-bold text-white">{apyReward.percentage}%</div>
                 </div>
               )}
             </div>
@@ -124,9 +118,7 @@ export function StrategyInfo({
           )}
 
           {/* Action section - provided as children */}
-          <div className="w-full">
-            {children}
-          </div>
+          <div className="w-full">{children}</div>
         </div>
       </CardContent>
     </Card>

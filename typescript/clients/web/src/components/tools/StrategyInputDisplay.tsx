@@ -1,14 +1,14 @@
-"use client";
+'use client';
 
-import React from "react";
-import { useAccount } from "wagmi";
-import { WalletConnectMoment } from "./strategyInput/walletConnectMoment";
-import { WalletUpgradeMoment } from "./strategyInput/walletUpgradeMoment";
-import { StrategyConfigMoment } from "./strategyInput/strategyConfigMoment";
-import { useUpgradeToSmartAccount } from "../../hooks/useUpgradeToSmartAccount";
+import React from 'react';
+import { useAccount } from 'wagmi';
+import { WalletConnectMoment } from './strategyInput/walletConnectMoment';
+import { WalletUpgradeMoment } from './strategyInput/walletUpgradeMoment';
+import { StrategyConfigMoment } from './strategyInput/strategyConfigMoment';
+import { useUpgradeToSmartAccount } from '../../hooks/useUpgradeToSmartAccount';
 
 interface Reward {
-  type: "points" | "apy";
+  type: 'points' | 'apy';
   multiplier?: number;
   percentage?: number;
   label: string;
@@ -31,10 +31,7 @@ interface StrategyInputDisplayProps {
   onUserAction?: (data: any) => Promise<void>;
 }
 
-export type StrategyInputMoment =
-  | "walletConnect"
-  | "walletUpgrade"
-  | "strategyConfig";
+export type StrategyInputMoment = 'walletConnect' | 'walletUpgrade' | 'strategyConfig';
 
 export function StrategyInputDisplay({
   name,
@@ -46,7 +43,7 @@ export function StrategyInputDisplay({
   chains,
   onUserAction,
 }: StrategyInputDisplayProps) {
-  const { address, isConnected } = useAccount();
+  const { isConnected } = useAccount();
   const { isDeployed, isLoading } = useUpgradeToSmartAccount();
 
   // Convert rewards to match the expected interface
@@ -54,7 +51,7 @@ export function StrategyInputDisplay({
     type: reward.type,
     multiplier: reward.multiplier,
     percentage: reward.percentage,
-    label: reward.label || "",
+    label: reward.label || '',
   }));
 
   // Show loading state while checking deployment status

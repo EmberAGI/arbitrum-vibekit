@@ -1,22 +1,22 @@
 /**
  * Session Operations Module
- * 
+ *
  * Handles session CRUD operations
  */
 
-import React from "react";
-import { Session, SessionState, CreateSessionOptions, generateSessionId } from "@/lib/types/session";
-import { deleteSession as deleteStoredSession } from "@/lib/sessionStorage";
+import React from 'react';
+import {
+  Session,
+  SessionState,
+  CreateSessionOptions,
+  generateSessionId,
+} from '@/lib/types/session';
 
 export interface SessionOperations {
   createSession: (options: CreateSessionOptions) => string;
   switchSession: (sessionId: string) => void;
   closeSession: (sessionId: string) => void;
-  updateSessionStatus: (
-    sessionId: string,
-    status: Session["status"],
-    force?: boolean
-  ) => void;
+  updateSessionStatus: (sessionId: string, status: Session['status'], force?: boolean) => void;
   updateSessionTitle: (sessionId: string, title: string) => void;
   setSessionContextId: (sessionId: string, contextId: string) => void;
   getSessionContextId: (sessionId: string) => string | null;
@@ -25,7 +25,7 @@ export interface SessionOperations {
 
 export function createSessionOperations(
   state: SessionState,
-  setState: React.Dispatch<React.SetStateAction<SessionState>>
+  setState: React.Dispatch<React.SetStateAction<SessionState>>,
 ): SessionOperations {
   const createSession = (options: CreateSessionOptions): string => {
     const sessionId = generateSessionId(options.type);
@@ -34,7 +34,7 @@ export function createSessionOperations(
     const newSession: Session = {
       id: sessionId,
       type: options.type,
-      status: "idle",
+      status: 'idle',
       title: options.title,
       createdAt: now,
       updatedAt: now,
@@ -67,10 +67,7 @@ export function createSessionOperations(
   const switchSession = (sessionId: string) => {
     setState((prev) => {
       if (!prev.sessions[sessionId]) {
-        console.warn(
-          "[SessionOperations] Cannot switch to non-existent session:",
-          sessionId
-        );
+        console.warn('[SessionOperations] Cannot switch to non-existent session:', sessionId);
         return prev;
       }
 
@@ -86,22 +83,19 @@ export function createSessionOperations(
       const newSessions = { ...prev.sessions };
       delete newSessions[sessionId];
 
-      const newSessionOrder = prev.sessionOrder.filter(
-        (id) => id !== sessionId
-      );
+      const newSessionOrder = prev.sessionOrder.filter((id) => id !== sessionId);
       let newActiveSessionId = prev.activeSessionId;
 
       if (prev.activeSessionId === sessionId) {
-        newActiveSessionId =
-          newSessionOrder[newSessionOrder.length - 1] || null;
+        newActiveSessionId = newSessionOrder[newSessionOrder.length - 1] || null;
       }
 
       if (newSessionOrder.length === 0) {
         const newSession: Session = {
-          id: generateSessionId("conversation"),
-          type: "conversation",
-          status: "idle",
-          title: "New Conversation",
+          id: generateSessionId('conversation'),
+          type: 'conversation',
+          status: 'idle',
+          title: 'New Conversation',
           createdAt: new Date(),
           updatedAt: new Date(),
           lastActivityAt: new Date(),
@@ -129,20 +123,17 @@ export function createSessionOperations(
 
   const updateSessionStatus = (
     sessionId: string,
-    status: Session["status"],
-    force: boolean = false
+    status: Session['status'],
+    force: boolean = false,
   ) => {
     setState((prev) => {
       const session = prev.sessions[sessionId];
       if (!session) {
-        console.warn(
-          "[SessionOperations] Cannot update status - session not found:",
-          sessionId
-        );
+        console.warn('[SessionOperations] Cannot update status - session not found:', sessionId);
         return prev;
       }
 
-      if (session.status === "completed" && !force && status !== "error") {
+      if (session.status === 'completed' && !force && status !== 'error') {
         return prev;
       }
 
@@ -203,10 +194,7 @@ export function createSessionOperations(
     return state.sessions[sessionId]?.contextId || null;
   };
 
-  const setSessionAgentEndpoint = (
-    sessionId: string,
-    agentEndpoint: string
-  ) => {
+  const setSessionAgentEndpoint = (sessionId: string, agentEndpoint: string) => {
     setState((prev) => {
       const session = prev.sessions[sessionId];
       if (!session) return prev;
@@ -236,4 +224,3 @@ export function createSessionOperations(
     setSessionAgentEndpoint,
   };
 }
-

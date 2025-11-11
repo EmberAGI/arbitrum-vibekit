@@ -1,77 +1,56 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState, useMemo, useCallback } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  MessageSquare,
-  Bot,
-  User,
-  AlertCircle,
-  CheckCircle,
-  ChevronDown,
-  ChevronRight,
-  Loader,
-} from "lucide-react";
-import DOMPurify from "dompurify";
-import { SettingsPanel } from "@/components/SettingsPanel";
-import { StreamingMessage } from "@/components/StreamingMessage";
-import { MessageList } from "@/components/MessageList";
-import { useMCPConnection } from "@/lib/hooks/useMCPConnection";
-import { useSessionManager } from "@/lib/hooks/useSessionManager";
-import { useA2AHandler } from "@/lib/hooks/useA2AHandler";
-import { A2AHandlerCallbacks } from "@/lib/handlers/BaseA2AHandler";
-import { createA2ACallbacks } from "@/lib/utils/createA2ACallbacks";
-import { loadServerConfig } from "@/config/servers";
-import { MCPServer } from "@/lib/types/mcp";
-import ConversationalPromptInput from "@/components/ConversationalPromptInput";
-import { PromptTemplate } from "@/config/prompts";
-import { ToolResultRenderer } from "@/components/ToolResultRenderer";
-import { WorkflowApprovalHandler } from "@/components/tools/WorkflowApprovalHandler";
-import { StrategyOverview } from "@/components/tools/StrategyOverview";
-import { SplashScreen } from "@/components/SplashScreen";
-import { AppSidebar } from "@/components/AppSidebar";
-import { DebugModal } from "@/components/DebugModal";
-import { Session, TaskState, createTaskInfo } from "@/lib/types/session";
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { MessageSquare, CheckCircle } from 'lucide-react';
+import DOMPurify from 'dompurify';
+import { SettingsPanel } from '@/components/SettingsPanel';
+import { MessageList } from '@/components/MessageList';
+import { useMCPConnection } from '@/lib/hooks/useMCPConnection';
+import { useSessionManager } from '@/lib/hooks/useSessionManager';
+import { useA2AHandler } from '@/lib/hooks/useA2AHandler';
+import { createA2ACallbacks } from '@/lib/utils/createA2ACallbacks';
+import { loadServerConfig } from '@/config/servers';
+import { MCPServer } from '@/lib/types/mcp';
+import ConversationalPromptInput from '@/components/ConversationalPromptInput';
+import { PromptTemplate } from '@/config/prompts';
+import { StrategyOverview } from '@/components/tools/StrategyOverview';
+import { SplashScreen } from '@/components/SplashScreen';
+import { AppSidebar } from '@/components/AppSidebar';
+import { DebugModal } from '@/components/DebugModal';
+import { Session, TaskState, createTaskInfo } from '@/lib/types/session';
 
 interface DebugLog {
   timestamp: Date;
-  type: "info" | "success" | "warning" | "error";
+  type: 'info' | 'success' | 'warning' | 'error';
   message: string;
   data?: any;
 }
 
 export default function Home() {
   const [agentCardUrl, setAgentCardUrl] = useState(
-    process.env.NEXT_PUBLIC_AGENT_CARD_URL || "http://localhost:3001"
+    process.env.NEXT_PUBLIC_AGENT_CARD_URL || 'http://localhost:3001',
   );
   const [showSettings, setShowSettings] = useState(false);
   const [showConnection, setShowConnection] = useState(false);
   const [showDebugModal, setShowDebugModal] = useState(false);
-  const [customHeaders, setCustomHeaders] = useState<Record<string, string>>(
-    {},
-  );
-  const [messageMetadata, setMessageMetadata] = useState<
-    Record<string, string>
-  >({});
+  const [customHeaders, setCustomHeaders] = useState<Record<string, string>>({});
+  const [messageMetadata, setMessageMetadata] = useState<Record<string, string>>({});
   const [showSplash, setShowSplash] = useState(true);
   const [showOverview, setShowOverview] = useState(false); // Don't show overview automatically - user must click
   const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
   const [isA2AConnected, setIsA2AConnected] = useState(false);
   const [isA2AConnecting, setIsA2AConnecting] = useState(false);
   const [agentCard, setAgentCard] = useState<any>(null);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  const [agentEndpoint, setAgentEndpoint] = useState<string>("");
-  const [workflowChildSessions, setWorkflowChildSessions] = useState<Record<string, string>>({});  // Maps childTaskId to childSessionId
-  const [sessionsWithCompleteDelegations, setSessionsWithCompleteDelegations] = useState<Set<string>>(() => {
+  const [validationErrors, _setValidationErrors] = useState<string[]>([]);
+  const [agentEndpoint, setAgentEndpoint] = useState<string>('');
+  const [workflowChildSessions, setWorkflowChildSessions] = useState<Record<string, string>>({}); // Maps childTaskId to childSessionId
+  const [sessionsWithCompleteDelegations, setSessionsWithCompleteDelegations] = useState<
+    Set<string>
+  >(() => {
     // Load from localStorage on mount (only in browser)
     if (typeof window === 'undefined') return new Set();
     const stored = localStorage.getItem('ember-complete-delegations');
@@ -85,7 +64,10 @@ export default function Home() {
   // Save complete delegations to localStorage whenever it changes
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('ember-complete-delegations', JSON.stringify(Array.from(sessionsWithCompleteDelegations)));
+      localStorage.setItem(
+        'ember-complete-delegations',
+        JSON.stringify(Array.from(sessionsWithCompleteDelegations)),
+      );
     }
   }, [sessionsWithCompleteDelegations]);
 
@@ -132,7 +114,7 @@ export default function Home() {
   const hasAttemptedMCPAutoConnectRef = useRef(false);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
@@ -143,11 +125,7 @@ export default function Home() {
   useEffect(() => {
     if (activeSession && activeSession.messages.length > 0) {
       setShowSplash(false);
-    } else if (
-      activeSession &&
-      activeSession.messages.length === 0 &&
-      !showSplash
-    ) {
+    } else if (activeSession && activeSession.messages.length === 0 && !showSplash) {
       // Show splash for empty sessions
       setShowSplash(true);
     }
@@ -158,36 +136,32 @@ export default function Home() {
     if (!activeSession || activeSession.messages.length === 0) return;
 
     // Check if any message has dashboard artifacts
-    const messageWithDashboard = activeSession.messages.find((msg: any) =>
-      msg.artifacts?.["strategy-dashboard-display"]
+    const messageWithDashboard = activeSession.messages.find(
+      (msg: any) => msg.artifacts?.['strategy-dashboard-display'],
     );
 
     if (messageWithDashboard) {
       const hasStrategyDashboard = true;
-      const canShowOverview =
-        hasStrategyDashboard && !messageWithDashboard.awaitingUserAction;
+      const canShowOverview = hasStrategyDashboard && !messageWithDashboard.awaitingUserAction;
 
       // Automatically show overview when dashboard artifacts are received
       if (canShowOverview && !showOverview) {
-        console.log("[Main] Dashboard artifacts detected, automatically showing overview");
+        console.log('[Main] Dashboard artifacts detected, automatically showing overview');
         setShowOverview(true);
       }
     }
   }, [activeSession?.messages, activeSession?.id, showOverview]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Add debug log helper
-  const addDebugLog = useCallback(
-    (type: DebugLog["type"], message: string, data?: any) => {
-      const log: DebugLog = {
-        timestamp: new Date(),
-        type,
-        message,
-        data,
-      };
-      setDebugLogs((prev) => [...prev, log].slice(-50));
-    },
-    [],
-  );
+  const addDebugLog = useCallback((type: DebugLog['type'], message: string, data?: any) => {
+    const log: DebugLog = {
+      timestamp: new Date(),
+      type,
+      message,
+      data,
+    };
+    setDebugLogs((prev) => [...prev, log].slice(-50));
+  }, []);
 
   const clearDebugLogs = useCallback(() => {
     setDebugLogs([]);
@@ -196,96 +170,80 @@ export default function Home() {
   // Helper to map A2A task state to our TaskState enum
   const mapA2AStateToTaskState = useCallback((a2aState: string): TaskState => {
     switch (a2aState.toLowerCase()) {
-      case "pending":
-        return "pending";
-      case "working":
-      case "running":
-        return "working";
-      case "completed":
-      case "success":
-        return "completed";
-      case "failed":
-      case "error":
-        return "failed";
-      case "cancelled":
-        return "cancelled";
+      case 'pending':
+        return 'pending';
+      case 'working':
+      case 'running':
+        return 'working';
+      case 'completed':
+      case 'success':
+        return 'completed';
+      case 'failed':
+      case 'error':
+        return 'failed';
+      case 'cancelled':
+        return 'cancelled';
       default:
-        return "working"; // Default to working for unknown states
+        return 'working'; // Default to working for unknown states
     }
   }, []);
 
   // Handle child task detection - create new tab and resubscribe
   // Defined early to avoid initialization order issues
   const handleChildTask = useCallback(
-    (
-      parentSessionId: string,
-      childTaskId: string,
-      contextId: string,
-      metadata?: any,
-    ) => {
+    (parentSessionId: string, childTaskId: string, contextId: string, metadata?: any) => {
       // Check if we've already processed this child task
       if (processedChildTasksRef.current.has(childTaskId)) {
-        console.log(
-          "[Main] Child task already processed, skipping:",
-          childTaskId,
-        );
+        console.log('[Main] Child task already processed, skipping:', childTaskId);
         return;
       }
 
       // Mark this child task as processed
       processedChildTasksRef.current.add(childTaskId);
 
-      const workflowName = metadata?.workflowName || "Workflow";
+      const workflowName = metadata?.workflowName || 'Workflow';
 
-      // Track the last message ID for this session
-      const lastMessageIdRef: string | null = null;
-
-      console.log("[Main] ===== CHILD TASK DETECTED =====");
-      console.log("[Main] Parent Session:", parentSessionId);
-      console.log("[Main] Child Task ID:", childTaskId);
-      console.log("[Main] Context ID:", contextId);
-      console.log("[Main] Workflow Name:", workflowName);
+      console.log('[Main] ===== CHILD TASK DETECTED =====');
+      console.log('[Main] Parent Session:', parentSessionId);
+      console.log('[Main] Child Task ID:', childTaskId);
+      console.log('[Main] Context ID:', contextId);
+      console.log('[Main] Workflow Name:', workflowName);
 
       // Get parent session info
       const parentSession = sessions[parentSessionId];
       if (!parentSession) {
-        console.error("[Main] ❌ Parent session not found:", parentSessionId);
+        console.error('[Main] ❌ Parent session not found:', parentSessionId);
         return;
       }
 
       const parentAgentEndpoint = parentSession.agentEndpoint || agentEndpoint;
       if (!parentAgentEndpoint) {
-        console.error("[Main] ❌ No agent endpoint available");
+        console.error('[Main] ❌ No agent endpoint available');
         return;
       }
 
-      console.log("[Main] ✅ Parent Agent Endpoint:", parentAgentEndpoint);
+      console.log('[Main] ✅ Parent Agent Endpoint:', parentAgentEndpoint);
 
       // Create a new session for the child task (will persist to localStorage for sidebar visibility)
       const childSessionId = createSession({
-        type: "conversation",
+        type: 'conversation',
         title: workflowName,
         isTemporary: false, // Persist child workflow tabs so they appear in sidebar after refresh
         parentSessionId: parentSessionId, // Link to parent session to prevent auto-switching
       });
 
-      console.log(
-        "[Main] ✅ Child Session Created:",
-        childSessionId,
-      );
+      console.log('[Main] ✅ Child Session Created:', childSessionId);
 
       // Copy connection details from parent
       setSessionContextId(childSessionId, contextId);
       setSessionAgentEndpoint(childSessionId, parentAgentEndpoint);
 
       // Add the child task to the session
-      addTask(childSessionId, childTaskId, "working");
+      addTask(childSessionId, childTaskId, 'working');
 
-      console.log(
-        "[Main] ✅ Session setup complete, initiating reconnection...",
-      );
+      console.log('[Main] ✅ Session setup complete, initiating reconnection...');
 
-      addDebugLog("info", "Child session created, connecting to A2A...", {
+      addDebugLog('info', 'Child session created, connecting to A2A...', {
         childSessionId,
         childTaskId,
         contextId,
@@ -296,12 +254,12 @@ export default function Home() {
       console.log('[Main] Storing workflowChildSessions mapping:', {
         childTaskId,
         childSessionId,
-        previousMappings: workflowChildSessions
+        previousMappings: workflowChildSessions,
       });
-      setWorkflowChildSessions(prev => {
+      setWorkflowChildSessions((prev) => {
         const updated = {
           ...prev,
-          [childTaskId]: childSessionId
+          [childTaskId]: childSessionId,
         };
         console.log('[Main] Updated workflowChildSessions:', updated);
         return updated;
@@ -315,7 +273,11 @@ export default function Home() {
       // This allows the WorkflowDispatched component to navigate to the child session
       const parentMessages = parentSession.messages;
       if (parentMessages && parentMessages.length > 0) {
-        console.log('[Main] Searching through', parentMessages.length, 'messages for workflow dispatch artifact');
+        console.log(
+          '[Main] Searching through',
+          parentMessages.length,
+          'messages for workflow dispatch artifact',
+        );
 
         // Search through all messages to find the workflow dispatch artifact
         let foundAndUpdated = false;
@@ -323,14 +285,20 @@ export default function Home() {
           const message = parentMessages[i];
           if (message.artifacts) {
             const hasWorkflowDispatch = Object.values(message.artifacts).some(
-              (artifact: any) => artifact.toolName === 'dispatch_workflow_usdai_points_trading_strateg'
+              (artifact: any) =>
+                artifact.toolName === 'dispatch_workflow_usdai_points_trading_strateg',
             );
 
             if (hasWorkflowDispatch) {
-              console.log('[Main] Found workflow dispatch artifact in message', i, 'messageId:', message.id);
+              console.log(
+                '[Main] Found workflow dispatch artifact in message',
+                i,
+                'messageId:',
+                message.id,
+              );
               const updatedArtifacts = { ...message.artifacts };
 
-              Object.keys(updatedArtifacts).forEach(artifactId => {
+              Object.keys(updatedArtifacts).forEach((artifactId) => {
                 const artifact = updatedArtifacts[artifactId];
                 if (artifact.toolName === 'dispatch_workflow_usdai_points_trading_strateg') {
                   console.log('[Main] Updating artifact with childSessionId:', {
@@ -338,7 +306,7 @@ export default function Home() {
                     childSessionId,
                     childTaskId,
                     currentOutput: artifact.output,
-                    currentInput: artifact.input
+                    currentInput: artifact.input,
                   });
 
                   // Create new artifact with childSessionId
@@ -363,7 +331,7 @@ export default function Home() {
               // Trigger a re-render by updating the message
               console.log('[Main] Calling updateMessageInSession for message:', message.id);
               updateMessageInSession(parentSessionId, message.id, {
-                artifacts: updatedArtifacts
+                artifacts: updatedArtifacts,
               });
 
               foundAndUpdated = true;
@@ -375,7 +343,9 @@ export default function Home() {
         if (!foundAndUpdated) {
           console.warn('[Main] ⚠️ Could not find workflow dispatch artifact in any message!');
         } else {
-          console.log('[Main] ✅ Successfully updated workflow dispatch artifact with childSessionId');
+          console.log(
+            '[Main] ✅ Successfully updated workflow dispatch artifact with childSessionId',
+          );
         }
       }
 
@@ -384,13 +354,13 @@ export default function Home() {
 
       // IMPORTANT: Reconnect immediately - don't wait for auto-reconnect
       // This ensures the child session gets the workflow stream
-      console.log("[Main] 🔌 About to call reconnectToStream...");
-      console.log("[Main] reconnectToStream type:", typeof reconnectToStream);
-      console.log("[Main] reconnectToStream exists:", !!reconnectToStream);
+      console.log('[Main] 🔌 About to call reconnectToStream...');
+      console.log('[Main] reconnectToStream type:', typeof reconnectToStream);
+      console.log('[Main] reconnectToStream exists:', !!reconnectToStream);
 
       if (!reconnectToStream) {
-        console.error("[Main] ❌ reconnectToStream is undefined!");
-        addDebugLog("error", "reconnectToStream function not available", {
+        console.error('[Main] ❌ reconnectToStream is undefined!');
+        addDebugLog('error', 'reconnectToStream function not available', {
           childSessionId,
           childTaskId,
         });
@@ -398,7 +368,7 @@ export default function Home() {
       }
 
       try {
-        console.log("[Main] Calling reconnectToStream with params:", {
+        console.log('[Main] Calling reconnectToStream with params:', {
           sessionId: childSessionId,
           agentEndpoint: parentAgentEndpoint,
           contextId: contextId,
@@ -412,10 +382,10 @@ export default function Home() {
             id: childSessionId,
             agentEndpoint: parentAgentEndpoint,
             contextId,
-            tasks: [createTaskInfo(childTaskId, "working")],
+            tasks: [createTaskInfo(childTaskId, 'working')],
             parentSessionId,
-            type: "conversation",
-            status: "working",
+            type: 'conversation',
+            status: 'working',
             title: workflowName,
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -455,14 +425,14 @@ export default function Home() {
 
         reconnectToStream(childSession, callbacks);
 
-        console.log("[Main] ✅ reconnectToStream called successfully");
-        addDebugLog("success", "Child task reconnection initiated", {
+        console.log('[Main] ✅ reconnectToStream called successfully');
+        addDebugLog('success', 'Child task reconnection initiated', {
           childSessionId,
           childTaskId,
         });
       } catch (error) {
-        console.error("[Main] ❌ Error calling reconnectToStream:", error);
-        addDebugLog("error", "Failed to reconnect to child task", {
+        console.error('[Main] ❌ Error calling reconnectToStream:', error);
+        addDebugLog('error', 'Failed to reconnect to child task', {
           error: error instanceof Error ? error.message : String(error),
           childSessionId,
           childTaskId,
@@ -507,38 +477,28 @@ export default function Home() {
 
     // NEVER auto-reconnect to main chat sessions
     if (session.isMainChat) {
-      console.log("[Main] Never auto-reconnect to main chat session");
+      console.log('[Main] Never auto-reconnect to main chat session');
       return;
     }
 
     // Don't auto-reconnect if session has no tasks yet (newly created child session)
     if (session.tasks.length === 0) {
-      console.log(
-        "[Main] Skipping auto-reconnect for session with no tasks:",
-        activeSessionId,
-      );
+      console.log('[Main] Skipping auto-reconnect for session with no tasks:', activeSessionId);
       return;
     }
 
     // Don't auto-reconnect if we're already processing
     if (isProcessing(activeSessionId)) {
-      console.log(
-        "[Main] Skipping auto-reconnect - already processing:",
-        activeSessionId,
-      );
+      console.log('[Main] Skipping auto-reconnect - already processing:', activeSessionId);
       return;
     }
 
     // Check if session needs reconnection
-    const needsReconnection =
-      (session.status === "working" || session.status === "waiting");
+    const needsReconnection = session.status === 'working' || session.status === 'waiting';
 
     if (needsReconnection) {
-      console.log(
-        "[Main] Auto-reconnecting to incomplete session on load:",
-        activeSessionId,
-      );
-      addDebugLog("info", "Auto-reconnecting to incomplete session", {
+      console.log('[Main] Auto-reconnecting to incomplete session on load:', activeSessionId);
+      addDebugLog('info', 'Auto-reconnecting to incomplete session', {
         sessionId: activeSessionId,
         status: session.status,
         contextId: session.contextId,
@@ -547,15 +507,20 @@ export default function Home() {
       // Clear messages for child sessions before reconnecting
       // UNLESS they have complete delegations waiting for Continue
       if (session.parentSessionId && !sessionsWithCompleteDelegations.has(activeSessionId)) {
-        console.log('[Main] Clearing messages from child session before auto-reconnect:', activeSessionId);
+        console.log(
+          '[Main] Clearing messages from child session before auto-reconnect:',
+          activeSessionId,
+        );
         clearSessionMessages(activeSessionId);
       } else if (session.parentSessionId && sessionsWithCompleteDelegations.has(activeSessionId)) {
-        console.log('[Main] NOT clearing messages - session has complete delegations waiting for Continue');
+        console.log(
+          '[Main] NOT clearing messages - session has complete delegations waiting for Continue',
+        );
       }
 
       // Reconnect to the stream
-      const latestIncompleteTaskId = getLatestIncompleteTaskId(activeSessionId);
-      
+      const _latestIncompleteTaskId = getLatestIncompleteTaskId(activeSessionId);
+
       if (!session) return;
 
       const lastMessageIdRef = { current: lastMessageIdRefs.current.get(activeSessionId) || null };
@@ -614,84 +579,75 @@ export default function Home() {
     const attemptMCPAutoConnect = () => {
       if (hasAttemptedMCPAutoConnectRef.current) return;
 
-      if (
-        mcpConnectionState.status === "disconnected" ||
-        mcpConnectionState.status === "error"
-      ) {
+      if (mcpConnectionState.status === 'disconnected' || mcpConnectionState.status === 'error') {
         const defaultServerId = serverConfig.defaultServer;
-        const defaultServer = defaultServerId
-          ? serverConfig.servers[defaultServerId]
-          : undefined;
+        const defaultServer = defaultServerId ? serverConfig.servers[defaultServerId] : undefined;
 
         if (defaultServer) {
           hasAttemptedMCPAutoConnectRef.current = true;
-          console.log("[Main] Connecting to MCP server:", defaultServer);
+          console.log('[Main] Connecting to MCP server:', defaultServer);
           connectMCP(defaultServer as MCPServer);
         } else {
-          console.warn("[Main] No default MCP server configured");
+          console.warn('[Main] No default MCP server configured');
         }
       }
     };
 
-    if (document.readyState === "complete") {
+    if (document.readyState === 'complete') {
       attemptMCPAutoConnect();
     } else {
-      window.addEventListener("load", attemptMCPAutoConnect, { once: true });
-      return () => window.removeEventListener("load", attemptMCPAutoConnect);
+      window.addEventListener('load', attemptMCPAutoConnect, { once: true });
+      return () => window.removeEventListener('load', attemptMCPAutoConnect);
     }
   }, [mcpConnectionState.status, serverConfig, connectMCP]);
 
   const handleConnect = async () => {
     if (!agentCardUrl.trim()) {
-      alert("Please enter an agent card URL.");
+      alert('Please enter an agent card URL.');
       return;
     }
 
     let url = agentCardUrl.trim();
     if (!/^[a-zA-Z]+:\/\//.test(url)) {
-      url = "http://" + url;
+      url = 'http://' + url;
     }
 
     try {
       const urlObj = new URL(url);
-      if (urlObj.protocol !== "http:" && urlObj.protocol !== "https:") {
-        throw new Error("Protocol must be http or https.");
+      if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+        throw new Error('Protocol must be http or https.');
       }
-    } catch (error) {
-      alert(
-        "Invalid URL. Please enter a valid URL starting with http:// or https://.",
-      );
+    } catch (_error) {
+      alert('Invalid URL. Please enter a valid URL starting with http:// or https://.');
       return;
     }
 
     setIsA2AConnecting(true);
-    addDebugLog("info", "Starting connection", { url, customHeaders });
+    addDebugLog('info', 'Starting connection', { url, customHeaders });
 
     try {
       // Fetch agent card
-      const agentCardUrlFull = url.endsWith("/")
+      const agentCardUrlFull = url.endsWith('/')
         ? `${url}.well-known/agent-card.json`
         : `${url}/.well-known/agent-card.json`;
 
-      addDebugLog("info", "Fetching agent card", { agentCardUrlFull });
+      addDebugLog('info', 'Fetching agent card', { agentCardUrlFull });
 
       const response = await fetch(agentCardUrlFull, {
-        method: "GET",
+        method: 'GET',
         headers: {
-          Accept: "application/json",
+          Accept: 'application/json',
           ...customHeaders,
         },
-        mode: "cors",
+        mode: 'cors',
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to fetch agent card: ${response.status} ${response.statusText}`,
-        );
+        throw new Error(`Failed to fetch agent card: ${response.status} ${response.statusText}`);
       }
 
       const agentCardData = await response.json();
-      addDebugLog("success", "Agent card fetched", agentCardData);
+      addDebugLog('success', 'Agent card fetched', agentCardData);
       setAgentCard(agentCardData);
 
       // Extract A2A endpoint from agent card
@@ -700,7 +656,7 @@ export default function Home() {
 
       // Check if agent supports streaming
       const supportsStreaming = agentCardData.capabilities?.streaming === true;
-      addDebugLog("success", "Connected to A2A agent", {
+      addDebugLog('success', 'Connected to A2A agent', {
         endpoint: a2aEndpoint,
         supportsStreaming,
       });
@@ -710,17 +666,14 @@ export default function Home() {
 
       // Update active session with agent endpoint
       if (activeSessionId) {
-        updateSessionStatus(activeSessionId, "active");
+        updateSessionStatus(activeSessionId, 'active');
         // Store agent endpoint in session for reconnection
         setSessionAgentEndpoint(activeSessionId, a2aEndpoint);
       }
     } catch (error) {
       setIsA2AConnecting(false);
-      addDebugLog("error", "Connection failed", { error });
-      alert(
-        `Connection failed: ${error instanceof Error ? error.message : String(error)
-        }`,
-      );
+      addDebugLog('error', 'Connection failed', { error });
+      alert(`Connection failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -729,8 +682,7 @@ export default function Home() {
     template?: PromptTemplate,
     parameters?: Record<string, string>,
   ) => {
-    if (!prompt.trim() || !isA2AConnected || !activeSessionId || !agentEndpoint)
-      return;
+    if (!prompt.trim() || !isA2AConnected || !activeSessionId || !agentEndpoint) return;
 
     // Hide splash screen on first message
     if (showSplash) {
@@ -748,21 +700,16 @@ export default function Home() {
       ...(parameters || {}),
     };
 
-    console.log(
-      "[Main] Prompt submitted:",
-      prompt,
-      "Session:",
-      activeSessionId,
-    );
+    console.log('[Main] Prompt submitted:', prompt, 'Session:', activeSessionId);
 
     // Add user message to session
     addMessageToSession(activeSessionId, {
-      sender: "user",
+      sender: 'user',
       content: sanitizedMessage,
     });
 
     // Update session status
-    updateSessionStatus(activeSessionId, "working");
+    updateSessionStatus(activeSessionId, 'working');
 
     // Store agent endpoint in session for future reconnection
     setSessionAgentEndpoint(activeSessionId, agentEndpoint);
@@ -793,13 +740,8 @@ export default function Home() {
       addDebugLog,
     });
 
-    await sendA2AMessage(
-      updatedSession,
-      callbacks,
-      sanitizedMessage,
-      combinedMetadata,
-    );
-    };
+    await sendA2AMessage(updatedSession, callbacks, sanitizedMessage, combinedMetadata);
+  };
 
   const handleSwitchSession = useCallback(
     (sessionId: string) => {
@@ -818,20 +760,15 @@ export default function Home() {
 
       // Check if session needs reconnection
       const session = sessions[sessionId];
-      if (
-        session &&
-        session.contextId &&
-        agentEndpoint &&
-        session.tasks.length > 0
-      ) {
+      if (session && session.contextId && agentEndpoint && session.tasks.length > 0) {
         const needsReconnection =
-          (session.status === "working" || session.status === "waiting") &&
+          (session.status === 'working' || session.status === 'waiting') &&
           !isProcessing(sessionId);
 
         // Don't reconnect to main chat sessions
         if (needsReconnection && !session.isMainChat) {
-          console.log("[Main] Reconnecting to child session:", sessionId);
-          addDebugLog("info", "Reconnecting to incomplete child session", {
+          console.log('[Main] Reconnecting to child session:', sessionId);
+          addDebugLog('info', 'Reconnecting to incomplete child session', {
             sessionId,
             status: session.status,
             contextId: session.contextId,
@@ -840,16 +777,21 @@ export default function Home() {
           // Clear messages for child sessions before reconnecting
           // UNLESS they have complete delegations waiting for Continue
           if (session.parentSessionId && !sessionsWithCompleteDelegations.has(sessionId)) {
-            console.log('[Main - Switch] Clearing messages from child session before reconnect:', sessionId);
+            console.log(
+              '[Main - Switch] Clearing messages from child session before reconnect:',
+              sessionId,
+            );
             clearSessionMessages(sessionId);
           } else if (session.parentSessionId && sessionsWithCompleteDelegations.has(sessionId)) {
-            console.log('[Main - Switch] NOT clearing messages - session has complete delegations waiting for Continue');
+            console.log(
+              '[Main - Switch] NOT clearing messages - session has complete delegations waiting for Continue',
+            );
           }
 
           // Reconnect to the stream
-          const latestIncompleteTaskId = getLatestIncompleteTaskId(sessionId);
+          const _latestIncompleteTaskId = getLatestIncompleteTaskId(sessionId);
           const targetSession = sessions[sessionId];
-          
+
           if (!targetSession) return;
 
           const lastMessageIdRef = { current: lastMessageIdRefs.current.get(sessionId) || null };
@@ -906,7 +848,7 @@ export default function Home() {
 
   const handleCloseSession = (sessionId: string) => {
     // Remove from complete delegations set if present
-    setSessionsWithCompleteDelegations(prev => {
+    setSessionsWithCompleteDelegations((prev) => {
       const newSet = new Set(prev);
       newSet.delete(sessionId);
       return newSet;
@@ -917,9 +859,9 @@ export default function Home() {
   };
 
   const handleCreateSession = () => {
-    const newSessionId = createSession({
-      type: "conversation",
-      title: "New Conversation",
+    const _newSessionId = createSession({
+      type: 'conversation',
+      title: 'New Conversation',
     });
     // New sessions have no messages, so splash will be shown by useEffect
     setShowSplash(true);
@@ -932,20 +874,20 @@ export default function Home() {
     const currentSession = sessions[activeSessionId];
     if (!currentSession?.parentSessionId) return;
 
-    console.log("[Main] User clicked Continue - checking for dashboard artifacts");
+    console.log('[Main] User clicked Continue - checking for dashboard artifacts');
 
     // Check if we have dashboard artifacts in any message
-    const hasDashboardArtifacts = currentSession.messages.some((msg: any) =>
-      msg.artifacts?.["strategy-dashboard-display"]
+    const hasDashboardArtifacts = currentSession.messages.some(
+      (msg: any) => msg.artifacts?.['strategy-dashboard-display'],
     );
 
     if (!hasDashboardArtifacts) {
-      console.log("[Main] No dashboard artifacts found - need to fetch from server");
+      console.log('[Main] No dashboard artifacts found - need to fetch from server');
       // TODO: Could trigger a refresh here if needed
     }
 
     // Remove this session from the set of sessions with complete delegations
-    setSessionsWithCompleteDelegations(prev => {
+    setSessionsWithCompleteDelegations((prev) => {
       const newSet = new Set(prev);
       newSet.delete(activeSessionId);
       return newSet;
@@ -957,11 +899,11 @@ export default function Home() {
 
     // Update the session status to completed - this moves it to "Completed Strategies"
     // Force the status update to ensure it sticks (prevent any overwrites from status callbacks)
-    console.log("[Main] Updating session status to completed (forced):", activeSessionId);
-    updateSessionStatus(activeSessionId, "completed", true);
+    console.log('[Main] Updating session status to completed (forced):', activeSessionId);
+    updateSessionStatus(activeSessionId, 'completed', true);
 
     // Show the overview in the current session
-    console.log("[Main] Setting showOverview to true");
+    console.log('[Main] Setting showOverview to true');
     setShowOverview(true);
   }, [activeSessionId, sessions, removeDelegationMessages, updateSessionStatus]);
 
@@ -969,9 +911,7 @@ export default function Home() {
   const handleUserAction = useCallback(
     async (data: any) => {
       if (!activeSessionId || !agentEndpoint) {
-        console.error(
-          "[Main] Cannot send user action - no active session or endpoint",
-        );
+        console.error('[Main] Cannot send user action - no active session or endpoint');
         return;
       }
 
@@ -980,12 +920,14 @@ export default function Home() {
 
       // Check if this is a delegation submission
       if (data.delegations && Array.isArray(data.delegations)) {
-        console.log("[Main] Delegation submission detected - marking session as having complete delegations");
-        setSessionsWithCompleteDelegations(prev => new Set(prev).add(activeSessionId));
+        console.log(
+          '[Main] Delegation submission detected - marking session as having complete delegations',
+        );
+        setSessionsWithCompleteDelegations((prev) => new Set(prev).add(activeSessionId));
       }
 
-      console.log("[Main] User action from component:", data);
-      addDebugLog("info", "User interaction from component", {
+      console.log('[Main] User action from component:', data);
+      addDebugLog('info', 'User interaction from component', {
         sessionId: activeSessionId,
         data,
       });
@@ -1006,16 +948,12 @@ export default function Home() {
           addDebugLog,
         });
 
-        await sendToActiveTask(
-          session,
-          callbacks,
-          data,
-        );
-        addDebugLog("success", "User interaction sent successfully", {
+        await sendToActiveTask(session, callbacks, data);
+        addDebugLog('success', 'User interaction sent successfully', {
           sessionId: activeSessionId,
         });
       } catch (error) {
-        addDebugLog("error", "Failed to send user interaction", {
+        addDebugLog('error', 'Failed to send user interaction', {
           error,
         });
       }
@@ -1063,14 +1001,9 @@ export default function Home() {
         <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
           {/* Connection Panel - Collapsible */}
           {showConnection && (
-            <Card
-              className="m-4 mb-0"
-              style={{ backgroundColor: "#2a2a2a", border: "none" }}
-            >
+            <Card className="m-4 mb-0" style={{ backgroundColor: '#2a2a2a', border: 'none' }}>
               <CardHeader className="pb-3">
-                <CardTitle className="text-white text-sm">
-                  Agent Connection
-                </CardTitle>
+                <CardTitle className="text-white text-sm">Agent Connection</CardTitle>
                 <CardDescription className="text-gray-400 text-xs">
                   Connect to an A2A agent to start communicating
                 </CardDescription>
@@ -1084,31 +1017,28 @@ export default function Home() {
                     disabled={isA2AConnecting}
                     className="flex-1"
                     style={{
-                      backgroundColor: "#1a1a1a",
-                      borderColor: "rgba(255, 255, 255, 0.2)",
-                      color: "white",
-                      border: "none",
+                      backgroundColor: '#1a1a1a',
+                      borderColor: 'rgba(255, 255, 255, 0.2)',
+                      color: 'white',
+                      border: 'none',
                     }}
                   />
                   <Button
                     onClick={handleConnect}
                     disabled={isA2AConnecting || !agentCardUrl.trim()}
                     style={{
-                      backgroundColor: "#FD6731",
-                      borderColor: "#FD6731",
-                      border: "none",
+                      backgroundColor: '#FD6731',
+                      borderColor: '#FD6731',
+                      border: 'none',
                     }}
                   >
-                    {isA2AConnecting ? "Connecting..." : "Connect"}
+                    {isA2AConnecting ? 'Connecting...' : 'Connect'}
                   </Button>
                 </div>
 
                 {isA2AConnected && (
                   <div className="flex items-center gap-2">
-                    <Badge
-                      variant="success"
-                      className="flex items-center gap-1"
-                    >
+                    <Badge variant="success" className="flex items-center gap-1">
                       <CheckCircle className="w-3 h-3" />
                       Connected
                     </Badge>
@@ -1149,23 +1079,15 @@ export default function Home() {
           )}
 
           {/* Main view - Splash, Chat, or Overview */}
-          <div
-            className="flex-1 flex flex-col"
-            style={{ minHeight: 0, overflow: "hidden" }}
-          >
+          <div className="flex-1 flex flex-col" style={{ minHeight: 0, overflow: 'hidden' }}>
             {(showSplash || !activeSession) && !activeSession?.parentSessionId ? (
-              <SplashScreen
-                onSubmit={(message) => handlePromptSubmit(message)}
-              />
+              <SplashScreen onSubmit={(message) => handlePromptSubmit(message)} />
             ) : (
               (() => {
                 // Check if we should show the overview
-                const lastMessage =
-                  activeSession.messages[activeSession.messages.length - 1];
-                const hasStrategyDashboard =
-                  lastMessage?.artifacts?.["strategy-dashboard-display"];
-                const canShowOverview =
-                  hasStrategyDashboard && !lastMessage.awaitingUserAction;
+                const lastMessage = activeSession.messages[activeSession.messages.length - 1];
+                const hasStrategyDashboard = lastMessage?.artifacts?.['strategy-dashboard-display'];
+                const canShowOverview = hasStrategyDashboard && !lastMessage.awaitingUserAction;
 
                 if (canShowOverview && showOverview && lastMessage.artifacts) {
                   // Show overview instead of chat
@@ -1237,13 +1159,13 @@ export default function Home() {
                     )} */}
                     <div
                       className={`flex-1 overflow-y-auto smooth-transition ${!!activeSession.parentSessionId ? '' : 'space-y-4 p-6'}`}
-                      style={{ backgroundColor: "#1a1a1a", minHeight: 0 }}
+                      style={{ backgroundColor: '#1a1a1a', minHeight: 0 }}
                     >
                       {(() => {
                         // Check if child session should show overview
                         if (activeSession.parentSessionId && showOverview) {
-                          const messageWithDashboard = activeSession.messages.find((msg: any) =>
-                            msg.artifacts?.["strategy-dashboard-display"]
+                          const messageWithDashboard = activeSession.messages.find(
+                            (msg: any) => msg.artifacts?.['strategy-dashboard-display'],
                           );
 
                           if (messageWithDashboard?.artifacts) {
@@ -1263,8 +1185,8 @@ export default function Home() {
                               <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
                               <p>
                                 {activeSession.parentSessionId
-                                  ? "Loading workflow..."
-                                  : "No messages yet. Start chatting with the agent."}
+                                  ? 'Loading workflow...'
+                                  : 'No messages yet. Start chatting with the agent.'}
                               </p>
                             </div>
                           </div>
@@ -1293,12 +1215,9 @@ export default function Home() {
 
           {/* Chat Input - Only show for main chat or when not in overview mode */}
           {(() => {
-            const lastMessage =
-              activeSession?.messages[activeSession.messages.length - 1];
-            const hasStrategyDashboard =
-              lastMessage?.artifacts?.["strategy-dashboard-display"];
-            const canShowOverview =
-              hasStrategyDashboard && !lastMessage?.awaitingUserAction;
+            const lastMessage = activeSession?.messages[activeSession.messages.length - 1];
+            const hasStrategyDashboard = lastMessage?.artifacts?.['strategy-dashboard-display'];
+            const canShowOverview = hasStrategyDashboard && !lastMessage?.awaitingUserAction;
 
             // Don't show input when in overview mode
             if (canShowOverview && showOverview) return null;
@@ -1306,25 +1225,22 @@ export default function Home() {
             // Only show chat input for chat sessions (not workflows)
             // Workflows have parentSessionId or type === "tool-execution"
             if (!activeSession) return null;
-            const isWorkflow = activeSession.parentSessionId || activeSession.type === "tool-execution";
+            const isWorkflow =
+              activeSession.parentSessionId || activeSession.type === 'tool-execution';
             if (isWorkflow) {
               return null;
             }
 
             return (
-              <div
-                className="relative p-4 bg-[#1a1a1a]"
-                style={{ zIndex: 10, flexShrink: 0 }}
-              >
+              <div className="relative p-4 bg-[#1a1a1a]" style={{ zIndex: 10, flexShrink: 0 }}>
                 <ConversationalPromptInput
                   onSubmit={handlePromptSubmit}
                   placeholder="Type your message or use a prompt template..."
                   handleCompletion={handleCompletion}
                   completionsSupported={
-                    completionsSupported &&
-                    mcpConnectionState.status === "connected"
+                    completionsSupported && mcpConnectionState.status === 'connected'
                   }
-                  isConnected={mcpConnectionState.status === "connected"}
+                  isConnected={mcpConnectionState.status === 'connected'}
                   disabled={!isA2AConnected || !activeSession}
                   mcpPrompts={mcpConnectionState.prompts}
                   onGetPrompt={getPrompt}

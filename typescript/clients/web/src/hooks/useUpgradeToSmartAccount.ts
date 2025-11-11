@@ -3,12 +3,11 @@ import {
   type MetaMaskSmartAccount,
   toMetaMaskSmartAccount,
   getDeleGatorEnvironment,
-} from "@metamask/delegation-toolkit";
-import { useAccount, usePublicClient, useWalletClient } from "wagmi";
-import { createWalletClient, http } from "viem";
-import { arbitrum } from "viem/chains";
-import { zeroAddress } from "viem";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+} from '@metamask/delegation-toolkit';
+import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
+import { arbitrum } from 'viem/chains';
+import { zeroAddress } from 'viem';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 interface UseUpgradeToSmartAccountReturn {
   smartAccount: MetaMaskSmartAccount | null;
@@ -31,10 +30,10 @@ export function useUpgradeToSmartAccount(): UseUpgradeToSmartAccountReturn {
     isLoading,
     error: queryError,
   } = useQuery({
-    queryKey: ["smartAccount", address],
+    queryKey: ['smartAccount', address],
     queryFn: async () => {
       if (!address || !publicClient || !walletClient) {
-        throw new Error("Wallet not connected");
+        throw new Error('Wallet not connected');
       }
 
       const account = await toMetaMaskSmartAccount({
@@ -60,24 +59,23 @@ export function useUpgradeToSmartAccount(): UseUpgradeToSmartAccountReturn {
   const upgradeMutation = useMutation({
     mutationFn: async () => {
       if (!address || !publicClient || !walletClient) {
-        throw new Error("Wallet not connected");
+        throw new Error('Wallet not connected');
       }
 
       // Get the DeleGator environment for Arbitrum
       const environment = getDeleGatorEnvironment(arbitrum.id);
-      const contractAddress =
-        environment.implementations.EIP7702StatelessDeleGatorImpl;
+      const contractAddress = environment.implementations.EIP7702StatelessDeleGatorImpl;
 
       // Sign the authorization
       const authorization = await walletClient.signAuthorization({
         contractAddress,
-        executor: "self",
+        executor: 'self',
       });
 
       // Submit the authorization with a dummy transaction
       const hash = await walletClient.sendTransaction({
         authorizationList: [authorization],
-        data: "0x",
+        data: '0x',
         to: zeroAddress,
       });
 
@@ -88,7 +86,7 @@ export function useUpgradeToSmartAccount(): UseUpgradeToSmartAccountReturn {
     },
     onSuccess: () => {
       // Invalidate and refetch smart account data after successful upgrade
-      queryClient.invalidateQueries({ queryKey: ["smartAccount", address] });
+      queryClient.invalidateQueries({ queryKey: ['smartAccount', address] });
     },
   });
 

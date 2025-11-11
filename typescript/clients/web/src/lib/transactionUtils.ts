@@ -4,7 +4,7 @@
  * Shared utilities and types for handling blockchain transactions across the app.
  */
 
-import { type Hex } from "viem";
+// Hex type available from viem if needed later
 
 export interface RawTransaction {
   to: string;
@@ -17,11 +17,10 @@ export interface RawTransaction {
   maxPriorityFeePerGas?: string;
 }
 
-export interface TxPlan extends Array<RawTransaction> {
-  // TxPlan is an array of RawTransactions
-  // Last item is typically the main transaction
-  // Previous items are approval transactions
-}
+// TxPlan is an array of RawTransactions
+// Last item is typically the main transaction
+// Previous items are approval transactions
+export type TxPlan = RawTransaction[];
 
 /**
  * Convert various value formats to bigint
@@ -31,17 +30,17 @@ export function toBigInt(value: string | number | bigint | undefined): bigint {
     return BigInt(0);
   }
 
-  if (typeof value === "bigint") {
+  if (typeof value === 'bigint') {
     return value;
   }
 
-  if (typeof value === "number") {
+  if (typeof value === 'number') {
     return BigInt(Math.floor(value));
   }
 
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     // Handle hex strings
-    if (value.startsWith("0x")) {
+    if (value.startsWith('0x')) {
       return BigInt(value);
     }
     // Handle decimal strings
@@ -69,18 +68,18 @@ export async function withSafeDefaults(
     data?: string;
     value?: bigint;
   },
-  fromAddress: string
+  _fromAddress: string,
 ): Promise<{
   gasLimit?: bigint;
   maxFeePerGas?: bigint;
   maxPriorityFeePerGas?: bigint;
 }> {
-  console.log("[withSafeDefaults] Getting gas estimates for chain", chainId);
+  console.log('[withSafeDefaults] Getting gas estimates for chain', chainId);
 
   // Basic gas estimates based on transaction type
   let gasLimit = BigInt(21000); // Basic transfer
 
-  if (transaction.data && transaction.data !== "0x") {
+  if (transaction.data && transaction.data !== '0x') {
     // Contract interaction, estimate higher
     gasLimit = transaction.data.length > 1000 ? BigInt(500000) : BigInt(150000);
   }
@@ -117,7 +116,7 @@ export async function withSafeDefaults(
  * Format transaction hash for display
  */
 export function formatTxHash(hash: string): string {
-  if (!hash) return "";
+  if (!hash) return '';
   return `${hash.slice(0, 6)}...${hash.slice(-4)}`;
 }
 
@@ -133,8 +132,8 @@ export function formatWei(wei: bigint, decimals: number = 18): string {
     return whole.toString();
   }
 
-  const fractionStr = fraction.toString().padStart(decimals, "0");
-  const trimmed = fractionStr.replace(/0+$/, "");
+  const fractionStr = fraction.toString().padStart(decimals, '0');
+  const trimmed = fractionStr.replace(/0+$/, '');
 
   return `${whole.toString()}.${trimmed}`;
 }
@@ -142,12 +141,9 @@ export function formatWei(wei: bigint, decimals: number = 18): string {
 /**
  * Parse token amount string to wei
  */
-export function parseTokenAmount(
-  amount: string,
-  decimals: number = 18
-): bigint {
-  const [whole, fraction = ""] = amount.split(".");
-  const fractionPadded = fraction.padEnd(decimals, "0").slice(0, decimals);
+export function parseTokenAmount(amount: string, decimals: number = 18): bigint {
+  const [whole, fraction = ''] = amount.split('.');
+  const fractionPadded = fraction.padEnd(decimals, '0').slice(0, decimals);
   const combined = whole + fractionPadded;
   return BigInt(combined);
 }
@@ -159,7 +155,7 @@ export function isApprovalTransaction(transaction: RawTransaction): boolean {
   if (!transaction.data) return false;
 
   // ERC-20 approve function signature: 0x095ea7b3
-  return transaction.data.startsWith("0x095ea7b3");
+  return transaction.data.startsWith('0x095ea7b3');
 }
 
 /**
@@ -167,14 +163,14 @@ export function isApprovalTransaction(transaction: RawTransaction): boolean {
  */
 export function getChainName(chainId: number): string {
   const chainNames: Record<number, string> = {
-    1: "Ethereum",
-    137: "Polygon",
-    42161: "Arbitrum One",
-    10: "Optimism",
-    56: "BNB Chain",
-    43114: "Avalanche",
-    250: "Fantom",
-    8453: "Base",
+    1: 'Ethereum',
+    137: 'Polygon',
+    42161: 'Arbitrum One',
+    10: 'Optimism',
+    56: 'BNB Chain',
+    43114: 'Avalanche',
+    250: 'Fantom',
+    8453: 'Base',
   };
 
   return chainNames[chainId] || `Chain ${chainId}`;
@@ -194,18 +190,18 @@ export function validateTransaction(tx: RawTransaction): {
   }
 
   if (!tx.chainId || tx.chainId <= 0) {
-    errors.push("Invalid chain ID");
+    errors.push('Invalid chain ID');
   }
 
-  if (tx.data && !tx.data.startsWith("0x")) {
-    errors.push("Transaction data must start with 0x");
+  if (tx.data && !tx.data.startsWith('0x')) {
+    errors.push('Transaction data must start with 0x');
   }
 
-  if (tx.value && tx.value !== "0x0" && tx.value !== "0") {
+  if (tx.value && tx.value !== '0x0' && tx.value !== '0') {
     try {
       toBigInt(tx.value);
     } catch {
-      errors.push("Invalid transaction value");
+      errors.push('Invalid transaction value');
     }
   }
 
@@ -228,7 +224,7 @@ export function calculateGasCost(gasLimit: bigint, gasPrice: bigint): bigint {
 export function formatGasCost(
   gasLimit: bigint,
   gasPrice: bigint,
-  nativeTokenSymbol: string = "ETH"
+  nativeTokenSymbol: string = 'ETH',
 ): string {
   const cost = calculateGasCost(gasLimit, gasPrice);
   const formatted = formatWei(cost);

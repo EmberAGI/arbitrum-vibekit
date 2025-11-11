@@ -5,23 +5,16 @@
  * Integrates A2A protocol with session management
  */
 
-"use client";
+'use client';
 
-import { useCallback, useRef, useEffect } from "react";
-import { SessionStatus } from "@/lib/types/session";
-import { processSSEStream } from "@/lib/utils/sseProcessor";
+import { useCallback, useRef, useEffect } from 'react';
+import { SessionStatus } from '@/lib/types/session';
+import { processSSEStream } from '@/lib/utils/sseProcessor';
 import {
   processA2AEvent,
   type EventProcessorState,
   type EventProcessorCallbacks,
-} from "@/lib/utils/a2aEventProcessor";
-
-interface A2ASessionMessage {
-  sessionId: string;
-  messageId: string;
-  content: string;
-  metadata: Record<string, string>;
-}
+} from '@/lib/utils/a2aEventProcessor';
 
 interface A2ASessionConfig {
   sessionId: string;
@@ -32,26 +25,18 @@ interface A2ASessionConfig {
     sessionId: string,
     messageId: string,
     content: string,
-    sender: "agent" | "agent-progress" | "agent-error",
-    updates?: any
+    sender: 'agent' | 'agent-progress' | 'agent-error',
+    updates?: any,
   ) => string;
-  onStatusUpdate: (
-    sessionId: string,
-    status: SessionStatus,
-    data?: any
-  ) => void;
+  onStatusUpdate: (sessionId: string, status: SessionStatus, data?: any) => void;
   onContextIdReceived: (sessionId: string, contextId: string) => void;
   onTaskReceived?: (sessionId: string, taskId: string, state: string) => void;
-  onTaskStateChanged?: (
-    sessionId: string,
-    taskId: string,
-    state: string
-  ) => void;
+  onTaskStateChanged?: (sessionId: string, taskId: string, state: string) => void;
   onChildTaskDetected?: (
     parentSessionId: string,
     childTaskId: string,
     contextId: string,
-    metadata?: any
+    metadata?: any,
   ) => void;
   onToolInvocation?: (sessionId: string, toolData: any) => void;
 }
@@ -60,7 +45,7 @@ interface UseA2ASessionReturn {
   sendMessage: (
     config: A2ASessionConfig,
     message: string,
-    metadata: Record<string, string>
+    metadata: Record<string, string>,
   ) => Promise<void>;
   reconnectToStream: (config: A2ASessionConfig) => Promise<void>;
   sendToActiveTask: (
@@ -72,15 +57,11 @@ interface UseA2ASessionReturn {
       sessionId: string,
       messageId: string,
       content: string,
-      sender: "agent" | "agent-progress" | "agent-error",
-      updates?: any
+      sender: 'agent' | 'agent-progress' | 'agent-error',
+      updates?: any,
     ) => string,
-    onStatusUpdate: (
-      sessionId: string,
-      status: SessionStatus,
-      data?: any
-    ) => void,
-    metadata?: Record<string, string>
+    onStatusUpdate: (sessionId: string, status: SessionStatus, data?: any) => void,
+    metadata?: Record<string, string>,
   ) => Promise<void>;
   isProcessing: (sessionId: string) => boolean;
 }
@@ -93,11 +74,7 @@ export function useA2ASession(): UseA2ASessionReturn {
   const processingSessionsRef = useRef<Set<string>>(new Set());
 
   const sendMessage = useCallback(
-    async (
-      config: A2ASessionConfig,
-      message: string,
-      metadata: Record<string, string>
-    ) => {
+    async (config: A2ASessionConfig, message: string, metadata: Record<string, string>) => {
       const {
         sessionId,
         agentEndpoint,
@@ -112,17 +89,15 @@ export function useA2ASession(): UseA2ASessionReturn {
       } = config;
 
       if (!agentEndpoint) {
-        console.error("[A2ASession] No agent endpoint for session:", sessionId);
+        console.error('[A2ASession] No agent endpoint for session:', sessionId);
         return;
       }
 
       // Mark session as processing
       processingSessionsRef.current.add(sessionId);
-      onStatusUpdate(sessionId, "working");
+      onStatusUpdate(sessionId, 'working');
 
-      const messageId = `msg-${Date.now()}-${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
+      const messageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       // Cancel any existing request for this session
       if (activeRequestsRef.current.has(sessionId)) {
@@ -132,7 +107,7 @@ export function useA2ASession(): UseA2ASessionReturn {
       const abortController = new AbortController();
       activeRequestsRef.current.set(sessionId, abortController);
 
-      console.log("[A2ASession] Sending message for session:", sessionId, {
+      console.log('[A2ASession] Sending message for session:', sessionId, {
         hasContextId: !!contextId,
         contextId,
       });
@@ -140,8 +115,8 @@ export function useA2ASession(): UseA2ASessionReturn {
       try {
         // Prepare message payload
         const messagePayload: any = {
-          role: "user",
-          parts: [{ kind: "text", text: message }],
+          role: 'user',
+          parts: [{ kind: 'text', text: message }],
           messageId,
           metadata,
         };
@@ -152,23 +127,23 @@ export function useA2ASession(): UseA2ASessionReturn {
         }
 
         const request = {
-          jsonrpc: "2.0",
+          jsonrpc: '2.0',
           id: messageId,
-          method: "message/stream",
+          method: 'message/stream',
           params: {
             message: messagePayload,
             configuration: {
-              acceptedOutputModes: ["text/plain"],
+              acceptedOutputModes: ['text/plain'],
             },
           },
         };
 
         // Make fetch request with SSE
         const response = await fetch(agentEndpoint, {
-          method: "POST",
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
-            Accept: "text/event-stream",
+            'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
           },
           body: JSON.stringify(request),
           signal: abortController.signal,
@@ -181,11 +156,11 @@ export function useA2ASession(): UseA2ASessionReturn {
         // Process SSE stream
         const reader = response.body?.getReader();
         if (!reader) {
-          throw new Error("No response body");
+          throw new Error('No response body');
         }
 
         // Initialize state for event processing
-        const currentAgentMessageId = onMessage(sessionId, "", "", "agent", {
+        const currentAgentMessageId = onMessage(sessionId, '', '', 'agent', {
           isStreaming: true,
         });
 
@@ -193,8 +168,8 @@ export function useA2ASession(): UseA2ASessionReturn {
           sessionId,
           contextId,
           currentAgentMessageId,
-          reasoningText: "",
-          responseText: "",
+          reasoningText: '',
+          responseText: '',
           artifactsMap: {},
         };
 
@@ -218,36 +193,32 @@ export function useA2ASession(): UseA2ASessionReturn {
               sessionId,
               eventState.currentAgentMessageId,
               `Error: ${error.message}`,
-              "agent-error",
+              'agent-error',
               {
                 isStreaming: false,
-              }
+              },
             );
-            onStatusUpdate(sessionId, "error", error);
+            onStatusUpdate(sessionId, 'error', error);
           },
         });
 
-        console.log("[A2ASession] Stream ended for session:", sessionId);
+        console.log('[A2ASession] Stream ended for session:', sessionId);
       } catch (error: any) {
-        if (error.name === "AbortError") {
-          console.log("[A2ASession] Request aborted for session:", sessionId);
+        if (error.name === 'AbortError') {
+          console.log('[A2ASession] Request aborted for session:', sessionId);
         } else {
-          console.error(
-            "[A2ASession] Failed to send message for session:",
-            sessionId,
-            error
-          );
-          onMessage(sessionId, "", `Error: ${error.message}`, "agent-error", {
+          console.error('[A2ASession] Failed to send message for session:', sessionId, error);
+          onMessage(sessionId, '', `Error: ${error.message}`, 'agent-error', {
             isStreaming: false,
           });
-          onStatusUpdate(sessionId, "error", error);
+          onStatusUpdate(sessionId, 'error', error);
         }
       } finally {
         processingSessionsRef.current.delete(sessionId);
         activeRequestsRef.current.delete(sessionId);
       }
     },
-    []
+    [],
   );
 
   const reconnectToStream = useCallback(async (config: A2ASessionConfig) => {
@@ -266,15 +237,15 @@ export function useA2ASession(): UseA2ASessionReturn {
     } = config;
 
     if (!agentEndpoint) {
-      console.error("[A2ASession] No agent endpoint for session:", sessionId);
+      console.error('[A2ASession] No agent endpoint for session:', sessionId);
       return;
     }
 
     if (!taskId) {
       console.warn(
-        "[A2ASession] Cannot resubscribe without taskId:",
+        '[A2ASession] Cannot resubscribe without taskId:',
         sessionId,
-        "- falling back to message/stream with contextId"
+        '- falling back to message/stream with contextId',
       );
       // If no taskId but we have contextId, fall back to old method
       if (!contextId) {
@@ -284,11 +255,9 @@ export function useA2ASession(): UseA2ASessionReturn {
 
     // Mark session as processing
     processingSessionsRef.current.add(sessionId);
-    onStatusUpdate(sessionId, "connecting");
+    onStatusUpdate(sessionId, 'connecting');
 
-    const requestId = `resubscribe-${Date.now()}-${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
+    const requestId = `resubscribe-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     // Cancel any existing request for this session
     if (activeRequestsRef.current.has(sessionId)) {
@@ -298,7 +267,7 @@ export function useA2ASession(): UseA2ASessionReturn {
     const abortController = new AbortController();
     activeRequestsRef.current.set(sessionId, abortController);
 
-    console.log("[A2ASession] Resubscribing to task for session:", sessionId, {
+    console.log('[A2ASession] Resubscribing to task for session:', sessionId, {
       taskId,
       contextId,
       agentEndpoint,
@@ -307,29 +276,26 @@ export function useA2ASession(): UseA2ASessionReturn {
     try {
       // Prepare resubscribe request using tasks/resubscribe method
       const request = {
-        jsonrpc: "2.0",
+        jsonrpc: '2.0',
         id: requestId,
-        method: "tasks/resubscribe",
+        method: 'tasks/resubscribe',
         params: {
           id: taskId, // Task ID to resubscribe to
           metadata: {
             sessionId,
-            reconnect: "true",
+            reconnect: 'true',
           },
         },
       };
 
-      console.log(
-        "[A2ASession] Sending resubscribe request:",
-        JSON.stringify(request, null, 2)
-      );
+      console.log('[A2ASession] Sending resubscribe request:', JSON.stringify(request, null, 2));
 
       // Make fetch request with SSE
       const response = await fetch(agentEndpoint, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
         },
         body: JSON.stringify(request),
         signal: abortController.signal,
@@ -338,27 +304,24 @@ export function useA2ASession(): UseA2ASessionReturn {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(
-          "[A2ASession] Resubscribe request failed:",
+          '[A2ASession] Resubscribe request failed:',
           response.status,
           response.statusText,
-          errorText
+          errorText,
         );
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      console.log(
-        "[A2ASession] Resubscribe response received, status:",
-        response.status
-      );
+      console.log('[A2ASession] Resubscribe response received, status:', response.status);
 
       // Process SSE stream
       const reader = response.body?.getReader();
       if (!reader) {
-        throw new Error("No response body");
+        throw new Error('No response body');
       }
 
       // Initialize state for event processing
-      const currentAgentMessageId = onMessage(sessionId, "", "", "agent", {
+      const currentAgentMessageId = onMessage(sessionId, '', '', 'agent', {
         isStreaming: true,
       });
 
@@ -366,8 +329,8 @@ export function useA2ASession(): UseA2ASessionReturn {
         sessionId,
         contextId,
         currentAgentMessageId,
-        reasoningText: "",
-        responseText: "",
+        reasoningText: '',
+        responseText: '',
         artifactsMap: {},
       };
 
@@ -385,30 +348,21 @@ export function useA2ASession(): UseA2ASessionReturn {
       await processSSEStream(reader, {
         onEvent: async (event) => {
           // Special handling for resubscribe: process initial task artifacts
-          if (
-            event.kind === "task" &&
-            event.artifacts &&
-            Array.isArray(event.artifacts)
-          ) {
-            console.log(
-              "[A2ASession] Resubscribe: Processing initial task artifacts"
-            );
+          if (event.kind === 'task' && event.artifacts && Array.isArray(event.artifacts)) {
+            console.log('[A2ASession] Resubscribe: Processing initial task artifacts');
 
             // Process ALL artifacts including data artifacts
             for (const artifact of event.artifacts) {
               const artifactType = artifact.name || artifact.artifactId;
-              const artifactId =
-                artifact.artifactId || artifact.id || artifactType;
+              const artifactId = artifact.artifactId || artifact.id || artifactType;
 
               if (artifact.parts) {
-                const dataParts = artifact.parts.filter(
-                  (p: any) => p.kind === "data" && p.data
-                );
+                const dataParts = artifact.parts.filter((p: any) => p.kind === 'data' && p.data);
                 const hasMultipleDataParts = dataParts.length > 1;
                 let aggregatedData: any = null;
 
                 for (const part of artifact.parts) {
-                  if (part.kind === "data" && part.data) {
+                  if (part.kind === 'data' && part.data) {
                     const toolData = part.data;
                     if (hasMultipleDataParts) {
                       if (aggregatedData === null) {
@@ -437,23 +391,17 @@ export function useA2ASession(): UseA2ASessionReturn {
 
             // Update message with artifacts if any
             if (Object.keys(eventState.artifactsMap).length > 0) {
-              onMessage(
-                sessionId,
-                currentAgentMessageId,
-                eventState.responseText,
-                "agent",
-                {
-                  reasoning: eventState.reasoningText,
-                  artifacts: eventState.artifactsMap,
-                  isStreaming: false,
-                }
-              );
+              onMessage(sessionId, currentAgentMessageId, eventState.responseText, 'agent', {
+                reasoning: eventState.reasoningText,
+                artifacts: eventState.artifactsMap,
+                isStreaming: false,
+              });
             }
           }
 
           // Process message from history if present (e.g., input-required message)
           if (
-            event.kind === "task" &&
+            event.kind === 'task' &&
             event.history &&
             Array.isArray(event.history) &&
             event.history.length > 0
@@ -461,19 +409,13 @@ export function useA2ASession(): UseA2ASessionReturn {
             const latestMessage = event.history[event.history.length - 1];
             if (latestMessage.parts) {
               for (const part of latestMessage.parts) {
-                if (part.kind === "text" && part.text) {
+                if (part.kind === 'text' && part.text) {
                   eventState.responseText = part.text;
-                  onMessage(
-                    sessionId,
-                    currentAgentMessageId,
-                    eventState.responseText,
-                    "agent",
-                    {
-                      reasoning: eventState.reasoningText,
-                      artifacts: eventState.artifactsMap,
-                      isStreaming: false,
-                    }
-                  );
+                  onMessage(sessionId, currentAgentMessageId, eventState.responseText, 'agent', {
+                    reasoning: eventState.reasoningText,
+                    artifacts: eventState.artifactsMap,
+                    isStreaming: false,
+                  });
                 }
               }
             }
@@ -487,41 +429,25 @@ export function useA2ASession(): UseA2ASessionReturn {
             sessionId,
             eventState.currentAgentMessageId,
             `Error resubscribing to task: ${error.message}`,
-            "agent-error",
+            'agent-error',
             {
               isStreaming: false,
-            }
+            },
           );
-          onStatusUpdate(sessionId, "error", error);
+          onStatusUpdate(sessionId, 'error', error);
         },
       });
 
-      console.log(
-        "[A2ASession] Resubscription stream ended for session:",
-        sessionId
-      );
+      console.log('[A2ASession] Resubscription stream ended for session:', sessionId);
     } catch (error: any) {
-      if (error.name === "AbortError") {
-        console.log(
-          "[A2ASession] Resubscription aborted for session:",
-          sessionId
-        );
+      if (error.name === 'AbortError') {
+        console.log('[A2ASession] Resubscription aborted for session:', sessionId);
       } else {
-        console.error(
-          "[A2ASession] Failed to resubscribe for session:",
-          sessionId,
-          error
-        );
-        onMessage(
-          sessionId,
-          "",
-          `Error resubscribing to task: ${error.message}`,
-          "agent-error",
-          {
-            isStreaming: false,
-          }
-        );
-        onStatusUpdate(sessionId, "error", error);
+        console.error('[A2ASession] Failed to resubscribe for session:', sessionId, error);
+        onMessage(sessionId, '', `Error resubscribing to task: ${error.message}`, 'agent-error', {
+          isStreaming: false,
+        });
+        onStatusUpdate(sessionId, 'error', error);
       }
     } finally {
       processingSessionsRef.current.delete(sessionId);
@@ -539,54 +465,42 @@ export function useA2ASession(): UseA2ASessionReturn {
         sessionId: string,
         messageId: string,
         content: string,
-        sender: "agent" | "agent-progress" | "agent-error",
-        updates?: any
+        sender: 'agent' | 'agent-progress' | 'agent-error',
+        updates?: any,
       ) => string,
-      onStatusUpdate: (
-        sessionId: string,
-        status: SessionStatus,
-        data?: any
-      ) => void,
-      metadata: Record<string, string> = {}
+      onStatusUpdate: (sessionId: string, status: SessionStatus, data?: any) => void,
+      metadata: Record<string, string> = {},
     ) => {
       if (!agentEndpoint) {
-        console.error("[A2ASession] No agent endpoint for session:", sessionId);
+        console.error('[A2ASession] No agent endpoint for session:', sessionId);
         return;
       }
 
       if (!contextId) {
-        console.error(
-          "[A2ASession] No contextId - cannot send to active task:",
-          sessionId
-        );
+        console.error('[A2ASession] No contextId - cannot send to active task:', sessionId);
         return;
       }
 
-      console.log(
-        "[A2ASession] Sending user interaction data to active task:",
-        {
-          sessionId,
-          contextId,
-          data,
-        }
-      );
+      console.log('[A2ASession] Sending user interaction data to active task:', {
+        sessionId,
+        contextId,
+        data,
+      });
 
-      const messageId = `user-action-${Date.now()}-${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
+      const messageId = `user-action-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       try {
         // Prepare user interaction message
         const request = {
-          jsonrpc: "2.0",
+          jsonrpc: '2.0',
           id: messageId,
-          method: "message/stream", // Use streaming to continue task
+          method: 'message/stream', // Use streaming to continue task
           params: {
             message: {
-              role: "user",
+              role: 'user',
               parts: [
                 {
-                  kind: "data",
+                  kind: 'data',
                   data: data,
                 },
               ],
@@ -594,26 +508,26 @@ export function useA2ASession(): UseA2ASessionReturn {
               contextId, // Important: continue in the same context and task
               metadata: {
                 ...metadata,
-                userInteraction: "true",
-                interactionType: "component-response",
+                userInteraction: 'true',
+                interactionType: 'component-response',
               },
             },
             configuration: {
-              acceptedOutputModes: ["text/plain"],
+              acceptedOutputModes: ['text/plain'],
             },
           },
         };
 
         // Mark as processing
         processingSessionsRef.current.add(sessionId);
-        onStatusUpdate(sessionId, "working");
+        onStatusUpdate(sessionId, 'working');
 
         // Send via streaming (SSE)
         const response = await fetch(agentEndpoint, {
-          method: "POST",
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
-            Accept: "text/event-stream",
+            'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
           },
           body: JSON.stringify(request),
         });
@@ -622,24 +536,20 @@ export function useA2ASession(): UseA2ASessionReturn {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
-        console.log("[A2ASession] User interaction sent, processing stream...");
+        console.log('[A2ASession] User interaction sent, processing stream...');
 
         // TODO: Add streaming response processing here
         // For now, just log success
-        console.log("[A2ASession] User interaction stream initiated");
+        console.log('[A2ASession] User interaction stream initiated');
       } catch (error: any) {
-        console.error(
-          "[A2ASession] Failed to send user interaction:",
-          sessionId,
-          error
-        );
-        onStatusUpdate(sessionId, "error", error);
+        console.error('[A2ASession] Failed to send user interaction:', sessionId, error);
+        onStatusUpdate(sessionId, 'error', error);
         throw error;
       } finally {
         processingSessionsRef.current.delete(sessionId);
       }
     },
-    []
+    [],
   );
 
   const isProcessing = useCallback((sessionId: string): boolean => {

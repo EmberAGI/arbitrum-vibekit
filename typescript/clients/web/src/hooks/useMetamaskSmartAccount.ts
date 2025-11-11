@@ -2,9 +2,9 @@ import {
   Implementation,
   type MetaMaskSmartAccount,
   toMetaMaskSmartAccount,
-} from "@metamask/delegation-toolkit";
-import { useAccount, usePublicClient, useWalletClient } from "wagmi";
-import { useQuery } from "@tanstack/react-query";
+} from '@metamask/delegation-toolkit';
+import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
+import { useQuery } from '@tanstack/react-query';
 
 interface UseMetamaskSmartAccountReturn {
   smartAccount: MetaMaskSmartAccount | null;
@@ -13,7 +13,7 @@ interface UseMetamaskSmartAccountReturn {
 }
 
 export default function useMetamaskSmartAccount(): UseMetamaskSmartAccountReturn {
-  const { address, connector } = useAccount();
+  const { address } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
 
@@ -22,13 +22,13 @@ export default function useMetamaskSmartAccount(): UseMetamaskSmartAccountReturn
     isLoading,
     error,
   } = useQuery({
-    queryKey: ["metamaskSmartAccount", address],
+    queryKey: ['metamaskSmartAccount', address],
     queryFn: async (): Promise<MetaMaskSmartAccount> => {
       if (!address || !walletClient || !publicClient) {
-        throw new Error("Wallet not connected");
+        throw new Error('Wallet not connected');
       }
 
-      console.log("Creating smart account");
+      console.log('Creating smart account');
 
       const smartAccount = await toMetaMaskSmartAccount({
         client: publicClient,

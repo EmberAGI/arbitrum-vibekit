@@ -1,10 +1,10 @@
 /**
  * Connection Management Hook
- * 
+ *
  * Handles A2A agent connection and connection state
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback } from 'react';
 
 interface UseConnectionReturn {
   agentCardUrl: string;
@@ -19,34 +19,32 @@ interface UseConnectionReturn {
 
 export function useConnection(): UseConnectionReturn {
   const [agentCardUrl, setAgentCardUrl] = useState(
-    process.env.NEXT_PUBLIC_AGENT_CARD_URL || "http://localhost:3001"
+    process.env.NEXT_PUBLIC_AGENT_CARD_URL || 'http://localhost:3001',
   );
   const [isA2AConnected, setIsA2AConnected] = useState(false);
   const [isA2AConnecting, setIsA2AConnecting] = useState(false);
   const [agentCard, setAgentCard] = useState<any>(null);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  const [agentEndpoint, setAgentEndpoint] = useState<string>("");
+  const [validationErrors, _setValidationErrors] = useState<string[]>([]);
+  const [agentEndpoint, setAgentEndpoint] = useState<string>('');
 
   const handleConnect = useCallback(async () => {
     if (!agentCardUrl.trim()) {
-      alert("Please enter an agent card URL.");
+      alert('Please enter an agent card URL.');
       return;
     }
 
     let url = agentCardUrl.trim();
     if (!/^[a-zA-Z]+:\/\//.test(url)) {
-      url = "http://" + url;
+      url = 'http://' + url;
     }
 
     try {
       const urlObj = new URL(url);
-      if (urlObj.protocol !== "http:" && urlObj.protocol !== "https:") {
-        throw new Error("Protocol must be http or https.");
+      if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+        throw new Error('Protocol must be http or https.');
       }
-    } catch (error) {
-      alert(
-        "Invalid URL. Please enter a valid URL starting with http:// or https://."
-      );
+    } catch (_error) {
+      alert('Invalid URL. Please enter a valid URL starting with http:// or https://.');
       return;
     }
 
@@ -54,22 +52,20 @@ export function useConnection(): UseConnectionReturn {
 
     try {
       // Fetch agent card
-      const agentCardUrlFull = url.endsWith("/")
+      const agentCardUrlFull = url.endsWith('/')
         ? `${url}.well-known/agent-card.json`
         : `${url}/.well-known/agent-card.json`;
 
       const response = await fetch(agentCardUrlFull, {
-        method: "GET",
+        method: 'GET',
         headers: {
-          Accept: "application/json",
+          Accept: 'application/json',
         },
-        mode: "cors",
+        mode: 'cors',
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to fetch agent card: ${response.status} ${response.statusText}`
-        );
+        throw new Error(`Failed to fetch agent card: ${response.status} ${response.statusText}`);
       }
 
       const agentCardData = await response.json();
@@ -83,9 +79,7 @@ export function useConnection(): UseConnectionReturn {
       setIsA2AConnecting(false);
     } catch (error) {
       setIsA2AConnecting(false);
-      alert(
-        `Connection failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+      alert(`Connection failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }, [agentCardUrl]);
 
@@ -100,9 +94,3 @@ export function useConnection(): UseConnectionReturn {
     handleConnect,
   };
 }
-
-
-
-
-
-
