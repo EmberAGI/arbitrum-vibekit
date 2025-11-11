@@ -175,19 +175,16 @@ export const TokenizedYieldUserPositionSchema = z.object({
       'Details of the Principal Token (PT) held by the user',
     ),
     exactAmount: z.string().describe('Exact amount of Principal Token (PT) held'),
-    displayAmount: z.string().describe('Display amount of Principal Token (PT) held'),
   }),
   yt: z.object({
     tokenIdentifier: TokenIdentifierSchema.describe(
       'Details of the Yield Token (YT) held by the user',
     ),
     exactAmount: z.string().describe('Exact amount of Yield Token (YT) held'),
-    displayAmount: z.string().describe('Display amount of Yield Token (YT) held'),
     claimableRewards: z.array(
       z.object({
         token: TokenSchema.describe('Details of the reward token claimable by the user'),
         exactAmount: z.string().describe('Exact amount of reward token claimable'),
-        displayAmount: z.string().describe('Display amount of reward token claimable'),
       }),
     ),
   }),
