@@ -16,10 +16,8 @@ export type MintPtAndYtRequest = z.infer<typeof MintPtAndYtRequestSchema>;
 
 export const MintPtAndYtResponseSchema = z.object({
   exactPtAmount: z.string().describe('Amount of Principal Tokens (PT) minted'),
-  displayPtAmount: z.string().describe('Display amount of Principal Tokens (PT) minted'),
   ptTokenIdentifier: TokenIdentifierSchema.describe('Details of the minted Principal Token (PT)'),
   exactYtAmount: z.string().describe('Amount of Yield Tokens (YT) minted'),
-  displayYtAmount: z.string().describe('Display amount of Yield Tokens (YT) minted'),
   ytTokenIdentifier: TokenIdentifierSchema.describe('Details of the minted Yield Token (YT)'),
   transactions: z
     .array(TransactionPlanSchema)
@@ -41,7 +39,6 @@ export type BuyPtRequest = z.infer<typeof BuyPtRequestSchema>;
 
 export const BuyPtResponseSchema = z.object({
   exactPtAmount: z.string().describe('Amount of Principal Tokens (PT) minted'),
-  displayPtAmount: z.string().describe('Display amount of Principal Tokens (PT) minted'),
   ptTokenIdentifier: TokenIdentifierSchema.describe('Details of the minted Principal Token (PT)'),
   transactions: z
     .array(TransactionPlanSchema)
@@ -63,7 +60,6 @@ export type BuyYtRequest = z.infer<typeof BuyYtRequestSchema>;
 
 export const BuyYtResponseSchema = z.object({
   exactYtAmount: z.string().describe('Amount of Yield Tokens (YT) minted'),
-  displayYtAmount: z.string().describe('Display amount of Yield Tokens (YT) minted'),
   ytTokenIdentifier: TokenIdentifierSchema.describe('Details of the minted Yield Token (YT)'),
   transactions: z
     .array(TransactionPlanSchema)
@@ -83,9 +79,10 @@ export const SellPtRequestSchema = z.object({
 export type SellPtRequest = z.infer<typeof SellPtRequestSchema>;
 
 export const SellPtResponseSchema = z.object({
-  tokenOut: TokenSchema.describe('Details of the token received from selling PT'),
+  tokenOutIdentifier: TokenIdentifierSchema.describe(
+    'Details of the token received from selling PT',
+  ),
   exactAmountOut: z.string().describe('Exact amount of token received from selling PT'),
-  displayAmountOut: z.string().describe('Display amount of token received from selling PT'),
   transactions: z
     .array(TransactionPlanSchema)
     .describe('Array of transaction plans required to complete the selling process'),
@@ -104,9 +101,10 @@ export const SellYtRequestSchema = z.object({
 export type SellYtRequest = z.infer<typeof SellYtRequestSchema>;
 
 export const SellYtResponseSchema = z.object({
-  tokenOut: TokenSchema.describe('Details of the token received from selling YT'),
+  tokenOutIdentifier: TokenIdentifierSchema.describe(
+    'Details of the token received from selling YT',
+  ),
   exactAmountOut: z.string().describe('Exact amount of token received from selling YT'),
-  displayAmountOut: z.string().describe('Display amount of token received from selling YT'),
   transactions: z
     .array(TransactionPlanSchema)
     .describe('Array of transaction plans required to complete the selling process'),
@@ -125,7 +123,6 @@ export const RedeemPtResponseSchema = z.object({
     'Details of the underlying token received upon redemption',
   ),
   exactUnderlyingAmount: z.string().describe('Exact amount of underlying token received'),
-  displayUnderlyingAmount: z.string().describe('Display amount of underlying token received'),
   transactions: z
     .array(TransactionPlanSchema)
     .describe('Array of transaction plans required to complete the redemption process'),
@@ -145,15 +142,6 @@ export const ClaimRewardsResponseSchema = z.object({
 });
 export type ClaimRewardsResponse = z.infer<typeof ClaimRewardsResponseSchema>;
 
-export const TokenizedYieldMarketSchema = z.object({
-  marketIdentifier: TokenIdentifierSchema.describe('Unique identifier for the yield market'),
-  ptToken: TokenSchema.describe('Details of the Principal Token (PT)'),
-  ytToken: TokenSchema.describe('Details of the Yield Token (YT)'),
-  underlyingToken: TokenSchema.describe('Details of the underlying asset token'),
-  expiry: z.string().describe('Expiry date of the yield market in ISO 8601 format'),
-  details: z.object({}),
-});
-
 export const MarketTokenizedYieldRequestSchema = z.object({
   chainIds: z
     .array(z.string().describe('Blockchain network identifier'))
@@ -161,21 +149,38 @@ export const MarketTokenizedYieldRequestSchema = z.object({
 });
 export type MarketTokenizedYieldRequest = z.infer<typeof MarketTokenizedYieldRequestSchema>;
 
+export const TokenizedYieldMarketSchema = z.object({
+  marketIdentifier: TokenIdentifierSchema.describe('Unique identifier for the yield market'),
+  ptTokenIdentifier: TokenIdentifierSchema.describe('Details of the Principal Token (PT)'),
+  ytTokenIdentifier: TokenIdentifierSchema.describe('Details of the Yield Token (YT)'),
+  underlyingTokenIdentifier: TokenIdentifierSchema.describe(
+    'Details of the underlying asset token',
+  ),
+  expiry: z.string().describe('Expiry date of the yield market in ISO 8601 format'),
+  details: z.object({}),
+});
+export type TokenizedYieldMarket = z.infer<typeof TokenizedYieldMarketSchema>;
+
 export const MarketTokenizedYieldResponseSchema = z.object({
   markets: z
     .array(TokenizedYieldMarketSchema)
     .describe('Array of tokenized yield markets matching the request criteria'),
 });
+export type MarketTokenizedYieldResponse = z.infer<typeof MarketTokenizedYieldResponseSchema>;
 
 export const TokenizedYieldUserPositionSchema = z.object({
   marketIdentifier: TokenIdentifierSchema.describe('Unique identifier for the yield market'),
   pt: z.object({
-    token: TokenSchema.describe('Details of the Principal Token (PT) held by the user'),
+    tokenIdentifier: TokenIdentifierSchema.describe(
+      'Details of the Principal Token (PT) held by the user',
+    ),
     exactAmount: z.string().describe('Exact amount of Principal Token (PT) held'),
     displayAmount: z.string().describe('Display amount of Principal Token (PT) held'),
   }),
   yt: z.object({
-    token: TokenSchema.describe('Details of the Yield Token (YT) held by the user'),
+    tokenIdentifier: TokenIdentifierSchema.describe(
+      'Details of the Yield Token (YT) held by the user',
+    ),
     exactAmount: z.string().describe('Exact amount of Yield Token (YT) held'),
     displayAmount: z.string().describe('Display amount of Yield Token (YT) held'),
     claimableRewards: z.array(
