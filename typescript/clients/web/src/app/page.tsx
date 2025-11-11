@@ -238,7 +238,7 @@ export default function Home() {
       const workflowName = metadata?.workflowName || "Workflow";
 
       // Track the last message ID for this session
-      let lastMessageIdRef: string | null = null;
+      const lastMessageIdRef: string | null = null;
 
       console.log("[Main] ===== CHILD TASK DETECTED =====");
       console.log("[Main] Parent Session:", parentSessionId);

@@ -121,7 +121,7 @@ export function useMCPConnection(): UseMCPConnectionReturn {
           server.url || ""
         )}&transportType=${server.transport}`;
 
-        let sessionId = crypto.randomUUID();
+        const sessionId = crypto.randomUUID();
         localStorage.setItem(`mcp-session-${server.url}`, sessionId);
         console.log(`[MCP] Generated new session ID: ${sessionId}`);
 
