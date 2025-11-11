@@ -142,55 +142,82 @@ export const MessageRenderer = ({
     const { result, toolCallId, toolName } = toolInvocation;
     console.log('[MessageRenderer] Tool result - toolName:', toolName);
     console.log('[MessageRenderer] Tool result - full result:', JSON.stringify(result, null, 2));
-    // Handle MCP response structure: result.content[0].resource.text
-    let rawContent = result?.result?.content?.[0];
-    
-    const toolInvocationParsableString = rawContent?.text
-      ? rawContent.text
-      : rawContent?.resource?.text
-        ? rawContent.resource.text
-        : typeof result?.result === 'string'
-          ? result.result
-          : result?.result
-            ? JSON.stringify(result.result)
-            : '';
-    
-    console.log('[MessageRenderer] Parsable string:', toolInvocationParsableString);
     
     let toolInvocationResult: any = null;
     
-    // First try: Parse as JSON string
-    if (toolInvocationParsableString) {
+    // First try: MCP A2A response format - result.content[0].resource.text (most common for skills)
+    if (result?.content?.[0]?.resource?.text) {
+      console.log('[MessageRenderer] Found MCP A2A resource format');
       try {
-        toolInvocationResult = JSON.parse(toolInvocationParsableString);
+        toolInvocationResult = JSON.parse(result.content[0].resource.text);
+        console.log('[MessageRenderer] Successfully parsed A2A Task from resource.text');
       } catch (_e) {
-        console.log('[MessageRenderer] JSON parse failed');
+        console.log('[MessageRenderer] Failed to parse resource.text as JSON');
       }
     }
     
-    // Second try: If result is already an object, use it directly
-    if (!toolInvocationResult && result?.result && typeof result.result === 'object' && !Array.isArray(result.result)) {
-      console.log('[MessageRenderer] Using result as object directly');
-      toolInvocationResult = result.result;
-    }
-    
-    // Third try: Check if result.content[0].resource exists with text
+    // Second try: Nested result.content[0].resource.text (some MCP wrappers)
     if (!toolInvocationResult && result?.result?.content?.[0]?.resource?.text) {
-      console.log('[MessageRenderer] Extracting from MCP resource format');
+      console.log('[MessageRenderer] Found nested MCP resource format');
       try {
         toolInvocationResult = JSON.parse(result.result.content[0].resource.text);
+        console.log('[MessageRenderer] Successfully parsed from nested resource.text');
       } catch (_e) {
-        console.log('[MessageRenderer] Failed to parse resource text');
+        console.log('[MessageRenderer] Failed to parse nested resource text');
+      }
+    }
+    
+    // Third try: Direct text content
+    if (!toolInvocationResult && result?.content?.[0]?.text) {
+      console.log('[MessageRenderer] Found direct text content');
+      try {
+        toolInvocationResult = JSON.parse(result.content[0].text);
+      } catch (_e) {
+        console.log('[MessageRenderer] Failed to parse direct text');
+      }
+    }
+    
+    // Fourth try: If result is already a Task object (direct return)
+    if (!toolInvocationResult && result?.result && typeof result.result === 'object' && !Array.isArray(result.result)) {
+      console.log('[MessageRenderer] Using result as object directly');
+      // Check if it's already a Task with artifacts
+      if (result.result.artifacts || result.result.kind === 'task') {
+        toolInvocationResult = result.result;
+      } else {
+        toolInvocationResult = result.result;
+      }
+    }
+    
+    // Fifth try: String result that needs parsing
+    if (!toolInvocationResult && typeof result?.result === 'string') {
+      console.log('[MessageRenderer] Result is a string, attempting to parse');
+      try {
+        toolInvocationResult = JSON.parse(result.result);
+      } catch (_e) {
+        console.log('[MessageRenderer] Failed to parse string result');
       }
     }
     
     // Fallback
     if (!toolInvocationResult) {
       console.log('[MessageRenderer] No result found, creating raw wrapper');
-      toolInvocationResult = { raw: result?.result };
+      toolInvocationResult = { raw: result?.result || result };
     }
-    const getKeyFromResult = (key: string) =>
-      toolInvocationResult?.artifacts?.[0]?.parts?.[0]?.data?.[key] ?? null;
+    const getKeyFromResult = (key: string) => {
+      // Try extracting from artifact parts data
+      const artifactData = toolInvocationResult?.artifacts?.[0]?.parts?.[0]?.data;
+      if (artifactData?.[key]) {
+        return artifactData[key];
+      }
+      // Fallback: if artifactData is the full object (like txArtifact), extract from it
+      if (artifactData?.txPreview && key === 'txPreview') {
+        return artifactData.txPreview;
+      }
+      if (artifactData?.jobData && key === 'jobData') {
+        return artifactData.jobData;
+      }
+      return null;
+    };
 
     // Default keys
     const txPlan = getKeyFromResult('txPlan');
@@ -244,11 +271,20 @@ export const MessageRenderer = ({
             />
           )
         ) : (() => {
-          const isAutoSynth = toolName.includes('autosynth') || toolName.includes('createTimeJob') || toolName.includes('job-management-skill') || toolName.includes('createSafeWallet') || getArtifact()?.name === 'triggerx-job-plan' || getArtifact()?.name === 'safe-wallet-creation';
+          const artifactName = getArtifact()?.name;
+          const isAutoSynth = 
+            toolName.includes('autosynth') || 
+            toolName.includes('createTimeJob') || 
+            toolName.includes('deleteJob') ||
+            toolName.includes('job-management-skill') || 
+            toolName.includes('createSafeWallet') || 
+            artifactName === 'triggerx-job-plan' || 
+            artifactName === 'triggerx-delete-plan' ||
+            artifactName === 'safe-wallet-creation';
           console.log('[MessageRenderer] AutoSynth condition check:', {
             toolName,
             isAutoSynth,
-            artifactName: getArtifact()?.name,
+            artifactName,
             hasResult: !!toolInvocationResult
           });
           return isAutoSynth;
@@ -256,7 +292,7 @@ export const MessageRenderer = ({
           toolInvocationResult && (
             <AutoSynth
               txPreview={getKeyFromResult('txPreview') || txPreview}
-              jobData={getKeyFromResult('jobData') || getArtifact()?.parts?.[0]?.data}
+              jobData={getKeyFromResult('jobData') || getArtifact()?.parts?.[0]?.data?.jobData || getArtifact()?.parts?.[0]?.data}
             />
           )
         ) : (

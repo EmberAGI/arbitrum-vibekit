@@ -5,50 +5,75 @@
 
 import { z } from 'zod';
 import { TriggerXClient } from 'sdk-triggerx';
-import { getJobData } from 'sdk-triggerx/dist/api/getjob.js';
+import { getJobsByUserAddress } from 'sdk-triggerx/dist/api/getjob.js';
 import { getUserData } from 'sdk-triggerx/dist/api/getUserData.js';
+
+const ethereumAddressRegex = /^0x[a-fA-F0-9]{40}$/;
 
 const GetJobsSchema = z.object({
   jobId: z.string().optional().describe('Specific job ID to retrieve (optional - returns all jobs if not provided)'),
+  userAddress: z
+    .string()
+    .regex(ethereumAddressRegex)
+    .optional()
+    .describe('Connected wallet address (auto-detected when omitted).'),
 });
 
 export async function getJobs(params: z.infer<typeof GetJobsSchema>, triggerxClient: TriggerXClient) {
   try {
-    console.error('GetJobs executing with input:', JSON.stringify(params, null, 2));
+    console.log('📤 [MCP getJobs] Tool invoked');
+    console.log('📝 [MCP getJobs] Input:', JSON.stringify(params, null, 2));
     
-    // Get user job data using SDK
-    console.error('Calling SDK getJobData...');
-    const result = await getJobData(triggerxClient);
-    console.error('Raw SDK result:', JSON.stringify(result, null, 2));
+    const normalizeAddress = (value: unknown) => {
+      if (typeof value !== 'string') {
+        return undefined;
+      }
+      const trimmed = value.trim();
+      return ethereumAddressRegex.test(trimmed) ? trimmed : undefined;
+    };
+
+    // Get user address from params
+    let userAddress = normalizeAddress(params.userAddress);
+
+    if (!userAddress) {
+      console.error('❌ [MCP getJobs] No user address provided. userAddress parameter is required.');
+      throw new Error('No connected wallet address found. Please provide userAddress parameter.');
+    }
+
+    console.log('🚀 [MCP getJobs] Calling SDK getJobsByUserAddress for address:', userAddress);
+    const result = await getJobsByUserAddress(triggerxClient, userAddress);
+    console.log('📦 [MCP getJobs] Raw SDK result:', JSON.stringify(result, null, 2)); 
     
     // Handle different response structures
     let jobs = {};
     if (result.success) {
       jobs = result.jobs || {};
-      console.error('API call successful');
+      console.log('✅ [MCP getJobs] API call successful');
     } else {
-      console.error('API call failed:', result.error);
+      console.log('❌ [MCP getJobs] API call failed:', result.error);
       
       // Try getUserData as fallback to get user info and job IDs
       try {
-        console.error('Trying getUserData as fallback...');
-        const userData = await getUserData(triggerxClient, 'demo-user'); // Note: Real user address should come from frontend
-        console.error('User data:', JSON.stringify(userData, null, 2));
+        console.log('🔄 [MCP getJobs] Trying getUserData as fallback...');
+        const userData = await getUserData(triggerxClient, userAddress);
+        console.log('👤 [MCP getJobs] User data:', JSON.stringify(userData, null, 2));
         
-        if (userData && userData.data && userData.data.job_ids && userData.data.job_ids.length > 0) {
-          jobs = { userData: userData.data, jobIds: userData.data.job_ids };
-          console.error('Found job IDs via getUserData:', userData.data.job_ids);
+        // Handle SDK response structure - userData is wrapped in a response object
+        const actualUserData = (userData as any).data || userData;
+        if (actualUserData && actualUserData.job_ids && actualUserData.job_ids.length > 0) {
+          jobs = { userData: actualUserData, jobIds: actualUserData.job_ids };
+          console.log('✅ [MCP getJobs] Found job IDs via getUserData:', actualUserData.job_ids);
         } else {
-          jobs = { userData: userData.data };
-          console.error('No job IDs found in user data');
+          jobs = { userData: actualUserData };
+          console.log('ℹ️ [MCP getJobs] No job IDs found in user data');
         }
       } catch (userDataError) {
-        console.error('getUserData also failed:', userDataError);
+        console.log('❌ [MCP getJobs] getUserData also failed:', userDataError);
         jobs = {};
       }
     }
 
-    console.error('Extracted jobs:', JSON.stringify(jobs, null, 2));
+    console.log('📥 [MCP getJobs] Extracted jobs:', JSON.stringify(jobs, null, 2));
 
     const jobCount = Array.isArray(jobs) ? jobs.length : jobs ? 1 : 0;
     const message = params.jobId
@@ -63,7 +88,7 @@ export async function getJobs(params: z.infer<typeof GetJobsSchema>, triggerxCli
       data: jobs,
     };
   } catch (error) {
-    console.error('GetJobs error:', error);
+    console.error('❌ [MCP getJobs] Error while retrieving jobs:', error);
     throw new Error(`Failed to retrieve jobs: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

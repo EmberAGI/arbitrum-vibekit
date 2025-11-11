@@ -105,12 +105,32 @@ async function getTool(serverUrl: string, context?: { walletAddress?: string }) 
         console.log("Context walletAddress:", context?.walletAddress);
         
         // For autosynth tools, automatically inject userAddress if available
+        // Check if this is an autosynth tool by checking tool name patterns or server URL
         let finalArgs = args;
-        if (mcptool.name.includes('autosynth') || mcptool.name.includes('createTimeJob')) {
+        const isAutosynthTool = 
+          mcptool.name.includes('autosynth') || 
+          mcptool.name.includes('createTimeJob') ||
+          mcptool.name.includes('getJobs') ||
+          mcptool.name.includes('listJobs') ||
+          mcptool.name.includes('job') ||
+          mcptool.name.includes('Job') ||
+          mcptool.name.includes('listing') ||
+          serverUrl.includes('autosynth') ||
+          serverUrl.includes('3041'); // autosynth default port
+        
+        if (isAutosynthTool) {
           const walletAddress = context?.walletAddress;
-          if (walletAddress && !args.userAddress) {
-            finalArgs = { ...args, userAddress: walletAddress };
-            console.log("Injected userAddress for autosynth tool:", walletAddress);
+          if (walletAddress) {
+            // Inject userAddress into args (works for both skills and tools)
+            if (!args.userAddress) {
+              finalArgs = { ...args, userAddress: walletAddress };
+              console.log(`✅ Injected userAddress for autosynth tool/skill (${mcptool.name}):`, walletAddress);
+              console.log(`📦 Final args:`, JSON.stringify(finalArgs, null, 2));
+            } else {
+              console.log(`ℹ️ userAddress already present in args for ${mcptool.name}`);
+            }
+          } else {
+            console.log(`⚠️ No walletAddress in context for ${mcptool.name}`);
           }
         }
         

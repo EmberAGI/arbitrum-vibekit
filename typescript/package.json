@@ -34,7 +34,9 @@
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "@viem/anvil": "^0.0.10",
+    "c8": "catalog:",
     "chai": "^4.3.10",
+    "dotenv": "catalog:",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
     "globals": "^16.1.0",
@@ -42,13 +44,11 @@
     "mocha-suppress-logs": "^0.5.1",
     "prettier": "^3.5.3",
     "prool": "^0.0.24",
-    "dotenv": "catalog:",
+    "sdk-triggerx": "^0.1.26",
     "tsx": "^4.6.2",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.32.1",
-    "vitest": "catalog:",
-    "c8": "catalog:",
-    "sdk-triggerx": "^0.1.19"
+    "vitest": "catalog:"
   },
   "dependencies": {
     "@google-a2a/types": "workspace:*",

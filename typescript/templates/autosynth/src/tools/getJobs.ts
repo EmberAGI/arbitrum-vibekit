@@ -8,11 +8,21 @@ import type { VibkitToolDefinition } from 'arbitrum-vibekit-core';
 import { createSuccessTask, createErrorTask } from 'arbitrum-vibekit-core';
 import type { TriggerXContext } from '../context/types.js';
 import type { JobData } from '../types.js';
-import { getJobData } from 'sdk-triggerx/dist/api/getjob.js';
+import { getJobsByUserAddress } from 'sdk-triggerx/dist/api/getjob.js';
 import { getUserData } from 'sdk-triggerx/dist/api/getUserData.js';
 
+const ethereumAddressRegex = /^0x[a-fA-F0-9]{40}$/;
+
 const GetJobsInputSchema = z.object({
-  jobId: z.string().optional().describe('Specific job ID to retrieve (optional - returns all jobs if not provided)'),
+  jobId: z
+    .string()
+    .optional()
+    .describe('Specific job ID to retrieve (optional - returns all jobs if not provided)'),
+  userAddress: z
+    .string()
+    .regex(ethereumAddressRegex)
+    .optional()
+    .describe('Connected wallet address (auto-detected when omitted).'),
 });
 
 export const getJobsTool: VibkitToolDefinition<typeof GetJobsInputSchema, any, TriggerXContext, any> = {
@@ -39,12 +49,94 @@ export const getJobsTool: VibkitToolDefinition<typeof GetJobsInputSchema, any, T
         console.log('🔑 [getJobs] API key present on client:', !!(context.custom.triggerxClient as any).apiKey);
       } catch (_) {}
 
-      // Get user job data using SDK
-      console.log('🚀 [getJobs] Calling SDK getJobData...');
+      const normalizeAddress = (value: unknown) => {
+        if (typeof value !== 'string') {
+          return undefined;
+        }
+        const trimmed = value.trim();
+        return ethereumAddressRegex.test(trimmed) ? trimmed : undefined;
+      };
+
+      // Deep search for wallet address in context
+      const searchContextForAddress = (obj: any, path = 'root'): string | undefined => {
+        if (!obj || typeof obj !== 'object') return undefined;
+        
+        // Check common address field names
+        const addressFields = ['userAddress', 'walletAddress', 'connectedWalletAddress', 'address', 'userAddress', 'wallet'];
+        for (const field of addressFields) {
+          if (obj[field] && typeof obj[field] === 'string') {
+            const normalized = normalizeAddress(obj[field]);
+            if (normalized) {
+              console.log(`✅ [getJobs] Found address at ${path}.${field}: ${normalized}`);
+              return normalized;
+            }
+          }
+        }
+        
+        // Recursively search nested objects (limit depth to avoid infinite loops)
+        if (path.split('.').length < 5) {
+          for (const key in obj) {
+            if (key !== 'triggerxClient' && typeof obj[key] === 'object' && obj[key] !== null) {
+              const found = searchContextForAddress(obj[key], `${path}.${key}`);
+              if (found) return found;
+            }
+          }
+        }
+        
+        return undefined;
+      };
+
+      const customContext = context.custom;
+      const skillInput = (context as any).skillInput ?? {};
+      const sessionContext = (context as any).session ?? {};
+      const rawContext = context as any;
+
+
+
+      // Try all known paths first - prioritize skillInput since that's where the skill passes it
+      let userAddress =
+        normalizeAddress(skillInput?.userAddress) ??  // Check skillInput first (from skill)
+        normalizeAddress(input.userAddress) ??        // Then tool input
+        normalizeAddress(skillInput?.walletAddress) ??
+        normalizeAddress(skillInput?.connectedWalletAddress) ??
+        normalizeAddress(skillInput?.address) ??
+        normalizeAddress((customContext as any)?.userAddress) ??
+        normalizeAddress((customContext as any)?.walletAddress) ??
+        normalizeAddress((customContext as any)?.connectedWalletAddress) ??
+        normalizeAddress(sessionContext?.walletAddress) ??
+        normalizeAddress(sessionContext?.user?.walletAddress) ??
+        normalizeAddress(sessionContext?.user?.address) ??
+        normalizeAddress(rawContext?.walletAddress) ??
+        normalizeAddress(rawContext?.userAddress) ??
+        normalizeAddress(rawContext?.connectedWalletAddress);
+
+      // If still not found, do deep search
+      if (!userAddress) {
+        console.log('🔍 [getJobs] Address not found in known paths, doing deep search...');
+        userAddress = searchContextForAddress(context);
+      }
+
+      if (!userAddress && customContext?.signer) {
+        try {
+          const signerAddress = await customContext.signer.getAddress();
+          userAddress = normalizeAddress(signerAddress);
+        } catch (signerError) {
+          console.warn('⚠️ [getJobs] Failed to resolve address from signer:', signerError);
+        }
+      }
+
+      if (!userAddress) {
+        console.error('❌ [getJobs] Connected wallet address not available. Ensure the wallet is connected in the UI.');
+        return createErrorTask(
+          'getJobs',
+          new Error('No connected wallet address found. Please connect your wallet and try again.'),
+        );
+      }
+
+      console.log('🚀 [getJobs] Calling SDK getJobData for address:', userAddress);
       console.log('context.custom.triggerxClient', context.custom.triggerxClient);
-      console.log('context', context);
-      const result = await getJobData(context.custom.triggerxClient);
-      console.log('📦 [getJobs] Raw SDK result:', JSON.stringify(result, null, 2));
+      const result = await getJobsByUserAddress(context.custom.triggerxClient, userAddress);
+      console.log('📦 [getJobs] Raw SDK result:', JSON.stringify(result, null, 2)); 
       
       // Handle different response structures
       let jobs = {};
@@ -57,7 +149,7 @@ export const getJobsTool: VibkitToolDefinition<typeof GetJobsInputSchema, any, T
         // Try getUserData as fallback to get user info and job IDs
         try {
           console.log('🔄 [getJobs] Trying getUserData as fallback...');
-          const userData = await getUserData(context.custom.triggerxClient, 'demo-user'); // Note: Real user address should come from frontend
+          const userData = await getUserData(context.custom.triggerxClient, userAddress);
           console.log('👤 [getJobs] User data:', JSON.stringify(userData, null, 2));
           
           // Handle SDK response structure - userData is wrapped in a response object

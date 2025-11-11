@@ -93,7 +93,7 @@ export const jobManagementSkill = defineSkill({
     getUserDataTool,
   ],
 
-  // Explicit handler for CREATE operations to ensure ALL fields are passed to tools
+  // Explicit handler for CREATE and DELETE operations to ensure proper tool execution
   handler: async (input: any) => {
     console.log('🎯 JobManagement handler - operation:', input.operation, 'jobType:', input.jobType);
     
@@ -128,6 +128,23 @@ export const jobManagementSkill = defineSkill({
       
       // Call the actual tool with ALL extracted fields
       return await createTimeJobTool.execute(extracted, {} as any);
+    }
+    
+    // For DELETE operations, directly call deleteJobTool
+    // deleteJobTool doesn't need context - it just creates a transaction preview
+    if (input.operation === 'delete' && input.jobId) {
+      console.log('🗑️ JobManagement handler - DELETE operation for jobId:', input.jobId);
+      console.log('🔗 Calling deleteJobTool directly');
+      
+      const deleteInput = {
+        jobId: input.jobId,
+        chainId: input.chainId || '421614',
+        userAddress: input.userAddress,
+      };
+      
+      console.log('📦 Delete input:', JSON.stringify(deleteInput, null, 2));
+      // deleteJobTool doesn't require context - it just creates a preview artifact
+      return await deleteJobTool.execute(deleteInput, {} as any);
     }
     
     // For other operations, let LLM orchestrate

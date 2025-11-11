@@ -222,7 +222,7 @@ export function AutoSynth({
 
       // 1) Check if job exists before attempting delete
       try {
-        await getJobDataById(triggerxClient, String(jobIdToDelete));
+        await getJobDataById(triggerxClient, String(jobIdToDelete), address);
       } catch (_) {
         // Treat missing job as already deleted
         setDeleteSuccess(true);

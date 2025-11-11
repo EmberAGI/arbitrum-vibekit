@@ -37,7 +37,7 @@
     "express": "catalog:",
     "nanoid": "^5.0.7",
     "node-cron": "^3.0.3",
-    "sdk-triggerx": "^0.1.19",
+    "sdk-triggerx": "^0.1.26",
     "viem": "catalog:",
     "zod": "catalog:"
   },

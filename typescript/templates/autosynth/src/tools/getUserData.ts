@@ -7,7 +7,6 @@ import { z } from 'zod';
 import type { VibkitToolDefinition } from 'arbitrum-vibekit-core';
 import { createSuccessTask, createErrorTask } from 'arbitrum-vibekit-core';
 import type { TriggerXContext } from '../context/types.js';
-import type { UserData } from '../types.js';
 
 const GetUserDataInputSchema = z.object({
   address: z

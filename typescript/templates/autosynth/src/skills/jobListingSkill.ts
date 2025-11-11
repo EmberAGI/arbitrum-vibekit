@@ -9,6 +9,11 @@ import { getJobsTool } from '../tools/getJobs.js';
 
 const JobListingInputSchema = z.object({
   instruction: z.string().describe('Natural language request to list or view jobs'),
+  userAddress: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{40}$/)
+    .optional()
+    .describe('Connected wallet address (auto-detected when omitted).'),
 });
 
 export const jobListingSkill = defineSkill({

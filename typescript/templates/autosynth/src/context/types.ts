@@ -9,6 +9,8 @@ export interface TriggerXContext {
   triggerxClient: TriggerXClient;
   supportedChains: string[];
   signer?: Signer;
+  userAddress?: string;
+  walletAddress?: string;
 }
 
 export interface AutoSynthContext extends TriggerXContext {
