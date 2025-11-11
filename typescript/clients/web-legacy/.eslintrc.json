@@ -1,0 +1,24 @@
+{
+  "root": true,
+  "extends": [
+    "plugin:import/typescript",
+    "prettier",
+    "plugin:tailwindcss/recommended",
+    "next",
+    "next/core-web-vitals"
+  ],
+  "plugins": ["tailwindcss"],
+  "rules": {
+    "tailwindcss/no-custom-classname": "off",
+    "tailwindcss/classnames-order": "off"
+  },
+  "settings": {
+    "import/resolver": {
+      "typescript": {
+        "alwaysTryTypes": true,
+        "project": ["./tsconfig.json", "../../tsconfig.base.json"]
+      }
+    }
+  },
+  "ignorePatterns": ["**/components/ui/**", "lib/editor/diff.js", "tests/**", "lib/test-utils/**"]
+}
