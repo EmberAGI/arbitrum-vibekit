@@ -1,6 +1,10 @@
 {
   "version": 1,
-  "skills": ["./skills/general-assistant.md", "./skills/ember-onchain-actions.md"],
+  "skills": [
+    "./skills/general-assistant.md",
+    "./skills/ember-onchain-actions.md",
+    "./skills/camelot-clmm.md"
+  ],
   "registries": {
     "mcp": "./mcp.json",
     "workflows": "./workflow.json"
