@@ -3,7 +3,10 @@
 import React, { useState, useEffect } from "react";
 import { baseSepolia } from "wagmi/chains";
 import { useClient, useAccount as useParaAccount } from "@getpara/react-sdk";
-import { createParaViemClient, createParaAccount } from "@getpara/viem-v2-integration";
+import {
+  createParaViemClient,
+  createParaAccount,
+} from "@getpara/viem-v2-integration";
 import { useWalletClient } from "wagmi";
 import {
   createPublicClient,
@@ -129,22 +132,35 @@ export function UsdcTransfer({ address, isConnected }: UsdcTransferProps) {
 
       // Check if external EVM wallet is connected via Para
       const isExternalWallet = paraAccount?.external?.evm?.isConnected;
-      
-      if (isExternalWallet && typeof window !== 'undefined' && (window as any).ethereum) {
-        console.log("[UsdcTransfer] Using external wallet (via window.ethereum) with x402-axios");
-        console.log("[UsdcTransfer] External wallet address:", paraAccount?.external?.evm?.address);
-        
+
+      if (
+        isExternalWallet &&
+        typeof window !== "undefined" &&
+        (window as any).ethereum
+      ) {
+        console.log(
+          "[UsdcTransfer] Using external wallet (via window.ethereum) with x402-axios",
+        );
+        console.log(
+          "[UsdcTransfer] External wallet address:",
+          paraAccount?.external?.evm?.address,
+        );
+
         // Check current chain and switch to Base Sepolia if needed
         const ethereum = (window as any).ethereum;
-        const currentChainId = await ethereum.request({ method: 'eth_chainId' });
+        const currentChainId = await ethereum.request({
+          method: "eth_chainId",
+        });
         const targetChainId = `0x${baseSepolia.id.toString(16)}`; // Base Sepolia chain ID in hex
-        
+
         if (currentChainId !== targetChainId) {
-          console.log(`[UsdcTransfer] Chain mismatch. Current: ${currentChainId}, Expected: ${targetChainId}`);
+          console.log(
+            `[UsdcTransfer] Chain mismatch. Current: ${currentChainId}, Expected: ${targetChainId}`,
+          );
           try {
             // Try to switch to Base Sepolia
             await ethereum.request({
-              method: 'wallet_switchEthereumChain',
+              method: "wallet_switchEthereumChain",
               params: [{ chainId: targetChainId }],
             });
             console.log("[UsdcTransfer] Switched to Base Sepolia");
@@ -152,18 +168,20 @@ export function UsdcTransfer({ address, isConnected }: UsdcTransferProps) {
             // Chain not added to wallet, try to add it
             if (switchError.code === 4902) {
               await ethereum.request({
-                method: 'wallet_addEthereumChain',
-                params: [{
-                  chainId: targetChainId,
-                  chainName: 'Base Sepolia',
-                  nativeCurrency: {
-                    name: 'Ether',
-                    symbol: 'ETH',
-                    decimals: 18,
+                method: "wallet_addEthereumChain",
+                params: [
+                  {
+                    chainId: targetChainId,
+                    chainName: "Base Sepolia",
+                    nativeCurrency: {
+                      name: "Ether",
+                      symbol: "ETH",
+                      decimals: 18,
+                    },
+                    rpcUrls: ["https://sepolia.base.org"],
+                    blockExplorerUrls: ["https://sepolia.basescan.org"],
                   },
-                  rpcUrls: ['https://sepolia.base.org'],
-                  blockExplorerUrls: ['https://sepolia.basescan.org'],
-                }],
+                ],
               });
               console.log("[UsdcTransfer] Added and switched to Base Sepolia");
             } else {
@@ -171,7 +189,7 @@ export function UsdcTransfer({ address, isConnected }: UsdcTransferProps) {
             }
           }
         }
-        
+
         // Create viem wallet client from window.ethereum provider
         signingClient = createWalletClient({
           account: address as `0x${string}`,
@@ -181,11 +199,17 @@ export function UsdcTransfer({ address, isConnected }: UsdcTransferProps) {
       } else if (walletClient) {
         // Fallback to wagmi wallet client if available
         console.log("[UsdcTransfer] Using wagmi wallet client with x402-axios");
-        console.log("[UsdcTransfer] Chain:", walletClient.chain?.id, walletClient.chain?.name);
+        console.log(
+          "[UsdcTransfer] Chain:",
+          walletClient.chain?.id,
+          walletClient.chain?.name,
+        );
         console.log("[UsdcTransfer] Account:", walletClient.account?.address);
         signingClient = walletClient;
       } else if (paraClient) {
-        console.log("[UsdcTransfer] Using Para embedded wallet client with x402-axios");
+        console.log(
+          "[UsdcTransfer] Using Para embedded wallet client with x402-axios",
+        );
         // Create Para's viem wallet client for signing (embedded wallets only)
         const viemAccount = createParaAccount(paraClient);
         signingClient = createParaViemClient(paraClient, {
@@ -209,13 +233,10 @@ export function UsdcTransfer({ address, isConnected }: UsdcTransferProps) {
       );
 
       // Make request - x402 interceptor handles payment flow automatically
-      const response = await axiosInstance.post(
-        "/api/usdc-pay",
-        {
-          to: recipient,
-          amount: amount,
-        },
-      );
+      const response = await axiosInstance.post("/api/usdc-pay", {
+        to: recipient,
+        amount: amount,
+      });
 
       // Payment successful
       setIsSuccess(true);
@@ -238,12 +259,14 @@ export function UsdcTransfer({ address, isConnected }: UsdcTransferProps) {
               ?.data?.error ||
             (err as { message?: string })?.message ||
             "Failed to process gasless transfer";
-      
+
       // Check if it's a timeout error
-      if (errorMessage.toLowerCase().includes("timeout") || 
-          errorMessage.toLowerCase().includes("timed out")) {
+      if (
+        errorMessage.toLowerCase().includes("timeout") ||
+        errorMessage.toLowerCase().includes("timed out")
+      ) {
         setLocalError(
-          "Payment authorization timed out. Please try again and approve the payment promptly in the Para wallet popup (within 30 seconds)."
+          "Payment authorization timed out. Please try again and approve the payment promptly in the Para wallet popup (within 30 seconds).",
         );
       } else {
         setLocalError(errorMessage);

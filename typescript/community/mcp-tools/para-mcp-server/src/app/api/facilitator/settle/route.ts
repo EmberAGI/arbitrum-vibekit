@@ -60,7 +60,10 @@ export async function POST(request: NextRequest) {
   const corsHeaders = getCorsHeaders(request.headers.get("origin"));
   const body = await request.json();
 
-  console.log("[Facilitator Settle] Request payload:", JSON.stringify(body, null, 2));
+  console.log(
+    "[Facilitator Settle] Request payload:",
+    JSON.stringify(body, null, 2),
+  );
 
   try {
     // Generate CDP Bearer token
@@ -70,7 +73,7 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${bearerToken}`,
+        Authorization: `Bearer ${bearerToken}`,
       },
       body: JSON.stringify(body),
     });
@@ -78,7 +81,10 @@ export async function POST(request: NextRequest) {
     const result = await response.json();
 
     console.log("[Facilitator Settle] Response status:", response.status);
-    console.log("[Facilitator Settle] Response body:", JSON.stringify(result, null, 2));
+    console.log(
+      "[Facilitator Settle] Response body:",
+      JSON.stringify(result, null, 2),
+    );
 
     if (!response.ok) {
       console.error("[Facilitator Settle] Error details:", {
@@ -97,8 +103,11 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("[Facilitator Settle] Error:", error);
     return NextResponse.json(
-      { error: "Failed to settle payment", details: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500, headers: corsHeaders }
+      {
+        error: "Failed to settle payment",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500, headers: corsHeaders },
     );
   }
 }

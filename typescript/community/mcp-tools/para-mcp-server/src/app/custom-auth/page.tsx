@@ -1,0 +1,702 @@
+"use client";
+
+import {
+  openPopup,
+  useAccount,
+  useClient,
+  useWallet,
+} from "@getpara/react-sdk";
+import { useEffect, useState } from "react";
+import { useConnect, useDisconnect } from "wagmi";
+
+type AuthStep = "select" | "authenticated";
+
+export default function CustomAuthPage() {
+  const para = useClient();
+  const account = useAccount();
+  const { data: wallet } = useWallet();
+  const { connectors, connect } = useConnect();
+  const { disconnect } = useDisconnect();
+
+  const [authStep, setAuthStep] = useState<AuthStep>("select");
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [message, setMessage] = useState("");
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const [walletAddress, setWalletAddress] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
+  const [requiresOtp, setRequiresOtp] = useState<boolean>(false);
+  const [verificationCode, setVerificationCode] = useState<string>("");
+  const [pendingAuthUrl, setPendingAuthUrl] = useState<string | null>(null);
+
+  // Check login status and get wallet
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        if (!para) {
+          if (active) setIsLoggedIn(false);
+          return;
+        }
+        const authed = await para.isFullyLoggedIn();
+        if (active) {
+          setIsLoggedIn(authed);
+          if (authed) {
+            setAuthStep("authenticated");
+            const wallets = Object.values(await para.getWallets());
+            if (wallets.length > 0 && wallets[0].address) {
+              setWalletAddress(wallets[0].address as string);
+            }
+          }
+        }
+      } catch {
+        if (active) setIsLoggedIn(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [para]);
+
+  useEffect(() => {
+    if (!para) return;
+    const shouldPoll = !!pendingAuthUrl || (message && message.includes("Authentication opened in a new tab"));
+    if (!shouldPoll) return;
+    let active = true;
+    let intervalId: any;
+    const poll = async () => {
+      try {
+        await para.touchSession?.();
+        const authed = await para.isFullyLoggedIn();
+        if (authed && active) {
+          let wallets = Object.values(await para.getWallets());
+          if (wallets.length === 0) {
+            try {
+              await para.createWallet({ type: "EVM" as any, skipDistribute: false });
+              wallets = Object.values(await para.getWallets());
+            } catch {}
+          }
+          if (wallets.length > 0) {
+            const evmWallet = (wallets as any[]).find((w) => (w as any).type === "EVM" || !(w as any).type);
+            if ((evmWallet as any)?.address) setWalletAddress((evmWallet as any).address as string);
+          }
+          setIsLoggedIn(true);
+          setAuthStep("authenticated");
+          setStatus("idle");
+          setMessage("Successfully logged in with Para!");
+          setPendingAuthUrl(null);
+          clearInterval(intervalId);
+          active = false;
+        }
+      } catch {}
+    };
+    poll();
+    intervalId = setInterval(poll, 2000);
+    const onFocus = () => {
+      void poll();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      active = false;
+      clearInterval(intervalId);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [para, pendingAuthUrl, message]);
+
+  // Para Authentication Flow (Email/Passkey via Para's hosted UI)
+  const handleParaLogin = async () => {
+    if (!email.trim()) {
+      setStatus("error");
+      setMessage("Please enter your email address");
+      return;
+    }
+
+    setStatus("loading");
+    setMessage("");
+
+    try {
+      if (!para) throw new Error("Para client not ready");
+
+      const authed = await para.isFullyLoggedIn();
+      if (!authed) {
+        // v2 API: Use signUpOrLogIn with the user's email
+        const authState = await (para as any).signUpOrLogIn?.({
+          auth: { email: email.trim() },
+        });
+
+        // Passkey/password/PIN signup flow: no loginUrl yet, user must enter OTP
+        if (authState?.stage === "verify" && !authState?.loginUrl) {
+          setRequiresOtp(true);
+          setStatus("idle");
+          setMessage("We sent a 6-digit code to your email. Enter it below to continue.");
+          return;
+        } else if (authState?.loginUrl) {
+          console.log("[CustomAuth] Opening auth in new tab:", authState.loginUrl);
+          const opened = window.open(authState.loginUrl, "_blank");
+          if (!opened) {
+            setPendingAuthUrl(authState.loginUrl);
+            setStatus("idle");
+            setMessage(
+              "Opening authentication in this tab...",
+            );
+            window.location.assign(authState.loginUrl);
+            return;
+          }
+          setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
+          setPendingAuthUrl(authState.loginUrl);
+          const isSignup = authState?.nextStage === "signup";
+          if (isSignup) {
+            await (para as any).waitForWalletCreation?.({});
+          } else {
+            await (para as any).waitForLogin?.({});
+          }
+        } else if (authState?.passkeyUrl) {
+          const opened = window.open(authState.passkeyUrl, "_blank");
+          if (!opened) {
+            setPendingAuthUrl(authState.passkeyUrl);
+            setStatus("idle");
+            setMessage("Opening authentication in this tab...");
+            window.location.assign(authState.passkeyUrl);
+            return;
+          }
+          setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
+          setPendingAuthUrl(authState.passkeyUrl);
+          await (para as any).waitForLogin?.({});
+        }
+        
+        // Refresh session to get latest authentication state (v2 API)
+        await para.touchSession?.();
+      } else {
+        // Session says authed, but user may not have completed biometrics/passkey yet.
+        // If no wallets exist, force portal flow to complete setup.
+        let preWallets = Object.values(await para.getWallets());
+        if (preWallets.length === 0) {
+          const authState = await (para as any).signUpOrLogIn?.({
+            auth: { email: email.trim() },
+          });
+
+          if (authState?.stage === "verify" && !authState?.loginUrl) {
+            setRequiresOtp(true);
+            setStatus("idle");
+            setMessage("We sent a 6-digit code to your email. Enter it below to continue.");
+            return;
+          } else if (authState?.loginUrl) {
+            const opened = window.open(authState.loginUrl, "_blank");
+            if (!opened) {
+              setPendingAuthUrl(authState.loginUrl);
+              setStatus("idle");
+              setMessage("Opening authentication in this tab...");
+              window.location.assign(authState.loginUrl);
+              return;
+            }
+            setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
+            setPendingAuthUrl(authState.loginUrl);
+            const isSignup = authState?.nextStage === "signup";
+            if (isSignup) {
+              await (para as any).waitForWalletCreation?.({});
+            } else {
+              await (para as any).waitForLogin?.({});
+            }
+          } else if (authState?.passkeyUrl) {
+            const opened = window.open(authState.passkeyUrl, "_blank");
+            if (!opened) {
+              setPendingAuthUrl(authState.passkeyUrl);
+              setStatus("idle");
+              setMessage("Opening authentication in this tab...");
+              window.location.assign(authState.passkeyUrl);
+              return;
+            }
+            setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
+            setPendingAuthUrl(authState.passkeyUrl);
+            await (para as any).waitForLogin?.({});
+          }
+
+          await para.touchSession?.();
+        }
+      }
+
+      // After login, fetch wallets from server (v2 API)
+      let wallets = Object.values(await para.getWallets());
+      
+      // If no wallets exist, ensure biometrics are verified, then create EVM wallet
+      if (wallets.length === 0) {
+        console.log("[CustomAuth] No wallets found, creating EVM wallet...");
+        try {
+          await para.createWallet({ type: "EVM" as any, skipDistribute: false });
+        } catch (e) {
+          console.warn("[CustomAuth] createWallet failed, attempting to complete biometrics first", e);
+          // Guide user through the Para portal to complete biometrics setup
+          const authState2 = await (para as any).signUpOrLogIn?.({ auth: { email: email.trim() } });
+
+          if (authState2?.stage === "verify" && !authState2?.loginUrl) {
+            // Requires OTP first
+            setRequiresOtp(true);
+            setStatus("idle");
+            setMessage("Please enter the 6-digit code sent to your email to continue.");
+            return;
+          }
+
+          let portalUrl = authState2?.loginUrl || authState2?.passkeyUrl || authState2?.passwordUrl || authState2?.pinUrl;
+          if (portalUrl) {
+            const opened = window.open(portalUrl, "_blank");
+            if (!opened) {
+              setPendingAuthUrl(portalUrl);
+              setStatus("idle");
+              setMessage("Opening authentication in this tab...");
+              window.location.assign(portalUrl);
+              return;
+            }
+            setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
+            setPendingAuthUrl(portalUrl);
+            const isSignup2 = authState2?.nextStage === "signup";
+            if (isSignup2) {
+              await (para as any).waitForWalletCreation?.({});
+            } else {
+              await (para as any).waitForLogin?.({});
+            }
+          }
+
+          await para.touchSession?.();
+          wallets = Object.values(await para.getWallets());
+
+          // Retry creating EVM wallet if still none
+          if (wallets.length === 0) {
+            await para.createWallet({ type: "EVM" as any, skipDistribute: false });
+            wallets = Object.values(await para.getWallets());
+          }
+        }
+      }
+
+      // Get the first EVM wallet address
+      if (wallets.length > 0) {
+        const evmWallet = wallets.find((w: any) => w.type === "EVM" || !w.type);
+        if (evmWallet?.address) {
+          setWalletAddress(evmWallet.address as string);
+          console.log("[CustomAuth] EVM wallet address:", evmWallet.address);
+        } else {
+          console.warn("[CustomAuth] Wallet found but no address:", evmWallet);
+        }
+      }
+      
+      setIsLoggedIn(true);
+      setAuthStep("authenticated");
+      setStatus("idle");
+      setMessage("Successfully logged in with Para!");
+    } catch (err) {
+      setStatus("error");
+      setMessage(
+        err instanceof Error ? err.message : "Failed to login with Para",
+      );
+    }
+  };
+
+  // Verify OTP for new users and complete passkey + wallet provisioning
+  const handleVerifyCode = async () => {
+    if (!verificationCode.trim()) {
+      setStatus("error");
+      setMessage("Please enter the 6-digit verification code");
+      return;
+    }
+
+    setStatus("loading");
+    setMessage("Verifying code...");
+
+    try {
+      if (!para) throw new Error("Para client not ready");
+
+      const verifiedState = await (para as any).verifyNewAccount?.({
+        verificationCode: verificationCode.trim(),
+      });
+
+      // Open passkey/password setup and wait for wallet creation
+      const nextUrl =
+        verifiedState?.passkeyUrl ||
+        verifiedState?.passwordUrl ||
+        verifiedState?.pinUrl ||
+        verifiedState?.loginUrl;
+
+      if (nextUrl) {
+        const opened = window.open(nextUrl, "_blank");
+        if (!opened) {
+          setPendingAuthUrl(nextUrl);
+          setStatus("idle");
+          setMessage("Opening authentication in this tab...");
+          window.location.assign(nextUrl);
+          return;
+        }
+        setMessage(
+          "Authentication opened in a new tab. Don't close this page; finish auth there and return here.",
+        );
+        setPendingAuthUrl(nextUrl);
+        await (para as any).waitForWalletCreation?.({});
+      }
+
+      await para.touchSession?.();
+
+      // Fetch wallets and create EVM if none
+      let wallets = Object.values(await para.getWallets());
+      if (wallets.length === 0) {
+        console.log("[CustomAuth] No wallets found, creating EVM wallet...");
+        await para.createWallet({ type: "EVM" as any, skipDistribute: false });
+        wallets = Object.values(await para.getWallets());
+      }
+
+      if (wallets.length > 0) {
+        const evmWallet = wallets.find((w: any) => w.type === "EVM" || !w.type);
+        if (evmWallet?.address) setWalletAddress(evmWallet.address as string);
+      }
+
+      setIsLoggedIn(true);
+      setAuthStep("authenticated");
+      setStatus("idle");
+      setMessage("Signup complete!");
+      setRequiresOtp(false);
+      setVerificationCode("");
+    } catch (err) {
+      setStatus("error");
+      setMessage(
+        err instanceof Error ? err.message : "Failed to verify and finish signup",
+      );
+    }
+  };
+
+  // External Wallet Authentication Flow
+  const handleExternalWalletConnect = async (connectorId: string) => {
+    setStatus("loading");
+    setMessage("Connecting wallet...");
+
+    try {
+      const connector = connectors.find((c) => c.id === connectorId);
+      if (!connector) throw new Error("Connector not found");
+
+      // Connect to external wallet (Rainbow, MetaMask, etc.)
+      connect(
+        { connector },
+        {
+          onSuccess: () => {
+            setMessage(
+              "Wallet connected! Authentication with Para will begin automatically...",
+            );
+          },
+          onError: (err) => {
+            setStatus("error");
+            setMessage(err.message || "Failed to connect wallet");
+          },
+        },
+      );
+    } catch (err) {
+      setStatus("error");
+      setMessage(
+        err instanceof Error
+          ? err.message
+          : "Failed to connect external wallet",
+      );
+    }
+  };
+
+  // Monitor external wallet connection and Para authentication
+  useEffect(() => {
+    if (account?.isConnected && !isLoggedIn && para) {
+      (async () => {
+        try {
+          setStatus("loading");
+          setMessage("Authenticating with Para...");
+
+          // Wait a bit for Para to process the external wallet connection
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          const authed = await para.isFullyLoggedIn();
+
+          if (authed) {
+            const wallets = Object.values(await para.getWallets());
+            if (wallets.length > 0 && wallets[0].address) {
+              setWalletAddress(wallets[0].address as string);
+            }
+            setIsLoggedIn(true);
+            setAuthStep("authenticated");
+            setStatus("idle");
+            setMessage("Successfully authenticated with external wallet!");
+          } else {
+            setStatus("idle");
+            setMessage(
+              "External wallet connected. Please complete any additional authentication steps.",
+            );
+          }
+        } catch (err) {
+          setStatus("error");
+          setMessage(
+            err instanceof Error
+              ? err.message
+              : "Failed to authenticate with Para",
+          );
+        }
+      })();
+    }
+  }, [account?.isConnected, isLoggedIn, para]);
+
+  const handleLogout = async () => {
+    try {
+      if (para) {
+        await para.logout();
+      }
+      if (account?.isConnected) {
+        disconnect();
+      }
+      setIsLoggedIn(false);
+      setAuthStep("select");
+      setWalletAddress("");
+      setMessage("");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Failed to logout");
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-cyan-500 via-teal-500 to-blue-600 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
+        <h1 className="mb-2 text-3xl font-bold text-gray-900">
+          Custom Authentication
+        </h1>
+        <p className="mb-8 text-sm text-gray-600">
+          Login without using ParaModal
+        </p>
+
+        {/* Authentication Step: Select Method */}
+        {authStep === "select" && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold text-gray-800">
+              Choose authentication method
+            </h2>
+
+            {/* Email Input for Para Login */}
+            <div className="space-y-3">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Email Address
+              </label>
+              <input
+                type="email"
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                disabled={status === "loading"}
+              />
+            </div>
+
+            {requiresOtp && (
+              <div className="space-y-3">
+                <label
+                  htmlFor="verificationCode"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  Verification Code
+                </label>
+                <input
+                  type="text"
+                  id="verificationCode"
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value)}
+                  placeholder="6-digit code"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  disabled={status === "loading"}
+                />
+                <button
+                  type="button"
+                  onClick={handleVerifyCode}
+                  disabled={status === "loading"}
+                  className="w-full rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Verify Code
+                </button>
+              </div>
+            )}
+
+            {/* Para Login Button (Email/Passkey) */}
+            <button
+              type="button"
+              onClick={handleParaLogin}
+              disabled={status === "loading"}
+              className="w-full rounded-lg bg-teal-600 px-6 py-4 text-left font-medium text-white transition-all hover:bg-teal-700 hover:shadow-lg disabled:opacity-50"
+            >
+              <div className="flex items-center gap-3">
+                <svg
+                  className="h-6 w-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <title>Envelope icon</title>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                  />
+                </svg>
+                <div>
+                  <div className="font-semibold">Continue with Para</div>
+                  <div className="text-sm text-teal-100">
+                    Login with email or passkey via Para
+                  </div>
+                </div>
+              </div>
+            </button>
+
+            {/* External Wallets Section */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-px flex-1 bg-gray-300"></div>
+                <span className="text-sm text-gray-500">or connect wallet</span>
+                <div className="h-px flex-1 bg-gray-300"></div>
+              </div>
+
+              {connectors.map((connector) => (
+                <button
+                  key={connector.id}
+                  type="button"
+                  onClick={() => handleExternalWalletConnect(connector.id)}
+                  disabled={status === "loading"}
+                  className="w-full rounded-lg border-2 border-gray-300 bg-white px-6 py-4 text-left font-medium text-gray-900 transition-all hover:border-teal-500 hover:shadow-md disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-3">
+                    <svg
+                      className="h-6 w-6 text-teal-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <title>Wallet connection icon</title>
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
+                      />
+                    </svg>
+                    <div>
+                      <div className="font-semibold">{connector.name}</div>
+                      <div className="text-sm text-gray-500">
+                        Connect with {connector.name}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Authentication Step: Authenticated */}
+        {authStep === "authenticated" && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-green-50 p-4">
+              <div className="flex items-center gap-2 text-green-800">
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <title>Success icon</title>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <span className="font-semibold">
+                  Successfully Authenticated!
+                </span>
+              </div>
+            </div>
+
+            {wallet && walletAddress && (
+              <div>
+                <h3 className="mb-3 text-lg font-semibold text-gray-900">
+                  Your Wallet
+                </h3>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <div className="text-sm text-gray-600">EVM Wallet</div>
+                  <div className="mt-1 font-mono text-sm text-gray-900">
+                    {`${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full rounded-lg border-2 border-red-600 px-6 py-3 font-semibold text-red-600 transition-colors hover:bg-red-50"
+            >
+              Logout
+            </button>
+          </div>
+        )}
+
+        {/* Status Messages */}
+        {message && (
+          <div
+            className={`mt-4 rounded-lg p-4 ${
+              status === "error"
+                ? "bg-red-50 text-red-800"
+                : "bg-blue-50 text-blue-800"
+            }`}
+          >
+            <div>{message}</div>
+            {pendingAuthUrl && (
+              <div className="mt-2 flex items-center gap-3">
+                <a
+                  href={pendingAuthUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 underline"
+                >
+                  Open authentication in a new tab
+                </a>
+                <button
+                  type="button"
+                  onClick={() => window.location.assign(pendingAuthUrl)}
+                  className="text-teal-600 underline"
+                >
+                  Open in this tab
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Loading Indicator */}
+        {status === "loading" && (
+          <div className="mt-4 flex items-center justify-center gap-2 text-teal-600">
+            <svg
+              className="h-5 w-5 animate-spin"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <title>Loading</title>
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              ></circle>
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
+            </svg>
+            <span className="font-medium">Processing...</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

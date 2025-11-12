@@ -69,7 +69,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { to, amount } = body;
 
-    console.log("[USDC Pay] Request received:", { to, amount, hasPayment: !!paymentData });
+    console.log("[USDC Pay] Request received:", {
+      to,
+      amount,
+      hasPayment: !!paymentData,
+    });
 
     // Validate required parameters
     if (!to || !amount) {
@@ -148,7 +152,10 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    console.log("[USDC Pay] Payment requirements:", JSON.stringify(paymentRequirements, null, 2));
+    console.log(
+      "[USDC Pay] Payment requirements:",
+      JSON.stringify(paymentRequirements, null, 2),
+    );
 
     // If no payment data, return 402 Payment Required
     if (!paymentData) {
@@ -213,7 +220,10 @@ export async function POST(request: NextRequest) {
     });
 
     const verifyResult = await verifyResponse.json();
-    console.log("[USDC Pay] Verify result:", JSON.stringify(verifyResult, null, 2));
+    console.log(
+      "[USDC Pay] Verify result:",
+      JSON.stringify(verifyResult, null, 2),
+    );
 
     if (!verifyResult.isValid) {
       console.log("[USDC Pay] Verification failed:", verifyResult);
@@ -244,7 +254,10 @@ export async function POST(request: NextRequest) {
     });
 
     const settleResult = await settleResponse.json();
-    console.log("[USDC Pay] Settle result:", JSON.stringify(settleResult, null, 2));
+    console.log(
+      "[USDC Pay] Settle result:",
+      JSON.stringify(settleResult, null, 2),
+    );
 
     if (!settleResult.success) {
       console.log("[USDC Pay] Settlement failed:", settleResult);

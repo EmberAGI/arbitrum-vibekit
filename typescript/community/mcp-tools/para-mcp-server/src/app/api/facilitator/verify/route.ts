@@ -60,16 +60,25 @@ export async function POST(request: NextRequest) {
   const corsHeaders = getCorsHeaders(request.headers.get("origin"));
   const body = await request.json();
 
-  console.log("[Facilitator Verify] Request payload:", JSON.stringify(body, null, 2));
-  
+  console.log(
+    "[Facilitator Verify] Request payload:",
+    JSON.stringify(body, null, 2),
+  );
+
   // Log signature and authorization details for debugging
   if (body.paymentPayload?.payload?.signature) {
     const sig = body.paymentPayload.payload.signature;
     console.log("[Facilitator Verify] Signature length:", sig.length);
-    console.log("[Facilitator Verify] Signature (first 20 chars):", sig.substring(0, 20));
-    console.log("[Facilitator Verify] Signature (last 10 chars):", sig.substring(sig.length - 10));
+    console.log(
+      "[Facilitator Verify] Signature (first 20 chars):",
+      sig.substring(0, 20),
+    );
+    console.log(
+      "[Facilitator Verify] Signature (last 10 chars):",
+      sig.substring(sig.length - 10),
+    );
   }
-  
+
   if (body.paymentPayload?.payload?.authorization) {
     const auth = body.paymentPayload.payload.authorization;
     console.log("[Facilitator Verify] Authorization from:", auth.from);
@@ -86,15 +95,18 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${bearerToken}`,
+        Authorization: `Bearer ${bearerToken}`,
       },
       body: JSON.stringify(body),
     });
 
     const result = await response.json();
-    
+
     console.log("[Facilitator Verify] Response status:", response.status);
-    console.log("[Facilitator Verify] Response body:", JSON.stringify(result, null, 2));
+    console.log(
+      "[Facilitator Verify] Response body:",
+      JSON.stringify(result, null, 2),
+    );
 
     return NextResponse.json(result, {
       status: response.status,
@@ -103,8 +115,11 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("[Facilitator Verify] Error:", error);
     return NextResponse.json(
-      { error: "Failed to verify payment", details: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500, headers: corsHeaders }
+      {
+        error: "Failed to verify payment",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500, headers: corsHeaders },
     );
   }
 }

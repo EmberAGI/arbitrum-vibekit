@@ -53,17 +53,11 @@ const connectors = connectorsForWallets(
   [
     {
       groupName: "Recommended",
-      wallets: [
-        rainbowWallet,
-      ],
+      wallets: [rainbowWallet],
     },
     {
       groupName: "Other Wallets",
-      wallets: [
-        baseAccount,
-        metaMaskWallet,
-        walletConnectWallet,
-      ],
+      wallets: [baseAccount, metaMaskWallet, walletConnectWallet],
     },
   ],
   {
