@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { enrichCamelotPoolUsdPrices } from '../src/usdPrices.js';
+import { enrichCamelotPoolUsdPrices, isUsdStableToken } from '../src/usdPrices.js';
 import type { CamelotPool } from '../src/types.js';
 
 const LOG_BASE = Math.log(1.0001);
@@ -92,5 +92,35 @@ describe('enrichCamelotPoolUsdPrices', () => {
     expect(pools[1].token0.usdPrice).toBeGreaterThan(999);
     expect(pools[1].token0.usdPrice).toBeLessThan(1001);
     expect(pools[1].token1.usdPrice).toBeGreaterThan(1999);
+  });
+
+  it('keeps explicit USD prices intact when already provided by the API', () => {
+    const pools = [
+      {
+        address: '0x1',
+        token0: { address: '0xaaaa', symbol: 'KNOWN', decimals: 18, usdPrice: 42 },
+        token1: { address: '0xaf88d065e77c8cc2239327c5edb3a432268e5831', symbol: 'USDC', decimals: 6 },
+        tickSpacing: 60,
+        tick: 0,
+        liquidity: '1',
+      },
+    ] satisfies CamelotPool[];
+
+    // Given a pool whose primary token already carries API-provided usdPrice data
+    enrichCamelotPoolUsdPrices(pools);
+
+    // Then the enrichment pass should preserve the supplied USD valuation
+    expect(pools[0].token0.usdPrice).toBe(42);
+  });
+});
+
+describe('isUsdStableToken', () => {
+  it('detects canonical USD stablecoins independent of casing', () => {
+    // Given a supported stable token address in uppercase form
+    const isStable = isUsdStableToken('0xAF88D065E77C8CC2239327C5EDB3A432268E5831');
+
+    // Then the helper should classify it as USD-pegged
+    expect(isStable).toBe(true);
+    expect(isUsdStableToken('0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef')).toBe(false);
   });
 });

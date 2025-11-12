@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   EmberCamelotClient,
+  fetchPoolSnapshot,
+  normalizePool,
   type ClmmRebalanceRequest,
 } from './emberApi.js';
 import type { CamelotPool } from './types.js';
@@ -206,5 +208,50 @@ describe('EmberCamelotClient (unit)', () => {
         method: 'POST',
       }),
     );
+  });
+});
+
+describe('fetchPoolSnapshot + normalizePool helpers', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns undefined when the target pool is absent from the Ember catalog', async () => {
+    // Given a client whose list response lacks the requested pool
+    const client = new EmberCamelotClient(BASE_URL);
+    vi.spyOn(client, 'listCamelotPools').mockResolvedValue([
+      {
+        address: '0xabc',
+        token0: { address: '0x1', symbol: 'A', decimals: 18 },
+        token1: { address: '0x2', symbol: 'B', decimals: 18 },
+        tickSpacing: 60,
+        tick: 0,
+        liquidity: '1',
+      },
+    ]);
+
+    // When fetchPoolSnapshot looks up a different address
+    const snapshot = await fetchPoolSnapshot(client, '0x9999', 42161);
+
+    // Then it should return undefined instead of an unrelated pool
+    expect(snapshot).toBeUndefined();
+  });
+
+  it('normalizePool injects numeric tick spacing, bigint liquidity, and USD defaults', () => {
+    // Given a pool payload missing usdPrice metadata
+    const normalized = normalizePool({
+      address: '0xabc',
+      token0: { address: '0x1', symbol: 'A', decimals: 18 },
+      token1: { address: '0x2', symbol: 'B', decimals: 6 },
+      tickSpacing: undefined as unknown as number,
+      tick: 123,
+      liquidity: '42',
+    });
+
+    // Then normalization should promote strings into durable numeric types
+    expect(typeof normalized.tickSpacing).toBe('number');
+    expect(normalized.liquidity).toBe(42n);
+    expect(normalized.token0Usd).toBe(0);
+    expect(normalized.token1Usd).toBe(0);
   });
 });

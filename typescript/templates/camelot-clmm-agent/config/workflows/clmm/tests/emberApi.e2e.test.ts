@@ -1,6 +1,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ARBITRUM_CHAIN_ID } from '../src/constants.js';
+import {
+  ARBITRUM_CHAIN_ID,
+  DEFAULT_REBALANCE_THRESHOLD_PCT,
+  DEFAULT_TICK_BANDWIDTH_BPS,
+  MAX_GAS_SPEND_ETH,
+  SAFETY_NET_MAX_IDLE_CYCLES,
+  resolveEthUsdPrice,
+} from '../src/constants.js';
 import {
   EmberCamelotClient,
   fetchPoolSnapshot,
@@ -8,11 +15,14 @@ import {
   type ClmmRebalanceRequest,
   type ClmmWithdrawRequest,
 } from '../src/emberApi.js';
+import { deriveMidPrice, evaluateDecision, normalizePosition } from '../src/decision-engine.js';
 const BASE_URL =
   process.env['EMBER_API_BASE_URL']?.replace(/\/$/, '') ?? 'https://api.emberai.xyz';
 const LIVE_TEST_TIMEOUT_MS = Number(process.env['EMBER_E2E_TIMEOUT_MS'] ?? 45_000);
 const EMPTY_WALLET: `0x${string}` =
   (process.env['CLMM_E2E_EMPTY_WALLET'] ?? '0x0000000000000000000000000000000000000001') as `0x${string}`;
+const LIVE_LP_WALLET: `0x${string}` =
+  (process.env['CLMM_E2E_LIVE_WALLET'] ?? '0x2d2c313ec7650995b193a34e16be5b86eede872d') as `0x${string}`;
 
 type RequestLogEntry = {
   url: string;
@@ -83,6 +93,43 @@ async function execute<T>(run: () => Promise<T>) {
   } catch (error) {
     return { error };
   }
+}
+
+async function discoverLiveWalletContext() {
+  const [pools, positions] = await Promise.all([
+    client.listCamelotPools(ARBITRUM_CHAIN_ID),
+    client.getWalletPositions(LIVE_LP_WALLET, ARBITRUM_CHAIN_ID),
+  ]);
+  if (positions.length === 0) {
+    console.warn('Live LP wallet has no active Camelot positions');
+    return null;
+  }
+  const livePosition = positions[0]!;
+  const pool = pools.find(
+    (candidate) =>
+      candidate.address.toLowerCase() === livePosition.poolAddress.toLowerCase(),
+  );
+  if (!pool) {
+    console.warn('Unable to match live wallet position to Camelot pool list');
+    return null;
+  }
+  return { pool, position: livePosition };
+}
+
+async function fetchLivePoolIdentifier() {
+  const response = await realFetch(
+    `${BASE_URL}/liquidity/positions/${LIVE_LP_WALLET}?chainId=${ARBITRUM_CHAIN_ID}`,
+  );
+  if (!response.ok) {
+    throw new Error(`Unable to load raw wallet positions (${response.status})`);
+  }
+  const payload = await response.json();
+  const identifier = payload.positions?.[0]?.poolIdentifier;
+  if (!identifier) {
+    console.warn('Live wallet returned no pool identifier');
+    return null;
+  }
+  return identifier as { chainId: string; address: `0x${string}` };
 }
 
 describe('EmberCamelotClient (e2e)', () => {
@@ -218,6 +265,136 @@ describe('EmberCamelotClient (e2e)', () => {
     LIVE_TEST_TIMEOUT_MS,
   );
   it(
+    'loads wallet positions for the delegated live LP wallet',
+    async () => {
+      // Given the funded LP wallet supplied in the PRD
+      const positions = await client.getWalletPositions(LIVE_LP_WALLET, ARBITRUM_CHAIN_ID);
+
+      // When we fetch its Camelot positions through the API client
+      // Then the response should expose normalized ticks for at least one pool
+      if (positions.length === 0) {
+        console.warn('CLMM_E2E_LIVE_WALLET currently has no Camelot LP positions.');
+        return;
+      }
+      const sample = positions[0]!;
+      expect(sample.poolAddress).toMatch(/^0x/);
+      expect(sample.tickUpper).toBeGreaterThanOrEqual(sample.tickLower);
+    },
+    LIVE_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'requests a rebalance plan using the live wallet pool metadata',
+    async () => {
+      // Given the live wallet and its active pool
+      const context = await discoverLiveWalletContext();
+      if (!context) {
+        console.warn('Skipping live rebalance plan test: no wallet context available.');
+        return;
+      }
+      const { pool } = context;
+      const chainIdString = ARBITRUM_CHAIN_ID.toString();
+      const midPrice = deriveMidPrice(pool);
+      const payload: ClmmRebalanceRequest = {
+        walletAddress: LIVE_LP_WALLET,
+        supplyChain: chainIdString,
+        poolIdentifier: {
+          chainId: chainIdString,
+          address: pool.address as `0x${string}`,
+        },
+        range: {
+          type: 'limited',
+          minPrice: (midPrice * 0.99).toString(),
+          maxPrice: (midPrice * 1.01).toString(),
+        },
+        payableTokens: [
+          {
+            tokenUid: {
+              chainId: chainIdString,
+              address: pool.token0.address as `0x${string}`,
+            },
+            amount: '0',
+          },
+          {
+            tokenUid: {
+              chainId: chainIdString,
+              address: pool.token1.address as `0x${string}`,
+            },
+            amount: '0',
+          },
+        ],
+      };
+
+      // When we request a plan from Ember
+      const outcome = await execute(() => client.requestRebalance(payload));
+
+      // Then the API should return a structured transaction list
+      expect(outcome.error).toBeUndefined();
+      expect(Array.isArray(outcome.data?.transactions)).toBe(true);
+    },
+    LIVE_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'attempts a withdrawal plan using the live wallet poolTokenUid',
+    async () => {
+      // Given the raw Camelot pool identifier captured from the wallet’s position
+      const poolTokenUid = await fetchLivePoolIdentifier();
+      if (!poolTokenUid) {
+        console.warn('Skipping live withdrawal test: wallet has no poolTokenUid data.');
+        return;
+      }
+      const payload: ClmmWithdrawRequest = {
+        walletAddress: LIVE_LP_WALLET,
+        poolTokenUid,
+      };
+
+      // When we request a withdrawal/compound plan
+      const plan = await client.requestWithdrawal(payload);
+
+      // Then the API should respond with a transaction plan instead of schema errors
+      expect(Array.isArray(plan.transactions)).toBe(true);
+    },
+    LIVE_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'runs a decision-engine smoke test with live pool + wallet data',
+    async () => {
+      // Given the live pool snapshot and wallet position
+      const context = await discoverLiveWalletContext();
+      if (!context) {
+        console.warn('Skipping decision-engine live test: no wallet context available.');
+        return;
+      }
+      const { pool, position } = context;
+      const normalizedPosition = normalizePosition(position);
+
+      // When we feed the data into the decision engine
+      const decision = evaluateDecision({
+        pool,
+        position: normalizedPosition,
+        midPrice: deriveMidPrice(pool),
+        volatilityPct: 0,
+        cyclesSinceRebalance: 0,
+        tickBandwidthBps: DEFAULT_TICK_BANDWIDTH_BPS,
+        rebalanceThresholdPct: DEFAULT_REBALANCE_THRESHOLD_PCT,
+        maxIdleCycles: SAFETY_NET_MAX_IDLE_CYCLES,
+        autoCompoundFees: true,
+        estimatedGasCostUsd: MAX_GAS_SPEND_ETH * resolveEthUsdPrice(),
+        estimatedFeeValueUsd: undefined,
+      });
+
+      // Then it should yield a valid CLMM action with a non-empty rationale
+      expect(['enter-range', 'adjust-range', 'hold', 'exit-range', 'compound-fees']).toContain(
+        decision.kind,
+      );
+      expect(decision.reason).toMatch(/\w+/);
+    },
+    LIVE_TEST_TIMEOUT_MS,
+  );
+
+  it(
     'fetchPoolSnapshot locates pools case-insensitively via live API',
     async () => {
       // Given a real Camelot pool address from Ember
@@ -236,7 +413,7 @@ describe('EmberCamelotClient (e2e)', () => {
       expect(snapshot?.address.toLowerCase()).toBe(targetPool.address.toLowerCase());
       expect(snapshot?.token0.address).toBeDefined();
     },
-    LIVE_TEST_TIMEOUT_MS,
+    LIVE_TEST_TIMEOUT_MS * 2,
   );
 
   it(
