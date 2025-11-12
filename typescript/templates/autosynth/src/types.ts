@@ -46,6 +46,7 @@ export interface JobInput {
   arguments: string[];
   dynamicArgumentsScriptUrl: string;
   isImua: boolean;
+  language?: string;
 
   // Safe wallet fields
   walletMode?: 'regular' | 'safe';
