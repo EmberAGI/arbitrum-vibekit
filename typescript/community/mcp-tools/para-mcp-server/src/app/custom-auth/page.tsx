@@ -303,6 +303,8 @@ export default function CustomAuthPage() {
     try {
       if (!para) throw new Error("Para client not ready");
 
+      const preOpened = window.open("", "_blank");
+
       const verifiedState = await (para as any).verifyNewAccount?.({
         verificationCode: verificationCode.trim(),
       });
@@ -315,19 +317,44 @@ export default function CustomAuthPage() {
         verifiedState?.loginUrl;
 
       if (nextUrl) {
-        const opened = window.open(nextUrl, "_blank");
-        if (!opened) {
+        if (preOpened) {
+          try {
+            preOpened.location.href = nextUrl;
+            setMessage(
+              "Authentication opened in a new tab. Don't close this page; finish auth there and return here.",
+            );
+            setPendingAuthUrl(nextUrl);
+            await (para as any).waitForWalletCreation?.({});
+          } catch {
+            const opened = window.open(nextUrl, "_blank");
+            if (!opened) {
+              setPendingAuthUrl(nextUrl);
+              setStatus("idle");
+              setMessage("Opening authentication in this tab...");
+              window.location.assign(nextUrl);
+              return;
+            }
+            setMessage(
+              "Authentication opened in a new tab. Don't close this page; finish auth there and return here.",
+            );
+            setPendingAuthUrl(nextUrl);
+            await (para as any).waitForWalletCreation?.({});
+          }
+        } else {
+          const opened = window.open(nextUrl, "_blank");
+          if (!opened) {
+            setPendingAuthUrl(nextUrl);
+            setStatus("idle");
+            setMessage("Opening authentication in this tab...");
+            window.location.assign(nextUrl);
+            return;
+          }
+          setMessage(
+            "Authentication opened in a new tab. Don't close this page; finish auth there and return here.",
+          );
           setPendingAuthUrl(nextUrl);
-          setStatus("idle");
-          setMessage("Opening authentication in this tab...");
-          window.location.assign(nextUrl);
-          return;
+          await (para as any).waitForWalletCreation?.({});
         }
-        setMessage(
-          "Authentication opened in a new tab. Don't close this page; finish auth there and return here.",
-        );
-        setPendingAuthUrl(nextUrl);
-        await (para as any).waitForWalletCreation?.({});
       }
 
       await para.touchSession?.();

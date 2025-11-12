@@ -1,18 +1,16 @@
 "use client";
 
 import "@rainbow-me/rainbowkit/styles.css";
+import "@getpara/react-sdk/styles.css";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useBalance, useDisconnect, useChainId } from "wagmi";
 import { arbitrum, arbitrumSepolia, base, baseSepolia } from "wagmi/chains";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useMcp } from "use-mcp/react";
 import { useChat } from "@ai-sdk/react";
-import {
-  DefaultChatTransport,
-  lastAssistantMessageIsCompleteWithApprovalResponses,
-} from "ai";
+import { DefaultChatTransport } from "ai";
 import ReactMarkdown from "react-markdown";
-import type { ChatAddToolApproveResponseFunction, DynamicToolUIPart } from "ai";
+
 // Type for JSON Schema properties
 type JsonSchemaProperty = {
   type: string;
@@ -29,534 +27,77 @@ type JsonSchema = {
   required?: string[];
   additionalProperties?: boolean;
 };
+import { WagmiProvider, createConfig, http } from "wagmi";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
-  useSendTransaction,
-  useSwitchChain,
-  useReadContract,
-  useWalletClient,
-} from "wagmi";
-import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { encodeFunctionData, parseUnits, isAddress } from "viem";
-import type { Abi } from "viem";
-import axios from "axios";
-// @ts-ignore - x402-axios has dual package exports which may cause TS resolution issues
-import { withPaymentInterceptor } from "x402-axios";
+  RainbowKitProvider,
+  darkTheme,
+  connectorsForWallets,
+} from "@rainbow-me/rainbowkit";
+import {
+  walletConnectWallet,
+  baseAccount,
+} from "@rainbow-me/rainbowkit/wallets";
+import { paraConnector } from "@getpara/wagmi-v2-integration";
+import Para, { Environment } from "@getpara/web-sdk";
 
 const CHAINS = [arbitrum, arbitrumSepolia, base, baseSepolia];
 
-// USDC token address on Base Sepolia
-const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+const queryClient = new QueryClient();
 
-// ERC-20 ABI for balanceOf
-const ERC20_ABI = [
+// Initialize Para client
+const para = new Para(
+  (process.env.NEXT_PUBLIC_PARA_ENVIRONMENT || "BETA") === "BETA"
+    ? Environment.BETA
+    : Environment.PRODUCTION,
+  process.env.NEXT_PUBLIC_PARA_API_KEY || "",
+);
+
+// Create Para connector
+const paraConn = paraConnector({
+  para,
+  chains: CHAINS as [
+    typeof arbitrum,
+    typeof arbitrumSepolia,
+    typeof base,
+    typeof baseSepolia,
+  ],
+  appName: "Para MCP Server",
+  options: {},
+  queryClient,
+});
+
+// Create connectors for RainbowKit wallets
+const rainbowKitConnectors = connectorsForWallets(
+  [
+    {
+      groupName: "Popular",
+      wallets: [walletConnectWallet, baseAccount],
+    },
+  ],
   {
-    constant: true,
-    inputs: [{ name: "_owner", type: "address" }],
-    name: "balanceOf",
-    outputs: [{ name: "balance", type: "uint256" }],
-    type: "function",
+    appName: "Para MCP Server",
+    projectId: "4b49e5e63b9f6253943b470873b47208",
   },
-  {
-    constant: true,
-    inputs: [],
-    name: "decimals",
-    outputs: [{ name: "", type: "uint8" }],
-    type: "function",
+);
+
+// Create Wagmi config with Para connector and RainbowKit wallets
+const wagmiConfig = createConfig({
+  connectors: [paraConn as any, ...rainbowKitConnectors],
+  chains: CHAINS as [
+    typeof arbitrum,
+    typeof arbitrumSepolia,
+    typeof base,
+    typeof baseSepolia,
+  ],
+  transports: {
+    [arbitrum.id]: http(),
+    [arbitrumSepolia.id]: http(),
+    [base.id]: http(),
+    [baseSepolia.id]: http(),
   },
-] as const;
-
-// Transaction Preview Component
-function TransactionPreviewComponent({
-  txPreview,
-}: {
-  txPreview: Array<{
-    to: string;
-    data: string;
-    value: string;
-    chainId: string;
-  }>;
-}) {
-  const { isConnected, chainId: currentChainId } = useAccount();
-  const { switchChainAsync } = useSwitchChain();
-  const {
-    sendTransaction,
-    isPending,
-    isSuccess,
-    error,
-    data: txHash,
-  } = useSendTransaction();
-
-  const handleSignTransaction = async () => {
-    if (!txPreview || txPreview.length === 0) return;
-
-    const tx = txPreview[0];
-    const targetChainId = Number.parseInt(tx.chainId);
-
-    try {
-      // Switch chain if needed
-      if (currentChainId !== targetChainId) {
-        await switchChainAsync({ chainId: targetChainId });
-      }
-
-      // Send transaction using Wagmi
-      sendTransaction({
-        to: tx.to as `0x${string}`,
-        data: tx.data as `0x${string}`,
-        value: BigInt(tx.value),
-        chainId: targetChainId,
-      });
-    } catch (err) {
-      console.error("Transaction error:", err);
-    }
-  };
-
-  return (
-    <div className="mt-4 space-y-3">
-      <div className="text-sm font-semibold text-gray-100">
-        Transaction Preview
-      </div>
-
-      {/* Transaction Details */}
-      <div className="space-y-2">
-        {txPreview.map((tx, index) => (
-          <div
-            key={index}
-            className="p-3 bg-gray-700 rounded-lg border border-gray-600 text-xs"
-          >
-            <div className="space-y-1">
-              <div>
-                <span className="text-gray-400">To:</span>{" "}
-                <span className="text-gray-100 font-mono">{tx.to}</span>
-              </div>
-              <div>
-                <span className="text-gray-400">Value:</span>{" "}
-                <span className="text-gray-100">{tx.value} wei</span>
-              </div>
-              <div>
-                <span className="text-gray-400">Chain ID:</span>{" "}
-                <span className="text-gray-100">{tx.chainId}</span>
-              </div>
-              {tx.data && tx.data !== "0x" && (
-                <div>
-                  <span className="text-gray-400">Data:</span>{" "}
-                  <span className="text-gray-100 font-mono break-all">
-                    {tx.data}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Status Messages */}
-      {isSuccess && (
-        <div className="p-2 rounded-lg border-2 border-green-800 bg-green-200 text-green-800">
-          Transaction Successful! Hash: {String(txHash ?? "")}
-        </div>
-      )}
-      {isPending && (
-        <div className="p-2 rounded-lg border-2 border-gray-400 bg-gray-200 text-slate-800">
-          Signing Transaction...
-        </div>
-      )}
-      {error && (
-        <div className="p-2 rounded-lg border-2 border-red-800 bg-red-400 text-white break-words">
-          Error: {(error as Error)?.message || JSON.stringify(error, null, 2)}
-        </div>
-      )}
-
-      {/* Action Buttons */}
-      {isConnected ? (
-        <button
-          type="button"
-          onClick={handleSignTransaction}
-          disabled={isPending || isSuccess}
-          className="w-full mt-2 px-4 py-2 rounded-full bg-cyan-700 text-white hover:bg-cyan-800 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isPending ? "Signing..." : isSuccess ? "Signed" : "Sign Transaction"}
-        </button>
-      ) : (
-        <div className="p-2 flex rounded-lg border-2 border-gray-400 bg-gray-200 flex-col">
-          <div className="mb-2 text-red-500">
-            Please connect your wallet to sign
-          </div>
-          <ConnectButton />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Simple USDC transfer form for Base Sepolia with x402 gasless payment
-function BaseSepoliaUsdcTransfer() {
-  const { address, isConnected } = useAccount();
-  const { openConnectModal } = useConnectModal();
-  const { data: walletClient } = useWalletClient();
-
-  const [recipient, setRecipient] = useState("");
-  const [amount, setAmount] = useState("");
-  const [localError, setLocalError] = useState<string | null>(null);
-  const [isPending, setIsPending] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [txHash, setTxHash] = useState<string | null>(null);
-
-  // Fetch USDC balance on Base Sepolia for connected user
-  const {
-    data: usdcBal,
-    isLoading: loadingBal,
-    refetch: refetchBal,
-  } = useReadContract({
-    address: USDC_BASE_SEPOLIA,
-    abi: ERC20_ABI,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    chainId: baseSepolia.id,
-    query: { enabled: !!address },
-  });
-
-  const formatUsdc = (bal: bigint | undefined) => {
-    if (!bal) return "0.00";
-    return (Number(bal) / 1e6).toFixed(2);
-  };
-
-  const handleSend = async () => {
-    setLocalError(null);
-    setIsSuccess(false);
-    setTxHash(null);
-
-    if (!isConnected) {
-      openConnectModal?.();
-      return;
-    }
-
-    if (!walletClient) {
-      setLocalError("Wallet client not available");
-      return;
-    }
-
-    if (!recipient || !isAddress(recipient)) {
-      setLocalError("Enter a valid recipient address");
-      return;
-    }
-
-    const amountFloat = parseFloat(amount || "0");
-    if (isNaN(amountFloat) || amountFloat <= 0) {
-      setLocalError("Enter a valid amount");
-      return;
-    }
-
-    setIsPending(true);
-
-    try {
-      // Create axios instance with x402 payment interceptor
-      const axiosInstance = withPaymentInterceptor(
-        axios.create(),
-        walletClient as unknown as Parameters<typeof withPaymentInterceptor>[1],
-      );
-
-      // Make request to the payment-gated API
-      const response = await axiosInstance.post(
-        "/api/usdc-pay",
-        {
-          to: recipient,
-          amount: amount,
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        },
-      );
-
-      // Payment successful
-      setIsSuccess(true);
-      if (response.data?.transaction) {
-        setTxHash(response.data.transaction);
-      }
-
-      // Force refresh balance after payment
-      refetchBal();
-
-      // Reset form
-      setAmount("");
-    } catch (error) {
-      console.error("USDC transfer error:", error);
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : (error as { response?: { data?: { error?: string } } })?.response
-              ?.data?.error ||
-            (error as { message?: string })?.message ||
-            "Failed to process payment";
-      setLocalError(errorMessage);
-    } finally {
-      setIsPending(false);
-    }
-  };
-
-  return (
-    <div className="mt-8 p-4 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-          USDC Transfer (Base Sepolia)
-        </div>
-        <div className="text-xs text-gray-600 dark:text-gray-300">
-          {loadingBal ? (
-            <span>Loading balance…</span>
-          ) : (
-            <span>
-              Balance: {formatUsdc(usdcBal as bigint | undefined)} USDC
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => refetchBal()}
-            className="ml-2 text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <label className="text-xs text-gray-600 dark:text-gray-300">
-            Recipient Address
-          </label>
-          <input
-            type="text"
-            value={recipient}
-            onChange={(e) => setRecipient(e.target.value)}
-            placeholder="0x…"
-            className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500"
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs text-gray-600 dark:text-gray-300">
-            Amount (USDC)
-          </label>
-          <input
-            type="text"
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v === "" || /^\d*\.?\d*$/.test(v)) setAmount(v);
-            }}
-            placeholder="0.00"
-            className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500"
-          />
-        </div>
-      </div>
-
-      {localError && (
-        <div className="mt-3 p-2 rounded border border-red-700 bg-red-100 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-300 break-words">
-          {localError}
-        </div>
-      )}
-      {isSuccess && txHash && (
-        <div className="mt-3 p-2 rounded border border-green-800 bg-green-100 dark:bg-green-900/20 text-sm text-green-800 dark:text-green-300 break-words">
-          Sent! Tx: {String(txHash ?? "")}
-        </div>
-      )}
-
-      <button
-        type="button"
-        onClick={!isConnected ? openConnectModal : handleSend}
-        disabled={isPending}
-        className="w-full mt-4 px-4 py-2 rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {!isConnected
-          ? "Connect Wallet"
-          : isPending
-            ? "Sending…"
-            : isSuccess
-              ? "Sent"
-              : "Send USDC"}
-      </button>
-    </div>
-  );
-}
-
-function DynamicToolWithApprovalView({
-  invocation,
-  addToolApprovalResponse,
-}: {
-  invocation: DynamicToolUIPart;
-  addToolApprovalResponse: ChatAddToolApproveResponseFunction;
-}) {
-  switch (invocation.state) {
-    case "approval-requested":
-      return (
-        <div className="text-gray-500">
-          <div className="mb-2 bg-gray-600 rounded-xl border border-gray-900 shadow-lg">
-            <pre className="overflow-x-auto p-4 text-sm text-gray-100 whitespace-pre-wrap">
-              <div className="pb-2 font-semibold">
-                Execute tool &quot;{invocation.toolName}&quot;
-              </div>
-              {JSON.stringify(invocation.input, null, 2)}
-            </pre>
-          </div>
-          <div>
-            <button
-              className="px-4 py-2 mr-2 text-white bg-blue-500 rounded transition-colors hover:bg-blue-600"
-              onClick={() =>
-                addToolApprovalResponse({
-                  id: invocation.approval.id,
-                  approved: true,
-                })
-              }
-            >
-              Approve
-            </button>
-            <button
-              className="px-4 py-2 text-white bg-red-500 rounded transition-colors hover:bg-red-600"
-              onClick={() =>
-                addToolApprovalResponse({
-                  id: invocation.approval.id,
-                  approved: false,
-                })
-              }
-            >
-              Deny
-            </button>
-          </div>
-        </div>
-      );
-    case "approval-responded":
-      return (
-        <div className="text-gray-500">
-          <div className="mb-2 bg-gray-600 rounded-xl border border-gray-900 shadow-lg">
-            <pre className="overflow-x-auto p-4 text-sm text-gray-100 whitespace-pre-wrap">
-              <div className="pb-2 font-semibold">
-                Execute tool &quot;{invocation.toolName}&quot;
-              </div>
-              {JSON.stringify(invocation.input, null, 2)}
-              <div className="font-semibold">
-                {invocation.approval.approved ? "Approved" : "Denied"}
-              </div>
-            </pre>
-          </div>
-        </div>
-      );
-    case "output-available": {
-      const isPreliminary = invocation.preliminary ?? false;
-
-      // Parse the output to extract content[0].text if available
-      const output = invocation.output as {
-        content?: Array<{ type: string; text: string }>;
-        isError?: boolean;
-      };
-
-      let displayContent = "";
-      let hasError = output.isError ?? false;
-      let parsedData: unknown = null;
-
-      if (hasError) {
-        // Display error from content[0].text
-        if (output.content?.[0]?.text) {
-          displayContent = output.content[0].text;
-        } else {
-          displayContent = JSON.stringify(invocation.output, null, 2);
-        }
-      } else {
-        // Parse and display the content[0].text JSON
-        if (output.content?.[0]?.text) {
-          try {
-            parsedData = JSON.parse(output.content[0].text);
-            displayContent = JSON.stringify(parsedData, null, 2);
-          } catch {
-            // If parsing fails, display as-is
-            displayContent = output.content[0].text;
-          }
-        } else {
-          // Fallback to full output if structure is different
-          displayContent = JSON.stringify(invocation.output, null, 2);
-        }
-      }
-
-      // Special handling for create-transaction-preview tool
-      if (
-        invocation.toolName === "create-transaction-preview" &&
-        parsedData &&
-        !hasError
-      ) {
-        const txData = parsedData as {
-          artifacts?: Array<{
-            name: string;
-            parts: Array<{
-              data: {
-                txPreview?: Array<{
-                  to: string;
-                  data: string;
-                  value: string;
-                  chainId: string;
-                }>;
-                txPlan?: Array<{
-                  to: string;
-                  data: string;
-                  value: string;
-                  chainId: string;
-                }>;
-              };
-            }>;
-          }>;
-        };
-
-        const txPreview = txData.artifacts?.[0]?.parts?.[0]?.data?.txPreview;
-
-        if (txPreview && txPreview.length > 0) {
-          return (
-            <div className="text-gray-500">
-              <div className="mb-2 bg-gray-600 rounded-xl border border-gray-900 shadow-lg">
-                <div className="p-4">
-                  <div className="pb-2 font-semibold text-gray-100">
-                    {isPreliminary ? "Executing" : "Executed"} tool &quot;
-                    {invocation.toolName}&quot;
-                  </div>
-                  <TransactionPreviewComponent txPreview={txPreview} />
-                </div>
-              </div>
-            </div>
-          );
-        }
-      }
-
-      return (
-        <div className="text-gray-500">
-          <div className="mb-2 bg-gray-600 rounded-xl border border-gray-900 shadow-lg">
-            <pre className="overflow-x-auto p-4 text-sm text-gray-100 whitespace-pre-wrap">
-              <div className="pb-2 font-semibold">
-                {isPreliminary ? "Executing" : "Executed"} tool &quot;
-                {invocation.toolName}&quot;
-              </div>
-              {JSON.stringify(invocation.input, null, 2)}
-              <div
-                className={`pt-2 pb-2 font-semibold ${hasError ? "text-red-400" : ""}`}
-              >
-                {hasError ? "Error:" : "Output:"}
-              </div>
-              <div className={hasError ? "text-red-300" : ""}>
-                {displayContent}
-              </div>
-            </pre>
-          </div>
-        </div>
-      );
-    }
-    case "output-denied":
-      return (
-        <div className="text-red-500">
-          Tool {invocation.toolName} with input{" "}
-          {JSON.stringify(invocation.input)}
-          execution denied.
-        </div>
-      );
-    case "output-error":
-      return <div className="text-red-500">Error: {invocation.errorText}</div>;
-  }
-}
+  ssr: true,
+});
 
 function ChatInner() {
   const { address, isConnected } = useAccount();
@@ -580,24 +121,23 @@ function ChatInner() {
     return process.env.NEXT_PUBLIC_MCP_URL || "http://localhost:3012/mcp";
   }, []);
 
-  // Chatbox state using Vercel AI SDK v6 with tool approval flow
-  const {
-    messages: chatMessages,
-    status: chatStatus,
-    error: chatError,
-    sendMessage: sendChatMessage,
-    addToolApprovalResponse,
-  } = useChat({
+  // Chatbox state using Vercel AI SDK v6
+  const chatHelpers = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
       headers: () => ({
         "X-MCP-URL": mcpUrl,
       }),
     }),
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
   });
 
-  const isChatLoading = chatStatus !== "ready";
+  const chatMessages = chatHelpers.messages;
+  const chatStatus = chatHelpers.status;
+  const chatError = chatHelpers.error;
+  const isChatLoading = chatStatus !== 'ready';
+
+  // Access sendMessage from chatHelpers
+  const sendChatMessage = (chatHelpers as any).sendMessage;
 
   // Local input state to ensure typing works regardless of hook internals
   const [localChatInput, setLocalChatInput] = useState("");
@@ -666,27 +206,8 @@ function ChatInner() {
     chainId: selectedChainId,
   });
 
-  // Get USDC balance on Base Sepolia
-  const {
-    data: usdcBalance,
-    isLoading: isLoadingUsdcBalance,
-    refetch: refetchUsdcBalance,
-  } = useReadContract({
-    address: USDC_BASE_SEPOLIA,
-    abi: ERC20_ABI,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    chainId: baseSepolia.id,
-    query: {
-      enabled: !!address && selectedChainId === baseSepolia.id,
-    },
-  });
-
   const handleRefreshBalance = async () => {
     await refetch();
-    if (selectedChainId === baseSepolia.id) {
-      await refetchUsdcBalance();
-    }
   };
 
   // Format balance from wei to ETH
@@ -694,13 +215,6 @@ function ChatInner() {
     if (!balanceWei) return "0";
     const ethBalance = Number(balanceWei) / 1e18;
     return ethBalance.toFixed(6);
-  };
-
-  // Format USDC balance (6 decimals)
-  const formatUsdcBalance = (balanceRaw: bigint | undefined) => {
-    if (!balanceRaw) return "0";
-    const usdcBalance = Number(balanceRaw) / 1e6;
-    return usdcBalance.toFixed(2);
   };
 
   const selectedChain =
@@ -954,7 +468,7 @@ function ChatInner() {
       </div>
 
       {!isConnected ? (
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex justify-center">
           <ConnectButton />
         </div>
       ) : (
@@ -1019,23 +533,6 @@ function ChatInner() {
             </div>
           </div>
 
-          {/* USDC Balance on Base Sepolia */}
-          {selectedChainId === baseSepolia.id && (
-            <div className="space-y-2">
-              <div className="text-sm text-gray-600 dark:text-gray-200">
-                USDC Balance on {selectedChain.name}:
-              </div>
-              <div className="font-mono text-lg font-semibold text-gray-900 dark:text-gray-100">
-                {isLoadingUsdcBalance
-                  ? "Loading..."
-                  : `${formatUsdcBalance(usdcBalance as bigint | undefined)} USDC`}
-              </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">
-                Token: {USDC_BASE_SEPOLIA}
-              </div>
-            </div>
-          )}
-
           <button
             type="button"
             className="w-full px-4 py-2 rounded bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50"
@@ -1045,8 +542,6 @@ function ChatInner() {
           </button>
         </div>
       )}
-
-      <BaseSepoliaUsdcTransfer />
 
       {/* MCP Tools List - Always visible regardless of wallet connection */}
       <div className="mt-8 pt-8 border-t border-gray-300 dark:border-gray-600 space-y-4">
@@ -1285,48 +780,21 @@ function ChatInner() {
                   >
                     <div className="text-sm whitespace-pre-wrap break-words">
                       {message.parts.map((part, index) => {
-                        if (
-                          (part as unknown as { type: string }).type === "text"
-                        ) {
+                        if (part.type === "text") {
                           return (
                             <ReactMarkdown
                               key={index}
                               className="markdown-content"
                               components={{
-                                p: ({ children }) => (
-                                  <p className="mb-2 last:mb-0">{children}</p>
-                                ),
-                                h1: ({ children }) => (
-                                  <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0">
-                                    {children}
-                                  </h1>
-                                ),
-                                h2: ({ children }) => (
-                                  <h2 className="text-base font-bold mb-2 mt-3 first:mt-0">
-                                    {children}
-                                  </h2>
-                                ),
-                                h3: ({ children }) => (
-                                  <h3 className="text-sm font-bold mb-1 mt-2 first:mt-0">
-                                    {children}
-                                  </h3>
-                                ),
-                                ul: ({ children }) => (
-                                  <ul className="list-disc list-inside mb-2 space-y-1">
-                                    {children}
-                                  </ul>
-                                ),
-                                ol: ({ children }) => (
-                                  <ol className="list-decimal list-inside mb-2 space-y-1">
-                                    {children}
-                                  </ol>
-                                ),
-                                li: ({ children }) => (
-                                  <li className="ml-2">{children}</li>
-                                ),
+                                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                                h1: ({ children }) => <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0">{children}</h1>,
+                                h2: ({ children }) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h2>,
+                                h3: ({ children }) => <h3 className="text-sm font-bold mb-1 mt-2 first:mt-0">{children}</h3>,
+                                ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                                ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                                li: ({ children }) => <li className="ml-2">{children}</li>,
                                 code: ({ children, className, ...props }) => {
-                                  const inline = (props as { inline?: boolean })
-                                    .inline;
+                                  const inline = (props as { inline?: boolean }).inline;
                                   if (inline) {
                                     return (
                                       <code className="bg-gray-200 dark:bg-gray-800 px-1 py-0.5 rounded text-xs font-mono">
@@ -1340,9 +808,7 @@ function ChatInner() {
                                     </code>
                                   );
                                 },
-                                pre: ({ children }) => (
-                                  <pre className="mb-2">{children}</pre>
-                                ),
+                                pre: ({ children }) => <pre className="mb-2">{children}</pre>,
                                 blockquote: ({ children }) => (
                                   <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-3 italic my-2">
                                     {children}
@@ -1358,30 +824,12 @@ function ChatInner() {
                                     {children}
                                   </a>
                                 ),
-                                strong: ({ children }) => (
-                                  <strong className="font-semibold">
-                                    {children}
-                                  </strong>
-                                ),
-                                em: ({ children }) => (
-                                  <em className="italic">{children}</em>
-                                ),
+                                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                                em: ({ children }) => <em className="italic">{children}</em>,
                               }}
                             >
                               {part.text}
                             </ReactMarkdown>
-                          );
-                        }
-                        if (
-                          (part as unknown as { type: string }).type ===
-                          "dynamic-tool"
-                        ) {
-                          return (
-                            <DynamicToolWithApprovalView
-                              key={index}
-                              invocation={part as unknown as DynamicToolUIPart}
-                              addToolApprovalResponse={addToolApprovalResponse}
-                            />
                           );
                         }
                         return null;
@@ -1451,5 +899,19 @@ function ChatInner() {
 }
 
 export default function ChatPage() {
-  return <ChatInner />;
+  return (
+    <WagmiProvider config={wagmiConfig}>
+      <QueryClientProvider client={queryClient}>
+        <RainbowKitProvider
+          theme={darkTheme({
+            accentColor: "#FF6B35",
+            accentColorForeground: "#fff",
+          })}
+          initialChain={arbitrum}
+        >
+          <ChatInner />
+        </RainbowKitProvider>
+      </QueryClientProvider>
+    </WagmiProvider>
+  );
 }
