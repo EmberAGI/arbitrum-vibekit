@@ -1,4 +1,4 @@
-import { generateObject, type LanguageModelV1 } from 'ai';
+import { generateObject, type LanguageModel } from 'ai';
 import type { GreetingState } from '../state.js';
 import { getLowestSatisfaction, isAcceptableSatisfaction } from '../state.js';
 import { EVALUATE_GREETING_PROMPT } from '../prompts/evaluator.js';
@@ -6,7 +6,7 @@ import { evaluationOutputSchema } from '../schemas.js';
 
 export async function evaluatorNode(
   state: GreetingState,
-  model: LanguageModelV1
+  model: LanguageModel
 ): Promise<Partial<GreetingState>> {
   try {
     // Build history context
@@ -33,7 +33,7 @@ export async function evaluatorNode(
       prompt,
       schema: evaluationOutputSchema,
       temperature: 0.3,
-      maxTokens: 1000, // Further increased to avoid truncation
+      maxOutputTokens: 1000, // Further increased to avoid truncation
     });
 
     // Calculate overall satisfaction (lowest of the three)

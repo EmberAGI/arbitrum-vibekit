@@ -1,0 +1,72 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import process from 'node:process';
+
+import { createA2AServer } from './a2a/server.js';
+import { resolveConfigDirectory } from './config/runtime/config-dir.js';
+import { initFromConfigWorkspace, type AgentConfigHandle } from './config/runtime/init.js';
+import { serviceConfig } from './config.js';
+import { Logger } from './utils/logger.js';
+
+async function main(): Promise<void> {
+  const logger = Logger.getInstance('Server');
+
+  // Check for config workspace
+  const { configDir: configRoot } = resolveConfigDirectory();
+  const manifestPath = resolve(configRoot, 'agent.manifest.json');
+  if (!existsSync(manifestPath)) {
+    throw new Error(
+      `Config workspace not found at ${configRoot}. Run "npx -y @emberai/agent-node init" to scaffold the configuration workspace before starting the server.`,
+    );
+  }
+
+  logger.info(`Using config workspace from ${configRoot}`);
+
+  const agentConfigHandle: AgentConfigHandle = await initFromConfigWorkspace({
+    root: configRoot,
+    dev: process.env['NODE_ENV'] === 'development',
+  });
+
+  const server = await createA2AServer({
+    serviceConfig,
+    agentConfig: agentConfigHandle,
+  });
+
+  const addressInfo = server.address();
+  if (addressInfo && typeof addressInfo !== 'string') {
+    logger.info(`A2A server listening on http://${addressInfo.address}:${addressInfo.port}`);
+  }
+
+  const shutdown = async (): Promise<void> => {
+    logger.info('Shutting down server...');
+    await agentConfigHandle.close();
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+  };
+
+  const handleSignal = (_signal: NodeJS.Signals): void => {
+    void shutdown()
+      .catch((error) => {
+        logger.error('Error during server shutdown', error);
+      })
+      .finally(() => {
+        process.exit(0);
+      });
+  };
+
+  process.on('SIGINT', handleSignal);
+  process.on('SIGTERM', handleSignal);
+}
+
+void main().catch((error) => {
+  const logger = Logger.getInstance('Server');
+  logger.error('Failed to start A2A server', error);
+  process.exit(1);
+});

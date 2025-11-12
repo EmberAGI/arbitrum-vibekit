@@ -1,0 +1,117 @@
+name: 🤖 New Agent Template
+description: Propose a new agent template for the community directory
+title: "[New Agent Template]: "
+labels: ["enhancement", "agent-template"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a new agent template! Templates help developers quickly build DeFi agents. 
+        Note that all agent templates must be created in the `typescript/community/` directory.
+
+  - type: input
+    id: agent-name
+    attributes:
+      label: 🏷️ Agent Name
+      description: What is this agent called?
+    validations:
+      required: true
+
+  - type: textarea
+    id: agent-description
+    attributes:
+      label: 📝 Agent Description
+      description: Describe what this agent does and its key features
+      placeholder: |
+        This agent automatically...
+        Key features:
+
+    validations:
+      required: true
+
+  - type: textarea
+    id: protocols
+    attributes:
+      label: 🔌 Required Protocols
+      description: Which DeFi protocols this agent integrates with?
+      placeholder: |
+        Primary protocols:
+
+        Optional protocols:
+
+    validations:
+      required: true
+
+  - type: dropdown
+    id: automation-level
+    attributes:
+      label: 🤖 Automation Level
+      description: How automated is this agent?
+      options:
+        - Manual - User triggers each action
+        - Semi-automated - Agent suggests, user approves
+        - Automated - Agent executes based on conditions
+        - Fully autonomous - Agent manages everything independently
+    validations:
+      required: true
+
+  - type: textarea
+    id: architecture
+    attributes:
+      label: 🏗️ Code Architecture
+      description: Explain the technical architecture for this agent template
+      placeholder: |
+        Skills & Tools structure:
+        - Primary skills this agent exposes
+        - Internal tools each skill uses
+        - MCP tool definitions and schemas
+
+        Agent components:
+        - Context providers needed (wallet, price feeds, etc.)
+        - Hooks for validation/logging/transformation
+        - Configuration and environment setup
+
+        Integration patterns:
+        - How agent connects to DeFi protocols
+        - External APIs and data sources used
+        - Error handling and retry strategies
+    validations:
+      required: true
+
+  - type: textarea
+    id: testing-approach
+    attributes:
+      label: 🧪 Testing Requirements
+      description: How should this agent be tested?
+      placeholder: |
+        Unit tests:
+
+        Integration tests:
+
+        Live testing:
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 📎 Additional Information
+      description: Any other relevant details, mockups, or references
+      placeholder: |
+        Technical specifications, architecture diagrams, 
+        demos, or any other supporting materials...
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: ✅ Pre-submission Checklist
+      options:
+        - label: I have searched existing issues and templates to avoid duplicates
+          required: true
+        - label: I have clearly described the agent's purpose and functionality
+          required: true
+        - label: I have identified the required protocols and integrations
+          required: true
+        - label: I understand this agent will be created in the typescript/community/ directory
+          required: true
+        - label: I will wait for the Vibekit team to approve this issue before continuing to implementation
+          required: true

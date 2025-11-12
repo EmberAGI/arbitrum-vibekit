@@ -1,5 +1,5 @@
 import * as ethers from 'ethers';
-import type { Task } from '@google-a2a/types';
+import type { Task } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 
 import { extractLendingTransactionPlan } from './lending.js';
 import { MultiChainSigner } from './multi-chain-signer.js';
@@ -186,7 +186,7 @@ export async function extractAndExecuteTransactions(
   const transactionsToExecute = txPlanEntries.map(tx => ({
     to: tx.to,
     data: tx.data,
-    value: tx.value || '0' // Ensure value is a string, defaulting to '0'
+    value: tx.value || '0', // Ensure value is a string, defaulting to '0'
   }));
 
   // Execute the transactions using the (new) executeTransactionPlan
@@ -226,4 +226,4 @@ export async function executeTransactionPlan(
   }
 
   return txHashes;
-} 
+}

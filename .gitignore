@@ -1,64 +1,47 @@
-# Node.js / TypeScript
+# Dependencies
 node_modules/
-dist/
-build/
-coverage/
+.pnpm/
 .pnpm-store/
-.npm/
-.pnpm-debug.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
 
-# Environment variables
-.env
-.env.*
-!.env.example
-!.env.test.example
-
-# TypeScript cache
+# Build outputs
+dist/
+dist-test/
+build/
 *.tsbuildinfo
-.eslintcache
+.tsbuildinfo
+.next/
+.turbo/
+out/
 
-# Rust
-target/
-Cargo.lock
-**/*.rs.bk
-**/*.pdb
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
 
 # Testing
-.coverage/
+coverage/
 .nyc_output/
-
-# IDE / Editors
-.idea/
-.vscode/*
-!.vscode/extensions.json
-!.vscode/launch.json
-!.vscode/settings.json
-!.vscode/tasks.json
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-.history/
-*~
-.*.swp
-.cursor/rules/scratchpad.mdc
+*.lcov
 
 # Logs
 logs/
 *.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Build artifacts
-.turbo
-.cache/
-.vercel
-.next/
+# OS files
+.DS_Store
+Thumbs.db
 
 # Package managers
 .pnp.*
@@ -86,3 +69,7 @@ logs/
 
 # .claude
 .claude/
+# Project specific
+/onchain-actions/
+.vibecode/
+typescript/lib/agent-node/*.zip

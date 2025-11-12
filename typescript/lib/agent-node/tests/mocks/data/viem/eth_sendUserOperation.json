@@ -1,0 +1,25 @@
+{
+  "metadata": {
+    "service": "viem",
+    "endpoint": "/",
+    "method": "POST",
+    "recordedAt": "2025-10-19T01:00:00.000Z"
+  },
+  "request": {
+    "headers": {},
+    "body": {
+      "jsonrpc": "2.0",
+      "method": "eth_sendUserOperation",
+      "params": [],
+      "id": 1
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Sat, 19 Oct 2025 01:00:00 GMT",
+      "content-type": "application/json"
+    },
+    "rawBody": "eyJqc29ucnBjIjoiMi4wIiwiaWQiOjEsInJlc3VsdCI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2NzgifQ=="
+  }
+}

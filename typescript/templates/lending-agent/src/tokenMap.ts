@@ -2,9 +2,9 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import {
   LendingGetCapabilitiesResponseSchema,
   type LendingGetCapabilitiesResponse,
-  type TokenInfo,
   type LendingAgentCapability,
-} from 'ember-schemas';
+} from '@emberai/arbitrum-vibekit-core/ember-schemas';
+import type { TokenInfo } from './tools/types.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -59,9 +59,13 @@ export async function loadTokenMapFromMcp(
       console.log('Raw capabilitiesResult received from MCP tool call.');
 
       // Check if the response has structuredContent directly (modern format)
-      if (capabilitiesResult && typeof capabilitiesResult === 'object' && 'structuredContent' in capabilitiesResult) {
+      if (
+        capabilitiesResult &&
+        typeof capabilitiesResult === 'object' &&
+        'structuredContent' in capabilitiesResult
+      ) {
         const parsedData = (capabilitiesResult as any).structuredContent;
-        
+
         // Validate the capabilities structure
         const capabilitiesValidationResult =
           LendingGetCapabilitiesResponseSchema.safeParse(parsedData);
@@ -70,13 +74,17 @@ export async function loadTokenMapFromMcp(
             'Parsed MCP getCapabilities response validation failed:',
             capabilitiesValidationResult.error
           );
-          throw new Error(`Failed to validate the parsed capabilities data from MCP server. Complete response: ${JSON.stringify(capabilitiesResult, null, 2)}`);
+          throw new Error(
+            `Failed to validate the parsed capabilities data from MCP server. Complete response: ${JSON.stringify(capabilitiesResult, null, 2)}`
+          );
         }
 
         capabilitiesResponse = capabilitiesValidationResult.data;
         console.log(`Validated ${capabilitiesResponse.capabilities.length} capabilities.`);
       } else {
-        throw new Error(`MCP getCapabilities tool returned an unexpected structure. Expected { structuredContent: { capabilities: [...] } }. Complete response: ${JSON.stringify(capabilitiesResult, null, 2)}`);
+        throw new Error(
+          `MCP getCapabilities tool returned an unexpected structure. Expected { structuredContent: { capabilities: [...] } }. Complete response: ${JSON.stringify(capabilitiesResult, null, 2)}`
+        );
       }
 
       // Cache the response

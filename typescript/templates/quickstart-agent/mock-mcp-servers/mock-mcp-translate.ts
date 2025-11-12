@@ -121,7 +121,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // Simple mock translation: if we have an exact match, use it
     // Otherwise, just return the text with a language prefix
-    const sourceTrans = TRANSLATIONS[sourceLanguage] || TRANSLATIONS.en;
+    const sourceTrans = TRANSLATIONS[sourceLanguage] || TRANSLATIONS['en'];
     const targetTrans = TRANSLATIONS[targetLanguage];
 
     // Try to find the text in source translations

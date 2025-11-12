@@ -1,15 +1,24 @@
-import { customProvider, extractReasoningMiddleware, wrapLanguageModel } from 'ai';
+import {
+  customProvider,
+  extractReasoningMiddleware,
+  wrapLanguageModel,
+} from 'ai';
 import { groq } from '@ai-sdk/groq';
 import { xai } from '@ai-sdk/xai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { isTestEnvironment } from '../constants';
-import { artifactModel, chatModel, reasoningModel, titleModel } from './models.test';
+import {
+  artifactModel,
+  chatModel,
+  reasoningModel,
+  titleModel,
+} from './models.mock';
 
 const openRouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-export const openRouterProvider = isTestEnvironment
+export const openRouterProvider: any = isTestEnvironment
   ? customProvider({
       languageModels: {
         'chat-model': chatModel,
@@ -35,11 +44,11 @@ export const openRouterProvider = isTestEnvironment
         'artifact-model': openRouter('x-ai/grok-3-mini'),
       },
       imageModels: {
-        'small-model': xai.image('grok-2-image'),
+        'small-model': xai.image('grok-2-image') as any,
       },
     });
 
-export const grokProvider = isTestEnvironment
+export const grokProvider: any = isTestEnvironment
   ? customProvider({
       languageModels: {
         'chat-model': chatModel,
@@ -50,15 +59,15 @@ export const grokProvider = isTestEnvironment
     })
   : customProvider({
       languageModels: {
-        'chat-model': xai('grok-2-1212'),
+        'chat-model': xai('grok-2-1212') as any,
         'chat-model-reasoning': wrapLanguageModel({
-          model: groq('deepseek-r1-distill-llama-70b'),
+          model: groq('deepseek-r1-distill-llama-70b') as any,
           middleware: extractReasoningMiddleware({ tagName: 'think' }),
-        }),
-        'title-model': xai('grok-2-1212'),
-        'artifact-model': xai('grok-2-1212'),
+        }) as any,
+        'title-model': xai('grok-2-1212') as any,
+        'artifact-model': xai('grok-2-1212') as any,
       },
       imageModels: {
-        'small-model': xai.image('grok-2-image'),
+        'small-model': xai.image('grok-2-image') as any,
       },
     });

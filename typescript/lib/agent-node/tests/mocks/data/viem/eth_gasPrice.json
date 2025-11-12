@@ -1,0 +1,33 @@
+{
+  "metadata": {
+    "service": "viem",
+    "endpoint": "/",
+    "method": "POST",
+    "recordedAt": "2025-10-17T22:11:35.701Z"
+  },
+  "request": {
+    "headers": {},
+    "body": {
+      "jsonrpc": "2.0",
+      "method": "eth_gasPrice",
+      "params": [],
+      "id": 1
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 17 Oct 2025 22:11:35 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "x-cache": "false",
+      "cf-cache-status": "DYNAMIC",
+      "content-encoding": "br",
+      "server": "cloudflare",
+      "cf-ray": "990321f448037ce4-EWR",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "rawBody": "GywAAASibZj6ZZERBL9FF2gYaBHEUgiqUN+jnzn2SghOGxQtI1bRswLB3BJ8zbHyAQ=="
+  }
+}

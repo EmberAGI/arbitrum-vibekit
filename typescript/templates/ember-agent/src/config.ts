@@ -1,4 +1,4 @@
-import type { AgentConfig } from 'arbitrum-vibekit-core';
+import type { AgentConfig } from '@emberai/arbitrum-vibekit-core';
 import { swappingSkill } from './skills/swapping.js';
 import { documentationSkill } from './skills/documentation.js';
 

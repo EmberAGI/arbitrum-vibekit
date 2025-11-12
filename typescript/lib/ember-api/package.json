@@ -4,12 +4,14 @@
   "type": "module",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
+  "private": true,
   "scripts": {
     "prepare": "pnpm build",
     "build": "pnpm exec tsc -b",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
-    "format": "prettier --write \"src/**/*.ts\""
+    "format": "prettier --write \"src/**/*.ts\"",
+    "test:ci": "echo \"No CI tests defined for ${npm_package_name}\""
   },
   "devDependencies": {
     "@types/node": "catalog:",
@@ -18,7 +20,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
-    "arbitrum-vibekit-core": "workspace:*",
+    "@emberai/arbitrum-vibekit-core": "catalog:",
     "zod": "catalog:"
   }
 }

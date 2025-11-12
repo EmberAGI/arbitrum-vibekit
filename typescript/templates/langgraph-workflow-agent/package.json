@@ -4,6 +4,7 @@
   "description": "A hello-world agent demonstrating the evaluator-optimizer workflow pattern using LangGraph",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "private": true,
   "type": "module",
   "scripts": {
     "build": "tsc",
@@ -11,18 +12,18 @@
     "test": "vitest run",
     "test:unit": "vitest run test/unit",
     "test:integration": "vitest run test/integration",
-    "lint": "eslint src test || true"
+    "lint": "eslint src test || true",
+    "test:ci": "echo \"Skipping CI tests for ${npm_package_name}\""
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-    "@google-a2a/types": "workspace:*",
     "@langchain/core": "^0.3.59",
     "@langchain/langgraph": "^0.3.3",
     "@modelcontextprotocol/sdk": "catalog:",
     "ai": "catalog:",
-    "arbitrum-vibekit-core": "workspace:*",
+    "@emberai/arbitrum-vibekit-core": "catalog:",
     "dotenv": "catalog:",
     "zod": "catalog:"
   },

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defineSkill, type AgentConfig } from 'arbitrum-vibekit-core';
+import { defineSkill, type AgentConfig } from '@emberai/arbitrum-vibekit-core';
 import { lendingTools } from './tools/index.js';
 
 // Agent context with token map (MCP client is provided by framework)

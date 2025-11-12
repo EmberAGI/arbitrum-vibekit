@@ -1,4 +1,4 @@
-import { generateText, type LanguageModelV1 } from 'ai';
+import { generateText, type LanguageModel } from 'ai';
 import type { GreetingState } from '../state.js';
 import {
   INITIAL_GREETING_PROMPT,
@@ -33,7 +33,7 @@ function isWeirdInput(input: string): { isWeird: boolean; reason?: string } {
 
 export async function generatorNode(
   state: GreetingState,
-  model: LanguageModelV1
+  model: LanguageModel
 ): Promise<Partial<GreetingState>> {
   try {
     let prompt: string;
@@ -70,7 +70,7 @@ export async function generatorNode(
       model,
       prompt,
       temperature: 0.7,
-      maxTokens: 200,
+      maxOutputTokens: 200,
     });
 
     return {

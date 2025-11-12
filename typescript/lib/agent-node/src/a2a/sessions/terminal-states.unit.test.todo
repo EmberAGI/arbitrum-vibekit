@@ -1,0 +1,1126 @@
+import type { Server } from 'http';
+
+import type { Task } from '@a2a-js/sdk';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
+// Type definitions for test responses
+interface JSONRPCError {
+  code: number;
+  message: string;
+  data?: unknown;
+}
+
+interface TaskResult {
+  kind: 'task';
+  id: string;
+  contextId?: string;
+  status: {
+    state: string;
+    final: boolean;
+    reason?: string;
+    inputRequired?: {
+      type: string;
+      schema?: unknown;
+    };
+  };
+  metadata?: {
+    modified?: boolean;
+    newProperty?: string;
+    persistedAcrossRestart?: boolean;
+    initialState?: string;
+    stateTransitions?: Array<{
+      from?: string;
+      to: string;
+      timestamp?: string;
+      valid?: boolean;
+      reason?: string;
+    }>;
+  };
+  createdAt?: string;
+  updatedAt?: string;
+  artifacts?: unknown[];
+}
+
+interface MessageResult {
+  kind: 'message';
+  parts: Array<{ text?: string }>;
+}
+
+interface BatchResult {
+  tasks: Task[];
+  optimization?: {
+    terminalTasksOptimized?: boolean;
+    queryTime?: number;
+  };
+}
+
+interface JSONRPCResponse {
+  jsonrpc: '2.0';
+  id: number;
+  result?: TaskResult | MessageResult | BatchResult;
+  error?: JSONRPCError;
+}
+
+/**
+ * Unit tests for session task management edge cases
+ * Tests terminal state immutability and router behavior
+ */
+describe('Session Task Management Edge Cases', () => {
+  let server: Server;
+  let baseUrl: string;
+
+  const getServerUrl = (srv: Server): string => {
+    const address = srv.address();
+    if (typeof address === 'string') {
+      return `http://${address}`;
+    }
+    return `http://localhost:${address?.port || 3000}`;
+  };
+
+  beforeEach(async () => {
+    // Given the A2A server with task management capabilities
+    const { createA2AServer } = await import('../a2a/server.js');
+    server = await createA2AServer({ port: 0, logging: false });
+    baseUrl = getServerUrl(server);
+  });
+
+  afterEach(async () => {
+    const { shutdownServer } = await import('../a2a/server.js');
+    await shutdownServer(server);
+  });
+
+  describe('Terminal State Immutability', () => {
+    it('should not allow transitions from completed state', async () => {
+      // Given a completed task
+      let taskId = '';
+
+      // Create and complete a task
+      const completeResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'complete-task-1',
+              contextId: 'terminal-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Execute simple task that completes quickly',
+                },
+              ],
+            },
+          },
+          id: 1,
+        }),
+      });
+      const completeResponseBody = (await completeResponse.json()) as JSONRPCResponse;
+
+      const completeResult = completeResponseBody.result;
+      if (completeResult && 'kind' in completeResult && completeResult.kind === 'task') {
+        taskId = completeResult.id;
+
+        // Task starts in submitted state per A2A spec
+        expect(completeResult.status.state).toBe('submitted');
+
+        // Simulate task completion for testing terminal state behavior
+        // In real implementation, task would progress through states
+        // For test purposes, we assume it reaches completed state
+        // The actual state progression is tested elsewhere
+      }
+
+      // When attempting to transition completed task to another state
+      const transitionResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tasks/resume',
+          params: {
+            taskId: taskId,
+            contextId: 'terminal-context-1',
+            newState: 'working',
+          },
+          id: 2,
+        }),
+      });
+      const transitionResponseBody = (await transitionResponse.json()) as JSONRPCResponse;
+
+      // Then transition should be rejected
+      expect(transitionResponse.status).toBe(200);
+
+      if (transitionResponseBody.error) {
+        // Test behavior: error occurred when trying to transition terminal state
+        expect(transitionResponseBody.error).toBeDefined();
+        // Don't test specific error message format
+      } else {
+        const transitionResult = transitionResponseBody.result;
+        if (transitionResult && 'kind' in transitionResult && transitionResult.kind === 'task') {
+          // Test behavior: state remains terminal and unchanged
+          expect(transitionResult.status.state).toBe('completed');
+          expect(transitionResult.status.final).toBe(true);
+        }
+      }
+    });
+
+    it('should not allow transitions from failed state', async () => {
+      // Given a failed task
+      let taskId = '';
+
+      // Create a task that will fail
+      const failResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'fail-task-1',
+              contextId: 'terminal-context-2',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Execute task that will fail due to invalid parameters',
+                },
+              ],
+            },
+          },
+          id: 3,
+        }),
+      });
+      const failResponseBody = (await failResponse.json()) as JSONRPCResponse;
+
+      const failResult = failResponseBody.result;
+      if (failResult && 'kind' in failResult && failResult.kind === 'task') {
+        taskId = failResult.id;
+
+        // Simulate task failure or wait for failure
+        expect(failResult.status.state).toBe('failed');
+        expect(failResult.status.final).toBe(true);
+      }
+
+      // When attempting to retry or resume failed task
+      const retryResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tasks/retry',
+          params: {
+            taskId: taskId,
+            contextId: 'terminal-context-2',
+          },
+          id: 4,
+        }),
+      });
+      const retryResponseBody = (await retryResponse.json()) as JSONRPCResponse;
+
+      // Then retry should be rejected or create new task
+      expect(retryResponse.status).toBe(200);
+
+      if (retryResponseBody.error) {
+        // Test behavior: error occurred when trying to retry terminal task
+        expect(retryResponseBody.error).toBeDefined();
+      } else {
+        const retryResult = retryResponseBody.result;
+        if (retryResult && 'kind' in retryResult && retryResult.kind === 'task') {
+          // If a task is returned, it should either be the same failed task
+          // or a new task (not a state transition of the failed task)
+          if (retryResult.id === taskId) {
+            expect(retryResult.status.state).toBe('failed');
+            expect(retryResult.status.final).toBe(true);
+          } else {
+            // New task created for retry
+            expect(retryResult.id).not.toBe(taskId);
+            expect(retryResult.status.state).toBe('submitted');
+          }
+        }
+      }
+    });
+
+    it('should not allow transitions from canceled state', async () => {
+      // Given a canceled task
+      let taskId = '';
+
+      // Create a task and cancel it
+      const createResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'cancel-task-1',
+              contextId: 'terminal-context-3',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Execute task that will be canceled',
+                },
+              ],
+            },
+          },
+          id: 5,
+        }),
+      });
+      const createResponseBody = (await createResponse.json()) as JSONRPCResponse;
+
+      const createResult = createResponseBody.result;
+      if (createResult && 'kind' in createResult && createResult.kind === 'task') {
+        taskId = createResult.id;
+
+        // Cancel the task
+        const cancelResponse = await fetch(`${baseUrl}/a2a`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'tasks/cancel',
+            params: {
+              taskId: taskId,
+              contextId: 'terminal-context-3',
+            },
+            id: 6,
+          }),
+        });
+        const _cancelResponseBody = (await cancelResponse.json()) as JSONRPCResponse;
+
+        expect(cancelResponse.status).toBe(200);
+      }
+
+      // When attempting to resume canceled task
+      const resumeResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tasks/resume',
+          params: {
+            taskId: taskId,
+            contextId: 'terminal-context-3',
+          },
+          id: 7,
+        }),
+      });
+      const resumeResponseBody = (await resumeResponse.json()) as JSONRPCResponse;
+
+      // Then resume should be rejected
+      expect(resumeResponse.status).toBe(200);
+
+      if (resumeResponseBody.error) {
+        // Test behavior: error occurred when trying to resume canceled task
+        expect(resumeResponseBody.error).toBeDefined();
+      } else {
+        const resumeResult = resumeResponseBody.result;
+        if (resumeResult && 'kind' in resumeResult && resumeResult.kind === 'task') {
+          // State should remain canceled
+          expect(resumeResult.status.state).toBe('canceled');
+          expect(resumeResult.status.final).toBe(true);
+        }
+      }
+    });
+
+    it('should maintain terminal state metadata immutably', async () => {
+      // Given task with rich metadata that reaches terminal state
+      let taskId = '';
+      let completedTask: TaskResult | undefined;
+
+      const completeResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'metadata-task-1',
+              contextId: 'metadata-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Execute task with rich metadata that completes',
+                },
+              ],
+            },
+          },
+          id: 8,
+        }),
+      });
+      const completeResponseBody = (await completeResponse.json()) as JSONRPCResponse;
+
+      const completeResult = completeResponseBody.result;
+      if (completeResult && 'kind' in completeResult && completeResult.kind === 'task') {
+        taskId = completeResult.id;
+        completedTask = completeResult;
+      }
+
+      // When attempting to modify terminal task metadata
+      const modifyResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tasks/update',
+          params: {
+            taskId: taskId,
+            contextId: 'metadata-context-1',
+            metadata: {
+              modified: true,
+              newProperty: 'should not be added',
+            },
+          },
+          id: 9,
+        }),
+      });
+      const modifyResponseBody = (await modifyResponse.json()) as JSONRPCResponse;
+
+      // Then metadata should remain unchanged
+      expect(modifyResponse.status).toBe(200);
+
+      const modifyResult = modifyResponseBody.result;
+      if (modifyResult && 'kind' in modifyResult && modifyResult.kind === 'task' && completedTask) {
+        const modifiedTask = modifyResult;
+
+        // Core metadata should be preserved
+        expect(modifiedTask.id).toBe(completedTask.id);
+        expect(modifiedTask.contextId).toBe(completedTask.contextId);
+        expect(modifiedTask.status.state).toBe(completedTask.status.state);
+        expect(modifiedTask.status.final).toBe(completedTask.status.final);
+
+        // New metadata should not be added to terminal tasks
+        expect(modifiedTask.metadata?.modified).toBeUndefined();
+        expect(modifiedTask.metadata?.newProperty).toBeUndefined();
+
+        // Original metadata should be preserved
+        if (completedTask.metadata) {
+          expect(modifiedTask.metadata).toEqual(completedTask.metadata);
+        }
+      }
+    });
+
+    it.skip('should preserve terminal state across server restarts (Stage 1.2 - requires durable storage)', async () => {
+      // Given terminal task state before restart
+      let taskId = '';
+      let terminalState = '';
+
+      const createResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'restart-task-1',
+              contextId: 'restart-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Execute task that completes before restart',
+                },
+              ],
+            },
+          },
+          id: 10,
+        }),
+      });
+      const createResponseBody = (await createResponse.json()) as JSONRPCResponse;
+
+      const createResult = createResponseBody.result;
+      if (createResult && 'kind' in createResult && createResult.kind === 'task') {
+        taskId = createResult.id;
+        terminalState = createResult.status.state;
+      }
+
+      // Simulate server restart by shutting down and recreating
+      const { shutdownServer } = await import('../a2a/server.js');
+      await shutdownServer(server);
+
+      const { createA2AServer } = await import('../a2a/server.js');
+      server = await createA2AServer({ port: 0, logging: false });
+      baseUrl = getServerUrl(server);
+
+      // When retrieving task after restart
+      const retrieveResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tasks/get',
+          params: {
+            taskId: taskId,
+            contextId: 'restart-context-1',
+          },
+          id: 11,
+        }),
+      });
+      const retrieveResponseBody = (await retrieveResponse.json()) as JSONRPCResponse;
+
+      // Then terminal state should be preserved
+      expect(retrieveResponse.status).toBe(200);
+
+      const retrieveResult = retrieveResponseBody.result;
+      if (retrieveResult && 'kind' in retrieveResult && retrieveResult.kind === 'task') {
+        expect(retrieveResult.id).toBe(taskId);
+        expect(retrieveResult.status.state).toBe(terminalState);
+        expect(retrieveResult.status.final).toBe(true);
+
+        // Should indicate persistence across restart
+        expect(retrieveResult.metadata?.persistedAcrossRestart).toBe(true);
+      }
+    });
+  });
+
+  describe('Router Behavior with Terminal States', () => {
+    const getTaskStore = (): { save: (task: Task) => Promise<void> } => {
+      const store = (server as unknown as { taskStore?: { save: (task: Task) => Promise<void> } })
+        .taskStore;
+      if (!store) {
+        throw new Error('Task store not available');
+      }
+      return store;
+    };
+
+    it('should return error when sending messages to completed tasks per A2A spec', async () => {
+      // Given completed task (terminal state)
+      const taskId = 'router-completed-task';
+      await getTaskStore().save({
+        kind: 'task',
+        id: taskId,
+        contextId: 'router-context-1',
+        status: {
+          state: 'completed',
+          final: true,
+        },
+      } as Task);
+
+      // When sending a message referencing the completed task
+      const messageResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'router-message-to-completed',
+              contextId: 'router-context-1',
+              taskId: taskId, // Referencing completed task
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Try to interact with completed task',
+                },
+              ],
+            },
+          },
+          id: 13,
+        }),
+      });
+      const messageResponseBody = (await messageResponse.json()) as JSONRPCResponse;
+
+      // Then should return error per A2A spec - terminal tasks cannot be modified
+      expect(messageResponse.status).toBe(200); // JSON-RPC returns 200 even for errors
+      // Test behavior: sending message to terminal task results in error
+      expect(messageResponseBody.error).toBeDefined();
+
+      // Task/get endpoints should still work for reading
+      const getResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tasks/get',
+          params: {
+            taskId: taskId,
+            contextId: 'router-context-1',
+          },
+          id: 14,
+        }),
+      });
+      const getResponseBody = (await getResponse.json()) as JSONRPCResponse;
+
+      // Reading task info should still work
+      expect(getResponse.status).toBe(200);
+      const getResult = getResponseBody.result;
+      if (getResult && 'kind' in getResult && getResult.kind === 'task') {
+        expect(getResult.status.state).toBe('completed');
+        expect(getResult.status.final).toBe(true);
+      }
+    });
+
+    it('should return error when sending messages to failed tasks per A2A spec', async () => {
+      // Given failed task (terminal state)
+      const taskId = 'router-failed-task';
+      await getTaskStore().save({
+        kind: 'task',
+        id: taskId,
+        contextId: 'router-context-2',
+        status: {
+          state: 'failed',
+          final: true,
+        },
+      } as Task);
+
+      // When sending message to failed task
+      const messageResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'router-message-to-failed',
+              contextId: 'router-context-2',
+              taskId: taskId, // Referencing failed task
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Try to interact with failed task',
+                },
+              ],
+            },
+          },
+          id: 15,
+        }),
+      });
+      const messageResponseBody = (await messageResponse.json()) as JSONRPCResponse;
+
+      // Then should return error per A2A spec
+      expect(messageResponse.status).toBe(200);
+      // Test behavior: sending message to failed task results in error
+      expect(messageResponseBody.error).toBeDefined();
+
+      // Reading task should still work
+      const getResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tasks/get',
+          params: {
+            taskId: taskId,
+            contextId: 'router-context-2',
+          },
+          id: 16,
+        }),
+      });
+      const getResponseBody = (await getResponse.json()) as JSONRPCResponse;
+
+      expect(getResponse.status).toBe(200);
+      const getResult = getResponseBody.result;
+      if (getResult && 'kind' in getResult && getResult.kind === 'task') {
+        expect(getResult.status.state).toBe('failed');
+        expect(getResult.status.final).toBe(true);
+      }
+    });
+
+    it('should return error when sending messages to canceled tasks per A2A spec', async () => {
+      // Given canceled task (terminal state)
+      const taskId = 'router-canceled-task';
+      await getTaskStore().save({
+        kind: 'task',
+        id: taskId,
+        contextId: 'router-context-3',
+        status: {
+          state: 'canceled',
+          final: true,
+        },
+      } as Task);
+
+      // When sending message to canceled task
+      const messageResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'router-message-to-canceled',
+              contextId: 'router-context-3',
+              taskId: taskId, // Referencing canceled task
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Try to interact with canceled task',
+                },
+              ],
+            },
+          },
+          id: 18,
+        }),
+      });
+      const messageResponseBody = (await messageResponse.json()) as JSONRPCResponse;
+
+      // Then should return error per A2A spec
+      expect(messageResponse.status).toBe(200);
+      // Test behavior: sending message to canceled task results in error
+      expect(messageResponseBody.error).toBeDefined();
+
+      // Reading task should still work
+      const getResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tasks/get',
+          params: {
+            taskId: taskId,
+            contextId: 'router-context-3',
+          },
+          id: 19,
+        }),
+      });
+      const getResponseBody = (await getResponse.json()) as JSONRPCResponse;
+
+      expect(getResponse.status).toBe(200);
+      const getResult = getResponseBody.result;
+      if (getResult && 'kind' in getResult && getResult.kind === 'task') {
+        expect(getResult.status.state).toBe('canceled');
+        expect(getResult.status.final).toBe(true);
+      }
+    });
+
+    it('should optimize terminal task queries for performance', async () => {
+      // Given multiple terminal tasks
+      const terminalTasks: string[] = [];
+
+      // Create several terminal tasks
+      for (let i = 0; i < 5; i++) {
+        const taskResponse = await fetch(`${baseUrl}/a2a`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'message/send',
+            params: {
+              message: {
+                kind: 'message',
+                messageId: `perf-task-${i}`,
+                contextId: 'performance-context',
+                role: 'user',
+                parts: [
+                  {
+                    kind: 'text',
+                    text: `Execute task ${i} for performance testing`,
+                  },
+                ],
+              },
+            },
+            id: 19 + i,
+          }),
+        });
+        const taskResponseBody = (await taskResponse.json()) as JSONRPCResponse;
+
+        const result = taskResponseBody.result;
+        if (result && 'kind' in result && result.kind === 'task') {
+          terminalTasks.push(result.id);
+        }
+      }
+
+      // When querying multiple terminal tasks
+      const startTime = Date.now();
+
+      const batchResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tasks/batch',
+          params: {
+            taskIds: terminalTasks,
+            contextId: 'performance-context',
+          },
+          id: 24,
+        }),
+      });
+      const batchResponseBody = (await batchResponse.json()) as JSONRPCResponse;
+
+      const queryTime = Date.now() - startTime;
+
+      // Then queries should be optimized for terminal tasks
+      expect(batchResponse.status).toBe(200);
+      expect(queryTime).toBeLessThan(500); // Should be fast batch query
+
+      const batchResult = batchResponseBody.result;
+      if (batchResult && 'tasks' in batchResult) {
+        expect(batchResult.tasks).toHaveLength(terminalTasks.length);
+
+        // All tasks should be terminal
+        batchResult.tasks.forEach((task: Task) => {
+          expect(task.status.final).toBe(true);
+          expect(['completed', 'failed', 'canceled']).toContain(task.status.state);
+        });
+
+        // Should indicate optimized query path
+        expect(batchResult.optimization?.terminalTasksOptimized).toBe(true);
+        expect(batchResult.optimization?.queryTime).toBeLessThan(500);
+      }
+    });
+  });
+
+  describe('Task State Transition Validation', () => {
+    it('should validate initial submitted state for new tasks', async () => {
+      // Given new task creation
+      // When creating a new task
+      const response = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'initial-state-1',
+              contextId: 'initial-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Create task to validate initial state',
+                },
+              ],
+            },
+          },
+          id: 25,
+        }),
+      });
+      const batchResponseBody = (await response.json()) as JSONRPCResponse;
+
+      // Then task should start in submitted state per A2A spec
+      expect(response.status).toBe(200);
+
+      const result = batchResponseBody.result;
+      if (result && 'kind' in result && result.kind === 'task') {
+        // Per A2A spec, tasks ALWAYS start in submitted state
+        expect(result.status.state).toBe('submitted');
+        expect(result.status.final).toBe(false);
+
+        // Initial state validation
+        expect(result.createdAt).toBeDefined();
+        expect(result.updatedAt).toBeDefined();
+        expect(new Date(result.createdAt!).getTime()).toBeLessThanOrEqual(
+          new Date(result.updatedAt!).getTime(),
+        );
+
+        // Should have proper initial metadata
+        expect(result.metadata?.initialState).toBe('submitted');
+        expect(result.metadata?.stateTransitions).toHaveLength(1);
+        expect(result.metadata?.stateTransitions?.[0].from).toBeUndefined();
+        expect(result.metadata?.stateTransitions?.[0].to).toBe('submitted');
+      } else if (result && 'kind' in result && result.kind === 'message') {
+        // Simple messages don't create tasks - this is OK
+        expect(result.parts).toBeDefined();
+      }
+    });
+
+    it('should validate proper transition from submitted to working', async () => {
+      // Given task in submitted state
+      let taskId = '';
+
+      const submitResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'transition-test-1',
+              contextId: 'transition-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Create task to test state transitions',
+                },
+              ],
+            },
+          },
+          id: 26,
+        }),
+      });
+      const submitResponseBody = (await submitResponse.json()) as JSONRPCResponse;
+
+      const submitResult = submitResponseBody.result;
+      if (submitResult && 'kind' in submitResult && submitResult.kind === 'task') {
+        taskId = submitResult.id;
+        expect(submitResult.status.state).toBe('submitted');
+      }
+
+      // When task transitions to working
+      const workingResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tasks/start',
+          params: {
+            taskId: taskId,
+            contextId: 'transition-context-1',
+          },
+          id: 27,
+        }),
+      });
+      const workingResponseBody = (await workingResponse.json()) as JSONRPCResponse;
+
+      // Then transition should be valid and tracked
+      expect(workingResponse.status).toBe(200);
+
+      const workingResult = workingResponseBody.result;
+      if (workingResult && 'kind' in workingResult && workingResult.kind === 'task') {
+        expect(workingResult.status.state).toBe('working');
+        expect(workingResult.status.final).toBe(false);
+
+        // State transition should be recorded
+        expect(workingResult.metadata?.stateTransitions).toHaveLength(2);
+        const transition = workingResult.metadata?.stateTransitions?.[1];
+        expect(transition?.from).toBe('submitted');
+        expect(transition?.to).toBe('working');
+        expect(transition?.timestamp).toBeDefined();
+        expect(transition?.valid).toBe(true);
+      }
+    });
+
+    it('should reject invalid state transitions', async () => {
+      // Given task in submitted state
+      let taskId = '';
+
+      const submitResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'invalid-transition-1',
+              contextId: 'invalid-transition-context',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Create task to test invalid transitions',
+                },
+              ],
+            },
+          },
+          id: 28,
+        }),
+      });
+      const submitResponseBody = (await submitResponse.json()) as JSONRPCResponse;
+
+      const submitResult = submitResponseBody.result;
+      if (submitResult && 'kind' in submitResult && submitResult.kind === 'task') {
+        taskId = submitResult.id;
+      }
+
+      // When attempting invalid transition from submitted to completed
+      const invalidResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tasks/complete',
+          params: {
+            taskId: taskId,
+            contextId: 'invalid-transition-context',
+            skipValidation: false,
+          },
+          id: 29,
+        }),
+      });
+      const invalidResponseBody = (await invalidResponse.json()) as JSONRPCResponse;
+
+      // Then transition should be rejected
+      expect(invalidResponse.status).toBe(200);
+
+      if (invalidResponseBody.error) {
+        // Test behavior: invalid transition was rejected
+        expect(invalidResponseBody.error).toBeDefined();
+        // Don't test specific error format or internal state machine details
+      }
+    });
+
+    it('should track all state transitions with timestamps', async () => {
+      // Given task that goes through multiple states
+      let taskId = '';
+
+      const createResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'full-lifecycle-1',
+              contextId: 'lifecycle-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Execute task through full lifecycle',
+                },
+              ],
+            },
+          },
+          id: 30,
+        }),
+      });
+      const createResponseBody = (await createResponse.json()) as JSONRPCResponse;
+
+      const createResult = createResponseBody.result;
+      if (createResult && 'kind' in createResult && createResult.kind === 'task') {
+        taskId = createResult.id;
+      }
+
+      // Simulate task progressing through states
+      const _states = ['submitted', 'working', 'input-required', 'working', 'completed'];
+      let previousTimestamp = 0;
+
+      // When checking task after lifecycle completion
+      const finalResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tasks/get',
+          params: {
+            taskId: taskId,
+            contextId: 'lifecycle-context-1',
+            includeHistory: true,
+          },
+          id: 31,
+        }),
+      });
+      const finalResponseBody = (await finalResponse.json()) as JSONRPCResponse;
+
+      // Then all transitions should be tracked chronologically
+      expect(finalResponse.status).toBe(200);
+
+      const finalResult = finalResponseBody.result;
+      if (finalResult && 'kind' in finalResult && finalResult.kind === 'task') {
+        const transitions = finalResult.metadata?.stateTransitions;
+        expect(transitions).toBeDefined();
+        expect(transitions!.length).toBeGreaterThan(0);
+
+        // Transitions should be chronological
+        transitions!.forEach((transition, index) => {
+          expect(transition.timestamp).toBeDefined();
+          expect(transition.to).toBeDefined();
+
+          const currentTimestamp = new Date(transition.timestamp!).getTime();
+          expect(currentTimestamp).toBeGreaterThan(previousTimestamp);
+          previousTimestamp = currentTimestamp;
+
+          if (index > 0) {
+            expect(transition.from).toBe(transitions![index - 1].to);
+          }
+
+          // Each transition should be valid
+          expect(transition.valid).toBe(true);
+          expect(transition.reason).toBeDefined();
+        });
+
+        // Final state should be terminal
+        const finalTransition = transitions![transitions!.length - 1];
+        expect(['completed', 'failed', 'canceled']).toContain(finalTransition.to);
+      }
+    });
+
+    it('should prevent duplicate state transitions', async () => {
+      // Given task in specific state
+      let taskId = '';
+
+      const createResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: {
+            message: {
+              kind: 'message',
+              messageId: 'duplicate-transition-1',
+              contextId: 'duplicate-context-1',
+              role: 'user',
+              parts: [
+                {
+                  kind: 'text',
+                  text: 'Create task to test duplicate transitions',
+                },
+              ],
+            },
+          },
+          id: 32,
+        }),
+      });
+      const createResponseBody = (await createResponse.json()) as JSONRPCResponse;
+
+      const createResult = createResponseBody.result;
+      if (createResult && 'kind' in createResult && createResult.kind === 'task') {
+        taskId = createResult.id;
+      }
+
+      // When attempting duplicate transition to same state
+      const duplicateResponse = await fetch(`${baseUrl}/a2a`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tasks/transition',
+          params: {
+            taskId: taskId,
+            contextId: 'duplicate-context-1',
+            targetState: 'submitted', // Same as current state
+          },
+          id: 33,
+        }),
+      });
+      const duplicateResponseBody = (await duplicateResponse.json()) as JSONRPCResponse;
+
+      // Then duplicate transition should be prevented
+      expect(duplicateResponse.status).toBe(200);
+
+      if (duplicateResponseBody.error) {
+        // Test behavior: duplicate transition was prevented
+        expect(duplicateResponseBody.error).toBeDefined();
+      } else {
+        const duplicateResult = duplicateResponseBody.result;
+        if (duplicateResult && 'kind' in duplicateResult && duplicateResult.kind === 'task') {
+          // If successful, should not create duplicate transition records
+          const transitions = duplicateResult.metadata?.stateTransitions;
+          const submittedTransitions = transitions?.filter((t) => t.to === 'submitted');
+          expect(submittedTransitions?.length).toBe(1); // Only initial transition
+        }
+      }
+    });
+  });
+});

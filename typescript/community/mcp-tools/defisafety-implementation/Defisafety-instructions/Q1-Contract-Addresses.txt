@@ -1,0 +1,28 @@
+Q1: Are the deployed smart contract addresses easy to find in the documentation?
+Weight: 15%
+
+Purpose: Verify that the protocol's documentation clearly lists the addresses of the deployed smart contracts (not just the token address, but the core contracts like pools, vaults, farms, etc.). This is crucial so that users and reviewers can quickly find and verify the running contracts on a block explorer.
+
+Where to Look: Check the project's documentation pages (or GitHub README) for a section titled "Contracts", "Deployed Addresses", "Smart Contracts", or similar. Often, well-documented projects have a dedicated page listing all important contract names and their addresses on each network. If no obvious section, use the search function in docs for known address formats (like "0x" which starts Ethereum addresses) or terms like "contract address".
+
+Scoring Criteria: Simplified evaluation of contract address documentation:
+
+    100% (Full marks): The contract addresses are listed anywhere in the documentation, whether prominently displayed or requiring some navigation to find. This includes addresses in dedicated sections, FAQs, developer guides, or any other documentation page.
+
+    40%: The addresses were found only after significant effort or in an obscure place – for instance, hidden in a JSON file in the code repository, in an audit report, or an answer on a community Discord/forum.
+
+    0%: No contract addresses are found in any public documentation.
+
+Answer Format: The answer should state whether the contract addresses are provided in the docs and how easy they were to locate, then give the resulting score. For example:
+
+    "Yes – the documentation lists the deployed contract addresses. Score: 100%."
+
+If found in obscure places:
+
+    "Addresses are given, but only in a GitHub repository file or external source, which made them hard to find. Score: 40%."
+
+If no addresses:
+
+    "No – the documentation does not list any deployed contract addresses. Score: 0%."
+
+Each statement should be backed by a citation from the documentation where the information (or lack thereof) was confirmed.

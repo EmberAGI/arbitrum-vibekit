@@ -1,10 +1,10 @@
-import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
-import type { Task, Message, DataPart } from '@google-a2a/types';
-import { TaskState } from '@google-a2a/types';
+import type { VibkitToolDefinition } from '@emberai/arbitrum-vibekit-core';
+import { parseMcpToolResponsePayload } from '@emberai/arbitrum-vibekit-core';
+import type { Task } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
+import { TaskState } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 import type { LendingAgentContext } from '../agent.js';
-import { BorrowRepaySupplyWithdrawSchema, SupplyResponseSchema } from 'ember-schemas';
-import type { LendingTransactionArtifact, LendingPreview, TokenInfo } from './types.js';
+import { BorrowRepaySupplyWithdrawSchema, SupplyResponseSchema } from '@emberai/arbitrum-vibekit-core/ember-schemas';
+import type { LendingPreview, TokenInfo } from './types.js';
 import { createTaskId, findTokenInfo } from './utils.js';
 
 export const supplyBase: VibkitToolDefinition<
@@ -80,7 +80,7 @@ export const supplyBase: VibkitToolDefinition<
           });
 
           // Parse and validate the MCP response
-          const supplyResp = parseMcpToolResponsePayload(toolResult, SupplyResponseSchema);
+          const supplyResp = parseMcpToolResponsePayload(toolResult, SupplyResponseSchema) as any;
           const finalTxPlan = supplyResp.transactions;
 
           if (finalTxPlan.length === 0) {

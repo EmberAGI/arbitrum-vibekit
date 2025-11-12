@@ -1,10 +1,11 @@
-import { tool, type CoreTool } from "ai";
-import { z } from "zod";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { cookies } from "next/headers";
-import { DEFAULT_SERVER_URLS } from "../../../agents-config";
-import type { ChatAgentId } from "../../../agents-config";
+import { tool } from 'ai';
+import { z } from 'zod';
+import type { CoreTool } from '@/lib/ai/types';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { cookies } from 'next/headers';
+import { DEFAULT_SERVER_URLS } from '../../../agents-config';
+import type { ChatAgentId } from '../../../agents-config';
 
 /*export const getEmberLending = tool({
   description: 'Get the current weather at a location',
@@ -32,25 +33,25 @@ const convertToZodSchema = (schema: any): z.ZodSchema => {
   if (schema._def !== undefined) return schema;
 
   // For an object schema, convert properties
-  if (schema.type === "object" && schema.properties) {
+  if (schema.type === 'object' && schema.properties) {
     const zodProperties: { [key: string]: z.ZodTypeAny } = {};
     Object.entries(schema.properties).forEach(
       ([key, propSchema]: [string, any]) => {
         switch (propSchema.type) {
-          case "string":
+          case 'string':
             zodProperties[key] = z.string();
             break;
-          case "number":
+          case 'number':
             zodProperties[key] = z.number();
             break;
-          case "boolean":
+          case 'boolean':
             zodProperties[key] = z.boolean();
             break;
           default:
             // Default to any for complex types
             zodProperties[key] = z.any();
         }
-      }
+      },
     );
     return z.object(zodProperties);
   }
@@ -64,31 +65,34 @@ async function getTool(serverUrl: string, context?: { walletAddress?: string }) 
 
   // Create MCP Client
   mcpClient = new Client(
-    { name: "TestClient", version: "1.0.0" },
-    { capabilities: { tools: {}, resources: {}, prompts: {} } }
+    { name: 'TestClient', version: '1.0.0' },
+    { capabilities: { tools: {}, resources: {}, prompts: {} } },
   );
 
-  // Create SSE transport
+  // Create StreamableHTTP transport
   let transport = null;
   if (serverUrl) {
-    transport = new SSEClientTransport(new URL(serverUrl));
+    transport = new StreamableHTTPClientTransport(
+      new URL(serverUrl),
+      {} // headers - empty for now
+    );
   }
 
   // Connect to the server
   if (transport) {
     await mcpClient.connect(transport);
-    console.log("MCP client initialized successfully!");
+    console.log('MCP client initialized successfully!');
   }
 
   // Try to discover tools
-  console.log("Attempting to discover tools via MCP client...");
+  console.log('Attempting to discover tools via MCP client...');
   // biome-ignore lint/suspicious/noImplicitAnyLet: <explanation>
   let toolsResponse;
   try {
     toolsResponse = await mcpClient.listTools();
     console.log(toolsResponse);
   } catch (error) {
-    console.error("Error discovering tools:", error);
+    console.error('Error discovering tools:', error);
     toolsResponse = { tools: [] }; // Fallback to empty tools array
   }
 
@@ -103,12 +107,12 @@ async function getTool(serverUrl: string, context?: { walletAddress?: string }) 
         console.log("Arguments:", args);
         console.log("MCP Client:", mcpClient);
         console.log("Context walletAddress:", context?.walletAddress);
-        
+
         // For autosynth tools, automatically inject userAddress if available
         // Check if this is an autosynth tool by checking tool name patterns or server URL
         let finalArgs = args;
-        const isAutosynthTool = 
-          mcptool.name.includes('autosynth') || 
+        const isAutosynthTool =
+          mcptool.name.includes('autosynth') ||
           mcptool.name.includes('createTimeJob') ||
           mcptool.name.includes('getJobs') ||
           mcptool.name.includes('listJobs') ||
@@ -117,7 +121,7 @@ async function getTool(serverUrl: string, context?: { walletAddress?: string }) 
           mcptool.name.includes('listing') ||
           serverUrl.includes('autosynth') ||
           serverUrl.includes('3041'); // autosynth default port
-        
+
         if (isAutosynthTool) {
           const walletAddress = context?.walletAddress;
           if (walletAddress) {
@@ -133,7 +137,7 @@ async function getTool(serverUrl: string, context?: { walletAddress?: string }) 
             console.log(`⚠️ No walletAddress in context for ${mcptool.name}`);
           }
         }
-        
+
         const result = await mcpClient.callTool({
           name: mcptool.name,
           arguments: finalArgs,
@@ -151,7 +155,7 @@ async function getTool(serverUrl: string, context?: { walletAddress?: string }) 
   }, {} as { [key: string]: CoreTool }); // Initialize with the correct type
 
   // Return the object of tools
-  console.log("toolObject =", toolObject);
+  console.log('toolObject =', toolObject);
   return toolObject;
 }
 
@@ -159,18 +163,18 @@ export const getTools = async (context?: { walletAddress?: string }): Promise<{ 
   console.log("Initializing MCP client...");
 
   const cookieStore = await cookies();
-  const rawAgentId = cookieStore.get("agent")?.value;
+  const rawAgentId = cookieStore.get('agent')?.value;
   const agentId = rawAgentId as ChatAgentId | undefined;
   const overrideUrl = process.env.MCP_SERVER_URL; // optional env override
 
   // helper that chooses override first, then config file
   const resolveUrl = (id: ChatAgentId) =>
-    overrideUrl ?? DEFAULT_SERVER_URLS.get(id) ?? "";
+    overrideUrl ?? DEFAULT_SERVER_URLS.get(id) ?? '';
 
   // "all" agents: fan-out to every URL
-  if (!agentId || agentId === "all") {
+  if (!agentId || agentId === 'all') {
     const urls = Array.from(DEFAULT_SERVER_URLS.keys()).map((id) =>
-      resolveUrl(id)
+      resolveUrl(id),
     );
     const toolsByAgent = await Promise.all(urls.map(url => getTool(url, context)));
     // flatten and prefix so you don't get name collisions
@@ -178,7 +182,7 @@ export const getTools = async (context?: { walletAddress?: string }): Promise<{ 
       (
         all: Record<string, CoreTool>,
         tools: { [key: string]: CoreTool },
-        idx: number
+        idx: number,
       ) => {
         const id = Array.from(DEFAULT_SERVER_URLS.keys())[idx];
         Object.entries(tools).forEach(([toolName, tool]) => {
@@ -186,7 +190,7 @@ export const getTools = async (context?: { walletAddress?: string }): Promise<{ 
         });
         return all;
       },
-      {} as Record<string, CoreTool>
+      {} as Record<string, CoreTool>,
     );
   }
 

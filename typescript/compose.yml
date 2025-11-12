@@ -26,7 +26,7 @@ services:
   #   ports:
   #     - 3005:3005
   #   restart: unless-stopped
-  
+
   autosynth:
     build:
       context: .
@@ -44,6 +44,34 @@ services:
     restart: unless-stopped
     networks:
       - vibekit_network
+
+  coingecko-mcp-server:
+    build:
+      context: ./
+      dockerfile: community/mcp-tools/coingecko-mcp-server/Dockerfile
+    container_name: vibekit-coingecko-mcp-server
+    env_file:
+      - path: .env
+        required: true
+    ports:
+      - 3011:3011
+    restart: unless-stopped
+
+  defisafety-agent:
+    build:
+      context: ./
+      dockerfile: templates/defisafety-agent/Dockerfile
+    container_name: vibekit-defisafety-agent
+    env_file:
+      - path: .env
+        required: true
+      - path: templates/defisafety-agent/.env
+        required: false
+    environment:
+      - PORT=3010
+    ports:
+      - 3010:3010
+    restart: unless-stopped
 
   # langgraph-workflow-agent:
   #   build:
@@ -90,12 +118,12 @@ services:
   # liquidity-agent-no-wallet:
   #   build:
   #     context: ./
-  #     dockerfile: examples/liquidity-agent-no-wallet/Dockerfile
+  #     dockerfile: community/agents/liquidity-agent-no-wallet/Dockerfile
   #   container_name: vibekit-liquidity-agent-no-wallet
   #   env_file:
   #     - path: .env
   #       required: true
-  #     - path: examples/liquidity-agent-no-wallet/.env
+  #     - path: community/agents/liquidity-agent-no-wallet/.env
   #       required: false
   #   ports:
   #     - 3002:3002
@@ -104,12 +132,12 @@ services:
   # pendle-agent:
   #   build:
   #     context: ./
-  #     dockerfile: examples/pendle-agent/Dockerfile
+  #     dockerfile: community/agents/pendle-agent/Dockerfile
   #   container_name: vibekit-pendle-agent
   #   env_file:
   #     - path: .env
   #       required: true
-  #     - path: examples/pendle-agent/.env
+  #     - path: community/agents/pendle-agent/.env
   #       required: false
   #   ports:
   #     - 3003:3003
@@ -118,12 +146,12 @@ services:
   # swapping-agent:
   #   build:
   #     context: ./
-  #     dockerfile: examples/swapping-agent/Dockerfile
+  #     dockerfile: community/agents/swapping-agent/Dockerfile
   #   container_name: vibekit-swapping-agent
   #   env_file:
   #     - path: .env
   #       required: true
-  #     - path: examples/swapping-agent/.env
+  #     - path: community/agents/swapping-agent/.env
   #       required: false
   #   ports:
   #     - 3004:3004

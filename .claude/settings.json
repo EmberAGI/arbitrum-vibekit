@@ -1,47 +1,109 @@
 {
-    "permissions": {
-        "allow": [
-        ],
-        "deny": [
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Edit",
+      "MultiEdit",
+      "NotebookEdit",
+      "WebFetch",
+      "WebSearch",
+      "Write",
+      "Read",
+      "Search"
+    ],
+    "ask": [
+      "Bash(rm -r)",
+      "Bash(rm -r:*)",
+      "Bash(rm -R)",
+      "Bash(rm -R:*)",
+      "Bash(rm -rf)",
+      "Bash(rm -rf:*)",
+      "Bash(shred)",
+      "Bash(shred:*)",
+      "Bash(git commit)",
+      "Bash(git push --force)",
+      "Bash(git push --force:*)",
+      "Bash(git push --force-with-lease)",
+      "Bash(git push --force-with-lease:*)",
+      "Bash(git reset --hard)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean -fd)",
+      "Bash(git clean -fd:*)",
+      "Bash(git clean -fx)",
+      "Bash(git clean -fx:*)",
+      "Bash(git clean -fdx)",
+      "Bash(git clean -fdx:*)",
+      "Bash(git checkout -f)",
+      "Bash(git checkout -f:*)",
+      "Bash(git checkout .)",
+      "Bash(git switch -f)",
+      "Bash(git switch -f:*)",
+      "Bash(git branch -D)",
+      "Bash(git branch -D:*)",
+      "Bash(git tag -d)",
+      "Bash(git tag -d:*)",
+      "Bash(git reflog expire)",
+      "Bash(git reflog expire:*)",
+      "Bash(git gc --prune=now)",
+      "Bash(git gc --prune=now:*)",
+      "Bash(git filter-branch)",
+      "Bash(git filter-branch:*)",
+      "Bash(git filter-repo)",
+      "Bash(git filter-repo:*)"
+    ],
+    "deny": [
+      "Bash(sudo)",
+      "Bash(sudo:*)",
+      "Bash(dd)",
+      "Bash(dd:*)",
+      "Bash(fdisk)",
+      "Bash(fdisk:*)",
+      "Bash(sfdisk)",
+      "Bash(sfdisk:*)",
+      "Bash(parted)",
+      "Bash(parted:*)",
+      "Bash(mkfs)",
+      "Bash(mkfs:*)",
+      "Bash(wipefs)",
+      "Bash(wipefs:*)",
+      "Bash(diskutil)",
+      "Bash(diskutil:*)"
+    ]
+  },
+  "env": {},
+  "includeCoAuthoredBy": false,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pre-task-hook.sh"
+          }
         ]
-    },
-    "env": {
-        "ANTHROPIC_SMALL_FAST_MODEL": "claude-sonnet-4-20250514"
-    },
-    "includeCoAuthoredBy": false,
-    "model": "claude-opus-4-20250514",
-    "hooks": {
-        "PreToolUse": [
-            {
-                "matcher": "Task",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": ".claude/hooks/pre-task-hook.sh"
-                    }
-                ]
-            }
-        ],
-        "PostToolUse": [
-            {
-                "matcher": "Task",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": ".claude/hooks/post-task-hook.sh"
-                    }
-                ]
-            }
-        ],
-        "SubagentStop": [
-            {
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": ".claude/hooks/subagent-stop-hook.sh"
-                    }
-                ]
-            }
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/post-task-hook.sh"
+          }
         ]
-    }
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/subagent-stop-hook.sh"
+          }
+        ]
+      }
+    ]
+  }
 }

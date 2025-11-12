@@ -1,0 +1,1 @@
+pnpm --prefix typescript commitlint --edit "$1"

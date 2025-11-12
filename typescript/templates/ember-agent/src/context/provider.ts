@@ -5,7 +5,7 @@
 
 import type { EmberContext, ContextDependencies, TokenInfo } from './types.js';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { LanguageModelV1 } from 'ai';
+import type { LanguageModel } from 'ai';
 import { Address, isAddress } from 'viem';
 import pRetry from 'p-retry';
 
@@ -100,7 +100,7 @@ function parseUserAddress(addressString?: string): Address | undefined {
  * Context provider function for Ember Agent
  */
 export async function contextProvider(
-  deps: ContextDependencies & { llmModel: LanguageModelV1 }
+  deps: ContextDependencies & { llmModel: LanguageModel }
 ): Promise<EmberContext> {
   console.log('[Context] Initializing Ember Agent context...');
 

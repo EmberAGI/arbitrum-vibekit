@@ -1,15 +1,15 @@
-"use client";
+'use client';
 
-import { useMemo, useOptimistic, startTransition } from "react";
+import { useMemo, useOptimistic, startTransition } from 'react';
 //import { saveChatAgentAsCookie } from '@/app/(chat)/actions';
-import type { Button } from "@/components/ui/button";
-import { chatAgents } from "@/agents-config";
-import { ChipToggle } from "./chips";
-import { saveChatAgentAsCookie } from "@/app/(chat)/actions";
+import type { Button } from '@/components/ui/button';
+import { chatAgents } from '@/agents-config';
+import { ChipToggle } from './chips';
+import { saveChatAgentAsCookie } from '@/app/(chat)/actions';
 
 export function AgentSelector({
   selectedAgentId,
-  className,
+  className: _className,
   onAgentChange,
 }: {
   selectedAgentId: string;
@@ -18,24 +18,19 @@ export function AgentSelector({
   const [optimisticAgentId, setOptimisticAgentId] =
     useOptimistic(selectedAgentId);
 
-  const selectedChatAgent = useMemo(
-    () => chatAgents.find((chatAgent) => chatAgent.id === optimisticAgentId),
-    [optimisticAgentId]
-  );
-
   const options = useMemo(
     () =>
       chatAgents.map((chatAgent) => ({
         value: chatAgent.id,
         label: chatAgent.name,
       })),
-    []
+    [],
   );
 
   return (
     <ChipToggle
       options={options}
-      defaultValue={optimisticAgentId || "all"}
+      defaultValue={optimisticAgentId || 'all'}
       onValueChange={(value) => {
         console.log(value);
 

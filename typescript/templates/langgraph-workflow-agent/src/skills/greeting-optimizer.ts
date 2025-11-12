@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defineSkill } from 'arbitrum-vibekit-core';
+import { defineSkill } from '@emberai/arbitrum-vibekit-core';
 import { optimizeGreetingTool } from '../tools/optimize-greeting.js';
 
 // Input schema for the skill

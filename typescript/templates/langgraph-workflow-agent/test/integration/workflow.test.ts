@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createGreetingWorkflow } from '../../src/workflow/index.js';
 import { createInitialState } from '../../src/workflow/state.js';
-import { createProviderSelector } from 'arbitrum-vibekit-core';
+import { createProviderSelector } from '@emberai/arbitrum-vibekit-core';
 import { optimizeGreetingTool } from '../../src/tools/optimize-greeting.js';
-import type { AgentContext } from 'arbitrum-vibekit-core';
+import type { AgentContext } from '@emberai/arbitrum-vibekit-core';
 
 // Skip these tests if no API key is provided
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;

@@ -1,6 +1,6 @@
-import type { VibkitToolDefinition, AgentContext } from 'arbitrum-vibekit-core';
-import type { Task, Message, DataPart } from '@google-a2a/types';
-import { TaskState } from '@google-a2a/types';
+import type { AgentContext } from '@emberai/arbitrum-vibekit-core';
+import type { Task, Message, DataPart } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
+import { TaskState } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 import {
   createPublicClient,
   http,
@@ -12,10 +12,10 @@ import {
 import type { LendingAgentContext } from '../agent.js';
 import type { TokenInfo } from './types.js';
 import { createTaskId, findTokenInfo, getChainConfigById } from './utils.js';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
+import { parseMcpToolResponsePayload } from '@emberai/arbitrum-vibekit-core';
 import type { z } from 'zod';
 import type { LendingTransactionArtifact, LendingPreview } from './types.js';
-import type { TransactionPlan } from 'ember-schemas';
+import type { TransactionPlan } from '@emberai/arbitrum-vibekit-core/ember-schemas';
 
 // Minimal ERC20 ABI for balance check
 const MinimalErc20Abi = [
@@ -273,7 +273,7 @@ export async function responseParserHook<
   TSkillInput = any,
 >(
   mcpResult: any,
-  context: AgentContext<LendingAgentContext, TSkillInput>,
+  _context: AgentContext<LendingAgentContext, TSkillInput>,
   toolArgs: { resolvedToken: TokenInfo; amount: string; tokenName: string; [key: string]: any }, // Args expected after tokenResolutionHook
   zodSchema: z.ZodType<ParsedResponse>,
   action: LendingPreview['action']

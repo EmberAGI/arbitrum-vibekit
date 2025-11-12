@@ -1,0 +1,70 @@
+{
+  "metadata": {
+    "service": "openrouter",
+    "endpoint": "/api/v1/chat/completions",
+    "method": "POST",
+    "recordedAt": "2025-10-17T22:11:03.502Z"
+  },
+  "request": {
+    "headers": {
+      "Authorization": "***"
+    },
+    "body": {
+      "model": "openai/gpt-4o-mini",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are an AI agent that can dispatch workflows using tools."
+        },
+        {
+          "role": "user",
+          "content": "Start both workflow filter_test_1 and filter_test_2"
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "dispatch_workflow_filter_test_1",
+            "description": "Dispatch the filter_test_1 workflow",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "dispatch_workflow_filter_test_2",
+            "description": "Dispatch the filter_test_2 workflow",
+            "parameters": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto",
+      "stream": true
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 17 Oct 2025 22:11:03 GMT",
+      "content-type": "text/event-stream",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "cf-ray": "9903211cae16da48-EWR",
+      "access-control-allow-origin": "*",
+      "cache-control": "no-cache",
+      "vary": "Accept-Encoding",
+      "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+      "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "server": "cloudflare"
+    },
+    "rawBody": "OiBPUEVOUk9VVEVSIFBST0NFU1NJTkcKCjogT1BFTlJPVVRFUiBQUk9DRVNTSU5HCgo6IE9QRU5ST1VURVIgUFJPQ0VTU0lORwoKOiBPUEVOUk9VVEVSIFBST0NFU1NJTkcKCjogT1BFTlJPVVRFUiBQUk9DRVNTSU5HCgpkYXRhOiB7ImlkIjoiZ2VuLTE3NjA3MzkwNjEtN2pxTUtPOHlpd3lTWG1admhETFciLCJwcm92aWRlciI6Ik9wZW5BSSIsIm1vZGVsIjoib3BlbmFpL2dwdC00by1taW5pIiwib2JqZWN0IjoiY2hhdC5jb21wbGV0aW9uLmNodW5rIiwiY3JlYXRlZCI6MTc2MDczOTA2MSwiY2hvaWNlcyI6W3siaW5kZXgiOjAsImRlbHRhIjp7InJvbGUiOiJhc3Npc3RhbnQiLCJjb250ZW50IjoiIn0sImZpbmlzaF9yZWFzb24iOm51bGwsIm5hdGl2ZV9maW5pc2hfcmVhc29uIjpudWxsLCJsb2dwcm9icyI6bnVsbH1dLCJzeXN0ZW1fZmluZ2VycHJpbnQiOiJmcF81NjBhZjZlNTU5In0KCmRhdGE6IHsiaWQiOiJnZW4tMTc2MDczOTA2MS03anFNS084eWl3eVNYbVp2aERMVyIsInByb3ZpZGVyIjoiT3BlbkFJIiwibW9kZWwiOiJvcGVuYWkvZ3B0LTRvLW1pbmkiLCJvYmplY3QiOiJjaGF0LmNvbXBsZXRpb24uY2h1bmsiLCJjcmVhdGVkIjoxNzYwNzM5MDYxLCJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsicm9sZSI6ImFzc2lzdGFudCIsImNvbnRlbnQiOm51bGwsInRvb2xfY2FsbHMiOlt7ImluZGV4IjowLCJpZCI6ImNhbGxfTGU3QjFrb1hOM1NPWnVqMmoxN3lROWtFIiwidHlwZSI6ImZ1bmN0aW9uIiwiZnVuY3Rpb24iOnsibmFtZSI6ImRpc3BhdGNoX3dvcmtmbG93X2ZpbHRlcl90ZXN0XzEiLCJhcmd1bWVudHMiOiIifX1dfSwiZmluaXNoX3JlYXNvbiI6bnVsbCwibmF0aXZlX2ZpbmlzaF9yZWFzb24iOm51bGwsImxvZ3Byb2JzIjpudWxsfV0sInN5c3RlbV9maW5nZXJwcmludCI6ImZwXzU2MGFmNmU1NTkifQoKZGF0YTogeyJpZCI6Imdlbi0xNzYwNzM5MDYxLTdqcU1LTzh5aXd5U1htWnZoRExXIiwicHJvdmlkZXIiOiJPcGVuQUkiLCJtb2RlbCI6Im9wZW5haS9ncHQtNG8tbWluaSIsIm9iamVjdCI6ImNoYXQuY29tcGxldGlvbi5jaHVuayIsImNyZWF0ZWQiOjE3NjA3MzkwNjEsImNob2ljZXMiOlt7ImluZGV4IjowLCJkZWx0YSI6eyJyb2xlIjoiYXNzaXN0YW50IiwiY29udGVudCI6bnVsbCwidG9vbF9jYWxscyI6W3siaW5kZXgiOjAsImZ1bmN0aW9uIjp7ImFyZ3VtZW50cyI6Int9In0sInR5cGUiOiJmdW5jdGlvbiJ9XX0sImZpbmlzaF9yZWFzb24iOm51bGwsIm5hdGl2ZV9maW5pc2hfcmVhc29uIjpudWxsLCJsb2dwcm9icyI6bnVsbH1dLCJzeXN0ZW1fZmluZ2VycHJpbnQiOiJmcF81NjBhZjZlNTU5In0KCmRhdGE6IHsiaWQiOiJnZW4tMTc2MDczOTA2MS03anFNS084eWl3eVNYbVp2aERMVyIsInByb3ZpZGVyIjoiT3BlbkFJIiwibW9kZWwiOiJvcGVuYWkvZ3B0LTRvLW1pbmkiLCJvYmplY3QiOiJjaGF0LmNvbXBsZXRpb24uY2h1bmsiLCJjcmVhdGVkIjoxNzYwNzM5MDYxLCJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsicm9sZSI6ImFzc2lzdGFudCIsImNvbnRlbnQiOm51bGwsInRvb2xfY2FsbHMiOlt7ImluZGV4IjoxLCJpZCI6ImNhbGxfVzlaS1gzeXJvNGdIRUV2cGhYa1JEdlZpIiwidHlwZSI6ImZ1bmN0aW9uIiwiZnVuY3Rpb24iOnsibmFtZSI6ImRpc3BhdGNoX3dvcmtmbG93X2ZpbHRlcl90ZXN0XzIiLCJhcmd1bWVudHMiOiIifX1dfSwiZmluaXNoX3JlYXNvbiI6bnVsbCwibmF0aXZlX2ZpbmlzaF9yZWFzb24iOm51bGwsImxvZ3Byb2JzIjpudWxsfV0sInN5c3RlbV9maW5nZXJwcmludCI6ImZwXzU2MGFmNmU1NTkifQoKZGF0YTogeyJpZCI6Imdlbi0xNzYwNzM5MDYxLTdqcU1LTzh5aXd5U1htWnZoRExXIiwicHJvdmlkZXIiOiJPcGVuQUkiLCJtb2RlbCI6Im9wZW5haS9ncHQtNG8tbWluaSIsIm9iamVjdCI6ImNoYXQuY29tcGxldGlvbi5jaHVuayIsImNyZWF0ZWQiOjE3NjA3MzkwNjEsImNob2ljZXMiOlt7ImluZGV4IjowLCJkZWx0YSI6eyJyb2xlIjoiYXNzaXN0YW50IiwiY29udGVudCI6bnVsbCwidG9vbF9jYWxscyI6W3siaW5kZXgiOjEsImZ1bmN0aW9uIjp7ImFyZ3VtZW50cyI6Int9In0sInR5cGUiOiJmdW5jdGlvbiJ9XX0sImZpbmlzaF9yZWFzb24iOm51bGwsIm5hdGl2ZV9maW5pc2hfcmVhc29uIjpudWxsLCJsb2dwcm9icyI6bnVsbH1dLCJzeXN0ZW1fZmluZ2VycHJpbnQiOiJmcF81NjBhZjZlNTU5In0KCmRhdGE6IHsiaWQiOiJnZW4tMTc2MDczOTA2MS03anFNS084eWl3eVNYbVp2aERMVyIsInByb3ZpZGVyIjoiT3BlbkFJIiwibW9kZWwiOiJvcGVuYWkvZ3B0LTRvLW1pbmkiLCJvYmplY3QiOiJjaGF0LmNvbXBsZXRpb24uY2h1bmsiLCJjcmVhdGVkIjoxNzYwNzM5MDYxLCJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsicm9sZSI6ImFzc2lzdGFudCIsImNvbnRlbnQiOiIifSwiZmluaXNoX3JlYXNvbiI6InRvb2xfY2FsbHMiLCJuYXRpdmVfZmluaXNoX3JlYXNvbiI6InRvb2xfY2FsbHMiLCJsb2dwcm9icyI6bnVsbH1dLCJzeXN0ZW1fZmluZ2VycHJpbnQiOiJmcF81NjBhZjZlNTU5In0KCmRhdGE6IHsiaWQiOiJnZW4tMTc2MDczOTA2MS03anFNS084eWl3eVNYbVp2aERMVyIsInByb3ZpZGVyIjoiT3BlbkFJIiwibW9kZWwiOiJvcGVuYWkvZ3B0LTRvLW1pbmkiLCJvYmplY3QiOiJjaGF0LmNvbXBsZXRpb24uY2h1bmsiLCJjcmVhdGVkIjoxNzYwNzM5MDYxLCJjaG9pY2VzIjpbeyJpbmRleCI6MCwiZGVsdGEiOnsicm9sZSI6ImFzc2lzdGFudCIsImNvbnRlbnQiOiIifSwiZmluaXNoX3JlYXNvbiI6bnVsbCwibmF0aXZlX2ZpbmlzaF9yZWFzb24iOm51bGwsImxvZ3Byb2JzIjpudWxsfV0sInVzYWdlIjp7InByb21wdF90b2tlbnMiOjg5LCJjb21wbGV0aW9uX3Rva2VucyI6NDksInRvdGFsX3Rva2VucyI6MTM4LCJwcm9tcHRfdG9rZW5zX2RldGFpbHMiOnsiY2FjaGVkX3Rva2VucyI6MCwiYXVkaW9fdG9rZW5zIjowfSwiY29tcGxldGlvbl90b2tlbnNfZGV0YWlscyI6eyJyZWFzb25pbmdfdG9rZW5zIjowfX19CgpkYXRhOiBbRE9ORV0KCg=="
+  }
+}

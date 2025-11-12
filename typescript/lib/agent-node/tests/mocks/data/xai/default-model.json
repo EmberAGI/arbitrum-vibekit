@@ -1,0 +1,43 @@
+{
+  "metadata": {
+    "service": "xai",
+    "endpoint": "/v1/chat/completions",
+    "method": "POST",
+    "recordedAt": "2025-10-17T22:11:17.706Z"
+  },
+  "request": {
+    "headers": {
+      "Authorization": "***"
+    },
+    "body": {
+      "model": "grok-4-fast-reasoning",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Test default model"
+        }
+      ],
+      "stream": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 17 Oct 2025 22:11:17 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "content-encoding": "gzip",
+      "x-zero-data-retention": "false",
+      "x-request-id": "00-ef2a1a141b176e27a21f0ecac9f76d14-3cfff5b9000bc24d-01",
+      "vary": "origin, access-control-request-method, access-control-request-headers",
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "*",
+      "cf-cache-status": "DYNAMIC",
+      "strict-transport-security": "max-age=31536000",
+      "server": "cloudflare",
+      "cf-ray": "9903217c7c050866-EWR"
+    },
+    "rawBody": "H4sIAAAAAAAAA3RSy47bMAz8FYGXvciBnYdT+1L0VOQLeigKg5HoWI0suhK9myDIvxfKdoNssXvUUDMcDnkBZ6EF2mDd2GpZrDfLssCqagr6UlNBG9NU26Vpqk3VzakgTFJUoIH3v8kItGAGlIXhcfIkjgNoMJFQyEJbbetyu2rKba1hZEseWjhEPhbros86kTBxcOGQSQM7QwnanxdwwdIJ2lLDSCnhgaC9QGRP0AKm5JJgkMzhIBSyiZ0oz3xMyrsjqTPPT5GUUBIXDkoGUpZ6nL2oPQ347Dgq7m/4zdZC7Z5G9T3yUav97PK3szp922mFwd5qA2U9VgP5Sb04GdSfOatzSFrRafIY8N+Lo3oZUOiZYjaiApFdqB8DijIY1E69TnCr3ZSELZ6/goZI/ZzQQxtm768aehdcGrrXlKCFJDzB9ZeG+S2TKfI4SSd8pJCgrTZNDuVtFXd8vdYgLOjvyKou9Xt2Z0nQ+ZRlhU7/ieJsHd+hUoMb8UCPgEEzkH1gVdcPvDx2uW//gbT9oBUaQ5OQ7aZI1pl3k5U5tXyIn5SvGsI8donnaCh1c8pnmdF0TkJj17twoDhFd7uifuqaVb0s66pflXD9CwAA//8DABRpFaEbAwAA"
+  }
+}

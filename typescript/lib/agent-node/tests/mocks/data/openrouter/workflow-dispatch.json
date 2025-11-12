@@ -1,0 +1,64 @@
+{
+  "metadata": {
+    "service": "openrouter",
+    "endpoint": "/api/v1/chat/completions",
+    "method": "POST",
+    "recordedAt": "2025-10-17T22:11:01.169Z"
+  },
+  "request": {
+    "headers": {
+      "Authorization": "***"
+    },
+    "body": {
+      "model": "openai/gpt-4o-mini",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are an AI agent that can dispatch workflows. Use the dispatch_workflow_* tools to start workflows when requested."
+        },
+        {
+          "role": "user",
+          "content": "Execute USDai strategy workflow"
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "dispatch_workflow_usdai_points_trading_strateg",
+            "description": "Dispatch the usdai-points-trading-strateg workflow",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "params": {
+                  "type": "object",
+                  "description": "Optional parameters for the workflow"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto",
+      "stream": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 17 Oct 2025 22:11:01 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "access-control-allow-origin": "*",
+      "vary": "Accept-Encoding",
+      "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+      "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "server": "cloudflare",
+      "cf-ray": "9903210c7d53da48-EWR",
+      "content-encoding": "gzip"
+    },
+    "rawBody": "H4sIAFk39GgAA31RTW/UMBC98zN83oV0ux9pbly6FAkBVS8IIWtqT5Khjm3sSZdtlP/OpLAfSFUlS7bfzLz3/DwosqpSDfr5xWZdbC6vilU5v7mDp9IsFx+K0l4j3pXLj9dqpmIKj2QxycDniP79jWBdsOgECAIAvWsiz5dh3pEnKYb7n2hYqqYFfmtCFx0yBS8lkxAYRfskK2AbyGBW1fdBudCI3r1cfO/cTNVCmVstY1kIKsUhOG3AuSxsHpgeUb/aQ97ib1UV4hlzhgZVNagUnOwKcqbM4HlyFjyjn1zLJWHdZ3AHE3+ZyTcH4ExhMn3SeI51KuivVH7axnS7eOq+LG7XW3LbYv9t90vYeR8n9br35l8sx6N489BNVUs5AptW70J6qF3Y6T5bIB0Dec6aE1gxpLMcGBvhgNT0nbxALKlhVOP4Q9ZM5X1m7KaMGkwx0fMT66hX6wLqNa5WVzLbH4KR7LvImsMDeiEqL6dgDv93hC82UwQM7oQUxez/YW2RgaaABgnEtGiPzdIKvaVwAsYXZM4Jjh9wNjKOb/4A+/dkm8cCAAA="
+  }
+}

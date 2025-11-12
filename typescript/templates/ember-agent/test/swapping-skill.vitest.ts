@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
 
 describe('Swapping Skill', () => {
   it('should be able to import swapping skill', async () => {

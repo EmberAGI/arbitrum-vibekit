@@ -179,6 +179,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
           if (history) {
             return history.filter((h) => h.id !== id);
           }
+          return undefined;
         });
         return 'Chat deleted successfully';
       },

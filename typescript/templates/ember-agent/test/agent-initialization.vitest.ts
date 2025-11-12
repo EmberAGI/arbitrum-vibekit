@@ -27,7 +27,7 @@ describe('Agent Components', () => {
   });
 
   it('should be able to import arbitrum-vibekit-core', async () => {
-    const { Agent, createProviderSelector } = await import('arbitrum-vibekit-core');
+    const { Agent, createProviderSelector } = await import('@emberai/arbitrum-vibekit-core');
     expect(Agent).toBeDefined();
     expect(createProviderSelector).toBeDefined();
     expect(typeof Agent.create).toBe('function');
@@ -35,7 +35,7 @@ describe('Agent Components', () => {
   });
 
   it('should be able to create a provider selector', async () => {
-    const { createProviderSelector, getAvailableProviders } = await import('arbitrum-vibekit-core');
+    const { createProviderSelector, getAvailableProviders } = await import('@emberai/arbitrum-vibekit-core');
 
     const providers = createProviderSelector({
       openRouterApiKey: 'test-key',

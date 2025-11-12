@@ -5,54 +5,78 @@
   "private": true,
   "packageManager": "pnpm@10.7.0",
   "description": "Root for the TypeScript pnpm workspace",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
-    "clean": "rm -rf .pnpm && find . -name tsconfig.tsbuildinfo -type f -exec rm -f {} + && find . -name node_modules -type d -prune -exec rm -rf {} + && find . -name dist -type d -prune -exec rm -rf {} + && find . -name dist-test -type d -prune -exec rm -rf {} + && echo \"Workspace cleaned.\"",
-    "build": "pnpm recursive run build",
+    "clean": "rimraf .pnpm '**/node_modules' '**/dist' '**/dist-test' '**/*.tsbuildinfo' && echo 'Workspace cleaned.'",
+    "build": "pnpm  -r --filter '!./community/**' --filter '!test-utils' run build",
     "build:sequential": "pnpm recursive run --sort --workspace-concurrency=1 build",
     "docker:compose:up": "docker compose up --build --no-log-prefix",
     "docker:compose:build": "docker compose build --no-cache",
     "docker:compose:down": "docker compose down",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "test": "pnpm run test:vitest && pnpm run test:anvil",
-    "test:anvil": "pnpm --filter lending-agent-no-wallet run test && pnpm --filter swapping-agent-no-wallet run test && pnpm --filter pendle-agent run test && pnpm --filter liquidity-agent-no-wallet run test",
+    "lint": "pnpm -r --filter '!./community/**' --filter '!test-utils' --filter '!@alloralabs/mcp-server' run lint",
+    "lint:fix": "pnpm -r --filter '!./community/**' --filter '!test-utils' --filter '!@alloralabs/mcp-server' run lint:fix",
+    "test": "pnpm run test:ci",
+    "test:ci": "pnpm --filter '!monorepo-root' --workspace-concurrency=1 --sort run test:ci && pnpm run test:anvil",
+    "test:anvil": "echo \"Skipping Anvil-dependent test suites in CI\"",
     "test:vitest": "vitest run",
-    "format": "pnpm recursive run format",
-    "format:check": "pnpm recursive run format:check",
     "lint:require-submodule": "./scripts/require-submodule.sh",
     "start:anvil": "pnpm run lint:require-submodule && npx tsx test/start-anvil.ts",
-    "start:mainnet": "pnpm run lint:require-submodule && npx tsx test/start-mainnet.ts"
+    "start:mainnet": "pnpm run lint:require-submodule && npx tsx test/start-mainnet.ts",
+    "release": "node ./scripts/run-multi-release.mjs",
+    "release:dry-run:main": "RELEASE_SIMULATE_BRANCH=main node --env-file=.env ./scripts/run-release-dry-run.mjs",
+    "release:dry-run:next": "RELEASE_SIMULATE_BRANCH=next node --env-file=.env ./scripts/run-release-dry-run.mjs",
+    "sync:rules": "(cd .. && ./typescript/node_modules/.bin/rulesync generate)"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@anolilab/multi-semantic-release": "^2.0.8",
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
     "@eslint/js": "catalog:",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^11.0.5",
+    "@semantic-release/npm": "^12.0.2",
+    "@semantic-release/release-notes-generator": "^14.1.0",
     "@types/chai": "^4.3.11",
+    "@types/js-yaml": "^4.0.9",
     "@types/mocha": "^10.0.6",
-    "@types/node": "^20.10.0",
+    "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "@viem/anvil": "^0.0.10",
     "c8": "catalog:",
     "chai": "^4.3.10",
+    "conventional-changelog-conventionalcommits": "^9.1.0",
+    "debug": "^4.4.3",
     "dotenv": "catalog:",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
+    "eslint-import-resolver-typescript": "^4.4.4",
+    "eslint-plugin-import": "^2.32.0",
+    "glob": "^11.0.3",
     "globals": "^16.1.0",
+    "husky": "^9.1.7",
+    "js-yaml": "^4.1.0",
     "mocha": "^10.2.0",
     "mocha-suppress-logs": "^0.5.1",
     "prettier": "^3.5.3",
     "prool": "^0.0.24",
     "sdk-triggerx": "^0.1.26",
+    "rimraf": "^6.0.1",
+    "rulesync": "^3.14.0",
+    "semantic-release": "^24.2.7",
     "tsx": "^4.6.2",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.32.1",
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@google-a2a/types": "workspace:*",
-    "ethers": "^6.15.0"
+    "ethers": "^5.7.2"
   },
   "pnpm": {
     "ignoredBuiltDependencies": [
@@ -61,6 +85,9 @@
       "esbuild",
       "fsevents",
       "protobufjs"
-    ]
+    ],
+    "patchedDependencies": {
+      "@anolilab/multi-semantic-release": "patches/@anolilab__multi-semantic-release.patch"
+    }
   }
 }

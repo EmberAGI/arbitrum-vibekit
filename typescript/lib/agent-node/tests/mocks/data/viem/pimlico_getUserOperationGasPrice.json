@@ -1,0 +1,25 @@
+{
+  "metadata": {
+    "service": "viem",
+    "endpoint": "/",
+    "method": "POST",
+    "recordedAt": "2025-10-19T01:00:00.000Z"
+  },
+  "request": {
+    "headers": {},
+    "body": {
+      "jsonrpc": "2.0",
+      "method": "pimlico_getUserOperationGasPrice",
+      "params": [],
+      "id": 1
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Sat, 19 Oct 2025 01:00:00 GMT",
+      "content-type": "application/json"
+    },
+    "rawBody": "eyJqc29ucnBjIjoiMi4wIiwiaWQiOjEsInJlc3VsdCI6eyJzbG93Ijp7Im1heEZlZVBlckdhcyI6IjB4M2I5YWNhMDAiLCJtYXhQcmlvcml0eUZlZVBlckdhcyI6IjB4M2I5YWNhMDAifSwic3RhbmRhcmQiOnsibWF4RmVlUGVyR2FzIjoiMHgzYjlhY2EwMCIsIm1heFByaW9yaXR5RmVlUGVyR2FzIjoiMHgzYjlhY2EwMCJ9LCJmYXN0Ijp7Im1heEZlZVBlckdhcyI6IjB4M2I5YWNhMDAiLCJtYXhQcmlvcml0eUZlZVBlckdhcyI6IjB4M2I5YWNhMDAifX19"
+  }
+}

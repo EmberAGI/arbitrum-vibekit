@@ -1,7 +1,10 @@
+# Docker and container files
 Containerfile
 Dockerfile
 .containerignore
 .dockerignore
+
+# Dependencies
 node_modules
 **/node_modules
 README.md
@@ -34,3 +37,48 @@ coverage/
 # Editor files
 .vscode/
 .idea/
+.pnpm-store
+pnpm-store
+
+# Build outputs
+dist
+.next
+*.tsbuildinfo
+
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Tests
+tests
+coverage
+.nyc_output
+.vitest
+
+# IDE and editor files
+.DS_Store
+.idea
+.vscode
+*.swp
+*.swo
+.eslintcache
+
+# Environment files (but keep .npmrc)
+.env
+.env.*
+!.env.example
+!.npmrc
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Other build tools
+.turbo

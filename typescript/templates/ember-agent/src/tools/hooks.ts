@@ -1,5 +1,5 @@
-import type { AgentContext } from 'arbitrum-vibekit-core';
-import type { Task, Message } from '@google-a2a/types';
+import type { AgentContext } from '@emberai/arbitrum-vibekit-core';
+import type { Task, Message } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 
 /**
  * Composes multiple 'before' hooks into a single 'before' hook.
@@ -11,7 +11,6 @@ import type { Task, Message } from '@google-a2a/types';
 export function composeBeforeHooks<
   TArgs extends object,
   TContext extends AgentContext<any, any>,
-  TSkillInput = any,
 >(
   ...hooks: Array<
     (args: TArgs, context: TContext) => Promise<TArgs | Task | Message> | TArgs | Task | Message
@@ -46,7 +45,6 @@ export function composeBeforeHooks<
 export function composeAfterHooks<
   TResult,
   TContext extends AgentContext<any, any>,
-  TSkillInput = any,
 >(
   ...hooks: Array<(result: TResult, context: TContext) => Promise<TResult> | TResult>
 ): (result: TResult, context: TContext) => Promise<TResult> {

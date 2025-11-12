@@ -1,17 +1,17 @@
-"use client";
+'use client';
 
-import type { UIMessage } from "ai";
-import cx from "classnames";
-import { AnimatePresence, motion } from "framer-motion";
-import { memo, useState } from "react";
-import type { Vote } from "@/lib/db/schema";
-import { SparklesIcon } from "./icons";
-import { MessageActions } from "./message-actions";
-import { PreviewAttachment } from "./preview-attachment";
-import equal from "fast-deep-equal";
-import { cn } from "@/lib/utils";
-import type { UseChatHelpers } from "@ai-sdk/react";
-import { MessageRenderer } from "./message.renderer";
+import type { UIMessage } from 'ai';
+import cx from 'classnames';
+import { AnimatePresence, motion } from 'framer-motion';
+import { memo, useState } from 'react';
+import type { Vote } from '@/lib/db/schema';
+import { SparklesIcon } from './icons';
+import { MessageActions } from './message-actions';
+import { PreviewAttachment } from './preview-attachment';
+import equal from 'fast-deep-equal';
+import { cn } from '@/lib/utils';
+import type { UseChatHelpers } from '@ai-sdk/react';
+import { MessageRenderer } from './message.renderer';
 
 const PurePreviewMessage = ({
   chatId,
@@ -26,11 +26,11 @@ const PurePreviewMessage = ({
   message: UIMessage;
   vote: Vote | undefined;
   isLoading: boolean;
-  setMessages: UseChatHelpers["setMessages"];
-  reload: UseChatHelpers["reload"];
+  setMessages: UseChatHelpers['setMessages'];
+  reload: UseChatHelpers['reload'];
   isReadonly: boolean;
 }) => {
-  const [mode, setMode] = useState<"view" | "edit">("view");
+  const [mode, setMode] = useState<'view' | 'edit'>('view');
 
   return (
     <AnimatePresence>
@@ -43,14 +43,14 @@ const PurePreviewMessage = ({
       >
         <div
           className={cn(
-            "flex gap-4 w-full group-data-[role=user]/message:ml-auto group-data-[role=user]/message:max-w-2xl",
+            'flex gap-4 w-full group-data-[role=user]/message:ml-auto group-data-[role=user]/message:max-w-2xl',
             {
-              "w-full": mode === "edit",
-              "group-data-[role=user]/message:w-fit": mode !== "edit",
+              'w-full': mode === 'edit',
+              'group-data-[role=user]/message:w-fit': mode !== 'edit',
             },
           )}
         >
-          {message.role === "assistant" && (
+          {message.role === 'assistant' && (
             <div className="size-8 flex items-center rounded-full justify-center ring-1 shrink-0 ring-border bg-background">
               <div className="translate-y-px">
                 <SparklesIcon size={14} />
@@ -59,19 +59,32 @@ const PurePreviewMessage = ({
           )}
 
           <div className="flex flex-col gap-4 w-full">
-            {message.experimental_attachments && (
-              <div
-                data-testid={`message-attachments`}
-                className="flex flex-row justify-end gap-2"
-              >
-                {message.experimental_attachments.map((attachment) => (
-                  <PreviewAttachment
-                    key={attachment.url}
-                    attachment={attachment}
-                  />
-                ))}
-              </div>
-            )}
+            {(() => {
+              // Extract file parts from message.parts
+              const fileAttachments = message.parts
+                .filter((part): part is { type: 'file'; url: string; mediaType: string; filename?: string } =>
+                  part.type === 'file'
+                )
+                .map((part) => ({
+                  url: part.url,
+                  name: part.filename ?? 'file',
+                  contentType: part.mediaType,
+                }));
+
+              return fileAttachments.length > 0 ? (
+                <div
+                  data-testid={`message-attachments`}
+                  className="flex flex-row justify-end gap-2"
+                >
+                  {fileAttachments.map((attachment) => (
+                    <PreviewAttachment
+                      key={attachment.url}
+                      attachment={attachment}
+                    />
+                  ))}
+                </div>
+              ) : null;
+            })()}
 
             {message.parts?.map((part, index) => (
               <MessageRenderer
@@ -116,7 +129,7 @@ export const PreviewMessage = memo(
 );
 
 export const ThinkingMessage = () => {
-  const role = "assistant";
+  const role = 'assistant';
 
   return (
     <motion.div
@@ -128,9 +141,9 @@ export const ThinkingMessage = () => {
     >
       <div
         className={cx(
-          "flex gap-4 group-data-[role=user]/message:px-3 w-full group-data-[role=user]/message:w-fit group-data-[role=user]/message:ml-auto group-data-[role=user]/message:max-w-2xl group-data-[role=user]/message:py-2 rounded-xl",
+          'flex gap-4 group-data-[role=user]/message:px-3 w-full group-data-[role=user]/message:w-fit group-data-[role=user]/message:ml-auto group-data-[role=user]/message:max-w-2xl group-data-[role=user]/message:py-2 rounded-xl',
           {
-            "group-data-[role=user]/message:bg-muted": true,
+            'group-data-[role=user]/message:bg-muted': true,
           },
         )}
       >

@@ -1,4 +1,4 @@
-import { Agent, createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
+import { Agent, createProviderSelector, getAvailableProviders } from '@emberai/arbitrum-vibekit-core';
 import { greetingOptimizerSkill } from './skills/greeting-optimizer.js';
 import dotenv from 'dotenv';
 
@@ -7,10 +7,10 @@ dotenv.config();
 
 // Initialize provider selector with all supported API keys
 const providers = createProviderSelector({
-  openRouterApiKey: process.env.OPENROUTER_API_KEY,
-  openaiApiKey: process.env.OPENAI_API_KEY,
-  xaiApiKey: process.env.XAI_API_KEY,
-  hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
+  openRouterApiKey: process.env['OPENROUTER_API_KEY'],
+  openaiApiKey: process.env['OPENAI_API_KEY'],
+  xaiApiKey: process.env['XAI_API_KEY'],
+  hyperbolicApiKey: process.env['HYPERBOLIC_API_KEY'],
 });
 
 // Determine available providers
@@ -22,7 +22,7 @@ if (availableProviders.length === 0) {
 }
 
 // Choose provider based on env or fallback
-const preferredProvider = process.env.AI_PROVIDER || availableProviders[0]!;
+const preferredProvider = process.env['AI_PROVIDER'] || availableProviders[0]!;
 const selectedProvider = providers[preferredProvider as keyof typeof providers];
 
 if (!selectedProvider) {
@@ -32,7 +32,7 @@ if (!selectedProvider) {
   process.exit(1);
 }
 
-const modelOverride = process.env.AI_MODEL;
+const modelOverride = process.env['AI_MODEL'];
 
 // Agent configuration
 const agentConfig = {
@@ -60,12 +60,12 @@ const agent = Agent.create(agentConfig, {
 
 // Start the agent with context provider for the model
 async function main() {
-  const portStr = process.env.PORT || '41241';
+  const portStr = process.env['PORT'] || '41241';
   const port = parseInt(portStr, 10);
 
   if (isNaN(port) || port < 1 || port > 65535) {
     console.error(
-      `Invalid PORT value: "${process.env.PORT}". Must be a number between 1 and 65535.`
+      `Invalid PORT value: "${process.env['PORT']}". Must be a number between 1 and 65535.`
     );
     process.exit(1);
   }

@@ -3,7 +3,7 @@
  */
 
 import type { GetWalletLendingPositionsResponse, LendTokenDetail } from 'ember-api';
-import type { Task } from '@google-a2a/types';
+import type { Task } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 
 import type { TransactionPlan } from './transactions.js';
 
@@ -34,7 +34,9 @@ export function extractLendingTransactionPlan(response: Task): Array<Transaction
  */
 export function extractPositionsData(response: Task): GetWalletLendingPositionsResponse {
   if (!response.artifacts) {
-    throw new Error(`No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`);
+    throw new Error(
+      `No artifacts found in response. Response: ${JSON.stringify(response, null, 2)}`
+    );
   }
 
   // Look for positions artifact (support both legacy and new names)
@@ -51,13 +53,15 @@ export function extractPositionsData(response: Task): GetWalletLendingPositionsR
   // Debug: log available artifact names before throwing an error
   try {
     const names = response.artifacts.map(a => a.name).join(', ');
-     
+
     console.log(`[extractPositionsData] Available artifact names: ${names}`);
   } catch (_) {
     // ignore logging errors
   }
 
-  throw new Error(`No positions data found in artifacts. Response: ${JSON.stringify(response, null, 2)}`);
+  throw new Error(
+    `No positions data found in artifacts. Response: ${JSON.stringify(response, null, 2)}`
+  );
 }
 
 /**
@@ -78,13 +82,17 @@ export function getReserveForToken(
         } catch (error) {
           console.error('Failed to parse LendTokenDetail:', error);
           console.error('Reserve object that failed parsing:', reserve);
-          throw new Error(`Failed to parse reserve data for token ${tokenNameOrSymbol}. Reserve: ${JSON.stringify(reserve, null, 2)}`);
+          throw new Error(
+            `Failed to parse reserve data for token ${tokenNameOrSymbol}. Reserve: ${JSON.stringify(reserve, null, 2)}`
+          );
         }
       }
     }
   }
 
-  throw new Error(`No reserve found for token ${tokenNameOrSymbol}. Response: ${JSON.stringify(response, null, 2)}`);
+  throw new Error(
+    `No reserve found for token ${tokenNameOrSymbol}. Response: ${JSON.stringify(response, null, 2)}`
+  );
 }
 
 /**
@@ -100,4 +108,4 @@ export async function getTokenReserve(
   const response = await agent.processUserInput('show my positions', userAddress);
   const positionsData = extractPositionsData(response);
   return getReserveForToken(positionsData, tokenName);
-} 
+}

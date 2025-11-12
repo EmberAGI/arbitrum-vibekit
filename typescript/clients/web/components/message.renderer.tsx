@@ -20,6 +20,7 @@ import { Liquidity } from './Liquidity';
 import { AutoSynth } from './AutoSynth';
 import type { Dispatch } from 'react';
 import { TemplateComponent } from './TemplateComponent';
+import { PriceChart } from './price-chart';
 
 interface MessageRendererProps {
   message: UIMessage;
@@ -48,7 +49,9 @@ export const MessageRenderer = ({
   console.log('[MessageRenderer] Part type:', type);
 
   if (type === 'reasoning') {
-    return <MessageReasoning isLoading={isLoading} reasoning={part.reasoning} />;
+    return (
+      <MessageReasoning isLoading={isLoading} reasoning={part.text} />
+    );
   }
 
   if (type === 'text' && mode === 'view') {
@@ -75,7 +78,8 @@ export const MessageRenderer = ({
         <div
           data-testid="message-content"
           className={cn('flex flex-col gap-4', {
-            'bg-primary text-primary-foreground px-3 py-2 rounded-xl': role === 'user',
+            'bg-primary text-primary-foreground px-3 py-2 rounded-xl':
+              role === 'user',
           })}
         >
           <Markdown>{part.text}</Markdown>
@@ -100,32 +104,51 @@ export const MessageRenderer = ({
     );
   }
 
-  if (type === 'tool-invocation' && part.toolInvocation.state === 'call') {
-    const { toolInvocation } = part;
-    const { toolName, toolCallId, args } = toolInvocation;
+  if (type === 'tool-call') {
+    const toolCall = part as unknown as { toolName: string; toolCallId: string; input: unknown };
+    const { toolName, toolCallId, input: args } = toolCall;
 
-    console.log('toolInvocation', toolInvocation);
+    console.log('tool-call', toolCall);
     return (
       <div
         key={toolCallId}
         className={cx({
-          skeleton: ['getWeather'].includes(toolName) || ['askSwapAgent'].includes(toolName),
+          skeleton:
+            ['getWeather'].includes(toolName) ||
+            ['askSwapAgent'].includes(toolName),
         })}
       >
         {toolName.endsWith('getWeather') ? (
           <Weather />
         ) : toolName.endsWith('createDocument') ? (
-          <DocumentPreview isReadonly={isReadonly} args={args} />
+          <DocumentPreview isReadonly={isReadonly} args={args as never} />
         ) : toolName === 'updateDocument' ? (
-          <DocumentToolCall type="update" args={args} isReadonly={isReadonly} />
+          <DocumentToolCall type="update" args={args as never} isReadonly={isReadonly} />
         ) : toolName.endsWith('requestSuggestions') ? (
-          <DocumentToolCall type="request-suggestions" args={args} isReadonly={isReadonly} />
+          <DocumentToolCall
+            type="request-suggestions"
+            args={args as never}
+            isReadonly={isReadonly}
+          />
+        ) : toolName.endsWith('generate_chart') ||
+          toolName === 'coingecko-generate_chart' ? (
+          <div className="flex items-center gap-3 p-4 border border-blue-200 rounded-lg bg-blue-50">
+            <div className="animate-spin rounded-full size-6 border-b-2 border-blue-600" />
+            <p className="text-blue-700">
+              Generating price chart for {(args as { token?: string }).token}...
+            </p>
+          </div>
         ) : toolName.endsWith('askSwapAgent') ? (
           <Swaps txPreview={null} txPlan={null} />
         ) : toolName.endsWith('askLendingAgent') ? (
           <Lending txPreview={null} txPlan={null} />
         ) : toolName.endsWith('askLiquidityAgent') ? (
-          <Liquidity positions={null} txPreview={null} txPlan={null} pools={null} />
+          <Liquidity
+            positions={null}
+            txPreview={null}
+            txPlan={null}
+            pools={null}
+          />
         ) : toolName.endsWith('askYieldTokenizationAgent') ? (
           <Pendle txPreview={null} txPlan={null} markets={[]} isMarketList={false} />
         ) : toolName.includes('autosynth') || toolName.includes('createTimeJob') || toolName.includes('job-management-skill') ? (
@@ -142,9 +165,9 @@ export const MessageRenderer = ({
     const { result, toolCallId, toolName } = toolInvocation;
     console.log('[MessageRenderer] Tool result - toolName:', toolName);
     console.log('[MessageRenderer] Tool result - full result:', JSON.stringify(result, null, 2));
-    
+
     let toolInvocationResult: any = null;
-    
+
     // First try: MCP A2A response format - result.content[0].resource.text (most common for skills)
     if (result?.content?.[0]?.resource?.text) {
       console.log('[MessageRenderer] Found MCP A2A resource format');
@@ -155,7 +178,7 @@ export const MessageRenderer = ({
         console.log('[MessageRenderer] Failed to parse resource.text as JSON');
       }
     }
-    
+
     // Second try: Nested result.content[0].resource.text (some MCP wrappers)
     if (!toolInvocationResult && result?.result?.content?.[0]?.resource?.text) {
       console.log('[MessageRenderer] Found nested MCP resource format');
@@ -166,7 +189,7 @@ export const MessageRenderer = ({
         console.log('[MessageRenderer] Failed to parse nested resource text');
       }
     }
-    
+
     // Third try: Direct text content
     if (!toolInvocationResult && result?.content?.[0]?.text) {
       console.log('[MessageRenderer] Found direct text content');
@@ -176,7 +199,7 @@ export const MessageRenderer = ({
         console.log('[MessageRenderer] Failed to parse direct text');
       }
     }
-    
+
     // Fourth try: If result is already a Task object (direct return)
     if (!toolInvocationResult && result?.result && typeof result.result === 'object' && !Array.isArray(result.result)) {
       console.log('[MessageRenderer] Using result as object directly');
@@ -187,7 +210,7 @@ export const MessageRenderer = ({
         toolInvocationResult = result.result;
       }
     }
-    
+
     // Fifth try: String result that needs parsing
     if (!toolInvocationResult && typeof result?.result === 'string') {
       console.log('[MessageRenderer] Result is a string, attempting to parse');
@@ -197,7 +220,7 @@ export const MessageRenderer = ({
         console.log('[MessageRenderer] Failed to parse string result');
       }
     }
-    
+
     // Fallback
     if (!toolInvocationResult) {
       console.log('[MessageRenderer] No result found, creating raw wrapper');
@@ -218,11 +241,55 @@ export const MessageRenderer = ({
       }
       return null;
     };
+  if (type === 'tool-result') {
+    const toolResult = part as unknown as { output: unknown; toolCallId: string; toolName: string };
+    const { output: result, toolCallId, toolName } = toolResult;
+
+    // // Handle local generateChart tool (legacy)
+    // if (toolName.endsWith('generateChart')) {
+    //   return <PriceChart data={result as any} />;
+    // }
+
+    // Handle MCP server chart generation tools
+    if (
+      toolName.endsWith('generate_chart') ||
+      toolName === 'coingecko-generate_chart'
+    ) {
+      try {
+        const resultData = result as { result?: { content?: Array<{ text?: string }> } };
+        const mcpResultString = resultData?.result?.content?.[0]?.text;
+        if (mcpResultString) {
+          const chartData = JSON.parse(mcpResultString);
+          console.log('🔍 [MCP Chart] Parsed chart data:', chartData);
+          return <PriceChart data={chartData} />;
+        }
+      } catch (error) {
+        console.error('🔍 [MCP Chart] Error parsing chart data:', error);
+        return (
+          <div className="p-4 border border-red-200 rounded-lg bg-red-50">
+            <p className="text-red-700">Error loading chart data</p>
+          </div>
+        );
+      }
+    }
+
+    const resultData = result as { result?: { content?: Array<{ text?: string; resource?: { text?: string } }> } };
+    const toolInvocationParsableString = resultData?.result?.content?.[0]?.text
+      ? resultData?.result?.content?.[0]?.text
+      : resultData?.result?.content?.[0]?.resource?.text;
+    const toolInvocationResult = resultData?.result?.content?.[0]
+      ? JSON.parse(
+          toolInvocationParsableString ||
+            '{Error: An error occurred while parsing the result}',
+        )
+      : null;
+    const getKeyFromResult = (key: string) =>
+      toolInvocationResult?.artifacts?.[0]?.parts[0]?.data?.[key] || null;
 
     // Default keys
     const txPlan = getKeyFromResult('txPlan');
     const txPreview = getKeyFromResult('txPreview');
-    
+
     console.log('[MessageRenderer] Parsed toolInvocationResult:', JSON.stringify(toolInvocationResult, null, 2));
     console.log('[MessageRenderer] Artifacts:', toolInvocationResult?.artifacts);
     console.log('[MessageRenderer] txPreview from artifact:', txPreview);
@@ -230,28 +297,40 @@ export const MessageRenderer = ({
     console.log('[MessageRenderer] Raw data in artifact parts:', toolInvocationResult?.artifacts?.[0]?.parts?.[0]?.data);
 
     const getParts = () =>
-      Array.isArray(toolInvocationResult?.artifacts)
-        ? toolInvocationResult?.artifacts?.[0]?.parts ?? null
+      toolInvocationResult?.artifacts
+        ? toolInvocationResult?.artifacts[0]?.parts
         : null;
     const getArtifact = () =>
-      Array.isArray(toolInvocationResult?.artifacts)
-        ? toolInvocationResult?.artifacts?.[0] ?? null
+      toolInvocationResult?.artifacts
+        ? toolInvocationResult?.artifacts[0]
         : null;
 
     return (
       <div key={toolCallId}>
         {toolName.endsWith('getWeather') ? (
-          <Weather weatherAtLocation={result} />
+          <Weather weatherAtLocation={result as never} />
         ) : toolName.endsWith('createDocument') ? (
-          <DocumentPreview isReadonly={isReadonly} result={result} />
+          <DocumentPreview isReadonly={isReadonly} result={result as never} />
         ) : toolName.endsWith('updateDocument') ? (
-          <DocumentToolResult type="update" result={result} isReadonly={isReadonly} />
+          <DocumentToolResult
+            type="update"
+            result={result as never}
+            isReadonly={isReadonly}
+          />
         ) : toolName.endsWith('requestSuggestions') ? (
-          <DocumentToolResult type="request-suggestions" result={result} isReadonly={isReadonly} />
+          <DocumentToolResult
+            type="request-suggestions"
+            result={result as never}
+            isReadonly={isReadonly}
+          />
         ) : toolName.endsWith('askSwapAgent') ? (
-          toolInvocationResult && <Swaps txPreview={txPreview} txPlan={txPlan} />
+          toolInvocationResult && (
+            <Swaps txPreview={txPreview} txPlan={txPlan} />
+          )
         ) : toolName.endsWith('askLendingAgent') ? (
-          toolInvocationResult && <Lending txPreview={txPreview} txPlan={txPlan} />
+          toolInvocationResult && (
+            <Lending txPreview={txPreview} txPlan={txPlan} />
+          )
         ) : toolName.endsWith('askLiquidityAgent') ? (
           toolInvocationResult && (
             <Liquidity
@@ -272,13 +351,13 @@ export const MessageRenderer = ({
           )
         ) : (() => {
           const artifactName = getArtifact()?.name;
-          const isAutoSynth = 
-            toolName.includes('autosynth') || 
-            toolName.includes('createTimeJob') || 
+          const isAutoSynth =
+            toolName.includes('autosynth') ||
+            toolName.includes('createTimeJob') ||
             toolName.includes('deleteJob') ||
-            toolName.includes('job-management-skill') || 
-            toolName.includes('createSafeWallet') || 
-            artifactName === 'triggerx-job-plan' || 
+            toolName.includes('job-management-skill') ||
+            toolName.includes('createSafeWallet') ||
+            artifactName === 'triggerx-job-plan' ||
             artifactName === 'triggerx-delete-plan' ||
             artifactName === 'safe-wallet-creation';
           console.log('[MessageRenderer] AutoSynth condition check:', {
@@ -305,4 +384,8 @@ export const MessageRenderer = ({
       </div>
     );
   }
+
+  // Default return for unhandled part types
+  return null;
 };
+}

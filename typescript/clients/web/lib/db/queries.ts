@@ -22,7 +22,7 @@ import type { ArtifactKind } from '@/components/artifact';
 // https://authjs.dev/reference/adapter/drizzle
 
 // biome-ignore lint: Forbidden non-null assertion.
-const client = postgres(process.env.POSTGRES_URL!);
+const client = postgres(process.env['POSTGRES_URL']!);
 const db = drizzle(client);
 
 export async function getUser(address: string): Promise<Array<User>> {
@@ -74,18 +74,19 @@ export async function saveChat({
         .from(user)
         .where(eq(user.id, userId));
       console.log('existingUser', existingUser);
-      
+
       if (!existingUser) {
         console.log('creating new user');
         // Create new user with the provided userId and address
-        await db
-          .insert(user)
-          .values({ address, id: userId });
+        await db.insert(user).values({ address, id: userId });
 
         console.log('actualUserId');
       }
     } catch (error) {
-      console.error('Failed to get user from database or create user + ', error);
+      console.error(
+        'Failed to get user from database or create user + ',
+        error,
+      );
       throw error;
     }
 
@@ -359,6 +360,7 @@ export async function deleteMessagesByChatIdAfterTimestamp({
           and(eq(message.chatId, chatId), inArray(message.id, messageIds)),
         );
     }
+    return undefined;
   } catch (error) {
     console.error(
       'Failed to delete messages by id after timestamp from database',

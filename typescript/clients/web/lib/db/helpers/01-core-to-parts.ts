@@ -9,7 +9,7 @@ import {
 } from '../schema';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { inArray } from 'drizzle-orm';
-import { appendResponseMessages, type UIMessage } from 'ai';
+import type { UIMessage } from 'ai';
 
 config({
   path: '.env.local',
@@ -95,29 +95,18 @@ async function createNewTable() {
 
       // Process each message section
       for (const section of messageSections) {
-        const [userMessage, ...assistantMessages] = section;
-
-        const [firstAssistantMessage] = assistantMessages;
-
         try {
-          const uiSection = appendResponseMessages({
-            messages: [userMessage],
-            // @ts-expect-error: message.content has different type
-            responseMessages: assistantMessages,
-            _internal: {
-              currentDate: () => firstAssistantMessage.createdAt ?? new Date(),
-            },
-          });
-
-          const projectedUISection = uiSection
-            .map((message) => {
+          // Simplified migration: directly process messages without appendResponseMessages
+          // (appendResponseMessages was removed in AI SDK v5)
+          const projectedUISection = section
+            .map((message: any) => {
               if (message.role === 'user') {
                 return {
                   id: message.id,
                   chatId: chat.id,
                   parts: [{ type: 'text', text: message.content }],
                   role: message.role,
-                  createdAt: message.createdAt,
+                  createdAt: message.createdAt ?? new Date(),
                   attachments: [],
                 } as NewMessageInsert;
               } else if (message.role === 'assistant') {
@@ -126,13 +115,13 @@ async function createNewTable() {
                   chatId: chat.id,
                   parts: message.parts || [],
                   role: message.role,
-                  createdAt: message.createdAt,
+                  createdAt: message.createdAt ?? new Date(),
                   attachments: [],
                 } as NewMessageInsert;
               }
               return null;
             })
-            .filter((msg): msg is NewMessageInsert => msg !== null);
+            .filter((msg: NewMessageInsert | null): msg is NewMessageInsert => msg !== null);
 
           // Add messages to batch
           for (const msg of projectedUISection) {

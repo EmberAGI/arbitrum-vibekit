@@ -10,8 +10,8 @@ config({
   path: '.env.local',
 });
 
-/* Use process.env.PORT by default and fallback to port 3040 */
-const PORT = process.env.PORT || 3040;
+/* Use process.env["PORT"] by default and fallback to port 3000 */
+const PORT = process.env.PORT || 3000;
 
 /**
  * Set webServer.url and use.baseURL with the location
@@ -33,7 +33,9 @@ export default defineConfig({
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
+  reporter: process.env.CI
+    ? [['html', { open: 'never' }]]
+    : [['html', { open: 'on-failure' }]],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
@@ -49,16 +51,18 @@ export default defineConfig({
     timeout: 60 * 1000,
   },
 
+  testIgnore: ['**/auth.setup.ts', '**/auth.test.ts'],
+
   /* Configure projects */
   projects: [
     {
-      name: 'setup:auth',
-      testMatch: /auth.setup.ts/,
+      name: 'setup:wallet-auth',
+      testMatch: /auth-wallet.setup.ts/,
     },
     {
       name: 'setup:reasoning',
       testMatch: /reasoning.setup.ts/,
-      dependencies: ['setup:auth'],
+      dependencies: ['setup:wallet-auth'],
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/session.json',
@@ -67,7 +71,7 @@ export default defineConfig({
     {
       name: 'chat',
       testMatch: /chat.test.ts/,
-      dependencies: ['setup:auth'],
+      dependencies: ['setup:wallet-auth'],
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/session.json',
@@ -85,7 +89,32 @@ export default defineConfig({
     {
       name: 'artifacts',
       testMatch: /artifacts.test.ts/,
-      dependencies: ['setup:auth'],
+      dependencies: ['setup:wallet-auth'],
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: 'playwright/.auth/session.json',
+      },
+    },
+    {
+      name: 'chart-generation',
+      testMatch: /chart-generation.test.ts/,
+      // dependencies: ['setup:wallet-auth'],
+      use: {
+        ...devices['Desktop Chrome'],
+        // storageState: 'playwright/.auth/session.json',
+      },
+    },
+    {
+      name: 'chart-unit-tests',
+      testMatch: /generate-chart-unit.test.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+      },
+    },
+    {
+      name: 'mcp-integration',
+      testMatch: /mcp-integration.test.ts/,
+      dependencies: ['setup:wallet-auth'],
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/session.json',

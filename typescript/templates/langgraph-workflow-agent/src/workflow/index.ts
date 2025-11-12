@@ -1,5 +1,5 @@
 import { StateGraph, Annotation } from '@langchain/langgraph';
-import type { LanguageModelV1 } from 'ai';
+import type { LanguageModel } from 'ai';
 import type { GreetingState, SatisfactionLevel } from './state.js';
 import { createInitialState } from './state.js';
 import { generatorNode } from './nodes/generator.js';
@@ -65,7 +65,7 @@ const GreetingAnnotation = Annotation.Root({
 });
 
 // Create the greeting optimization workflow
-export function createGreetingWorkflow(model: LanguageModelV1) {
+export function createGreetingWorkflow(model: LanguageModel) {
   // Define the graph with our state annotation
   const workflow = new StateGraph(GreetingAnnotation)
     .addNode('generator', state => generatorNode(state, model))
@@ -89,7 +89,7 @@ export function createGreetingWorkflow(model: LanguageModelV1) {
 // Helper function to run the workflow
 export async function runGreetingWorkflow(
   userInput: string,
-  model: LanguageModelV1
+  model: LanguageModel
 ): Promise<GreetingState> {
   const workflow = createGreetingWorkflow(model);
   const initialState = createInitialState(userInput);

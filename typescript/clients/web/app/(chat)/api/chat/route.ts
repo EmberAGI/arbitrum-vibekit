@@ -1,7 +1,5 @@
 import type { UIMessage } from 'ai';
 import {
-  createDataStreamResponse,
-  appendResponseMessages,
   smoothStream,
   streamText,
 } from 'ai';
@@ -14,11 +12,11 @@ import {
   saveMessages,
 } from '@/lib/db/queries';
 import {
-  generateUUID,
   getMostRecentUserMessage,
-  getTrailingMessageId,
 } from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
+import { generateUUID } from '@/lib/utils';
+import { createDataStreamResponse } from 'ai';
 // import { createDocument } from '@/lib/ai/tools/create-document';
 // import { updateDocument } from '@/lib/ai/tools/update-document';
 // import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
@@ -26,6 +24,7 @@ import { generateTitleFromUserMessage } from '../../actions';
 import { isProductionEnvironment } from '@/lib/constants';
 import { openRouterProvider } from '@/lib/ai/providers';
 import { getTools as getDynamicTools } from '@/lib/ai/tools/tool-agents';
+// import { generateChart } from '@/lib/ai/tools/generate-chart'; // Now using MCP server
 
 import type { Session } from 'next-auth';
 
@@ -36,7 +35,7 @@ const ContextSchema = z.object({
 });
 type Context = z.infer<typeof ContextSchema>;
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   console.log('🔍 newwww [ROUTE] POST request started');
@@ -53,32 +52,12 @@ export async function POST(request: Request) {
       context: Context;
     } = await request.json();
 
-    console.log('🔍 [ROUTE] Request parsed - messages:', messages?.length);
-    console.log('🔍 [ROUTE] selectedChatModel:', selectedChatModel);
-    console.log('🔍 [ROUTE] context:', context);
-    console.log('🔍 [ROUTE] Environment variables check:');
-    console.log('🔍 [ROUTE] OPENROUTER_API_KEY exists:', !!process.env.OPENROUTER_API_KEY);
-    console.log(
-      '🔍 [ROUTE] OPENROUTER_API_KEY length:',
-      process.env.OPENROUTER_API_KEY?.length || 0
-    );
-    console.log(
-      '🔍 [ROUTE] OPENROUTER_API_KEY prefix:',
-      process.env.OPENROUTER_API_KEY?.substring(0, 10) || 'N/A'
-    );
-
-    console.log('🔍 [ROUTE] id:', id);
-
     const session: Session | null = await auth();
-
-    console.log('session', session);
 
     const validationResult = ContextSchema.safeParse(context);
 
-    console.log('validationResult', validationResult);
-
     if (!validationResult.success) {
-      return new Response(JSON.stringify(validationResult.error.errors), {
+      return new Response(JSON.stringify(validationResult.error.issues), {
         status: 400,
         headers: {
           'Content-Type': 'application/json',
@@ -109,19 +88,28 @@ export async function POST(request: Request) {
 
 
     if (!chat) {
-      console.log('🔍 [ROUTE] No existing chat found, generating title...');
+      try {
+        const title = await generateTitleFromUserMessage({
+          message: userMessage,
+        });
 
-      const title = await generateTitleFromUserMessage({
-        message: userMessage,
-      });
-      console.log('✅ [ROUTE] Title generated successfully:', title);
-
-      console.log('🔍 [ROUTE] Saving chat...');
-      await saveChat({ id, userId: session.user.id, title, address: validatedContext.walletAddress || "" });
-      console.log('✅ [ROUTE] Chat saved successfully');
+        await saveChat({
+          id,
+          userId: session.user.id,
+          title,
+          address: validatedContext.walletAddress || '',
+        });
+      } catch (error) {
+        console.error(
+          '[ROUTE] Error in title generation or chat saving:',
+          error,
+        );
+        throw error; // Re-throw to be caught by outer try-catch
+      }
     } else {
       console.log('🔍 [ROUTE] Chat already exists');
       if (chat.userId !== session.user.id) {
+        console.log('[ROUTE] Unauthorized chat access attempt');
         return new Response('Unauthorized', { status: 401 });
       }
     }
@@ -213,6 +201,43 @@ export async function POST(request: Request) {
               } catch (error) {
                 console.error('❌ [ROUTE] Failed to save chat:', error);
               }
+
+              // Get the last assistant message
+              const lastAssistantMessage = assistantMessages[assistantMessages.length - 1];
+
+              if (!lastAssistantMessage) {
+                throw new Error('No assistant message found!');
+              }
+
+              // Extract file attachments from message parts (v5 represents files as parts)
+              const assistantFileAttachments = lastAssistantMessage.parts
+                .filter((part): part is { type: 'file'; mediaType: string; filename?: string; url: string } =>
+                  part.type === 'file'
+                )
+                .map((part) => ({
+                  url: part.url,
+                  name: part.filename ?? 'file',
+                  size: 0, // Size not available in UIMessage parts
+                  type: part.mediaType,
+                }));
+
+              await saveMessages({
+                messages: [
+                  {
+                    id: lastAssistantMessage.id,
+                    chatId: id,
+                    role: lastAssistantMessage.role,
+                    parts: lastAssistantMessage.parts,
+                    attachments: assistantFileAttachments,
+                    createdAt: new Date(),
+                  },
+                ],
+              });
+            } catch (saveError) {
+              console.error(
+                '[ROUTE] Failed to save assistant response:',
+                saveError,
+              );
             }
           },
           experimental_telemetry: {
@@ -236,11 +261,12 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
+    console.error('[ROUTE] Main POST error:', error);
     const JSONerror = JSON.stringify(error, null, 2);
     return new Response(
       `An error occurred while processing your request! ${JSONerror}`,
       {
-        status: 404,
+        status: 500,
       },
     );
   }
