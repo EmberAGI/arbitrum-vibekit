@@ -125,8 +125,8 @@ export const chatAgents = [
       },
       {
         title: 'Create time-based job',
-        label: 'daily at 9 AM (EOA)',
-        action: 'Create a time-based job (regular wallet) that runs daily at 9 AM',
+        label: 'interval every 60s',
+        action: 'Create a time-based job (regular wallet) that runs interval',
       },
       {
         title: 'Create time job (Safe)',

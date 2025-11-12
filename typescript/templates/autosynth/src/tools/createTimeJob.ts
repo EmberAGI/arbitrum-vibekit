@@ -19,7 +19,7 @@ const CreateTimeJobInputSchema = z.object({
     .optional()
     .describe('Contract address (NOT needed for Safe wallet mode - SDK auto-sets to Safe Module. Only needed for regular wallet mode.)'),
   targetFunction: z.string().min(1).optional().describe('Function name (NOT needed for Safe wallet mode - SDK uses execJobFromHub. Only needed for regular wallet mode.)'),
-  abi: z.string().min(1).optional().describe('Contract ABI (NOT needed for Safe wallet mode - SDK handles Safe Module ABI. Only needed for regular wallet mode.)'),
+  abi: z.union([z.string().min(1), z.array(z.any())]).optional().describe('Contract ABI as JSON string or array (NOT needed for Safe wallet mode - SDK handles Safe Module ABI. Only needed for regular wallet mode.)'),
   arguments: z.array(z.string()).default([]).describe('Static arguments for function call (NOT allowed in Safe wallet mode - use dynamicArgumentsScriptUrl)'),
   scheduleType: z.enum(['interval', 'cron', 'specific']).describe('Type of time-based scheduling: "interval" for recurring intervals, "cron" for cron expressions, or "specific" for one-time execution'),
   timeInterval: z.number().positive().optional().describe('Interval in seconds (for interval scheduling)'),
@@ -33,6 +33,7 @@ const CreateTimeJobInputSchema = z.object({
   walletMode: z.enum(['regular', 'safe']).default('regular').describe('Wallet mode: "regular" for EOA execution or "safe" for Safe wallet execution'),
   safeAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional().describe('Safe wallet address (REQUIRED when walletMode is "safe" - must be created first)'),
   language: z.string().optional().describe('Code language for the dynamic arguments script (e.g., "go", "javascript", "python")'),
+  autotopupTG: z.boolean().default(true).describe('Whether to automatically top up TG balance if low (default: true for automatic top-up)'),
 });
 
 // Define TriggerX Job Preview Schema
@@ -170,7 +171,7 @@ Examples:
         isImua: false,
         arguments: input.walletMode === 'safe' ? [] : input.arguments,
         dynamicArgumentsScriptUrl: input.dynamicArgumentsScriptUrl,
-        autotopupTG: true,
+        autotopupTG: input.autotopupTG ?? true,
         walletMode: input.walletMode,
         language: input.language || '',
       };
@@ -179,7 +180,14 @@ Examples:
       if (input.walletMode === 'regular') {
         jobInput.targetContractAddress = input.targetContractAddress;
         jobInput.targetFunction = input.targetFunction;
-        jobInput.abi = input.abi;
+        // Ensure ABI is a string - stringify if it's an array/object
+        if (typeof input.abi === 'string') {
+          jobInput.abi = input.abi;
+        } else if (Array.isArray(input.abi) || typeof input.abi === 'object') {
+          jobInput.abi = JSON.stringify(input.abi);
+        } else {
+          throw new Error('Invalid ABI format. ABI must be a JSON string or array.');
+        }
       } else {
         // Safe mode - add Safe address (SDK auto-sets targetContractAddress/targetFunction/abi)
         jobInput.safeAddress = input.safeAddress;
@@ -198,7 +206,7 @@ Examples:
 
       console.log('📦 Preparing transaction data for user signing...');
 
-      // Create transaction preview
+      // Create transaction preview - include ABI for frontend validation
       const txPreview = {
         action: 'createTimeJob' as const,
         jobTitle: input.jobTitle,
@@ -211,6 +219,8 @@ Examples:
         timeInterval: input.timeInterval,
         cronExpression: input.cronExpression,
         specificSchedule: input.specificSchedule,
+        // Include ABI in preview for frontend validation (only for regular mode)
+        abi: input.walletMode === 'regular' ? (typeof input.abi === 'string' ? input.abi : JSON.stringify(input.abi)) : undefined,
       };
 
       // Create transaction artifact for user signing

@@ -122,6 +122,8 @@ export const jobManagementSkill = defineSkill({
         // Add other scheduling fields
         cronExpression: input.jobDetails.cronExpression,
         specificSchedule: input.jobDetails.specificSchedule,
+        // Extract autotopupTG if present, default to true
+        autotopupTG: input.jobDetails.autotopupTG !== undefined ? input.jobDetails.autotopupTG : true,
       };
       
       console.log('✅ Extracted fields:', JSON.stringify(extracted, null, 2));

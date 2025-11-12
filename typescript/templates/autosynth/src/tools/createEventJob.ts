@@ -24,7 +24,7 @@ const CreateEventJobInputSchema = z.object({
     .optional()
     .describe('Contract address to call when event is detected (NOT required for Safe wallet mode - SDK auto-sets Safe Module)'),
   targetFunction: z.string().min(1).optional().describe('Function name to call on target contract (NOT required for Safe wallet mode - SDK uses execJobFromHub)'),
-  targetAbi: z.string().min(1).optional().describe('Target contract ABI JSON string (NOT required for Safe wallet mode - SDK handles Safe Module ABI)'),
+  targetAbi: z.union([z.string().min(1), z.array(z.any())]).optional().describe('Target contract ABI as JSON string or array (NOT required for Safe wallet mode - SDK handles Safe Module ABI)'),
   arguments: z.array(z.string()).default([]).describe('Static arguments for function call (NOT allowed in Safe wallet mode - use dynamicArgumentsScriptUrl)'),
   recurring: z.boolean().default(true).describe('Whether the job should continue listening for events'),
   timeFrame: z.number().positive().default(36).describe('Job validity timeframe in hours'),
@@ -35,6 +35,7 @@ const CreateEventJobInputSchema = z.object({
   walletMode: z.enum(['regular', 'safe']).default('regular').describe('Wallet mode: "regular" for EOA execution or "safe" for Safe wallet execution'),
   safeAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional().describe('Safe wallet address (REQUIRED when walletMode is "safe" - must be created first)'),
   language: z.string().optional().describe('Code language for the dynamic arguments script (e.g., "go", "javascript", "python")'),
+  autotopupTG: z.boolean().default(true).describe('Whether to automatically top up TG balance if low (default: true for automatic top-up)'),
 });
 
 export const createEventJobTool: VibkitToolDefinition<typeof CreateEventJobInputSchema, any, TriggerXContext, any> = {
@@ -84,7 +85,7 @@ export const createEventJobTool: VibkitToolDefinition<typeof CreateEventJobInput
         isImua: false,
         arguments: input.walletMode === 'safe' ? [] : input.arguments,
         dynamicArgumentsScriptUrl: input.dynamicArgumentsScriptUrl || '',
-        autotopupTG: true,
+        autotopupTG: input.autotopupTG ?? true,
         walletMode: input.walletMode,
         language: input.language || '',
       };
@@ -93,7 +94,14 @@ export const createEventJobTool: VibkitToolDefinition<typeof CreateEventJobInput
       if (input.walletMode === 'regular') {
         jobInput.targetContractAddress = input.targetContractAddress;
         jobInput.targetFunction = input.targetFunction;
-        jobInput.abi = input.targetAbi;
+        // Ensure ABI is a string - stringify if it's an array/object
+        if (typeof input.targetAbi === 'string') {
+          jobInput.abi = input.targetAbi;
+        } else if (Array.isArray(input.targetAbi) || typeof input.targetAbi === 'object') {
+          jobInput.abi = JSON.stringify(input.targetAbi);
+        } else {
+          throw new Error('Invalid ABI format. ABI must be a JSON string or array.');
+        }
       } else {
         // Safe mode - add Safe address
         jobInput.safeAddress = input.safeAddress;
