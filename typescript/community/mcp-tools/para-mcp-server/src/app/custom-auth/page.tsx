@@ -28,6 +28,39 @@ export default function CustomAuthPage() {
   const [verificationCode, setVerificationCode] = useState<string>("");
   const [pendingAuthUrl, setPendingAuthUrl] = useState<string | null>(null);
 
+  // Helper function to request parent to open auth URL via postMessage
+  const requestParentOpenPopup = (url: string, target: string): boolean => {
+    try {
+      // Send message to parent window
+      window.parent.postMessage(
+        {
+          type: "OPEN_AUTH_URL",
+          url,
+          target,
+        },
+        "*"
+      );
+      return true;
+    } catch (error) {
+      console.error("[CustomAuth] Failed to send postMessage:", error);
+      return false;
+    }
+  };
+
+  // Listen for auth completion messages from parent
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "AUTH_COMPLETED") {
+        console.log("[CustomAuth] Auth completed via postMessage");
+        // Trigger polling to check auth status
+        setPendingAuthUrl(null);
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
   // Check login status and get wallet
   useEffect(() => {
     let active = true;
@@ -133,8 +166,8 @@ export default function CustomAuthPage() {
         const loginUrl = authState.loginUrl || authState.passkeyUrl || authState.passwordUrl || authState.pinUrl;
         if (loginUrl) {
           console.log("[CustomAuth] Opening login for existing user:", loginUrl);
-          const opened = window.open(loginUrl, "_blank");
-          if (!opened) {
+          const parentOpened = requestParentOpenPopup(loginUrl, "para-login");
+          if (!parentOpened) {
             setPendingAuthUrl(loginUrl);
             setStatus("idle");
             setMessage("Opening authentication in this tab...");
@@ -157,8 +190,8 @@ export default function CustomAuthPage() {
       } else if (authState?.stage === "verify" && authState?.loginUrl) {
         // New user - passkey/password/PIN signup flow
         console.log("[CustomAuth] Opening signup for new user:", authState.loginUrl);
-        const opened = window.open(authState.loginUrl, "_blank");
-        if (!opened) {
+        const parentOpened = requestParentOpenPopup(authState.loginUrl, "para-signup");
+        if (!parentOpened) {
           setPendingAuthUrl(authState.loginUrl);
           setStatus("idle");
           setMessage("Opening authentication in this tab...");
@@ -175,8 +208,8 @@ export default function CustomAuthPage() {
         const setupUrl = authState.passkeyUrl || authState.passwordUrl || authState.pinUrl;
         if (setupUrl) {
           console.log("[CustomAuth] Opening passkey setup:", setupUrl);
-          const opened = window.open(setupUrl, "_blank");
-          if (!opened) {
+          const parentOpened = requestParentOpenPopup(setupUrl, "para-setup");
+          if (!parentOpened) {
             setPendingAuthUrl(setupUrl);
             setStatus("idle");
             setMessage("Opening authentication in this tab...");
@@ -244,8 +277,6 @@ export default function CustomAuthPage() {
     try {
       if (!para) throw new Error("Para client not ready");
 
-      const preOpened = window.open("", "_blank");
-
       const verifiedState = await (para as any).verifyNewAccount?.({
         verificationCode: verificationCode.trim(),
       });
@@ -258,44 +289,19 @@ export default function CustomAuthPage() {
         verifiedState?.loginUrl;
 
       if (nextUrl) {
-        if (preOpened) {
-          try {
-            preOpened.location.href = nextUrl;
-            setMessage(
-              "Authentication opened in a new tab. Don't close this page; finish auth there and return here.",
-            );
-            setPendingAuthUrl(nextUrl);
-            await (para as any).waitForWalletCreation?.({});
-          } catch {
-            const opened = window.open(nextUrl, "_blank");
-            if (!opened) {
-              setPendingAuthUrl(nextUrl);
-              setStatus("idle");
-              setMessage("Opening authentication in this tab...");
-              window.location.assign(nextUrl);
-              return;
-            }
-            setMessage(
-              "Authentication opened in a new tab. Don't close this page; finish auth there and return here.",
-            );
-            setPendingAuthUrl(nextUrl);
-            await (para as any).waitForWalletCreation?.({});
-          }
-        } else {
-          const opened = window.open(nextUrl, "_blank");
-          if (!opened) {
-            setPendingAuthUrl(nextUrl);
-            setStatus("idle");
-            setMessage("Opening authentication in this tab...");
-            window.location.assign(nextUrl);
-            return;
-          }
-          setMessage(
-            "Authentication opened in a new tab. Don't close this page; finish auth there and return here.",
-          );
+        const parentOpened = requestParentOpenPopup(nextUrl, "para-verify");
+        if (!parentOpened) {
           setPendingAuthUrl(nextUrl);
-          await (para as any).waitForWalletCreation?.({});
+          setStatus("idle");
+          setMessage("Opening authentication in this tab...");
+          window.location.assign(nextUrl);
+          return;
         }
+        setMessage(
+          "Authentication opened in a new tab. Don't close this page; finish auth there and return here.",
+        );
+        setPendingAuthUrl(nextUrl);
+        await (para as any).waitForWalletCreation?.({});
       }
 
       await para.touchSession?.();
