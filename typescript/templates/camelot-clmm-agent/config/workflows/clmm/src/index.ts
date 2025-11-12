@@ -27,14 +27,19 @@ import {
   DATA_STALE_CYCLE_LIMIT,
   EMBER_API_BASE_URL,
   MAX_GAS_SPEND_ETH,
-  MAX_SLIPPAGE_BPS,
   SAFETY_NET_MAX_IDLE_CYCLES,
   resolveEthUsdPrice,
   resolvePollIntervalMs,
   resolveStreamLimit,
 } from './constants.js';
 import { createClients } from './clients.js';
-import { EmberCamelotClient, fetchPoolSnapshot, type TransactionInformation } from './emberApi.js';
+import {
+  EmberCamelotClient,
+  fetchPoolSnapshot,
+  type ClmmRebalanceRequest,
+  type ClmmWithdrawRequest,
+  type TransactionInformation,
+} from './emberApi.js';
 import {
   ClmmWorkflowParametersSchema,
   OperatorConfigInputSchema,
@@ -153,18 +158,6 @@ const plugin: WorkflowPlugin = {
       inputSchema: OperatorConfigInputSchema,
     }) as OperatorConfigInput;
 
-    const operatorConfig: OperatorConfigInput = {
-      ...operatorInput,
-      baseContributionUsd:
-        operatorInput.baseContributionUsd ?? parameters.targetNotionalUsd ?? 5_000,
-      maxIdleCycles:
-        operatorInput.maxIdleCycles ?? parameters.maxIdleCycles ?? SAFETY_NET_MAX_IDLE_CYCLES,
-      manualBandwidthBps:
-        operatorInput.manualBandwidthBps ??
-        parameters.tickBandwidthBps ??
-        DEFAULT_TICK_BANDWIDTH_BPS,
-    };
-
     const account = privateKeyToAccount(agentPrivateKey as `0x${string}`);
     const clients = createClients();
     const agentsWallet = await toMetaMaskSmartAccount({
@@ -181,46 +174,62 @@ const plugin: WorkflowPlugin = {
       signer: { account },
     });
 
-    const delegations = createClmmDelegations({
-      walletAddress: operatorConfig.walletAddress,
-      agentSmartAccount: agentsWallet.address,
-      token0: selectedPool.token0.address as `0x${string}`,
-      token1: selectedPool.token1.address as `0x${string}`,
-      environment: String(agentsWallet.environment),
-    });
-
-    const delegationArtifact = buildDelegationArtifact(delegations);
-    yield { type: 'artifact', artifact: delegationArtifact };
-
-    const signedDelegationsInput = (yield {
-      type: 'interrupted',
-      reason: 'input-required',
-      message: 'Sign and return each delegation to authorize the workflow.',
-      inputSchema: z.object({
-        delegations: z.array(
-          z.object({
-            id: z.enum(['approveToken0', 'approveToken1', 'manageCamelot']),
-            signedDelegation: z.templateLiteral(['0x', z.string()]),
-          }),
-        ),
-      }),
-      artifact: delegationArtifact,
-    }) as unknown as { delegations: Array<{ id: keyof typeof delegations; signedDelegation: `0x${string}` }> };
-
-    const signedDelegations = Object.fromEntries(
-      signedDelegationsInput.delegations.map((entry) => [
-        entry.id,
-        {
-          ...delegations[entry.id],
-          signature: entry.signedDelegation,
-        } satisfies SignedDelegation,
-      ]),
-    ) as Record<keyof typeof delegations, SignedDelegation>;
-
-    yield {
-      type: 'status-update',
-      message: 'Delegations received. Starting live polling loop.',
+    const operatorConfig: OperatorConfigInput = {
+      ...operatorInput,
+      walletAddress: agentsWallet.address, // Using the agent's embedded smart account for all transactions.
+      baseContributionUsd:
+        operatorInput.baseContributionUsd ?? parameters.targetNotionalUsd ?? 5_000,
+      maxIdleCycles:
+        operatorInput.maxIdleCycles ?? parameters.maxIdleCycles ?? SAFETY_NET_MAX_IDLE_CYCLES,
+      manualBandwidthBps:
+        operatorInput.manualBandwidthBps ??
+        parameters.tickBandwidthBps ??
+        DEFAULT_TICK_BANDWIDTH_BPS,
     };
+
+    // TODO: Need to remove delegations and replace with the agent's embedded smart account. The agent's wallet will directly sign and manage the transactions.
+    // const delegations = createClmmDelegations({
+    //   walletAddress: operatorConfig.walletAddress,
+    //   agentSmartAccount: agentsWallet.address,
+    //   token0: selectedPool.token0.address as `0x${string}`,
+    //   token1: selectedPool.token1.address as `0x${string}`,
+    //   environment: String(agentsWallet.environment),
+    // });
+
+    // const delegationArtifact = buildDelegationArtifact(delegations);
+    // yield { type: 'artifact', artifact: delegationArtifact };
+
+    // const signedDelegationsInput = (yield {
+    //   type: 'interrupted',
+    //   reason: 'input-required',
+    //   message: 'Sign and return each delegation to authorize the workflow.',
+    //   inputSchema: z.object({
+    //     delegations: z.array(
+    //       z.object({
+    //         id: z.enum(['approveToken0', 'approveToken1', 'manageCamelot']),
+    //         signedDelegation: z.templateLiteral(['0x', z.string()]),
+    //       }),
+    //     ),
+    //   }),
+    //   artifact: delegationArtifact,
+    // }) as unknown as {
+    //   delegations: Array<{ id: keyof typeof delegations; signedDelegation: `0x${string}` }>;
+    // };
+
+    // const signedDelegations = Object.fromEntries(
+    //   signedDelegationsInput.delegations.map((entry) => [
+    //     entry.id,
+    //     {
+    //       ...delegations[entry.id],
+    //       signature: entry.signedDelegation,
+    //     } satisfies SignedDelegation,
+    //   ]),
+    // ) as Record<keyof typeof delegations, SignedDelegation>;
+
+    // yield {
+    //   type: 'status-update',
+    //   message: 'Delegations received. Starting live polling loop.',
+    // };
 
     const telemetry: RebalanceTelemetry[] = [];
     let previousPrice: number | undefined;
@@ -303,7 +312,6 @@ const plugin: WorkflowPlugin = {
             camelotClient,
             pool: poolSnapshot,
             operatorConfig,
-            signedDelegations,
             agentsWallet,
             clients,
           });
@@ -486,7 +494,6 @@ async function executeDecision({
   camelotClient,
   pool,
   operatorConfig,
-  signedDelegations,
   agentsWallet,
   clients,
 }: {
@@ -494,7 +501,6 @@ async function executeDecision({
   camelotClient: EmberCamelotClient;
   pool: CamelotPool;
   operatorConfig: OperatorConfigInput;
-  signedDelegations: Record<'approveToken0' | 'approveToken1' | 'manageCamelot', SignedDelegation>;
   agentsWallet: MetaMaskSmartAccount;
   clients: ReturnType<typeof createClients>;
 }): Promise<string | undefined> {
@@ -502,6 +508,14 @@ async function executeDecision({
   if (action.kind === 'hold') {
     throw new Error('executeDecision invoked with hold action');
   }
+
+  const chainIdString = ARBITRUM_CHAIN_ID.toString();
+  const poolIdentifier = {
+    chainId: chainIdString,
+    address: pool.address as `0x${string}`,
+  };
+
+  let response: Awaited<ReturnType<EmberCamelotClient['requestRebalance']>>;
 
   if (action.kind === 'enter-range' || action.kind === 'adjust-range') {
     const allocations = estimateTokenAllocations(pool, operatorConfig.baseContributionUsd);
@@ -511,7 +525,6 @@ async function executeDecision({
       ownerAccount: walletAddress,
       spenderAddress: CAMELOT_POSITION_MANAGER_ADDRESS,
       requiredAmount: allocations.token0,
-      delegation: signedDelegations.approveToken0,
       agentAccount: agentsWallet,
       clients,
     });
@@ -521,36 +534,52 @@ async function executeDecision({
       ownerAccount: walletAddress,
       spenderAddress: CAMELOT_POSITION_MANAGER_ADDRESS,
       requiredAmount: allocations.token1,
-      delegation: signedDelegations.approveToken1,
       agentAccount: agentsWallet,
       clients,
     });
+
+    const rebalancePayload: ClmmRebalanceRequest = {
+      walletAddress,
+      supplyChain: chainIdString,
+      poolIdentifier,
+      range: {
+        type: 'limited',
+        minPrice: action.targetRange.lowerPrice.toString(),
+        maxPrice: action.targetRange.upperPrice.toString(),
+      },
+      payableTokens: [
+        {
+          tokenUid: {
+            chainId: chainIdString,
+            address: pool.token0.address as `0x${string}`,
+          },
+          amount: allocations.token0.toString(),
+        },
+        {
+          tokenUid: {
+            chainId: chainIdString,
+            address: pool.token1.address as `0x${string}`,
+          },
+          amount: allocations.token1.toString(),
+        },
+      ],
+    };
+
+    response = await camelotClient.requestRebalance(rebalancePayload);
+  } else if (action.kind === 'exit-range' || action.kind === 'compound-fees') {
+    const withdrawPayload: ClmmWithdrawRequest = {
+      walletAddress,
+      poolTokenUid: poolIdentifier,
+    };
+    response = await camelotClient.requestWithdrawal(withdrawPayload);
+  } else {
+    throw new Error(`Unsupported action kind: ${action.kind}`);
   }
 
-  const rebalancePayload = {
-    walletAddress,
-    poolAddress: pool.address as `0x${string}`,
-    chainId: ARBITRUM_CHAIN_ID.toString(),
-    action: mapActionKind(action.kind),
-    range:
-      action.kind === 'exit-range' || action.kind === 'compound-fees'
-        ? undefined
-        : {
-            minPrice: action.targetRange.lowerPrice.toString(),
-            maxPrice: action.targetRange.upperPrice.toString(),
-          },
-    maxSlippageBps: MAX_SLIPPAGE_BPS,
-    maxGasEth: MAX_GAS_SPEND_ETH,
-    autoCompound: operatorConfig.autoCompoundFees,
-    baseContributionUsd: operatorConfig.baseContributionUsd,
-  };
-
-  const response = await camelotClient.requestRebalance(rebalancePayload);
   let lastTxHash: string | undefined;
   for (const tx of response.transactions) {
     const receipt = await executePlannedTransaction({
       tx,
-      delegation: signedDelegations.manageCamelot,
       agentsWallet,
       clients,
     });
@@ -560,45 +589,19 @@ async function executeDecision({
   return lastTxHash;
 }
 
-function mapActionKind(kind: ClmmAction['kind']): 'enter' | 'adjust' | 'exit' | 'compound' {
-  switch (kind) {
-    case 'enter-range':
-      return 'enter';
-    case 'adjust-range':
-      return 'adjust';
-    case 'exit-range':
-      return 'exit';
-    case 'compound-fees':
-      return 'compound';
-    case 'hold':
-      throw new Error('Cannot map hold action to rebalance request');
-    default: {
-      const _exhaustive: never = kind;
-      throw new Error(`Unexpected action kind: ${_exhaustive}`);
-    }
-  }
-}
 
 async function executePlannedTransaction({
   tx,
-  delegation,
   agentsWallet,
   clients,
 }: {
   tx: TransactionInformation;
-  delegation: SignedDelegation;
   agentsWallet: MetaMaskSmartAccount;
   clients: ReturnType<typeof createClients>;
 }) {
   const execution = createExecution({
     target: tx.to,
     callData: tx.data,
-  });
-
-  const redeemData = DelegationManager.encode.redeemDelegations({
-    delegations: [[delegation]],
-    modes: [ExecutionMode.SingleDefault],
-    executions: [[execution]],
   });
 
   return executeTransaction(clients, {
@@ -614,14 +617,15 @@ async function executePlannedTransaction({
 
 function estimateTokenAllocations(pool: CamelotPool, baseContributionUsd: number) {
   const half = baseContributionUsd / 2;
-  const token0Price = pool.token0.usdPrice ?? pool.token1.usdPrice ?? 0;
+  const midPrice = deriveMidPrice(pool);
+  const token0Price =
+    pool.token0.usdPrice ??
+    (pool.token1.usdPrice && midPrice > 0 ? pool.token1.usdPrice * midPrice : undefined);
   const token1Price =
     pool.token1.usdPrice ??
-    (pool.token0.usdPrice && pool.token0.usdPrice > 0
-      ? pool.token0.usdPrice / deriveMidPrice(pool)
-      : 0);
+    (pool.token0.usdPrice && midPrice > 0 ? pool.token0.usdPrice / midPrice : undefined);
 
-  if (token0Price <= 0 || token1Price <= 0) {
+  if (!token0Price || !token1Price || token0Price <= 0 || token1Price <= 0) {
     throw new Error('Token USD prices unavailable; cannot size allowances');
   }
 

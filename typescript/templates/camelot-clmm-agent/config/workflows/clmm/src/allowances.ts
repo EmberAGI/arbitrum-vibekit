@@ -30,7 +30,6 @@ export async function ensureAllowance({
   ownerAccount,
   spenderAddress,
   requiredAmount,
-  delegation,
   agentAccount,
   clients,
 }: {
@@ -39,11 +38,15 @@ export async function ensureAllowance({
   ownerAccount: `0x${string}`;
   spenderAddress: `0x${string}`;
   requiredAmount: bigint;
-  delegation: Delegation;
   agentAccount: MetaMaskSmartAccount;
   clients: OnchainClients;
 }) {
-  const allowance = await checkTokenAllowance(publicClient, tokenAddress, ownerAccount, spenderAddress);
+  const allowance = await checkTokenAllowance(
+    publicClient,
+    tokenAddress,
+    ownerAccount,
+    spenderAddress,
+  );
   if (allowance >= requiredAmount) {
     return;
   }
@@ -56,12 +59,6 @@ export async function ensureAllowance({
   const execution = createExecution({
     target: tokenAddress,
     callData: approveCallData,
-  });
-
-  const redeemCalldata = DelegationManager.encode.redeemDelegations({
-    delegations: [[delegation]],
-    modes: [ExecutionMode.SingleDefault],
-    executions: [[execution]],
   });
 
   await executeTransaction(clients, {

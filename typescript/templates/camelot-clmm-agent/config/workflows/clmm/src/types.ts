@@ -25,22 +25,73 @@ export type CamelotPool = z.infer<typeof CamelotPoolSchema>;
 export const WalletPositionSchema = z.object({
   poolAddress: z.templateLiteral(['0x', z.string()]),
   operator: z.string(),
-  liquidity: z.string(),
+  liquidity: z.string().optional(),
   tickLower: z.number().int(),
   tickUpper: z.number().int(),
-  tokensOwed0: z.string().default('0'),
-  tokensOwed1: z.string().default('0'),
+  tokensOwed0: z.string().optional(),
+  tokensOwed1: z.string().optional(),
 });
 export type WalletPosition = z.infer<typeof WalletPositionSchema>;
 
+const ChainIdentifierSchema = z.object({
+  chainId: z.string(),
+  address: z.string(),
+});
+
+const EmberPoolTokenSchema = z.object({
+  tokenUid: ChainIdentifierSchema,
+  name: z.string(),
+  symbol: z.string(),
+  decimals: z.number().int().nonnegative(),
+  isNative: z.boolean().optional(),
+  iconUri: z.string().optional(),
+  isVetted: z.boolean().optional(),
+});
+
 export const PoolListResponseSchema = z.object({
-  pools: z.array(CamelotPoolSchema),
-  asOf: z.string().datetime().optional(),
+  liquidityPools: z.array(
+    z.object({
+      identifier: ChainIdentifierSchema,
+      tokens: z.array(EmberPoolTokenSchema).min(2),
+      price: z.string(),
+      providerId: z.string(),
+      poolName: z.string(),
+    }),
+  ),
+  cursor: z.string().nullable().optional(),
+  currentPage: z.number().int().nullable().optional(),
+  totalPages: z.number().int().nullable().optional(),
+  totalItems: z.number().int().nullable().optional(),
 });
 export type PoolListResponse = z.infer<typeof PoolListResponseSchema>;
 
+const EmberPositionRangeSchema = z
+  .object({
+    fromPrice: z.string(),
+    toPrice: z.string(),
+  })
+  .partial()
+  .optional();
+
+const EmberWalletTokenSchema = EmberPoolTokenSchema.extend({
+  amount: z.string().optional(),
+});
+
 export const WalletPositionsResponseSchema = z.object({
-  positions: z.array(WalletPositionSchema),
+  positions: z.array(
+    z.object({
+      poolIdentifier: ChainIdentifierSchema,
+      operator: z.string(),
+      price: z.string().optional(),
+      providerId: z.string(),
+      positionRange: EmberPositionRangeSchema,
+      suppliedTokens: z.array(EmberWalletTokenSchema),
+    }),
+  ),
+  cursor: z.string().nullable().optional(),
+  currentPage: z.number().int().nullable().optional(),
+  totalPages: z.number().int().nullable().optional(),
+  totalItems: z.number().int().nullable().optional(),
 });
 export type WalletPositionsResponse = z.infer<typeof WalletPositionsResponseSchema>;
 
@@ -80,9 +131,9 @@ export type PositionSnapshot = {
   poolAddress: `0x${string}`;
   tickLower: number;
   tickUpper: number;
-  liquidity: bigint;
-  tokensOwed0: bigint;
-  tokensOwed1: bigint;
+  liquidity?: bigint;
+  tokensOwed0?: bigint;
+  tokensOwed1?: bigint;
 };
 
 export interface DecisionContext {

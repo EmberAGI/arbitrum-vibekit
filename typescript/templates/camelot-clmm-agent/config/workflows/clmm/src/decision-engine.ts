@@ -98,15 +98,15 @@ export function estimateFeeValueUsd(
   position: PositionSnapshot | undefined,
   pool: CamelotPool,
 ): number {
-  if (!position) {
+  if (!position || (!position.tokensOwed0 && !position.tokensOwed1)) {
     return 0;
   }
-  const amount0 = Number(
-    formatUnits(position.tokensOwed0, pool.token0.decimals),
-  );
-  const amount1 = Number(
-    formatUnits(position.tokensOwed1, pool.token1.decimals),
-  );
+  const amount0 = position.tokensOwed0
+    ? Number(formatUnits(position.tokensOwed0, pool.token0.decimals))
+    : 0;
+  const amount1 = position.tokensOwed1
+    ? Number(formatUnits(position.tokensOwed1, pool.token1.decimals))
+    : 0;
   const token0Usd = pool.token0.usdPrice ?? 0;
   const token1Usd = pool.token1.usdPrice ?? 0;
   return amount0 * token0Usd + amount1 * token1Usd;
@@ -183,8 +183,8 @@ export function normalizePosition(raw: WalletPosition): PositionSnapshot {
     poolAddress: raw.poolAddress,
     tickLower: raw.tickLower,
     tickUpper: raw.tickUpper,
-    liquidity: BigInt(raw.liquidity),
-    tokensOwed0: BigInt(raw.tokensOwed0 ?? '0'),
-    tokensOwed1: BigInt(raw.tokensOwed1 ?? '0'),
+    liquidity: raw.liquidity ? BigInt(raw.liquidity) : undefined,
+    tokensOwed0: raw.tokensOwed0 ? BigInt(raw.tokensOwed0) : undefined,
+    tokensOwed1: raw.tokensOwed1 ? BigInt(raw.tokensOwed1) : undefined,
   };
 }
