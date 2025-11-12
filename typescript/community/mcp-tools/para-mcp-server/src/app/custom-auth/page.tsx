@@ -116,153 +116,96 @@ export default function CustomAuthPage() {
     try {
       if (!para) throw new Error("Para client not ready");
 
-      const authed = await para.isFullyLoggedIn();
-      if (!authed) {
-        // v2 API: Use signUpOrLogIn with the user's email
-        const authState = await (para as any).signUpOrLogIn?.({
-          auth: { email: email.trim() },
-        });
+      // v2 API: Use signUpOrLogIn with the user's email
+      const authState = await (para as any).signUpOrLogIn?.({
+        auth: { email: email.trim() },
+      });
 
-        // Passkey/password/PIN signup flow: no loginUrl yet, user must enter OTP
-        if (authState?.stage === "verify" && !authState?.loginUrl) {
-          setRequiresOtp(true);
-          setStatus("idle");
-          setMessage("We sent a 6-digit code to your email. Enter it below to continue.");
-          return;
-        } else if (authState?.loginUrl) {
-          console.log("[CustomAuth] Opening auth in new tab:", authState.loginUrl);
-          const opened = window.open(authState.loginUrl, "_blank");
+      // Handle different authentication stages
+      if (authState?.stage === "verify" && !authState?.loginUrl) {
+        // New user - requires OTP verification
+        setRequiresOtp(true);
+        setStatus("idle");
+        setMessage("We sent a 6-digit code to your email. Enter it below to continue.");
+        return;
+      } else if (authState?.stage === "login") {
+        // Existing user - open login URL and wait for completion
+        const loginUrl = authState.loginUrl || authState.passkeyUrl || authState.passwordUrl || authState.pinUrl;
+        if (loginUrl) {
+          console.log("[CustomAuth] Opening login for existing user:", loginUrl);
+          const opened = window.open(loginUrl, "_blank");
           if (!opened) {
-            setPendingAuthUrl(authState.loginUrl);
-            setStatus("idle");
-            setMessage(
-              "Opening authentication in this tab...",
-            );
-            window.location.assign(authState.loginUrl);
-            return;
-          }
-          setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
-          setPendingAuthUrl(authState.loginUrl);
-          const isSignup = authState?.nextStage === "signup";
-          if (isSignup) {
-            await (para as any).waitForWalletCreation?.({});
-          } else {
-            await (para as any).waitForLogin?.({});
-          }
-        } else if (authState?.passkeyUrl) {
-          const opened = window.open(authState.passkeyUrl, "_blank");
-          if (!opened) {
-            setPendingAuthUrl(authState.passkeyUrl);
+            setPendingAuthUrl(loginUrl);
             setStatus("idle");
             setMessage("Opening authentication in this tab...");
-            window.location.assign(authState.passkeyUrl);
+            window.location.assign(loginUrl);
             return;
           }
           setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
-          setPendingAuthUrl(authState.passkeyUrl);
-          await (para as any).waitForLogin?.({});
-        }
-        
-        // Refresh session to get latest authentication state (v2 API)
-        await para.touchSession?.();
-      } else {
-        // Session says authed, but user may not have completed biometrics/passkey yet.
-        // If no wallets exist, force portal flow to complete setup.
-        let preWallets = Object.values(await para.getWallets());
-        if (preWallets.length === 0) {
-          const authState = await (para as any).signUpOrLogIn?.({
-            auth: { email: email.trim() },
-          });
-
-          if (authState?.stage === "verify" && !authState?.loginUrl) {
-            setRequiresOtp(true);
-            setStatus("idle");
-            setMessage("We sent a 6-digit code to your email. Enter it below to continue.");
-            return;
-          } else if (authState?.loginUrl) {
-            const opened = window.open(authState.loginUrl, "_blank");
-            if (!opened) {
-              setPendingAuthUrl(authState.loginUrl);
-              setStatus("idle");
-              setMessage("Opening authentication in this tab...");
-              window.location.assign(authState.loginUrl);
-              return;
-            }
-            setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
-            setPendingAuthUrl(authState.loginUrl);
-            const isSignup = authState?.nextStage === "signup";
-            if (isSignup) {
-              await (para as any).waitForWalletCreation?.({});
-            } else {
-              await (para as any).waitForLogin?.({});
-            }
-          } else if (authState?.passkeyUrl) {
-            const opened = window.open(authState.passkeyUrl, "_blank");
-            if (!opened) {
-              setPendingAuthUrl(authState.passkeyUrl);
-              setStatus("idle");
-              setMessage("Opening authentication in this tab...");
-              window.location.assign(authState.passkeyUrl);
-              return;
-            }
-            setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
-            setPendingAuthUrl(authState.passkeyUrl);
-            await (para as any).waitForLogin?.({});
+          setPendingAuthUrl(loginUrl);
+          
+          // Wait for login to complete and get result
+          const loginResult = await (para as any).waitForLogin?.({});
+          console.log("[CustomAuth] Login result:", loginResult);
+          
+          // Check if wallet creation is needed
+          if (loginResult?.needsWallet) {
+            console.log("[CustomAuth] Creating wallet after login...");
+            await para.createWallet({ type: "EVM" as any, skipDistribute: false });
           }
-
-          await para.touchSession?.();
+        }
+      } else if (authState?.stage === "verify" && authState?.loginUrl) {
+        // New user - passkey/password/PIN signup flow
+        console.log("[CustomAuth] Opening signup for new user:", authState.loginUrl);
+        const opened = window.open(authState.loginUrl, "_blank");
+        if (!opened) {
+          setPendingAuthUrl(authState.loginUrl);
+          setStatus("idle");
+          setMessage("Opening authentication in this tab...");
+          window.location.assign(authState.loginUrl);
+          return;
+        }
+        setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
+        setPendingAuthUrl(authState.loginUrl);
+        
+        // Wait for wallet creation to complete
+        await (para as any).waitForWalletCreation?.({});
+      } else if (authState?.stage === "signup") {
+        // User verified email, now needs to set up passkey/password
+        const setupUrl = authState.passkeyUrl || authState.passwordUrl || authState.pinUrl;
+        if (setupUrl) {
+          console.log("[CustomAuth] Opening passkey setup:", setupUrl);
+          const opened = window.open(setupUrl, "_blank");
+          if (!opened) {
+            setPendingAuthUrl(setupUrl);
+            setStatus("idle");
+            setMessage("Opening authentication in this tab...");
+            window.location.assign(setupUrl);
+            return;
+          }
+          setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
+          setPendingAuthUrl(setupUrl);
+          
+          // Wait for wallet creation to complete
+          await (para as any).waitForWalletCreation?.({});
         }
       }
+      
+      // Refresh session to get latest authentication state
+      await para.touchSession?.();
 
-      // After login, fetch wallets from server (v2 API)
+      // NOW safely fetch wallets (user is authenticated)
       let wallets = Object.values(await para.getWallets());
       
-      // If no wallets exist, ensure biometrics are verified, then create EVM wallet
+      // If no wallets exist, create EVM wallet
       if (wallets.length === 0) {
         console.log("[CustomAuth] No wallets found, creating EVM wallet...");
         try {
           await para.createWallet({ type: "EVM" as any, skipDistribute: false });
-        } catch (e) {
-          console.warn("[CustomAuth] createWallet failed, attempting to complete biometrics first", e);
-          // Guide user through the Para portal to complete biometrics setup
-          const authState2 = await (para as any).signUpOrLogIn?.({ auth: { email: email.trim() } });
-
-          if (authState2?.stage === "verify" && !authState2?.loginUrl) {
-            // Requires OTP first
-            setRequiresOtp(true);
-            setStatus("idle");
-            setMessage("Please enter the 6-digit code sent to your email to continue.");
-            return;
-          }
-
-          let portalUrl = authState2?.loginUrl || authState2?.passkeyUrl || authState2?.passwordUrl || authState2?.pinUrl;
-          if (portalUrl) {
-            const opened = window.open(portalUrl, "_blank");
-            if (!opened) {
-              setPendingAuthUrl(portalUrl);
-              setStatus("idle");
-              setMessage("Opening authentication in this tab...");
-              window.location.assign(portalUrl);
-              return;
-            }
-            setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
-            setPendingAuthUrl(portalUrl);
-            const isSignup2 = authState2?.nextStage === "signup";
-            if (isSignup2) {
-              await (para as any).waitForWalletCreation?.({});
-            } else {
-              await (para as any).waitForLogin?.({});
-            }
-          }
-
-          await para.touchSession?.();
           wallets = Object.values(await para.getWallets());
-
-          // Retry creating EVM wallet if still none
-          if (wallets.length === 0) {
-            await para.createWallet({ type: "EVM" as any, skipDistribute: false });
-            wallets = Object.values(await para.getWallets());
-          }
+        } catch (e) {
+          console.warn("[CustomAuth] createWallet failed:", e);
+          // Don't fail the auth process if wallet creation fails
         }
       }
 
@@ -272,8 +215,6 @@ export default function CustomAuthPage() {
         if (evmWallet?.address) {
           setWalletAddress(evmWallet.address as string);
           console.log("[CustomAuth] EVM wallet address:", evmWallet.address);
-        } else {
-          console.warn("[CustomAuth] Wallet found but no address:", evmWallet);
         }
       }
       
