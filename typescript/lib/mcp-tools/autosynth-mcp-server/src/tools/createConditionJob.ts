@@ -32,6 +32,7 @@ const CreateConditionJobSchema = z.object({
   userAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).describe('User wallet address for signing transactions'),
   walletMode: z.enum(['regular','safe']).default('regular').describe('Wallet mode for execution'),
   safeAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional().describe('Safe wallet address (required for Safe mode)'),
+  language: z.string().optional().describe('Code language for the dynamic arguments script (e.g., "go", "javascript", "python")'),
   autotopupTG: z.boolean().default(true).describe('Whether to automatically top up TG balance if low'),
 });
 
@@ -72,6 +73,7 @@ export async function createConditionJob(params: z.infer<typeof CreateConditionJ
       dynamicArgumentsScriptUrl: params.dynamicArgumentsScriptUrl || '',
       autotopupTG: params.autotopupTG,
       walletMode: isSafe ? 'safe' : 'regular',
+      language: params.language || '',
       safeAddress: isSafe ? params.safeAddress : undefined,
     };
 

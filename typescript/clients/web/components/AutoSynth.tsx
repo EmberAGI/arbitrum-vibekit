@@ -2,7 +2,7 @@
 
 import { useAccount, useSwitchChain } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createJob } from 'sdk-triggerx';
 import { deleteJob  } from 'sdk-triggerx/dist/api/deleteJob.js';
 import { getJobDataById } from 'sdk-triggerx/dist/api/getJobDataById.js';
@@ -41,6 +41,32 @@ export function AutoSynth({
   const [safeError, setSafeError] = useState<string | null>(null);
   const [safeAddress, setSafeAddress] = useState<string | null>(null);
 
+  // Validate ABI on component mount and when jobData changes
+  useEffect(() => {
+    if (jobData?.jobInput && (jobData.jobInput.walletMode === 'regular' || !jobData.jobInput.walletMode)) {
+      const abi = jobData.jobInput.abi;
+      if (!abi || (typeof abi === 'string' && abi.trim() === '') || (Array.isArray(abi) && abi.length === 0)) {
+        setError('Contract ABI must be provided');
+      } else {
+        // Clear error if ABI is present and error was about missing ABI
+        setError((prevError) => {
+          if (prevError === 'Contract ABI must be provided') {
+            return null;
+          }
+          return prevError;
+        });
+      }
+    } else if (jobData?.jobInput?.walletMode === 'safe') {
+      // Clear ABI error for Safe wallet mode (ABI not required)
+      setError((prevError) => {
+        if (prevError === 'Contract ABI must be provided') {
+          return null;
+        }
+        return prevError;
+      });
+    }
+  }, [jobData]);
+
   const signAndCreateJob = async () => {
     if (!isConnected || !address || !jobData?.jobInput) {
       setError("Wallet not connected or job data missing");
@@ -50,6 +76,19 @@ export function AutoSynth({
     try {
       setIsCreating(true);
       setError(null);
+
+      // Validate ABI for regular wallet mode
+      if (jobData.jobInput.walletMode === 'regular' || !jobData.jobInput.walletMode) {
+        // Check if ABI exists in jobInput (could be string or array)
+        const abi = jobData.jobInput.abi;
+        if (!abi || (typeof abi === 'string' && abi.trim() === '') || (Array.isArray(abi) && abi.length === 0)) {
+          throw new Error('Contract ABI must be provided for regular wallet mode');
+        }
+        // Ensure ABI is a string for SDK
+        if (Array.isArray(abi) || typeof abi === 'object') {
+          jobData.jobInput.abi = JSON.stringify(abi);
+        }
+      }
 
       // Check if we need to switch chain (TriggerX typically uses Arbitrum Sepolia - chain ID 421614)
       const targetChainId = parseInt(jobData.jobInput.chainId || '421614', 10);
@@ -88,10 +127,20 @@ export function AutoSynth({
       if ((result as any)?.success === false) {
         console.error('❌ SDK returned failure');
         const errorMessage = (result as any)?.error || 'Failed to create job';
+        const errorCode = (result as any)?.errorCode || '';
         const errorDetails = (result as any)?.details || {};
         console.error('Error details:', errorDetails);
         
-        // Provide more specific error messages
+        // Handle TG balance errors
+        if (errorMessage.includes('top up TG') || errorMessage.includes('TG balance') || errorCode === 'BALANCE_ERROR') {
+          const originalError = errorDetails?.originalError;
+          if (originalError?.message?.includes('Infinity') || originalError?.message?.includes('underflow')) {
+            throw new Error('TG balance top-up calculation error. Please disable automatic top-up (autotopupTG: false) or ensure you have sufficient balance. The job creation may still succeed if you have enough TG balance.');
+          }
+          throw new Error(`TG balance error: ${errorMessage}. Please check your TG balance or disable automatic top-up.`);
+        }
+        
+        // Provide more specific error messages for Safe wallet
         if (errorMessage.includes('Safe wallet')) {
           const safeAddr = jobData.jobInput.safeAddress;
           const originalError = errorDetails?.originalError;
