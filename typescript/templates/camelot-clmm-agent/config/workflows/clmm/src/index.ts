@@ -589,7 +589,6 @@ async function executeDecision({
   return lastTxHash;
 }
 
-
 async function executePlannedTransaction({
   tx,
   agentsWallet,
