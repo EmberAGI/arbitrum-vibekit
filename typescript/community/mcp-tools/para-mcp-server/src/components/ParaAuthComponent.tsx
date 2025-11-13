@@ -40,10 +40,14 @@ export default function ParaAuthComponent({
   const [allWallets, setAllWallets] = useState<any[]>([]);
   const [selectedWalletId, setSelectedWalletId] = useState<string>("");
   const [email, setEmail] = useState<string>("");
+  const [connectedEmail, setConnectedEmail] = useState<string>("");
   const [requiresOtp, setRequiresOtp] = useState<boolean>(false);
   const [verificationCode, setVerificationCode] = useState<string>("");
   const [pendingAuthUrl, setPendingAuthUrl] = useState<string | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState<boolean>(true);
+  const [authState, setAuthState] = useState<any>(null);
+  const [signupMethods, setSignupMethods] = useState<string[]>([]);
+  const [selectedSignupMethod, setSelectedSignupMethod] = useState<string>("");
 
   // Helper function to request parent to open auth URL via postMessage
   const requestParentOpenPopup = (url: string, target: string): boolean => {
@@ -177,8 +181,11 @@ export default function ParaAuthComponent({
       const authState = await (para as any).signUpOrLogIn?.({
         auth: { email: email.trim() },
       });
-console.log("papa",authState)
+      console.log("[ParaAuth] Auth state:", authState);
+      setAuthState(authState);
+      
       const stage = (authState?.nextStage ?? authState?.stage) as string;
+
 
       if (stage === "login") {
         const loginUrl = authState?.loginUrl || authState?.passkeyUrl || authState?.passwordUrl || authState?.pinUrl;
@@ -229,22 +236,18 @@ console.log("papa",authState)
           await (para as any).waitForLogin?.({});
         }
       } else if (stage === "signup") {
-        const setupUrl = authState?.passkeyUrl || authState?.passwordUrl || authState?.pinUrl;
-        if (setupUrl) {
-          console.log("[ParaAuth] Opening passkey setup:", setupUrl);
-          const parentOpened = requestParentOpenPopup(setupUrl, "para-setup");
-          if (!parentOpened) {
-            setPendingAuthUrl(setupUrl);
-            setStatus("idle");
-            setMessage("Opening authentication in this tab...");
-            window.location.assign(setupUrl);
-            return;
-          }
-          setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
-          setPendingAuthUrl(setupUrl);
-
-          await (para as any).waitForWalletCreation?.({});
+        // New user signup: show method selector based on signupAuthMethods
+        if (authState?.signupAuthMethods && authState.signupAuthMethods.length > 0) {
+          setAuthState(authState);
+          setSignupMethods(authState.signupAuthMethods);
+          setStatus("idle");
+          setMessage("Please select your preferred authentication method");
+          return;
         }
+        // Fallback if no signupAuthMethods
+        setStatus("error");
+        setMessage("No signup methods available");
+        return;
       }
       
       await para.touchSession?.();
@@ -300,11 +303,39 @@ console.log("papa",authState)
         verificationCode: verificationCode.trim(),
       });
 
-      const nextUrl =
-        verifiedState?.passkeyUrl ||
-        verifiedState?.passwordUrl ||
-        verifiedState?.pinUrl ||
-        verifiedState?.loginUrl;
+      const availableMethods: string[] = [];
+      if (verifiedState?.passkeyUrl) availableMethods.push("PASSKEY");
+      if (verifiedState?.passwordUrl) availableMethods.push("PASSWORD");
+      if (verifiedState?.pinUrl) availableMethods.push("PIN");
+
+      setAuthState(verifiedState);
+
+      let nextUrl: string | undefined;
+
+      if (selectedSignupMethod) {
+        nextUrl =
+          selectedSignupMethod === "PASSKEY"
+            ? verifiedState?.passkeyUrl
+            : selectedSignupMethod === "PASSWORD"
+            ? verifiedState?.passwordUrl
+            : selectedSignupMethod === "PIN"
+            ? verifiedState?.pinUrl
+            : undefined;
+      }
+
+      if (!nextUrl) {
+        if (availableMethods.length > 1) {
+          setSignupMethods(availableMethods);
+          setStatus("idle");
+          setMessage("Please select your preferred authentication method");
+          return;
+        }
+        nextUrl =
+          verifiedState?.passkeyUrl ||
+          verifiedState?.passwordUrl ||
+          verifiedState?.pinUrl ||
+          verifiedState?.loginUrl;
+      }
 
       if (nextUrl) {
         const parentOpened = requestParentOpenPopup(nextUrl, "para-verify");
@@ -319,7 +350,11 @@ console.log("papa",authState)
           "Authentication opened in a new tab. Don't close this page; finish auth there and return here.",
         );
         setPendingAuthUrl(nextUrl);
-        await (para as any).waitForWalletCreation?.({});
+        if (nextUrl === verifiedState?.loginUrl) {
+          await (para as any).waitForLogin?.({});
+        } else {
+          await (para as any).waitForWalletCreation?.({});
+        }
       }
 
       await para.touchSession?.();
@@ -357,6 +392,17 @@ console.log("papa",authState)
     setPendingAuthUrl(null);
     setRequiresOtp(false);
     setVerificationCode("");
+    setSignupMethods([]);
+    setSelectedSignupMethod("");
+  };
+
+  const handleSignupMethodSelect = (method: string) => {
+    console.log("[ParaAuth] Selected signup method:", method);
+    setSelectedSignupMethod(method);
+    setSignupMethods([]);
+    setRequiresOtp(true);
+    setStatus("idle");
+    setMessage("We sent a 6-digit code to your email. Enter it below to continue.");
   };
 
   const handleLogout = async () => {
@@ -372,6 +418,7 @@ console.log("papa",authState)
       setWalletAddress("");
       setAllWallets([]);
       setSelectedWalletId("");
+      setConnectedEmail("");
       setMessage("");
       onLogout?.();
     } catch (err) {
@@ -385,6 +432,18 @@ console.log("papa",authState)
         console.log("[ParaAuth] Para client not ready");
         return;
       }
+      
+      // Fetch connected email
+      try {
+        const userEmail = await (para as any).getEmail?.();
+        if (userEmail) {
+          setConnectedEmail(userEmail);
+          console.log("[ParaAuth] Connected email:", userEmail);
+        }
+      } catch (err) {
+        console.warn("[ParaAuth] Failed to fetch email:", err);
+      }
+      
       const allWalletsData = Object.values(await para.getWallets());
       // Filter out wallets with undefined or non-string addresses
       const validWallets = allWalletsData.filter((w: any) => w && typeof w.address === "string");
@@ -473,6 +532,38 @@ console.log("papa",authState)
               >
                 Verify Code
               </button>
+              {status !== "loading" && (
+                <button
+                  type="button"
+                  onClick={handleCancelAuth}
+                  className="w-full rounded-lg border-2 border-gray-300 bg-white px-6 py-2 font-medium text-gray-700 transition-colors hover:border-red-500 hover:text-red-600"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          )}
+
+          {signupMethods.length > 0 && (
+            <div className="space-y-3">
+              <label className="block text-sm font-medium text-gray-700">
+                Choose Authentication Method
+              </label>
+              <div className="space-y-2">
+                {signupMethods.map((method) => (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => handleSignupMethodSelect(method)}
+                    disabled={status === "loading"}
+                    className="w-full rounded-lg border-2 border-teal-600 bg-white px-4 py-3 text-left font-medium text-teal-600 transition-colors hover:bg-teal-50 disabled:opacity-50"
+                  >
+                    {method === "PASSKEY" && "🔐 Passkey (Recommended)"}
+                    {method === "PASSWORD" && "🔑 Password"}
+                    {method === "PIN" && "📌 PIN"}
+                  </button>
+                ))}
+              </div>
               {status !== "loading" && (
                 <button
                   type="button"
@@ -630,6 +721,15 @@ console.log("papa",authState)
             </div>
           )}
 
+          {connectedEmail && (
+            <div className="rounded-lg bg-blue-50 p-4 border border-blue-200">
+              <div className="text-sm text-blue-600 font-medium">Connected Email</div>
+              <div className="mt-1 font-mono text-sm text-blue-900 break-all">
+                {connectedEmail}
+              </div>
+            </div>
+          )}
+
           {allWallets.length > 0 ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -649,11 +749,12 @@ console.log("papa",authState)
                 onChange={(e) => handleWalletChange(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
               >
-                {allWallets.map(({ id, address, type }: any) => {
+                {allWallets.map(({ id, address, type, isPregen }: any) => {
                   if (!address || typeof address !== "string") return null;
+                  const pregenLabel = isPregen ? "Pre-gen" : "Non-pre-gen";
                   return (
                     <option key={id || address} value={id || address}>
-                      {type || "EVM"} - {`${address.slice(0, 6)}...${address.slice(-4)}`}
+                      {type || "EVM"} - {pregenLabel} - {`${address.slice(0, 6)}...${address.slice(-4)}`}
                     </option>
                   );
                 })}

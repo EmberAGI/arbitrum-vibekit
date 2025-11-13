@@ -270,12 +270,20 @@ export default function ClaimPregenWalletClient({
           </div>
 
           {showAuthComponent && (
-            <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950">
-              <ParaAuthComponent
-                onAuthSuccess={handleAuthSuccess}
-                onLogout={() => setIsLoggedIn(false)}
-                showWalletDetails={false}
-              />
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+              onClick={() => setShowAuthComponent(false)}
+            >
+              <div
+                className="rounded-md border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ParaAuthComponent
+                  onAuthSuccess={handleAuthSuccess}
+                  onLogout={() => setIsLoggedIn(false)}
+                  showWalletDetails={false}
+                />
+              </div>
             </div>
           )}
 
