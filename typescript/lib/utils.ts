@@ -6,3 +6,8 @@ export function formatDate(date: Date): string {
 export function parseConfig(json: string): Record<string, any> {
   return JSON.parse(json);
 }
+
+// NEW: Added validation function
+export function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
