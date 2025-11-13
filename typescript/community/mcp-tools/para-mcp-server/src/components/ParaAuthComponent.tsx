@@ -108,6 +108,10 @@ export default function ParaAuthComponent({
             if (wallets.length > 0 && wallets[0].address) {
               setWalletAddress(wallets[0].address as string);
             }
+            // Fetch and set all wallets when authenticated
+            if (active) {
+              await fetchAndSetWallets(false);
+            }
           }
         }
       } catch {
@@ -276,7 +280,7 @@ export default function ParaAuthComponent({
       setAuthStep("authenticated");
       setStatus("idle");
       setMessage("Successfully logged in with Para!");
-      await fetchAndSetWallets();
+      await fetchAndSetWallets(true);
     } catch (err) {
       setStatus("error");
       setMessage(
@@ -377,7 +381,7 @@ export default function ParaAuthComponent({
       setMessage("Signup complete!");
       setRequiresOtp(false);
       setVerificationCode("");
-      await fetchAndSetWallets();
+      await fetchAndSetWallets(true);
     } catch (err) {
       setStatus("error");
       setMessage(
@@ -426,7 +430,7 @@ export default function ParaAuthComponent({
     }
   };
 
-  const fetchAndSetWallets = async () => {
+  const fetchAndSetWallets = async (notifyParent: boolean = false) => {
     try {
       if (!para) {
         console.log("[ParaAuth] Para client not ready");
@@ -457,12 +461,14 @@ export default function ParaAuthComponent({
         setWalletAddress(walletAddr);
         
         // Notify parent component of successful auth
-        onAuthSuccess?.({
-          isLoggedIn: true,
-          walletAddress: walletAddr,
-          allWallets: validWallets as any[],
-          selectedWalletId: walletId,
-        });
+        if (notifyParent) {
+          onAuthSuccess?.({
+            isLoggedIn: true,
+            walletAddress: walletAddr,
+            allWallets: validWallets as any[],
+            selectedWalletId: walletId,
+          });
+        }
       } else {
         console.log("[ParaAuth] No valid wallets found");
       }
@@ -738,7 +744,10 @@ export default function ParaAuthComponent({
                 </h3>
                 <button
                   type="button"
-                  onClick={fetchAndSetWallets}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fetchAndSetWallets();
+                  }}
                   className="text-xs px-3 py-1 rounded bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
                 >
                   Refresh
@@ -809,7 +818,19 @@ export default function ParaAuthComponent({
             </div>
           ) : (
             <div className="rounded-lg border border-gray-200 bg-yellow-50 p-4">
-              <div className="text-sm text-yellow-800">Loading wallet information...</div>
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-yellow-800">Loading wallet information...</div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fetchAndSetWallets();
+                  }}
+                  className="text-xs px-3 py-1 rounded bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                >
+                  Refresh
+                </button>
+              </div>
             </div>
           )}
 

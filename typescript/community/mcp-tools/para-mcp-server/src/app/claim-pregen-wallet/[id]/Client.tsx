@@ -310,14 +310,27 @@ export default function ClaimPregenWalletClient({
           )}
 
           {isLoggedIn === true && (
-            <button
-              type="button"
-              onClick={handleLogout}
-              disabled={isLoggingOut || claimStatus === "loading"}
-              className="flex h-10 items-center justify-center rounded-md border border-zinc-300 px-4 font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-            >
-              {isLoggingOut ? "Logging out..." : "Logout"}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setTimeout(() => setShowAuthComponent(true), 0);
+                }}
+                className="flex h-10 items-center justify-center rounded-md border border-zinc-300 px-4 font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Switch Wallet
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={isLoggingOut || claimStatus === "loading"}
+                className="flex h-10 items-center justify-center rounded-md border border-zinc-300 px-4 font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                {isLoggingOut ? "Logging out..." : "Logout"}
+              </button>
+            </>
           )}
 
           {claimMessage && (
