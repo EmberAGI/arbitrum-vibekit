@@ -1,22 +1,22 @@
-import { http, createConfig } from "wagmi";
-import {
-  arbitrum,
-  base,
-  mainnet,
-  optimism,
-  polygon,
-  baseSepolia,
-} from "wagmi/chains";
+import { paraConnector } from "@getpara/wagmi-v2-integration";
+import Para, { Environment } from "@getpara/web-sdk";
 import { connectorsForWallets } from "@rainbow-me/rainbowkit";
 import {
   baseAccount,
   metaMaskWallet,
-  walletConnectWallet,
   rainbowWallet,
+  walletConnectWallet,
 } from "@rainbow-me/rainbowkit/wallets";
-import { paraConnector } from "@getpara/wagmi-v2-integration";
-import Para, { Environment } from "@getpara/web-sdk";
 import { QueryClient } from "@tanstack/react-query";
+import { createConfig, http } from "wagmi";
+import {
+  arbitrum,
+  base,
+  baseSepolia,
+  mainnet,
+  optimism,
+  polygon,
+} from "wagmi/chains";
 
 // Chains configuration - exported for use in components
 export const CHAINS = [

@@ -1,10 +1,13 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from "ai";
-import { useMcp } from "use-mcp/react";
-import { useState, useMemo, useEffect, useRef } from "react";
+import {
+  DefaultChatTransport,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+} from "ai";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { useMcp } from "use-mcp/react";
 import { DynamicToolWithApprovalView } from "@/components";
 
 // Type for JSON Schema properties
@@ -622,8 +625,9 @@ function ChatPage() {
                                     <li className="ml-2">{children}</li>
                                   ),
                                   code: ({ children, className, ...props }) => {
-                                    const inline = (props as { inline?: boolean })
-                                      .inline;
+                                    const inline = (
+                                      props as { inline?: boolean }
+                                    ).inline;
                                     if (inline) {
                                       return (
                                         <code className="bg-gray-200 dark:bg-gray-800 px-1 py-0.5 rounded text-xs font-mono">
@@ -674,7 +678,9 @@ function ChatPage() {
                               <DynamicToolWithApprovalView
                                 key={index}
                                 invocation={part}
-                                addToolApprovalResponse={addToolApprovalResponse}
+                                addToolApprovalResponse={
+                                  addToolApprovalResponse
+                                }
                               />
                             );
                           }

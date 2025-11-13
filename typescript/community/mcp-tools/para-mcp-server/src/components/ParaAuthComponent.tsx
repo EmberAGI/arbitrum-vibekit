@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  useAccount,
-  useClient,
-  useWallet,
-} from "@getpara/react-sdk";
+import { useAccount, useClient, useWallet } from "@getpara/react-sdk";
 import { useEffect, useState } from "react";
 import { useConnect, useDisconnect } from "wagmi";
 
@@ -58,7 +54,7 @@ export default function ParaAuthComponent({
           url,
           target,
         },
-        "*"
+        "*",
       );
       return true;
     } catch (error) {
@@ -125,7 +121,9 @@ export default function ParaAuthComponent({
 
   useEffect(() => {
     if (!para) return;
-    const shouldPoll = !!pendingAuthUrl || (message && message.includes("Authentication opened in a new tab"));
+    const shouldPoll =
+      !!pendingAuthUrl ||
+      (message && message.includes("Authentication opened in a new tab"));
     if (!shouldPoll) return;
     let active = true;
     let intervalId: any;
@@ -137,13 +135,19 @@ export default function ParaAuthComponent({
           let wallets = Object.values(await para.getWallets());
           if (wallets.length === 0) {
             try {
-              await para.createWallet({ type: "EVM" as any, skipDistribute: false });
+              await para.createWallet({
+                type: "EVM" as any,
+                skipDistribute: false,
+              });
               wallets = Object.values(await para.getWallets());
             } catch {}
           }
           if (wallets.length > 0) {
-            const evmWallet = (wallets as any[]).find((w) => (w as any).type === "EVM" || !(w as any).type);
-            if ((evmWallet as any)?.address) setWalletAddress((evmWallet as any).address as string);
+            const evmWallet = (wallets as any[]).find(
+              (w) => (w as any).type === "EVM" || !(w as any).type,
+            );
+            if ((evmWallet as any)?.address)
+              setWalletAddress((evmWallet as any).address as string);
           }
           setIsLoggedIn(true);
           setAuthStep("authenticated");
@@ -187,12 +191,15 @@ export default function ParaAuthComponent({
       });
       console.log("[ParaAuth] Auth state:", authState);
       setAuthState(authState);
-      
+
       const stage = (authState?.nextStage ?? authState?.stage) as string;
 
-
       if (stage === "login") {
-        const loginUrl = authState?.loginUrl || authState?.passkeyUrl || authState?.passwordUrl || authState?.pinUrl;
+        const loginUrl =
+          authState?.loginUrl ||
+          authState?.passkeyUrl ||
+          authState?.passwordUrl ||
+          authState?.pinUrl;
         if (loginUrl) {
           console.log("[ParaAuth] Opening login for existing user:", loginUrl);
           const parentOpened = requestParentOpenPopup(loginUrl, "para-login");
@@ -203,7 +210,9 @@ export default function ParaAuthComponent({
             window.location.assign(loginUrl);
             return;
           }
-          setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
+          setMessage(
+            "Authentication opened in a new tab. Don't close this page; finish auth there and return here.",
+          );
           setPendingAuthUrl(loginUrl);
 
           const loginResult = await (para as any).waitForLogin?.({});
@@ -211,7 +220,10 @@ export default function ParaAuthComponent({
 
           if (loginResult?.needsWallet) {
             console.log("[ParaAuth] Creating wallet after login...");
-            await para.createWallet({ type: "EVM" as any, skipDistribute: false });
+            await para.createWallet({
+              type: "EVM" as any,
+              skipDistribute: false,
+            });
           }
         }
       } else if (stage === "verify") {
@@ -219,7 +231,9 @@ export default function ParaAuthComponent({
         if (!authState?.loginUrl) {
           setRequiresOtp(true);
           setStatus("idle");
-          setMessage("We sent a 6-digit code to your email. Enter it below to continue.");
+          setMessage(
+            "We sent a 6-digit code to your email. Enter it below to continue.",
+          );
           return;
         }
         // If a URL is provided alongside verify, treat it like a hosted verification/login link
@@ -234,14 +248,19 @@ export default function ParaAuthComponent({
             window.location.assign(verifyUrl);
             return;
           }
-          setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
+          setMessage(
+            "Authentication opened in a new tab. Don't close this page; finish auth there and return here.",
+          );
           setPendingAuthUrl(verifyUrl);
 
           await (para as any).waitForLogin?.({});
         }
       } else if (stage === "signup") {
         // New user signup: show method selector based on signupAuthMethods
-        if (authState?.signupAuthMethods && authState.signupAuthMethods.length > 0) {
+        if (
+          authState?.signupAuthMethods &&
+          authState.signupAuthMethods.length > 0
+        ) {
           setAuthState(authState);
           setSignupMethods(authState.signupAuthMethods);
           setStatus("idle");
@@ -253,15 +272,18 @@ export default function ParaAuthComponent({
         setMessage("No signup methods available");
         return;
       }
-      
+
       await para.touchSession?.();
 
       let wallets = Object.values(await para.getWallets());
-      
+
       if (wallets.length === 0) {
         console.log("[ParaAuth] No wallets found, creating EVM wallet...");
         try {
-          await para.createWallet({ type: "EVM" as any, skipDistribute: false });
+          await para.createWallet({
+            type: "EVM" as any,
+            skipDistribute: false,
+          });
           wallets = Object.values(await para.getWallets());
         } catch (e) {
           console.warn("[ParaAuth] createWallet failed:", e);
@@ -275,7 +297,7 @@ export default function ParaAuthComponent({
           console.log("[ParaAuth] EVM wallet address:", evmWallet.address);
         }
       }
-      
+
       setIsLoggedIn(true);
       setAuthStep("authenticated");
       setStatus("idle");
@@ -321,10 +343,10 @@ export default function ParaAuthComponent({
           selectedSignupMethod === "PASSKEY"
             ? verifiedState?.passkeyUrl
             : selectedSignupMethod === "PASSWORD"
-            ? verifiedState?.passwordUrl
-            : selectedSignupMethod === "PIN"
-            ? verifiedState?.pinUrl
-            : undefined;
+              ? verifiedState?.passwordUrl
+              : selectedSignupMethod === "PIN"
+                ? verifiedState?.pinUrl
+                : undefined;
       }
 
       if (!nextUrl) {
@@ -385,7 +407,9 @@ export default function ParaAuthComponent({
     } catch (err) {
       setStatus("error");
       setMessage(
-        err instanceof Error ? err.message : "Failed to verify and finish signup",
+        err instanceof Error
+          ? err.message
+          : "Failed to verify and finish signup",
       );
     }
   };
@@ -406,7 +430,9 @@ export default function ParaAuthComponent({
     setSignupMethods([]);
     setRequiresOtp(true);
     setStatus("idle");
-    setMessage("We sent a 6-digit code to your email. Enter it below to continue.");
+    setMessage(
+      "We sent a 6-digit code to your email. Enter it below to continue.",
+    );
   };
 
   const handleLogout = async () => {
@@ -436,7 +462,7 @@ export default function ParaAuthComponent({
         console.log("[ParaAuth] Para client not ready");
         return;
       }
-      
+
       // Fetch connected email
       try {
         const userEmail = await (para as any).getEmail?.();
@@ -447,10 +473,12 @@ export default function ParaAuthComponent({
       } catch (err) {
         console.warn("[ParaAuth] Failed to fetch email:", err);
       }
-      
+
       const allWalletsData = Object.values(await para.getWallets());
       // Filter out wallets with undefined or non-string addresses
-      const validWallets = allWalletsData.filter((w: any) => w && typeof w.address === "string");
+      const validWallets = allWalletsData.filter(
+        (w: any) => w && typeof w.address === "string",
+      );
       console.log("[ParaAuth] Fetched wallets:", validWallets);
       setAllWallets(validWallets as any[]);
       if (validWallets.length > 0) {
@@ -459,7 +487,7 @@ export default function ParaAuthComponent({
         const walletAddr = firstWallet.address as string;
         setSelectedWalletId(walletId);
         setWalletAddress(walletAddr);
-        
+
         // Notify parent component of successful auth
         if (notifyParent) {
           onAuthSuccess?.({
@@ -478,7 +506,9 @@ export default function ParaAuthComponent({
   };
 
   const handleWalletChange = (walletId: string) => {
-    const selected = allWallets.find((w: any) => w.id === walletId || w.address === walletId);
+    const selected = allWallets.find(
+      (w: any) => w.id === walletId || w.address === walletId,
+    );
     if (selected) {
       setSelectedWalletId(walletId);
       setWalletAddress(selected.address as string);
@@ -487,9 +517,7 @@ export default function ParaAuthComponent({
 
   return (
     <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
-      <h1 className="mb-2 text-3xl font-bold text-gray-900">
-        Para Connect
-      </h1>
+      <h1 className="mb-2 text-3xl font-bold text-gray-900">Para Connect</h1>
 
       {/* Authentication Step: Select Method */}
       {authStep === "select" && (
@@ -729,7 +757,9 @@ export default function ParaAuthComponent({
 
           {connectedEmail && (
             <div className="rounded-lg bg-blue-50 p-4 border border-blue-200">
-              <div className="text-sm text-blue-600 font-medium">Connected Email</div>
+              <div className="text-sm text-blue-600 font-medium">
+                Connected Email
+              </div>
               <div className="mt-1 font-mono text-sm text-blue-900 break-all">
                 {connectedEmail}
               </div>
@@ -763,7 +793,8 @@ export default function ParaAuthComponent({
                   const pregenLabel = isPregen ? "Pre-gen" : "Non-pre-gen";
                   return (
                     <option key={id || address} value={id || address}>
-                      {type || "EVM"} - {pregenLabel} - {`${address.slice(0, 6)}...${address.slice(-4)}`}
+                      {type || "EVM"} - {pregenLabel} -{" "}
+                      {`${address.slice(0, 6)}...${address.slice(-4)}`}
                     </option>
                   );
                 })}
@@ -773,53 +804,65 @@ export default function ParaAuthComponent({
                   <div>
                     <div className="text-sm text-gray-600">Address</div>
                     <div className="mt-1 font-mono text-sm text-gray-900">
-                      {walletAddress && `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}
+                      {walletAddress &&
+                        `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}
                     </div>
                   </div>
-                  {allWallets.length > 0 && (() => {
-                    const selected = allWallets.find((w: any) => w.id === selectedWalletId || w.address === selectedWalletId);
-                    return selected ? (
-                      <>
-                        <div>
-                          <div className="text-sm text-gray-600">ID</div>
-                          <div className="mt-1 font-mono text-xs text-gray-900 break-all">
-                            {selected.id}
-                          </div>
-                        </div>
-                        {selected.userId && (
+                  {allWallets.length > 0 &&
+                    (() => {
+                      const selected = allWallets.find(
+                        (w: any) =>
+                          w.id === selectedWalletId ||
+                          w.address === selectedWalletId,
+                      );
+                      return selected ? (
+                        <>
                           <div>
-                            <div className="text-sm text-gray-600">User ID</div>
+                            <div className="text-sm text-gray-600">ID</div>
                             <div className="mt-1 font-mono text-xs text-gray-900 break-all">
-                              {selected.userId}
+                              {selected.id}
                             </div>
                           </div>
-                        )}
-                        {selected.isPregen !== undefined && (
-                          <div>
-                            <div className="text-sm text-gray-600">Pre-generated</div>
-                            <div className="mt-1 text-sm text-gray-900">
-                              {selected.isPregen ? "Yes" : "No"}
+                          {selected.userId && (
+                            <div>
+                              <div className="text-sm text-gray-600">
+                                User ID
+                              </div>
+                              <div className="mt-1 font-mono text-xs text-gray-900 break-all">
+                                {selected.userId}
+                              </div>
                             </div>
-                          </div>
-                        )}
-                        {selected.type && (
-                          <div>
-                            <div className="text-sm text-gray-600">Type</div>
-                            <div className="mt-1 text-sm text-gray-900">
-                              {selected.type}
+                          )}
+                          {selected.isPregen !== undefined && (
+                            <div>
+                              <div className="text-sm text-gray-600">
+                                Pre-generated
+                              </div>
+                              <div className="mt-1 text-sm text-gray-900">
+                                {selected.isPregen ? "Yes" : "No"}
+                              </div>
                             </div>
-                          </div>
-                        )}
-                      </>
-                    ) : null;
-                  })()}
+                          )}
+                          {selected.type && (
+                            <div>
+                              <div className="text-sm text-gray-600">Type</div>
+                              <div className="mt-1 text-sm text-gray-900">
+                                {selected.type}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      ) : null;
+                    })()}
                 </div>
               )}
             </div>
           ) : (
             <div className="rounded-lg border border-gray-200 bg-yellow-50 p-4">
               <div className="flex items-center justify-between">
-                <div className="text-sm text-yellow-800">Loading wallet information...</div>
+                <div className="text-sm text-yellow-800">
+                  Loading wallet information...
+                </div>
                 <button
                   type="button"
                   onClick={(e) => {

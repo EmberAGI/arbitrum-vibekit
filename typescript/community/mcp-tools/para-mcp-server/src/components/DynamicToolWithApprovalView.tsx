@@ -74,7 +74,7 @@ export function DynamicToolWithApprovalView({
       };
 
       let displayContent = "";
-      let hasError = output.isError ?? false;
+      const hasError = output.isError ?? false;
       let parsedData: unknown = null;
 
       if (hasError) {
@@ -117,7 +117,6 @@ export function DynamicToolWithApprovalView({
             }>;
           }>;
         };
-
       }
 
       return (

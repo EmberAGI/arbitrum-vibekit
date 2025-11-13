@@ -1,22 +1,22 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { baseSepolia } from "wagmi/chains";
 import { useClient, useAccount as useParaAccount } from "@getpara/react-sdk";
 import {
-  createParaViemClient,
   createParaAccount,
+  createParaViemClient,
 } from "@getpara/viem-v2-integration";
-import { useWalletClient } from "wagmi";
+import axios from "axios";
+import React, { useEffect, useState } from "react";
 import {
   createPublicClient,
-  http as viemHttp,
-  isAddress,
   createWalletClient,
   custom,
+  isAddress,
+  http as viemHttp,
 } from "viem";
-import axios from "axios";
-// @ts-ignore - x402-axios has dual package exports which may cause TS resolution issues
+import { useWalletClient } from "wagmi";
+import { baseSepolia } from "wagmi/chains";
+// @ts-expect-error - x402-axios has dual package exports which may cause TS resolution issues
 import { withPaymentInterceptor } from "x402-axios";
 
 /**

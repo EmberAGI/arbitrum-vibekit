@@ -124,9 +124,7 @@ async function executeUsdcTransfer() {
     }
 
     // Convert amount to atomic units (USDC has 6 decimals)
-    const atomicAmount = BigInt(
-      Math.floor(amountFloat * Math.pow(10, USDC_DECIMALS)),
-    );
+    const atomicAmount = BigInt(Math.floor(amountFloat * 10 ** USDC_DECIMALS));
 
     console.log(
       `Preparing USDC transfer: ${amountFloat} USDC (${atomicAmount.toString()} atomic units)`,

@@ -5,9 +5,7 @@
  * interactions internally.
  */
 
-export { TransactionPreviewComponent } from "./TransactionPreviewComponent";
-export type { TransactionPreviewComponentProps } from "./TransactionPreviewComponent";
-
-export { UsdcTransfer } from "./UsdcTransfer";
-
 export { DynamicToolWithApprovalView } from "./DynamicToolWithApprovalView";
+export type { TransactionPreviewComponentProps } from "./TransactionPreviewComponent";
+export { TransactionPreviewComponent } from "./TransactionPreviewComponent";
+export { UsdcTransfer } from "./UsdcTransfer";

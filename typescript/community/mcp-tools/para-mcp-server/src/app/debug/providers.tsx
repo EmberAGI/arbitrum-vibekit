@@ -1,8 +1,8 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { darkTheme, RainbowKitProvider } from "@rainbow-me/rainbowkit";
+import type { ReactNode } from "react";
 import { WagmiProvider } from "wagmi";
-import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import { baseSepolia } from "wagmi/chains";
 import { wagmiConfig } from "./config";
 

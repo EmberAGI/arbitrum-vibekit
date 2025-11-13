@@ -2,14 +2,14 @@
 
 import "@rainbow-me/rainbowkit/styles.css";
 import "@getpara/react-sdk/styles.css";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount, useBalance, useDisconnect, useChainId } from "wagmi";
-import { arbitrum, arbitrumSepolia, base, baseSepolia } from "wagmi/chains";
-import { useState, useMemo, useEffect, useRef } from "react";
-import { useMcp } from "use-mcp/react";
 import { useChat } from "@ai-sdk/react";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { DefaultChatTransport } from "ai";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { useMcp } from "use-mcp/react";
+import { useAccount, useBalance, useChainId, useDisconnect } from "wagmi";
+import { arbitrum, arbitrumSepolia, base, baseSepolia } from "wagmi/chains";
 
 // Type for JSON Schema properties
 type JsonSchemaProperty = {
@@ -27,15 +27,8 @@ type JsonSchema = {
   required?: string[];
   additionalProperties?: boolean;
 };
- 
 
 const CHAINS = [arbitrum, arbitrumSepolia, base, baseSepolia];
- 
-
-
- 
-
- 
 
 function ChatInner() {
   const { address, isConnected } = useAccount();
@@ -72,7 +65,7 @@ function ChatInner() {
   const chatMessages = chatHelpers.messages;
   const chatStatus = chatHelpers.status;
   const chatError = chatHelpers.error;
-  const isChatLoading = chatStatus !== 'ready';
+  const isChatLoading = chatStatus !== "ready";
 
   // Access sendMessage from chatHelpers
   const sendChatMessage = (chatHelpers as any).sendMessage;
@@ -713,15 +706,40 @@ function ChatInner() {
                               key={index}
                               className="markdown-content"
                               components={{
-                                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                                h1: ({ children }) => <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0">{children}</h1>,
-                                h2: ({ children }) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h2>,
-                                h3: ({ children }) => <h3 className="text-sm font-bold mb-1 mt-2 first:mt-0">{children}</h3>,
-                                ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                                ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                                li: ({ children }) => <li className="ml-2">{children}</li>,
+                                p: ({ children }) => (
+                                  <p className="mb-2 last:mb-0">{children}</p>
+                                ),
+                                h1: ({ children }) => (
+                                  <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0">
+                                    {children}
+                                  </h1>
+                                ),
+                                h2: ({ children }) => (
+                                  <h2 className="text-base font-bold mb-2 mt-3 first:mt-0">
+                                    {children}
+                                  </h2>
+                                ),
+                                h3: ({ children }) => (
+                                  <h3 className="text-sm font-bold mb-1 mt-2 first:mt-0">
+                                    {children}
+                                  </h3>
+                                ),
+                                ul: ({ children }) => (
+                                  <ul className="list-disc list-inside mb-2 space-y-1">
+                                    {children}
+                                  </ul>
+                                ),
+                                ol: ({ children }) => (
+                                  <ol className="list-decimal list-inside mb-2 space-y-1">
+                                    {children}
+                                  </ol>
+                                ),
+                                li: ({ children }) => (
+                                  <li className="ml-2">{children}</li>
+                                ),
                                 code: ({ children, className, ...props }) => {
-                                  const inline = (props as { inline?: boolean }).inline;
+                                  const inline = (props as { inline?: boolean })
+                                    .inline;
                                   if (inline) {
                                     return (
                                       <code className="bg-gray-200 dark:bg-gray-800 px-1 py-0.5 rounded text-xs font-mono">
@@ -735,7 +753,9 @@ function ChatInner() {
                                     </code>
                                   );
                                 },
-                                pre: ({ children }) => <pre className="mb-2">{children}</pre>,
+                                pre: ({ children }) => (
+                                  <pre className="mb-2">{children}</pre>
+                                ),
                                 blockquote: ({ children }) => (
                                   <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-3 italic my-2">
                                     {children}
@@ -751,8 +771,14 @@ function ChatInner() {
                                     {children}
                                   </a>
                                 ),
-                                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                                em: ({ children }) => <em className="italic">{children}</em>,
+                                strong: ({ children }) => (
+                                  <strong className="font-semibold">
+                                    {children}
+                                  </strong>
+                                ),
+                                em: ({ children }) => (
+                                  <em className="italic">{children}</em>
+                                ),
                               }}
                             >
                               {part.text}
@@ -826,7 +852,5 @@ function ChatInner() {
 }
 
 export default function ChatPage() {
-  return (
-    <ChatInner />
-  );
+  return <ChatInner />;
 }

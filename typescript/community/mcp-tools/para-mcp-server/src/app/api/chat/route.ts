@@ -1,6 +1,6 @@
+import { experimental_createMCPClient } from "@ai-sdk/mcp";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAgentUIStreamResponse, ToolLoopAgent } from "ai";
-import { experimental_createMCPClient } from "@ai-sdk/mcp";
 
 const provider = createOpenAICompatible({
   name: "openai-compatible",

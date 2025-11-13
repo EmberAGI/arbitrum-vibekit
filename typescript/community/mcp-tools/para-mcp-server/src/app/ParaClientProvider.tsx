@@ -3,7 +3,7 @@
 import { ParaProvider } from "@getpara/react-sdk";
 import { Environment } from "@getpara/web-sdk";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { type PropsWithChildren } from "react";
+import type { PropsWithChildren } from "react";
 import { baseSepolia } from "wagmi/chains";
 
 // Create QueryClient outside component to ensure single instance

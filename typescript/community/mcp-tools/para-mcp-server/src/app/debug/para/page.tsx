@@ -7,28 +7,27 @@
  * Para-specific logic is passed to components via props/adapters.
  */
 
-import { useState, useMemo, useEffect, useRef } from "react";
-import { arbitrum, arbitrumSepolia, base, baseSepolia } from "wagmi/chains";
-import { useMcp } from "use-mcp/react";
 import { useChat } from "@ai-sdk/react";
+// Para SDK v2 alpha hooks
+import { useAccount, useLogout, useModal, useWallet } from "@getpara/react-sdk";
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
 } from "ai";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-
-// Para SDK v2 alpha hooks
-import { useAccount, useModal, useWallet, useLogout } from "@getpara/react-sdk";
-
+import { useMcp } from "use-mcp/react";
 // Viem imports for balance queries
-import { createPublicClient, http as viemHttp, formatEther } from "viem";
+import { createPublicClient, formatEther, http as viemHttp } from "viem";
+import { arbitrum, arbitrumSepolia, base, baseSepolia } from "wagmi/chains";
 
 // Para components
 import {
+  DynamicToolWithApprovalView,
   TransactionPreviewComponent,
   UsdcTransfer,
-  DynamicToolWithApprovalView,
 } from "@/components";
+
 // Constants
 const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 const ERC20_ABI = [

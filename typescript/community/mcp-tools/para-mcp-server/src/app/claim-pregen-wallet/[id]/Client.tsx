@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  useClient,
-  useLogout,
-} from "@getpara/react-sdk";
+import { useClient, useLogout } from "@getpara/react-sdk";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import ParaAuthComponent from "@/components/ParaAuthComponent";
@@ -118,9 +115,7 @@ export default function ClaimPregenWalletClient({
         // Show auth component and stop the claim until the user finishes login
         setShowAuthComponent(true);
         setClaimStatus("idle");
-        setClaimMessage(
-          "Please complete Para login to continue claiming.",
-        );
+        setClaimMessage("Please complete Para login to continue claiming.");
         return;
       }
 
@@ -143,13 +138,20 @@ export default function ClaimPregenWalletClient({
       // Claim the pregenerated wallet (may or may not return a recovery secret)
       const claimedRecoverySecret = await para.claimPregenWallets();
 
-      // Notify server of successful claim for cache invalidation
+      // Export a secure session (without signing capabilities) and notify server
+      const session = await (para as any).exportSession?.({
+        excludeSigners: true,
+      });
+      if (!session) {
+        throw new Error("Failed to export Para session");
+      }
       const response = await fetch(claimApiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           pregenId: wallet?.id,
           walletId: wallet?.walletId,
+          session,
         }),
       });
       const data = await response.json();
@@ -170,6 +172,19 @@ export default function ClaimPregenWalletClient({
       setClaimMessage("Wallet claimed successfully!");
       if (claimedRecoverySecret) {
         setRecoverySecret(claimedRecoverySecret);
+      }
+
+      // Refresh wallet data to reflect claimed status
+      if (wallet?.id) {
+        try {
+          const refreshResponse = await fetch(`/api/pregen-wallets/${wallet.id}`);
+          if (refreshResponse.ok) {
+            const refreshedData = await refreshResponse.json();
+            setIsClaimed(refreshedData.claimed ?? true);
+          }
+        } catch (refreshErr) {
+          console.error("Failed to refresh wallet data:", refreshErr);
+        }
       }
     } catch (err) {
       setClaimStatus("error");
@@ -210,7 +225,7 @@ export default function ClaimPregenWalletClient({
           {error ? (
             <p className="text-sm text-red-500">{error}</p>
           ) : wallet ? (
-            <div className="space-y-1 text-sm">
+            <div className="space-y-1 text-sm text-black dark:text-black">
               <div>
                 <span className="font-medium">ID:</span> {wallet.id}
               </div>

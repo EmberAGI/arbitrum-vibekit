@@ -4,17 +4,17 @@ import { useCallback } from "react";
  * Hook to open external links through the ChatGPT client.
  * This ensures links open properly in native environments (mobile apps, desktop clients).
  * Falls back to standard window.open if not in ChatGPT environment.
- * 
+ *
  * @returns A function that opens external URLs in a new tab/window
- * 
+ *
  * @example
  * ```tsx
  * const openExternal = useOpenExternal();
- * 
+ *
  * const handleLinkClick = () => {
  *   openExternal("https://example.com");
  * };
- * 
+ *
  * return <button onClick={handleLinkClick}>Visit Site</button>;
  * ```
  */
@@ -40,4 +40,3 @@ export function useOpenExternal() {
 
   return openExternal;
 }
-

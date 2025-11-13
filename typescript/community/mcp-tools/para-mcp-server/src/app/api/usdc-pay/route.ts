@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 /**
  * USDC Payment API with x402 Protocol
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
     }
 
     const atomicAmount = Math.floor(
-      amountFloat * Math.pow(10, USDC_DECIMALS),
+      amountFloat * 10 ** USDC_DECIMALS,
     ).toString();
 
     // Get resource URL

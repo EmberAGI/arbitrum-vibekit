@@ -6,7 +6,7 @@ export type OpenAIGlobals<
   ToolInput = UnknownObject,
   ToolOutput = UnknownObject,
   ToolResponseMetadata = UnknownObject,
-  WidgetState = UnknownObject
+  WidgetState = UnknownObject,
 > = {
   // visuals
   theme: Theme;
@@ -78,7 +78,7 @@ export type CallToolResponse = {
 /** Calling APIs */
 export type CallTool = (
   name: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
 ) => Promise<CallToolResponse>;
 
 /** Extra events */

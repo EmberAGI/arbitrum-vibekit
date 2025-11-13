@@ -16,7 +16,12 @@ export default function WalletConnectPage() {
   // Detect Ethereum (EIP-6963) providers
   // Also checks parent and top windows for iframe support
   useEffect(() => {
-    const providers: Array<{ name: string; provider: any; icon?: string; type: "ethereum" }> = [];
+    const providers: Array<{
+      name: string;
+      provider: any;
+      icon?: string;
+      type: "ethereum";
+    }> = [];
     const seenProviders = new Set<string>();
 
     // Handle Ethereum EIP-6963 provider announcements
@@ -47,7 +52,7 @@ export default function WalletConnectPage() {
           // Try to get wallet name from common properties
           // Check specific properties first, then fallback to generic detection
           let walletName = "Ethereum Wallet";
-          
+
           // Check for specific wallet identifiers
           if (w.ethereum.isRainbow) {
             walletName = "Rainbow";
@@ -68,7 +73,7 @@ export default function WalletConnectPage() {
             // Fallback: if only isMetaMask is true, it's MetaMask
             walletName = "MetaMask";
           }
-          
+
           const providerKey = `ethereum:${walletName}`;
           if (!seenProviders.has(providerKey)) {
             seenProviders.add(providerKey);
@@ -98,7 +103,7 @@ export default function WalletConnectPage() {
         return null;
       }
     })();
-    
+
     // Also use direct detection for current window (fallback)
     detectEthereumProviders(window);
 
@@ -122,7 +127,10 @@ export default function WalletConnectPage() {
 
     return () => {
       if (currentEthListener) {
-        window.removeEventListener("eip6963:announceProvider", currentEthListener);
+        window.removeEventListener(
+          "eip6963:announceProvider",
+          currentEthListener,
+        );
       }
     };
   }, []);
@@ -134,13 +142,15 @@ export default function WalletConnectPage() {
 
     try {
       const providerDetail = availableProviders.find(
-        (p) => p.name === providerName
+        (p) => p.name === providerName,
       );
       if (!providerDetail) throw new Error("Provider not found");
       const provider = providerDetail.provider;
 
       // Connect to external wallet using EIP-1193 provider
-      const accounts = await provider.request({ method: "eth_requestAccounts" });
+      const accounts = await provider.request({
+        method: "eth_requestAccounts",
+      });
       if (accounts && accounts.length > 0) {
         setWalletAddress(accounts[0]);
         setAuthStep("connected");
@@ -152,9 +162,7 @@ export default function WalletConnectPage() {
     } catch (err) {
       setStatus("error");
       setMessage(
-        err instanceof Error
-          ? err.message
-          : "Failed to connect wallet",
+        err instanceof Error ? err.message : "Failed to connect wallet",
       );
     }
   };
@@ -270,7 +278,8 @@ export default function WalletConnectPage() {
             ) : (
               <div className="rounded-lg bg-yellow-50 p-4 text-center">
                 <p className="text-sm text-yellow-800">
-                  No wallet provider detected. Please install MetaMask, Rainbow, or another Web3 wallet.
+                  No wallet provider detected. Please install MetaMask, Rainbow,
+                  or another Web3 wallet.
                 </p>
               </div>
             )}
@@ -296,9 +305,7 @@ export default function WalletConnectPage() {
                     d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                <span className="font-semibold">
-                  Wallet Connected!
-                </span>
+                <span className="font-semibold">Wallet Connected!</span>
               </div>
             </div>
 

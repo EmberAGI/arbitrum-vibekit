@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
 import { generateJwt } from "@coinbase/cdp-sdk/auth";
+import { type NextRequest, NextResponse } from "next/server";
 
 /**
  * Facilitator Proxy - /verify endpoint

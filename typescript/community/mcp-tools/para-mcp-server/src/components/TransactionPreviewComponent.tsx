@@ -1,18 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import { arbitrum, arbitrumSepolia, base, baseSepolia } from "wagmi/chains";
 import {
-  useClient as useParaClient,
-  useAccount as useParaAccount,
   useModal,
+  useAccount as useParaAccount,
+  useClient as useParaClient,
   useWallet,
 } from "@getpara/react-sdk";
+import { useState } from "react";
 import {
   createPublicClient,
-  http as viemHttp,
   serializeTransaction,
+  http as viemHttp,
 } from "viem";
+import { arbitrum, arbitrumSepolia, base, baseSepolia } from "wagmi/chains";
 
 /**
  * Para-specific Transaction Preview Component

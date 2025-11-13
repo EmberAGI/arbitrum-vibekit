@@ -14,6 +14,6 @@ export function useIsChatGptApp(): boolean {
     () => {
       // Server snapshot - always false since window is undefined on server
       return false;
-    }
+    },
   );
 }

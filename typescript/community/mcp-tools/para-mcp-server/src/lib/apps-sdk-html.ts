@@ -2,7 +2,7 @@ import { baseURL } from "@/config/baseUrl";
 
 export const getAppsSdkCompatibleHtml = async (
   baseUrl: string | undefined,
-  path: string
+  path: string,
 ) => {
   const origin = baseUrl?.startsWith("http")
     ? baseUrl
