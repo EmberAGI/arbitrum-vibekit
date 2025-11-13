@@ -1,11 +1,5 @@
-import {
-  createExecution,
-  type Delegation,
-  ExecutionMode,
-  type MetaMaskSmartAccount,
-} from '@metamask/delegation-toolkit';
+import { type MetaMaskSmartAccount } from '@metamask/delegation-toolkit';
 import { encodeFunctionData, erc20Abi } from 'viem';
-import { DelegationManager } from '@metamask/delegation-toolkit/contracts';
 
 import type { OnchainClients } from './clients.js';
 import { executeTransaction } from './transaction.js';
@@ -56,17 +50,12 @@ export async function ensureAllowance({
     functionName: 'approve',
     args: [spenderAddress, requiredAmount],
   });
-  const execution = createExecution({
-    target: tokenAddress,
-    callData: approveCallData,
-  });
-
   await executeTransaction(clients, {
     account: agentAccount,
     calls: [
       {
-        to: agentAccount.address,
-        data: redeemCalldata,
+        to: tokenAddress,
+        data: approveCallData,
       },
     ],
   });
