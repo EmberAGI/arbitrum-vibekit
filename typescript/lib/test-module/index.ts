@@ -2,6 +2,7 @@
 export interface ModuleConfig {
   name: string;
   version: string;
+  enabled?: boolean;  // NEW: Added optional enabled flag
 }
 
 export class TestModule {
@@ -9,5 +10,10 @@ export class TestModule {
   
   getName(): string {
     return this.config.name;
+  }
+  
+  // NEW: Added method to check if module is enabled
+  isEnabled(): boolean {
+    return this.config.enabled ?? true;
   }
 }
