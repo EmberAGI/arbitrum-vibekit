@@ -3,7 +3,14 @@
  * Scaffolds a new config workspace with sample files
  */
 
-import { existsSync, mkdirSync, writeFileSync, copyFileSync, readFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  copyFileSync,
+  readFileSync,
+  readdirSync,
+} from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -175,6 +182,37 @@ function stripTsSuppressions(content: string): string {
   return content
     .replace(/^[ \t]*\/\/[ \t]*@ts-ignore.*\n/gm, '')
     .replace(/^[ \t]*\/\/[ \t]*@ts-expect-error.*\n/gm, '');
+}
+
+function copyTemplateDirectory(rel: string, destination: string): void {
+  const sourceDir = fileURLToPath(new URL(rel, import.meta.url));
+  copyDirectoryContents(sourceDir, destination);
+}
+
+function copyDirectoryContents(sourceDir: string, destination: string): void {
+  mkdirSync(destination, { recursive: true });
+  const entries = readdirSync(sourceDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const sourcePath = resolve(sourceDir, entry.name);
+    const destinationPath = resolve(destination, entry.name);
+    if (entry.isDirectory()) {
+      copyDirectoryContents(sourcePath, destinationPath);
+    } else if (entry.isFile()) {
+      if (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) {
+        const content = readFileSync(sourcePath, 'utf-8');
+        writeFileSync(destinationPath, stripTsSuppressions(content));
+      } else {
+        copyFileSync(sourcePath, destinationPath);
+      }
+      const envMatch = entry.name.match(/^(\.env(?:\.[\w.-]+)?)\.example$/);
+      if (envMatch) {
+        const envDestinationPath = resolve(destination, envMatch[1]);
+        if (!existsSync(envDestinationPath)) {
+          copyFileSync(sourcePath, envDestinationPath);
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -434,24 +472,13 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
       loadTemplate('../templates/config-workspace/skills/ember-onchain-actions.md'),
     );
     // Workflow samples
-    mkdirSync(resolve(targetDir, 'workflows', 'sample-package', 'src'), { recursive: true });
-    mkdirSync(resolve(targetDir, 'workflows', 'simple-script'), { recursive: true });
-    writeFileSync(
-      resolve(targetDir, 'workflows', 'sample-package', 'package.json'),
-      loadTemplate('../templates/config-workspace/workflows/sample-package/package.json'),
+    copyTemplateDirectory(
+      '../templates/config-workspace/workflows/sample-package',
+      resolve(targetDir, 'workflows', 'sample-package'),
     );
-    {
-      const sampleIndex = loadTemplate(
-        '../templates/config-workspace/workflows/sample-package/src/index.ts',
-      );
-      writeFileSync(
-        resolve(targetDir, 'workflows', 'sample-package', 'src', 'index.ts'),
-        stripTsSuppressions(sampleIndex),
-      );
-    }
-    writeFileSync(
-      resolve(targetDir, 'workflows', 'simple-script', 'hello.js'),
-      loadTemplate('../templates/config-workspace/workflows/simple-script/hello.js'),
+    copyTemplateDirectory(
+      '../templates/config-workspace/workflows/simple-script',
+      resolve(targetDir, 'workflows', 'simple-script'),
     );
 
     cliOutput.success('Created `agent.md`');
