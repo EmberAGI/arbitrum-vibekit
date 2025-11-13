@@ -32,6 +32,7 @@ export default tseslint.config(
       "**/*.d.ts",
       "**/coverage/**",
       "clients/web/**",
+      "clients/web-legacy/**",
       "src/proto/",
       "lib/agent-node/config/**"
     ]
