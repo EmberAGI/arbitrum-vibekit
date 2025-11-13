@@ -64,6 +64,7 @@
     "js-yaml": "^4.1.0",
     "mocha": "^10.2.0",
     "mocha-suppress-logs": "^0.5.1",
+    "openai": "^6.8.1",
     "prettier": "^3.5.3",
     "prool": "^0.0.24",
     "rimraf": "^6.0.1",
