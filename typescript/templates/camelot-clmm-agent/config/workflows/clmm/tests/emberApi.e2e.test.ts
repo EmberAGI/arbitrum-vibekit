@@ -8,6 +8,7 @@ import {
   SAFETY_NET_MAX_IDLE_CYCLES,
   resolveEthUsdPrice,
 } from '../src/constants.js';
+import { deriveMidPrice, evaluateDecision, normalizePosition } from '../src/decision-engine.js';
 import {
   EmberCamelotClient,
   fetchPoolSnapshot,
@@ -15,14 +16,12 @@ import {
   type ClmmRebalanceRequest,
   type ClmmWithdrawRequest,
 } from '../src/emberApi.js';
-import { deriveMidPrice, evaluateDecision, normalizePosition } from '../src/decision-engine.js';
-const BASE_URL =
-  process.env['EMBER_API_BASE_URL']?.replace(/\/$/, '') ?? 'https://api.emberai.xyz';
+const BASE_URL = process.env['EMBER_API_BASE_URL']?.replace(/\/$/, '') ?? 'https://api.emberai.xyz';
 const LIVE_TEST_TIMEOUT_MS = Number(process.env['EMBER_E2E_TIMEOUT_MS'] ?? 45_000);
-const EMPTY_WALLET: `0x${string}` =
-  (process.env['CLMM_E2E_EMPTY_WALLET'] ?? '0x0000000000000000000000000000000000000001') as `0x${string}`;
-const LIVE_LP_WALLET: `0x${string}` =
-  (process.env['CLMM_E2E_LIVE_WALLET'] ?? '0x2d2c313ec7650995b193a34e16be5b86eede872d') as `0x${string}`;
+const EMPTY_WALLET: `0x${string}` = (process.env['CLMM_E2E_EMPTY_WALLET'] ??
+  '0x0000000000000000000000000000000000000001') as `0x${string}`;
+const LIVE_LP_WALLET: `0x${string}` = (process.env['CLMM_E2E_LIVE_WALLET'] ??
+  '0x2d2c313ec7650995b193a34e16be5b86eede872d') as `0x${string}`;
 
 type RequestLogEntry = {
   url: string;
@@ -33,6 +32,7 @@ type RequestLogEntry = {
 const requestLog: RequestLogEntry[] = [];
 const client = new EmberCamelotClient(BASE_URL);
 const realFetch = globalThis.fetch.bind(globalThis);
+type ExecutionResult<T> = { data: T; error?: undefined } | { data?: undefined; error: Error };
 
 function extractUrl(input: Parameters<typeof globalThis.fetch>[0]): string {
   if (typeof input === 'string') {
@@ -86,12 +86,16 @@ function lastRequestContaining(pathFragment: string) {
   return [...requestLog].reverse().find((entry) => entry.url.includes(pathFragment));
 }
 
-async function execute<T>(run: () => Promise<T>) {
+async function execute<T>(run: () => Promise<T>): Promise<ExecutionResult<T>> {
   try {
     const data = await run();
     return { data };
   } catch (error) {
-    return { error };
+    const failure =
+      error instanceof Error
+        ? error
+        : new Error(typeof error === 'string' ? error : 'Unknown error');
+    return { error: failure };
   }
 }
 
@@ -104,10 +108,9 @@ async function discoverLiveWalletContext() {
     console.warn('Live LP wallet has no active Camelot positions');
     return null;
   }
-  const livePosition = positions[0]!;
+  const livePosition = positions[0];
   const pool = pools.find(
-    (candidate) =>
-      candidate.address.toLowerCase() === livePosition.poolAddress.toLowerCase(),
+    (candidate) => candidate.address.toLowerCase() === livePosition.poolAddress.toLowerCase(),
   );
   if (!pool) {
     console.warn('Unable to match live wallet position to Camelot pool list');
@@ -117,34 +120,48 @@ async function discoverLiveWalletContext() {
 }
 
 async function fetchLivePoolIdentifier() {
+  type WalletPositionsResponse = {
+    positions?: Array<{
+      poolIdentifier?: {
+        chainId: string;
+        address: string;
+      };
+    }>;
+  };
   const response = await realFetch(
     `${BASE_URL}/liquidity/positions/${LIVE_LP_WALLET}?chainId=${ARBITRUM_CHAIN_ID}`,
   );
   if (!response.ok) {
     throw new Error(`Unable to load raw wallet positions (${response.status})`);
   }
-  const payload = await response.json();
+  const payload = (await response.json()) as WalletPositionsResponse;
   const identifier = payload.positions?.[0]?.poolIdentifier;
   if (!identifier) {
     console.warn('Live wallet returned no pool identifier');
     return null;
   }
-  return identifier as { chainId: string; address: `0x${string}` };
+  return {
+    chainId: identifier.chainId,
+    address: identifier.address as `0x${string}`,
+  };
 }
 
 describe('EmberCamelotClient (e2e)', () => {
-  let fetchSpy: ReturnType<typeof vi.spyOn> | undefined;
+  let restoreFetch: (() => void) | undefined;
 
   beforeAll(() => {
-    fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (...args) => {
-      const [input, init] = args as Parameters<typeof globalThis.fetch>;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (...args) => {
+      const [input, init] = args;
       logRequest(input, init);
       return realFetch(...args);
     });
+    restoreFetch = () => {
+      fetchSpy.mockRestore();
+    };
   });
 
   afterAll(() => {
-    fetchSpy?.mockRestore();
+    restoreFetch?.();
   });
 
   beforeEach(() => {
@@ -173,7 +190,9 @@ describe('EmberCamelotClient (e2e)', () => {
     'queries GET /liquidity/positions/{walletAddress} for wallet balances',
     async () => {
       // Given the docs expose wallet-specific positions at /liquidity/positions/{walletAddress}
-      const outcome = await execute(() => client.getWalletPositions(EMPTY_WALLET, ARBITRUM_CHAIN_ID));
+      const outcome = await execute(() =>
+        client.getWalletPositions(EMPTY_WALLET, ARBITRUM_CHAIN_ID),
+      );
       const request = lastRequestContaining('/liquidity/');
 
       // Then the request path should include the wallet-aware endpoint
@@ -276,7 +295,7 @@ describe('EmberCamelotClient (e2e)', () => {
         console.warn('CLMM_E2E_LIVE_WALLET currently has no Camelot LP positions.');
         return;
       }
-      const sample = positions[0]!;
+      const sample = positions[0];
       expect(sample.poolAddress).toMatch(/^0x/);
       expect(sample.tickUpper).toBeGreaterThanOrEqual(sample.tickLower);
     },
@@ -300,7 +319,7 @@ describe('EmberCamelotClient (e2e)', () => {
         supplyChain: chainIdString,
         poolIdentifier: {
           chainId: chainIdString,
-          address: pool.address as `0x${string}`,
+          address: pool.address,
         },
         range: {
           type: 'limited',
@@ -311,14 +330,14 @@ describe('EmberCamelotClient (e2e)', () => {
           {
             tokenUid: {
               chainId: chainIdString,
-              address: pool.token0.address as `0x${string}`,
+              address: pool.token0.address,
             },
             amount: '0',
           },
           {
             tokenUid: {
               chainId: chainIdString,
-              address: pool.token1.address as `0x${string}`,
+              address: pool.token1.address,
             },
             amount: '0',
           },
@@ -400,7 +419,7 @@ describe('EmberCamelotClient (e2e)', () => {
       // Given a real Camelot pool address from Ember
       const pools = await client.listCamelotPools(ARBITRUM_CHAIN_ID);
       expect(pools.length).toBeGreaterThan(0);
-      const targetPool = pools[0]!;
+      const targetPool = pools[0];
 
       // When we request a snapshot using a differently cased address
       const snapshot = await fetchPoolSnapshot(
@@ -424,7 +443,7 @@ describe('EmberCamelotClient (e2e)', () => {
       expect(pools.length).toBeGreaterThan(0);
 
       // When we normalize it for workflow consumption
-      const normalized = normalizePool(pools[0]!);
+      const normalized = normalizePool(pools[0]);
 
       // Then tick data should be numeric and liquidity converted to bigint
       expect(typeof normalized.tick).toBe('number');

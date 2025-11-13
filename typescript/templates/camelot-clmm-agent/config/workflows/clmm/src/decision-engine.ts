@@ -135,7 +135,9 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
   }
 
   const width = ctx.position.tickUpper - ctx.position.tickLower;
-  const innerWidth = Math.round(width * (ctx.rebalanceThresholdPct ?? DEFAULT_REBALANCE_THRESHOLD_PCT));
+  const innerWidth = Math.round(
+    width * (ctx.rebalanceThresholdPct ?? DEFAULT_REBALANCE_THRESHOLD_PCT),
+  );
   const padding = Math.max(1, Math.floor((width - innerWidth) / 2));
   const innerLower = ctx.position.tickLower + padding;
   const innerUpper = ctx.position.tickUpper - padding;
@@ -157,8 +159,7 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
     };
   }
 
-  const feeValueUsd =
-    ctx.estimatedFeeValueUsd ?? estimateFeeValueUsd(ctx.position, ctx.pool);
+  const feeValueUsd = ctx.estimatedFeeValueUsd ?? estimateFeeValueUsd(ctx.position, ctx.pool);
 
   if (
     shouldCompound({

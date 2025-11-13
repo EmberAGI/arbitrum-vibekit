@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_MIN_TVL_USD,
+  DEFAULT_REBALANCE_THRESHOLD_PCT,
+  DEFAULT_TICK_BANDWIDTH_BPS,
+} from './constants.js';
+import {
   buildRange,
   computeVolatilityPct,
   deriveMidPrice,
@@ -8,11 +13,6 @@ import {
   evaluateDecision,
   normalizePosition,
 } from './decision-engine.js';
-import {
-  DEFAULT_MIN_TVL_USD,
-  DEFAULT_REBALANCE_THRESHOLD_PCT,
-  DEFAULT_TICK_BANDWIDTH_BPS,
-} from './constants.js';
 import type { CamelotPool, DecisionContext, PositionSnapshot, WalletPosition } from './types.js';
 
 const LOG_BASE = Math.log(1.0001);
@@ -44,8 +44,7 @@ function makeContext(overrides: Partial<DecisionContext> = {}): DecisionContext 
     volatilityPct: overrides.volatilityPct ?? 0,
     cyclesSinceRebalance: overrides.cyclesSinceRebalance ?? 0,
     tickBandwidthBps: overrides.tickBandwidthBps ?? DEFAULT_TICK_BANDWIDTH_BPS,
-    rebalanceThresholdPct:
-      overrides.rebalanceThresholdPct ?? DEFAULT_REBALANCE_THRESHOLD_PCT,
+    rebalanceThresholdPct: overrides.rebalanceThresholdPct ?? DEFAULT_REBALANCE_THRESHOLD_PCT,
     maxIdleCycles: overrides.maxIdleCycles ?? 10,
     autoCompoundFees: overrides.autoCompoundFees ?? true,
     estimatedFeeValueUsd: overrides.estimatedFeeValueUsd,
@@ -103,7 +102,7 @@ describe('evaluateDecision', () => {
     // Given a position whose current tick sits outside the inner band
     const pool = makePool({ tick: tickForPrice(2100, 12) });
     const position: PositionSnapshot = {
-      poolAddress: pool.address as `0x${string}`,
+      poolAddress: pool.address,
       tickLower: tickForPrice(1800, 12),
       tickUpper: tickForPrice(2200, 12),
     };
@@ -124,7 +123,7 @@ describe('evaluateDecision', () => {
     // Given a pool that stayed within range but hit the idle cycle cap
     const pool = makePool();
     const position: PositionSnapshot = {
-      poolAddress: pool.address as `0x${string}`,
+      poolAddress: pool.address,
       tickLower: pool.tick - 120,
       tickUpper: pool.tick + 120,
     };
@@ -146,7 +145,7 @@ describe('evaluateDecision', () => {
     // Given accumulated fees that dwarf the projected gas spend
     const pool = makePool();
     const position: PositionSnapshot = {
-      poolAddress: pool.address as `0x${string}`,
+      poolAddress: pool.address,
       tickLower: pool.tick - 60,
       tickUpper: pool.tick + 60,
     };
@@ -168,7 +167,7 @@ describe('evaluateDecision', () => {
     // Given a healthy pool + position configuration
     const pool = makePool();
     const position: PositionSnapshot = {
-      poolAddress: pool.address as `0x${string}`,
+      poolAddress: pool.address,
       tickLower: pool.tick - 120,
       tickUpper: pool.tick + 120,
     };
@@ -190,7 +189,7 @@ describe('estimateFeeValueUsd', () => {
     // Given a position with accrued fees
     const pool = makePool();
     const snapshot: PositionSnapshot = {
-      poolAddress: pool.address as `0x${string}`,
+      poolAddress: pool.address,
       tickLower: pool.tick - 60,
       tickUpper: pool.tick + 60,
       tokensOwed0: 2000000000000000000n, // 2 WETH

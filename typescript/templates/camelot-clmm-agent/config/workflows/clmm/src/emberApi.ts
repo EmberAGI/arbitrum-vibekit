@@ -125,27 +125,19 @@ export class EmberCamelotClient {
   }
 
   async requestRebalance(payload: ClmmRebalanceRequest): Promise<ClmmRebalanceResponse> {
-    const body = await this.fetchEndpoint(
-      `/liquidity/supply`,
-      ClmmRebalanceResponseSchema,
-      {
-        method: 'POST',
-        body: JSON.stringify(ClmmRebalanceRequestSchema.parse(payload)),
-      },
-    );
+    const body = await this.fetchEndpoint(`/liquidity/supply`, ClmmRebalanceResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify(ClmmRebalanceRequestSchema.parse(payload)),
+    });
 
     return body;
   }
 
   async requestWithdrawal(payload: ClmmWithdrawRequest): Promise<ClmmRebalanceResponse> {
-    const body = await this.fetchEndpoint(
-      `/liquidity/withdraw`,
-      ClmmRebalanceResponseSchema,
-      {
-        method: 'POST',
-        body: JSON.stringify(ClmmWithdrawRequestSchema.parse(payload)),
-      },
-    );
+    const body = await this.fetchEndpoint(`/liquidity/withdraw`, ClmmRebalanceResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify(ClmmWithdrawRequestSchema.parse(payload)),
+    });
 
     return body;
   }

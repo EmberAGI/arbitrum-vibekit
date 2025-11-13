@@ -1,8 +1,11 @@
+import type { SendUserOperationParameters } from 'viem/account-abstraction';
 import { describe, expect, it, vi } from 'vitest';
 
-import { assertGasBudget, executeTransaction, toWei } from './transaction.js';
 import type { OnchainClients } from './clients.js';
-import type { SendUserOperationParameters } from 'viem/account-abstraction';
+import { assertGasBudget, executeTransaction, toWei } from './transaction.js';
+
+const partial = <T extends Record<string, unknown>>(value: T): unknown =>
+  expect.objectContaining(value) as unknown;
 
 function makeClients({
   maxFeePerGas,
@@ -50,17 +53,20 @@ describe('executeTransaction', () => {
   it('forwards successful plans to the bundler and returns the final receipt', async () => {
     // Given a gas quote that sits safely below our max budget
     const clients = makeClients({ maxFeePerGas: 1_000_000_000n, sendReceipt: '0xhash' });
-    const parameters: SendUserOperationParameters = {
-      account: { address: '0xaaa' },
-      calls: [{ to: '0xbbb', data: '0x01' }],
+    const parameters = {
+      account: { address: '0xaaa' as `0x${string}` },
+      calls: [{ to: '0xbbb' as `0x${string}`, data: '0x01' as `0x${string}` }],
+    } satisfies {
+      account: { address: `0x${string}` };
+      calls: Array<{ to: `0x${string}`; data: `0x${string}` }>;
     };
 
     // When executeTransaction submits the user operation
-    const receipt = await executeTransaction(clients, parameters, 1);
+    const receipt = await executeTransaction(clients, parameters as SendUserOperationParameters, 1);
 
     // Then it should propagate Pimlico gas quotes and paymaster config to the bundler call
     expect(clients.bundler.sendUserOperation).toHaveBeenCalledWith(
-      expect.objectContaining({
+      partial({
         paymaster: clients.paymaster,
         maxFeePerGas: 1_000_000_000n,
         calls: parameters.calls,

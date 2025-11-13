@@ -1,8 +1,8 @@
 import { formatEther, parseEther } from 'viem';
-import { SendUserOperationParameters } from 'viem/account-abstraction';
+import type { SendUserOperationParameters } from 'viem/account-abstraction';
 
-import { MAX_GAS_SPEND_ETH } from './constants.js';
 import type { OnchainClients } from './clients.js';
+import { MAX_GAS_SPEND_ETH } from './constants.js';
 
 const DEFAULT_GAS_LIMIT = 850_000n;
 

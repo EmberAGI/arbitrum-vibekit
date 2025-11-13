@@ -1,9 +1,9 @@
+import type { MetaMaskSmartAccount } from '@metamask/delegation-toolkit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { checkTokenAllowance, ensureAllowance } from './allowances.js';
 import type { OnchainClients } from './clients.js';
 import * as transactionModule from './transaction.js';
-import type { MetaMaskSmartAccount } from '@metamask/delegation-toolkit';
 
 describe('allowances helpers', () => {
   afterEach(() => {

@@ -1,23 +1,21 @@
 import {
-  z,
   type WorkflowContext,
   type WorkflowPlugin,
   type WorkflowState,
   type Artifact,
 } from '@emberai/agent-node/workflow';
 import {
-  createDelegation,
   Implementation,
   toMetaMaskSmartAccount,
-  createExecution,
-  ExecutionMode,
-  type Delegation,
   type MetaMaskSmartAccount,
 } from '@metamask/delegation-toolkit';
 import type { Client, PublicActions, PublicRpcSchema, Transport } from 'viem';
+import { parseUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import type { Chain } from 'viem/chains';
 
+import { ensureAllowance } from './allowances.js';
+import { createClients } from './clients.js';
 import {
   ARBITRUM_CHAIN_ID,
   CAMELOT_POSITION_MANAGER_ADDRESS,
@@ -32,27 +30,6 @@ import {
   resolvePollIntervalMs,
   resolveStreamLimit,
 } from './constants.js';
-import { createClients } from './clients.js';
-import {
-  EmberCamelotClient,
-  fetchPoolSnapshot,
-  type ClmmRebalanceRequest,
-  type ClmmWithdrawRequest,
-  type TransactionInformation,
-} from './emberApi.js';
-import {
-  ClmmWorkflowParametersSchema,
-  OperatorConfigInputSchema,
-  PoolSelectionInputSchema,
-  type CamelotPool,
-  type ClmmAction,
-  type ClmmWorkflowParameters,
-  type OperatorConfigInput,
-  type PoolSelectionInput,
-  type PositionSnapshot,
-  type RebalanceTelemetry,
-} from './types.js';
-import { sleep } from './utils.js';
 import {
   computeVolatilityPct,
   deriveMidPrice,
@@ -60,12 +37,25 @@ import {
   estimateFeeValueUsd,
   normalizePosition,
 } from './decision-engine.js';
-import { ensureAllowance } from './allowances.js';
+import {
+  EmberCamelotClient,
+  fetchPoolSnapshot,
+  type ClmmRebalanceRequest,
+  type ClmmWithdrawRequest,
+  type TransactionInformation,
+} from './emberApi.js';
 import { executeTransaction } from './transaction.js';
-import { DelegationManager } from '@metamask/delegation-toolkit/contracts';
-import { parseUnits } from 'viem';
-
-type SignedDelegation = Delegation & { signature: `0x${string}` };
+import {
+  ClmmWorkflowParametersSchema,
+  OperatorConfigInputSchema,
+  PoolSelectionInputSchema,
+  type CamelotPool,
+  type ClmmAction,
+  type OperatorConfigInput,
+  type PoolSelectionInput,
+  type RebalanceTelemetry,
+} from './types.js';
+import { sleep } from './utils.js';
 
 const agentPrivateKey = process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
 if (!agentPrivateKey) {
@@ -124,8 +114,7 @@ const plugin: WorkflowPlugin = {
     yield { type: 'artifact', artifact: poolsArtifact };
 
     let selectedPoolAddress =
-      parameters.poolAddress ??
-      (filteredPools.length === 1 ? filteredPools[0]!.address : undefined);
+      parameters.poolAddress ?? (filteredPools.length === 1 ? filteredPools[0].address : undefined);
     if (!selectedPoolAddress) {
       const poolSelection = (yield {
         type: 'interrupted',
@@ -139,7 +128,7 @@ const plugin: WorkflowPlugin = {
 
     const selectedPool =
       filteredPools.find(
-        (pool) => pool.address.toLowerCase() === selectedPoolAddress!.toLowerCase(),
+        (pool) => pool.address.toLowerCase() === selectedPoolAddress.toLowerCase(),
       ) ??
       (await fetchPoolSnapshot(
         camelotClient,
@@ -243,25 +232,28 @@ const plugin: WorkflowPlugin = {
       let poolSnapshot: CamelotPool | undefined;
       try {
         poolSnapshot =
-          (await fetchPoolSnapshot(
-            camelotClient,
-            selectedPool.address as `0x${string}`,
-            ARBITRUM_CHAIN_ID,
-          )) ?? lastSnapshot;
+          (await fetchPoolSnapshot(camelotClient, selectedPool.address, ARBITRUM_CHAIN_ID)) ??
+          lastSnapshot;
         staleCycles = 0;
       } catch (error) {
         staleCycles += 1;
+        const cause =
+          error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+              ? error
+              : 'Unknown error';
         if (staleCycles > DATA_STALE_CYCLE_LIMIT) {
           yield {
             type: 'status-update',
-            message: `ERROR: Abort: Ember API unreachable for ${staleCycles} consecutive cycles`,
+            message: `ERROR: Abort: Ember API unreachable for ${staleCycles} consecutive cycles (last error: ${cause})`,
           };
           break;
         }
         poolSnapshot = lastSnapshot;
         yield {
           type: 'status-update',
-          message: `WARNING: Using cached pool state (attempt ${staleCycles}/${DATA_STALE_CYCLE_LIMIT})`,
+          message: `WARNING: Using cached pool state (attempt ${staleCycles}/${DATA_STALE_CYCLE_LIMIT}) - last error: ${cause}`,
         };
       }
 
@@ -275,7 +267,7 @@ const plugin: WorkflowPlugin = {
       previousPrice = midPrice;
 
       const walletPositions = await camelotClient.getWalletPositions(
-        operatorConfig.walletAddress as `0x${string}`,
+        operatorConfig.walletAddress,
         ARBITRUM_CHAIN_ID,
       );
       const currentPositionRaw = walletPositions.find(
@@ -321,7 +313,7 @@ const plugin: WorkflowPlugin = {
 
       const cycleTelemetry: RebalanceTelemetry = {
         cycle: iteration,
-        poolAddress: poolSnapshot.address as `0x${string}`,
+        poolAddress: poolSnapshot.address,
         midPrice,
         action: decision.kind,
         reason: decision.reason,
@@ -397,88 +389,6 @@ function buildPoolArtifact(pools: CamelotPool[]): Artifact {
   };
 }
 
-function buildDelegationArtifact(delegations: ReturnType<typeof createClmmDelegations>): Artifact {
-  return {
-    artifactId: 'clmm-delegations',
-    name: 'clmm-delegations.json',
-    description: 'Delegations required for Camelot CLMM management',
-    parts: [
-      {
-        kind: 'data',
-        data: {
-          delegations: Object.entries(delegations).map(([id, delegation]) => ({
-            id,
-            description: describeDelegation(id),
-            delegation: JSON.stringify(delegation),
-          })),
-        },
-      },
-    ],
-  };
-}
-
-function describeDelegation(id: string) {
-  switch (id) {
-    case 'approveToken0':
-      return 'Allows the agent to approve token0 for Camelot LP actions.';
-    case 'approveToken1':
-      return 'Allows the agent to approve token1 for Camelot LP actions.';
-    case 'manageCamelot':
-      return 'Allows the agent to call Camelot position manager (mint/burn/collect).';
-    default:
-      return 'Delegation';
-  }
-}
-
-function createClmmDelegations(args: {
-  walletAddress: `0x${string}`;
-  agentSmartAccount: `0x${string}`;
-  token0: `0x${string}`;
-  token1: `0x${string}`;
-  environment: string;
-}) {
-  const approveSelectors = ['approve(address, uint256)'];
-  return {
-    approveToken0: createDelegation({
-      scope: {
-        type: 'functionCall' as const,
-        targets: [args.token0],
-        selectors: approveSelectors,
-      },
-      to: args.agentSmartAccount,
-      from: args.walletAddress,
-      environment: args.environment as unknown,
-    } as Parameters<typeof createDelegation>[0]),
-    approveToken1: createDelegation({
-      scope: {
-        type: 'functionCall' as const,
-        targets: [args.token1],
-        selectors: approveSelectors,
-      },
-      to: args.agentSmartAccount,
-      from: args.walletAddress,
-      environment: args.environment as unknown,
-    } as Parameters<typeof createDelegation>[0]),
-    manageCamelot: createDelegation({
-      scope: {
-        type: 'functionCall' as const,
-        targets: [CAMELOT_POSITION_MANAGER_ADDRESS],
-        selectors: [
-          'mint((address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,address,uint256))',
-          'increaseLiquidity((uint256,uint256,uint256,uint256,uint256,uint256))',
-          'decreaseLiquidity((uint256,uint128,uint256,uint256,uint256))',
-          'collect((uint256,address,uint128,uint128))',
-          'burn(uint256)',
-          'multicall(bytes[])',
-        ],
-      },
-      to: args.agentSmartAccount,
-      from: args.walletAddress,
-      environment: args.environment as unknown,
-    } as Parameters<typeof createDelegation>[0]),
-  };
-}
-
 function isPoolAllowed(pool: CamelotPool, mode: 'debug' | 'production') {
   if (mode === 'production') {
     return true;
@@ -504,7 +414,7 @@ async function executeDecision({
   agentsWallet: MetaMaskSmartAccount;
   clients: ReturnType<typeof createClients>;
 }): Promise<string | undefined> {
-  const walletAddress = operatorConfig.walletAddress as `0x${string}`;
+  const walletAddress = operatorConfig.walletAddress;
   if (action.kind === 'hold') {
     throw new Error('executeDecision invoked with hold action');
   }
@@ -512,7 +422,7 @@ async function executeDecision({
   const chainIdString = ARBITRUM_CHAIN_ID.toString();
   const poolIdentifier = {
     chainId: chainIdString,
-    address: pool.address as `0x${string}`,
+    address: pool.address,
   };
 
   let response: Awaited<ReturnType<EmberCamelotClient['requestRebalance']>>;
@@ -521,7 +431,7 @@ async function executeDecision({
     const allocations = estimateTokenAllocations(pool, operatorConfig.baseContributionUsd);
     await ensureAllowance({
       publicClient: clients.public,
-      tokenAddress: pool.token0.address as `0x${string}`,
+      tokenAddress: pool.token0.address,
       ownerAccount: walletAddress,
       spenderAddress: CAMELOT_POSITION_MANAGER_ADDRESS,
       requiredAmount: allocations.token0,
@@ -530,7 +440,7 @@ async function executeDecision({
     });
     await ensureAllowance({
       publicClient: clients.public,
-      tokenAddress: pool.token1.address as `0x${string}`,
+      tokenAddress: pool.token1.address,
       ownerAccount: walletAddress,
       spenderAddress: CAMELOT_POSITION_MANAGER_ADDRESS,
       requiredAmount: allocations.token1,
@@ -551,14 +461,14 @@ async function executeDecision({
         {
           tokenUid: {
             chainId: chainIdString,
-            address: pool.token0.address as `0x${string}`,
+            address: pool.token0.address,
           },
           amount: allocations.token0.toString(),
         },
         {
           tokenUid: {
             chainId: chainIdString,
-            address: pool.token1.address as `0x${string}`,
+            address: pool.token1.address,
           },
           amount: allocations.token1.toString(),
         },
@@ -573,7 +483,7 @@ async function executeDecision({
     };
     response = await camelotClient.requestWithdrawal(withdrawPayload);
   } else {
-    throw new Error(`Unsupported action kind: ${action.kind}`);
+    assertUnreachable(action);
   }
 
   let lastTxHash: string | undefined;
@@ -598,20 +508,40 @@ async function executePlannedTransaction({
   agentsWallet: MetaMaskSmartAccount;
   clients: ReturnType<typeof createClients>;
 }) {
-  const execution = createExecution({
-    target: tx.to,
-    callData: tx.data,
-  });
+  const callValue = parseTransactionValue(tx.value);
 
   return executeTransaction(clients, {
     account: agentsWallet,
     calls: [
       {
-        to: agentsWallet.address,
-        data: redeemData,
+        to: tx.to,
+        data: tx.data,
+        ...(callValue > 0n ? { value: callValue } : {}),
       },
     ],
   });
+}
+
+function parseTransactionValue(value: string | undefined) {
+  if (!value) {
+    return 0n;
+  }
+  try {
+    return BigInt(value);
+  } catch (error) {
+    const reason =
+      error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';
+    throw new Error(`Unable to parse transaction value "${value}": ${reason}`);
+  }
+}
+
+function assertUnreachable(value: never): never {
+  const kind =
+    typeof value === 'object' && value !== null && 'kind' in value
+      ? (value as { kind?: string }).kind
+      : undefined;
+  const detail = kind ? `: ${kind}` : '';
+  throw new Error(`Unsupported action kind${detail}`);
 }
 
 function estimateTokenAllocations(pool: CamelotPool, baseContributionUsd: number) {

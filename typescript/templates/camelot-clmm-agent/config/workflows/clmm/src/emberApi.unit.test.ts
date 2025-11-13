@@ -10,6 +10,9 @@ import type { CamelotPool } from './types.js';
 
 const BASE_URL = 'https://unit.test';
 
+const partial = <T extends Record<string, unknown>>(value: T): unknown =>
+  expect.objectContaining(value) as unknown;
+
 function mockJsonResponse(data: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(data), {
     status: 200,
@@ -25,58 +28,56 @@ describe('EmberCamelotClient (unit)', () => {
   });
 
   it('filters to Camelot Algebra pools and lowercases addresses', async () => {
-    const fetchSpy = vi
-      .fn()
-      .mockResolvedValue(
-        mockJsonResponse({
-          liquidityPools: [
-            {
-              identifier: { chainId: '42161', address: '0xABC' },
-              tokens: [
-                {
-                  tokenUid: { chainId: '42161', address: '0xTokenA' },
-                  name: 'TokenA',
-                  symbol: 'TK0',
-                  decimals: 18,
-                },
-                {
-                  tokenUid: { chainId: '42161', address: '0xTokenB' },
-                  name: 'TokenB',
-                  symbol: 'TK1',
-                  decimals: 18,
-                },
-              ],
-              price: '1',
-              providerId: 'camelot-algebra',
-              poolName: 'Algebra Pool',
-            },
-            {
-              identifier: { chainId: '42161', address: '0xDEF' },
-              tokens: [
-                {
-                  tokenUid: { chainId: '42161', address: '0xTokenC' },
-                  name: 'TokenC',
-                  symbol: 'TC',
-                  decimals: 18,
-                },
-                {
-                  tokenUid: { chainId: '42161', address: '0xTokenD' },
-                  name: 'TokenD',
-                  symbol: 'TD',
-                  decimals: 18,
-                },
-              ],
-              price: '1',
-              providerId: 'other-dex',
-              poolName: 'Other Pool',
-            },
-          ],
-          cursor: null,
-          currentPage: 1,
-          totalPages: 1,
-          totalItems: 2,
-        }),
-      );
+    const fetchSpy = vi.fn().mockResolvedValue(
+      mockJsonResponse({
+        liquidityPools: [
+          {
+            identifier: { chainId: '42161', address: '0xABC' },
+            tokens: [
+              {
+                tokenUid: { chainId: '42161', address: '0xTokenA' },
+                name: 'TokenA',
+                symbol: 'TK0',
+                decimals: 18,
+              },
+              {
+                tokenUid: { chainId: '42161', address: '0xTokenB' },
+                name: 'TokenB',
+                symbol: 'TK1',
+                decimals: 18,
+              },
+            ],
+            price: '1',
+            providerId: 'camelot-algebra',
+            poolName: 'Algebra Pool',
+          },
+          {
+            identifier: { chainId: '42161', address: '0xDEF' },
+            tokens: [
+              {
+                tokenUid: { chainId: '42161', address: '0xTokenC' },
+                name: 'TokenC',
+                symbol: 'TC',
+                decimals: 18,
+              },
+              {
+                tokenUid: { chainId: '42161', address: '0xTokenD' },
+                name: 'TokenD',
+                symbol: 'TD',
+                decimals: 18,
+              },
+            ],
+            price: '1',
+            providerId: 'other-dex',
+            poolName: 'Other Pool',
+          },
+        ],
+        cursor: null,
+        currentPage: 1,
+        totalPages: 1,
+        totalItems: 2,
+      }),
+    );
 
     vi.stubGlobal('fetch', fetchSpy);
     const client = new EmberCamelotClient(BASE_URL);
@@ -85,8 +86,8 @@ describe('EmberCamelotClient (unit)', () => {
 
     expect(fetchSpy).toHaveBeenCalledWith(
       `${BASE_URL}/liquidity/pools?chainId=42161`,
-      expect.objectContaining({
-        headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+      partial({
+        headers: partial({ 'Content-Type': 'application/json' }),
       }),
     );
     expect(pools).toHaveLength(1);
@@ -131,8 +132,8 @@ describe('EmberCamelotClient (unit)', () => {
 
     expect(fetchSpy).toHaveBeenCalledWith(
       `${BASE_URL}/liquidity/positions/0x1234?chainId=42161`,
-      expect.objectContaining({
-        headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+      partial({
+        headers: partial({ 'Content-Type': 'application/json' }),
       }),
     );
     expect(positions).toHaveLength(1);
@@ -176,7 +177,7 @@ describe('EmberCamelotClient (unit)', () => {
 
     expect(fetchSpy).toHaveBeenCalledWith(
       `${BASE_URL}/liquidity/supply`,
-      expect.objectContaining({
+      partial({
         method: 'POST',
         body: JSON.stringify(payload),
       }),
@@ -188,9 +189,7 @@ describe('EmberCamelotClient (unit)', () => {
   it('propagates HTTP failures from requestWithdrawal with the raw body', async () => {
     const fetchSpy = vi
       .fn()
-      .mockResolvedValue(
-        mockJsonResponse({ error: 'Token ID not found' }, { status: 500 }),
-      );
+      .mockResolvedValue(mockJsonResponse({ error: 'Token ID not found' }, { status: 500 }));
     vi.stubGlobal('fetch', fetchSpy);
 
     const client = new EmberCamelotClient(BASE_URL);
@@ -204,7 +203,7 @@ describe('EmberCamelotClient (unit)', () => {
 
     expect(fetchSpy).toHaveBeenCalledWith(
       `${BASE_URL}/liquidity/withdraw`,
-      expect.objectContaining({
+      partial({
         method: 'POST',
       }),
     );

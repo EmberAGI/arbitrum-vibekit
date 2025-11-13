@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { enrichCamelotPoolUsdPrices, isUsdStableToken } from '../src/usdPrices.js';
 import type { CamelotPool } from '../src/types.js';
+import { enrichCamelotPoolUsdPrices, isUsdStableToken } from '../src/usdPrices.js';
 
 const LOG_BASE = Math.log(1.0001);
 let poolCounter = 0;
@@ -20,7 +20,7 @@ function makePool({
   const tick = Math.round(Math.log(adjusted) / LOG_BASE);
 
   poolCounter += 1;
-  const address = `0x${poolCounter.toString(16).padStart(40, '0')}` as `0x${string}`;
+  const address = `0x${poolCounter.toString(16).padStart(40, '0')}`;
 
   return {
     address,
@@ -36,8 +36,16 @@ describe('enrichCamelotPoolUsdPrices', () => {
   it('marks USD stablecoins at $1 even when API omits usdPrice', () => {
     const pools = [
       makePool({
-        token0: { address: '0xaf88d065e77c8cc2239327c5edb3a432268e5831', symbol: 'USDC', decimals: 6 },
-        token1: { address: '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', symbol: 'USDT', decimals: 6 },
+        token0: {
+          address: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          symbol: 'USDC',
+          decimals: 6,
+        },
+        token1: {
+          address: '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9',
+          symbol: 'USDT',
+          decimals: 6,
+        },
         ratio: 1,
       }),
     ];
@@ -54,8 +62,16 @@ describe('enrichCamelotPoolUsdPrices', () => {
   it('derives volatile token price from USD pool ratios', () => {
     const pools = [
       makePool({
-        token0: { address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', symbol: 'WETH', decimals: 18 },
-        token1: { address: '0xaf88d065e77c8cc2239327c5edb3a432268e5831', symbol: 'USDC', decimals: 6 },
+        token0: {
+          address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+          symbol: 'WETH',
+          decimals: 18,
+        },
+        token1: {
+          address: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          symbol: 'USDC',
+          decimals: 6,
+        },
         ratio: 1800, // token0/token1 ratio == WETH price in USD
       }),
     ];
@@ -73,13 +89,29 @@ describe('enrichCamelotPoolUsdPrices', () => {
   it('derives both sides when either token already has a USD value', () => {
     const pools = [
       makePool({
-        token0: { address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', symbol: 'WETH', decimals: 18 },
-        token1: { address: '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', symbol: 'USDT', decimals: 6 },
+        token0: {
+          address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+          symbol: 'WETH',
+          decimals: 18,
+        },
+        token1: {
+          address: '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9',
+          symbol: 'USDT',
+          decimals: 6,
+        },
         ratio: 2000,
       }),
       makePool({
-        token0: { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', symbol: 'TOKEN-A', decimals: 18 },
-        token1: { address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', symbol: 'WETH', decimals: 18 },
+        token0: {
+          address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          symbol: 'TOKEN-A',
+          decimals: 18,
+        },
+        token1: {
+          address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+          symbol: 'WETH',
+          decimals: 18,
+        },
         ratio: 0.5, // TOKEN-A is worth half a WETH
       }),
     ];
@@ -99,7 +131,11 @@ describe('enrichCamelotPoolUsdPrices', () => {
       {
         address: '0x1',
         token0: { address: '0xaaaa', symbol: 'KNOWN', decimals: 18, usdPrice: 42 },
-        token1: { address: '0xaf88d065e77c8cc2239327c5edb3a432268e5831', symbol: 'USDC', decimals: 6 },
+        token1: {
+          address: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+          symbol: 'USDC',
+          decimals: 6,
+        },
         tickSpacing: 60,
         tick: 0,
         liquidity: '1',

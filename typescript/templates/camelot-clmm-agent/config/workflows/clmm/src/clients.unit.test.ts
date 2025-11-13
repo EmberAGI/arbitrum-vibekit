@@ -6,6 +6,9 @@ const createBundlerClientMock = vi.fn((config: unknown) => ({ kind: 'bundler', c
 const createPaymasterClientMock = vi.fn((config: unknown) => ({ kind: 'paymaster', config }));
 const createPimlicoClientMock = vi.fn((config: unknown) => ({ kind: 'pimlico', config }));
 
+const partial = <T extends Record<string, unknown>>(value: T): unknown =>
+  expect.objectContaining(value) as unknown;
+
 vi.mock('viem', () => ({
   createPublicClient: createPublicClientMock,
   http: httpMock,
@@ -54,27 +57,27 @@ describe('createClients', () => {
 
     // Then each viem client should receive the mocked arbitrum chain plus the matching transports
     expect(createPublicClientMock).toHaveBeenCalledWith({
-      chain: expect.objectContaining({ id: 42161 }),
-      transport: expect.objectContaining({ url: 'https://arb.custom.rpc' }),
+      chain: partial({ id: 42161 }),
+      transport: partial({ url: 'https://arb.custom.rpc' }),
     });
     expect(httpMock).toHaveBeenCalledWith('https://arb.custom.rpc');
 
     expect(createBundlerClientMock).toHaveBeenCalledWith({
-      chain: expect.objectContaining({ id: 42161 }),
-      transport: expect.objectContaining({ url: 'https://pimlico.custom.rpc' }),
+      chain: partial({ id: 42161 }),
+      transport: partial({ url: 'https://pimlico.custom.rpc' }),
     });
     expect(createPaymasterClientMock).toHaveBeenCalledWith({
-      transport: expect.objectContaining({ url: 'https://pimlico.custom.rpc' }),
+      transport: partial({ url: 'https://pimlico.custom.rpc' }),
     });
     expect(createPimlicoClientMock).toHaveBeenCalledWith({
-      chain: expect.objectContaining({ id: 42161 }),
-      transport: expect.objectContaining({ url: 'https://pimlico.custom.rpc' }),
+      chain: partial({ id: 42161 }),
+      transport: partial({ url: 'https://pimlico.custom.rpc' }),
     });
 
     // And the returned structure should expose each mocked client for downstream callers
-    expect(clients.public).toEqual(expect.objectContaining({ kind: 'public' }));
-    expect(clients.bundler).toEqual(expect.objectContaining({ kind: 'bundler' }));
-    expect(clients.paymaster).toEqual(expect.objectContaining({ kind: 'paymaster' }));
-    expect(clients.pimlico).toEqual(expect.objectContaining({ kind: 'pimlico' }));
+    expect(clients.public).toEqual(partial({ kind: 'public' }));
+    expect(clients.bundler).toEqual(partial({ kind: 'bundler' }));
+    expect(clients.paymaster).toEqual(partial({ kind: 'paymaster' }));
+    expect(clients.pimlico).toEqual(partial({ kind: 'pimlico' }));
   });
 });
