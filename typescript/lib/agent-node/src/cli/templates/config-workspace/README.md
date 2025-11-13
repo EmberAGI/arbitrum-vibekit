@@ -134,6 +134,18 @@ The included `sample-package-workflow` demonstrates:
 - Multiple artifact generation
 - User confirmation pauses with schema validation
 
+## Workflow Tooling
+
+The TypeScript workflow template in `workflows/sample-package/` ships with a complete toolchain so you can run quality gates immediately after scaffolding:
+
+- `pnpm lint`, `pnpm lint:fix`, `pnpm format`, and `pnpm format:check` rely on local ESLint/Prettier configs copied with the template
+- `pnpm build` compiles the workflow using strict ES2022 + NodeNext settings defined in `tsconfig.json`
+- `pnpm test`, `pnpm test:unit`, `pnpm test:int`, `pnpm test:e2e`, and `pnpm test:watch` are backed by dedicated Vitest config files in the template root
+- `tests/setup/vitest.setup.ts` explains how `LOG_LEVEL` toggles console output during tests, mirroring repository conventions
+- `.env.example` and `.env.test` document how to pass provider secrets through Node’s native `--env-file` flag without importing `dotenv`
+
+Refer to `workflows/sample-package/README.md` after scaffolding for step-by-step commands.
+
 ## Tool Naming Convention
 
 All MCP tools follow the canonical naming format:
