@@ -1,10 +1,8 @@
 import type { ChatAddToolApproveResponseFunction, DynamicToolUIPart } from "ai";
-import { TransactionPreviewComponent } from "./TransactionPreviewComponent";
 
 /**
- * Para-specific Dynamic Tool with Approval View
+ * Dynamic Tool with Approval View
  *
- * Uses the Para TransactionPreviewComponent for transaction previews.
  */
 
 export function DynamicToolWithApprovalView({
@@ -120,23 +118,6 @@ export function DynamicToolWithApprovalView({
           }>;
         };
 
-        const txPreview = txData.artifacts?.[0]?.parts?.[0]?.data?.txPreview;
-
-        if (txPreview && txPreview.length > 0) {
-          return (
-            <div className="text-gray-500">
-              <div className="mb-2 bg-gray-600 rounded-xl border border-gray-900 shadow-lg">
-                <div className="p-4">
-                  <div className="pb-2 font-semibold text-gray-100">
-                    {isPreliminary ? "Executing" : "Executed"} tool &quot;
-                    {invocation.toolName}&quot;
-                  </div>
-                  <TransactionPreviewComponent txPreview={txPreview} />
-                </div>
-              </div>
-            </div>
-          );
-        }
       }
 
       return (

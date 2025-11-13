@@ -1,14 +1,12 @@
 "use client";
 
 import {
-  ParaModal,
-  useAccount,
   useClient,
   useLogout,
-  useModal,
 } from "@getpara/react-sdk";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import ParaAuthComponent from "@/components/ParaAuthComponent";
 
 export type PregenWallet = {
   id: string;
@@ -37,10 +35,9 @@ export default function ClaimPregenWalletClient({
   const [recoverySecret, setRecoverySecret] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
   const [isClaimed, setIsClaimed] = useState(wallet?.claimed ?? false);
+  const [showAuthComponent, setShowAuthComponent] = useState(false);
   const claimApiUrl = "/claim-pregen-wallet/api";
   const para = useClient();
-  const { openModal } = useModal();
-  const { data: account } = useAccount();
   const { logoutAsync, isPending: isLoggingOut } = useLogout();
 
   useEffect(() => {
@@ -62,33 +59,20 @@ export default function ClaimPregenWalletClient({
     };
   }, [para]);
 
-  // Keep local isLoggedIn in sync with Para account connection state
-  useEffect(() => {
-    if (account?.isConnected === true) setIsLoggedIn(true);
-    if (account?.isConnected === false) setIsLoggedIn(false);
-  }, [account?.isConnected]);
+  const handleAuthSuccess = async (authData: {
+    isLoggedIn: boolean;
+    walletAddress: string;
+    allWallets: any[];
+    selectedWalletId: string;
+  }) => {
+    setIsLoggedIn(authData.isLoggedIn);
+    setShowAuthComponent(false);
+    setClaimStatus("idle");
+    setClaimMessage("Logged in with Para. You can now claim the wallet.");
 
-  const handleLogin = async () => {
-    setClaimStatus("loading");
-    setClaimMessage("");
-    try {
-      if (!para) throw new Error("Para client not ready");
-      const authed = await para.isFullyLoggedIn();
-      if (!authed) {
-        // Open Para's built-in auth modal instead of email-specific login URL
-        openModal();
-        setClaimStatus("idle");
-        setClaimMessage(
-          "Please complete Para authentication in the modal, then try again.",
-        );
-        return;
-      }
-      if (!authed)
-        throw new Error("Login failed. Please complete Para authentication.");
-
-      // Post-login email check: show mismatch error AFTER successful login
-      setIsLoggedIn(true);
-      if (wallet?.email) {
+    // Verify email matches if wallet has an email
+    if (wallet?.email && para) {
+      try {
         const authedEmail = await para.getEmail();
         if (!authedEmail) {
           setClaimStatus("error");
@@ -102,17 +86,17 @@ export default function ClaimPregenWalletClient({
           );
           return;
         }
+      } catch (err) {
+        setClaimStatus("error");
+        setClaimMessage(
+          err instanceof Error ? err.message : "Failed to verify email",
+        );
       }
-
-      setClaimStatus("idle");
-      setClaimMessage("Logged in with Para. You can now claim the wallet.");
-    } catch (err) {
-      setIsLoggedIn(false);
-      setClaimStatus("error");
-      setClaimMessage(
-        err instanceof Error ? err.message : "Failed to login with Para",
-      );
     }
+  };
+
+  const handleLogin = () => {
+    setShowAuthComponent(true);
   };
 
   const handleClaim = async () => {
@@ -131,11 +115,11 @@ export default function ClaimPregenWalletClient({
       // Ensure user is logged in with Para first (double-check)
       const isAuthenticated = await para.isFullyLoggedIn();
       if (!isAuthenticated) {
-        // Trigger the Para modal and stop the claim until the user finishes login
-        openModal();
+        // Show auth component and stop the claim until the user finishes login
+        setShowAuthComponent(true);
         setClaimStatus("idle");
         setClaimMessage(
-          "Please complete Para login in the modal to continue claiming.",
+          "Please complete Para login to continue claiming.",
         );
         return;
       }
@@ -285,7 +269,17 @@ export default function ClaimPregenWalletClient({
             />
           </div>
 
-          {isLoggedIn !== true && (
+          {showAuthComponent && (
+            <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950">
+              <ParaAuthComponent
+                onAuthSuccess={handleAuthSuccess}
+                onLogout={() => setIsLoggedIn(false)}
+                showWalletDetails={false}
+              />
+            </div>
+          )}
+
+          {isLoggedIn !== true && !showAuthComponent && (
             <button
               type="button"
               onClick={handleLogin}
@@ -367,8 +361,6 @@ export default function ClaimPregenWalletClient({
           </p>
         </div>
       </main>
-      {/* Para authentication modal */}
-      <ParaModal appName="Vibekit" />
     </div>
   );
 }

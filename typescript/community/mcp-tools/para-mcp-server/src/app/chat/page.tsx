@@ -1,15 +1,11 @@
 "use client";
 
-import "@rainbow-me/rainbowkit/styles.css";
-import "@getpara/react-sdk/styles.css";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount, useBalance, useDisconnect, useChainId } from "wagmi";
-import { arbitrum, arbitrumSepolia, base, baseSepolia } from "wagmi/chains";
-import { useState, useMemo, useEffect, useRef } from "react";
-import { useMcp } from "use-mcp/react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from "ai";
+import { useMcp } from "use-mcp/react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
+import { DynamicToolWithApprovalView } from "@/components";
 
 // Type for JSON Schema properties
 type JsonSchemaProperty = {
@@ -27,29 +23,31 @@ type JsonSchema = {
   required?: string[];
   additionalProperties?: boolean;
 };
- 
 
-const CHAINS = [arbitrum, arbitrumSepolia, base, baseSepolia];
- 
+function ChatPage() {
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("darkMode");
+      return saved === "true";
+    }
+    return false;
+  });
 
+  // Handle dark mode changes
+  useEffect(() => {
+    const html = document.documentElement;
+    if (isDarkMode) {
+      html.classList.add("dark");
+      localStorage.setItem("darkMode", "true");
+    } else {
+      html.classList.remove("dark");
+      localStorage.setItem("darkMode", "false");
+    }
+  }, [isDarkMode]);
 
- 
-
- 
-
-function ChatInner() {
-  const { address, isConnected } = useAccount();
-  const chainId = useChainId();
-  const { disconnect } = useDisconnect();
-
-  const [selectedChainId, setSelectedChainId] = useState<number>(42161);
-  const [showToolsList, setShowToolsList] = useState<boolean>(false);
-  const [toolFormValues, setToolFormValues] = useState<
-    Record<string, Record<string, unknown>>
-  >({});
-  const [toolCallResults, setToolCallResults] = useState<
-    Record<string, { loading: boolean; result?: unknown; error?: string }>
-  >({});
+  const toggleDarkMode = () => {
+    setIsDarkMode((prev) => !prev);
+  };
 
   // Get MCP server URL from current domain + /mcp
   const mcpUrl = useMemo(() => {
@@ -67,44 +65,21 @@ function ChatInner() {
         "X-MCP-URL": mcpUrl,
       }),
     }),
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
   });
 
   const chatMessages = chatHelpers.messages;
   const chatStatus = chatHelpers.status;
   const chatError = chatHelpers.error;
-  const isChatLoading = chatStatus !== 'ready';
+  const isChatLoading = chatStatus !== "ready";
 
   // Access sendMessage from chatHelpers
   const sendChatMessage = (chatHelpers as any).sendMessage;
+  const addToolApprovalResponse = (chatHelpers as any).addToolApprovalResponse;
 
   // Local input state to ensure typing works regardless of hook internals
   const [localChatInput, setLocalChatInput] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
-
-  // Dark mode state - initialize from localStorage or default to false
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("darkMode");
-      return saved === "true";
-    }
-    return false;
-  });
-
-  // Handle dark mode changes - both on mount and when isDarkMode changes
-  useEffect(() => {
-    const html = document.documentElement;
-    if (isDarkMode) {
-      html.classList.add("dark");
-      localStorage.setItem("darkMode", "true");
-    } else {
-      html.classList.remove("dark");
-      localStorage.setItem("darkMode", "false");
-    }
-  }, [isDarkMode]);
-
-  const toggleDarkMode = () => {
-    setIsDarkMode((prev) => !prev);
-  };
 
   // Connect to MCP server
   const {
@@ -119,33 +94,17 @@ function ChatInner() {
     callTool,
   } = useMcp({
     url: mcpUrl,
-    clientName: "Para MCP Server Debug",
+    clientName: "Para MCP Server Chat",
     autoReconnect: true,
   });
 
-  // Get balance for the selected chain
-  const {
-    data: balance,
-    isLoading: isLoadingBalance,
-    refetch,
-  } = useBalance({
-    address,
-    chainId: selectedChainId,
-  });
-
-  const handleRefreshBalance = async () => {
-    await refetch();
-  };
-
-  // Format balance from wei to ETH
-  const formatBalance = (balanceWei: bigint | undefined) => {
-    if (!balanceWei) return "0";
-    const ethBalance = Number(balanceWei) / 1e18;
-    return ethBalance.toFixed(6);
-  };
-
-  const selectedChain =
-    CHAINS.find((c) => c.id === selectedChainId) || CHAINS[0];
+  const [showToolsList, setShowToolsList] = useState<boolean>(false);
+  const [toolFormValues, setToolFormValues] = useState<
+    Record<string, Record<string, unknown>>
+  >({});
+  const [toolCallResults, setToolCallResults] = useState<
+    Record<string, { loading: boolean; result?: unknown; error?: string }>
+  >({});
 
   // Scroll chat to bottom when new messages arrive
   useEffect(() => {
@@ -351,133 +310,52 @@ function ChatInner() {
   };
 
   return (
-    <div className="max-w-xl mx-auto p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-          Debug
-        </h1>
-        <button
-          type="button"
-          onClick={toggleDarkMode}
-          className="px-3 py-2 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-          aria-label="Toggle dark mode"
-        >
-          {isDarkMode ? (
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-              />
-            </svg>
-          ) : (
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-              />
-            </svg>
-          )}
-        </button>
-      </div>
-
-      {!isConnected ? (
-        <div className="flex justify-center">
-          <ConnectButton />
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex justify-end">
-            <ConnectButton />
-          </div>
-
-          <div className="space-y-2">
-            <div className="text-sm text-gray-600 dark:text-gray-200">
-              Connected address:
-            </div>
-            <div className="font-mono break-all text-gray-900 dark:text-gray-100 text-sm">
-              {address || "Loading..."}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="text-sm text-gray-600 dark:text-gray-200">
-              Current Chain ID:
-            </div>
-            <div className="font-mono text-gray-900 dark:text-gray-100 text-sm">
-              {chainId}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="text-sm text-gray-600 dark:text-gray-200">
-              Chain:
-            </div>
-            <select
-              value={selectedChainId}
-              onChange={(e) => setSelectedChainId(Number(e.target.value))}
-              className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {CHAINS.map((chain) => (
-                <option key={chain.id} value={chain.id}>
-                  {chain.name} ({chain.id})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-600 dark:text-gray-200">
-                Balance on {selectedChain.name}:
-              </div>
-              <button
-                type="button"
-                onClick={handleRefreshBalance}
-                disabled={isLoadingBalance}
-                className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoadingBalance ? "Refreshing..." : "Refresh"}
-              </button>
-            </div>
-            <div className="font-mono text-lg font-semibold text-gray-900 dark:text-gray-100">
-              {isLoadingBalance
-                ? "Loading..."
-                : `${formatBalance(balance?.value)} ETH`}
-            </div>
-          </div>
-
+    <div className="min-h-screen bg-white dark:bg-gray-900">
+      <div className="max-w-4xl mx-auto p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+            MCP Chat & Tools
+          </h1>
           <button
             type="button"
-            className="w-full px-4 py-2 rounded bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50"
-            onClick={() => disconnect()}
+            onClick={toggleDarkMode}
+            className="px-3 py-2 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+            aria-label="Toggle dark mode"
           >
-            Disconnect
+            {isDarkMode ? (
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+                />
+              </svg>
+            ) : (
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+                />
+              </svg>
+            )}
           </button>
         </div>
-      )}
-
-      {/* MCP Tools List - Always visible regardless of wallet connection */}
-      <div className="mt-8 pt-8 border-t border-gray-300 dark:border-gray-600 space-y-4">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-          MCP Server Tools
-        </h2>
 
         {/* MCP Connection Status */}
-        <div className="space-y-2">
+        <div className="space-y-2 p-4 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800">
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-600 dark:text-gray-200">
               MCP Server Status:
@@ -672,152 +550,194 @@ function ChatInner() {
             Connecting to MCP server...
           </div>
         )}
-      </div>
 
-      {/* Chatbox */}
-      <div className="mt-8 pt-8 border-t border-gray-300 dark:border-gray-600">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
-          MCP Chat
-        </h2>
-        <div className="flex flex-col h-[500px] border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800">
-          {/* Messages area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {chatMessages.length === 0 ? (
-              <div className="text-center text-gray-500 dark:text-gray-400 mt-8">
-                <p className="text-sm">
-                  Start a conversation with the AI assistant
-                </p>
-                <p className="text-xs mt-2">
-                  Ask about available MCP tools or request to call a specific
-                  tool
-                </p>
-              </div>
-            ) : (
-              chatMessages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-                >
+        {/* Chatbox */}
+        <div className="mt-8 pt-8 border-t border-gray-300 dark:border-gray-600">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            MCP Chat
+          </h2>
+          <div className="flex flex-col h-[500px] border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800">
+            {/* Messages area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {chatMessages.length === 0 ? (
+                <div className="text-center text-gray-500 dark:text-gray-400 mt-8">
+                  <p className="text-sm">
+                    Start a conversation with the AI assistant
+                  </p>
+                  <p className="text-xs mt-2">
+                    Ask about available MCP tools or request to call a specific
+                    tool
+                  </p>
+                </div>
+              ) : (
+                chatMessages.map((message) => (
                   <div
-                    className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                      message.role === "user"
-                        ? "bg-orange-600 text-white"
-                        : "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    }`}
+                    key={message.id}
+                    className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                   >
-                    <div className="text-sm whitespace-pre-wrap break-words">
-                      {message.parts.map((part, index) => {
-                        if (part.type === "text") {
-                          return (
-                            <ReactMarkdown
-                              key={index}
-                              className="markdown-content"
-                              components={{
-                                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                                h1: ({ children }) => <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0">{children}</h1>,
-                                h2: ({ children }) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h2>,
-                                h3: ({ children }) => <h3 className="text-sm font-bold mb-1 mt-2 first:mt-0">{children}</h3>,
-                                ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                                ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                                li: ({ children }) => <li className="ml-2">{children}</li>,
-                                code: ({ children, className, ...props }) => {
-                                  const inline = (props as { inline?: boolean }).inline;
-                                  if (inline) {
+                    <div
+                      className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                        message.role === "user"
+                          ? "bg-orange-600 text-white"
+                          : "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      }`}
+                    >
+                      <div className="text-sm whitespace-pre-wrap break-words">
+                        {message.parts.map((part, index) => {
+                          if (part.type === "text") {
+                            return (
+                              <ReactMarkdown
+                                key={index}
+                                className="markdown-content"
+                                components={{
+                                  p: ({ children }) => (
+                                    <p className="mb-2 last:mb-0">{children}</p>
+                                  ),
+                                  h1: ({ children }) => (
+                                    <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0">
+                                      {children}
+                                    </h1>
+                                  ),
+                                  h2: ({ children }) => (
+                                    <h2 className="text-base font-bold mb-2 mt-3 first:mt-0">
+                                      {children}
+                                    </h2>
+                                  ),
+                                  h3: ({ children }) => (
+                                    <h3 className="text-sm font-bold mb-1 mt-2 first:mt-0">
+                                      {children}
+                                    </h3>
+                                  ),
+                                  ul: ({ children }) => (
+                                    <ul className="list-disc list-inside mb-2 space-y-1">
+                                      {children}
+                                    </ul>
+                                  ),
+                                  ol: ({ children }) => (
+                                    <ol className="list-decimal list-inside mb-2 space-y-1">
+                                      {children}
+                                    </ol>
+                                  ),
+                                  li: ({ children }) => (
+                                    <li className="ml-2">{children}</li>
+                                  ),
+                                  code: ({ children, className, ...props }) => {
+                                    const inline = (props as { inline?: boolean })
+                                      .inline;
+                                    if (inline) {
+                                      return (
+                                        <code className="bg-gray-200 dark:bg-gray-800 px-1 py-0.5 rounded text-xs font-mono">
+                                          {children}
+                                        </code>
+                                      );
+                                    }
                                     return (
-                                      <code className="bg-gray-200 dark:bg-gray-800 px-1 py-0.5 rounded text-xs font-mono">
+                                      <code className="block bg-gray-200 dark:bg-gray-800 p-2 rounded text-xs font-mono overflow-x-auto mb-2">
                                         {children}
                                       </code>
                                     );
-                                  }
-                                  return (
-                                    <code className="block bg-gray-200 dark:bg-gray-800 p-2 rounded text-xs font-mono overflow-x-auto mb-2">
+                                  },
+                                  pre: ({ children }) => (
+                                    <pre className="mb-2">{children}</pre>
+                                  ),
+                                  blockquote: ({ children }) => (
+                                    <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-3 italic my-2">
                                       {children}
-                                    </code>
-                                  );
-                                },
-                                pre: ({ children }) => <pre className="mb-2">{children}</pre>,
-                                blockquote: ({ children }) => (
-                                  <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-3 italic my-2">
-                                    {children}
-                                  </blockquote>
-                                ),
-                                a: ({ children, href }) => (
-                                  <a
-                                    href={href}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="underline hover:no-underline"
-                                  >
-                                    {children}
-                                  </a>
-                                ),
-                                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                                em: ({ children }) => <em className="italic">{children}</em>,
-                              }}
-                            >
-                              {part.text}
-                            </ReactMarkdown>
-                          );
-                        }
-                        return null;
-                      })}
+                                    </blockquote>
+                                  ),
+                                  a: ({ children, href }) => (
+                                    <a
+                                      href={href}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="underline hover:no-underline"
+                                    >
+                                      {children}
+                                    </a>
+                                  ),
+                                  strong: ({ children }) => (
+                                    <strong className="font-semibold">
+                                      {children}
+                                    </strong>
+                                  ),
+                                  em: ({ children }) => (
+                                    <em className="italic">{children}</em>
+                                  ),
+                                }}
+                              >
+                                {part.text}
+                              </ReactMarkdown>
+                            );
+                          }
+                          if (part.type === "dynamic-tool") {
+                            return (
+                              <DynamicToolWithApprovalView
+                                key={index}
+                                invocation={part}
+                                addToolApprovalResponse={addToolApprovalResponse}
+                              />
+                            );
+                          }
+                          return null;
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              {chatError && (
+                <div className="flex justify-start">
+                  <div className="bg-red-100 dark:bg-red-900/20 rounded-lg px-4 py-2 max-w-[80%]">
+                    <div className="text-sm text-red-700 dark:text-red-400">
+                      Error: {chatError.message || "Failed to send message"}
                     </div>
                   </div>
                 </div>
-              ))
-            )}
-            {chatError && (
-              <div className="flex justify-start">
-                <div className="bg-red-100 dark:bg-red-900/20 rounded-lg px-4 py-2 max-w-[80%]">
-                  <div className="text-sm text-red-700 dark:text-red-400">
-                    Error: {chatError.message || "Failed to send message"}
+              )}
+              {isChatLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-100 dark:bg-gray-700 rounded-lg px-4 py-2">
+                    <div className="text-sm text-gray-600 dark:text-gray-300">
+                      Thinking...
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-            {isChatLoading && (
-              <div className="flex justify-start">
-                <div className="bg-gray-100 dark:bg-gray-700 rounded-lg px-4 py-2">
-                  <div className="text-sm text-gray-600 dark:text-gray-300">
-                    Thinking...
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
 
-          {/* Input area */}
-          <div className="border-t border-gray-300 dark:border-gray-600 p-4">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!localChatInput.trim() || isChatLoading) return;
+            {/* Input area */}
+            <div className="border-t border-gray-300 dark:border-gray-600 p-4">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!localChatInput.trim() || isChatLoading) return;
 
-                // Use sendMessage with text format (AI SDK v5+)
-                if (sendChatMessage) {
-                  sendChatMessage({ text: localChatInput });
-                  setLocalChatInput("");
-                }
-              }}
-              className="flex gap-2"
-            >
-              <input
-                type="text"
-                value={localChatInput}
-                onChange={(e) => setLocalChatInput(e.target.value)}
-                placeholder="Type a message or ask about MCP tools..."
-                disabled={isChatLoading}
-                className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-              <button
-                type="submit"
-                disabled={isChatLoading || !localChatInput.trim()}
-                className="px-6 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  // Use sendMessage with text format (AI SDK v5+)
+                  if (sendChatMessage) {
+                    sendChatMessage({ text: localChatInput });
+                    setLocalChatInput("");
+                  }
+                }}
+                className="flex gap-2"
               >
-                {isChatLoading ? "Sending..." : "Send"}
-              </button>
-            </form>
+                <input
+                  type="text"
+                  value={localChatInput}
+                  onChange={(e) => setLocalChatInput(e.target.value)}
+                  placeholder="Type a message or ask about MCP tools..."
+                  disabled={isChatLoading}
+                  className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+                <button
+                  type="submit"
+                  disabled={isChatLoading || !localChatInput.trim()}
+                  className="px-6 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isChatLoading ? "Sending..." : "Send"}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       </div>
@@ -825,8 +745,4 @@ function ChatInner() {
   );
 }
 
-export default function ChatPage() {
-  return (
-    <ChatInner />
-  );
-}
+export default ChatPage;

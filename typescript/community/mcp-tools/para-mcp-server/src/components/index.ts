@@ -1,5 +1,5 @@
 /**
- * Para-specific UI components for the Para debug page
+ * Para-specific UI components
  *
  * These components use the Para SDK directly and handle all wallet
  * interactions internally.
