@@ -23,6 +23,8 @@ export default function CustomAuthPage() {
   const [message, setMessage] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [walletAddress, setWalletAddress] = useState<string>("");
+  const [allWallets, setAllWallets] = useState<any[]>([]);
+  const [selectedWalletId, setSelectedWalletId] = useState<string>("");
   const [email, setEmail] = useState<string>("");
   const [requiresOtp, setRequiresOtp] = useState<boolean>(false);
   const [verificationCode, setVerificationCode] = useState<string>("");
@@ -255,6 +257,7 @@ export default function CustomAuthPage() {
       setAuthStep("authenticated");
       setStatus("idle");
       setMessage("Successfully logged in with Para!");
+      await fetchAndSetWallets();
     } catch (err) {
       setStatus("error");
       setMessage(
@@ -325,6 +328,7 @@ export default function CustomAuthPage() {
       setMessage("Signup complete!");
       setRequiresOtp(false);
       setVerificationCode("");
+      await fetchAndSetWallets();
     } catch (err) {
       setStatus("error");
       setMessage(
@@ -353,9 +357,45 @@ export default function CustomAuthPage() {
       setIsLoggedIn(false);
       setAuthStep("select");
       setWalletAddress("");
+      setAllWallets([]);
+      setSelectedWalletId("");
       setMessage("");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Failed to logout");
+    }
+  };
+
+  const fetchAndSetWallets = async () => {
+    try {
+      if (!para) {
+        console.log("[fetchAndSetWallets] Para client not ready");
+        return;
+      }
+      const wallets = Object.values(await para.getWallets());
+      console.log("[fetchAndSetWallets] Fetched wallets:", wallets);
+      console.log("[fetchAndSetWallets] Wallets JSON:", JSON.stringify(wallets, null, 2));
+      setAllWallets(wallets as any[]);
+      if (wallets.length > 0) {
+        const firstWallet = wallets[0] as any;
+        const walletId = firstWallet.id || firstWallet.address || "";
+        const walletAddr = firstWallet.address as string;
+        console.log("[fetchAndSetWallets] Setting wallet:", { walletId, walletAddr });
+        console.log("[fetchAndSetWallets] First wallet JSON:", JSON.stringify(firstWallet, null, 2));
+        setSelectedWalletId(walletId);
+        setWalletAddress(walletAddr);
+      } else {
+        console.log("[fetchAndSetWallets] No wallets found");
+      }
+    } catch (err) {
+      console.error("[fetchAndSetWallets] Failed to fetch wallets:", err);
+    }
+  };
+
+  const handleWalletChange = (walletId: string) => {
+    const selected = allWallets.find((w: any) => w.id === walletId || w.address === walletId);
+    if (selected) {
+      setSelectedWalletId(walletId);
+      setWalletAddress(selected.address as string);
     }
   };
 
@@ -547,17 +587,74 @@ export default function CustomAuthPage() {
               </div>
             </div>
 
-            {wallet && walletAddress && (
-              <div>
-                <h3 className="mb-3 text-lg font-semibold text-gray-900">
-                  Your Wallet
+            {allWallets.length > 0 ? (
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Your Wallets
                 </h3>
-                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                  <div className="text-sm text-gray-600">EVM Wallet</div>
-                  <div className="mt-1 font-mono text-sm text-gray-900">
-                    {`${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}
+                <select
+                  value={selectedWalletId}
+                  onChange={(e) => handleWalletChange(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                >
+                  {allWallets.map(({ id, address, type }: any) => {
+                    if (!address) return null;
+                    return (
+                      <option key={id || address} value={id || address}>
+                        {type || "EVM"} - {`${address.slice(0, 6)}...${address.slice(-4)}`}
+                      </option>
+                    );
+                  })}
+                </select>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+                  <div>
+                    <div className="text-sm text-gray-600">Address</div>
+                    <div className="mt-1 font-mono text-sm text-gray-900">
+                      {walletAddress && `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}
+                    </div>
                   </div>
+                  {allWallets.length > 0 && (() => {
+                    const selected = allWallets.find((w: any) => w.id === selectedWalletId || w.address === selectedWalletId);
+                    return selected ? (
+                      <>
+                        <div>
+                          <div className="text-sm text-gray-600">ID</div>
+                          <div className="mt-1 font-mono text-xs text-gray-900 break-all">
+                            {selected.id}
+                          </div>
+                        </div>
+                        {selected.userId && (
+                          <div>
+                            <div className="text-sm text-gray-600">User ID</div>
+                            <div className="mt-1 font-mono text-xs text-gray-900 break-all">
+                              {selected.userId}
+                            </div>
+                          </div>
+                        )}
+                        {selected.isPregen !== undefined && (
+                          <div>
+                            <div className="text-sm text-gray-600">Pre-generated</div>
+                            <div className="mt-1 text-sm text-gray-900">
+                              {selected.isPregen ? "Yes" : "No"}
+                            </div>
+                          </div>
+                        )}
+                        {selected.type && (
+                          <div>
+                            <div className="text-sm text-gray-600">Type</div>
+                            <div className="mt-1 text-sm text-gray-900">
+                              {selected.type}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : null;
+                  })()}
                 </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-gray-200 bg-yellow-50 p-4">
+                <div className="text-sm text-yellow-800">Loading wallet information...</div>
               </div>
             )}
 
