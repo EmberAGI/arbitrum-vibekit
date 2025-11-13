@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('environment wiring', () => {
   it('exposes provider keys from the Node --env-file flag', () => {
-    expect(process.env.API_KEY).toBeDefined();
-    expect(process.env.CUSTOM_RPC_URL).toBeDefined();
+    expect(process.env['API_KEY']).toBeDefined();
+    expect(process.env['CUSTOM_RPC_URL']).toBeDefined();
   });
 });
