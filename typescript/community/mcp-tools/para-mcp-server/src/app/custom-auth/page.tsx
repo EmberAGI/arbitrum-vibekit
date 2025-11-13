@@ -27,6 +27,126 @@ export default function CustomAuthPage() {
   const [requiresOtp, setRequiresOtp] = useState<boolean>(false);
   const [verificationCode, setVerificationCode] = useState<string>("");
   const [pendingAuthUrl, setPendingAuthUrl] = useState<string | null>(null);
+  const [availableProviders, setAvailableProviders] = useState<
+    Array<{ name: string; provider: any; icon?: string; type: "ethereum" }>
+  >([]);
+
+  // Detect Ethereum (EIP-6963) providers
+  // Also checks parent and top windows for iframe support
+  useEffect(() => {
+    const providers: Array<{ name: string; provider: any; icon?: string; type: "ethereum" }> = [];
+    const seenProviders = new Set<string>();
+
+    // Handle Ethereum EIP-6963 provider announcements
+    const handleAnnounceProvider = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { info, provider } = customEvent.detail || {};
+      if (info && provider) {
+        const providerKey = `ethereum:${info.name}`;
+        if (!seenProviders.has(providerKey)) {
+          seenProviders.add(providerKey);
+          providers.push({
+            name: info.name,
+            provider,
+            icon: info.icon,
+            type: "ethereum",
+          });
+          setAvailableProviders([...providers]);
+        }
+      }
+    };
+
+    // Detect Ethereum providers via window.ethereum (fallback for iframes)
+    // EIP-6963 events don't cross iframe boundaries, so check window.ethereum directly
+    const detectEthereumProviders = (targetWindow: Window) => {
+      try {
+        const w = targetWindow as unknown as { ethereum?: any };
+        if (w?.ethereum) {
+          // Try to get wallet name from common properties
+          // Check specific properties first, then fallback to generic detection
+          let walletName = "Ethereum Wallet";
+          
+          // Check for specific wallet identifiers
+          if (w.ethereum.isRainbow) {
+            walletName = "Rainbow";
+          } else if (w.ethereum.isBraveWallet) {
+            walletName = "Brave Wallet";
+          } else if (w.ethereum.isMetaMask && !w.ethereum.isBraveWallet) {
+            // MetaMask, but not Brave (Brave sets isMetaMask=true for compatibility)
+            walletName = "MetaMask";
+          } else if (w.ethereum.isRabby) {
+            walletName = "Rabby";
+          } else if (w.ethereum.isCoinbaseWallet) {
+            walletName = "Coinbase Wallet";
+          } else if (w.ethereum.isTokenPocket) {
+            walletName = "TokenPocket";
+          } else if (w.ethereum.isTrust) {
+            walletName = "Trust Wallet";
+          } else if (w.ethereum.isMetaMask) {
+            // Fallback: if only isMetaMask is true, it's MetaMask
+            walletName = "MetaMask";
+          }
+          
+          const providerKey = `ethereum:${walletName}`;
+          if (!seenProviders.has(providerKey)) {
+            seenProviders.add(providerKey);
+            providers.push({
+              name: walletName,
+              provider: w.ethereum,
+              type: "ethereum",
+            });
+            setAvailableProviders([...providers]);
+          }
+        }
+      } catch {
+        // Cross-origin access blocked or provider unavailable
+      }
+    };
+
+    // Request Ethereum providers from current window using EIP-6963
+    // For parent/top windows, only use direct detection (EIP-6963 doesn't work cross-window)
+    const currentEthListener = (() => {
+      try {
+        const listener = (event: Event) => handleAnnounceProvider(event);
+        window.addEventListener("eip6963:announceProvider", listener);
+        // Dispatch EIP-6963 RequestProviderEvent (plain Event, not CustomEvent)
+        window.dispatchEvent(new Event("eip6963:requestProvider"));
+        return listener;
+      } catch {
+        return null;
+      }
+    })();
+    
+    // Also use direct detection for current window (fallback)
+    detectEthereumProviders(window);
+
+    // For parent/top windows, only use direct detection
+    // (EIP-6963 events don't work reliably across window contexts)
+    try {
+      if (window.parent && window.parent !== window) {
+        detectEthereumProviders(window.parent);
+      }
+    } catch {
+      // Cross-origin access blocked, continue
+    }
+
+    try {
+      if (window.top && window.top !== window) {
+        detectEthereumProviders(window.top);
+      }
+    } catch {
+      // Cross-origin access blocked, continue
+    }
+
+    return () => {
+      if (currentEthListener) {
+        window.removeEventListener("eip6963:announceProvider", currentEthListener);
+      }
+    };
+  }, []);
+
+  // Filter connectors to only show Para connector (external wallets handled via EIP-6963)
+  const externalWalletConnectors = availableProviders;
 
   // Helper function to request parent to open auth URL via postMessage
   const requestParentOpenPopup = (url: string, target: string): boolean => {
@@ -334,29 +454,27 @@ export default function CustomAuthPage() {
   };
 
   // External Wallet Authentication Flow
-  const handleExternalWalletConnect = async (connectorId: string) => {
+  const handleExternalWalletConnect = async (providerName: string) => {
     setStatus("loading");
     setMessage("Connecting wallet...");
 
     try {
-      const connector = connectors.find((c) => c.id === connectorId);
-      if (!connector) throw new Error("Connector not found");
-
-      // Connect to external wallet (Rainbow, MetaMask, etc.)
-      connect(
-        { connector },
-        {
-          onSuccess: () => {
-            setMessage(
-              "Wallet connected! Authentication with Para will begin automatically...",
-            );
-          },
-          onError: (err) => {
-            setStatus("error");
-            setMessage(err.message || "Failed to connect wallet");
-          },
-        },
+      const providerDetail = availableProviders.find(
+        (p) => p.name === providerName
       );
+      if (!providerDetail) throw new Error("Provider not found");
+      const provider = providerDetail.provider;
+
+      // Connect to external wallet using EIP-1193 provider
+      const accounts = await provider.request({ method: "eth_requestAccounts" });
+      if (accounts && accounts.length > 0) {
+        setWalletAddress(accounts[0]);
+        setAuthStep("authenticated");
+        setStatus("idle");
+        setMessage(`Connected to ${providerName}`);
+      } else {
+        throw new Error("No accounts returned from provider");
+      }
     } catch (err) {
       setStatus("error");
       setMessage(
@@ -520,46 +638,64 @@ export default function CustomAuthPage() {
             </button>
 
             {/* External Wallets Section */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="h-px flex-1 bg-gray-300"></div>
-                <span className="text-sm text-gray-500">or connect wallet</span>
-                <div className="h-px flex-1 bg-gray-300"></div>
-              </div>
+            {externalWalletConnectors.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-px flex-1 bg-gray-300"></div>
+                  <span className="text-sm text-gray-500">or connect wallet</span>
+                  <div className="h-px flex-1 bg-gray-300"></div>
+                </div>
 
-              {connectors.map((connector) => (
-                <button
-                  key={connector.id}
-                  type="button"
-                  onClick={() => handleExternalWalletConnect(connector.id)}
-                  disabled={status === "loading"}
-                  className="w-full rounded-lg border-2 border-gray-300 bg-white px-6 py-4 text-left font-medium text-gray-900 transition-all hover:border-teal-500 hover:shadow-md disabled:opacity-50"
-                >
-                  <div className="flex items-center gap-3">
-                    <svg
-                      className="h-6 w-6 text-teal-600"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <title>Wallet connection icon</title>
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
-                      />
-                    </svg>
-                    <div>
-                      <div className="font-semibold">{connector.name}</div>
-                      <div className="text-sm text-gray-500">
-                        Connect with {connector.name}
+                {externalWalletConnectors.map((provider) => (
+                  <button
+                    key={provider.name}
+                    type="button"
+                    onClick={() => handleExternalWalletConnect(provider.name)}
+                    disabled={status === "loading"}
+                    className="w-full rounded-lg border-2 border-gray-300 bg-white px-6 py-4 text-left font-medium text-gray-900 transition-all hover:border-teal-500 hover:shadow-md disabled:opacity-50"
+                  >
+                    <div className="flex items-center gap-3">
+                      {provider.icon ? (
+                        <img
+                          src={provider.icon}
+                          alt={provider.name}
+                          className="h-6 w-6"
+                        />
+                      ) : (
+                        <svg
+                          className="h-6 w-6 text-teal-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <title>Wallet connection icon</title>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
+                          />
+                        </svg>
+                      )}
+                      <div>
+                        <div className="font-semibold">{provider.name}</div>
+                        <div className="text-sm text-gray-500">
+                          Connect with {provider.name}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </button>
-              ))}
-            </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {externalWalletConnectors.length === 0 && (
+              <div className="rounded-lg bg-yellow-50 p-4 text-center">
+                <p className="text-sm text-yellow-800">
+                  No wallet provider detected. Please install MetaMask or another Web3 wallet.
+                </p>
+              </div>
+            )}
           </div>
         )}
 

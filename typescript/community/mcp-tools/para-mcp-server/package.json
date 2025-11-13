@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "xmcp dev & next dev -p 3012",
+    "dev": "NEXT_SKIP_TYPE_CHECK=1 xmcp dev & next dev -p 3012",
     "build": "xmcp build && next build",
     "start": "next start",
     "lint": "biome check",
@@ -42,7 +42,7 @@
     "viem": "^2.38.5",
     "wagmi": "^2.0.0",
     "x402-axios": "^0.7.0",
-    "xmcp": "^0.3.5",
+    "xmcp": "0.3.6",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -56,11 +56,9 @@
     "tailwindcss": "^4",
     "typescript": "^5"
   },
-  "pnpm": {
-    "overrides": {
-      "@getpara/viem-v2-integration>viem": "$viem",
-      "@getpara/wagmi-v2-integration>viem": "$viem",
-      "@getpara/core-sdk>viem": "$viem"
-    }
+  "overrides": {
+    "@getpara/viem-v2-integration>viem": "$viem",
+    "@getpara/wagmi-v2-integration>viem": "$viem",
+    "@getpara/core-sdk>viem": "$viem"
   }
 }

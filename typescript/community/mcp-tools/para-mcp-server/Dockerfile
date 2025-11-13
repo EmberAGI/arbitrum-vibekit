@@ -23,7 +23,7 @@ RUN pnpm install
 COPY . .
 ENV PATH=/app/node_modules/.bin:$PATH
 # Build xmcp first (generates .xmcp folder), then Next.js
-RUN pnpm dlx xmcp@0.3.5 build && \
+RUN pnpm dlx xmcp@latest build && \
     pnpm build
 
 # 3) Production deps only (lean runtime node_modules)
