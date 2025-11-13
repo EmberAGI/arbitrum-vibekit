@@ -525,6 +525,14 @@ export default function CustomAuthPage() {
     }
   }, [account?.isConnected, isLoggedIn, para]);
 
+  const handleCancelAuth = () => {
+    setStatus("idle");
+    setMessage("");
+    setPendingAuthUrl(null);
+    setRequiresOtp(false);
+    setVerificationCode("");
+  };
+
   const handleLogout = async () => {
     try {
       if (para) {
@@ -603,6 +611,15 @@ export default function CustomAuthPage() {
                 >
                   Verify Code
                 </button>
+                {status !== "loading" && (
+                  <button
+                    type="button"
+                    onClick={handleCancelAuth}
+                    className="w-full rounded-lg border-2 border-gray-300 bg-white px-6 py-2 font-medium text-gray-700 transition-colors hover:border-red-500 hover:text-red-600"
+                  >
+                    Cancel
+                  </button>
+                )}
               </div>
             )}
 
@@ -610,7 +627,7 @@ export default function CustomAuthPage() {
             <button
               type="button"
               onClick={handleParaLogin}
-              disabled={status === "loading"}
+              disabled={status === "loading" || requiresOtp}
               className="w-full rounded-lg bg-teal-600 px-6 py-4 text-left font-medium text-white transition-all hover:bg-teal-700 hover:shadow-lg disabled:opacity-50"
             >
               <div className="flex items-center gap-3">
@@ -637,6 +654,68 @@ export default function CustomAuthPage() {
               </div>
             </button>
 
+            {pendingAuthUrl && (
+              <div className="mt-2 flex items-center gap-3">
+                <a
+                  href={pendingAuthUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 underline"
+                >
+                  Open authentication in a new tab
+                </a>
+              </div>
+            )}
+
+            {/* Status Messages */}
+            {message && (
+              <div
+                className={`mt-4 rounded-lg p-4 ${
+                  status === "error"
+                    ? "bg-red-50 text-red-800"
+                    : "bg-blue-50 text-blue-800"
+                }`}
+              >
+                <div>{message}</div>
+              </div>
+            )}
+
+            {/* Loading Indicator */}
+            {status === "loading" && (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-center gap-2 text-teal-600">
+                  <svg
+                    className="h-5 w-5 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <title>Loading</title>
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  <span className="font-medium">Processing...</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCancelAuth}
+                  className="w-full rounded-lg border-2 border-gray-300 bg-white px-6 py-2 font-medium text-gray-700 transition-colors hover:border-red-500 hover:text-red-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
             {/* External Wallets Section */}
             {externalWalletConnectors.length > 0 && (
               <div className="space-y-3">
@@ -651,7 +730,7 @@ export default function CustomAuthPage() {
                     key={provider.name}
                     type="button"
                     onClick={() => handleExternalWalletConnect(provider.name)}
-                    disabled={status === "loading"}
+                    disabled={status === "loading" || requiresOtp}
                     className="w-full rounded-lg border-2 border-gray-300 bg-white px-6 py-4 text-left font-medium text-gray-900 transition-all hover:border-teal-500 hover:shadow-md disabled:opacity-50"
                   >
                     <div className="flex items-center gap-3">
@@ -748,64 +827,6 @@ export default function CustomAuthPage() {
           </div>
         )}
 
-        {/* Status Messages */}
-        {message && (
-          <div
-            className={`mt-4 rounded-lg p-4 ${
-              status === "error"
-                ? "bg-red-50 text-red-800"
-                : "bg-blue-50 text-blue-800"
-            }`}
-          >
-            <div>{message}</div>
-            {pendingAuthUrl && (
-              <div className="mt-2 flex items-center gap-3">
-                <a
-                  href={pendingAuthUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 underline"
-                >
-                  Open authentication in a new tab
-                </a>
-                <button
-                  type="button"
-                  onClick={() => window.location.assign(pendingAuthUrl)}
-                  className="text-teal-600 underline"
-                >
-                  Open in this tab
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Loading Indicator */}
-        {status === "loading" && (
-          <div className="mt-4 flex items-center justify-center gap-2 text-teal-600">
-            <svg
-              className="h-5 w-5 animate-spin"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <title>Loading</title>
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              ></circle>
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              ></path>
-            </svg>
-            <span className="font-medium">Processing...</span>
-          </div>
-        )}
       </div>
     </div>
   );
