@@ -48,23 +48,66 @@ if (changedFiles.length === 0) {
   process.exit(0);
 }
 
-async function generateDocs(diff, file) {
+async function generateDocs(diff, file, existingContent = '') {
   const prompt = `
 You are updating developer documentation for Ember AI Vibekit, a TypeScript toolkit for building DeFi agents.
 
-Given this diff, generate Markdown documentation suitable for inclusion in that file's README.
-- Summarize what changed, what new APIs or functions were added.
-- Provide clear explanations and usage examples.
-- Be concise and technical.
-- Wrap your output with clear section markers like:
-  <!-- AUTO-DOC: filename.ts START -->
-  ...content...
-  <!-- AUTO-DOC: filename.ts END -->
+Given this code diff and existing documentation, analyze what sections need to be updated and provide SPECIFIC UPDATES to existing content.
+
+CRITICAL RULES:
+1. ONLY update content that is DIRECTLY RELATED to the code changes in the diff
+2. DO NOT change titles, headings, or formatting unless they specifically mention removed/changed functionality
+3. BE CONSERVATIVE - if something is not directly affected by the code changes, leave it unchanged
+4. Focus ONLY on content that mentions the specific functionality being added/removed/changed
+
+VERIFICATION PROCESS:
+Before providing updates, you should first identify what terms/functionality are being removed or changed from the diff, then search for ALL occurrences of those terms in the documentation.
+
+For example, if the diff shows removal of "simple script workflows", you should look for:
+- "simple-script"
+- "simple script"
+- "Simple Script"
+- ".js files"
+- "without package.json"
+- Any directory structures showing simple-script examples
+
+SPECIFIC INSTRUCTIONS:
+- If code removes functionality: Find and update ALL mentions of that functionality throughout the entire document
+- If code adds functionality: Only update sections that would logically include the new feature
+- Preserve all existing formatting, structure, and unrelated content
+- Do not change section titles unless they specifically reference removed functionality
+- Use exact text matching - provide the complete text block that needs to be replaced
 
 Code diff:
 \`\`\`diff
 ${diff}
 \`\`\`
+
+${existingContent ? `Existing documentation content:
+\`\`\`markdown
+${existingContent}
+\`\`\`` : ''}
+
+STEP 1: First, identify what functionality is being removed/changed from the diff.
+STEP 2: Search through the documentation for ALL references to that functionality.
+STEP 3: Provide exact text replacements for each occurrence found.
+
+Provide your response as a JSON object with this structure:
+{
+  "analysis": "What functionality is being removed/changed based on the diff",
+  "search_terms": ["list", "of", "terms", "to", "search", "for"],
+  "updates": [
+    {
+      "section": "exact text to find and replace (including line breaks if multiline)",
+      "action": "update" or "add" or "remove",
+      "content": "new content to replace it with",
+      "reason": "why this specific text needs to change"
+    }
+  ],
+  "summary": "brief summary of all changes made"
+}
+
+IMPORTANT: Use "exact text to find and replace" - provide the complete text that needs to be changed, including proper line breaks for multiline content.
 `;
 
   try {
@@ -174,6 +217,64 @@ function findOrCreateDocumentationFile(filePath) {
   return docPath;
 }
 
+function applyDocumentationUpdates(readmePath, updatesJson) {
+  let content = '';
+  if (existsSync(readmePath)) {
+    content = readFileSync(readmePath, 'utf8');
+  }
+
+  try {
+    const updates = JSON.parse(updatesJson);
+
+    if (!updates.updates || !Array.isArray(updates.updates)) {
+      console.warn('Invalid updates format, falling back to simple append');
+      return insertOrUpdateAutoDocSection(readmePath, 'fallback', updatesJson);
+    }
+
+    // Show analysis and search terms
+    if (updates.analysis) {
+      console.log(`🔍 Analysis: ${updates.analysis}`);
+    }
+    if (updates.search_terms && updates.search_terms.length > 0) {
+      console.log(`🔎 Search terms: ${updates.search_terms.join(', ')}`);
+    }
+
+    console.log(`📝 Applying ${updates.updates.length} documentation updates...`);
+
+    for (const update of updates.updates) {
+      console.log(`   - ${update.action}: "${update.section.substring(0, 50)}..." (${update.reason})`);
+
+      if (update.action === 'update') {
+        // Exact text replacement
+        if (content.includes(update.section)) {
+          content = content.replace(update.section, update.content);
+          console.log(`     ✅ Found and updated exact text`);
+        } else {
+          console.warn(`   ⚠️  Could not find exact text: "${update.section.substring(0, 100)}..."`);
+        }
+      } else if (update.action === 'add') {
+        // Add new content at the end
+        content += `\n\n${update.content}\n`;
+      } else if (update.action === 'remove') {
+        // Remove specific content by exact text match
+        if (content.includes(update.section)) {
+          content = content.replace(update.section, '');
+          console.log(`     ✅ Removed exact text`);
+        } else {
+          console.warn(`   ⚠️  Could not find text to remove: "${update.section.substring(0, 100)}..."`);
+        }
+      }
+    }
+
+    writeFileSync(readmePath, content, 'utf8');
+    console.log(`✅ Applied documentation updates: ${updates.summary}`);
+
+  } catch (error) {
+    console.warn('Failed to parse JSON updates, falling back to simple append:', error.message);
+    insertOrUpdateAutoDocSection(readmePath, 'fallback', updatesJson);
+  }
+}
+
 function insertOrUpdateAutoDocSection(readmePath, fileName, newContent) {
   const startMarker = `<!-- AUTO-DOC: ${fileName} START -->`;
   const endMarker = `<!-- AUTO-DOC: ${fileName} END -->`;
@@ -207,10 +308,21 @@ async function main() {
       if (!diff.trim()) continue;
 
       console.log(`📄 Generating docs for ${relativePath}...`);
-      const newDocs = await generateDocs(diff, relativePath);
 
+      // Find or create appropriate documentation file
       const docPath = findOrCreateDocumentationFile(path.resolve(relativePath));
-      insertOrUpdateAutoDocSection(docPath, path.basename(relativePath), newDocs);
+
+      // Read existing documentation content
+      let existingContent = '';
+      if (existsSync(docPath)) {
+        existingContent = readFileSync(docPath, 'utf8');
+      }
+
+      // Generate documentation updates with existing content context
+      const newDocs = await generateDocs(diff, relativePath, existingContent);
+
+      // Apply the documentation updates using the new intelligent update system
+      applyDocumentationUpdates(docPath, newDocs);
 
       console.log(`✅ Updated documentation: ${docPath}`);
     } catch (err) {
