@@ -3,6 +3,7 @@ export interface UserData {
   id: string;
   name: string;
   email: string;
+  createdAt?: Date;  // NEW: Added timestamp field
 }
 
 /**
@@ -18,8 +19,20 @@ export async function createUser(userData: Partial<UserData>): Promise<UserData>
   return {
     id: generateId(),
     name: userData.name || 'Anonymous',
-    email: userData.email
+    email: userData.email,
+    createdAt: new Date()  // NEW: Set creation timestamp
   };
+}
+
+// NEW FUNCTION: Delete user by ID
+export async function deleteUser(userId: string): Promise<boolean> {
+  if (!userId) {
+    throw new Error('User ID is required');
+  }
+  
+  // Simulate deletion logic
+  console.log(`Deleting user: ${userId}`);
+  return true;
 }
 
 function generateId(): string {
