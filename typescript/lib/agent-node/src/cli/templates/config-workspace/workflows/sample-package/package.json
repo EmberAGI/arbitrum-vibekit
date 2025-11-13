@@ -3,7 +3,33 @@
   "version": "1.0.0",
   "type": "module",
   "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "test": "pnpm test:unit && pnpm test:int && pnpm test:e2e",
+    "test:unit": "vitest run --config vitest.config.unit.ts",
+    "test:int": "tsx --env-file=.env.test ./node_modules/vitest/vitest.mjs run --config vitest.config.int.ts",
+    "test:e2e": "tsx --env-file=.env.test ./node_modules/vitest/vitest.mjs run --config vitest.config.e2e.ts --no-file-parallelism --maxConcurrency=1",
+    "test:watch": "vitest watch",
+    "test:ci": "pnpm test:unit && pnpm test:int",
+    "lint": "eslint \"src\" \"tests\" --ext .ts",
+    "lint:fix": "eslint \"src\" \"tests\" --ext .ts --fix",
+    "format": "prettier \"{src,tests}/**/*.{ts,tsx,js,jsx}\" --write",
+    "format:check": "prettier \"{src,tests}/**/*.{ts,tsx,js,jsx}\" --check"
+  },
   "dependencies": {
     "@emberai/agent-node": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.1",
+    "@typescript-eslint/eslint-plugin": "^8.46.4",
+    "@typescript-eslint/parser": "^8.46.4",
+    "@vitest/coverage-v8": "^4.0.8",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "2.32.0",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.8"
   }
 }

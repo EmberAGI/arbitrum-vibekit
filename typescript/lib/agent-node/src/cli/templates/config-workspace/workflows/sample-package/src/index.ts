@@ -11,6 +11,8 @@ import {
   type WorkflowState,
 } from '@emberai/agent-node/workflow';
 
+import { logWorkflowEvent } from './workflow-logger.js';
+
 const confirmationInputSchema = z.object({
   confirmed: z.boolean(),
   notes: z.string().optional(),
@@ -30,6 +32,11 @@ type SignatureInput = z.infer<typeof signatureInputSchema>;
 
 type WorkflowInput = ConfirmationInput | SignatureInput;
 
+const workflowParametersSchema = z.object({
+  message: z.string().optional(),
+  count: z.number().int().positive().optional().default(1),
+});
+
 const plugin: WorkflowPlugin = {
   id: 'sample-package-workflow',
   name: 'Example Workflow',
@@ -37,15 +44,15 @@ const plugin: WorkflowPlugin = {
     'A comprehensive workflow example demonstrating A2A patterns, pause/resume, multiple artifacts, and lifecycle management',
   version: '1.0.0',
 
-  inputSchema: z.object({
-    message: z.string().optional(),
-    count: z.number().int().positive().optional().default(1),
-  }),
+  inputSchema: workflowParametersSchema,
 
   async *execute(
     context: WorkflowContext,
   ): AsyncGenerator<WorkflowState, WorkflowReturn, WorkflowInput> {
-    const { message = 'Hello from example workflow!', count = 1 } = context.parameters ?? {};
+    const { message = 'Hello from example workflow!', count = 1 } = workflowParametersSchema.parse(
+      context.parameters ?? {},
+    );
+    logWorkflowEvent(`sample workflow received request: ${message}`);
 
     // First yield (optional): provide a repsonse for the tool call that dispatched this workflow
     yield {
@@ -84,7 +91,7 @@ const plugin: WorkflowPlugin = {
     yield { type: 'artifact', artifact: configArtifact };
 
     // Simulate some work
-    for (let i = 0; i < (count as number); i++) {
+    for (let i = 0; i < count; i++) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
@@ -149,6 +156,7 @@ const plugin: WorkflowPlugin = {
       type: 'status-update',
       message: 'Workflow completed successfully',
     };
+    logWorkflowEvent('sample workflow finalized successfully');
 
     // When the workflow returns, it is considered completed.
     // You can optionally return a message or data:
