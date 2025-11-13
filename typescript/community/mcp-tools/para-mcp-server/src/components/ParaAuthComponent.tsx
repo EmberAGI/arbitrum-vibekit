@@ -43,6 +43,7 @@ export default function ParaAuthComponent({
   const [requiresOtp, setRequiresOtp] = useState<boolean>(false);
   const [verificationCode, setVerificationCode] = useState<string>("");
   const [pendingAuthUrl, setPendingAuthUrl] = useState<string | null>(null);
+  const [showSuccessMessage, setShowSuccessMessage] = useState<boolean>(true);
 
   // Helper function to request parent to open auth URL via postMessage
   const requestParentOpenPopup = (url: string, target: string): boolean => {
@@ -74,6 +75,16 @@ export default function ParaAuthComponent({
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, []);
+
+  // Auto-hide success message after 3 seconds
+  useEffect(() => {
+    if (authStep === "authenticated" && showSuccessMessage) {
+      const timer = setTimeout(() => {
+        setShowSuccessMessage(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [authStep, showSuccessMessage]);
 
   // Check login status and get wallet
   useEffect(() => {
@@ -166,14 +177,11 @@ export default function ParaAuthComponent({
       const authState = await (para as any).signUpOrLogIn?.({
         auth: { email: email.trim() },
       });
+console.log("papa",authState)
+      const stage = (authState?.nextStage ?? authState?.stage) as string;
 
-      if (authState?.stage === "verify" && !authState?.loginUrl) {
-        setRequiresOtp(true);
-        setStatus("idle");
-        setMessage("We sent a 6-digit code to your email. Enter it below to continue.");
-        return;
-      } else if (authState?.stage === "login") {
-        const loginUrl = authState.loginUrl || authState.passkeyUrl || authState.passwordUrl || authState.pinUrl;
+      if (stage === "login") {
+        const loginUrl = authState?.loginUrl || authState?.passkeyUrl || authState?.passwordUrl || authState?.pinUrl;
         if (loginUrl) {
           console.log("[ParaAuth] Opening login for existing user:", loginUrl);
           const parentOpened = requestParentOpenPopup(loginUrl, "para-login");
@@ -186,31 +194,42 @@ export default function ParaAuthComponent({
           }
           setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
           setPendingAuthUrl(loginUrl);
-          
+
           const loginResult = await (para as any).waitForLogin?.({});
           console.log("[ParaAuth] Login result:", loginResult);
-          
+
           if (loginResult?.needsWallet) {
             console.log("[ParaAuth] Creating wallet after login...");
             await para.createWallet({ type: "EVM" as any, skipDistribute: false });
           }
         }
-      } else if (authState?.stage === "verify" && authState?.loginUrl) {
-        console.log("[ParaAuth] Opening signup for new user:", authState.loginUrl);
-        const parentOpened = requestParentOpenPopup(authState.loginUrl, "para-signup");
-        if (!parentOpened) {
-          setPendingAuthUrl(authState.loginUrl);
+      } else if (stage === "verify") {
+        // New user flow: require OTP entry in this UI when no remote URL provided
+        if (!authState?.loginUrl) {
+          setRequiresOtp(true);
           setStatus("idle");
-          setMessage("Opening authentication in this tab...");
-          window.location.assign(authState.loginUrl);
+          setMessage("We sent a 6-digit code to your email. Enter it below to continue.");
           return;
         }
-        setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
-        setPendingAuthUrl(authState.loginUrl);
-        
-        await (para as any).waitForWalletCreation?.({});
-      } else if (authState?.stage === "signup") {
-        const setupUrl = authState.passkeyUrl || authState.passwordUrl || authState.pinUrl;
+        // If a URL is provided alongside verify, treat it like a hosted verification/login link
+        const verifyUrl = authState.loginUrl;
+        if (verifyUrl) {
+          console.log("[ParaAuth] Opening verification link:", verifyUrl);
+          const parentOpened = requestParentOpenPopup(verifyUrl, "para-verify");
+          if (!parentOpened) {
+            setPendingAuthUrl(verifyUrl);
+            setStatus("idle");
+            setMessage("Opening authentication in this tab...");
+            window.location.assign(verifyUrl);
+            return;
+          }
+          setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
+          setPendingAuthUrl(verifyUrl);
+
+          await (para as any).waitForLogin?.({});
+        }
+      } else if (stage === "signup") {
+        const setupUrl = authState?.passkeyUrl || authState?.passwordUrl || authState?.pinUrl;
         if (setupUrl) {
           console.log("[ParaAuth] Opening passkey setup:", setupUrl);
           const parentOpened = requestParentOpenPopup(setupUrl, "para-setup");
@@ -223,7 +242,7 @@ export default function ParaAuthComponent({
           }
           setMessage("Authentication opened in a new tab. Don't close this page; finish auth there and return here.");
           setPendingAuthUrl(setupUrl);
-          
+
           await (para as any).waitForWalletCreation?.({});
         }
       }
@@ -564,27 +583,52 @@ export default function ParaAuthComponent({
       {/* Authentication Step: Authenticated */}
       {authStep === "authenticated" && (
         <div className="space-y-4">
-          <div className="rounded-lg bg-green-50 p-4">
-            <div className="flex items-center gap-2 text-green-800">
-              <svg
-                className="h-5 w-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <title>Success icon</title>
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <span className="font-semibold">
-                Successfully Authenticated!
-              </span>
+          {showSuccessMessage && (
+            <div className="rounded-lg bg-green-50 p-4">
+              <div className="flex items-center justify-between gap-2 text-green-800">
+                <div className="flex items-center gap-2">
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <title>Success icon</title>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  <span className="font-semibold">
+                    Successfully Authenticated!
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSuccessMessage(false)}
+                  className="text-green-800 hover:text-green-900 transition-colors"
+                  aria-label="Close success message"
+                >
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <title>Close icon</title>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {allWallets.length > 0 ? (
             <div className="space-y-3">
