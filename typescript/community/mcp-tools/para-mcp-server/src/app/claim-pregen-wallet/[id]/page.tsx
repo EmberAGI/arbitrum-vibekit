@@ -1,4 +1,4 @@
-import ClaimPregenWalletClient from "./Client";
+import ClaimPregenWalletClient from "@/components/ClaimPregenWalletClient";
 
 export const dynamic = "force-dynamic";
 

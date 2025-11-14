@@ -5,6 +5,7 @@ import { requestContext } from "@/app/mcp/route";
 import { baseURL as rawBaseURL } from "@/config/baseUrl";
 import { db } from "@/db";
 import { pregenWallets } from "@/db/schema";
+import { getAppsSdkCompatibleHtml, baseURL } from "@/lib/apps-sdk-html";
 
 // Helper to check if client is OpenAI
 function isOpenAIClient(): boolean {
@@ -50,6 +51,25 @@ export const metadata = {
     destructiveHint: false,
     idempotentHint: true,
   },
+    _meta: {
+    openai: {
+      toolInvocation: {
+        invoking: "Loading claim url",
+        invoked: "Claim url ready",
+      },
+      widgetAccessible: true,
+      resultCanProduceWidget: true,
+      widgetDescription: "Claim url viewer",
+      widgetPrefersBorder: true,
+      widgetCSP: {
+        connect_domains: [
+          "https://app.beta.usecapsule.com",
+          "connector_69153801992c8191842add9057bbd621.web-sandbox.oaiusercontent.com",
+        ],
+        resource_domains: ["https://app.beta.usecapsule.com"],
+      },
+    },
+  },
 };
 
 function resolveBaseUrl(input?: string | null) {
@@ -65,34 +85,8 @@ export default async function getClaimUrl({
   email,
 }: InferSchema<typeof schema>) {
   try {
-    if (!id && !email) {
-      throw new Error("Provide either 'id' (UUID) or 'email'");
-    }
-
-    // Find target wallet record
-    let target: { id: string; email: string } | undefined;
-
-    if (id) {
-      const [row] = await db
-        .select({ id: pregenWallets.id, email: pregenWallets.email })
-        .from(pregenWallets)
-        .where(eq(pregenWallets.id, id))
-        .limit(1);
-      if (row) target = row as any;
-    } else if (email) {
-      const [row] = await db
-        .select({ id: pregenWallets.id, email: pregenWallets.email })
-        .from(pregenWallets)
-        .where(
-          and(eq(pregenWallets.email, email), isNull(pregenWallets.claimedAt)),
-        )
-        .limit(1);
-      if (row) target = row as any;
-    }
-
-    if (!target) {
-      throw new Error("Pregenerated wallet not found");
-    }
+    const html = await getAppsSdkCompatibleHtml(baseURL, "/claim-pregen-wallet");
+   
 
     const base = resolveBaseUrl();
     if (!base) {
@@ -101,29 +95,46 @@ export default async function getClaimUrl({
       );
     }
 
-    const url = `${base}/claim-pregen-wallet/${target.id}`;
+    const url = `${base}/claim-pregen-wallet/${id}`;
 
     const result = {
       success: true,
       url,
       wallet: {
-        id: target.id,
-        email: target.email,
+        id,
+        email,
       },
     };
 
+    
+
     return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      content: [
+        {
+          type: "text",
+          text: `<html>${html}</html>`,
+        },
+      ],
+      structuredContent: result,
     };
   } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to generate claim URL";
+
     const result = {
       success: false,
-      error:
-        error instanceof Error ? error.message : "Failed to generate claim URL",
+      error: errorMessage,
     };
 
     return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+      structuredContent: result,
+      isError: true,
     };
   }
 }
