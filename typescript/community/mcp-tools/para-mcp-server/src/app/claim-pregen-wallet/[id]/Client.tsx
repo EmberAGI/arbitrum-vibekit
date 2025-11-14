@@ -2,7 +2,7 @@
 
 import { useClient, useLogout } from "@getpara/react-sdk";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ParaAuthComponent from "@/components/ParaAuthComponent";
 
 export type PregenWallet = {
@@ -16,26 +16,124 @@ export type PregenWallet = {
 };
 
 export default function ClaimPregenWalletClient({
-  wallet,
-  error,
-  initialUserShare,
+  walletId,
 }: {
-  wallet: PregenWallet | null;
-  error: string | null;
-  initialUserShare?: string;
+  walletId: string;
 }) {
-  const [userShare, setUserShare] = useState(initialUserShare ?? "");
+  const [wallet, setWallet] = useState<PregenWallet | null>(null);
+  const [walletError, setWalletError] = useState<string | null>(null);
+  const [userShare, setUserShare] = useState("");
   const [claimStatus, setClaimStatus] = useState<
     "idle" | "loading" | "success" | "error"
   >("idle");
   const [claimMessage, setClaimMessage] = useState("");
   const [recoverySecret, setRecoverySecret] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
-  const [isClaimed, setIsClaimed] = useState(wallet?.claimed ?? false);
+  const [isClaimed, setIsClaimed] = useState(false);
   const [showAuthComponent, setShowAuthComponent] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(null);
   const claimApiUrl = "/claim-pregen-wallet/api";
   const para = useClient();
   const { logoutAsync, isPending: isLoggingOut } = useLogout();
+
+  const loadWalletDetailsWithToken = useCallback(
+    async (token: string) => {
+      try {
+        const response = await fetch(`/api/pregen-wallets/${walletId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const data = (await response.json()) as {
+          id: string;
+          email: string;
+          address: string;
+          walletId: string;
+          type: string;
+          createdAt?: string;
+          claimed?: boolean;
+          userShare?: string | null;
+          error?: string;
+        };
+
+        if (!response.ok) {
+          setWallet(null);
+          setWalletError(
+            typeof data.error === "string"
+              ? data.error
+              : "Failed to load wallet details",
+          );
+          return;
+        }
+
+        const loadedWallet: PregenWallet = {
+          id: data.id,
+          email: data.email,
+          address: data.address,
+          walletId: data.walletId,
+          type: data.type,
+          createdAt: data.createdAt,
+          claimed: !!data.claimed,
+        };
+
+        setWallet(loadedWallet);
+        setIsClaimed(!!data.claimed);
+        if (typeof data.userShare === "string") {
+          setUserShare(data.userShare);
+        }
+      } catch (err) {
+        setWalletError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load wallet details",
+        );
+      }
+    },
+    [walletId],
+  );
+
+  const ensureAuthToken = useCallback(async () => {
+    if (authToken) return authToken;
+    if (!para) {
+      setWalletError("Para client not ready");
+      return null;
+    }
+
+    try {
+      const session = await (para as any).exportSession?.({
+        excludeSigners: true,
+      });
+      if (!session) {
+        setWalletError("Failed to export Para session");
+        return null;
+      }
+
+      const response = await fetch("/api/para/issue-jwt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.token) {
+        setWalletError(
+          typeof data.error === "string"
+            ? data.error
+            : "Failed to establish authentication token",
+        );
+        return null;
+      }
+
+      const token = data.token as string;
+      setAuthToken(token);
+      return token;
+    } catch (err) {
+      setWalletError(
+        err instanceof Error
+          ? err.message
+          : "Failed to establish authentication token",
+      );
+      return null;
+    }
+  }, [authToken, para]);
 
   useEffect(() => {
     let active = true;
@@ -46,7 +144,15 @@ export default function ClaimPregenWalletClient({
           return;
         }
         const authed = await para.isFullyLoggedIn();
-        if (active) setIsLoggedIn(authed);
+        if (!active) return;
+        setIsLoggedIn(authed);
+
+        if (authed) {
+          const token = await ensureAuthToken();
+          if (active && token) {
+            await loadWalletDetailsWithToken(token);
+          }
+        }
       } catch {
         if (active) setIsLoggedIn(false);
       }
@@ -54,7 +160,7 @@ export default function ClaimPregenWalletClient({
     return () => {
       active = false;
     };
-  }, [para]);
+  }, [para, ensureAuthToken, loadWalletDetailsWithToken]);
 
   const handleAuthSuccess = async (authData: {
     isLoggedIn: boolean;
@@ -66,29 +172,21 @@ export default function ClaimPregenWalletClient({
     setShowAuthComponent(false);
     setClaimStatus("idle");
     setClaimMessage("Logged in with Para. You can now claim the wallet.");
+    if (!para) {
+      return;
+    }
 
-    // Verify email matches if wallet has an email
-    if (wallet?.email && para) {
-      try {
-        const authedEmail = await para.getEmail();
-        if (!authedEmail) {
-          setClaimStatus("error");
-          setClaimMessage("Unable to read authenticated email from Para.");
-          return;
-        }
-        if (authedEmail.toLowerCase() !== wallet.email.toLowerCase()) {
-          setClaimStatus("error");
-          setClaimMessage(
-            "No Para account found for this wallet's email. Please log in with the same email as the pregenerated wallet.",
-          );
-          return;
-        }
-      } catch (err) {
-        setClaimStatus("error");
-        setClaimMessage(
-          err instanceof Error ? err.message : "Failed to verify email",
-        );
+    try {
+      const token = await ensureAuthToken();
+      if (!token) {
+        return;
       }
+
+      await loadWalletDetailsWithToken(token);
+    } catch (err) {
+      setWalletError(
+        err instanceof Error ? err.message : "Failed to load wallet details",
+      );
     }
   };
 
@@ -138,20 +236,19 @@ export default function ClaimPregenWalletClient({
       // Claim the pregenerated wallet (may or may not return a recovery secret)
       const claimedRecoverySecret = await para.claimPregenWallets();
 
-      // Export a secure session (without signing capabilities) and notify server
-      const session = await (para as any).exportSession?.({
-        excludeSigners: true,
-      });
-      if (!session) {
-        throw new Error("Failed to export Para session");
+      const token = await ensureAuthToken();
+      if (!token) {
+        throw new Error("Failed to establish authentication token");
       }
       const response = await fetch(claimApiUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           pregenId: wallet?.id,
           walletId: wallet?.walletId,
-          session,
         }),
       });
       const data = await response.json();
@@ -159,9 +256,11 @@ export default function ClaimPregenWalletClient({
         throw new Error(data.error || "Failed to finalize wallet claim");
       }
 
-      // Verify wallet is claimed by checking the API
+      // Verify wallet is claimed by checking the protected API with session
       if (wallet?.id) {
-        const checkResponse = await fetch(`/api/pregen-wallets/${wallet.id}`);
+        const checkResponse = await fetch(`/api/pregen-wallets/${wallet.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (checkResponse.ok) {
           const walletData = await checkResponse.json();
           setIsClaimed(walletData.claimed ?? false);
@@ -177,7 +276,9 @@ export default function ClaimPregenWalletClient({
       // Refresh wallet data to reflect claimed status
       if (wallet?.id) {
         try {
-          const refreshResponse = await fetch(`/api/pregen-wallets/${wallet.id}`);
+          const refreshResponse = await fetch(`/api/pregen-wallets/${wallet.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
           if (refreshResponse.ok) {
             const refreshedData = await refreshResponse.json();
             setIsClaimed(refreshedData.claimed ?? true);
@@ -222,9 +323,15 @@ export default function ClaimPregenWalletClient({
 
         {/* Wallet details */}
         <div className="rounded-md border border-zinc-200 p-4 dark:border-zinc-800">
-          {error ? (
-            <p className="text-sm text-red-500">{error}</p>
-          ) : wallet ? (
+          {walletError ? (
+            <p className="text-sm text-red-500">{walletError}</p>
+          ) : !wallet ? (
+            <p className="text-sm text-zinc-600 dark:text-zinc-300">
+              {isLoggedIn
+                ? "Loading wallet details..."
+                : "Log in with Para to view wallet details."}
+            </p>
+          ) : (
             <div className="space-y-1 text-sm text-black dark:text-black">
               <div>
                 <span className="font-medium">ID:</span> {wallet.id}
@@ -244,26 +351,13 @@ export default function ClaimPregenWalletClient({
               </div>
               <div>
                 <span className="font-medium">Claimed:</span>{" "}
-                {wallet.claimed ? "Yes" : "No"}
+                {isClaimed ? "Yes" : "No"}
               </div>
             </div>
-          ) : (
-            <p className="text-sm text-zinc-500">Wallet not found</p>
           )}
         </div>
 
-        {/* Login helper */}
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-900/20">
-          <p className="text-sm text-amber-800 dark:text-amber-300">
-            You must be fully authenticated with Para before claiming. If your
-            app has a dedicated login flow, please log in first, then return to
-            this page.
-          </p>
-          <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-            The claim API will return 401 if not authenticated. After logging
-            in, reload this page and proceed.
-          </p>
-        </div>
+       
 
         {/* User share input and claim */}
         <div className="flex flex-col gap-4">
@@ -386,7 +480,7 @@ export default function ClaimPregenWalletClient({
               After claiming, Para manages the wallet through your
               authentication
             </li>
-            <li>Store your recovery secret securely for wallet recovery</li>
+           
           </ul>
           <p className="mt-3 text-xs text-zinc-500">
             If you already have a different claim link, you can return to the

@@ -4,20 +4,22 @@ import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { pregenWallets } from "@/db/schema";
-import { getParaServerClient } from "@/lib/para-server-client";
+
+const rawAppJwtSecret = process.env.APP_JWT_SECRET;
+if (!rawAppJwtSecret) {
+  throw new Error("APP_JWT_SECRET environment variable is not set");
+}
+const APP_JWT_SECRET = rawAppJwtSecret as string;
 
 export async function POST(request: Request) {
   try {
     // Accept flexible payloads
-    // For DB updates, clients must also send { session } exported from Para client.
     let pregenId: string | undefined;
     let walletId: string | undefined;
-    let session: string | undefined;
     try {
       const body = await request.json();
       pregenId = body?.pregenId;
       walletId = body?.walletId;
-      session = body?.session;
     } catch {
       // no JSON body provided; proceed with generic revalidation
     }
@@ -25,38 +27,25 @@ export async function POST(request: Request) {
     const shouldModify = !!pregenId || !!walletId;
 
     if (shouldModify) {
-      if (!session || typeof session !== "string") {
-        return NextResponse.json({ error: "Missing session" }, { status: 401 });
+      const authHeader = request.headers.get("authorization");
+      const bearerPrefix = "Bearer ";
+      if (!authHeader || !authHeader.startsWith(bearerPrefix)) {
+        return NextResponse.json(
+          { error: "Missing or invalid authorization token" },
+          { status: 401 },
+        );
       }
 
-      const para = getParaServerClient();
-
-      try {
-        await para.importSession(session);
-      } catch {
-        return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-      }
-
-      const isActive = await para.isSessionActive();
-      if (!isActive) {
-        return NextResponse.json({ error: "Session expired" }, { status: 401 });
-      }
+      const token = authHeader.slice(bearerPrefix.length).trim();
 
       let authedEmail: string | undefined;
       try {
-        const { token } = await para.issueJwt();
-        const decoded = jwt.decode(token) as
-          | (JwtPayload & {
-              data?: { email?: string };
-            })
-          | null
-          | string;
-        authedEmail =
-          decoded && typeof decoded !== "string"
-            ? decoded.data?.email
-            : undefined;
+        const payload = jwt.verify(token, APP_JWT_SECRET) as JwtPayload & {
+          email?: string;
+        };
+        authedEmail = payload.email;
       } catch {
-        // fallthrough
+        return NextResponse.json({ error: "Invalid token" }, { status: 401 });
       }
 
       if (!authedEmail) {
