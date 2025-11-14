@@ -42,7 +42,7 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ## How It Works
 
-1. **Frontend** fetches agent card from `https://dev.emberai.xyz/.well-known/agent-card.json`
+1. **Frontend** fetches agent card from `NEXT_PUBLIC_AGENT_CARD_URL` (defaults to `http://localhost:3001/.well-known/agent-card.json`)
 2. **Frontend** connects to **Backend** via Socket.IO (`localhost:5001`)
 3. **Backend** sends JSONRPC requests to `https://dev.emberai.xyz/a2a`
 4. **Backend** forwards responses back to **Frontend**
