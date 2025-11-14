@@ -16,10 +16,9 @@ mcp:
   servers:
     - name: fetch
       allowedTools: [fetch_json, fetch_txt, fetch_markdown]
-
 # Workflow integration
-workflows:
-  include: ['sample-package-workflow']
+# workflows:
+#   include: ['sample-package-workflow']
 # Optional: Uncomment to override AI model for this skill
 # ai:
 #   modelProvider: openrouter

@@ -1,14 +1,6 @@
 {
   "workflows": [
     {
-      "id": "sample-package-workflow",
-      "from": "./workflows/sample-package/src/index.ts",
-      "enabled": true,
-      "config": {
-        "mode": "default"
-      }
-    },
-    {
       "id": "camelot-clmm-rebalancer",
       "from": "./workflows/clmm/src/index.ts",
       "enabled": true,
