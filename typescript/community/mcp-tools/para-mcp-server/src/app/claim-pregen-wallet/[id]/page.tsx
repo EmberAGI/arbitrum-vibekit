@@ -8,5 +8,5 @@ export default async function ClaimPregenWalletById({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <ClaimPregenWalletClient walletId={id} />;
+  return <ClaimPregenWalletClient id={id} />;
 }

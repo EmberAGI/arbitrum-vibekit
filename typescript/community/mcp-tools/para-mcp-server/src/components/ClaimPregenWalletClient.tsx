@@ -17,9 +17,9 @@ export type PregenWallet = {
 };
 
 export default function ClaimPregenWalletClient({
-  walletId,
+  id,
 }: {
-  walletId: string;
+  id: string;
 }) {
   const [wallet, setWallet] = useState<PregenWallet | null>(null);
   const [walletError, setWalletError] = useState<string | null>(null);
@@ -40,7 +40,7 @@ export default function ClaimPregenWalletClient({
   const loadWalletDetailsWithToken = useCallback(
     async (token: string) => {
       try {
-        const response = await fetch(`${baseURL}/api/pregen-wallets/${walletId}`, {
+        const response = await fetch(`${baseURL}/api/pregen-wallets/${id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -89,7 +89,7 @@ export default function ClaimPregenWalletClient({
         );
       }
     },
-    [walletId],
+    [id],
   );
 
   const ensureAuthToken = useCallback(async () => {
@@ -333,7 +333,7 @@ export default function ClaimPregenWalletClient({
                 : "Log in with Para to view wallet details."}
             </p>
           ) : (
-            <div className="space-y-1 text-sm text-black dark:text-black">
+            <div className="space-y-1 text-sm text-black dark:text-white">
               <div>
                 <span className="font-medium">ID:</span> {wallet.id}
               </div>

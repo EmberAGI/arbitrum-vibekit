@@ -56,7 +56,7 @@ export default function ClaimPregenWallet() {
           }
 
           if (!cancelled) {
-            setResolvedWalletId(data.walletId as string);
+            setResolvedWalletId(data.id as string);
             setIsResolving(false);
           }
         } catch (error) {
@@ -133,7 +133,7 @@ export default function ClaimPregenWallet() {
   // pregenerated wallet id (either directly or resolved from email),
   // delegate to the ClaimPregenWalletClient for the wallet-specific flow.
   if (resolvedWalletId) {
-    return <ClaimPregenWalletClient walletId={resolvedWalletId} />;
+    return <ClaimPregenWalletClient id={resolvedWalletId} />;
   }
 
   if (isResolving) {
