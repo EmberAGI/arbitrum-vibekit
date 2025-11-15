@@ -27,3 +27,20 @@ export function useWidgetProps<T extends Record<string, unknown>>(
 
   return toolOutput ?? fallback;
 }
+
+/**
+ * Hook to get the current tool input from ChatGPT.
+ * Mirrors useWidgetProps but reads from the "toolInput" global instead.
+ */
+export function useToolInput<T extends Record<string, unknown>>(
+  defaultState?: T | (() => T),
+): T {
+  const toolInput = useOpenAIGlobal("toolInput") as T;
+
+  const fallback =
+    typeof defaultState === "function"
+      ? (defaultState as () => T | null)()
+      : (defaultState ?? null);
+
+  return toolInput ?? fallback;
+}

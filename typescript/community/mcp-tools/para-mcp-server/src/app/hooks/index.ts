@@ -12,5 +12,5 @@ export { useOpenExternal } from "./use-open-external";
 export { useOpenAIGlobal } from "./use-openai-global";
 export { useRequestDisplayMode } from "./use-request-display-mode";
 export { useSendMessage } from "./use-send-message";
-export { useWidgetProps } from "./use-widget-props";
+export { useWidgetProps, useToolInput } from "./use-widget-props";
 export { useWidgetState } from "./use-widget-state";

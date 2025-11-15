@@ -2,15 +2,12 @@ import type { Address, Hex } from "viem";
 import type { InferSchema } from "xmcp";
 import { z } from "zod";
 import { requestContext } from "@/app/mcp/route";
+import { getAppsSdkCompatibleHtml, baseURL } from "@/lib/apps-sdk-html";
 
 export const schema = {
   to: z.string().describe("Recipient address"),
   value: z.string().describe("Transaction value in wei"),
-  chainId: z
-    .enum(["42161", "421614", "8453", "84532"])
-    .describe(
-      "Chain ID: 42161 (Arbitrum), 421614 (Arbitrum Sepolia), 8453 (Base), 84532 (Base Sepolia)",
-    ),
+  chainId: z.string().describe("Chain ID as a string (e.g., '42161' for Arbitrum, '8453' for Base)"),
   data: z.string().optional().describe("Transaction data (hex, optional)"),
   gasLimit: z
     .string()
@@ -60,6 +57,25 @@ export const metadata = {
     destructiveHint: false,
     idempotentHint: true,
   },
+  _meta: {
+    openai: {
+      toolInvocation: {
+        invoking: "Creating transaction preview",
+        invoked: "Transaction preview ready",
+      },
+      widgetAccessible: true,
+      resultCanProduceWidget: true,
+      widgetDescription: "Transaction preview and signing interface",
+      widgetPrefersBorder: true,
+      widgetCSP: {
+        connect_domains: [
+          "https://app.beta.usecapsule.com",
+          "connector_69153801992c8191842add9057bbd621.web-sandbox.oaiusercontent.com",
+        ],
+        resource_domains: ["https://app.beta.usecapsule.com"],
+      },
+    },
+  },
 };
 
 export default async function createTransactionPreview({
@@ -73,6 +89,8 @@ export default async function createTransactionPreview({
   previewData,
 }: InferSchema<typeof schema>) {
   try {
+    const html = await getAppsSdkCompatibleHtml(baseURL, "/sign-transaction");
+
     // Convert transaction parameters to txPlan format
     const txPlan = [
       {
@@ -90,39 +108,40 @@ export default async function createTransactionPreview({
     const txPreview = previewData || txPlan;
 
     const result = {
-      artifacts: [
+      success: true,
+      txPreview,
+      txPlan,
+    };
+
+    return {
+      content: [
         {
-          name: "transaction-preview",
-          parts: [
-            {
-              data: {
-                txPreview,
-                txPlan,
-              },
-            },
-          ],
+          type: "text",
+          text: `<html>${html}</html>`,
         },
       ],
-    };
-
-    return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      structuredContent: result,
     };
   } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "Failed to create transaction preview";
+
     const result = {
       success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Failed to create transaction preview",
-      details:
-        error instanceof Error && error.stack
-          ? error.stack
-          : "No additional details available",
+      error: errorMessage,
     };
 
     return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+      structuredContent: result,
+      isError: true,
     };
   }
 }
