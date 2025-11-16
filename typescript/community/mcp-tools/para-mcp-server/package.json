@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "NEXT_SKIP_TYPE_CHECK=1 xmcp dev & next dev -p 3012",
+    "dev": "xmcp dev & next dev -p 3012",
     "build": "xmcp build && next build",
  "start": "next start -p 3012",
     "lint": "biome check",

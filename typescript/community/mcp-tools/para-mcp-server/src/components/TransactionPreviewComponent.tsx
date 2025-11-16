@@ -1,16 +1,17 @@
 "use client";
 
 import {
-  useModal,
   useAccount as useParaAccount,
   useClient as useParaClient,
   useWallet,
 } from "@getpara/react-sdk";
+import ParaAuthComponent from "./ParaAuthComponent";
 import { useState } from "react";
 import {
   createPublicClient,
   serializeTransaction,
   http as viemHttp,
+  formatEther,
 } from "viem";
 import { arbitrum, arbitrumSepolia, base, baseSepolia } from "wagmi/chains";
 
@@ -38,20 +39,54 @@ export function TransactionPreviewComponent({
   const paraAccount = useParaAccount();
   const paraClient = useParaClient();
   const { data: activeWallet } = useWallet();
-  const { openModal } = useModal();
 
   const [isPending, setIsPending] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>(undefined);
+  const [copied, setCopied] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  
+  // Editable transaction state
+  const [editableTx, setEditableTx] = useState({
+    to: txPreview[0]?.to || "",
+    value: txPreview[0]?.value || "0",
+    chainId: txPreview[0]?.chainId || "",
+    data: txPreview[0]?.data || "0x",
+  });
 
   const isConnected = Boolean(paraAccount?.isConnected);
 
-  const handleSignTransaction = async () => {
-    if (!txPreview || txPreview.length === 0 || !paraClient) return;
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(txPreview, null, 2));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
 
-    const tx = txPreview[0];
-    const targetChainId = Number.parseInt(tx.chainId);
+  const handleLogout = async () => {
+    try {
+      if (paraClient) {
+        await paraClient.logout();
+      }
+      // Reset state after logout
+      setError(null);
+      setTxHash(undefined);
+      setIsSuccess(false);
+    } catch (err) {
+      console.error("Logout error:", err);
+      setError(err as Error);
+    }
+  };
+
+  const handleSignTransaction = async () => {
+    if (!paraClient) return;
+
+    // Use the editable transaction values
+    const targetChainId = Number.parseInt(editableTx.chainId);
 
     try {
       setIsPending(true);
@@ -94,9 +129,9 @@ export function TransactionPreviewComponent({
       const gasPrice = await publicClient.getGasPrice();
 
       const serialized = serializeTransaction({
-        to: tx.to as `0x${string}`,
-        value: BigInt(tx.value),
-        data: tx.data as `0x${string}`,
+        to: editableTx.to as `0x${string}`,
+        value: BigInt(editableTx.value),
+        data: editableTx.data as `0x${string}`,
         nonce,
         gasLimit: BigInt(100000),
         gasPrice,
@@ -138,37 +173,74 @@ export function TransactionPreviewComponent({
         Transaction Preview
       </div>
 
-      {/* Transaction Details */}
-      <div className="space-y-2">
-        {txPreview.map((tx, index) => (
-          <div
-            key={index}
-            className="p-3 bg-gray-700 rounded-lg border border-gray-600 text-xs"
+      {/* JSON Output Section */}
+      <div className="mt-4 flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+            Tool Output (JSON)
+          </h2>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="rounded bg-zinc-700 px-3 py-1 text-sm text-white transition-colors hover:bg-zinc-600 dark:bg-zinc-600 dark:hover:bg-zinc-500"
           >
-            <div className="space-y-1">
-              <div>
-                <span className="text-gray-400">To:</span>{" "}
-                <span className="text-gray-100 font-mono">{tx.to}</span>
+            {copied ? "Copied!" : "Copy"}
+          </button>
+        </div>
+        <pre className="overflow-x-auto rounded-lg bg-zinc-100 p-4 text-xs text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
+          <code>{JSON.stringify(txPreview, null, 2)}</code>
+        </pre>
+      </div>
+
+      {/* Transaction Details - Editable Form */}
+      <div className="space-y-2">
+        <div className="p-3 bg-gray-700 rounded-lg border border-gray-600 text-xs">
+          <div className="space-y-3">
+            <div>
+              <label className="block text-gray-400 mb-1">To:</label>
+              <input
+                type="text"
+                value={editableTx.to}
+                onChange={(e) => setEditableTx({ ...editableTx, to: e.target.value })}
+                className="w-full px-2 py-1 bg-gray-800 text-gray-100 font-mono rounded border border-gray-600 focus:border-cyan-500 focus:outline-none"
+                placeholder="0x..."
+              />
+            </div>
+            <div>
+              <label className="block text-gray-400 mb-1">Value (wei):</label>
+              <input
+                type="text"
+                value={editableTx.value}
+                onChange={(e) => setEditableTx({ ...editableTx, value: e.target.value })}
+                className="w-full px-2 py-1 bg-gray-800 text-gray-100 rounded border border-gray-600 focus:border-cyan-500 focus:outline-none"
+                placeholder="0"
+              />
+              <div className="text-gray-500 text-xs mt-1">
+                ≈ {formatEther(BigInt(editableTx.value || "0"))} ETH
               </div>
-              <div>
-                <span className="text-gray-400">Value:</span>{" "}
-                <span className="text-gray-100">{tx.value} wei</span>
-              </div>
-              <div>
-                <span className="text-gray-400">Chain ID:</span>{" "}
-                <span className="text-gray-100">{tx.chainId}</span>
-              </div>
-              {tx.data && tx.data !== "0x" && (
-                <div>
-                  <span className="text-gray-400">Data:</span>{" "}
-                  <span className="text-gray-100 font-mono break-all">
-                    {tx.data}
-                  </span>
-                </div>
-              )}
+            </div>
+            <div>
+              <label className="block text-gray-400 mb-1">Chain ID:</label>
+              <input
+                type="text"
+                value={editableTx.chainId}
+                onChange={(e) => setEditableTx({ ...editableTx, chainId: e.target.value })}
+                className="w-full px-2 py-1 bg-gray-800 text-gray-100 rounded border border-gray-600 focus:border-cyan-500 focus:outline-none"
+                placeholder="1"
+              />
+            </div>
+            <div>
+              <label className="block text-gray-400 mb-1">Data:</label>
+              <textarea
+                value={editableTx.data}
+                onChange={(e) => setEditableTx({ ...editableTx, data: e.target.value })}
+                className="w-full px-2 py-1 bg-gray-800 text-gray-100 font-mono rounded border border-gray-600 focus:border-cyan-500 focus:outline-none"
+                placeholder="0x"
+                rows={3}
+              />
             </div>
           </div>
-        ))}
+        </div>
       </div>
 
       {/* Status Messages */}
@@ -190,25 +262,66 @@ export function TransactionPreviewComponent({
 
       {/* Action Buttons */}
       {isConnected ? (
-        <button
-          type="button"
-          onClick={handleSignTransaction}
-          disabled={isPending || isSuccess}
-          className="w-full mt-2 px-4 py-2 rounded-full bg-cyan-700 text-white hover:bg-cyan-800 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isPending ? "Signing..." : isSuccess ? "Signed" : "Sign Transaction"}
-        </button>
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={handleSignTransaction}
+            disabled={isPending || isSuccess}
+            className="w-full mt-2 px-4 py-2 rounded-full bg-cyan-700 text-white hover:bg-cyan-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isPending ? "Signing..." : isSuccess ? "Signed" : "Sign Transaction"}
+          </button>
+          
+          {/* Logout and Manage Wallet Buttons */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex-1 px-4 py-2 rounded-full border-2 border-red-600 text-red-600 hover:bg-red-50 transition-colors"
+            >
+              Logout
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAuthModal(true)}
+              className="flex-1 px-4 py-2 rounded-full border-2 border-cyan-700 text-cyan-700 hover:bg-cyan-50 transition-colors"
+            >
+              Manage Wallet
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="p-2 flex rounded-lg border-2 border-gray-400 bg-gray-200 flex-col">
           <div className="mb-2 text-red-500">
             Please connect your wallet to sign
           </div>
           <button
-            onClick={() => openModal()}
+            onClick={() => setShowAuthModal(true)}
             className="px-4 py-2 rounded-full bg-cyan-700 text-white hover:bg-cyan-800"
           >
             Connect Para Wallet
           </button>
+        </div>
+      )}
+
+      {/* Para Auth Modal */}
+      {showAuthModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-opacity-50" onClick={() => setShowAuthModal(false)}>
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setShowAuthModal(false)}
+              className="absolute -top-2 -right-2 z-10 h-8 w-8 rounded-full bg-red-500 text-white hover:bg-red-600 flex items-center justify-center"
+              aria-label="Close modal"
+            >
+              ×
+            </button>
+            <ParaAuthComponent
+              onAuthSuccess={() => {
+                setShowAuthModal(false);
+              }}
+              showWalletDetails={false}
+            />
+          </div>
         </div>
       )}
     </div>
