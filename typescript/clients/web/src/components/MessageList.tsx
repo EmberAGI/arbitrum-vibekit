@@ -91,7 +91,7 @@ export function MessageList({
                     return false;
                   }
 
-                  const skipArtifacts = ['delegations-display', 'delegations-data'];
+                  const skipArtifacts = ['policy-display', 'policy-data'];
                   if (skipArtifacts.includes(artifact.artifactId)) {
                     return false;
                   }
@@ -116,8 +116,8 @@ export function MessageList({
             }
 
             // Workflow Approval Handler
-            const hasDelegationDisplay = message.artifacts?.['delegations-display'];
-            const hasDelegationData = message.artifacts?.['delegations-data'];
+            const hasDelegationDisplay = message.artifacts?.['policy-display'];
+            const hasDelegationData = message.artifacts?.['policy-data'];
             const hasAwaitingAction = message.awaitingUserAction && message.statusData;
             const isCompleteDelegationSession = activeSessionId
               ? sessionsWithCompleteDelegations.has(activeSessionId)
@@ -222,7 +222,7 @@ export function MessageList({
                       return false;
                     }
 
-                    const skipArtifacts = ['delegations-display', 'delegations-data'];
+                    const skipArtifacts = ['policy-display', 'policy-data'];
                     if (skipArtifacts.includes(artifact.artifactId)) {
                       return false;
                     }
@@ -247,8 +247,8 @@ export function MessageList({
 
             {/* Workflow Approval Handler */}
             {(() => {
-              const hasDelegationDisplay = message.artifacts?.['delegations-display'];
-              const hasDelegationData = message.artifacts?.['delegations-data'];
+              const hasDelegationDisplay = message.artifacts?.['policy-display'];
+              const hasDelegationData = message.artifacts?.['policy-data'];
               const hasAwaitingAction = message.awaitingUserAction && message.statusData;
               const shouldRender = hasDelegationDisplay || hasDelegationData || hasAwaitingAction;
 
