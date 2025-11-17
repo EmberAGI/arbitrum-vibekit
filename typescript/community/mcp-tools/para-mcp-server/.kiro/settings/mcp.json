@@ -1,0 +1,64 @@
+{
+  "mcpServers": {
+    "blockscout": {
+      // for blockchain querying like token address and such
+      "url": "https://mcp.blockscout.com/mcp",
+      "disabled": false
+    },
+    "chrome-devtools": {
+      //for interacting with browser using ai
+      "args": [
+        "chrome-devtools-mcp@latest",
+        "--browser-url=http://127.0.0.1:9222"
+      ],
+      "command": "npx",
+      "disabled": false
+    },
+    "coinbase-cdp": {
+      // for interacting with coinbase cdp
+      "disabled": true,
+      "url": "https://docs.cdp.coinbase.com/mcp"
+    },
+    "context7": {
+      // for looking for a docs of particular library like shadcn
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
+      "command": "npx",
+      "disabled": false
+    },
+    "next-devtools": {
+      // for interacting searching nextjs docs using ai
+      "args": [
+        "-y",
+        "next-devtools-mcp@latest"
+      ],
+      "command": "npx",
+      "disabled": false
+    },
+    "para-docs": {
+      // for searching para docs
+      "disabled": false,
+      "url": "http://docs.getpara.com/mcp"
+    },
+    "sequential-thinking": {
+      // sequential thinking for complex task before we do all of the thing
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "command": "npx",
+      "disabled": true
+    },
+    "tiger": {
+      // tiger is for querying postgres database easily using ai
+      "args": [
+        "mcp",
+        "start"
+      ],
+      "command": "tiger",
+      "disabled": true
+    }
+  }
+}
