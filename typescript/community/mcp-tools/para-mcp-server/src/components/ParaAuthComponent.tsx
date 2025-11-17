@@ -44,6 +44,7 @@ export default function ParaAuthComponent({
   const [authState, setAuthState] = useState<any>(null);
   const [signupMethods, setSignupMethods] = useState<string[]>([]);
   const [selectedSignupMethod, setSelectedSignupMethod] = useState<string>("");
+  const [isAddressCopied, setIsAddressCopied] = useState<boolean>(false);
 
   // Helper function to request parent to open auth URL via postMessage
   const requestParentOpenPopup = (url: string, target: string): boolean => {
@@ -515,8 +516,19 @@ export default function ParaAuthComponent({
     }
   };
 
+  const handleCopyWalletAddress = async () => {
+    if (!walletAddress) return;
+    try {
+      await navigator.clipboard.writeText(walletAddress);
+      setIsAddressCopied(true);
+      setTimeout(() => setIsAddressCopied(false), 2000);
+    } catch (err) {
+      console.error("[ParaAuth] Failed to copy wallet address:", err);
+    }
+  };
+
   return (
-    <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
+    <div className="w-full max-w-md max-h-[80vh] overflow-y-auto rounded-2xl bg-white p-8 shadow-2xl">
       <h1 className="mb-2 text-3xl font-bold text-gray-900">Para Connect</h1>
 
       {/* Authentication Step: Select Method */}
@@ -803,9 +815,20 @@ export default function ParaAuthComponent({
                 <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
                   <div>
                     <div className="text-sm text-gray-600">Address</div>
-                    <div className="mt-1 font-mono text-sm text-gray-900">
-                      {walletAddress &&
-                        `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}
+                    <div className="mt-1 flex items-center gap-2 font-mono text-sm text-gray-900">
+                      <span>
+                        {walletAddress &&
+                          `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}
+                      </span>
+                      {walletAddress && (
+                        <button
+                          type="button"
+                          onClick={handleCopyWalletAddress}
+                          className="rounded bg-gray-200 px-2 py-1 text-xs font-semibold text-gray-800 hover:bg-gray-300"
+                        >
+                          {isAddressCopied ? "Copied" : "Copy"}
+                        </button>
+                      )}
                     </div>
                   </div>
                   {allWallets.length > 0 &&

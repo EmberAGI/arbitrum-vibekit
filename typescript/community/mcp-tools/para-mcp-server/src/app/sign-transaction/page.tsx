@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useIsChatGptApp, useWidgetProps } from "@/app/hooks";
 import { TransactionPreviewComponent } from "@/components/TransactionPreviewComponent";
 
 type TransactionWidgetProps = {
   success?: boolean;
+  rpcUrl?: string;
   txPreview?: Array<{
     to: string;
     data: string;
@@ -25,6 +27,24 @@ type TransactionWidgetProps = {
 export default function SignTransaction() {
   const isChatGptApp = useIsChatGptApp();
   const toolOutput = useWidgetProps<TransactionWidgetProps>();
+
+  const widgetTxPreview = toolOutput?.txPreview;
+  const widgetRpcUrl = toolOutput?.rpcUrl;
+
+  const [txPreview, setTxPreview] = useState<
+    TransactionWidgetProps["txPreview"]
+  >([]);
+  const [rpcUrl, setRpcUrl] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (widgetTxPreview && widgetTxPreview.length > 0) {
+      setTxPreview(widgetTxPreview);
+    } else {
+      setTxPreview([]);
+    }
+
+    setRpcUrl(widgetRpcUrl);
+  }, [widgetTxPreview, widgetRpcUrl]);
 
   // When running inside ChatGPT Apps, wait for the widget props to arrive
   if (isChatGptApp && toolOutput == null) {
@@ -76,36 +96,22 @@ export default function SignTransaction() {
     );
   }
 
-  // Render transaction preview if we have transaction data
-  if (toolOutput?.txPreview && toolOutput.txPreview.length > 0) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-        <main className="flex w-full max-w-2xl flex-col gap-4 rounded-lg bg-white p-8 shadow-lg dark:bg-zinc-900">
-          <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-50">
-            Sign Transaction
-          </h1>
-          <p className="text-zinc-600 dark:text-zinc-400">
-            Review and sign the transaction below using your Para wallet.
-          </p>
-
-          <TransactionPreviewComponent txPreview={toolOutput.txPreview} />
-        </main>
-      </div>
-    );
-  }
-
-  // Fallback state - no transaction data
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex w-full max-w-2xl flex-col gap-4 rounded-lg bg-white p-8 shadow-lg dark:bg-zinc-900">
         <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-50">
           Sign Transaction
         </h1>
-        <p className="text-zinc-600 dark:text-zinc-400">
-          This page is intended to be used with transaction preview data from
-          the create-transaction-preview tool. No transaction data was
-          provided.
-        </p>
+   
+          <p className="text-zinc-600 dark:text-zinc-400">
+            Review and sign the transaction below using your Para wallet.
+          </p>
+      
+
+        <TransactionPreviewComponent
+          txPreview={txPreview || []}
+          rpcUrl={rpcUrl}
+        />
       </main>
     </div>
   );

@@ -2,6 +2,7 @@ import type { Address, Hex } from "viem";
 import type { InferSchema } from "xmcp";
 import { z } from "zod";
 import { requestContext } from "@/app/mcp/route";
+import { baseURL as rawBaseURL } from "@/config/baseUrl";
 import { getAppsSdkCompatibleHtml, baseURL } from "@/lib/apps-sdk-html";
 
 export const schema = {
@@ -21,12 +22,10 @@ export const schema = {
     .string()
     .optional()
     .describe("Max priority fee per gas in wei (optional)"),
-  previewData: z
-    .record(z.unknown())
-    .optional()
-    .describe(
-      "Optional additional data to display in the preview (can be any JSON object). If not provided, will show the transaction plan.",
-    ),
+  rpcUrl: z
+    .string()
+    .url()
+    .describe("RPC URL for the network"),
 };
 
 function isOpenAIClient(): boolean {
@@ -78,6 +77,13 @@ export const metadata = {
   },
 };
 
+function resolveBaseUrl(input?: string | null) {
+  const value = input ?? rawBaseURL ?? "";
+  if (!value) return "";
+  if (value.startsWith("http://") || value.startsWith("https://")) return value;
+  return `https://${value}`;
+}
+
 export default async function createTransactionPreview({
   to,
   value,
@@ -86,10 +92,19 @@ export default async function createTransactionPreview({
   gasLimit,
   maxFeePerGas,
   maxPriorityFeePerGas,
-  previewData,
+  rpcUrl,
 }: InferSchema<typeof schema>) {
   try {
     const html = await getAppsSdkCompatibleHtml(baseURL, "/sign-transaction");
+
+    const base = resolveBaseUrl();
+    if (!base) {
+      throw new Error(
+        "Base URL is not configured. Ensure Vercel environment variables (VERCEL_URL/VERCEL_BRANCH_URL/VERCEL_PROJECT_PRODUCTION_URL) are set.",
+      );
+    }
+
+    const url = `${base}/sign-transaction`;
 
     // Convert transaction parameters to txPlan format
     const txPlan = [
@@ -104,11 +119,13 @@ export default async function createTransactionPreview({
       },
     ];
 
-    // Use previewData if provided, otherwise use txPlan as preview
-    const txPreview = previewData || txPlan;
+    // Use the transaction plan as the preview
+    const txPreview = txPlan;
 
     const result = {
       success: true,
+      url,
+      rpcUrl,
       txPreview,
       txPlan,
     };

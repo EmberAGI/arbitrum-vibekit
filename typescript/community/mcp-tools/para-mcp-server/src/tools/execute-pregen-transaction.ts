@@ -3,8 +3,7 @@ import {
   createParaViemClient,
 } from "@getpara/viem-v2-integration";
 import { eq } from "drizzle-orm";
-import { type Chain, createPublicClient, type Hex, http } from "viem";
-import { arbitrum, arbitrumSepolia, base, baseSepolia } from "viem/chains";
+import { createPublicClient, type Hex, http, defineChain } from "viem";
 import type { InferSchema } from "xmcp";
 import { z } from "zod";
 import { requestContext } from "@/app/mcp/route";
@@ -12,23 +11,15 @@ import { db } from "@/db";
 import { pregenWallets } from "@/db/schema";
 import { getParaServerClient } from "@/lib/para-server-client";
 
-// Supported networks mapping
-const SUPPORTED_NETWORKS: Record<string, { chain: Chain; name: string }> = {
-  "42161": { chain: arbitrum, name: "Arbitrum" },
-  "421614": { chain: arbitrumSepolia, name: "Arbitrum Sepolia" },
-  "8453": { chain: base, name: "Base" },
-  "84532": { chain: baseSepolia, name: "Base Sepolia" },
-};
-
 // Schema for the decoded transaction data
 const transactionDataSchema = z.object({
   to: z.string().describe("Recipient address"),
   data: z.string().optional().describe("Transaction data (hex, optional)"),
   value: z.string().describe("Transaction value in wei"),
   chainId: z
-    .enum(["42161", "421614", "8453", "84532"])
+    .string()
     .describe(
-      "Chain ID: 42161 (Arbitrum), 421614 (Arbitrum Sepolia), 8453 (Base), 84532 (Base Sepolia)",
+      "Chain ID as a string (for example, '42161' for Arbitrum, '8453' for Base)",
     ),
   gasLimit: z
     .string()
@@ -44,6 +35,46 @@ const transactionDataSchema = z.object({
     .describe("Max priority fee per gas in wei (optional)"),
 });
 
+type RawTransaction = z.infer<typeof transactionDataSchema>;
+
+function withSafeGasDefaults(rawTx: RawTransaction): RawTransaction {
+  const tx: RawTransaction = { ...rawTx };
+
+  if (!tx.gasLimit) {
+    if (!tx.data || tx.data === "0x") {
+      tx.gasLimit = "21000";
+    } else {
+      tx.gasLimit = "100000";
+    }
+  }
+
+  let defaultGasPriceWei = "1000000000";
+
+  if (tx.chainId === "84532") {
+    // Base Sepolia - fast ≈ 0.16 gwei
+    defaultGasPriceWei = "160000000";
+  } else if (tx.chainId === "1500") {
+    // Arbitrum Sepolia - fast ≈ 0.72 gwei
+    defaultGasPriceWei = "720000000";
+  } else if (tx.chainId === "8453") {
+    // Base mainnet - fast ≈ 0.02 gwei
+    defaultGasPriceWei = "20000000";
+  } else if (tx.chainId === "42161") {
+    // Arbitrum One mainnet - fast ≈ 0.05 gwei
+    defaultGasPriceWei = "50000000";
+  }
+
+  if (!tx.maxFeePerGas) {
+    tx.maxFeePerGas = defaultGasPriceWei;
+  }
+
+  if (!tx.maxPriorityFeePerGas) {
+    tx.maxPriorityFeePerGas = defaultGasPriceWei;
+  }
+
+  return tx;
+}
+
 // Define the schema for tool parameters
 export const schema = {
   userIdentifier: z
@@ -55,8 +86,7 @@ export const schema = {
   rpcUrl: z
     .string()
     .url()
-    .optional()
-    .describe("Optional custom RPC URL for the network"),
+    .describe("RPC URL for the network"),
 };
 
 // Helper to check if client is OpenAI
@@ -69,12 +99,12 @@ function isOpenAIClient(): boolean {
 export const metadata = {
   get name() {
     const isOpenAI = isOpenAIClient();
-    return isOpenAI ? "process-operation" : "execute-pregen-transaction";
+    return isOpenAI ? "pregen-tx" : "execute-pregen-transaction";
   },
   get description() {
     const isOpenAI = isOpenAIClient();
     if (isOpenAI) {
-      return "process operation";
+      return "pregen-tx";
     }
     return "Execute a transaction using a pregenerated Para wallet on Arbitrum, Base, Arbitrum Sepolia, or Base Sepolia. Signs and broadcasts the transaction to the blockchain, then returns the transaction receipt with confirmation details.";
   },
@@ -98,21 +128,9 @@ export default async function executePregenTransaction({
   rpcUrl,
 }: InferSchema<typeof schema>) {
   try {
-    const rawTransaction = rawTx;
+    const rawTransaction = withSafeGasDefaults(rawTx);
 
-    // For OpenAI clients, just validate and return the transaction data without executing
-    if (isOpenAIClient()) {
-      const result = {
-        success: true,
-        message: "Transaction data validated successfully",
-        validatedTransaction: rawTransaction,
-        note: "Transaction not executed - validation only for OpenAI client",
-      };
-
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
-    }
+ 
 
     // Query database for the pregen wallet
     const isUUID =
@@ -138,13 +156,28 @@ export default async function executePregenTransaction({
       );
     }
 
-    // Get chain configuration
-    const networkConfig = SUPPORTED_NETWORKS[rawTransaction.chainId];
-    if (!networkConfig) {
+    // Build a dynamic chain configuration from the provided chainId and rpcUrl
+    const chainIdNumber = Number(rawTransaction.chainId);
+    if (!Number.isInteger(chainIdNumber) || chainIdNumber <= 0) {
       throw new Error(
-        `Unsupported chain ID: ${rawTransaction.chainId}. Supported: ${Object.keys(SUPPORTED_NETWORKS).join(", ")}`,
+        `Invalid chain ID: ${rawTransaction.chainId}. Expected a positive integer string, e.g. "42161".`,
       );
     }
+
+    const chainConfig = defineChain({
+      id: chainIdNumber,
+      name: `Chain ${rawTransaction.chainId}`,
+      network: `chain-${rawTransaction.chainId}`,
+      nativeCurrency: {
+        name: "Ether",
+        symbol: "ETH",
+        decimals: 18,
+      },
+      rpcUrls: {
+        default: { http: [rpcUrl] },
+        public: { http: [rpcUrl] },
+      },
+    });
 
     // Initialize Para server client
     const para = getParaServerClient();
@@ -156,13 +189,13 @@ export default async function executePregenTransaction({
     const account = createParaAccount(para);
     const walletClient = createParaViemClient(para, {
       account,
-      chain: networkConfig.chain,
+      chain: chainConfig,
       transport: http(rpcUrl),
     });
 
     // Create public client for reading blockchain data
     const publicClient = createPublicClient({
-      chain: networkConfig.chain,
+      chain: chainConfig,
       transport: http(rpcUrl),
     });
 
@@ -220,7 +253,7 @@ export default async function executePregenTransaction({
         effectiveGasPrice: receipt.effectiveGasPrice.toString(),
         status: receipt.status === "success" ? "success" : "failed",
         chainId: rawTransaction.chainId,
-        chainName: networkConfig.name,
+        chainName: chainConfig.name,
         to: rawTransaction.to,
         value: rawTransaction.value,
       },
