@@ -2,7 +2,7 @@ name: Automate Documentation
 
 on:
   push:
-    branches: [main, master]
+    branches-ignore: [main, master, next]
 
 jobs:
   auto-docs:

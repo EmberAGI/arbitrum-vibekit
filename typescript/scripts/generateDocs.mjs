@@ -83,10 +83,14 @@ Code diff:
 ${diff}
 \`\`\`
 
-${existingContent ? `Existing documentation content:
+${
+  existingContent
+    ? `Existing documentation content:
 \`\`\`markdown
 ${existingContent}
-\`\`\`` : ''}
+\`\`\``
+    : ''
+}
 
 STEP 1: First, identify what functionality is being removed/changed from the diff.
 STEP 2: Search through the documentation for ALL references to that functionality.
@@ -123,10 +127,11 @@ IMPORTANT: Use "exact text to find and replace" - provide the complete text that
         },
       });
       const response = await openai.chat.completions.create({
-        model: 'anthropic/claude-3.5-sonnet', // Good balance of quality and cost
+        model: 'openai/gpt-5.1', // GPT-5.1 with low thinking mode for better performance
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 2000,
         temperature: 0.7,
+        reasoning_effort: 'low', // Low thinking mode as requested
       });
       const content = response.choices[0]?.message?.content;
       if (!content) {
@@ -137,10 +142,11 @@ IMPORTANT: Use "exact text to find and replace" - provide the complete text that
       const { default: OpenAI } = await import('openai');
       const openai = new OpenAI({ apiKey: openaiKey });
       const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: 'gpt-5.1',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 2000,
         temperature: 0.7,
+        reasoning_effort: 'low', // Low thinking mode as requested
       });
       const content = response.choices[0]?.message?.content;
       if (!content) {
@@ -242,7 +248,9 @@ function applyDocumentationUpdates(readmePath, updatesJson) {
     console.log(`📝 Applying ${updates.updates.length} documentation updates...`);
 
     for (const update of updates.updates) {
-      console.log(`   - ${update.action}: "${update.section.substring(0, 50)}..." (${update.reason})`);
+      console.log(
+        `   - ${update.action}: "${update.section.substring(0, 50)}..." (${update.reason})`,
+      );
 
       if (update.action === 'update') {
         // Exact text replacement
@@ -250,7 +258,9 @@ function applyDocumentationUpdates(readmePath, updatesJson) {
           content = content.replace(update.section, update.content);
           console.log(`     ✅ Found and updated exact text`);
         } else {
-          console.warn(`   ⚠️  Could not find exact text: "${update.section.substring(0, 100)}..."`);
+          console.warn(
+            `   ⚠️  Could not find exact text: "${update.section.substring(0, 100)}..."`,
+          );
         }
       } else if (update.action === 'add') {
         // Add new content at the end
@@ -261,14 +271,15 @@ function applyDocumentationUpdates(readmePath, updatesJson) {
           content = content.replace(update.section, '');
           console.log(`     ✅ Removed exact text`);
         } else {
-          console.warn(`   ⚠️  Could not find text to remove: "${update.section.substring(0, 100)}..."`);
+          console.warn(
+            `   ⚠️  Could not find text to remove: "${update.section.substring(0, 100)}..."`,
+          );
         }
       }
     }
 
     writeFileSync(readmePath, content, 'utf8');
     console.log(`✅ Applied documentation updates: ${updates.summary}`);
-
   } catch (error) {
     console.warn('Failed to parse JSON updates, falling back to simple append:', error.message);
     insertOrUpdateAutoDocSection(readmePath, 'fallback', updatesJson);
