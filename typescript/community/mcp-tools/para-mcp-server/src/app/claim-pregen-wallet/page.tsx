@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useIsChatGptApp, useWidgetProps } from "@/app/hooks";
+import { useIsChatGptApp, useSendMessage, useWidgetProps } from "@/app/hooks";
 import { baseURL } from "@/config/baseUrl";
 import ClaimPregenWalletClient from "@/components/ClaimPregenWalletClient";
 
@@ -16,6 +16,7 @@ type ClaimWidgetProps = {
 
 export default function ClaimPregenWallet() {
   const isChatGptApp = useIsChatGptApp();
+  const sendMessage = useSendMessage();
   const toolOutput = useWidgetProps<ClaimWidgetProps>();
   const [resolvedWalletId, setResolvedWalletId] = useState<string | null>(null);
   const [resolveError, setResolveError] = useState<string | null>(null);
@@ -56,6 +57,7 @@ export default function ClaimPregenWallet() {
           }
 
           if (!cancelled) {
+            void sendMessage(`${baseURL}/claim-pregen-wallet/${data.id as string}`);
             setResolvedWalletId(data.id as string);
             setIsResolving(false);
           }

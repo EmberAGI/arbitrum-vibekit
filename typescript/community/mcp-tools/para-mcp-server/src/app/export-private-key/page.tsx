@@ -1,6 +1,6 @@
 "use client";
 
-import { useExportPrivateKey } from "@getpara/react-sdk";
+import { useExportPrivateKey, useLogout } from "@getpara/react-sdk";
 import { useState } from "react";
 import ParaAuthComponent, {
   type ParaAuthComponentProps,
@@ -29,6 +29,7 @@ function isExportableWallet(value: unknown): value is ExportableWallet {
 
 export default function ExportPrivateKeyPage() {
   const { mutate: triggerExport, isPending } = useExportPrivateKey();
+  const { logoutAsync } = useLogout();
   const openExternal = useOpenExternal();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [allWallets, setAllWallets] = useState<ExportableWallet[]>([]);
@@ -40,7 +41,7 @@ export default function ExportPrivateKeyPage() {
 
   // Filter to only show EVM non-pregenerated wallets
   const eligibleWallets = allWallets.filter(
-    (wallet) => wallet.type === "EVM" && wallet.isPregen === false,
+    (wallet) => wallet.type === "EVM",
   );
 
   const handleAuthSuccess: NonNullable<
@@ -52,14 +53,17 @@ export default function ExportPrivateKeyPage() {
 
     // Find first eligible wallet and select it
     const eligible = normalizedWallets.filter(
-      (wallet) => wallet.type === "EVM" && wallet.isPregen === false,
+      (wallet) => wallet.type === "EVM",
     );
     if (eligible.length > 0) {
       setSelectedWalletId(eligible[0].id ?? eligible[0].address ?? "");
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await logoutAsync();
+    } catch {}
     setIsLoggedIn(false);
     setAllWallets([]);
     setSelectedWalletId("");
@@ -120,8 +124,7 @@ export default function ExportPrivateKeyPage() {
               Export Private Key
             </h1>
             <p className="text-sm text-gray-600">
-              Export your EVM wallet private key. Only non-pregenerated wallets
-              support private key export.
+              Export your EVM wallet private key.
             </p>
           </div>
 

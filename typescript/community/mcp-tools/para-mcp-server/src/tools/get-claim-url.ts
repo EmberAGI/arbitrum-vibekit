@@ -86,7 +86,6 @@ export default async function getClaimUrl({
 }: InferSchema<typeof schema>) {
   try {
     const html = await getAppsSdkCompatibleHtml(baseURL, "/claim-pregen-wallet");
-   
 
     const base = resolveBaseUrl();
     if (!base) {
@@ -95,24 +94,129 @@ export default async function getClaimUrl({
       );
     }
 
-    const url = `${base}/claim-pregen-wallet/${id}`;
+    const isOpenAI = isOpenAIClient();
+    let resolvedId = id;
+
+    if (!resolvedId && email != null && !isOpenAI) {
+      const walletRecord = await db.query.pregenWallets.findFirst({
+        where: and(eq(pregenWallets.email, email), isNull(pregenWallets.claimedAt)),
+      });
+
+      if (!walletRecord) {
+        const result = {
+          success: false,
+          error: "Pregenerated wallet not found or already claimed for this email.",
+          wallet: {
+            id: resolvedId,
+            email,
+          },
+        };
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+          structuredContent: result,
+          isError: true,
+        };
+      }
+
+      resolvedId = walletRecord.id;
+    }
+
+    if (!resolvedId) {
+      // If email is provided but id is not, treat this as a valid request
+      // and return wallet info without a URL. The claim page will resolve
+      // the wallet id from the email.
+      if (email != null && isOpenAI) {
+        const result = {
+          success: true,
+          wallet: {
+            id: resolvedId,
+            email,
+          },
+          note:"please claim via chatgpt apps"
+        };
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `<html>${html}</html>` ,
+            },
+          ],
+          structuredContent: result,
+        };
+      }
+
+      // No id and no email provided: this is an error.
+      const errorMessage = "Cannot generate claim URL without a pregenerated wallet id.";
+
+      const result = {
+        success: false,
+        error: errorMessage,
+        wallet: {
+          id: resolvedId,
+          email,
+        },
+      };
+
+      if (isOpenAI) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `<html>${html}</html>` ,
+            },
+          ],
+          structuredContent: result,
+          isError: true,
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+        structuredContent: result,
+        isError: true,
+      };
+    }
+
+    const url = `${base}/claim-pregen-wallet/${resolvedId}`;
 
     const result = {
       success: true,
       url,
       wallet: {
-        id,
+        id: resolvedId,
         email,
       },
     };
 
-    
+    if (isOpenAI) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `<html>${html}</html>` ,
+          },
+        ],
+        structuredContent: result,
+      };
+    }
 
     return {
       content: [
         {
           type: "text",
-          text: `<html>${html}</html>`,
+          text: JSON.stringify(result, null, 2),
         },
       ],
       structuredContent: result,

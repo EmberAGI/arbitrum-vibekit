@@ -72,15 +72,32 @@ export default async function getExportPrivateKeyUrl() {
 
     const url = `${base}/export-private-key`;
 
+    const isOpenAI = isOpenAIClient();
+    const result = {
+      url,
+    };
+
+    if (isOpenAI) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `<html>${html}</html>`,
+          },
+        ],
+        // Only expose the URL in structuredContent
+        structuredContent: result,
+      };
+    }
+
     return {
       content: [
         {
           type: "text" as const,
-          text: `<html>${html}</html>`,
+          text: JSON.stringify(result, null, 2),
         },
       ],
-      // Only expose the URL in structuredContent
-      structuredContent: url,
+      structuredContent: result,
     };
   } catch (error) {
     const errorMessage =

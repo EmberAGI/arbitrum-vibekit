@@ -130,11 +130,25 @@ export default async function createTransactionPreview({
       txPlan,
     };
 
+    const isOpenAI = isOpenAIClient();
+
+    if (isOpenAI) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `<html>${html}</html>`,
+          },
+        ],
+        structuredContent: result,
+      };
+    }
+
     return {
       content: [
         {
           type: "text",
-          text: `<html>${html}</html>`,
+          text: JSON.stringify(result, null, 2),
         },
       ],
       structuredContent: result,

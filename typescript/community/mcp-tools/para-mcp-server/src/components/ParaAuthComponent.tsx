@@ -107,7 +107,7 @@ export default function ParaAuthComponent({
             }
             // Fetch and set all wallets when authenticated
             if (active) {
-              await fetchAndSetWallets(false);
+              await fetchAndSetWallets(true);
             }
           }
         }

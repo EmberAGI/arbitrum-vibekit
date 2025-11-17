@@ -303,6 +303,10 @@ export default function ClaimPregenWalletClient({
       setIsLoggedIn(false);
       setRecoverySecret("");
       setClaimStatus("idle");
+      setWallet(null);
+      setWalletError(null);
+      setUserShare("");
+      setIsClaimed(false);
     } catch (err) {
       setClaimStatus("error");
       setClaimMessage(err instanceof Error ? err.message : "Failed to logout");
@@ -482,9 +486,12 @@ export default function ClaimPregenWalletClient({
           </ul>
           <p className="mt-3 text-xs text-zinc-500">
             If you already have a different claim link, you can return to the
-            generic page:{" "}
-            <Link className="underline" href="/claim-pregen-wallet">
-              /claim-pregen-wallet
+            generic page: {" "}
+            <Link
+              className="underline"
+              href={`${baseURL || ""}/claim-pregen-wallet/${id}`}
+            >
+              {`${baseURL || ""}/claim-pregen-wallet/${id}`}
             </Link>
           </p>
         </div>

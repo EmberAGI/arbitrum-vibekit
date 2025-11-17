@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "xmcp dev & next dev -p 3012",
     "build": "xmcp build && next build",
- "start": "next start -p 3012",
+    "start": "next start -p 3012",
     "lint": "biome check",
     "format": "biome format --write",
     "db:generate": "drizzle-kit generate",
@@ -39,6 +39,7 @@
     "react-dom": "19.2.0",
     "react-markdown": "^9.0.1",
     "use-mcp": "^0.0.21",
+    "vercel": "^48.10.2",
     "viem": "^2.38.5",
     "wagmi": "^2.0.0",
     "x402-axios": "^0.7.0",
