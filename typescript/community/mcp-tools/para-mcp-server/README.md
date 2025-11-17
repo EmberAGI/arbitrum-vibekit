@@ -1,36 +1,105 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## para-mcp-server – How to Run
 
-## Getting Started
+This folder contains the **Para MCP server + Next.js demo UI**.
 
-First, run the development server:
+---
+
+## 1. Prerequisites
+
+- **Node.js** 20 or higher
+- **pnpm** as the package manager (this repo uses a pnpm workspace)
+- **PostgreSQL** (optional, required only if you use pregenerated wallets – see `DATABASE_SETUP.md`)
+
+---
+
+## 2. Install Dependencies
+
+From the **repository root** (where `pnpm-workspace.yaml` lives):
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+This installs all workspace dependencies, including those for `para-mcp-server`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 3. Configure Environment Variables
 
-## Learn More
+From this directory (`typescript/community/mcp-tools/para-mcp-server`):
 
-To learn more about Next.js, take a look at the following resources:
+1. Copy the example env file:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+   ```bash
+   cp .env.example .env
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+2. Edit `.env` and fill in the required values from the comments in `.env.example`:
 
-## Deploy on Vercel
+   - **Para SDK**
+     - `PARA_API_KEY`
+     - `NEXT_PUBLIC_PARA_API_KEY`
+     - `NEXT_PUBLIC_PARA_ENVIRONMENT` (e.g. `BETA` or `PROD`)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+   - **WalletConnect**
+     - `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+   - **Coinbase Developer Platform (CDP)** – for faucet and paymaster support
+     - `CDP_API_KEY_ID`
+     - `CDP_API_KEY_SECRET`
+     - `NEXT_PUBLIC_PAYMASTER_URL` (optional for sponsored gas)
+
+   - **RPC URLs (optional but recommended)**
+     - `NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL`
+
+3. (Optional, for pregenerated wallets) Configure the database URL as described in `DATABASE_SETUP.md`:
+
+   ```bash
+   DATABASE_URL=postgresql://username:password@host:port/database
+   ```
+
+   Then follow `DATABASE_SETUP.md` to create the database and run migrations if you need that functionality.
+
+---
+
+## 4. Run in Development
+
+From this directory:
+
+```bash
+pnpm dev
+```
+
+This runs:
+
+- `xmcp dev` – starts the MCP HTTP server based on `xmcp.config.ts`
+- `next dev -p 3012` – starts the Next.js app on **http://localhost:3012**
+
+Open your browser at:
+
+- **Next.js UI:** http://localhost:3012
+
+Use the xmcp documentation for details on connecting your MCP client to the running server.
+
+---
+
+## 5. Build and Run in Production Mode
+
+From this directory:
+
+1. Build the project:
+
+   ```bash
+   pnpm build
+   ```
+
+   This runs `xmcp build` and then `next build`.
+
+2. Start the production server:
+
+   ```bash
+   pnpm start
+   ```
+
+The Next.js app will run on **http://localhost:3012** in production mode. Ensure your `.env` file contains the correct production API keys and URLs before deploying or running in production.
+
