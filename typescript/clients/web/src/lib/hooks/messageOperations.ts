@@ -83,11 +83,10 @@ export function createMessageOperations(
               // (which means we're reconnecting and should replace, not merge)
               const existingArtifacts = msg.artifacts || {};
               const hasDelegations =
-                existingArtifacts['delegations-display'] || existingArtifacts['delegations-data'];
+                existingArtifacts['policy-display'] || existingArtifacts['policy-data'];
 
               const receivingDelegations =
-                updates.artifacts?.['delegations-display'] ||
-                updates.artifacts?.['delegations-data'];
+                updates.artifacts?.['policy-display'] || updates.artifacts?.['policy-data'];
 
               let mergedArtifacts = {
                 ...existingArtifacts,
@@ -101,7 +100,7 @@ export function createMessageOperations(
                 mergedArtifacts = {
                   ...Object.fromEntries(
                     Object.entries(existingArtifacts).filter(
-                      ([key]) => key !== 'delegations-display' && key !== 'delegations-data',
+                      ([key]) => key !== 'policy-display' && key !== 'policy-data',
                     ),
                   ),
                   ...updates.artifacts,
@@ -109,14 +108,14 @@ export function createMessageOperations(
               } else if (
                 hasDelegations &&
                 updates.artifacts &&
-                !updates.artifacts['delegations-display'] &&
-                !updates.artifacts['delegations-data']
+                !updates.artifacts['policy-display'] &&
+                !updates.artifacts['policy-data']
               ) {
                 // If we had delegations before and they're being removed, preserve them
                 mergedArtifacts = {
                   ...updates.artifacts,
-                  'delegations-display': existingArtifacts['delegations-display'],
-                  'delegations-data': existingArtifacts['delegations-data'],
+                  'policy-display': existingArtifacts['policy-display'],
+                  'policy-data': existingArtifacts['policy-data'],
                 };
               }
 
@@ -171,7 +170,7 @@ export function createMessageOperations(
       }
 
       const filteredMessages = session.messages.filter(
-        (msg) => !(msg.artifacts?.['delegations-display'] || msg.artifacts?.['delegations-data']),
+        (msg) => !(msg.artifacts?.['policy-display'] || msg.artifacts?.['policy-data']),
       );
 
       return {

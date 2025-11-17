@@ -3,9 +3,7 @@
 import React from 'react';
 import { useAccount } from 'wagmi';
 import { WalletConnectMoment } from './strategyInput/walletConnectMoment';
-import { WalletUpgradeMoment } from './strategyInput/walletUpgradeMoment';
 import { StrategyConfigMoment } from './strategyInput/strategyConfigMoment';
-import { useUpgradeToSmartAccount } from '../../hooks/useUpgradeToSmartAccount';
 
 interface Reward {
   type: 'points' | 'apy';
@@ -44,7 +42,6 @@ export function StrategyInputDisplay({
   onUserAction,
 }: StrategyInputDisplayProps) {
   const { isConnected } = useAccount();
-  const { isDeployed, isLoading } = useUpgradeToSmartAccount();
 
   // Convert rewards to match the expected interface
   const convertedRewards = rewards.map((reward) => ({
@@ -53,21 +50,6 @@ export function StrategyInputDisplay({
     percentage: reward.percentage,
     label: reward.label || '',
   }));
-
-  // Show loading state while checking deployment status
-  if (isConnected && isLoading) {
-    return (
-      <WalletConnectMoment
-        name={name}
-        subtitle="Checking wallet status..."
-        protocol={protocol}
-        tokenIconUri={tokenIconUri}
-        platformIconUri={platformIconUri}
-        rewards={convertedRewards}
-        chains={chains}
-      />
-    );
-  }
 
   // Determine which moment to show
   switch (true) {
@@ -84,20 +66,7 @@ export function StrategyInputDisplay({
         />
       );
 
-    case isConnected && isDeployed === false:
-      return (
-        <WalletUpgradeMoment
-          name={name}
-          subtitle={subtitle}
-          protocol={protocol}
-          tokenIconUri={tokenIconUri}
-          platformIconUri={platformIconUri}
-          rewards={convertedRewards}
-          chains={chains}
-        />
-      );
-
-    case isConnected && isDeployed === true:
+    case isConnected:
       return (
         <StrategyConfigMoment
           name={name}

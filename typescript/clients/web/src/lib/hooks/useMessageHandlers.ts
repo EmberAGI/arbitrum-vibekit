@@ -56,8 +56,7 @@ export function useMessageHandlers(handlers: MessageHandlers) {
           justSubmittedDelegations &&
           messageId &&
           (!updates?.artifacts ||
-            (!updates.artifacts['delegations-display'] &&
-              !updates.artifacts['delegations-data'])) &&
+            (!updates.artifacts['policy-display'] && !updates.artifacts['policy-data'])) &&
           !hasDashboardArtifacts
         ) {
           console.log(
