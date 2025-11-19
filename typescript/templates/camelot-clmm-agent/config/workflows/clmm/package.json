@@ -14,7 +14,9 @@
     "lint": "eslint \"src\" \"tests\" --ext .ts",
     "lint:fix": "eslint \"src\" \"tests\" --ext .ts --fix",
     "format": "prettier \"{src,tests}/**/*.{ts,tsx,js,jsx}\" --write",
-    "format:check": "prettier \"{src,tests}/**/*.{ts,tsx,js,jsx}\" --check"
+    "format:check": "prettier \"{src,tests}/**/*.{ts,tsx,js,jsx}\" --check",
+    "workflow:demo": "tsx --env-file=.env ./scripts/run-camelot-demo.ts",
+    "wallet:withdraw": "tsx --env-file=.env scripts/manualWithdraw.ts"
   },
   "dependencies": {
     "@emberai/agent-node": "^1.0.0",
