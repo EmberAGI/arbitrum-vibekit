@@ -9,11 +9,50 @@ import { createA2AServer } from '../../a2a/server.js';
 import { resolveConfigDirectory } from '../../config/runtime/config-dir.js';
 import { initFromConfigWorkspace } from '../../config/runtime/init.js';
 import type { HotReloadEvent } from '../../config/runtime/init.js';
-import { serviceConfig } from '../../config.js';
+import { serviceConfig, type ServiceConfig } from '../../config.js';
 import { Logger } from '../../utils/logger.js';
 import { cliOutput } from '../output.js';
 
 const NativePromise: PromiseConstructor = global.Promise;
+
+function normalizePathSegment(path?: string): string {
+  if (!path) {
+    return '/';
+  }
+  let normalized = path.trim();
+  if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`;
+  }
+  normalized = normalized.replace(/\/{2,}/g, '/');
+  if (normalized.length > 1 && normalized.endsWith('/')) {
+    normalized = normalized.slice(0, -1);
+  }
+  return normalized || '/';
+}
+
+function resolveA2APath(agentCardUrl: string, overridePath?: string): string {
+  if (overridePath) {
+    return normalizePathSegment(overridePath);
+  }
+  try {
+    const parsed = new URL(agentCardUrl);
+    const path = parsed.pathname && parsed.pathname !== '' ? parsed.pathname : '/a2a';
+    return normalizePathSegment(path);
+  } catch {
+    return '/a2a';
+  }
+}
+
+function resolveAgentCardPath(agentCardPath?: string): string {
+  if (agentCardPath) {
+    return normalizePathSegment(agentCardPath);
+  }
+  return '/.well-known/agent-card.json';
+}
+
+function buildEndpoint(baseUrl: string, path: string): string {
+  return path === '/' ? baseUrl : `${baseUrl}${path}`;
+}
 
 async function withNativePromise<T>(fn: () => Promise<T>): Promise<T> {
   const currentPromise = global.Promise;
@@ -167,10 +206,19 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
     process.env['LOG_LEVEL'] = 'ERROR';
   }
 
+  const effectiveServiceConfig: ServiceConfig = {
+    ...serviceConfig,
+    server: {
+      ...serviceConfig.server,
+      port: options.port ?? serviceConfig.server.port,
+      host: options.host ?? serviceConfig.server.host,
+    },
+  };
+
   // Create server with service and agent config
   const server = await withNativePromise(() =>
     createA2AServer({
-      serviceConfig,
+      serviceConfig: effectiveServiceConfig,
       agentConfig: agentConfigHandle,
     }),
   );
@@ -189,10 +237,16 @@ export async function runCommand(options: RunOptions = {}): Promise<void> {
     const host = addressInfo.address === '::' ? 'localhost' : addressInfo.address;
     serverUrl = `http://${host}:${addressInfo.port}`;
 
+    const a2aPath = resolveA2APath(
+      agentConfigHandle.config.agentCard.url,
+      effectiveServiceConfig.a2a.path,
+    );
+    const agentCardPath = resolveAgentCardPath(agentConfigHandle.config.routing?.agentCardPath);
+
     cliOutput.blank();
     cliOutput.success(`Server running at \`${serverUrl}\``);
-    cliOutput.success(`Agent card: \`${serverUrl}/.well-known/agent-card.json\``);
-    cliOutput.success(`A2A endpoint: \`${serverUrl}/a2a\``);
+    cliOutput.success(`Agent card: \`${buildEndpoint(serverUrl, agentCardPath)}\``);
+    cliOutput.success(`A2A endpoint: \`${buildEndpoint(serverUrl, a2aPath)}\``);
 
     if (shouldAttach) {
       cliOutput.blank();

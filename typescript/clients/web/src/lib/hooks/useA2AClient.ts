@@ -158,14 +158,9 @@ export function useA2AClient(): UseA2AClientReturn {
       addDebugLog('info', 'Starting connection', { url, customHeaders });
 
       try {
-        // Fetch agent card
-        const agentCardUrl = url.endsWith('/')
-          ? `${url}.well-known/agent-card.json`
-          : `${url}/.well-known/agent-card.json`;
+        addDebugLog('info', 'Fetching agent card', { agentCardUrl: url });
 
-        addDebugLog('info', 'Fetching agent card', { agentCardUrl });
-
-        const response = await fetch(agentCardUrl, {
+        const response = await fetch(url, {
           method: 'GET',
           headers: {
             Accept: 'application/json',
@@ -182,14 +177,16 @@ export function useA2AClient(): UseA2AClientReturn {
         addDebugLog('success', 'Agent card fetched', agentCardData);
         setAgentCard(agentCardData);
 
-        // Extract A2A endpoint from agent card
-        const a2aEndpoint = agentCardData.a2a?.endpoint || `${url}/a2a`;
-        agentEndpointRef.current = a2aEndpoint;
+        const agentUrl = agentCardData.url;
+        if (typeof agentUrl !== 'string' || agentUrl.length === 0) {
+          throw new Error('Agent card missing required url field');
+        }
+        agentEndpointRef.current = agentUrl;
 
         // Check if agent supports streaming
         const supportsStreaming = agentCardData.capabilities?.streaming === true;
         addDebugLog('success', 'Connected to A2A agent', {
-          endpoint: a2aEndpoint,
+          endpoint: agentUrl,
           supportsStreaming,
         });
 

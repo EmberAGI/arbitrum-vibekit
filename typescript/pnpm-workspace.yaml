@@ -3,6 +3,7 @@ packages:
   - 'community/*/*'
   - 'examples/*'
   - 'templates/*'
+  - '!templates/**/config/**'
   - 'clients/*'
   - 'onchain-actions-plugins/*'
   - '!**/dist/**'

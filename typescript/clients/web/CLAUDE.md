@@ -69,7 +69,7 @@ npm run build           # Production build
 npm run lint            # Run linter
 ```
 
-**Default A2A Agent:** http://localhost:3001 (fetches `/.well-known/agent-card.json`)
+**Default Agent Card URL:** http://localhost:3001/.well-known/agent-card.json
 
 ## Conventions
 

@@ -32,7 +32,7 @@ interface DebugLog {
 
 export default function Home() {
   const [agentCardUrl, setAgentCardUrl] = useState(
-    process.env.NEXT_PUBLIC_AGENT_CARD_URL || 'http://localhost:3001',
+    process.env.NEXT_PUBLIC_AGENT_CARD_URL || 'http://localhost:3001/.well-known/agent-card.json',
   );
   const [showSettings, setShowSettings] = useState(false);
   const [showConnection, setShowConnection] = useState(false);
@@ -626,14 +626,9 @@ export default function Home() {
     addDebugLog('info', 'Starting connection', { url, customHeaders });
 
     try {
-      // Fetch agent card
-      const agentCardUrlFull = url.endsWith('/')
-        ? `${url}.well-known/agent-card.json`
-        : `${url}/.well-known/agent-card.json`;
+      addDebugLog('info', 'Fetching agent card', { agentCardUrlFull: url });
 
-      addDebugLog('info', 'Fetching agent card', { agentCardUrlFull });
-
-      const response = await fetch(agentCardUrlFull, {
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           Accept: 'application/json',
@@ -650,14 +645,16 @@ export default function Home() {
       addDebugLog('success', 'Agent card fetched', agentCardData);
       setAgentCard(agentCardData);
 
-      // Extract A2A endpoint from agent card
-      const a2aEndpoint = agentCardData.a2a?.endpoint || `${url}/a2a`;
-      setAgentEndpoint(a2aEndpoint);
+      const agentUrl = agentCardData.url;
+      if (typeof agentUrl !== 'string' || agentUrl.length === 0) {
+        throw new Error('Agent card missing required url field');
+      }
+      setAgentEndpoint(agentUrl);
 
       // Check if agent supports streaming
       const supportsStreaming = agentCardData.capabilities?.streaming === true;
       addDebugLog('success', 'Connected to A2A agent', {
-        endpoint: a2aEndpoint,
+        endpoint: agentUrl,
         supportsStreaming,
       });
 
@@ -668,7 +665,7 @@ export default function Home() {
       if (activeSessionId) {
         updateSessionStatus(activeSessionId, 'active');
         // Store agent endpoint in session for reconnection
-        setSessionAgentEndpoint(activeSessionId, a2aEndpoint);
+        setSessionAgentEndpoint(activeSessionId, agentUrl);
       }
     } catch (error) {
       setIsA2AConnecting(false);
