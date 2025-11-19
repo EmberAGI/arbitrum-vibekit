@@ -26,18 +26,18 @@ globs: ["**/*"]
 - Unit tests mirror source directory structure
 - Use Vitest for testing framework (migrating from Mocha)
 - Follow Test-Driven Development (TDD) practices
-- For detailed testing guidelines, see `docs/testing-strategy.md` and the TDD agents
+- For detailed testing guidelines, see `.rulesync/commands/write-tests.md` and the TDD agents
 
 ### Working with Test Infrastructure and Code
 
 When modifying test infrastructure (MSW handlers, test utilities, mock data):
 
-- **ALWAYS read** `.claude/agents/tdd-test-writer.md` FIRST for requirements and patterns
+- **ALWAYS read** `.rulesync/commands/write-tests.md` FIRST for requirements and patterns
 - This includes creating new handlers, updating existing ones, or adding mock utilities
 
 When implementing or modifying code (whether making tests pass or any other changes):
 
-- **ALWAYS read** `.claude/agents/test-driven-coder.md` FIRST for implementation patterns
+- **ALWAYS read** `.rulesync/commands/write-tests.md` FIRST for implementation patterns
 
 ### Environment Configuration
 
