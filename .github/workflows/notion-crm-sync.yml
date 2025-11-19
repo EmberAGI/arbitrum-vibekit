@@ -1,0 +1,163 @@
+name: Sync External Contributions to Notion CRM
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run sync script
+        env:
+          NOTION_SECRET: ${{ secrets.NOTION_SECRET }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          GITHUB_EVENT: ${{ toJson(github.event) }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: |
+          cat > script.py << 'EOF'
+          import os, json, re, requests
+
+          NOTION_SECRET = os.environ["NOTION_SECRET"]
+          DATABASE_ID = os.environ["NOTION_DATABASE_ID"]
+          event = json.loads(os.environ["GITHUB_EVENT"])
+          actor = os.environ["GITHUB_ACTOR"]
+
+          INTERNAL_DEVS = [
+              "0xTomDaniel", "0xchepe", "dev-coda",
+              "ParastooGM", "danielkinahan", "varelaseb"
+          ]
+
+          # Skip internal contributors
+          if actor in INTERNAL_DEVS:
+              print("Internal contributor detected — exiting.")
+              exit(0)
+
+          headers = {
+              "Authorization": f"Bearer {NOTION_SECRET}",
+              "Notion-Version": "2022-06-28",
+              "Content-Type": "application/json"
+          }
+
+          def search_notion_for_url(url):
+              query = {
+                  "filter": {
+                      "or": [
+                          {"property": "Github Issue", "url": {"equals": url}},
+                          {"property": "PR", "url": {"equals": url}},
+                      ]
+                  }
+              }
+              resp = requests.post(
+                  f"https://api.notion.com/v1/databases/{DATABASE_ID}/query",
+                  headers=headers,
+                  json=query
+              )
+              data = resp.json()
+              results = data.get("results", [])
+              return results[0]["id"] if results else None
+
+          def update_row(page_id, issue_url=None, pr_url=None, title=None):
+              props = {}
+              if issue_url:
+                  props["Github Issue"] = {"url": issue_url}
+              if pr_url:
+                  props["PR"] = {"url": pr_url}
+              if title:
+                  props["Project"] = {"rich_text": [{"text": {"content": title}}]}
+
+              payload = {"properties": props}
+
+              requests.patch(
+                  f"https://api.notion.com/v1/pages/{page_id}",
+                  headers=headers,
+                  json=payload
+              )
+
+          def create_row(actor, issue_url=None, pr_url=None, title=""):
+              payload = {
+                  "parent": {"database_id": DATABASE_ID},
+                  "properties": {
+                      "Builder Name": {
+                          "title": [{"text": {"content": actor}}]
+                      },
+                      "Status": {
+                          "select": {"name": "Active Project"}
+                      },
+                      "Project": {
+                          "rich_text": [{"text": {"content": title}}]
+                      },
+                      "Github Issue": {"url": issue_url},
+                      "PR": {"url": pr_url},
+                  }
+              }
+
+              requests.post(
+                  "https://api.notion.com/v1/pages",
+                  headers=headers,
+                  json=payload
+              )
+
+          # Extract data depending on event type
+          if "issue" in event:
+              # Issue event
+              issue_title = event["issue"]["title"]
+              issue_url = event["issue"]["html_url"]
+
+              # Search if PR-first workflow created a row already
+              page = search_notion_for_url(issue_url)
+
+              if page:
+                  # Update existing row (add issue URL if missing)
+                  update_row(page_id=page, issue_url=issue_url, title=issue_title)
+              else:
+                  # Create new entry
+                  create_row(actor, issue_url=issue_url, title=issue_title)
+
+          else:
+              # PR event
+              pr_title = event["pull_request"]["title"]
+              pr_url = event["pull_request"]["html_url"]
+              body = event["pull_request"].get("body", "") or ""
+
+              # Try to extract linked issue from PR body
+              issue_number = None
+              match = re.search(r'#(\d+)', body)
+              if match:
+                  issue_number = match.group(1)
+
+              issue_url = None
+              if issue_number:
+                  repo = event["repository"]["full_name"]
+                  issue_url = f"https://github.com/{repo}/issues/{issue_number}"
+
+              # First try: find row by Issue URL
+              page = None
+              if issue_url:
+                  page = search_notion_for_url(issue_url)
+
+              # Second try: find row by PR URL (in PR-first case)
+              if not page:
+                  page = search_notion_for_url(pr_url)
+
+              if page:
+                  # Update existing CRM entry
+                  update_row(page_id=page, pr_url=pr_url, title=pr_title)
+              else:
+                  # No related Issue/PR → create new row
+                  create_row(actor, pr_url=pr_url, title=pr_title)
+
+          EOF
+
+          python3 script.py
