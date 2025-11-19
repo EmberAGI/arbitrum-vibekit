@@ -388,6 +388,11 @@ describe('EmberCamelotClient (e2e)', () => {
       }
       const { pool, position } = context;
       const normalizedPosition = normalizePosition(position);
+      const ethUsd = resolveEthUsdPrice(pool);
+      if (!ethUsd) {
+        console.warn('Skipping decision-engine live test: missing WETH/USD quote for pool.');
+        return;
+      }
 
       // When we feed the data into the decision engine
       const decision = evaluateDecision({
@@ -400,7 +405,7 @@ describe('EmberCamelotClient (e2e)', () => {
         rebalanceThresholdPct: DEFAULT_REBALANCE_THRESHOLD_PCT,
         maxIdleCycles: SAFETY_NET_MAX_IDLE_CYCLES,
         autoCompoundFees: true,
-        estimatedGasCostUsd: MAX_GAS_SPEND_ETH * resolveEthUsdPrice(),
+        estimatedGasCostUsd: MAX_GAS_SPEND_ETH * ethUsd,
         estimatedFeeValueUsd: undefined,
       });
 

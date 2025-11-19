@@ -75,7 +75,10 @@ export function buildRange(
 }
 
 function shouldExit(pool: CamelotPool) {
-  const tvl = pool.activeTvlUSD ?? 0;
+  const tvl = pool.activeTvlUSD;
+  if (tvl === undefined || tvl === null) {
+    return false;
+  }
   return tvl < DEFAULT_MIN_TVL_USD * 0.2;
 }
 
@@ -118,19 +121,26 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
     ctx.tickBandwidthBps ??
     (ctx.volatilityPct >= 1.0 ? VOLATILE_TICK_BANDWIDTH_BPS : DEFAULT_TICK_BANDWIDTH_BPS);
   const targetRange = buildRange(ctx.midPrice, bandwidthBps, ctx.pool.tickSpacing, decimalsDiff);
-
-  if (shouldExit(ctx.pool)) {
-    return {
-      kind: 'exit-range',
-      reason: 'Pool TVL below safety threshold',
-    };
-  }
+  const exitUnsafePool = shouldExit(ctx.pool);
 
   if (!ctx.position) {
+    if (exitUnsafePool) {
+      return {
+        kind: 'hold',
+        reason: 'Pool TVL below safety threshold; waiting to redeploy',
+      };
+    }
     return {
       kind: 'enter-range',
       reason: 'No active CLMM position detected for this pool',
       targetRange,
+    };
+  }
+
+  if (exitUnsafePool) {
+    return {
+      kind: 'exit-range',
+      reason: 'Pool TVL below safety threshold',
     };
   }
 

@@ -82,11 +82,36 @@ describe('evaluateDecision', () => {
   it('requests an exit when TVL falls below the safety floor', () => {
     // Given a dangerously illiquid pool
     const pool = makePool({ activeTvlUSD: DEFAULT_MIN_TVL_USD * 0.1 });
-    const action = evaluateDecision(makeContext({ pool }));
+    const position: PositionSnapshot = {
+      poolAddress: pool.address,
+      tickLower: pool.tick - 60,
+      tickUpper: pool.tick + 60,
+    };
+    const action = evaluateDecision(
+      makeContext({
+        pool,
+        position,
+      }),
+    );
 
     // Then the decision engine should cut exposure immediately
     expect(action.kind).toBe('exit-range');
     expect(action.reason).toMatch(/safety threshold/i);
+  });
+
+  it('stays sidelined when TVL is unsafe and no position exists', () => {
+    // Given an illiquid pool while the wallet already exited
+    const pool = makePool({ activeTvlUSD: DEFAULT_MIN_TVL_USD * 0.1 });
+    const action = evaluateDecision(
+      makeContext({
+        pool,
+        position: undefined,
+      }),
+    );
+
+    // Then the engine should hold rather than re-issuing an exit
+    expect(action.kind).toBe('hold');
+    expect(action.reason).toMatch(/waiting to redeploy/i);
   });
 
   it('enters a range when no position is active', () => {
@@ -96,6 +121,20 @@ describe('evaluateDecision', () => {
     // Then the engine should prepare an entry plan with a target range
     expect(action.kind).toBe('enter-range');
     expect(action.targetRange).toBeDefined();
+  });
+
+  it('enters a range even when TVL data is unavailable', () => {
+    // Given the Ember snapshot omitted pool TVL
+    const pool = makePool({ activeTvlUSD: undefined });
+    const action = evaluateDecision(
+      makeContext({
+        pool,
+        position: undefined,
+      }),
+    );
+
+    // Then missing TVL should not block re-entry
+    expect(action.kind).toBe('enter-range');
   });
 
   it('adjusts ranges when price drifts outside the inner safety band', () => {

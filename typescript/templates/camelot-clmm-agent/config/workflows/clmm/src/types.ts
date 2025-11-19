@@ -22,6 +22,19 @@ export const CamelotPoolSchema = z.object({
 });
 export type CamelotPool = z.infer<typeof CamelotPoolSchema>;
 
+const ChainIdentifierSchema = z.object({
+  chainId: z.string(),
+  address: z.string(),
+});
+
+const WalletPositionTokenSchema = z.object({
+  tokenAddress: z.templateLiteral(['0x', z.string()]),
+  symbol: z.string(),
+  decimals: z.number().int().nonnegative(),
+  amount: z.string().optional(),
+});
+export type WalletPositionToken = z.infer<typeof WalletPositionTokenSchema>;
+
 export const WalletPositionSchema = z.object({
   poolAddress: z.templateLiteral(['0x', z.string()]),
   operator: z.string(),
@@ -30,13 +43,9 @@ export const WalletPositionSchema = z.object({
   tickUpper: z.number().int(),
   tokensOwed0: z.string().optional(),
   tokensOwed1: z.string().optional(),
+  suppliedTokens: z.array(WalletPositionTokenSchema).optional(),
 });
 export type WalletPosition = z.infer<typeof WalletPositionSchema>;
-
-const ChainIdentifierSchema = z.object({
-  chainId: z.string(),
-  address: z.string(),
-});
 
 const EmberPoolTokenSchema = z.object({
   tokenUid: ChainIdentifierSchema,
@@ -95,29 +104,24 @@ export const WalletPositionsResponseSchema = z.object({
 });
 export type WalletPositionsResponse = z.infer<typeof WalletPositionsResponseSchema>;
 
-export const ClmmWorkflowParametersSchema = z.object({
-  poolAddress: z.string().optional(),
-  mode: z.enum(['debug', 'production']).optional(),
-  tickBandwidthBps: z.number().int().positive().optional(),
-  rebalanceThresholdPct: z.number().positive().optional(),
-  maxIdleCycles: z.number().int().positive().optional(),
-  targetNotionalUsd: z.number().positive().optional(),
-});
-export type ClmmWorkflowParameters = z.infer<typeof ClmmWorkflowParametersSchema>;
-
-export const PoolSelectionInputSchema = z.object({
-  poolAddress: z.templateLiteral(['0x', z.string()]),
-});
-export type PoolSelectionInput = z.infer<typeof PoolSelectionInputSchema>;
-
 export const OperatorConfigInputSchema = z.object({
+  poolAddress: z.templateLiteral(['0x', z.string()]),
   walletAddress: z.templateLiteral(['0x', z.string()]),
-  baseContributionUsd: z.number().positive(),
-  autoCompoundFees: z.boolean().default(true),
-  maxIdleCycles: z.number().int().min(1).max(60).default(10),
-  manualBandwidthBps: z.number().int().min(25).max(250).optional(),
+  baseContributionUsd: z.number().positive().optional(),
 });
-export type OperatorConfigInput = z.infer<typeof OperatorConfigInputSchema>;
+type OperatorConfigInputBase = z.infer<typeof OperatorConfigInputSchema>;
+export interface OperatorConfigInput extends OperatorConfigInputBase {
+  poolAddress: `0x${string}`;
+  walletAddress: `0x${string}`;
+}
+
+export type ResolvedOperatorConfig = {
+  walletAddress: `0x${string}`;
+  baseContributionUsd: number;
+  autoCompoundFees: boolean;
+  maxIdleCycles: number;
+  manualBandwidthBps: number;
+};
 
 export type PriceRange = {
   lowerTick: number;

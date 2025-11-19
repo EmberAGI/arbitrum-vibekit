@@ -183,13 +183,28 @@ function priceToTick(price: number, decimalsDiff: number): number {
   return Math.round(Math.log(adjustedPrice) / LOG_BASE);
 }
 
+function invertApiPrice(price: number): number {
+  if (!Number.isFinite(price) || price <= 0) {
+    return 0;
+  }
+  return 1 / price;
+}
+
+function normalizePositionRangePrice(price: number): number {
+  if (!Number.isFinite(price) || price <= 0) {
+    return 0;
+  }
+  return price;
+}
+
 function toCamelotPool(pool: EmberLiquidityPool): CamelotPool | undefined {
   if (pool.tokens.length < 2) {
     return undefined;
   }
 
   const [token0Raw, token1Raw] = pool.tokens;
-  const tick = priceToTick(Number(pool.price), token0Raw.decimals - token1Raw.decimals);
+  const normalizedPrice = invertApiPrice(Number(pool.price));
+  const tick = priceToTick(normalizedPrice, token0Raw.decimals - token1Raw.decimals);
 
   return CamelotPoolSchema.parse({
     address: normalizeAddress(pool.identifier.address),
@@ -220,18 +235,29 @@ function toWalletPosition(
 
   if (pool && position.positionRange) {
     const decimalsDiff = pool.token0.decimals - pool.token1.decimals;
-    const lower = Number(position.positionRange.fromPrice ?? position.positionRange.toPrice ?? 0);
-    const upper = Number(position.positionRange.toPrice ?? position.positionRange.fromPrice ?? 0);
-    if (Number.isFinite(lower) && Number.isFinite(upper)) {
+    const lowerRaw = Number(position.positionRange.fromPrice ?? position.positionRange.toPrice ?? 0);
+    const upperRaw = Number(position.positionRange.toPrice ?? position.positionRange.fromPrice ?? 0);
+    const lower = normalizePositionRangePrice(lowerRaw);
+    const upper = normalizePositionRangePrice(upperRaw);
+    if (lower > 0 && upper > 0) {
       tickLower = priceToTick(Math.min(lower, upper), decimalsDiff);
       tickUpper = priceToTick(Math.max(lower, upper), decimalsDiff);
     }
   }
+
+  const suppliedTokens =
+    position.suppliedTokens?.map((token) => ({
+      tokenAddress: normalizeAddress(token.tokenUid.address),
+      symbol: token.symbol,
+      decimals: token.decimals,
+      amount: token.amount,
+    })) ?? [];
 
   return WalletPositionSchema.parse({
     poolAddress,
     operator: position.operator,
     tickLower,
     tickUpper,
+    suppliedTokens,
   });
 }

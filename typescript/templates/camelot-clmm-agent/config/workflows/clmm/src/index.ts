@@ -4,15 +4,8 @@ import {
   type WorkflowState,
   type Artifact,
 } from '@emberai/agent-node/workflow';
-import {
-  Implementation,
-  toMetaMaskSmartAccount,
-  type MetaMaskSmartAccount,
-} from '@metamask/delegation-toolkit';
-import type { Client, PublicActions, PublicRpcSchema, Transport } from 'viem';
-import { parseUnits } from 'viem';
+import { erc20Abi, parseUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import type { Chain } from 'viem/chains';
 
 import { ensureAllowance } from './allowances.js';
 import { createClients } from './clients.js';
@@ -46,23 +39,23 @@ import {
 } from './emberApi.js';
 import { executeTransaction } from './transaction.js';
 import {
-  ClmmWorkflowParametersSchema,
   OperatorConfigInputSchema,
-  PoolSelectionInputSchema,
   type CamelotPool,
   type ClmmAction,
   type OperatorConfigInput,
-  type PoolSelectionInput,
   type RebalanceTelemetry,
+  type ResolvedOperatorConfig,
 } from './types.js';
 import { sleep } from './utils.js';
 
-const agentPrivateKey = process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
-if (!agentPrivateKey) {
+const rawAgentPrivateKey = process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
+if (!rawAgentPrivateKey) {
   throw new Error('A2A_TEST_AGENT_NODE_PRIVATE_KEY environment variable is required');
 }
+const agentPrivateKey = normalizeHexAddress(rawAgentPrivateKey, 'agent private key');
 
 const DEBUG_MODE = process.env['DEBUG_MODE'] === 'true';
+const MAX_WITHDRAW_ATTEMPTS = 10;
 
 const plugin: WorkflowPlugin = {
   id: 'camelot-clmm-rebalancer',
@@ -70,19 +63,18 @@ const plugin: WorkflowPlugin = {
   description:
     'Maintains Camelot concentrated liquidity positions by polling Ember APIs every 30 seconds and adjusting tick ranges automatically.',
   version: '1.0.0',
-  inputSchema: ClmmWorkflowParametersSchema,
+  inputSchema: undefined,
 
   async *execute(
     context: WorkflowContext,
-  ): AsyncGenerator<WorkflowState, void, PoolSelectionInput | OperatorConfigInput> {
-    const parameters = ClmmWorkflowParametersSchema.parse(context.parameters ?? {});
-    const mode =
-      parameters.mode ?? (process.env['CLMM_MODE'] === 'production' ? 'production' : 'debug');
+  ): AsyncGenerator<WorkflowState, void, OperatorConfigInput> {
+    void context;
+    const mode = process.env['CLMM_MODE'] === 'production' ? 'production' : 'debug';
     const pollIntervalMs = resolvePollIntervalMs();
     const streamLimit = resolveStreamLimit();
-    const ethUsd = resolveEthUsdPrice();
 
     const camelotClient = new EmberCamelotClient(EMBER_API_BASE_URL);
+    logInfo('Initialized workflow context', { mode, pollIntervalMs, streamLimit });
 
     yield {
       type: 'dispatch-response',
@@ -106,6 +98,11 @@ const plugin: WorkflowPlugin = {
 
     const pools = await camelotClient.listCamelotPools(ARBITRUM_CHAIN_ID);
     const filteredPools = pools.filter((pool) => isPoolAllowed(pool, mode));
+    logInfo('Retrieved Camelot pools', {
+      total: pools.length,
+      allowed: filteredPools.length,
+      mode,
+    });
     if (filteredPools.length === 0) {
       throw new Error(`No Camelot pools available for mode=${mode}`);
     }
@@ -113,68 +110,55 @@ const plugin: WorkflowPlugin = {
     const poolsArtifact = buildPoolArtifact(filteredPools.slice(0, 8));
     yield { type: 'artifact', artifact: poolsArtifact };
 
-    let selectedPoolAddress =
-      parameters.poolAddress ?? (filteredPools.length === 1 ? filteredPools[0].address : undefined);
-    if (!selectedPoolAddress) {
-      const poolSelection = (yield {
-        type: 'interrupted',
-        reason: 'input-required',
-        message: 'Select a Camelot pool to manage',
-        inputSchema: PoolSelectionInputSchema,
-        artifact: poolsArtifact,
-      }) as PoolSelectionInput;
-      selectedPoolAddress = poolSelection.poolAddress;
-    }
+    const operatorInput = yield {
+      type: 'interrupted',
+      reason: 'input-required',
+      message:
+        'Select a Camelot pool to manage, confirm wallet, and optional allocation override for this CLMM workflow.',
+      inputSchema: OperatorConfigInputSchema,
+      artifact: poolsArtifact,
+    };
+
+    const { poolAddress, walletAddress, baseContributionUsd } = operatorInput;
+    const selectedPoolAddress: `0x${string}` = normalizeHexAddress(poolAddress, 'pool address');
+    const operatorWalletAddress = normalizeHexAddress(walletAddress, 'wallet address');
 
     const selectedPool =
       filteredPools.find(
         (pool) => pool.address.toLowerCase() === selectedPoolAddress.toLowerCase(),
-      ) ??
-      (await fetchPoolSnapshot(
-        camelotClient,
-        selectedPoolAddress as `0x${string}`,
-        ARBITRUM_CHAIN_ID,
-      ));
+      ) ?? (await fetchPoolSnapshot(camelotClient, selectedPoolAddress, ARBITRUM_CHAIN_ID));
 
     if (!selectedPool) {
       throw new Error(`Pool ${selectedPoolAddress} not available from Ember API`);
     }
 
-    const operatorInput = (yield {
-      type: 'interrupted',
-      reason: 'input-required',
-      message: 'Confirm wallet, allocation, and safety toggles for this CLMM workflow.',
-      inputSchema: OperatorConfigInputSchema,
-    }) as OperatorConfigInput;
+    const account = privateKeyToAccount(agentPrivateKey);
+    const clients = createClients(account);
+    const agentWalletAddress = normalizeHexAddress(account.address, 'agent wallet address');
+    if (agentWalletAddress !== operatorWalletAddress) {
+      logInfo('Operator wallet input differs from managed account', {
+        operatorWalletAddress,
+        agentWalletAddress,
+      });
+      yield {
+        type: 'status-update',
+        message: `NOTICE: Private key controls ${agentWalletAddress}; workflow will act on this address instead of ${operatorWalletAddress}.`,
+      };
+    }
 
-    const account = privateKeyToAccount(agentPrivateKey as `0x${string}`);
-    const clients = createClients();
-    const agentsWallet = await toMetaMaskSmartAccount({
-      client: clients.public as Client<
-        Transport,
-        Chain | undefined,
-        undefined,
-        PublicRpcSchema,
-        PublicActions<Transport, Chain | undefined>
-      >,
-      implementation: Implementation.Hybrid,
-      deployParams: [account.address, [], [], []],
-      deploySalt: '0x',
-      signer: { account },
-    });
-
-    const operatorConfig: OperatorConfigInput = {
-      ...operatorInput,
-      walletAddress: agentsWallet.address, // Using the agent's embedded smart account for all transactions.
-      baseContributionUsd:
-        operatorInput.baseContributionUsd ?? parameters.targetNotionalUsd ?? 5_000,
-      maxIdleCycles:
-        operatorInput.maxIdleCycles ?? parameters.maxIdleCycles ?? SAFETY_NET_MAX_IDLE_CYCLES,
-      manualBandwidthBps:
-        operatorInput.manualBandwidthBps ??
-        parameters.tickBandwidthBps ??
-        DEFAULT_TICK_BANDWIDTH_BPS,
+    const operatorConfig: ResolvedOperatorConfig = {
+      walletAddress: agentWalletAddress,
+      baseContributionUsd: baseContributionUsd ?? 5_000,
+      maxIdleCycles: SAFETY_NET_MAX_IDLE_CYCLES,
+      manualBandwidthBps: DEFAULT_TICK_BANDWIDTH_BPS,
+      autoCompoundFees: true,
     };
+    logInfo('Operator configuration established', {
+      poolAddress: selectedPoolAddress,
+      operatorWalletAddress,
+      agentWalletAddress,
+      baseContributionUsd: operatorConfig.baseContributionUsd,
+    });
 
     // TODO: Need to remove delegations and replace with the agent's embedded smart account. The agent's wallet will directly sign and manage the transactions.
     // const delegations = createClmmDelegations({
@@ -227,12 +211,14 @@ const plugin: WorkflowPlugin = {
     let lastSnapshot: CamelotPool | undefined = selectedPool;
     let iteration = 0;
 
+    logInfo('Entering polling loop', { streamLimit, pollIntervalMs });
     while (streamLimit < 0 || iteration < streamLimit) {
       iteration += 1;
+      logInfo('Polling cycle begin', { iteration, poolAddress: selectedPoolAddress });
       let poolSnapshot: CamelotPool | undefined;
       try {
         poolSnapshot =
-          (await fetchPoolSnapshot(camelotClient, selectedPool.address, ARBITRUM_CHAIN_ID)) ??
+          (await fetchPoolSnapshot(camelotClient, selectedPoolAddress, ARBITRUM_CHAIN_ID)) ??
           lastSnapshot;
         staleCycles = 0;
       } catch (error) {
@@ -243,6 +229,11 @@ const plugin: WorkflowPlugin = {
             : typeof error === 'string'
               ? error
               : 'Unknown error';
+        logInfo('Pool snapshot fetch failed; falling back to cache', {
+          iteration,
+          staleCycles,
+          error: cause,
+        });
         if (staleCycles > DATA_STALE_CYCLE_LIMIT) {
           yield {
             type: 'status-update',
@@ -265,6 +256,13 @@ const plugin: WorkflowPlugin = {
       const midPrice = deriveMidPrice(poolSnapshot);
       const volatilityPct = computeVolatilityPct(midPrice, previousPrice);
       previousPrice = midPrice;
+      logInfo('Pool snapshot ready', {
+        iteration,
+        tick: poolSnapshot.tick,
+        midPrice,
+        volatilityPct,
+        tvl: poolSnapshot.activeTvlUSD,
+      });
 
       const walletPositions = await camelotClient.getWalletPositions(
         operatorConfig.walletAddress,
@@ -276,6 +274,31 @@ const plugin: WorkflowPlugin = {
       const currentPosition = currentPositionRaw
         ? normalizePosition(currentPositionRaw)
         : undefined;
+      logInfo('Wallet positions fetched', {
+        iteration,
+        totalPositions: walletPositions.length,
+        hasActivePosition: Boolean(currentPosition),
+      });
+      const positionSummaries = walletPositions.map((position) => ({
+        poolAddress: position.poolAddress,
+        operator: position.operator,
+        tickLower: position.tickLower,
+        tickUpper: position.tickUpper,
+        liquidity: position.liquidity,
+        suppliedTokens: position.suppliedTokens?.map((token) => ({
+          tokenAddress: token.tokenAddress,
+          symbol: token.symbol,
+          decimals: token.decimals,
+          amount: token.amount,
+        })),
+      }));
+      logInfo('Wallet position snapshots', { iteration, positions: positionSummaries }, { detailed: true });
+
+      const ethUsd = resolveEthUsdPrice(poolSnapshot);
+      if (!ethUsd) {
+        logInfo('Missing WETH/USD price for pool', { poolAddress: poolSnapshot.address });
+        throw new Error(`failure: Unable to locate a WETH/USD price for pool ${poolSnapshot.address}`);
+      }
 
       const decision = evaluateDecision({
         pool: poolSnapshot,
@@ -283,12 +306,19 @@ const plugin: WorkflowPlugin = {
         midPrice,
         volatilityPct,
         cyclesSinceRebalance,
-        tickBandwidthBps: operatorConfig.manualBandwidthBps ?? DEFAULT_TICK_BANDWIDTH_BPS,
-        rebalanceThresholdPct: parameters.rebalanceThresholdPct ?? DEFAULT_REBALANCE_THRESHOLD_PCT,
-        maxIdleCycles: operatorConfig.maxIdleCycles ?? SAFETY_NET_MAX_IDLE_CYCLES,
+        tickBandwidthBps: operatorConfig.manualBandwidthBps,
+        rebalanceThresholdPct: DEFAULT_REBALANCE_THRESHOLD_PCT,
+        maxIdleCycles: operatorConfig.maxIdleCycles,
         autoCompoundFees: operatorConfig.autoCompoundFees,
         estimatedGasCostUsd: MAX_GAS_SPEND_ETH * ethUsd,
         estimatedFeeValueUsd: estimateFeeValueUsd(currentPosition, poolSnapshot),
+      });
+      logInfo('Decision evaluated', {
+        iteration,
+        action: decision.kind,
+        reason: decision.reason,
+        cyclesSinceRebalance,
+        volatilityPct,
       });
 
       let txHash: string | undefined;
@@ -296,6 +326,11 @@ const plugin: WorkflowPlugin = {
       if (decision.kind === 'hold') {
         cyclesSinceRebalance += 1;
       } else {
+        logInfo('Executing action', {
+          iteration,
+          action: decision.kind,
+          reason: decision.reason,
+        });
         if (DEBUG_MODE) {
           txHash = `0xdebug${Date.now().toString(16)}`;
         } else {
@@ -304,11 +339,11 @@ const plugin: WorkflowPlugin = {
             camelotClient,
             pool: poolSnapshot,
             operatorConfig,
-            agentsWallet,
             clients,
           });
         }
         cyclesSinceRebalance = 0;
+        logInfo('Action execution complete', { iteration, action: decision.kind, txHash });
       }
 
       const cycleTelemetry: RebalanceTelemetry = {
@@ -350,6 +385,7 @@ const plugin: WorkflowPlugin = {
       await sleep(pollIntervalMs);
     }
 
+    logInfo('Exiting polling loop', { totalCycles: iteration, telemetryCount: telemetry.length });
     yield {
       type: 'artifact',
       artifact: buildSummaryArtifact(telemetry),
@@ -365,6 +401,13 @@ const plugin: WorkflowPlugin = {
 };
 
 export default plugin;
+
+function normalizeHexAddress(value: string, label: string): `0x${string}` {
+  if (!value.startsWith('0x')) {
+    throw new Error(`Invalid ${label}: ${value}`);
+  }
+  return value as `0x${string}`;
+}
 
 function buildPoolArtifact(pools: CamelotPool[]): Artifact {
   return {
@@ -399,19 +442,37 @@ function isPoolAllowed(pool: CamelotPool, mode: 'debug' | 'production') {
   );
 }
 
-async function executeDecision({
+type LogOptions = {
+  detailed?: boolean;
+};
+
+function logInfo(message: string, metadata?: Record<string, unknown>, options?: LogOptions) {
+  const timestamp = new Date().toISOString();
+  const prefix = `[CamelotCLMM][${timestamp}]`;
+  if (metadata && Object.keys(metadata).length > 0) {
+    if (options?.detailed) {
+      console.info(`${prefix} ${message}`);
+      // eslint-disable-next-line no-console
+      console.dir(metadata, { depth: null });
+      return;
+    }
+    console.info(`${prefix} ${message}`, metadata);
+    return;
+  }
+  console.info(`${prefix} ${message}`);
+}
+
+export async function executeDecision({
   action,
   camelotClient,
   pool,
   operatorConfig,
-  agentsWallet,
   clients,
 }: {
   action: ClmmAction;
   camelotClient: EmberCamelotClient;
   pool: CamelotPool;
-  operatorConfig: OperatorConfigInput;
-  agentsWallet: MetaMaskSmartAccount;
+  operatorConfig: ResolvedOperatorConfig;
   clients: ReturnType<typeof createClients>;
 }): Promise<string | undefined> {
   const walletAddress = operatorConfig.walletAddress;
@@ -425,17 +486,59 @@ async function executeDecision({
     address: pool.address,
   };
 
-  let response: Awaited<ReturnType<EmberCamelotClient['requestRebalance']>>;
+  const withdrawPayload: ClmmWithdrawRequest = {
+    walletAddress,
+    poolTokenUid: poolIdentifier,
+  };
+  let lastTxHash: string | undefined;
 
-  if (action.kind === 'enter-range' || action.kind === 'adjust-range') {
-    const allocations = estimateTokenAllocations(pool, operatorConfig.baseContributionUsd);
+  if (action.kind === 'adjust-range' || action.kind === 'exit-range' || action.kind === 'compound-fees') {
+    lastTxHash = await executeWithdrawalPlans({
+      camelotClient,
+      withdrawPayload,
+      clients,
+    });
+  }
+
+  switch (action.kind) {
+    case 'enter-range':
+    case 'adjust-range': {
+      const allocations = estimateTokenAllocations(pool, operatorConfig.baseContributionUsd);
+      const tokenBudget = await resolveTokenBudget({
+        publicClient: clients.public,
+        walletAddress,
+        pool,
+      desired: allocations,
+    });
+
+    if (!tokenBudget) {
+      logInfo('Skipping supply: wallet lacks required token balances', {
+        walletAddress,
+        token0Required: allocations.token0.toString(),
+        token1Required: allocations.token1.toString(),
+      });
+      return lastTxHash;
+    }
+
+    if (
+      tokenBudget.token0 < allocations.token0 ||
+      tokenBudget.token1 < allocations.token1
+    ) {
+      logInfo('Clamped supply allocation to wallet balances', {
+        walletAddress,
+        token0Planned: allocations.token0.toString(),
+        token0Using: tokenBudget.token0.toString(),
+        token1Planned: allocations.token1.toString(),
+        token1Using: tokenBudget.token1.toString(),
+      });
+    }
+
     await ensureAllowance({
       publicClient: clients.public,
       tokenAddress: pool.token0.address,
       ownerAccount: walletAddress,
       spenderAddress: CAMELOT_POSITION_MANAGER_ADDRESS,
-      requiredAmount: allocations.token0,
-      agentAccount: agentsWallet,
+      requiredAmount: tokenBudget.token0,
       clients,
     });
     await ensureAllowance({
@@ -443,8 +546,7 @@ async function executeDecision({
       tokenAddress: pool.token1.address,
       ownerAccount: walletAddress,
       spenderAddress: CAMELOT_POSITION_MANAGER_ADDRESS,
-      requiredAmount: allocations.token1,
-      agentAccount: agentsWallet,
+      requiredAmount: tokenBudget.token1,
       clients,
     });
 
@@ -463,62 +565,201 @@ async function executeDecision({
             chainId: chainIdString,
             address: pool.token0.address,
           },
-          amount: allocations.token0.toString(),
+          amount: tokenBudget.token0.toString(),
         },
         {
           tokenUid: {
             chainId: chainIdString,
             address: pool.token1.address,
           },
-          amount: allocations.token1.toString(),
+          amount: tokenBudget.token1.toString(),
         },
       ],
     };
 
-    response = await camelotClient.requestRebalance(rebalancePayload);
-  } else if (action.kind === 'exit-range' || action.kind === 'compound-fees') {
-    const withdrawPayload: ClmmWithdrawRequest = {
+    logInfo('Prepared Ember supply payload', {
       walletAddress,
-      poolTokenUid: poolIdentifier,
-    };
-    response = await camelotClient.requestWithdrawal(withdrawPayload);
-  } else {
-    assertUnreachable(action);
-  }
-
-  let lastTxHash: string | undefined;
-  for (const tx of response.transactions) {
-    const receipt = await executePlannedTransaction({
-      tx,
-      agentsWallet,
-      clients,
+      poolAddress: poolIdentifier.address,
+      tickLower: action.targetRange.lowerTick,
+      tickUpper: action.targetRange.upperTick,
+      tokenBudget: {
+        token0: tokenBudget.token0.toString(),
+        token1: tokenBudget.token1.toString(),
+      },
     });
-    lastTxHash = receipt.transactionHash;
-  }
 
-  return lastTxHash;
+    const rebalancePlan = await camelotClient.requestRebalance(rebalancePayload);
+    logInfo('Received Ember supply plan', {
+      requestId: rebalancePlan.requestId,
+      transactionCount: rebalancePlan.transactions.length,
+    });
+
+    const confirmationSnapshot = await fetchPoolSnapshot(
+      camelotClient,
+      normalizeHexAddress(pool.address, 'pool address'),
+      ARBITRUM_CHAIN_ID,
+    );
+    if (confirmationSnapshot) {
+      logInfo('Validated pool snapshot prior to executing supply plan', {
+        previousTick: pool.tick,
+        confirmationTick: confirmationSnapshot.tick,
+        tickDelta: confirmationSnapshot.tick - pool.tick,
+      });
+    }
+
+    lastTxHash = await executePlanTransactions({
+      plan: rebalancePlan,
+      clients,
+    }) ?? lastTxHash;
+    return lastTxHash;
+    }
+    case 'exit-range':
+    case 'compound-fees':
+      return lastTxHash;
+    default:
+      assertUnreachable(action);
+  }
 }
 
 async function executePlannedTransaction({
   tx,
-  agentsWallet,
   clients,
 }: {
   tx: TransactionInformation;
-  agentsWallet: MetaMaskSmartAccount;
   clients: ReturnType<typeof createClients>;
 }) {
   const callValue = parseTransactionValue(tx.value);
 
-  return executeTransaction(clients, {
-    account: agentsWallet,
-    calls: [
-      {
-        to: tx.to,
-        data: tx.data,
-        ...(callValue > 0n ? { value: callValue } : {}),
-      },
-    ],
+  logInfo('Submitting Camelot transaction', {
+    to: tx.to,
+    chainId: tx.chainId,
+    callValue: callValue.toString(),
+    dataLength: tx.data.length,
+  });
+
+  const receipt = await executeTransaction(clients, {
+    to: tx.to,
+    data: tx.data,
+    ...(callValue > 0n ? { value: callValue } : {}),
+  });
+
+  const receiptMetadata = {
+    transactionHash: receipt.transactionHash,
+    blockNumber: receipt.blockNumber,
+    to: tx.to,
+    status: receipt.status,
+    chainId: tx.chainId,
+  };
+
+  if (receipt.status !== 'success') {
+    logInfo('Transaction failed', receiptMetadata);
+    const revertReason = await describeRevertReason({
+      tx,
+      clients,
+      callValue,
+      blockNumber: receipt.blockNumber,
+    });
+    const detail = revertReason ? `: ${revertReason}` : '';
+    throw new Error(`Camelot transaction ${receipt.transactionHash} reverted${detail}`);
+  }
+
+  logInfo('Transaction confirmed', receiptMetadata);
+  return receipt;
+}
+
+async function executeWithdrawalPlans({
+  camelotClient,
+  withdrawPayload,
+  clients,
+}: {
+  camelotClient: EmberCamelotClient;
+  withdrawPayload: ClmmWithdrawRequest;
+  clients: ReturnType<typeof createClients>;
+}) {
+  let lastHash: string | undefined;
+  for (let attempt = 0; attempt < MAX_WITHDRAW_ATTEMPTS; attempt += 1) {
+    const plan = await camelotClient.requestWithdrawal(withdrawPayload);
+    if (plan.transactions.length === 0) {
+      return lastHash;
+    }
+
+    logInfo('Executing Ember withdrawal plan', {
+      attempt: attempt + 1,
+      transactionCount: plan.transactions.length,
+    });
+    for (const tx of plan.transactions) {
+      const receipt = await executePlannedTransaction({ tx, clients });
+      lastHash = receipt.transactionHash;
+    }
+  }
+
+  throw new Error(
+    `Ember withdrawal endpoint returned transactions after ${MAX_WITHDRAW_ATTEMPTS} attempts; aborting`,
+  );
+}
+
+async function executePlanTransactions({
+  plan,
+  clients,
+}: {
+  plan: { transactions: TransactionInformation[] };
+  clients: ReturnType<typeof createClients>;
+}) {
+  let lastHash: string | undefined;
+  for (const tx of plan.transactions) {
+    const receipt = await executePlannedTransaction({ tx, clients });
+    lastHash = receipt.transactionHash;
+  }
+  return lastHash;
+}
+
+type TokenAllocation = {
+  token0: bigint;
+  token1: bigint;
+};
+
+async function resolveTokenBudget({
+  publicClient,
+  walletAddress,
+  pool,
+  desired,
+}: {
+  publicClient: ReturnType<typeof createClients>['public'];
+  walletAddress: `0x${string}`;
+  pool: CamelotPool;
+  desired: TokenAllocation;
+}): Promise<TokenAllocation | undefined> {
+  const [token0Balance, token1Balance] = await Promise.all([
+    readTokenBalance(publicClient, pool.token0.address, walletAddress),
+    readTokenBalance(publicClient, pool.token1.address, walletAddress),
+  ]);
+
+  const token0 = token0Balance < desired.token0 ? token0Balance : desired.token0;
+  const token1 = token1Balance < desired.token1 ? token1Balance : desired.token1;
+  if (token0 === 0n || token1 === 0n) {
+    logInfo('Wallet lacks sufficient balance to supply both tokens', {
+      walletAddress,
+      token0Balance: token0Balance.toString(),
+      token1Balance: token1Balance.toString(),
+      token0Required: desired.token0.toString(),
+      token1Required: desired.token1.toString(),
+    });
+    return undefined;
+  }
+
+  return { token0, token1 };
+}
+
+function readTokenBalance(
+  publicClient: ReturnType<typeof createClients>['public'],
+  tokenAddress: `0x${string}`,
+  walletAddress: `0x${string}`,
+) {
+  return publicClient.readContract({
+    address: tokenAddress,
+    abi: erc20Abi,
+    functionName: 'balanceOf',
+    args: [walletAddress],
   });
 }
 
@@ -532,6 +773,37 @@ function parseTransactionValue(value: string | undefined) {
     const reason =
       error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';
     throw new Error(`Unable to parse transaction value "${value}": ${reason}`);
+  }
+}
+
+async function describeRevertReason({
+  tx,
+  clients,
+  callValue,
+  blockNumber,
+}: {
+  tx: TransactionInformation;
+  clients: ReturnType<typeof createClients>;
+  callValue: bigint;
+  blockNumber: bigint;
+}) {
+  try {
+    await clients.public.call({
+      account: clients.wallet.account,
+      to: tx.to,
+      data: tx.data,
+      ...(callValue > 0n ? { value: callValue } : {}),
+      blockNumber,
+    });
+    return 'Call succeeded when replayed; original revert reason unavailable.';
+  } catch (error) {
+    if (error instanceof Error) {
+      return error.message;
+    }
+    if (typeof error === 'string') {
+      return error;
+    }
+    return undefined;
   }
 }
 

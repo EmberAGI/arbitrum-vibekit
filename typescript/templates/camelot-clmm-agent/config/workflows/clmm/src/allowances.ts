@@ -1,4 +1,3 @@
-import { type MetaMaskSmartAccount } from '@metamask/delegation-toolkit';
 import { encodeFunctionData, erc20Abi } from 'viem';
 
 import type { OnchainClients } from './clients.js';
@@ -24,7 +23,6 @@ export async function ensureAllowance({
   ownerAccount,
   spenderAddress,
   requiredAmount,
-  agentAccount,
   clients,
 }: {
   publicClient: OnchainClients['public'];
@@ -32,7 +30,6 @@ export async function ensureAllowance({
   ownerAccount: `0x${string}`;
   spenderAddress: `0x${string}`;
   requiredAmount: bigint;
-  agentAccount: MetaMaskSmartAccount;
   clients: OnchainClients;
 }) {
   const allowance = await checkTokenAllowance(
@@ -51,12 +48,7 @@ export async function ensureAllowance({
     args: [spenderAddress, requiredAmount],
   });
   await executeTransaction(clients, {
-    account: agentAccount,
-    calls: [
-      {
-        to: tokenAddress,
-        data: approveCallData,
-      },
-    ],
+    to: tokenAddress,
+    data: approveCallData,
   });
 }

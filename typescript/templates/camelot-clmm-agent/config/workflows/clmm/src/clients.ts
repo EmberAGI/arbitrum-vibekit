@@ -1,42 +1,30 @@
-import { createPimlicoClient } from 'permissionless/clients/pimlico';
-import { createPublicClient, http } from 'viem';
-import { createBundlerClient, createPaymasterClient } from 'viem/account-abstraction';
+import { createPublicClient, createWalletClient, http, type Account } from 'viem';
 import { arbitrum } from 'viem/chains';
 
 const ARBITRUM_RPC_URL =
   process.env['ARBITRUM_RPC_URL'] ?? 'https://arb-mainnet.g.alchemy.com/v2/demo-key';
 
-const PIMLICO_RPC_URL =
-  process.env['PIMLICO_ARBITRUM_URL'] ?? 'https://api.pimlico.io/v2/42161/rpc?apikey=demo';
+type WalletInstance = ReturnType<typeof createWalletClient>;
 
 export type OnchainClients = {
   public: ReturnType<typeof createPublicClient>;
-  bundler: ReturnType<typeof createBundlerClient>;
-  paymaster: ReturnType<typeof createPaymasterClient>;
-  pimlico: ReturnType<typeof createPimlicoClient>;
+  wallet: WalletInstance & { account: Account };
 };
 
-export function createClients(): OnchainClients {
+export function createClients(account: Account): OnchainClients {
+  const transport = http(ARBITRUM_RPC_URL);
   const publicClient = createPublicClient({
     chain: arbitrum,
-    transport: http(ARBITRUM_RPC_URL),
+    transport,
   });
-  const bundlerClient = createBundlerClient({
+  const walletClient = createWalletClient({
+    account,
     chain: arbitrum,
-    transport: http(PIMLICO_RPC_URL),
-  });
-  const paymasterClient = createPaymasterClient({
-    transport: http(PIMLICO_RPC_URL),
-  });
-  const pimlicoClient = createPimlicoClient({
-    chain: arbitrum,
-    transport: http(PIMLICO_RPC_URL),
-  });
+    transport,
+  }) as WalletInstance & { account: Account };
 
   return {
     public: publicClient,
-    bundler: bundlerClient,
-    paymaster: paymasterClient,
-    pimlico: pimlicoClient,
+    wallet: walletClient,
   };
 }

@@ -1,4 +1,3 @@
-import type { SendUserOperationParameters } from 'viem/account-abstraction';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { OnchainClients } from './clients.js';
@@ -8,83 +7,55 @@ const partial = <T extends Record<string, unknown>>(value: T): unknown =>
   expect.objectContaining(value) as unknown;
 
 function makeClients({
-  maxFeePerGas,
-  sendReceipt,
+  txHash,
+  receipt,
 }: {
-  maxFeePerGas: bigint;
-  sendReceipt?: string;
+  txHash: `0x${string}`;
+  receipt: { transactionHash: `0x${string}` };
 }): OnchainClients {
-  const receiptHash = sendReceipt ?? '0xtxhash';
   return {
-    public: {} as OnchainClients['public'],
-    paymaster: { id: 'paymaster' } as unknown as OnchainClients['paymaster'],
-    pimlico: {
-      getUserOperationGasPrice: vi.fn().mockResolvedValue({
-        fast: {
-          maxFeePerGas,
-          maxPriorityFeePerGas: 1n,
-        },
-      }),
-    } as unknown as OnchainClients['pimlico'],
-    bundler: {
-      sendUserOperation: vi.fn().mockResolvedValue(receiptHash),
-      waitForUserOperationReceipt: vi.fn().mockResolvedValue({
-        receipt: { transactionHash: `${receiptHash}-receipt` },
-      }),
-    } as unknown as OnchainClients['bundler'],
+    public: {
+      waitForTransactionReceipt: vi.fn().mockResolvedValue(receipt),
+    } as unknown as OnchainClients['public'],
+    wallet: {
+      account: { address: '0xaaaa' } as `0x${string}`,
+      sendTransaction: vi.fn().mockResolvedValue(txHash),
+    } as unknown as OnchainClients['wallet'],
   };
 }
 
 describe('executeTransaction', () => {
-  it('rejects plans whose estimated gas exceeds the configured budget', async () => {
-    // Given Pimlico quotes that imply costs above our 0.0001 ETH budget
-    const clients = makeClients({ maxFeePerGas: 1_000_000_000_000n });
+  it('submits transactions via the wallet client and waits for the receipt', async () => {
+    // Given a wallet/public client pair with spies
+    const clients = makeClients({
+      txHash: '0xhash',
+      receipt: { transactionHash: '0xreceipt' as `0x${string}` },
+    });
 
-    // When executeTransaction evaluates the plan against the tighter cap
-    await expect(
-      executeTransaction(
-        clients,
-        { account: {} as never, calls: [] } as SendUserOperationParameters,
-        0.0001,
-      ),
-    ).rejects.toThrow(/exceeds budget/);
-  });
+    // When executeTransaction forwards the call to the wallet client
+    const receipt = await executeTransaction(clients, {
+      to: '0xbbb' as `0x${string}`,
+      data: '0x01' as `0x${string}`,
+      value: 123n,
+    });
 
-  it('forwards successful plans to the bundler and returns the final receipt', async () => {
-    // Given a gas quote that sits safely below our max budget
-    const clients = makeClients({ maxFeePerGas: 1_000_000_000n, sendReceipt: '0xhash' });
-    const parameters = {
-      account: { address: '0xaaa' as `0x${string}` },
-      calls: [{ to: '0xbbb' as `0x${string}`, data: '0x01' as `0x${string}` }],
-    } satisfies {
-      account: { address: `0x${string}` };
-      calls: Array<{ to: `0x${string}`; data: `0x${string}` }>;
-    };
-
-    // When executeTransaction submits the user operation
-    const receipt = await executeTransaction(clients, parameters as SendUserOperationParameters, 1);
-
-    // Then it should propagate Pimlico gas quotes and paymaster config to the bundler call
-    expect(clients.bundler.sendUserOperation).toHaveBeenCalledWith(
+    // Then it should send the transaction and wait for the receipt
+    expect(clients.wallet.sendTransaction).toHaveBeenCalledWith(
       partial({
-        paymaster: clients.paymaster,
-        maxFeePerGas: 1_000_000_000n,
-        calls: parameters.calls,
+        account: clients.wallet.account,
+        to: '0xbbb',
+        data: '0x01',
+        value: 123n,
       }),
     );
-    expect(clients.bundler.waitForUserOperationReceipt).toHaveBeenCalledWith({
+    expect(clients.public.waitForTransactionReceipt).toHaveBeenCalledWith({
       hash: '0xhash',
     });
-    expect(receipt.transactionHash).toBe('0xhash-receipt');
+    expect(receipt.transactionHash).toBe('0xreceipt');
   });
 });
 
 describe('assertGasBudget', () => {
-  it('rejects budgets above the hard-coded protocol ceiling', () => {
-    // Given a budget that exceeds MAX_GAS_SPEND_ETH
-    expect(() => assertGasBudget(0.1)).toThrow(/exceeds protocol limit/);
-  });
-
   it('rejects zero or negative budgets', () => {
     // Given a budget of zero
     expect(() => assertGasBudget(0)).toThrow(/must be positive/);

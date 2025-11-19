@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { CamelotPool } from './types.js';
+
 const ORIGINAL_ENV = { ...process.env };
 
 function restoreEnv() {
@@ -62,23 +64,62 @@ describe('constants env resolvers', () => {
     expect(constants.resolveStreamLimit()).toBe(-1);
   });
 
-  it('resolveEthUsdPrice enforces positive USD quotes with a sensible fallback', async () => {
-    // Given an explicit ETH/USD override
-    process.env['CLMM_ETH_PRICE_USD'] = '4100';
-    vi.resetModules();
+  it('resolveEthUsdPrice prefers pool WETH quotes when available', async () => {
+    const { ARBITRUM_WETH_ADDRESS, resolveEthUsdPrice } = await import('./constants.js');
+    const pool: CamelotPool = {
+      address: '0x1234567890abcdef1234567890abcdef12345678',
+      token0: {
+        address: ARBITRUM_WETH_ADDRESS,
+        symbol: 'WETH',
+        decimals: 18,
+        usdPrice: 3123.45,
+      },
+      token1: {
+        address: '0x2222222222222222222222222222222222222222',
+        symbol: 'USDC',
+        decimals: 6,
+        usdPrice: 1,
+      },
+      tickSpacing: 60,
+      tick: 0,
+      sqrtPriceX96: '0',
+      liquidity: '0',
+      activeTvlUSD: 1_000_000,
+      volume24hUSD: 50_000,
+      feeTierBps: 5,
+    };
+
+    const resolved = resolveEthUsdPrice(pool);
+
+    expect(resolved).toBe(pool.token0.usdPrice);
+  });
+
+  it('resolveEthUsdPrice returns undefined when no WETH quote exists', async () => {
     const { resolveEthUsdPrice } = await import('./constants.js');
+    const pool: CamelotPool = {
+      address: '0x1234567890abcdef1234567890abcdef12345678',
+      token0: {
+        address: '0x1111111111111111111111111111111111111111',
+        symbol: 'ARB',
+        decimals: 18,
+        usdPrice: 1.75,
+      },
+      token1: {
+        address: '0x2222222222222222222222222222222222222222',
+        symbol: 'USDC',
+        decimals: 6,
+        usdPrice: 1,
+      },
+      tickSpacing: 60,
+      tick: 0,
+      sqrtPriceX96: '0',
+      liquidity: '0',
+      activeTvlUSD: 1_000_000,
+      volume24hUSD: 50_000,
+      feeTierBps: 5,
+    };
 
-    // When the resolver runs
-    const resolved = resolveEthUsdPrice();
-
-    // Then it should surface the operator-provided quote
-    expect(resolved).toBe(4100);
-
-    // And invalid overrides should roll back to the baked-in $3.5k estimate
-    process.env['CLMM_ETH_PRICE_USD'] = 'not-a-number';
-    vi.resetModules();
-    const constants = await import('./constants.js');
-    expect(constants.resolveEthUsdPrice()).toBe(3500);
+    expect(resolveEthUsdPrice(pool)).toBeUndefined();
   });
 
   it('EMBER_API_BASE_URL trims trailing slashes to avoid double separators', async () => {

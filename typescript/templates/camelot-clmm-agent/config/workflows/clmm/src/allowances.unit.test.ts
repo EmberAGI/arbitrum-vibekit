@@ -1,4 +1,3 @@
-import type { MetaMaskSmartAccount } from '@metamask/delegation-toolkit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { checkTokenAllowance, ensureAllowance } from './allowances.js';
@@ -44,12 +43,9 @@ describe('allowances helpers', () => {
     const executeSpy = vi
       .spyOn(transactionModule, 'executeTransaction')
       .mockResolvedValue({} as never);
-    const agentAccount = { address: '0xaaaa' } as MetaMaskSmartAccount;
     const clients = {
       public: publicClient,
-      bundler: {} as OnchainClients['bundler'],
-      paymaster: {} as OnchainClients['paymaster'],
-      pimlico: {} as OnchainClients['pimlico'],
+      wallet: {} as OnchainClients['wallet'],
     };
 
     // When ensureAllowance runs with a requirement beneath the current allowance
@@ -59,7 +55,6 @@ describe('allowances helpers', () => {
       ownerAccount: '0x2222222222222222222222222222222222222222',
       spenderAddress: '0x3333333333333333333333333333333333333333',
       requiredAmount: 150n,
-      agentAccount,
       clients,
     });
 
