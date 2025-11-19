@@ -33,7 +33,7 @@ The main plugin export demonstrating the complete `EmberPlugin` interface and re
 
 ```typescript
 export async function getAaveEmberPlugin(
-  params: AAVEAdapterParams
+  params: AAVEAdapterParams,
 ): Promise<EmberPlugin<'lending'>> {
   const adapter = new AAVEAdapter(params);
 
@@ -65,7 +65,7 @@ export function registerAave(chainConfig: ChainConfig, registry: PublicEmberPlug
       chainId: chainConfig.chainId,
       rpcUrl: chainConfig.rpcUrl,
       wrappedNativeToken: chainConfig.wrappedNativeToken,
-    })
+    }),
   );
 }
 ```
@@ -95,7 +95,7 @@ export class AAVEAdapter {
 
   // Public query implementations
   async getUserSummary(
-    params: GetWalletLendingPositionsRequest
+    params: GetWalletLendingPositionsRequest,
   ): Promise<GetWalletLendingPositionsResponse>;
   async getReserves(): Promise<ReservesDataHumanized>;
 
@@ -242,6 +242,6 @@ registry.registerDeferredPlugin(
     chainId: chainConfig.chainId,
     rpcUrl: chainConfig.rpcUrl,
     wrappedNativeToken: chainConfig.wrappedNativeToken,
-  })
+  }),
 );
 ```

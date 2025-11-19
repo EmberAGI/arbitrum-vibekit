@@ -26,13 +26,11 @@ The Quickstart Agent showcases **legacy framework features**:
 ### Skills
 
 1. **greet** (LLM-orchestrated)
-
    - Takes name and greeting style
    - Uses multiple tools to generate personalized greetings
    - Demonstrates multi-step LLM execution
 
 2. **getTime** (Manual handler)
-
    - Returns current time without LLM
    - Shows manual handler bypass pattern
    - Uses utility functions

@@ -5,62 +5,77 @@ A Model Context Protocol (MCP) server that provides comprehensive tools for inte
 ## 🚀 Features
 
 ### Core Investment Tools
+
 - **Pool Discovery**: Discover and analyze available Centrifuge investment pools
 - **Investment Orders**: Place and cancel investment orders across different tranches
 - **Performance Tracking**: Monitor investment performance and returns
 - **Portfolio Management**: Rebalance and optimize RWA portfolios
 
 ### Advanced Analytics
+
 - **Risk Assessment**: Advanced risk analysis for RWA investments
 - **Yield Optimization**: AI-powered yield optimization strategies
 - **Transaction History**: Comprehensive transaction tracking and reporting
 - **Alert System**: Real-time risk and performance alerts
 
 ### Automation Tools
+
 - **Automated Rebalancing**: Execute automated portfolio rebalancing
 - **Yield Comparison**: Compare yields across different pools and strategies
 
 ## 🛠️ Available Tools
 
 ### 1. Pool Discovery (`discover-centrifuge-pools`)
+
 Discover available Centrifuge pools with detailed information about yields, risk profiles, and investment opportunities.
 
 ### 2. Investment Status (`get-investment-status`)
+
 Get current status of investments including active positions, pending orders, and portfolio overview.
 
 ### 3. Pool Analysis (`analyze-pool-details`)
+
 Analyze detailed information about specific pools including historical performance, risk metrics, and investment terms.
 
 ### 4. Place Investment Order (`place-investment-order`)
+
 Place new investment orders in Centrifuge pools with specified amounts, tranche types, and risk parameters.
 
 ### 5. Cancel Investment Order (`cancel-investment-order`)
+
 Cancel pending investment orders before execution.
 
 ### 6. Portfolio Rebalancing (`portfolio-rebalancing`)
+
 Rebalance existing RWA portfolio across different pools and tranches.
 
 ### 7. Yield Optimization (`yield-optimization`)
+
 Optimize portfolio yields based on risk tolerance and investment objectives.
 
 ### 8. Transaction History (`transaction-history`)
+
 Retrieve comprehensive transaction history for investment analysis and reporting.
 
 ### 9. Performance Tracking (`investment-performance-tracking`)
+
 Track investment performance metrics including returns, risk-adjusted performance, and benchmark comparisons.
 
 ### 10. Automated Rebalancing (`automated-rebalancing-execution`)
+
 Execute automated rebalancing strategies based on predefined rules and market conditions.
 
 ### 11. Risk Alert System (`risk-alert-system`)
+
 Set up and manage risk alerts for portfolio monitoring and early warning systems.
 
 ### 12. Yield Comparison (`yield-comparison-tool`)
+
 Compare yields across different pools, strategies, and time periods.
 
 ## 📋 Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - pnpm package manager
 - Access to Centrifuge network (Arbitrum or Ethereum)
 - Valid wallet with funds for investments
@@ -260,4 +275,3 @@ MIT License - see [LICENSE](../../../../LICENSE) for details.
 - [Centrifuge SDK](https://github.com/centrifuge/centrifuge-sdk)
 - [Arbitrum Vibekit Core](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/arbitrum-vibekit-core)
 - [RWA Investment Agent Template](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/rwa-investment-agent)
-

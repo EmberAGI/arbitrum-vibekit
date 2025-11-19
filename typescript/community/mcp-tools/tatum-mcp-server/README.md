@@ -64,6 +64,7 @@ pnpm build && pnpm start
 ```
 
 You should see:
+
 ```
 Tatum MCP server listening on 3010
 ```
@@ -73,16 +74,19 @@ Tatum MCP server listening on 3010
 The Tatum MCP server exposes 7 core blockchain tools:
 
 ### 1. `get_block_number`
+
 Get the latest Arbitrum block number.
 
 **Parameters:** None
 
 **Example:**
+
 ```json
 {}
 ```
 
 **Response:**
+
 ```json
 {
   "hex": "0x168781ab",
@@ -91,12 +95,15 @@ Get the latest Arbitrum block number.
 ```
 
 ### 2. `get_native_balance`
+
 Get native ETH balance for an address with automatic conversion.
 
 **Parameters:**
+
 - `address` (string): EVM address to query
 
 **Example:**
+
 ```json
 {
   "address": "0x742d35Cc6074C4532895c05b22629ce5b3c28da4"
@@ -104,6 +111,7 @@ Get native ETH balance for an address with automatic conversion.
 ```
 
 **Response:**
+
 ```json
 {
   "address": "0x742d35Cc6074C4532895c05b22629ce5b3c28da4",
@@ -114,13 +122,16 @@ Get native ETH balance for an address with automatic conversion.
 ```
 
 ### 3. `get_token_balance`
+
 Get ERC-20 token balance with automatic decimal formatting.
 
 **Parameters:**
+
 - `tokenAddress` (string): ERC-20 token contract address
 - `address` (string): Owner address to query
 
 **Example:**
+
 ```json
 {
   "tokenAddress": "0x912CE59144191C1204E64559FE8253a0e49E6548",
@@ -129,6 +140,7 @@ Get ERC-20 token balance with automatic decimal formatting.
 ```
 
 **Response:**
+
 ```json
 {
   "tokenAddress": "0x912CE59144191C1204E64559FE8253a0e49E6548",
@@ -141,13 +153,16 @@ Get ERC-20 token balance with automatic decimal formatting.
 ```
 
 ### 4. `get_block_by_number`
+
 Get complete block information by number or tag.
 
 **Parameters:**
+
 - `tagOrNumber` (string): Block number (hex/dec) or tag ("latest", "pending", "earliest")
 - `full` (boolean, optional): Include full transaction objects (default: false)
 
 **Example:**
+
 ```json
 {
   "tagOrNumber": "latest",
@@ -158,12 +173,15 @@ Get complete block information by number or tag.
 **Response:** Complete block object with transactions, headers, and metadata.
 
 ### 5. `get_transaction_by_hash`
+
 Get detailed transaction information by hash.
 
 **Parameters:**
+
 - `hash` (string): Transaction hash
 
 **Example:**
+
 ```json
 {
   "hash": "0xd6a6f4f02be772ae5cc27728ce4e21b9db1ae094a8ee3b591bb0df3f9b4e9380"
@@ -173,15 +191,18 @@ Get detailed transaction information by hash.
 **Response:** Complete transaction object with from/to addresses, value, gas, input data, etc.
 
 ### 6. `get_logs`
+
 Query event logs with flexible filtering options.
 
 **Parameters:**
+
 - `fromBlock` (string, optional): Starting block
 - `toBlock` (string, optional): Ending block
 - `address` (string, optional): Contract address filter
 - `topics` (array, optional): Topic filters (up to 4 topics)
 
 **Example:**
+
 ```json
 {
   "fromBlock": "0x16877f00",
@@ -194,19 +215,23 @@ Query event logs with flexible filtering options.
 **Response:** Array of matching log entries.
 
 ### 7. `rpc_call`
+
 Allow-listed raw RPC method calls for advanced usage.
 
 **Parameters:**
+
 - `method` (string): RPC method name
 - `params` (array): Method parameters
 
 **Supported Methods:**
+
 - `eth_blockNumber`, `eth_getBalance`, `eth_getBlockByNumber`
 - `eth_getTransactionByHash`, `eth_getLogs`, `eth_call`
 - `eth_chainId`, `eth_gasPrice`, `eth_estimateGas`
 - `eth_getCode`, `eth_getTransactionReceipt`
 
 **Example:**
+
 ```json
 {
   "method": "eth_chainId",
@@ -226,6 +251,7 @@ pnpm run inspect:npx
 ```
 
 This opens:
+
 - **Inspector UI**: http://localhost:6274/
 - **Proxy Server**: http://localhost:6277/
 
@@ -238,46 +264,57 @@ This opens:
 ### Sample Test Cases
 
 **Block Number Test:**
+
 ```json
 {}
 ```
+
 → Returns current block in hex and decimal
 
 **Native Balance Test:**
+
 ```json
 {
   "address": "0x742d35Cc6074C4532895c05b22629ce5b3c28da4"
 }
 ```
+
 → ETH balance in multiple formats
 
 **Token Balance Test:**
+
 ```json
 {
   "tokenAddress": "0x912CE59144191C1204E64559FE8253a0e49E6548",
   "address": "0x742d35Cc6074C4532895c05b22629ce5b3c28da4"
 }
 ```
+
 → Token balance with decimal formatting
 
 **Block Query Test:**
+
 ```json
 {
   "tagOrNumber": "0x16877f00",
   "full": false
 }
 ```
+
 → Block header information
 
 **Transaction Query Test:**
+
 ```json
 {
   "hash": "0xd6a6f4f02be772ae5cc27728ce4e21b9db1ae094a8ee3b591bb0df3f9b4e9380"
 }
 ```
+
 → Complete transaction details
 
 **Event Logs Test:**
+
 ```json
 {
   "fromBlock": "0x16877f00",
@@ -285,6 +322,7 @@ This opens:
   "address": "0x912CE59144191C1204E64559FE8253a0e49E6548"
 }
 ```
+
 → Filtered event logs
 
 ## Integration with Vibekit Agents
@@ -311,13 +349,15 @@ export const myAgentConfig = {
             'get_block_by_number',
             'get_transaction_by_hash',
             'get_logs',
-            'rpc_call'
-          ]
-        }
+            'rpc_call',
+          ],
+        },
       },
-      tools: [/* Import Tatum MCP tools */],
-    }
-  ]
+      tools: [
+        /* Import Tatum MCP tools */
+      ],
+    },
+  ],
 };
 ```
 
@@ -347,11 +387,11 @@ export const myAgentConfig = {
 
 ## Configuration Options
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TATUM_API_KEY` | Required | Your Tatum API key |
-| `TATUM_CHAIN` | `arbitrum-one-mainnet` | Target blockchain network |
-| `PORT` | `3010` | Server port for HTTP transport |
+| Variable        | Default                | Description                    |
+| --------------- | ---------------------- | ------------------------------ |
+| `TATUM_API_KEY` | Required               | Your Tatum API key             |
+| `TATUM_CHAIN`   | `arbitrum-one-mainnet` | Target blockchain network      |
+| `PORT`          | `3010`                 | Server port for HTTP transport |
 
 ### Supported Chains
 
@@ -364,18 +404,22 @@ export const myAgentConfig = {
 ### Common Issues
 
 **"TATUM_API_KEY is required"**
+
 - Ensure your `.env` file contains the API key
 - Verify the key is valid and has proper permissions
 
 **"HTTP 404" errors**
+
 - Check server is running: `lsof -i :3010`
 - Verify `TATUM_MCP_SERVER_URL` matches server URL
 
 **"Rate limit exceeded"**
+
 - Server includes automatic retry with backoff
 - Consider upgrading Tatum plan for higher limits
 
 **"Method not allowed" in rpc_call**
+
 - Only pre-approved methods are allowed for security
 - Use specific tools for common operations
 
@@ -391,6 +435,7 @@ console.error('Debug:', { method, params, response });
 ### Health Checks
 
 Server exposes health endpoints:
+
 - `GET /` - Server information and available tools
 - `GET /.well-known/agent.json` - Agent card for discovery
 

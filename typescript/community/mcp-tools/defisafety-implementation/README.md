@@ -49,16 +49,19 @@ You can get an OpenAI API key from: https://platform.openai.com/api-keys
 
 **Option 1: Use a .env file**
 Create a `.env` file in the project directory:
+
 ```bash
 OPENAI_API_KEY=sk-your-actual-api-key-here
 ```
 
 **Option 2: Set inline when running**
+
 ```bash
 OPENAI_API_KEY=sk-your-key-here pnpm dev
 ```
 
 **Option 3: Export in your shell**
+
 ```bash
 export OPENAI_API_KEY=sk-your-key-here
 pnpm dev
@@ -82,34 +85,42 @@ pnpm start
 ## Available Tools
 
 ### 1. index_documentation
+
 Scrapes and indexes documentation from a website.
 
 **Parameters:**
+
 - `baseUrl` (required): Base URL to scrape (will not go beyond this domain/path)
 - `maxPages` (optional): Maximum pages to scrape (default: 100)
 - `selector` (optional): CSS selector for main content (default: "main, article, .content, .documentation")
 
 ### 2. query_documentation
+
 Queries indexed documentation using natural language.
 
 **Parameters:**
+
 - `query` (required): Natural language query
 - `topK` (optional): Number of relevant chunks to retrieve (default: 5)
 
 ### 3. clear_index
+
 Clears the entire documentation index.
 
 **Parameters:** None
 
 ### 4. list_indexed_urls
+
 Lists all URLs that have been indexed.
 
 **Parameters:** None
 
 ### 5. evaluate_defisafety_criteria
+
 All-in-one tool that scrapes documentation from a URL, generates embeddings, and evaluates against DeFiSafety criteria (Q1-Q11) to generate a comprehensive scored report.
 
 **Parameters:**
+
 - `projectName` (required): Name of the project being evaluated
 - `baseUrl` (required): Base URL of the documentation to scrape and evaluate
 - `maxPages` (optional): Maximum pages to scrape (default: 50)
@@ -119,6 +130,7 @@ All-in-one tool that scrapes documentation from a URL, generates embeddings, and
 The following examples show how to use this MCP server directly, or you can see it in action with the [Scraper Agent](../../templates/scraper-agent/) template.
 
 1. Index documentation:
+
 ```json
 {
   "tool": "index_documentation",
@@ -130,6 +142,7 @@ The following examples show how to use this MCP server directly, or you can see 
 ```
 
 2. Query the documentation:
+
 ```json
 {
   "tool": "query_documentation",
@@ -141,6 +154,7 @@ The following examples show how to use this MCP server directly, or you can see 
 ```
 
 3. Evaluate against DeFiSafety criteria (all-in-one):
+
 ```json
 {
   "tool": "evaluate_defisafety_criteria",
@@ -153,6 +167,7 @@ The following examples show how to use this MCP server directly, or you can see 
 ```
 
 This single tool call will:
+
 - Scrape the documentation from the provided URL
 - Generate embeddings for all content
 - Evaluate against all Q1-Q11 DeFiSafety criteria
@@ -174,4 +189,4 @@ pnpm test
 
 ## License
 
-MIT 
+MIT

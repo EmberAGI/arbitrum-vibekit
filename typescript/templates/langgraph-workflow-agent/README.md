@@ -227,7 +227,6 @@ langgraph-workflow-agent/
 The project includes comprehensive tests at three levels:
 
 1. **Unit Tests** - Test individual components with mocked LLM calls
-
    - State utilities
    - Generator node
    - Evaluator node

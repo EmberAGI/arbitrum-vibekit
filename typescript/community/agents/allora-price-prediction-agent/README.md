@@ -37,13 +37,11 @@ The agent has one main skill:
 The price prediction tool uses a hook-based approach ([Lesson 16](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/lib/arbitrum-vibekit-core/docs/lesson-16.md)):
 
 1. **Pre-hook (Topic Discovery)**:
-
    - Calls `list_all_topics` from Allora MCP
    - Finds the topic ID matching the requested token
    - Adds topic ID to the tool arguments
 
 2. **Main Tool Execution**:
-
    - Uses the discovered topic ID
    - Calls `get_inference_by_topic_id` from Allora MCP
    - Returns the price prediction data

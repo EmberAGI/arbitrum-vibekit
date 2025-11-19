@@ -3,6 +3,7 @@
 **MCP Inspector URL:** `http://localhost:6274`
 
 **Configuration:**
+
 ```
 Command: /Users/griffinsoduol/Desktop/OtherProjects/arbitrum-vibekit/typescript/lib/mcp-tools/centrifuge-mcp-server/run-server-stdio.sh
 Arguments: (leave empty)
@@ -12,6 +13,7 @@ Transport: stdio
 ## 6 Reliable Tools
 
 ### 1. place-investment-order
+
 ```json
 {
   "investorAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
@@ -24,6 +26,7 @@ Transport: stdio
 ```
 
 ### 2. yield-optimization
+
 ```json
 {
   "investorAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
@@ -34,6 +37,7 @@ Transport: stdio
 ```
 
 ### 3. transaction-history
+
 ```json
 {
   "investorAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
@@ -43,6 +47,7 @@ Transport: stdio
 ```
 
 ### 4. investment-performance-tracking
+
 ```json
 {
   "investorAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
@@ -52,6 +57,7 @@ Transport: stdio
 ```
 
 ### 5. risk-alert-system
+
 ```json
 {
   "investorAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
@@ -65,6 +71,7 @@ Transport: stdio
 ```
 
 ### 6. yield-comparison-tool
+
 ```json
 {
   "poolIds": ["1", "2"],
@@ -74,6 +81,7 @@ Transport: stdio
 ```
 
 ## Status
+
 - ✅ Local Ethereum fork (Anvil) running
 - ✅ Centrifuge MCP server running
 - ✅ MCP Inspector running

@@ -189,36 +189,30 @@ We recommend modifying the [`quickstart-agent`](https://github.com/EmberAGI/arbi
    ```
 
 2. Update Package Configuration
-
    - Edit `package.json` to change the name and description
    - Update any references to "quickstart-agent" in your new agent's files
 
 3. Define Your Skills
-
    - Modify files in `src/skills/` to match your agent's capabilities
    - Remove the demo skills (greet, getTime, echo) and create your own
    - Each skill should represent a high-level capability your agent provides
 
 4. Implement Your Tools
-
    - Update files in `src/tools/` with your specific business logic
    - Replace the greeting tools with tools that perform your desired actions
    - Keep the tool structure but change the implementation details
 
 5. Configure MCP Integrations
-
    - Replace the mock MCP servers in `mock-mcp-servers/` with real integrations
    - Or remove them if you don't need external MCP tools
    - Update `src/index.ts` to register your MCP connections
 
 6. Add Custom Context & Hooks
-
    - Modify `src/context/` if you need shared state management
    - Update `src/hooks/` to add logging, authentication, or data transformation
    - Remove any context or hooks you don't need
 
 7. Update Environment Configuration
-
    - Copy `.env.example` to `.env` and configure your API keys
    - Add any new environment variables your agent requires
    - Update the example file with your new variables
@@ -234,7 +228,6 @@ We recommend modifying the [`quickstart-agent`](https://github.com/EmberAGI/arbi
    - Use the integration test patterns from the quickstart agent
 
 9. Create Your Agent's README
-
    - Update the `README.md` file with your agent's specific information
    - Document your agent's skills, tools, and capabilities
    - Include setup instructions, environment variables, and usage examples

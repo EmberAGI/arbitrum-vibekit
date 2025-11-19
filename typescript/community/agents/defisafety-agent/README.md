@@ -15,18 +15,21 @@ An AI agent for evaluating DeFi protocol safety and documentation quality using 
 The agent evaluates protocols against 10 key criteria with weighted importance:
 
 ### Critical Documentation (44% of total score)
+
 - **Q1 - Contract Addresses (15%)**: Availability and accuracy of smart contract addresses
 - **Q4 - Architecture Documentation (12%)**: System design and component interaction docs
 - **Q9 - Change Capabilities (12%)**: Governance and modification processes
 - **Q2 - Public Repository (5%)**: Open source code availability
 
 ### Security & Risk Management (33% of total score)
+
 - **Q10 - Oracle Documentation (12%)**: Price feed and external data documentation
 - **Q7 - Upgradeability (10%)**: Upgrade mechanisms and procedures
 - **Q5 - Bug Bounty Programs (8%)**: Security vulnerability disclosure programs
 - **Q3 - Whitepaper/Docs (5%)**: Foundational technical documentation
 
 ### Transparency & Governance (23% of total score)
+
 - **Q6 - Admin Controls (8%)**: Administrative function documentation
 - **Q8 - Contract Ownership (7%)**: Ownership structure and control mechanisms
 

@@ -16,6 +16,7 @@ The Allora MCP server allows AI systems and applications to access Allora predic
 ## Quickstart
 
 Docker:
+
 ```
 docker run -p 3001:3001 -e PORT=3001 -e ALLORA_API_KEY=your_api_key alloranetwork/mcp-server
 
@@ -24,16 +25,19 @@ docker run -p 3001:3001 --env-file .env alloranetwork/mcp-server
 ```
 
 `docker-compose`:
+
 ```
 docker-compose up
 ```
 
 `npx`:
+
 ```
 npx @alloralabs/mcp-server
 ```
 
 Node.js:
+
 ```
 npm run start
 ```
@@ -49,9 +53,9 @@ Point your LLM/tooling at http://localhost:3001/sse to start using the server.
 
 ### Available Tools
 
-| Tool Name | Description | Parameters |
-|-----------|-------------|------------|
-| `list_all_topics` | Fetch a list of all Allora topics | None |
+| Tool Name                   | Description                               | Parameters        |
+| --------------------------- | ----------------------------------------- | ----------------- |
+| `list_all_topics`           | Fetch a list of all Allora topics         | None              |
 | `get_inference_by_topic_id` | Fetch inference data for a specific topic | `topicID`: number |
 
 ### Example Usage with Claude

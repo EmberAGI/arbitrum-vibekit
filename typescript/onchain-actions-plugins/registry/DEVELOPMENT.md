@@ -44,7 +44,7 @@ import type { ChainConfig } from '../chainConfig.js';
 import type { PublicEmberPluginRegistry } from '../registry.js';
 
 export async function getYourProtocolPlugin(
-  params: YourProtocolAdapterParams
+  params: YourProtocolAdapterParams,
 ): Promise<EmberPlugin<'lending'>> {
   const adapter = new YourProtocolAdapter(params);
 
@@ -67,7 +67,7 @@ export async function getYourProtocolPlugin(
  */
 export function registerYourProtocol(
   chainConfig: ChainConfig,
-  registry: PublicEmberPluginRegistry
+  registry: PublicEmberPluginRegistry,
 ) {
   const supportedChains = [42161]; // Add your supported chain IDs
   if (!supportedChains.includes(chainConfig.chainId)) {
@@ -79,7 +79,7 @@ export function registerYourProtocol(
       chainId: chainConfig.chainId,
       rpcUrl: chainConfig.rpcUrl,
       wrappedNativeToken: chainConfig.wrappedNativeToken,
-    })
+    }),
   );
 }
 ```
@@ -115,21 +115,21 @@ Create action functions that return proper action definitions:
 import type { ActionDefinition, LendingActions } from '../core/index.js';
 
 async function getYourProtocolActions(
-  adapter: YourProtocolAdapter
+  adapter: YourProtocolAdapter,
 ): Promise<ActionDefinition<LendingActions>[]> {
   // Dynamically fetch protocol data to get real token addresses
   const reservesResponse = await adapter.getReserves();
 
   // Extract real contract addresses from protocol
   const underlyingAssets: string[] = reservesResponse.reservesData.map(
-    reserve => reserve.underlyingAsset
+    (reserve) => reserve.underlyingAsset,
   );
   const yieldTokens: string[] = reservesResponse.reservesData.map(
-    reserve => reserve.yTokenAddress // Protocol-specific yield token addresses (e.g., aTokenAddress for AAVE)
+    (reserve) => reserve.yTokenAddress, // Protocol-specific yield token addresses (e.g., aTokenAddress for AAVE)
   );
   const borrowableAssets = reservesResponse.reservesData
-    .filter(reserve => reserve.borrowingEnabled)
-    .map(reserve => reserve.underlyingAsset);
+    .filter((reserve) => reserve.borrowingEnabled)
+    .map((reserve) => reserve.underlyingAsset);
 
   return [
     {
@@ -241,7 +241,7 @@ export class YourProtocolAdapter {
   // Core transaction methods - implement your protocol-specific logic
   async createSupplyTransaction(params: SupplyTokensRequest): Promise<SupplyTokensResponse> {
     const txs = await this.supply(params.supplyToken, params.amount, params.walletAddress);
-    return { transactions: txs.map(tx => this.transformToTransactionPlan(tx)) };
+    return { transactions: txs.map((tx) => this.transformToTransactionPlan(tx)) };
   }
 
   async createBorrowTransaction(params: BorrowTokensRequest): Promise<BorrowTokensResponse> {

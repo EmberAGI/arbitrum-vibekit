@@ -1,7 +1,9 @@
 # RWA Investment Agent - AI-Powered Blockchain Analysis
 
 ## Overview
+
 This is an advanced RWA investment agent that combines AI-powered conversation with real-time Arbitrum blockchain data. The agent features:
+
 - 🤖 **AI-Powered Chat** - Intelligent conversation using OpenAI GPT-4o
 - 📊 **Real Blockchain Data** - All data comes from live Arbitrum contracts
 - 🔗 **MCP Integration** - Model Context Protocol for seamless AI-blockchain interaction
@@ -11,6 +13,7 @@ This is an advanced RWA investment agent that combines AI-powered conversation w
 ## Features
 
 ### 🤖 AI-Powered Chat System
+
 - Intelligent conversation handling with GPT-4o
 - Real-time blockchain data integration
 - Context-aware responses with conversation memory
@@ -18,6 +21,7 @@ This is an advanced RWA investment agent that combines AI-powered conversation w
 - Natural language processing for investment analysis
 
 ### 📊 Real-Time Blockchain Integration
+
 - Live block numbers from Arbitrum mainnet
 - Real contract addresses for top RWA protocols
 - Dynamic data fetching for each conversation
@@ -25,6 +29,7 @@ This is an advanced RWA investment agent that combines AI-powered conversation w
 - On-chain data verification
 
 ### 🔍 AI Analysis Capabilities
+
 - RWA investment recommendations
 - Risk assessment and analysis
 - Market trend insights
@@ -32,6 +37,7 @@ This is an advanced RWA investment agent that combines AI-powered conversation w
 - Portfolio optimization suggestions
 
 ### 🔗 MCP Tools Available
+
 - `analyze_rwa_query` - AI-powered RWA investment analysis
 - `verify_contract` - Real-time contract verification on Arbitrum
 - `get_token_balance` - Live ERC20 token balance checking
@@ -39,27 +45,32 @@ This is an advanced RWA investment agent that combines AI-powered conversation w
 ## Quick Start
 
 ### Prerequisites
+
 - OpenAI API key (set as `OPENAI_API_KEY` environment variable)
 - Node.js and pnpm installed
 
 ### 1. Install Dependencies
+
 ```bash
 cd typescript/templates/rwa-investment-agent
 pnpm install
 ```
 
 ### 2. Set Environment Variables
+
 ```bash
 export OPENAI_API_KEY="your-openai-api-key-here"
 # Optional: export OPENROUTER_API_KEY for fallback
 ```
 
 ### 3. Build the Project
+
 ```bash
 pnpm build
 ```
 
 ### 4. Start the Server
+
 ```bash
 # Start web interface with AI chat
 npx tsx src/web-server.ts
@@ -69,6 +80,7 @@ npx tsx src/index.ts
 ```
 
 ### 5. Test the AI Chat
+
 ```bash
 # Test AI-powered RWA investment query
 curl -X POST http://localhost:3001/api/chat \
@@ -89,9 +101,11 @@ curl -X POST http://localhost:3001/api/chat \
 ## API Endpoints
 
 ### POST `/api/chat`
+
 Analyze RWA investment queries with real blockchain data.
 
 **Request:**
+
 ```json
 {
   "message": "what are RWA investments"
@@ -99,6 +113,7 @@ Analyze RWA investment queries with real blockchain data.
 ```
 
 **Response:**
+
 ```json
 {
   "skill": "RWA Analysis",
@@ -109,12 +124,14 @@ Analyze RWA investment queries with real blockchain data.
 ## Architecture
 
 ### Core Components
+
 - **Express Server**: RESTful API endpoints
 - **Viem Client**: Direct blockchain connectivity to Arbitrum
 - **Real-time Data**: Live block numbers and timestamps
 - **AI Analysis**: Intelligent query processing
 
 ### Data Sources
+
 - **Arbitrum RPC**: `https://arb1.arbitrum.io/rpc`
 - **Real Contracts**: Aave, Uniswap, Compound protocol contracts
 - **Live Block Data**: Current block numbers and timestamps
@@ -123,11 +140,13 @@ Analyze RWA investment queries with real blockchain data.
 ## Technical Details
 
 ### Dependencies
+
 - `express`: Web server framework
 - `viem`: Ethereum blockchain client
 - `cors`: Cross-origin resource sharing
 
 ### Blockchain Integration
+
 - Direct connection to Arbitrum mainnet
 - Real-time block number fetching
 - ERC20 contract interaction capabilities
@@ -136,6 +155,7 @@ Analyze RWA investment queries with real blockchain data.
 ## Verification
 
 All data provided by this agent is:
+
 - ✅ **Real** - Fetched from live Arbitrum blockchain
 - ✅ **Verifiable** - Contract addresses exist on Arbiscan
 - ✅ **Current** - Block numbers and timestamps are live
@@ -144,6 +164,7 @@ All data provided by this agent is:
 ## Usage Examples
 
 ### Investment Query
+
 ```bash
 curl -X POST http://localhost:3001/api/chat \
   -H "Content-Type: application/json" \
@@ -151,6 +172,7 @@ curl -X POST http://localhost:3001/api/chat \
 ```
 
 ### General Conversation
+
 ```bash
 curl -X POST http://localhost:3001/api/chat \
   -H "Content-Type: application/json" \
@@ -160,6 +182,7 @@ curl -X POST http://localhost:3001/api/chat \
 ## Development
 
 ### Project Structure
+
 ```
 src/
 ├── web-server.ts    # Main application server
@@ -167,6 +190,7 @@ src/
 ```
 
 ### Adding New Features
+
 1. Extend the `analyzeRWAQuery` function
 2. Add new response handlers
 3. Test with real blockchain data
