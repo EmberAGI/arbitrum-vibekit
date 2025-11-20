@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       packages:
-        description: 'Comma separated package overrides (agent-node, registry)'
+        description: "Comma separated package overrides (agent-node, registry)"
         required: false
         type: string
   push:
@@ -12,12 +12,12 @@ on:
       - main
       - next
     paths:
-      - 'typescript/lib/agent-node/**'
-      - 'typescript/onchain-actions-plugins/registry/**'
-      - 'typescript/scripts/**'
-      - 'typescript/release/**'
-      - 'typescript/.multi-releaserc.cjs'
-      - '.github/workflows/release.yml'
+      - "typescript/lib/agent-node/**"
+      - "typescript/onchain-actions-plugins/registry/**"
+      - "typescript/scripts/**"
+      - "typescript/release/**"
+      - "typescript/.multi-releaserc.cjs"
+      - ".github/workflows/release.yml"
 
 permissions:
   contents: write
@@ -114,6 +114,11 @@ jobs:
           name: release-summary-${{ matrix.package.id }}
           path: typescript/release-summary-${{ matrix.package.id }}.json
           if-no-files-found: warn
+
+      - name: Generate release tweet copy
+        run: |
+          cd typescript
+          node scripts/release-tweet-copy.mjs "release-summary-${{ matrix.package.id }}.json"
 
   sync-next:
     name: Sync next branch
