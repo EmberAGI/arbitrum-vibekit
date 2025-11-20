@@ -1,0 +1,103 @@
+name: Docs Sync on Comment
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  sync-docs:
+    if: |
+      github.event.issue.pull_request != '' &&
+      contains(github.event.comment.body, '@docs-update')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          # Checkout the head branch of the PR
+          repository: "${{ github.repository }}"
+          ref: ${{ github.event.issue.number }}
+          fetch-depth: 0
+
+      - name: Get PR info
+        id: pr
+        uses: octokit/request-action@v2
+        with:
+          route: GET /repos/{owner}/{repo}/pulls/{pull_number}
+          owner: ${{ github.repository_owner }}
+          repo: ${{ github.event.repository.name }}
+          pull_number: ${{ github.event.issue.number }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout the PR head sha
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ fromJson(steps.pr.outputs.data).head.sha }}
+
+      - name: Find changed documentation files
+        id: diff
+        run: |
+          git fetch origin ${{ fromJson(steps.pr.outputs.data).base.ref }}
+          git diff --name-only origin/${{ fromJson(steps.pr.outputs.data).base.ref }}...HEAD > changed_files.txt
+
+          echo "Changed files:"
+          cat changed_files.txt
+
+          # Filter only documentation files
+          grep -E '(^docs/|README\.md$|readme\.md$|\.md$)' changed_files.txt > docs_changed.txt || true
+
+          echo "Docs changed:"
+          cat docs_changed.txt
+
+          DOCS_LIST=$(paste -sd "," docs_changed.txt)
+          echo "docs_list=$DOCS_LIST" >> $GITHUB_OUTPUT
+
+      - name: Stop if no doc files changed
+        if: steps.diff.outputs.docs_list == ''
+        run: |
+          echo "No documentation changes detected. Exiting."
+          exit 0
+
+      - name: Prepare export folder
+        run: |
+          mkdir export
+          while IFS= read -r file; do
+            mkdir -p export/$(dirname "$file")
+            cp "$file" export/"$file"
+          done < docs_changed.txt
+
+      - name: Checkout Mintlify repo
+        uses: actions/checkout@v4
+        with:
+          repository: EmberAGI/ember_docs
+          token: ${{ secrets.DOCS_SYNC_TOKEN }}
+          path: ember_docs
+          fetch-depth: 0
+
+      - name: Copy updated docs into Mintlify repo
+        run: |
+          while IFS= read -r file; do
+            target="ember_docs/docs/$file"
+            mkdir -p "$(dirname "$target")"
+            cp "export/$file" "$target"
+          done < docs_changed.txt
+
+      - name: Create Pull Request in Mintlify repo
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.DOCS_SYNC_TOKEN }}
+          path: ember_docs
+          commit-message: "Docs Sync: Updated ${{ steps.diff.outputs.docs_list }}"
+          branch: docs-sync-${{ github.run_id }}
+          title: "Docs Sync from PR #${{ github.event.issue.number }}"
+          body: |
+            Triggered by **@docs-update** on PR #${{ github.event.issue.number }}.
+
+            Updated documentation files:
+            ${{ steps.diff.outputs.docs_list }}
+          base: main
