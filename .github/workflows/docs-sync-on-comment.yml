@@ -1,15 +1,18 @@
-name: Docs Sync on Comment
+name: AI-Powered Mintlify Docs Sync
 
 on:
   issue_comment:
     types: [created]
+  pull_request:
+    types: [opened, edited]
 
 jobs:
   sync-docs:
     if: |
-      github.event.issue.pull_request != '' &&
-      contains(github.event.comment.body, '@docs-update')
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request != '' && contains(github.event.comment.body, '@docs-update')) ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.body, '@docs-update'))
     runs-on: ubuntu-latest
+    environment: ci
     permissions:
       contents: read
       pull-requests: read
@@ -21,15 +24,26 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const prNumber = context.issue.number;
-            const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-            });
+            let prNumber, prData;
 
-            core.setOutput('head_sha', pr.head.sha);
-            core.setOutput('base_ref', pr.base.ref);
+            if (context.eventName === 'issue_comment') {
+              prNumber = context.issue.number;
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+              });
+              prData = pr;
+            } else {
+              // pull_request event
+              prData = context.payload.pull_request;
+            }
+
+            core.setOutput('pr_number', prData.number);
+            core.setOutput('pr_title', prData.title);
+            core.setOutput('pr_body', prData.body || '');
+            core.setOutput('head_sha', prData.head.sha);
+            core.setOutput('base_ref', prData.base.ref);
 
       - name: Checkout the PR head sha
         uses: actions/checkout@v4
@@ -38,37 +52,20 @@ jobs:
           ref: ${{ steps.pr.outputs.head_sha }}
           fetch-depth: 0
 
-      - name: Find changed documentation files
-        id: diff
-        run: |
-          git fetch origin ${{ steps.pr.outputs.base_ref }}
-          git diff --name-only origin/${{ steps.pr.outputs.base_ref }}...HEAD > changed_files.txt
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
-          echo "Changed files:"
-          cat changed_files.txt
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
 
-          # Filter only documentation files
-          grep -E '(^docs/|README\.md$|readme\.md$|\.md$)' changed_files.txt > docs_changed.txt || true
-
-          echo "Docs changed:"
-          cat docs_changed.txt
-
-          DOCS_LIST=$(paste -sd "," docs_changed.txt)
-          echo "docs_list=$DOCS_LIST" >> $GITHUB_OUTPUT
-
-      - name: Stop if no doc files changed
-        if: steps.diff.outputs.docs_list == ''
-        run: |
-          echo "No documentation changes detected. Exiting."
-          exit 0
-
-      - name: Prepare export folder
-        run: |
-          mkdir export
-          while IFS= read -r file; do
-            mkdir -p export/$(dirname "$file")
-            cp "$file" export/"$file"
-          done < docs_changed.txt
+      - name: Install dependencies
+        working-directory: ./typescript
+        run: pnpm install --frozen-lockfile
 
       - name: Checkout Mintlify repo
         uses: actions/checkout@v4
@@ -78,25 +75,62 @@ jobs:
           path: ember_docs
           fetch-depth: 0
 
-      - name: Copy updated docs into Mintlify repo
+      - name: AI-Powered Documentation Analysis and Update
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
-          while IFS= read -r file; do
-            target="ember_docs/docs/$file"
-            mkdir -p "$(dirname "$target")"
-            cp "export/$file" "$target"
-          done < docs_changed.txt
+          cd typescript
+          node scripts/sync-mintlify-docs.mjs \
+            "${{ steps.pr.outputs.pr_number }}" \
+            "${{ steps.pr.outputs.pr_title }}" \
+            "${{ steps.pr.outputs.pr_body }}"
+
+      - name: Read sync summary
+        id: summary
+        run: |
+          if [ -f mintlify-sync-summary.json ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            SUMMARY=$(cat mintlify-sync-summary.json | jq -r '.summary')
+            ANALYSIS=$(cat mintlify-sync-summary.json | jq -r '.analysis')
+            FILES=$(cat mintlify-sync-summary.json | jq -r '.updatedFiles | join(", ")')
+            echo "summary<<EOF" >> $GITHUB_OUTPUT
+            echo "$SUMMARY" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "analysis<<EOF" >> $GITHUB_OUTPUT
+            echo "$ANALYSIS" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "files<<EOF" >> $GITHUB_OUTPUT
+            echo "$FILES" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create Pull Request in Mintlify repo
+        if: steps.summary.outputs.has_changes == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.DOCS_SYNC_TOKEN }}
           path: ember_docs
-          commit-message: "Docs Sync: Updated ${{ steps.diff.outputs.docs_list }}"
+          commit-message: "docs: AI-powered sync from Vibekit PR #${{ steps.pr.outputs.pr_number }}"
           branch: docs-sync-${{ github.run_id }}
-          title: "Docs Sync from PR #${{ github.event.issue.number }}"
+          title: "🤖 AI Docs Sync from Vibekit PR #${{ steps.pr.outputs.pr_number }}"
           body: |
-            Triggered by **@docs-update** on PR #${{ github.event.issue.number }}.
+            ## 🤖 AI-Powered Documentation Sync
 
-            Updated documentation files:
-            ${{ steps.diff.outputs.docs_list }}
+            Triggered by **@docs-update** on Vibekit PR [#${{ steps.pr.outputs.pr_number }}](https://github.com/${{ github.repository }}/pull/${{ steps.pr.outputs.pr_number }})
+
+            ### 📊 Analysis
+            ${{ steps.summary.outputs.analysis }}
+
+            ### 📝 Summary
+            ${{ steps.summary.outputs.summary }}
+
+            ### 📄 Updated Files
+            ${{ steps.summary.outputs.files }}
+
+            ---
+
+            **Note:** This PR was automatically generated by AI analysis. Please review all changes carefully before merging.
           base: main
