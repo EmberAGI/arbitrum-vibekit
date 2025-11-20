@@ -25,25 +25,30 @@ jobs:
 
       - name: Get PR info
         id: pr
-        uses: octokit/request-action@v2
+        uses: actions/github-script@v7
         with:
-          route: GET /repos/{owner}/{repo}/pulls/{pull_number}
-          owner: ${{ github.repository_owner }}
-          repo: ${{ github.event.repository.name }}
-          pull_number: ${{ github.event.issue.number }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.issue.number;
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('base_ref', pr.base.ref);
 
       - name: Checkout the PR head sha
         uses: actions/checkout@v4
         with:
-          ref: ${{ fromJson(steps.pr.outputs.data).head.sha }}
+          ref: ${{ steps.pr.outputs.head_sha }}
 
       - name: Find changed documentation files
         id: diff
         run: |
-          git fetch origin ${{ fromJson(steps.pr.outputs.data).base.ref }}
-          git diff --name-only origin/${{ fromJson(steps.pr.outputs.data).base.ref }}...HEAD > changed_files.txt
+          git fetch origin ${{ steps.pr.outputs.base_ref }}
+          git diff --name-only origin/${{ steps.pr.outputs.base_ref }}...HEAD > changed_files.txt
 
           echo "Changed files:"
           cat changed_files.txt
