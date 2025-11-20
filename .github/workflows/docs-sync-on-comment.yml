@@ -34,7 +34,9 @@ jobs:
       - name: Checkout the PR head sha
         uses: actions/checkout@v4
         with:
+          # Use full history so git can find a merge base with the base branch
           ref: ${{ steps.pr.outputs.head_sha }}
+          fetch-depth: 0
 
       - name: Find changed documentation files
         id: diff
