@@ -175,31 +175,25 @@ ${JSON.stringify(docsList, null, 2)}
 - Focus on user-facing documentation (tutorials, guides, API docs, examples)
 
 **Response Format:**
-Respond with a JSON object:
+You MUST respond with ONLY a valid JSON object, no additional text before or after.
+
 {
-  "analysis": "Brief summary of what changed in the PR and documentation impact",
+  "analysis": "Brief summary of what changed",
   "files_to_update": [
     {
-      "file": "docs/path/to/file.md",
-      "reason": "Why this file needs updating",
-      "updates": [
-        {
-          "action": "replace_entire" | "append",
-          "new_content": "the complete new content for the file (for replace_entire) or content to append (for append)",
-          "context": "brief explanation of this change"
-        }
-      ]
+      "file": "vibekit/quickstart/example.mdx",
+      "reason": "Why this needs updating"
     }
   ],
-  "summary": "Overall summary of documentation changes"
+  "summary": "Overall summary"
 }
 
-**Important**:
-- Use "replace_entire" to provide the complete new content for the entire file
-- Use "append" to add new content at the end of the file
-- DO NOT try to do partial text matching - provide the full file content
-
-If no documentation updates are needed, return { "analysis": "...", "files_to_update": [], "summary": "No documentation updates required" }
+**Rules:**
+- Respond with ONLY the JSON object
+- No markdown code blocks
+- No explanatory text before or after
+- File paths should NOT start with slash or "docs/"
+- If no updates needed: {"analysis": "...", "files_to_update": [], "summary": "No documentation updates required"}
 `;
 
   console.log('🤖 Analyzing PR changes and Mintlify docs...');
@@ -207,8 +201,16 @@ If no documentation updates are needed, return { "analysis": "...", "files_to_up
 
   // Parse initial response to get files that need updating
   let jsonText = response.trim();
+
+  // Try to extract JSON from markdown code blocks
   if (jsonText.startsWith('```')) {
     jsonText = jsonText.replace(/^```(?:json)?\n/, '').replace(/\n```$/, '');
+  }
+
+  // Try to find JSON object if there's explanatory text
+  const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    jsonText = jsonMatch[0];
   }
 
   let initialPlan;
@@ -216,7 +218,17 @@ If no documentation updates are needed, return { "analysis": "...", "files_to_up
     initialPlan = JSON.parse(jsonText);
   } catch (error) {
     console.error('Failed to parse initial LLM response:', error);
-    return { analysis: 'Failed to parse response', files_to_update: [], summary: 'Error' };
+    console.error('Response text (first 500 chars):', jsonText.substring(0, 500));
+
+    // Try to fix common JSON issues
+    try {
+      // Remove trailing commas
+      const fixed = jsonText.replace(/,(\s*[}\]])/g, '$1');
+      initialPlan = JSON.parse(fixed);
+      console.log('✓ Successfully parsed after fixing trailing commas');
+    } catch (e) {
+      return { analysis: 'Failed to parse response', files_to_update: [], summary: 'Error' };
+    }
   }
 
   // If files need updating, fetch their full content and re-prompt for complete rewrites
@@ -249,7 +261,8 @@ ${initialPlan.analysis}
 
 Please provide the COMPLETE updated content for this file. Make only the necessary changes to reflect the PR updates while preserving all existing structure, formatting, and unrelated content.
 
-Respond with ONLY a JSON object in this format:
+You MUST respond with ONLY a valid JSON object, no markdown code blocks, no additional text:
+
 {
   "new_content": "the complete updated markdown content",
   "changes_made": "brief description of what you changed"
@@ -257,12 +270,28 @@ Respond with ONLY a JSON object in this format:
 
       const detailResponse = await callLLM(detailPrompt);
       let detailJson = detailResponse.trim();
+
+      // Extract JSON from markdown code blocks
       if (detailJson.startsWith('```')) {
         detailJson = detailJson.replace(/^```(?:json)?\n/, '').replace(/\n```$/, '');
       }
 
+      // Try to find JSON object
+      const detailMatch = detailJson.match(/\{[\s\S]*\}/);
+      if (detailMatch) {
+        detailJson = detailMatch[0];
+      }
+
       try {
-        const update = JSON.parse(detailJson);
+        let update;
+        try {
+          update = JSON.parse(detailJson);
+        } catch (e) {
+          // Try fixing trailing commas
+          const fixed = detailJson.replace(/,(\s*[}\]])/g, '$1');
+          update = JSON.parse(fixed);
+        }
+
         detailedUpdates.push({
           file: docKey,
           reason: fileUpdate.reason,
