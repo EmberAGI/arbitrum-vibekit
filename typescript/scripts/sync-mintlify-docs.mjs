@@ -144,7 +144,7 @@ function loadMintlifyDocs(mintlifyPath) {
 async function analyzeAndUpdateDocs(prDiff, mintlifyDocs, prTitle, prBody) {
   const docsList = Object.keys(mintlifyDocs).map((key) => ({
     path: key,
-    preview: mintlifyDocs[key].content.substring(0, 500) + '...',
+    preview: mintlifyDocs[key].content.substring(0, 300) + '...',
   }));
 
   const prompt = `You are updating Mintlify documentation for Ember AI Vibekit based on changes from a GitHub PR.
@@ -175,82 +175,193 @@ ${JSON.stringify(docsList, null, 2)}
 - Focus on user-facing documentation (tutorials, guides, API docs, examples)
 
 **Response Format:**
-Respond with a JSON object:
+You MUST respond with ONLY a valid JSON object, no additional text before or after.
+
 {
-  "analysis": "Brief summary of what changed in the PR and documentation impact",
+  "analysis": "Brief summary of what changed",
   "files_to_update": [
     {
-      "file": "docs/path/to/file.md",
-      "reason": "Why this file needs updating",
-      "updates": [
-        {
-          "action": "update" | "add" | "remove",
-          "old_text": "exact text to find (for update/remove)",
-          "new_text": "replacement text (for update/add)",
-          "context": "brief explanation of this change"
-        }
-      ]
+      "file": "vibekit/quickstart/example.mdx",
+      "reason": "Why this needs updating"
     }
   ],
-  "summary": "Overall summary of documentation changes"
+  "summary": "Overall summary"
 }
 
-If no documentation updates are needed, return { "analysis": "...", "files_to_update": [], "summary": "No documentation updates required" }
+**Rules:**
+- Respond with ONLY the JSON object
+- No markdown code blocks
+- No explanatory text before or after
+- File paths should NOT start with slash or "docs/"
+- If no updates needed: {"analysis": "...", "files_to_update": [], "summary": "No documentation updates required"}
 `;
 
   console.log('🤖 Analyzing PR changes and Mintlify docs...');
   const response = await callLLM(prompt);
 
-  // Extract JSON from response (handle markdown code blocks)
+  // Parse initial response to get files that need updating
   let jsonText = response.trim();
+
+  // Try to extract JSON from markdown code blocks
   if (jsonText.startsWith('```')) {
     jsonText = jsonText.replace(/^```(?:json)?\n/, '').replace(/\n```$/, '');
   }
 
-  try {
-    return JSON.parse(jsonText);
-  } catch (error) {
-    console.error('Failed to parse LLM response as JSON:', error);
-    console.log('Raw response:', response);
-    return { analysis: 'Failed to parse response', files_to_update: [], summary: 'Error' };
+  // Try to find JSON object if there's explanatory text
+  const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    jsonText = jsonMatch[0];
   }
+
+  let initialPlan;
+  try {
+    initialPlan = JSON.parse(jsonText);
+  } catch (error) {
+    console.error('Failed to parse initial LLM response:', error);
+    console.error('Response text (first 500 chars):', jsonText.substring(0, 500));
+
+    // Try to fix common JSON issues
+    try {
+      // Remove trailing commas
+      const fixed = jsonText.replace(/,(\s*[}\]])/g, '$1');
+      initialPlan = JSON.parse(fixed);
+      console.log('✓ Successfully parsed after fixing trailing commas');
+    } catch (e) {
+      return { analysis: 'Failed to parse response', files_to_update: [], summary: 'Error' };
+    }
+  }
+
+  // If files need updating, fetch their full content and re-prompt for complete rewrites
+  if (initialPlan.files_to_update && initialPlan.files_to_update.length > 0) {
+    console.log(
+      `📝 Generating complete updates for ${initialPlan.files_to_update.length} file(s)...`,
+    );
+
+    const detailedUpdates = [];
+    for (const fileUpdate of initialPlan.files_to_update) {
+      const docKey = fileUpdate.file;
+      if (!mintlifyDocs[docKey]) {
+        console.warn(`⚠️  File not found: ${docKey}`);
+        continue;
+      }
+
+      const currentContent = mintlifyDocs[docKey].content;
+
+      const detailPrompt = `You are updating the Mintlify documentation file: ${docKey}
+
+Reason for update: ${fileUpdate.reason}
+
+Current file content:
+\`\`\`markdown
+${currentContent}
+\`\`\`
+
+PR Changes Summary:
+${initialPlan.analysis}
+
+Please provide the COMPLETE updated content for this file. Make only the necessary changes to reflect the PR updates while preserving all existing structure, formatting, and unrelated content.
+
+You MUST respond with ONLY a valid JSON object, no markdown code blocks, no additional text:
+
+{
+  "new_content": "the complete updated markdown content",
+  "changes_made": "brief description of what you changed"
+}`;
+
+      const detailResponse = await callLLM(detailPrompt);
+      let detailJson = detailResponse.trim();
+
+      // Extract JSON from markdown code blocks
+      if (detailJson.startsWith('```')) {
+        detailJson = detailJson.replace(/^```(?:json)?\n/, '').replace(/\n```$/, '');
+      }
+
+      // Try to find JSON object
+      const detailMatch = detailJson.match(/\{[\s\S]*\}/);
+      if (detailMatch) {
+        detailJson = detailMatch[0];
+      }
+
+      try {
+        let update;
+        try {
+          update = JSON.parse(detailJson);
+        } catch (e) {
+          // Try fixing trailing commas
+          const fixed = detailJson.replace(/,(\s*[}\]])/g, '$1');
+          update = JSON.parse(fixed);
+        }
+
+        detailedUpdates.push({
+          file: docKey,
+          reason: fileUpdate.reason,
+          updates: [
+            {
+              action: 'replace_entire',
+              new_content: update.new_content,
+              context: update.changes_made,
+            },
+          ],
+        });
+        console.log(`✓ Generated update for ${docKey}`);
+      } catch (error) {
+        console.error(`Failed to parse update for ${docKey}:`, error);
+      }
+    }
+
+    return {
+      analysis: initialPlan.analysis,
+      files_to_update: detailedUpdates,
+      summary: initialPlan.summary,
+    };
+  }
+
+  return initialPlan;
 }
 
 function applyUpdates(mintlifyDocs, updatePlan) {
   const updatedFiles = [];
 
   for (const fileUpdate of updatePlan.files_to_update) {
-    const docKey = fileUpdate.file;
+    let docKey = fileUpdate.file;
 
+    // Try to find the file with different path variations
     if (!mintlifyDocs[docKey]) {
-      console.warn(`⚠️  File not found in Mintlify docs: ${docKey}`);
-      continue;
+      // Try without leading slash
+      const withoutSlash = docKey.replace(/^\/+/, '');
+      // Try with docs/ prefix
+      const withDocs = `docs/${withoutSlash}`;
+      // Try exact match in keys
+      const matchingKey = Object.keys(mintlifyDocs).find(
+        (key) =>
+          key === docKey ||
+          key === withoutSlash ||
+          key.endsWith(docKey) ||
+          key.endsWith(withoutSlash),
+      );
+
+      if (matchingKey) {
+        docKey = matchingKey;
+        console.log(`✓ Mapped ${fileUpdate.file} to ${docKey}`);
+      } else {
+        console.warn(`⚠️  File not found in Mintlify docs: ${fileUpdate.file}`);
+        console.warn(`   Available keys (first 10):`, Object.keys(mintlifyDocs).slice(0, 10));
+        continue;
+      }
     }
 
     let content = mintlifyDocs[docKey].content;
     let modified = false;
 
     for (const update of fileUpdate.updates) {
-      if (update.action === 'update' || update.action === 'remove') {
-        if (content.includes(update.old_text)) {
-          const newText = update.action === 'remove' ? '' : update.new_text;
-          content = content.replace(update.old_text, newText);
-          modified = true;
-          console.log(`✓ Applied ${update.action} to ${docKey}: ${update.context}`);
-        } else {
-          console.warn(
-            `⚠️  Could not find text to ${update.action} in ${docKey}:\n"${update.old_text.substring(0, 100)}..."`,
-          );
-        }
-      } else if (update.action === 'add') {
-        // For 'add', append at the end or after a specific marker if old_text is provided
-        if (update.old_text && content.includes(update.old_text)) {
-          content = content.replace(update.old_text, update.old_text + '\n\n' + update.new_text);
-        } else {
-          content = content + '\n\n' + update.new_text;
-        }
+      if (update.action === 'replace_entire') {
+        content = update.new_content;
         modified = true;
-        console.log(`✓ Added content to ${docKey}: ${update.context}`);
+        console.log(`✓ Replaced entire content of ${docKey}: ${update.context}`);
+      } else if (update.action === 'append') {
+        content = content + '\n\n' + update.new_content;
+        modified = true;
+        console.log(`✓ Appended content to ${docKey}: ${update.context}`);
       }
     }
 
