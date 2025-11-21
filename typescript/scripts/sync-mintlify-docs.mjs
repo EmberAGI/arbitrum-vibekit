@@ -267,7 +267,8 @@ async function main() {
   }
 
   // Load Mintlify docs
-  const mintlifyPath = path.resolve(process.cwd(), 'ember_docs');
+  // The ember_docs directory is checked out at the workspace root, not in typescript/
+  const mintlifyPath = path.resolve(process.cwd(), '..', 'ember_docs');
   const mintlifyDocs = loadMintlifyDocs(mintlifyPath);
 
   if (Object.keys(mintlifyDocs).length === 0) {
@@ -296,8 +297,8 @@ async function main() {
   console.log(`\n✅ Successfully updated ${updatedFiles.length} file(s):`);
   updatedFiles.forEach((file) => console.log(`   - ${file}`));
 
-  // Write summary for PR body
-  const summaryPath = path.resolve(process.cwd(), 'mintlify-sync-summary.json');
+  // Write summary for PR body (at workspace root, not typescript/)
+  const summaryPath = path.resolve(process.cwd(), '..', 'mintlify-sync-summary.json');
   writeFileSync(
     summaryPath,
     JSON.stringify(
