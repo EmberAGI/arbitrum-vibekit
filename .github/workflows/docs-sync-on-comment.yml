@@ -75,6 +75,16 @@ jobs:
           path: ember_docs
           fetch-depth: 0
 
+      - name: Verify Mintlify repo checkout
+        run: |
+          if [ ! -d "ember_docs" ]; then
+            echo "❌ ember_docs directory not found after checkout!"
+            echo "This likely means the DOCS_SYNC_TOKEN doesn't have access to EmberAGI/ember_docs"
+            exit 1
+          fi
+          echo "✅ ember_docs directory exists"
+          ls -la ember_docs/ | head -20
+
       - name: AI-Powered Documentation Analysis and Update
         working-directory: ./typescript
         env:
