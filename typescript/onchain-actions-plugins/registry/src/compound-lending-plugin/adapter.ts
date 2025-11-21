@@ -226,27 +226,46 @@ export class CompoundAdapter {
 
       let totalCollateralValue = ethers.BigNumber.from(0);
 
-      for (let i = 0; i < numAssets.toNumber(); i++) {
-        const assetInfo = await comet.getAssetInfo(i);
-        const collateralBalance = await comet.getCollateralBalance(validatedUser, assetInfo.asset);
+      // Convert numAssets to number
+      // numAssets() returns uint8, which should be a small number
+      const numAssetsCount = Number(numAssets);
 
-        if (collateralBalance.gt(0)) {
-          // Get price for this asset
-          const price = await comet.getPrice(assetInfo.priceFeed);
-          const assetScale = assetInfo.scale;
+      for (let i = 0; i < numAssetsCount; i++) {
+        try {
+          const assetInfo = await comet.getAssetInfo(i);
 
-          // Calculate USD value: (balance * price * priceScale) / (assetScale * baseScale)
-          const balanceScaled = collateralBalance.mul(price).mul(priceScale);
-          const divisor = assetScale.mul(baseScale);
-          const usdValue = balanceScaled.div(divisor);
+          // Skip if asset address is invalid
+          if (!assetInfo.asset || assetInfo.asset === ethers.constants.AddressZero) {
+            continue;
+          }
 
-          totalCollateralValue = totalCollateralValue.add(usdValue);
+          const collateralBalance = await comet.getCollateralBalance(
+            validatedUser,
+            assetInfo.asset,
+          );
 
-          collateralPositions.push({
-            asset: assetInfo.asset,
-            balance: collateralBalance,
-            balanceUsd: ethers.utils.formatUnits(usdValue, 8), // priceScale is 8 decimals
-          });
+          if (collateralBalance.gt(0)) {
+            // Get price for this asset
+            const price = await comet.getPrice(assetInfo.priceFeed);
+            const assetScale = assetInfo.scale;
+
+            // Calculate USD value: (balance * price * priceScale) / (assetScale * baseScale)
+            const balanceScaled = collateralBalance.mul(price).mul(priceScale);
+            const divisor = assetScale.mul(baseScale);
+            const usdValue = balanceScaled.div(divisor);
+
+            totalCollateralValue = totalCollateralValue.add(usdValue);
+
+            collateralPositions.push({
+              asset: assetInfo.asset,
+              balance: collateralBalance,
+              balanceUsd: ethers.utils.formatUnits(usdValue, 8), // priceScale is 8 decimals
+            });
+          }
+        } catch (error) {
+          // Skip assets that fail (e.g., invalid asset, contract revert)
+          // This can happen if an asset index is out of bounds or asset is invalid
+          continue;
         }
       }
 

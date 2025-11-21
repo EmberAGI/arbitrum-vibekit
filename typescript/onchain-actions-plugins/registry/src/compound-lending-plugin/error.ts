@@ -11,11 +11,25 @@ class CompoundError extends Error {
     this.errorName = errorName;
     this.message = errorName;
 
-    Object.setPrototypeOf(this, new.target.prototype);
+    // Fix prototype chain for proper instanceof checks
+    if (Object.setPrototypeOf) {
+      Object.setPrototypeOf(this, CompoundError.prototype);
+    }
   }
 }
 
 // Helper functions
+
+// Standard JavaScript error names that should not be treated as Compound errors
+const STANDARD_ERROR_NAMES = new Set([
+  'TypeError',
+  'ReferenceError',
+  'SyntaxError',
+  'RangeError',
+  'EvalError',
+  'URIError',
+  'Error',
+]);
 
 function extractErrorName(reason: string): string | null {
   if (!reason) {
@@ -25,11 +39,20 @@ function extractErrorName(reason: string): string | null {
   const revertedMatch = reason.match(/execution reverted:?\s*(.+)/i);
   if (revertedMatch) {
     const errorPart = revertedMatch[1]?.trim().replace(/^["']|["']$/g, '');
-    return errorPart?.replace(/\(\)$/, '') || null;
+    const errorName = errorPart?.replace(/\(\)$/, '') || null;
+    // Don't treat standard JS errors as Compound errors
+    if (errorName && !STANDARD_ERROR_NAMES.has(errorName)) {
+      return errorName;
+    }
+    return null;
   }
 
   const trimmed = reason.trim().replace(/\(\)$/, '');
-  return trimmed && trimmed.length > 0 && trimmed.length < 100 ? trimmed : null;
+  // Don't treat standard JS errors or very short strings as Compound errors
+  if (trimmed && trimmed.length > 0 && trimmed.length < 100 && !STANDARD_ERROR_NAMES.has(trimmed)) {
+    return trimmed;
+  }
+  return null;
 }
 
 function extractErrorReason(error: unknown): string | null {
@@ -41,13 +64,28 @@ function extractErrorReason(error: unknown): string | null {
     return null;
   }
 
+  // Skip standard JavaScript errors - they're not Compound contract errors
+  if ('name' in error && typeof error.name === 'string') {
+    if (STANDARD_ERROR_NAMES.has(error.name)) {
+      // For standard JS errors, check if there's a reason/message that might contain Compound error info
+      if ('reason' in error && typeof error.reason === 'string') {
+        return error.reason;
+      }
+      if ('message' in error && typeof error.message === 'string') {
+        return error.message;
+      }
+      if ('shortMessage' in error && typeof error.shortMessage === 'string') {
+        return error.shortMessage;
+      }
+      // Don't return standard error names as they're not Compound errors
+      return null;
+    }
+  }
+
   if ('errorName' in error && typeof error.errorName === 'string') {
     return error.errorName;
   }
 
-  if ('name' in error && typeof error.name === 'string') {
-    return error.name;
-  }
   if ('reason' in error && typeof error.reason === 'string') {
     return error.reason;
   }
@@ -92,7 +130,14 @@ function extractErrorReason(error: unknown): string | null {
  */
 export function getCompoundError(reason: string): CompoundError | null {
   const errorName = extractErrorName(reason);
-  return errorName ? new CompoundError(errorName) : null;
+  if (!errorName || typeof errorName !== 'string') {
+    return null;
+  }
+  try {
+    return new CompoundError(errorName);
+  } catch {
+    return null;
+  }
 }
 
 /**
