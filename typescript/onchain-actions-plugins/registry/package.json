@@ -28,7 +28,7 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "test": "pnpm test:unit && pnpm test:int",
     "test:unit": "vitest run --config vitest.config.unit.ts",
-    "test:int": "tsx --env-file=.env.test ./node_modules/vitest/vitest.mjs run --config vitest.config.int.ts",
+    "test:int": "vitest run --config vitest.config.int.ts",
     "test:watch": "vitest watch",
     "test:ci": "pnpm test:unit && LOG_LEVEL=error pnpm test:int"
   },
