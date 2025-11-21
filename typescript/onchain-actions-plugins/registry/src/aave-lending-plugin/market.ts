@@ -29,7 +29,7 @@ export const getMarket = (chainId: number): AAVEMarket => {
   const marketKey = marketMap[chainId];
   if (!marketKey) {
     throw new Error(
-      `AAVE: no market found for chain ID ${chainId}: modify providers/aave/market.ts`
+      `AAVE: no market found for chain ID ${chainId}: modify providers/aave/market.ts`,
     );
   }
 
