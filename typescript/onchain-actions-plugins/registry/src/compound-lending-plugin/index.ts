@@ -35,7 +35,7 @@ export async function getCompoundEmberPlugin(
  * @returns An array of action definitions for the Compound V3 lending protocol.
  */
 export async function getCompoundActions(
-  adapter: CompoundAdapter,
+  _adapter: CompoundAdapter,
 ): Promise<ActionDefinition<LendingActions>[]> {
   // Transaction methods are not yet implemented
   // Will be populated when we implement:

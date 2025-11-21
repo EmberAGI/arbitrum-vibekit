@@ -26,7 +26,11 @@
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\"",
-    "test:ci": "echo \"No CI tests defined for ${npm_package_name}\""
+    "test": "pnpm test:unit && pnpm test:int",
+    "test:unit": "vitest run --config vitest.config.unit.ts",
+    "test:int": "tsx --env-file=.env.test ./node_modules/vitest/vitest.mjs run --config vitest.config.int.ts",
+    "test:watch": "vitest watch",
+    "test:ci": "pnpm test:unit && LOG_LEVEL=error pnpm test:int"
   },
   "dependencies": {
     "@aave/contract-helpers": "^1.32.1",
@@ -39,7 +43,9 @@
   },
   "devDependencies": {
     "@semantic-release/exec": "^7.1.0",
-    "tsdown": "catalog:"
+    "@vitest/coverage-v8": "catalog:",
+    "tsdown": "catalog:",
+    "vitest": "catalog:"
   },
   "license": "MIT",
   "publishConfig": {
