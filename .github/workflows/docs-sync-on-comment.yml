@@ -76,11 +76,11 @@ jobs:
           fetch-depth: 0
 
       - name: AI-Powered Documentation Analysis and Update
+        working-directory: ./typescript
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
-          cd typescript
           node scripts/sync-mintlify-docs.mjs \
             "${{ steps.pr.outputs.pr_number }}" \
             "${{ steps.pr.outputs.pr_title }}" \
