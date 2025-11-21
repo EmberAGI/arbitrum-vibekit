@@ -111,16 +111,24 @@ function findAllMarkdownFiles(dir, fileList = []) {
 }
 
 function loadMintlifyDocs(mintlifyPath) {
-  const docsPath = path.join(mintlifyPath, 'docs');
-
-  if (!existsSync(docsPath)) {
-    console.error('❌ Mintlify docs directory not found');
+  if (!existsSync(mintlifyPath)) {
+    console.error(`❌ Mintlify repo directory not found at: ${mintlifyPath}`);
     return {};
   }
 
-  const mdFiles = findAllMarkdownFiles(docsPath);
-  const docs = {};
+  console.log(`🔍 Scanning for markdown files in: ${mintlifyPath}`);
 
+  // Recursively find all markdown files starting from repo root
+  const mdFiles = findAllMarkdownFiles(mintlifyPath);
+
+  if (mdFiles.length === 0) {
+    console.error('❌ No markdown files found in Mintlify repo');
+    return {};
+  }
+
+  console.log(`📚 Found ${mdFiles.length} markdown files`);
+
+  const docs = {};
   mdFiles.forEach((filePath) => {
     const relativePath = path.relative(mintlifyPath, filePath);
     const content = readFileSync(filePath, 'utf8');
@@ -269,6 +277,19 @@ async function main() {
   // Load Mintlify docs
   // The ember_docs directory is checked out at the workspace root, not in typescript/
   const mintlifyPath = path.resolve(process.cwd(), '..', 'ember_docs');
+  console.log(`🔍 Looking for Mintlify docs at: ${mintlifyPath}`);
+  console.log(`📂 Current working directory: ${process.cwd()}`);
+
+  // Debug: List what's in the parent directory
+  try {
+    const parentDir = path.resolve(process.cwd(), '..');
+    const { readdirSync } = await import('node:fs');
+    const contents = readdirSync(parentDir);
+    console.log(`📁 Contents of parent directory (${parentDir}):`, contents);
+  } catch (err) {
+    console.log('⚠️  Could not read parent directory:', err.message);
+  }
+
   const mintlifyDocs = loadMintlifyDocs(mintlifyPath);
 
   if (Object.keys(mintlifyDocs).length === 0) {
