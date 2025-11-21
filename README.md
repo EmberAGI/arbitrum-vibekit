@@ -15,7 +15,7 @@
 
 ## 📙 Introduction
 
-Welcome to Vibekit, the polyglot toolkit for vibe coding smart, autonomous DeFi agents that can perform complex on-chain operations. Whether you're automating trades, managing liquidity, or integrating with blockchain data, Vibekit makes it simple to create intelligent agents that understand natural language and execute sophisticated workflows.
+Welcome to Vibekit, the polyglot toolkit for vibe coding smart, autonomous DeFi agents that can perform complex on-chain operations. Whether you're automating trades, managing liquidity, or integrating with blockchain data, Vibekit makes it simple to create intelligent agents that understand natural language and execute sophisticated workflows. There is a new frontend for the vibekit in [this directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web). The [previous frontend](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web-legacy) is deprecated.
 
 ### Core Features
 

@@ -1,6 +1,6 @@
 # EmberAi A2A Client
 
-Modern chat interface for Agent-to-Agent (A2A) communication with Node.js backend.
+New frontend for Vibekit. Modern chat interface for Agent-to-Agent (A2A) communication with Node.js backend.
 
 ## Architecture
 
