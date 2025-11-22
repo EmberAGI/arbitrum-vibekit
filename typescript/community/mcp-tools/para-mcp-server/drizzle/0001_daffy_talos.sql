@@ -1,0 +1,1 @@
+ALTER TABLE "pregen_wallets" DROP CONSTRAINT "pregen_wallets_email_unique";
