@@ -10,9 +10,7 @@ import { getMarketsForChain } from './market.js';
  * @param params - Configuration parameters for the CompoundAdapter, including chainId, rpcUrl, and marketId.
  * @returns The Compound V3 Ember plugin.
  */
-export async function getCompoundEmberPlugin(
-  params: CompoundAdapterParams,
-): Promise<EmberPlugin<'lending'>> {
+export function getCompoundEmberPlugin(params: CompoundAdapterParams): EmberPlugin<'lending'> {
   const adapter = new CompoundAdapter(params);
 
   return {
@@ -22,7 +20,7 @@ export async function getCompoundEmberPlugin(
     description: 'Compound V3 (Comet) lending protocol',
     website: 'https://compound.finance',
     x: 'https://x.com/compoundfinance',
-    actions: await getCompoundActions(adapter),
+    actions: getCompoundActions(adapter),
     queries: {
       getPositions: adapter.getUserSummary.bind(adapter),
     },
@@ -34,9 +32,7 @@ export async function getCompoundEmberPlugin(
  * @param adapter - An instance of CompoundAdapter to interact with the Compound V3 protocol.
  * @returns An array of action definitions for the Compound V3 lending protocol.
  */
-export async function getCompoundActions(
-  _adapter: CompoundAdapter,
-): Promise<ActionDefinition<LendingActions>[]> {
+export function getCompoundActions(_adapter: CompoundAdapter): ActionDefinition<LendingActions>[] {
   // Transaction methods are not yet implemented
   // Will be populated when we implement:
   // - createSupplyTransaction

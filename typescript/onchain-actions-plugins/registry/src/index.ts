@@ -1,6 +1,6 @@
 import { registerAave } from './aave-lending-plugin/index.js';
-import { registerCompound } from './compound-lending-plugin/index.js';
 import type { ChainConfig } from './chainConfig.js';
+import { registerCompound } from './compound-lending-plugin/index.js';
 import { PublicEmberPluginRegistry } from './registry.js';
 
 /**

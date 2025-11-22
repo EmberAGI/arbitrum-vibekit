@@ -1,15 +1,15 @@
-import { ethers } from 'ethers';
+import type { BigNumber } from 'ethers';
 
 // Compound V3 user position data structure
 export type CompoundUserPosition = {
   // Collateral positions
   collateral: Array<{
     asset: string;
-    balance: ethers.BigNumber;
+    balance: BigNumber;
     balanceUsd: string;
   }>;
   // Borrow position (single borrowable asset in Compound V3)
-  borrowBalance: ethers.BigNumber;
+  borrowBalance: BigNumber;
   borrowBalanceUsd: string;
   // Calculated metrics
   totalCollateralUsd: string;
@@ -21,7 +21,7 @@ export type CompoundUserPosition = {
   availableBorrowsUsd: string;
 };
 
-function formatNumeric(value: string | ethers.BigNumber): string {
+function formatNumeric(value: string | BigNumber): string {
   const num = typeof value === 'string' ? parseFloat(value) : parseFloat(value.toString());
   if (Number.isNaN(num)) return '0';
   if (Number.isInteger(num)) return num.toString();

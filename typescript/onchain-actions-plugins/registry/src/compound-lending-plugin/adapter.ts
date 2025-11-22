@@ -16,8 +16,8 @@ import {
 } from '../core/index.js';
 
 import { Chain } from './chain.js';
-import { type CompoundMarket, getMarket } from './market.js';
 import { handleCompoundError } from './error.js';
+import { type CompoundMarket, getMarket } from './market.js';
 import { UserSummary, type CompoundUserPosition } from './userSummary.js';
 
 /**
@@ -527,7 +527,7 @@ export class CompoundAdapter {
               balanceUsd: ethers.utils.formatUnits(usdValue, DECIMALS.PRICE_SCALE),
             });
           }
-        } catch (error) {
+        } catch (_error) {
           // Skip assets that fail (e.g., invalid asset, contract revert)
           // This can happen if an asset index is out of bounds or asset is invalid
           continue;
@@ -954,6 +954,13 @@ export class CompoundAdapter {
 
     // Check current allowance for ERC20 tokens (including WETH after wrapping)
     // All ERC20 tokens (including base tokens like USDC) require approval
+    interface ERC20Contract {
+      allowance: (owner: string, spender: string) => Promise<ethers.BigNumber>;
+      populateTransaction: {
+        approve: (spender: string, amount: ethers.BigNumber) => Promise<PopulatedTransaction>;
+      };
+    }
+
     const tokenContract = new ethers.Contract(
       targetAsset,
       [
@@ -961,15 +968,15 @@ export class CompoundAdapter {
         'function approve(address spender, uint256 amount) returns (bool)',
       ],
       this.getProvider(),
-    );
+    ) as unknown as ERC20Contract;
 
-    const allowance = await tokenContract['allowance'](validatedFrom, cometAddress);
+    const allowance = await tokenContract.allowance(validatedFrom, cometAddress);
     const amountBN = ethers.BigNumber.from(amount.toString());
 
     if (allowance.lt(amountBN)) {
       // Create approval transaction with MaxUint256 for gas efficiency
       // This avoids needing multiple approvals for future transactions
-      const approvalTx = await tokenContract.populateTransaction['approve']!(
+      const approvalTx = await tokenContract.populateTransaction.approve(
         cometAddress,
         ethers.constants.MaxUint256,
       );
