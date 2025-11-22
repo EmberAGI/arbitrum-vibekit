@@ -20,6 +20,12 @@ import { type CompoundMarket, getMarket } from './market.js';
 import { handleCompoundError } from './error.js';
 import { UserSummary, type CompoundUserPosition } from './userSummary.js';
 
+/**
+ * Native ETH placeholder address used in DeFi protocols.
+ * This is the standard address used to represent native ETH.
+ */
+const NATIVE_ETH_PLACEHOLDER = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -664,16 +670,25 @@ export class CompoundAdapter {
    * @remarks
    * - All ERC20 tokens (including base tokens) require approval before supply
    * - Approval is set to MaxUint256 for gas efficiency
-   * - Native ETH (address(0)) does not require approval
+   * - Native ETH (0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE) is automatically wrapped to WETH before supply
+   * - Requires `wrappedNativeToken` to be configured in adapter params for native ETH support
    *
    * @example
    * ```typescript
+   * // Supply ERC20 token
    * const result = await adapter.createSupplyTransaction({
    *   supplyToken: { tokenUid: { address: '0x...', chainId: '42161' }, decimals: 8, ... },
    *   amount: BigInt('100000000'), // 1 token with 8 decimals
    *   walletAddress: '0x...',
    * });
-   * // Execute result.transactions
+   *
+   * // Supply native ETH (auto-wraps to WETH)
+   * const ethResult = await adapter.createSupplyTransaction({
+   *   supplyToken: { tokenUid: { address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', chainId: '42161' }, decimals: 18, ... },
+   *   amount: BigInt('1000000000000000000'), // 1 ETH
+   *   walletAddress: '0x...',
+   * });
+   * // Execute result.transactions (includes WETH deposit + approval + supply)
    * ```
    */
   public async createSupplyTransaction(params: SupplyTokensRequest): Promise<SupplyTokensResponse> {
@@ -869,18 +884,21 @@ export class CompoundAdapter {
   /**
    * Internal method to create supply transactions for collateral or base token.
    *
-   * Handles ERC20 approval if needed, then creates the supply transaction.
+   * Handles native ETH auto-wrapping and ERC20 approval if needed, then creates the supply transaction.
    * All ERC20 tokens (including base tokens) require approval before supply.
    *
-   * @param asset - Token address to supply (can be collateral or base token)
+   * @param asset - Token address to supply (can be collateral, base token, or native ETH placeholder)
    * @param amount - Amount to supply in token's native decimals
    * @param from - Address that will supply the tokens (must have balance and approval)
-   * @returns Promise resolving to array of populated transactions (approval + supply)
+   * @returns Promise resolving to array of populated transactions (wrap + approval + supply)
    *
    * @remarks
+   * - If native ETH (address(0)) is provided, automatically wraps to WETH first
    * - Checks current allowance and adds approval transaction if insufficient
    * - Approval is set to MaxUint256 for gas efficiency
-   * - Native ETH (address(0)) does not require approval
+   * - Requires `wrappedNativeToken` to be configured in adapter params for native ETH support
+   *
+   * @throws {Error} If native ETH placeholder is provided but `wrappedNativeToken` is not configured
    */
   private async supply(
     asset: string,
@@ -893,41 +911,76 @@ export class CompoundAdapter {
     const cometAddress = this.market.COMET;
 
     const transactions: PopulatedTransaction[] = [];
+    let targetAsset = validatedAsset;
 
-    // Check if approval is needed for ERC20 tokens
-    // All ERC20 tokens (including base tokens like USDC) require approval
-    // Only native ETH (address(0)) doesn't need approval
-    const isNativeETH = validatedAsset === ethers.constants.AddressZero;
+    // Handle native ETH auto-wrapping
+    // Compound V3 doesn't support native ETH directly in the Comet contract
+    // Best practice: Auto-wrap ETH to WETH first, then supply WETH
+    // This matches Compound's UI behavior where backend wraps ETH before supplying
+    // Native ETH is represented as 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE (standard DeFi convention)
+    if (validatedAsset === NATIVE_ETH_PLACEHOLDER) {
+      // Get WETH address from chain configuration
+      const wethAddress = this.chain.wrappedNativeTokenAddress;
+      if (!wethAddress) {
+        throw new Error(
+          `Native ETH supply requires wrappedNativeToken to be configured. Please provide WETH address in adapter params.`,
+        );
+      }
 
-    if (!isNativeETH) {
-      // Check current allowance for ERC20 tokens
-      const tokenContract = new ethers.Contract(
-        validatedAsset,
-        [
-          'function allowance(address owner, address spender) view returns (uint256)',
-          'function approve(address spender, uint256 amount) returns (bool)',
-        ],
+      // Create WETH deposit transaction to wrap ETH
+      // Functions: deposit() payable, withdraw(uint256 amount)
+      const wethContract = new ethers.Contract(
+        wethAddress,
+        ['function deposit() external payable', 'function withdraw(uint256 amount) external'],
         this.getProvider(),
       );
 
-      const allowance = await tokenContract['allowance'](validatedFrom, cometAddress);
-      const amountBN = ethers.BigNumber.from(amount.toString());
+      // Populate transaction with value override for payable function
+      // In ethers v5, populateTransaction accepts overrides as the last parameter
+      const wrapTx = await wethContract.populateTransaction['deposit']!({
+        value: ethers.BigNumber.from(amount.toString()),
+      });
 
-      if (allowance.lt(amountBN)) {
-        // Create approval transaction with MaxUint256 for gas efficiency
-        // This avoids needing multiple approvals for future transactions
-        const approvalTx = await tokenContract.populateTransaction['approve']!(
-          cometAddress,
-          ethers.constants.MaxUint256,
-        );
-        transactions.push(approvalTx);
+      // Ensure value is set (populateTransaction should set it, but we verify)
+      if (!wrapTx.value) {
+        wrapTx.value = ethers.BigNumber.from(amount.toString());
       }
+
+      transactions.push(wrapTx);
+
+      // Use WETH address for subsequent operations
+      targetAsset = ethers.utils.getAddress(wethAddress);
+    }
+
+    // Check current allowance for ERC20 tokens (including WETH after wrapping)
+    // All ERC20 tokens (including base tokens like USDC) require approval
+    const tokenContract = new ethers.Contract(
+      targetAsset,
+      [
+        'function allowance(address owner, address spender) view returns (uint256)',
+        'function approve(address spender, uint256 amount) returns (bool)',
+      ],
+      this.getProvider(),
+    );
+
+    const allowance = await tokenContract['allowance'](validatedFrom, cometAddress);
+    const amountBN = ethers.BigNumber.from(amount.toString());
+
+    if (allowance.lt(amountBN)) {
+      // Create approval transaction with MaxUint256 for gas efficiency
+      // This avoids needing multiple approvals for future transactions
+      const approvalTx = await tokenContract.populateTransaction['approve']!(
+        cometAddress,
+        ethers.constants.MaxUint256,
+      );
+      transactions.push(approvalTx);
     }
 
     // Create supply transaction
-    // Compound V3's supply() function accepts any asset (collateral or base token)
+    // Compound V3's supply() function accepts any ERC20 asset (collateral or base token)
+    // After wrapping, we supply WETH instead of native ETH
     const supplyTx = await comet.populateTransaction['supply']!(
-      validatedAsset,
+      targetAsset,
       ethers.BigNumber.from(amount.toString()),
     );
     transactions.push(supplyTx);
@@ -946,11 +999,12 @@ export class CompoundAdapter {
    *
    * @param asset - Token address to withdraw (can be collateral or base token)
    * @param amount - Amount to withdraw in token's native decimals
-   * @returns Promise resolving to array with single withdraw transaction
+   * @returns Promise resolving to array with withdraw transaction
    *
    * @remarks
    * - No approval needed for withdrawals (tokens are already in the protocol)
    * - For base tokens, this is used for both withdrawing supply and borrowing
+   * - WETH unwrapping (WETH.withdraw(uint256)) can be done separately after withdrawal
    */
   private async withdraw(asset: string, amount: bigint): Promise<PopulatedTransaction[]> {
     const validatedAsset = ethers.utils.getAddress(asset);

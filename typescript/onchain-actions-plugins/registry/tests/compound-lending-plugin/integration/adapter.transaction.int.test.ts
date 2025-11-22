@@ -7,6 +7,8 @@ const ANVIL_RPC_URL = process.env.ANVIL_RPC_URL || 'http://localhost:8545';
 
 const USDC_ADDRESS = '0xaf88d065e77c8cc2239327c5edb3a432268e5831';
 const WBTC_ADDRESS = '0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f';
+const WETH_ADDRESS = '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1'; // Arbitrum WETH
+const NATIVE_ETH_PLACEHOLDER = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
 function parseUnits(value: number, decimals: number): bigint {
   // Convert decimal value to integer by multiplying and then converting to BigInt
@@ -88,6 +90,7 @@ describe('CompoundAdapter Transaction Integration Tests', () => {
       chainId: 42161,
       rpcUrl: ANVIL_RPC_URL,
       marketId: 'USDC',
+      wrappedNativeToken: WETH_ADDRESS, // Required for native ETH supply support
     });
 
     provider = new ethers.providers.JsonRpcProvider(ANVIL_RPC_URL);
@@ -225,6 +228,68 @@ describe('CompoundAdapter Transaction Integration Tests', () => {
 
         expect(finalCompound).toBeGreaterThan(initialCompound);
         expect(finalWallet).toBeLessThan(initialWallet);
+      },
+      TEST_TIMEOUT,
+    );
+
+    it(
+      'should wrap native ETH to WETH and supply when supplying native ETH',
+      async () => {
+        // Native ETH supply requires auto-wrapping to WETH first
+        // The adapter should create: [WETH.deposit(), WETH.approve(), Comet.supply(WETH)]
+        const amount = parseUnits(0.1, 18); // 0.1 ETH
+
+        // Get initial balances
+        // For native ETH, we check ETH balance in wallet
+        const initialEthBalance = await provider.getBalance(testWalletAddress);
+        // For WETH in Compound, we check the WETH balance
+        const initialWethCompound = await getCompoundBalance(WETH_ADDRESS);
+        const initialWethWallet = await getWalletTokenBalance(WETH_ADDRESS);
+
+        const result = await adapter.createSupplyTransaction({
+          supplyToken: {
+            tokenUid: {
+              address: NATIVE_ETH_PLACEHOLDER,
+              chainId: '42161',
+            },
+            name: 'Ether',
+            symbol: 'ETH',
+            isNative: true,
+            decimals: 18,
+            isVetted: true,
+          },
+          amount,
+          walletAddress: testWalletAddress,
+        });
+
+        // Should have at least 2 transactions: WETH deposit + WETH approve + Comet supply
+        // (approve may be skipped if already approved)
+        expect(result.transactions.length).toBeGreaterThanOrEqual(2);
+
+        // Verify first transaction is WETH deposit (should have value set)
+        const firstTx = result.transactions[0];
+        expect(firstTx.to?.toLowerCase()).toBe(WETH_ADDRESS.toLowerCase());
+        expect(BigInt(firstTx.value || '0')).toBeGreaterThan(BigInt(0));
+
+        // Execute transactions
+        await executeTransactions(result.transactions);
+
+        // Wait for state to update
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        // Verify ETH balance decreased (ETH was wrapped to WETH)
+        const finalEthBalance = await provider.getBalance(testWalletAddress);
+        expect(BigInt(finalEthBalance.toString())).toBeLessThan(
+          BigInt(initialEthBalance.toString()),
+        );
+
+        // Verify WETH balance in Compound increased (WETH was supplied)
+        const finalWethCompound = await getCompoundBalance(WETH_ADDRESS);
+        expect(finalWethCompound).toBeGreaterThan(initialWethCompound);
+
+        // After wrapping and supplying, wallet WETH should be less than initial + wrapped amount
+        // (because some was supplied to Compound)
+        expect(finalWethCompound - initialWethCompound).toBeGreaterThan(BigInt(0));
       },
       TEST_TIMEOUT,
     );
