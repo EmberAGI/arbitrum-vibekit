@@ -20,9 +20,67 @@ import { type CompoundMarket, getMarket } from './market.js';
 import { handleCompoundError } from './error.js';
 import { UserSummary, type CompoundUserPosition } from './userSummary.js';
 
-// Comet contract interface for view and transaction functions
-// Based on Compound V3 documentation: https://docs.compound.finance/helper-functions/
-// ABI reference: https://docs.compound.finance/public/files/comet-interface-abi-98f438b.json
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * Decimal precision constants used in Compound V3 calculations
+ */
+const DECIMALS = {
+  /** Price scale uses 8 decimals (e.g., 1 USD = 1e8) */
+  PRICE_SCALE: 8,
+  /** Health factor and LTV calculations use 18 decimals for precision */
+  PRECISION: 18,
+  /** Factor scale uses 18 decimals (e.g., 0.8 = 0.8e18) */
+  FACTOR_SCALE: 18,
+} as const;
+
+/**
+ * Constants for health factor calculations
+ */
+const HEALTH_FACTOR = {
+  /** Infinite health factor representation (no borrows) */
+  INFINITE: ethers.BigNumber.from(10).pow(36),
+  /** Precision multiplier for health factor calculation */
+  PRECISION_MULTIPLIER: ethers.BigNumber.from(10).pow(18),
+} as const;
+
+/**
+ * Constants for LTV percentage calculation
+ */
+const LTV = {
+  /** Multiplier to convert decimal to percentage (10^20 = 10^18 * 100) */
+  PERCENTAGE_MULTIPLIER: ethers.BigNumber.from(10).pow(20),
+  /** Format decimals for percentage output (18 decimals) */
+  FORMAT_DECIMALS: 18,
+} as const;
+
+/**
+ * Time constants for APY calculations
+ */
+const TIME = {
+  /** Seconds per year (365 * 24 * 60 * 60) */
+  SECONDS_PER_YEAR: 365 * 24 * 60 * 60,
+} as const;
+
+/**
+ * Constants for liquidation threshold calculation
+ */
+const LIQUIDATION = {
+  /** Maximum value for uint64 scaled (used as initial value for min calculation) */
+  MAX_UINT64_SCALED: ethers.BigNumber.from('999999999999999999'),
+} as const;
+
+/**
+ * Comet contract interface for view and transaction functions.
+ *
+ * This interface extends ethers.Contract to provide type-safe access to Compound V3 (Comet) contract methods.
+ * Based on the official Compound V3 documentation and ABI.
+ *
+ * @see {@link https://docs.compound.finance/helper-functions/ Compound V3 Documentation}
+ * @see {@link https://docs.compound.finance/public/files/comet-interface-abi-98f438b.json ABI Reference}
+ */
 interface CometContract extends ethers.Contract {
   // Account balances
   balanceOf(account: string): Promise<ethers.BigNumber>;
@@ -88,21 +146,63 @@ interface CometContract extends ethers.Contract {
   withdraw(asset: string, amount: ethers.BigNumber): Promise<ethers.ContractTransaction>;
 }
 
+/**
+ * Configuration parameters for initializing a CompoundAdapter instance.
+ */
 export interface CompoundAdapterParams {
+  /** Chain ID where the Compound V3 market is deployed (e.g., 42161 for Arbitrum) */
   chainId: number;
+  /** RPC URL for blockchain interactions */
   rpcUrl: string;
-  marketId: string; // e.g., 'USDC', 'WETH', etc.
+  /** Market identifier (e.g., 'USDC', 'WETH', 'USDCE') */
+  marketId: string;
+  /** Optional wrapped native token address (e.g., WETH on Ethereum) */
   wrappedNativeToken?: string;
 }
 
+/**
+ * Type alias for Compound transaction actions.
+ * @deprecated Not currently used, kept for potential future use
+ */
 export type CompoundAction = PopulatedTransaction[];
 
 /**
- * CompoundAdapter is the primary class wrapping Compound V3 (Comet) interactions.
+ * CompoundAdapter provides a high-level interface for interacting with Compound V3 (Comet) protocol.
+ *
+ * This adapter handles:
+ * - Querying user lending positions (collateral, borrows, health factor, LTV)
+ * - Creating transactions for supply, withdraw, borrow, and repay operations
+ * - Calculating risk metrics (health factor, LTV, available borrows)
+ *
+ * @remarks
+ * Compound V3 uses a simplified model compared to V2:
+ * - Single borrowable asset (base token, typically a stablecoin)
+ * - Multiple collateral assets
+ * - Borrowing is done via `withdraw()` of the base token
+ * - Repaying is done via `supply()` of the base token
+ *
+ * @example
+ * ```typescript
+ * const adapter = new CompoundAdapter({
+ *   chainId: 42161,
+ *   rpcUrl: 'https://arb1.arbitrum.io/rpc',
+ *   marketId: 'USDC',
+ * });
+ *
+ * const positions = await adapter.getUserSummary({
+ *   walletAddress: '0x...',
+ * });
+ * ```
  */
 export class CompoundAdapter {
-  public chain: Chain;
-  public market: CompoundMarket;
+  public readonly chain: Chain;
+  public readonly market: CompoundMarket;
+
+  /** Cached Comet contract instance to avoid recreating on every call */
+  private _cometContract: CometContract | null = null;
+
+  /** Cached base token address to avoid repeated contract calls */
+  private _baseToken: string | null = null;
 
   constructor(params: CompoundAdapterParams) {
     this.chain = new Chain(params.chainId, params.rpcUrl, params.wrappedNativeToken);
@@ -114,7 +214,30 @@ export class CompoundAdapter {
   // ============================================================================
 
   /**
-   * Get user summary (positions, health factor, etc.)
+   * Retrieves comprehensive lending position information for a wallet address.
+   *
+   * This method fetches and calculates:
+   * - Collateral positions with USD values
+   * - Borrow positions (base token only in Compound V3)
+   * - Health factor (risk metric for liquidation)
+   * - Loan-to-Value (LTV) ratio as percentage (0-100)
+   * - Available borrow capacity
+   * - Net worth (collateral - borrows)
+   *
+   * @param params - Request parameters containing the wallet address
+   * @param params.walletAddress - Ethereum address to query (case-insensitive)
+   * @returns Promise resolving to user's lending positions and risk metrics
+   * @throws {CompoundError} If contract interaction fails with a Compound-specific error
+   * @throws {Error} For other errors during execution
+   *
+   * @example
+   * ```typescript
+   * const summary = await adapter.getUserSummary({
+   *   walletAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+   * });
+   * console.log(`Health Factor: ${summary.healthFactor}`);
+   * console.log(`LTV: ${summary.currentLoanToValue}%`);
+   * ```
    */
   public async getUserSummary(
     params: GetWalletLendingPositionsRequest,
@@ -154,20 +277,29 @@ export class CompoundAdapter {
     }
 
     // Add base token position (supply and/or borrow)
+    // The base token can be both supplied (lent) and borrowed
     const comet = this.getCometContract();
-    const baseToken = await comet.baseToken();
+    const baseToken = await this.getBaseToken();
     const baseTokenSupply = await comet.balanceOf(params.walletAddress);
     const baseScale = await comet.baseScale();
     const priceScale = await comet.priceScale();
+    // Calculate USD value: (supply * priceScale) / baseScale
+    // For stablecoins, priceScale typically equals baseScale, so this simplifies to supply amount
     const baseTokenSupplyUsd = baseTokenSupply.gt(0)
       ? ethers.utils.formatUnits(
           baseTokenSupply.mul(priceScale).div(baseScale),
-          8, // priceScale is 8 decimals
+          DECIMALS.PRICE_SCALE,
         )
       : '0';
 
     // Add base token if there's supply or borrows
-    if (parseFloat(baseTokenSupplyUsd) > 0 || parseFloat(totalBorrowsUsd) > 0) {
+    // Use BigNumber comparison for precision instead of parseFloat
+    const baseTokenSupplyUsdBN = ethers.utils.parseUnits(
+      baseTokenSupplyUsd || '0',
+      DECIMALS.PRICE_SCALE,
+    );
+    const totalBorrowsUsdBN = ethers.utils.parseUnits(totalBorrowsUsd || '0', DECIMALS.PRICE_SCALE);
+    if (baseTokenSupplyUsdBN.gt(0) || totalBorrowsUsdBN.gt(0)) {
       userReservesFormatted.push({
         tokenUid: {
           address: baseToken,
@@ -199,37 +331,89 @@ export class CompoundAdapter {
   // Private Helper Methods
   // ============================================================================
 
+  /**
+   * Gets the JSON-RPC provider for blockchain interactions.
+   * @returns Configured ethers.js JsonRpcProvider instance
+   */
   private getProvider(): ethers.providers.JsonRpcProvider {
     return this.chain.getProvider();
   }
 
+  /**
+   * Gets or creates a typed Comet contract instance.
+   *
+   * The contract instance is cached to avoid recreating it on every call,
+   * improving performance and reducing memory allocations.
+   *
+   * The contract is initialized with a minimal ABI containing only the functions
+   * needed for this adapter. This reduces bundle size and improves type safety.
+   *
+   * @returns Typed CometContract instance for interacting with the Compound V3 market
+   */
   private getCometContract(): CometContract {
-    const provider = this.getProvider();
-    // Using minimal ABI for view functions - will be extended as needed
-    const cometAbi = [
-      'function balanceOf(address account) external view returns (uint256)',
-      'function borrowBalanceOf(address account) external view returns (uint256)',
-      'function collateralBalanceOf(address account, address asset) external view returns (uint128)',
-      'function userBasic(address account) external view returns (int104 principal, uint64 baseTrackingIndex, uint64 baseTrackingAccrued, uint16 assetsIn)',
-      'function numAssets() external view returns (uint8)',
-      'function getAssetInfo(uint8 i) external view returns ((uint8 offset, address asset, address priceFeed, uint64 scale, uint64 borrowCollateralFactor, uint64 liquidateCollateralFactor, uint64 liquidationFactor, uint128 supplyCap))',
-      'function getAssetInfoByAddress(address asset) external view returns ((uint8 offset, address asset, address priceFeed, uint64 scale, uint64 borrowCollateralFactor, uint64 liquidateCollateralFactor, uint64 liquidationFactor, uint128 supplyCap))',
-      'function getPrice(address priceFeed) external view returns (uint256)',
-      'function getLiquidity(address account) external view returns (int256)',
-      'function isBorrowCollateralized(address account) external view returns (bool)',
-      'function totalsBasic() external view returns ((uint64 baseSupplyIndex, uint64 baseBorrowIndex, uint64 trackingSupplyIndex, uint64 trackingBorrowIndex, uint104 totalSupplyBase, uint104 totalBorrowBase, uint40 lastAccrualTime, uint8 pauseFlags))',
-      'function baseToken() external view returns (address)',
-      'function baseScale() external view returns (uint64)',
-      'function factorScale() external view returns (uint64)',
-      'function priceScale() external view returns (uint64)',
-      // Interest rate functions
-      'function getUtilization() external view returns (uint256)',
-      'function getBorrowRate(uint256 utilization) external view returns (uint64)',
-      // Transaction functions
-      'function supply(address asset, uint256 amount) external',
-      'function withdraw(address asset, uint256 amount) external',
-    ];
-    return new ethers.Contract(this.market.COMET, cometAbi, provider) as CometContract;
+    if (this._cometContract === null) {
+      const provider = this.getProvider();
+      // Using minimal ABI for view functions - will be extended as needed
+      const cometAbi = [
+        'function balanceOf(address account) external view returns (uint256)',
+        'function borrowBalanceOf(address account) external view returns (uint256)',
+        'function collateralBalanceOf(address account, address asset) external view returns (uint128)',
+        'function userBasic(address account) external view returns (int104 principal, uint64 baseTrackingIndex, uint64 baseTrackingAccrued, uint16 assetsIn)',
+        'function numAssets() external view returns (uint8)',
+        'function getAssetInfo(uint8 i) external view returns ((uint8 offset, address asset, address priceFeed, uint64 scale, uint64 borrowCollateralFactor, uint64 liquidateCollateralFactor, uint64 liquidationFactor, uint128 supplyCap))',
+        'function getAssetInfoByAddress(address asset) external view returns ((uint8 offset, address asset, address priceFeed, uint64 scale, uint64 borrowCollateralFactor, uint64 liquidateCollateralFactor, uint64 liquidationFactor, uint128 supplyCap))',
+        'function getPrice(address priceFeed) external view returns (uint256)',
+        'function getLiquidity(address account) external view returns (int256)',
+        'function isBorrowCollateralized(address account) external view returns (bool)',
+        'function totalsBasic() external view returns ((uint64 baseSupplyIndex, uint64 baseBorrowIndex, uint64 trackingSupplyIndex, uint64 trackingBorrowIndex, uint104 totalSupplyBase, uint104 totalBorrowBase, uint40 lastAccrualTime, uint8 pauseFlags))',
+        'function baseToken() external view returns (address)',
+        'function baseScale() external view returns (uint64)',
+        'function factorScale() external view returns (uint64)',
+        'function priceScale() external view returns (uint64)',
+        // Interest rate functions
+        'function getUtilization() external view returns (uint256)',
+        'function getBorrowRate(uint256 utilization) external view returns (uint64)',
+        // Transaction functions
+        'function supply(address asset, uint256 amount) external',
+        'function withdraw(address asset, uint256 amount) external',
+      ];
+      this._cometContract = new ethers.Contract(
+        this.market.COMET,
+        cometAbi,
+        provider,
+      ) as CometContract;
+    }
+    return this._cometContract;
+  }
+
+  /**
+   * Gets the base token address, caching it to avoid repeated contract calls.
+   *
+   * @returns Promise resolving to the base token address
+   */
+  private async getBaseToken(): Promise<string> {
+    if (this._baseToken === null) {
+      const comet = this.getCometContract();
+      this._baseToken = await comet.baseToken();
+    }
+    return this._baseToken;
+  }
+
+  /**
+   * Validates that the provided token address matches the base token.
+   *
+   * @param tokenAddress - Token address to validate
+   * @param operation - Operation name for error message (e.g., "borrow", "repay")
+   * @throws {Error} If token address does not match the base token
+   */
+  private async validateBaseToken(tokenAddress: string, operation: string): Promise<void> {
+    const baseToken = await this.getBaseToken();
+    const validatedTokenAddress = ethers.utils.getAddress(tokenAddress);
+    if (validatedTokenAddress !== baseToken) {
+      throw new Error(
+        `Compound V3 only supports ${operation} the base token (${baseToken}), not ${validatedTokenAddress}`,
+      );
+    }
   }
 
   // ============================================================================
@@ -237,24 +421,54 @@ export class CompoundAdapter {
   // ============================================================================
 
   /**
-   * Internal method to fetch and format user summary
+   * Internal method to fetch and format user summary from Compound V3 protocol.
+   *
+   * This method performs the core logic of:
+   * 1. Fetching user's collateral positions (using assetsIn bitmap for efficiency)
+   * 2. Calculating USD values using price feeds
+   * 3. Computing risk metrics (health factor, LTV, available borrows)
+   * 4. Formatting data into a UserSummary object
+   *
+   * @param userAddress - Validated Ethereum address to query
+   * @returns Promise resolving to UserSummary with all position data
+   * @throws {CompoundError} If contract interaction fails with Compound-specific error
+   * @throws {Error} For other errors during execution
+   *
+   * @remarks
+   * - Uses `assetsIn` bitmap to only query balances for assets the user actually has
+   * - Skips invalid assets gracefully to handle edge cases
+   * - All USD calculations use 8 decimal precision (priceScale)
+   * - LTV is returned as percentage (0-100) for consistency with industry standards
    */
   private async _getUserSummary(userAddress: string): Promise<UserSummary> {
     const validatedUser = ethers.utils.getAddress(userAddress);
     const comet = this.getCometContract();
 
     try {
-      // Get scales
+      // ========================================================================
+      // Step 1: Fetch Protocol Scales
+      // ========================================================================
+      // These scales are used for all calculations to maintain precision
+      // - baseScale: Scaling factor for base token (typically 1e6 for USDC)
+      // - factorScale: Scaling factor for collateral/liquidation factors (typically 1e18)
+      // - priceScale: Scaling factor for prices (typically 1e8)
       const baseScale = await comet.baseScale();
       const factorScale = await comet.factorScale();
       const priceScale = await comet.priceScale();
 
-      // Get user borrow balance and assetsIn bitmap
+      // ========================================================================
+      // Step 2: Fetch User Borrow Position
+      // ========================================================================
       const borrowedBase = await comet.borrowBalanceOf(validatedUser);
       const userBasic = await comet.userBasic(validatedUser);
-      const assetsIn = userBasic.assetsIn; // Bitmap of assets the user has
+      // assetsIn is a bitmap where each bit represents an asset index
+      // Bit 0 = asset 0, Bit 1 = asset 1, etc.
+      // This allows efficient checking without querying all assets
+      const assetsIn = userBasic.assetsIn;
 
-      // Get number of assets and fetch all collateral positions
+      // ========================================================================
+      // Step 3: Fetch Collateral Positions
+      // ========================================================================
       const numAssets = await comet.numAssets();
       const collateralPositions: Array<{
         asset: string;
@@ -264,8 +478,7 @@ export class CompoundAdapter {
 
       let totalCollateralValue = ethers.BigNumber.from(0);
 
-      // Convert numAssets to number
-      // numAssets() returns uint8, which should be a small number
+      // numAssets() returns uint8 (0-255), safe to convert to number
       const numAssetsCount = Number(numAssets);
 
       for (let i = 0; i < numAssetsCount; i++) {
@@ -289,11 +502,13 @@ export class CompoundAdapter {
           const collateralBalance = await comet.collateralBalanceOf(validatedUser, assetInfo.asset);
 
           if (collateralBalance.gt(0)) {
-            // Get price for this asset
+            // Fetch current price from oracle
             const price = await comet.getPrice(assetInfo.priceFeed);
             const assetScale = assetInfo.scale;
 
-            // Calculate USD value: (balance * price * priceScale) / (assetScale * baseScale)
+            // Calculate USD value using Compound V3's pricing formula:
+            // USD Value = (balance * price * priceScale) / (assetScale * baseScale)
+            // This accounts for different token decimals and price feed scaling
             const balanceScaled = collateralBalance.mul(price).mul(priceScale);
             const divisor = assetScale.mul(baseScale);
             const usdValue = balanceScaled.div(divisor);
@@ -303,7 +518,7 @@ export class CompoundAdapter {
             collateralPositions.push({
               asset: assetInfo.asset,
               balance: collateralBalance,
-              balanceUsd: ethers.utils.formatUnits(usdValue, 8), // priceScale is 8 decimals
+              balanceUsd: ethers.utils.formatUnits(usdValue, DECIMALS.PRICE_SCALE),
             });
           }
         } catch (error) {
@@ -313,17 +528,28 @@ export class CompoundAdapter {
         }
       }
 
-      // Calculate borrow USD value (base token is typically 1:1 for stablecoins like USDC)
-      // Base token price is typically 1e8 (priceScale) for stablecoins
-      const basePrice = priceScale; // For stablecoins, price is typically 1 * priceScale
+      // ========================================================================
+      // Step 4: Calculate Borrow USD Value
+      // ========================================================================
+      // For stablecoins (like USDC), the base token price is 1:1 with USD
+      // Price is represented as priceScale (typically 1e8) for 1 USD
+      const basePrice = priceScale; // 1 USD = priceScale in the price feed
       const borrowUsdValue = borrowedBase.mul(basePrice).div(baseScale);
-      const borrowBalanceUsd = ethers.utils.formatUnits(borrowUsdValue, 8); // priceScale is 8 decimals
+      const borrowBalanceUsd = ethers.utils.formatUnits(borrowUsdValue, DECIMALS.PRICE_SCALE);
 
-      const totalCollateralUsd = ethers.utils.formatUnits(totalCollateralValue, 8);
+      const totalCollateralUsd = ethers.utils.formatUnits(
+        totalCollateralValue,
+        DECIMALS.PRICE_SCALE,
+      );
       const totalBorrowsUsd = borrowBalanceUsd;
 
-      // Get liquidation threshold (minimum of all collateral factors)
-      let minLiquidationFactor = ethers.BigNumber.from('999999999999999999'); // Max uint64 scaled
+      // ========================================================================
+      // Step 5: Calculate Liquidation Threshold
+      // ========================================================================
+      // The liquidation threshold is the minimum of all collateral factors
+      // This represents the maximum LTV before liquidation can occur
+      // We use the minimum to be conservative (worst-case scenario)
+      let minLiquidationFactor = LIQUIDATION.MAX_UINT64_SCALED;
       for (const coll of collateralPositions) {
         const assetInfo = await comet.getAssetInfoByAddress(coll.asset);
         if (assetInfo.liquidateCollateralFactor.lt(minLiquidationFactor)) {
@@ -331,42 +557,66 @@ export class CompoundAdapter {
         }
       }
 
-      // Calculate health factor
-      // Health factor = (collateral value * liquidation factor) / borrow value
-      // We'll calculate it manually for precision
+      // ========================================================================
+      // Step 6: Calculate Health Factor
+      // ========================================================================
+      // Health Factor = (Max Borrowable Value) / (Current Borrow Value)
+      // Where Max Borrowable = Collateral Value * Liquidation Factor
+      //
+      // Health Factor > 1: Position is safe
+      // Health Factor = 1: At liquidation threshold
+      // Health Factor < 1: Position can be liquidated
+      //
+      // We calculate manually using BigNumber for precision
       const borrowValueScaled = borrowUsdValue;
       const collateralValueScaled = totalCollateralValue;
 
       let healthFactorValue = ethers.BigNumber.from(0);
       if (borrowValueScaled.gt(0) && collateralValueScaled.gt(0)) {
+        // Calculate max borrowable: collateral * liquidationFactor / factorScale
         const maxBorrowable = collateralValueScaled.mul(minLiquidationFactor).div(factorScale);
+        // Health factor = (maxBorrowable / borrowValue) * precision multiplier
         healthFactorValue = maxBorrowable
-          .mul(ethers.BigNumber.from(10).pow(18))
+          .mul(HEALTH_FACTOR.PRECISION_MULTIPLIER)
           .div(borrowValueScaled);
       } else if (borrowValueScaled.eq(0) && collateralValueScaled.gt(0)) {
-        // No borrows, health factor is infinite (represented as a very large number)
-        healthFactorValue = ethers.BigNumber.from(10).pow(36);
+        // No borrows = infinite health factor (represented as very large number)
+        healthFactorValue = HEALTH_FACTOR.INFINITE;
       }
 
       const healthFactor = healthFactorValue.gt(0)
-        ? ethers.utils.formatUnits(healthFactorValue, 18)
+        ? ethers.utils.formatUnits(healthFactorValue, DECIMALS.PRECISION)
         : '0';
 
-      // Calculate LTV: borrow / collateral
+      // ========================================================================
+      // Step 7: Calculate Loan-to-Value (LTV)
+      // ========================================================================
+      // LTV = (Borrow Value / Collateral Value) * 100
+      // Returns as percentage (0-100) for consistency with industry standards
+      //
+      // Calculation: (borrow / collateral) * PERCENTAGE_MULTIPLIER, then format with 18 decimals
+      // Result: (borrow / collateral) * 10^20 / 10^18 = (borrow / collateral) * 100
       const ltvValue = collateralValueScaled.gt(0)
-        ? borrowValueScaled.mul(ethers.BigNumber.from(10).pow(18)).div(collateralValueScaled)
+        ? borrowValueScaled.mul(LTV.PERCENTAGE_MULTIPLIER).div(collateralValueScaled)
         : ethers.BigNumber.from(0);
-      const currentLoanToValue = ethers.utils.formatUnits(ltvValue, 18);
+      const currentLoanToValue = ethers.utils.formatUnits(ltvValue, LTV.FORMAT_DECIMALS);
 
-      // Calculate available borrows
+      // ========================================================================
+      // Step 8: Calculate Available Borrows
+      // ========================================================================
+      // Available Borrows = Max Borrowable - Current Borrows
+      // Max Borrowable = Collateral Value * Liquidation Factor
       const maxBorrowValue = collateralValueScaled.mul(minLiquidationFactor).div(factorScale);
       const availableBorrowsUsd = maxBorrowValue.gt(borrowValueScaled)
-        ? ethers.utils.formatUnits(maxBorrowValue.sub(borrowValueScaled), 8)
+        ? ethers.utils.formatUnits(maxBorrowValue.sub(borrowValueScaled), DECIMALS.PRICE_SCALE)
         : '0';
 
-      // Net worth
+      // ========================================================================
+      // Step 9: Calculate Net Worth
+      // ========================================================================
+      // Net Worth = Total Collateral - Total Borrows
       const netWorthValue = totalCollateralValue.sub(borrowUsdValue);
-      const netWorthUsd = ethers.utils.formatUnits(netWorthValue, 8);
+      const netWorthUsd = ethers.utils.formatUnits(netWorthValue, DECIMALS.PRICE_SCALE);
 
       const position: CompoundUserPosition = {
         collateral: collateralPositions,
@@ -377,7 +627,10 @@ export class CompoundAdapter {
         netWorthUsd,
         healthFactor,
         currentLoanToValue,
-        currentLiquidationThreshold: ethers.utils.formatUnits(minLiquidationFactor, 18),
+        currentLiquidationThreshold: ethers.utils.formatUnits(
+          minLiquidationFactor,
+          DECIMALS.FACTOR_SCALE,
+        ),
         availableBorrowsUsd,
       };
 
@@ -396,7 +649,32 @@ export class CompoundAdapter {
   // ============================================================================
 
   /**
-   * Create a supply transaction for supplying collateral or base token
+   * Creates a transaction plan for supplying collateral or base token to Compound V3.
+   *
+   * This method handles:
+   * - ERC20 token approval (if needed)
+   * - Supply transaction creation
+   *
+   * @param params - Supply transaction parameters
+   * @param params.supplyToken - Token to supply (can be collateral or base token)
+   * @param params.amount - Amount to supply in token's native decimals
+   * @param params.walletAddress - Address that will supply the tokens
+   * @returns Promise resolving to transaction plan with approval + supply transactions
+   *
+   * @remarks
+   * - All ERC20 tokens (including base tokens) require approval before supply
+   * - Approval is set to MaxUint256 for gas efficiency
+   * - Native ETH (address(0)) does not require approval
+   *
+   * @example
+   * ```typescript
+   * const result = await adapter.createSupplyTransaction({
+   *   supplyToken: { tokenUid: { address: '0x...', chainId: '42161' }, decimals: 8, ... },
+   *   amount: BigInt('100000000'), // 1 token with 8 decimals
+   *   walletAddress: '0x...',
+   * });
+   * // Execute result.transactions
+   * ```
    */
   public async createSupplyTransaction(params: SupplyTokensRequest): Promise<SupplyTokensResponse> {
     const { supplyToken, amount, walletAddress } = params;
@@ -408,7 +686,25 @@ export class CompoundAdapter {
   }
 
   /**
-   * Create a withdraw transaction for withdrawing collateral or base token supply
+   * Creates a transaction plan for withdrawing collateral or base token from Compound V3.
+   *
+   * @param params - Withdraw transaction parameters
+   * @param params.tokenToWithdraw - Token to withdraw (can be collateral or base token)
+   * @param params.amount - Amount to withdraw in token's native decimals
+   * @returns Promise resolving to transaction plan with withdraw transaction
+   *
+   * @remarks
+   * - For base tokens: withdraws from supply first, then borrows if supply is insufficient
+   * - For collateral: withdraws from collateral position
+   * - No approval needed for withdrawals
+   *
+   * @example
+   * ```typescript
+   * const result = await adapter.createWithdrawTransaction({
+   *   tokenToWithdraw: { tokenUid: { address: '0x...', chainId: '42161' }, decimals: 8, ... },
+   *   amount: BigInt('50000000'), // 0.5 token with 8 decimals
+   * });
+   * ```
    */
   public async createWithdrawTransaction(
     params: WithdrawTokensRequest,
@@ -422,23 +718,41 @@ export class CompoundAdapter {
   }
 
   /**
-   * Create a borrow transaction for borrowing base token
-   * In Compound V3, borrowing is done by withdrawing base token
+   * Creates a transaction plan for borrowing the base token from Compound V3.
+   *
+   * In Compound V3, borrowing is implemented by withdrawing the base token.
+   * The protocol automatically creates a borrow position if there's no supply to withdraw.
+   *
+   * @param params - Borrow transaction parameters
+   * @param params.borrowToken - Token to borrow (must be the base token)
+   * @param params.amount - Amount to borrow in token's native decimals
+   * @param params.walletAddress - Address that will borrow (must have collateral)
+   * @returns Promise resolving to transaction plan with borrow transaction and risk metrics
+   * @throws {Error} If borrowToken is not the base token
+   *
+   * @remarks
+   * - Compound V3 only supports borrowing the base token (typically a stablecoin)
+   * - User must have sufficient collateral to borrow against
+   * - Returns current borrow APY and liquidation threshold for risk assessment
+   *
+   * @example
+   * ```typescript
+   * const result = await adapter.createBorrowTransaction({
+   *   borrowToken: { tokenUid: { address: baseTokenAddress, chainId: '42161' }, decimals: 6, ... },
+   *   amount: BigInt('1000000'), // 1 USDC (6 decimals)
+   *   walletAddress: '0x...',
+   * });
+   * console.log(`Borrow APY: ${result.currentBorrowApy}`);
+   * ```
    */
   public async createBorrowTransaction(params: BorrowTokensRequest): Promise<BorrowTokensResponse> {
     const { borrowToken, amount, walletAddress } = params;
-    const comet = this.getCometContract();
-    const baseToken = await comet.baseToken();
 
     // Verify that the borrow token is the base token
-    const borrowTokenAddress = ethers.utils.getAddress(borrowToken.tokenUid.address);
-    if (borrowTokenAddress !== baseToken) {
-      throw new Error(
-        `Compound V3 only supports borrowing the base token (${baseToken}), not ${borrowTokenAddress}`,
-      );
-    }
+    await this.validateBaseToken(borrowToken.tokenUid.address, 'borrowing');
 
     // Borrow is done by withdrawing base token
+    const baseToken = await this.getBaseToken();
     const txs = await this.withdraw(baseToken, amount);
 
     // Get liquidation threshold from user's collateral
@@ -456,23 +770,40 @@ export class CompoundAdapter {
   }
 
   /**
-   * Create a repay transaction for repaying borrowed base token
-   * In Compound V3, repaying is done by supplying base token
+   * Creates a transaction plan for repaying borrowed base token to Compound V3.
+   *
+   * In Compound V3, repaying is implemented by supplying the base token.
+   * The protocol automatically applies the supply to the borrow position.
+   *
+   * @param params - Repay transaction parameters
+   * @param params.repayToken - Token to repay (must be the base token)
+   * @param params.amount - Amount to repay in token's native decimals
+   * @param params.walletAddress - Address that will repay (must have tokens and approval)
+   * @returns Promise resolving to transaction plan with approval + repay transactions
+   * @throws {Error} If repayToken is not the base token
+   *
+   * @remarks
+   * - Compound V3 only supports repaying the base token
+   * - Requires ERC20 approval if not already approved
+   * - Repayment reduces borrow balance and improves health factor
+   *
+   * @example
+   * ```typescript
+   * const result = await adapter.createRepayTransaction({
+   *   repayToken: { tokenUid: { address: baseTokenAddress, chainId: '42161' }, decimals: 6, ... },
+   *   amount: BigInt('500000'), // 0.5 USDC (6 decimals)
+   *   walletAddress: '0x...',
+   * });
+   * ```
    */
   public async createRepayTransaction(params: RepayTokensRequest): Promise<RepayTokensResponse> {
     const { repayToken, amount, walletAddress } = params;
-    const comet = this.getCometContract();
-    const baseToken = await comet.baseToken();
 
     // Verify that the repay token is the base token
-    const repayTokenAddress = ethers.utils.getAddress(repayToken.tokenUid.address);
-    if (repayTokenAddress !== baseToken) {
-      throw new Error(
-        `Compound V3 only supports repaying the base token (${baseToken}), not ${repayTokenAddress}`,
-      );
-    }
+    await this.validateBaseToken(repayToken.tokenUid.address, 'repaying');
 
     // Repay is done by supplying base token
+    const baseToken = await this.getBaseToken();
     const txs = await this.supply(baseToken, amount, walletAddress);
 
     return {
@@ -485,21 +816,40 @@ export class CompoundAdapter {
   // ============================================================================
 
   /**
-   * Helper to convert ethers PopulatedTransaction to TransactionPlan
+   * Converts an ethers.js PopulatedTransaction to the TransactionPlan format.
+   *
+   * @param tx - Ethers.js populated transaction object
+   * @returns TransactionPlan formatted for execution
    */
   private transactionPlanFromEthers(tx: PopulatedTransaction): TransactionPlan {
+    if (!tx.to) {
+      throw new Error('Transaction must have a recipient address');
+    }
+    if (!tx.data) {
+      throw new Error('Transaction must have data');
+    }
+
     return {
       type: TransactionTypes.EVM_TX,
-      to: tx.to!,
+      to: tx.to,
       value: tx.value?.toString() || '0',
-      data: tx.data!,
+      data: tx.data,
       chainId: this.chain.id.toString(),
     };
   }
 
   /**
-   * Get the current borrow APY from the Comet contract
-   * @returns Borrow APY as a string (e.g., "0.05" for 5%)
+   * Calculates the current borrow APY (Annual Percentage Yield) from the Comet contract.
+   *
+   * The APY is calculated from the per-second borrow rate returned by the contract.
+   * For small rates, we use the approximation: APY ≈ rate_per_second * seconds_per_year
+   *
+   * @returns Promise resolving to borrow APY as a decimal string (e.g., "0.05" for 5%)
+   *
+   * @remarks
+   * - Uses current utilization to get the borrow rate
+   * - Rate is scaled by baseAccrualScale (typically 1e18)
+   * - Returns decimal format (0.05 = 5%) for consistency
    */
   private async getBorrowApy(): Promise<string> {
     const comet = this.getCometContract();
@@ -507,26 +857,30 @@ export class CompoundAdapter {
     const borrowRatePerSecond = await comet.getBorrowRate(utilization);
 
     // Convert per-second rate to APY
-    // borrowRatePerSecond is scaled by baseAccrualScale (typically 1e18)
-    // APY = (1 + rate_per_second)^(seconds_per_year) - 1
-    // For small rates: APY ≈ rate_per_second * seconds_per_year
-    const secondsPerYear = 365 * 24 * 60 * 60; // 31,536,000 seconds
-    const baseAccrualScale = ethers.BigNumber.from(10).pow(18); // 1e18
+    // Formula: APY = (1 + rate_per_second)^(seconds_per_year) - 1
+    // For small rates, approximation: APY ≈ rate_per_second * seconds_per_year
+    const baseAccrualScale = ethers.BigNumber.from(10).pow(DECIMALS.PRECISION); // 1e18
 
-    // Calculate APY: (borrowRatePerSecond / baseAccrualScale) * secondsPerYear
-    const rateDecimal = borrowRatePerSecond.mul(secondsPerYear).div(baseAccrualScale);
-    const apyDecimal = rateDecimal.toString();
-
-    // Convert to percentage string (e.g., "0.05" for 5%)
-    // For better precision, we can return the decimal directly
-    return apyDecimal;
+    // Calculate: (borrowRatePerSecond / baseAccrualScale) * secondsPerYear
+    const rateDecimal = borrowRatePerSecond.mul(TIME.SECONDS_PER_YEAR).div(baseAccrualScale);
+    return rateDecimal.toString();
   }
 
   /**
-   * Supply collateral or base token to Compound V3
+   * Internal method to create supply transactions for collateral or base token.
+   *
+   * Handles ERC20 approval if needed, then creates the supply transaction.
+   * All ERC20 tokens (including base tokens) require approval before supply.
+   *
    * @param asset - Token address to supply (can be collateral or base token)
-   * @param amount - Amount to supply (in token's native decimals)
-   * @param from - Address supplying the tokens
+   * @param amount - Amount to supply in token's native decimals
+   * @param from - Address that will supply the tokens (must have balance and approval)
+   * @returns Promise resolving to array of populated transactions (approval + supply)
+   *
+   * @remarks
+   * - Checks current allowance and adds approval transaction if insufficient
+   * - Approval is set to MaxUint256 for gas efficiency
+   * - Native ETH (address(0)) does not require approval
    */
   private async supply(
     asset: string,
@@ -541,12 +895,12 @@ export class CompoundAdapter {
     const transactions: PopulatedTransaction[] = [];
 
     // Check if approval is needed for ERC20 tokens
-    // All ERC20 tokens (including base tokens like USDC) need approval
+    // All ERC20 tokens (including base tokens like USDC) require approval
     // Only native ETH (address(0)) doesn't need approval
     const isNativeETH = validatedAsset === ethers.constants.AddressZero;
 
     if (!isNativeETH) {
-      // For all ERC20 tokens (base or collateral), check allowance
+      // Check current allowance for ERC20 tokens
       const tokenContract = new ethers.Contract(
         validatedAsset,
         [
@@ -560,18 +914,18 @@ export class CompoundAdapter {
       const amountBN = ethers.BigNumber.from(amount.toString());
 
       if (allowance.lt(amountBN)) {
-        // Create approval transaction
-        // approve(address spender, uint256 amount) is always available in ERC20 contracts
+        // Create approval transaction with MaxUint256 for gas efficiency
+        // This avoids needing multiple approvals for future transactions
         const approvalTx = await tokenContract.populateTransaction['approve']!(
           cometAddress,
-          ethers.constants.MaxUint256, // Approve max for gas efficiency
+          ethers.constants.MaxUint256,
         );
         transactions.push(approvalTx);
       }
     }
 
     // Create supply transaction
-    // supply(address asset, uint256 amount) is always available in Comet contract
+    // Compound V3's supply() function accepts any asset (collateral or base token)
     const supplyTx = await comet.populateTransaction['supply']!(
       validatedAsset,
       ethers.BigNumber.from(amount.toString()),
@@ -582,18 +936,28 @@ export class CompoundAdapter {
   }
 
   /**
-   * Withdraw collateral or base token from Compound V3
-   * For base token, this can be either withdrawing supply or borrowing
+   * Internal method to create withdraw transaction for collateral or base token.
+   *
+   * For base tokens, Compound V3's withdraw() function:
+   * 1. First withdraws from supply (if available)
+   * 2. Then borrows if supply is insufficient
+   *
+   * For collateral tokens, withdraws from the collateral position.
+   *
    * @param asset - Token address to withdraw (can be collateral or base token)
-   * @param amount - Amount to withdraw (in token's native decimals)
+   * @param amount - Amount to withdraw in token's native decimals
+   * @returns Promise resolving to array with single withdraw transaction
+   *
+   * @remarks
+   * - No approval needed for withdrawals (tokens are already in the protocol)
+   * - For base tokens, this is used for both withdrawing supply and borrowing
    */
   private async withdraw(asset: string, amount: bigint): Promise<PopulatedTransaction[]> {
     const validatedAsset = ethers.utils.getAddress(asset);
     const comet = this.getCometContract();
 
     // Create withdraw transaction
-    // withdraw(address asset, uint256 amount) is always available in Comet contract
-    // No approval needed for withdrawals
+    // Compound V3's withdraw() handles both supply withdrawal and borrowing for base tokens
     const withdrawTx = await comet.populateTransaction['withdraw']!(
       validatedAsset,
       ethers.BigNumber.from(amount.toString()),
