@@ -180,13 +180,16 @@ describe('CompoundAdapter Integration Tests', () => {
           walletAddress: TEST_WALLET,
         });
 
+        // LTV is returned as a percentage (0-100 range) for consistency with industry standards
         const ltv = parseFloat(result.currentLoanToValue);
         const totalCollateral = parseFloat(result.totalCollateralUsd);
         const totalBorrows = parseFloat(result.totalBorrowsUsd);
 
         expect(ltv).toBeGreaterThanOrEqual(0);
+        expect(ltv).toBeLessThanOrEqual(100); // LTV should be between 0 and 100 (percentage)
 
         if (totalCollateral > 0) {
+          // Calculate expected LTV as percentage: (borrow / collateral) * 100
           const expectedLtv = (totalBorrows / totalCollateral) * 100;
           expect(Math.abs(ltv - expectedLtv)).toBeLessThan(0.01);
         } else {
