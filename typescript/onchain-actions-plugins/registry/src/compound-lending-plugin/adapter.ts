@@ -27,7 +27,7 @@ interface CometContract extends ethers.Contract {
   // Account balances
   balanceOf(account: string): Promise<ethers.BigNumber>;
   borrowBalanceOf(account: string): Promise<ethers.BigNumber>;
-  getCollateralBalance(account: string, asset: string): Promise<ethers.BigNumber>;
+  collateralBalanceOf(account: string, asset: string): Promise<ethers.BigNumber>;
 
   // Account data
   userBasic(account: string): Promise<{
@@ -135,9 +135,9 @@ export class CompoundAdapter {
 
     const userReservesFormatted = [];
 
-    // Add collateral positions
+    // Add collateral positions (include if balance > 0, regardless of USD value)
     for (const coll of collateral) {
-      if (parseFloat(coll.balanceUsd) > 0) {
+      if (coll.balance.gt(0)) {
         userReservesFormatted.push({
           tokenUid: {
             address: coll.asset,
@@ -153,17 +153,28 @@ export class CompoundAdapter {
       }
     }
 
-    // Add borrow position if exists
-    if (parseFloat(totalBorrowsUsd) > 0) {
-      const comet = this.getCometContract();
-      const baseToken = await comet.baseToken();
+    // Add base token position (supply and/or borrow)
+    const comet = this.getCometContract();
+    const baseToken = await comet.baseToken();
+    const baseTokenSupply = await comet.balanceOf(params.walletAddress);
+    const baseScale = await comet.baseScale();
+    const priceScale = await comet.priceScale();
+    const baseTokenSupplyUsd = baseTokenSupply.gt(0)
+      ? ethers.utils.formatUnits(
+          baseTokenSupply.mul(priceScale).div(baseScale),
+          8, // priceScale is 8 decimals
+        )
+      : '0';
+
+    // Add base token if there's supply or borrows
+    if (parseFloat(baseTokenSupplyUsd) > 0 || parseFloat(totalBorrowsUsd) > 0) {
       userReservesFormatted.push({
         tokenUid: {
           address: baseToken,
           chainId: this.chain.id.toString(),
         },
-        underlyingBalance: '0',
-        underlyingBalanceUsd: '0',
+        underlyingBalance: baseTokenSupply.toString(),
+        underlyingBalanceUsd: baseTokenSupplyUsd,
         variableBorrows: borrowBalance.toString(),
         variableBorrowsUsd: borrowBalanceUsd,
         totalBorrows: borrowBalance.toString(),
@@ -198,7 +209,7 @@ export class CompoundAdapter {
     const cometAbi = [
       'function balanceOf(address account) external view returns (uint256)',
       'function borrowBalanceOf(address account) external view returns (uint256)',
-      'function getCollateralBalance(address account, address asset) external view returns (uint256)',
+      'function collateralBalanceOf(address account, address asset) external view returns (uint128)',
       'function userBasic(address account) external view returns (int104 principal, uint64 baseTrackingIndex, uint64 baseTrackingAccrued, uint16 assetsIn)',
       'function numAssets() external view returns (uint8)',
       'function getAssetInfo(uint8 i) external view returns ((uint8 offset, address asset, address priceFeed, uint64 scale, uint64 borrowCollateralFactor, uint64 liquidateCollateralFactor, uint64 liquidationFactor, uint128 supplyCap))',
@@ -238,8 +249,10 @@ export class CompoundAdapter {
       const factorScale = await comet.factorScale();
       const priceScale = await comet.priceScale();
 
-      // Get user borrow balance
+      // Get user borrow balance and assetsIn bitmap
       const borrowedBase = await comet.borrowBalanceOf(validatedUser);
+      const userBasic = await comet.userBasic(validatedUser);
+      const assetsIn = userBasic.assetsIn; // Bitmap of assets the user has
 
       // Get number of assets and fetch all collateral positions
       const numAssets = await comet.numAssets();
@@ -257,6 +270,15 @@ export class CompoundAdapter {
 
       for (let i = 0; i < numAssetsCount; i++) {
         try {
+          // Check if asset is in the user's assetsIn bitmap before querying balance
+          // This avoids unnecessary calls and potential reverts
+          const assetsInNum = Number(assetsIn);
+          const assetBit = 1 << i;
+          if ((assetsInNum & assetBit) === 0) {
+            // Asset not in user's portfolio, skip
+            continue;
+          }
+
           const assetInfo = await comet.getAssetInfo(i);
 
           // Skip if asset address is invalid
@@ -264,10 +286,7 @@ export class CompoundAdapter {
             continue;
           }
 
-          const collateralBalance = await comet.getCollateralBalance(
-            validatedUser,
-            assetInfo.asset,
-          );
+          const collateralBalance = await comet.collateralBalanceOf(validatedUser, assetInfo.asset);
 
           if (collateralBalance.gt(0)) {
             // Get price for this asset
@@ -521,17 +540,19 @@ export class CompoundAdapter {
 
     const transactions: PopulatedTransaction[] = [];
 
-    // Check if approval is needed
-    // For base token (native token), no approval needed if using native ETH
-    // For ERC20 tokens, check allowance
-    const baseToken = await comet.baseToken();
-    const isBaseToken = validatedAsset.toLowerCase() === baseToken.toLowerCase();
+    // Check if approval is needed for ERC20 tokens
+    // All ERC20 tokens (including base tokens like USDC) need approval
+    // Only native ETH (address(0)) doesn't need approval
+    const isNativeETH = validatedAsset === ethers.constants.AddressZero;
 
-    if (!isBaseToken) {
-      // For collateral tokens, we need approval
+    if (!isNativeETH) {
+      // For all ERC20 tokens (base or collateral), check allowance
       const tokenContract = new ethers.Contract(
         validatedAsset,
-        ['function allowance(address owner, address spender) view returns (uint256)'],
+        [
+          'function allowance(address owner, address spender) view returns (uint256)',
+          'function approve(address spender, uint256 amount) returns (bool)',
+        ],
         this.getProvider(),
       );
 
