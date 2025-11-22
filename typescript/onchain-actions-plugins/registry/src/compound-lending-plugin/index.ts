@@ -60,13 +60,12 @@ export function registerCompound(chainConfig: ChainConfig, registry: PublicEmber
 
   // Register a plugin for each market
   for (const marketId of marketIds) {
-    registry.registerDeferredPlugin(
-      getCompoundEmberPlugin({
-        chainId: chainConfig.chainId,
-        rpcUrl: chainConfig.rpcUrl,
-        marketId,
-        wrappedNativeToken: chainConfig.wrappedNativeToken,
-      }),
-    );
+    const plugin = getCompoundEmberPlugin({
+      chainId: chainConfig.chainId,
+      rpcUrl: chainConfig.rpcUrl,
+      marketId,
+      wrappedNativeToken: chainConfig.wrappedNativeToken,
+    });
+    registry.registerPlugin(plugin);
   }
 }
