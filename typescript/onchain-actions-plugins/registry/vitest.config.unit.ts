@@ -4,6 +4,6 @@ export default defineConfig({
   test: {
     globals: true,
     setupFiles: ['./tests/setup/vitest.unit.setup.ts'],
-    include: ['tests/unit/**/*.unit.test.ts'],
+    include: ['tests/**/*.unit.test.ts'],
   },
 });

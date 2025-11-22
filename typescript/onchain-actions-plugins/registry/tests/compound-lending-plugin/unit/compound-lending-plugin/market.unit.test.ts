@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getMarket, getMarketsForChain } from '../../../src/compound-lending-plugin/market.js';
+import { getMarket, getMarketsForChain } from '../../../../src/compound-lending-plugin/market.js';
 
 describe('Market Functions', () => {
   describe('getMarket', () => {

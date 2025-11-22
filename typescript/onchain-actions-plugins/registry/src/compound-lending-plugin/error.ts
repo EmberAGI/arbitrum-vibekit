@@ -1,15 +1,14 @@
 // Compound V3 error handling
-// Compound V3 uses Solidity custom errors which are automatically extracted from contract reverts
+// Error names are whitelisted from the official Compound V3 Comet interface ABI
+// https://docs.compound.finance/public/files/comet-interface-abi-98f438b.json
 
 class CompoundError extends Error {
-  public override message: string;
   public errorName: string;
 
   constructor(errorName: string) {
     super(errorName);
     this.name = 'CompoundError';
     this.errorName = errorName;
-    this.message = errorName;
 
     // Fix prototype chain for proper instanceof checks
     if (Object.setPrototypeOf) {
@@ -18,7 +17,44 @@ class CompoundError extends Error {
   }
 }
 
-// Helper functions
+// Valid Compound V3 error names from the Comet interface ABI
+const VALID_COMPOUND_ERROR_NAMES = new Set([
+  'Absurd',
+  'AlreadyInitialized',
+  'BadAmount',
+  'BadAsset',
+  'BadDecimals',
+  'BadDiscount',
+  'BadMinimum',
+  'BadNonce',
+  'BadPrice',
+  'BadSignatory',
+  'BorrowCFTooLarge',
+  'BorrowTooSmall',
+  'InsufficientReserves',
+  'InvalidInt104',
+  'InvalidInt256',
+  'InvalidUInt104',
+  'InvalidUInt128',
+  'InvalidUInt64',
+  'InvalidValueS',
+  'InvalidValueV',
+  'LiquidateCFTooLarge',
+  'NegativeNumber',
+  'NoSelfTransfer',
+  'NotCollateralized',
+  'NotForSale',
+  'NotLiquidatable',
+  'Paused',
+  'SignatureExpired',
+  'SupplyCapExceeded',
+  'TimestampTooLarge',
+  'TooManyAssets',
+  'TooMuchSlippage',
+  'TransferInFailed',
+  'TransferOutFailed',
+  'Unauthorized',
+]);
 
 // Standard JavaScript error names that should not be treated as Compound errors
 const STANDARD_ERROR_NAMES = new Set([
@@ -31,28 +67,28 @@ const STANDARD_ERROR_NAMES = new Set([
   'Error',
 ]);
 
+function isValidCompoundError(errorName: string): boolean {
+  return VALID_COMPOUND_ERROR_NAMES.has(errorName) && !STANDARD_ERROR_NAMES.has(errorName);
+}
+
 function extractErrorName(reason: string): string | null {
   if (!reason) {
     return null;
   }
 
+  // Try to extract from "execution reverted: ErrorName" pattern
   const revertedMatch = reason.match(/execution reverted:?\s*(.+)/i);
   if (revertedMatch) {
-    const errorPart = revertedMatch[1]?.trim().replace(/^["']|["']$/g, '');
-    const errorName = errorPart?.replace(/\(\)$/, '') || null;
-    // Don't treat standard JS errors as Compound errors
-    if (errorName && !STANDARD_ERROR_NAMES.has(errorName)) {
-      return errorName;
-    }
-    return null;
+    const errorName = revertedMatch[1]
+      ?.trim()
+      .replace(/^["']|["']$/g, '')
+      .replace(/\(\)$/, '');
+    return errorName && isValidCompoundError(errorName) ? errorName : null;
   }
 
+  // Try direct match
   const trimmed = reason.trim().replace(/\(\)$/, '');
-  // Don't treat standard JS errors or very short strings as Compound errors
-  if (trimmed && trimmed.length > 0 && trimmed.length < 100 && !STANDARD_ERROR_NAMES.has(trimmed)) {
-    return trimmed;
-  }
-  return null;
+  return trimmed && isValidCompoundError(trimmed) ? trimmed : null;
 }
 
 function extractErrorReason(error: unknown): string | null {
@@ -64,95 +100,58 @@ function extractErrorReason(error: unknown): string | null {
     return null;
   }
 
-  // Skip standard JavaScript errors - they're not Compound contract errors
-  if ('name' in error && typeof error.name === 'string') {
-    if (STANDARD_ERROR_NAMES.has(error.name)) {
-      // For standard JS errors, check if there's a reason/message that might contain Compound error info
-      if ('reason' in error && typeof error.reason === 'string') {
-        return error.reason;
-      }
-      if ('message' in error && typeof error.message === 'string') {
-        return error.message;
-      }
-      if ('shortMessage' in error && typeof error.shortMessage === 'string') {
-        return error.shortMessage;
-      }
-      // Don't return standard error names as they're not Compound errors
-      return null;
+  // For standard JS errors, extract nested reason/message
+  if ('name' in error && typeof error.name === 'string' && STANDARD_ERROR_NAMES.has(error.name)) {
+    const errorObj = error as Record<string, unknown>;
+    return (
+      (typeof errorObj['reason'] === 'string' && errorObj['reason']) ||
+      (typeof errorObj['message'] === 'string' && errorObj['message']) ||
+      (typeof errorObj['shortMessage'] === 'string' && errorObj['shortMessage']) ||
+      null
+    );
+  }
+
+  // Extract from various error object properties
+  const errorObj = error as Record<string, unknown>;
+  const data = errorObj['data'] as Record<string, unknown> | undefined;
+  const candidates = [
+    errorObj['errorName'],
+    errorObj['reason'],
+    errorObj['message'],
+    errorObj['shortMessage'],
+    data?.['errorName'],
+    data?.['reason'],
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string') {
+      return candidate;
     }
-  }
-
-  if ('errorName' in error && typeof error.errorName === 'string') {
-    return error.errorName;
-  }
-
-  if ('reason' in error && typeof error.reason === 'string') {
-    return error.reason;
-  }
-
-  if ('message' in error && typeof error.message === 'string') {
-    return error.message;
-  }
-
-  if ('shortMessage' in error && typeof error.shortMessage === 'string') {
-    return error.shortMessage;
-  }
-
-  if (
-    'data' in error &&
-    typeof error.data === 'object' &&
-    error.data !== null &&
-    'errorName' in error.data &&
-    typeof error.data.errorName === 'string'
-  ) {
-    return error.data.errorName;
-  }
-
-  if (
-    'data' in error &&
-    typeof error.data === 'object' &&
-    error.data !== null &&
-    'reason' in error.data &&
-    typeof error.data.reason === 'string'
-  ) {
-    return error.data.reason;
   }
 
   return null;
 }
 
-// Public API
-
 /**
  * Get a Compound error from a revert reason string
- * @param reason - The revert reason from the transaction
  * @returns CompoundError if error name can be extracted, null otherwise
  */
 export function getCompoundError(reason: string): CompoundError | null {
   const errorName = extractErrorName(reason);
-  if (!errorName || typeof errorName !== 'string') {
-    return null;
-  }
-  try {
-    return new CompoundError(errorName);
-  } catch {
-    return null;
-  }
+  return errorName ? new CompoundError(errorName) : null;
 }
 
 /**
  * Create a Compound error from an unknown error
- * @param reason - The revert reason from the transaction
- * @returns CompoundError with the extracted error name or original reason
+ * @returns CompoundError with the extracted error name or a generic fallback
  */
 export function createCompoundError(reason: string): CompoundError {
-  const errorName = extractErrorName(reason) || reason || 'Unknown Compound V3 error';
+  const errorName = extractErrorName(reason) || 'Unknown Compound V3 error';
   return new CompoundError(errorName);
 }
 
 /**
  * Handle errors from Compound V3 contract interactions
- * @param error - The error object from a contract call that reverted
  * @returns CompoundError if error name can be extracted, null otherwise
  */
 export function handleCompoundError(error: unknown): CompoundError | null {

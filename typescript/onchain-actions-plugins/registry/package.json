@@ -43,9 +43,10 @@
   },
   "devDependencies": {
     "@semantic-release/exec": "^7.1.0",
-    "@vitest/coverage-v8": "catalog:",
+    "@vitest/coverage-v8": "^3.2.4",
     "tsdown": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "catalog:"
   },
   "license": "MIT",
   "publishConfig": {

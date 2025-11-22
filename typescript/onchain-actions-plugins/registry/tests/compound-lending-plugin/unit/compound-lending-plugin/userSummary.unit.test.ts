@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 import {
   UserSummary,
   type CompoundUserPosition,
-} from '../../../src/compound-lending-plugin/userSummary.js';
+} from '../../../../src/compound-lending-plugin/userSummary.js';
 
 describe('UserSummary', () => {
   describe('constructor', () => {

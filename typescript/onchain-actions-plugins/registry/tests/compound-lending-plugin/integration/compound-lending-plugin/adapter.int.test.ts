@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { CompoundAdapter } from '../../../src/compound-lending-plugin/adapter.js';
+import { CompoundAdapter } from '../../../../src/compound-lending-plugin/adapter.js';
 
 const ARBITRUM_RPC_URL = process.env.ARBITRUM_ONE_RPC_URL || 'https://arb1.arbitrum.io/rpc';
 const TEST_WALLET = '0xDa805dBC6530c9ed1360b7c61624613c4Fe380a9';

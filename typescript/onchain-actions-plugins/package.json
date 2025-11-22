@@ -1,0 +1,13 @@
+{
+  "name": "onchain-actions-plugins",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "pnpm --filter @emberai/onchain-actions-registry test",
+    "test:unit": "pnpm --filter @emberai/onchain-actions-registry test:unit",
+    "test:int": "pnpm --filter @emberai/onchain-actions-registry test:int",
+    "test:watch": "pnpm --filter @emberai/onchain-actions-registry test:watch",
+    "test:coverage": "pnpm --filter @emberai/onchain-actions-registry test:coverage"
+  }
+}
