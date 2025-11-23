@@ -84,6 +84,8 @@ export type WithdrawLiquidityResponse = z.infer<typeof WithdrawLiquidityResponse
 
 export const GetWalletLiquidityPositionsRequestSchema = z.object({
   walletAddress: z.string(),
+  includePrices: z.boolean().optional(),
+  positionIds: z.array(z.number()).optional(),
 });
 export type GetWalletLiquidityPositionsRequest = z.infer<
   typeof GetWalletLiquidityPositionsRequestSchema
