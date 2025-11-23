@@ -14,8 +14,8 @@ export type LiquidityGetPoolsOptions = {
 };
 
 /**
- * Optional hints for fetching wallet liquidity positions. includePrices defaults to true when omitted,
- * and an empty or undefined positionIds array means no filtering.
+ * Request params for fetching wallet liquidity positions. walletAddress is required, includePrices defaults
+ * to true when omitted, and an empty or undefined positionIds array means no filtering.
  */
 export type LiquidityGetWalletPositionsOptions = GetWalletLiquidityPositionsRequest;
 
@@ -23,7 +23,7 @@ export type LiquidityGetWalletPositionsOptions = GetWalletLiquidityPositionsRequ
  * Get liquidity positions for a wallet.
  */
 export type LiquidityGetWalletPositions = (
-  options?: LiquidityGetWalletPositionsOptions
+  options: LiquidityGetWalletPositionsOptions
 ) => Promise<GetWalletLiquidityPositionsResponse>;
 
 /**
