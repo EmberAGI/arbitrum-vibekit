@@ -116,9 +116,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Generate release tweet copy
-        run: |
-          cd typescript
-          node scripts/release-tweet-copy.mjs "release-summary-${{ matrix.package.id }}.json"
+        run: node scripts/release-tweet-copy.mjs "release-summary-${{ matrix.package.id }}.json"
 
   sync-next:
     name: Sync next branch
