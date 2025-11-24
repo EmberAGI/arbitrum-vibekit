@@ -107,6 +107,11 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           pnpm release -- --packages "${{ matrix.package.packageJson }}" --summary-file "release-summary-${{ matrix.package.id }}.json"
+      - name: Generate release tweet copy
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: node scripts/release-tweet-copy.mjs "release-summary-${{ matrix.package.id }}.json"
       - name: Upload release summary
         if: always()
         uses: actions/upload-artifact@v4
@@ -114,9 +119,6 @@ jobs:
           name: release-summary-${{ matrix.package.id }}
           path: typescript/release-summary-${{ matrix.package.id }}.json
           if-no-files-found: warn
-
-      - name: Generate release tweet copy
-        run: node scripts/release-tweet-copy.mjs "release-summary-${{ matrix.package.id }}.json"
 
   sync-next:
     name: Sync next branch
