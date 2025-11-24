@@ -7,6 +7,7 @@ TypeScript plugin for integration with Radiant V2 Lending Protocol on Arbitrum. 
 - ✅ Fetch market data (APR, liquidity, prices)
 - ✅ Get user positions (collateral, debt, health factor)
 - ✅ Build supply/withdraw/borrow/repay transactions
+- ✅ Enable/disable collateral for borrowing
 - ✅ Full TypeScript support
 - ✅ Uses viem for RPC calls
 - ✅ No external API dependencies
@@ -59,6 +60,12 @@ const repayTx = radiantPlugin.actions.repay({
   amount: '1000000',
   rateMode: 2,
   onBehalfOf: '0xYourAddress...'
+});
+
+// Build setCollateral transaction (enable asset as collateral)
+const setCollateralTx = radiantPlugin.actions.setCollateral({
+  token: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+  useAsCollateral: true
 });
 ```
 
@@ -200,6 +207,49 @@ Builds a transaction to repay borrowed assets.
   rateMode?: number;    // 1 = stable, 2 = variable (default: 2)
   onBehalfOf?: string;  // Optional: repay on behalf of another address
 }
+```
+
+### `setCollateral(params)`
+
+Builds a transaction to enable or disable an asset as collateral.
+
+**Important:** Before you can borrow, you must:
+1. Supply assets using `supply()`
+2. Enable them as collateral using `setCollateral({ useAsCollateral: true })`
+3. Then you can `borrow()` against your collateral
+
+You cannot disable collateral if it would cause your health factor to drop below 1.0.
+
+**Parameters:**
+```typescript
+{
+  token: string;           // Token address
+  useAsCollateral: boolean; // true = enable, false = disable
+}
+```
+
+**Example:**
+```typescript
+// Step 1: Supply USDC
+const supplyTx = radiantPlugin.actions.supply({
+  token: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+  amount: '10000000000', // 10,000 USDC
+  onBehalfOf: '0xYourAddress...'
+});
+
+// Step 2: Enable USDC as collateral
+const enableCollateralTx = radiantPlugin.actions.setCollateral({
+  token: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+  useAsCollateral: true
+});
+
+// Step 3: Now you can borrow against it
+const borrowTx = radiantPlugin.actions.borrow({
+  token: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', // WETH
+  amount: '1000000000000000000', // 1 WETH
+  rateMode: 2,
+  onBehalfOf: '0xYourAddress...'
+});
 ```
 
 ## Supported Assets

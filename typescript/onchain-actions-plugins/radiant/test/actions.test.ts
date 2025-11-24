@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { decodeFunctionData, parseAbi } from 'viem';
-import { supply } from '../src/actions.js';
+import { supply, setCollateral } from '../src/actions.js';
 import { RADIANT_CONFIG } from '../radiant.config.js';
 
 describe('supply', () => {
@@ -28,5 +28,47 @@ describe('supply', () => {
     expect(decoded.args[0].toLowerCase()).toBe(token.toLowerCase());
     expect(decoded.args[1]).toBe(1000000n);
     expect(decoded.args[2].toLowerCase()).toBe(user.toLowerCase());
+  });
+});
+
+describe('setCollateral', () => {
+  it('should build setCollateral transaction to enable', () => {
+    const token = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831';
+    
+    const tx = setCollateral({ token, useAsCollateral: true });
+    
+    expect(tx.to).toBe(RADIANT_CONFIG.addresses.lendingPool);
+    expect(tx.data).toMatch(/^0x[a-fA-F0-9]+$/);
+    expect(tx.value).toBe('0');
+    
+    const abi = parseAbi([
+      'function setUserUseReserveAsCollateral(address asset, bool useAsCollateral)'
+    ]);
+    
+    const decoded = decodeFunctionData({
+      abi,
+      data: tx.data as `0x${string}`
+    });
+    
+    expect(decoded.functionName).toBe('setUserUseReserveAsCollateral');
+    expect(decoded.args[0].toLowerCase()).toBe(token.toLowerCase());
+    expect(decoded.args[1]).toBe(true);
+  });
+
+  it('should build setCollateral transaction to disable', () => {
+    const token = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831';
+    
+    const tx = setCollateral({ token, useAsCollateral: false });
+    
+    const abi = parseAbi([
+      'function setUserUseReserveAsCollateral(address asset, bool useAsCollateral)'
+    ]);
+    
+    const decoded = decodeFunctionData({
+      abi,
+      data: tx.data as `0x${string}`
+    });
+    
+    expect(decoded.args[1]).toBe(false);
   });
 });
