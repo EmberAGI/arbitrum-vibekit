@@ -21,7 +21,7 @@ Welcome to Vibekit, the polyglot toolkit for vibe coding smart, autonomous DeFi 
 
 - **Agent Node Framework**: Modern config-driven framework with full A2A protocol compliance, generator-based workflows, and embedded wallet support for building production-ready autonomous agents
 
-- **Model Context Protocol (MCP)**: Standardized integration layer for connecting agents with tools and external data sources, enabling modular and extensible agent capabilities
+- **Model Context Protocol (MCP)**: Standardized integration layer for connecting agents with tools and external data sources, enabling modular and extensible agent capabilities. Check out Ember's [MCP Playground](https://mcp.emberai.xyz/) to learn more.
 
 - **X402 Payment Protocol**: HTTP-native payment infrastructure for autonomous agent commerce, supporting micropayments and service monetization
 
