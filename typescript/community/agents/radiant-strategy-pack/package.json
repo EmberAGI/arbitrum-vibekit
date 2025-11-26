@@ -1,0 +1,31 @@
+{
+  "name": "radiant-strategy-pack",
+  "version": "1.0.0",
+  "description": "Automated DeFi strategies for Radiant lending protocol on Arbitrum",
+  "type": "module",
+  "bin": {
+    "radiant-strategy": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "radiant",
+    "defi",
+    "arbitrum",
+    "vibekit",
+    "lending"
+  ],
+  "author": "Community Contributor",
+  "license": "MIT",
+  "dependencies": {
+    "viem": "^2.40.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}
