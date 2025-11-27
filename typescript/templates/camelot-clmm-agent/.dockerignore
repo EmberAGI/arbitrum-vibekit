@@ -1,0 +1,22 @@
+# Node/pnpm artifacts
+node_modules
+pnpm-debug.log
+npm-debug.log
+dist
+
+# Workflow build outputs
+config/workflows/**/node_modules
+config/workflows/**/dist
+
+# Environment files and local tooling
+.env
+.env.*
+config/.env
+config/.env.*
+config/workflows/**/.env
+config/workflows/**/.env.*
+.vibecode
+
+# OS junk
+.DS_Store
+**/.DS_Store
