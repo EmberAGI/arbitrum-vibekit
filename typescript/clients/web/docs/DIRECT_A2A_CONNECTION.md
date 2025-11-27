@@ -53,12 +53,12 @@ Browser → fetch (SSE) → A2A Agent ✨
 
 ```typescript
 // Fetch agent card
-const agentCardUrl = `${url}/.well-known/agent-card.json`;
+const agentCardUrl = url; // full path to /.well-known/agent-card.json
 const response = await fetch(agentCardUrl);
 const agentCard = await response.json();
 
 // Extract A2A endpoint
-const a2aEndpoint = agentCard.a2a?.endpoint || `${url}/a2a`;
+const a2aEndpoint = agentCard.url;
 ```
 
 ### 2. Message Streaming
@@ -287,8 +287,8 @@ Access-Control-Allow-Headers: Content-Type, Accept
 
 If connection times out:
 
-1. ✅ Verify agent URL is correct
-2. ✅ Check agent card is accessible: `https://dev.emberai.xyz/.well-known/agent-card.json`
+1. ✅ Verify the configured agent card URL is correct
+2. ✅ Check the agent card endpoint responds (default: `http://localhost:3001/.well-known/agent-card.json`)
 3. ✅ Ensure network connectivity
 
 ### No Streaming

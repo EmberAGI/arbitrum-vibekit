@@ -110,6 +110,9 @@ importers:
       ethers:
         specifier: ^5.7.2
         version: 5.8.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      viem:
+        specifier: 'catalog:'
+        version: 2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.1.12)
     devDependencies:
       '@anolilab/multi-semantic-release':
         specifier: ^2.0.8

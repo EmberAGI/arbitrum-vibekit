@@ -19,7 +19,7 @@ interface UseConnectionReturn {
 
 export function useConnection(): UseConnectionReturn {
   const [agentCardUrl, setAgentCardUrl] = useState(
-    process.env.NEXT_PUBLIC_AGENT_CARD_URL || 'http://localhost:3001',
+    process.env.NEXT_PUBLIC_AGENT_CARD_URL || 'http://localhost:3001/.well-known/agent-card.json',
   );
   const [isA2AConnected, setIsA2AConnected] = useState(false);
   const [isA2AConnecting, setIsA2AConnecting] = useState(false);
@@ -51,12 +51,7 @@ export function useConnection(): UseConnectionReturn {
     setIsA2AConnecting(true);
 
     try {
-      // Fetch agent card
-      const agentCardUrlFull = url.endsWith('/')
-        ? `${url}.well-known/agent-card.json`
-        : `${url}/.well-known/agent-card.json`;
-
-      const response = await fetch(agentCardUrlFull, {
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           Accept: 'application/json',
@@ -71,9 +66,11 @@ export function useConnection(): UseConnectionReturn {
       const agentCardData = await response.json();
       setAgentCard(agentCardData);
 
-      // Extract A2A endpoint from agent card
-      const a2aEndpoint = agentCardData.a2a?.endpoint || `${url}/a2a`;
-      setAgentEndpoint(a2aEndpoint);
+      const agentUrl = agentCardData.url;
+      if (typeof agentUrl !== 'string' || agentUrl.length === 0) {
+        throw new Error('Agent card missing required url field');
+      }
+      setAgentEndpoint(agentUrl);
 
       setIsA2AConnected(true);
       setIsA2AConnecting(false);

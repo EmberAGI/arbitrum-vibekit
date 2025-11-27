@@ -50,8 +50,8 @@ The backend server (`server/server.js`) is no longer needed for A2A communicatio
 
 ### Connection Flow
 
-1. User enters agent URL (e.g., `https://dev.emberai.xyz`)
-2. Client fetches agent card from `/.well-known/agent-card.json`
+1. User enters the agent card URL (e.g., `https://dev.emberai.xyz/.well-known/agent-card.json`)
+2. Client fetches that agent card document directly
 3. `A2AClient` is initialized with the agent URL
 4. Ready to send messages!
 

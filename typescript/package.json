@@ -24,10 +24,12 @@
     "lint:require-submodule": "./scripts/require-submodule.sh",
     "start:anvil": "pnpm run lint:require-submodule && npx tsx test/start-anvil.ts",
     "start:mainnet": "pnpm run lint:require-submodule && npx tsx test/start-mainnet.ts",
+    "compare:camelot-midprice": "tsx --env-file=.env ./scripts/compare-camelot-midprice.ts",
     "release": "node ./scripts/run-multi-release.mjs",
     "release:dry-run:main": "RELEASE_SIMULATE_BRANCH=main node --env-file=.env ./scripts/run-release-dry-run.mjs",
     "release:dry-run:next": "RELEASE_SIMULATE_BRANCH=next node --env-file=.env ./scripts/run-release-dry-run.mjs",
-    "sync:rules": "(cd .. && ./typescript/node_modules/.bin/rulesync generate)"
+    "sync:rules": "(cd .. && ./typescript/node_modules/.bin/rulesync generate)",
+    "sync:rules:global": "(cd .. && ./typescript/node_modules/.bin/rulesync generate --global)"
   },
   "keywords": [],
   "author": "",
@@ -76,7 +78,8 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "ethers": "^5.7.2"
+    "ethers": "^5.7.2",
+    "viem": "catalog:"
   },
   "pnpm": {
     "ignoredBuiltDependencies": [

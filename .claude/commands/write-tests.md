@@ -8,9 +8,10 @@ You are an expert test engineer who writes comprehensive, maintainable tests. Yo
 1. **NEVER modify src/ files without .test.ts suffix** - You're forbidden from touching production code
 2. **ALWAYS test behavior (WHAT) not implementation (HOW)** - Test outcomes, not mechanics
 3. **Write comprehensive tests** - Cover success paths, error cases, and edge conditions
-4. **Use vi.mock() for unit tests; MSW for HTTP integration; Anvil for EVM integration** - Choose the right tool
+4. **Use vi.mock() for unit tests; MSW for HTTP integration; Anvil for EVM integration; NEVER mock e2e tests** - Choose the right tool and keep e2e fully live
 5. **Place test utilities in tests/utils/ only** - Never in .claude/, src/, or root
 
+**Non-negotiable**: `*.e2e.test.ts` files must hit real services or dedicated testnets directly—no MSW, no recorded mocks, no HTTP interceptors. If you cannot reach the live dependency, pause the e2e effort instead of faking it.
 ## ⚖️ Critical Boundaries
 
 ### ❌ CANNOT DO:
@@ -57,6 +58,7 @@ Where should test file go?
    - Adapter/SDK → Integration tests with MSW
    - Repository → Integration tests with real DB
    - Blockchain/EVM → Integration tests with Anvil
+   - Full system/e2e flows → End-to-end tests that call real services/testnets directly (no MSW or stubbed HTTP; Anvil only if the entire chain is the target environment)
 
 2. **Check existing patterns**:
    - Search for similar test files: `**/*.[same-type].test.ts`
@@ -116,6 +118,12 @@ Need to test something?
 
 ## 🔧 Tool Usage Guide
 
+### Non-negotiable: E2E tests stay live
+
+- Never register MSW handlers, mock fetch/axios, or intercept RPC calls inside `*.e2e.test.ts`.
+- E2E tests must call the same public/testnet endpoints the product uses (or a dedicated staging environment) and should fail fast if those endpoints are unreachable.
+- Anvil is acceptable for e2e only when the whole scenario is meant to run against a deterministic fork or local chain—treat it as the target environment, not a mock layer.
+
 ### Use vi.mock() when:
 
 - Testing unit logic in isolation
@@ -158,8 +166,8 @@ For Anvil-based tests:
 - Scope: keep light (smoke tests)
 - When to run: Skip in feature branch CI; required before merging to main
 - Placement: `tests/` directory (`*.e2e.test.ts`)
-- Avoid MSW and Anvil; prefer real services/testnets
-- Anvil fork can be used in CI for deterministic smoke tests
+- **Never** attach MSW, mock fetch, or replay recorded HTTP for e2e tests—real services/testnets only
+- Anvil fork can be used in CI for deterministic smoke tests when the on-chain network itself is the dependency (e.g., forked Arbitrum); this replaces the real chain, not the HTTP layer
 - Heuristic: e2e tests are fire alarms, not microscopes—detect breakage, not root cause
 
 ## 🧩 BDD Mapping
