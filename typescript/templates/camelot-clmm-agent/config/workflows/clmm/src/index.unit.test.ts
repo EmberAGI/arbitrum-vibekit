@@ -62,7 +62,6 @@ const operatorConfig: ResolvedOperatorConfig = {
   walletAddress: '0xwallet',
   baseContributionUsd: 1.5,
   autoCompoundFees: true,
-  maxIdleCycles: 5,
   manualBandwidthBps: 75,
 };
 
@@ -151,7 +150,7 @@ describe('executeDecision', () => {
     });
 
     // When executeDecision orchestrates the adjustment
-    const txHash = await executeDecision({
+    const outcome = await executeDecision({
       action: makeAdjustRangeAction(),
       camelotClient,
       pool: makePool(),
@@ -166,7 +165,7 @@ describe('executeDecision', () => {
     expect(executeTransactionMock).toHaveBeenCalledTimes(2);
     expect(executeTransactionMock.mock.calls[0]?.[1]).toMatchObject({ to: '0xwithdraw' });
     expect(executeTransactionMock.mock.calls[1]?.[1]).toMatchObject({ to: '0xreenter' });
-    expect(txHash).toBe('0xreenterhash');
+    expect(outcome?.txHash).toBe('0xreenterhash');
   });
 
   it('logs transaction lifecycle events for each executed plan transaction', async () => {

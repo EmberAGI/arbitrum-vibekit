@@ -18,7 +18,6 @@ import {
   DATA_STALE_CYCLE_LIMIT,
   EMBER_API_BASE_URL,
   MAX_GAS_SPEND_ETH,
-  SAFETY_NET_MAX_IDLE_CYCLES,
   resolveEthUsdPrice,
   resolvePollIntervalMs,
   resolveStreamLimit,
@@ -29,6 +28,8 @@ import {
   evaluateDecision,
   estimateFeeValueUsd,
   normalizePosition,
+  buildRange,
+  tickToPrice,
 } from './decision-engine.js';
 import {
   EmberCamelotClient,
@@ -55,7 +56,7 @@ if (!rawAgentPrivateKey) {
 const agentPrivateKey = normalizeHexAddress(rawAgentPrivateKey, 'agent private key');
 
 const DEBUG_MODE = process.env['DEBUG_MODE'] === 'true';
-const MAX_WITHDRAW_ATTEMPTS = 10;
+const MAX_WITHDRAW_ATTEMPTS = 3;
 
 const plugin: WorkflowPlugin = {
   id: 'camelot-clmm-rebalancer',
@@ -149,7 +150,6 @@ const plugin: WorkflowPlugin = {
     const operatorConfig: ResolvedOperatorConfig = {
       walletAddress: agentWalletAddress,
       baseContributionUsd: baseContributionUsd ?? 5_000,
-      maxIdleCycles: SAFETY_NET_MAX_IDLE_CYCLES,
       manualBandwidthBps: DEFAULT_TICK_BANDWIDTH_BPS,
       autoCompoundFees: true,
     };
@@ -263,6 +263,7 @@ const plugin: WorkflowPlugin = {
         volatilityPct,
         tvl: poolSnapshot.activeTvlUSD,
       });
+      const decimalsDiff = poolSnapshot.token0.decimals - poolSnapshot.token1.decimals;
 
       const walletPositions = await camelotClient.getWalletPositions(
         operatorConfig.walletAddress,
@@ -292,14 +293,23 @@ const plugin: WorkflowPlugin = {
           amount: token.amount,
         })),
       }));
-      logInfo('Wallet position snapshots', { iteration, positions: positionSummaries }, { detailed: true });
+      logInfo(
+        'Wallet position snapshots',
+        { iteration, positions: positionSummaries },
+        { detailed: true },
+      );
 
       const ethUsd = resolveEthUsdPrice(poolSnapshot);
       if (!ethUsd) {
         logInfo('Missing WETH/USD price for pool', { poolAddress: poolSnapshot.address });
-        throw new Error(`failure: Unable to locate a WETH/USD price for pool ${poolSnapshot.address}`);
+        throw new Error(
+          `failure: Unable to locate a WETH/USD price for pool ${poolSnapshot.address}`,
+        );
       }
+      const maxGasSpendUsd = MAX_GAS_SPEND_ETH * ethUsd;
+      const estimatedFeeValueUsd = estimateFeeValueUsd(currentPosition, poolSnapshot);
 
+      const rebalanceThresholdPct = DEFAULT_REBALANCE_THRESHOLD_PCT;
       const decision = evaluateDecision({
         pool: poolSnapshot,
         position: currentPosition,
@@ -307,11 +317,10 @@ const plugin: WorkflowPlugin = {
         volatilityPct,
         cyclesSinceRebalance,
         tickBandwidthBps: operatorConfig.manualBandwidthBps,
-        rebalanceThresholdPct: DEFAULT_REBALANCE_THRESHOLD_PCT,
-        maxIdleCycles: operatorConfig.maxIdleCycles,
+        rebalanceThresholdPct,
         autoCompoundFees: operatorConfig.autoCompoundFees,
-        estimatedGasCostUsd: MAX_GAS_SPEND_ETH * ethUsd,
-        estimatedFeeValueUsd: estimateFeeValueUsd(currentPosition, poolSnapshot),
+        maxGasSpendUsd,
+        estimatedFeeValueUsd,
       });
       logInfo('Decision evaluated', {
         iteration,
@@ -320,8 +329,120 @@ const plugin: WorkflowPlugin = {
         cyclesSinceRebalance,
         volatilityPct,
       });
+      const targetRangeForLog =
+        decision.kind === 'hold' ||
+        decision.kind === 'exit-range' ||
+        decision.kind === 'compound-fees'
+          ? buildRange(
+              midPrice,
+              operatorConfig.manualBandwidthBps,
+              poolSnapshot.tickSpacing,
+              decimalsDiff,
+            )
+          : decision.targetRange;
+      const positionLowerPrice = currentPosition
+        ? tickToPrice(currentPosition.tickLower, decimalsDiff)
+        : undefined;
+      const positionUpperPrice = currentPosition
+        ? tickToPrice(currentPosition.tickUpper, decimalsDiff)
+        : undefined;
+      const pctFromLower =
+        currentPosition && positionLowerPrice !== undefined && midPrice > 0
+          ? Number((((midPrice - positionLowerPrice) / midPrice) * 100).toFixed(4))
+          : undefined;
+      const pctToUpper =
+        currentPosition && positionUpperPrice !== undefined && midPrice > 0
+          ? Number((((positionUpperPrice - midPrice) / midPrice) * 100).toFixed(4))
+          : undefined;
+      const innerBand =
+        currentPosition && rebalanceThresholdPct > 0
+          ? (() => {
+              const width = currentPosition.tickUpper - currentPosition.tickLower;
+              const innerWidth = Math.round(width * rebalanceThresholdPct);
+              const padding = Math.max(1, Math.floor((width - innerWidth) / 2));
+              return {
+                lowerTick: currentPosition.tickLower + padding,
+                upperTick: currentPosition.tickUpper - padding,
+              };
+            })()
+          : undefined;
+      const distanceToEdges =
+        currentPosition && innerBand
+          ? {
+              ticksFromLower: poolSnapshot.tick - currentPosition.tickLower,
+              ticksToUpper: currentPosition.tickUpper - poolSnapshot.tick,
+              pctFromLower,
+              pctToUpper,
+              innerBand: {
+                lowerTick: innerBand.lowerTick,
+                upperTick: innerBand.upperTick,
+                ticksFromInnerLower: poolSnapshot.tick - innerBand.lowerTick,
+                ticksToInnerUpper: innerBand.upperTick - poolSnapshot.tick,
+              },
+            }
+          : currentPosition
+            ? {
+                ticksFromLower: poolSnapshot.tick - currentPosition.tickLower,
+                ticksToUpper: currentPosition.tickUpper - poolSnapshot.tick,
+                pctFromLower,
+                pctToUpper,
+              }
+            : undefined;
+      const inRange = currentPosition
+        ? poolSnapshot.tick >= currentPosition.tickLower &&
+          poolSnapshot.tick <= currentPosition.tickUpper
+        : undefined;
+      const inInnerBand = innerBand
+        ? poolSnapshot.tick >= innerBand.lowerTick && poolSnapshot.tick <= innerBand.upperTick
+        : undefined;
+      const positionRangeTelemetry = currentPosition
+        ? {
+            lowerTick: currentPosition.tickLower,
+            upperTick: currentPosition.tickUpper,
+            lowerPrice: positionLowerPrice ?? tickToPrice(currentPosition.tickLower, decimalsDiff),
+            upperPrice: positionUpperPrice ?? tickToPrice(currentPosition.tickUpper, decimalsDiff),
+            widthTicks: currentPosition.tickUpper - currentPosition.tickLower,
+          }
+        : undefined;
+      const targetRangeTelemetry = {
+        lowerTick: targetRangeForLog.lowerTick,
+        upperTick: targetRangeForLog.upperTick,
+        lowerPrice: targetRangeForLog.lowerPrice,
+        upperPrice: targetRangeForLog.upperPrice,
+        widthTicks: targetRangeForLog.upperTick - targetRangeForLog.lowerTick,
+        bandwidthBps: targetRangeForLog.bandwidthBps,
+      };
+      let cycleMetrics = {
+        tick: poolSnapshot.tick,
+        tickSpacing: poolSnapshot.tickSpacing,
+        midPrice,
+        volatilityPct,
+        tvlUsd: poolSnapshot.activeTvlUSD,
+        rebalanceThresholdPct,
+        cyclesSinceRebalance,
+        bandwidthBps: targetRangeTelemetry.bandwidthBps,
+        inRange,
+        inInnerBand,
+        positionRange: positionRangeTelemetry,
+        targetRange: targetRangeTelemetry,
+        distanceToEdges,
+        estimatedFeeValueUsd,
+        maxGasSpendUsd,
+      };
+      logInfo('Range diagnostics', {
+        iteration,
+        midPrice,
+        currentTick: poolSnapshot.tick,
+        inRange,
+        inInnerBand,
+        positionRange: positionRangeTelemetry,
+        targetRange: targetRangeTelemetry,
+        distanceToEdges,
+      });
+      logInfo('Cycle metrics', { iteration, metrics: cycleMetrics }, { detailed: true });
 
       let txHash: string | undefined;
+      let gasSpentWei: bigint | undefined;
 
       if (decision.kind === 'hold') {
         cyclesSinceRebalance += 1;
@@ -334,17 +455,32 @@ const plugin: WorkflowPlugin = {
         if (DEBUG_MODE) {
           txHash = `0xdebug${Date.now().toString(16)}`;
         } else {
-          txHash = await executeDecision({
+          const result = await executeDecision({
             action: decision,
             camelotClient,
             pool: poolSnapshot,
             operatorConfig,
             clients,
           });
+          txHash = result?.txHash;
+          gasSpentWei = result?.gasSpentWei;
         }
         cyclesSinceRebalance = 0;
-        logInfo('Action execution complete', { iteration, action: decision.kind, txHash });
+        logInfo('Action execution complete', {
+          iteration,
+          action: decision.kind,
+          txHash,
+          gasSpentWei: gasSpentWei?.toString(),
+        });
       }
+
+      const gasSpentUsd =
+        gasSpentWei !== undefined ? (Number(gasSpentWei) / 1_000_000_000_000_000_000) * ethUsd : undefined;
+      cycleMetrics = {
+        ...cycleMetrics,
+        gasSpentWei: gasSpentWei?.toString(),
+        gasSpentUsd,
+      };
 
       const cycleTelemetry: RebalanceTelemetry = {
         cycle: iteration,
@@ -355,7 +491,7 @@ const plugin: WorkflowPlugin = {
         tickLower:
           decision.kind === 'hold' ||
           decision.kind === 'exit-range' ||
-          decision.kind === 'compound-fees'
+        decision.kind === 'compound-fees'
             ? undefined
             : decision.targetRange.lowerTick,
         tickUpper:
@@ -366,6 +502,7 @@ const plugin: WorkflowPlugin = {
             : decision.targetRange.upperTick,
         txHash,
         timestamp: new Date().toISOString(),
+        metrics: cycleMetrics,
       };
       telemetry.push(cycleTelemetry);
 
@@ -474,7 +611,7 @@ export async function executeDecision({
   pool: CamelotPool;
   operatorConfig: ResolvedOperatorConfig;
   clients: ReturnType<typeof createClients>;
-}): Promise<string | undefined> {
+}): Promise<{ txHash?: string; gasSpentWei?: bigint }> {
   const walletAddress = operatorConfig.walletAddress;
   if (action.kind === 'hold') {
     throw new Error('executeDecision invoked with hold action');
@@ -491,131 +628,176 @@ export async function executeDecision({
     poolTokenUid: poolIdentifier,
   };
   let lastTxHash: string | undefined;
+  let totalGasSpentWei: bigint | undefined;
 
-  if (action.kind === 'adjust-range' || action.kind === 'exit-range' || action.kind === 'compound-fees') {
-    lastTxHash = await executeWithdrawalPlans({
+  if (
+    action.kind === 'adjust-range' ||
+    action.kind === 'exit-range' ||
+    action.kind === 'compound-fees'
+  ) {
+    const withdrawalOutcome = await executeWithdrawalPlans({
       camelotClient,
       withdrawPayload,
       clients,
     });
+    lastTxHash = withdrawalOutcome.lastHash;
+    if (withdrawalOutcome.gasSpentWei !== undefined) {
+      totalGasSpentWei = (totalGasSpentWei ?? 0n) + withdrawalOutcome.gasSpentWei;
+    }
   }
 
   switch (action.kind) {
     case 'enter-range':
     case 'adjust-range': {
-      const allocations = estimateTokenAllocations(pool, operatorConfig.baseContributionUsd);
+      const refreshedPoolSnapshot =
+        (await fetchPoolSnapshot(
+          camelotClient,
+          normalizeHexAddress(pool.address, 'pool address'),
+          ARBITRUM_CHAIN_ID,
+        )) ?? pool;
+      const decimalsDiff =
+        refreshedPoolSnapshot.token0.decimals - refreshedPoolSnapshot.token1.decimals;
+      const refreshedTargetRange = buildRange(
+        deriveMidPrice(refreshedPoolSnapshot),
+        action.targetRange.bandwidthBps,
+        refreshedPoolSnapshot.tickSpacing,
+        decimalsDiff,
+      );
+      if (
+        refreshedTargetRange.lowerTick !== action.targetRange.lowerTick ||
+        refreshedTargetRange.upperTick !== action.targetRange.upperTick
+      ) {
+        logInfo('Refreshed target range after withdrawal', {
+          previousRange: {
+            lowerTick: action.targetRange.lowerTick,
+            upperTick: action.targetRange.upperTick,
+          },
+          refreshedRange: {
+            lowerTick: refreshedTargetRange.lowerTick,
+            upperTick: refreshedTargetRange.upperTick,
+          },
+          confirmationTick: refreshedPoolSnapshot.tick,
+        });
+      }
+      action.targetRange = refreshedTargetRange;
+
+      const allocations = estimateTokenAllocations(
+        refreshedPoolSnapshot,
+        operatorConfig.baseContributionUsd,
+      );
       const tokenBudget = await resolveTokenBudget({
         publicClient: clients.public,
         walletAddress,
-        pool,
-      desired: allocations,
-    });
+        pool: refreshedPoolSnapshot,
+        desired: allocations,
+      });
 
-    if (!tokenBudget) {
-      logInfo('Skipping supply: wallet lacks required token balances', {
+      if (!tokenBudget) {
+        logInfo('Skipping supply: wallet lacks required token balances', {
+          walletAddress,
+          token0Required: allocations.token0.toString(),
+          token1Required: allocations.token1.toString(),
+        });
+        return lastTxHash;
+      }
+
+      if (tokenBudget.token0 < allocations.token0 || tokenBudget.token1 < allocations.token1) {
+        logInfo('Clamped supply allocation to wallet balances', {
+          walletAddress,
+          token0Planned: allocations.token0.toString(),
+          token0Using: tokenBudget.token0.toString(),
+          token1Planned: allocations.token1.toString(),
+          token1Using: tokenBudget.token1.toString(),
+        });
+      }
+
+      await ensureAllowance({
+        publicClient: clients.public,
+        tokenAddress: refreshedPoolSnapshot.token0.address,
+        ownerAccount: walletAddress,
+        spenderAddress: CAMELOT_POSITION_MANAGER_ADDRESS,
+        requiredAmount: tokenBudget.token0,
+        clients,
+      });
+      await ensureAllowance({
+        publicClient: clients.public,
+        tokenAddress: refreshedPoolSnapshot.token1.address,
+        ownerAccount: walletAddress,
+        spenderAddress: CAMELOT_POSITION_MANAGER_ADDRESS,
+        requiredAmount: tokenBudget.token1,
+        clients,
+      });
+
+      const rebalancePayload: ClmmRebalanceRequest = {
         walletAddress,
-        token0Required: allocations.token0.toString(),
-        token1Required: allocations.token1.toString(),
-      });
-      return lastTxHash;
-    }
+        supplyChain: chainIdString,
+        poolIdentifier,
+        range: {
+          type: 'limited',
+          minPrice: action.targetRange.lowerPrice.toString(),
+          maxPrice: action.targetRange.upperPrice.toString(),
+        },
+        payableTokens: [
+          {
+            tokenUid: {
+              chainId: chainIdString,
+              address: refreshedPoolSnapshot.token0.address,
+            },
+            amount: tokenBudget.token0.toString(),
+          },
+          {
+            tokenUid: {
+              chainId: chainIdString,
+              address: refreshedPoolSnapshot.token1.address,
+            },
+            amount: tokenBudget.token1.toString(),
+          },
+        ],
+      };
 
-    if (
-      tokenBudget.token0 < allocations.token0 ||
-      tokenBudget.token1 < allocations.token1
-    ) {
-      logInfo('Clamped supply allocation to wallet balances', {
+      logInfo('Prepared Ember supply payload', {
         walletAddress,
-        token0Planned: allocations.token0.toString(),
-        token0Using: tokenBudget.token0.toString(),
-        token1Planned: allocations.token1.toString(),
-        token1Using: tokenBudget.token1.toString(),
-      });
-    }
-
-    await ensureAllowance({
-      publicClient: clients.public,
-      tokenAddress: pool.token0.address,
-      ownerAccount: walletAddress,
-      spenderAddress: CAMELOT_POSITION_MANAGER_ADDRESS,
-      requiredAmount: tokenBudget.token0,
-      clients,
-    });
-    await ensureAllowance({
-      publicClient: clients.public,
-      tokenAddress: pool.token1.address,
-      ownerAccount: walletAddress,
-      spenderAddress: CAMELOT_POSITION_MANAGER_ADDRESS,
-      requiredAmount: tokenBudget.token1,
-      clients,
-    });
-
-    const rebalancePayload: ClmmRebalanceRequest = {
-      walletAddress,
-      supplyChain: chainIdString,
-      poolIdentifier,
-      range: {
-        type: 'limited',
-        minPrice: action.targetRange.lowerPrice.toString(),
-        maxPrice: action.targetRange.upperPrice.toString(),
-      },
-      payableTokens: [
-        {
-          tokenUid: {
-            chainId: chainIdString,
-            address: pool.token0.address,
-          },
-          amount: tokenBudget.token0.toString(),
+        poolAddress: poolIdentifier.address,
+        tickLower: action.targetRange.lowerTick,
+        tickUpper: action.targetRange.upperTick,
+        tokenBudget: {
+          token0: tokenBudget.token0.toString(),
+          token1: tokenBudget.token1.toString(),
         },
-        {
-          tokenUid: {
-            chainId: chainIdString,
-            address: pool.token1.address,
-          },
-          amount: tokenBudget.token1.toString(),
-        },
-      ],
-    };
-
-    logInfo('Prepared Ember supply payload', {
-      walletAddress,
-      poolAddress: poolIdentifier.address,
-      tickLower: action.targetRange.lowerTick,
-      tickUpper: action.targetRange.upperTick,
-      tokenBudget: {
-        token0: tokenBudget.token0.toString(),
-        token1: tokenBudget.token1.toString(),
-      },
-    });
-
-    const rebalancePlan = await camelotClient.requestRebalance(rebalancePayload);
-    logInfo('Received Ember supply plan', {
-      requestId: rebalancePlan.requestId,
-      transactionCount: rebalancePlan.transactions.length,
-    });
-
-    const confirmationSnapshot = await fetchPoolSnapshot(
-      camelotClient,
-      normalizeHexAddress(pool.address, 'pool address'),
-      ARBITRUM_CHAIN_ID,
-    );
-    if (confirmationSnapshot) {
-      logInfo('Validated pool snapshot prior to executing supply plan', {
-        previousTick: pool.tick,
-        confirmationTick: confirmationSnapshot.tick,
-        tickDelta: confirmationSnapshot.tick - pool.tick,
       });
-    }
 
-    lastTxHash = await executePlanTransactions({
-      plan: rebalancePlan,
-      clients,
-    }) ?? lastTxHash;
-    return lastTxHash;
+      const rebalancePlan = await camelotClient.requestRebalance(rebalancePayload);
+      logInfo('Received Ember supply plan', {
+        requestId: rebalancePlan.requestId,
+        transactionCount: rebalancePlan.transactions.length,
+      });
+
+      const confirmationSnapshot = await fetchPoolSnapshot(
+        camelotClient,
+        normalizeHexAddress(pool.address, 'pool address'),
+        ARBITRUM_CHAIN_ID,
+      );
+      if (confirmationSnapshot) {
+        logInfo('Validated pool snapshot prior to executing supply plan', {
+          previousTick: refreshedPoolSnapshot.tick,
+          confirmationTick: confirmationSnapshot.tick,
+          tickDelta: confirmationSnapshot.tick - refreshedPoolSnapshot.tick,
+        });
+      }
+
+      const supplyOutcome = await executePlanTransactions({
+        plan: rebalancePlan,
+        clients,
+      });
+      lastTxHash = supplyOutcome.lastHash ?? lastTxHash;
+      if (supplyOutcome.gasSpentWei !== undefined) {
+        totalGasSpentWei = (totalGasSpentWei ?? 0n) + supplyOutcome.gasSpentWei;
+      }
+      return { txHash: lastTxHash, gasSpentWei: totalGasSpentWei };
     }
     case 'exit-range':
     case 'compound-fees':
-      return lastTxHash;
+      return { txHash: lastTxHash, gasSpentWei: totalGasSpentWei };
     default:
       assertUnreachable(action);
   }
@@ -627,7 +809,7 @@ async function executePlannedTransaction({
 }: {
   tx: TransactionInformation;
   clients: ReturnType<typeof createClients>;
-}) {
+}): Promise<{ receipt: Awaited<ReturnType<typeof executeTransaction>>; gasSpentWei?: bigint }> {
   const callValue = parseTransactionValue(tx.value);
 
   logInfo('Submitting Camelot transaction', {
@@ -664,7 +846,14 @@ async function executePlannedTransaction({
   }
 
   logInfo('Transaction confirmed', receiptMetadata);
-  return receipt;
+  const gasSpentWei =
+    receipt.gasUsed !== undefined && receipt.effectiveGasPrice !== undefined
+      ? receipt.gasUsed * receipt.effectiveGasPrice
+      : undefined;
+  if (gasSpentWei !== undefined) {
+    logInfo('Transaction gas spent (wei)', { transactionHash: receipt.transactionHash, gasSpentWei: gasSpentWei.toString() });
+  }
+  return { receipt, gasSpentWei };
 }
 
 async function executeWithdrawalPlans({
@@ -675,27 +864,39 @@ async function executeWithdrawalPlans({
   camelotClient: EmberCamelotClient;
   withdrawPayload: ClmmWithdrawRequest;
   clients: ReturnType<typeof createClients>;
-}) {
+}): Promise<{ lastHash?: string; gasSpentWei?: bigint }> {
   let lastHash: string | undefined;
+  let totalGasSpentWei: bigint | undefined;
   for (let attempt = 0; attempt < MAX_WITHDRAW_ATTEMPTS; attempt += 1) {
-    const plan = await camelotClient.requestWithdrawal(withdrawPayload);
-    if (plan.transactions.length === 0) {
-      return lastHash;
-    }
+    try {
+      const plan = await camelotClient.requestWithdrawal(withdrawPayload);
+      if (plan.transactions.length === 0) {
+        return { lastHash, gasSpentWei: totalGasSpentWei };
+      }
 
-    logInfo('Executing Ember withdrawal plan', {
-      attempt: attempt + 1,
-      transactionCount: plan.transactions.length,
-    });
-    for (const tx of plan.transactions) {
-      const receipt = await executePlannedTransaction({ tx, clients });
-      lastHash = receipt.transactionHash;
+      logInfo('Executing Ember withdrawal plan', {
+        attempt: attempt + 1,
+        transactionCount: plan.transactions.length,
+      });
+      for (const tx of plan.transactions) {
+        const { receipt, gasSpentWei } = await executePlannedTransaction({ tx, clients });
+        lastHash = receipt.transactionHash;
+        if (gasSpentWei !== undefined) {
+          totalGasSpentWei = (totalGasSpentWei ?? 0n) + gasSpentWei;
+        }
+      }
+
+      return { lastHash, gasSpentWei: totalGasSpentWei };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logInfo('Withdrawal attempt failed', { attempt: attempt + 1, error: message });
+      if (attempt + 1 >= MAX_WITHDRAW_ATTEMPTS) {
+        throw new Error(
+          `Camelot withdrawal failed after ${MAX_WITHDRAW_ATTEMPTS} attempts: ${message}`,
+        );
+      }
     }
   }
-
-  throw new Error(
-    `Ember withdrawal endpoint returned transactions after ${MAX_WITHDRAW_ATTEMPTS} attempts; aborting`,
-  );
 }
 
 async function executePlanTransactions({
@@ -704,13 +905,17 @@ async function executePlanTransactions({
 }: {
   plan: { transactions: TransactionInformation[] };
   clients: ReturnType<typeof createClients>;
-}) {
+}): Promise<{ lastHash?: string; gasSpentWei?: bigint }> {
   let lastHash: string | undefined;
+  let totalGasSpentWei: bigint | undefined;
   for (const tx of plan.transactions) {
-    const receipt = await executePlannedTransaction({ tx, clients });
+    const { receipt, gasSpentWei } = await executePlannedTransaction({ tx, clients });
     lastHash = receipt.transactionHash;
+    if (gasSpentWei !== undefined) {
+      totalGasSpentWei = (totalGasSpentWei ?? 0n) + gasSpentWei;
+    }
   }
-  return lastHash;
+  return { lastHash, gasSpentWei: totalGasSpentWei };
 }
 
 type TokenAllocation = {
@@ -857,6 +1062,157 @@ function buildTelemetryArtifact(entry: RebalanceTelemetry): Artifact {
 }
 
 function buildSummaryArtifact(telemetry: RebalanceTelemetry[]): Artifact {
+  const actions: Record<string, number> = {};
+  let rebalanceCount = 0;
+  let firstTimestamp: Date | undefined;
+  let lastTimestamp: Date | undefined;
+  let volatilitySum = 0;
+  let volatilityCount = 0;
+  let maxVolatility = 0;
+  let bandwidthSum = 0;
+  let bandwidthCount = 0;
+  let widthSum = 0;
+  let widthCount = 0;
+  let inRangeCount = 0;
+  let inInnerBandCount = 0;
+  let ticksFromLowerSum = 0;
+  let ticksToUpperSum = 0;
+  let pctFromLowerSum = 0;
+  let pctToUpperSum = 0;
+  let ticksDistanceCount = 0;
+  let pctDistanceCount = 0;
+  let minTicksToEdge: number | undefined;
+  let minPctToEdge: number | undefined;
+  let feeSumUsd = 0;
+  let feeCount = 0;
+  let gasSpentSumUsd = 0;
+  let gasSpentCount = 0;
+  let cyclesSinceLastRebalance = 0;
+  let maxCyclesSinceRebalance = 0;
+  let minTvlUsd: number | undefined;
+  let maxTvlUsd: number | undefined;
+  let lastTvlUsd: number | undefined;
+
+  for (const entry of telemetry) {
+    actions[entry.action] = (actions[entry.action] ?? 0) + 1;
+    if (entry.action === 'enter-range' || entry.action === 'adjust-range') {
+      rebalanceCount += 1;
+      cyclesSinceLastRebalance = 0;
+    }
+    if (entry.action === 'hold') {
+      cyclesSinceLastRebalance += 1;
+      if (cyclesSinceLastRebalance > maxCyclesSinceRebalance) {
+        maxCyclesSinceRebalance = cyclesSinceLastRebalance;
+      }
+    }
+
+    const ts = new Date(entry.timestamp);
+    if (!firstTimestamp || ts < firstTimestamp) {
+      firstTimestamp = ts;
+    }
+    if (!lastTimestamp || ts > lastTimestamp) {
+      lastTimestamp = ts;
+    }
+
+    const metrics = entry.metrics;
+    if (!metrics) {
+      continue;
+    }
+
+    if (typeof metrics.volatilityPct === 'number') {
+      volatilitySum += metrics.volatilityPct;
+      volatilityCount += 1;
+      if (metrics.volatilityPct > maxVolatility) {
+        maxVolatility = metrics.volatilityPct;
+      }
+    }
+
+    if (typeof metrics.bandwidthBps === 'number') {
+      bandwidthSum += metrics.bandwidthBps;
+      bandwidthCount += 1;
+    }
+
+    if (metrics.targetRange) {
+      widthSum += metrics.targetRange.widthTicks;
+      widthCount += 1;
+    }
+
+    if (metrics.inRange) {
+      inRangeCount += 1;
+    }
+    if (metrics.inInnerBand) {
+      inInnerBandCount += 1;
+    }
+
+    if (metrics.distanceToEdges) {
+      const { ticksFromLower, ticksToUpper, pctFromLower: pctLow, pctToUpper: pctUp } =
+        metrics.distanceToEdges;
+      ticksFromLowerSum += ticksFromLower;
+      ticksToUpperSum += ticksToUpper;
+      ticksDistanceCount += 1;
+      const minTickEdge = Math.min(ticksFromLower, ticksToUpper);
+      minTicksToEdge = minTicksToEdge === undefined ? minTickEdge : Math.min(minTicksToEdge, minTickEdge);
+
+      if (typeof pctLow === 'number') {
+        pctFromLowerSum += pctLow;
+        pctDistanceCount += 1;
+        minPctToEdge = minPctToEdge === undefined ? pctLow : Math.min(minPctToEdge, pctLow);
+      }
+      if (typeof pctUp === 'number') {
+        pctToUpperSum += pctUp;
+        if (pctDistanceCount === 0 && minPctToEdge === undefined) {
+          minPctToEdge = pctUp;
+        } else if (typeof minPctToEdge === 'number') {
+          minPctToEdge = Math.min(minPctToEdge, pctUp);
+        }
+        pctDistanceCount += 1;
+      }
+    }
+
+    if (typeof metrics.estimatedFeeValueUsd === 'number') {
+      feeSumUsd += metrics.estimatedFeeValueUsd;
+      feeCount += 1;
+    }
+    if (typeof metrics.gasSpentUsd === 'number') {
+      gasSpentSumUsd += metrics.gasSpentUsd;
+      gasSpentCount += 1;
+    }
+
+    if (typeof metrics.tvlUsd === 'number') {
+      lastTvlUsd = metrics.tvlUsd;
+      minTvlUsd = minTvlUsd === undefined ? metrics.tvlUsd : Math.min(minTvlUsd, metrics.tvlUsd);
+      maxTvlUsd = maxTvlUsd === undefined ? metrics.tvlUsd : Math.max(maxTvlUsd, metrics.tvlUsd);
+    }
+  }
+
+  const elapsedMs =
+    firstTimestamp && lastTimestamp ? Math.max(0, lastTimestamp.getTime() - firstTimestamp.getTime()) : 0;
+  const elapsedDays = elapsedMs > 0 ? elapsedMs / 86_400_000 : undefined;
+  const avgRebalancesPerDay =
+    elapsedDays && elapsedDays > 0 ? Number((rebalanceCount / elapsedDays).toFixed(2)) : undefined;
+  const avgVolatilityPct =
+    volatilityCount > 0 ? Number((volatilitySum / volatilityCount).toFixed(4)) : undefined;
+  const avgBandwidthBps =
+    bandwidthCount > 0 ? Number((bandwidthSum / bandwidthCount).toFixed(2)) : undefined;
+  const avgWidthTicks = widthCount > 0 ? Number((widthSum / widthCount).toFixed(2)) : undefined;
+  const avgTicksFromLower =
+    ticksDistanceCount > 0 ? Number((ticksFromLowerSum / ticksDistanceCount).toFixed(2)) : undefined;
+  const avgTicksToUpper =
+    ticksDistanceCount > 0 ? Number((ticksToUpperSum / ticksDistanceCount).toFixed(2)) : undefined;
+  const avgPctFromLower =
+    pctDistanceCount > 0 ? Number((pctFromLowerSum / pctDistanceCount).toFixed(4)) : undefined;
+  const avgPctToUpper =
+    pctDistanceCount > 0 ? Number((pctToUpperSum / pctDistanceCount).toFixed(4)) : undefined;
+  const timeInRangePct =
+    telemetry.length > 0 ? Number(((inRangeCount / telemetry.length) * 100).toFixed(2)) : undefined;
+  const timeInInnerBandPct =
+    telemetry.length > 0
+      ? Number(((inInnerBandCount / telemetry.length) * 100).toFixed(2))
+      : undefined;
+  const avgFeesUsd = feeCount > 0 ? Number((feeSumUsd / feeCount).toFixed(6)) : undefined;
+  const avgGasSpentUsd =
+    gasSpentCount > 0 ? Number((gasSpentSumUsd / gasSpentCount).toFixed(6)) : undefined;
+
   return {
     artifactId: 'clmm-summary',
     name: 'clmm-summary.json',
@@ -866,12 +1222,53 @@ function buildSummaryArtifact(telemetry: RebalanceTelemetry[]): Artifact {
         kind: 'data',
         data: {
           cycles: telemetry.length,
-          actions: telemetry.map((item) => ({
+          actionsTimeline: telemetry.map((item) => ({
             cycle: item.cycle,
             action: item.action,
             reason: item.reason,
             txHash: item.txHash,
           })),
+          actionCounts: actions,
+          rebalanceCount,
+          rebalanceCadence: {
+            currentCyclesSinceRebalance: cyclesSinceLastRebalance || undefined,
+            maxCyclesSinceRebalance: maxCyclesSinceRebalance || undefined,
+          },
+          avgRebalancesPerDay,
+          timeWindow: {
+            firstTimestamp: firstTimestamp?.toISOString(),
+            lastTimestamp: lastTimestamp?.toISOString(),
+            elapsedMs,
+          },
+          priceDrift: {
+            avgVolatilityPct,
+            maxVolatilityPct: maxVolatility || undefined,
+          },
+          rangeWidths: {
+            avgBandwidthBps,
+            avgWidthTicks,
+          },
+          positioning: {
+            timeInRangePct,
+            timeInInnerBandPct,
+            avgTicksFromLower,
+            avgTicksToUpper,
+            avgPctFromLower,
+            avgPctToUpper,
+            minTicksToEdge,
+            minPctToEdge,
+          },
+          economics: {
+            avgEstimatedFeesUsd: avgFeesUsd,
+            totalEstimatedFeesUsd: feeSumUsd || undefined,
+            avgGasSpentUsd,
+            totalGasSpentUsd: gasSpentSumUsd || undefined,
+          },
+          tvl: {
+            lastTvlUsd,
+            minTvlUsd,
+            maxTvlUsd,
+          },
         },
       },
     ],

@@ -5,7 +5,6 @@ import {
   DEFAULT_REBALANCE_THRESHOLD_PCT,
   DEFAULT_TICK_BANDWIDTH_BPS,
   MAX_GAS_SPEND_ETH,
-  SAFETY_NET_MAX_IDLE_CYCLES,
   resolveEthUsdPrice,
 } from '../src/constants.js';
 import { deriveMidPrice, evaluateDecision, normalizePosition } from '../src/decision-engine.js';
@@ -403,9 +402,8 @@ describe('EmberCamelotClient (e2e)', () => {
         cyclesSinceRebalance: 0,
         tickBandwidthBps: DEFAULT_TICK_BANDWIDTH_BPS,
         rebalanceThresholdPct: DEFAULT_REBALANCE_THRESHOLD_PCT,
-        maxIdleCycles: SAFETY_NET_MAX_IDLE_CYCLES,
         autoCompoundFees: true,
-        estimatedGasCostUsd: MAX_GAS_SPEND_ETH * ethUsd,
+        maxGasSpendUsd: MAX_GAS_SPEND_ETH * ethUsd,
         estimatedFeeValueUsd: undefined,
       });
 

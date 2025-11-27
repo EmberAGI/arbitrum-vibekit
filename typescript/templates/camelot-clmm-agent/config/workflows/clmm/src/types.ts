@@ -119,7 +119,6 @@ export type ResolvedOperatorConfig = {
   walletAddress: `0x${string}`;
   baseContributionUsd: number;
   autoCompoundFees: boolean;
-  maxIdleCycles: number;
   manualBandwidthBps: number;
 };
 
@@ -148,10 +147,11 @@ export interface DecisionContext {
   cyclesSinceRebalance: number;
   tickBandwidthBps: number;
   rebalanceThresholdPct: number;
-  maxIdleCycles: number;
   autoCompoundFees: boolean;
   estimatedFeeValueUsd?: number;
-  estimatedGasCostUsd: number;
+  maxGasSpendUsd: number;
+  gasSpentUsd?: number;
+  gasSpentWei?: string;
 }
 
 export type ClmmAction =
@@ -188,4 +188,46 @@ export type RebalanceTelemetry = {
   tickUpper?: number;
   txHash?: string;
   timestamp: string;
+  metrics?: {
+    tick: number;
+    tickSpacing: number;
+    volatilityPct: number;
+    tvlUsd?: number;
+    rebalanceThresholdPct: number;
+    cyclesSinceRebalance: number;
+    bandwidthBps: number;
+    inRange?: boolean;
+    inInnerBand?: boolean;
+    positionRange?: {
+      lowerTick: number;
+      upperTick: number;
+      lowerPrice: number;
+      upperPrice: number;
+      widthTicks: number;
+    };
+    targetRange: {
+      lowerTick: number;
+      upperTick: number;
+      lowerPrice: number;
+      upperPrice: number;
+      widthTicks: number;
+      bandwidthBps: number;
+    };
+    distanceToEdges?: {
+      ticksFromLower: number;
+      ticksToUpper: number;
+      pctFromLower?: number;
+      pctToUpper?: number;
+      innerBand?: {
+        lowerTick: number;
+        upperTick: number;
+        ticksFromInnerLower: number;
+        ticksToInnerUpper: number;
+      };
+    };
+    estimatedFeeValueUsd?: number;
+    maxGasSpendUsd: number;
+    gasSpentUsd?: number;
+    gasSpentWei?: string;
+  };
 };

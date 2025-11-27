@@ -45,10 +45,9 @@ function makeContext(overrides: Partial<DecisionContext> = {}): DecisionContext 
     cyclesSinceRebalance: overrides.cyclesSinceRebalance ?? 0,
     tickBandwidthBps: overrides.tickBandwidthBps ?? DEFAULT_TICK_BANDWIDTH_BPS,
     rebalanceThresholdPct: overrides.rebalanceThresholdPct ?? DEFAULT_REBALANCE_THRESHOLD_PCT,
-    maxIdleCycles: overrides.maxIdleCycles ?? 10,
     autoCompoundFees: overrides.autoCompoundFees ?? true,
     estimatedFeeValueUsd: overrides.estimatedFeeValueUsd,
-    estimatedGasCostUsd: overrides.estimatedGasCostUsd ?? 10,
+    maxGasSpendUsd: overrides.maxGasSpendUsd ?? 10,
   };
 }
 
@@ -158,8 +157,8 @@ describe('evaluateDecision', () => {
     expect(action.targetRange).toBeDefined();
   });
 
-  it('forces an adjustment after exceeding the idle cycle safety net', () => {
-    // Given a pool that stayed within range but hit the idle cycle cap
+  it('continues to hold when within range even after many idle cycles', () => {
+    // Given a pool that stayed comfortably within range over many cycles
     const pool = makePool();
     const position: PositionSnapshot = {
       poolAddress: pool.address,
@@ -170,14 +169,12 @@ describe('evaluateDecision', () => {
       makeContext({
         pool,
         position,
-        cyclesSinceRebalance: 11,
-        maxIdleCycles: 10,
+        cyclesSinceRebalance: 50,
       }),
     );
 
-    // Then the engine should still demand an adjustment to refresh liquidity
-    expect(action.kind).toBe('adjust-range');
-    expect(action.reason).toMatch(/Safety net/i);
+    // Then the engine should keep holding instead of forcing a rebalance
+    expect(action.kind).toBe('hold');
   });
 
   it('compounds fees when auto-compound is enabled and gas ratio is favorable', () => {
@@ -193,7 +190,7 @@ describe('evaluateDecision', () => {
         pool,
         position,
         estimatedFeeValueUsd: 500,
-        estimatedGasCostUsd: 1,
+        maxGasSpendUsd: 1,
         autoCompoundFees: true,
       }),
     );

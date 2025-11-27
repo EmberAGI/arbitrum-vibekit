@@ -40,7 +40,7 @@ function priceToTick(price: number, decimalsDiff: number) {
   return Math.round(Math.log(adjustedPrice) / LOG_BASE);
 }
 
-function tickToPrice(tick: number, decimalsDiff: number) {
+export function tickToPrice(tick: number, decimalsDiff: number) {
   const ratio = Math.exp(tick * LOG_BASE);
   return ratio * Math.pow(10, decimalsDiff);
 }
@@ -85,15 +85,15 @@ function shouldExit(pool: CamelotPool) {
 function shouldCompound({
   autoCompoundFees,
   estimatedFeeValueUsd,
-  estimatedGasCostUsd,
+  maxGasSpendUsd,
 }: DecisionContext) {
   if (!autoCompoundFees) {
     return false;
   }
-  if (!estimatedFeeValueUsd || estimatedFeeValueUsd <= 0 || estimatedGasCostUsd <= 0) {
+  if (!estimatedFeeValueUsd || estimatedFeeValueUsd <= 0 || maxGasSpendUsd <= 0) {
     return false;
   }
-  const ratio = estimatedGasCostUsd / estimatedFeeValueUsd;
+  const ratio = maxGasSpendUsd / estimatedFeeValueUsd;
   return ratio <= AUTO_COMPOUND_COST_RATIO;
 }
 
@@ -161,14 +161,6 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
     };
   }
 
-  if (ctx.cyclesSinceRebalance >= ctx.maxIdleCycles) {
-    return {
-      kind: 'adjust-range',
-      reason: 'Safety net triggered max idle cycles without rebalance',
-      targetRange,
-    };
-  }
-
   const feeValueUsd = ctx.estimatedFeeValueUsd ?? estimateFeeValueUsd(ctx.position, ctx.pool);
 
   if (
@@ -185,7 +177,7 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
 
   return {
     kind: 'hold',
-    reason: 'Within target band and safety timers; monitoring continues',
+    reason: 'Within target band; monitoring continues',
   };
 }
 

@@ -183,13 +183,6 @@ function priceToTick(price: number, decimalsDiff: number): number {
   return Math.round(Math.log(adjustedPrice) / LOG_BASE);
 }
 
-function invertApiPrice(price: number): number {
-  if (!Number.isFinite(price) || price <= 0) {
-    return 0;
-  }
-  return 1 / price;
-}
-
 function normalizePositionRangePrice(price: number): number {
   if (!Number.isFinite(price) || price <= 0) {
     return 0;
@@ -203,7 +196,7 @@ function toCamelotPool(pool: EmberLiquidityPool): CamelotPool | undefined {
   }
 
   const [token0Raw, token1Raw] = pool.tokens;
-  const normalizedPrice = invertApiPrice(Number(pool.price));
+  const normalizedPrice = Number(pool.price);
   const tick = priceToTick(normalizedPrice, token0Raw.decimals - token1Raw.decimals);
 
   return CamelotPoolSchema.parse({
