@@ -37,7 +37,7 @@ jobs:
 
           INTERNAL_DEVS = [
               "0xTomDaniel", "0xchepe", "dev-coda",
-              "ParastooGM", "danielkinahan", "varelaseb"
+              "danielkinahan", "varelaseb"
           ]
 
           # Skip internal contributors
