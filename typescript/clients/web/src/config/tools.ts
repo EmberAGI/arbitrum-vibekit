@@ -239,7 +239,7 @@ export const toolConfigs: ToolConfig[] = [
     enabled: true,
   },
   {
-    id: 'delegations-display',
+    id: 'policy-display',
     name: 'Delegations',
     description: 'Displays delegation policies for signing',
     category: 'interactive',
@@ -247,7 +247,7 @@ export const toolConfigs: ToolConfig[] = [
     enabled: true,
   },
   {
-    id: 'delegations-data',
+    id: 'policy-data',
     name: 'Delegation Data',
     description: 'Raw delegation data for signing',
     category: 'interactive',

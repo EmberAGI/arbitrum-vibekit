@@ -1,18 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, Loader2, AlertCircle } from 'lucide-react';
-import { useAccount } from 'wagmi';
+import { CheckCircle, Loader2, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import type { Hex } from 'viem';
-import {
-  getDeleGatorEnvironment,
-  signDelegation as signDelegationWithPrivateKey,
-  type Delegation,
-} from '@metamask/delegation-toolkit';
-import { useDelegationExtractor, type DelegationData } from '@/lib/hooks/useDelegationExtractor';
+import { usePolicyExtractor } from '@/lib/hooks/usePolicyExtractor';
+import { addPermissionsToSessionKey } from '@/lib/utils/zerodev';
 
 interface WorkflowApprovalHandlerProps {
   // Input schema from status message
@@ -34,40 +29,29 @@ export function WorkflowApprovalHandler({
   onUserAction,
   onNavigateToParent,
 }: WorkflowApprovalHandlerProps) {
-  const { isConnected, chain } = useAccount();
-  const [expandedPolicies, setExpandedPolicies] = useState<Set<number>>(new Set([0]));
-  const [isSubmittingAll, setIsSubmittingAll] = useState(false);
-  const [isSubmissionComplete, setIsSubmissionComplete] = useState(false);
-  const [signingStates, setSigningStates] = useState<
-    Record<
-      string,
-      {
-        isPending: boolean;
-        isSuccess: boolean;
-        signature?: string;
-        error?: Error;
-      }
-    >
-  >({});
+  const { isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient();
+  const [expandedPolicies, setExpandedPolicies] = useState<Set<number>>(new Set());
+  const [isSigning, setIsSigning] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
-  // Extract delegation data using the new hook
-  const { delegationsData } = useDelegationExtractor(artifacts);
+  // Extract policy data using the hook
+  const policyExtractor = usePolicyExtractor(artifacts);
 
-  // Check if this is delegation signing
-  const isDelegationSigning = delegationsData.length > 0;
-
-  // Check if all delegations are signed
-  const isAllSigned =
-    delegationsData.length > 0 && delegationsData.every((d) => signingStates[d.id]?.isSuccess);
+  // Check if this is policy signing
+  const isPolicySigning = policyExtractor !== undefined;
 
   // Debug logging
   console.log('[WorkflowApprovalHandler] Component rendering with:', {
     artifacts,
-    delegationsData: delegationsData.length,
-    signingStates,
-    isAllSigned,
-    isSubmittingAll,
-    isSubmissionComplete,
+    hasPolicies: isPolicySigning,
+    policyCount: policyExtractor?.display.length,
+    isSigning,
+    isSuccess,
+    isSubmitting,
   });
 
   const togglePolicy = (index: number) => {
@@ -82,122 +66,59 @@ export function WorkflowApprovalHandler({
     });
   };
 
-  // Handle signing a single delegation
-  const handleSignDelegation = async (delegation: DelegationData) => {
-    if (!isConnected) {
-      console.warn('[WorkflowApprovalHandler] Wallet not connected');
+  // Handle signing all policies at once
+  const handleSignPolicies = async () => {
+    if (!isConnected || !policyExtractor || !walletClient || !publicClient) {
+      console.warn('[WorkflowApprovalHandler] Missing requirements for signing');
       return;
     }
 
-    console.log('[WorkflowApprovalHandler] Signing delegation:', delegation.id);
-
-    // Set pending state
-    setSigningStates((prev) => ({
-      ...prev,
-      [delegation.id]: { isPending: true, isSuccess: false },
-    }));
+    console.log('[WorkflowApprovalHandler] Starting policy signing...');
+    setIsSigning(true);
+    setError(null);
 
     try {
-      // Get and validate private key from environment
-      const rawPrivateKey = process.env.NEXT_PUBLIC_NEXT_7702_PRIVATE_KEY;
-      if (!rawPrivateKey || !rawPrivateKey.startsWith('0x') || rawPrivateKey.length !== 66) {
-        throw new Error(
-          'NEXT_PUBLIC_NEXT_7702_PRIVATE_KEY not configured. Must be a 0x-prefixed 64-hex-char private key.',
-        );
+      // Sign the policies
+      console.log(
+        '[WorkflowApprovalHandler] Signing policies with session key:',
+        policyExtractor.publicSessionKey,
+      );
+      const approval = await addPermissionsToSessionKey(
+        policyExtractor.publicSessionKey,
+        policyExtractor.policy,
+        walletClient,
+        publicClient,
+        policyExtractor.kernelVersion,
+        policyExtractor.entryPointVersion,
+      );
+
+      console.log('[WorkflowApprovalHandler] Successfully signed policies');
+
+      setIsSuccess(true);
+      setIsSigning(false);
+
+      // Auto-submit the approval
+      if (onUserAction) {
+        setIsSubmitting(true);
+        try {
+          await onUserAction({ approval });
+          console.log('[WorkflowApprovalHandler] Approval submitted successfully');
+        } catch (submitError) {
+          console.error('[WorkflowApprovalHandler] Failed to submit approval:', submitError);
+          setError(submitError as Error);
+        } finally {
+          setIsSubmitting(false);
+        }
       }
-      const testPrivateKey = rawPrivateKey as Hex;
-
-      // Get chainId from connected wallet
-      if (!chain?.id) {
-        throw new Error('No chain ID available from connected wallet');
-      }
-      const chainId = chain.id;
-
-      // Get delegation environment (includes DelegationManager address)
-      const delegationEnvironment = getDeleGatorEnvironment(chainId);
-
-      // Sign the delegation using private key
-      const signature = await signDelegationWithPrivateKey({
-        privateKey: testPrivateKey,
-        delegation: delegation.delegation as Delegation,
-        delegationManager: delegationEnvironment.DelegationManager,
-        chainId,
-      });
-
-      // Set success state with signature
-      setSigningStates((prev) => ({
-        ...prev,
-        [delegation.id]: { isPending: false, isSuccess: true, signature },
-      }));
-
-      console.log('[WorkflowApprovalHandler] Successfully signed delegation:', delegation.id);
-    } catch (error) {
-      console.error('[WorkflowApprovalHandler] Failed to sign delegation:', error);
-
-      // Set error state
-      setSigningStates((prev) => ({
-        ...prev,
-        [delegation.id]: {
-          isPending: false,
-          isSuccess: false,
-          error: error as Error,
-        },
-      }));
+    } catch (err) {
+      console.error('[WorkflowApprovalHandler] Failed to sign policies:', err);
+      setError(err as Error);
+      setIsSigning(false);
     }
   };
 
-  // Submit all signed delegations to the A2A agent
-  const handleSubmitAllSignatures = async () => {
-    if (!onUserAction || !isAllSigned) return;
-
-    setIsSubmittingAll(true);
-    try {
-      // Get all signed delegations
-      const formattedDelegations = delegationsData
-        .filter((d) => signingStates[d.id]?.isSuccess)
-        .map((d) => ({
-          id: d.id,
-          signedDelegation: signingStates[d.id].signature, // A2A expects 'signedDelegation' not 'signature'
-        }));
-
-      console.log('[WorkflowApprovalHandler] Submitting all signatures:', formattedDelegations);
-
-      // Send the signed delegations back to the A2A agent
-      await onUserAction({
-        delegations: formattedDelegations,
-      });
-
-      console.log('[WorkflowApprovalHandler] All signatures submitted successfully');
-
-      // Mark submission as complete
-      setIsSubmissionComplete(true);
-    } catch (error) {
-      console.error('[WorkflowApprovalHandler] Failed to submit signatures:', error);
-    } finally {
-      setIsSubmittingAll(false);
-    }
-  };
-
-  // Auto-submit when all delegations are signed
-  useEffect(() => {
-    if (isAllSigned && !isSubmittingAll && !isSubmissionComplete && onUserAction) {
-      console.log('[WorkflowApprovalHandler] All delegations signed, auto-submitting...');
-      handleSubmitAllSignatures();
-    }
-  }, [isAllSigned]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-expand the next unsigned delegation
-  useEffect(() => {
-    const nextUnsignedIndex = delegationsData.findIndex((d) => !signingStates[d.id]?.isSuccess);
-
-    if (nextUnsignedIndex !== -1 && !expandedPolicies.has(nextUnsignedIndex)) {
-      console.log('[WorkflowApprovalHandler] Auto-expanding delegation:', nextUnsignedIndex);
-      setExpandedPolicies(new Set([nextUnsignedIndex]));
-    }
-  }, [signingStates, delegationsData, expandedPolicies]);
-
-  // Delegation Signing Screen
-  if (isDelegationSigning) {
+  // Policy Signing Screen
+  if (isPolicySigning && policyExtractor) {
     // Show wallet connection prompt if not connected
     if (!isConnected) {
       return (
@@ -208,7 +129,7 @@ export function WorkflowApprovalHandler({
               <div className="text-center">
                 <h3 className="text-lg font-medium text-white mb-2">Connect Your Wallet</h3>
                 <p className="text-sm text-gray-400 mb-4">
-                  You need to connect your wallet to sign delegations
+                  You need to connect your wallet to sign policies
                 </p>
               </div>
               <ConnectButton />
@@ -219,156 +140,111 @@ export function WorkflowApprovalHandler({
     }
 
     return (
-      <div className="space-y-2">
-        {/* Policy Cards */}
-        {delegationsData.map((delegation, idx) => {
-          const isExpanded = expandedPolicies.has(idx);
-          const signingState = signingStates[delegation.id] || {
-            isPending: false,
-            isSuccess: false,
-          };
-          const isPending = signingState.isPending;
-          const isSuccess = signingState.isSuccess;
-          const hasError = signingState.error != null;
+      <div className="space-y-4">
+        {/* Policy Display Cards (read-only, collapsible) */}
+        <div className="space-y-2">
+          {policyExtractor.display.map((policy, idx) => {
+            const isExpanded = expandedPolicies.has(idx);
 
-          return (
-            <Card
-              key={idx}
-              className={`border-gray-800/50 overflow-hidden component-fade-in ${
-                isSuccess
-                  ? 'bg-green-950/20 border-green-800/30'
-                  : hasError
-                    ? 'bg-red-950/20 border-red-800/30'
-                    : 'bg-[#1a1a1a]'
-              }`}
-            >
-              <div className="cursor-pointer p-4" onClick={() => togglePolicy(idx)}>
-                {!isExpanded ? (
-                  // Collapsed view
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 ${
-                        isSuccess
-                          ? 'bg-green-600 text-white'
-                          : hasError
-                            ? 'bg-red-600 text-white'
-                            : 'bg-gray-800 text-gray-400'
-                      }`}
-                    >
-                      {isSuccess ? '✓' : idx + 1}
-                    </div>
-                    <div className="flex-1 min-w-0 flex items-center justify-between">
-                      <h4 className="text-sm text-gray-400">{delegation.name}</h4>
-                      {isSuccess && <CheckCircle className="w-4 h-4 text-green-500" />}
-                      {hasError && <AlertCircle className="w-4 h-4 text-red-500" />}
-                      {isPending && <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />}
-                    </div>
-                  </div>
-                ) : (
-                  // Expanded view
-                  <div className="space-y-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3 flex-1">
-                        <div
-                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5 ${
-                            isSuccess
-                              ? 'bg-green-600 text-white'
-                              : hasError
-                                ? 'bg-red-600 text-white'
-                                : 'bg-gray-800 text-white'
-                          }`}
-                        >
-                          {isSuccess ? '✓' : idx + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-base font-medium text-white mb-2">
-                            {delegation.name}
-                          </h4>
-                          <p className="text-sm text-gray-400 leading-relaxed mb-3">
-                            {delegation.description}
-                          </p>
-                          <div className="text-sm text-gray-300">{delegation.policy}</div>
-                          {hasError && signingState?.error && (
-                            <div className="mt-3 p-2 bg-red-950/40 border border-red-800/50 rounded text-sm text-red-300">
-                              Error: {signingState.error.message}
-                            </div>
-                          )}
-                        </div>
+            return (
+              <Card
+                key={idx}
+                className="border-gray-800/50 bg-[#1a1a1a] overflow-hidden component-fade-in"
+              >
+                <div className="cursor-pointer p-4" onClick={() => togglePolicy(idx)}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3 flex-1">
+                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0 mt-0.5 bg-gray-800 text-white">
+                        {idx + 1}
                       </div>
-                      <div className="flex flex-col gap-2 flex-shrink-0">
-                        {isSuccess ? (
-                          <div className="flex items-center gap-2 text-green-500 px-6 py-2">
-                            <CheckCircle className="w-4 h-4" />
-                            <span className="text-sm font-medium">Signed</span>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-base font-medium text-white mb-1">{policy.name}</h4>
+                        {isExpanded && (
+                          <div className="mt-2 space-y-2">
+                            <p className="text-sm text-gray-400 leading-relaxed">
+                              {policy.description}
+                            </p>
+                            <div className="text-sm text-gray-300">{policy.policy}</div>
                           </div>
-                        ) : (
-                          <Button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSignDelegation(delegation);
-                            }}
-                            disabled={isPending}
-                            className="bg-orange-500 hover:bg-orange-600 text-white font-medium px-6"
-                          >
-                            {isPending ? (
-                              <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Signing...
-                              </>
-                            ) : hasError ? (
-                              'Retry'
-                            ) : (
-                              'Sign'
-                            )}
-                          </Button>
                         )}
                       </div>
                     </div>
+                    <div className="shrink-0">
+                      {isExpanded ? (
+                        <ChevronUp className="w-5 h-5 text-gray-400" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-gray-400" />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Single Sign Button or Success State */}
+        {!isSuccess ? (
+          <Card className="bg-[#1a1a1a] border-gray-800/50">
+            <CardContent className="p-6">
+              <div className="flex flex-col items-center gap-4">
+                {error && (
+                  <div className="w-full p-3 bg-red-950/40 border border-red-800/50 rounded text-sm text-red-300 mb-2">
+                    Error: {error.message}
                   </div>
                 )}
-              </div>
-            </Card>
-          );
-        })}
-
-        {/* Submit All Button - shown when all are signed */}
-        {isAllSigned && (
-          <div className="mt-4 p-4 bg-green-950/20 border border-green-800/30 rounded-lg component-fade-in">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 flex-1">
-                <CheckCircle className="w-6 h-6 text-green-500" />
-                <div className="flex-1">
-                  <h4 className="text-base font-medium text-white">
-                    {isSubmissionComplete ? 'Delegations Submitted' : 'All Delegations Signed'}
-                  </h4>
-                  <p className="text-sm text-gray-400">
-                    {isSubmittingAll
-                      ? 'Submitting to agent...'
-                      : isSubmissionComplete
-                        ? 'Ready to view your strategy'
-                        : 'Ready to submit'}
-                  </p>
-                </div>
-              </div>
-              {isSubmittingAll && <Loader2 className="w-5 h-5 text-green-500 animate-spin" />}
-              {isSubmissionComplete && onNavigateToParent && (
                 <Button
-                  onClick={onNavigateToParent}
-                  className="bg-[#FD6731] hover:bg-[#FD6731]/90 text-white font-medium px-6 py-2 rounded-lg transition-colors"
+                  onClick={handleSignPolicies}
+                  disabled={isSigning || isSubmitting}
+                  className="bg-orange-500 hover:bg-orange-600 text-white font-medium px-8 py-2 w-full"
                 >
-                  Continue
+                  {isSigning || isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {isSigning ? 'Signing Policies...' : 'Submitting...'}
+                    </>
+                  ) : (
+                    'Sign All Policies'
+                  )}
                 </Button>
-              )}
-            </div>
-          </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="bg-green-950/20 border-green-800/30 component-fade-in">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 flex-1">
+                  <CheckCircle className="w-6 h-6 text-green-500" />
+                  <div className="flex-1">
+                    <h4 className="text-base font-medium text-white">
+                      {isSubmitting ? 'Submitting Policies...' : 'Policies Signed Successfully'}
+                    </h4>
+                    <p className="text-sm text-gray-400">
+                      {isSubmitting ? 'Sending to agent...' : 'Ready to continue'}
+                    </p>
+                  </div>
+                </div>
+                {isSubmitting && <Loader2 className="w-5 h-5 text-green-500 animate-spin" />}
+                {!isSubmitting && onNavigateToParent && (
+                  <Button
+                    onClick={onNavigateToParent}
+                    className="bg-[#FD6731] hover:bg-[#FD6731]/90 text-white font-medium px-6 py-2 rounded-lg transition-colors"
+                  >
+                    Continue
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
     );
   }
 
-  // If not delegation signing, don't render anything (wallet/amount is handled by StrategyInputDisplay)
-  if (!isDelegationSigning) {
-    console.log('[WorkflowApprovalHandler] Not rendering - isDelegationSigning is false');
+  // If not policy signing, don't render anything
+  if (!isPolicySigning) {
+    console.log('[WorkflowApprovalHandler] Not rendering - isPolicySigning is false');
     console.log('[WorkflowApprovalHandler] Available artifacts:', Object.keys(artifacts || {}));
   }
   return null;
