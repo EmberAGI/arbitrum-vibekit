@@ -37,7 +37,7 @@ jobs:
 
           INTERNAL_DEVS = [
               "0xTomDaniel", "0xchepe", "dev-coda",
-              "ParastooGM", "danielkinahan", "varelaseb"
+              "danielkinahan", "varelaseb"
           ]
 
           # Skip internal contributors
@@ -109,7 +109,7 @@ jobs:
                           "title": [{"text": {"content": actor}}]
                       },
                       "Status": {
-                          "select": {"name": "Active Project"}
+                          "status": {"name": "Active Project"}
                       },
                       "Project": {
                           "rich_text": [{"text": {"content": title}}]
