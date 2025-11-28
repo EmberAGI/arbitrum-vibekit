@@ -20,3 +20,4 @@ export function initializePublicRegistry(chainConfigs: ChainConfig[]) {
 
 export { type ChainConfig, PublicEmberPluginRegistry };
 export * from './core/index.js';
+export * from './polymarket-perpetuals-plugin/index.js';
