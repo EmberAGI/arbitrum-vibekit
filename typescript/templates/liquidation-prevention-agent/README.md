@@ -9,9 +9,9 @@ The Liquidation Prevention Agent continuously monitors user positions on Aave, t
 ## Features
 
 - **🛡️ Continuous Monitoring**: Real-time health factor tracking with user-defined target thresholds
-- **🎯 Intelligent Prevention Strategies**: 
+- **🎯 Intelligent Prevention Strategies**:
   - **Supply Collateral**: Add more assets to improve health factor
-  - **Repay Debt**: Reduce borrowed amounts to lower risk  
+  - **Repay Debt**: Reduce borrowed amounts to lower risk
   - **Hybrid Approach**: Combined supply + repay for optimal results
 - **🧠 AI-Powered Strategy Selection**: LLM analyzes position and wallet to choose optimal prevention action
 - **⚡ Automatic Execution**: No warnings - directly executes transactions when health factor drops below target
@@ -29,7 +29,7 @@ The agent follows the focused skills architecture:
 liquidation-prevention-agent/
 ├── src/
 │   ├── skills/
-│   │   ├── healthMonitoring.ts        # Health factor monitoring & alerts  
+│   │   ├── healthMonitoring.ts        # Health factor monitoring & alerts
 │   │   ├── liquidationPrevention.ts   # Intelligent prevention strategies
 │   │   └── positionStatus.ts          # Position status & health checks
 │   ├── tools/
@@ -66,7 +66,7 @@ The agent uses **AI-powered strategy selection** through the `intelligentPrevent
 2. **Assesses Available Resources**: Reviews wallet balances and available tokens
 3. **LLM Strategy Selection**: Uses large language model to determine optimal approach:
    - **SUPPLY**: Add collateral when user has available tokens
-   - **REPAY**: Reduce debt when user has tokens matching borrowed assets  
+   - **REPAY**: Reduce debt when user has tokens matching borrowed assets
    - **HYBRID**: Multi-step approach combining both supply and repay operations
 
 **Automatic Execution**: Once strategy is selected, the agent executes the corresponding tools (`supplyCollateral`, `repayDebt`) with real on-chain transactions.
@@ -131,7 +131,7 @@ Edit `.env` file with your configuration:
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 EMBER_ENDPOINT=https://api.emberai.xyz/mcp
 USER_PRIVATE_KEY=your_private_key_here
-QUICKNODE_SUBDOMAIN=your_quicknode_subdomain  
+QUICKNODE_SUBDOMAIN=your_quicknode_subdomain
 QUICKNODE_API_KEY=your_quicknode_api_key
 
 # Optional - Agent Configuration
@@ -204,7 +204,7 @@ curl -X POST http://localhost:3010/invoke \
 curl -X POST http://localhost:3010/invoke \
   -H "Content-Type: application/json" \
   -d '{
-    "skillId": "health-monitoring", 
+    "skillId": "health-monitoring",
     "input": {
       "userAddress": "0x...",
       "instruction": "Monitor my health factor every 15 minutes and prevent liquidation if it drops below 1.2"
@@ -271,7 +271,7 @@ The agent automatically selects strategies based on:
 | `HEALTH_FACTOR_CRITICAL` | Display threshold for risk levels | No | `1.03` |
 | `MONITORING_INTERVAL` | Check interval (ms) | No | `900000` |
 | `AI_PROVIDER` | AI provider selection | No | `openrouter` |
-| `AI_MODEL` | AI model to use | No | `x-ai/grok-3-mini` |
+| `AI_MODEL` | AI model to use | No | `x-ai/grok-4-fast` |
 | `LLM_MODEL` | Legacy AI model setting | No | `deepseek/deepseek-chat-v3-0324:free` |
 | `PORT` | Agent server port | No | `3010` |
 

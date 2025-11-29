@@ -1,8 +1,9 @@
-import { tool } from 'ai';
-import { z } from 'zod';
+import { tool, jsonSchema } from 'ai';
+import type { JSONSchema7 } from 'json-schema';
 import type { CoreTool } from '@/lib/ai/types';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { cookies } from 'next/headers';
 import { DEFAULT_SERVER_URLS } from '../../../agents-config';
 import type { ChatAgentId } from '../../../agents-config';
@@ -26,39 +27,44 @@ import type { ChatAgentId } from '../../../agents-config';
 const URL_CHAT_IDS = new Map<string, ChatAgentId>();
 DEFAULT_SERVER_URLS.forEach((value, key) => URL_CHAT_IDS.set(value, key));
 
-const convertToZodSchema = (schema: any): z.ZodSchema => {
-  if (!schema) return z.object({});
+/**
+ * Normalize MCP input schema into a minimal Draft-07 compatible schema.
+ * - Ensures type: 'object'
+ * - Copies property keys but not inner constraints (to stay schema-agnostic)
+ * - Copies required array when present and valid
+ * - Adds $schema for draft-07 to make intent explicit
+ */
+function normalizeMcpInputSchemaToJsonSchema7(schema: any): JSONSchema7 {
+  console.log('🔍 [TOOLS] Normalizing MCP schema:', JSON.stringify(schema, null, 2));
 
-  // If it's already a Zod schema, return it
-  if (schema._def !== undefined) return schema;
+  const propertiesInput = schema?.['properties'] as Record<string, unknown> | undefined;
+  const props: Record<string, JSONSchema7> = {};
 
-  // For an object schema, convert properties
-  if (schema.type === 'object' && schema.properties) {
-    const zodProperties: { [key: string]: z.ZodTypeAny } = {};
-    Object.entries(schema.properties).forEach(
-      ([key, propSchema]: [string, any]) => {
-        switch (propSchema.type) {
-          case 'string':
-            zodProperties[key] = z.string();
-            break;
-          case 'number':
-            zodProperties[key] = z.number();
-            break;
-          case 'boolean':
-            zodProperties[key] = z.boolean();
-            break;
-          default:
-            // Default to any for complex types
-            zodProperties[key] = z.any();
-        }
-      },
-    );
-    return z.object(zodProperties);
+  if (propertiesInput && typeof propertiesInput === 'object') {
+    for (const key of Object.keys(propertiesInput)) {
+      const v = propertiesInput[key];
+      // Preserve boolean schemas (valid in Draft-07) and object schemas; otherwise fallback to empty schema
+      props[key] = {};
+      if (typeof v === 'boolean' || (v && typeof v === 'object')) {
+        props[key] = v as unknown as JSONSchema7;
+      }
+    }
   }
 
-  // Default fallback
-  return z.object({});
-};
+  const required = Array.isArray(schema?.['required'])
+    ? ([...schema['required']] as string[])
+    : undefined;
+
+  const result: JSONSchema7 = {
+    $schema: 'http://json-schema.org/draft-07/schema#',
+    type: 'object',
+    properties: props,
+    ...(required && { required }),
+  };
+
+  console.log('🔍 [TOOLS] Normalized schema:', JSON.stringify(result, null, 2));
+  return result;
+}
 
 async function getTool(serverUrl: string) {
   let mcpClient = null;
@@ -69,13 +75,18 @@ async function getTool(serverUrl: string) {
     { capabilities: { tools: {}, resources: {}, prompts: {} } },
   );
 
-  // Create StreamableHTTP transport
   let transport = null;
   if (serverUrl) {
-    transport = new StreamableHTTPClientTransport(
-      new URL(serverUrl),
-      {} // headers - empty for now
-    );
+    if (serverUrl.endsWith('/sse')) {
+      // Use SSE transport for /sse endpoints (agents using @emberai/arbitrum-vibekit-core)
+      transport = new SSEClientTransport(new URL(serverUrl));
+    } else {
+      // Use StreamableHTTP transport for /mcp endpoints (standard MCP servers)
+      transport = new StreamableHTTPClientTransport(
+        new URL(serverUrl),
+        {} // headers - empty for now
+      );
+    }
   }
 
   // Connect to the server
@@ -90,7 +101,11 @@ async function getTool(serverUrl: string) {
   let toolsResponse;
   try {
     toolsResponse = await mcpClient.listTools();
-    console.log(toolsResponse);
+    console.log('🔍 [TOOLS] toolsResponse:', toolsResponse);
+    // Debug: Log the actual input schema structure
+    if (toolsResponse.tools && toolsResponse.tools.length > 0) {
+      console.log('🔍 [TOOLS] First tool inputSchema:', JSON.stringify(toolsResponse.tools[0].inputSchema, null, 2));
+    }
   } catch (error) {
     console.error('Error discovering tools:', error);
     toolsResponse = { tools: [] }; // Fallback to empty tools array
@@ -99,12 +114,17 @@ async function getTool(serverUrl: string) {
   // Use reduce to create an object mapping tool names to AI tools
   const toolObject = toolsResponse.tools.reduce(
     (acc, mcptool) => {
-      // Convert MCP tool schema to Zod schema
+      console.log('🔍 [TOOLS] Processing tool:', mcptool.name);
+      console.log('🔍 [TOOLS] Tool inputSchema:', JSON.stringify(mcptool.inputSchema, null, 2));
+
+      // Normalize MCP schema to JSON Schema 7 format
+      const normalized = normalizeMcpInputSchemaToJsonSchema7(mcptool.inputSchema);
+      console.log('🔍 [TOOLS] Normalized schema for', mcptool.name, ':', JSON.stringify(normalized, null, 2));
+
       const aiTool = tool({
         description: mcptool.description,
-        parameters: convertToZodSchema(mcptool.inputSchema),
-        // @ts-ignore - AI SDK v5 tool types have compatibility issues with parameter inference
-        execute: async (args: Record<string, unknown>) => {
+        inputSchema: jsonSchema(normalized),
+        execute: async (args: { [x: string]: unknown }) => {
           console.log('Executing tool:', mcptool.name);
           console.log('Arguments:', args);
           console.log('MCP Client:', mcpClient);
@@ -112,13 +132,11 @@ async function getTool(serverUrl: string) {
             name: mcptool.name,
             arguments: args,
           });
-          //const result = 'chat lending USDC successfully';
           console.log('RUNNING TOOL:', mcptool.name);
           console.log(result);
-          const toolResult = { status: 'completed', result: result };
-          return toolResult;
+          return result;
         },
-      }) as any;
+      } as any);
       // Add the tool to the accumulator object, using its name as the key
       acc[mcptool.name] = aiTool;
       return acc;
@@ -127,7 +145,7 @@ async function getTool(serverUrl: string) {
   ); // Initialize with the correct type
 
   // Return the object of tools
-  console.log('toolObject =', toolObject);
+  console.log('toolObject =>>', toolObject);
   return toolObject;
 }
 
@@ -142,6 +160,11 @@ export const getTools = async (): Promise<{ [key: string]: CoreTool }> => {
   // helper that chooses override first, then config file
   const resolveUrl = (id: ChatAgentId) =>
     overrideUrl ?? DEFAULT_SERVER_URLS.get(id) ?? '';
+
+  console.log('🔍 [TOOLS] rawAgentId:', rawAgentId);
+  console.log('🔍 [TOOLS] agentId:', agentId);
+  console.log('🔍 [TOOLS] DEFAULT_SERVER_URLS:', DEFAULT_SERVER_URLS);
+  console.log('🔍 [TOOLS] resolveUrl:', resolveUrl(agentId as ChatAgentId));
 
   // "all" agents: fan-out to every URL
   if (!agentId || agentId === 'all') {
@@ -168,6 +191,7 @@ export const getTools = async (): Promise<{ [key: string]: CoreTool }> => {
 
   // single agent
   const serverUrl = resolveUrl(agentId);
+  console.log('🔍 [TOOLS] serverUrl:', serverUrl);
   if (!serverUrl) {
     // It's better to return an empty object or handle this case as per your application's needs
     // Throwing an error might be too disruptive for some use cases.
@@ -177,3 +201,15 @@ export const getTools = async (): Promise<{ [key: string]: CoreTool }> => {
   }
   return getTool(serverUrl);
 };
+
+
+
+
+
+
+
+
+
+
+
+

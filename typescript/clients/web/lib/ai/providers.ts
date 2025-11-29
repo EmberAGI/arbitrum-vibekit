@@ -29,19 +29,19 @@ export const openRouterProvider: any = isTestEnvironment
     })
   : customProvider({
       languageModels: {
-        'chat-model': openRouter('google/gemini-2.5-pro-preview', {
+        'chat-model': openRouter('x-ai/grok-4-fast', {
           reasoning: {
             exclude: true,
             effort: 'low',
           },
         }) as any,
-        'chat-model-medium': openRouter('google/gemini-2.5-pro-preview', {
+        'chat-model-medium': openRouter('x-ai/grok-4-fast', {
           reasoning: {
             effort: 'medium',
           },
         }) as any,
-        'title-model': openRouter('google/gemini-2.5-flash') as any,
-        'artifact-model': openRouter('google/gemini-2.5-flash') as any,
+        'title-model': openRouter('x-ai/grok-4-fast') as any,
+        'artifact-model': openRouter('x-ai/grok-4-fast') as any,
       },
       imageModels: {
         'small-model': xai.image('grok-2-image') as any,

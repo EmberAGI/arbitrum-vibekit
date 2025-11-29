@@ -1,13 +1,13 @@
 /**
  * Position Status Skill
- * 
+ *
  * Provides immediate position status checks and health factor queries.
  * Returns current information without setting up monitoring or automation.
- * 
+ *
  * For continuous monitoring and automatic prevention, use Health Monitoring skill.
  */
 
-import { defineSkill } from 'arbitrum-vibekit-core';
+import { defineSkill } from '@emberai/arbitrum-vibekit-core';
 import { z } from 'zod';
 import { getUserPositionsTool } from '../tools/getUserPositions.js';
 import { getWalletBalancesTool } from '../tools/getWalletBalances.js';
@@ -51,4 +51,4 @@ export const positionStatusSkill = defineSkill({
     getUserPositionsTool,        // ✅ Immediate position lookup and health status
     getWalletBalancesTool,       // ✅ Current wallet balance information
   ],
-}); 
+});

@@ -18,7 +18,7 @@ export interface TokenInfo {
 export async function loadTokenMapFromMcp(
   mcpClient: Client
 ): Promise<Record<string, Array<TokenInfo>>> {
-  const useCache = process.env.AGENT_CACHE_TOKENS === 'true';
+  const useCache = process.env['AGENT_CACHE_TOKENS'] === 'true';
   let tokensResponse: GetTokensResponse | undefined;
 
   // Try to load from cache first
@@ -49,7 +49,7 @@ export async function loadTokenMapFromMcp(
   if (!tokensResponse) {
     console.log('Fetching tokens via MCP tool call...');
     try {
-      const mcpTimeoutMs = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '30000', 10);
+      const mcpTimeoutMs = parseInt(process.env['MCP_TOOL_TIMEOUT_MS'] || '30000', 10);
       console.log(`Using MCP tool timeout: ${mcpTimeoutMs}ms`);
 
       const tokensResult = await mcpClient.callTool(
@@ -170,4 +170,4 @@ export async function loadTokenMapFromMcp(
   }
 
   return tokenMap;
-} 
+}

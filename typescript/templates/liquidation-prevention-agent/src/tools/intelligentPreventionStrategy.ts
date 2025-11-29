@@ -1,27 +1,27 @@
 /**
  * intelligentPreventionStrategy Tool
- * 
+ *
  * Analyzes user position, wallet balances, and provides strategy recommendations
  * for liquidation prevention.
  */
 
-import { createSuccessTask, createErrorTask, type VibkitToolDefinition, getAvailableProviders } from 'arbitrum-vibekit-core';
+import { createSuccessTask, createErrorTask, type VibkitToolDefinition, getAvailableProviders } from '@emberai/arbitrum-vibekit-core';
 import { z } from 'zod';
 import type { LiquidationPreventionContext } from '../context/types.js';
 import { parseUserPreferences } from '../utils/userPreferences.js';
 import { generateLiquidationPreventionData } from '../utils/liquidationData.js';
 import { supplyCollateralTool } from './supplyCollateral.js';
 import { repayDebtTool } from './repayDebt.js';
-import { generateText, type LanguageModelV1 } from 'ai';
-import { createProviderSelector } from 'arbitrum-vibekit-core';
-import { TaskState, type Part } from '@google-a2a/types';
+import { generateText } from 'ai';
+import { createProviderSelector } from '@emberai/arbitrum-vibekit-core';
+import { TaskState } from '@emberai/arbitrum-vibekit-core/google-a2a-types';
 import dotenv from 'dotenv';
 import { preventionResponseSchema } from '../schemas/prevention.js';
 
 dotenv.config();
 
 const providers = createProviderSelector({
-  openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  openRouterApiKey: process.env['OPENROUTER_API_KEY'],
 });
 
 const available = getAvailableProviders(providers);
@@ -29,7 +29,7 @@ if (available.length === 0) {
   console.error('No AI providers configured. Please set at least one provider API key.');
   process.exit(1);
 }
-const preferred = process.env.AI_PROVIDER || available[0]!;
+const preferred = process.env['AI_PROVIDER'] || available[0]!;
 const selectedProvider = providers[preferred as keyof typeof providers];
 
 // Input schema for intelligentPreventionStrategy tool
@@ -45,8 +45,8 @@ const LLM_SYSTEM_PROMPT = `
 You are a backend assistant helping manage DeFi borrowing risk.
 
 ### User Task
-The user wants to avoid liquidation by improving their health factor (HF) to a safe level.  
-You are given a snapshot of their wallet, current supplied/borrowed assets, and position summary.  
+The user wants to avoid liquidation by improving their health factor (HF) to a safe level.
+You are given a snapshot of their wallet, current supplied/borrowed assets, and position summary.
 
 Your job is to:
 1. Analyze the current Health Factor (HF) vs. the target HF.
@@ -135,17 +135,17 @@ export const intelligentPreventionStrategyTool: VibkitToolDefinition<typeof Inte
 
       const prompt = `
       ${LLM_SYSTEM_PROMPT}
-      
+
       ### User Data
       The following is the user's liquidation data in JSON format:
-      
+
       ${JSON.stringify(liquidationData)}
       `;
 
       console.log("🧠 prompt:", prompt);
 
 
-      const modelId = process.env.LLM_MODEL;
+      const modelId = process.env['LLM_MODEL'];
       console.log('🧠 LLM model ID:', modelId);
       const model = modelId
         ? selectedProvider!(modelId)
@@ -155,35 +155,25 @@ export const intelligentPreventionStrategyTool: VibkitToolDefinition<typeof Inte
         })();
 
 
-      const { response } = await generateText({
-        model,
+      const { response, text } = await generateText({
+        model: model as any,
         prompt: prompt,
         temperature: 0.7,
-        maxTokens: 4000,
       });
 
-      // const messageFromLLM = response?.messages?.[0];
-      console.log("🧾 LLM message from LLM:", response?.messages ? JSON.stringify(response?.messages) : "No messages");
+      console.log("🧾 LLM response:", response);
+      console.log("🧾 LLM response text:", text);
 
-      const llmMessage = response?.messages?.[0];
-
-      if (!llmMessage || !Array.isArray(llmMessage.content)) {
-        throw new Error("LLM did not return content as an array.");
-      }
-
-      // Find the first "text"-type content block
-      const firstTextContent = llmMessage.content.find(c => c.type === "text");
-
-      if (!firstTextContent || typeof firstTextContent.text !== "string") {
-        throw new Error("LLM content array does not contain a valid text entry.");
+      if (!text || typeof text !== "string") {
+        throw new Error("LLM did not return valid text response.");
       }
 
       let parsedJson;
       try {
-        parsedJson = JSON.parse(firstTextContent.text);
+        parsedJson = JSON.parse(text);
         console.log("🧠 Parsed JSON from LLM:", parsedJson);
       } catch (e) {
-        console.error("❌ Failed to parse LLM response as JSON:", firstTextContent.text);
+        console.error("❌ Failed to parse LLM response as JSON:", text);
         throw e;
       }
 
@@ -217,8 +207,8 @@ export const intelligentPreventionStrategyTool: VibkitToolDefinition<typeof Inte
         // Check if the result is a failed Task
         if (result && 'kind' in result && result.kind === 'task' && result.status?.state === TaskState.Failed) {
           const firstPart = result.status?.message?.parts?.[0];
-          const errorMessage = (firstPart?.kind === 'text' ? firstPart.text : undefined) || 
-            result.metadata?.error?.message || 'Unknown error';
+          const errorMessage = (firstPart?.kind === 'text' ? firstPart.text : undefined) ||
+            result.metadata?.['error']?.['message'] || 'Unknown error';
           throw new Error(`❌ ${label} failed: ${errorMessage}`);
         }
 

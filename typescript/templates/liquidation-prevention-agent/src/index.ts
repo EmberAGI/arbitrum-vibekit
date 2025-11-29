@@ -5,7 +5,7 @@
  */
 
 import 'dotenv/config';
-import { Agent, type AgentConfig, createProviderSelector, getAvailableProviders } from 'arbitrum-vibekit-core';
+import { Agent, createProviderSelector, getAvailableProviders } from '@emberai/arbitrum-vibekit-core';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { contextProvider } from './context/provider.js';
@@ -13,7 +13,7 @@ import { loadTokenMapFromMcp } from './tokenMap.js';
 
 // Provider selector initialization
 const providers = createProviderSelector({
-  openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  openRouterApiKey: process.env['OPENROUTER_API_KEY'],
   // openaiApiKey: process.env.OPENAI_API_KEY,
   // xaiApiKey: process.env.XAI_API_KEY,
   // hyperbolicApiKey: process.env.HYPERBOLIC_API_KEY,
@@ -25,14 +25,14 @@ if (available.length === 0) {
   process.exit(1);
 }
 
-const preferred = process.env.AI_PROVIDER || available[0]!;
+const preferred = process.env['AI_PROVIDER'] || available[0]!;
 const selectedProvider = providers[preferred as keyof typeof providers];
 if (!selectedProvider) {
   console.error(`Preferred provider '${preferred}' not available. Available: ${available.join(', ')}`);
   process.exit(1);
 }
 
-const modelOverride = process.env.AI_MODEL;
+const modelOverride = process.env['AI_MODEL'];
 
 // Remove agentConfig definition and import it from config.ts instead
 import { agentConfig } from './config.js';
@@ -40,22 +40,22 @@ import { agentConfig } from './config.js';
 // Configure the agent
 const agent = Agent.create(agentConfig, {
   // Runtime options
-  cors: process.env.ENABLE_CORS !== 'false',
-  basePath: process.env.BASE_PATH || undefined,
+  cors: process.env['ENABLE_CORS'] !== 'false',
+  basePath: process.env['BASE_PATH'] || undefined,
   llm: {
-    model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(process.env.LLM_MODEL || 'deepseek/deepseek-chat-v3-0324:free'),
+    model: modelOverride ? selectedProvider!(modelOverride) : selectedProvider!(process.env['LLM_MODEL'] || 'deepseek/deepseek-chat-v3-0324:free'),
   },
 });
 
 // Start the agent
-const PORT = parseInt(process.env.PORT || '3010', 10);
+const PORT = parseInt(process.env['PORT'] || '3010', 10);
 
 agent
   .start(PORT, async deps => {
     // Create manual MCP client for Ember endpoint
     let emberMcpClient: Client | null = null;
 
-    const emberEndpoint = process.env.EMBER_ENDPOINT || 'https://api.emberai.xyz/mcp';
+    const emberEndpoint = process.env['EMBER_ENDPOINT'] || 'https://api.emberai.xyz/mcp';
 
     try {
       console.log(`Connecting to MCP server at ${emberEndpoint}`);
@@ -129,4 +129,4 @@ process.on('SIGINT', async () => {
   await agent.stop();
   console.log('✅ Agent stopped successfully');
   process.exit(0);
-}); 
+});

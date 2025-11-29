@@ -1,13 +1,13 @@
 /**
  * getWalletBalances Tool
- * 
+ *
  * Fetches wallet token balances for tokens that have supply or borrow positions
  * by calling token contracts directly since getWalletBalances is not available in emberClient.
  */
 
-import { createSuccessTask, createErrorTask, type VibkitToolDefinition, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
+import { createSuccessTask, createErrorTask, type VibkitToolDefinition, parseMcpToolResponsePayload } from '@emberai/arbitrum-vibekit-core';
 import { z } from 'zod';
-import { GetWalletLendingPositionsResponseSchema } from 'ember-schemas';
+import { GetWalletLendingPositionsResponseSchema } from 'ember-api';
 import { MinimalErc20Abi, TokenBalance, ChainConfig, type LiquidationPreventionContext } from '../context/types.js';
 import {
   createPublicClient,
@@ -309,4 +309,4 @@ export const getWalletBalancesTool: VibkitToolDefinition<typeof GetWalletBalance
       );
     }
   },
-}; 
+};

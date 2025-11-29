@@ -1,11 +1,11 @@
 /**
  * User Preferences Parser
- * 
+ *
  * Simplified version that extracts only the essential preferences from user instructions.
  * Only includes properties that are actually used in the business logic.
  */
 
-import { z } from 'zod';
+// import { z } from 'zod';
 
 // Simplified user preferences interface - only properties actually used
 export interface UserPreferences {
@@ -39,7 +39,7 @@ export interface ContextDefaults {
  * Only extracts properties that are actually used in business logic
  */
 export function parseUserPreferences(instruction: string): UserPreferences {
-  const lowerInstruction = instruction.toLowerCase();
+  // const lowerInstruction = instruction.toLowerCase();
   const preferences: UserPreferences = {};
 
   // Extract target health factor (used in intelligentPreventionStrategy, monitorHealth)
@@ -90,7 +90,7 @@ export function parseUserPreferences(instruction: string): UserPreferences {
     }
   }
 
-  // Danger threshold  
+  // Danger threshold
   const dangerMatch = instruction.match(/danger.*?(?:threshold|factor).*?(\d+(?:\.\d+)?)/i);
   if (dangerMatch && dangerMatch[1]) {
     const value = parseFloat(dangerMatch[1]);
@@ -165,4 +165,4 @@ export function generatePreferencesSummary(preferences: UserPreferences): string
   }
 
   return parts.length > 0 ? parts.join(' | ') : 'Using defaults';
-} 
+}

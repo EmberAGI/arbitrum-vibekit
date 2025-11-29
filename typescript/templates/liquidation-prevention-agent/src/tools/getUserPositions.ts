@@ -1,13 +1,13 @@
 /**
  * getUserPositions Tool
- * 
+ *
  * Fetches user position data from Ember MCP server including health factors,
  * supplied amounts, borrowed amounts, and liquidation risks.
  */
 
-import { createSuccessTask, createErrorTask, type VibkitToolDefinition, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
+import { createSuccessTask, createErrorTask, type VibkitToolDefinition, parseMcpToolResponsePayload } from '@emberai/arbitrum-vibekit-core';
 import { z } from 'zod';
-import { GetWalletLendingPositionsResponseSchema } from 'ember-schemas';
+import { GetWalletLendingPositionsResponseSchema } from 'ember-api';
 import type { LiquidationPreventionContext } from '../context/types.js';
 
 // Input schema for getUserPositions tool
@@ -106,4 +106,4 @@ export const getUserPositionsTool: VibkitToolDefinition<typeof GetUserPositionsP
       );
     }
   },
-}; 
+};

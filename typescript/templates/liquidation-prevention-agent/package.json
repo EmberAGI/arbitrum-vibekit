@@ -16,15 +16,13 @@
         "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
     },
     "dependencies": {
-        "@google-a2a/types": "workspace:*",
+        "@emberai/arbitrum-vibekit-core": "catalog:",
         "@modelcontextprotocol/sdk": "catalog:",
         "@openrouter/ai-sdk-provider": "catalog:",
         "ai": "catalog:",
-        "arbitrum-vibekit-core": "workspace:*",
         "cors": "^2.8.5",
         "dotenv": "catalog:",
-        "ember-api": "workspace:^", 
-        "ember-schemas": "workspace:*",
+        "ember-api": "workspace:*",
         "express": "catalog:",
         "nanoid": "^5.0.7",
         "viem": "^2.26.3",

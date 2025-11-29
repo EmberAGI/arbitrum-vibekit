@@ -1,13 +1,13 @@
 /**
  * Health Monitoring Skill
- * 
+ *
  * Provides comprehensive health factor monitoring with automatic liquidation prevention.
  * Continuously tracks positions and automatically executes prevention strategies when needed.
- * 
+ *
  * For immediate status checks without monitoring, use Position Status skill instead.
  */
 
-import { defineSkill } from 'arbitrum-vibekit-core';
+import { defineSkill } from '@emberai/arbitrum-vibekit-core';
 import { z } from 'zod';
 import { monitorHealthTool } from '../tools/monitorHealth.js';
 
@@ -36,4 +36,4 @@ export const healthMonitoringSkill = defineSkill({
   tools: [
     monitorHealthTool,           // ✅ ONLY continuous monitoring + automatic prevention
   ],
-}); 
+});

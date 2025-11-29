@@ -4,7 +4,7 @@
  */
 
 import type { Address, LocalAccount } from 'viem';
-import type { TransactionPlan } from 'ember-schemas';
+import type { TransactionPlan } from 'ember-api';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
 export interface LiquidationPreventionContext {

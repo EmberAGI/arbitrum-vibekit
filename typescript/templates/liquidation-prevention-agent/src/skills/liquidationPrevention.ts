@@ -1,13 +1,13 @@
 /**
  * Liquidation Prevention Skill
- * 
+ *
  * Provides direct liquidation prevention actions including
  * collateral supply and debt repayment for immediate execution.
- * 
+ *
  * Note: For continuous monitoring and automatic prevention, use the Health Monitoring skill.
  */
 
-import { defineSkill } from 'arbitrum-vibekit-core';
+import { defineSkill } from '@emberai/arbitrum-vibekit-core';
 import { z } from 'zod';
 import { supplyCollateralTool } from '../tools/supplyCollateral.js';
 import { repayDebtTool } from '../tools/repayDebt.js';
@@ -38,4 +38,4 @@ export const liquidationPreventionSkill = defineSkill({
     supplyCollateralTool,
     repayDebtTool,
   ],
-}); 
+});

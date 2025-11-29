@@ -20,13 +20,13 @@ export async function contextProvider(
   console.log(`[Context] Received token map with ${Object.keys(tokenMap).length} tokens`);
 
   // Set up user account from private key
-  const userPrivateKey = process.env.USER_PRIVATE_KEY;
+  const userPrivateKey = process.env['USER_PRIVATE_KEY'];
   if (!userPrivateKey) {
     throw new Error('USER_PRIVATE_KEY not found in .env file. This is required for transaction execution.');
   }
 
-  const quicknodeSubdomain = process.env.QUICKNODE_SUBDOMAIN;
-  const quicknodeApiKey = process.env.QUICKNODE_API_KEY;
+  const quicknodeSubdomain = process.env['QUICKNODE_SUBDOMAIN'];
+  const quicknodeApiKey = process.env['QUICKNODE_API_KEY'];
   if (!quicknodeSubdomain || !quicknodeApiKey) {
     throw new Error('QUICKNODE_SUBDOMAIN and QUICKNODE_API_KEY must be set in .env file for transaction execution.');
   }
@@ -57,28 +57,28 @@ export async function contextProvider(
     executeTransaction: transactionExecutor.executeTransactions.bind(transactionExecutor),
 
     thresholds: {
-      warning: parseFloat(process.env.HEALTH_FACTOR_WARNING || '1.5'),
-      danger: parseFloat(process.env.HEALTH_FACTOR_DANGER || '1.1'),
-      critical: parseFloat(process.env.HEALTH_FACTOR_CRITICAL || '1.03'),
+      warning: parseFloat(process.env['HEALTH_FACTOR_WARNING'] || '1.5'),
+      danger: parseFloat(process.env['HEALTH_FACTOR_DANGER'] || '1.1'),
+      critical: parseFloat(process.env['HEALTH_FACTOR_CRITICAL'] || '1.03'),
     },
 
     monitoring: {
-      intervalMs: parseInt(process.env.MONITORING_INTERVAL || '900000', 10),
+      intervalMs: parseInt(process.env['MONITORING_INTERVAL'] || '900000', 10),
     },
 
     tokenMap,
 
     quicknode: {
-      subdomain: process.env.QUICKNODE_SUBDOMAIN || '',
-      apiKey: process.env.QUICKNODE_API_KEY || '',
+      subdomain: process.env['QUICKNODE_SUBDOMAIN'] || '',
+      apiKey: process.env['QUICKNODE_API_KEY'] || '',
     },
 
     loadedAt: new Date(),
 
     metadata: {
       mcpServersConnected: Object.keys(mcpClients).length,
-      environment: process.env.NODE_ENV || 'development',
-      agentVersion: process.env.AGENT_VERSION || '1.0.0',
+      environment: process.env['NODE_ENV'] || 'development',
+      agentVersion: process.env['AGENT_VERSION'] || '1.0.0',
     },
   };
 
@@ -90,4 +90,4 @@ export async function contextProvider(
   });
 
   return context;
-} 
+}

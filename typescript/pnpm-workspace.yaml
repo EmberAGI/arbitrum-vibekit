@@ -7,7 +7,7 @@ packages:
 
 catalog:
   # Core dependencies
-  zod: ^4.0.0
+  zod: ^3.25.76
   '@modelcontextprotocol/sdk': ^1.18.2
   dotenv: ^17.2.3
   ai: ^5.0.59

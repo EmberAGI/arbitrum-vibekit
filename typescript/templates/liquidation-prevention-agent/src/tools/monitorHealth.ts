@@ -10,9 +10,9 @@ import {
   createErrorTask,
   type VibkitToolDefinition,
   parseMcpToolResponsePayload,
-} from 'arbitrum-vibekit-core';
+} from '@emberai/arbitrum-vibekit-core';
 import { z } from 'zod';
-import { GetWalletLendingPositionsResponseSchema } from 'ember-schemas';
+import { GetWalletLendingPositionsResponseSchema } from 'ember-api';
 import type { LiquidationPreventionContext, MonitoringSession } from '../context/types.js';
 import { parseUserPreferences } from '../utils/userPreferences.js';
 
@@ -399,7 +399,7 @@ export const stopMonitoringSession = (userAddress: string): boolean => {
 // Helper function to stop all monitoring sessions (for graceful shutdown)
 export const stopAllMonitoringSessions = (): number => {
   let stoppedCount = 0;
-  for (const [userAddress, session] of monitoringSessions.entries()) {
+  for (const [_userAddress, session] of monitoringSessions.entries()) {
     if (session.timerId) {
       clearInterval(session.timerId);
     }

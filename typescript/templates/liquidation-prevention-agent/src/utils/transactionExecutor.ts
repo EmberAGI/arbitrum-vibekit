@@ -1,6 +1,6 @@
 /**
  * Transaction Executor Utility
- * 
+ *
  * Handles actual transaction execution using user's private key
  * Based on the swapping-agent pattern for real on-chain transactions
  */
@@ -19,7 +19,7 @@ import {
   http,
 } from 'viem';
 import { arbitrum } from 'viem/chains';
-import type { TransactionPlan } from 'ember-schemas';
+import type { TransactionPlan } from 'ember-api';
 
 interface ChainConfig {
   viemChain: typeof arbitrum;
@@ -74,13 +74,13 @@ export class TransactionExecutor {
     try {
       this.log(`Executing ${transactions.length} transaction(s) for ${actionName}...`);
       const txHashes: string[] = [];
-      
+
       for (const transaction of transactions) {
         const txHash = await this.signAndSendTransaction(transaction);
         this.log(`${actionName} transaction sent: ${txHash}`);
         txHashes.push(txHash);
       }
-      
+
       return `${actionName.charAt(0).toUpperCase() + actionName.slice(1)} successful! Transaction hash(es): ${txHashes.join(', ')}`;
     } catch (error: unknown) {
       const err = error as Error;
@@ -181,7 +181,7 @@ export class TransactionExecutor {
         if (cause instanceof ContractFunctionRevertedError) {
           const errorName = cause.reason ?? cause.shortMessage;
           revertReason = `Transaction reverted: ${errorName}`;
-          
+
           if (cause.data?.errorName === '_decodeRevertReason') {
             const hexReason = cause.data.args?.[0];
             if (hexReason && typeof hexReason === 'string' && isHex(hexReason as Hex)) {
@@ -205,4 +205,4 @@ export class TransactionExecutor {
       throw new Error(revertReason);
     }
   }
-} 
+}

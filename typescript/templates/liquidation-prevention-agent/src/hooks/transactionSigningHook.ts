@@ -1,5 +1,5 @@
-import { createSuccessTask, createErrorTask } from 'arbitrum-vibekit-core';
-import type { TransactionPlan } from 'ember-schemas';
+import { createSuccessTask, createErrorTask } from '@emberai/arbitrum-vibekit-core';
+import type { TransactionPlan } from 'ember-api';
 import type { AfterHook } from './withHooks.js';
 import type { LiquidationPreventionContext } from '../context/types.js';
 
@@ -27,17 +27,17 @@ export const transactionSigningAfterHook: AfterHook<TransactionResult, any, Liqu
 ) => {
   try {
     // Extract transactions from the result
-    const { transactions, ...otherData } = result;
-    
+    const { transactions } = result;
+
     if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
       throw new Error('No transactions to execute');
     }
 
     console.log(`🔐 [withHooks] Executing ${transactions.length} transaction(s) with secure signing...`);
-    
+
     // Use the transaction executor from context for secure signing
     const executionResult = await context.custom.executeTransaction(
-      `${args.userAddress}-transaction`, 
+      `${args.userAddress}-transaction`,
       transactions
     );
 
@@ -52,7 +52,7 @@ export const transactionSigningAfterHook: AfterHook<TransactionResult, any, Liqu
 
   } catch (error) {
     console.error('❌ [withHooks] Transaction signing/execution failed:', error);
-    
+
     return createErrorTask(
       'transaction-execution',
       error instanceof Error ? error : new Error(`Transaction execution failed: ${error}`)
@@ -64,7 +64,7 @@ export const transactionSigningAfterHook: AfterHook<TransactionResult, any, Liqu
  * Before hook for transaction validation and security checks.
  * This can be used to validate inputs before transaction preparation.
  */
-export const transactionValidationBeforeHook = async (args: any, context: any) => {
+export const transactionValidationBeforeHook = async (args: any, _context: any) => {
   // Validate required fields
   if (!args.userAddress) {
     throw new Error('User address is required for transaction execution');
@@ -75,7 +75,7 @@ export const transactionValidationBeforeHook = async (args: any, context: any) =
   }
 
   console.log(`🔍 [withHooks] Transaction validation passed for user: ${args.userAddress}`);
-  
+
   // Return processed args (no changes in this case)
   return args;
 };

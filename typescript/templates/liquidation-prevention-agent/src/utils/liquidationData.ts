@@ -12,8 +12,8 @@ import {
 import { arbitrum } from 'viem/chains';
 
 import { DATA_PROVIDER_ABI, LiquidationPreventionData, MinimalErc20Abi, PreventionConfig, type AssetData, type LiquidationPreventionContext, type PositionSummary } from '../context/types.js';
-import { parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
-import { GetWalletLendingPositionsResponseSchema } from 'ember-schemas';
+import { parseMcpToolResponsePayload } from '@emberai/arbitrum-vibekit-core';
+import { GetWalletLendingPositionsResponseSchema } from 'ember-api';
 
 // Aave configuration for Arbitrum
 const ARBITRUM_CONFIG = {
@@ -118,6 +118,27 @@ export async function getPositionAssets(
 
     const positionsData = parseMcpToolResponsePayload(positionsResult, GetWalletLendingPositionsResponseSchema);
     const positions = positionsData.positions || [];
+    console.log('positionsData =>>', positionsData);
+    console.log('positions =>>', positions);
+
+    if (positions[0]?.userReserves) {
+        console.log('userReserves =>>', positions[0].userReserves);
+        console.log(
+            'userReserves supplied =>>',
+            positions[0].userReserves.filter(
+                (reserve: any) => parseFloat(reserve.underlyingBalance) > 0
+            )
+        );
+        console.log(
+            'userReserves borrowed =>>',
+            positions[0].userReserves.filter(
+                (reserve: any) => parseFloat(reserve.variableBorrows) > 0
+            )
+        );
+    } else {
+        console.log('No userReserves found on first position.');
+    }
+
 
     if (positions.length === 0) {
         return {
@@ -169,6 +190,11 @@ export async function getPositionAssets(
                 const borrowedAmount = reserve.variableBorrows || '0';
                 const token = reserve.token;
                 const addr = token.tokenUid.address.toLowerCase();
+                console.log('addr =>>', addr);
+                console.log('token =>>', token);
+                console.log('suppliedAmount =>>', suppliedAmount);
+                console.log('borrowedAmount =>>', borrowedAmount);
+
 
                 // Add SUPPLIED asset if user has supplied collateral
                 if (parseFloat(suppliedAmount) > 0) {
@@ -214,7 +240,7 @@ export async function getPositionAssets(
 export async function getWalletAssets(
     userAddress: string,
     context: LiquidationPreventionContext,
-    borrowedTokens: string[] // List of token symbols that user is borrowing
+    // borrowedTokens: string[] // List of token symbols that user is borrowing
 ): Promise<AssetData[]> {
     console.log(`💰 Fetching wallet assets for: ${userAddress}`);
 
@@ -232,8 +258,9 @@ export async function getWalletAssets(
     }
 
     const positionsData = parseMcpToolResponsePayload(positionsResult, GetWalletLendingPositionsResponseSchema);
+    console.log('positionsData =>>', positionsData);
     const positions = positionsData.positions || [];
-
+    console.log('positions =>>', positions);
     if (positions.length === 0) {
         return [];
     }
@@ -244,6 +271,9 @@ export async function getWalletAssets(
         hasSupply: boolean;
         hasBorrow: boolean;
     }> = [];
+
+
+
 
     for (const position of positions) {
         if (position.userReserves) {
@@ -344,8 +374,9 @@ export async function generateLiquidationPreventionData(
         .filter(asset => asset.type === "BORROWED")
         .map(asset => asset.symbol);
 
+    console.log('borrowedTokens =>>', borrowedTokens);
     // Step 3: Get wallet assets
-    const walletAssets = await getWalletAssets(userAddress, context, borrowedTokens);
+    const walletAssets = await getWalletAssets(userAddress, context);
 
     // Step 4: Combine all assets
     const allAssets = [...positionAssets, ...walletAssets];
@@ -361,6 +392,7 @@ export async function generateLiquidationPreventionData(
         preventionConfig,
     };
 
+    console.log("positionSummary =>>", positionSummary);
     console.log(`✅ Generated LiquidationPreventionData:`, {
         totalAssets: allAssets.length,
         suppliedAssets: allAssets.filter(a => a.type === "SUPPLIED").length,

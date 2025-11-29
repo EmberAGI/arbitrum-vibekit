@@ -1,17 +1,17 @@
 /**
  * supplyCollateral Tool
- * 
+ *
  * Supplies collateral to Aave via Ember MCP server to improve health factor
  * and prevent liquidation.
  */
 
 
-import { createSuccessTask, createErrorTask, type VibkitToolDefinition, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
+import { type VibkitToolDefinition } from '@emberai/arbitrum-vibekit-core';
 import { z } from 'zod';
 import type { LiquidationPreventionContext } from '../context/types.js';
-import { TransactionPlan, TransactionPlanSchema, SupplyResponseSchema } from 'ember-schemas';
+// import { TransactionPlan, TransactionPlanSchema, SupplyTokensResponseSchema } from 'ember-api';
 import { parseUserPreferences } from '../utils/userPreferences.js';
-import { resolveTokenInfo, isTokenSymbol } from '../utils/tokenResolver.js';
+import { resolveTokenInfo } from '../utils/tokenResolver.js';
 import { withHooks, transactionSigningAfterHook, transactionValidationBeforeHook } from '../hooks/index.js';
 
 // Input schema for supplyCollateral tool (updated for new createLendingSupply tool)
@@ -40,7 +40,7 @@ const baseSupplyCollateralTool: VibkitToolDefinition<typeof SupplyCollateralPara
      // Resolve token address and chain info from symbol or use provided address
      let finalTokenAddress: string;
      let finalChainId: string;
-     
+
      if (args.tokenAddress) {
        // Use provided token address directly
        finalTokenAddress = args.tokenAddress;
@@ -51,7 +51,7 @@ const baseSupplyCollateralTool: VibkitToolDefinition<typeof SupplyCollateralPara
        if (!context.custom.tokenMap) {
          throw new Error('Token map not available. Cannot resolve token symbol.');
        }
-       
+
        try {
          const tokenInfo = resolveTokenInfo(
            context.custom.tokenMap,
@@ -68,19 +68,19 @@ const baseSupplyCollateralTool: VibkitToolDefinition<typeof SupplyCollateralPara
      } else {
        throw new Error('Either tokenAddress or tokenSymbol must be provided');
      }
-     
+
      // Parse user preferences from instruction (only for targetHealthFactor if needed)
      const userPrefs = parseUserPreferences(args.instruction || '');
-     
+
     const tokenIdentifier = args.tokenSymbol || finalTokenAddress;
     console.log(`💰 Supplying collateral: ${args.amount} ${tokenIdentifier} for user ${args.userAddress}`);
-     
+
      if (userPrefs.targetHealthFactor) {
        console.log(`🎯 Target Health Factor: ${userPrefs.targetHealthFactor}`);
      }
      console.log('💰 args........:', args);
-     
-     // Access Ember MCP client from custom context  
+
+     // Access Ember MCP client from custom context
      const emberClient = context.custom.mcpClient;
 
      if (!emberClient) {
@@ -95,10 +95,10 @@ const baseSupplyCollateralTool: VibkitToolDefinition<typeof SupplyCollateralPara
     console.log("args.tokenSymbol..........!!:", args.tokenSymbol);
     console.log("args.tokenAddress..........!!:", args.tokenAddress);
     console.log("args.chainId..........!!:", args.chainId);
-    
+
     // Determine the token symbol to send to the new API
     const supplyToken = args.tokenSymbol || finalTokenAddress;
-    
+
     // Call the Ember MCP server's createLendingSupply tool to get transaction plan
     const result = await emberClient.callTool({
       name: 'createLendingSupply',
@@ -122,7 +122,7 @@ const baseSupplyCollateralTool: VibkitToolDefinition<typeof SupplyCollateralPara
 
     // Parse and validate the supply response from MCP
     console.log('📋 Parsing supply response from MCP...');
-    
+
     // Handle the new response format with structuredContent
     let transactions: any[] = [];
     if (result.content && Array.isArray(result.content)) {
@@ -139,7 +139,7 @@ const baseSupplyCollateralTool: VibkitToolDefinition<typeof SupplyCollateralPara
         }
       }
     }
-    
+
     // Fallback: try to access transactions directly from result
     if (transactions.length === 0 && result.content) {
       try {
@@ -152,9 +152,9 @@ const baseSupplyCollateralTool: VibkitToolDefinition<typeof SupplyCollateralPara
         console.warn('⚠️ Could not extract transactions from response');
       }
     }
-    
+
     console.log(`📋 Received ${transactions.length} transaction(s) to execute`);
-    
+
     // Validate that we have transactions to execute
     if (transactions.length === 0) {
       throw new Error('No transactions received from createLendingSupply tool');
@@ -162,7 +162,7 @@ const baseSupplyCollateralTool: VibkitToolDefinition<typeof SupplyCollateralPara
 
      // Return transaction data for withHooks execution
      console.log(`📋 Prepared ${transactions.length} transaction(s) for secure execution via withHooks`);
-     
+
      return {
        transactions,
        tokenIdentifier,

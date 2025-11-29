@@ -1,17 +1,17 @@
 export const chatAgents = [
-  {
-    id: 'ember-aave' as const,
-    name: 'Lending',
-    description: 'AAVE lending agent',
-    suggestedActions: [
-      {
-        title: 'Deposit WETH',
-        label: 'to my balance',
-        action: 'Deposit WETH to my balance',
-      },
-      { title: 'Check', label: 'balance', action: 'Check balance' },
-    ],
-  },
+  // {
+  //   id: 'ember-aave' as const,
+  //   name: 'Lending',
+  //   description: 'AAVE lending agent',
+  //   suggestedActions: [
+  //     {
+  //       title: 'Deposit WETH',
+  //       label: 'to my balance',
+  //       action: 'Deposit WETH to my balance',
+  //     },
+  //     { title: 'Check', label: 'balance', action: 'Check balance' },
+  //   ],
+  // },
   // {
   //   id: 'ember-camelot' as const,
   //   name: 'Trading',
@@ -221,7 +221,7 @@ export const chatAgents = [
 ] as const;
 
 export const DEFAULT_SERVER_URLS = new Map<ChatAgentId, string>([
-  ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
+  // ['ember-aave', 'http://lending-agent-no-wallet:3001/sse'],
   // ['ember-camelot', 'http://swapping-agent-no-wallet:3005/sse'],
   // ['defisafety-agent', 'http://defisafety-agent:3010/sse'],
   // ['coingecko', 'http://coingecko-mcp-server:3011/mcp'], // CoinGecko MCP server

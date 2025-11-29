@@ -1,16 +1,16 @@
 /**
  * repayDebt Tool
- * 
+ *
  * Repays debt on Aave via Ember MCP server to improve health factor
  * and prevent liquidation.
  */
 
-import { createSuccessTask, createErrorTask, type VibkitToolDefinition, parseMcpToolResponsePayload } from 'arbitrum-vibekit-core';
+import { type VibkitToolDefinition } from '@emberai/arbitrum-vibekit-core';
 import { z } from 'zod';
 import type { LiquidationPreventionContext } from '../context/types.js';
-import { TransactionPlan, TransactionPlanSchema, RepayResponseSchema } from 'ember-schemas';
+// import { TransactionPlan, TransactionPlanSchema, RepayTokensResponseSchema } from 'ember-api';
 import { parseUserPreferences } from '../utils/userPreferences.js';
-import { resolveTokenInfo, isTokenSymbol } from '../utils/tokenResolver.js';
+import { resolveTokenInfo } from '../utils/tokenResolver.js';
 import { withHooks, transactionSigningAfterHook, transactionValidationBeforeHook } from '../hooks/index.js';
 
 // Input schema for repayDebt tool (updated for new createLendingRepay tool)
@@ -40,7 +40,7 @@ const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Liqui
       // Resolve token address and chain info from symbol or use provided address
       let finalTokenAddress: string;
       let finalChainId: string;
-      
+
       if (args.tokenAddress) {
         // Use provided token address directly
         finalTokenAddress = args.tokenAddress;
@@ -51,7 +51,7 @@ const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Liqui
         if (!context.custom.tokenMap) {
           throw new Error('Token map not available. Cannot resolve token symbol.');
         }
-        
+
         try {
           const tokenInfo = resolveTokenInfo(
             context.custom.tokenMap,
@@ -68,13 +68,13 @@ const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Liqui
       } else {
         throw new Error('Either tokenAddress or tokenSymbol must be provided');
       }
-      
+
       // Parse user preferences from instruction (only for targetHealthFactor if needed)
       const userPrefs = parseUserPreferences(args.instruction || '');
-      
+
       const tokenIdentifier = args.tokenSymbol || finalTokenAddress;
       console.log(`💸 Repaying debt: ${args.amount} of ${tokenIdentifier} for user ${args.userAddress}`);
-      
+
       if (userPrefs.targetHealthFactor) {
         console.log(`🎯 Target Health Factor: ${userPrefs.targetHealthFactor}`);
       }
@@ -94,10 +94,10 @@ const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Liqui
       console.log("args.tokenSymbol..........!!:", args.tokenSymbol);
       console.log("args.tokenAddress..........!!:", args.tokenAddress);
       console.log("args.chainId..........!!:", args.chainId);
-      
+
       // Determine the token symbol to send to the new API
       const repayToken = args.tokenSymbol || finalTokenAddress;
-      
+
       // Call the Ember MCP server's createLendingRepay tool to get transaction plan
       const result = await emberClient.callTool({
         name: 'createLendingRepay',
@@ -120,7 +120,7 @@ const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Liqui
 
       // Parse and validate the repay response from MCP
       console.log('📋 Parsing repay response from MCP...');
-      
+
       // Handle the new response format with structuredContent
       let transactions: any[] = [];
       if (result.content && Array.isArray(result.content)) {
@@ -137,7 +137,7 @@ const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Liqui
           }
         }
       }
-      
+
       // Fallback: try to access transactions directly from result
       if (transactions.length === 0 && result.content) {
         try {
@@ -150,9 +150,9 @@ const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Liqui
           console.warn('⚠️ Could not extract transactions from response');
         }
       }
-      
+
       console.log(`📋 Received ${transactions.length} transaction(s) to execute`);
-      
+
       // Validate that we have transactions to execute
       if (transactions.length === 0) {
         throw new Error('No transactions received from createLendingRepay tool');
@@ -160,7 +160,7 @@ const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Liqui
 
       // Return transaction data for withHooks execution
       console.log(`📋 Prepared ${transactions.length} transaction(s) for secure execution via withHooks`);
-      
+
       return {
         transactions,
         tokenIdentifier,
@@ -179,5 +179,4 @@ const baseRepayDebtTool: VibkitToolDefinition<typeof RepayDebtParams, any, Liqui
 export const repayDebtTool = withHooks(baseRepayDebtTool, {
   before: transactionValidationBeforeHook,
   after: transactionSigningAfterHook,
-}); 
- 
+});
