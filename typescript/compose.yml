@@ -1,59 +1,59 @@
 services:
-  lending-agent-no-wallet:
-    build:
-      context: ./
-      dockerfile: community/agents/lending-agent-no-wallet/Dockerfile
-    container_name: vibekit-lending-agent-no-wallet
-    env_file:
-      - path: .env
-        required: true
-      - path: community/agents/lending-agent-no-wallet/.env
-        required: false
-    ports:
-      - 3001:3001
-    restart: unless-stopped
+  # lending-agent-no-wallet:
+  #   build:
+  #     context: ./
+  #     dockerfile: community/agents/lending-agent-no-wallet/Dockerfile
+  #   container_name: vibekit-lending-agent-no-wallet
+  #   env_file:
+  #     - path: .env
+  #       required: true
+  #     - path: community/agents/lending-agent-no-wallet/.env
+  #       required: false
+  #   ports:
+  #     - 3001:3001
+  #   restart: unless-stopped
 
-  swapping-agent-no-wallet:
-    build:
-      context: ./
-      dockerfile: community/agents/swapping-agent-no-wallet/Dockerfile
-    container_name: vibekit-swapping-agent-no-wallet
-    env_file:
-      - path: .env
-        required: true
-      - path: community/agents/swapping-agent-no-wallet/.env
-        required: false
-    ports:
-      - 3005:3005
-    restart: unless-stopped
+  # swapping-agent-no-wallet:
+  #   build:
+  #     context: ./
+  #     dockerfile: community/agents/swapping-agent-no-wallet/Dockerfile
+  #   container_name: vibekit-swapping-agent-no-wallet
+  #   env_file:
+  #     - path: .env
+  #       required: true
+  #     - path: community/agents/swapping-agent-no-wallet/.env
+  #       required: false
+  #   ports:
+  #     - 3005:3005
+  #   restart: unless-stopped
 
-  coingecko-mcp-server:
-    build:
-      context: ./
-      dockerfile: community/mcp-tools/coingecko-mcp-server/Dockerfile
-    container_name: vibekit-coingecko-mcp-server
-    env_file:
-      - path: .env
-        required: true
-    ports:
-      - 3011:3011
-    restart: unless-stopped
+  # coingecko-mcp-server:
+  #   build:
+  #     context: ./
+  #     dockerfile: community/mcp-tools/coingecko-mcp-server/Dockerfile
+  #   container_name: vibekit-coingecko-mcp-server
+  #   env_file:
+  #     - path: .env
+  #       required: true
+  #   ports:
+  #     - 3011:3011
+  #   restart: unless-stopped
 
-  defisafety-agent:
-    build:
-      context: ./
-      dockerfile: templates/defisafety-agent/Dockerfile
-    container_name: vibekit-defisafety-agent
-    env_file:
-      - path: .env
-        required: true
-      - path: templates/defisafety-agent/.env
-        required: false
-    environment:
-      - PORT=3010
-    ports:
-      - 3010:3010
-    restart: unless-stopped
+  # defisafety-agent:
+  #   build:
+  #     context: ./
+  #     dockerfile: templates/defisafety-agent/Dockerfile
+  #   container_name: vibekit-defisafety-agent
+  #   env_file:
+  #     - path: .env
+  #       required: true
+  #     - path: templates/defisafety-agent/.env
+  #       required: false
+  #   environment:
+  #     - PORT=3010
+  #   ports:
+  #     - 3010:3010
+  #   restart: unless-stopped
 
   # langgraph-workflow-agent:
   #   build:
@@ -96,6 +96,23 @@ services:
   #   ports:
   #     - 3008:3008
   #   restart: unless-stopped
+
+  liquidation-prevention-agent:
+    build:
+      context: ./
+      dockerfile: templates/liquidation-prevention-agent/Dockerfile
+    container_name: vibekit-liquidation-prevention-agent
+    env_file:
+      - path: .env
+        required: true
+      - path: templates/liquidation-prevention-agent/.env
+        required: false
+    environment:
+      - PORT=3010
+    ports:
+      - 3010:3010
+    restart: unless-stopped
+
 
   # liquidity-agent-no-wallet:
   #   build:

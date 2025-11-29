@@ -14,19 +14,13 @@ import {
 } from '@/lib/db/queries';
 import {
   getMostRecentUserMessage,
+  generateUUID,
 } from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
-// import { createDocument } from '@/lib/ai/tools/create-document';
-// import { updateDocument } from '@/lib/ai/tools/update-document';
-// import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
-// import { getWeather } from '@/lib/ai/tools/get-weather';
 import { isProductionEnvironment } from '@/lib/constants';
 import { openRouterProvider } from '@/lib/ai/providers';
 import { getTools as getDynamicTools } from '@/lib/ai/tools/tool-agents';
-// import { generateChart } from '@/lib/ai/tools/generate-chart'; // Now using MCP server
-
 import type { Session } from 'next-auth';
-
 import { z } from 'zod';
 
 const ContextSchema = z.object({
@@ -37,6 +31,8 @@ type Context = z.infer<typeof ContextSchema>;
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
+  console.log('🔍 [ROUTE] POST request started');
+
   try {
     const {
       id,
@@ -50,69 +46,85 @@ export async function POST(request: Request) {
       context: Context;
     } = await request.json();
 
+    console.log('🔍 [ROUTE] Request parsed:', {
+      messageCount: messages?.length,
+      selectedChatModel,
+      context,
+      chatId: id,
+    });
+
+    // === AUTH ===
     const session: Session | null = await auth();
+    console.log('🔍 [ROUTE] Auth result:', session ? '✅ Authenticated' : '❌ No session');
 
     const validationResult = ContextSchema.safeParse(context);
-
     if (!validationResult.success) {
+      console.error('❌ [ROUTE] Context validation failed:', validationResult.error.issues);
       return new Response(JSON.stringify(validationResult.error.issues), {
         status: 400,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
       });
     }
 
     const validatedContext = validationResult.data;
+    console.log('🔍 [ROUTE] Context validated:', validatedContext);
 
-    if (!session || !session.user || !session.user.id) {
+    if (!session?.user?.id) {
+      console.error('❌ [ROUTE] Unauthorized request — missing user session');
       return new Response('Unauthorized', { status: 401 });
     }
 
+    // === USER MESSAGE ===
     const userMessage = getMostRecentUserMessage(messages);
-
     if (!userMessage) {
+      console.error('❌ [ROUTE] No user message found in request');
       return new Response('No user message found', { status: 400 });
     }
+    console.log('🔍 [ROUTE] User message retrieved:', {
+      id: userMessage.id,
+      partCount: userMessage.parts?.length,
+    });
 
+    // === CHAT LOOKUP ===
+    console.log('🔍 [ROUTE] Checking if chat exists...');
     const chat = await getChatById({ id });
+    console.log('🔍 [ROUTE] Chat lookup result:', chat ? '✅ Found' : '❌ Not found');
 
     if (!chat) {
+      console.log('🔍 [ROUTE] Creating new chat entry...');
       try {
-        const title = await generateTitleFromUserMessage({
-          message: userMessage,
-        });
-
+        const title = await generateTitleFromUserMessage({ message: userMessage });
+        console.log('✅ [ROUTE] Title generated:', title);
         await saveChat({
           id,
           userId: session.user.id,
           title,
           address: validatedContext.walletAddress || '',
         });
+        console.log('✅ [ROUTE] Chat saved successfully');
       } catch (error) {
-        console.error(
-          '[ROUTE] Error in title generation or chat saving:',
-          error,
-        );
-        throw error; // Re-throw to be caught by outer try-catch
+        console.error('❌ [ROUTE] Failed to create chat:', error);
+        throw error;
       }
+    } else if (chat.userId !== session.user.id) {
+      console.error('❌ [ROUTE] Unauthorized access to chat ID:', id);
+      return new Response('Unauthorized', { status: 401 });
     } else {
-      if (chat.userId !== session.user.id) {
-        console.log('[ROUTE] Unauthorized chat access attempt');
-        return new Response('Unauthorized', { status: 401 });
-      }
+      console.log('✅ [ROUTE] Existing chat validated for user');
     }
 
+    // === SAVE USER MESSAGE ===
+    console.log('🔍 [ROUTE] Saving user message...');
     try {
-      // Extract file attachments from message parts (v5 represents files as parts)
       const fileAttachments = userMessage.parts
-        .filter((part): part is { type: 'file'; mediaType: string; filename?: string; url: string } =>
-          part.type === 'file'
+        .filter(
+          (part): part is { type: 'file'; mediaType: string; filename?: string; url: string } =>
+            part.type === 'file'
         )
         .map((part) => ({
           url: part.url,
           name: part.filename ?? 'file',
-          size: 0, // Size not available in UIMessage parts
+          size: 0,
           type: part.mediaType,
         }));
 
@@ -128,8 +140,9 @@ export async function POST(request: Request) {
           },
         ],
       });
+      console.log('✅ [ROUTE] User message saved successfully');
     } catch (error) {
-      console.error('[ROUTE] Error saving user message:', error);
+      console.error('❌ [ROUTE] Error saving user message:', error);
       throw error;
     }
 
@@ -137,7 +150,7 @@ export async function POST(request: Request) {
     try {
       dynamicTools = await getDynamicTools();
     } catch (error) {
-      console.error('[ROUTE] Error loading dynamic tools:', error);
+      console.error('❌ [ROUTE] Error loading dynamic tools:', error);
       dynamicTools = {};
     }
 
@@ -145,26 +158,23 @@ export async function POST(request: Request) {
 
     try {
       const model = openRouterProvider.languageModel(selectedChatModel);
+      console.log('🔍 [ROUTE] Model initialized:', selectedChatModel);
 
       const systemPromptText = systemPrompt({
         selectedChatModel,
         walletAddress: validatedContext.walletAddress,
       });
 
+      console.log('🔍 [ROUTE] System prompt generated.');
+      console.log('🔍 [ROUTE] System prompt:', systemPromptText);
+
       const result = streamText({
         model,
         system: systemPromptText,
         messages: convertToModelMessages(messages),
-        // maxSteps: 20, // TODO: Check if this parameter still exists in v5
         experimental_transform: smoothStream({ chunking: 'word' }),
-        // experimental_generateMessageId: generateUUID, // TODO: Check if this exists in v5
         tools: {
-          //getWeather,
-          //createDocument: createDocument({ session }),
-          //updateDocument: updateDocument({ session }),
-          //requestSuggestions: requestSuggestions({ session }),
           ...(dynamicTools as any),
-          // generateChart, // Now handled by MCP server via dynamicTools
         },
         experimental_telemetry: {
           isEnabled: isProductionEnvironment,
@@ -172,58 +182,61 @@ export async function POST(request: Request) {
         },
       });
 
+      console.log("[ROUTE] streamText() result", result);
+
+      console.log('✅ [ROUTE] streamText() initialized successfully');
+
       return result.toUIMessageStreamResponse({
         sendReasoning: true,
         onFinish: async ({ messages }) => {
-          console.log('🔍 [ROUTE] StreamText finished');
-          if (session.user?.id) {
-            try {
-              // Find the assistant message(s) in the UI messages
-              const assistantMessages = messages.filter(
-                (message) => message.role === 'assistant',
-              );
+          console.log('🔍 [ROUTE] onFinish() triggered — assistant response ready');
 
-              if (assistantMessages.length === 0) {
-                throw new Error('No assistant message found!');
-              }
+          if (!session.user?.id) {
+            console.warn('⚠️ [ROUTE] No valid user session during save');
+            return;
+          }
 
-              // Get the last assistant message
-              const lastAssistantMessage = assistantMessages[assistantMessages.length - 1];
+          try {
+            const assistantMessages = messages.filter(
+              (message) => message.role === 'assistant',
+            );
+            console.log('🔍 [ROUTE] Assistant messages found:', assistantMessages.length);
+            console.log('🔍 [ROUTE] Assistant messages:', assistantMessages);
 
-              if (!lastAssistantMessage) {
-                throw new Error('No assistant message found!');
-              }
-
-              // Extract file attachments from message parts (v5 represents files as parts)
-              const assistantFileAttachments = lastAssistantMessage.parts
-                .filter((part): part is { type: 'file'; mediaType: string; filename?: string; url: string } =>
-                  part.type === 'file'
-                )
-                .map((part) => ({
-                  url: part.url,
-                  name: part.filename ?? 'file',
-                  size: 0, // Size not available in UIMessage parts
-                  type: part.mediaType,
-                }));
-
-              await saveMessages({
-                messages: [
-                  {
-                    id: lastAssistantMessage.id,
-                    chatId: id,
-                    role: lastAssistantMessage.role,
-                    parts: lastAssistantMessage.parts,
-                    attachments: assistantFileAttachments,
-                    createdAt: new Date(),
-                  },
-                ],
-              });
-            } catch (saveError) {
-              console.error(
-                '[ROUTE] Failed to save assistant response:',
-                saveError,
-              );
+            if (assistantMessages.length === 0) {
+              throw new Error('No assistant message found');
             }
+
+            const lastAssistantMessage = assistantMessages[assistantMessages.length - 1];
+            console.log('🔍 [ROUTE] Saving last assistant message:', lastAssistantMessage.id);
+
+            const assistantFileAttachments = lastAssistantMessage.parts
+              .filter(
+                (part): part is { type: 'file'; mediaType: string; filename?: string; url: string } =>
+                  part.type === 'file'
+              )
+              .map((part) => ({
+                url: part.url,
+                name: part.filename ?? 'file',
+                size: 0,
+                type: part.mediaType,
+              }));
+
+            await saveMessages({
+              messages: [
+                {
+                  id: lastAssistantMessage.id || generateUUID(),
+                  chatId: id,
+                  role: lastAssistantMessage.role,
+                  parts: lastAssistantMessage.parts,
+                  attachments: assistantFileAttachments,
+                  createdAt: new Date(),
+                },
+              ],
+            });
+            console.log('✅ [ROUTE] Assistant message saved successfully');
+          } catch (saveError) {
+            console.error('❌ [ROUTE] Failed to save assistant response:', saveError);
           }
         },
       });
@@ -239,7 +252,7 @@ export async function POST(request: Request) {
       throw streamError;
     }
   } catch (error) {
-    console.error('[ROUTE] Main POST error:', error);
+    console.error('❌ [ROUTE] Main POST error:', error);
     const JSONerror = JSON.stringify(error, null, 2);
     return new Response(
       `An error occurred while processing your request! ${JSONerror}`,
@@ -251,28 +264,38 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  console.log('🔍 [ROUTE] DELETE request started');
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
 
+  console.log('🔍 [ROUTE] DELETE - chatId:', id);
+
   if (!id) {
+    console.error('❌ [ROUTE] Missing chat ID in delete request');
     return new Response('Not Found', { status: 404 });
   }
 
   const session = await auth();
+  console.log('🔍 [ROUTE] DELETE - session check:', session ? '✅ Yes' : '❌ No');
 
-  if (!session || !session.user) {
+  if (!session?.user) {
     return new Response('Unauthorized', { status: 401 });
   }
 
   try {
     const chat = await getChatById({ id });
+    if (!chat) {
+      console.warn('⚠️ [ROUTE] DELETE - Chat not found');
+      return new Response('Chat not found', { status: 404 });
+    }
 
     if (chat.userId !== session.user.id) {
+      console.error('❌ [ROUTE] DELETE - Unauthorized access to chat');
       return new Response('Unauthorized', { status: 401 });
     }
 
     await deleteChatById({ id });
-
+    console.log('✅ [ROUTE] Chat deleted successfully');
     return new Response('Chat deleted', { status: 200 });
   } catch (error) {
     return new Response('An error occurred while processing your request!', {

@@ -1,2 +1,4 @@
 /onchain-actions/
+**/node-compiler-cache/
+**/node-compile-cache/
 /.artifacts/

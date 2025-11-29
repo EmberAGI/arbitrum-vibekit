@@ -10,7 +10,7 @@ packages:
 
 catalog:
   # Core dependencies
-  zod: ^4.0.0
+  zod: ^3.25.76
   '@modelcontextprotocol/sdk': ^1.18.2
   '@centrifuge/sdk': ^0.24.0
   dotenv: ^17.2.3

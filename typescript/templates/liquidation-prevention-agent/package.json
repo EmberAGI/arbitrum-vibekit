@@ -1,0 +1,47 @@
+{
+    "name": "liquidation-prevention-agent",
+    "version": "1.0.0",
+    "description": "Aave Liquidation Prevention Agent - Monitors health factors and automatically prevents liquidations using strategic interventions",
+    "type": "module",
+    "main": "dist/index.js",
+    "scripts": {
+        "build": "tsc --build",
+        "dev": "tsx src/index.ts",
+        "start": "node dist/index.js",
+        "test": "vitest run",
+        "test:watch": "vitest watch",
+        "test:run": "vitest run",
+        "inspect:npx": "pnpm run build && npx -y @modelcontextprotocol/inspector node ./dist/index.js",
+        "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
+        "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
+    },
+    "dependencies": {
+        "@emberai/arbitrum-vibekit-core": "catalog:",
+        "@modelcontextprotocol/sdk": "catalog:",
+        "@openrouter/ai-sdk-provider": "catalog:",
+        "ai": "catalog:",
+        "cors": "^2.8.5",
+        "dotenv": "catalog:",
+        "ember-api": "workspace:*",
+        "express": "catalog:",
+        "nanoid": "^5.0.7",
+        "viem": "^2.26.3",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@types/chai": "catalog:",
+        "@types/cors": "^2.8.17",
+        "@types/express": "^5.0.0",
+        "@types/mocha": "catalog:",
+        "@types/node": "catalog:",
+        "@types/sinon": "^17.0.4",
+        "chai": "catalog:",
+        "mocha": "catalog:",
+        "mocha-suppress-logs": "catalog:",
+        "prettier": "catalog:",
+        "sinon": "^20.0.0",
+        "tsx": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "catalog:"
+    }
+}

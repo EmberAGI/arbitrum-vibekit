@@ -53,7 +53,7 @@ describe('Allora Price Prediction Agent - Integration Tests', () => {
 
     agent = Agent.create(agentConfig, {
       llm: {
-        model: providers.openrouter!('x-ai/grok-3-mini'),
+        model: providers.openrouter!('x-ai/grok-4-fast'),
       },
       cors: true,
       basePath: '/api/v1',
