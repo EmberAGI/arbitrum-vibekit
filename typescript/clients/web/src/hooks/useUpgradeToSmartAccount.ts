@@ -4,10 +4,12 @@ import {
   toMetaMaskSmartAccount,
   getDeleGatorEnvironment,
 } from '@metamask/delegation-toolkit';
-import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
+import { useAccount, usePublicClient } from 'wagmi';
 import { arbitrum } from 'viem/chains';
-import { zeroAddress } from 'viem';
+import { Hex, zeroAddress } from 'viem';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSign7702Authorization } from '@privy-io/react-auth';
+import { usePrivyWalletClient } from './usePrivyWalletClient';
 
 interface UseUpgradeToSmartAccountReturn {
   smartAccount: MetaMaskSmartAccount | null;
@@ -21,8 +23,9 @@ interface UseUpgradeToSmartAccountReturn {
 export function useUpgradeToSmartAccount(): UseUpgradeToSmartAccountReturn {
   const { address } = useAccount();
   const publicClient = usePublicClient();
-  const { data: walletClient } = useWalletClient();
   const queryClient = useQueryClient();
+  const { walletClient, privyWallet } = usePrivyWalletClient();
+  const { signAuthorization } = useSign7702Authorization();
 
   // Query to get smart account and check deployment status
   const {
@@ -32,15 +35,15 @@ export function useUpgradeToSmartAccount(): UseUpgradeToSmartAccountReturn {
   } = useQuery({
     queryKey: ['smartAccount', address],
     queryFn: async () => {
-      if (!address || !publicClient || !walletClient) {
+      if (!address || !publicClient || !walletClient || !privyWallet) {
         throw new Error('Wallet not connected');
       }
 
       const account = await toMetaMaskSmartAccount({
         client: publicClient,
         implementation: Implementation.Stateless7702,
-        address,
-        signer: { walletClient },
+        address: privyWallet.address as Hex,
+        signer: { walletClient: walletClient },
       });
 
       const deployed = await account.isDeployed();
@@ -58,7 +61,7 @@ export function useUpgradeToSmartAccount(): UseUpgradeToSmartAccountReturn {
   // Mutation to upgrade to smart account
   const upgradeMutation = useMutation({
     mutationFn: async () => {
-      if (!address || !publicClient || !walletClient) {
+      if (!address || !publicClient || !walletClient || !privyWallet) {
         throw new Error('Wallet not connected');
       }
 
@@ -66,10 +69,9 @@ export function useUpgradeToSmartAccount(): UseUpgradeToSmartAccountReturn {
       const environment = getDeleGatorEnvironment(arbitrum.id);
       const contractAddress = environment.implementations.EIP7702StatelessDeleGatorImpl;
 
-      // Sign the authorization
-      const authorization = await walletClient.signAuthorization({
+      // Sign the authorization using Privy
+      const authorization = await signAuthorization({
         contractAddress,
-        executor: 'self',
       });
 
       // Submit the authorization with a dummy transaction

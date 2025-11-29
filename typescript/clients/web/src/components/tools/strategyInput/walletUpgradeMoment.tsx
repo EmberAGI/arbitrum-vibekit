@@ -35,7 +35,8 @@ export function WalletUpgradeMoment({
   rewards = [],
   chains = [],
 }: WalletUpgradeMomentProps) {
-  const { isDeployed, isLoading } = useUpgradeToSmartAccount();
+  const { isDeployed, isLoading, upgradeToSmartAccount, isUpgrading, error } =
+    useUpgradeToSmartAccount();
 
   return (
     <StrategyInfo
@@ -61,12 +62,23 @@ export function WalletUpgradeMoment({
             ✓ Wallet is ready for delegations
           </div>
         ) : (
-          <div className="w-full bg-orange-950/30 border border-orange-800/50 rounded-lg p-4 text-center">
-            <div className="text-orange-400 font-medium mb-2">Wallet Upgrade Required</div>
-            <div className="text-sm text-gray-400 leading-relaxed">
-              Your wallet needs to be upgraded to a smart contract wallet to use delegations. Please
-              upgrade your wallet through MetaMask or another compatible provider to continue.
+          <div className="w-full bg-orange-950/30 border border-orange-800/50 rounded-lg p-4">
+            <div className="text-orange-400 font-medium mb-2 text-center">
+              Wallet Upgrade Required
             </div>
+            <div className="text-sm text-gray-400 leading-relaxed mb-4 text-center">
+              Your wallet needs to be upgraded to a smart contract wallet to use delegations.
+            </div>
+            <button
+              onClick={() => upgradeToSmartAccount()}
+              disabled={isUpgrading}
+              className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-orange-800 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors"
+            >
+              {isUpgrading ? 'Upgrading...' : 'Upgrade Wallet'}
+            </button>
+            {error && (
+              <div className="mt-3 text-sm text-red-400 text-center">Error: {error.message}</div>
+            )}
           </div>
         )}
 
