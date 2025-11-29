@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import { TokenSchema } from './core.js';
 
 export const SwapCapabilitySchema = z.object({

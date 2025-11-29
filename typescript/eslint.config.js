@@ -32,7 +32,9 @@ export default tseslint.config(
       "**/*.d.ts",
       "**/coverage/**",
       "clients/web/**",
-      "src/proto/"
+      "clients/web-legacy/**",
+      "src/proto/",
+      "lib/agent-node/config/**"
     ]
   },
   eslint.configs.recommended,
@@ -184,5 +186,21 @@ export default tseslint.config(
       "no-console": "off",
     },
   },
+  {
+    files: ["lib/agent-node/src/cli/templates/**/*.ts"],
+    languageOptions: {
+      parserOptions: {
+        project: ["lib/agent-node/src/cli/templates/tsconfig.json"],
+      },
+    },
+    settings: {
+      "import/resolver": {
+        typescript: {
+          alwaysTryTypes: true,
+          project: ["lib/agent-node/src/cli/templates/tsconfig.json"],
+        },
+      },
+    },
+  },
   eslintConfigPrettier
-); 
+);

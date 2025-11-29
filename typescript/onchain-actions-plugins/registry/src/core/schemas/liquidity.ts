@@ -1,11 +1,6 @@
 import { z } from 'zod';
-import { TokenIdentifierSchema, TokenSchema, TransactionPlanSchema } from './core.js';
 
-export const LimitedLiquidityProvisionRangeSchema = z.object({
-  minPrice: z.string(),
-  maxPrice: z.string(),
-});
-export type LimitedLiquidityProvisionRange = z.infer<typeof LimitedLiquidityProvisionRangeSchema>;
+import { TokenIdentifierSchema, TokenSchema, TransactionPlanSchema } from './core.js';
 
 export const LiquidityProvisionRangeSchema = z.discriminatedUnion('type', [
   z.object({
@@ -89,6 +84,8 @@ export type WithdrawLiquidityResponse = z.infer<typeof WithdrawLiquidityResponse
 
 export const GetWalletLiquidityPositionsRequestSchema = z.object({
   walletAddress: z.string(),
+  includePrices: z.boolean().optional(),
+  positionIds: z.array(z.number()).optional(),
 });
 export type GetWalletLiquidityPositionsRequest = z.infer<
   typeof GetWalletLiquidityPositionsRequestSchema

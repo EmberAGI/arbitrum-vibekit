@@ -703,9 +703,9 @@ card:
   defaultInputModes: ['text/plain']
   defaultOutputModes: ['application/json']
 
-model:
-  provider: openrouter
-  name: anthropic/claude-sonnet-4.5
+ai:
+  modelProvider: openrouter
+  model: openai/gpt-5
 ---
 
 Base agent prompt.
@@ -721,6 +721,175 @@ Base agent prompt.
       expect(config.card.capabilities).toBeDefined();
       expect(config.card.capabilities.streaming).toBe(true);
       expect(config.card.capabilities.pushNotifications).toBe(false);
+    });
+  });
+
+  describe('Workflow Discovery Composition', () => {
+    it('should include only registry workflows referenced by skills', async () => {
+      // Given: a config workspace with workflow registry and discovered workflows
+      const configDir = createTestConfigWorkspace({
+        agentName: 'Workflow Discovery Test Agent',
+        skills: [{ id: 'skill-1', name: 'Skill 1' }],
+      });
+      tempDirs.push(configDir);
+
+      // Create discovered workflows directory structure
+      const workflowsDir = join(configDir, 'workflows');
+
+      // Create a discovered workflow with package.json (id: discovered-package)
+      const discoveredWorkflow1 = join(workflowsDir, 'discovered-package');
+      rmSync(discoveredWorkflow1, { recursive: true, force: true }); // Remove if exists
+      const { mkdirSync } = await import('fs');
+      mkdirSync(discoveredWorkflow1, { recursive: true });
+      writeFileSync(
+        join(discoveredWorkflow1, 'package.json'),
+        JSON.stringify({ name: 'discovered-package', main: 'index.js' }),
+      );
+      writeFileSync(
+        join(discoveredWorkflow1, 'index.js'),
+        'export default { id: "discovered-package" }',
+      );
+
+      // Create a discovered workflow without package.json (id: discovered-simple)
+      const discoveredWorkflow2 = join(workflowsDir, 'discovered-simple');
+      mkdirSync(discoveredWorkflow2, { recursive: true });
+      writeFileSync(
+        join(discoveredWorkflow2, 'index.ts'),
+        'export default { id: "discovered-simple" }',
+      );
+
+      // Add registry entries (allow-list) for two workflows
+      const workflowRegistryPath = join(configDir, 'workflow.json');
+      writeFileSync(
+        workflowRegistryPath,
+        JSON.stringify({
+          workflows: [
+            { id: 'registry-workflow', from: './workflows/registry.ts', enabled: true },
+            { id: 'discovered-package', from: './workflows/custom-path.js', enabled: false }, // Overlap
+          ],
+        }),
+      );
+
+      // Update skill to include only allowed IDs
+      const skill1Path = join(configDir, 'skills', 'skill-1.md');
+      writeFileSync(
+        skill1Path,
+        `---
+skill:
+  id: skill-1
+  name: Skill 1
+  description: 'Test skill'
+  tags: [test]
+
+workflows:
+  include: ['registry-workflow', 'discovered-package']
+---
+
+Skill 1 content.
+`,
+        'utf-8',
+      );
+
+      const manifestPath = join(configDir, 'agent.manifest.json');
+
+      // When: loading agent config
+      const config = await loadAgentConfig(manifestPath);
+
+      // Then: only registry-listed and skill-included workflows should appear
+      expect(config.workflows).toBeDefined();
+      expect(config.workflows.length).toBe(2);
+
+      // Registry workflow should be included with its entry fields
+      const registryWorkflow = config.workflows.find((w) => w.id === 'registry-workflow');
+      expect(registryWorkflow).toBeDefined();
+      expect(registryWorkflow?.entry.from).toBe('./workflows/registry.ts');
+      expect(registryWorkflow?.usedBySkills).toContain('skill-1');
+
+      // Overlap: registry should override discovered for same ID
+      const overlapWorkflow = config.workflows.find((w) => w.id === 'discovered-package');
+      expect(overlapWorkflow).toBeDefined();
+      expect(overlapWorkflow?.entry.from).toBe('./workflows/custom-path.js'); // Registry path
+      expect(overlapWorkflow?.entry.enabled).toBe(false); // Registry enabled state
+
+      // Discovered-only (not in registry) is NOT eligible even if present on disk
+      expect(config.workflows.find((w) => w.id === 'discovered-simple')).toBeUndefined();
+    });
+
+    it('should give registry workflows precedence over discovered', async () => {
+      // Given: a config workspace with conflicting registry and discovered workflows
+      const configDir = createTestConfigWorkspace({
+        agentName: 'Workflow Precedence Test Agent',
+        skills: [{ id: 'skill-1', name: 'Skill 1' }],
+      });
+      tempDirs.push(configDir);
+
+      // Create discovered workflow file
+      const workflowsDir = join(configDir, 'workflows');
+      const discoveredWorkflow = join(workflowsDir, 'shared-workflow');
+      const { mkdirSync } = await import('fs');
+      mkdirSync(discoveredWorkflow, { recursive: true });
+      writeFileSync(
+        join(discoveredWorkflow, 'index.ts'),
+        'export default { id: "shared-workflow" }',
+      );
+
+      // Create registry with same workflow ID but different configuration
+      const workflowRegistryPath = join(configDir, 'workflow.json');
+      writeFileSync(
+        workflowRegistryPath,
+        JSON.stringify({
+          workflows: [
+            { id: 'shared-workflow', from: './workflows/registry-version.ts', enabled: false },
+          ],
+        }),
+      );
+
+      // Include via skill
+      const skill1Path = join(configDir, 'skills', 'skill-1.md');
+      writeFileSync(
+        skill1Path,
+        `---
+skill:
+  id: skill-1
+  name: Skill 1
+  description: 'Test skill'
+  tags: [test]
+workflows:
+  include: ['shared-workflow']
+---
+`,
+      );
+
+      const manifestPath = join(configDir, 'agent.manifest.json');
+
+      // When: loading agent config
+      const config = await loadAgentConfig(manifestPath);
+
+      // Then: registry version should win
+      const sharedWorkflow = config.workflows.find((w) => w.id === 'shared-workflow');
+      expect(sharedWorkflow).toBeDefined();
+      expect(sharedWorkflow?.entry.from).toBe('./workflows/registry-version.ts');
+      expect(sharedWorkflow?.entry.enabled).toBe(false);
+    });
+
+    it('should error when no registry exists', async () => {
+      // Given: a config workspace with no workflow.json
+      const configDir = createTestConfigWorkspace({
+        agentName: 'Discovery Only Test Agent',
+        skills: [],
+      });
+      tempDirs.push(configDir);
+
+      // Remove workflow.json if it exists
+      const workflowRegistryPath = join(configDir, 'workflow.json');
+      if (existsSync(workflowRegistryPath)) {
+        rmSync(workflowRegistryPath);
+      }
+
+      const manifestPath = join(configDir, 'agent.manifest.json');
+
+      // When/Then: loading agent config should throw
+      await expect(loadAgentConfig(manifestPath)).rejects.toThrow(/Workflow registry not found/);
     });
   });
 

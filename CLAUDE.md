@@ -67,10 +67,10 @@ Commands (`.rulesync/commands/*.md`):
 
 ```yaml
 ---
-description: 'Brief description'
-targets: ['*']
-allowed-tools: ['Bash', 'Read', 'Write', 'Edit', 'Grep', 'Glob', 'Task']
-argument-hint: '(optional) argument hint'
+description: "Brief description"
+targets: ["*"]
+allowed-tools: ["Bash", "Read", "Write", "Edit", "Grep", "Glob", "Task"]
+argument-hint: "(optional) argument hint"
 ---
 ```
 
@@ -79,7 +79,7 @@ Subagents (`.rulesync/subagents/*.md`):
 ```yaml
 ---
 name: agent-name
-targets: ['*']
+targets: ["*"]
 description: When to use this agent
 claudecode:
   model: sonnet # or opus
@@ -92,9 +92,9 @@ Rules (`.rulesync/rules/*.md`):
 ```yaml
 ---
 root: true # for root.md only
-targets: ['*']
-description: 'Rule description'
-globs: ['**/*']
+targets: ["*"]
+description: "Rule description"
+globs: ["**/*"]
 ---
 ```
 
@@ -117,6 +117,7 @@ globs: ['**/*']
 **CRITICAL: NEVER maintain backwards compatibility. This is an internal codebase, not a public library.**
 
 When refactoring:
+
 - ✅ Update ALL call sites immediately
 - ✅ Make breaking changes directly
 - ❌ NO compatibility aliases, re-exports, or type aliases (e.g., `type OldName = NewName`)
@@ -125,11 +126,15 @@ When refactoring:
 
 ```typescript
 // ❌ WRONG
-export const newName = () => { /* ... */ };
+export const newName = () => {
+  /* ... */
+};
 export const oldName = newName; // NO!
 
 // ✅ CORRECT - rename and update all call sites
-export const newName = () => { /* ... */ };
+export const newName = () => {
+  /* ... */
+};
 ```
 
 ### Schema Validation (Zod)
@@ -241,10 +246,14 @@ Approach: [current attempt]
 
 ### Debugging Tests
 
-- **Console logs are suppressed during tests by default**. To see console.log/console.error output:
-  - Run tests with `DEBUG_TESTS=1` environment variable: `DEBUG_TESTS=1 pnpm test:int`
+- **Console logs are suppressed during tests by default**. To control test output visibility:
+  - Use the `LOG_LEVEL` environment variable with one of these values:
+    - `LOG_LEVEL=error` - Show only error logs: `LOG_LEVEL=error pnpm test:int`
+    - `LOG_LEVEL=warn` - Show errors and warnings: `LOG_LEVEL=warn pnpm test:int`
+    - `LOG_LEVEL=debug` - Show all logs (log, error, warn, debug): `LOG_LEVEL=debug pnpm test:int`
+    - Default (no flag) - Suppress all console output
   - This is essential when debugging failing tests to see adapter logs and error messages
-  - The suppression is configured in `tests/setup/vitest.setup.ts`
+  - The log level control is configured in `tests/setup/vitest.base.setup.ts`
 - **View mock file contents**: Use `pnpm view:mock <service> <mock-name>` to decode and display mock data
   - Example: `pnpm view:mock squid squid-route-1-137-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48-0x2791bca1f2de4661ed88a30c99a7a9449aa84174`
   - The service parameter is the provider name (e.g., squid, dune, birdeye)

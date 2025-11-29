@@ -184,8 +184,8 @@ We recommend modifying the [`quickstart-agent`](https://github.com/EmberAGI/arbi
    > If you are contributing an agent template, make sure to create it in the [`community`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community) directory.
 
    ```bash
-   cp -r typescript/templates/quickstart-agent typescript/community/my-custom-agent
-   cd typescript/community/my-custom-agent
+   cp -r typescript/templates/quickstart-agent typescript/community/agents/my-custom-agent
+   cd typescript/community/agents/my-custom-agent
    ```
 
 2. Update Package Configuration

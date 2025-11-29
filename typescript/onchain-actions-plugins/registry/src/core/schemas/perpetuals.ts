@@ -1,11 +1,16 @@
 import { z } from 'zod';
+
 import { TransactionPlanSchema, TokenIdentifierSchema } from './core.js';
-import { DecreasePositionSwapType, OrderType } from '@gmx-io/sdk/types/orders';
 
 // Enums
-export const DecreasePositionSwapTypeSchema = z.nativeEnum(DecreasePositionSwapType);
+export const DecreasePositionSwapTypeSchema = z.enum([
+  'NoSwap',
+  'SwapPnlTokenToCollateralToken',
+  'SwapCollateralTokenToPnlToken',
+]);
+export type DecreasePositionSwapType = z.infer<typeof DecreasePositionSwapTypeSchema>;
 
-export const PositionSideSchema = z.union([z.literal('long'), z.literal('short')]);
+export const PositionSideSchema = z.enum(['long', 'short']);
 
 export type PositionSide = z.infer<typeof PositionSideSchema>;
 
@@ -40,6 +45,19 @@ export type PerpetualsPosition = z.infer<typeof PositionSchema>;
 
 export const PositionsDataSchema = z.array(PositionSchema);
 
+export const OrderTypeSchema = z.enum([
+  'MarketSwap',
+  'LimitSwap',
+  'MarketIncrease',
+  'LimitIncrease',
+  'MarketDecrease',
+  'LimitDecrease',
+  'StopLossDecrease',
+  'Liquidation',
+  'StopIncrease',
+]);
+export type OrderType = z.infer<typeof OrderTypeSchema>;
+
 // Order Schema
 export const OrderSchema = z.object({
   chainId: z.string(),
@@ -61,7 +79,7 @@ export const OrderSchema = z.object({
   updatedAtTime: z.string(),
   isFrozen: z.boolean(),
   positionSide: PositionSideSchema,
-  orderType: z.nativeEnum(OrderType),
+  orderType: OrderTypeSchema,
   shouldUnwrapNativeToken: z.boolean(),
   autoCancel: z.boolean(),
   data: z.string().optional(),

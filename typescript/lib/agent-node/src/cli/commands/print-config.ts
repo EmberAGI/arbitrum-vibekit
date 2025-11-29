@@ -6,7 +6,9 @@
 import { resolve } from 'node:path';
 import { URL } from 'node:url';
 
+import { loadAgentBase } from '../../config/loaders/agent-loader.js';
 import { loadAgentConfig } from '../../config/orchestrator.js';
+import { resolveConfigDirectory } from '../../config/runtime/config-dir.js';
 import {
   extractGuardrails,
   extractToolPolicies,
@@ -20,6 +22,53 @@ export interface PrintConfigOptions {
   format?: 'json' | 'yaml';
   redact?: boolean;
   prompt?: 'summary' | 'full';
+}
+
+/**
+ * Extract ERC-8004 extension info from agent card
+ */
+function extractERC8004Info(card: {
+  capabilities?: { extensions?: Array<{ uri: string; params?: Record<string, unknown> }> };
+}): {
+  enabled: boolean;
+  canonicalCaip10?: string;
+  identityRegistry?: string;
+  registrationUri?: string;
+  supportedTrustCount?: number;
+} {
+  const extension = card.capabilities?.extensions?.find(
+    (ext) => ext.uri === 'https://eips.ethereum.org/EIPS/eip-8004',
+  );
+
+  if (!extension) {
+    return { enabled: false };
+  }
+
+  const params = extension.params;
+  const result: {
+    enabled: boolean;
+    canonicalCaip10?: string;
+    identityRegistry?: string;
+    registrationUri?: string;
+    supportedTrustCount?: number;
+  } = { enabled: true };
+
+  if (params && typeof params === 'object') {
+    if (typeof params['canonicalCaip10'] === 'string') {
+      result.canonicalCaip10 = params['canonicalCaip10'];
+    }
+    if (typeof params['identityRegistry'] === 'string') {
+      result.identityRegistry = params['identityRegistry'];
+    }
+    if (typeof params['registrationUri'] === 'string') {
+      result.registrationUri = params['registrationUri'];
+    }
+    if (Array.isArray(params['supportedTrust'])) {
+      result.supportedTrustCount = params['supportedTrust'].length;
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -55,7 +104,7 @@ function redactSecrets(obj: unknown): unknown {
 }
 
 export async function printConfigCommand(options: PrintConfigOptions = {}): Promise<void> {
-  const configDir = resolve(process.cwd(), options.configDir ?? 'config');
+  const { configDir } = resolveConfigDirectory(options.configDir);
   const manifestPath = resolve(configDir, 'agent.manifest.json');
   const promptMode = options.prompt ?? 'summary';
 
@@ -96,12 +145,16 @@ export async function printConfigCommand(options: PrintConfigOptions = {}): Prom
       ...(promptMode === 'full' ? { content: composedConfig.prompt.content } : {}),
     };
 
+    // Extract ERC-8004 extension info
+    const erc8004Info = extractERC8004Info(sanitizedAgentCard);
+
     const output = {
       summary: {
         skills: sanitizedAgentCard.skills?.length ?? 0,
         mcpServers: composedConfig.mcpServers.length,
         workflows: composedConfig.workflows.length,
         promptMode,
+        erc8004: erc8004Info,
       },
       agentCard: {
         protocolVersion: sanitizedAgentCard.protocolVersion,
@@ -166,6 +219,36 @@ export async function printConfigCommand(options: PrintConfigOptions = {}): Prom
       });
     } catch {
       // ignore URL parse issues in diagnostics
+    }
+
+    // Compute Agent Card hosting URL diagnostics from routing overrides
+    try {
+      const agentPath = resolve(configDir, 'agent.md');
+      const agentBase = loadAgentBase(agentPath);
+      const routing = agentBase.frontmatter.routing ?? {};
+      const agentCardOriginOverride = routing.agentCardOrigin;
+      const agentCardPath = routing.agentCardPath ?? '/.well-known/agent-card.json';
+
+      const baseOrigin = new URL(sanitizedAgentCard.url).origin;
+      const originForAgentCard =
+        agentCardOriginOverride && typeof agentCardOriginOverride === 'string'
+          ? agentCardOriginOverride
+          : baseOrigin;
+      const effectiveAgentCardUrl = `${originForAgentCard}${agentCardPath}`;
+
+      Object.assign(output, {
+        agentCardUrlDiagnostics: {
+          origin: originForAgentCard,
+          path: agentCardPath,
+          effectiveAgentCardUrl,
+          sources: {
+            origin: agentCardOriginOverride ? 'routing.agentCardOrigin' : 'origin(card.url)',
+            path: routing.agentCardPath ? 'routing.agentCardPath' : 'default',
+          },
+        },
+      });
+    } catch {
+      // ignore routing diagnostics failures
     }
 
     if (options.format === 'yaml') {

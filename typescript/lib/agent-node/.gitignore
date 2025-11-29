@@ -32,6 +32,8 @@ out/
 .tmp/
 .temp/
 .cache/
+*.tgz
+*.zip
 
 # Framework outputs
 .next/
@@ -53,6 +55,7 @@ serverless/
 .env.*
 !.env.example
 !.env.test.example
+!src/cli/templates/config-workspace/workflows/sample-package/.env.test
 
 # IDE/editor
 .DS_Store

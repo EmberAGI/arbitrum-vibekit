@@ -1,7 +1,7 @@
 ![Graphic](img/Banner.png)
 
 <p align="center">
-   &nbsp&nbsp <a href="https://docs.emberai.xyz/vibekit/introduction">Documentation </a> &nbsp&nbsp | &nbsp&nbsp <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/CONTRIBUTIONS.md"> Contributions </a> &nbsp&nbsp | &nbsp&nbsp <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates"> Agent Templates</a>  &nbsp&nbsp |  &nbsp&nbsp   <a href="https://www.emberai.xyz/"> Ember AI</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://discord.com/invite/bgxWQ2fSBR"> Support Discord </a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://t.me/EmberChat"> Ember Telegram</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://x.com/EmberAGI"> 𝕏 </a> &nbsp&nbsp
+   &nbsp&nbsp <a href="https://docs.emberai.xyz/vibekit/introduction">Documentation </a> &nbsp&nbsp | &nbsp&nbsp <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/CONTRIBUTIONS.md"> Contributions </a> &nbsp&nbsp | &nbsp&nbsp <a href="https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node"> Agent Node</a>  &nbsp&nbsp |  &nbsp&nbsp   <a href="https://www.emberai.xyz/"> Ember AI</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://discord.com/invite/bgxWQ2fSBR"> Support Discord </a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://t.me/EmberChat"> Ember Telegram</a>  &nbsp&nbsp | &nbsp&nbsp  <a href="https://x.com/EmberAGI"> 𝕏 </a> &nbsp&nbsp
 </p>
 
 ## 🧭 Table of Contents
@@ -17,7 +17,21 @@
 
 Welcome to Vibekit, the polyglot toolkit for vibe coding smart, autonomous DeFi agents that can perform complex on-chain operations. Whether you're automating trades, managing liquidity, or integrating with blockchain data, Vibekit makes it simple to create intelligent agents that understand natural language and execute sophisticated workflows.
 
-At its core, Vibekit uses the Model Context Protocol (MCP) to standardize how agents connect with tools and data, with built-in Agent2Agent (A2A) integration enabling seamless collaboration. The Ember Plugin System extends this foundation with a modular architecture for DeFi protocols, providing standardized entity mapping, comprehensive type safety, and intelligent routing for optimized execution across multiple protocols.
+### Core Features
+
+- **Agent Node Framework**: Modern config-driven framework with full A2A protocol compliance, generator-based workflows, and embedded wallet support for building production-ready autonomous agents
+
+- **Model Context Protocol (MCP)**: Standardized integration layer for connecting agents with tools and external data sources, enabling modular and extensible agent capabilities. Check out Ember's [MCP Playground](https://mcp.emberai.xyz/) to learn more
+
+- **X402 Payment Protocol**: HTTP-native payment infrastructure for autonomous agent commerce, supporting micropayments and service monetization
+
+- **Agent-to-Agent (A2A) Communication**: Built-in protocol support enabling seamless collaboration and communication between multiple agents
+
+- **EIP-8004 On-Chain Registration**: Decentralized agent identity registration following the EIP-8004 standard, enabling verifiable agent ownership, discoverability through on-chain registries, and cross-platform compatibility
+
+- **Composable DeFi Workflows**: Workflow system enabling multi-step operations with pause/resume capabilities, allowing agents to orchestrate complex DeFi strategies across protocols
+
+- **Ember Plugin System**: Modular architecture for DeFi protocols with standardized entity mapping, comprehensive type safety, and intelligent routing for optimized execution across multiple protocols
 
 Here's an overview of how everything fits together:
 
@@ -40,13 +54,14 @@ arbitrum-vibekit/
 │   ├── clients/                    # Client applications
 │   │   └── web/                    # Vibekit frontend
 │   ├── templates/                  # Official Vibekit agent templates
-│   ├── community/                  # Community-contributed agent templates
+│   ├── community/                  # Community contributions
+│   │   ├── agents/                 # Community-contributed agent templates
+│   │   └── mcp-tools/              # Community MCP tool server implementations
 │   ├── lib/                        # Core framework libraries such as MCP tools, Ember API, etc.
 │   │   ├── a2a-types/              # Agent-to-Agent type definitions
-│   │   ├── agent-node/             # Agent Node framework (v3.0+) - Config-driven A2A-compliant agents
+│   │   ├── agent-node/             # Agent Node framework (v3.0+) - Config-driven A2A-compliant agents with X402 payments
 │   │   ├── ember-api/              # Ember AI API client
 │   │   ├── ember-schemas/          # Schema definitions
-│   │   ├── community-mcp-tools/   # Community MCP tool server implementations
 │   │   └── test-utils/             # Testing utilities and helpers
 │   └── onchain-actions-plugins/    # Ember plugin system
 ├── CHANGELOG.md
@@ -58,155 +73,95 @@ arbitrum-vibekit/
 
 ### Key Directories
 
-- **[`agent-node/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node)**: The modern config-driven agent framework with full A2A protocol compliance, generator-based workflows, and embedded wallet support. This is the recommended framework for building new agents.
+- **[`agent-node/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node)**: The modern config-driven agent framework with full A2A protocol compliance, generator-based workflows, embedded wallet support, and X402 payment protocol integration for autonomous agent commerce. This is the recommended framework for building new agents.
 
 - **[`templates/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates)**: Official Vibekit agent templates featuring production-ready implementations with skills, tools, hooks, and modern deployment patterns. These serve as reference implementations for building your own agents.
 
-- **[`community/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community)**: Community-contributed agent templates and external integrations. This is where developers can contribute their own specialized agents to expand Vibekit's ecosystem.
+- **[`community/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community)**: Community contributions including agent templates and MCP tool server implementations. This is where developers can contribute their own specialized agents and tools to expand Vibekit's ecosystem.
 
-- **[`clients/web`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web)**: Vibekit web frontend, featuring wallet integration, agent chat interface, and real-time MCP communication for DeFi agent interactions.
-
-- **[`community-mcp-tools`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/community-mcp-tools)**: Community MCP tool server implementations, providing standardized external data access through the Model Context Protocol.
+- **[`clients/web`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web)**: Modern chat interface for interacting with AI agents, enabling Agent-to-Agent communication, workflow orchestration, and real-time messaging through an intuitive web interface.
 
 - **[`onchain-actions-plugins/`](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/onchain-actions-plugins)**: The Ember Plugin System providing a registry for on-chain action plugins and smart contract integrations with extensible architecture for adding new blockchain protocols.
 
 ## ⚡ Quickstart
 
-Follow these steps to build and run DeFi agents:
+[Agent Node](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node) is Vibekit's modern framework for building production-ready autonomous agents with no coding required. Simply chat with your agent in natural language to execute complex DeFi strategies, orchestrate multi-step operations, and communicate with other agents. Follow the steps below to get started:
 
 ### Prerequisites
 
-Make sure you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) with Docker Compose v2.24 or greater installed on your system.
+Before you begin, ensure you have:
 
-> [!TIP]
-> If you are on an M-series Mac, you need to install Docker using the [dmg package](https://docs.docker.com/desktop/setup/install/mac-install/) supplied officially by Docker rather than through Homebrew or other means to avoid build issues.
+1. Node.js 18+
+2. AI Provider API Key (from OpenRouter, OpenAI, xAI, or Hyperbolic)
 
-### Get the Code
+### 1. Initialize Config Workspace
 
-To get started, clone the repository through command line or your preferred IDE:
-
-```
-git clone https://github.com/EmberAGI/arbitrum-vibekit.git &&
-cd arbitrum-vibekit
-```
-
-### Run DeFi Agents
-
-The swapping and lending agents start automatically when you launch the Vibekit frontend. Follow the steps below to get everything up and running.
-
-#### Configure Environment Variables
-
-Navigate to the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory and create a `.env` file by copying the `.env.example` and filling in the required values:
+> [!NOTE]
+> You can initialize Agent Node anywhere on your system. To take advantage of Vibekit's offered tools and capabilities, we recommend creating your agent node in the [community agent directory](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/community/agents).
 
 ```bash
-cd typescript &&
-cp .env.example .env
+npx -y @emberai/agent-node@latest init
 ```
 
-At a minimum, you need:
+> [!NOTE]
+> During initialization, you'll be prompted with optional EIP-8004 registration configuration for on-chain agent identity. See the [Agent Node documentation](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node#on-chain-agent-registration) for details on these prompts.
 
-- Your preferred AI provider API key (e.g., `OPENROUTER_API_KEY`, `OPENAI_API_KEY`)
-- Generate a secure `AUTH_SECRET` (you can use https://generate-secret.vercel.app/32 or `openssl rand -base64 32`)
+This creates a `config/` directory with:
 
-#### Start Services:
+- `agent.md` - Base agent configuration including system prompt, model settings, A2A protocol card definition, and EIP-8004 registration details
+- `agent.manifest.json` - Skill composition settings
+- `skills/` - Directory for skill modules (includes `general-assistant.md` and `ember-onchain-actions.md`)
+- `workflows/` - Directory for custom workflow implementations (includes `sample-package/` and `simple-script/` examples)
+- `mcp.json` - MCP server registry
+- `workflow.json` - Workflow plugin registry
+- `README.md` - Config workspace documentation
+
+### 2. Run the Server
+
+Smart-start chat mode (connects to running agent or starts new server):
 
 ```bash
-# Start the web frontend and default agents
-docker compose up
+npx -y @emberai/agent-node@latest
 ```
 
-> [!WARNING]
-> If you previously ran `docker compose up` with an older version of Vibekit and encounter frontend or database-related errors, clear your browser cache and run the following command in your terminal:
->
-> ```bash
-> docker compose down && docker volume rm typescript_db_data && docker compose build web --no-cache && docker compose up
-> ```
+### 3. Time to Profit!
 
-#### Access the Web Interface:
-
-Once all services are running, open your browser and navigate to http://localhost:3000. To be able to chat with the agents, you need to connect your wallet first. Click on "Connect Wallet" to get started:
-
-<p align="left">
-  <img src="img/wallet.png" width="900px" alt="wallet"/>
-</p>
-
-After setting up your wallet, you'll see the Vibekit web interface where you can explore different agent capabilities:
-
-<p align="left">
-  <img src="img/frontend.png" width="900px" alt="frontend"/>
-</p>
+You can now build and execute any DeFi strategy through simple conversation with the Agent Node.
 
 ## 🔧 Build Your Own Agent
 
-To build your own agent, we recommend using our [Quickstart Agent template](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/templates/quickstart-agent). It provides all the necessary boilerplate code so you can start building right away. Follow these steps to integrate and run the Quickstart Agent:
+Once you have Agent Node running, customizing your agent is as simple as editing configuration files. Your `config/` directory contains everything needed to define your agent's personality, capabilities, and behavior.
 
-### Enable the Quickstart Agent in the Frontend
+### Key Configuration Files
 
-In the [agents-config.ts](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/clients/web/agents-config.ts) file, uncomment the agent's configuration in two places:
+**`agent.md`** - Your agent's core identity and system prompt. Modify this to:
 
-```typescript
-...
-  {
-    id: 'quickstart-agent-template' as const,
-    name: 'Quickstart',
-    description: 'Quickstart agent',
-    suggestedActions: [],
-  },
-...
-```
+- Define your agent's personality and expertise (trading specialist, yield farmer, etc.)
+- Set AI model preferences (OpenAI, Anthropic, xAI, etc.)
+- Configure A2A protocol card for agent-to-agent communication
+- Set up EIP-8004 on-chain registration details
 
-```typescript
-...
-  ['quickstart-agent-template', 'http://quickstart-agent-template:3007/sse'],
-...
-```
+**`skills/`** - Modular capabilities that compose your agent's skillset:
 
-### Add the Agent to Docker Compose
+- `general-assistant.md`: Basic conversational and reasoning abilities
+- `ember-onchain-actions.md`: DeFi operations (swaps, lending, staking, etc.)
+- Add custom skills by creating new `.md` files with specific tool access
 
-In the [docker compose](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/typescript/compose.yml) file, uncomment the service definition for the Quickstart Agent:
+**`workflows/`** - Custom multi-step operations for complex strategies:
 
-```yaml
----
-quickstart-agent-template:
-  build:
-    context: ./
-    dockerfile: templates/quickstart-agent/Dockerfile
-  container_name: vibekit-quickstart-agent-template
-  env_file:
-    - path: .env
-      required: true
-    - path: templates/quickstart-agent/.env
-      required: false
-  ports:
-    - 3007:3007
-  restart: unless-stopped
-```
+- `sample-package/`: Package-based workflow with dependencies and src/index.ts
+- `simple-script/`: Simple workflow without dependencies
+- Create package-based workflows for sophisticated DeFi automation with their own dependencies
 
-### Configure the Agent's Environment
+**`agent.manifest.json`**: Controls which skills and workflows are active
 
-Navigate to the agent's directory and create a local `.env` by copying the`.env.example` file. Make sure to populate the `.env` file with your API keys and configurations:
+**`mcp.json`**: Registry for Model Context Protocol servers and tools
 
-```bash
-cd typescript/templates/quickstart-agent && cp .env.example .env
-```
+**`workflow.json`**: Registry for custom workflow plugins
 
-### Rebuild and Restart Services
+### Advanced Configuration
 
-Navigate to the [typescript](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript) directory, rebuild the web application and restart all services to apply the changes:
-
-```bash
-cd ../.. &&
-docker compose build web --no-cache && docker compose up
-```
-
-The Quickstart Agent is now accessible through the web frontend:
-
-<p align="left">
-  <img src="/img/quickstart-agent.png" width="900px" alt="quickstart-agent"/>
-</p>
-
-> [!TIP]
-> To learn more about Vibekit's agent configurations, refer to [this guide](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/clients/web#agent-configuration).
+For detailed configuration options, workflow creation, and advanced features like on-chain registration, see the comprehensive [Agent Node documentation](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/lib/agent-node).
 
 ## 🤖 LLM Guides
 

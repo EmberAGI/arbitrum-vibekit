@@ -191,7 +191,7 @@ describe('createProviderSelector', () => {
 
       // When using custom models for each provider
       const customModels = {
-        openrouter: 'anthropic/claude-sonnet-4.5',
+        openrouter: 'openai/gpt-5',
         openai: 'gpt-5-mini',
         xai: 'grok-4-fast-reasoning',
       };
@@ -214,7 +214,7 @@ describe('createProviderSelector', () => {
       // Given DEFAULT_MODELS export
       // Then it should have all provider defaults
       expect(DEFAULT_MODELS).toBeDefined();
-      expect(DEFAULT_MODELS.openrouter).toBe('anthropic/claude-sonnet-4.5');
+      expect(DEFAULT_MODELS.openrouter).toBe('openai/gpt-5');
       expect(DEFAULT_MODELS.openai).toBe('gpt-5-mini');
       expect(DEFAULT_MODELS.xai).toBe('grok-4-fast-reasoning');
       expect(DEFAULT_MODELS.hyperbolic).toBe('openai/gpt-oss-120b');
@@ -223,7 +223,7 @@ describe('createProviderSelector', () => {
     it('should use modern model defaults', () => {
       // Given DEFAULT_MODELS
       // Then models should be modern versions
-      expect(DEFAULT_MODELS.openrouter).toContain('claude-sonnet-4.5');
+      expect(DEFAULT_MODELS.openrouter).toContain('gpt-5');
       expect(DEFAULT_MODELS.openai).toContain('gpt-5');
       expect(DEFAULT_MODELS.xai).toContain('grok-4');
       expect(DEFAULT_MODELS.hyperbolic).toContain('gpt-oss-120b');

@@ -6,8 +6,8 @@ import { z } from 'zod';
 
 import type { AIService } from '../src/ai/service.js';
 import type { AgentConfigHandle } from '../src/config/runtime/init.js';
-import { WorkflowRuntime } from '../src/workflows/runtime.js';
-import type { WorkflowContext, WorkflowPlugin, WorkflowState } from '../src/workflows/types.js';
+import { WorkflowRuntime } from '../src/workflow/runtime.js';
+import type { WorkflowContext, WorkflowPlugin, WorkflowState } from '../src/workflow/types.js';
 import {
   cleanupTestServer,
   createTestA2AServerWithStubs,

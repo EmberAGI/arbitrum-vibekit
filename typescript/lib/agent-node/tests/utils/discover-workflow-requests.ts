@@ -15,8 +15,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 
 import type { AgentConfigHandle } from '../../src/config/runtime/init.js';
-import { WorkflowRuntime } from '../../src/workflows/runtime.js';
-import type { WorkflowPlugin, WorkflowContext, WorkflowState } from '../../src/workflows/types.js';
+import { WorkflowRuntime } from '../../src/workflow/runtime.js';
+import type { WorkflowPlugin, WorkflowContext, WorkflowState } from '../../src/workflow/types.js';
 
 import { createTestA2AServer, cleanupTestServer } from './test-server.js';
 

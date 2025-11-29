@@ -1,22 +1,32 @@
 packages:
-  - 'lib/**/*'
+  - 'lib/*'
+  - 'community/*/*'
   - 'examples/*'
   - 'templates/*'
   - 'clients/*'
-  - 'onchain-actions-plugins/**/*'
+  - 'onchain-actions-plugins/*'
+  - '!**/dist/**'
+  - '!**/node_modules/**'
 
 catalog:
   # Core dependencies
   zod: ^3.25.76
   '@modelcontextprotocol/sdk': ^1.18.2
+  '@centrifuge/sdk': ^0.24.0
   dotenv: ^17.2.3
   ai: ^5.0.59
+  '@ai-sdk/openai': ^2.0.42
+  cors: ^2.8.5
   express: ^5.1.0
+  viem: ^2.26.3
+  graphql-request: ^7.0.0
   '@openrouter/ai-sdk-provider': ^1.2.0
   '@emberai/arbitrum-vibekit-core': ^0.1.2
 
   # Dev dependencies
   '@types/node': ^22.0.0
+  '@types/cors': ^2.8.17
+  '@types/express': ^5.0.0
   typescript: ^5.9.2
   tsx: ^4.20.6
   prettier: ^3.6.2
@@ -39,3 +49,4 @@ catalog:
   '@typescript-eslint/eslint-plugin': ^8.0.0
   '@typescript-eslint/parser': ^8.0.0
   typescript-eslint: ^8.0.0
+  tsdown: ^0.16.1

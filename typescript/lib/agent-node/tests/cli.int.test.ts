@@ -13,6 +13,7 @@ import { bundleCommand } from '../src/cli/commands/bundle.js';
 import { doctorCommand } from '../src/cli/commands/doctor.js';
 import { initCommand } from '../src/cli/commands/init.js';
 import { printConfigCommand } from '../src/cli/commands/print-config.js';
+import { workflowInstallCommand } from '../src/cli/commands/workflow-install.js';
 
 import { createTestConfigWorkspace } from './utils/test-config-workspace.js';
 
@@ -39,7 +40,7 @@ describe('CLI Commands Integration Tests', () => {
       tempDirs.push(targetDir);
 
       // When: running init command
-      await initCommand({ target: targetDir });
+      await initCommand({ target: targetDir, noInstall: true });
 
       // Then: all required files should be created
       expect(existsSync(targetDir)).toBe(true);
@@ -54,7 +55,11 @@ describe('CLI Commands Integration Tests', () => {
       // Then: template skill and workflow files should be created
       expect(existsSync(join(targetDir, 'skills', 'general-assistant.md'))).toBe(true);
       expect(existsSync(join(targetDir, 'skills', 'ember-onchain-actions.md'))).toBe(true);
-      expect(existsSync(join(targetDir, 'workflows', 'example-workflow.ts'))).toBe(true);
+      expect(existsSync(join(targetDir, 'workflows', 'sample-package'))).toBe(true);
+      expect(existsSync(join(targetDir, 'workflows', 'sample-package', 'src', 'index.ts'))).toBe(
+        true,
+      );
+      expect(existsSync(join(targetDir, 'workflows', 'sample-package', 'package.json'))).toBe(true);
     });
 
     it('should create valid agent.md with frontmatter', async () => {
@@ -66,7 +71,7 @@ describe('CLI Commands Integration Tests', () => {
       tempDirs.push(targetDir);
 
       // When: running init command
-      await initCommand({ target: targetDir });
+      await initCommand({ target: targetDir, noInstall: true });
 
       // Then: agent.md should have valid frontmatter
       const agentMd = readFileSync(join(targetDir, 'agent.md'), 'utf-8');
@@ -74,7 +79,8 @@ describe('CLI Commands Integration Tests', () => {
       expect(agentMd).toContain('version: 1');
       expect(agentMd).toContain('card:');
       expect(agentMd).toContain("protocolVersion: '0.3.0'");
-      expect(agentMd).toContain('model:');
+      expect(agentMd).toContain('ai:');
+      expect(agentMd).toContain('modelProvider:');
       expect(agentMd).toContain('You are a helpful AI agent');
     });
 
@@ -87,7 +93,7 @@ describe('CLI Commands Integration Tests', () => {
       tempDirs.push(targetDir);
 
       // When: running init command
-      await initCommand({ target: targetDir });
+      await initCommand({ target: targetDir, noInstall: true });
 
       // Then: manifest should have valid structure with both template skills
       const manifestPath = join(targetDir, 'agent.manifest.json');
@@ -120,7 +126,7 @@ describe('CLI Commands Integration Tests', () => {
       tempDirs.push(targetDir);
 
       // When: running init command
-      await initCommand({ target: targetDir });
+      await initCommand({ target: targetDir, noInstall: true });
 
       // Then: template skill should have valid frontmatter and content
       const skillPath = join(targetDir, 'skills', 'general-assistant.md');
@@ -153,7 +159,7 @@ describe('CLI Commands Integration Tests', () => {
       // Validate workflow integration (active by default)
       expect(skillContent).toContain('# Workflow integration');
       expect(skillContent).toContain('workflows:');
-      expect(skillContent).toContain("include: ['example-workflow']");
+      expect(skillContent).toContain("include: ['sample-package-workflow']");
     });
 
     it('should create ember skill with valid frontmatter and MCP integration', async () => {
@@ -165,7 +171,7 @@ describe('CLI Commands Integration Tests', () => {
       tempDirs.push(targetDir);
 
       // When: running init command
-      await initCommand({ target: targetDir });
+      await initCommand({ target: targetDir, noInstall: true });
 
       // Then: ember skill should have valid frontmatter and content
       const skillPath = join(targetDir, 'skills', 'ember-onchain-actions.md');
@@ -200,7 +206,7 @@ describe('CLI Commands Integration Tests', () => {
       tempDirs.push(targetDir);
 
       // When: running init command
-      await initCommand({ target: targetDir });
+      await initCommand({ target: targetDir, noInstall: true });
 
       // Then: MCP registry should contain default servers (fetch stdio and ember_onchain_actions http)
       const mcpJson = JSON.parse(readFileSync(join(targetDir, 'mcp.json'), 'utf-8'));
@@ -218,13 +224,13 @@ describe('CLI Commands Integration Tests', () => {
       expect(mcpJson.mcpServers.ember_onchain_actions.type).toBe('http');
       expect(mcpJson.mcpServers.ember_onchain_actions.url).toBe('https://api.emberai.xyz/mcp');
 
-      // Then: workflow registry should contain example-workflow
+      // Then: workflow registry should contain sample-package-workflow
       const workflowJson = JSON.parse(readFileSync(join(targetDir, 'workflow.json'), 'utf-8'));
       expect(workflowJson.workflows).toBeDefined();
       expect(Array.isArray(workflowJson.workflows)).toBe(true);
       expect(workflowJson.workflows.length).toBe(1);
-      expect(workflowJson.workflows[0].id).toBe('example-workflow');
-      expect(workflowJson.workflows[0].from).toBe('./workflows/example-workflow.ts');
+      expect(workflowJson.workflows[0].id).toBe('sample-package-workflow');
+      expect(workflowJson.workflows[0].from).toBe('./workflows/sample-package/src/index.ts');
       expect(workflowJson.workflows[0].enabled).toBe(true);
     });
 
@@ -235,11 +241,13 @@ describe('CLI Commands Integration Tests', () => {
         `test-init-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       );
       tempDirs.push(targetDir);
-      await initCommand({ target: targetDir });
+      await initCommand({ target: targetDir, noInstall: true });
 
       // When: running init command again without force
       // Then: should throw error
-      await expect(initCommand({ target: targetDir })).rejects.toThrow(/already exists/);
+      await expect(initCommand({ target: targetDir, noInstall: true })).rejects.toThrow(
+        /already exists/,
+      );
     });
 
     it('should overwrite when using force flag', async () => {
@@ -249,14 +257,14 @@ describe('CLI Commands Integration Tests', () => {
         `test-init-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       );
       tempDirs.push(targetDir);
-      await initCommand({ target: targetDir });
+      await initCommand({ target: targetDir, noInstall: true });
 
       // Modify a file
       const agentMdPath = join(targetDir, 'agent.md');
       const originalContent = readFileSync(agentMdPath, 'utf-8');
 
       // When: running init command with force
-      await initCommand({ target: targetDir, force: true });
+      await initCommand({ target: targetDir, force: true, noInstall: true });
 
       // Then: files should be reset to defaults
       const newContent = readFileSync(agentMdPath, 'utf-8');
@@ -792,6 +800,154 @@ describe('CLI Commands Integration Tests', () => {
       const bundle = JSON.parse(readFileSync(outputPath, 'utf-8'));
       expect(bundle.workflows).toBeDefined();
       expect(Array.isArray(bundle.workflows)).toBe(true);
+    });
+  });
+
+  describe('agent workflow install', () => {
+    it('should install workflow dependencies', async () => {
+      // Given: a config workspace with workflows
+      const configDir = createTestConfigWorkspace({
+        agentName: 'Workflow Install Test Agent',
+        skills: [],
+      });
+      tempDirs.push(configDir);
+
+      // Create a workflow with package.json
+      const workflowDir = join(configDir, 'workflows', 'test-workflow');
+      const { mkdirSync } = await import('fs');
+      mkdirSync(workflowDir, { recursive: true });
+      writeFileSync(
+        join(workflowDir, 'package.json'),
+        JSON.stringify({
+          name: 'test-workflow',
+          version: '1.0.0',
+          main: 'index.js',
+        }),
+      );
+      writeFileSync(join(workflowDir, 'index.js'), 'module.exports = {};');
+
+      // When: running workflow install command
+      await workflowInstallCommand(undefined, { configDir });
+
+      // Then: workflow should have node_modules
+      expect(existsSync(join(workflowDir, 'node_modules'))).toBe(true);
+      expect(existsSync(join(workflowDir, 'pnpm-lock.yaml'))).toBe(true);
+    });
+
+    it('should install specific workflow by name', async () => {
+      // Given: a config workspace with multiple workflows
+      const configDir = createTestConfigWorkspace({
+        agentName: 'Workflow Name Test Agent',
+        skills: [],
+      });
+      tempDirs.push(configDir);
+
+      // Create two workflows
+      const { mkdirSync } = await import('fs');
+
+      const workflow1Dir = join(configDir, 'workflows', 'workflow-one');
+      mkdirSync(workflow1Dir, { recursive: true });
+      writeFileSync(
+        join(workflow1Dir, 'package.json'),
+        JSON.stringify({ name: 'workflow-one', version: '1.0.0' }),
+      );
+      writeFileSync(join(workflow1Dir, 'index.js'), 'module.exports = {};');
+
+      const workflow2Dir = join(configDir, 'workflows', 'workflow-two');
+      mkdirSync(workflow2Dir, { recursive: true });
+      writeFileSync(
+        join(workflow2Dir, 'package.json'),
+        JSON.stringify({ name: 'workflow-two', version: '1.0.0' }),
+      );
+      writeFileSync(join(workflow2Dir, 'index.js'), 'module.exports = {};');
+
+      // When: installing specific workflow
+      await workflowInstallCommand('workflow-one', { configDir });
+
+      // Then: only workflow-one should have node_modules
+      expect(existsSync(join(workflow1Dir, 'node_modules'))).toBe(true);
+      expect(existsSync(join(workflow2Dir, 'node_modules'))).toBe(false);
+    });
+
+    it('should handle --all flag to install all workflows', async () => {
+      // Given: a config workspace with multiple workflows
+      const configDir = createTestConfigWorkspace({
+        agentName: 'Workflow All Test Agent',
+        skills: [],
+      });
+      tempDirs.push(configDir);
+
+      // Create two workflows
+      const { mkdirSync } = await import('fs');
+
+      const workflow1Dir = join(configDir, 'workflows', 'workflow-alpha');
+      mkdirSync(workflow1Dir, { recursive: true });
+      writeFileSync(
+        join(workflow1Dir, 'package.json'),
+        JSON.stringify({ name: 'workflow-alpha', version: '1.0.0' }),
+      );
+      writeFileSync(join(workflow1Dir, 'index.js'), 'module.exports = {};');
+
+      const workflow2Dir = join(configDir, 'workflows', 'workflow-beta');
+      mkdirSync(workflow2Dir, { recursive: true });
+      writeFileSync(
+        join(workflow2Dir, 'package.json'),
+        JSON.stringify({ name: 'workflow-beta', version: '1.0.0' }),
+      );
+      writeFileSync(join(workflow2Dir, 'index.js'), 'module.exports = {};');
+
+      // When: installing with --all flag
+      await workflowInstallCommand(undefined, { configDir, all: true });
+
+      // Then: both workflows should have node_modules
+      expect(existsSync(join(workflow1Dir, 'node_modules'))).toBe(true);
+      expect(existsSync(join(workflow2Dir, 'node_modules'))).toBe(true);
+    });
+
+    it('should skip workflows without package.json', async () => {
+      // Given: a config workspace with mixed workflows
+      const configDir = createTestConfigWorkspace({
+        agentName: 'Workflow Skip Test Agent',
+        skills: [],
+      });
+      tempDirs.push(configDir);
+
+      // Create workflow with package.json
+      const { mkdirSync } = await import('fs');
+
+      const packageWorkflowDir = join(configDir, 'workflows', 'with-package');
+      mkdirSync(packageWorkflowDir, { recursive: true });
+      writeFileSync(
+        join(packageWorkflowDir, 'package.json'),
+        JSON.stringify({ name: 'with-package', version: '1.0.0' }),
+      );
+      writeFileSync(join(packageWorkflowDir, 'index.js'), 'module.exports = {};');
+
+      // Create workflow without package.json (simple script)
+      const simpleWorkflowDir = join(configDir, 'workflows', 'simple-script');
+      mkdirSync(simpleWorkflowDir, { recursive: true });
+      writeFileSync(join(simpleWorkflowDir, 'index.js'), 'module.exports = {};');
+
+      // When: installing all workflows
+      await workflowInstallCommand(undefined, { configDir });
+
+      // Then: only package workflow should have node_modules
+      expect(existsSync(join(packageWorkflowDir, 'node_modules'))).toBe(true);
+      expect(existsSync(join(simpleWorkflowDir, 'node_modules'))).toBe(false);
+    });
+
+    it('should warn and return when no installable workflows exist', async () => {
+      // Given: a config workspace
+      const configDir = createTestConfigWorkspace({
+        agentName: 'Workflow Error Test Agent',
+        skills: [],
+      });
+      tempDirs.push(configDir);
+
+      // When/Then: installing a named workflow with no installables should resolve (no throw)
+      await expect(
+        workflowInstallCommand('does-not-exist', { configDir }),
+      ).resolves.toBeUndefined();
     });
   });
 });

@@ -1,4 +1,3 @@
-import { ethers } from 'ethers';
 import {
   LegacyUiPoolDataProvider,
   UiPoolDataProvider,
@@ -9,6 +8,7 @@ import {
   type EmodeDataHumanized,
   type UserReserveDataHumanized,
 } from '@aave/contract-helpers';
+import type { providers } from 'ethers';
 
 // @aave/contract-helpers provides two periphery contracts for fetching data from the blockchain:
 // `LegacyUiPoolDataProvider` and `UiPoolDataProvider`. Which one should be used is determined by the version that is actually deployed on a given chain.
@@ -33,7 +33,7 @@ export type IUiPoolDataProviderConstructor = new ({
   chainId,
 }: {
   uiPoolDataProviderAddress: string;
-  provider: ethers.providers.JsonRpcProvider;
+  provider: providers.JsonRpcProvider;
   chainId: number;
 }) => IUiPoolDataProvider;
 
