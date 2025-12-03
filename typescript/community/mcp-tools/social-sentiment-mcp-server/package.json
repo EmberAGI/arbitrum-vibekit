@@ -1,0 +1,41 @@
+{
+  "name": "social-sentiment-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server for social sentiment analysis and trading signals",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "test:ci": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "express": "catalog:",
+    "node-fetch": "^3.3.2",
+    "snoowrap": "^1.23.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/express": "catalog:",
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "keywords": [
+    "social-sentiment",
+    "trading",
+    "mcp",
+    "defi",
+    "reddit",
+    "discord",
+    "telegram",
+    "sentiment-analysis"
+  ],
+  "author": "Arbitrum Vibekit",
+  "license": "MIT"
+}
+

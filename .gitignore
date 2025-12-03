@@ -47,3 +47,6 @@ Thumbs.db
 /onchain-actions/
 .vibecode/
 typescript/lib/agent-node/*.zip
+
+# Contribution guidance docs (local dev only)
+**/.contribution/
