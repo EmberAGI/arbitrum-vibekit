@@ -80,10 +80,15 @@ export function useUpgradeToSmartAccount(): UseUpgradeToSmartAccountReturn {
       const contractAddress = environment.implementations.EIP7702StatelessDeleGatorImpl;
 
       // Sign the authorization using Privy
+      const executorAddress = process.env.NEXT_PUBLIC_EXECUTOR_ADDRESS;
+      if (!executorAddress) {
+        throw new Error('NEXT_PUBLIC_EXECUTOR_ADDRESS environment variable is not set');
+      }
+
       const authorization = await signAuthorization({
         contractAddress,
         chainId: arbitrum.id,
-        executor: '0x33adef7fb0b26a59215bec0cbc22b91d9d518c4f',
+        executor: executorAddress as Hex,
       });
 
       // Send the authorization to the backend for relay
