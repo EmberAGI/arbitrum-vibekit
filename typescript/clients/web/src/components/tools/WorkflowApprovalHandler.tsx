@@ -239,7 +239,7 @@ export function WorkflowApprovalHandler({
                   // Collapsed view
                   <div className="flex items-center gap-3">
                     <div
-                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 ${
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0 ${
                         isSuccess
                           ? 'bg-green-600 text-white'
                           : hasError
@@ -262,7 +262,7 @@ export function WorkflowApprovalHandler({
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3 flex-1">
                         <div
-                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5 ${
+                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0 mt-0.5 ${
                             isSuccess
                               ? 'bg-green-600 text-white'
                               : hasError
@@ -287,7 +287,7 @@ export function WorkflowApprovalHandler({
                           )}
                         </div>
                       </div>
-                      <div className="flex flex-col gap-2 flex-shrink-0">
+                      <div className="flex flex-col gap-2 shrink-0">
                         {isSuccess ? (
                           <div className="flex items-center gap-2 text-green-500 px-6 py-2">
                             <CheckCircle className="w-4 h-4" />

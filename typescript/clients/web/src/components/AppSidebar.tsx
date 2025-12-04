@@ -17,10 +17,15 @@ import {
   AlertCircle,
   Loader,
   Circle,
+  DollarSign,
+  Copy,
 } from 'lucide-react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { Session } from '@/lib/types/session';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
+import { useWalletFunding } from '@/hooks/useWalletFunding';
+import { FundingModal } from '@/components/FundingModal';
+import { copyAddressToClipboard } from '@/lib/utils';
 
 interface AppSidebarProps {
   isA2AConnected: boolean;
@@ -74,9 +79,31 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const [isBlockedStrategiesExpanded, setIsBlockedStrategiesExpanded] = useState(true);
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(false);
   const [isConnectionsExpanded, setIsConnectionsExpanded] = useState(false);
-  const { ready, authenticated } = usePrivy();
+  const { ready, authenticated, user } = usePrivy();
   const { login } = useLogin();
   const { privyWallet } = usePrivyWalletClient();
+
+  // Wallet funding hook - auto-triggers funding on login when wallet is new
+  const {
+    isFunded,
+    fundingState,
+    error: fundingError,
+    fundingResult,
+    reset: resetFunding,
+  } = useWalletFunding(
+    user?.linkedAccounts.find(
+      (account) => account.type === 'wallet' && account.walletClientType === 'privy',
+      // @ts-expect-error: the wallet id is poorly typed by privy
+    )?.id ?? null,
+  );
+
+  // Show modal when funding is in progress, success, or error
+  const showFundingModal =
+    fundingState === 'checking' ||
+    fundingState === 'funding' ||
+    fundingState === 'success' ||
+    fundingState === 'error';
+
   // Disable login when Privy is not ready or the user is already authenticated
   const disableLogin = !ready || (ready && authenticated);
 
@@ -618,8 +645,18 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               <div className="w-2 h-2 rounded-full bg-green-500" />
               <div className="flex-1 min-w-0">
                 <div className="text-xs text-muted-foreground">Privy Wallet</div>
-                <div className="text-sm font-mono truncate">
-                  {formatAddress(privyWallet.address)}
+                <div className="flex items-center gap-1">
+                  <span className="text-sm font-mono truncate">
+                    {formatAddress(privyWallet.address)}
+                  </span>
+                  {isFunded && <DollarSign className="w-3 h-3 text-green-400 shrink-0" />}
+                  <button
+                    onClick={() => copyAddressToClipboard(privyWallet.address)}
+                    className="p-0.5 rounded hover:bg-muted/50 shrink-0"
+                    title="Copy address"
+                  >
+                    <Copy className="w-3 h-3 text-muted-foreground hover:text-white" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -635,6 +672,15 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             <span className="flex-1">Login to Privy Wallet</span>
           </Button>
         )}
+
+        {/* Funding Modal */}
+        <FundingModal
+          isOpen={showFundingModal}
+          fundingState={fundingState}
+          error={fundingError}
+          fundingResult={fundingResult}
+          onClose={resetFunding}
+        />
 
         {/* Wallet Connect - Full Width */}
         <div className="w-full">
