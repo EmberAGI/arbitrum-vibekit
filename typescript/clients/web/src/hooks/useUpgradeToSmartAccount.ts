@@ -6,10 +6,20 @@ import {
 } from '@metamask/delegation-toolkit';
 import { useAccount, usePublicClient } from 'wagmi';
 import { arbitrum } from 'viem/chains';
-import { Hex, zeroAddress } from 'viem';
+import { Hex, nonceManager } from 'viem';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSign7702Authorization } from '@privy-io/react-auth';
 import { usePrivyWalletClient } from './usePrivyWalletClient';
+import { r } from 'node_modules/@metamask/delegation-toolkit/dist/index-DoP3c-jb';
+
+interface UpgradeResponse {
+  message: string;
+  upgraded: boolean;
+  transactionHash?: string;
+  chain?: string;
+  error?: string;
+  details?: string;
+}
 
 interface UseUpgradeToSmartAccountReturn {
   smartAccount: MetaMaskSmartAccount | null;
@@ -43,7 +53,7 @@ export function useUpgradeToSmartAccount(): UseUpgradeToSmartAccountReturn {
         client: publicClient,
         implementation: Implementation.Stateless7702,
         address: privyWallet.address as Hex,
-        signer: { walletClient: walletClient },
+        signer: { walletClient },
       });
 
       const deployed = await account.isDeployed();
@@ -72,19 +82,44 @@ export function useUpgradeToSmartAccount(): UseUpgradeToSmartAccountReturn {
       // Sign the authorization using Privy
       const authorization = await signAuthorization({
         contractAddress,
+        chainId: arbitrum.id,
+        executor: '0x33adef7fb0b26a59215bec0cbc22b91d9d518c4f',
       });
 
-      // Submit the authorization with a dummy transaction
-      const hash = await walletClient.sendTransaction({
-        authorizationList: [authorization],
-        data: '0x',
-        to: zeroAddress,
+      // Send the authorization to the backend for relay
+      const response = await fetch(`/api/wallet/upgrade`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          authorization: {
+            r: authorization.r,
+            s: authorization.s,
+            v: authorization.v?.toString(),
+            yParity: authorization.yParity,
+            chainId: authorization.chainId,
+            address: authorization.address,
+            nonce: authorization.nonce,
+          },
+          address: privyWallet.address,
+        }),
       });
+
+      const data: UpgradeResponse = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || data.details || 'Failed to upgrade wallet');
+      }
+
+      if (!data.transactionHash) {
+        throw new Error('No transaction hash returned');
+      }
 
       // Wait for transaction confirmation
-      await publicClient.waitForTransactionReceipt({ hash });
+      await publicClient.waitForTransactionReceipt({ hash: data.transactionHash as Hex });
 
-      return hash;
+      return data.transactionHash;
     },
     onSuccess: () => {
       // Invalidate and refetch smart account data after successful upgrade

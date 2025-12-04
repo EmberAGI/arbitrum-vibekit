@@ -14,18 +14,8 @@ const PrivyTransactionDetailsSchema = z.object({
   display_values: z.record(z.string()),
 });
 
-const PrivyTransactionSchema = z.object({
-  caip2: z.string(),
-  transaction_hash: z.string(),
-  status: z.string(),
-  created_at: z.number(),
-  privy_transaction_id: z.string(),
-  wallet_id: z.string(),
-  details: PrivyTransactionDetailsSchema,
-});
-
 const PrivyTransactionsResponseSchema = z.object({
-  transactions: z.array(PrivyTransactionSchema),
+  transactions: z.array(z.any()),
   next_cursor: z.string().nullable(),
 });
 
@@ -41,7 +31,6 @@ const PrivyWalletResponseSchema = z.object({
   imported_at: z.number().nullable(),
 });
 
-export type PrivyTransaction = z.infer<typeof PrivyTransactionSchema>;
 export type PrivyTransactionsResponse = z.infer<typeof PrivyTransactionsResponseSchema>;
 export type PrivyWalletResponse = z.infer<typeof PrivyWalletResponseSchema>;
 
