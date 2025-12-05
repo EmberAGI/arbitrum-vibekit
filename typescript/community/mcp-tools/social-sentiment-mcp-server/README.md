@@ -12,22 +12,22 @@ A Model Context Protocol (MCP) server that provides social sentiment analysis an
 - **Price Prediction**: ML-powered predictions based on social sentiment
 
 ### Data Sources (All Free Tier)
-- **Reddit API**: Crypto subreddits sentiment analysis
-- **Discord**: Community channel monitoring
-- **Telegram**: Crypto group sentiment tracking
+- **Reddit API**: Crypto subreddits sentiment analysis (public JSON endpoints)
+- **Twitter/X API**: Tweet sentiment analysis (requires Bearer token)
+- **Farcaster**: Decentralized social network via Neynar API
+- **Discord**: Community channel monitoring (placeholder)
+- **Telegram**: Crypto group sentiment tracking (placeholder)
 - **Hugging Face**: Free sentiment analysis models
-- **Tatum API**: On-chain wallet and transaction data
 
 ## 📋 Prerequisites
 
 - Node.js 18+
 - pnpm package manager
-- API keys for:
-  - Reddit (OAuth app - free)
-  - Discord Bot Token (free)
-  - Telegram Bot Token (free)
-  - Hugging Face API key (optional, free tier available)
-  - Tatum API key (if not already in ecosystem)
+- API keys for (all optional, free tiers available):
+  - Twitter Bearer Token (for Twitter/X integration)
+  - Neynar API Key (for Farcaster integration - 1,000 requests/day free)
+  - Hugging Face API key (optional, improves sentiment analysis accuracy)
+  - Reddit User Agent (optional, custom user agent string)
 
 ## 🚀 Quick Start
 
@@ -43,22 +43,20 @@ pnpm install
 Create a `.env` file:
 
 ```env
-# Reddit API (get from https://www.reddit.com/prefs/apps)
-REDDIT_CLIENT_ID=your_client_id
-REDDIT_CLIENT_SECRET=your_client_secret
-REDDIT_USER_AGENT=your_app_name/1.0.0
+# Twitter/X API (get from https://developer.twitter.com/)
+# Required for Twitter integration
+TWITTER_BEARER_TOKEN=your_bearer_token
 
-# Discord Bot Token (get from https://discord.com/developers/applications)
-DISCORD_BOT_TOKEN=your_bot_token
+# Farcaster via Neynar API (get from https://neynar.com/)
+# Required for Farcaster integration - 1,000 requests/day free tier
+NEYNAR_API_KEY=your_neynar_api_key
 
-# Telegram Bot Token (get from @BotFather)
-TELEGRAM_BOT_TOKEN=your_bot_token
+# Reddit User Agent (optional, custom user agent string)
+REDDIT_USER_AGENT=social-sentiment-mcp/1.0.0
 
-# Hugging Face (optional, for higher limits)
-HUGGING_FACE_API_KEY=your_api_key
-
-# Tatum (if needed)
-TATUM_API_KEY=your_tatum_key
+# Hugging Face (optional, improves sentiment analysis accuracy)
+# Free tier: 1,000 requests/day
+HUGGING_FACE_API_KEY=your_huggingface_api_key
 ```
 
 ### 3. Build and Run
@@ -83,13 +81,17 @@ npx -y @modelcontextprotocol/inspector node ./dist/index.js
 ## 🛠️ Available Tools
 
 ### 1. `analyze-social-sentiment`
-Analyze sentiment for a token across Reddit, Discord, and Telegram.
+Analyze sentiment for a token across Reddit, Twitter/X, Farcaster, Discord, and Telegram.
 
 **Parameters:**
 - `tokenSymbol` (string): Token symbol (e.g., "ETH", "BTC", "ARB")
 - `timeRange` (optional): Lookback period in hours (max 168 = 7 days)
 
-**Returns:** Sentiment score, confidence, sources breakdown, trend direction
+**Returns:**
+- Sentiment score (-1 to 1), confidence, sources breakdown, trend direction
+- **Contextual analysis**: Human-readable explanations, key themes, actionable insights
+- **DeFi categories**: Perpetuals, arbitrage, flashloans, lending, staking sentiment
+- **All posts with direct links**: Reddit posts, Twitter tweets, Farcaster casts
 
 ### 2. `detect-early-signals`
 Detect early social signals before price movements.
@@ -110,12 +112,16 @@ Correlate influencer social posts with wallet activity.
 **Returns:** Social posts + on-chain transaction correlation
 
 ### 4. `social-momentum-score`
-Calculate combined social + on-chain momentum score.
+Calculate combined social momentum score across all platforms.
 
 **Parameters:**
 - `tokenSymbol` (string): Token to score
 
-**Returns:** Overall momentum score (0-100) with platform breakdown
+**Returns:**
+- Overall momentum score (0-100) with platform breakdown (Reddit, Twitter, Farcaster, Discord, Telegram)
+- **Contextual explanation**: What the score means and what actions to take
+- **Platform breakdown**: Individual scores and contributions from each platform
+- **Top engagement**: Most engaging posts from each platform
 
 ### 5. `predict-social-driven-moves`
 Predict price impact based on social sentiment.
@@ -153,14 +159,14 @@ src/
 
 ## 🔒 Rate Limiting & Caching
 
-- **Reddit**: 100 requests/min (OAuth) or 10/min (no OAuth)
-- **Discord**: ~50 requests/second
-- **Telegram**: Unlimited (be respectful)
-- **Hugging Face**: 1,000 requests/day (cache aggressively!)
+- **Reddit**: ~10 requests/minute (public JSON endpoints, no OAuth)
+- **Twitter/X**: Varies by API tier (free tier: 1,500 requests/month)
+- **Farcaster (Neynar)**: 1,000 requests/day (free tier)
+- **Hugging Face**: 1,000 requests/day (free tier) - cache aggressively!
 
 All responses are cached:
 - Sentiment results: 5 minutes
-- Influencer wallet data: 1 hour
+- Social posts: 10 minutes
 - Historical data: 24 hours
 
 ## 🧪 Testing

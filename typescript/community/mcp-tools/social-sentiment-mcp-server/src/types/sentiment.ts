@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Sentiment analysis result
+ * Sentiment analysis result with contextual explanations
  */
 export interface SentimentResult {
   score: number; // -1 (very negative) to 1 (very positive)
@@ -9,13 +9,26 @@ export interface SentimentResult {
   sources: SentimentSource[];
   trend: 'bullish' | 'bearish' | 'neutral';
   timestamp: string;
+  // Enhanced contextual analysis
+  context?: {
+    explanation: string; // Human-readable explanation of the score
+    keyThemes: string[]; // Main topics discussed
+    actionableInsights: string[]; // What actions users might take
+    defiCategories?: {
+      perpetuals?: { score: number; mentions: number; context: string };
+      arbitrage?: { score: number; mentions: number; context: string };
+      flashloans?: { score: number; mentions: number; context: string };
+      lending?: { score: number; mentions: number; context: string };
+      staking?: { score: number; mentions: number; context: string };
+    };
+  };
 }
 
 /**
  * Individual sentiment source
  */
 export interface SentimentSource {
-  platform: 'reddit' | 'discord' | 'telegram';
+  platform: 'reddit' | 'discord' | 'telegram' | 'twitter' | 'farcaster';
   score: number;
   volume: number; // Number of mentions/posts
   sampleText: string[]; // Sample posts/comments
@@ -47,10 +60,22 @@ export interface MomentumScore {
     reddit: number;
     discord: number;
     telegram: number;
+    twitter?: number;
+    farcaster?: number;
   };
   velocity: number; // Rate of change
   volume: number; // Total mentions
   timestamp: string;
+  context?: {
+    explanation: string;
+    actionableInsights: string[];
+    platformBreakdown: {
+      platform: string;
+      score: number;
+      volume: number;
+      contribution: string;
+    }[];
+  };
 }
 
 /**

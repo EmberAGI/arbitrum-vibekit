@@ -3,6 +3,9 @@ import type { EarlySignal, MomentumScore } from '../types/sentiment.js';
 import { analyzeTextsSentiment, buildSentimentResult } from '../services/sentiment.js';
 import { getDiscordSentiment } from '../services/discord.js';
 import { getTelegramSentiment } from '../services/telegram.js';
+import { searchTwitterForToken } from '../services/twitter.js';
+import { searchFarcasterForToken } from '../services/farcaster.js';
+import { enhanceSentimentWithContext } from './contextGenerator.js';
 import { cache, CACHE_TTL } from './cache.js';
 
 interface RedditPost {
@@ -83,6 +86,42 @@ export async function aggregateMultiSourceSentiment(
     // Continue without Telegram data
   }
 
+  // 4. Twitter/X sentiment (if available)
+  try {
+    const twitterData = await searchTwitterForToken(tokenSymbol, 24);
+    if (twitterData.totalMentions > 0) {
+      const twitterTexts = twitterData.posts.map((p) => p.text);
+      const { score } = await analyzeTextsSentiment(twitterTexts);
+      sources.push({
+        platform: 'twitter',
+        score,
+        volume: twitterData.totalMentions,
+        sampleText: twitterTexts.slice(0, 5),
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching Twitter sentiment:', error);
+    // Continue without Twitter data
+  }
+
+  // 5. Farcaster sentiment (if available)
+  try {
+    const farcasterData = await searchFarcasterForToken(tokenSymbol, 24);
+    if (farcasterData.totalMentions > 0) {
+      const farcasterTexts = farcasterData.casts.map((c) => c.text);
+      const { score } = await analyzeTextsSentiment(farcasterTexts);
+      sources.push({
+        platform: 'farcaster',
+        score,
+        volume: farcasterData.totalMentions,
+        sampleText: farcasterTexts.slice(0, 5),
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching Farcaster sentiment:', error);
+    // Continue without Farcaster data
+  }
+
   // Build combined result
   const result = buildSentimentResult(sources);
 
@@ -91,8 +130,11 @@ export async function aggregateMultiSourceSentiment(
   const volumeFactor = Math.min(1, totalVolume / 50);
   result.confidence = Math.min(1, (result.confidence + volumeFactor) / 2);
 
-  cache.set(cacheKey, result, CACHE_TTL.SENTIMENT);
-  return result;
+  // Enhance with contextual analysis
+  const enhancedResult = enhanceSentimentWithContext(result);
+
+  cache.set(cacheKey, enhancedResult, CACHE_TTL.SENTIMENT);
+  return enhancedResult;
 }
 
 /**
@@ -152,8 +194,85 @@ export function detectRedditEarlySignals(
 }
 
 /**
- * Compute a simple Reddit-based social momentum score.
- * For now, only Reddit is used; Discord/Telegram can be added later.
+ * Compute a multi-platform social momentum score.
+ * Includes Reddit, Twitter, Farcaster, Discord, and Telegram.
+ */
+export async function computeMultiPlatformMomentumScore(
+  tokenSymbol: string,
+  redditData: RedditSearchResult,
+  sentiment: SentimentResult,
+): Promise<MomentumScore> {
+  const redditVolume = redditData.totalMentions;
+
+  // Get volumes from other platforms
+  let twitterVolume = 0;
+  let farcasterVolume = 0;
+  let discordVolume = 0;
+  let telegramVolume = 0;
+
+  try {
+    const twitterData = await searchTwitterForToken(tokenSymbol, 24);
+    twitterVolume = twitterData.totalMentions;
+  } catch {
+    // Ignore errors
+  }
+
+  try {
+    const farcasterData = await searchFarcasterForToken(tokenSymbol, 24);
+    farcasterVolume = farcasterData.totalMentions;
+  } catch {
+    // Ignore errors
+  }
+
+  try {
+    const discordSentiment = await getDiscordSentiment(tokenSymbol);
+    discordVolume = discordSentiment.volume;
+  } catch {
+    // Ignore errors
+  }
+
+  try {
+    const telegramSentiment = await getTelegramSentiment(tokenSymbol);
+    telegramVolume = telegramSentiment.volume;
+  } catch {
+    // Ignore errors
+  }
+
+  const totalVolume = redditVolume + twitterVolume + farcasterVolume + discordVolume + telegramVolume;
+
+  // Map sentiment score [-1,1] and volume into a 0-100 score
+  const sentimentFactor = (sentiment.score + 1) / 2; // 0..1
+  const volumeFactor = Math.min(1, totalVolume / 100); // 0..1
+
+  const overallScore = Math.round((sentimentFactor * 0.6 + volumeFactor * 0.4) * 100);
+
+  // Calculate per-platform scores
+  const redditScore = redditVolume > 0 ? Math.round((sentimentFactor * 0.6 + Math.min(1, redditVolume / 100) * 0.4) * 100) : 0;
+  const twitterScore = twitterVolume > 0 ? Math.round((sentimentFactor * 0.6 + Math.min(1, twitterVolume / 100) * 0.4) * 100) : 0;
+  const farcasterScore = farcasterVolume > 0 ? Math.round((sentimentFactor * 0.6 + Math.min(1, farcasterVolume / 100) * 0.4) * 100) : 0;
+  const discordScore = discordVolume > 0 ? Math.round((sentimentFactor * 0.6 + Math.min(1, discordVolume / 100) * 0.4) * 100) : 0;
+  const telegramScore = telegramVolume > 0 ? Math.round((sentimentFactor * 0.6 + Math.min(1, telegramVolume / 100) * 0.4) * 100) : 0;
+
+  const momentum: MomentumScore = {
+    tokenSymbol,
+    overallScore,
+    breakdown: {
+      reddit: redditScore,
+      discord: discordScore,
+      telegram: telegramScore,
+      twitter: twitterScore,
+      farcaster: farcasterScore,
+    },
+    velocity: volumeFactor,
+    volume: totalVolume,
+    timestamp: new Date().toISOString(),
+  };
+
+  return momentum;
+}
+
+/**
+ * @deprecated Use computeMultiPlatformMomentumScore instead
  */
 export function computeRedditMomentumScore(
   tokenSymbol: string,

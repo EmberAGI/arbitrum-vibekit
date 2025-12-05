@@ -55,34 +55,68 @@ export async function executeDetectEarlySignals(args: unknown): Promise<{ conten
   // Detect early signals
   const signal = detectRedditEarlySignals(tokenSymbol, redditData);
 
+  const detectedSignal = signal || {
+    tokenSymbol: tokenSymbol.toUpperCase(),
+    signalType: 'social_spike' as const,
+    strength: 0,
+    description: `No significant early signals detected for ${tokenSymbol.toUpperCase()}. Social activity is within normal range.`,
+    timestamp: new Date().toISOString(),
+    historicalComparison: {
+      average: 5,
+      current: redditData.totalMentions,
+      change: 0,
+    },
+  };
+
+  // Generate contextual explanation
+  let explanation = '';
+  let actionableInsights: string[] = [];
+
+  if (detectedSignal.strength > 0.5) {
+    explanation = `Strong early signal detected! Social volume has spiked ${detectedSignal.historicalComparison.change.toFixed(1)}% above baseline, indicating growing community interest before mainstream awareness. `;
+    actionableInsights.push('High signal strength suggests potential price movement - monitor closely');
+    actionableInsights.push('Consider this as an early entry opportunity if fundamentals align');
+    actionableInsights.push('Watch for confirmation from other platforms (Twitter, Farcaster)');
+  } else if (detectedSignal.strength > 0.2) {
+    explanation = `Moderate early signal detected. Social volume is ${detectedSignal.historicalComparison.change.toFixed(1)}% above baseline, showing increased interest. `;
+    actionableInsights.push('Moderate signal - monitor for trend continuation');
+    actionableInsights.push('Cross-reference with on-chain data for confirmation');
+  } else {
+    explanation = `No significant early signals detected. Current social volume (${redditData.totalMentions} mentions) is within normal range. `;
+    actionableInsights.push('Low signal strength - social activity is stable');
+    actionableInsights.push('Monitor for sudden spikes in volume or sentiment shifts');
+  }
+
   const response = {
     tokenSymbol: tokenSymbol.toUpperCase(),
     tokenName: tokenInfo.name,
-    signal: signal || {
-      tokenSymbol: tokenSymbol.toUpperCase(),
-      signalType: 'social_spike' as const,
-      strength: 0,
-      description: `No significant early signals detected for ${tokenSymbol.toUpperCase()}. Social activity is within normal range.`,
-      timestamp: new Date().toISOString(),
-      historicalComparison: {
-        average: 5,
-        current: redditData.totalMentions,
-        change: 0,
+    signal: {
+      ...detectedSignal,
+      context: {
+        explanation,
+        actionableInsights,
+        interpretation: detectedSignal.strength > 0.5
+          ? 'Strong early signal - high probability of price movement'
+          : detectedSignal.strength > 0.2
+            ? 'Moderate early signal - monitor for confirmation'
+            : 'No significant early signal - normal social activity',
       },
     },
     redditData: {
       totalMentions: redditData.totalMentions,
-      topPosts: redditData.posts.slice(0, 3).map((p) => ({
+      topPosts: redditData.posts.slice(0, 5).map((p) => ({
         title: p.title,
         subreddit: p.subreddit,
-        engagement: p.score + p.comments,
+        score: p.score,
+        comments: p.comments,
+        engagement: p.score + p.comments * 2,
         url: p.url,
       })),
     },
     meta: {
       lookbackHours,
       generatedAt: new Date().toISOString(),
-      notes: 'Early signal detection uses volume spike heuristics. For production, historical data would improve accuracy.',
+      notes: 'Early signal detection uses volume spike heuristics. Signals with strength > 0.5 are considered strong. For production, historical data would improve accuracy.',
     },
   };
 
