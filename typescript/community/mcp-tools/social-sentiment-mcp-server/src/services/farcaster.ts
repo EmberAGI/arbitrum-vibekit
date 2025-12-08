@@ -80,8 +80,16 @@ export async function searchFarcasterForToken(
 
           if (!response.ok) {
             const errorText = await response.text().catch(() => '');
-            console.error(`Farcaster API error for "${query}": ${response.status} ${response.statusText}`, errorText.substring(0, 300));
-            if (response.status === 429) {
+            console.error(`Farcaster API error for "${query}": ${response.status} ${response.statusText}`);
+            console.error(`Error response: ${errorText.substring(0, 500)}`);
+
+            if (response.status === 402 || errorText.includes('PaymentRequired') || errorText.includes('paid plan')) {
+              console.error('⚠️  Neynar API: Cast search endpoint requires a paid plan.');
+              console.error('   Free tier may not include cast search. Visit https://dev.neynar.com/pricing');
+              console.error('   Farcaster integration will return empty results until upgraded.');
+              // Don't continue - this is a known limitation
+              break;
+            } else if (response.status === 429) {
               console.error('Neynar API rate limit reached');
               await new Promise((resolve) => setTimeout(resolve, 5000));
             } else if (response.status === 401 || response.status === 403) {

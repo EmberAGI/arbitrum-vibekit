@@ -17,25 +17,25 @@ const __dirname = dirname(__filename);
 try {
   const envPath = join(__dirname, '.env');
   const envContent = readFileSync(envPath, 'utf-8');
-  
+
   // Parse .env file (simple parser - handles KEY=value format)
   const lines = envContent.split('\n');
   for (const line of lines) {
     const trimmed = line.trim();
     // Skip comments and empty lines
     if (!trimmed || trimmed.startsWith('#')) continue;
-    
+
     const match = trimmed.match(/^([^=]+)=(.*)$/);
     if (match) {
       const key = match[1].trim();
       let value = match[2].trim();
-      
+
       // Remove quotes if present
-      if ((value.startsWith('"') && value.endsWith('"')) || 
+      if ((value.startsWith('"') && value.endsWith('"')) ||
           (value.startsWith("'") && value.endsWith("'"))) {
         value = value.slice(1, -1);
       }
-      
+
       // Set environment variable if not already set
       if (!process.env[key]) {
         process.env[key] = value;

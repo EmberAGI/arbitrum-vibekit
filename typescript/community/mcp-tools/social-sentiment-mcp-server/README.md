@@ -14,9 +14,9 @@ A Model Context Protocol (MCP) server that provides social sentiment analysis an
 ### Data Sources (All Free Tier)
 - **Reddit API**: Crypto subreddits sentiment analysis (public JSON endpoints)
 - **Twitter/X API**: Tweet sentiment analysis (requires Bearer token)
-- **Farcaster**: Decentralized social network via Neynar API
-- **Discord**: Community channel monitoring (placeholder)
-- **Telegram**: Crypto group sentiment tracking (placeholder)
+- **Farcaster**: Decentralized social network via Neynar API (cast search requires paid plan)
+- **Discord**: Community channel monitoring via Discord.js bot (requires bot invitation to servers)
+- **Telegram**: Crypto group sentiment tracking via Telegram Bot API (requires bot added to groups)
 - **Hugging Face**: Free sentiment analysis models
 
 ## 📋 Prerequisites
@@ -25,7 +25,9 @@ A Model Context Protocol (MCP) server that provides social sentiment analysis an
 - pnpm package manager
 - API keys for (all optional, free tiers available):
   - Twitter Bearer Token (for Twitter/X integration)
-  - Neynar API Key (for Farcaster integration - 1,000 requests/day free)
+  - Neynar API Key (for Farcaster integration - cast search requires paid plan)
+  - Discord Bot Token (for Discord integration - requires bot invitation to servers)
+  - Telegram Bot Token (for Telegram integration - requires bot added to groups)
   - Hugging Face API key (optional, improves sentiment analysis accuracy)
   - Reddit User Agent (optional, custom user agent string)
 
@@ -48,8 +50,18 @@ Create a `.env` file:
 TWITTER_BEARER_TOKEN=your_bearer_token
 
 # Farcaster via Neynar API (get from https://neynar.com/)
-# Required for Farcaster integration - 1,000 requests/day free tier
+# Note: Cast search requires paid plan
 NEYNAR_API_KEY=your_neynar_api_key
+
+# Discord Bot (get from https://discord.com/developers/applications)
+# Required for Discord integration - bot must be invited to servers
+DISCORD_BOT_TOKEN=your_discord_bot_token
+DISCORD_CHANNEL_IDS=channel_id_1,channel_id_2,channel_id_3
+
+# Telegram Bot (get from @BotFather on Telegram)
+# Required for Telegram integration - bot must be added to groups/channels
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_CHAT_IDS=chat_id_1,chat_id_2,chat_id_3
 
 # Reddit User Agent (optional, custom user agent string)
 REDDIT_USER_AGENT=social-sentiment-mcp/1.0.0

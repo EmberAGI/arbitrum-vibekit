@@ -13,14 +13,17 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
+    "discord.js": "^14.25.1",
     "express": "catalog:",
     "node-fetch": "^3.3.2",
+    "node-telegram-bot-api": "^0.66.0",
     "snoowrap": "^1.23.0",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@types/express": "catalog:",
     "@types/node": "catalog:",
+    "@types/node-telegram-bot-api": "^0.64.13",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
@@ -38,4 +41,3 @@
   "author": "Arbitrum Vibekit",
   "license": "MIT"
 }
-
