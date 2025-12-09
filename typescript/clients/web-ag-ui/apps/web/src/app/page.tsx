@@ -1,10 +1,11 @@
 'use client';
 
-import { useCoAgent, useCopilotAction } from '@copilotkit/react-core';
+import { useCoAgent, useCopilotContext } from '@copilotkit/react-core';
 import { CopilotKitCSSProperties, CopilotSidebar } from '@copilotkit/react-ui';
 import type { AIMessage } from '@copilotkit/shared';
-import { useState, type ChangeEvent } from 'react';
+import { type ChangeEvent } from 'react';
 import { v7 } from 'uuid';
+import { useAgentStateSnapshotLoader } from './hooks/useAgentStateSnapshotLoader';
 
 // • Multiple threads
 
@@ -74,12 +75,16 @@ const initialAgentState: AgentState = {
   amount: 0,
 };
 
+const AGENT_NAME = 'starterAgent';
+
 function YourMainContent({ themeColor }: { themeColor: string }) {
   // 🪁 Shared State: https://docs.copilotkit.ai/coagents/shared-state
   const { state, setState, run } = useCoAgent<AgentState>({
-    name: 'starterAgent',
+    name: AGENT_NAME,
     initialState: initialAgentState,
   });
+  const { threadId } = useCopilotContext();
+  const loadAgentStateSnapshot = useAgentStateSnapshotLoader<AgentState>(AGENT_NAME);
 
   const COMMAND_HIRE = {
     command: 'hire',
@@ -109,6 +114,14 @@ function YourMainContent({ themeColor }: { themeColor: string }) {
   //   risk interleaved or rejected tool events and non-deterministic state; practical
   //   recommendation is to serialize per thread (queue locally or disable the trigger while
   //   isRunning).
+
+  const refreshAgentState = async () => {
+    if (!threadId) return;
+    const snapshot = await loadAgentStateSnapshot(threadId);
+    if (snapshot?.state) {
+      setState(snapshot.state);
+    }
+  };
 
   const runCommandHire = () => {
     run(({ previousState, currentState }) => {
@@ -221,6 +234,13 @@ function YourMainContent({ themeColor }: { themeColor: string }) {
             bg-red-500 hover:bg-red-600 text-white rounded-full px-4 py-2 flex items-center justify-center"
         >
           Send Message
+        </button>
+        <button
+          onClick={() => void refreshAgentState()}
+          className="relative mx-auto mt-4 opacity-50 group-hover:opacity-100 transition-opacity
+            bg-white/20 hover:bg-white/30 text-white rounded-full px-4 py-2 flex items-center justify-center border border-white/40"
+        >
+          Reload Saved State
         </button>
         <hr className="border-white/20 my-6" />
         <div className="mt-4 bg-white/10 border border-white/20 rounded-lg p-4 text-white">
