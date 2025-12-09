@@ -1,173 +1,258 @@
-"use client";
+'use client';
 
-import { useCoAgent, useCopilotAction } from "@copilotkit/react-core";
-import { CopilotKitCSSProperties, CopilotSidebar } from "@copilotkit/react-ui";
-import { useState } from "react";
+import { useCoAgent, useCopilotAction } from '@copilotkit/react-core';
+import { CopilotKitCSSProperties, CopilotSidebar } from '@copilotkit/react-ui';
+import type { AIMessage } from '@copilotkit/shared';
+import { useState, type ChangeEvent } from 'react';
+import { v7 } from 'uuid';
+
+// • Multiple threads
+
+//   - CopilotKit exposes thread management on the provider context: threads,
+//     selectedThreadId, selectThread, createThread, createAndSelectThread all live on the
+//     same context that powers the chat UI. Use these to list threads and switch or create
+//     new ones; the provider will reload state/messages for the newly selected thread.
+//     (copilotjs.com (https://www.copilotjs.com/docs/react/use-copilot?utm_source=openai))
+//   - useCopilotContext() (and the higher-level useCopilot) and useCoAgent() read/write
+//     the same CopilotKit context; useCoAgent pulls threadId and state refs from that
+//     context for synchronization. Switching the thread via setThreadId or selectThread
+//     immediately changes which agent state/messages useCoAgent loads. (deepwiki.com
+//     (https://deepwiki.com/CopilotKit/CopilotKit/3.1.4-copilotkit-provider-and-context?
+//     utm_source=openai))
+
+//   Recommended pattern for multi-thread apps
+
+//   - Mount one <CopilotKit> per logical user/session, then drive thread selection
+//     explicitly in UI (e.g., a sidebar list that calls selectThread(id); a “New chat”
+//     button that calls createAndSelectThread()).
+//   - If you need per-view isolation (e.g., multiple widgets on a page), pass an explicit
+//     threadId prop to each <CopilotKit> instance so each widget is pinned to its own
+//     thread; otherwise they’ll share the auto-generated thread in the shared provider.
 
 export default function CopilotKitPage() {
-  const [themeColor, setThemeColor] = useState("#6366f1");
-
-  // 🪁 Frontend Actions: https://docs.copilotkit.ai/guides/frontend-actions
-  useCopilotAction({
-    name: "setThemeColor",
-    description: "Set the theme color of the page.",
-    parameters: [{
-      name: "themeColor",
-      description: "The theme color to set. Make sure to pick nice colors.",
-      required: true,
-    }],
-    handler({ themeColor }) {
-      setThemeColor(themeColor);
-    },
-  });
+  const themeColor = '#6366f1';
 
   return (
-    <main style={{ "--copilot-kit-primary-color": themeColor } as CopilotKitCSSProperties}>
+    <main style={{ '--copilot-kit-primary-color': themeColor } as CopilotKitCSSProperties}>
       <YourMainContent themeColor={themeColor} />
-      <CopilotSidebar
-        clickOutsideToClose={false}
-        defaultOpen={true}
-        labels={{
-          title: "Popup Assistant",
-          initial: "👋 Hi, there! You're chatting with an agent. This agent comes with a few tools to get you started.\n\nFor example you can try:\n- **Frontend Tools**: \"Set the theme to orange\"\n- **Shared State**: \"Write a proverb about AI\"\n- **Generative UI**: \"Get the weather in SF\"\n\nAs you interact with the agent, you'll see the UI update in real-time to reflect the agent's **state**, **tool calls**, and **progress**."
-        }}
-      />
     </main>
   );
 }
 
+type Task = {
+  id: string;
+  taskStatus: TaskStatus;
+};
+
+type TaskState =
+  | 'submitted'
+  | 'working'
+  | 'input-required'
+  | 'completed'
+  | 'canceled'
+  | 'failed'
+  | 'rejected'
+  | 'auth-required'
+  | 'unknown';
+
+type TaskStatus = {
+  state: TaskState;
+  message?: AIMessage;
+  timestamp?: string; // ISO 8601
+};
+
 // State of the agent, make sure this aligns with your agent's state.
 type AgentState = {
-  proverbs: string[];
-}
+  command?: string;
+  amount?: number;
+  task?: Task;
+  messages?: AIMessage[];
+};
+
+const initialAgentState: AgentState = {
+  command: 'idle',
+  amount: 0,
+};
 
 function YourMainContent({ themeColor }: { themeColor: string }) {
   // 🪁 Shared State: https://docs.copilotkit.ai/coagents/shared-state
-  const {state, setState} = useCoAgent<AgentState>({
-    name: "starterAgent",
-    initialState: {
-      proverbs: [
-        "CopilotKit may be new, but its the best thing since sliced bread.",
-      ],
-    },
-  })
-
-  // 🪁 Frontend Actions: https://docs.copilotkit.ai/coagents/frontend-actions
-  useCopilotAction({
-    name: "addProverb",
-    description: "Add a proverb to the list.",
-    parameters: [{
-      name: "proverb",
-      description: "The proverb to add. Make it witty, short and concise.",
-      required: true,
-    }],
-    handler: ({ proverb }) => {
-      setState((prevState) => ({
-        ...prevState,
-        proverbs: [...(prevState?.proverbs || []), proverb],
-      }));
-    },
-  }, [setState]);
-
-  //🪁 Generative UI: https://docs.copilotkit.ai/coagents/generative-ui
-  useCopilotAction({
-    name: "getWeather",
-    description: "Get the weather for a given location.",
-    available: "disabled",
-    parameters: [
-      { name: "location", type: "string", required: true },
-    ],
-    render: ({ args }) => {
-      return <WeatherCard location={args.location} themeColor={themeColor} />
-    },
+  const { state, setState, run } = useCoAgent<AgentState>({
+    name: 'starterAgent',
+    initialState: initialAgentState,
   });
+
+  const COMMAND_HIRE = {
+    command: 'hire',
+  };
+
+  const COMMAND_FIRE = {
+    command: 'fire',
+  };
+
+  const COMMAND_INVALID = {
+    command: 'invalid',
+  };
+
+  // TODO: Can we perform concurrent runs?
+
+  // Parallel calls to run
+
+  // - AG-UI guidance is to avoid concurrent agent runs/tool calls; trigger a run, wait for
+  //   completion/stream to end, then start the next. CopilotKit’s runtime and many backends
+  //   assume serial tool-call ordering, and concurrent runs can produce dropped or rejected
+  //   events. (copilotkit.ai (https://www.copilotkit.ai/blog/how-to-make-agents-talk-to-
+  //   each-other-and-your-app-using-a2a-ag-ui?utm_source=openai))
+  // - CopilotKit surfaces a disableParallelToolCalls flag on adapters to force sequential
+  //   execution, reflecting that parallel execution isn’t reliably supported. (github.com
+  //   (https://github.com/CopilotKit/CopilotKit/issues/2462?utm_source=openai))
+  // - If you invoke run twice before the first finishes, both will fire, but you
+  //   risk interleaved or rejected tool events and non-deterministic state; practical
+  //   recommendation is to serialize per thread (queue locally or disable the trigger while
+  //   isRunning).
+
+  const runCommandHire = () => {
+    run(({ previousState, currentState }) => {
+      return {
+        id: v7(),
+        role: 'user',
+        content: JSON.stringify(COMMAND_HIRE),
+      };
+    });
+  };
+
+  const handleAmountChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { value } = event.target;
+    if (value === '') {
+      setState((prev) => ({ ...(prev ?? initialAgentState), amount: undefined }));
+      return;
+    }
+
+    const numericValue = Number(value);
+    if (Number.isNaN(numericValue)) {
+      return;
+    }
+
+    setState((prev) => ({ ...(prev ?? initialAgentState), amount: numericValue }));
+  };
+
+  const runCommandFire = () => {
+    run(({ previousState, currentState }) => {
+      return {
+        id: v7(),
+        role: 'user',
+        content: JSON.stringify(COMMAND_FIRE),
+      };
+    });
+  };
+
+  const runCommandInvalid = () => {
+    run(({ previousState, currentState }) => {
+      return {
+        id: v7(),
+        role: 'user',
+        content: JSON.stringify(COMMAND_INVALID),
+      };
+    });
+  };
+
+  const runSendMessage = () => {
+    run(({ previousState, currentState }) => {
+      return {
+        id: v7(),
+        role: 'user',
+        content: 'Hello, how are you?',
+      };
+    });
+  };
 
   return (
     <div
       style={{ backgroundColor: themeColor }}
       className="h-screen w-screen flex justify-center items-center flex-col transition-colors duration-300"
     >
-      <div className="bg-white/20 backdrop-blur-md p-8 rounded-2xl shadow-xl max-w-2xl w-full">
-        <h1 className="text-4xl font-bold text-white mb-2 text-center">Proverbs</h1>
-        <p className="text-gray-200 text-center italic mb-6">This is a demonstrative page, but it could be anything you want! 🪁</p>
+      <div className="relative group bg-white/20 backdrop-blur-md p-8 rounded-2xl shadow-xl max-w-2xl w-full">
+        <h1 className="text-4xl font-bold text-white mb-2 text-center">DeFi Agent</h1>
+        <p className="text-gray-200 text-center italic mb-6">
+          This agent autonomously trades on DeFi protocols! 📈
+        </p>
         <hr className="border-white/20 my-6" />
-        <div className="flex flex-col gap-3">
-          {state.proverbs?.map((proverb, index) => (
-            <div
-              key={index}
-              className="bg-white/15 p-4 rounded-xl text-white relative group hover:bg-white/20 transition-all"
-            >
-              <p className="pr-8">{proverb}</p>
-              <button
-                onClick={() => setState({
-                  ...state,
-                  proverbs: state.proverbs?.filter((_, i) => i !== index),
-                })}
-                className="absolute right-3 top-3 opacity-0 group-hover:opacity-100 transition-opacity
-                  bg-red-500 hover:bg-red-600 text-white rounded-full h-6 w-6 flex items-center justify-center"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
+        <div className="mt-4 bg-white/10 border border-white/20 rounded-lg p-4 text-white">
+          <label
+            className="block text-xs uppercase tracking-wide text-white/70 mb-2"
+            htmlFor="amount"
+          >
+            Amount
+          </label>
+          <input
+            id="amount"
+            type="number"
+            inputMode="decimal"
+            step="any"
+            value={state?.amount ?? ''}
+            onChange={handleAmountChange}
+            className="w-full rounded-md bg-white/20 border border-white/30 px-3 py-2 text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-white/60"
+            placeholder="Enter trade amount"
+          />
         </div>
-        {state.proverbs?.length === 0 && <p className="text-center text-white/80 italic my-8">
-          No proverbs yet. Ask the assistant to add some!
-        </p>}
+        <button
+          onClick={() => runCommandHire()}
+          className="relative mx-auto mt-4 opacity-50 group-hover:opacity-100 transition-opacity
+            bg-red-500 hover:bg-red-600 text-white rounded-full px-4 py-2 flex items-center justify-center"
+        >
+          Hire
+        </button>
+        <button
+          onClick={() => runCommandFire()}
+          className="relative mx-auto mt-4 opacity-50 group-hover:opacity-100 transition-opacity
+            bg-red-500 hover:bg-red-600 text-white rounded-full px-4 py-2 flex items-center justify-center"
+        >
+          Fire
+        </button>
+        <button
+          onClick={() => runCommandInvalid()}
+          className="relative mx-auto mt-4 opacity-50 group-hover:opacity-100 transition-opacity
+            bg-red-500 hover:bg-red-600 text-white rounded-full px-4 py-2 flex items-center justify-center"
+        >
+          Invalid
+        </button>
+        <button
+          onClick={() => runSendMessage()}
+          className="relative mx-auto mt-4 opacity-50 group-hover:opacity-100 transition-opacity
+            bg-red-500 hover:bg-red-600 text-white rounded-full px-4 py-2 flex items-center justify-center"
+        >
+          Send Message
+        </button>
+        <hr className="border-white/20 my-6" />
+        <div className="mt-4 bg-white/10 border border-white/20 rounded-lg p-4 text-white">
+          <p className="text-xs uppercase tracking-wide text-white/70">Command</p>
+          <p className="text-lg font-semibold">{state?.command ?? '—'}</p>
+        </div>
+        <hr className="border-white/20 my-6" />
+        <div className="mt-4 bg-white/10 border border-white/20 rounded-lg p-4 text-white">
+          <p className="text-xs uppercase tracking-wide text-white/70">Task</p>
+          <p className="text-lg font-semibold">{state?.task?.id ?? '—'}</p>
+          <p className="text-lg font-semibold">{state?.task?.taskStatus.state ?? '—'}</p>
+          <p className="text-lg font-semibold">{state?.task?.taskStatus.message?.content ?? '—'}</p>
+        </div>
+        <hr className="border-white/20 my-6" />
+        <div className="mt-4 bg-white/10 border border-white/20 rounded-lg p-4 text-white">
+          <p className="text-xs uppercase tracking-wide text-white/70">Messages</p>
+          {state?.messages && state.messages.length > 0 ? (
+            <ul className="space-y-2">
+              {state.messages.map((msg, index) => (
+                <li key={msg.id ?? `${msg.role}-${index}`} className="text-sm leading-tight">
+                  <span className="font-semibold uppercase text-white/60">{msg.role}:</span>{' '}
+                  <span className="text-white">
+                    {typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-lg font-semibold">—</p>
+          )}
+        </div>
       </div>
     </div>
-  );
-}
-
-// Simple sun icon for the weather card
-function SunIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-14 h-14 text-yellow-200">
-      <circle cx="12" cy="12" r="5" />
-      <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" strokeWidth="2" stroke="currentColor" />
-    </svg>
-  );
-}
-
-// Weather card component where the location and themeColor are based on what the agent
-// sets via tool calls.
-function WeatherCard({ location, themeColor }: { location?: string, themeColor: string }) {
-  return (
-    <div
-    style={{ backgroundColor: themeColor }}
-    className="rounded-xl shadow-xl mt-6 mb-4 max-w-md w-full"
-  >
-    <div className="bg-white/20 p-4 w-full">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-xl font-bold text-white capitalize">{location}</h3>
-          <p className="text-white">Current Weather</p>
-        </div>
-        <SunIcon />
-      </div>
-
-      <div className="mt-4 flex items-end justify-between">
-        <div className="text-3xl font-bold text-white">70°</div>
-        <div className="text-sm text-white">Clear skies</div>
-      </div>
-
-      <div className="mt-4 pt-4 border-t border-white">
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <div>
-            <p className="text-white text-xs">Humidity</p>
-            <p className="text-white font-medium">45%</p>
-          </div>
-          <div>
-            <p className="text-white text-xs">Wind</p>
-            <p className="text-white font-medium">5 mph</p>
-          </div>
-          <div>
-            <p className="text-white text-xs">Feels Like</p>
-            <p className="text-white font-medium">72°</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
   );
 }
