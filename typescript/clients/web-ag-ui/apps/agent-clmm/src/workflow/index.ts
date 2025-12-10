@@ -5,9 +5,13 @@ import { ClmmStateAnnotation, memory } from './context.js';
 import { normalizeHexAddress } from './context.js';
 import { bootstrapNode } from './nodes/bootstrap.js';
 import { collectOperatorInputNode } from './nodes/collectOperatorInput.js';
+import { fireCommandNode } from './nodes/fireCommand.js';
+import { hireCommandNode } from './nodes/hireCommand.js';
 import { listPoolsNode } from './nodes/listPools.js';
 import { pollCycleNode } from './nodes/pollCycle.js';
 import { prepareOperatorNode } from './nodes/prepareOperator.js';
+import { resolveCommandTarget, runCommandNode } from './nodes/runCommand.js';
+import { runCycleCommandNode } from './nodes/runCycleCommand.js';
 import { summarizeNode } from './nodes/summarize.js';
 import { saveBootstrapContext } from './store.js';
 
@@ -24,13 +28,21 @@ const agentWalletAddress = normalizeHexAddress(account.address, 'agent wallet ad
 await saveBootstrapContext({ account, agentWalletAddress }, store);
 
 const workflow = new StateGraph(ClmmStateAnnotation)
+  .addNode('runCommand', runCommandNode)
+  .addNode('hireCommand', hireCommandNode)
+  .addNode('fireCommand', fireCommandNode)
+  .addNode('runCycleCommand', runCycleCommandNode)
   .addNode('bootstrap', bootstrapNode)
   .addNode('listPools', listPoolsNode)
   .addNode('collectOperatorInput', collectOperatorInputNode)
   .addNode('prepareOperator', prepareOperatorNode)
   .addNode('pollCycle', pollCycleNode, { ends: ['summarize'] })
   .addNode('summarize', summarizeNode)
-  .addEdge(START, 'bootstrap')
+  .addEdge(START, 'runCommand')
+  .addConditionalEdges('runCommand', resolveCommandTarget)
+  .addEdge('hireCommand', 'bootstrap')
+  .addEdge('fireCommand', END)
+  .addEdge('runCycleCommand', 'pollCycle')
   .addEdge('bootstrap', 'listPools')
   .addEdge('listPools', 'collectOperatorInput')
   .addEdge('collectOperatorInput', 'prepareOperator')

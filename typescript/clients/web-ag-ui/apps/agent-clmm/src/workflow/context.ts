@@ -1,3 +1,4 @@
+import { CopilotKitStateAnnotation } from '@copilotkit/sdk-js/langgraph';
 import type { AIMessage as CopilotKitAIMessage } from '@copilotkit/shared';
 import { type Artifact } from '@emberai/agent-node/workflow';
 import { Annotation, MemorySaver } from '@langchain/langgraph';
@@ -50,6 +51,7 @@ export type OperatorInterrupt = {
 };
 
 export const ClmmStateAnnotation = Annotation.Root({
+  ...CopilotKitStateAnnotation.spec,
   mode: Annotation<'debug' | 'production'>(),
   pollIntervalMs: Annotation<number>({
     default: () => resolvePollIntervalMs(),
@@ -59,7 +61,16 @@ export const ClmmStateAnnotation = Annotation.Root({
     default: () => resolveStreamLimit(),
     reducer: (_previous, current) => current ?? _previous ?? resolveStreamLimit(),
   }),
-  cronScheduled: Annotation<boolean>({ default: () => false, reducer: (_left, right) => right ?? _left ?? false }),
+  cronScheduled: Annotation<boolean>({
+    default: () => false,
+    reducer: (_left, right) => right ?? _left ?? false,
+  }),
+  bootstrapped: Annotation<boolean>({
+    default: () => false,
+    reducer: (_left, right) => right ?? _left ?? false,
+  }),
+  command: Annotation<string | undefined>({ reducer: (_left, right) => right ?? _left }),
+  amount: Annotation<number | undefined>({ reducer: (_left, right) => right ?? _left }),
   camelotClient: Annotation<EmberCamelotClient | undefined>(),
   clients: Annotation<ReturnType<typeof createClients> | undefined>(),
   task: Annotation<Task | undefined>({ reducer: (_left, right) => right ?? _left }),
@@ -154,3 +165,16 @@ export function normalizeHexAddress(value: string, label: string): `0x${string}`
   }
   return value as `0x${string}`;
 }
+
+export const isTaskTerminal = (state: TaskState) =>
+  state === 'completed' ||
+  state === 'failed' ||
+  state === 'canceled' ||
+  state === 'rejected' ||
+  state === 'unknown';
+
+export const isTaskActive = (state: TaskState) =>
+  state === 'submitted' ||
+  state === 'working' ||
+  state === 'input-required' ||
+  state === 'auth-required';

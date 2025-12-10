@@ -1,5 +1,6 @@
 import { GraphInterrupt } from '@langchain/langgraph';
 import cron from 'node-cron';
+import { v7 as uuidv7 } from 'uuid';
 
 import { clmmGraph } from './workflow/index.js';
 
@@ -10,8 +11,14 @@ async function runGraphOnce(threadId: string) {
   const startedAt = Date.now();
   console.info(`[cron] Starting CLMM graph run (thread=${threadId})`);
 
+  const runMessage = {
+    id: uuidv7(),
+    role: 'user' as const,
+    content: JSON.stringify({ command: 'cycle' }),
+  };
+
   try {
-    const stream = await clmmGraph.stream(null, {
+    const stream = await clmmGraph.stream({ messages: [runMessage] }, {
       configurable: { thread_id: threadId },
     });
     // streaming ensures all nodes execute; events are handled inside nodes
@@ -48,7 +55,13 @@ if (!initialThreadId) {
 }
 
 void (async () => {
-  const stream = await clmmGraph.stream(null, {
+  const initialRunMessage = {
+    id: uuidv7(),
+    role: 'user' as const,
+    content: JSON.stringify({ command: 'cycle' }),
+  };
+
+  const stream = await clmmGraph.stream({ messages: [initialRunMessage] }, {
     configurable: {
       thread_id: initialThreadId,
       scheduleCron: ensureCronForThread,

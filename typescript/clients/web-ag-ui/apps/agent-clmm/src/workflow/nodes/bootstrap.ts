@@ -18,15 +18,16 @@ export const bootstrapNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
-  if (state.cronScheduled) {
-    logInfo('Skipping bootstrap; cron already scheduled for thread', {
-      threadId: (config as Configurable).configurable?.thread_id,
-    });
+  const threadId = (config as Configurable).configurable?.thread_id;
+
+  if (state.bootstrapped) {
+    logInfo('Skipping bootstrap; state already initialized for thread', { threadId });
     return new Command({
       update: {},
-      goto: 'pollCycle',
+      goto: 'listPools',
     });
   }
+
   const { account } = await loadBootstrapContext();
   const mode = process.env['CLMM_MODE'] === 'production' ? 'production' : 'debug';
   const pollIntervalMs = resolvePollIntervalMs();
@@ -59,6 +60,7 @@ export const bootstrapNode = async (
   await copilotkitEmitState(config, { task, events: [statusEvent] });
 
   return {
+    bootstrapped: true,
     mode,
     pollIntervalMs,
     streamLimit,
