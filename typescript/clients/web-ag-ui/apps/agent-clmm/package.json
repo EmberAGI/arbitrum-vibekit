@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "npx @langchain/langgraph-cli dev --port 8123 --no-browser",
     "build": "tsc --project tsconfig.json",
+    "ci:build": "pnpm typecheck && pnpm build",
     "test": "pnpm test:unit && pnpm test:int && pnpm test:e2e",
     "test:unit": "vitest run --config vitest.config.unit.ts",
     "test:int": "tsx --env-file=.env.test ./node_modules/vitest/vitest.mjs run --config vitest.config.int.ts",
@@ -15,6 +16,7 @@
     "test:ci": "pnpm test:unit && pnpm test:int",
     "lint": "eslint \"src\" \"tests\" --ext .ts",
     "lint:fix": "eslint \"src\" \"tests\" --ext .ts --fix",
+    "typecheck": "tsc --noEmit --project tsconfig.eslint.json",
     "format": "prettier \"{src,tests}/**/*.{ts,tsx,js,jsx}\" --write",
     "format:check": "prettier \"{src,tests}/**/*.{ts,tsx,js,jsx}\" --check",
     "workflow:demo": "tsx --env-file=.env ./scripts/run-camelot-demo.ts",
