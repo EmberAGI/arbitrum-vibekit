@@ -1,5 +1,6 @@
-import { ARBITRUM_CHAIN_ID, DEFAULT_TICK_BANDWIDTH_BPS } from '../../config/constants.js';
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
+import { ARBITRUM_CHAIN_ID, DEFAULT_TICK_BANDWIDTH_BPS } from '../../config/constants.js';
+import { type ResolvedOperatorConfig } from '../../domain/types.js';
 import {
   type ClmmState,
   type ClmmUpdate,
@@ -7,7 +8,6 @@ import {
   normalizeHexAddress,
   type ClmmEvent,
 } from '../context.js';
-import { type ResolvedOperatorConfig } from '../../domain/types.js';
 import { loadBootstrapContext } from '../store.js';
 
 export const prepareOperatorNode = async (state: ClmmState): Promise<ClmmUpdate> => {

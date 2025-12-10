@@ -5,6 +5,8 @@ import {
   DEFAULT_REBALANCE_THRESHOLD_PCT,
   DEFAULT_TICK_BANDWIDTH_BPS,
 } from '../config/constants.js';
+import type { CamelotPool, DecisionContext, PositionSnapshot, WalletPosition } from '../domain/types.js';
+
 import {
   buildRange,
   computeVolatilityPct,
@@ -13,7 +15,6 @@ import {
   evaluateDecision,
   normalizePosition,
 } from './decision-engine.js';
-import type { CamelotPool, DecisionContext, PositionSnapshot, WalletPosition } from '../domain/types.js';
 
 const LOG_BASE = Math.log(1.0001);
 

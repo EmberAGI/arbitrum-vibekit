@@ -2,13 +2,13 @@ import { END, InMemoryStore, START, StateGraph } from '@langchain/langgraph';
 import { privateKeyToAccount } from 'viem/accounts';
 
 import { ClmmStateAnnotation, memory } from './context.js';
+import { normalizeHexAddress } from './context.js';
+import { bootstrapNode } from './nodes/bootstrap.js';
 import { collectOperatorInputNode } from './nodes/collectOperatorInput.js';
 import { listPoolsNode } from './nodes/listPools.js';
 import { pollCycleNode } from './nodes/pollCycle.js';
 import { prepareOperatorNode } from './nodes/prepareOperator.js';
 import { summarizeNode } from './nodes/summarize.js';
-import { bootstrapNode } from './nodes/bootstrap.js';
-import { normalizeHexAddress } from './context.js';
 import { saveBootstrapContext } from './store.js';
 
 const store = new InMemoryStore();

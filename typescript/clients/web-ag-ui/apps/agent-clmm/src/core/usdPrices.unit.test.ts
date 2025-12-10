@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CamelotPool } from '../domain/types.js';
+
 import { enrichCamelotPoolUsdPrices } from './usdPrices.js';
 
 const LOG_BASE = Math.log(1.0001);

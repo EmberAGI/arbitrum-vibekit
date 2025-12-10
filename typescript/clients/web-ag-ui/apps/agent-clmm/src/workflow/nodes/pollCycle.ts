@@ -1,7 +1,7 @@
 import { Command } from '@langchain/langgraph';
 
-import { ARBITRUM_CHAIN_ID, DATA_STALE_CYCLE_LIMIT, DEFAULT_REBALANCE_THRESHOLD_PCT, MAX_GAS_SPEND_ETH, resolveEthUsdPrice, resolvePollIntervalMs, resolveStreamLimit } from '../../config/constants.js';
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
+import { ARBITRUM_CHAIN_ID, DATA_STALE_CYCLE_LIMIT, DEFAULT_REBALANCE_THRESHOLD_PCT, MAX_GAS_SPEND_ETH, resolveEthUsdPrice, resolvePollIntervalMs, resolveStreamLimit } from '../../config/constants.js';
 import { buildRange, computeVolatilityPct, deriveMidPrice, evaluateDecision, estimateFeeValueUsd, normalizePosition, tickToPrice } from '../../core/decision-engine.js';
 import { sleep } from '../../core/utils.js';
 import { type CamelotPool, type RebalanceTelemetry } from '../../domain/types.js';
@@ -194,7 +194,7 @@ export const pollCycleNode = async (
     bandwidthBps: targetRangeForLog.bandwidthBps,
   };
 
-  let cycleMetrics: RebalanceTelemetry['metrics'] = {
+  let cycleMetrics: NonNullable<RebalanceTelemetry['metrics']> = {
     tick: poolSnapshot.tick,
     tickSpacing: poolSnapshot.tickSpacing,
     midPrice,

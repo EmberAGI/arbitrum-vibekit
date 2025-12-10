@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { enrichCamelotPoolUsdPrices } from '../core/usdPrices.js';
 import {
   CamelotPoolSchema,
   PoolListResponseSchema,
@@ -8,7 +9,6 @@ import {
   type CamelotPool,
   type WalletPosition,
 } from '../domain/types.js';
-import { enrichCamelotPoolUsdPrices } from '../core/usdPrices.js';
 
 const LOG_BASE = Math.log(1.0001);
 
@@ -67,13 +67,19 @@ const ClmmWithdrawRequestSchema = z.object({
 });
 export type ClmmWithdrawRequest = z.infer<typeof ClmmWithdrawRequestSchema>;
 
-type EmberLiquidityPool = z.infer<typeof PoolListResponseSchema>['liquidityPools'][number];
-type EmberWalletPosition = z.infer<typeof WalletPositionsResponseSchema>['positions'][number];
+type PoolListResponse = z.infer<typeof PoolListResponseSchema>;
+type WalletPositionsResponse = z.infer<typeof WalletPositionsResponseSchema>;
+type EmberLiquidityPool = PoolListResponse['liquidityPools'][number];
+type EmberWalletPosition = WalletPositionsResponse['positions'][number];
 
 export class EmberCamelotClient {
   constructor(private readonly baseUrl: string) {}
 
-  private async fetchEndpoint<T>(endpoint: string, schema: z.ZodSchema<T>, init?: RequestInit) {
+  private async fetchEndpoint<T>(
+    endpoint: string,
+    schema: z.ZodType<T>,
+    init?: RequestInit,
+  ): Promise<T> {
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       ...init,
       headers: {
@@ -87,12 +93,12 @@ export class EmberCamelotClient {
       throw new Error(`Ember API request failed (${response.status}): ${text}`);
     }
 
-    const json = await response.json();
+    const json: unknown = await response.json();
     return schema.parseAsync(json);
   }
 
   async listCamelotPools(chainId: number): Promise<CamelotPool[]> {
-    const data = await this.fetchEndpoint(
+    const data = await this.fetchEndpoint<PoolListResponse>(
       `/liquidity/pools?chainId=${chainId}`,
       PoolListResponseSchema,
     );
@@ -108,7 +114,7 @@ export class EmberCamelotClient {
     walletAddress: `0x${string}`,
     chainId: number,
   ): Promise<WalletPosition[]> {
-    const data = await this.fetchEndpoint(
+    const data = await this.fetchEndpoint<WalletPositionsResponse>(
       `/liquidity/positions/${walletAddress}?chainId=${chainId}`,
       WalletPositionsResponseSchema,
     );
@@ -125,19 +131,27 @@ export class EmberCamelotClient {
   }
 
   async requestRebalance(payload: ClmmRebalanceRequest): Promise<ClmmRebalanceResponse> {
-    const body = await this.fetchEndpoint(`/liquidity/supply`, ClmmRebalanceResponseSchema, {
-      method: 'POST',
-      body: JSON.stringify(ClmmRebalanceRequestSchema.parse(payload)),
-    });
+    const body = await this.fetchEndpoint<ClmmRebalanceResponse>(
+      `/liquidity/supply`,
+      ClmmRebalanceResponseSchema,
+      {
+        method: 'POST',
+        body: JSON.stringify(ClmmRebalanceRequestSchema.parse(payload)),
+      },
+    );
 
     return body;
   }
 
   async requestWithdrawal(payload: ClmmWithdrawRequest): Promise<ClmmRebalanceResponse> {
-    const body = await this.fetchEndpoint(`/liquidity/withdraw`, ClmmRebalanceResponseSchema, {
-      method: 'POST',
-      body: JSON.stringify(ClmmWithdrawRequestSchema.parse(payload)),
-    });
+    const body = await this.fetchEndpoint<ClmmRebalanceResponse>(
+      `/liquidity/withdraw`,
+      ClmmRebalanceResponseSchema,
+      {
+        method: 'POST',
+        body: JSON.stringify(ClmmWithdrawRequestSchema.parse(payload)),
+      },
+    );
 
     return body;
   }

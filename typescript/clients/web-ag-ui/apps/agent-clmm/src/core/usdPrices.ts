@@ -1,5 +1,6 @@
-import { deriveMidPrice } from './decision-engine.js';
 import type { CamelotPool } from '../domain/types.js';
+
+import { deriveMidPrice } from './decision-engine.js';
 
 const LOGICAL_ONE = 1;
 

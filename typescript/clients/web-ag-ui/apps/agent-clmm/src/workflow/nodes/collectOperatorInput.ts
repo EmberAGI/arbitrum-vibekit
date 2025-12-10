@@ -1,6 +1,6 @@
 import { interrupt } from '@langchain/langgraph';
 
-import { OperatorConfigInputSchema, type OperatorConfigInput } from '../../domain/types.js';
+import { OperatorConfigInputSchema } from '../../domain/types.js';
 import { logInfo, type ClmmState, type OperatorInterrupt, type ClmmUpdate } from '../context.js';
 
 export const collectOperatorInputNode = async (
@@ -17,8 +17,7 @@ export const collectOperatorInputNode = async (
     artifactId: state.poolArtifact.artifactId,
   };
 
-  const operatorInput = await interrupt<OperatorConfigInput>(request);
-  const parsed = OperatorConfigInputSchema.parse(operatorInput);
+  const parsed = OperatorConfigInputSchema.parse(await interrupt(request));
   logInfo('Operator input received', { poolAddress: parsed.poolAddress, walletAddress: parsed.walletAddress });
 
   return {

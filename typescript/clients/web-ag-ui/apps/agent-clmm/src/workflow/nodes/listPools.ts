@@ -1,6 +1,6 @@
 import { ARBITRUM_CHAIN_ID } from '../../config/constants.js';
-import { logInfo, type ClmmEvent, type ClmmState, type ClmmUpdate } from '../context.js';
 import { buildPoolArtifact } from '../artifacts.js';
+import { logInfo, type ClmmEvent, type ClmmState, type ClmmUpdate } from '../context.js';
 import { isPoolAllowed } from '../pools.js';
 
 export const listPoolsNode = async (state: ClmmState): Promise<ClmmUpdate> => {

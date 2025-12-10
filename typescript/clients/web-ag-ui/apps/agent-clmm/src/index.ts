@@ -1,5 +1,5 @@
-import cron from 'node-cron';
 import { GraphInterrupt } from '@langchain/langgraph';
+import cron from 'node-cron';
 
 import { clmmGraph } from './workflow/index.js';
 
@@ -15,8 +15,8 @@ async function runGraphOnce() {
       configurable: { thread_id: threadId },
     });
     // streaming ensures all nodes execute; events are handled inside nodes
-    for await (const _ of stream) {
-      // no-op
+    for await (const event of stream) {
+      void event;
     }
     console.info(`[cron] Run complete in ${Date.now() - startedAt}ms`);
   } catch (error) {

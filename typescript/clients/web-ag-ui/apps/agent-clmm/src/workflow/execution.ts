@@ -1,22 +1,24 @@
 import { erc20Abi, parseUnits } from 'viem';
 
-import { ensureAllowance } from '../core/allowances.js';
-import { createClients } from '../clients/clients.js';
+import type { createClients } from '../clients/clients.js';
+import type {
+  EmberCamelotClient} from '../clients/emberApi.js';
 import {
-  ARBITRUM_CHAIN_ID,
-  CAMELOT_POSITION_MANAGER_ADDRESS,
-} from '../config/constants.js';
-import { buildRange, deriveMidPrice } from '../core/decision-engine.js';
-import {
-  EmberCamelotClient,
   fetchPoolSnapshot,
   type ClmmRebalanceRequest,
   type ClmmWithdrawRequest,
   type TransactionInformation,
 } from '../clients/emberApi.js';
+import {
+  ARBITRUM_CHAIN_ID,
+  CAMELOT_POSITION_MANAGER_ADDRESS,
+} from '../config/constants.js';
+import { ensureAllowance } from '../core/allowances.js';
+import { buildRange, deriveMidPrice } from '../core/decision-engine.js';
 import { executeTransaction } from '../core/transaction.js';
-import { logInfo, normalizeHexAddress } from './context.js';
 import { type CamelotPool, type ClmmAction, type ResolvedOperatorConfig } from '../domain/types.js';
+
+import { logInfo, normalizeHexAddress } from './context.js';
 
 type TokenAllocation = {
   token0: bigint;

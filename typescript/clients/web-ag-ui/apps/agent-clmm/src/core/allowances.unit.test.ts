@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { checkTokenAllowance, ensureAllowance } from './allowances.js';
 import type { OnchainClients } from '../clients/clients.js';
+
+import { checkTokenAllowance, ensureAllowance } from './allowances.js';
 import * as transactionModule from './transaction.js';
 
 describe('allowances helpers', () => {

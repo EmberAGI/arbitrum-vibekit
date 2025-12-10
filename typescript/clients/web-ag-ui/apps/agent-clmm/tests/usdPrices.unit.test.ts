@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { CamelotPool } from '../src/types.js';
-import { enrichCamelotPoolUsdPrices, isUsdStableToken } from '../src/usdPrices.js';
+import { enrichCamelotPoolUsdPrices, isUsdStableToken } from '../src/core/usdPrices.js';
+import type { CamelotPool } from '../src/domain/types.js';
 
 const LOG_BASE = Math.log(1.0001);
 let poolCounter = 0;

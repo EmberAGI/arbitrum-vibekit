@@ -191,6 +191,7 @@ export type RebalanceTelemetry = {
   metrics?: {
     tick: number;
     tickSpacing: number;
+    midPrice: number;
     volatilityPct: number;
     tvlUsd?: number;
     rebalanceThresholdPct: number;

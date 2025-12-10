@@ -1,13 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { deriveMidPrice } from '../core/decision-engine.js';
+import type { CamelotPool } from '../domain/types.js';
+
 import {
   EmberCamelotClient,
   fetchPoolSnapshot,
   normalizePool,
   type ClmmRebalanceRequest,
 } from './emberApi.js';
-import type { CamelotPool } from '../domain/types.js';
 
 const BASE_URL = 'https://unit.test';
 const LOG_BASE = Math.log(1.0001);

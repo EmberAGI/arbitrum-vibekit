@@ -1,6 +1,7 @@
 import { encodeFunctionData, erc20Abi } from 'viem';
 
 import type { OnchainClients } from '../clients/clients.js';
+
 import { executeTransaction } from './transaction.js';
 
 export async function checkTokenAllowance(

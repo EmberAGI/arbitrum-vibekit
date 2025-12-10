@@ -3,33 +3,11 @@
  * It defines the workflow graph, state, tools, nodes and edges.
  */
 
-import { z } from 'zod';
-import { RunnableConfig } from '@langchain/core/runnables';
-import { tool } from '@langchain/core/tools';
-import { ToolNode } from '@langchain/langgraph/prebuilt';
-import { BaseMessage, SystemMessage } from '@langchain/core/messages';
-import {
-  END,
-  InMemoryStore,
-  MemorySaver,
-  START,
-  StateGraph,
-  interrupt,
-} from '@langchain/langgraph';
-import { ChatOpenAI } from '@langchain/openai';
-import {
-  convertActionsToDynamicStructuredTools,
-  copilotkitEmitState,
-  CopilotKitStateAnnotation,
-} from '@copilotkit/sdk-js/langgraph';
-import { Annotation } from '@langchain/langgraph';
-import type { AIMessage } from '@copilotkit/shared';
+import { CopilotKitStateAnnotation } from '@copilotkit/sdk-js/langgraph';
+import { AIMessage } from '@langchain/core/messages';
+import { Annotation, END, MemorySaver, START, StateGraph } from '@langchain/langgraph';
 import { v7 } from 'uuid';
-
-type Task = {
-  id: string;
-  taskStatus: TaskStatus;
-};
+import { z } from 'zod';
 
 type TaskState =
   | 'submitted'
@@ -41,12 +19,6 @@ type TaskState =
   | 'rejected'
   | 'auth-required'
   | 'unknown';
-
-type TaskStatus = {
-  state: TaskState;
-  message?: AIMessage;
-  timestamp?: string; // ISO 8601
-};
 
 // 1. Define our agent state, which includes CopilotKit state to
 //    provide actions to the state.
@@ -60,101 +32,113 @@ const AgentStateAnnotation = Annotation.Root({
 // 2. Define the type for our agent state
 export type AgentState = typeof AgentStateAnnotation.State;
 
+type AgentMessage = AgentState['messages'][number];
+
+type TaskStatus = {
+  state: TaskState;
+  message?: AgentMessage;
+  timestamp?: string; // ISO 8601
+};
+
+type Task = {
+  id: string;
+  taskStatus: TaskStatus;
+};
+
 const commandSchema = z.object({
   command: z.enum(['hire', 'fire']),
 });
 
 // 5. Define the chat node, which will handle the chat logic
-async function chat_node(state: AgentState, config: RunnableConfig) {
-  console.log(`state.copilotkit: ${JSON.stringify(state.copilotkit)}`);
-  //console.log(`config: ${JSON.stringify(config)}`);
-
+function chat_node(state: AgentState): AgentState {
+  console.info('state.copilotkit:', state.copilotkit);
   return state;
 }
 
-async function hire_node(state: AgentState, config: RunnableConfig) {
+function hire_node(state: AgentState): AgentState {
   const amount = state.amount;
-  console.log(`amount: ${amount}`);
+  console.info('amount:', amount);
 
   if (state.task && isTaskActive(state.task.taskStatus.state)) {
-    const message: AIMessage = {
-      id: v7(),
-      role: 'assistant',
-      content: `Task ${state.task.id} is already in a active state.`,
-    };
-    return {
-      ...state,
-      messages: [...state.messages, message],
-    };
-  }
+      const message = new AIMessage({
+        id: v7(),
+        content: `Task ${state.task.id} is already in a active state.`,
+      });
+      return {
+        ...state,
+        messages: [...state.messages, message as unknown as (typeof state.messages)[number]],
+      };
+    }
 
-  const message: AIMessage = {
+  const message = new AIMessage({
     id: v7(),
-    role: 'assistant',
     content: `Agent hired! Trading ${amount} tokens...`,
-  };
+  });
 
   const taskStatus: TaskStatus = {
     state: 'submitted',
-    message: message,
+    message: message as unknown as AgentState['messages'][number],
   };
 
   const task: Task = {
     id: v7(),
-    taskStatus: taskStatus,
+    taskStatus,
   };
 
   return {
     ...state,
-    task: task,
-    command: 'hire',
+    task,
+    command: ['hire'],
   };
 }
 
-async function fire_node(state: AgentState, config: RunnableConfig) {
-  console.log(`state.copilotkit: ${JSON.stringify(state.copilotkit)}`);
-  //console.log(`config: ${JSON.stringify(config)}`);
+function fire_node(state: AgentState): AgentState {
+  console.info('state.copilotkit:', state.copilotkit);
 
   const currentTask = state.task;
 
   if (isTaskTerminal(currentTask.taskStatus.state)) {
-    const message: AIMessage = {
-      id: v7(),
-      role: 'assistant',
-      content: `Task ${currentTask.id} is already in a terminal state.`,
-    };
-    return {
-      ...state,
-      message: [...state.messages, message],
-    };
-  }
+      const message = new AIMessage({
+        id: v7(),
+        content: `Task ${currentTask.id} is already in a terminal state.`,
+      });
+      return {
+        ...state,
+        messages: [...state.messages, message as unknown as (typeof state.messages)[number]],
+      };
+    }
 
-  const message: AIMessage = {
+  const message = new AIMessage({
     id: v7(),
-    role: 'assistant',
     content: `Agent fired! It no longer trades your tokens.`,
-  };
+  });
 
   const taskStatus: TaskStatus = {
     state: 'canceled',
-    message: message,
+    message: message as unknown as AgentState['messages'][number],
   };
 
   const task: Task = {
     ...currentTask,
-    taskStatus: taskStatus,
+    taskStatus,
   };
 
   return {
     ...state,
-    task: task,
-    command: 'fire',
+    task,
+    command: ['fire'],
   };
 }
 
-function runCommand({ messages }: AgentState) {
+type CommandNode = 'hire_node' | 'fire_node' | '__end__';
+
+function runCommand({ messages }: AgentState): CommandNode {
   const lastMessage = messages[messages.length - 1];
-  console.log(`lastMessage: ${lastMessage.content}`);
+  const content =
+    typeof lastMessage.content === 'string'
+      ? lastMessage.content
+      : JSON.stringify(lastMessage.content);
+  console.info('lastMessage:', content);
 
   let command: string;
   if (typeof lastMessage.content === 'string') {
@@ -165,8 +149,9 @@ function runCommand({ messages }: AgentState) {
       } else {
         command = parsed.error.message;
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+    } catch (unknownError) {
+      const errorMessage =
+        unknownError instanceof Error ? unknownError.message : String(unknownError);
       console.error(errorMessage);
       command = errorMessage;
     }
@@ -211,7 +196,7 @@ const workflow = new StateGraph(AgentStateAnnotation)
   .addNode('hire_node', hire_node)
   .addNode('fire_node', fire_node)
   .addEdge(START, 'chat_node')
-  .addConditionalEdges('chat_node', runCommand as any)
+  .addConditionalEdges('chat_node', (state) => runCommand(state))
   .addEdge('hire_node', END)
   .addEdge('fire_node', END);
 

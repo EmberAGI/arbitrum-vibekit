@@ -1,15 +1,15 @@
 import { createClients } from '../../clients/clients.js';
+import { EmberCamelotClient } from '../../clients/emberApi.js';
 import {
   EMBER_API_BASE_URL,
   resolvePollIntervalMs,
   resolveStreamLimit,
 } from '../../config/constants.js';
-import { EmberCamelotClient } from '../../clients/emberApi.js';
 import { logInfo, type ClmmEvent, type ClmmUpdate } from '../context.js';
 import { loadBootstrapContext } from '../store.js';
 
 export const bootstrapNode = async (): Promise<ClmmUpdate> => {
-  const { account, agentWalletAddress } = await loadBootstrapContext();
+  const { account } = await loadBootstrapContext();
   const mode = process.env['CLMM_MODE'] === 'production' ? 'production' : 'debug';
   const pollIntervalMs = resolvePollIntervalMs();
   const streamLimit = resolveStreamLimit();
