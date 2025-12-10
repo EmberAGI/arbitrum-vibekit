@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint \"src\" --ext .ts,.tsx"
   },
   "dependencies": {
     "@copilotkit/react-core": "1.10.6",
@@ -28,6 +28,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.7",
+    "eslint-plugin-next": "^0.0.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
