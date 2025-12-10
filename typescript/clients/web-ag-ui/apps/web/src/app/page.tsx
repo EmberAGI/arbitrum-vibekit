@@ -75,7 +75,7 @@ const initialAgentState: AgentState = {
   amount: 0,
 };
 
-const AGENT_NAME = 'starterAgent';
+const AGENT_NAME = 'agent-clmm';
 
 function YourMainContent({ themeColor }: { themeColor: string }) {
   // 🪁 Shared State: https://docs.copilotkit.ai/coagents/shared-state

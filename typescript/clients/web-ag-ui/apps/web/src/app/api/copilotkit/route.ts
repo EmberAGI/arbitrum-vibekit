@@ -10,13 +10,21 @@ import { NextRequest } from "next/server";
 //    the empty adapter since we're only using one agent.
 const serviceAdapter = new ExperimentalEmptyAdapter();
 
+const CLMM_AGENT_NAME = "agent-clmm";
+const LEGACY_AGENT_NAME = "starterAgent";
+
 // 2. Create the CopilotRuntime instance and utilize the LangGraph AG-UI
 //    integration to setup the connection.
 const runtime = new CopilotRuntime({
   agents: {
-    starterAgent: new LangGraphAgent({
-      deploymentUrl: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8123",
-      graphId: "starterAgent",
+    [CLMM_AGENT_NAME]: new LangGraphAgent({
+      deploymentUrl: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8124",
+      graphId: CLMM_AGENT_NAME,
+      langsmithApiKey: process.env.LANGSMITH_API_KEY || "",
+    }),
+    [LEGACY_AGENT_NAME]: new LangGraphAgent({
+      deploymentUrl: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8124",
+      graphId: LEGACY_AGENT_NAME,
       langsmithApiKey: process.env.LANGSMITH_API_KEY || "",
     })
   }

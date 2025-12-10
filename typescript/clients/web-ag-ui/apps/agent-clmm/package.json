@@ -5,7 +5,7 @@
   "main": "dist/agent.js",
   "type": "module",
   "scripts": {
-    "dev": "npx @langchain/langgraph-cli dev --port 8123 --no-browser",
+    "dev": "npx @langchain/langgraph-cli dev --port 8124 --no-browser",
     "build": "tsc --project tsconfig.json",
     "ci:build": "pnpm typecheck && pnpm build",
     "test": "pnpm test:unit && pnpm test:int && pnpm test:e2e",

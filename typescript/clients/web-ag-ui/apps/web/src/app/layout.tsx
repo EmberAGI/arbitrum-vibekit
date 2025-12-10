@@ -14,11 +14,13 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const AGENT_NAME = 'agent-clmm';
+
   return (
     <html lang="en">
       <body className={'antialiased'}>
         {/* Pass `threadId` to manage separate threads manually or keep it undefined to auto-generate a new thread and ID*/}
-        <CopilotKit runtimeUrl="/api/copilotkit" agent="starterAgent" threadId={undefined}>
+        <CopilotKit runtimeUrl="/api/copilotkit" agent={AGENT_NAME} threadId={undefined}>
           {children}
         </CopilotKit>
       </body>
