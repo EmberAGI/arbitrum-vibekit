@@ -52,7 +52,7 @@ type TaskStatus = {
 //    provide actions to the state.
 const AgentStateAnnotation = Annotation.Root({
   ...CopilotKitStateAnnotation.spec, // CopilotKit state annotation already includes messages, as well as frontend tools
-  command: Annotation<string[]>,
+  command: Annotation<string>,
   amount: Annotation<number>,
   task: Annotation<Task>,
 });
@@ -125,7 +125,7 @@ async function fire_node(state: AgentState, config: RunnableConfig) {
     };
     return {
       ...state,
-      message: [...state.messages, message],
+      messages: [...state.messages, message],
     };
   }
 
