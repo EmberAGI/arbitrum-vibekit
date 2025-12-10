@@ -1,5 +1,5 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { interrupt } from '@langchain/langgraph';
+import { Command, interrupt } from '@langchain/langgraph';
 import { z } from 'zod';
 
 import { OperatorConfigInputSchema } from '../../domain/types.js';
@@ -16,9 +16,19 @@ type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 export const collectOperatorInputNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
-): Promise<ClmmUpdate> => {
+): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
   if (!state.poolArtifact) {
-    throw new Error('Pool artifact missing before operator input');
+    const failureMessage = 'ERROR: Pool artifact missing before operator input';
+    const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    return new Command({
+      update: {
+        haltReason: failureMessage,
+        task,
+        events: [statusEvent],
+      },
+      goto: 'summarize',
+    });
   }
 
   const request: OperatorInterrupt = {

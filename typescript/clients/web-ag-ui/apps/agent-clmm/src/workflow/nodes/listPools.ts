@@ -1,4 +1,5 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
+import { Command } from '@langchain/langgraph';
 
 import { ARBITRUM_CHAIN_ID } from '../../config/constants.js';
 import { buildPoolArtifact } from '../artifacts.js';
@@ -16,9 +17,19 @@ type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 export const listPoolsNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
-): Promise<ClmmUpdate> => {
+): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
   if (!state.camelotClient) {
-    throw new Error('Camelot client not initialized');
+    const failureMessage = 'ERROR: Camelot client not initialized';
+    const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    return new Command({
+      update: {
+        haltReason: failureMessage,
+        events: [statusEvent],
+        task,
+      },
+      goto: 'summarize',
+    });
   }
   const pools = await state.camelotClient.listCamelotPools(ARBITRUM_CHAIN_ID);
   const allowedPools = pools.filter((pool) => isPoolAllowed(pool, state.mode ?? 'debug'));
@@ -28,7 +39,17 @@ export const listPoolsNode = async (
     mode: state.mode,
   });
   if (allowedPools.length === 0) {
-    throw new Error(`No Camelot pools available for mode=${state.mode}`);
+    const failureMessage = `ERROR: No Camelot pools available for mode=${state.mode}`;
+    const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    return new Command({
+      update: {
+        haltReason: failureMessage,
+        events: [statusEvent],
+        task,
+      },
+      goto: 'summarize',
+    });
   }
 
   const poolArtifact = buildPoolArtifact(allowedPools.slice(0, 8));

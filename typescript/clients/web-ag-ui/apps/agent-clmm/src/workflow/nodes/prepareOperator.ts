@@ -1,4 +1,5 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
+import { Command } from '@langchain/langgraph';
 
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
 import { ARBITRUM_CHAIN_ID, DEFAULT_TICK_BANDWIDTH_BPS } from '../../config/constants.js';
@@ -19,16 +20,46 @@ type Configurable = { configurable?: { thread_id?: string; scheduleCron?: (threa
 export const prepareOperatorNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
-): Promise<ClmmUpdate> => {
+): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
   const { operatorInput, allowedPools, camelotClient, clients } = state;
   if (!operatorInput) {
-    throw new Error('Operator input missing');
+    const failureMessage = 'ERROR: Operator input missing';
+    const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    return new Command({
+      update: {
+        haltReason: failureMessage,
+        events: [statusEvent],
+        task,
+      },
+      goto: 'summarize',
+    });
   }
   if (!camelotClient) {
-    throw new Error('Camelot client missing');
+    const failureMessage = 'ERROR: Camelot client missing';
+    const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    return new Command({
+      update: {
+        haltReason: failureMessage,
+        events: [statusEvent],
+        task,
+      },
+      goto: 'summarize',
+    });
   }
   if (!clients) {
-    throw new Error('Agent wallet context missing');
+    const failureMessage = 'ERROR: Agent wallet context missing';
+    const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    return new Command({
+      update: {
+        haltReason: failureMessage,
+        events: [statusEvent],
+        task,
+      },
+      goto: 'summarize',
+    });
   }
 
   const { agentWalletAddress } = await loadBootstrapContext();
@@ -42,7 +73,17 @@ export const prepareOperatorNode = async (
     ) ?? (await fetchPoolSnapshot(camelotClient, selectedPoolAddress, ARBITRUM_CHAIN_ID));
 
   if (!selectedPool) {
-    throw new Error(`Pool ${selectedPoolAddress} not available from Ember API`);
+    const failureMessage = `ERROR: Pool ${selectedPoolAddress} not available from Ember API`;
+    const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    return new Command({
+      update: {
+        haltReason: failureMessage,
+        events: [statusEvent],
+        task,
+      },
+      goto: 'summarize',
+    });
   }
 
   if (agentWalletAddress !== operatorWalletAddress) {

@@ -25,7 +25,19 @@ export const pollCycleNode = async (
   } = state;
 
   if (!camelotClient || !operatorConfig || !selectedPool || !clients) {
-    throw new Error('Polling node missing required state');
+    const failureMessage = 'ERROR: Polling node missing required state';
+    const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    return new Command({
+      update: {
+        haltReason: failureMessage,
+        events: [statusEvent],
+        iteration: state.iteration ?? 0,
+        staleCycles: state.staleCycles ?? 0,
+        task,
+      },
+      goto: 'summarize',
+    });
   }
 
   const iteration = (state.iteration ?? 0) + 1;
@@ -33,6 +45,8 @@ export const pollCycleNode = async (
 
   let staleCycles = state.staleCycles ?? 0;
   let poolSnapshot: CamelotPool | undefined;
+  let taskState = state.task;
+  const preCycleEvents: ClmmEvent[] = [];
   try {
     poolSnapshot =
       (await fetchPoolSnapshot(camelotClient, selectedPool.address, ARBITRUM_CHAIN_ID)) ??
@@ -68,24 +82,29 @@ export const pollCycleNode = async (
     }
     poolSnapshot = state.lastSnapshot;
     const { task, statusEvent } = buildTaskStatus(
-      state.task,
+      taskState,
       'working',
       `WARNING: Using cached pool state (attempt ${staleCycles}/${DATA_STALE_CYCLE_LIMIT})`,
     );
-  await copilotkitEmitState(config, { task, events: [statusEvent] });
-  return new Command({
-    update: {
-      staleCycles,
-      iteration,
-      events: [statusEvent],
-      task,
-    },
-    goto: 'summarize',
-  });
-}
+    taskState = task;
+    preCycleEvents.push(statusEvent);
+    await copilotkitEmitState(config, { task, events: [statusEvent] });
+  }
 
   if (!poolSnapshot) {
-    throw new Error('Unable to obtain Camelot pool snapshot');
+    const failureMessage = `ERROR: Unable to obtain Camelot pool snapshot after ${staleCycles} attempts`;
+    const { task, statusEvent } = buildTaskStatus(taskState, 'failed', failureMessage);
+    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    return new Command({
+      update: {
+        haltReason: failureMessage,
+        events: [...preCycleEvents, statusEvent],
+        staleCycles,
+        iteration,
+        task,
+      },
+      goto: 'summarize',
+    });
   }
 
   const midPrice = deriveMidPrice(poolSnapshot);
@@ -104,7 +123,19 @@ export const pollCycleNode = async (
   const ethUsd = resolveEthUsdPrice(poolSnapshot);
   if (!ethUsd) {
     logInfo('Missing WETH/USD price for pool', { poolAddress: poolSnapshot.address });
-    throw new Error(`failure: Unable to locate a WETH/USD price for pool ${poolSnapshot.address}`);
+    const failureMessage = `ERROR: Unable to locate a WETH/USD price for pool ${poolSnapshot.address}`;
+    const { task, statusEvent } = buildTaskStatus(taskState, 'failed', failureMessage);
+    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    return new Command({
+      update: {
+        haltReason: failureMessage,
+        events: [...preCycleEvents, statusEvent],
+        staleCycles,
+        iteration,
+        task,
+      },
+      goto: 'summarize',
+    });
   }
   const maxGasSpendUsd = MAX_GAS_SPEND_ETH * ethUsd;
   const estimatedFeeValueUsd = estimateFeeValueUsd(currentPosition, poolSnapshot);
