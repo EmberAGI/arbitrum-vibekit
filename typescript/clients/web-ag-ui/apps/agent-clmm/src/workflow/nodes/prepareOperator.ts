@@ -14,6 +14,7 @@ import {
 import { loadBootstrapContext } from '../store.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
+type Configurable = { configurable?: { thread_id?: string; scheduleCron?: (threadId: string) => void } };
 
 export const prepareOperatorNode = async (
   state: ClmmState,
@@ -65,6 +66,13 @@ export const prepareOperatorNode = async (
     baseContributionUsd: operatorConfig.baseContributionUsd,
   });
 
+  const threadId = (config as Configurable).configurable?.thread_id;
+  const scheduleCron = (config as Configurable).configurable?.scheduleCron;
+  if (threadId && scheduleCron && !state.cronScheduled) {
+    scheduleCron(threadId);
+    logInfo('Cron scheduled after operator preparation', { threadId, cron: '*/1 * * * *' });
+  }
+
   const { task, statusEvent } = buildTaskStatus(
     state.task,
     'working',
@@ -85,6 +93,7 @@ export const prepareOperatorNode = async (
     iteration: 0,
     telemetry: [],
     previousPrice: undefined,
+    cronScheduled: threadId ? true : state.cronScheduled,
     task,
     events,
   };

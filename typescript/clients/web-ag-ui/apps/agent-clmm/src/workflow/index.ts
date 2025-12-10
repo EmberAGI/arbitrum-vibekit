@@ -28,7 +28,7 @@ const workflow = new StateGraph(ClmmStateAnnotation)
   .addNode('listPools', listPoolsNode)
   .addNode('collectOperatorInput', collectOperatorInputNode)
   .addNode('prepareOperator', prepareOperatorNode)
-  .addNode('pollCycle', pollCycleNode, { ends: ['pollCycle', 'summarize'] })
+  .addNode('pollCycle', pollCycleNode, { ends: ['summarize'] })
   .addNode('summarize', summarizeNode)
   .addEdge(START, 'bootstrap')
   .addEdge('bootstrap', 'listPools')
@@ -36,7 +36,6 @@ const workflow = new StateGraph(ClmmStateAnnotation)
   .addEdge('collectOperatorInput', 'prepareOperator')
   .addEdge('prepareOperator', 'pollCycle')
   .addEdge('pollCycle', 'summarize')
-  .addEdge('pollCycle', 'pollCycle')
   .addEdge('summarize', END);
 
 export const clmmGraph = workflow.compile({

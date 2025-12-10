@@ -59,6 +59,7 @@ export const ClmmStateAnnotation = Annotation.Root({
     default: () => resolveStreamLimit(),
     reducer: (_previous, current) => current ?? _previous ?? resolveStreamLimit(),
   }),
+  cronScheduled: Annotation<boolean>({ default: () => false, reducer: (_left, right) => right ?? _left ?? false }),
   camelotClient: Annotation<EmberCamelotClient | undefined>(),
   clients: Annotation<ReturnType<typeof createClients> | undefined>(),
   task: Annotation<Task | undefined>({ reducer: (_left, right) => right ?? _left }),

@@ -3,10 +3,10 @@ import cron from 'node-cron';
 
 import { clmmGraph } from './workflow/index.js';
 
-const threadId = 'clmm-thread';
 const cronExpression = '*/1 * * * *';
+const cronJobs = new Map<string, cron.ScheduledTask>();
 
-async function runGraphOnce() {
+async function runGraphOnce(threadId: string) {
   const startedAt = Date.now();
   console.info(`[cron] Starting CLMM graph run (thread=${threadId})`);
 
@@ -29,12 +29,32 @@ async function runGraphOnce() {
   }
 }
 
-function startScheduler() {
+function ensureCronForThread(threadId: string) {
+  if (cronJobs.has(threadId)) {
+    return cronJobs.get(threadId);
+  }
+
   console.info(`[cron] Scheduling CLMM graph with expression "${cronExpression}" (thread=${threadId})`);
-  cron.schedule(cronExpression, () => {
-    void runGraphOnce();
+  const job = cron.schedule(cronExpression, () => {
+    void runGraphOnce(threadId);
   });
+  cronJobs.set(threadId, job);
+  return job;
 }
 
-startScheduler();
-void runGraphOnce();
+const initialThreadId = process.env['CLMM_THREAD_ID'];
+if (!initialThreadId) {
+  throw new Error('CLMM_THREAD_ID environment variable is required to start the CLMM scheduler.');
+}
+
+void (async () => {
+  const stream = await clmmGraph.stream(null, {
+    configurable: {
+      thread_id: initialThreadId,
+      scheduleCron: ensureCronForThread,
+    },
+  });
+  for await (const event of stream) {
+    void event;
+  }
+})();

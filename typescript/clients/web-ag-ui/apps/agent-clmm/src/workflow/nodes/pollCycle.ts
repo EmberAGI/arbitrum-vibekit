@@ -2,9 +2,8 @@ import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
-import { ARBITRUM_CHAIN_ID, DATA_STALE_CYCLE_LIMIT, DEFAULT_REBALANCE_THRESHOLD_PCT, MAX_GAS_SPEND_ETH, resolveEthUsdPrice, resolvePollIntervalMs, resolveStreamLimit } from '../../config/constants.js';
+import { ARBITRUM_CHAIN_ID, DATA_STALE_CYCLE_LIMIT, DEFAULT_REBALANCE_THRESHOLD_PCT, MAX_GAS_SPEND_ETH, resolveEthUsdPrice } from '../../config/constants.js';
 import { buildRange, computeVolatilityPct, deriveMidPrice, evaluateDecision, estimateFeeValueUsd, normalizePosition, tickToPrice } from '../../core/decision-engine.js';
-import { sleep } from '../../core/utils.js';
 import { type CamelotPool, type RebalanceTelemetry } from '../../domain/types.js';
 import { buildTelemetryArtifact } from '../artifacts.js';
 import { buildTaskStatus, logInfo, type ClmmEvent, type ClmmState, type ClmmUpdate } from '../context.js';
@@ -22,8 +21,6 @@ export const pollCycleNode = async (
     camelotClient,
     operatorConfig,
     selectedPool,
-    pollIntervalMs = resolvePollIntervalMs(),
-    streamLimit = resolveStreamLimit(),
     clients,
   } = state;
 
@@ -75,17 +72,17 @@ export const pollCycleNode = async (
       'working',
       `WARNING: Using cached pool state (attempt ${staleCycles}/${DATA_STALE_CYCLE_LIMIT})`,
     );
-    await copilotkitEmitState(config, { task, events: [statusEvent] });
-    return new Command({
-      update: {
-        staleCycles,
-        iteration,
-        events: [statusEvent],
-        task,
-      },
-      goto: 'pollCycle',
-    });
-  }
+  await copilotkitEmitState(config, { task, events: [statusEvent] });
+  return new Command({
+    update: {
+      staleCycles,
+      iteration,
+      events: [statusEvent],
+      task,
+    },
+    goto: 'summarize',
+  });
+}
 
   if (!poolSnapshot) {
     throw new Error('Unable to obtain Camelot pool snapshot');
@@ -291,10 +288,7 @@ export const pollCycleNode = async (
     append: true,
   };
 
-  const shouldStop = streamLimit >= 0 && iteration >= streamLimit;
-  const goto = shouldStop ? 'summarize' : 'pollCycle';
-
-  await sleep(pollIntervalMs);
+  const goto = 'summarize';
 
   return new Command({
     update: {
