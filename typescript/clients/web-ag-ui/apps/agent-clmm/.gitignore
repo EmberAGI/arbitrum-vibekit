@@ -1,9 +1,16 @@
 venv/
 __pycache__/
 *.pyc
-.env
 .vercel
+.env
+.env.local
+.env.test
+!.env.test.example
+node_modules/
+dist
+coverage
+.vitest
+*.tsbuildinfo
 
 # LangGraph API
 .langgraph_api
-node_modules/

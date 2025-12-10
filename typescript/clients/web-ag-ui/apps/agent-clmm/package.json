@@ -5,7 +5,20 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "npx @langchain/langgraph-cli dev --port 8123 --no-browser"
+    "dev": "npx @langchain/langgraph-cli dev --port 8123 --no-browser",
+    "build": "tsc --project tsconfig.json",
+    "test": "pnpm test:unit && pnpm test:int && pnpm test:e2e",
+    "test:unit": "vitest run --config vitest.config.unit.ts",
+    "test:int": "tsx --env-file=.env.test ./node_modules/vitest/vitest.mjs run --config vitest.config.int.ts",
+    "test:e2e": "tsx --env-file=.env.test ./node_modules/vitest/vitest.mjs run --config vitest.config.e2e.ts --no-file-parallelism --maxConcurrency=1",
+    "test:watch": "vitest watch",
+    "test:ci": "pnpm test:unit && pnpm test:int",
+    "lint": "eslint \"src\" \"tests\" --ext .ts",
+    "lint:fix": "eslint \"src\" \"tests\" --ext .ts --fix",
+    "format": "prettier \"{src,tests}/**/*.{ts,tsx,js,jsx}\" --write",
+    "format:check": "prettier \"{src,tests}/**/*.{ts,tsx,js,jsx}\" --check",
+    "workflow:demo": "tsx --env-file=.env ./scripts/run-camelot-demo.ts",
+    "wallet:withdraw": "tsx --env-file=.env scripts/manualWithdraw.ts"
   },
   "keywords": [],
   "author": "",
@@ -37,6 +50,6 @@
     "permissionless": "^0.2.57",
     "uuid": "^13.0.0",
     "viem": "^2.26.3",
-    "zod": "^3.25.76"
+    "zod": "^4.1.13"
   }
 }
