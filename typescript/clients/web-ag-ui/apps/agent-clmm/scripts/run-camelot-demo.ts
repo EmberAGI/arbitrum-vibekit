@@ -1,6 +1,6 @@
-import { randomUUID } from 'node:crypto';
 import process from 'node:process';
 import { inspect } from 'node:util';
+import { v7 as uuidv7 } from 'uuid';
 
 import type { WorkflowContext, WorkflowState } from '@emberai/agent-node/workflow';
 import { z } from 'zod';
@@ -102,7 +102,7 @@ async function runDemo() {
 
   const context: WorkflowContext = {
     contextId: `camelot-demo-${Date.now().toString(16)}`,
-    taskId: randomUUID(),
+    taskId: uuidv7(),
   };
 
   const iterator = plugin.execute(context);

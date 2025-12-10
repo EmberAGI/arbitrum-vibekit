@@ -1,5 +1,7 @@
+import type { AIMessage as CopilotKitAIMessage } from '@copilotkit/shared';
 import { type Artifact } from '@emberai/agent-node/workflow';
 import { Annotation, MemorySaver } from '@langchain/langgraph';
+import { v7 as uuidv7 } from 'uuid';
 
 import type { createClients } from '../clients/clients.js';
 import { type EmberCamelotClient } from '../clients/emberApi.js';
@@ -11,8 +13,32 @@ import {
   type ResolvedOperatorConfig,
 } from '../domain/types.js';
 
+export type AgentMessage = CopilotKitAIMessage;
+
+export type TaskState =
+  | 'submitted'
+  | 'working'
+  | 'input-required'
+  | 'completed'
+  | 'canceled'
+  | 'failed'
+  | 'rejected'
+  | 'auth-required'
+  | 'unknown';
+
+export type TaskStatus = {
+  state: TaskState;
+  message?: AgentMessage;
+  timestamp?: string; // ISO 8601
+};
+
+export type Task = {
+  id: string;
+  taskStatus: TaskStatus;
+};
+
 export type ClmmEvent =
-  | { type: 'status'; message: string }
+  | { type: 'status'; message: string; task: Task }
   | { type: 'artifact'; artifact: Artifact; append?: boolean }
   | { type: 'dispatch-response'; parts: Array<{ kind: string; data: unknown }> };
 
@@ -34,6 +60,7 @@ export const ClmmStateAnnotation = Annotation.Root({
   }),
   camelotClient: Annotation<EmberCamelotClient | undefined>(),
   clients: Annotation<ReturnType<typeof createClients> | undefined>(),
+  task: Annotation<Task | undefined>({ reducer: (_left, right) => right ?? _left }),
   pools: Annotation<CamelotPool[]>({ default: () => [], reducer: (_left, right) => right }),
   allowedPools: Annotation<CamelotPool[]>({ default: () => [], reducer: (_left, right) => right }),
   poolArtifact: Annotation<Artifact | undefined>({ reducer: (_left, right) => right }),
@@ -61,6 +88,38 @@ export type ClmmState = typeof ClmmStateAnnotation.State;
 export type ClmmUpdate = typeof ClmmStateAnnotation.Update;
 
 export const memory = new MemorySaver();
+
+function buildAgentMessage(message: string): AgentMessage {
+  return {
+    id: uuidv7(),
+    role: 'assistant',
+    content: message,
+  };
+}
+
+export function buildTaskStatus(
+  task: Task | undefined,
+  state: TaskState,
+  message: string,
+): { task: Task; statusEvent: ClmmEvent } {
+  const timestamp = new Date().toISOString();
+  const nextTask: Task = {
+    id: task?.id ?? uuidv7(),
+    taskStatus: {
+      state,
+      message: buildAgentMessage(message),
+      timestamp,
+    },
+  };
+
+  const statusEvent: ClmmEvent = {
+    type: 'status',
+    message,
+    task: nextTask,
+  };
+
+  return { task: nextTask, statusEvent };
+}
 
 export type LogOptions = {
   detailed?: boolean;

@@ -1,3 +1,4 @@
+import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
@@ -6,13 +7,16 @@ import { buildRange, computeVolatilityPct, deriveMidPrice, evaluateDecision, est
 import { sleep } from '../../core/utils.js';
 import { type CamelotPool, type RebalanceTelemetry } from '../../domain/types.js';
 import { buildTelemetryArtifact } from '../artifacts.js';
-import { logInfo, type ClmmEvent, type ClmmState, type ClmmUpdate } from '../context.js';
+import { buildTaskStatus, logInfo, type ClmmEvent, type ClmmState, type ClmmUpdate } from '../context.js';
 import { executeDecision } from '../execution.js';
 
 const DEBUG_MODE = process.env['DEBUG_MODE'] === 'true';
 
+type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
+
 export const pollCycleNode = async (
   state: ClmmState,
+  config: CopilotKitConfig,
 ): Promise<Command<string, ClmmUpdate>> => {
   const {
     camelotClient,
@@ -37,13 +41,13 @@ export const pollCycleNode = async (
       (await fetchPoolSnapshot(camelotClient, selectedPool.address, ARBITRUM_CHAIN_ID)) ??
       state.lastSnapshot;
     staleCycles = 0;
-  } catch (error) {
+  } catch (unknownError: unknown) {
     staleCycles += 1;
-    const cause =
-      error instanceof Error
-        ? error.message
-        : typeof error === 'string'
-          ? error
+    const cause: string =
+      unknownError instanceof Error
+        ? unknownError.message
+        : typeof unknownError === 'string'
+          ? unknownError
           : 'Unknown error';
     logInfo('Pool snapshot fetch failed; falling back to cache', {
       iteration,
@@ -51,30 +55,33 @@ export const pollCycleNode = async (
       error: cause,
     });
     if (staleCycles > DATA_STALE_CYCLE_LIMIT) {
-      const status: ClmmEvent = {
-        type: 'status',
-        message: `ERROR: Abort: Ember API unreachable for ${staleCycles} consecutive cycles (last error: ${cause})`,
-      };
+      const failureMessage = `ERROR: Abort: Ember API unreachable for ${staleCycles} consecutive cycles (last error: ${cause})`;
+      const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
+      await copilotkitEmitState(config, { task, events: [statusEvent] });
       return new Command({
         update: {
-          haltReason: status.message,
-          events: [status],
+          haltReason: failureMessage,
+          events: [statusEvent],
           staleCycles,
           iteration,
+          task,
         },
         goto: 'summarize',
       });
     }
     poolSnapshot = state.lastSnapshot;
-    const warning: ClmmEvent = {
-      type: 'status',
-      message: `WARNING: Using cached pool state (attempt ${staleCycles}/${DATA_STALE_CYCLE_LIMIT})`,
-    };
+    const { task, statusEvent } = buildTaskStatus(
+      state.task,
+      'working',
+      `WARNING: Using cached pool state (attempt ${staleCycles}/${DATA_STALE_CYCLE_LIMIT})`,
+    );
+    await copilotkitEmitState(config, { task, events: [statusEvent] });
     return new Command({
       update: {
         staleCycles,
         iteration,
-        events: [warning],
+        events: [statusEvent],
+        task,
       },
       goto: 'pollCycle',
     });
@@ -274,10 +281,9 @@ export const pollCycleNode = async (
     metrics: cycleMetrics,
   };
 
-  const statusEvent: ClmmEvent = {
-    type: 'status',
-    message: `[Cycle ${iteration}] ${decision.kind}: ${decision.reason}${txHash ? ` (tx: ${txHash})` : ''}`,
-  };
+  const cycleStatusMessage = `[Cycle ${iteration}] ${decision.kind}: ${decision.reason}${txHash ? ` (tx: ${txHash})` : ''}`;
+  const { task, statusEvent } = buildTaskStatus(state.task, 'working', cycleStatusMessage);
+  await copilotkitEmitState(config, { task, events: [statusEvent], latestCycle: cycleTelemetry });
 
   const telemetryEvent: ClmmEvent = {
     type: 'artifact',
@@ -299,6 +305,7 @@ export const pollCycleNode = async (
       iteration,
       telemetry: [cycleTelemetry],
       latestCycle: cycleTelemetry,
+      task,
       events: [telemetryEvent, statusEvent],
     },
     goto,

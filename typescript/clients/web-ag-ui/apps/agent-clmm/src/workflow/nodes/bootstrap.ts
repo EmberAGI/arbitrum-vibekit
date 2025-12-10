@@ -1,3 +1,5 @@
+import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
+
 import { createClients } from '../../clients/clients.js';
 import { EmberCamelotClient } from '../../clients/emberApi.js';
 import {
@@ -5,10 +7,15 @@ import {
   resolvePollIntervalMs,
   resolveStreamLimit,
 } from '../../config/constants.js';
-import { logInfo, type ClmmEvent, type ClmmUpdate } from '../context.js';
+import { buildTaskStatus, logInfo, type ClmmEvent, type ClmmState, type ClmmUpdate } from '../context.js';
 import { loadBootstrapContext } from '../store.js';
 
-export const bootstrapNode = async (): Promise<ClmmUpdate> => {
+type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
+
+export const bootstrapNode = async (
+  state: ClmmState,
+  config: CopilotKitConfig,
+): Promise<ClmmUpdate> => {
   const { account } = await loadBootstrapContext();
   const mode = process.env['CLMM_MODE'] === 'production' ? 'production' : 'debug';
   const pollIntervalMs = resolvePollIntervalMs();
@@ -33,10 +40,12 @@ export const bootstrapNode = async (): Promise<ClmmUpdate> => {
     ],
   };
 
-  const status: ClmmEvent = {
-    type: 'status',
-    message: `Bootstrapping CLMM workflow in ${mode} mode (poll every ${pollIntervalMs / 1000}s)`,
-  };
+  const { task, statusEvent } = buildTaskStatus(
+    state.task,
+    'submitted',
+    `Bootstrapping CLMM workflow in ${mode} mode (poll every ${pollIntervalMs / 1000}s)`,
+  );
+  await copilotkitEmitState(config, { task, events: [statusEvent] });
 
   return {
     mode,
@@ -44,6 +53,7 @@ export const bootstrapNode = async (): Promise<ClmmUpdate> => {
     streamLimit,
     camelotClient,
     clients,
-    events: [dispatch, status],
+    task,
+    events: [dispatch, statusEvent],
   };
 };

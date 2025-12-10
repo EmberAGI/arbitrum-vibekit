@@ -1,7 +1,10 @@
+import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
+
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
 import { ARBITRUM_CHAIN_ID, DEFAULT_TICK_BANDWIDTH_BPS } from '../../config/constants.js';
 import { type ResolvedOperatorConfig } from '../../domain/types.js';
 import {
+  buildTaskStatus,
   type ClmmState,
   type ClmmUpdate,
   logInfo,
@@ -10,7 +13,12 @@ import {
 } from '../context.js';
 import { loadBootstrapContext } from '../store.js';
 
-export const prepareOperatorNode = async (state: ClmmState): Promise<ClmmUpdate> => {
+type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
+
+export const prepareOperatorNode = async (
+  state: ClmmState,
+  config: CopilotKitConfig,
+): Promise<ClmmUpdate> => {
   const { operatorInput, allowedPools, camelotClient, clients } = state;
   if (!operatorInput) {
     throw new Error('Operator input missing');
@@ -57,11 +65,15 @@ export const prepareOperatorNode = async (state: ClmmState): Promise<ClmmUpdate>
     baseContributionUsd: operatorConfig.baseContributionUsd,
   });
 
+  const { task, statusEvent } = buildTaskStatus(
+    state.task,
+    'working',
+    `Managing pool ${selectedPool.token0.symbol}/${selectedPool.token1.symbol} from ${agentWalletAddress}`,
+  );
+  await copilotkitEmitState(config, { task, events: [statusEvent] });
+
   const events: ClmmEvent[] = [
-    {
-      type: 'status',
-      message: `Managing pool ${selectedPool.token0.symbol}/${selectedPool.token1.symbol} from ${agentWalletAddress}`,
-    },
+    statusEvent,
   ];
 
   return {
@@ -73,6 +85,7 @@ export const prepareOperatorNode = async (state: ClmmState): Promise<ClmmUpdate>
     iteration: 0,
     telemetry: [],
     previousPrice: undefined,
+    task,
     events,
   };
 };

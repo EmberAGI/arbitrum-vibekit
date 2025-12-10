@@ -9,17 +9,6 @@ import { Annotation, END, MemorySaver, START, StateGraph } from '@langchain/lang
 import { v7 } from 'uuid';
 import { z } from 'zod';
 
-type TaskState =
-  | 'submitted'
-  | 'working'
-  | 'input-required'
-  | 'completed'
-  | 'canceled'
-  | 'failed'
-  | 'rejected'
-  | 'auth-required'
-  | 'unknown';
-
 // 1. Define our agent state, which includes CopilotKit state to
 //    provide actions to the state.
 const AgentStateAnnotation = Annotation.Root({
@@ -33,6 +22,17 @@ const AgentStateAnnotation = Annotation.Root({
 export type AgentState = typeof AgentStateAnnotation.State;
 
 type AgentMessage = AgentState['messages'][number];
+
+type TaskState =
+  | 'submitted'
+  | 'working'
+  | 'input-required'
+  | 'completed'
+  | 'canceled'
+  | 'failed'
+  | 'rejected'
+  | 'auth-required'
+  | 'unknown';
 
 type TaskStatus = {
   state: TaskState;
@@ -60,15 +60,15 @@ function hire_node(state: AgentState): AgentState {
   console.info('amount:', amount);
 
   if (state.task && isTaskActive(state.task.taskStatus.state)) {
-      const message = new AIMessage({
-        id: v7(),
-        content: `Task ${state.task.id} is already in a active state.`,
-      });
-      return {
-        ...state,
-        messages: [...state.messages, message as unknown as (typeof state.messages)[number]],
-      };
-    }
+    const message = new AIMessage({
+      id: v7(),
+      content: `Task ${state.task.id} is already in a active state.`,
+    });
+    return {
+      ...state,
+      messages: [...state.messages, message as unknown as (typeof state.messages)[number]],
+    };
+  }
 
   const message = new AIMessage({
     id: v7(),
@@ -98,15 +98,15 @@ function fire_node(state: AgentState): AgentState {
   const currentTask = state.task;
 
   if (isTaskTerminal(currentTask.taskStatus.state)) {
-      const message = new AIMessage({
-        id: v7(),
-        content: `Task ${currentTask.id} is already in a terminal state.`,
-      });
-      return {
-        ...state,
-        messages: [...state.messages, message as unknown as (typeof state.messages)[number]],
-      };
-    }
+    const message = new AIMessage({
+      id: v7(),
+      content: `Task ${currentTask.id} is already in a terminal state.`,
+    });
+    return {
+      ...state,
+      messages: [...state.messages, message as unknown as (typeof state.messages)[number]],
+    };
+  }
 
   const message = new AIMessage({
     id: v7(),
