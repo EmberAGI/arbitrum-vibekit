@@ -40,7 +40,7 @@ echo "OPENAI_API_KEY=your-openai-api-key-here" > .env
 pnpm dev
 ```
 
-This will start both the Next.js app (on port 3000) and the LangGraph agent (on port 8123) using Turborepo.
+This will start the Next.js app (on port 3000), the default LangGraph agent (on port 8123), and the CLMM agent (on port 8124) using Turborepo.
 
 ## Available Scripts
 
