@@ -1,5 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { interrupt } from '@langchain/langgraph';
+import { z } from 'zod';
 
 import { OperatorConfigInputSchema } from '../../domain/types.js';
 import {
@@ -24,6 +25,7 @@ export const collectOperatorInputNode = async (
     type: 'operator-config-request',
     message:
       'Select a Camelot pool to manage, confirm wallet, and optional allocation override for this CLMM workflow.',
+    payloadSchema: z.toJSONSchema(OperatorConfigInputSchema),
     artifactId: state.poolArtifact.artifactId,
   };
 
@@ -34,8 +36,24 @@ export const collectOperatorInputNode = async (
   );
   await copilotkitEmitState(config, { task: awaitingInput.task, events: [awaitingInput.statusEvent] });
 
-  const parsed = OperatorConfigInputSchema.parse(await interrupt(request));
-  logInfo('Operator input received', { poolAddress: parsed.poolAddress, walletAddress: parsed.walletAddress });
+  const incoming: unknown = await interrupt(request);
+  const parsed = OperatorConfigInputSchema.safeParse(incoming);
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((issue) => issue.message).join('; ');
+    const failureMessage = `Invalid operator input: ${issues}`;
+    const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    return {
+      haltReason: failureMessage,
+      task,
+      events: [statusEvent],
+    };
+  }
+
+  logInfo('Operator input received', {
+    poolAddress: parsed.data.poolAddress,
+    walletAddress: parsed.data.walletAddress,
+  });
 
   const { task, statusEvent } = buildTaskStatus(
     awaitingInput.task,
@@ -45,7 +63,7 @@ export const collectOperatorInputNode = async (
   await copilotkitEmitState(config, { task, events: [statusEvent] });
 
   return {
-    operatorInput: parsed,
+    operatorInput: parsed.data,
     task,
     events: [statusEvent],
   };

@@ -45,6 +45,7 @@ export type ClmmEvent =
 export type OperatorInterrupt = {
   type: 'operator-config-request';
   message: string;
+  payloadSchema: Record<string, unknown>;
   artifactId?: string;
 };
 
@@ -66,10 +67,15 @@ export const ClmmStateAnnotation = Annotation.Root({
   poolArtifact: Annotation<Artifact | undefined>({ reducer: (_left, right) => right }),
   operatorInput: Annotation<OperatorConfigInput | undefined>({ reducer: (_left, right) => right }),
   selectedPool: Annotation<CamelotPool | undefined>({ reducer: (_left, right) => right }),
-  operatorConfig: Annotation<ResolvedOperatorConfig | undefined>({ reducer: (_left, right) => right }),
+  operatorConfig: Annotation<ResolvedOperatorConfig | undefined>({
+    reducer: (_left, right) => right,
+  }),
   lastSnapshot: Annotation<CamelotPool | undefined>({ reducer: (_left, right) => right }),
   previousPrice: Annotation<number | undefined>({ reducer: (_left, right) => right }),
-  cyclesSinceRebalance: Annotation<number>({ default: () => 0, reducer: (_left, right) => right ?? 0 }),
+  cyclesSinceRebalance: Annotation<number>({
+    default: () => 0,
+    reducer: (_left, right) => right ?? 0,
+  }),
   staleCycles: Annotation<number>({ default: () => 0, reducer: (_left, right) => right ?? 0 }),
   iteration: Annotation<number>({ default: () => 0, reducer: (_left, right) => right ?? 0 }),
   telemetry: Annotation<RebalanceTelemetry[]>({
