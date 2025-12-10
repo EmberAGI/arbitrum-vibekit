@@ -1,10 +1,10 @@
 /* eslint-disable import/order */
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
-import { type OnchainClients } from '../clients/clients.js';
-import { type EmberCamelotClient, type TransactionInformation } from '../clients/emberApi.js';
-import { type CamelotPool, type ClmmAction, type ResolvedOperatorConfig } from '../domain/types.js';
-import { executeDecision } from './index.js';
+import { type OnchainClients } from './clients/clients.js';
+import { type EmberCamelotClient, type TransactionInformation } from './clients/emberApi.js';
+import { type CamelotPool, type ClmmAction, type ResolvedOperatorConfig } from './domain/types.js';
+import { executeDecision } from './agent.js';
 
 const { ensureAllowanceMock, executeTransactionMock } = vi.hoisted(() => {
   process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'] ??= `0x${'1'.repeat(64)}`;

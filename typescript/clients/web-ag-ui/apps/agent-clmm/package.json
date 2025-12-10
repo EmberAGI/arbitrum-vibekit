@@ -2,7 +2,7 @@
   "name": "agent-clmm",
   "version": "0.0.1",
   "description": "",
-  "main": "index.js",
+  "main": "dist/agent.js",
   "type": "module",
   "scripts": {
     "dev": "npx @langchain/langgraph-cli dev --port 8123 --no-browser",
