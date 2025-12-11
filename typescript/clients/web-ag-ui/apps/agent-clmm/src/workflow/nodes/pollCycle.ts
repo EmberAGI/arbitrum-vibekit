@@ -2,11 +2,32 @@ import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
-import { ARBITRUM_CHAIN_ID, DATA_STALE_CYCLE_LIMIT, DEFAULT_REBALANCE_THRESHOLD_PCT, MAX_GAS_SPEND_ETH, resolveEthUsdPrice } from '../../config/constants.js';
-import { buildRange, computeVolatilityPct, deriveMidPrice, evaluateDecision, estimateFeeValueUsd, normalizePosition, tickToPrice } from '../../core/decision-engine.js';
+import {
+  ARBITRUM_CHAIN_ID,
+  DATA_STALE_CYCLE_LIMIT,
+  DEFAULT_REBALANCE_THRESHOLD_PCT,
+  MAX_GAS_SPEND_ETH,
+  resolveEthUsdPrice,
+} from '../../config/constants.js';
+import {
+  buildRange,
+  computeVolatilityPct,
+  deriveMidPrice,
+  evaluateDecision,
+  estimateFeeValueUsd,
+  normalizePosition,
+  tickToPrice,
+} from '../../core/decision-engine.js';
 import { type CamelotPool, type RebalanceTelemetry } from '../../domain/types.js';
 import { buildTelemetryArtifact } from '../artifacts.js';
-import { buildTaskStatus, logInfo, type ClmmEvent, type ClmmState, type ClmmUpdate } from '../context.js';
+import { getCamelotClient, getOnchainClients } from '../clientFactory.js';
+import {
+  buildTaskStatus,
+  logInfo,
+  type ClmmEvent,
+  type ClmmState,
+  type ClmmUpdate,
+} from '../context.js';
 import { executeDecision } from '../execution.js';
 
 const DEBUG_MODE = process.env['DEBUG_MODE'] === 'true';
@@ -17,15 +38,11 @@ export const pollCycleNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<Command<string, ClmmUpdate>> => {
-  const {
-    camelotClient,
-    operatorConfig,
-    selectedPool,
-    clients,
-  } = state;
+  const { operatorConfig, selectedPool } = state;
 
-  if (!camelotClient || !operatorConfig || !selectedPool || !clients) {
-    const failureMessage = 'ERROR: Polling node missing required state';
+  if (!operatorConfig || !selectedPool) {
+    const failureMessage =
+      'ERROR: Polling node missing required state (operatorConfig or selectedPool)';
     const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
     await copilotkitEmitState(config, { task, events: [statusEvent] });
     return new Command({
@@ -39,6 +56,10 @@ export const pollCycleNode = async (
       goto: 'summarize',
     });
   }
+
+  // Create clients on-demand (class instances don't survive LangGraph checkpointing)
+  const camelotClient = getCamelotClient();
+  const clients = await getOnchainClients();
 
   const iteration = (state.iteration ?? 0) + 1;
   logInfo('Polling cycle begin', { iteration, poolAddress: selectedPool.address });
@@ -156,11 +177,20 @@ export const pollCycleNode = async (
 
   const targetRangeForLog =
     decision.kind === 'hold' || decision.kind === 'exit-range' || decision.kind === 'compound-fees'
-      ? buildRange(midPrice, operatorConfig.manualBandwidthBps, poolSnapshot.tickSpacing, decimalsDiff)
+      ? buildRange(
+          midPrice,
+          operatorConfig.manualBandwidthBps,
+          poolSnapshot.tickSpacing,
+          decimalsDiff,
+        )
       : decision.targetRange;
 
-  const positionLowerPrice = currentPosition ? tickToPrice(currentPosition.tickLower, decimalsDiff) : undefined;
-  const positionUpperPrice = currentPosition ? tickToPrice(currentPosition.tickUpper, decimalsDiff) : undefined;
+  const positionLowerPrice = currentPosition
+    ? tickToPrice(currentPosition.tickLower, decimalsDiff)
+    : undefined;
+  const positionUpperPrice = currentPosition
+    ? tickToPrice(currentPosition.tickUpper, decimalsDiff)
+    : undefined;
   const pctFromLower =
     currentPosition && positionLowerPrice !== undefined && midPrice > 0
       ? Number((((midPrice - positionLowerPrice) / midPrice) * 100).toFixed(4))
@@ -205,7 +235,8 @@ export const pollCycleNode = async (
         : undefined;
 
   const inRange = currentPosition
-    ? poolSnapshot.tick >= currentPosition.tickLower && poolSnapshot.tick <= currentPosition.tickUpper
+    ? poolSnapshot.tick >= currentPosition.tickLower &&
+      poolSnapshot.tick <= currentPosition.tickUpper
     : undefined;
   const inInnerBand = innerBand
     ? poolSnapshot.tick >= innerBand.lowerTick && poolSnapshot.tick <= innerBand.upperTick
@@ -283,7 +314,9 @@ export const pollCycleNode = async (
   }
 
   const gasSpentUsd =
-    gasSpentWei !== undefined ? (Number(gasSpentWei) / 1_000_000_000_000_000_000) * ethUsd : undefined;
+    gasSpentWei !== undefined
+      ? (Number(gasSpentWei) / 1_000_000_000_000_000_000) * ethUsd
+      : undefined;
   cycleMetrics = {
     ...cycleMetrics,
     gasSpentWei: gasSpentWei?.toString(),
@@ -297,11 +330,15 @@ export const pollCycleNode = async (
     action: decision.kind,
     reason: decision.reason,
     tickLower:
-      decision.kind === 'hold' || decision.kind === 'exit-range' || decision.kind === 'compound-fees'
+      decision.kind === 'hold' ||
+      decision.kind === 'exit-range' ||
+      decision.kind === 'compound-fees'
         ? undefined
         : decision.targetRange.lowerTick,
     tickUpper:
-      decision.kind === 'hold' || decision.kind === 'exit-range' || decision.kind === 'compound-fees'
+      decision.kind === 'hold' ||
+      decision.kind === 'exit-range' ||
+      decision.kind === 'compound-fees'
         ? undefined
         : decision.targetRange.upperTick,
     txHash,

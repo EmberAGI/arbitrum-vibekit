@@ -1,15 +1,14 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
-import { createClients } from '../../clients/clients.js';
-import { EmberCamelotClient } from '../../clients/emberApi.js';
+import { resolvePollIntervalMs, resolveStreamLimit } from '../../config/constants.js';
 import {
-  EMBER_API_BASE_URL,
-  resolvePollIntervalMs,
-  resolveStreamLimit,
-} from '../../config/constants.js';
-import { buildTaskStatus, logInfo, type ClmmEvent, type ClmmState, type ClmmUpdate } from '../context.js';
-import { loadBootstrapContext } from '../store.js';
+  buildTaskStatus,
+  logInfo,
+  type ClmmEvent,
+  type ClmmState,
+  type ClmmUpdate,
+} from '../context.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = { configurable?: { thread_id?: string } };
@@ -28,12 +27,12 @@ export const bootstrapNode = async (
     });
   }
 
-  const { account } = await loadBootstrapContext();
+  // Note: We don't store client instances in state because LangGraph's checkpointer
+  // serializes state to JSON, which strips away prototype methods from class instances.
+  // Instead, clients are created on-demand in each node via clientFactory.ts.
   const mode = process.env['CLMM_MODE'] === 'production' ? 'production' : 'debug';
   const pollIntervalMs = resolvePollIntervalMs();
   const streamLimit = resolveStreamLimit();
-  const camelotClient = new EmberCamelotClient(EMBER_API_BASE_URL);
-  const clients = createClients(account);
 
   logInfo('Initialized LangGraph workflow context', { mode, pollIntervalMs, streamLimit });
 
@@ -64,8 +63,6 @@ export const bootstrapNode = async (
     mode,
     pollIntervalMs,
     streamLimit,
-    camelotClient,
-    clients,
     task,
     events: [dispatch, statusEvent],
   };

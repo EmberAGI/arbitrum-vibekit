@@ -2,8 +2,13 @@ import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
-import { ARBITRUM_CHAIN_ID, DEFAULT_TICK_BANDWIDTH_BPS, resolvePollIntervalMs } from '../../config/constants.js';
+import {
+  ARBITRUM_CHAIN_ID,
+  DEFAULT_TICK_BANDWIDTH_BPS,
+  resolvePollIntervalMs,
+} from '../../config/constants.js';
 import { type ResolvedOperatorConfig } from '../../domain/types.js';
+import { getCamelotClient } from '../clientFactory.js';
 import {
   buildTaskStatus,
   type ClmmState,
@@ -24,7 +29,7 @@ export const prepareOperatorNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
-  const { operatorInput, allowedPools, camelotClient, clients } = state;
+  const { operatorInput, allowedPools } = state;
   if (!operatorInput) {
     const failureMessage = 'ERROR: Operator input missing';
     const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
@@ -38,33 +43,9 @@ export const prepareOperatorNode = async (
       goto: 'summarize',
     });
   }
-  if (!camelotClient) {
-    const failureMessage = 'ERROR: Camelot client missing';
-    const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, { task, events: [statusEvent] });
-    return new Command({
-      update: {
-        haltReason: failureMessage,
-        events: [statusEvent],
-        task,
-      },
-      goto: 'summarize',
-    });
-  }
-  if (!clients) {
-    const failureMessage = 'ERROR: Agent wallet context missing';
-    const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, { task, events: [statusEvent] });
-    return new Command({
-      update: {
-        haltReason: failureMessage,
-        events: [statusEvent],
-        task,
-      },
-      goto: 'summarize',
-    });
-  }
 
+  // Create client on-demand (class instances don't survive LangGraph checkpointing)
+  const camelotClient = getCamelotClient();
   const { agentWalletAddress } = await loadBootstrapContext();
 
   const selectedPoolAddress = normalizeHexAddress(operatorInput.poolAddress, 'pool address');

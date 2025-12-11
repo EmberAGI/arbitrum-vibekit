@@ -4,8 +4,6 @@ import { type Artifact } from '@emberai/agent-node/workflow';
 import { Annotation, MemorySaver } from '@langchain/langgraph';
 import { v7 as uuidv7 } from 'uuid';
 
-import type { createClients } from '../clients/clients.js';
-import { type EmberCamelotClient } from '../clients/emberApi.js';
 import { resolvePollIntervalMs, resolveStreamLimit } from '../config/constants.js';
 import {
   type CamelotPool,
@@ -71,30 +69,41 @@ export const ClmmStateAnnotation = Annotation.Root({
   }),
   command: Annotation<string | undefined>({ reducer: (_left, right) => right ?? _left }),
   amount: Annotation<number | undefined>({ reducer: (_left, right) => right ?? _left }),
-  camelotClient: Annotation<EmberCamelotClient | undefined>(),
-  clients: Annotation<ReturnType<typeof createClients> | undefined>(),
-  task: Annotation<Task | undefined>({ reducer: (_left, right) => right ?? _left }),
-  pools: Annotation<CamelotPool[]>({ default: () => [], reducer: (_left, right) => right }),
-  allowedPools: Annotation<CamelotPool[]>({ default: () => [], reducer: (_left, right) => right }),
-  poolArtifact: Annotation<Artifact | undefined>({ reducer: (_left, right) => right }),
-  operatorInput: Annotation<OperatorConfigInput | undefined>({ reducer: (_left, right) => right }),
-  selectedPool: Annotation<CamelotPool | undefined>({ reducer: (_left, right) => right }),
-  operatorConfig: Annotation<ResolvedOperatorConfig | undefined>({
-    reducer: (_left, right) => right,
+  // Note: Client instances (EmberCamelotClient, viem clients) are NOT stored in state
+  // because LangGraph's checkpointer serializes state to JSON, which strips prototype methods.
+  // Instead, clients are created on-demand in each node via clientFactory.ts.
+  task: Annotation<Task | undefined>({ reducer: (left, right) => right ?? left }),
+  pools: Annotation<CamelotPool[]>({ default: () => [], reducer: (left, right) => right ?? left }),
+  allowedPools: Annotation<CamelotPool[]>({
+    default: () => [],
+    reducer: (left, right) => right ?? left,
   }),
-  lastSnapshot: Annotation<CamelotPool | undefined>({ reducer: (_left, right) => right }),
-  previousPrice: Annotation<number | undefined>({ reducer: (_left, right) => right }),
+  poolArtifact: Annotation<Artifact | undefined>({ reducer: (left, right) => right ?? left }),
+  operatorInput: Annotation<OperatorConfigInput | undefined>({
+    reducer: (left, right) => right ?? left,
+  }),
+  selectedPool: Annotation<CamelotPool | undefined>({ reducer: (left, right) => right ?? left }),
+  operatorConfig: Annotation<ResolvedOperatorConfig | undefined>({
+    reducer: (left, right) => right ?? left,
+  }),
+  lastSnapshot: Annotation<CamelotPool | undefined>({ reducer: (left, right) => right ?? left }),
+  previousPrice: Annotation<number | undefined>({ reducer: (left, right) => right ?? left }),
   cyclesSinceRebalance: Annotation<number>({
     default: () => 0,
-    reducer: (_left, right) => right ?? 0,
+    reducer: (left, right) => right ?? left ?? 0,
   }),
-  staleCycles: Annotation<number>({ default: () => 0, reducer: (_left, right) => right ?? 0 }),
-  iteration: Annotation<number>({ default: () => 0, reducer: (_left, right) => right ?? 0 }),
+  staleCycles: Annotation<number>({
+    default: () => 0,
+    reducer: (left, right) => right ?? left ?? 0,
+  }),
+  iteration: Annotation<number>({ default: () => 0, reducer: (left, right) => right ?? left ?? 0 }),
   telemetry: Annotation<RebalanceTelemetry[]>({
     default: () => [],
     reducer: (left, right) => [...left, ...(right ?? [])],
   }),
-  latestCycle: Annotation<RebalanceTelemetry | undefined>({ reducer: (_left, right) => right }),
+  latestCycle: Annotation<RebalanceTelemetry | undefined>({
+    reducer: (left, right) => right ?? left,
+  }),
   events: Annotation<ClmmEvent[]>({
     default: () => [],
     reducer: (left, right) => [...left, ...(right ?? [])],

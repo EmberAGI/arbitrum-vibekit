@@ -1,9 +1,10 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
-import { ARBITRUM_CHAIN_ID, resolvePollIntervalMs } from '../../config/constants.js';
+import { ARBITRUM_CHAIN_ID } from '../../config/constants.js';
 import { type CamelotPool } from '../../domain/types.js';
 import { buildPoolArtifact } from '../artifacts.js';
+import { getCamelotClient } from '../clientFactory.js';
 import {
   buildTaskStatus,
   logInfo,
@@ -11,34 +12,20 @@ import {
   type ClmmState,
   type ClmmUpdate,
 } from '../context.js';
-import { ensureCronForThread } from '../cronScheduler.js';
 import { isPoolAllowed } from '../pools.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
-type Configurable = {
-  configurable?: { thread_id?: string; scheduleCron?: (threadId: string) => void };
-};
 
 export const listPoolsNode = async (
   state: ClmmState,
-  config: CopilotKitConfig & Configurable,
+  config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
-  if (!state.camelotClient) {
-    const failureMessage = 'ERROR: Camelot client not initialized';
-    const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, { task, events: [statusEvent] });
-    return new Command({
-      update: {
-        haltReason: failureMessage,
-        events: [statusEvent],
-        task,
-      },
-      goto: 'summarize',
-    });
-  }
+  // Create client on-demand (class instances don't survive LangGraph checkpointing)
+  const camelotClient = getCamelotClient();
+
   let pools: CamelotPool[];
   try {
-    pools = await state.camelotClient.listCamelotPools(ARBITRUM_CHAIN_ID);
+    pools = await camelotClient.listCamelotPools(ARBITRUM_CHAIN_ID);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const failureMessage = `ERROR: Failed to fetch Camelot pools - ${message}`;
@@ -83,21 +70,9 @@ export const listPoolsNode = async (
 
   const events: ClmmEvent[] = [{ type: 'artifact', artifact: poolArtifact }, statusEvent];
 
-  // Schedule cron here before the interrupt in collectOperatorInput
-  // This ensures the cron is set up even if the graph pauses waiting for operator input
-  const threadId = config.configurable?.thread_id;
-  const scheduleCron = config.configurable?.scheduleCron;
-  let cronScheduled = state.cronScheduled;
-  if (threadId && !cronScheduled) {
-    if (scheduleCron) {
-      scheduleCron(threadId);
-    } else {
-      const intervalMs = state.pollIntervalMs ?? resolvePollIntervalMs();
-      ensureCronForThread(threadId, intervalMs);
-    }
-    cronScheduled = true;
-    logInfo('Cron scheduled after pool discovery', { threadId });
-  }
+  // Note: Cron is scheduled in prepareOperatorNode AFTER the operator provides input
+  // via the interrupt in collectOperatorInput. This ensures the cron only starts
+  // once the workflow is fully configured.
 
   return {
     pools,
@@ -105,6 +80,5 @@ export const listPoolsNode = async (
     poolArtifact,
     task,
     events,
-    cronScheduled,
   };
 };
