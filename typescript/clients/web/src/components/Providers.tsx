@@ -5,7 +5,7 @@ import { WagmiProvider } from 'wagmi';
 import { RainbowKitProvider, getDefaultConfig, darkTheme } from '@rainbow-me/rainbowkit';
 import { arbitrum, mainnet, polygon, optimism, base } from 'wagmi/chains';
 import '@rainbow-me/rainbowkit/styles.css';
-import { PrivyProvider } from '@privy-io/react-auth';
+import dynamic from 'next/dynamic';
 
 const config = getDefaultConfig({
   appName: 'EmberAI A2A Client',
@@ -16,7 +16,10 @@ const config = getDefaultConfig({
 
 const queryClient = new QueryClient();
 
-const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID || 'your-privy-app-id';
+const PrivyClientProvider = dynamic(
+  () => import('./PrivyClientProvider').then((m) => m.PrivyClientProvider),
+  { ssr: false },
+);
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -29,18 +32,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           })}
           initialChain={arbitrum}
         >
-          <PrivyProvider
-            appId={PRIVY_APP_ID}
-            config={{
-              embeddedWallets: {
-                ethereum: {
-                  createOnLogin: 'all-users',
-                },
-              },
-            }}
-          >
-            {children}
-          </PrivyProvider>
+          <PrivyClientProvider>{children}</PrivyClientProvider>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
