@@ -17,12 +17,25 @@ type CommandTarget =
   | '__end__';
 
 function extractCommand(messages: ClmmState['messages']): Command | null {
-  if (!messages || messages.length === 0) {
+  if (!messages) {
     return null;
   }
 
-  const lastMessage = messages[messages.length - 1];
-  const content = typeof lastMessage.content === 'string' ? lastMessage.content : undefined;
+  const list = Array.isArray(messages) ? messages : [messages];
+  if (list.length === 0) {
+    return null;
+  }
+
+  const lastMessage = list[list.length - 1];
+  let content: string | undefined;
+  if (typeof lastMessage === 'string') {
+    content = lastMessage;
+  } else if (Array.isArray(lastMessage)) {
+    content = undefined;
+  } else if (typeof lastMessage === 'object' && lastMessage !== null && 'content' in lastMessage) {
+    const value = (lastMessage as { content: unknown }).content;
+    content = typeof value === 'string' ? value : undefined;
+  }
   if (!content) {
     return null;
   }
@@ -43,12 +56,15 @@ export function runCommandNode(state: ClmmState): ClmmState {
   const parsedCommand = extractCommand(state.messages);
   return {
     ...state,
-    command: parsedCommand ?? undefined,
+    view: {
+      ...state.view,
+      command: parsedCommand ?? undefined,
+    },
   };
 }
 
-export function resolveCommandTarget({ messages, bootstrapped, command }: ClmmState): CommandTarget {
-  const resolvedCommand = command ?? extractCommand(messages);
+export function resolveCommandTarget({ messages, private: priv, view }: ClmmState): CommandTarget {
+  const resolvedCommand = view.command ?? extractCommand(messages);
   if (!resolvedCommand) {
     return '__end__';
   }
@@ -59,9 +75,9 @@ export function resolveCommandTarget({ messages, bootstrapped, command }: ClmmSt
     case 'fire':
       return 'fireCommand';
     case 'cycle':
-      return bootstrapped ? 'runCycleCommand' : 'bootstrap';
+      return priv.bootstrapped ? 'runCycleCommand' : 'bootstrap';
     case 'sync':
-      return bootstrapped ? 'syncState' : 'bootstrap';
+      return priv.bootstrapped ? 'syncState' : 'bootstrap';
     default:
       return '__end__';
   }

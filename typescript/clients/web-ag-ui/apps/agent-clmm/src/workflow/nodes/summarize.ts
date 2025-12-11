@@ -14,22 +14,29 @@ export const summarizeNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate> => {
-  const summaryArtifact = buildSummaryArtifact(state.telemetry ?? []);
-  const finalState: TaskState = state.haltReason ? 'failed' : 'completed';
+  const summaryArtifact = buildSummaryArtifact(state.view.activity.telemetry ?? []);
+  const finalState: TaskState = state.view.haltReason ? 'failed' : 'completed';
   const { task, statusEvent: completion } = buildTaskStatus(
-    state.task,
+    state.view.task,
     finalState,
-    state.haltReason ?? 'CLMM workflow completed.',
+    state.view.haltReason ?? 'CLMM workflow completed.',
   );
-  await copilotkitEmitState(config, { task, events: [completion] });
+  await copilotkitEmitState(config, {
+    view: { task, activity: { events: [completion] } },
+  });
   return {
-    task,
-    events: [
-      {
-        type: 'artifact',
-        artifact: summaryArtifact,
+    view: {
+      task,
+      activity: {
+        telemetry: [],
+        events: [
+          {
+            type: 'artifact',
+            artifact: summaryArtifact,
+          },
+          completion,
+        ],
       },
-      completion,
-    ],
+    },
   };
 };

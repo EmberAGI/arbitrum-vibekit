@@ -17,17 +17,24 @@ export const collectOperatorInputNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
-  logInfo('collectOperatorInput: entering node', { hasPoolArtifact: !!state.poolArtifact });
+  logInfo('collectOperatorInput: entering node', { hasPoolArtifact: !!state.view.poolArtifact });
 
-  if (!state.poolArtifact) {
+  if (!state.view.poolArtifact) {
     const failureMessage = 'ERROR: Pool artifact missing before operator input';
-    const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    });
     return new Command({
       update: {
-        haltReason: failureMessage,
-        task,
-        events: [statusEvent],
+        view: {
+          haltReason: failureMessage,
+          task,
+          activity: { events: [statusEvent], telemetry: [] },
+          profile: state.view.profile,
+          metrics: state.view.metrics,
+          transactionHistory: state.view.transactionHistory,
+        },
       },
       goto: 'summarize',
     });
@@ -38,20 +45,19 @@ export const collectOperatorInputNode = async (
     message:
       'Select a Camelot pool to manage, confirm wallet, and optional allocation override for this CLMM workflow.',
     payloadSchema: z.toJSONSchema(OperatorConfigInputSchema),
-    artifactId: state.poolArtifact.artifactId,
+    artifactId: state.view.poolArtifact.artifactId,
   };
 
   logInfo('collectOperatorInput: emitting input-required status before interrupt');
 
   const awaitingInput = buildTaskStatus(
-    state.task,
+    state.view.task,
     'input-required',
     'Awaiting operator configuration to continue CLMM setup.',
   );
 
   await copilotkitEmitState(config, {
-    task: awaitingInput.task,
-    events: [awaitingInput.statusEvent],
+    view: { task: awaitingInput.task, activity: { events: [awaitingInput.statusEvent], telemetry: [] } },
   });
 
   logInfo('collectOperatorInput: calling interrupt() - graph should pause here');
@@ -79,11 +85,18 @@ export const collectOperatorInputNode = async (
     const failureMessage = `Invalid operator input: ${issues}`;
     logInfo('collectOperatorInput: validation failed', { issues, failureMessage });
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    });
     return {
-      haltReason: failureMessage,
-      task,
-      events: [statusEvent],
+      view: {
+        haltReason: failureMessage,
+        task,
+        activity: { events: [statusEvent], telemetry: [] },
+        profile: state.view.profile,
+        metrics: state.view.metrics,
+        transactionHistory: state.view.transactionHistory,
+      },
     };
   }
 
@@ -97,11 +110,15 @@ export const collectOperatorInputNode = async (
     'working',
     'Operator configuration received. Preparing execution context.',
   );
-  await copilotkitEmitState(config, { task, events: [statusEvent] });
+  await copilotkitEmitState(config, {
+    view: { task, activity: { events: [statusEvent], telemetry: [] } },
+  });
 
   return {
-    operatorInput: parsed.data,
-    task,
-    events: [statusEvent],
+    view: {
+      operatorInput: parsed.data,
+      task,
+      activity: { events: [statusEvent], telemetry: [] },
+    },
   };
 };

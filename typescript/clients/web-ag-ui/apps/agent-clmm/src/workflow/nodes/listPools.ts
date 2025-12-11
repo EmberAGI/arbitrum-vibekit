@@ -29,32 +29,47 @@ export const listPoolsNode = async (
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const failureMessage = `ERROR: Failed to fetch Camelot pools - ${message}`;
-    const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    });
     return new Command({
       update: {
-        haltReason: failureMessage,
-        events: [statusEvent],
-        task,
+        view: {
+          haltReason: failureMessage,
+          activity: { events: [statusEvent], telemetry: [] },
+          task,
+          profile: state.view.profile,
+          transactionHistory: state.view.transactionHistory,
+          metrics: state.view.metrics,
+        },
       },
       goto: 'summarize',
     });
   }
-  const allowedPools = pools.filter((pool) => isPoolAllowed(pool, state.mode ?? 'debug'));
+  const mode = state.private.mode ?? 'debug';
+  const allowedPools = pools.filter((pool) => isPoolAllowed(pool, mode));
   logInfo('Retrieved Camelot pools', {
     total: pools.length,
     allowed: allowedPools.length,
-    mode: state.mode,
+    mode,
   });
   if (allowedPools.length === 0) {
-    const failureMessage = `ERROR: No Camelot pools available for mode=${state.mode}`;
-    const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    const failureMessage = `ERROR: No Camelot pools available for mode=${mode}`;
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    });
     return new Command({
       update: {
-        haltReason: failureMessage,
-        events: [statusEvent],
-        task,
+        view: {
+          haltReason: failureMessage,
+          activity: { events: [statusEvent], telemetry: [] },
+          task,
+          profile: state.view.profile,
+          transactionHistory: state.view.transactionHistory,
+          metrics: state.view.metrics,
+        },
       },
       goto: 'summarize',
     });
@@ -62,11 +77,13 @@ export const listPoolsNode = async (
 
   const poolArtifact = buildPoolArtifact(allowedPools.slice(0, 8));
   const { task, statusEvent } = buildTaskStatus(
-    state.task,
+    state.view.task,
     'working',
     `Discovered ${allowedPools.length}/${pools.length} allowed Camelot pools`,
   );
-  await copilotkitEmitState(config, { task, events: [statusEvent] });
+  await copilotkitEmitState(config, {
+    view: { task, activity: { events: [statusEvent], telemetry: [] } },
+  });
 
   const events: ClmmEvent[] = [{ type: 'artifact', artifact: poolArtifact }, statusEvent];
 
@@ -75,10 +92,19 @@ export const listPoolsNode = async (
   // once the workflow is fully configured.
 
   return {
-    pools,
-    allowedPools,
-    poolArtifact,
-    task,
-    events,
+    view: {
+      profile: {
+        pools,
+        allowedPools,
+      },
+      poolArtifact,
+      task,
+      activity: { events, telemetry: state.view.activity.telemetry },
+      transactionHistory: state.view.transactionHistory,
+      metrics: state.view.metrics,
+    },
+    private: {
+      mode,
+    },
   };
 };

@@ -9,15 +9,17 @@ export const runCycleCommandNode = async (
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate> => {
   const { task, statusEvent } = buildTaskStatus(
-    state.task,
+    state.view.task,
     'working',
     'Running scheduled CLMM cycle.',
   );
-  await copilotkitEmitState(config, { task, events: [statusEvent] });
+  await copilotkitEmitState(config, { view: { task, activity: { events: [statusEvent], telemetry: [] } } });
 
   return {
-    task,
-    command: 'cycle',
-    events: [statusEvent],
+    view: {
+      task,
+      command: 'cycle',
+      activity: { events: [statusEvent], telemetry: [] },
+    },
   };
 };

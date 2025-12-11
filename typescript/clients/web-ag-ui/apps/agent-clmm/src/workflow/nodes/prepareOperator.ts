@@ -21,16 +21,23 @@ export const prepareOperatorNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
-  const { operatorInput, allowedPools } = state;
+  const { operatorInput, profile } = state.view;
   if (!operatorInput) {
     const failureMessage = 'ERROR: Operator input missing';
-    const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    });
     return new Command({
       update: {
-        haltReason: failureMessage,
-        events: [statusEvent],
-        task,
+        view: {
+          haltReason: failureMessage,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          task,
+          profile: state.view.profile,
+          transactionHistory: state.view.transactionHistory,
+          metrics: state.view.metrics,
+        },
       },
       goto: 'summarize',
     });
@@ -44,19 +51,26 @@ export const prepareOperatorNode = async (
   const operatorWalletAddress = normalizeHexAddress(operatorInput.walletAddress, 'wallet address');
 
   const selectedPool =
-    allowedPools?.find(
+    profile.allowedPools?.find(
       (pool) => pool.address.toLowerCase() === selectedPoolAddress.toLowerCase(),
     ) ?? (await fetchPoolSnapshot(camelotClient, selectedPoolAddress, ARBITRUM_CHAIN_ID));
 
   if (!selectedPool) {
     const failureMessage = `ERROR: Pool ${selectedPoolAddress} not available from Ember API`;
-    const { task, statusEvent } = buildTaskStatus(state.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    });
     return new Command({
       update: {
-        haltReason: failureMessage,
-        events: [statusEvent],
-        task,
+        view: {
+          haltReason: failureMessage,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          task,
+          profile: state.view.profile,
+          transactionHistory: state.view.transactionHistory,
+          metrics: state.view.metrics,
+        },
       },
       goto: 'summarize',
     });
@@ -87,25 +101,35 @@ export const prepareOperatorNode = async (
   // before subsequent cron-triggered runs begin
 
   const { task, statusEvent } = buildTaskStatus(
-    state.task,
+    state.view.task,
     'working',
     `Managing pool ${selectedPool.token0.symbol}/${selectedPool.token1.symbol} from ${agentWalletAddress}`,
   );
-  await copilotkitEmitState(config, { task, events: [statusEvent] });
+  await copilotkitEmitState(config, {
+    view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+  });
 
   const events: ClmmEvent[] = [statusEvent];
 
   return {
-    operatorConfig,
-    selectedPool,
-    lastSnapshot: selectedPool,
-    cyclesSinceRebalance: 0,
-    staleCycles: 0,
-    iteration: 0,
-    telemetry: [],
-    previousPrice: undefined,
-    cronScheduled: false, // Will be set to true in pollCycle after first cycle
-    task,
-    events,
+    view: {
+      operatorConfig,
+      selectedPool,
+      metrics: {
+        lastSnapshot: selectedPool,
+        previousPrice: undefined,
+        cyclesSinceRebalance: 0,
+        staleCycles: 0,
+        iteration: 0,
+        latestCycle: undefined,
+      },
+      task,
+      activity: { events, telemetry: state.view.activity.telemetry },
+      transactionHistory: state.view.transactionHistory,
+      profile: state.view.profile,
+    },
+    private: {
+      cronScheduled: false, // Will be set to true in pollCycle after first cycle
+    },
   };
 };

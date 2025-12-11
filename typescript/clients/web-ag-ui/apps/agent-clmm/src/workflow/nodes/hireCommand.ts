@@ -8,19 +8,23 @@ export const hireCommandNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate> => {
-  const amount = state.amount;
+  const amount = state.settings.amount;
 
-  if (state.task && isTaskActive(state.task.taskStatus.state)) {
+  if (state.view.task && isTaskActive(state.view.task.taskStatus.state)) {
     const { task, statusEvent } = buildTaskStatus(
-      state.task,
-      state.task.taskStatus.state,
-      `Task ${state.task.id} is already active.`,
+      state.view.task,
+      state.view.task.taskStatus.state,
+      `Task ${state.view.task.id} is already active.`,
     );
-    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: [] } },
+    });
     return {
-      task,
-      events: [statusEvent],
-      command: 'hire',
+      view: {
+        task,
+        activity: { events: [statusEvent], telemetry: [] },
+        command: 'hire',
+      },
     };
   }
 
@@ -29,11 +33,13 @@ export const hireCommandNode = async (
     'submitted',
     `Agent hired!${amount ? ` Trading ${amount} tokens...` : ''}`,
   );
-  await copilotkitEmitState(config, { task, events: [statusEvent] });
+  await copilotkitEmitState(config, { view: { task, activity: { events: [statusEvent], telemetry: [] } } });
 
   return {
-    task,
-    command: 'hire',
-    events: [statusEvent],
+    view: {
+      task,
+      command: 'hire',
+      activity: { events: [statusEvent], telemetry: [] },
+    },
   };
 };

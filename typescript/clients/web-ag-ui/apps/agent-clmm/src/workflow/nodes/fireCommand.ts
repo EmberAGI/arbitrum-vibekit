@@ -11,7 +11,7 @@ export const fireCommandNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate> => {
-  const currentTask = state.task;
+  const currentTask = state.view.task;
   const threadId = (config as Configurable).configurable?.thread_id;
   if (threadId) {
     cancelCronForThread(threadId);
@@ -23,20 +23,24 @@ export const fireCommandNode = async (
       currentTask.taskStatus.state,
       `Task ${currentTask.id} is already in a terminal state.`,
     );
-    await copilotkitEmitState(config, { task, events: [statusEvent] });
+    await copilotkitEmitState(config, { view: { task, activity: { events: [statusEvent], telemetry: [] } } });
     return {
-      task,
-      events: [statusEvent],
-      command: 'fire',
+      view: {
+        task,
+        activity: { events: [statusEvent], telemetry: [] },
+        command: 'fire',
+      },
     };
   }
 
   const { task, statusEvent } = buildTaskStatus(currentTask, 'canceled', 'Agent fired! It will stop trading.');
-  await copilotkitEmitState(config, { task, events: [statusEvent] });
+  await copilotkitEmitState(config, { view: { task, activity: { events: [statusEvent], telemetry: [] } } });
 
   return {
-    task,
-    command: 'fire',
-    events: [statusEvent],
+    view: {
+      task,
+      command: 'fire',
+      activity: { events: [statusEvent], telemetry: [] },
+    },
   };
 };
