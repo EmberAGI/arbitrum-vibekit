@@ -2,11 +2,7 @@ import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
-import {
-  ARBITRUM_CHAIN_ID,
-  DEFAULT_TICK_BANDWIDTH_BPS,
-  resolvePollIntervalMs,
-} from '../../config/constants.js';
+import { ARBITRUM_CHAIN_ID, DEFAULT_TICK_BANDWIDTH_BPS } from '../../config/constants.js';
 import { type ResolvedOperatorConfig } from '../../domain/types.js';
 import { getCamelotClient } from '../clientFactory.js';
 import {
@@ -17,13 +13,9 @@ import {
   normalizeHexAddress,
   type ClmmEvent,
 } from '../context.js';
-import { ensureCronForThread } from '../cronScheduler.js';
 import { loadBootstrapContext } from '../store.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
-type Configurable = {
-  configurable?: { thread_id?: string; scheduleCron?: (threadId: string) => void };
-};
 
 export const prepareOperatorNode = async (
   state: ClmmState,
@@ -91,17 +83,8 @@ export const prepareOperatorNode = async (
     baseContributionUsd: operatorConfig.baseContributionUsd,
   });
 
-  const threadId = (config as Configurable).configurable?.thread_id;
-  const scheduleCron = (config as Configurable).configurable?.scheduleCron;
-  if (threadId && !state.cronScheduled) {
-    if (scheduleCron) {
-      scheduleCron(threadId);
-    } else {
-      const intervalMs = state.pollIntervalMs ?? resolvePollIntervalMs();
-      ensureCronForThread(threadId, intervalMs);
-    }
-    logInfo('Cron scheduled after operator preparation', { threadId });
-  }
+  // Note: Cron scheduling moved to pollCycle to ensure first cycle completes
+  // before subsequent cron-triggered runs begin
 
   const { task, statusEvent } = buildTaskStatus(
     state.task,
@@ -121,7 +104,7 @@ export const prepareOperatorNode = async (
     iteration: 0,
     telemetry: [],
     previousPrice: undefined,
-    cronScheduled: threadId ? true : state.cronScheduled,
+    cronScheduled: false, // Will be set to true in pollCycle after first cycle
     task,
     events,
   };

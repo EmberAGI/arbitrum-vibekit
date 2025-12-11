@@ -4,9 +4,8 @@ import { END, GraphInterrupt, InMemoryStore, START, StateGraph } from '@langchai
 import { v7 as uuidv7 } from 'uuid';
 import { privateKeyToAccount } from 'viem/accounts';
 
-import { resolvePollIntervalMs } from './config/constants.js';
 import { ClmmStateAnnotation, memory, normalizeHexAddress } from './workflow/context.js';
-import { configureCronExecutor, ensureCronForThread } from './workflow/cronScheduler.js';
+import { configureCronExecutor } from './workflow/cronScheduler.js';
 import { bootstrapNode } from './workflow/nodes/bootstrap.js';
 import { collectOperatorInputNode } from './workflow/nodes/collectOperatorInput.js';
 import { fireCommandNode } from './workflow/nodes/fireCommand.js';
@@ -59,7 +58,15 @@ export const clmmGraph = workflow.compile({
   store,
 });
 
+const runningThreads = new Set<string>();
+
 export async function runGraphOnce(threadId: string) {
+  if (runningThreads.has(threadId)) {
+    console.info(`[cron] Skipping tick - run already in progress (thread=${threadId})`);
+    return;
+  }
+
+  runningThreads.add(threadId);
   const startedAt = Date.now();
   console.info(`[cron] Starting CLMM graph run (thread=${threadId})`);
 
@@ -70,24 +77,25 @@ export async function runGraphOnce(threadId: string) {
   };
 
   try {
-    const stream = await clmmGraph.stream(
+    // Use invoke() instead of stream() - cron runs have no HTTP streaming context
+    await clmmGraph.invoke(
       { messages: [runMessage] },
       {
         configurable: { thread_id: threadId },
       },
     );
-    // streaming ensures all nodes execute; events are handled inside nodes
-    for await (const event of stream) {
-      void event;
-    }
     console.info(`[cron] Run complete in ${Date.now() - startedAt}ms`);
   } catch (error) {
     if (error instanceof GraphInterrupt) {
-      console.warn('[cron] Graph interrupted awaiting operator input; supply input via UI and rerun.');
+      console.warn(
+        '[cron] Graph interrupted awaiting operator input; supply input via UI and rerun.',
+      );
       return;
     }
 
     console.error('[cron] Graph run failed', error);
+  } finally {
+    runningThreads.delete(threadId);
   }
 }
 
@@ -98,14 +106,11 @@ export async function startClmmCron(threadId: string) {
     content: JSON.stringify({ command: 'cycle' }),
   };
 
-  const pollIntervalMs = resolvePollIntervalMs();
+  // Cron scheduling happens in pollCycle after first cycle completes
   const stream = await clmmGraph.stream(
     { messages: [initialRunMessage] },
     {
-      configurable: {
-        thread_id: threadId,
-        scheduleCron: (id: string) => ensureCronForThread(id, pollIntervalMs),
-      },
+      configurable: { thread_id: threadId },
     },
   );
   for await (const event of stream) {

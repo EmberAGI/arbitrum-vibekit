@@ -8,6 +8,7 @@ import {
   DEFAULT_REBALANCE_THRESHOLD_PCT,
   MAX_GAS_SPEND_ETH,
   resolveEthUsdPrice,
+  resolvePollIntervalMs,
 } from '../../config/constants.js';
 import {
   buildRange,
@@ -28,11 +29,15 @@ import {
   type ClmmState,
   type ClmmUpdate,
 } from '../context.js';
+import { ensureCronForThread } from '../cronScheduler.js';
 import { executeDecision } from '../execution.js';
 
 const DEBUG_MODE = process.env['DEBUG_MODE'] === 'true';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
+type Configurable = {
+  configurable?: { thread_id?: string };
+};
 
 export const pollCycleNode = async (
   state: ClmmState,
@@ -356,6 +361,16 @@ export const pollCycleNode = async (
     append: true,
   };
 
+  // Schedule cron after first cycle completes (ensures no concurrent runs)
+  const threadId = (config as Configurable).configurable?.thread_id;
+  let cronScheduled = state.cronScheduled;
+  if (threadId && !cronScheduled) {
+    const intervalMs = state.pollIntervalMs ?? resolvePollIntervalMs();
+    ensureCronForThread(threadId, intervalMs);
+    logInfo('Cron scheduled after first poll cycle', { threadId });
+    cronScheduled = true;
+  }
+
   const goto = 'summarize';
 
   return new Command({
@@ -367,6 +382,7 @@ export const pollCycleNode = async (
       iteration,
       telemetry: [cycleTelemetry],
       latestCycle: cycleTelemetry,
+      cronScheduled,
       task,
       events: [telemetryEvent, statusEvent],
     },
