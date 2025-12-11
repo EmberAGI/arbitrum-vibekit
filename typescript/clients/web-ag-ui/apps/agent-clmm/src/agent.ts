@@ -16,6 +16,7 @@ import { prepareOperatorNode } from './workflow/nodes/prepareOperator.js';
 import { resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
 import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
+import { syncStateNode } from './workflow/nodes/syncState.js';
 import { saveBootstrapContext } from './workflow/store.js';
 
 const store = new InMemoryStore();
@@ -35,6 +36,7 @@ const workflow = new StateGraph(ClmmStateAnnotation)
   .addNode('hireCommand', hireCommandNode)
   .addNode('fireCommand', fireCommandNode)
   .addNode('runCycleCommand', runCycleCommandNode)
+  .addNode('syncState', syncStateNode)
   .addNode('bootstrap', bootstrapNode)
   .addNode('listPools', listPoolsNode)
   .addNode('collectOperatorInput', collectOperatorInputNode)
@@ -46,6 +48,7 @@ const workflow = new StateGraph(ClmmStateAnnotation)
   .addEdge('hireCommand', 'bootstrap')
   .addEdge('fireCommand', END)
   .addEdge('runCycleCommand', 'pollCycle')
+  .addEdge('syncState', END)
   .addEdge('bootstrap', 'listPools')
   .addEdge('listPools', 'collectOperatorInput')
   .addEdge('collectOperatorInput', 'prepareOperator')

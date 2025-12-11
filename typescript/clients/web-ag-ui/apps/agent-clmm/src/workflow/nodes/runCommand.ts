@@ -3,47 +3,65 @@ import { z } from 'zod';
 import { type ClmmState } from '../context.js';
 
 const commandSchema = z.object({
-  command: z.enum(['hire', 'fire', 'cycle']),
+  command: z.enum(['hire', 'fire', 'cycle', 'sync']),
 });
 
-type CommandTarget = 'hireCommand' | 'fireCommand' | 'runCycleCommand' | 'bootstrap' | '__end__';
+type Command = z.infer<typeof commandSchema>['command'];
 
-export function runCommandNode(state: ClmmState): ClmmState {
-  void state; // passthrough; routing handled by conditional edges
-  return state;
-}
+type CommandTarget =
+  | 'hireCommand'
+  | 'fireCommand'
+  | 'runCycleCommand'
+  | 'bootstrap'
+  | 'syncState'
+  | '__end__';
 
-export function resolveCommandTarget({ messages, bootstrapped }: ClmmState): CommandTarget {
+function extractCommand(messages: ClmmState['messages']): Command | null {
   if (!messages || messages.length === 0) {
-    return '__end__';
+    return null;
   }
 
   const lastMessage = messages[messages.length - 1];
   const content = typeof lastMessage.content === 'string' ? lastMessage.content : undefined;
   if (!content) {
-    return '__end__';
+    return null;
   }
 
-  let command: string;
   try {
     const parsed = commandSchema.safeParse(JSON.parse(content));
-    if (parsed.success) {
-      command = parsed.data.command;
-    } else {
-      return '__end__';
+    if (!parsed.success) {
+      return null;
     }
+    return parsed.data.command;
   } catch (unknownError) {
     console.error('[runCommand] Failed to parse command content', unknownError);
+    return null;
+  }
+}
+
+export function runCommandNode(state: ClmmState): ClmmState {
+  const parsedCommand = extractCommand(state.messages);
+  return {
+    ...state,
+    command: parsedCommand ?? undefined,
+  };
+}
+
+export function resolveCommandTarget({ messages, bootstrapped, command }: ClmmState): CommandTarget {
+  const resolvedCommand = command ?? extractCommand(messages);
+  if (!resolvedCommand) {
     return '__end__';
   }
 
-  switch (command) {
+  switch (resolvedCommand) {
     case 'hire':
       return 'hireCommand';
     case 'fire':
       return 'fireCommand';
     case 'cycle':
       return bootstrapped ? 'runCycleCommand' : 'bootstrap';
+    case 'sync':
+      return bootstrapped ? 'syncState' : 'bootstrap';
     default:
       return '__end__';
   }
