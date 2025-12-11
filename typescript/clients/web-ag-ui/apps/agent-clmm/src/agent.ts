@@ -1,11 +1,12 @@
 import { pathToFileURL } from 'node:url';
 
 import { END, GraphInterrupt, InMemoryStore, START, StateGraph } from '@langchain/langgraph';
-import cron from 'node-cron';
 import { v7 as uuidv7 } from 'uuid';
 import { privateKeyToAccount } from 'viem/accounts';
 
+import { resolvePollIntervalMs } from './config/constants.js';
 import { ClmmStateAnnotation, memory, normalizeHexAddress } from './workflow/context.js';
+import { configureCronExecutor, ensureCronForThread } from './workflow/cronScheduler.js';
 import { bootstrapNode } from './workflow/nodes/bootstrap.js';
 import { collectOperatorInputNode } from './workflow/nodes/collectOperatorInput.js';
 import { fireCommandNode } from './workflow/nodes/fireCommand.js';
@@ -58,9 +59,6 @@ export const clmmGraph = workflow.compile({
   store,
 });
 
-const cronExpression = '*/1 * * * *';
-const cronJobs = new Map<string, cron.ScheduledTask>();
-
 export async function runGraphOnce(threadId: string) {
   const startedAt = Date.now();
   console.info(`[cron] Starting CLMM graph run (thread=${threadId})`);
@@ -93,19 +91,6 @@ export async function runGraphOnce(threadId: string) {
   }
 }
 
-export function ensureCronForThread(threadId: string) {
-  if (cronJobs.has(threadId)) {
-    return cronJobs.get(threadId);
-  }
-
-  console.info(`[cron] Scheduling CLMM graph with expression "${cronExpression}" (thread=${threadId})`);
-  const job = cron.schedule(cronExpression, () => {
-    void runGraphOnce(threadId);
-  });
-  cronJobs.set(threadId, job);
-  return job;
-}
-
 export async function startClmmCron(threadId: string) {
   const initialRunMessage = {
     id: uuidv7(),
@@ -113,12 +98,13 @@ export async function startClmmCron(threadId: string) {
     content: JSON.stringify({ command: 'cycle' }),
   };
 
+  const pollIntervalMs = resolvePollIntervalMs();
   const stream = await clmmGraph.stream(
     { messages: [initialRunMessage] },
     {
       configurable: {
         thread_id: threadId,
-        scheduleCron: ensureCronForThread,
+        scheduleCron: (id: string) => ensureCronForThread(id, pollIntervalMs),
       },
     },
   );
@@ -126,6 +112,8 @@ export async function startClmmCron(threadId: string) {
     void event;
   }
 }
+
+configureCronExecutor(runGraphOnce);
 
 const invokedAsEntryPoint =
   process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;

@@ -2,7 +2,7 @@ import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
-import { ARBITRUM_CHAIN_ID, DEFAULT_TICK_BANDWIDTH_BPS } from '../../config/constants.js';
+import { ARBITRUM_CHAIN_ID, DEFAULT_TICK_BANDWIDTH_BPS, resolvePollIntervalMs } from '../../config/constants.js';
 import { type ResolvedOperatorConfig } from '../../domain/types.js';
 import {
   buildTaskStatus,
@@ -12,10 +12,13 @@ import {
   normalizeHexAddress,
   type ClmmEvent,
 } from '../context.js';
+import { ensureCronForThread } from '../cronScheduler.js';
 import { loadBootstrapContext } from '../store.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
-type Configurable = { configurable?: { thread_id?: string; scheduleCron?: (threadId: string) => void } };
+type Configurable = {
+  configurable?: { thread_id?: string; scheduleCron?: (threadId: string) => void };
+};
 
 export const prepareOperatorNode = async (
   state: ClmmState,
@@ -109,9 +112,14 @@ export const prepareOperatorNode = async (
 
   const threadId = (config as Configurable).configurable?.thread_id;
   const scheduleCron = (config as Configurable).configurable?.scheduleCron;
-  if (threadId && scheduleCron && !state.cronScheduled) {
-    scheduleCron(threadId);
-    logInfo('Cron scheduled after operator preparation', { threadId, cron: '*/1 * * * *' });
+  if (threadId && !state.cronScheduled) {
+    if (scheduleCron) {
+      scheduleCron(threadId);
+    } else {
+      const intervalMs = state.pollIntervalMs ?? resolvePollIntervalMs();
+      ensureCronForThread(threadId, intervalMs);
+    }
+    logInfo('Cron scheduled after operator preparation', { threadId });
   }
 
   const { task, statusEvent } = buildTaskStatus(
@@ -121,9 +129,7 @@ export const prepareOperatorNode = async (
   );
   await copilotkitEmitState(config, { task, events: [statusEvent] });
 
-  const events: ClmmEvent[] = [
-    statusEvent,
-  ];
+  const events: ClmmEvent[] = [statusEvent];
 
   return {
     operatorConfig,
