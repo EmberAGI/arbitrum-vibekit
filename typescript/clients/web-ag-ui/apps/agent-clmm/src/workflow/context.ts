@@ -109,6 +109,7 @@ export const ClmmStateAnnotation = Annotation.Root({
     reducer: (left, right) => [...left, ...(right ?? [])],
   }),
   haltReason: Annotation<string | undefined>({ reducer: (_left, right) => right }),
+  executionError: Annotation<string | undefined>({ reducer: (_left, right) => right }),
 });
 
 export type ClmmState = typeof ClmmStateAnnotation.State;

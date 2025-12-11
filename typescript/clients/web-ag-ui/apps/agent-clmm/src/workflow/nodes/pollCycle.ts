@@ -299,15 +299,69 @@ export const pollCycleNode = async (
     if (DEBUG_MODE) {
       txHash = `0xdebug${Date.now().toString(16)}`;
     } else {
-      const result = await executeDecision({
-        action: decision,
-        camelotClient,
-        pool: poolSnapshot,
-        operatorConfig,
-        clients,
-      });
-      txHash = result?.txHash;
-      gasSpentWei = result?.gasSpentWei;
+      try {
+        const result = await executeDecision({
+          action: decision,
+          camelotClient,
+          pool: poolSnapshot,
+          operatorConfig,
+          clients,
+        });
+        txHash = result?.txHash;
+        gasSpentWei = result?.gasSpentWei;
+      } catch (executionError: unknown) {
+        // Transaction failed (e.g., reverted on-chain) - log and gracefully stop this cycle
+        // The cron job will retry on the next scheduled run
+        const errorMessage =
+          executionError instanceof Error
+            ? executionError.message
+            : typeof executionError === 'string'
+              ? executionError
+              : 'Unknown execution error';
+        logInfo('Action execution failed', {
+          iteration,
+          action: decision.kind,
+          error: errorMessage,
+        });
+
+        // Schedule cron before returning so next cycle will run
+        const threadId = (config as Configurable).configurable?.thread_id;
+        let cronScheduled = state.cronScheduled;
+        if (threadId && !cronScheduled) {
+          const intervalMs = state.pollIntervalMs ?? resolvePollIntervalMs();
+          ensureCronForThread(threadId, intervalMs);
+          logInfo('Cron scheduled after execution failure', { threadId });
+          cronScheduled = true;
+        }
+
+        const failureStatusMessage = `[Cycle ${iteration}] ${decision.kind} FAILED: ${errorMessage}`;
+        const { task: failedTask, statusEvent: failureEvent } = buildTaskStatus(
+          taskState,
+          'working', // Use 'working' not 'failed' - we'll retry on next cron cycle
+          failureStatusMessage,
+        );
+        await copilotkitEmitState(config, {
+          task: failedTask,
+          events: [failureEvent],
+          executionError: errorMessage,
+        });
+
+        // Return gracefully - don't throw. The cron job will run the next cycle.
+        return new Command({
+          update: {
+            lastSnapshot: poolSnapshot,
+            previousPrice: midPrice,
+            cyclesSinceRebalance: state.cyclesSinceRebalance ?? 0, // Don't reset - we didn't complete
+            staleCycles,
+            iteration,
+            cronScheduled,
+            task: failedTask,
+            events: [...preCycleEvents, failureEvent],
+            executionError: errorMessage, // Store error for debugging/display
+          },
+          goto: 'summarize',
+        });
+      }
     }
     cyclesSinceRebalance = 0;
     logInfo('Action execution complete', {
