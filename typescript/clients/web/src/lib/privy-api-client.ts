@@ -1,19 +1,6 @@
 import { z } from 'zod';
 
 // Zod schemas for Privy API responses
-const PrivyTransactionDetailsSchema = z.object({
-  type: z.string(),
-  chain: z.string(),
-  asset: z.string(),
-  sender: z.string(),
-  sender_privy_user_id: z.string(),
-  recipient: z.string(),
-  recipient_privy_user_id: z.string(),
-  raw_value: z.string(),
-  raw_value_decimals: z.number(),
-  display_values: z.record(z.string()),
-});
-
 const PrivyTransactionsResponseSchema = z.object({
   transactions: z.array(z.any()),
   next_cursor: z.string().nullable(),

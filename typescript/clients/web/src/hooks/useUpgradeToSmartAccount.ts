@@ -6,11 +6,10 @@ import {
 } from '@metamask/delegation-toolkit';
 import { useAccount, usePublicClient } from 'wagmi';
 import { arbitrum } from 'viem/chains';
-import { Hex, nonceManager } from 'viem';
+import { Hex } from 'viem';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSign7702Authorization } from '@privy-io/react-auth';
 import { usePrivyWalletClient } from './usePrivyWalletClient';
-import { r } from 'node_modules/@metamask/delegation-toolkit/dist/index-DoP3c-jb';
 
 interface UpgradeResponse {
   message: string;

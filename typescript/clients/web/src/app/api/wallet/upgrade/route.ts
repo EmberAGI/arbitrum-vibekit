@@ -17,9 +17,6 @@ const AuthorizationSchema = z.object({
 
 type Authorization = z.infer<typeof AuthorizationSchema>;
 
-// Simple in-memory lock to prevent concurrent upgrades for the same wallet
-const upgradeLocks = new Set<string>();
-
 async function broadcast7702Authorization(
   authorization: Authorization,
   address: Hex,

@@ -31,11 +31,7 @@ export function WorkflowApprovalHandler({
   onNavigateToParent,
 }: WorkflowApprovalHandlerProps) {
   const { isConnected, chain } = useAccount();
-  const {
-    smartAccount,
-    isLoading: isSmartAccountLoading,
-    error: smartAccountError,
-  } = useMetamaskSmartAccount();
+  const { smartAccount } = useMetamaskSmartAccount();
   const [expandedPolicies, setExpandedPolicies] = useState<Set<number>>(new Set([0]));
   const [isSubmittingAll, setIsSubmittingAll] = useState(false);
   const [isSubmissionComplete, setIsSubmissionComplete] = useState(false);
