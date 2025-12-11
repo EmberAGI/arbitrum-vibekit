@@ -83,6 +83,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const { login } = useLogin();
   const { privyWallet } = usePrivyWalletClient();
 
+  // Check if funding feature is enabled
+  const isFundingEnabled = process.env.NEXT_PUBLIC_FEATURE_FLAG_ENABLE_FUNDING === 'true';
+
   // Wallet funding hook - auto-triggers funding on login when wallet is new
   const {
     isFunded,
@@ -91,18 +94,21 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     fundingResult,
     reset: resetFunding,
   } = useWalletFunding(
-    user?.linkedAccounts.find(
-      (account) => account.type === 'wallet' && account.walletClientType === 'privy',
-      // @ts-expect-error: the wallet id is poorly typed by privy
-    )?.id ?? null,
+    isFundingEnabled
+      ? (user?.linkedAccounts.find(
+          (account) => account.type === 'wallet' && account.walletClientType === 'privy',
+          // @ts-expect-error: the wallet id is poorly typed by privy
+        )?.id ?? null)
+      : null,
   );
 
-  // Show modal when funding is in progress, success, or error
+  // Show modal when funding is in progress, success, or error (only if funding is enabled)
   const showFundingModal =
-    fundingState === 'checking' ||
-    fundingState === 'funding' ||
-    fundingState === 'success' ||
-    fundingState === 'error';
+    isFundingEnabled &&
+    (fundingState === 'checking' ||
+      fundingState === 'funding' ||
+      fundingState === 'success' ||
+      fundingState === 'error');
 
   // Disable login when Privy is not ready or the user is already authenticated
   const disableLogin = !ready || (ready && authenticated);
@@ -649,7 +655,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   <span className="text-sm font-mono truncate">
                     {formatAddress(privyWallet.address)}
                   </span>
-                  {isFunded && <DollarSign className="w-3 h-3 text-green-400 shrink-0" />}
+                  {isFundingEnabled && isFunded && (
+                    <DollarSign className="w-3 h-3 text-green-400 shrink-0" />
+                  )}
                   <button
                     onClick={() => copyAddressToClipboard(privyWallet.address)}
                     className="p-0.5 rounded hover:bg-muted/50 shrink-0"
