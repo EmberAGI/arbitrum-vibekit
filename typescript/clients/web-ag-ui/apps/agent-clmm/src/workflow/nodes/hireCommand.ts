@@ -25,7 +25,7 @@ export const hireCommandNode = async (
   }
 
   const { task, statusEvent } = buildTaskStatus(
-    state.task,
+    undefined,
     'submitted',
     `Agent hired!${amount ? ` Trading ${amount} tokens...` : ''}`,
   );

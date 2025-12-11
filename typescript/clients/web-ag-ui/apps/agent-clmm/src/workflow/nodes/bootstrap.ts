@@ -3,7 +3,6 @@ import { Command } from '@langchain/langgraph';
 
 import { resolvePollIntervalMs, resolveStreamLimit } from '../../config/constants.js';
 import {
-  buildTaskStatus,
   logInfo,
   type ClmmEvent,
   type ClmmState,
@@ -51,19 +50,13 @@ export const bootstrapNode = async (
     ],
   };
 
-  const { task, statusEvent } = buildTaskStatus(
-    state.task,
-    'submitted',
-    `Bootstrapping CLMM workflow in ${mode} mode (poll every ${pollIntervalMs / 1000}s)`,
-  );
-  await copilotkitEmitState(config, { task, events: [statusEvent] });
+  await copilotkitEmitState(config, { events: [dispatch] });
 
   return {
     bootstrapped: true,
     mode,
     pollIntervalMs,
     streamLimit,
-    task,
-    events: [dispatch, statusEvent],
+    events: [dispatch],
   };
 };
