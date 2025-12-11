@@ -11,6 +11,24 @@ export type BootstrapContext = {
   agentWalletAddress: `0x${string}`;
 };
 
+/**
+ * Input for saving bootstrap context - requires the private key for serialization.
+ * LangGraph's store serializes to JSON, which strips prototype methods from objects.
+ * We store the private key string and recreate the PrivateKeyAccount when loading.
+ */
+export type BootstrapContextInput = {
+  privateKey: `0x${string}`;
+  agentWalletAddress: `0x${string}`;
+};
+
+/**
+ * Serializable version of BootstrapContext for storage.
+ */
+type StoredBootstrapContext = {
+  privateKey: `0x${string}`;
+  agentWalletAddress: `0x${string}`;
+};
+
 function resolveStore(store?: BaseStore): BaseStore {
   const resolvedStore = store ?? getStore();
   if (!resolvedStore) {
@@ -20,22 +38,34 @@ function resolveStore(store?: BaseStore): BaseStore {
 }
 
 export async function saveBootstrapContext(
-  context: BootstrapContext,
+  context: BootstrapContextInput,
   store?: BaseStore,
 ): Promise<void> {
   const resolvedStore = resolveStore(store);
-  await resolvedStore.put(CROSS_THREAD_NAMESPACE, BOOTSTRAP_KEY, context);
+  // Store only serializable data - the private key string, not the account object
+  const storable: StoredBootstrapContext = {
+    privateKey: context.privateKey,
+    agentWalletAddress: context.agentWalletAddress,
+  };
+  await resolvedStore.put(CROSS_THREAD_NAMESPACE, BOOTSTRAP_KEY, storable);
 }
 
-function resolveBootstrapContextFromEnv(): BootstrapContext {
+function resolveBootstrapContextFromEnv(): {
+  context: BootstrapContext;
+  privateKey: `0x${string}`;
+} {
   const rawAgentPrivateKey = process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
   if (!rawAgentPrivateKey) {
     throw new Error('A2A_TEST_AGENT_NODE_PRIVATE_KEY environment variable is required');
   }
-  const account = privateKeyToAccount(normalizeHexAddress(rawAgentPrivateKey, 'agent private key'));
+  const privateKey = normalizeHexAddress(rawAgentPrivateKey, 'agent private key');
+  const account = privateKeyToAccount(privateKey);
   return {
-    account,
-    agentWalletAddress: normalizeHexAddress(account.address, 'agent wallet address'),
+    context: {
+      account,
+      agentWalletAddress: normalizeHexAddress(account.address, 'agent wallet address'),
+    },
+    privateKey,
   };
 }
 
@@ -43,10 +73,20 @@ export async function loadBootstrapContext(store?: BaseStore): Promise<Bootstrap
   const resolvedStore = resolveStore(store);
   const stored = await resolvedStore.get(CROSS_THREAD_NAMESPACE, BOOTSTRAP_KEY);
   if (stored?.value) {
-    return stored.value as BootstrapContext;
+    const storedContext = stored.value as StoredBootstrapContext;
+    // Recreate the PrivateKeyAccount from the stored private key
+    // This ensures the account has all its methods (signTransaction, etc.)
+    const account = privateKeyToAccount(storedContext.privateKey);
+    return {
+      account,
+      agentWalletAddress: storedContext.agentWalletAddress,
+    };
   }
 
-  const context = resolveBootstrapContextFromEnv();
-  await saveBootstrapContext(context, resolvedStore);
+  const { context, privateKey } = resolveBootstrapContextFromEnv();
+  await saveBootstrapContext(
+    { privateKey, agentWalletAddress: context.agentWalletAddress },
+    resolvedStore,
+  );
   return context;
 }

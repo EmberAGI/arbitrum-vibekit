@@ -28,7 +28,7 @@ const agentPrivateKey = normalizeHexAddress(rawAgentPrivateKey, 'agent private k
 const account = privateKeyToAccount(agentPrivateKey);
 const agentWalletAddress = normalizeHexAddress(account.address, 'agent wallet address');
 
-await saveBootstrapContext({ account, agentWalletAddress }, store);
+await saveBootstrapContext({ privateKey: agentPrivateKey, agentWalletAddress }, store);
 
 const workflow = new StateGraph(ClmmStateAnnotation)
   .addNode('runCommand', runCommandNode)
