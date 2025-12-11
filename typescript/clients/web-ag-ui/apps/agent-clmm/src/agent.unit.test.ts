@@ -14,11 +14,11 @@ const { ensureAllowanceMock, executeTransactionMock } = vi.hoisted(() => {
   };
 });
 
-vi.mock('../core/allowances.js', () => ({
+vi.mock('./core/allowances.js', () => ({
   ensureAllowance: ensureAllowanceMock,
 }));
 
-vi.mock('../core/transaction.js', () => ({
+vi.mock('./core/transaction.js', () => ({
   executeTransaction: executeTransactionMock,
 }));
 
@@ -266,9 +266,7 @@ function collectLogs(substring: string): LogEntry[] {
       }
       return entry;
     })
-    .filter(
-      (entry): entry is LogEntry => Boolean(entry) && entry.message.includes(substring),
-    );
+    .filter((entry): entry is LogEntry => Boolean(entry) && entry.message.includes(substring));
 }
 
 function assertMetadata(entry: LogEntry | undefined) {
