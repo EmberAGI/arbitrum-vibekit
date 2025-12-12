@@ -4,7 +4,12 @@ import { END, GraphInterrupt, InMemoryStore, START, StateGraph } from '@langchai
 import { v7 as uuidv7 } from 'uuid';
 import { privateKeyToAccount } from 'viem/accounts';
 
-import { ClmmStateAnnotation, memory, normalizeHexAddress } from './workflow/context.js';
+import {
+  ClmmStateAnnotation,
+  memory,
+  normalizeHexAddress,
+  type ClmmState,
+} from './workflow/context.js';
 import { configureCronExecutor } from './workflow/cronScheduler.js';
 import { bootstrapNode } from './workflow/nodes/bootstrap.js';
 import { collectOperatorInputNode } from './workflow/nodes/collectOperatorInput.js';
@@ -18,6 +23,15 @@ import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
 import { saveBootstrapContext } from './workflow/store.js';
+
+/**
+ * Routes after bootstrap based on the original command.
+ * - sync: go to syncState (just return state after bootstrap)
+ * - hire/cycle: continue to listPools for full setup flow
+ */
+function resolvePostBootstrap(state: ClmmState): 'listPools' | 'syncState' {
+  return state.view.command === 'sync' ? 'syncState' : 'listPools';
+}
 
 const store = new InMemoryStore();
 
@@ -49,7 +63,7 @@ const workflow = new StateGraph(ClmmStateAnnotation)
   .addEdge('fireCommand', END)
   .addEdge('runCycleCommand', 'pollCycle')
   .addEdge('syncState', END)
-  .addEdge('bootstrap', 'listPools')
+  .addConditionalEdges('bootstrap', resolvePostBootstrap)
   .addEdge('listPools', 'collectOperatorInput')
   .addEdge('collectOperatorInput', 'prepareOperator')
   .addEdge('prepareOperator', 'pollCycle')
@@ -79,14 +93,26 @@ export async function runGraphOnce(threadId: string) {
     content: JSON.stringify({ command: 'cycle' }),
   };
 
+  // Cron jobs are scheduled inside an AG-UI request context, so their ticks inherit
+  // AsyncLocalStorage runnable config (including EventStreamCallbackHandler tied to a
+  // closed SSE stream). Explicitly override callbacks to prevent "WritableStream is closed"
+  // errors during background runs.
+  const config = { configurable: { thread_id: threadId }, callbacks: [] };
+
   try {
-    // Use invoke() instead of stream() - cron runs have no HTTP streaming context
-    await clmmGraph.invoke(
-      { messages: [runMessage] },
-      {
-        configurable: { thread_id: threadId },
-      },
+    // When a graph reaches END, subsequent invoke() calls return immediately without
+    // running any nodes. Use updateState with asNode to "rewind" the execution point
+    // so the graph restarts from runCommand on the next invoke.
+    // Note: updateState(..., asNode="runCommand") treats this patch as the output of
+    // runCommand, so ensure we set view.command to the intended value.
+    await clmmGraph.updateState(
+      config,
+      { messages: [runMessage], view: { command: 'cycle' } },
+      'runCommand',
     );
+
+    // Now invoke - the graph will continue from the node after runCommand
+    await clmmGraph.invoke(null, config);
     console.info(`[cron] Run complete in ${Date.now() - startedAt}ms`);
   } catch (error) {
     if (error instanceof GraphInterrupt) {

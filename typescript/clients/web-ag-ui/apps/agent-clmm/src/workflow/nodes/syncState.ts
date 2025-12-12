@@ -3,10 +3,11 @@ import { type ClmmState } from '../context.js';
 /**
  * No-op sync node.
  *
- * When a sync command is issued after bootstrap has already run for the thread,
- * we simply accept the incoming LangGraph state snapshot and finish without
- * mutating it. If bootstrap has not run yet, routing logic will send the flow
- * through the bootstrap node instead.
+ * Returns the current LangGraph state snapshot without any mutations.
+ * Used by the frontend to fetch current state without triggering any actions.
+ *
+ * If bootstrap hasn't run yet, routing will run bootstrap first, then come here.
+ * This ensures the agent wallet is initialized before returning state.
  */
 export function syncStateNode(state: ClmmState): ClmmState {
   return state;
