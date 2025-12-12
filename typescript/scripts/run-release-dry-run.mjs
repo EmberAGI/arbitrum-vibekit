@@ -9,50 +9,25 @@ import { fileURLToPath } from "node:url";
 const SUMMARY_FLAG = "--summary-file";
 const DEFAULT_SUMMARY_PATH = ".artifacts/msr-dry-run-summary.json";
 
-// Load environment variables from .env file
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const rootDir = path.resolve(scriptDir, "..");
-const envPath = path.join(rootDir, ".env");
-
-if (fs.existsSync(envPath)) {
-  const envContent = fs.readFileSync(envPath, "utf8");
-  const envLines = envContent.split("\n");
-
-  for (const line of envLines) {
-    const trimmed = line.trim();
-    // Skip comments and empty lines
-    if (!trimmed || trimmed.startsWith("#")) {
-      continue;
-    }
-
-    // Parse KEY=VALUE format
-    const match = trimmed.match(/^([^=]+)=(.*)$/);
-    if (match) {
-      const key = match[1].trim();
-      const value = match[2].trim();
-      // Only set if not already in environment (don't override existing env vars)
-      if (!process.env[key]) {
-        process.env[key] = value;
-      }
-    }
-  }
-}
-
 // Check if user has real tokens set
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const hasGitHubToken = Boolean(process.env.GH_TOKEN || process.env.GITHUB_TOKEN);
-const hasNpmToken = Boolean(process.env.NPM_TOKEN);
+const hasNpmToken = Boolean(process.env.NPM_TOKEN || process.env.NODE_AUTH_TOKEN);
 
 if (!hasGitHubToken) {
   // eslint-disable-next-line no-console
-  console.warn(
-    "[dry-run] WARNING: No GitHub token found. Set GH_TOKEN or GITHUB_TOKEN environment variable for full dry-run functionality.",
+  console.error(
+    "[dry-run] Missing GitHub token. Set GH_TOKEN (preferred) or GITHUB_TOKEN before running this script.",
   );
-  console.warn("[dry-run] The dry-run may fail on GitHub API validation steps.");
-  process.env.GH_TOKEN = "dry-run-dummy-token";
+  process.exit(1);
 }
 
 if (!hasNpmToken) {
-  process.env.NPM_TOKEN = "dry-run-dummy-token";
+  // eslint-disable-next-line no-console
+  console.error(
+    "[dry-run] Missing npm auth. Set NPM_TOKEN (or NODE_AUTH_TOKEN) before running this script.",
+  );
+  process.exit(1);
 }
 
 // Determine which branch to simulate (default to current branch)
