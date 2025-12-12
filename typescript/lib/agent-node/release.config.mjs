@@ -9,6 +9,7 @@ export default createReleaseConfig({
       '@semantic-release/npm',
       {
         npmPublish: SHOULD_PUBLISH,
+        provenance: true,
       },
     ],
   ],

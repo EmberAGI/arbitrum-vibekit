@@ -10,6 +10,7 @@ export default createReleaseConfig({
       {
         npmPublish: SHOULD_PUBLISH,
         pkgRoot: ".npm-publish",
+        provenance: true,
       },
     ],
   ],
