@@ -108,6 +108,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          unset NPM_TOKEN NODE_AUTH_TOKEN
           pnpm release -- --packages "${{ matrix.package.packageJson }}" --summary-file "release-summary-${{ matrix.package.id }}.json"
       - name: Generate release tweet copy
         env:
