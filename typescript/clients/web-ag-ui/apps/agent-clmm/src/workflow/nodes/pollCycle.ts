@@ -107,7 +107,10 @@ export const pollCycleNode = async (
       const failureMessage = `ERROR: Abort: Ember API unreachable for ${staleCycles} consecutive cycles (last error: ${cause})`;
       const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
       await copilotkitEmitState(config, {
-        view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+        view: {
+          task,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        },
       });
       return new Command({
         update: {
@@ -488,8 +491,6 @@ export const pollCycleNode = async (
     cronScheduled = true;
   }
 
-  const goto = 'summarize';
-
   const transactionEntry: ClmmState['view']['transactionHistory'][number] | undefined =
     decision.kind === 'hold'
       ? undefined
@@ -527,6 +528,6 @@ export const pollCycleNode = async (
         cronScheduled,
       },
     },
-    goto,
+    goto: 'summarize',
   });
 };
