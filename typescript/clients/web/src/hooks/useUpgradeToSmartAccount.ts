@@ -4,10 +4,21 @@ import {
   toMetaMaskSmartAccount,
   getDeleGatorEnvironment,
 } from '@metamask/delegation-toolkit';
-import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
+import { useAccount, usePublicClient } from 'wagmi';
 import { arbitrum } from 'viem/chains';
-import { zeroAddress } from 'viem';
+import { Hex } from 'viem';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSign7702Authorization } from '@privy-io/react-auth';
+import { usePrivyWalletClient } from './usePrivyWalletClient';
+
+interface UpgradeResponse {
+  message: string;
+  upgraded: boolean;
+  transactionHash?: string;
+  chain?: string;
+  error?: string;
+  details?: string;
+}
 
 interface UseUpgradeToSmartAccountReturn {
   smartAccount: MetaMaskSmartAccount | null;
@@ -21,8 +32,9 @@ interface UseUpgradeToSmartAccountReturn {
 export function useUpgradeToSmartAccount(): UseUpgradeToSmartAccountReturn {
   const { address } = useAccount();
   const publicClient = usePublicClient();
-  const { data: walletClient } = useWalletClient();
   const queryClient = useQueryClient();
+  const { walletClient, privyWallet } = usePrivyWalletClient();
+  const { signAuthorization } = useSign7702Authorization();
 
   // Query to get smart account and check deployment status
   const {
@@ -32,14 +44,14 @@ export function useUpgradeToSmartAccount(): UseUpgradeToSmartAccountReturn {
   } = useQuery({
     queryKey: ['smartAccount', address],
     queryFn: async () => {
-      if (!address || !publicClient || !walletClient) {
+      if (!address || !publicClient || !walletClient || !privyWallet) {
         throw new Error('Wallet not connected');
       }
 
       const account = await toMetaMaskSmartAccount({
         client: publicClient,
         implementation: Implementation.Stateless7702,
-        address,
+        address: privyWallet.address as Hex,
         signer: { walletClient },
       });
 
@@ -58,7 +70,7 @@ export function useUpgradeToSmartAccount(): UseUpgradeToSmartAccountReturn {
   // Mutation to upgrade to smart account
   const upgradeMutation = useMutation({
     mutationFn: async () => {
-      if (!address || !publicClient || !walletClient) {
+      if (!address || !publicClient || !walletClient || !privyWallet) {
         throw new Error('Wallet not connected');
       }
 
@@ -66,23 +78,52 @@ export function useUpgradeToSmartAccount(): UseUpgradeToSmartAccountReturn {
       const environment = getDeleGatorEnvironment(arbitrum.id);
       const contractAddress = environment.implementations.EIP7702StatelessDeleGatorImpl;
 
-      // Sign the authorization
-      const authorization = await walletClient.signAuthorization({
+      // Sign the authorization using Privy
+      const executorAddress = process.env.NEXT_PUBLIC_EXECUTOR_ADDRESS;
+      if (!executorAddress) {
+        throw new Error('NEXT_PUBLIC_EXECUTOR_ADDRESS environment variable is not set');
+      }
+
+      const authorization = await signAuthorization({
         contractAddress,
-        executor: 'self',
+        chainId: arbitrum.id,
+        executor: executorAddress as Hex,
       });
 
-      // Submit the authorization with a dummy transaction
-      const hash = await walletClient.sendTransaction({
-        authorizationList: [authorization],
-        data: '0x',
-        to: zeroAddress,
+      // Send the authorization to the backend for relay
+      const response = await fetch(`/api/wallet/upgrade`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          authorization: {
+            r: authorization.r,
+            s: authorization.s,
+            v: authorization.v?.toString(),
+            yParity: authorization.yParity,
+            chainId: authorization.chainId,
+            address: authorization.address,
+            nonce: authorization.nonce,
+          },
+          address: privyWallet.address,
+        }),
       });
+
+      const data: UpgradeResponse = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || data.details || 'Failed to upgrade wallet');
+      }
+
+      if (!data.transactionHash) {
+        throw new Error('No transaction hash returned');
+      }
 
       // Wait for transaction confirmation
-      await publicClient.waitForTransactionReceipt({ hash });
+      await publicClient.waitForTransactionReceipt({ hash: data.transactionHash as Hex });
 
-      return hash;
+      return data.transactionHash;
     },
     onSuccess: () => {
       // Invalidate and refetch smart account data after successful upgrade

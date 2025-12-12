@@ -5,6 +5,7 @@ import { WagmiProvider } from 'wagmi';
 import { RainbowKitProvider, getDefaultConfig, darkTheme } from '@rainbow-me/rainbowkit';
 import { arbitrum, mainnet, polygon, optimism, base } from 'wagmi/chains';
 import '@rainbow-me/rainbowkit/styles.css';
+import dynamic from 'next/dynamic';
 
 const config = getDefaultConfig({
   appName: 'EmberAI A2A Client',
@@ -14,6 +15,11 @@ const config = getDefaultConfig({
 });
 
 const queryClient = new QueryClient();
+
+const PrivyClientProvider = dynamic(
+  () => import('./PrivyClientProvider').then((m) => m.PrivyClientProvider),
+  { ssr: false },
+);
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -26,7 +32,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           })}
           initialChain={arbitrum}
         >
-          {children}
+          <PrivyClientProvider>{children}</PrivyClientProvider>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

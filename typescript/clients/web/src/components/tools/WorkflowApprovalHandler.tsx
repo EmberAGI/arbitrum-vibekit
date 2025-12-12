@@ -6,13 +6,9 @@ import { Button } from '@/components/ui/button';
 import { CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import type { Hex } from 'viem';
-import {
-  getDeleGatorEnvironment,
-  signDelegation as signDelegationWithPrivateKey,
-  type Delegation,
-} from '@metamask/delegation-toolkit';
+import { type Delegation } from '@metamask/delegation-toolkit';
 import { useDelegationExtractor, type DelegationData } from '@/lib/hooks/useDelegationExtractor';
+import useMetamaskSmartAccount from '@/hooks/useMetamaskSmartAccount';
 
 interface WorkflowApprovalHandlerProps {
   // Input schema from status message
@@ -35,6 +31,7 @@ export function WorkflowApprovalHandler({
   onNavigateToParent,
 }: WorkflowApprovalHandlerProps) {
   const { isConnected, chain } = useAccount();
+  const { smartAccount } = useMetamaskSmartAccount();
   const [expandedPolicies, setExpandedPolicies] = useState<Set<number>>(new Set([0]));
   const [isSubmittingAll, setIsSubmittingAll] = useState(false);
   const [isSubmissionComplete, setIsSubmissionComplete] = useState(false);
@@ -89,6 +86,11 @@ export function WorkflowApprovalHandler({
       return;
     }
 
+    if (!smartAccount) {
+      console.warn('[WorkflowApprovalHandler] Smart account not available');
+      return;
+    }
+
     console.log('[WorkflowApprovalHandler] Signing delegation:', delegation.id);
 
     // Set pending state
@@ -98,15 +100,6 @@ export function WorkflowApprovalHandler({
     }));
 
     try {
-      // Get and validate private key from environment
-      const rawPrivateKey = process.env.NEXT_PUBLIC_NEXT_7702_PRIVATE_KEY;
-      if (!rawPrivateKey || !rawPrivateKey.startsWith('0x') || rawPrivateKey.length !== 66) {
-        throw new Error(
-          'NEXT_PUBLIC_NEXT_7702_PRIVATE_KEY not configured. Must be a 0x-prefixed 64-hex-char private key.',
-        );
-      }
-      const testPrivateKey = rawPrivateKey as Hex;
-
       // Get chainId from connected wallet
       if (!chain?.id) {
         throw new Error('No chain ID available from connected wallet');
@@ -114,13 +107,8 @@ export function WorkflowApprovalHandler({
       const chainId = chain.id;
 
       // Get delegation environment (includes DelegationManager address)
-      const delegationEnvironment = getDeleGatorEnvironment(chainId);
-
-      // Sign the delegation using private key
-      const signature = await signDelegationWithPrivateKey({
-        privateKey: testPrivateKey,
+      const signature = await smartAccount.signDelegation({
         delegation: delegation.delegation as Delegation,
-        delegationManager: delegationEnvironment.DelegationManager,
         chainId,
       });
 
@@ -247,7 +235,7 @@ export function WorkflowApprovalHandler({
                   // Collapsed view
                   <div className="flex items-center gap-3">
                     <div
-                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 ${
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0 ${
                         isSuccess
                           ? 'bg-green-600 text-white'
                           : hasError
@@ -270,7 +258,7 @@ export function WorkflowApprovalHandler({
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3 flex-1">
                         <div
-                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5 ${
+                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0 mt-0.5 ${
                             isSuccess
                               ? 'bg-green-600 text-white'
                               : hasError
@@ -295,7 +283,7 @@ export function WorkflowApprovalHandler({
                           )}
                         </div>
                       </div>
-                      <div className="flex flex-col gap-2 flex-shrink-0">
+                      <div className="flex flex-col gap-2 shrink-0">
                         {isSuccess ? (
                           <div className="flex items-center gap-2 text-green-500 px-6 py-2">
                             <CheckCircle className="w-4 h-4" />
