@@ -12,22 +12,18 @@ const DEFAULT_SUMMARY_PATH = ".artifacts/msr-dry-run-summary.json";
 // Check if user has real tokens set
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const hasGitHubToken = Boolean(process.env.GH_TOKEN || process.env.GITHUB_TOKEN);
-const hasNpmToken = Boolean(process.env.NPM_TOKEN || process.env.NODE_AUTH_TOKEN);
+
+if (!process.env.RELEASE_DRY_RUN) {
+  process.env.RELEASE_DRY_RUN = "true";
+}
 
 if (!hasGitHubToken) {
   // eslint-disable-next-line no-console
-  console.error(
-    "[dry-run] Missing GitHub token. Set GH_TOKEN (preferred) or GITHUB_TOKEN before running this script.",
+  console.warn(
+    "[dry-run] WARNING: No GitHub token found. Set GH_TOKEN or GITHUB_TOKEN for full dry-run functionality.",
   );
-  process.exit(1);
-}
-
-if (!hasNpmToken) {
-  // eslint-disable-next-line no-console
-  console.error(
-    "[dry-run] Missing npm auth. Set NPM_TOKEN (or NODE_AUTH_TOKEN) before running this script.",
-  );
-  process.exit(1);
+  console.warn("[dry-run] The dry-run may fail on GitHub API validation steps.");
+  process.env.GH_TOKEN = "dry-run-dummy-token";
 }
 
 // Determine which branch to simulate (default to current branch)

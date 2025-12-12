@@ -1,14 +1,14 @@
 import { createReleaseConfig } from '../../release/base.config.mjs';
 
+const SHOULD_PUBLISH = process.env.RELEASE_DRY_RUN !== 'true';
+
 export default createReleaseConfig({
   tagFormat: '@emberai/agent-node@${version}',
   packagePlugins: [
     [
-      '@semantic-release/exec',
+      '@semantic-release/npm',
       {
-        prepareCmd: 'pnpm pkg set version=${nextRelease.version}',
-        publishCmd:
-          "pnpm publish --no-git-checks --access public --tag ${nextRelease.channel || 'latest'}",
+        npmPublish: SHOULD_PUBLISH,
       },
     ],
   ],
