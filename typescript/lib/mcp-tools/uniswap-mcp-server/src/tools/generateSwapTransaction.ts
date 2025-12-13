@@ -1,7 +1,8 @@
-import { CurrencyAmount, Token, TradeType } from '@uniswap/sdk-core';
+import { CurrencyAmount, Token, TradeType, Percent } from '@uniswap/sdk-core';
 import { AlphaRouter, SwapType } from '@uniswap/smart-order-router';
-import { SwapRouter02 } from '@uniswap/universal-router-sdk';
-import { getAddress } from 'ethers/lib/utils';
+// SwapRouter removed - using trade.methodParameters directly
+import { utils } from 'ethers';
+const { getAddress } = utils;
 import { Contract } from 'ethers';
 import type {
   GenerateSwapTransactionRequest,
@@ -67,25 +68,29 @@ export async function generateSwapTransaction(
     provider
   );
 
-  const [tokenInDecimals, tokenOutDecimals] = await Promise.all([
-    tokenInContract.decimals(),
-    tokenOutContract.decimals(),
+  const [tokenInDecimals, tokenOutDecimals, tokenInSymbol, tokenOutSymbol, tokenInName, tokenOutName] = await Promise.all([
+    tokenInContract['decimals'](),
+    tokenOutContract['decimals'](),
+    tokenInContract['symbol'](),
+    tokenOutContract['symbol'](),
+    tokenInContract['name'](),
+    tokenOutContract['name'](),
   ]);
 
   const tokenIn = new Token(
     request.chainId,
     tokenInAddress,
     tokenInDecimals,
-    await tokenInContract.symbol(),
-    await tokenInContract.name()
+    tokenInSymbol,
+    tokenInName
   );
 
   const tokenOut = new Token(
     request.chainId,
     tokenOutAddress,
     tokenOutDecimals,
-    await tokenOutContract.symbol(),
-    await tokenOutContract.name()
+    tokenOutSymbol,
+    tokenOutName
   );
 
   // Determine amount and trade type
@@ -111,10 +116,10 @@ export async function generateSwapTransaction(
     isExactInput ? TradeType.EXACT_INPUT : TradeType.EXACT_OUTPUT,
     {
       recipient,
-      slippageTolerance: {
-        numerator: Math.floor(slippageTolerance * 100),
-        denominator: 10000,
-      },
+      slippageTolerance: new Percent(
+        Math.floor(slippageTolerance * 100),
+        10000
+      ),
       deadline:
         request.deadline || Math.floor(Date.now() / 1000) + 60 * 20,
       type: SwapType.SWAP_ROUTER_02,
@@ -125,16 +130,19 @@ export async function generateSwapTransaction(
     throw new RoutingError('No route found for transaction generation');
   }
 
-  // Generate transaction parameters
-  const methodParameters = SwapRouter02.swapCallParameters(route.trade, {
-    recipient,
-    slippageTolerance: {
-      numerator: Math.floor(slippageTolerance * 100),
-      denominator: 10000,
-    },
-    deadline:
-      request.deadline || Math.floor(Date.now() / 1000) + 60 * 20,
-  });
+  // Generate transaction parameters using Universal Router
+  // The route object from AlphaRouter contains methodParameters with calldata
+  const calculatedDeadline = request.deadline || Math.floor(Date.now() / 1000) + 60 * 20;
+
+  // Use the route's methodParameters which contains the encoded swap calldata
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const methodParameters = (route as any).methodParameters;
+
+  if (!methodParameters || !methodParameters.calldata || methodParameters.calldata === '0x') {
+    throw new TransactionError(
+      'Unable to generate transaction calldata. Route may not support direct execution. Use getSwapQuote to verify route availability.'
+    );
+  }
 
   // Estimate gas
   const gasEstimate = route.estimatedGasUsed
@@ -146,7 +154,7 @@ export async function generateSwapTransaction(
     data: methodParameters.calldata,
     value: methodParameters.value || '0',
     gasEstimate,
-    deadline: request.deadline || Math.floor(Date.now() / 1000) + 60 * 20,
+    deadline: calculatedDeadline,
   };
 }
 

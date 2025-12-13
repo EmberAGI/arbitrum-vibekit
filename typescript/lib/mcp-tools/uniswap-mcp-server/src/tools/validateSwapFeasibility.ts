@@ -1,5 +1,3 @@
-import { CurrencyAmount, Token } from '@uniswap/sdk-core';
-import { getAddress } from 'ethers/lib/utils';
 import { Contract } from 'ethers';
 import type {
   ValidateSwapFeasibilityRequest,
@@ -15,8 +13,6 @@ import {
 import { getSwapQuote } from './getSwapQuote.js';
 import { loadConfig } from '../utils/config.js';
 import {
-  BalanceError,
-  ApprovalError,
   TokenError,
   LiquidityError,
 } from '../errors/index.js';
@@ -66,14 +62,16 @@ export async function validateSwapFeasibility(
   try {
     if (tokenIn.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
       // Native token
-      userBalance = BigInt(await provider.getBalance(userAddress));
+      const balance = await provider.getBalance(userAddress);
+      userBalance = BigInt(balance.toString());
     } else {
-      const erc20Contract = new (await import('ethers')).Contract(
+      const erc20Contract = new Contract(
         tokenIn,
         ['function balanceOf(address) view returns (uint256)'],
         provider
       );
-      userBalance = BigInt(await erc20Contract.balanceOf(userAddress));
+      const balance = await erc20Contract['balanceOf'](userAddress);
+      userBalance = BigInt(balance.toString());
     }
 
     if (userBalance < amount) {
@@ -134,11 +132,10 @@ export async function validateSwapFeasibility(
       const chainConfig = getChainConfig(request.chainId);
       const routerAddress = chainConfig.uniswap.universalRouter;
 
-      currentAllowance = (
-        await erc20Contract.allowance(userAddress, routerAddress)
-      ).toString();
+      const allowance = await erc20Contract['allowance'](userAddress, routerAddress);
+      currentAllowance = allowance.toString();
 
-      if (BigInt(currentAllowance) < amount) {
+      if (currentAllowance && BigInt(currentAllowance) < amount) {
         requiresApproval = true;
         warnings.push(
           `Approval required: current allowance ${currentAllowance} is less than amount ${amount.toString()}`

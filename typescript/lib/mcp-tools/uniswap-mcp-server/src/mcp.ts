@@ -188,7 +188,7 @@ function handleError(error: unknown): {
             {
               error: 'Validation error',
               code: 'VALIDATION_ERROR',
-              details: error.errors,
+              details: error.issues,
             },
             null,
             2

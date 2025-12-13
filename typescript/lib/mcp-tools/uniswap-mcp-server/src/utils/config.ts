@@ -19,12 +19,12 @@ export interface ServerConfig {
  * Load and validate server configuration from environment variables
  */
 export function loadConfig(): ServerConfig {
-  const ethereumRpcUrl = process.env.ETHEREUM_RPC_URL;
-  const arbitrumRpcUrl = process.env.ARBITRUM_RPC_URL;
-  const privateKey = process.env.PRIVATE_KEY;
-  const defaultSlippage = parseFloat(process.env.DEFAULT_SLIPPAGE || '0.5');
-  const gasMultiplier = parseFloat(process.env.GAS_MULTIPLIER || '1.2');
-  const port = parseInt(process.env.PORT || '3012', 10);
+  const ethereumRpcUrl = process.env['ETHEREUM_RPC_URL'];
+  const arbitrumRpcUrl = process.env['ARBITRUM_RPC_URL'];
+  const privateKey = process.env['PRIVATE_KEY'];
+  const defaultSlippage = parseFloat(process.env['DEFAULT_SLIPPAGE'] || '0.5');
+  const gasMultiplier = parseFloat(process.env['GAS_MULTIPLIER'] || '1.2');
+  const port = parseInt(process.env['PORT'] || '3012', 10);
 
   if (!ethereumRpcUrl) {
     throw new ConfigurationError(

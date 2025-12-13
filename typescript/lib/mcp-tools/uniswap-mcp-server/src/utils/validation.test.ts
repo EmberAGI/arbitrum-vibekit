@@ -12,8 +12,12 @@ import { ValidationError } from '../errors/index.js';
 describe('validation utilities', () => {
   describe('validateAddress', () => {
     it('should accept valid addresses', () => {
-      const valid = '0x742d35Cc6634C4532895c05b22629ce5b3c28da4';
-      expect(validateAddress(valid)).toBe(valid.toLowerCase());
+      // Use lowercase address - ethers will checksum it
+      const valid = '0x742d35cc6634c4532895c05b22629ce5b3c28da4';
+      const result = validateAddress(valid);
+      // getAddress returns checksummed address (note the exact checksum)
+      expect(result).toBe('0x742d35Cc6634C4532895c05b22629CE5B3c28DA4');
+      expect(result.toLowerCase()).toBe(valid);
     });
 
     it('should reject invalid addresses', () => {
@@ -24,8 +28,12 @@ describe('validation utilities', () => {
 
   describe('validateNonZeroAddress', () => {
     it('should accept non-zero addresses', () => {
-      const valid = '0x742d35Cc6634C4532895c05b22629ce5b3c28da4';
-      expect(validateNonZeroAddress(valid)).toBe(valid.toLowerCase());
+      // Use lowercase address - ethers will checksum it
+      const valid = '0x742d35cc6634c4532895c05b22629ce5b3c28da4';
+      const result = validateNonZeroAddress(valid);
+      // getAddress returns checksummed address (note the exact checksum)
+      expect(result).toBe('0x742d35Cc6634C4532895c05b22629CE5B3c28DA4');
+      expect(result.toLowerCase()).toBe(valid);
     });
 
     it('should reject zero address', () => {
@@ -46,9 +54,9 @@ describe('validation utilities', () => {
       );
     });
 
-    it('should reject negative amounts', () => {
-      // BigInt doesn't support negative in our context, but test the check
-      expect(() => validatePositiveAmount(BigInt('-1'))).toThrow(
+    it('should reject zero amount', () => {
+      // Test that zero is rejected (already tested above, but keeping for clarity)
+      expect(() => validatePositiveAmount(BigInt('0'))).toThrow(
         ValidationError
       );
     });

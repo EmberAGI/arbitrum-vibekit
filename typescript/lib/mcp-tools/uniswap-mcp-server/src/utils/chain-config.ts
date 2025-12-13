@@ -1,4 +1,4 @@
-import { ChainId } from '../schemas/index.js';
+import type { ChainId } from '../schemas/index.js';
 import { ConfigurationError } from '../errors/index.js';
 
 /**

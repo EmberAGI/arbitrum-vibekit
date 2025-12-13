@@ -38,6 +38,7 @@ describe('getSwapQuote', () => {
     const mockProvider = {
       getCode: vi.fn().mockResolvedValue('0x'),
     };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.spyOn(provider, 'getProvider').mockReturnValue(
       mockProvider as any
     );

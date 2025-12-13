@@ -1,4 +1,4 @@
-import { getAddress } from 'ethers/lib/utils';
+// getAddress not used in this file
 import type {
   ProcessSwapIntentRequest,
   ProcessSwapIntentResponse,
@@ -9,7 +9,6 @@ import { generateSwapTransaction } from './generateSwapTransaction.js';
 import { validateSwapFeasibility } from './validateSwapFeasibility.js';
 import {
   validateAddress,
-  validateSlippageTolerance,
 } from '../utils/validation.js';
 import { loadConfig } from '../utils/config.js';
 import { ValidationError } from '../errors/index.js';

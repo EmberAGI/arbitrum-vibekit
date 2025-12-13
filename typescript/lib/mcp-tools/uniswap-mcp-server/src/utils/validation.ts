@@ -1,5 +1,6 @@
-import { getAddress, isAddress } from 'ethers/lib/utils';
-import { TokenError, ValidationError } from '../errors/index.js';
+import { utils } from 'ethers';
+const { getAddress, isAddress } = utils;
+import { ValidationError } from '../errors/index.js';
 
 /**
  * Validates and normalizes an Ethereum address
