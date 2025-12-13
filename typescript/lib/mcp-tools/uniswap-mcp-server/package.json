@@ -1,0 +1,57 @@
+{
+  "name": "@arbitrum-vibekit/uniswap-mcp-server",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "uniswap-mcp-server": "./dist/index.js"
+  },
+  "scripts": {
+    "prepare": "pnpm build",
+    "prepublishOnly": "pnpm build",
+    "build": "tsc",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "watch": "nodemon --watch 'src/**/*.ts' --exec 'tsx' src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest watch"
+  },
+  "keywords": [
+    "mcp",
+    "uniswap",
+    "defi",
+    "swap",
+    "dex"
+  ],
+  "author": "",
+  "license": "ISC",
+  "description": "Uniswap MCP Server for token swaps, quotes, and routing",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@types/express": "^5.0.1",
+    "@types/node": "catalog:",
+    "@uniswap/sdk-core": "^5.0.0",
+    "@uniswap/v3-sdk": "^4.0.0",
+    "@uniswap/universal-router-sdk": "^1.4.0",
+    "@uniswap/smart-order-router": "^3.10.0",
+    "dotenv": "catalog:",
+    "ethers": "^5.7.2",
+    "express": "catalog:",
+    "typescript": "catalog:",
+    "zod": "catalog:"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/chai": "catalog:",
+    "@types/mocha": "catalog:",
+    "chai": "catalog:",
+    "mocha": "catalog:",
+    "tsx": "catalog:",
+    "vitest": "catalog:"
+  }
+}
+
