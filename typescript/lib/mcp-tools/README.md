@@ -2,6 +2,15 @@
 
 Welcome to Vibekit's MCP tools directory! Model Context Protocol (MCP) tools are standardized interfaces that allow agents to easily interact with on-chain data, execute DeFi operations, and integrate with external services. This directory contains the MCP building blocks that give DeFi agents their superpowers.
 
+## 📦 Available MCP Servers
+
+This directory includes the following production-ready MCP servers:
+
+- **[Uniswap MCP Server](./uniswap-mcp-server/)** - Token swaps, quotes, routing, and transaction generation for Uniswap v2/v3
+- **[CoinGecko MCP Server](./coingecko-mcp-server/)** - Cryptocurrency price data and charts
+- **[Allora MCP Server](./allora-mcp-server/)** - Allora network price prediction data
+- **[DeFiSafety Implementation](./defisafety-implementation/)** - DeFi protocol safety evaluation tools
+
 ## 🛠️ Building Your MCP Tool
 
 By contributing new MCP tools, you're expanding the possibilities for all Vibekit agents. Your tools can enable new DeFi strategies, integrate additional protocols, or enhance existing capabilities. This guide will walk you through the process of creating and contributing your own MCP tools to the ecosystem. Before submitting a pull request for your work, please review the guidelines in [`CONTRIBUTIONS.md`](https://github.com/EmberAGI/arbitrum-vibekit/blob/main/CONTRIBUTIONS.md) to ensure best practices are followed.
