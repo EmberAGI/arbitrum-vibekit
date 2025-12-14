@@ -19,7 +19,7 @@ import {
   normalizePosition,
   tickToPrice,
 } from '../../core/decision-engine.js';
-import { type CamelotPool, type RebalanceTelemetry } from '../../domain/types.js';
+import { type CamelotPool, type ClmmAction, type RebalanceTelemetry } from '../../domain/types.js';
 import { buildTelemetryArtifact } from '../artifacts.js';
 import { getCamelotClient, getOnchainClients } from '../clientFactory.js';
 import {
@@ -329,6 +329,17 @@ export const pollCycleNode = async (
     maxGasSpendUsd,
   };
   logInfo('Cycle metrics', { iteration, metrics: cycleMetrics }, { detailed: true });
+
+  const decisionSummary: Pick<ClmmAction, 'kind' | 'reason'> & {
+    targetRange?: { lowerTick: number; upperTick: number };
+  } = { kind: decision.kind, reason: decision.reason };
+  if ('targetRange' in decision) {
+    decisionSummary.targetRange = {
+      lowerTick: decision.targetRange.lowerTick,
+      upperTick: decision.targetRange.upperTick,
+    };
+  }
+  logInfo('Decision evaluated', { iteration, decision: decisionSummary });
 
   let cyclesSinceRebalance = state.view.metrics.cyclesSinceRebalance ?? 0;
   let txHash: string | undefined;

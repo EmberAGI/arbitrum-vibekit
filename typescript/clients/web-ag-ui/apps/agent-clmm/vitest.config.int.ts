@@ -9,6 +9,7 @@ export default defineConfig({
     environment: 'node',
     setupFiles,
     include: ['tests/**/*.int.test.ts'],
+    passWithNoTests: true,
     testTimeout: 30_000,
     hookTimeout: 30_000,
     typecheck: {

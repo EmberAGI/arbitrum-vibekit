@@ -51,7 +51,8 @@ describe('EmberCamelotClient (unit)', () => {
               },
             ],
             price: '1',
-            providerId: 'camelot-algebra',
+            providerId:
+              'Algebra_0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B_42161',
             poolName: 'Algebra Pool',
           },
           {
@@ -88,7 +89,7 @@ describe('EmberCamelotClient (unit)', () => {
     const pools = await client.listCamelotPools(42161);
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      `${BASE_URL}/liquidity/pools?chainId=42161`,
+      `${BASE_URL}/liquidity/pools?chainId=42161&providerIds=Algebra_0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B_42161`,
       partial({
         headers: partial({ 'Content-Type': 'application/json' }),
       }),
@@ -99,8 +100,9 @@ describe('EmberCamelotClient (unit)', () => {
     expect(pools[0]?.token1.address).toBe('0xtokenb');
   });
 
-  it('converts Ember API token0/token1 quotes into token1/token0 mid prices', async () => {
-    const marketPrice = '0.00031296844083452509'; // token0/token1 from Ember
+  it('normalizes Ember API price quotes into token1/token0 mid prices', async () => {
+    // Ember may quote either token0/token1 or token1/token0; we normalize to token1/token0.
+    const marketPrice = '0.00031296844083452509'; // WETH/USDC (token0/token1)
     const fetchSpy = vi.fn().mockResolvedValue(
       mockJsonResponse({
         liquidityPools: [
@@ -108,20 +110,21 @@ describe('EmberCamelotClient (unit)', () => {
             identifier: { chainId: '42161', address: '0xPOOL' },
             tokens: [
               {
-                tokenUid: { chainId: '42161', address: '0xWETH' },
+                tokenUid: { chainId: '42161', address: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1' },
                 name: 'Wrapped ETH',
                 symbol: 'WETH',
                 decimals: 18,
               },
               {
-                tokenUid: { chainId: '42161', address: '0xUSDC' },
+                tokenUid: { chainId: '42161', address: '0xaf88d065e77c8cc2239327c5edb3a432268e5831' },
                 name: 'USDC',
                 symbol: 'USDC',
                 decimals: 6,
               },
             ],
             price: marketPrice,
-            providerId: 'Algebra_camelot',
+            providerId:
+              'Algebra_0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B_42161',
             poolName: 'lp_WETH-USDC',
           },
         ],
@@ -141,6 +144,50 @@ describe('EmberCamelotClient (unit)', () => {
     const midPrice = deriveMidPrice(pool);
     const expected = 1 / Number(marketPrice);
     expect(midPrice).toBeCloseTo(expected, 1);
+  });
+
+  it('preserves token1/token0 prices when Ember already quotes the expected direction', async () => {
+    const token1PerToken0 = '3195.2103455975202'; // USDC/WETH (token1/token0)
+    const fetchSpy = vi.fn().mockResolvedValue(
+      mockJsonResponse({
+        liquidityPools: [
+          {
+            identifier: { chainId: '42161', address: '0xPOOL' },
+            tokens: [
+              {
+                tokenUid: { chainId: '42161', address: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1' },
+                name: 'Wrapped ETH',
+                symbol: 'WETH',
+                decimals: 18,
+              },
+              {
+                tokenUid: { chainId: '42161', address: '0xaf88d065e77c8cc2239327c5edb3a432268e5831' },
+                name: 'USDC',
+                symbol: 'USDC',
+                decimals: 6,
+              },
+            ],
+            price: token1PerToken0,
+            providerId:
+              'Algebra_0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B_42161',
+            poolName: 'lp_WETH-USDC',
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+    const client = new EmberCamelotClient(BASE_URL);
+
+    const pools = await client.listCamelotPools(42161);
+
+    expect(pools).toHaveLength(1);
+    const pool = pools[0];
+    expect(pool).toBeDefined();
+    if (!pool) {
+      throw new Error('Expected Camelot pool in response');
+    }
+    const midPrice = deriveMidPrice(pool);
+    expect(midPrice).toBeCloseTo(Number(token1PerToken0), 1);
   });
 
   it('derives wallet position ticks from price ranges', async () => {
@@ -206,7 +253,7 @@ describe('EmberCamelotClient (unit)', () => {
     const positions = await client.getWalletPositions('0x1234', 42161);
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      `${BASE_URL}/liquidity/positions/0x1234?chainId=42161`,
+      `${BASE_URL}/liquidity/positions/0x1234?chainId=42161&providerIds=Algebra_0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B_42161`,
       partial({
         headers: partial({ 'Content-Type': 'application/json' }),
       }),

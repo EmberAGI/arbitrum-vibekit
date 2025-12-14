@@ -21,6 +21,13 @@ export const collectOperatorInputNode = async (
 
   if (!state.view.poolArtifact) {
     const failureMessage = 'ERROR: Pool artifact missing before operator input';
+    logInfo('collectOperatorInput: missing pool artifact - cannot prompt operator', {
+      hasProfilePools: Array.isArray(state.view.profile?.pools) ? state.view.profile.pools.length : 0,
+      hasAllowedPools: Array.isArray(state.view.profile?.allowedPools)
+        ? state.view.profile.allowedPools.length
+        : 0,
+      command: state.view.command,
+    });
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: [] } },

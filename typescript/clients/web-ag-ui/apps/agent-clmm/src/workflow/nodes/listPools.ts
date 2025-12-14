@@ -20,6 +20,12 @@ export const listPoolsNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
+  const startedAt = Date.now();
+  logInfo('listPools: entering node', {
+    mode: state.private.mode ?? 'debug',
+    emberBaseUrl: process.env['EMBER_API_BASE_URL'] ?? 'https://api.emberai.xyz',
+  });
+
   // Create client on-demand (class instances don't survive LangGraph checkpointing)
   const camelotClient = getCamelotClient();
 
@@ -29,6 +35,10 @@ export const listPoolsNode = async (
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const failureMessage = `ERROR: Failed to fetch Camelot pools - ${message}`;
+    logInfo('listPools: failed to fetch pools', {
+      error: message,
+      elapsedMs: Date.now() - startedAt,
+    });
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: [] } },
@@ -53,6 +63,7 @@ export const listPoolsNode = async (
     total: pools.length,
     allowed: allowedPools.length,
     mode,
+    elapsedMs: Date.now() - startedAt,
   });
   if (allowedPools.length === 0) {
     const failureMessage = `ERROR: No Camelot pools available for mode=${mode}`;
@@ -76,6 +87,10 @@ export const listPoolsNode = async (
   }
 
   const poolArtifact = buildPoolArtifact(allowedPools.slice(0, 8));
+  logInfo('listPools: built pool artifact', {
+    artifactId: poolArtifact.artifactId,
+    poolCount: Math.min(allowedPools.length, 8),
+  });
   const { task, statusEvent } = buildTaskStatus(
     state.view.task,
     'working',

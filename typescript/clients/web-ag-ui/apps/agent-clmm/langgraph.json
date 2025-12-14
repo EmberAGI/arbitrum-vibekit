@@ -1,5 +1,5 @@
 {
-  "node_version": "20",
+  "node_version": "22",
   "dockerfile_lines": [],
   "dependencies": ["."],
   "graphs": {

@@ -152,9 +152,11 @@ configureCronExecutor(runGraphOnce);
 const invokedAsEntryPoint =
   process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
 if (invokedAsEntryPoint) {
-  const initialThreadId = process.env['CLMM_THREAD_ID'];
-  if (!initialThreadId) {
-    throw new Error('CLMM_THREAD_ID environment variable is required to start the CLMM scheduler.');
+  // Thread ids scope LangGraph checkpointing/state. For the cron-driven worker we only need a
+  // stable id for the lifetime of the process, so generate one if not provided.
+  const initialThreadId = process.env['CLMM_THREAD_ID'] ?? uuidv7();
+  if (!process.env['CLMM_THREAD_ID']) {
+    console.info(`[cron] CLMM_THREAD_ID not provided; generated thread id ${initialThreadId}`);
   }
 
   await startClmmCron(initialThreadId);

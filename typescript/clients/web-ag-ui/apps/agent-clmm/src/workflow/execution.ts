@@ -295,37 +295,44 @@ async function executeWithdrawalPlans({
 }): Promise<{ lastHash?: string; gasSpentWei?: bigint }> {
   let lastHash: string | undefined;
   let totalGasSpentWei: bigint | undefined;
-  for (let attempt = 0; attempt < MAX_WITHDRAW_ATTEMPTS; attempt += 1) {
-    try {
-      const plan = await camelotClient.requestWithdrawal(withdrawPayload);
-      if (plan.transactions.length === 0) {
-        return { lastHash, gasSpentWei: totalGasSpentWei };
-      }
 
-      logInfo('Executing Ember withdrawal plan', {
-        attempt: attempt + 1,
-        transactionCount: plan.transactions.length,
-      });
-      for (const tx of plan.transactions) {
-        const { receipt, gasSpentWei } = await executePlannedTransaction({ tx, clients });
-        lastHash = receipt.transactionHash;
-        if (gasSpentWei !== undefined) {
-          totalGasSpentWei = (totalGasSpentWei ?? 0n) + gasSpentWei;
+  // Keep requesting withdrawal plans until the provider reports no further transactions.
+  // This allows multi-step withdrawals (e.g. unwind, collect, etc.) without changing thread state.
+  for (let planIndex = 0; ; planIndex += 1) {
+    let plan: Awaited<ReturnType<EmberCamelotClient['requestWithdrawal']>> | undefined;
+    for (let attempt = 0; attempt < MAX_WITHDRAW_ATTEMPTS; attempt += 1) {
+      try {
+        plan = await camelotClient.requestWithdrawal(withdrawPayload);
+        break;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logInfo('Withdrawal request failed', { attempt: attempt + 1, error: message });
+        if (attempt + 1 >= MAX_WITHDRAW_ATTEMPTS) {
+          throw new Error(
+            `Ember withdrawal request failed after ${MAX_WITHDRAW_ATTEMPTS} attempts: ${message}`,
+          );
         }
       }
+    }
 
+    if (!plan) {
+      throw new Error('Withdrawal request failed without returning a plan');
+    }
+
+    if (plan.transactions.length === 0) {
       return { lastHash, gasSpentWei: totalGasSpentWei };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logInfo('Withdrawal attempt failed', { attempt: attempt + 1, error: message });
-      if (attempt + 1 >= MAX_WITHDRAW_ATTEMPTS) {
-        throw new Error(
-          `Camelot withdrawal failed after ${MAX_WITHDRAW_ATTEMPTS} attempts: ${message}`,
-        );
-      }
+    }
+
+    logInfo('Executing Ember withdrawal plan', {
+      attempt: planIndex + 1,
+      transactionCount: plan.transactions.length,
+    });
+    const outcome = await executePlanTransactions({ plan, clients });
+    lastHash = outcome.lastHash ?? lastHash;
+    if (outcome.gasSpentWei !== undefined) {
+      totalGasSpentWei = (totalGasSpentWei ?? 0n) + outcome.gasSpentWei;
     }
   }
-  return { lastHash, gasSpentWei: totalGasSpentWei };
 }
 
 async function executePlanTransactions({
