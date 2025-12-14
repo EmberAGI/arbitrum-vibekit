@@ -23,16 +23,7 @@ import type {
   TelemetryItem,
 } from '../types/agent';
 
-// Re-export types for backward compatibility
-export type {
-  AgentProfile,
-  AgentMetrics,
-  OperatorInterrupt,
-  Pool,
-  OperatorConfigInput,
-  Transaction,
-  TelemetryItem,
-};
+export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem };
 
 interface AgentDetailPageProps {
   agentId: string;

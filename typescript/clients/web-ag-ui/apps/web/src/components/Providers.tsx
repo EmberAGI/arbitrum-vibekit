@@ -15,7 +15,6 @@ const config = getDefaultConfig({
 });
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  // Create QueryClient once per component instance to avoid recreation on re-renders
   const [queryClient] = useState(() => new QueryClient());
 
   return (

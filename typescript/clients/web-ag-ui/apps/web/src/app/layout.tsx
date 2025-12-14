@@ -21,11 +21,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `
-              // Force dark mode immediately
-              document.documentElement.className = 'dark';
-              document.documentElement.style.colorScheme = 'dark';
-            `,
+            __html: `document.documentElement.className='dark';document.documentElement.style.colorScheme='dark';`,
           }}
         />
       </head>

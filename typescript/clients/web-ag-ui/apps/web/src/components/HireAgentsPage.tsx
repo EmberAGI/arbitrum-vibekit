@@ -69,7 +69,6 @@ export function HireAgentsPage({
   const hiredCount = agents.filter((a) => a.status === 'hired').length;
   const forHireCount = agents.filter((a) => a.status === 'for_hire').length;
 
-  // Filter agents based on search and status
   const filteredAgents = agents
     .filter((agent) => {
       const matchesSearch =
@@ -81,7 +80,6 @@ export function HireAgentsPage({
         (filterStatus === 'for_hire' && agent.status === 'for_hire');
       return matchesSearch && matchesFilter;
     })
-    // Sort agents based on selected sort field
     .sort((a, b) => {
       switch (sortBy) {
         case 'income':

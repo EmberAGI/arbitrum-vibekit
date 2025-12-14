@@ -19,15 +19,10 @@ export default function HomePage() {
   );
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
-  // Connect to the configured agent
   const agent = useAgentConnection(DEFAULT_AGENT_ID);
-
-  // Get all registered agents for the listing
   const registeredAgents = getAllAgents();
 
-  // Build the agent list with live data from the connected agent
   const agentList: Agent[] = registeredAgents.map((agentConfig) => {
-    // If this is the connected agent, use live data
     if (agentConfig.id === DEFAULT_AGENT_ID) {
       return {
         id: agentConfig.id,
@@ -35,7 +30,7 @@ export default function HomePage() {
         name: agentConfig.name,
         creator: agentConfig.creator,
         creatorVerified: agentConfig.creatorVerified,
-        rating: 5, // Could come from state if available
+        rating: 5,
         weeklyIncome: agent.profile.agentIncome ?? 0,
         apy: agent.profile.apy ?? 0,
         users: agent.profile.totalUsers ?? 0,
@@ -48,7 +43,6 @@ export default function HomePage() {
       };
     }
 
-    // For other agents, show default/unavailable state
     return {
       id: agentConfig.id,
       rank: 0,
@@ -68,7 +62,6 @@ export default function HomePage() {
     };
   });
 
-  // Build featured agents from connected agent
   const featuredAgents: FeaturedAgent[] = [
     {
       id: agent.config.id,
@@ -85,7 +78,6 @@ export default function HomePage() {
     },
   ];
 
-  // Build agent activity from real state
   const activeAgents: AgentActivity[] = agent.isActive
     ? [
         {
@@ -115,7 +107,6 @@ export default function HomePage() {
 
   const completedAgents: AgentActivity[] = [];
 
-  // Navigation handlers
   const handleNavigate = (page: 'chat' | 'hire' | 'acquire' | 'leaderboard') => {
     if (page === 'chat') return;
     setCurrentPage(page);
@@ -136,7 +127,6 @@ export default function HomePage() {
     setSelectedAgentId(null);
   };
 
-  // Map transaction history to the expected format
   const mappedTransactions: Transaction[] = agent.transactionHistory.map((tx) => ({
     cycle: tx.cycle,
     action: tx.action,
@@ -146,7 +136,6 @@ export default function HomePage() {
     timestamp: tx.timestamp,
   }));
 
-  // Map telemetry to the expected format
   const mappedTelemetry: TelemetryItem[] = (agent.activity.telemetry ?? []).map((t) => ({
     cycle: t.cycle,
     action: t.action,
@@ -155,9 +144,7 @@ export default function HomePage() {
     timestamp: t.timestamp,
   }));
 
-  // Render the appropriate content
   const renderMainContent = () => {
-    // Agent Detail Page - only show for the connected agent
     if (selectedAgentId === agent.config.id && currentPage === 'hire') {
       return (
         <AgentDetailPage
@@ -192,26 +179,21 @@ export default function HomePage() {
           onFire={agent.runFire}
           onSync={agent.runSync}
           onBack={handleBackToList}
-          // Interrupt handling
           activeInterrupt={agent.activeInterrupt}
           allowedPools={agent.profile.allowedPools ?? []}
           onInterruptSubmit={agent.resolveInterrupt}
-          // Task state
           taskId={agent.view.task?.id}
           taskStatus={agent.view.task?.taskStatus?.state}
           haltReason={agent.view.haltReason}
           executionError={agent.view.executionError}
-          // Transaction history and telemetry
           transactions={mappedTransactions}
           telemetry={mappedTelemetry}
-          // Settings
           allocationAmount={agent.settings.amount}
           onAllocationChange={agent.updateSettings}
         />
       );
     }
 
-    // Hire Agents List
     if (currentPage === 'hire') {
       return (
         <HireAgentsPage
@@ -223,7 +205,6 @@ export default function HomePage() {
       );
     }
 
-    // Acquire (Coming Soon)
     if (currentPage === 'acquire') {
       return (
         <div className="flex-1 h-full flex items-center justify-center text-gray-500">
@@ -235,7 +216,6 @@ export default function HomePage() {
       );
     }
 
-    // Leaderboard (Coming Soon)
     if (currentPage === 'leaderboard') {
       return (
         <div className="flex-1 h-full flex items-center justify-center text-gray-500">
@@ -267,7 +247,7 @@ export default function HomePage() {
         {renderMainContent()}
       </main>
 
-      {/* Hidden CopilotPopup - needed for AG-UI interrupt mechanism */}
+      {/* Hidden popup for AG-UI interrupt handling */}
       <CopilotPopup defaultOpen={false} clickOutsideToClose={false} />
     </>
   );

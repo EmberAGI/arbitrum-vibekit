@@ -1,38 +1,16 @@
-/**
- * Shared Agent Type Definitions
- *
- * This file contains all type definitions related to agent state and interactions.
- * These types match the CopilotKit agent state shape expected from LangGraph agents.
- */
+// Agent state types matching CopilotKit/LangGraph schema
 
-// ============================================================================
-// Operator Configuration Types
-// ============================================================================
-
-/**
- * Represents a LangGraph interrupt requesting operator configuration.
- */
 export interface OperatorInterrupt {
   type: string;
   message: string;
 }
 
-/**
- * Input provided by the operator to configure an agent.
- */
 export interface OperatorConfigInput {
   poolAddress: `0x${string}`;
   walletAddress: `0x${string}`;
   baseContributionUsd?: number;
 }
 
-// ============================================================================
-// Pool Types
-// ============================================================================
-
-/**
- * Represents a liquidity pool that an agent can operate on.
- */
 export interface Pool {
   address: string;
   token0: { symbol: string };
@@ -40,13 +18,6 @@ export interface Pool {
   feeTierBps?: number;
 }
 
-// ============================================================================
-// Transaction & Telemetry Types
-// ============================================================================
-
-/**
- * A transaction executed by the agent.
- */
 export interface Transaction {
   cycle: number;
   action: string;
@@ -56,9 +27,6 @@ export interface Transaction {
   timestamp?: string;
 }
 
-/**
- * A telemetry event from the agent's activity.
- */
 export interface TelemetryItem {
   cycle: number;
   action: string;
@@ -67,13 +35,6 @@ export interface TelemetryItem {
   timestamp?: string;
 }
 
-// ============================================================================
-// Agent State Types (from CopilotKit/LangGraph)
-// ============================================================================
-
-/**
- * The view portion of agent state - contains all displayable data.
- */
 export interface AgentView {
   command: string;
   task?: {
@@ -95,9 +56,6 @@ export interface AgentView {
   transactionHistory: Transaction[];
 }
 
-/**
- * Agent profile data within the view.
- */
 export interface AgentViewProfile {
   agentIncome?: number;
   aum?: number;
@@ -110,17 +68,11 @@ export interface AgentViewProfile {
   allowedPools: Pool[];
 }
 
-/**
- * Agent activity data within the view.
- */
 export interface AgentViewActivity {
   telemetry: TelemetryItem[];
   events: unknown[];
 }
 
-/**
- * Agent metrics data within the view.
- */
 export interface AgentViewMetrics {
   lastSnapshot?: unknown;
   previousPrice?: number;
@@ -130,9 +82,6 @@ export interface AgentViewMetrics {
   latestCycle?: unknown;
 }
 
-/**
- * Complete agent state from CopilotKit.
- */
 export interface AgentState {
   messages?: unknown[];
   settings?: {
@@ -143,13 +92,7 @@ export interface AgentState {
   copilotkit?: unknown;
 }
 
-// ============================================================================
-// UI Display Types
-// ============================================================================
-
-/**
- * Simplified profile for UI display.
- */
+// Simplified types for UI components
 export interface AgentProfile {
   agentIncome?: number;
   aum?: number;
@@ -160,19 +103,13 @@ export interface AgentProfile {
   tokens: string[];
 }
 
-/**
- * Simplified metrics for UI display.
- */
 export interface AgentMetrics {
   iteration?: number;
   cyclesSinceRebalance?: number;
   staleCycles?: number;
 }
 
-// ============================================================================
-// Default Values
-// ============================================================================
-
+// Default values for state initialization
 export const defaultProfile: AgentViewProfile = {
   agentIncome: undefined,
   aum: undefined,
@@ -219,4 +156,3 @@ export const initialAgentState: AgentState = {
   settings: { amount: 0 },
   view: defaultView,
 };
-

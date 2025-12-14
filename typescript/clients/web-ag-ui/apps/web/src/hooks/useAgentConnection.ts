@@ -21,7 +21,6 @@ import {
   initialAgentState,
 } from '../types/agent';
 
-// Re-export types for convenience
 export type {
   AgentState,
   AgentView,
@@ -33,20 +32,15 @@ export type {
   Transaction,
 };
 
-// Type guard for operator config requests
 const isOperatorConfigRequest = (value: unknown): value is OperatorInterrupt =>
   typeof value === 'object' &&
   value !== null &&
   (value as { type?: string }).type === 'operator-config-request';
 
 export interface UseAgentConnectionResult {
-  // Agent metadata
   config: AgentConfig;
-
-  // Connection state
   isConnected: boolean;
 
-  // Agent state (from CopilotKit)
   view: AgentView;
   profile: AgentViewProfile;
   metrics: AgentViewMetrics;
@@ -54,18 +48,13 @@ export interface UseAgentConnectionResult {
   transactionHistory: Transaction[];
   settings: NonNullable<AgentState['settings']>;
 
-  // Derived state
   isHired: boolean;
   isActive: boolean;
-
-  // Action states
   isHiring: boolean;
   isFiring: boolean;
 
-  // Interrupt handling
   activeInterrupt: OperatorInterrupt | null;
 
-  // Commands
   runHire: () => void;
   runFire: () => void;
   runSync: () => void;
@@ -73,30 +62,22 @@ export interface UseAgentConnectionResult {
   updateSettings: (amount: number) => void;
 }
 
-/**
- * Hook to connect to and manage an agent via CopilotKit.
- * Provides a clean interface for interacting with any configured agent.
- */
 export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const [isHiring, setIsHiring] = useState(false);
   const [isFiring, setIsFiring] = useState(false);
 
-  // Get agent configuration
   const config = getAgentConfig(agentId);
 
-  // Connect to agent via CopilotKit
   const { state, setState, run } = useCoAgent<AgentState>({
     name: agentId,
     initialState: initialAgentState,
   });
   const { threadId } = useCopilotContext();
 
-  // Handle LangGraph interrupts
   const { activeInterrupt, resolve } = useLangGraphInterruptCustomUI<OperatorInterrupt>({
     enabled: isOperatorConfigRequest,
   });
 
-  // Sync state on initial connect
   useEffect(() => {
     if (threadId) {
       run(() => ({
@@ -108,7 +89,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId]);
 
-  // Extract state with defaults
   const view = state?.view ?? defaultView;
   const profile = view.profile ?? defaultProfile;
   const metrics = view.metrics ?? defaultMetrics;
@@ -116,11 +96,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const transactionHistory = view.transactionHistory ?? [];
   const settings = state?.settings ?? { amount: 0 };
 
-  // Derived state
   const isHired = view.command === 'hire' || view.command === 'run';
   const isActive = view.command !== 'idle' && view.command !== 'fire';
 
-  // Command handlers
   const runSync = useCallback(() => {
     run(() => ({
       id: v7(),
@@ -144,7 +122,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const runFire = useCallback(() => {
     if (!isFiring) {
       setIsFiring(true);
-      console.log(`[${agentId}] Sending fire command`);
       run(() => ({
         id: v7(),
         role: 'user',
@@ -152,14 +129,13 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       }));
       setTimeout(() => setIsFiring(false), 3000);
     }
-  }, [run, isFiring, agentId]);
+  }, [run, isFiring]);
 
   const resolveInterrupt = useCallback(
     (input: OperatorConfigInput) => {
-      console.log(`[${agentId}] Submitting interrupt response:`, input);
       resolve(JSON.stringify(input));
     },
-    [resolve, agentId],
+    [resolve],
   );
 
   const updateSettings = useCallback(
