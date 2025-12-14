@@ -15,6 +15,14 @@ Internal reference package for the CLMM agent workflow. Mirrors the Camelot work
 pnpm install
 ```
 
+## Docker
+
+This package has its own `pnpm-lock.yaml`, so you can build from this directory directly:
+
+```bash
+docker build --platform linux/amd64 -t agent-clmm:latest .
+```
+
 ## Available Scripts
 
 | Command              | Description                                                     |
