@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1.7
-FROM node:22-slim
+FROM node:22
 
-RUN apt-get update && apt-get install -y --no-install-recommends dumb-init ca-certificates python3 make g++ && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# NOTE: We intentionally avoid `apt-get` here.
+# Some environments intermittently fail `apt-get update` (GPG signature / TLS trust issues),
+# which makes `docker build --no-cache` unreliable. `node:22` is based on `buildpack-deps`,
+# which already includes common build tooling needed for native Node deps.
 
 WORKDIR /app
 
@@ -21,5 +22,4 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lo
 COPY . .
 RUN pnpm build
 
-ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "/app/dist/hire.js"]
