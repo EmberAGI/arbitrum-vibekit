@@ -22,4 +22,11 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lo
 COPY . .
 RUN pnpm build
 
-CMD ["node", "/app/dist/hire.js"]
+# Optional: bake a runtime env file into the image using a BuildKit secret:
+#   docker build --secret id=env,src=.env ...
+# We always create the file so `node --env-file` does not fail if the secret is omitted.
+RUN touch /app/.env.runtime
+RUN --mount=type=secret,id=env,required=false,target=/tmp/.env \
+    sh -c 'if [ -s /tmp/.env ]; then cp /tmp/.env /app/.env.runtime; else echo "WARN: no build secret env provided; /app/.env.runtime is empty." >&2; fi'
+
+CMD ["node", "--env-file=/app/.env.runtime", "/app/dist/hire.js"]
