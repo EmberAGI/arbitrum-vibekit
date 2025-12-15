@@ -38,15 +38,7 @@ jobs:
 
       - name: Build project
         working-directory: ./typescript
-        run: |
-          set -euo pipefail
-
-          pnpm run build || {
-            echo "::group::web-ag-ui verbose build"
-            (cd clients/web-ag-ui && pnpm run build)
-            echo "::endgroup::"
-            exit 1
-          }
+        run: pnpm run build
 
       - name: Initialize environment files
         working-directory: ./typescript
