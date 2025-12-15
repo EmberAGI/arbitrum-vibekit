@@ -6,9 +6,9 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "lint": "turbo run lint"
+    "dev": "turbo run dev --output-logs=full --log-order=stream",
+    "build": "turbo run build --output-logs=full --log-order=stream --summarize",
+    "lint": "turbo run lint --output-logs=full --log-order=stream --summarize"
   },
   "devDependencies": {
     "@langchain/langgraph-cli": "^1.0.4",
