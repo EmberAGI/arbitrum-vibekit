@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useLogin, usePrivy } from '@privy-io/react-auth';
 import {
   Settings,
   ChevronDown,
@@ -16,9 +17,15 @@ import {
   AlertCircle,
   Loader,
   Circle,
+  DollarSign,
+  Copy,
 } from 'lucide-react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { Session } from '@/lib/types/session';
+import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
+import { useWalletFunding } from '@/hooks/useWalletFunding';
+import { FundingModal } from '@/components/FundingModal';
+import { copyAddressToClipboard } from '@/lib/utils';
 
 interface AppSidebarProps {
   isA2AConnected: boolean;
@@ -72,6 +79,44 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const [isBlockedStrategiesExpanded, setIsBlockedStrategiesExpanded] = useState(true);
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(false);
   const [isConnectionsExpanded, setIsConnectionsExpanded] = useState(false);
+  const { ready, authenticated, user } = usePrivy();
+  const { login } = useLogin();
+  const { privyWallet } = usePrivyWalletClient();
+
+  // Check if funding feature is enabled
+  const isFundingEnabled = process.env.NEXT_PUBLIC_FEATURE_FLAG_ENABLE_FUNDING === 'true';
+
+  // Wallet funding hook - auto-triggers funding on login when wallet is new
+  const {
+    isFunded,
+    fundingState,
+    error: fundingError,
+    fundingResult,
+    reset: resetFunding,
+  } = useWalletFunding(
+    isFundingEnabled
+      ? (user?.linkedAccounts.find(
+          (account) => account.type === 'wallet' && account.walletClientType === 'privy',
+          // @ts-expect-error: the wallet id is poorly typed by privy
+        )?.id ?? null)
+      : null,
+  );
+
+  // Show modal when funding is in progress, success, or error (only if funding is enabled)
+  const showFundingModal =
+    isFundingEnabled &&
+    (fundingState === 'checking' ||
+      fundingState === 'funding' ||
+      fundingState === 'success' ||
+      fundingState === 'error');
+
+  // Disable login when Privy is not ready or the user is already authenticated
+  const disableLogin = !ready || (ready && authenticated);
+
+  // Format address to show first 6 and last 4 characters
+  const formatAddress = (address: string) => {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
 
   // Find the main chat session
   const mainChatSession = Object.values(sessions).find((session) => session.isMainChat);
@@ -590,6 +635,59 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             borderTop: '1px solid rgba(255, 255, 255, 0.1)',
             margin: '12px 0',
           }}
+        />
+
+        {/* Privy embedded wallet */}
+        {authenticated && privyWallet ? (
+          <div
+            className="w-full p-3 rounded-md"
+            style={{
+              borderColor: '#404040',
+              backgroundColor: 'rgba(64, 64, 64, 0.3)',
+              border: '1px solid #404040',
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-500" />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-muted-foreground">Privy Wallet</div>
+                <div className="flex items-center gap-1">
+                  <span className="text-sm font-mono truncate">
+                    {formatAddress(privyWallet.address)}
+                  </span>
+                  {isFundingEnabled && isFunded && (
+                    <DollarSign className="w-3 h-3 text-green-400 shrink-0" />
+                  )}
+                  <button
+                    onClick={() => copyAddressToClipboard(privyWallet.address)}
+                    className="p-0.5 rounded hover:bg-muted/50 shrink-0"
+                    title="Copy address"
+                  >
+                    <Copy className="w-3 h-3 text-muted-foreground hover:text-white" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <Button
+            onClick={() => login()}
+            variant="outline"
+            className="w-full justify-start text-left"
+            disabled={disableLogin}
+            style={{ borderColor: '#404040', backgroundColor: 'transparent' }}
+          >
+            <span className="flex-1">Login to Privy Wallet</span>
+          </Button>
+        )}
+
+        {/* Funding Modal */}
+        <FundingModal
+          isOpen={showFundingModal}
+          fundingState={fundingState}
+          error={fundingError}
+          fundingResult={fundingResult}
+          onClose={resetFunding}
         />
 
         {/* Wallet Connect - Full Width */}
