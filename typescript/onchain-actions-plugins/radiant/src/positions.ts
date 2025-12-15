@@ -24,6 +24,7 @@ export type UserPosition = {
   healthFactor: string;         // Health factor (scaled by 1e18, e.g., "1500000000000000000" = 1.5)
   totalCollateralUSD: string;   // Total collateral value in USD (scaled by 1e8)
   totalDebtUSD: string;         // Total debt value in USD (scaled by 1e8)
+  availableBorrowsUSD: string;  // Available borrow capacity in USD (scaled by 1e8)
   positions: {
     asset: string;              // Asset symbol (e.g., "USDC")
     supplied: string;           // Amount supplied (in smallest unit)
@@ -115,6 +116,7 @@ export async function getUserPosition(address: string): Promise<UserPosition> {
     healthFactor: accountData[5].toString(),
     totalCollateralUSD: accountData[0].toString(),
     totalDebtUSD: accountData[1].toString(),
+    availableBorrowsUSD: accountData[2].toString(),
     // Only include positions with non-zero balances
     positions: positions.filter((p): p is { asset: string; supplied: string; borrowed: string } => 
       p !== null && (p.supplied !== '0' || p.borrowed !== '0')

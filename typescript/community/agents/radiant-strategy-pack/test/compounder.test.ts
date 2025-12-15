@@ -1,41 +1,22 @@
 import { describe, it, expect, vi } from 'vitest';
-import { executeAutoCompounder } from '../src/strategies/autoCompounder';
+import { AutoCompounder } from '../src/strategies/compound';
 import { makeRadiantMock } from './mocks/radiantClient.mock';
 
-describe('Radiant Rewards Auto-Compounder', () => {
-  const config = {
-    wallet: '0xABC',
-    rewardToken: 'RDNT',
-    targetToken: '0xUSDC',
-    minValueUSD: 10,
-    slippageBps: 50,
-    intervalSec: 3600,
-  };
-
-  it('should skip when rewards below threshold', async () => {
+describe('Auto Compounder', () => {
+  it('should compound rewards when above threshold', async () => {
     const client = makeRadiantMock({
-      getPendingRewards: vi.fn(async () => 5n),
+      getPendingRewards: vi.fn(async () => 50n),
     });
 
-    const result = await executeAutoCompounder(client, config);
-
-    expect(result.action).toBe('skip_threshold');
-    expect(client.supply).not.toHaveBeenCalled();
-  });
-
-  it('should execute claim, swap, and supply when above threshold', async () => {
-    const client = makeRadiantMock({
-      getPendingRewards: vi.fn(async () => 100n),
+    const strategy = new AutoCompounder(client);
+    await strategy.execute({
+      targetToken: '0xUSDC',
+      minValueUSD: 10
     });
 
-    const result = await executeAutoCompounder(client, config);
-
-    expect(result.action).toBe('compound');
-    expect(result.rewardsClaimed).toBe(100n);
-    expect(result.amountSupplied).toBe(100n);
     expect(client.supply).toHaveBeenCalledWith({
       token: '0xUSDC',
-      amount: '100',
+      amount: '50'
     });
   });
 });

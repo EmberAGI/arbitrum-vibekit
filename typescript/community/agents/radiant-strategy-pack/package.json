@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "dev": "tsx src/cli.ts"
   },
   "keywords": [
     "radiant",
@@ -26,6 +27,7 @@
   "devDependencies": {
     "@types/node": "^24.10.1",
     "typescript": "^5.0.0",
-    "vitest": "^1.0.0"
+    "vitest": "^1.0.0",
+    "tsx": "^4.0.0"
   }
 }

@@ -1,21 +1,19 @@
 import { describe, it, expect, vi } from 'vitest';
-import { executeLoopingLender } from '../src/strategies/loopingLender';
+import { LoopingStrategy } from '../src/strategies/looping';
 import { makeRadiantMock } from './mocks/radiantClient.mock';
 
-describe('Radiant Looping Lender', () => {
-  it('should stop at maxLoops', async () => {
+describe('Radiant Looping Strategy', () => {
+  it('should execute loops correctly', async () => {
     const client = makeRadiantMock();
+    const strategy = new LoopingStrategy(client);
     
-    const result = await executeLoopingLender(client, {
-      wallet: '0xABC',
+    await strategy.execute({
       token: '0xUSDC',
       maxLoops: 3,
       minHealthFactor: 1.3,
       utilizationBps: 9000,
     });
 
-    expect(result.loopsExecuted).toBe(3);
-    expect(result.stoppedReason).toBe('Max loops reached');
     expect(client.borrow).toHaveBeenCalledTimes(3);
     expect(client.supply).toHaveBeenCalledTimes(3);
   });
@@ -29,39 +27,37 @@ describe('Radiant Looping Lender', () => {
       }),
     });
 
-    const result = await executeLoopingLender(client, {
-      wallet: '0xABC',
+    const strategy = new LoopingStrategy(client);
+    await strategy.execute({
       token: '0xUSDC',
       maxLoops: 10,
       minHealthFactor: 1.3,
       utilizationBps: 9000,
     });
 
-    expect(result.loopsExecuted).toBe(2);
-    expect(result.stoppedReason).toBe('HF below threshold');
-    expect(result.finalHealthFactor).toBe(1.2);
+    expect(client.borrow).toHaveBeenCalledTimes(2);
   });
 
   it('should call borrow and supply with correct amounts', async () => {
     const client = makeRadiantMock({
-      getBorrowCapacity: vi.fn(async () => 1000n),
+      getBorrowCapacity: vi.fn(async () => 2000n),
     });
 
-    await executeLoopingLender(client, {
-      wallet: '0xABC',
+    const strategy = new LoopingStrategy(client);
+    await strategy.execute({
       token: '0xUSDC',
       maxLoops: 1,
       minHealthFactor: 1.3,
-      utilizationBps: 9000,
+      utilizationBps: 8000, // 80%
     });
 
     expect(client.borrow).toHaveBeenCalledWith({
       token: '0xUSDC',
-      amount: '900',
+      amount: '1600', // 2000 * 80% = 1600
     });
     expect(client.supply).toHaveBeenCalledWith({
       token: '0xUSDC',
-      amount: '900',
+      amount: '1600',
     });
   });
 });

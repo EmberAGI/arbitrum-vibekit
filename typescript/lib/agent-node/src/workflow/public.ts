@@ -3,6 +3,7 @@ export { z } from 'zod';
 export type { Artifact, Message } from '@a2a-js/sdk';
 
 export { WorkflowRuntime } from './runtime.js';
+export { requestInput, type RequestInputOptions } from './requestInput.js';
 
 export {
   WorkflowStateSchema,

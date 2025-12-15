@@ -1,53 +1,185 @@
 # Radiant Strategy Pack for Vibekit Agents
 
-A collection of three automated DeFi strategies for Radiant lending protocol on Arbitrum, built as a community contribution to the Vibekit Agent Ecosystem.
+A collection of automated DeFi strategies for Radiant lending protocol on Arbitrum, built as a community contribution to the Vibekit Agent Ecosystem.
 
 ## Overview
 
-This strategy pack provides safe, automated, and composable DeFi strategies:
+This strategy pack provides safe, automated, and composable DeFi strategies that integrate with the [Radiant Lending Plugin](../../onchain-actions-plugins/radiant/):
 
-1. **Radiant Leveraged Looping Lender** - Automated leverage building through supply-borrow loops
-2. **Radiant Health Factor Shield** - Protection against liquidation with multi-tier response
-3. **Radiant Rewards Auto-Compounder** - Automatic reward claiming and compounding
+1. **Leveraged Looping** - Automated leverage building through supply-borrow loops
+2. **Health Factor Shield** - Protection against liquidation with multi-tier response  
+3. **Rewards Auto-Compounder** - Automatic reward claiming and compounding
 
 ## Architecture
 
-The pack uses a clean abstraction layer (`RadiantClient`) that separates strategy logic from the underlying Radiant plugin implementation.
+The pack uses a clean abstraction layer (`RadiantClient`) that wraps the Radiant plugin, providing a unified interface for all strategies.
 
 ```
 src/
   radiantClient.ts           # Core interface abstraction
   radiantFromPlugin.ts       # Adapter: plugin → client
+  cli.ts                     # Command-line interface
   strategies/
-    loopingLender.ts         # Strategy 1
-    healthFactorShield.ts    # Strategy 2
-    autoCompounder.ts        # Strategy 3
-test/
-  radiantLooping.test.ts
-  healthShield.test.ts
-  compounder.test.ts
-  mocks/
-    radiantClient.mock.ts
+    looping.ts               # Leveraged looping strategy
+    shield.ts                # Health factor protection
+    compound.ts              # Rewards auto-compounder
+```
+
+## Quick Start
+
+### Installation
+
+```bash
+cd radiant-strategy-pack
+npm install
+```
+
+### Setup Environment
+
+```bash
+cp .env.example .env
+# Edit .env and add your PRIVATE_KEY
+```
+
+### Run Strategies
+
+```bash
+# Check current position status
+npm run dev status
+
+# Execute leveraged looping (5 loops, USDC)
+npm run dev loop --token 0xaf88d065e77c8cC2239327C5EDb3A432268e5831 --loops 5
+
+# Execute health factor protection
+npm run dev shield --token 0xaf88d065e77c8cC2239327C5EDb3A432268e5831 --warn 1.35 --exit 1.20
+
+# Execute rewards compounding
+npm run dev compound --target 0xaf88d065e77c8cC2239327C5EDb3A432268e5831 --min 10
 ```
 
 ## Strategies
 
-### 1. Leveraged Looping Lender
+### 1. Leveraged Looping
 
 Automates the process of building leverage by repeatedly borrowing and re-supplying assets.
 
-**Config:**
-```typescript
-{
-  wallet: "0x...",
-  token: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",  // USDC on Arbitrum
-  maxLoops: 6,
-  minHealthFactor: 1.35,
-  utilizationBps: 9000  // 90%
-}
+**How it works:**
+1. Check health factor is above minimum threshold
+2. Calculate available borrow capacity  
+3. Borrow a percentage of available capacity
+4. Supply the borrowed amount back as collateral
+5. Repeat until maxLoops reached or health factor drops
+
+**CLI Usage:**
+```bash
+npm run dev loop --token 0xUSDC --loops 5 --hf 1.35 --util 9000
 ```
 
-**Usage:**
+**Parameters:**
+- `--token`: Token address to loop (e.g., USDC)
+- `--loops`: Maximum number of borrow-supply cycles (default: 5)
+- `--hf`: Minimum health factor threshold (default: 1.35)
+- `--util`: Utilization rate in basis points (default: 9000 = 90%)
+
+### 2. Health Factor Shield
+
+Monitors and protects lending positions from liquidation with tiered response levels.
+
+**Response Tiers:**
+1. HF >= warn: No action (position is healthy)
+2. HF < warn: Log warning only
+3. HF < soft: Repay 10% of debt
+4. HF < hard: Repay 20% of debt  
+5. HF < exit: Full exit (repay all debt)
+
+**CLI Usage:**
+```bash
+npm run dev shield --token 0xUSDC --warn 1.35 --soft 1.30 --hard 1.25 --exit 1.20
+```
+
+**Parameters:**
+- `--token`: Token address to repay
+- `--warn`: Warning threshold (default: 1.35)
+- `--soft`: Soft deleverage threshold (default: 1.30)
+- `--hard`: Hard deleverage threshold (default: 1.25)
+- `--exit`: Full exit threshold (default: 1.20)
+
+### 3. Rewards Auto-Compounder
+
+Automatically claims RDNT rewards, swaps them to target asset, and re-supplies to compound yields.
+
+**CLI Usage:**
+```bash
+npm run dev compound --target 0xUSDC --min 10
+```
+
+**Parameters:**
+- `--target`: Token to swap rewards into
+- `--min`: Minimum reward value in USD to trigger compound (default: 10)
+
+## Integration with Radiant Plugin
+
+This strategy pack is designed to work seamlessly with the [Radiant Lending Plugin](../../onchain-actions-plugins/radiant/). The plugin provides:
+
+- Real-time market data fetching
+- User position queries (collateral, debt, health factor)
+- Transaction builders for lending operations
+- Type-safe interfaces for all operations
+
+The `radiantFromPlugin.ts` adapter creates a `RadiantClient` that wraps the plugin's functionality, allowing strategies to focus on business logic rather than protocol details.
+
+## Development
+
+### Build
+
+```bash
+npm run build
+```
+
+### Test
+
+```bash
+npm test
+```
+
+### Add New Strategy
+
+1. Create new strategy class in `src/strategies/`
+2. Implement the strategy using `RadiantClient` interface
+3. Add CLI command in `src/cli.ts`
+4. Add tests in `test/`
+
+## Safety Features
+
+- **Health Factor Monitoring**: All strategies check health factor before operations
+- **Configurable Thresholds**: Customizable risk parameters for different user preferences
+- **Maximum Loop Limits**: Prevents infinite execution in looping strategies
+- **Minimum Value Thresholds**: Gas optimization for reward compounding
+- **Multi-tier Response**: Graduated response levels in health factor protection
+
+## Common Token Addresses (Arbitrum One)
+
+- **USDC**: `0xaf88d065e77c8cC2239327C5EDb3A432268e5831`
+- **USDT**: `0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9`
+- **WETH**: `0x82aF49447D8a07e3bd95BD0d56f35241523fBab1`
+- **ARB**: `0x912CE59144191C1204E64559FE8253a0e49E6548`
+
+## Contributing
+
+This is a community contribution to the Vibekit ecosystem. To contribute:
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Submit a pull request
+
+## License
+
+MIT License - see LICENSE file for details.
+
+## Disclaimer
+
+These strategies involve financial risk. Always test with small amounts first and understand the risks of leveraged positions and automated trading. The authors are not responsible for any financial losses.
 ```typescript
 import { executeLoopingLender } from './strategies/loopingLender';
 import { makeRadiantClient } from './radiantFromPlugin';

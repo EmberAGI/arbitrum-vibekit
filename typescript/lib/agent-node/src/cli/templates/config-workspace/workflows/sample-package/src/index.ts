@@ -4,6 +4,7 @@
  */
 import {
   z,
+  requestInput,
   type Artifact,
   type WorkflowContext,
   type WorkflowReturn,
@@ -114,14 +115,12 @@ const plugin: WorkflowPlugin = {
     yield { type: 'artifact', artifact: processingArtifact };
 
     // Pause for user confirmation
-    const userInput = (yield {
-      type: 'interrupted',
-      reason: 'input-required',
+    const userInput = yield* requestInput({
       message: 'Please confirm to proceed with final step',
       inputSchema: confirmationInputSchema,
-    }) as { confirmed?: boolean; notes?: string; timestamp?: string } | undefined;
-    const signatureResult = userInput ? signatureInputSchema.safeParse(userInput) : undefined;
-    const signature = signatureResult?.success ? signatureResult.data.signature : undefined;
+    });
+    const signatureResult = signatureInputSchema.safeParse(userInput);
+    const signature = signatureResult.success ? signatureResult.data.signature : undefined;
 
     // Continue after confirmation
     yield {
@@ -140,9 +139,9 @@ const plugin: WorkflowPlugin = {
           text: JSON.stringify({
             message,
             count,
-            confirmed: userInput?.confirmed ?? false,
-            userNotes: userInput?.notes,
-            userTimestamp: userInput?.timestamp,
+            confirmed: userInput.confirmed ?? false,
+            userNotes: userInput.notes,
+            userTimestamp: userInput.timestamp,
             signature,
             completedAt: new Date().toISOString(),
           }),
