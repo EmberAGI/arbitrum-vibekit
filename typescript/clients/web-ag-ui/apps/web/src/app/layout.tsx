@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 import { CopilotKit } from '@copilotkit/react-core';
-import { Providers } from '../components/Providers';
+import { ProvidersNoSSR } from '../components/ProvidersNoSSR';
 import { DEFAULT_AGENT_ID } from '../config/agents';
 import './globals.css';
 import '@copilotkit/react-ui/styles.css';
@@ -26,11 +26,11 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased bg-[#121212] text-white dark">
-        <Providers>
+        <ProvidersNoSSR>
           <CopilotKit runtimeUrl="/api/copilotkit" agent={DEFAULT_AGENT_ID} threadId={undefined}>
             <div className="flex h-screen overflow-hidden">{children}</div>
           </CopilotKit>
-        </Providers>
+        </ProvidersNoSSR>
       </body>
     </html>
   );
