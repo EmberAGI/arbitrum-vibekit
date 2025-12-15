@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, master]
   pull_request:
-    branches: [main, master, next]
+    branches: [main, master, next, refactor/frontend-ag-ui]
   workflow_dispatch:
 
 jobs:
