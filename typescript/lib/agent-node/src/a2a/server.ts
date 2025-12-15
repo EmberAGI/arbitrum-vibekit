@@ -1,4 +1,4 @@
-import type { Server } from 'http';
+import { createServer, type Server } from 'http';
 
 import type { AgentCard } from '@a2a-js/sdk';
 import {
@@ -285,7 +285,9 @@ async function startServer(
 ): Promise<Server> {
   const logger = Logger.getInstance('A2AServer');
   return await new Promise<Server>((resolve, reject) => {
-    const httpServer = app.listen(port, host, () => {
+    const httpServer = createServer(app);
+    httpServer.on('error', reject);
+    httpServer.listen(port, host, () => {
       logger.info('=================================');
       logger.info(`Server ready at ${Logger.colorValue(`http://${host}:${port}`)}`);
       logger.info(
@@ -297,7 +299,6 @@ async function startServer(
       logger.info('=================================');
       resolve(httpServer);
     });
-    httpServer.on('error', reject);
   });
 }
 

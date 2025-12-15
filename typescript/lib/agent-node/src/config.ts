@@ -20,7 +20,7 @@ import { Logger } from './utils/logger.js';
 export const ServiceConfigSchema = z.object({
   // Server runtime
   server: z.object({
-    port: z.number().int().positive().default(3000),
+    port: z.number().int().min(0).max(65535).default(3000),
     host: z.string().default('0.0.0.0'),
   }),
 
@@ -77,7 +77,7 @@ class ConfigManager {
     const rawConfig = {
       server: {
         port: this.parseNumber(process.env['PORT']),
-        host: process.env['HOST'],
+        host: process.env['AGENT_NODE_HOST'],
       },
       a2a: {
         path: process.env['A2A_PATH'],
