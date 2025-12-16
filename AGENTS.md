@@ -1,12 +1,9 @@
-Please also reference the following documents as needed. In this case, `@` stands for the project root directory.
+Please also reference the following rules as needed. The list below is provided in TOON format, and `@` stands for the project root directory.
 
-<Documents>
-  <Document>
-    <Path>@.codex/memories/msw-handlers.md</Path>
-    <Description>MSW handler rules for integration test fidelity</Description>
-    <FilePatterns>**/tests/mocks/**/*</FilePatterns>
-  </Document>
-</Documents>
+rules[1]:
+  - path: @.codex/memories/msw-handlers.md
+    description: MSW handler rules for integration test fidelity
+    applyTo[1]: **/tests/mocks/**/*
 
 # Additional Conventions Beyond the Built-in Functions
 
@@ -116,12 +113,20 @@ globs: ["**/*"]
 ### General Best Practices
 
 - Never use `--force` flags (e.g., `git push --force`) without explicit approval
+- Never run `git commit` or `git push` unless explicitly instructed to do so
 - Don't wrap code in try/catch blocks only to add context - propagate errors directly
 - Avoid trivial comments that merely restate the next line of code
 - Never redefine existing interfaces - always import and reuse
 - Never produce mocks instead of real implementations
 - **NEVER use `any` type** - use proper types, `unknown`, or type assertions with `as`
 - Never use `.passthrough()` with Zod schemas
+
+### Script Conventions
+
+- Every package must expose `lint`, `lint:fix`, `format`, `format:check`, `test`, `test:watch`, `test:ci`, and `build` scripts so workspace-level commands succeed.
+- `lint` runs ESLint in check mode only (no writes, no Prettier); `lint:fix` runs ESLint with `--fix`.
+- `format` runs Prettier with `--write`; `format:check` runs Prettier with `--check`.
+- Do not chain Prettier inside linting scripts—keep linting and formatting responsibilities separated for clarity and predictable CI behavior.
 
 ### Refactoring and Breaking Changes
 
