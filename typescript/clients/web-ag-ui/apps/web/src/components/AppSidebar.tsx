@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { useLogin, useLogout, usePrivy } from '@privy-io/react-auth';
 import { supportedEvmChains, getEvmChainOrDefault } from '@/config/evmChains';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
+import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
 
 export interface AgentActivity {
   id: string;
@@ -51,6 +52,13 @@ export function AppSidebar({
   const { logout } = useLogout();
   const { privyWallet, chainId, switchChain, isLoading: isWalletLoading, error: walletError } =
     usePrivyWalletClient();
+  const {
+    isDeployed: isSmartAccountDeployed,
+    isLoading: isSmartAccountLoading,
+    isUpgrading: isSmartAccountUpgrading,
+    upgradeToSmartAccount,
+    error: smartAccountError,
+  } = useUpgradeToSmartAccount();
 
   const selectedChain = getEvmChainOrDefault(chainId);
 
@@ -242,6 +250,35 @@ export function AppSidebar({
         <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#fd6731] hover:bg-[#e55a28] text-white font-medium transition-colors">
           Build my Agent
         </button>
+
+        {/* Smart Account Upgrade */}
+        {authenticated && privyWallet && !walletError && (
+          <>
+            {isSmartAccountLoading ? (
+              <div className="w-full px-3 py-2 rounded-lg bg-[#252525] text-xs text-gray-300">
+                Checking wallet status…
+              </div>
+            ) : smartAccountError ? (
+              <div className="w-full px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-200">
+                {smartAccountError.message}
+              </div>
+            ) : isSmartAccountDeployed === false ? (
+              <div className="w-full p-3 rounded-lg bg-[#252525] border border-[#2a2a2a]">
+                <div className="text-xs text-gray-300">
+                  Upgrade your wallet to a smart account to enable delegations.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => upgradeToSmartAccount()}
+                  disabled={isSmartAccountUpgrading || isWalletLoading}
+                  className="mt-2 w-full flex items-center justify-center px-3 py-2 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white text-sm font-medium transition-colors disabled:opacity-60 disabled:hover:bg-[#2a2a2a]"
+                >
+                  {isSmartAccountUpgrading ? 'Upgrading…' : 'Upgrade wallet'}
+                </button>
+              </div>
+            ) : null}
+          </>
+        )}
 
         {/* Wallet Connection */}
         {walletError ? (
