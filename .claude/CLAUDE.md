@@ -1,10 +1,3 @@
----
-root: true
-targets: ["*"]
-description: "Project overview and general development guidelines"
-globs: ["**/*"]
----
-
 ## Development Guidelines
 
 ### Package Management

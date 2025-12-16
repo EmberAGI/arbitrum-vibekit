@@ -12,7 +12,10 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { useState } from 'react';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useLogin, useLogout, usePrivy } from '@privy-io/react-auth';
+import { supportedEvmChains, getEvmChainOrDefault } from '@/config/evmChains';
+import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
+import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
 
 export interface AgentActivity {
   id: string;
@@ -42,6 +45,26 @@ export function AppSidebar({
   const [isBlockedExpanded, setIsBlockedExpanded] = useState(true);
   const [isActiveExpanded, setIsActiveExpanded] = useState(true);
   const [isCompletedExpanded, setIsCompletedExpanded] = useState(false);
+  const [isChainMenuOpen, setIsChainMenuOpen] = useState(false);
+
+  const { ready, authenticated } = usePrivy();
+  const { login } = useLogin();
+  const { logout } = useLogout();
+  const { privyWallet, chainId, switchChain, isLoading: isWalletLoading, error: walletError } =
+    usePrivyWalletClient();
+  const {
+    isDeployed: isSmartAccountDeployed,
+    isLoading: isSmartAccountLoading,
+    isUpgrading: isSmartAccountUpgrading,
+    upgradeToSmartAccount,
+    error: smartAccountError,
+  } = useUpgradeToSmartAccount();
+
+  const selectedChain = getEvmChainOrDefault(chainId);
+
+  const formatAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;
+
+  const canSelectChain = ready && authenticated && Boolean(privyWallet) && !isWalletLoading;
 
   return (
     <div className="flex flex-col h-full w-[260px] bg-[#1a1a1a] border-r border-[#2a2a2a]">
@@ -185,46 +208,106 @@ export function AppSidebar({
 
       {/* Footer */}
       <div className="p-4 border-t border-[#2a2a2a] space-y-3">
-        {/* Network Selector - Using RainbowKit's chain selector */}
-        <ConnectButton.Custom>
-          {({ chain, openChainModal }) => {
-            if (!chain) return null;
-            return (
-              <button
-                onClick={openChainModal}
-                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#252525] hover:bg-[#2a2a2a] transition-colors"
-              >
-                {chain.hasIcon && chain.iconUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={chain.iconUrl}
-                    alt={chain.name ?? 'Chain icon'}
-                    className="w-5 h-5 rounded-full"
-                  />
-                )}
-                <span className="text-sm">{chain.name}</span>
-                <ChevronDown className="w-4 h-4 text-gray-500 ml-auto" />
-              </button>
-            );
-          }}
-        </ConnectButton.Custom>
+        {/* Network Selector */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setIsChainMenuOpen((open) => !open)}
+            disabled={!canSelectChain}
+            className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg transition-colors ${
+              canSelectChain ? 'bg-[#252525] hover:bg-[#2a2a2a]' : 'bg-[#252525]/50 opacity-60'
+            }`}
+          >
+            <span className="text-sm">{selectedChain.name}</span>
+            <ChevronDown className="w-4 h-4 text-gray-500 ml-auto" />
+          </button>
+
+          {isChainMenuOpen && canSelectChain && (
+            <div className="absolute bottom-full mb-2 w-full rounded-lg border border-[#2a2a2a] bg-[#1f1f1f] overflow-hidden z-50">
+              {supportedEvmChains.map((chain) => {
+                const isSelected = chain.id === selectedChain.id;
+                return (
+                  <button
+                    key={chain.id}
+                    type="button"
+                    onClick={() => {
+                      setIsChainMenuOpen(false);
+                      void switchChain(chain.id);
+                    }}
+                    className={`w-full flex items-center px-3 py-2 text-sm text-left transition-colors ${
+                      isSelected ? 'bg-[#2a2a2a] text-white' : 'text-gray-300 hover:bg-[#252525]'
+                    }`}
+                  >
+                    {chain.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Build Agent Button */}
         <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#fd6731] hover:bg-[#e55a28] text-white font-medium transition-colors">
           Build my Agent
         </button>
 
+        {/* Smart Account Upgrade */}
+        {authenticated && privyWallet && !walletError && (
+          <>
+            {isSmartAccountLoading ? (
+              <div className="w-full px-3 py-2 rounded-lg bg-[#252525] text-xs text-gray-300">
+                Checking wallet status…
+              </div>
+            ) : smartAccountError ? (
+              <div className="w-full px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-200">
+                {smartAccountError.message}
+              </div>
+            ) : isSmartAccountDeployed === false ? (
+              <div className="w-full p-3 rounded-lg bg-[#252525] border border-[#2a2a2a]">
+                <div className="text-xs text-gray-300">
+                  Upgrade your wallet to a smart account to enable delegations.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => upgradeToSmartAccount()}
+                  disabled={isSmartAccountUpgrading || isWalletLoading}
+                  className="mt-2 w-full flex items-center justify-center px-3 py-2 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white text-sm font-medium transition-colors disabled:opacity-60 disabled:hover:bg-[#2a2a2a]"
+                >
+                  {isSmartAccountUpgrading ? 'Upgrading…' : 'Upgrade wallet'}
+                </button>
+              </div>
+            ) : null}
+          </>
+        )}
+
         {/* Wallet Connection */}
-        <div className="wallet-connect-wrapper">
-          <ConnectButton
-            showBalance={false}
-            chainStatus="none"
-            accountStatus={{
-              smallScreen: 'avatar',
-              largeScreen: 'full',
-            }}
-          />
-        </div>
+        {walletError ? (
+          <div className="w-full px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-200">
+            Wallet unavailable
+          </div>
+        ) : authenticated && privyWallet ? (
+          <div className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#252525]">
+            <div className="w-2 h-2 rounded-full bg-green-500" />
+            <span className="text-sm font-mono truncate">{formatAddress(privyWallet.address)}</span>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="ml-auto text-xs text-gray-300 hover:text-white"
+              disabled={!ready || isWalletLoading}
+            >
+              Logout
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => login()}
+            disabled={!ready || (ready && authenticated)}
+            className="w-full flex items-center justify-center px-4 py-2.5 rounded-lg bg-[#252525] hover:bg-[#2a2a2a] text-white font-medium transition-colors disabled:opacity-60 disabled:hover:bg-[#252525]"
+          >
+            {ready ? 'Login / Connect' : 'Loading...'}
+          </button>
+        )}
       </div>
     </div>
   );
