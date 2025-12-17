@@ -34,6 +34,14 @@ const ClmmRangeSchema = z.union([
   }),
 ]);
 
+const TokenIdentifierSchema = z.object({
+  chainId: z.string(),
+  address: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{40}$/u, "address must be an EVM address")
+    .transform((value) => value.toLowerCase() as `0x${string}`),
+});
+
 export const EmberSupplyRequestSchema = z.object({
   walletAddress: z
     .string()
@@ -56,6 +64,19 @@ export const EmberWithdrawRequestSchema = z.object({
 });
 
 export type EmberWithdrawRequest = z.infer<typeof EmberWithdrawRequestSchema>;
+
+export const EmberSwapRequestSchema = z.object({
+  walletAddress: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{40}$/u, "walletAddress must be an EVM address")
+    .transform((value) => value.toLowerCase() as `0x${string}`),
+  amount: z.string(),
+  amountType: z.enum(["exactIn", "exactOut"]),
+  fromTokenUid: TokenIdentifierSchema,
+  toTokenUid: TokenIdentifierSchema,
+});
+
+export type EmberSwapRequest = z.infer<typeof EmberSwapRequestSchema>;
 
 const EmberLiquidityResponseSchema = z.object({
   poolIdentifier: PoolIdentifierSchema.optional(),
@@ -124,6 +145,18 @@ export async function requestEmberWithdrawTransactions(params: {
   return { response, transactions: response.transactions };
 }
 
+export async function requestEmberSwapTransactions(params: {
+  baseUrl: string;
+  request: EmberSwapRequest;
+}): Promise<{ response: EmberLiquidityResponse; transactions: EmberEvmTransaction[] }> {
+  const response = await fetchEndpoint(params.baseUrl, "/swap", EmberLiquidityResponseSchema, {
+    method: "POST",
+    body: JSON.stringify(EmberSwapRequestSchema.parse(params.request)),
+  });
+
+  return { response, transactions: response.transactions };
+}
+
 const JsonFileSchema = z.object({
   jsonFile: z.string().min(1),
 });
@@ -137,4 +170,3 @@ export async function readJsonFile<T>(params: {
   const parsed: unknown = JSON.parse(raw);
   return params.schema.parse(parsed);
 }
-

@@ -5,21 +5,21 @@ import { z } from "zod";
 import {
   createSignedDelegationsForEmberTransactions,
   EmberEvmTransactionSchema,
+  normalizeEmberTransactionsForDelegations,
 } from "./delegations/emberDelegations.js";
 import {
-  EmberSupplyRequestSchema,
-  EmberWithdrawRequestSchema,
   readJsonFile,
   requestEmberSupplyTransactions,
+  requestEmberSwapTransactions,
   requestEmberWithdrawTransactions,
 } from "./ember/emberLiquidityClient.js";
+import { EmberClmmIntentSchema, type EmberClmmIntent } from "./intent/clmmIntent.js";
 
 const ArgsSchema = z.object({
+  intentFile: z.string().optional(),
   txFile: z.string().optional(),
   outTxFile: z.string().optional(),
   emberBaseUrl: z.string().url().optional(),
-  emberSupplyRequestFile: z.string().optional(),
-  emberWithdrawRequestFile: z.string().optional(),
   execute: z.boolean().optional(),
   rpcUrl: z.string().url().optional(),
   delegateePrivateKey: z
@@ -54,13 +54,10 @@ function parseArgs(argv: string[]) {
   }
 
   return ArgsSchema.parse({
+    intentFile: args["intent-file"] ?? process.env["DEMO_INTENT_FILE"],
     txFile: args["tx-file"] ?? process.env["DEMO_TX_FILE"],
     outTxFile: args["out-tx-file"] ?? process.env["DEMO_OUT_TX_FILE"],
     emberBaseUrl: args["ember-base-url"] ?? process.env["EMBER_BASE_URL"],
-    emberSupplyRequestFile:
-      args["ember-supply-request-file"] ?? process.env["EMBER_SUPPLY_REQUEST_FILE"],
-    emberWithdrawRequestFile:
-      args["ember-withdraw-request-file"] ?? process.env["EMBER_WITHDRAW_REQUEST_FILE"],
     execute: (args["execute"] ?? process.env["DEMO_EXECUTE"]) === "true",
     rpcUrl: args["rpc-url"] ?? process.env["DEMO_RPC_URL"],
     delegateePrivateKey:
@@ -90,18 +87,86 @@ function stringifyWithBigints(value: unknown): string {
   );
 }
 
+type TransactionGroup = {
+  label: string;
+  transactions: readonly z.infer<typeof EmberEvmTransactionSchema>[];
+};
+
+async function buildGroupsFromIntent(params: {
+  baseUrl: string;
+  intent: EmberClmmIntent;
+}): Promise<TransactionGroup[]> {
+  const groups: TransactionGroup[] = [];
+
+  for (let index = 0; index < params.intent.actions.length; index += 1) {
+    const action = params.intent.actions[index];
+    if (!action) {
+      continue;
+    }
+
+    if (action.type === "supply") {
+      const { transactions: txs } = await requestEmberSupplyTransactions({
+        baseUrl: params.baseUrl,
+        request: {
+          walletAddress: params.intent.walletAddress,
+          supplyChain: params.intent.chainId,
+          poolIdentifier: params.intent.poolIdentifier,
+          range: params.intent.range,
+          payableTokens: params.intent.payableTokens,
+        },
+      });
+      groups.push({
+        label: `intent:action[${index}]:supply`,
+        transactions: z.array(EmberEvmTransactionSchema).parse(txs),
+      });
+      continue;
+    }
+
+    if (action.type === "withdraw") {
+      const { transactions: txs } = await requestEmberWithdrawTransactions({
+        baseUrl: params.baseUrl,
+        request: {
+          walletAddress: params.intent.walletAddress,
+          poolTokenUid: params.intent.poolIdentifier,
+        },
+      });
+      groups.push({
+        label: `intent:action[${index}]:withdraw`,
+        transactions: z.array(EmberEvmTransactionSchema).parse(txs),
+      });
+      continue;
+    }
+
+    const { transactions: txs } = await requestEmberSwapTransactions({
+      baseUrl: params.baseUrl,
+      request: {
+        walletAddress: params.intent.walletAddress,
+        amount: action.amount,
+        amountType: action.amountType,
+        fromTokenUid: action.fromTokenUid,
+        toTokenUid: action.toTokenUid,
+      },
+    });
+    groups.push({
+      label: `intent:action[${index}]:swap`,
+      transactions: z.array(EmberEvmTransactionSchema).parse(txs),
+    });
+  }
+
+  return groups;
+}
+
 export async function main() {
   console.info("demo/liquidity: starting");
   console.info(
-    "demo/liquidity: see README.md for setup, env vars, and example request templates.",
+    "demo/liquidity: see README.md for setup, env vars, and the intent template.",
   );
 
   const {
+    intentFile,
     txFile,
     outTxFile,
     emberBaseUrl,
-    emberSupplyRequestFile,
-    emberWithdrawRequestFile,
     execute,
     rpcUrl,
     delegateePrivateKey,
@@ -117,17 +182,33 @@ export async function main() {
     );
   }
 
-  const transactions = await (async () => {
-    if (txFile) {
+  const groups = await (async (): Promise<TransactionGroup[]> => {
+    const collected: TransactionGroup[] = [];
+
+    if (intentFile) {
+      const intent = await readJsonFile({ filePath: intentFile, schema: EmberClmmIntentSchema });
+      collected.push(...(await buildGroupsFromIntent({ baseUrl, intent })));
+    }
+
+    const txFiles = (txFile ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    for (const file of txFiles) {
       try {
-        const raw = await readFile(txFile, "utf8");
+        const raw = await readFile(file, "utf8");
         const parsed: unknown = JSON.parse(raw);
         const txsRaw = TransactionListSchema.parse(parsed);
-        return Array.isArray(txsRaw) ? txsRaw : txsRaw.transactions;
+        const txs = Array.isArray(txsRaw) ? txsRaw : txsRaw.transactions;
+        collected.push({
+          label: `tx-file:${file}`,
+          transactions: z.array(EmberEvmTransactionSchema).parse(txs),
+        });
       } catch (error: unknown) {
         if (isErrnoException(error) && error.code === "ENOENT") {
           console.info(
-            `demo/liquidity: tx file not found at ${txFile}; falling back to Ember request files (if provided).`,
+            `demo/liquidity: tx file not found at ${file}; continuing with other inputs (if provided).`,
           );
         } else {
           throw error;
@@ -135,30 +216,21 @@ export async function main() {
       }
     }
 
-    if (emberSupplyRequestFile) {
-      const request = await readJsonFile({ filePath: emberSupplyRequestFile, schema: EmberSupplyRequestSchema });
-      const { transactions: txs } = await requestEmberSupplyTransactions({ baseUrl, request });
-      return txs;
+    if (collected.length === 0) {
+      console.info(
+        "demo/liquidity: provide --intent-file (recommended) and/or --tx-file for prebuilt tx plans.",
+      );
+      return [];
     }
 
-    if (emberWithdrawRequestFile) {
-      const request = await readJsonFile({
-        filePath: emberWithdrawRequestFile,
-        schema: EmberWithdrawRequestSchema,
-      });
-      const { transactions: txs } = await requestEmberWithdrawTransactions({ baseUrl, request });
-      return txs;
-    }
-
-    console.info(
-      "demo/liquidity: provide one of --tx-file, --ember-supply-request-file, or --ember-withdraw-request-file.",
-    );
-    return null;
+    return collected;
   })();
 
-  if (!transactions) {
+  if (groups.length === 0) {
     return;
   }
+
+  const transactions = groups.flatMap((group) => group.transactions);
 
   if (outTxFile) {
     await writeFile(outTxFile, JSON.stringify({ transactions }, null, 2), "utf8");
@@ -192,40 +264,61 @@ export async function main() {
     const { redeemDelegationsAndExecuteTransactions } = await import(
       "./execution/redeemAndExecute.js"
     );
-    console.info(
-      stringifyWithBigints({
-        message: "demo/liquidity: executing onchain",
-        chainId: result.chainId,
-        delegatee,
-        transactions: result.normalizedTransactions.map((tx) => ({
-          to: tx.to,
-          selector: tx.selector,
-          value: tx.value,
-          calldataBytes: Math.max(0, (tx.data.length - 2) / 2),
-        })),
-      }),
-    );
+    for (const group of groups) {
+      const actionTransactions = group.transactions;
+      const normalized = normalizeEmberTransactionsForDelegations({
+        transactions: actionTransactions,
+        options: {
+          enforceTargetAllowlist: allowlist.length > 0,
+          targetAllowlist: allowlist,
+          allowNonZeroValue: (process.env["DEMO_ALLOW_NONZERO_VALUE"] ?? "false") === "true",
+          allowEmptyCalldata: (process.env["DEMO_ALLOW_EMPTY_CALLDATA"] ?? "false") === "true",
+        },
+      });
 
-    const execution = await redeemDelegationsAndExecuteTransactions({
-      chainId: result.chainId,
-      rpcUrl,
-      delegateePrivateKey: delegateePrivateKey as `0x${string}`,
-      delegations: result.delegations,
-      selectorDiagnostics: result.selectorDiagnostics,
-      transactions: result.normalizedTransactions,
-    });
-    console.info(`demo/liquidity: redeem+execute broadcast txHash=${execution.txHash}`);
-    console.info(
-      stringifyWithBigints({
-        message: "demo/liquidity: redeem+execute receipt",
-        status: execution.receipt.status,
-        blockNumber: execution.receipt.blockNumber,
-        transactionIndex: execution.receipt.transactionIndex,
-        gasUsed: execution.receipt.gasUsed,
-        effectiveGasPrice: execution.receipt.effectiveGasPrice,
-        logs: execution.receipt.logs.length,
-      }),
-    );
+      if (normalized.chainId !== result.chainId) {
+        throw new Error(
+          `Execution group chainId mismatch (${group.label} chainId=${normalized.chainId}, expected ${result.chainId})`,
+        );
+      }
+
+      console.info(
+        stringifyWithBigints({
+          message: "demo/liquidity: executing onchain (intent-ordered batch)",
+          group: group.label,
+          chainId: result.chainId,
+          delegatee,
+          delegationDescriptions: result.delegationDescriptions,
+          transactions: normalized.normalizedTransactions.map((tx) => ({
+            to: tx.to,
+            selector: tx.selector,
+            value: tx.value,
+            calldataBytes: Math.max(0, (tx.data.length - 2) / 2),
+          })),
+        }),
+      );
+
+      const execution = await redeemDelegationsAndExecuteTransactions({
+        chainId: result.chainId,
+        rpcUrl,
+        delegateePrivateKey: delegateePrivateKey as `0x${string}`,
+        delegations: result.delegations,
+        transactions: normalized.normalizedTransactions,
+      });
+      console.info(`demo/liquidity: redeem+execute broadcast txHash=${execution.txHash}`);
+      console.info(
+        stringifyWithBigints({
+          message: "demo/liquidity: redeem+execute receipt",
+          group: group.label,
+          status: execution.receipt.status,
+          blockNumber: execution.receipt.blockNumber,
+          transactionIndex: execution.receipt.transactionIndex,
+          gasUsed: execution.receipt.gasUsed,
+          effectiveGasPrice: execution.receipt.effectiveGasPrice,
+          logs: execution.receipt.logs.length,
+        }),
+      );
+    }
   }
 
   console.info(
