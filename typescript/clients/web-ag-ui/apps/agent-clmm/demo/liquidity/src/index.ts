@@ -78,6 +78,18 @@ const TransactionListSchema = z.union([
   }),
 ]);
 
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+  return typeof error === "object" && error !== null && "code" in error;
+}
+
+function stringifyWithBigints(value: unknown): string {
+  return JSON.stringify(
+    value,
+    (_key, inner: unknown) => (typeof inner === "bigint" ? inner.toString() : inner),
+    2,
+  );
+}
+
 export async function main() {
   console.info("demo/liquidity: starting");
   console.info(
@@ -107,10 +119,20 @@ export async function main() {
 
   const transactions = await (async () => {
     if (txFile) {
-      const raw = await readFile(txFile, "utf8");
-      const parsed: unknown = JSON.parse(raw);
-      const txsRaw = TransactionListSchema.parse(parsed);
-      return Array.isArray(txsRaw) ? txsRaw : txsRaw.transactions;
+      try {
+        const raw = await readFile(txFile, "utf8");
+        const parsed: unknown = JSON.parse(raw);
+        const txsRaw = TransactionListSchema.parse(parsed);
+        return Array.isArray(txsRaw) ? txsRaw : txsRaw.transactions;
+      } catch (error: unknown) {
+        if (isErrnoException(error) && error.code === "ENOENT") {
+          console.info(
+            `demo/liquidity: tx file not found at ${txFile}; falling back to Ember request files (if provided).`,
+          );
+        } else {
+          throw error;
+        }
+      }
     }
 
     if (emberSupplyRequestFile) {
@@ -170,7 +192,21 @@ export async function main() {
     const { redeemDelegationsAndExecuteTransactions } = await import(
       "./execution/redeemAndExecute.js"
     );
-    const txHash = await redeemDelegationsAndExecuteTransactions({
+    console.info(
+      stringifyWithBigints({
+        message: "demo/liquidity: executing onchain",
+        chainId: result.chainId,
+        delegatee,
+        transactions: result.normalizedTransactions.map((tx) => ({
+          to: tx.to,
+          selector: tx.selector,
+          value: tx.value,
+          calldataBytes: Math.max(0, (tx.data.length - 2) / 2),
+        })),
+      }),
+    );
+
+    const execution = await redeemDelegationsAndExecuteTransactions({
       chainId: result.chainId,
       rpcUrl,
       delegateePrivateKey: delegateePrivateKey as `0x${string}`,
@@ -178,15 +214,22 @@ export async function main() {
       selectorDiagnostics: result.selectorDiagnostics,
       transactions: result.normalizedTransactions,
     });
-    console.info(`demo/liquidity: redeem+execute broadcast txHash=${txHash}`);
+    console.info(`demo/liquidity: redeem+execute broadcast txHash=${execution.txHash}`);
+    console.info(
+      stringifyWithBigints({
+        message: "demo/liquidity: redeem+execute receipt",
+        status: execution.receipt.status,
+        blockNumber: execution.receipt.blockNumber,
+        transactionIndex: execution.receipt.transactionIndex,
+        gasUsed: execution.receipt.gasUsed,
+        effectiveGasPrice: execution.receipt.effectiveGasPrice,
+        logs: execution.receipt.logs.length,
+      }),
+    );
   }
 
   console.info(
-    JSON.stringify(
-      result,
-      (_key, value: unknown) => (typeof value === "bigint" ? value.toString() : value),
-      2,
-    ),
+    stringifyWithBigints(result),
   );
 }
 

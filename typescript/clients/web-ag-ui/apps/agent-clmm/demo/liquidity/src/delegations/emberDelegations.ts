@@ -163,16 +163,6 @@ function normalizeAndValidateTransactions(
     };
   });
 
-  normalizedTransactions.sort((a, b) => {
-    if (a.to !== b.to) {
-      return a.to.localeCompare(b.to);
-    }
-    if (a.selector !== b.selector) {
-      return a.selector.localeCompare(b.selector);
-    }
-    return a.data.localeCompare(b.data);
-  });
-
   return { chainId, normalizedTransactions, selectorsByTarget, warnings };
 }
 

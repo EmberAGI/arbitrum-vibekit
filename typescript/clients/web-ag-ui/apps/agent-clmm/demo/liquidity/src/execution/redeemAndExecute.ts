@@ -5,7 +5,7 @@ import {
   type Delegation,
 } from "@metamask/delegation-toolkit";
 import { DelegationManager } from "@metamask/delegation-toolkit/contracts";
-import { createWalletClient, http, type Hex } from "viem";
+import { createPublicClient, createWalletClient, http, type Hex, type TransactionReceipt } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { arbitrum, mainnet } from "viem/chains";
 
@@ -15,6 +15,11 @@ type RedemptionPlan = {
   delegations: Delegation[];
   mode: ExecutionMode;
   transactions: NormalizedTransaction[];
+};
+
+export type RedeemAndExecuteResult = {
+  txHash: Hex;
+  receipt: TransactionReceipt;
 };
 
 function resolveChain(chainId: number) {
@@ -27,7 +32,7 @@ function resolveChain(chainId: number) {
   throw new Error(`Unsupported chainId ${chainId} for demo execution (add a viem chain mapping)`);
 }
 
-function groupTransactionsForRedemption(params: {
+function planRedemptionsInTransactionOrder(params: {
   delegations: readonly Delegation[];
   selectorDiagnostics: readonly SelectorDiagnostics[];
   transactions: readonly NormalizedTransaction[];
@@ -37,13 +42,11 @@ function groupTransactionsForRedemption(params: {
   }
 
   if (params.delegations.length === 1) {
-    return [
-      {
-        delegations: [params.delegations[0]],
-        mode: ExecutionMode.BatchDefault,
-        transactions: [...params.transactions],
-      },
-    ];
+    return params.transactions.map((tx) => ({
+      delegations: [params.delegations[0]],
+      mode: ExecutionMode.SingleDefault,
+      transactions: [tx],
+    }));
   }
 
   const targetsByIndex = params.selectorDiagnostics.map((entry) => entry.target.toLowerCase());
@@ -63,25 +66,16 @@ function groupTransactionsForRedemption(params: {
     delegationByTarget.set(target, delegation);
   }
 
-  const txsByTarget = new Map<string, NormalizedTransaction[]>();
-  for (const tx of params.transactions) {
+  return params.transactions.map((tx) => {
     const target = tx.to.toLowerCase();
-    const list = txsByTarget.get(target) ?? [];
-    list.push(tx);
-    txsByTarget.set(target, list);
-  }
-
-  const targets = [...txsByTarget.keys()].sort((a, b) => a.localeCompare(b));
-  return targets.map((target) => {
     const delegation = delegationByTarget.get(target);
     if (!delegation) {
       throw new Error(`No delegation available for target ${target}`);
     }
-    const transactions = txsByTarget.get(target) ?? [];
     return {
       delegations: [delegation],
-      mode: ExecutionMode.BatchDefault,
-      transactions,
+      mode: ExecutionMode.SingleDefault,
+      transactions: [tx],
     };
   });
 }
@@ -93,7 +87,7 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
   delegations: readonly Delegation[];
   selectorDiagnostics: readonly SelectorDiagnostics[];
   transactions: readonly NormalizedTransaction[];
-}): Promise<Hex> {
+}): Promise<RedeemAndExecuteResult> {
   const chain = resolveChain(params.chainId);
   const environment = getDeleGatorEnvironment(params.chainId);
 
@@ -103,8 +97,12 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
     chain,
     transport: http(params.rpcUrl),
   });
+  const publicClient = createPublicClient({
+    chain,
+    transport: http(params.rpcUrl),
+  });
 
-  const plan = groupTransactionsForRedemption({
+  const plan = planRedemptionsInTransactionOrder({
     delegations: params.delegations,
     selectorDiagnostics: params.selectorDiagnostics,
     transactions: params.transactions,
@@ -132,11 +130,15 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
     throw new Error("No redemption batches produced for execution");
   }
 
-  return DelegationManager.execute.redeemDelegations({
+  const txHash = await DelegationManager.execute.redeemDelegations({
     client: walletClient,
     delegationManagerAddress: environment.DelegationManager,
     delegations: delegationsBatch,
     modes,
     executions: executionsBatch,
   });
+
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+  return { txHash, receipt };
 }
