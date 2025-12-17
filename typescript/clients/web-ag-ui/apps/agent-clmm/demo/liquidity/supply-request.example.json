@@ -6,7 +6,9 @@
     "address": "0xd845f7d4f4deb9ff5bcf09d140ef13718f6f6c71"
   },
   "range": {
-    "type": "full"
+    "type": "limited",
+    "minPrice": "5.921251001359154730",
+    "maxPrice": "148.031275033978868231"
   },
   "payableTokens": [
     {
