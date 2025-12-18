@@ -30,7 +30,7 @@
     {
       "type": "swap",
       "amountType": "exactIn",
-      "amount": "10000",
+      "amount": "5000",
       "fromTokenUid": {
         "chainId": "42161",
         "address": "0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f"
@@ -40,7 +40,7 @@
     {
       "type": "swap",
       "amountType": "exactIn",
-      "amount": "1000000000000000",
+      "amount": "1500000000000000",
       "fromTokenUid": {
         "chainId": "42161",
         "address": "0x82af49447d8a07e3bd95bd0d56f35241523fbab1"
