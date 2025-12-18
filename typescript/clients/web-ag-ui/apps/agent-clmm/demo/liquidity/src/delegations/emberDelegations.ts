@@ -5,7 +5,7 @@ import {
   type DeleGatorEnvironment,
   type Delegation,
 } from "@metamask/delegation-toolkit";
-import { decodeFunctionData, type Abi } from "viem";
+import { decodeFunctionData, formatUnits, type Abi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { z } from "zod";
 
@@ -285,15 +285,15 @@ function chainLabel(chainId: number): string {
   return `chainId=${chainId}`;
 }
 
-type AddressLabel = { shortName: string; longName: string };
+type AddressLabel = { shortName: string; longName: string; decimals?: number };
 
 const KNOWN_ADDRESSES: Readonly<
   Record<number, Readonly<Record<`0x${string}`, AddressLabel>>>
 > = {
   42161: {
     // Tokens used by the demo intent template.
-    "0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f": { shortName: "WBTC", longName: "Wrapped Bitcoin" },
-    "0x82af49447d8a07e3bd95bd0d56f35241523fbab1": { shortName: "WETH", longName: "Wrapped Ether" },
+    "0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f": { shortName: "WBTC", longName: "Wrapped Bitcoin", decimals: 8 },
+    "0x82af49447d8a07e3bd95bd0d56f35241523fbab1": { shortName: "WETH", longName: "Wrapped Ether", decimals: 18 },
     // Router observed in Ember swap tx plans.
     "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45": { shortName: "Swap Router", longName: "Swap Router" },
     // Liquidity contract observed in Ember liquidity supply tx plans (protocol-specific).
@@ -311,6 +311,32 @@ function formatEntity(params: { chainId: number; address: `0x${string}`; showHex
     return params.showHex ? shortHex(params.address) : "a specific contract";
   }
   return params.showHex ? `${label.shortName} (${shortHex(params.address)})` : label.shortName;
+}
+
+function formatCapRateUnit(periodDurationSeconds: number): string {
+  if (periodDurationSeconds === 3600) {
+    return "hour";
+  }
+  if (periodDurationSeconds === 86400) {
+    return "day";
+  }
+  if (periodDurationSeconds === 60) {
+    return "minute";
+  }
+  return `${periodDurationSeconds}s`;
+}
+
+function formatTokenAmountForCaps(params: {
+  chainId: number;
+  tokenAddress: `0x${string}`;
+  amount: bigint;
+}): string {
+  const label = labelForAddress({ chainId: params.chainId, address: params.tokenAddress });
+  const decimals = label?.decimals;
+  if (typeof decimals !== "number") {
+    return params.amount.toString();
+  }
+  return formatUnits(params.amount, decimals);
 }
 
 function tryParseAbiWordAddress(word: `0x${string}`): `0x${string}` | null {
@@ -414,7 +440,13 @@ function describeDelegationIntent(params: {
         ? ` Spending caps: ${caps
             .map((cap) => {
               const tokenName = formatEntity({ chainId: params.chainId, address: cap.tokenAddress, showHex: params.showHex });
-              return `${cap.periodAmount.toString()} ${tokenName}/hour`;
+              const amountText = formatTokenAmountForCaps({
+                chainId: params.chainId,
+                tokenAddress: cap.tokenAddress,
+                amount: cap.periodAmount,
+              });
+              const unit = formatCapRateUnit(cap.periodDuration);
+              return `${amountText} ${tokenName}/${unit}`;
             })
             .join(", ")}.`
         : "";
@@ -532,7 +564,13 @@ function describeDelegationIntent(params: {
       ? ` Spending caps: ${caps
           .map((cap) => {
             const tokenName = formatEntity({ chainId: params.chainId, address: cap.tokenAddress, showHex: params.showHex });
-            return `${cap.periodAmount.toString()} ${tokenName}/hour`;
+            const amountText = formatTokenAmountForCaps({
+              chainId: params.chainId,
+              tokenAddress: cap.tokenAddress,
+              amount: cap.periodAmount,
+            });
+            const unit = formatCapRateUnit(cap.periodDuration);
+            return `${amountText} ${tokenName}/${unit}`;
           })
           .join(", ")}.`
       : "";
