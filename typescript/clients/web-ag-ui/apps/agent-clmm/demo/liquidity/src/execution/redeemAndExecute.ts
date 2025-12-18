@@ -5,16 +5,189 @@ import {
   type Delegation,
 } from "@metamask/delegation-toolkit";
 import { DelegationManager } from "@metamask/delegation-toolkit/contracts";
-import { createPublicClient, createWalletClient, http, type Hex, type TransactionReceipt } from "viem";
+import {
+  BaseError,
+  decodeAbiParameters,
+  createClient,
+  createPublicClient,
+  createWalletClient,
+  http,
+  publicActions,
+  type Hex,
+  type TransactionReceipt,
+} from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { arbitrum, mainnet } from "viem/chains";
 
-import type { NormalizedTransaction } from "../delegations/emberDelegations.js";
+import type { DelegationIntent, NormalizedTransaction } from "../delegations/emberDelegations.js";
 
 export type RedeemAndExecuteResult = {
   txHash: Hex;
   receipt: TransactionReceipt;
 };
+
+type Execution = {
+  target: `0x${string}`;
+  value: bigint;
+  callData: Hex;
+};
+
+function assertIsExecution(value: unknown): asserts value is Execution {
+  if (typeof value !== "object" || value === null) {
+    throw new Error("Internal error: createExecution returned a non-object");
+  }
+  if (!("target" in value) || !("value" in value) || !("callData" in value)) {
+    throw new Error("Internal error: createExecution returned an unexpected shape");
+  }
+
+  const target = (value as { target?: unknown }).target;
+  const callData = (value as { callData?: unknown }).callData;
+  const innerValue = (value as { value?: unknown }).value;
+
+  if (typeof target !== "string" || !/^0x[0-9a-fA-F]{40}$/u.test(target)) {
+    throw new Error("Internal error: createExecution returned invalid target");
+  }
+  if (typeof callData !== "string" || !/^0x[0-9a-fA-F]*$/u.test(callData)) {
+    throw new Error("Internal error: createExecution returned invalid callData");
+  }
+  if (typeof innerValue !== "bigint") {
+    throw new Error("Internal error: createExecution returned invalid value");
+  }
+}
+
+function createExecutionSafe(params: { target: `0x${string}`; value: bigint; callData: Hex }): Execution {
+  const execution: unknown = createExecution(params);
+  assertIsExecution(execution);
+  return execution;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function asHexString(value: unknown): Hex | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!/^0x[0-9a-fA-F]*$/u.test(trimmed)) {
+    return null;
+  }
+  if (trimmed.length < 10) {
+    return null;
+  }
+  return trimmed.toLowerCase() as Hex;
+}
+
+function asHex(value: string): Hex | null {
+  const trimmed = value.trim();
+  if (!/^0x[0-9a-fA-F]*$/u.test(trimmed)) {
+    return null;
+  }
+  return trimmed.toLowerCase() as Hex;
+}
+
+function findRevertData(value: unknown): Hex | null {
+  const direct = asHexString(value);
+  if (direct) {
+    return direct;
+  }
+  if (!isRecord(value)) {
+    return null;
+  }
+  const fromData = asHexString(value["data"]);
+  if (fromData) {
+    return fromData;
+  }
+  const fromResult = asHexString(value["result"]);
+  if (fromResult) {
+    return fromResult;
+  }
+  const fromCause = findRevertData(value["cause"]);
+  if (fromCause) {
+    return fromCause;
+  }
+  const fromError = findRevertData(value["error"]);
+  if (fromError) {
+    return fromError;
+  }
+  return null;
+}
+
+function decodeRevertData(data: Hex): string | null {
+  const selector = data.slice(0, 10).toLowerCase();
+  const payload = asHex(`0x${data.slice(10)}`);
+  if (!payload) {
+    return `revert data selector=${selector} (invalid payload)`;
+  }
+
+  // Error(string)
+  if (selector === "0x08c379a0") {
+    try {
+      const [message] = decodeAbiParameters([{ type: "string" }], payload);
+      return `revert: ${String(message)}`;
+    } catch {
+      return "revert: Error(string) (failed to decode)";
+    }
+  }
+
+  // Panic(uint256)
+  if (selector === "0x4e487b71") {
+    try {
+      const [code] = decodeAbiParameters([{ type: "uint256" }], payload);
+      if (typeof code !== "bigint") {
+        return "panic: Panic(uint256) (unexpected decoded type)";
+      }
+      return `panic: 0x${code.toString(16)}`;
+    } catch {
+      return "panic: Panic(uint256) (failed to decode)";
+    }
+  }
+
+  return `revert data selector=${selector}`;
+}
+
+function formatViemError(error: unknown): string {
+  if (error instanceof BaseError) {
+    const parts = [`${error.name}: ${error.shortMessage}`];
+    if (error.details) {
+      parts.push(error.details);
+    }
+    if (Array.isArray(error.metaMessages) && error.metaMessages.length > 0) {
+      parts.push(...error.metaMessages);
+    }
+    const revertData = findRevertData(error);
+    if (revertData) {
+      const decoded = decodeRevertData(revertData);
+      if (decoded) {
+        parts.push(decoded);
+      }
+    }
+    if (error.cause instanceof BaseError) {
+      parts.push(`cause: ${error.cause.shortMessage}`);
+      if (error.cause.details) {
+        parts.push(error.cause.details);
+      }
+      if (Array.isArray(error.cause.metaMessages) && error.cause.metaMessages.length > 0) {
+        parts.push(...error.cause.metaMessages);
+      }
+      const causeRevertData = findRevertData(error.cause);
+      if (causeRevertData) {
+        const decoded = decodeRevertData(causeRevertData);
+        if (decoded) {
+          parts.push(decoded);
+        }
+      }
+    } else if (error.cause instanceof Error) {
+      parts.push(`cause: ${error.cause.message}`);
+    }
+    return parts.join("\n");
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
 
 function resolveChain(chainId: number) {
   if (chainId === arbitrum.id) {
@@ -26,11 +199,103 @@ function resolveChain(chainId: number) {
   throw new Error(`Unsupported chainId ${chainId} for demo execution (add a viem chain mapping)`);
 }
 
+function parseOptionalGasLimit(value: string | undefined): bigint | null {
+  const raw = (value ?? "").trim();
+  if (raw === "") {
+    return null;
+  }
+  if (!/^\d+$/u.test(raw)) {
+    throw new Error("DEMO_GAS_LIMIT must be a positive integer");
+  }
+  const parsed = BigInt(raw);
+  if (parsed <= 0n) {
+    throw new Error("DEMO_GAS_LIMIT must be a positive integer");
+  }
+  return parsed;
+}
+
+function getWordAt(params: { calldata: `0x${string}`; startIndex: number }): `0x${string}` | null {
+  const start = 2 + params.startIndex * 2;
+  const end = start + 64;
+  if (start < 2 || end > params.calldata.length) {
+    return null;
+  }
+  return `0x${params.calldata.slice(start, end)}`;
+}
+
+function txMatchesDelegationIntent(tx: NormalizedTransaction, intent: DelegationIntent): boolean {
+  if (!intent.targets.includes(tx.to)) {
+    return false;
+  }
+  if (!intent.selectors.includes(tx.selector)) {
+    return false;
+  }
+
+  for (const pin of intent.allowedCalldata) {
+    const word = getWordAt({ calldata: tx.data, startIndex: pin.startIndex });
+    if (!word) {
+      return false;
+    }
+    if (word.toLowerCase() !== pin.value.toLowerCase()) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function maybeLogRedeemPlan(params: {
+  permissionContexts: readonly (readonly Delegation[])[];
+  modes: readonly Hex[];
+  executions: readonly (readonly Execution[])[];
+}): void {
+  if ((process.env["DEMO_DEBUG_REDEEM"] ?? "false") !== "true") {
+    return;
+  }
+
+  const summary = params.permissionContexts.map((chain, index) => {
+    const delegation = chain[0];
+    return {
+      index,
+      chainLength: chain.length,
+      delegation: delegation
+        ? {
+            delegate: delegation.delegate,
+            delegator: delegation.delegator,
+            authority: delegation.authority,
+          }
+        : null,
+      mode: params.modes[index],
+      executions: (params.executions[index] ?? []).map((execution) => ({
+        target: execution.target,
+        value: execution.value.toString(),
+        calldataBytes: Math.max(0, (execution.callData.length - 2) / 2),
+        selector: execution.callData.length >= 10 ? execution.callData.slice(0, 10) : execution.callData,
+      })),
+    };
+  });
+
+  console.info(
+    JSON.stringify(
+      {
+        message: "demo/liquidity: redeem plan debug",
+        contexts: params.permissionContexts.length,
+        modes: params.modes.length,
+        executions: params.executions.length,
+        summary,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 export async function redeemDelegationsAndExecuteTransactions(params: {
   chainId: number;
   rpcUrl: string;
   delegateePrivateKey: `0x${string}`;
   delegations: readonly Delegation[];
+  delegationIntents: readonly DelegationIntent[];
   transactions: readonly NormalizedTransaction[];
 }): Promise<RedeemAndExecuteResult> {
   const chain = resolveChain(params.chainId);
@@ -42,6 +307,11 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
     chain,
     transport: http(params.rpcUrl),
   });
+  const simulationClient = createClient({
+    account,
+    chain,
+    transport: http(params.rpcUrl),
+  }).extend(publicActions);
   const publicClient = createPublicClient({
     chain,
     transport: http(params.rpcUrl),
@@ -54,25 +324,99 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
     throw new Error("No transactions provided for execution");
   }
 
-  // Execute as a single atomic batch to preserve tx plan order and to support
-  // "expand then execute" multicall handling.
-  const executions = params.transactions.map((tx) =>
-    createExecution({
-      target: tx.to,
-      value: tx.value,
-      callData: tx.data,
-    }),
-  );
+  if (params.delegations.length !== params.delegationIntents.length) {
+    throw new Error(
+      `Delegation/intents length mismatch (delegations=${params.delegations.length}, intents=${params.delegationIntents.length})`,
+    );
+  }
 
-  const txHash = await DelegationManager.execute.redeemDelegations({
-    client: walletClient,
-    delegationManagerAddress: environment.DelegationManager,
-    delegations: [[...params.delegations]],
-    modes: [ExecutionMode.BatchDefault],
-    executions: [executions],
+  const executionsByDelegationIndex = new Map<number, Execution[]>();
+  const firstTxIndexByDelegationIndex = new Map<number, number>();
+  const delegationIndexSequence: number[] = [];
+
+  // Partition executions by delegation intent so we can pass one permission context per delegation.
+  // This avoids incorrectly treating multiple root delegations as a single "chain" (which can trigger
+  // InvalidAuthority), and also ensures modes/executions array lengths match.
+  for (const [txIndex, tx] of params.transactions.entries()) {
+    const matchingIndex = params.delegationIntents.findIndex((intent) => txMatchesDelegationIntent(tx, intent));
+    if (matchingIndex === -1) {
+      throw new Error(
+        `No delegation intent matched tx[${txIndex}] (to=${tx.to}, selector=${tx.selector}). Cannot safely execute.`,
+      );
+    }
+
+    if (!firstTxIndexByDelegationIndex.has(matchingIndex)) {
+      firstTxIndexByDelegationIndex.set(matchingIndex, txIndex);
+      delegationIndexSequence.push(matchingIndex);
+    } else {
+      // If the same delegation is needed again after another delegation has been used, we'd have to
+      // redeem the same delegation multiple times or reorder txs; fail closed.
+      const last = delegationIndexSequence.at(-1);
+      if (last !== matchingIndex) {
+        throw new Error(
+          `Execution plan requires interleaving delegation[${matchingIndex}] across other delegations; the demo executor cannot safely redeem the same delegation multiple times in one tx.`,
+        );
+      }
+    }
+
+    const list = executionsByDelegationIndex.get(matchingIndex) ?? [];
+    list.push(
+      createExecutionSafe({
+        target: tx.to,
+        value: tx.value,
+        callData: tx.data,
+      }),
+    );
+    executionsByDelegationIndex.set(matchingIndex, list);
+  }
+
+  const orderedDelegationIndices = [...executionsByDelegationIndex.keys()].sort((a, b) => {
+    const aIndex = firstTxIndexByDelegationIndex.get(a);
+    const bIndex = firstTxIndexByDelegationIndex.get(b);
+    if (aIndex === undefined || bIndex === undefined) {
+      throw new Error("Internal error: missing firstTxIndexByDelegationIndex entry");
+    }
+    return aIndex - bIndex;
   });
 
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+  const permissionContexts = orderedDelegationIndices.map((index) => [params.delegations[index]]);
+  const executions = orderedDelegationIndices.map((index) => executionsByDelegationIndex.get(index) ?? []);
+  const modes = executions.map((group) =>
+    group.length === 1 ? ExecutionMode.SingleDefault : ExecutionMode.BatchDefault,
+  );
 
-  return { txHash, receipt };
+  maybeLogRedeemPlan({ permissionContexts, modes, executions });
+
+  const manualGasLimit = parseOptionalGasLimit(process.env["DEMO_GAS_LIMIT"]);
+
+  try {
+    const simulation = await DelegationManager.simulate.redeemDelegations({
+      client: simulationClient,
+      delegationManagerAddress: environment.DelegationManager,
+      delegations: permissionContexts,
+      modes,
+      executions,
+    });
+
+    const estimatedGas =
+      typeof simulation.request.gas === "bigint" ? simulation.request.gas : undefined;
+    const gas = manualGasLimit ?? (estimatedGas ? (estimatedGas * 12n) / 10n : undefined);
+
+    const txHash = await walletClient.sendTransaction({
+      to: environment.DelegationManager,
+      data: DelegationManager.encode.redeemDelegations({
+        delegations: permissionContexts,
+        modes,
+        executions,
+      }),
+      value: 0n,
+      ...(gas ? { gas } : {}),
+    });
+
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    return { txHash, receipt };
+  } catch (error: unknown) {
+    const message = `redeemDelegations simulation reverted (groupCount=${executions.length}, totalCalls=${executions.reduce((sum, group) => sum + group.length, 0)}):\n${formatViemError(error)}`;
+    throw new Error(message, { cause: error });
+  }
 }

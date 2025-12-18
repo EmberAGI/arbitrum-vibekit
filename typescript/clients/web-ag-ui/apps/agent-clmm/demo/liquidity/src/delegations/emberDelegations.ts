@@ -389,6 +389,32 @@ const UNISWAP_V3_EXACT_INPUT_SINGLE_ABI = [
   },
 ] as const satisfies Abi;
 
+const ERC20_TRANSFER_SELECTORS: ReadonlySet<`0x${string}`> = new Set([
+  "0xa9059cbb", // transfer(address,uint256)
+  "0x23b872dd", // transferFrom(address,address,uint256)
+]);
+
+function getErc20PeriodTransferCapsForIntent(params: {
+  intent: DelegationIntent;
+  caps: readonly Erc20PeriodTransferCap[];
+}): Erc20PeriodTransferCap[] {
+  if (params.caps.length === 0) {
+    return [];
+  }
+  if (params.intent.targets.length !== 1 || params.intent.selectors.length !== 1) {
+    return [];
+  }
+  const target = params.intent.targets[0]?.toLowerCase() as `0x${string}` | undefined;
+  const selector = params.intent.selectors[0];
+  if (!target || !selector) {
+    return [];
+  }
+  if (!ERC20_TRANSFER_SELECTORS.has(selector)) {
+    return [];
+  }
+  return params.caps.filter((cap) => cap.tokenAddress.toLowerCase() === target);
+}
+
 function describeDelegationIntent(params: {
   chainId: number;
   delegatorAddress: `0x${string}`;
@@ -996,21 +1022,31 @@ export async function createSignedDelegationsForEmberTransactions(params: {
   }
 
   const showHex = (process.env["DEMO_SHOW_HEX_DETAILS"] ?? "false") === "true";
-  const delegationDescriptions = delegationIntents.map((intent) =>
-    describeDelegationIntent({
+  const delegationDescriptions = delegationIntents.map((intent) => {
+    const capsForIntent = getErc20PeriodTransferCapsForIntent({
+      intent,
+      caps: options.erc20PeriodTransferCaps,
+    });
+
+    return describeDelegationIntent({
       chainId,
       delegatorAddress,
       delegateeAddress: params.delegatee,
       intent,
       showHex,
-      erc20PeriodTransferCaps: options.erc20PeriodTransferCaps,
-    }),
-  );
+      erc20PeriodTransferCaps: capsForIntent,
+    });
+  });
 
+  let appliedAnyErc20PeriodTransfer = false;
   for (const intent of delegationIntents) {
+    const capsForIntent = getErc20PeriodTransferCapsForIntent({
+      intent,
+      caps: options.erc20PeriodTransferCaps,
+    });
     const caveats =
-      options.erc20PeriodTransferCaps.length > 0
-        ? options.erc20PeriodTransferCaps.map((cap) => ({
+      capsForIntent.length > 0
+        ? capsForIntent.map((cap) => ({
             type: "erc20PeriodTransfer" as const,
             tokenAddress: cap.tokenAddress,
             periodAmount: cap.periodAmount,
@@ -1018,6 +1054,9 @@ export async function createSignedDelegationsForEmberTransactions(params: {
             startDate: cap.startDate,
           }))
         : undefined;
+    if (caveats) {
+      appliedAnyErc20PeriodTransfer = true;
+    }
 
     const delegation = createDelegation({
       scope: {
@@ -1043,6 +1082,12 @@ export async function createSignedDelegationsForEmberTransactions(params: {
     });
 
     delegations.push({ ...delegation, signature });
+  }
+
+  if (options.erc20PeriodTransferCaps.length > 0 && !appliedAnyErc20PeriodTransfer) {
+    mutableWarnings.push(
+      "INFO: spend caps configured, but no delegation directly calls ERC-20 transfer/transferFrom; skipping ERC20PeriodTransfer caveats for this plan.",
+    );
   }
 
   return {

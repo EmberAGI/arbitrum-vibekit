@@ -10,30 +10,18 @@ import {
   requestEmberWithdrawTransactions,
   requestEmberWalletPositions,
 } from "../ember/emberLiquidityClient.js";
+import type { EmberClmmIntent } from "../intent/clmmIntent.js";
 
-type ChainIdentifier = {
-  chainId: string;
-  address: `0x${string}`;
-};
-
-type EmberClmmIntent = {
-  chainId: string;
-  walletAddress: `0x${string}`;
-  poolIdentifier: ChainIdentifier;
-  range: { type: "full" } | { type: "limited"; minPrice: string; maxPrice: string };
-  payableTokens: Array<{ tokenUid: ChainIdentifier; amount: string }>;
-  actions: Array<
-    | { type: "supply" }
-    | { type: "withdraw" }
-    | {
-        type: "swap";
-        amount: string;
-        amountType: "exactIn" | "exactOut";
-        fromTokenUid: ChainIdentifier;
-        toTokenUid: ChainIdentifier;
-      }
-  >;
-};
+function tryExtractPoolAddressFromProviderId(providerId: string | null): `0x${string}` | null {
+  if (!providerId) {
+    return null;
+  }
+  const match = providerId.match(/_?(0x[0-9a-fA-F]{40})_?/u);
+  if (!match?.[1]) {
+    return null;
+  }
+  return match[1].toLowerCase() as `0x${string}`;
+}
 
 function isKnownEmberWithdrawUnsupportedError(error: unknown): boolean {
   if (!(error instanceof EmberApiRequestError)) {
@@ -122,6 +110,7 @@ export async function validateNormalizedTransactionsAgainstDelegationIntents(par
 
   for (let cycle = 0; cycle < params.cycles; cycle += 1) {
     console.info(`demo/liquidity: simulation cycle=${cycle + 1}/${params.cycles}`);
+    let lastSupplyPoolTokenUid: EmberClmmIntent["poolIdentifier"] | null = null;
 
     for (let index = 0; index < params.intent.actions.length; index += 1) {
       const action = params.intent.actions[index];
@@ -135,7 +124,7 @@ export async function validateNormalizedTransactionsAgainstDelegationIntents(par
             ? { type: "limited" as const, ...varyLimitedRange({ ...params.intent.range, cycle }) }
             : params.intent.range;
 
-        const { transactions } = await requestEmberSupplyTransactions({
+        const { response, transactions } = await requestEmberSupplyTransactions({
           baseUrl: params.baseUrl,
           request: {
             walletAddress: params.intent.walletAddress,
@@ -145,6 +134,7 @@ export async function validateNormalizedTransactionsAgainstDelegationIntents(par
             payableTokens: params.intent.payableTokens,
           },
         });
+        lastSupplyPoolTokenUid = response.poolIdentifier ?? lastSupplyPoolTokenUid;
 
         validateAgainstIntents({
           label: `cycle=${cycle}:action[${index}]:supply`,
@@ -156,12 +146,15 @@ export async function validateNormalizedTransactionsAgainstDelegationIntents(par
       }
 
       if (action.type === "withdraw") {
+        const preferredPoolTokenUid =
+          params.intent.poolTokenUid ?? lastSupplyPoolTokenUid ?? params.intent.poolIdentifier;
+
         try {
           const { transactions } = await requestEmberWithdrawTransactions({
             baseUrl: params.baseUrl,
             request: {
               walletAddress: params.intent.walletAddress,
-              poolTokenUid: params.intent.poolIdentifier,
+              poolTokenUid: preferredPoolTokenUid,
             },
           });
           validateAgainstIntents({
@@ -177,12 +170,15 @@ export async function validateNormalizedTransactionsAgainstDelegationIntents(par
               walletAddress: params.intent.walletAddress,
               chainId: params.intent.chainId,
             });
-            const desiredPool = params.intent.poolIdentifier.address.toLowerCase();
-            const resolved =
-              positions.positions.find(
-                (position) => position.poolIdentifier.address.toLowerCase() === desiredPool,
-              )?.poolIdentifier ??
-              (positions.positions.length === 1 ? positions.positions[0]?.poolIdentifier : undefined);
+
+            const desiredPoolAddress = params.intent.poolIdentifier.address.toLowerCase() as `0x${string}`;
+            const resolved = positions.positions.find((position) => {
+              if (position.poolTokenUid.address.toLowerCase() === desiredPoolAddress) {
+                return true;
+              }
+              const poolAddress = tryExtractPoolAddressFromProviderId(position.providerId);
+              return poolAddress?.toLowerCase() === desiredPoolAddress;
+            })?.poolTokenUid;
 
             if (!resolved) {
               console.warn(

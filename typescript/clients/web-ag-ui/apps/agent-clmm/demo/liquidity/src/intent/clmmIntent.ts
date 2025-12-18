@@ -51,6 +51,7 @@ export const EmberClmmIntentSchema = z
     chainId: ChainIdSchema,
     walletAddress: AddressSchema,
     poolIdentifier: PoolIdentifierSchema,
+    poolTokenUid: PoolIdentifierSchema.optional(),
     range: ClmmRangeSchema,
     payableTokens: z.array(PayableTokenSchema).min(2),
     actions: z.array(ActionSchema).min(1),
@@ -58,6 +59,10 @@ export const EmberClmmIntentSchema = z
   .refine((value) => value.poolIdentifier.chainId === value.chainId, {
     message: "poolIdentifier.chainId must match chainId",
     path: ["poolIdentifier", "chainId"],
+  })
+  .refine((value) => value.poolTokenUid?.chainId === value.chainId, {
+    message: "poolTokenUid.chainId must match chainId",
+    path: ["poolTokenUid", "chainId"],
   })
   .refine(
     (value) => value.payableTokens.every((token) => token.tokenUid.chainId === value.chainId),

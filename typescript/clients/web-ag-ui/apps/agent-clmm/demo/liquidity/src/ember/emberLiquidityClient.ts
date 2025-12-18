@@ -103,11 +103,21 @@ export type EmberLiquidityResponse = z.infer<typeof EmberLiquidityResponseSchema
 const EmberWalletPositionsResponseSchema = z.object({
   positions: z
     .array(
-      z.object({
-        poolIdentifier: PoolIdentifierSchema,
-      }),
+      z
+        .object({
+          poolIdentifier: PoolIdentifierSchema,
+          providerId: z.string().optional(),
+          poolName: z.string().optional(),
+        })
+        .transform((value) => ({
+          poolTokenUid: value.poolIdentifier,
+          providerId: value.providerId ?? null,
+          poolName: value.poolName ?? null,
+        })),
     )
     .default([]),
+  totalPages: z.number().optional(),
+  totalItems: z.number().optional(),
 });
 
 export type EmberWalletPositionsResponse = z.infer<typeof EmberWalletPositionsResponseSchema>;
