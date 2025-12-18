@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 
 import { z } from "zod";
+import { privateKeyToAccount } from "viem/accounts";
 
 import {
   createSignedDelegationsForEmberTransactions,
@@ -41,6 +42,8 @@ type EmberClmmIntent = {
       }
   >;
 };
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 
 const ArgsSchema = z.object({
   intentFile: z.string().optional(),
@@ -327,7 +330,7 @@ async function buildGroupsFromIntent(params: {
     } catch (error: unknown) {
       if (isKnownEmberSwapUpstream400Error(error)) {
         console.warn(
-          `demo/liquidity: skipping swap action[${index}] because Ember /swap is currently failing upstream (HTTP 500 with embedded Axios 400). As of 2025-12-18, this appears to be a service-side issue; remove swap actions from your intent or use a different swap planner.`,
+          `demo/liquidity: skipping swap action[${index}] because Ember /swap failed (HTTP 500 with embedded Axios error). Common causes: intent.walletAddress is the zero address (0x000...000), or the upstream swap provider is rejecting routes.`,
         );
         continue;
       }
@@ -367,6 +370,8 @@ export async function main() {
     );
   }
 
+  const delegatorAddress = privateKeyToAccount(delegatorPrivateKey).address.toLowerCase() as `0x${string}`;
+
   let resolvedIntent: EmberClmmIntent | null = null;
   const groups: TransactionGroup[] = [];
 
@@ -375,8 +380,24 @@ export async function main() {
       filePath: intentFile,
       schema: EmberClmmIntentSchema,
     })) as EmberClmmIntent;
-    resolvedIntent = intent;
-    groups.push(...(await buildGroupsFromIntent({ baseUrl, intent, skipSwaps: skipSwaps ?? false })));
+
+    let walletAddress = intent.walletAddress.toLowerCase() as `0x${string}`;
+    if (walletAddress === ZERO_ADDRESS) {
+      walletAddress = delegatorAddress;
+      console.warn(
+        `demo/liquidity: intent walletAddress is the zero address; using delegator address=${delegatorAddress} (derived from DEMO_DELEGATOR_PRIVATE_KEY). Update your intent file to avoid ambiguity.`,
+      );
+    } else if (walletAddress !== delegatorAddress) {
+      throw new Error(
+        `Intent walletAddress (${walletAddress}) must match the address derived from DEMO_DELEGATOR_PRIVATE_KEY (${delegatorAddress}).`,
+      );
+    }
+
+    const resolved: EmberClmmIntent = { ...intent, walletAddress };
+    resolvedIntent = resolved;
+    groups.push(
+      ...(await buildGroupsFromIntent({ baseUrl, intent: resolved, skipSwaps: skipSwaps ?? false })),
+    );
   }
 
   const txFiles = (txFile ?? "")
