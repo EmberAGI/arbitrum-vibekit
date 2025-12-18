@@ -27,19 +27,24 @@
     }
   ],
   "actions": [
-    { "type": "withdraw" },
     {
       "type": "swap",
       "amountType": "exactIn",
-      "amount": "1",
-      "fromTokenUid": { "chainId": "42161", "address": "0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f" },
+      "amount": "10000",
+      "fromTokenUid": {
+        "chainId": "42161",
+        "address": "0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f"
+      },
       "toTokenUid": { "chainId": "42161", "address": "0x82af49447d8a07e3bd95bd0d56f35241523fbab1" }
     },
     {
       "type": "swap",
       "amountType": "exactIn",
-      "amount": "1",
-      "fromTokenUid": { "chainId": "42161", "address": "0x82af49447d8a07e3bd95bd0d56f35241523fbab1" },
+      "amount": "1000000000000000",
+      "fromTokenUid": {
+        "chainId": "42161",
+        "address": "0x82af49447d8a07e3bd95bd0d56f35241523fbab1"
+      },
       "toTokenUid": { "chainId": "42161", "address": "0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f" }
     },
     { "type": "supply" }
