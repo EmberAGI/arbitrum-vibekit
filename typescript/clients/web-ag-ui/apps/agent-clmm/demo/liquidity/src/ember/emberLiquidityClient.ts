@@ -6,6 +6,20 @@ import { EmberEvmTransactionSchema, type EmberEvmTransaction } from "../delegati
 
 const HTTP_TIMEOUT_MS = 60_000;
 
+export class EmberApiRequestError extends Error {
+  readonly status: number;
+  readonly url: string;
+  readonly bodyText: string;
+
+  constructor(params: { message: string; status: number; url: string; bodyText: string }) {
+    super(params.message);
+    this.name = "EmberApiRequestError";
+    this.status = params.status;
+    this.url = params.url;
+    this.bodyText = params.bodyText;
+  }
+}
+
 const PoolIdentifierSchema = z.object({
   chainId: z.string(),
   address: z
@@ -86,6 +100,18 @@ const EmberLiquidityResponseSchema = z.object({
 
 export type EmberLiquidityResponse = z.infer<typeof EmberLiquidityResponseSchema>;
 
+const EmberWalletPositionsResponseSchema = z.object({
+  positions: z
+    .array(
+      z.object({
+        poolIdentifier: PoolIdentifierSchema,
+      }),
+    )
+    .default([]),
+});
+
+export type EmberWalletPositionsResponse = z.infer<typeof EmberWalletPositionsResponseSchema>;
+
 async function fetchEndpoint<T>(
   baseUrl: string,
   endpoint: string,
@@ -104,7 +130,12 @@ async function fetchEndpoint<T>(
 
   if (!response.ok) {
     const text = await response.text().catch(() => "No error body");
-    throw new Error(`Ember API request failed (${response.status}): ${text}`);
+    throw new EmberApiRequestError({
+      message: `Ember API request failed (${response.status}): ${text}`,
+      status: response.status,
+      url,
+      bodyText: text,
+    });
   }
 
   const json: unknown = await response.json();
@@ -155,6 +186,20 @@ export async function requestEmberSwapTransactions(params: {
   });
 
   return { response, transactions: response.transactions };
+}
+
+export async function requestEmberWalletPositions(params: {
+  baseUrl: string;
+  walletAddress: `0x${string}`;
+  chainId: string;
+}): Promise<EmberWalletPositionsResponse> {
+  const query = new URLSearchParams();
+  query.set("chainId", params.chainId);
+  return fetchEndpoint(
+    params.baseUrl,
+    `/liquidity/positions/${params.walletAddress}?${query.toString()}`,
+    EmberWalletPositionsResponseSchema,
+  );
 }
 
 const JsonFileSchema = z.object({

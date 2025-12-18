@@ -30,6 +30,9 @@ export type DelegationGenerationOptions = {
   allowEmptyCalldata?: boolean;
   enforceTargetAllowlist?: boolean;
   targetAllowlist?: readonly `0x${string}`[];
+  enforceTokenAllowlist?: boolean;
+  tokenAllowlist?: readonly `0x${string}`[];
+  erc20PeriodTransferCaps?: readonly Erc20PeriodTransferCap[];
   consolidation?: "auto" | "single" | "perTarget";
   environment?: DeleGatorEnvironment;
 };
@@ -69,10 +72,18 @@ export type AllowedCalldataPin = {
   value: `0x${string}`;
 };
 
+export type Erc20PeriodTransferCap = {
+  tokenAddress: `0x${string}`;
+  periodAmount: bigint;
+  periodDuration: number;
+  startDate: number;
+};
+
 export type DelegationIntent = {
   targets: readonly `0x${string}`[];
   selectors: readonly `0x${string}`[];
   allowedCalldata: readonly AllowedCalldataPin[];
+  exampleCalldata?: `0x${string}`;
 };
 
 const MULTICALL_SELECTORS = {
@@ -202,6 +213,10 @@ function findAbiWordOccurrences(calldata: `0x${string}`, word: `0x${string}`): A
   return pins;
 }
 
+function calldataContainsWord(calldata: `0x${string}`, word: `0x${string}`): boolean {
+  return calldata.toLowerCase().includes(word.slice(2).toLowerCase());
+}
+
 function intersectPins(pinSets: readonly AllowedCalldataPin[][]): AllowedCalldataPin[] {
   if (pinSets.length === 0) {
     return [];
@@ -233,28 +248,295 @@ function getFirstArgWord(calldata: `0x${string}`): `0x${string}` | null {
   return `0x${calldata.slice(start, end)}`;
 }
 
+function getWordAt(params: { calldata: `0x${string}`; startIndex: number }): `0x${string}` | null {
+  const start = 2 + params.startIndex * 2;
+  const end = start + 64;
+  if (start < 2 || end > params.calldata.length) {
+    return null;
+  }
+  return `0x${params.calldata.slice(start, end)}`;
+}
+
 const SELECTOR_LABELS: Readonly<Record<`0x${string}`, string>> = {
   "0x095ea7b3": "approve(address,uint256)",
   "0xa9059cbb": "transfer(address,uint256)",
   "0x23b872dd": "transferFrom(address,address,uint256)",
   "0x39509351": "increaseAllowance(address,uint256)",
+  "0x04e45aaf": "exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))",
 } as const;
 
 function selectorLabel(selector: `0x${string}`): string {
   return SELECTOR_LABELS[selector] ?? selector;
 }
 
-function describeDelegationIntent(params: { chainId: number; intent: DelegationIntent }): string {
-  const chainLabel = params.chainId === 42161 ? "Arbitrum (42161)" : `chainId=${params.chainId}`;
-  const targets = params.intent.targets.join(", ");
-  const selectors = params.intent.selectors.map(selectorLabel).join(", ");
-  const pins =
-    params.intent.allowedCalldata.length === 0
-      ? "none"
-      : params.intent.allowedCalldata
-          .map((pin) => `byte[${pin.startIndex}]=${pin.value.slice(0, 18)}…`)
-          .join(", ");
-  return `${chainLabel}: targets=[${targets}] selectors=[${selectors}] pins=[${pins}]`;
+function shortHex(value: `0x${string}`, options?: { start?: number; end?: number }): string {
+  const start = options?.start ?? 6;
+  const end = options?.end ?? 4;
+  if (value.length <= 2 + start + end) {
+    return value;
+  }
+  return `${value.slice(0, 2 + start)}…${value.slice(-end)}`;
+}
+
+function chainLabel(chainId: number): string {
+  if (chainId === 42161) {
+    return "Arbitrum";
+  }
+  return `chainId=${chainId}`;
+}
+
+type AddressLabel = { shortName: string; longName: string };
+
+const KNOWN_ADDRESSES: Readonly<
+  Record<number, Readonly<Record<`0x${string}`, AddressLabel>>>
+> = {
+  42161: {
+    // Tokens used by the demo intent template.
+    "0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f": { shortName: "WBTC", longName: "Wrapped Bitcoin" },
+    "0x82af49447d8a07e3bd95bd0d56f35241523fbab1": { shortName: "WETH", longName: "Wrapped Ether" },
+    // Router observed in Ember swap tx plans.
+    "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45": { shortName: "Swap Router", longName: "Swap Router" },
+    // Liquidity contract observed in Ember liquidity supply tx plans (protocol-specific).
+    "0x00c7f3082833e796a5b3e4bd59f6642ff44dcd15": { shortName: "Liquidity Manager", longName: "Liquidity Manager" },
+  },
+} as const;
+
+function labelForAddress(params: { chainId: number; address: `0x${string}` }): AddressLabel | null {
+  return KNOWN_ADDRESSES[params.chainId]?.[params.address.toLowerCase() as `0x${string}`] ?? null;
+}
+
+function formatEntity(params: { chainId: number; address: `0x${string}`; showHex: boolean }): string {
+  const label = labelForAddress({ chainId: params.chainId, address: params.address });
+  if (!label) {
+    return params.showHex ? shortHex(params.address) : "a specific contract";
+  }
+  return params.showHex ? `${label.shortName} (${shortHex(params.address)})` : label.shortName;
+}
+
+function tryParseAbiWordAddress(word: `0x${string}`): `0x${string}` | null {
+  const normalized = word.toLowerCase();
+  if (!/^0x[0-9a-f]{64}$/u.test(normalized)) {
+    return null;
+  }
+  const raw = normalized.slice(2);
+  if (!raw.startsWith("0".repeat(24))) {
+    return null;
+  }
+  const address = `0x${raw.slice(24)}` as const;
+  return /^0x[0-9a-f]{40}$/u.test(address) ? address : null;
+}
+
+const ERC20_APPROVE_ABI = [
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "ok", type: "bool" }],
+  },
+] as const satisfies Abi;
+
+const UNISWAP_V3_EXACT_INPUT_SINGLE_ABI = [
+  {
+    type: "function",
+    name: "exactInputSingle",
+    stateMutability: "payable",
+    inputs: [
+      {
+        name: "params",
+        type: "tuple",
+        components: [
+          { name: "tokenIn", type: "address" },
+          { name: "tokenOut", type: "address" },
+          { name: "fee", type: "uint24" },
+          { name: "recipient", type: "address" },
+          { name: "amountIn", type: "uint256" },
+          { name: "amountOutMinimum", type: "uint256" },
+          { name: "sqrtPriceLimitX96", type: "uint160" },
+        ],
+      },
+    ],
+    outputs: [{ name: "amountOut", type: "uint256" }],
+  },
+] as const satisfies Abi;
+
+function describeDelegationIntent(params: {
+  chainId: number;
+  delegatorAddress: `0x${string}`;
+  delegateeAddress: `0x${string}`;
+  intent: DelegationIntent;
+  showHex: boolean;
+  erc20PeriodTransferCaps: readonly Erc20PeriodTransferCap[];
+}): string {
+  const network = chainLabel(params.chainId);
+
+  const targets = [...params.intent.targets];
+  const selectors = [...params.intent.selectors];
+  const allowedCalldata = [...params.intent.allowedCalldata];
+  const caps = [...params.erc20PeriodTransferCaps];
+
+  if (targets.length === 1 && selectors.length === 1) {
+    const target = targets[0] ?? ("0x" as `0x${string}`);
+    const selector = selectors[0] ?? ("0x00000000" as `0x${string}`);
+
+    const spenderPinned =
+      (selector === "0x095ea7b3" || selector === "0x39509351") &&
+      allowedCalldata.some((pin) => pin.startIndex === 4);
+
+    const spender = spenderPinned
+      ? tryParseAbiWordAddress(
+          allowedCalldata.find((pin) => pin.startIndex === 4)?.value ??
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+        )
+      : null;
+
+    const delegatorWord = toAbiWordAddress(params.delegatorAddress);
+    const delegatorPins = allowedCalldata
+      .filter((pin) => pin.value.toLowerCase() === delegatorWord.toLowerCase())
+      .map((pin) => pin.startIndex)
+      .sort((a, b) => a - b);
+
+    const detailsParts: string[] = [];
+    if (params.showHex) {
+      detailsParts.push(`target=${shortHex(target)}`);
+      detailsParts.push(`selector=${selectorLabel(selector)}`);
+      detailsParts.push(`agent=${shortHex(params.delegateeAddress)}`);
+    }
+    if (spender && params.showHex) {
+      detailsParts.push(`spender=${shortHex(spender)}`);
+    }
+    const details = detailsParts.length > 0 ? ` (${detailsParts.join(", ")})` : "";
+    const capText =
+      caps.length > 0
+        ? ` Spending caps: ${caps
+            .map((cap) => {
+              const tokenName = formatEntity({ chainId: params.chainId, address: cap.tokenAddress, showHex: params.showHex });
+              return `${cap.periodAmount.toString()} ${tokenName}/hour`;
+            })
+            .join(", ")}.`
+        : "";
+
+    if (selector === "0x095ea7b3" || selector === "0x39509351") {
+      const tokenName = formatEntity({ chainId: params.chainId, address: target, showHex: params.showHex });
+      let decodedSpender: `0x${string}` | null = null;
+      if (params.intent.exampleCalldata) {
+        try {
+          const decoded = decodeFunctionData({ abi: ERC20_APPROVE_ABI, data: params.intent.exampleCalldata });
+          if (decoded.functionName === "approve") {
+            const maybeSpender = decoded.args[0] as unknown;
+            if (typeof maybeSpender === "string") {
+              decodedSpender = maybeSpender.toLowerCase() as `0x${string}`;
+            }
+          }
+        } catch {
+          // Best-effort decode for UX; ignore failures.
+        }
+      }
+
+      const spenderName = (spender ?? decodedSpender)
+        ? formatEntity({
+            chainId: params.chainId,
+            address: (spender ?? decodedSpender ?? "0x0000000000000000000000000000000000000000"),
+            showHex: params.showHex,
+          })
+        : "a specific contract";
+
+      const onlySpender =
+        spenderName === "a specific contract"
+          ? "Only the approved swap service can use this permission."
+          : `Only ${spenderName} can use this permission.`;
+      return `${network}: Let your agent set up swapping by giving ${spenderName} access to your ${tokenName}. ${onlySpender}${capText}${details}`;
+    }
+
+    if (selector === "0x04e45aaf" && params.intent.exampleCalldata) {
+      try {
+        const decoded = decodeFunctionData({
+          abi: UNISWAP_V3_EXACT_INPUT_SINGLE_ABI,
+          data: params.intent.exampleCalldata,
+        });
+        if (decoded.functionName === "exactInputSingle") {
+          const arg0 = decoded.args[0] as unknown;
+          const tuple = Array.isArray(arg0) ? arg0 : null;
+          const object = isRecord(arg0) ? arg0 : null;
+          const tokenIn = (tuple?.[0] as unknown) ?? object?.["tokenIn"] ?? null;
+          const tokenOut = (tuple?.[1] as unknown) ?? object?.["tokenOut"] ?? null;
+          const recipient = (tuple?.[3] as unknown) ?? object?.["recipient"] ?? null;
+
+          if (
+            typeof tokenIn === "string" &&
+            typeof tokenOut === "string" &&
+            typeof recipient === "string"
+          ) {
+            const fromToken = formatEntity({
+              chainId: params.chainId,
+              address: tokenIn.toLowerCase() as `0x${string}`,
+              showHex: params.showHex,
+            });
+            const toToken = formatEntity({
+              chainId: params.chainId,
+              address: tokenOut.toLowerCase() as `0x${string}`,
+              showHex: params.showHex,
+            });
+            const routerName = formatEntity({
+              chainId: params.chainId,
+              address: target,
+              showHex: params.showHex,
+            });
+            const recipientIsYou = recipient.toLowerCase() === params.delegatorAddress.toLowerCase();
+            const recipientText =
+              recipientIsYou && delegatorPins.length > 0
+                ? "and always send the result back to you"
+                : recipientIsYou
+                  ? "and send the result back to you"
+                  : "and send the result to a specific address";
+
+            const constraints = `Only your agent can do this, and it can only use ${routerName}.`;
+            return `${network}: Let your agent swap tokens using ${routerName}. In this plan it swaps ${fromToken} to ${toToken}, ${recipientText}. ${constraints}${capText}${details}`;
+          }
+        }
+      } catch {
+        // Best-effort decode for UX; fall through to generic text.
+      }
+    }
+
+    const targetName = formatEntity({ chainId: params.chainId, address: target, showHex: params.showHex });
+    const tokenSymbols =
+      params.intent.exampleCalldata
+        ? Object.entries(KNOWN_ADDRESSES[params.chainId] ?? {})
+            .filter(([, label]) => !["Swap Router", "Liquidity Manager"].includes(label.shortName))
+            .filter(([address]) =>
+              calldataContainsWord(
+                params.intent.exampleCalldata as `0x${string}`,
+                toAbiWordAddress(address as `0x${string}`),
+              ),
+            )
+            .map(([, label]) => label.shortName)
+        : [];
+
+    const tokenSuffix =
+      tokenSymbols.length >= 2 ? ` for your ${tokenSymbols.slice(0, 2).join("/")} position` : " for your position";
+    const receiverConstraint =
+      delegatorPins.length > 0 ? " It must return any funds back to you." : "";
+    return `${network}: Let your agent manage liquidity${tokenSuffix} using ${targetName}.${receiverConstraint} Only your agent can do this.${capText}${details}`;
+  }
+
+  const targetsText = targets
+    .map((address) => formatEntity({ chainId: params.chainId, address, showHex: params.showHex }))
+    .join(", ");
+  const selectorsText = selectors.map(selectorLabel).join(", ");
+  const capText =
+    caps.length > 0
+      ? ` Spending caps: ${caps
+          .map((cap) => {
+            const tokenName = formatEntity({ chainId: params.chainId, address: cap.tokenAddress, showHex: params.showHex });
+            return `${cap.periodAmount.toString()} ${tokenName}/hour`;
+          })
+          .join(", ")}.`
+      : "";
+  return `${network}: Let your agent use ${targetsText} for a limited set of actions (${selectorsText}).${capText}`;
 }
 
 function isMulticallLikeSelector(selector: `0x${string}`): boolean {
@@ -506,20 +788,29 @@ export async function createSignedDelegationsForEmberTransactions(params: {
   delegatee: `0x${string}`;
   options?: DelegationGenerationOptions;
 }): Promise<DelegationGenerationResult> {
-  const options: Required<
-    Pick<
-      DelegationGenerationOptions,
-      "allowNonZeroValue" | "allowEmptyCalldata" | "enforceTargetAllowlist" | "targetAllowlist"
-    >
-  > &
-    Pick<DelegationGenerationOptions, "consolidation" | "environment"> = {
+  const options = {
     allowNonZeroValue: params.options?.allowNonZeroValue ?? false,
     allowEmptyCalldata: params.options?.allowEmptyCalldata ?? false,
     enforceTargetAllowlist: params.options?.enforceTargetAllowlist ?? false,
     targetAllowlist: params.options?.targetAllowlist ?? [],
     consolidation: params.options?.consolidation ?? "auto",
     environment: params.options?.environment,
-  };
+    enforceTokenAllowlist: params.options?.enforceTokenAllowlist ?? false,
+    tokenAllowlist: params.options?.tokenAllowlist ?? [],
+    erc20PeriodTransferCaps: params.options?.erc20PeriodTransferCaps ?? [],
+  } satisfies Required<
+    Pick<
+      DelegationGenerationOptions,
+      | "allowNonZeroValue"
+      | "allowEmptyCalldata"
+      | "enforceTargetAllowlist"
+      | "targetAllowlist"
+      | "enforceTokenAllowlist"
+      | "tokenAllowlist"
+      | "erc20PeriodTransferCaps"
+    >
+  > &
+    Pick<DelegationGenerationOptions, "consolidation" | "environment">;
 
   const { chainId, normalizedTransactions, selectorDiagnostics, warnings } =
     normalizeEmberTransactionsForDelegations({
@@ -535,46 +826,106 @@ export async function createSignedDelegationsForEmberTransactions(params: {
   const delegationIntents: DelegationIntent[] = [];
 
   const delegatorWord = toAbiWordAddress(delegatorAddress);
-  const txsByTargetSelector = new Map<string, NormalizedTransaction[]>();
+  const tokenAllowlistSet = new Set(options.tokenAllowlist.map((token) => token.toLowerCase()));
+
+  type TxGroup = {
+    target: `0x${string}`;
+    selector: `0x${string}`;
+    extraPins: AllowedCalldataPin[];
+    txs: NormalizedTransaction[];
+  };
+
+  const groupsByKey = new Map<string, TxGroup>();
   for (const tx of normalizedTransactions) {
-    const approvalOrAllowanceSelectors = new Set<`0x${string}`>(["0x095ea7b3", "0x39509351"]);
-    const maybeSpenderWord =
-      approvalOrAllowanceSelectors.has(tx.selector) ? getFirstArgWord(tx.data) : null;
-    const key = maybeSpenderWord
-      ? `${tx.to}:${tx.selector}:${maybeSpenderWord}`
-      : `${tx.to}:${tx.selector}`;
-    const existing = txsByTargetSelector.get(key) ?? [];
-    existing.push(tx);
-    txsByTargetSelector.set(key, existing);
-  }
+    const keyParts: string[] = [tx.to, tx.selector];
+    const extraPins: AllowedCalldataPin[] = [];
 
-  for (const [key, txs] of [...txsByTargetSelector.entries()].sort(([a], [b]) =>
-    a.localeCompare(b),
-  )) {
-    const [target, selector] = key.split(":");
-    if (!target || !selector) {
-      continue;
-    }
+    if (tx.selector === "0x095ea7b3" || tx.selector === "0x39509351") {
+      const spenderWord = getFirstArgWord(tx.data);
+      if (!spenderWord) {
+        throw new Error(`Unable to parse spender word for approval tx (selector=${tx.selector})`);
+      }
+      keyParts.push(`spender=${spenderWord}`);
+      extraPins.push({ startIndex: 4, value: spenderWord });
+    } else if (tx.selector === "0x04e45aaf") {
+      if (options.enforceTokenAllowlist && tokenAllowlistSet.size === 0) {
+        throw new Error("enforceTokenAllowlist enabled, but tokenAllowlist is empty");
+      }
 
-    const perTxPins = txs.map((tx) => findAbiWordOccurrences(tx.data, delegatorWord));
-    const pinnedDelegatorOccurrences = intersectPins(perTxPins);
+      const tokenInWord = getWordAt({ calldata: tx.data, startIndex: 4 });
+      const tokenOutWord = getWordAt({ calldata: tx.data, startIndex: 36 });
+      if (!tokenInWord || !tokenOutWord) {
+        throw new Error("exactInputSingle: expected tokenIn/tokenOut words");
+      }
 
-    const approvalSpenderPins: AllowedCalldataPin[] = [];
-    if (selector === "0x095ea7b3" || selector === "0x39509351") {
-      const spenderWord = key.split(":")[2] as `0x${string}` | undefined;
-      if (spenderWord) {
-        approvalSpenderPins.push({ startIndex: 4, value: spenderWord });
+      const tokenIn = tryParseAbiWordAddress(tokenInWord);
+      const tokenOut = tryParseAbiWordAddress(tokenOutWord);
+      if (!tokenIn || !tokenOut) {
+        throw new Error("exactInputSingle: tokenIn/tokenOut were not ABI-word addresses");
+      }
+
+      if (options.enforceTokenAllowlist) {
+        if (!tokenAllowlistSet.has(tokenIn.toLowerCase()) || !tokenAllowlistSet.has(tokenOut.toLowerCase())) {
+          throw new Error(
+            `Swap token pair not in allowlist (tokenIn=${tokenIn}, tokenOut=${tokenOut}). Refusing to build long-lived delegations.`,
+          );
+        }
+      }
+
+      keyParts.push(`tokenIn=${tokenInWord}`, `tokenOut=${tokenOutWord}`);
+      extraPins.push({ startIndex: 4, value: tokenInWord });
+      extraPins.push({ startIndex: 36, value: tokenOutWord });
+    } else if (tokenAllowlistSet.size > 0) {
+      const token0Word = getWordAt({ calldata: tx.data, startIndex: 4 });
+      const token1Word = getWordAt({ calldata: tx.data, startIndex: 36 });
+      if (token0Word && token1Word) {
+        const token0 = tryParseAbiWordAddress(token0Word);
+        const token1 = tryParseAbiWordAddress(token1Word);
+        if (
+          token0 &&
+          token1 &&
+          tokenAllowlistSet.has(token0.toLowerCase()) &&
+          tokenAllowlistSet.has(token1.toLowerCase())
+        ) {
+          keyParts.push(`token0=${token0Word}`, `token1=${token1Word}`);
+          extraPins.push({ startIndex: 4, value: token0Word });
+          extraPins.push({ startIndex: 36, value: token1Word });
+        }
       }
     }
 
-    const allowedCalldata = [...pinnedDelegatorOccurrences, ...approvalSpenderPins].sort(
+    const key = keyParts.join("|");
+    const existing = groupsByKey.get(key);
+    if (existing) {
+      existing.txs.push(tx);
+      continue;
+    }
+    groupsByKey.set(key, {
+      target: tx.to,
+      selector: tx.selector,
+      extraPins,
+      txs: [tx],
+    });
+  }
+
+  for (const key of [...groupsByKey.keys()].sort((a, b) => a.localeCompare(b))) {
+    const group = groupsByKey.get(key);
+    if (!group) {
+      continue;
+    }
+
+    const exampleCalldata = group.txs[0]?.data;
+    const perTxPins = group.txs.map((tx) => findAbiWordOccurrences(tx.data, delegatorWord));
+    const pinnedDelegatorOccurrences = intersectPins(perTxPins);
+    const allowedCalldata = [...pinnedDelegatorOccurrences, ...group.extraPins].sort(
       (a, b) => (a.startIndex - b.startIndex) || a.value.localeCompare(b.value),
     );
 
     delegationIntents.push({
-      targets: [target as `0x${string}`],
-      selectors: [selector as `0x${string}`],
+      targets: [group.target],
+      selectors: [group.selector],
       allowedCalldata,
+      exampleCalldata,
     });
   }
 
@@ -606,11 +957,30 @@ export async function createSignedDelegationsForEmberTransactions(params: {
     );
   }
 
+  const showHex = (process.env["DEMO_SHOW_HEX_DETAILS"] ?? "false") === "true";
   const delegationDescriptions = delegationIntents.map((intent) =>
-    describeDelegationIntent({ chainId, intent }),
+    describeDelegationIntent({
+      chainId,
+      delegatorAddress,
+      delegateeAddress: params.delegatee,
+      intent,
+      showHex,
+      erc20PeriodTransferCaps: options.erc20PeriodTransferCaps,
+    }),
   );
 
   for (const intent of delegationIntents) {
+    const caveats =
+      options.erc20PeriodTransferCaps.length > 0
+        ? options.erc20PeriodTransferCaps.map((cap) => ({
+            type: "erc20PeriodTransfer" as const,
+            tokenAddress: cap.tokenAddress,
+            periodAmount: cap.periodAmount,
+            periodDuration: cap.periodDuration,
+            startDate: cap.startDate,
+          }))
+        : undefined;
+
     const delegation = createDelegation({
       scope: {
         type: "functionCall",
@@ -621,6 +991,7 @@ export async function createSignedDelegationsForEmberTransactions(params: {
           value: pin.value,
         })),
       },
+      caveats,
       to: params.delegatee,
       from: delegatorAddress,
       environment,
