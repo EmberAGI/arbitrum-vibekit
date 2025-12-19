@@ -22,6 +22,7 @@ import {
   type ClmmUpdate,
   type DelegationBundle,
   type DelegationSigningInterrupt,
+  type OnboardingState,
   type SignedDelegation,
   type UnsignedDelegation,
 } from '../context.js';
@@ -30,15 +31,30 @@ import { loadBootstrapContext } from '../store.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
+const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
+  totalSteps: 3,
+};
+
 const HexSchema = z
   .string()
   .regex(/^0x[0-9a-fA-F]*$/u)
   .transform((value) => value.toLowerCase() as `0x${string}`);
 
+// NOTE: CopilotKit expects `payloadSchema` to be representable as JSON Schema.
+// Zod transforms cannot be represented in JSON Schema, so we provide a parallel schema
+// without transforms for the UI metadata.
+const HexJsonSchema = z.string().regex(/^0x[0-9a-fA-F]*$/u);
+
 const DelegationCaveatSchema = z.object({
   enforcer: HexSchema,
   terms: HexSchema,
   args: HexSchema,
+});
+
+const DelegationCaveatJsonSchema = z.object({
+  enforcer: HexJsonSchema,
+  terms: HexJsonSchema,
+  args: HexJsonSchema,
 });
 
 const SignedDelegationSchema = z.object({
@@ -50,10 +66,29 @@ const SignedDelegationSchema = z.object({
   signature: HexSchema,
 });
 
+const SignedDelegationJsonSchema = z.object({
+  delegate: HexJsonSchema,
+  delegator: HexJsonSchema,
+  authority: HexJsonSchema,
+  caveats: z.array(DelegationCaveatJsonSchema),
+  salt: HexJsonSchema,
+  signature: HexJsonSchema,
+});
+
 const DelegationSigningResponseSchema = z.union([
   z.object({
     outcome: z.literal('signed'),
     signedDelegations: z.array(SignedDelegationSchema).min(1),
+  }),
+  z.object({
+    outcome: z.literal('rejected'),
+  }),
+]);
+
+const DelegationSigningResponseJsonSchema = z.union([
+  z.object({
+    outcome: z.literal('signed'),
+    signedDelegations: z.array(SignedDelegationJsonSchema).min(1),
   }),
   z.object({
     outcome: z.literal('rejected'),
@@ -94,11 +129,21 @@ export const collectDelegationsNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
+  logInfo('collectDelegations: entering node', {
+    delegationsBypassActive: isDelegationsBypassActive(),
+    hasDelegationBundle: Boolean(state.view.delegationBundle),
+    hasOperatorInput: Boolean(state.view.operatorInput),
+    hasSelectedPool: Boolean(state.view.selectedPool),
+    hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
+    onboardingStep: state.view.onboarding?.step,
+  });
+
   if (isDelegationsBypassActive()) {
     logInfo('collectDelegations: bypass active; skipping delegation onboarding');
     return {
       view: {
         delegationsBypassActive: true,
+        onboarding: { ...ONBOARDING, step: 3 },
       },
     };
   }
@@ -108,6 +153,7 @@ export const collectDelegationsNode = async (
     return {
       view: {
         delegationBundle: state.view.delegationBundle,
+        onboarding: { ...ONBOARDING, step: 3 },
       },
     };
   }
@@ -115,6 +161,7 @@ export const collectDelegationsNode = async (
   const operatorInput = state.view.operatorInput;
   if (!operatorInput) {
     const failureMessage = 'ERROR: Operator input missing before delegation step';
+    logInfo('collectDelegations: missing operator input', { failureMessage });
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: [] } },
@@ -137,6 +184,7 @@ export const collectDelegationsNode = async (
   const selectedPool = state.view.selectedPool;
   if (!selectedPool) {
     const failureMessage = 'ERROR: Selected pool missing before delegation step';
+    logInfo('collectDelegations: missing selected pool', { failureMessage });
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: [] } },
@@ -292,6 +340,7 @@ export const collectDelegationsNode = async (
   if (plannedTransactions.length === 0) {
     const failureMessage =
       'ERROR: Unable to generate any Ember transactions for delegation planning; cannot safely derive delegations.';
+    logInfo('collectDelegations: no planned transactions', { failureMessage });
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
@@ -322,7 +371,7 @@ export const collectDelegationsNode = async (
   const request: DelegationSigningInterrupt = {
     type: 'clmm-delegation-signing-request',
     message: 'Review and sign the required delegations. If anything looks unsafe, reject and adjust your configuration.',
-    payloadSchema: z.toJSONSchema(DelegationSigningResponseSchema),
+    payloadSchema: z.toJSONSchema(DelegationSigningResponseJsonSchema),
     chainId: delegationRequest.chainId,
     delegationManager: delegationRequest.environment.DelegationManager,
     delegatorAddress,
@@ -339,12 +388,27 @@ export const collectDelegationsNode = async (
   );
   await copilotkitEmitState(config, {
     view: {
+      onboarding: { ...ONBOARDING, step: 3 },
       task: awaitingInput.task,
       activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
     },
   });
 
+  logInfo('collectDelegations: calling interrupt() - awaiting delegation signatures', {
+    chainId: request.chainId,
+    delegationManager: request.delegationManager,
+    delegatorAddress: request.delegatorAddress,
+    delegateeAddress: request.delegateeAddress,
+    delegationCount: request.delegationsToSign.length,
+    warningsCount: request.warnings.length,
+  });
+
   const incoming: unknown = await interrupt(request);
+  logInfo('collectDelegations: interrupt resolved with input', {
+    hasInput: incoming !== undefined,
+    incomingType: typeof incoming,
+    incoming: typeof incoming === 'string' ? incoming.slice(0, 120) : incoming,
+  });
 
   let inputToParse: unknown = incoming;
   if (typeof incoming === 'string') {
@@ -359,6 +423,7 @@ export const collectDelegationsNode = async (
   if (!parsed.success) {
     const issues = parsed.error.issues.map((issue) => issue.message).join('; ');
     const failureMessage = `Invalid delegation signing response: ${issues}`;
+    logInfo('collectDelegations: validation failed', { issues, failureMessage });
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
@@ -368,6 +433,7 @@ export const collectDelegationsNode = async (
         haltReason: failureMessage,
         task,
         activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        onboarding: { ...ONBOARDING, step: 3 },
       },
     };
   }
@@ -378,6 +444,11 @@ export const collectDelegationsNode = async (
       'rejected',
       'Delegation signing was rejected. The agent will not proceed.',
     );
+    logInfo('collectDelegations: user rejected delegation signing', {
+      delegatorAddress: request.delegatorAddress,
+      delegateeAddress: request.delegateeAddress,
+      delegationCount: request.delegationsToSign.length,
+    });
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
     });
@@ -408,6 +479,7 @@ export const collectDelegationsNode = async (
         haltReason: failureMessage,
         task,
         activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        onboarding: { ...ONBOARDING, step: 3 },
       },
     };
   }
@@ -429,6 +501,7 @@ export const collectDelegationsNode = async (
           haltReason: failureMessage,
           task,
           activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          onboarding: { ...ONBOARDING, step: 3 },
         },
       };
     }
@@ -463,6 +536,7 @@ export const collectDelegationsNode = async (
       task,
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
       delegationBundle,
+      onboarding: { ...ONBOARDING, step: 3 },
     },
   };
 };

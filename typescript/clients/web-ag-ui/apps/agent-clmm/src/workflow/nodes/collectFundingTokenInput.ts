@@ -15,10 +15,15 @@ import {
   type ClmmUpdate,
   type FundingTokenInterrupt,
   type FundingTokenOption,
+  type OnboardingState,
 } from '../context.js';
 import { estimateTokenAllocationsUsd } from '../planning/allocations.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
+
+const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
+  totalSteps: 3,
+};
 
 const ARBITRUM_FUNDING_TOKEN_CANDIDATES: ReadonlyArray<{
   address: `0x${string}`;
@@ -75,6 +80,14 @@ export const collectFundingTokenInputNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate | Command<string, ClmmUpdate>> => {
+  logInfo('collectFundingTokenInput: entering node', {
+    hasOperatorInput: Boolean(state.view.operatorInput),
+    hasSelectedPool: Boolean(state.view.selectedPool),
+    hasFundingTokenInput: Boolean(state.view.fundingTokenInput),
+    delegationsBypassActive: state.view.delegationsBypassActive === true,
+    onboardingStep: state.view.onboarding?.step,
+  });
+
   const operatorInput = state.view.operatorInput;
   if (!operatorInput) {
     const failureMessage = 'ERROR: Operator input missing before funding-token step';
@@ -103,6 +116,7 @@ export const collectFundingTokenInputNode = async (
       view: {
         selectedPool: state.view.selectedPool,
         fundingTokenInput: state.view.fundingTokenInput,
+        onboarding: { ...ONBOARDING, step: 3 },
       },
     };
   }
@@ -121,6 +135,7 @@ export const collectFundingTokenInputNode = async (
 
   if (!selectedPool) {
     const failureMessage = `ERROR: Pool ${selectedPoolAddress} not available from Ember API`;
+    logInfo('collectFundingTokenInput: selected pool missing', { selectedPoolAddress, failureMessage });
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
@@ -159,6 +174,7 @@ export const collectFundingTokenInputNode = async (
     return {
       view: {
         selectedPool,
+        onboarding: { ...ONBOARDING, step: 3 },
         task,
         activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
       },
@@ -205,9 +221,17 @@ export const collectFundingTokenInputNode = async (
     return {
       view: {
         selectedPool,
+        onboarding: { ...ONBOARDING, step: 3 },
       },
     };
   }
+
+  logInfo('collectFundingTokenInput: external funding required; building options', {
+    poolTokenUsdValue: Number.isFinite(poolTokenUsdValue) ? poolTokenUsdValue.toFixed(4) : poolTokenUsdValue,
+    baseContributionUsd,
+    poolAddress: selectedPool.address,
+    operatorWalletAddress,
+  });
 
   const candidateOptions = uniqByAddress([
     {
@@ -254,13 +278,23 @@ export const collectFundingTokenInputNode = async (
   );
   await copilotkitEmitState(config, {
     view: {
+      onboarding: { ...ONBOARDING, step: 2 },
       task: awaitingInput.task,
       activity: { events: [awaitingInput.statusEvent], telemetry: state.view.activity.telemetry },
       selectedPool,
     },
   });
 
+  logInfo('collectFundingTokenInput: calling interrupt() - awaiting funding token selection', {
+    optionCount: optionBalances.length,
+  });
+
   const incoming: unknown = await interrupt(request);
+  logInfo('collectFundingTokenInput: interrupt resolved with input', {
+    hasInput: incoming !== undefined,
+    incomingType: typeof incoming,
+    incoming: typeof incoming === 'string' ? incoming.slice(0, 120) : incoming,
+  });
 
   let inputToParse: unknown = incoming;
   if (typeof incoming === 'string') {
@@ -275,6 +309,7 @@ export const collectFundingTokenInputNode = async (
   if (!parsed.success) {
     const issues = parsed.error.issues.map((issue) => issue.message).join('; ');
     const failureMessage = `Invalid funding-token input: ${issues}`;
+    logInfo('collectFundingTokenInput: validation failed', { issues, failureMessage });
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
@@ -297,6 +332,7 @@ export const collectFundingTokenInputNode = async (
   );
   if (!isAllowed) {
     const failureMessage = `Invalid funding-token input: address ${normalizedFundingToken} not in allowed options`;
+    logInfo('collectFundingTokenInput: funding token not allowed', { normalizedFundingToken, failureMessage });
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
@@ -327,6 +363,7 @@ export const collectFundingTokenInputNode = async (
     view: {
       selectedPool,
       fundingTokenInput: input,
+      onboarding: { ...ONBOARDING, step: 3 },
       task,
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
     },

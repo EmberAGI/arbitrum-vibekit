@@ -160,11 +160,18 @@ export type DelegationSigningInterrupt = {
   warnings: string[];
 };
 
+export type OnboardingState = {
+  step: number;
+  totalSteps?: number;
+  key?: string;
+};
+
 type ClmmViewState = {
   command?: string;
   task?: Task;
   poolArtifact?: Artifact;
   operatorInput?: OperatorConfigInput;
+  onboarding?: OnboardingState;
   fundingTokenInput?: FundingTokenInput;
   selectedPool?: CamelotPool;
   operatorConfig?: ResolvedOperatorConfig;
@@ -196,6 +203,7 @@ const defaultViewState = (): ClmmViewState => ({
   task: undefined,
   poolArtifact: undefined,
   operatorInput: undefined,
+  onboarding: undefined,
   selectedPool: undefined,
   operatorConfig: undefined,
   haltReason: undefined,
@@ -283,6 +291,7 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     task: right.task ?? left.task,
     poolArtifact: right.poolArtifact ?? left.poolArtifact,
     operatorInput: right.operatorInput ?? left.operatorInput,
+    onboarding: right.onboarding ?? left.onboarding,
     fundingTokenInput: right.fundingTokenInput ?? left.fundingTokenInput,
     selectedPool: right.selectedPool ?? left.selectedPool,
     operatorConfig: right.operatorConfig ?? left.operatorConfig,
