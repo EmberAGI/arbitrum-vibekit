@@ -362,6 +362,9 @@ export const pollCycleNode = async (
           camelotClient,
           pool: poolSnapshot,
           operatorConfig,
+          delegationBundle: state.view.delegationBundle,
+          fundingTokenAddress: state.view.fundingTokenInput?.fundingTokenAddress,
+          delegationsBypassActive: state.view.delegationsBypassActive,
           clients,
         });
         txHash = result?.txHash;

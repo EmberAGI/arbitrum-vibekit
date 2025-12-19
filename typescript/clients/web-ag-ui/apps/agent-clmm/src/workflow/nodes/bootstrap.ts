@@ -27,8 +27,14 @@ export const bootstrapNode = async (
   const mode = process.env['CLMM_MODE'] === 'production' ? 'production' : 'debug';
   const pollIntervalMs = resolvePollIntervalMs();
   const streamLimit = resolveStreamLimit();
+  const delegationsBypassActive = process.env['CLMM_DELEGATIONS_BYPASS'] === 'true';
 
-  logInfo('Initialized LangGraph workflow context', { mode, pollIntervalMs, streamLimit });
+  logInfo('Initialized LangGraph workflow context', {
+    mode,
+    pollIntervalMs,
+    streamLimit,
+    delegationsBypassActive,
+  });
 
   const dispatch: ClmmEvent = {
     type: 'dispatch-response',
@@ -86,6 +92,9 @@ export const bootstrapNode = async (
       operatorConfig: undefined,
       haltReason: undefined,
       executionError: undefined,
+      fundingTokenInput: undefined,
+      delegationBundle: undefined,
+      delegationsBypassActive,
     },
   };
 };

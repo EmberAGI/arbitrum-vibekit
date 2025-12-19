@@ -51,9 +51,12 @@ export const prepareOperatorNode = async (
   const operatorWalletAddress = normalizeHexAddress(operatorInput.walletAddress, 'wallet address');
 
   const selectedPool =
-    profile.allowedPools?.find(
-      (pool) => pool.address.toLowerCase() === selectedPoolAddress.toLowerCase(),
-    ) ?? (await fetchPoolSnapshot(camelotClient, selectedPoolAddress, ARBITRUM_CHAIN_ID));
+    (state.view.selectedPool &&
+    state.view.selectedPool.address.toLowerCase() === selectedPoolAddress.toLowerCase()
+      ? state.view.selectedPool
+      : profile.allowedPools?.find(
+          (pool) => pool.address.toLowerCase() === selectedPoolAddress.toLowerCase(),
+        )) ?? (await fetchPoolSnapshot(camelotClient, selectedPoolAddress, ARBITRUM_CHAIN_ID));
 
   if (!selectedPool) {
     const failureMessage = `ERROR: Pool ${selectedPoolAddress} not available from Ember API`;
@@ -83,8 +86,78 @@ export const prepareOperatorNode = async (
     });
   }
 
+  const delegationsBypassActive = state.view.delegationsBypassActive === true;
+  if (!delegationsBypassActive) {
+    const delegationBundle = state.view.delegationBundle;
+    if (!delegationBundle) {
+      const failureMessage =
+        'ERROR: Delegation bundle missing. Complete delegation signing before continuing.';
+      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      await copilotkitEmitState(config, {
+        view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      });
+      return new Command({
+        update: {
+          view: {
+            haltReason: failureMessage,
+            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+            task,
+            profile: state.view.profile,
+            transactionHistory: state.view.transactionHistory,
+            metrics: state.view.metrics,
+          },
+        },
+        goto: 'summarize',
+      });
+    }
+
+    if (delegationBundle.delegatorAddress.toLowerCase() !== operatorWalletAddress.toLowerCase()) {
+      const failureMessage =
+        `ERROR: Delegation bundle delegator ${delegationBundle.delegatorAddress} does not match selected operator wallet ${operatorWalletAddress}.`;
+      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      await copilotkitEmitState(config, {
+        view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      });
+      return new Command({
+        update: {
+          view: {
+            haltReason: failureMessage,
+            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+            task,
+            profile: state.view.profile,
+            transactionHistory: state.view.transactionHistory,
+            metrics: state.view.metrics,
+          },
+        },
+        goto: 'summarize',
+      });
+    }
+
+    if (delegationBundle.delegateeAddress.toLowerCase() !== agentWalletAddress.toLowerCase()) {
+      const failureMessage =
+        `ERROR: Delegation bundle delegatee ${delegationBundle.delegateeAddress} does not match agent wallet ${agentWalletAddress}.`;
+      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      await copilotkitEmitState(config, {
+        view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      });
+      return new Command({
+        update: {
+          view: {
+            haltReason: failureMessage,
+            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+            task,
+            profile: state.view.profile,
+            transactionHistory: state.view.transactionHistory,
+            metrics: state.view.metrics,
+          },
+        },
+        goto: 'summarize',
+      });
+    }
+  }
+
   const operatorConfig: ResolvedOperatorConfig = {
-    walletAddress: agentWalletAddress,
+    walletAddress: delegationsBypassActive ? agentWalletAddress : operatorWalletAddress,
     baseContributionUsd: operatorInput.baseContributionUsd ?? 5_000,
     manualBandwidthBps: DEFAULT_TICK_BANDWIDTH_BPS,
     autoCompoundFees: true,
@@ -103,7 +176,9 @@ export const prepareOperatorNode = async (
   const { task, statusEvent } = buildTaskStatus(
     state.view.task,
     'working',
-    `Managing pool ${selectedPool.token0.symbol}/${selectedPool.token1.symbol} from ${agentWalletAddress}`,
+    delegationsBypassActive
+      ? `Delegation bypass active. Managing pool ${selectedPool.token0.symbol}/${selectedPool.token1.symbol} from agent wallet ${agentWalletAddress}`
+      : `Delegations active. Managing pool ${selectedPool.token0.symbol}/${selectedPool.token1.symbol} from user wallet ${operatorWalletAddress} (delegatee=${agentWalletAddress})`,
   );
   await copilotkitEmitState(config, {
     view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },

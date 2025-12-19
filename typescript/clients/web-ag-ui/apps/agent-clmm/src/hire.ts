@@ -3,9 +3,9 @@ import { pathToFileURL } from 'node:url';
 import { v7 as uuidv7 } from 'uuid';
 
 import { clmmGraph } from './agent.js';
-import { type OperatorConfigInput, OperatorConfigInputSchema } from './domain/types.js';
+import { type FundingTokenInput, FundingTokenInputSchema, type OperatorConfigInput, OperatorConfigInputSchema } from './domain/types.js';
 import { runGraphWithAutoResume } from './workflow/autoResumeRunner.js';
-import { type OperatorInterrupt } from './workflow/context.js';
+import { type DelegationSigningInterrupt, type FundingTokenInterrupt, type OperatorInterrupt } from './workflow/context.js';
 import { cancelCronForThread } from './workflow/cronScheduler.js';
 
 function resolveOperatorInputFromEnv(): OperatorConfigInput {
@@ -55,6 +55,24 @@ function isOperatorInterrupt(value: unknown): value is OperatorInterrupt {
   );
 }
 
+function isFundingTokenInterrupt(value: unknown): value is FundingTokenInterrupt {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    (value as { type?: unknown }).type === 'clmm-funding-token-request'
+  );
+}
+
+function isDelegationSigningInterrupt(value: unknown): value is DelegationSigningInterrupt {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    (value as { type?: unknown }).type === 'clmm-delegation-signing-request'
+  );
+}
+
 export async function startClmmHire(threadId: string, operatorInput: OperatorConfigInput) {
   const hireMessage = {
     id: uuidv7(),
@@ -77,6 +95,21 @@ export async function startClmmHire(threadId: string, operatorInput: OperatorCon
       const value = interrupt.value;
       if (isOperatorInterrupt(value)) {
         return operatorInput;
+      }
+      if (isFundingTokenInterrupt(value)) {
+        const raw = process.env['CLMM_FUNDING_TOKEN_ADDRESS'];
+        const parsed = FundingTokenInputSchema.safeParse({ fundingTokenAddress: raw });
+        if (!parsed.success) {
+          throw new Error(
+            'Funding-token selection required but CLMM_FUNDING_TOKEN_ADDRESS is not set to a valid 0x address.',
+          );
+        }
+        return parsed.data satisfies FundingTokenInput;
+      }
+      if (isDelegationSigningInterrupt(value)) {
+        throw new Error(
+          'Delegation signing is required. This CLI auto-resume does not support wallet signing; rerun with CLMM_DELEGATIONS_BYPASS=true or complete onboarding via the web UI.',
+        );
       }
       throw new Error(
         `Unsupported interrupt type for auto-resume (value=${value ? JSON.stringify(value) : 'undefined'}).`,
@@ -122,4 +155,3 @@ if (invokedAsEntryPoint) {
     process.once('SIGTERM', () => shutdown('SIGTERM'));
   }
 }
-

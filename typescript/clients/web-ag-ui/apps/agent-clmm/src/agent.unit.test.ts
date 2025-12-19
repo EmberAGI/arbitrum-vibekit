@@ -158,10 +158,9 @@ describe('executeDecision', () => {
       clients: makeClients(),
     });
 
-    // Then it should withdraw before minting, ensuring allowances and transaction ordering remain correct
+    // Then it should withdraw before minting, preserving transaction ordering
     expect(requestWithdrawal).toHaveBeenCalledTimes(2);
     expect(requestRebalance).toHaveBeenCalledTimes(1);
-    expect(ensureAllowanceMock).toHaveBeenCalledTimes(2);
     expect(executeTransactionMock).toHaveBeenCalledTimes(2);
     expect(executeTransactionMock.mock.calls[0]?.[1]).toMatchObject({ to: '0xwithdraw' });
     expect(executeTransactionMock.mock.calls[1]?.[1]).toMatchObject({ to: '0xreenter' });

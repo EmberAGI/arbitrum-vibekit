@@ -8,6 +8,7 @@ import { v7 as uuidv7 } from 'uuid';
 import { resolvePollIntervalMs, resolveStreamLimit } from '../config/constants.js';
 import {
   type CamelotPool,
+  type FundingTokenInput,
   type OperatorConfigInput,
   type RebalanceTelemetry,
   type ResolvedOperatorConfig,
@@ -98,19 +99,83 @@ export type OperatorInterrupt = {
   artifactId?: string;
 };
 
+export type FundingTokenOption = {
+  address: `0x${string}`;
+  symbol: string;
+  decimals: number;
+  balance: string; // base units (decimal string)
+};
+
+export type FundingTokenInterrupt = {
+  type: 'clmm-funding-token-request';
+  message: string;
+  payloadSchema: Record<string, unknown>;
+  options: FundingTokenOption[];
+};
+
+export type DelegationCaveat = {
+  enforcer: `0x${string}`;
+  terms: `0x${string}`;
+  args: `0x${string}`;
+};
+
+export type SignedDelegation = {
+  delegate: `0x${string}`;
+  delegator: `0x${string}`;
+  authority: `0x${string}`;
+  caveats: DelegationCaveat[];
+  salt: `0x${string}`;
+  signature: `0x${string}`;
+};
+
+export type UnsignedDelegation = Omit<SignedDelegation, 'signature'>;
+
+export type DelegationIntentSummary = {
+  target: `0x${string}`;
+  selector: `0x${string}`;
+  allowedCalldata: Array<{ startIndex: number; value: `0x${string}` }>;
+};
+
+export type DelegationBundle = {
+  chainId: number;
+  delegationManager: `0x${string}`;
+  delegatorAddress: `0x${string}`;
+  delegateeAddress: `0x${string}`;
+  delegations: SignedDelegation[];
+  intents: DelegationIntentSummary[];
+  descriptions: string[];
+  warnings: string[];
+};
+
+export type DelegationSigningInterrupt = {
+  type: 'clmm-delegation-signing-request';
+  message: string;
+  payloadSchema: Record<string, unknown>;
+  chainId: number;
+  delegationManager: `0x${string}`;
+  delegatorAddress: `0x${string}`;
+  delegateeAddress: `0x${string}`;
+  delegationsToSign: UnsignedDelegation[];
+  descriptions: string[];
+  warnings: string[];
+};
+
 type ClmmViewState = {
   command?: string;
   task?: Task;
   poolArtifact?: Artifact;
   operatorInput?: OperatorConfigInput;
+  fundingTokenInput?: FundingTokenInput;
   selectedPool?: CamelotPool;
   operatorConfig?: ResolvedOperatorConfig;
+  delegationBundle?: DelegationBundle;
   haltReason?: string;
   executionError?: string;
   profile: ClmmProfile;
   activity: ClmmActivity;
   metrics: ClmmMetrics;
   transactionHistory: ClmmTransaction[];
+  delegationsBypassActive?: boolean;
 };
 
 const defaultSettingsState = (): ClmmSettings => ({
@@ -218,10 +283,13 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     task: right.task ?? left.task,
     poolArtifact: right.poolArtifact ?? left.poolArtifact,
     operatorInput: right.operatorInput ?? left.operatorInput,
+    fundingTokenInput: right.fundingTokenInput ?? left.fundingTokenInput,
     selectedPool: right.selectedPool ?? left.selectedPool,
     operatorConfig: right.operatorConfig ?? left.operatorConfig,
+    delegationBundle: right.delegationBundle ?? left.delegationBundle,
     haltReason: right.haltReason ?? left.haltReason,
     executionError: right.executionError ?? left.executionError,
+    delegationsBypassActive: right.delegationsBypassActive ?? left.delegationsBypassActive,
     profile: nextProfile,
     activity: {
       telemetry: nextTelemetry,

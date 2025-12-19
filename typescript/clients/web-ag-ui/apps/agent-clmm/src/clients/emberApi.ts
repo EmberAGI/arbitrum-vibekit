@@ -70,6 +70,20 @@ const ClmmWithdrawRequestSchema = z.object({
 });
 export type ClmmWithdrawRequest = z.infer<typeof ClmmWithdrawRequestSchema>;
 
+const SwapTokenIdentifierSchema = z.object({
+  chainId: z.string(),
+  address: z.templateLiteral(['0x', z.string()]),
+});
+
+const ClmmSwapRequestSchema = z.object({
+  walletAddress: z.templateLiteral(['0x', z.string()]),
+  amount: z.string(),
+  amountType: z.enum(['exactIn', 'exactOut']),
+  fromTokenUid: SwapTokenIdentifierSchema,
+  toTokenUid: SwapTokenIdentifierSchema,
+});
+export type ClmmSwapRequest = z.infer<typeof ClmmSwapRequestSchema>;
+
 type PoolListResponse = z.infer<typeof PoolListResponseSchema>;
 type WalletPositionsResponse = z.infer<typeof WalletPositionsResponseSchema>;
 type EmberLiquidityPool = PoolListResponse['liquidityPools'][number];
@@ -172,6 +186,15 @@ export class EmberCamelotClient {
         body: JSON.stringify(ClmmWithdrawRequestSchema.parse(payload)),
       },
     );
+
+    return body;
+  }
+
+  async requestSwap(payload: ClmmSwapRequest): Promise<ClmmRebalanceResponse> {
+    const body = await this.fetchEndpoint<ClmmRebalanceResponse>(`/swap`, ClmmRebalanceResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify(ClmmSwapRequestSchema.parse(payload)),
+    });
 
     return body;
   }

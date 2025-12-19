@@ -1,29 +1,22 @@
-import { erc20Abi, parseUnits } from 'viem';
+import { erc20Abi } from 'viem';
 
 import type { createClients } from '../clients/clients.js';
-import type {
-  EmberCamelotClient} from '../clients/emberApi.js';
+import type { EmberCamelotClient } from '../clients/emberApi.js';
 import {
   fetchPoolSnapshot,
   type ClmmRebalanceRequest,
+  type ClmmSwapRequest,
   type ClmmWithdrawRequest,
   type TransactionInformation,
 } from '../clients/emberApi.js';
-import {
-  ARBITRUM_CHAIN_ID,
-  CAMELOT_POSITION_MANAGER_ADDRESS,
-} from '../config/constants.js';
-import { ensureAllowance } from '../core/allowances.js';
+import { ARBITRUM_CHAIN_ID } from '../config/constants.js';
 import { buildRange, deriveMidPrice } from '../core/decision-engine.js';
+import { redeemDelegationsAndExecuteTransactions } from '../core/delegatedExecution.js';
 import { executeTransaction } from '../core/transaction.js';
 import { type CamelotPool, type ClmmAction, type ResolvedOperatorConfig } from '../domain/types.js';
 
-import { logInfo, normalizeHexAddress } from './context.js';
-
-type TokenAllocation = {
-  token0: bigint;
-  token1: bigint;
-};
+import { logInfo, normalizeHexAddress, type DelegationBundle } from './context.js';
+import { estimateTokenAllocationsUsd } from './planning/allocations.js';
 
 const MAX_WITHDRAW_ATTEMPTS = 3;
 
@@ -32,12 +25,18 @@ export async function executeDecision({
   camelotClient,
   pool,
   operatorConfig,
+  delegationBundle,
+  fundingTokenAddress,
+  delegationsBypassActive,
   clients,
 }: {
   action: ClmmAction;
   camelotClient: EmberCamelotClient;
   pool: CamelotPool;
   operatorConfig: ResolvedOperatorConfig;
+  delegationBundle?: DelegationBundle;
+  fundingTokenAddress?: `0x${string}`;
+  delegationsBypassActive?: boolean;
   clients: ReturnType<typeof createClients>;
 }): Promise<{ txHash?: string; gasSpentWei?: bigint }> {
   const walletAddress = operatorConfig.walletAddress;
@@ -67,6 +66,7 @@ export async function executeDecision({
       camelotClient,
       withdrawPayload,
       clients,
+      delegationBundle: delegationsBypassActive ? undefined : delegationBundle,
     });
     lastTxHash = withdrawalOutcome.lastHash;
     if (withdrawalOutcome.gasSpentWei !== undefined) {
@@ -109,52 +109,90 @@ export async function executeDecision({
       }
       action.targetRange = refreshedTargetRange;
 
-      const allocations = estimateTokenAllocations(
+      const desired = estimateTokenAllocationsUsd(
         refreshedPoolSnapshot,
         operatorConfig.baseContributionUsd,
       );
-      const tokenBudget = await resolveTokenBudget({
-        publicClient: clients.public,
-        walletAddress,
-        pool: refreshedPoolSnapshot,
-        desired: allocations,
-      });
+      const [token0Balance, token1Balance] = await Promise.all([
+        readTokenBalance(clients.public, refreshedPoolSnapshot.token0.address, walletAddress),
+        readTokenBalance(clients.public, refreshedPoolSnapshot.token1.address, walletAddress),
+      ]);
 
-      if (!tokenBudget) {
-        logInfo('Skipping supply: wallet lacks required token balances', {
-          walletAddress,
-          token0Required: allocations.token0.toString(),
-          token1Required: allocations.token1.toString(),
-        });
-        return { txHash: lastTxHash, gasSpentWei: totalGasSpentWei };
+      const deficit0 = desired.token0 > token0Balance ? desired.token0 - token0Balance : 0n;
+      const deficit1 = desired.token1 > token1Balance ? desired.token1 - token1Balance : 0n;
+
+      const swapTransactions: TransactionInformation[] = [];
+      const normalizedFundingToken = fundingTokenAddress
+        ? normalizeHexAddress(fundingTokenAddress, 'funding token address')
+        : undefined;
+
+      if (deficit0 > 0n || deficit1 > 0n) {
+        const swapFromWithinPair = async (params: {
+          fromToken: `0x${string}`;
+          toToken: `0x${string}`;
+          amountOut: bigint;
+        }) => {
+          const request: ClmmSwapRequest = {
+            walletAddress,
+            amount: params.amountOut.toString(),
+            amountType: 'exactOut',
+            fromTokenUid: { chainId: chainIdString, address: params.fromToken },
+            toTokenUid: { chainId: chainIdString, address: params.toToken },
+          };
+          const response = await camelotClient.requestSwap(request);
+          swapTransactions.push(...response.transactions);
+        };
+
+        const swapFromExternalFunding = async (params: {
+          toToken: `0x${string}`;
+          amountOut: bigint;
+        }) => {
+          if (!normalizedFundingToken) {
+            throw new Error(
+              'Swap funding token not configured. Re-hire the agent or provide pool tokens to proceed.',
+            );
+          }
+          const request: ClmmSwapRequest = {
+            walletAddress,
+            amount: params.amountOut.toString(),
+            amountType: 'exactOut',
+            fromTokenUid: { chainId: chainIdString, address: normalizedFundingToken },
+            toTokenUid: { chainId: chainIdString, address: params.toToken },
+          };
+          const response = await camelotClient.requestSwap(request);
+          swapTransactions.push(...response.transactions);
+        };
+
+        // Prefer swaps within the pool token pair when possible (no external funding).
+        if (deficit0 > 0n && deficit1 === 0n && token1Balance > desired.token1) {
+          await swapFromWithinPair({
+            fromToken: refreshedPoolSnapshot.token1.address,
+            toToken: refreshedPoolSnapshot.token0.address,
+            amountOut: deficit0,
+          });
+        } else if (deficit1 > 0n && deficit0 === 0n && token0Balance > desired.token0) {
+          await swapFromWithinPair({
+            fromToken: refreshedPoolSnapshot.token0.address,
+            toToken: refreshedPoolSnapshot.token1.address,
+            amountOut: deficit1,
+          });
+        } else {
+          // External funding required (either both tokens short, or the available token pair value
+          // is not sufficient to convert within-pair without underfunding the other side).
+          if (deficit0 > 0n) {
+            await swapFromExternalFunding({
+              toToken: refreshedPoolSnapshot.token0.address,
+              amountOut: deficit0,
+            });
+          }
+          if (deficit1 > 0n) {
+            await swapFromExternalFunding({
+              toToken: refreshedPoolSnapshot.token1.address,
+              amountOut: deficit1,
+            });
+          }
+        }
       }
-
-      if (tokenBudget.token0 < allocations.token0 || tokenBudget.token1 < allocations.token1) {
-        logInfo('Clamped supply allocation to wallet balances', {
-          walletAddress,
-          token0Planned: allocations.token0.toString(),
-          token0Using: tokenBudget.token0.toString(),
-          token1Planned: allocations.token1.toString(),
-          token1Using: tokenBudget.token1.toString(),
-        });
-      }
-
-      await ensureAllowance({
-        publicClient: clients.public,
-        tokenAddress: refreshedPoolSnapshot.token0.address,
-        ownerAccount: walletAddress,
-        spenderAddress: CAMELOT_POSITION_MANAGER_ADDRESS,
-        requiredAmount: tokenBudget.token0,
-        clients,
-      });
-      await ensureAllowance({
-        publicClient: clients.public,
-        tokenAddress: refreshedPoolSnapshot.token1.address,
-        ownerAccount: walletAddress,
-        spenderAddress: CAMELOT_POSITION_MANAGER_ADDRESS,
-        requiredAmount: tokenBudget.token1,
-        clients,
-      });
 
       const rebalancePayload: ClmmRebalanceRequest = {
         walletAddress,
@@ -171,14 +209,14 @@ export async function executeDecision({
               chainId: chainIdString,
               address: refreshedPoolSnapshot.token0.address,
             },
-            amount: tokenBudget.token0.toString(),
+            amount: desired.token0.toString(),
           },
           {
             tokenUid: {
               chainId: chainIdString,
               address: refreshedPoolSnapshot.token1.address,
             },
-            amount: tokenBudget.token1.toString(),
+            amount: desired.token1.toString(),
           },
         ],
       };
@@ -188,9 +226,9 @@ export async function executeDecision({
         poolAddress: poolIdentifier.address,
         tickLower: action.targetRange.lowerTick,
         tickUpper: action.targetRange.upperTick,
-        tokenBudget: {
-          token0: tokenBudget.token0.toString(),
-          token1: tokenBudget.token1.toString(),
+        desired: {
+          token0: desired.token0.toString(),
+          token1: desired.token1.toString(),
         },
       });
 
@@ -214,8 +252,9 @@ export async function executeDecision({
       }
 
       const supplyOutcome = await executePlanTransactions({
-        plan: rebalancePlan,
+        plan: { transactions: [...swapTransactions, ...rebalancePlan.transactions] },
         clients,
+        delegationBundle: delegationsBypassActive ? undefined : delegationBundle,
       });
       lastTxHash = supplyOutcome.lastHash ?? lastTxHash;
       if (supplyOutcome.gasSpentWei !== undefined) {
@@ -288,10 +327,12 @@ async function executeWithdrawalPlans({
   camelotClient,
   withdrawPayload,
   clients,
+  delegationBundle,
 }: {
   camelotClient: EmberCamelotClient;
   withdrawPayload: ClmmWithdrawRequest;
   clients: ReturnType<typeof createClients>;
+  delegationBundle?: DelegationBundle;
 }): Promise<{ lastHash?: string; gasSpentWei?: bigint }> {
   let lastHash: string | undefined;
   let totalGasSpentWei: bigint | undefined;
@@ -327,7 +368,7 @@ async function executeWithdrawalPlans({
       attempt: planIndex + 1,
       transactionCount: plan.transactions.length,
     });
-    const outcome = await executePlanTransactions({ plan, clients });
+    const outcome = await executePlanTransactions({ plan, clients, delegationBundle });
     lastHash = outcome.lastHash ?? lastHash;
     if (outcome.gasSpentWei !== undefined) {
       totalGasSpentWei = (totalGasSpentWei ?? 0n) + outcome.gasSpentWei;
@@ -338,10 +379,25 @@ async function executeWithdrawalPlans({
 async function executePlanTransactions({
   plan,
   clients,
+  delegationBundle,
 }: {
   plan: { transactions: TransactionInformation[] };
   clients: ReturnType<typeof createClients>;
+  delegationBundle?: DelegationBundle;
 }): Promise<{ lastHash?: string; gasSpentWei?: bigint }> {
+  if (delegationBundle) {
+    const { txHash, receipt } = await redeemDelegationsAndExecuteTransactions({
+      clients,
+      delegationBundle,
+      transactions: plan.transactions,
+    });
+    const gasSpentWei =
+      receipt.gasUsed !== undefined && receipt.effectiveGasPrice !== undefined
+        ? receipt.gasUsed * receipt.effectiveGasPrice
+        : undefined;
+    return { lastHash: txHash, gasSpentWei };
+  }
+
   let lastHash: string | undefined;
   let totalGasSpentWei: bigint | undefined;
   for (const tx of plan.transactions) {
@@ -352,38 +408,6 @@ async function executePlanTransactions({
     }
   }
   return { lastHash, gasSpentWei: totalGasSpentWei };
-}
-
-async function resolveTokenBudget({
-  publicClient,
-  walletAddress,
-  pool,
-  desired,
-}: {
-  publicClient: ReturnType<typeof createClients>['public'];
-  walletAddress: `0x${string}`;
-  pool: CamelotPool;
-  desired: TokenAllocation;
-}): Promise<TokenAllocation | undefined> {
-  const [token0Balance, token1Balance] = await Promise.all([
-    readTokenBalance(publicClient, pool.token0.address, walletAddress),
-    readTokenBalance(publicClient, pool.token1.address, walletAddress),
-  ]);
-
-  const token0 = token0Balance < desired.token0 ? token0Balance : desired.token0;
-  const token1 = token1Balance < desired.token1 ? token1Balance : desired.token1;
-  if (token0 === 0n || token1 === 0n) {
-    logInfo('Wallet lacks sufficient balance to supply both tokens', {
-      walletAddress,
-      token0Balance: token0Balance.toString(),
-      token1Balance: token1Balance.toString(),
-      token0Required: desired.token0.toString(),
-      token1Required: desired.token1.toString(),
-    });
-    return undefined;
-  }
-
-  return { token0, token1 };
 }
 
 function readTokenBalance(
@@ -450,30 +474,4 @@ function assertUnreachable(value: never): never {
       : undefined;
   const detail = kind ? `: ${kind}` : '';
   throw new Error(`Unsupported action kind${detail}`);
-}
-
-function estimateTokenAllocations(pool: CamelotPool, baseContributionUsd: number) {
-  const half = baseContributionUsd / 2;
-  const midPrice = deriveMidPrice(pool);
-  const token0Price =
-    pool.token0.usdPrice ??
-    (pool.token1.usdPrice && midPrice > 0 ? pool.token1.usdPrice * midPrice : undefined);
-  const token1Price =
-    pool.token1.usdPrice ??
-    (pool.token0.usdPrice && midPrice > 0 ? pool.token0.usdPrice / midPrice : undefined);
-
-  if (!token0Price || !token1Price || token0Price <= 0 || token1Price <= 0) {
-    throw new Error('Token USD prices unavailable; cannot size allowances');
-  }
-
-  const amount0 = parseUnits(
-    (half / token0Price).toFixed(pool.token0.decimals),
-    pool.token0.decimals,
-  );
-  const amount1 = parseUnits(
-    (half / token1Price).toFixed(pool.token1.decimals),
-    pool.token1.decimals,
-  );
-
-  return { token0: amount0, token1: amount1 };
 }
