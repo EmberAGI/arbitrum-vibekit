@@ -130,6 +130,9 @@ const UNISWAP_V3_ROUTER_ABI = [
 const SELECTOR_LABELS: Record<`0x${string}`, string> = {
   '0x095ea7b3': 'ERC20.approve',
   '0x04e45aaf': 'UniswapV3Router.exactInputSingle',
+  '0x0c49ccbe': 'LiquidityManager.decreaseLiquidity',
+  '0xfc6f7865': 'LiquidityManager.collect',
+  '0x42966c68': 'LiquidityManager.burn',
   [MULTICALL_SELECTORS.uniswapV3StyleMulticallBytesArray]: 'Multicall.multicall(bytes[])',
   [MULTICALL_SELECTORS.squidFundAndRunMulticall]: 'Squid.fundAndRunMulticall',
 };
@@ -430,6 +433,7 @@ export function buildDelegationRequestBundle(params: {
   delegatorAddress: `0x${string}`;
   delegateeAddress: `0x${string}`;
   transactions: readonly EmberEvmTransaction[];
+  extraIntents?: readonly DelegationIntent[];
 }): DelegationRequestBundle {
   const normalization = normalizeAndExpandTransactions({ transactions: params.transactions });
   const environment: DeleGatorEnvironment = normalization.environment;
@@ -440,6 +444,21 @@ export function buildDelegationRequestBundle(params: {
     const key = `${tx.to.toLowerCase()}:${tx.selector.toLowerCase()}:${pinKey(allowedCalldata)}`;
     if (!intentsMap.has(key)) {
       intentsMap.set(key, { target: tx.to, selector: tx.selector, allowedCalldata });
+    }
+  }
+
+  for (const intent of params.extraIntents ?? []) {
+    const target = intent.target.toLowerCase() as `0x${string}`;
+    const selector = intent.selector.toLowerCase() as `0x${string}`;
+    const allowedCalldata = uniqPins(
+      intent.allowedCalldata.map((pin) => ({
+        startIndex: pin.startIndex,
+        value: pin.value.toLowerCase() as `0x${string}`,
+      })),
+    );
+    const key = `${target}:${selector}:${pinKey(allowedCalldata)}`;
+    if (!intentsMap.has(key)) {
+      intentsMap.set(key, { target, selector, allowedCalldata });
     }
   }
 

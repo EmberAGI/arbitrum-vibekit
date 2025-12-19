@@ -1,15 +1,23 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
+import { parseUnits } from 'viem';
 import { z } from 'zod';
 
 import {
+  EmberApiRequestError,
   type ClmmRebalanceRequest,
   type ClmmSwapRequest,
   type TransactionInformation,
 } from '../../clients/emberApi.js';
-import { ARBITRUM_CHAIN_ID } from '../../config/constants.js';
+import {
+  ARBITRUM_CHAIN_ID,
+  CAMELOT_POSITION_MANAGER_ADDRESS,
+  DEFAULT_TICK_BANDWIDTH_BPS,
+} from '../../config/constants.js';
+import { buildRange, deriveMidPrice } from '../../core/decision-engine.js';
 import {
   buildDelegationRequestBundle,
+  type DelegationIntent,
   EmberEvmTransactionSchema,
   type EmberEvmTransaction,
 } from '../../delegations/emberDelegations.js';
@@ -105,6 +113,54 @@ function minNonZero(value: bigint): bigint {
 
 function asEmberTransactions(transactions: TransactionInformation[]): EmberEvmTransaction[] {
   return z.array(EmberEvmTransactionSchema).parse(transactions);
+}
+
+function stableTokenDecimals(address: `0x${string}`): number | null {
+  const normalized = address.toLowerCase();
+  switch (normalized) {
+    case '0xaf88d065e77c8cc2239327c5edb3a432268e5831': // USDC
+    case '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8': // USDC.e
+    case '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9': // USDT
+      return 6;
+    case '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1': // DAI
+      return 18;
+    default:
+      return null;
+  }
+}
+
+function isKnownEmberSwapUpstream400Error(error: unknown): boolean {
+  if (error instanceof EmberApiRequestError) {
+    return error.status === 500 && /AxiosError:\s*Request failed with status code 400/i.test(error.bodyText);
+  }
+  if (error instanceof Error) {
+    return (
+      /Ember API request failed \(500\)/i.test(error.message) &&
+      /AxiosError:\s*Request failed with status code 400/i.test(error.message)
+    );
+  }
+  return false;
+}
+
+function toAbiWordAddress(address: `0x${string}`): `0x${string}` {
+  const raw = address.toLowerCase().slice(2);
+  return `0x${'0'.repeat(24)}${raw}` as `0x${string}`;
+}
+
+function buildDeterministicWithdrawIntents(params: {
+  delegatorAddress: `0x${string}`;
+}): DelegationIntent[] {
+  const positionManager = CAMELOT_POSITION_MANAGER_ADDRESS.toLowerCase() as `0x${string}`;
+  const recipientWord = toAbiWordAddress(params.delegatorAddress);
+  return [
+    { target: positionManager, selector: '0x0c49ccbe', allowedCalldata: [] },
+    {
+      target: positionManager,
+      selector: '0xfc6f7865',
+      allowedCalldata: [{ startIndex: 36, value: recipientWord }],
+    },
+    { target: positionManager, selector: '0x42966c68', allowedCalldata: [] },
+  ];
 }
 
 function basesMatchUnsigned(params: { expected: UnsignedDelegation; received: SignedDelegation }): boolean {
@@ -258,16 +314,35 @@ export const collectDelegationsNode = async (
 
     for (const target of swapTargets) {
       try {
-        const request: ClmmSwapRequest = {
-          walletAddress: delegatorAddress,
-          amount: target.amountOut.toString(),
-          amountType: 'exactOut',
-          fromTokenUid: { chainId: chainIdString, address: fundingToken },
-          toTokenUid: { chainId: chainIdString, address: target.toToken },
-        };
+        const fundingDecimals = stableTokenDecimals(fundingToken);
+        const request: ClmmSwapRequest =
+          fundingDecimals !== null
+            ? {
+                walletAddress: delegatorAddress,
+                amount: parseUnits(
+                  Math.max(1, Math.min(10, baseContributionUsd / 2)).toFixed(fundingDecimals),
+                  fundingDecimals,
+                ).toString(),
+                amountType: 'exactIn',
+                fromTokenUid: { chainId: chainIdString, address: fundingToken },
+                toTokenUid: { chainId: chainIdString, address: target.toToken },
+              }
+            : {
+                walletAddress: delegatorAddress,
+                amount: target.amountOut.toString(),
+                amountType: 'exactOut',
+                fromTokenUid: { chainId: chainIdString, address: fundingToken },
+                toTokenUid: { chainId: chainIdString, address: target.toToken },
+              };
         const response = await camelotClient.requestSwap(request);
         plannedTransactions.push(...asEmberTransactions(response.transactions));
       } catch (error) {
+        if (isKnownEmberSwapUpstream400Error(error)) {
+          warnings.push(
+            `WARNING: Failed to request swap plan from fundingToken=${fundingToken} to token=${target.toToken}: Ember /swap returned HTTP 500 with an embedded upstream 400 (known provider limitation; try amountType=exactIn and/or a larger amount).`,
+          );
+          continue;
+        }
         const message = error instanceof Error ? error.message : String(error);
         warnings.push(
           `WARNING: Failed to request swap plan from fundingToken=${fundingToken} to token=${target.toToken}: ${message}`,
@@ -309,11 +384,23 @@ export const collectDelegationsNode = async (
   }
 
   try {
+    const decimalsDiff = selectedPool.token0.decimals - selectedPool.token1.decimals;
+    const midPrice = deriveMidPrice(selectedPool);
+    const targetRange = buildRange(
+      midPrice,
+      DEFAULT_TICK_BANDWIDTH_BPS,
+      selectedPool.tickSpacing ?? 60,
+      decimalsDiff,
+    );
     const request: ClmmRebalanceRequest = {
       walletAddress: delegatorAddress,
       supplyChain: chainIdString,
       poolIdentifier,
-      range: { type: 'full' },
+      range: {
+        type: 'limited',
+        minPrice: targetRange.lowerPrice.toString(),
+        maxPrice: targetRange.upperPrice.toString(),
+      },
       payableTokens: [
         { tokenUid: { chainId: chainIdString, address: selectedPool.token0.address }, amount: desired.token0.toString() },
         { tokenUid: { chainId: chainIdString, address: selectedPool.token1.address }, amount: desired.token1.toString() },
@@ -324,17 +411,6 @@ export const collectDelegationsNode = async (
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     warnings.push(`WARNING: Failed to request supply plan for delegation generation: ${message}`);
-  }
-
-  try {
-    const response = await camelotClient.requestWithdrawal({
-      walletAddress: delegatorAddress,
-      poolTokenUid: poolIdentifier,
-    });
-    plannedTransactions.push(...asEmberTransactions(response.transactions));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    warnings.push(`WARNING: Failed to request withdraw plan for delegation generation: ${message}`);
   }
 
   if (plannedTransactions.length === 0) {
@@ -364,6 +440,7 @@ export const collectDelegationsNode = async (
     delegatorAddress,
     delegateeAddress,
     transactions: plannedTransactions,
+    extraIntents: buildDeterministicWithdrawIntents({ delegatorAddress }),
   });
 
   warnings.push(...delegationRequest.warnings);
