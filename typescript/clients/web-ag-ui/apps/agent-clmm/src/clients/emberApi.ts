@@ -15,6 +15,20 @@ const HTTP_TIMEOUT_MS = 60_000;
 const CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM =
   'Algebra_0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B_42161';
 
+export class EmberApiRequestError extends Error {
+  readonly status: number;
+  readonly url: string;
+  readonly bodyText: string;
+
+  constructor(params: { message: string; status: number; url: string; bodyText: string }) {
+    super(params.message);
+    this.name = 'EmberApiRequestError';
+    this.status = params.status;
+    this.url = params.url;
+    this.bodyText = params.bodyText;
+  }
+}
+
 const TransactionInformationSchema = z.object({
   type: z.enum(['EVM_TX']),
   to: z.templateLiteral(['0x', z.string()]),
@@ -89,6 +103,11 @@ type WalletPositionsResponse = z.infer<typeof WalletPositionsResponseSchema>;
 type EmberLiquidityPool = PoolListResponse['liquidityPools'][number];
 type EmberWalletPosition = WalletPositionsResponse['positions'][number];
 
+export type EmberWalletPositionUid = {
+  poolTokenUid: { chainId: string; address: `0x${string}` };
+  providerId: string;
+};
+
 export class EmberCamelotClient {
   constructor(private readonly baseUrl: string) {}
 
@@ -110,7 +129,12 @@ export class EmberCamelotClient {
 
     if (!response.ok) {
       const text = await response.text().catch(() => 'No error body');
-      throw new Error(`Ember API request failed (${response.status}): ${text}`);
+      throw new EmberApiRequestError({
+        message: `Ember API request failed (${response.status}): ${text}`,
+        status: response.status,
+        url,
+        bodyText: text,
+      });
     }
 
     const json: unknown = await response.json();
@@ -162,6 +186,32 @@ export class EmberCamelotClient {
       )
       .map((position) => toWalletPosition(position, poolMap))
       .filter((position): position is WalletPosition => Boolean(position));
+  }
+
+  async listWalletPositionUids(
+    walletAddress: `0x${string}`,
+    chainId: number,
+  ): Promise<EmberWalletPositionUid[]> {
+    const query = new URLSearchParams();
+    query.set('chainId', String(chainId));
+    query.append('providerIds', CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM);
+    const data = await this.fetchEndpoint<WalletPositionsResponse>(
+      `/liquidity/positions/${walletAddress}?${query.toString()}`,
+      WalletPositionsResponseSchema,
+    );
+
+    return data.positions
+      .filter(
+        (position) =>
+          position.providerId.toLowerCase() === CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM.toLowerCase(),
+      )
+      .map((position) => ({
+        poolTokenUid: {
+          chainId: position.poolIdentifier.chainId,
+          address: normalizeAddress(position.poolIdentifier.address),
+        },
+        providerId: position.providerId,
+      }));
   }
 
   async requestRebalance(payload: ClmmRebalanceRequest): Promise<ClmmRebalanceResponse> {
