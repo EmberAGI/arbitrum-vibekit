@@ -105,6 +105,25 @@ function estimateExactInFromUsd(params: {
   return amountInBaseUnits.toString();
 }
 
+function estimateExactInBaseUnitsFromUsd(params: {
+  amountOutBaseUnits: bigint;
+  toTokenUsdPrice: number;
+  toTokenDecimals: number;
+  fromTokenUsdPrice: number;
+  fromTokenDecimals: number;
+  slippageMultiplier: number;
+}): bigint | null {
+  const estimated = estimateExactInFromUsd(params);
+  if (estimated === '0') {
+    return null;
+  }
+  try {
+    return BigInt(estimated);
+  } catch {
+    return null;
+  }
+}
+
 function summarizeSupplyRequest(request: ClmmRebalanceRequest) {
   return {
     walletAddress: request.walletAddress,
@@ -329,21 +348,77 @@ export async function executeDecision({
         };
 
         // Prefer swaps within the pool token pair when possible (no external funding).
+        let usedWithinPair = false;
+
         if (deficit0 > 0n && deficit1 === 0n && token1Balance > desired.token1) {
-          await swapFromWithinPair({
-            fromToken: refreshedPoolSnapshot.token1.address,
-            toToken: refreshedPoolSnapshot.token0.address,
-            amountOut: deficit0,
-            maxAmountIn: token1Balance - desired.token1,
+          const maxAmountIn = token1Balance - desired.token1;
+          const estimatedAmountIn = estimateExactInBaseUnitsFromUsd({
+            amountOutBaseUnits: deficit0,
+            toTokenUsdPrice: refreshedPoolSnapshot.token0.usdPrice ?? 0,
+            toTokenDecimals: refreshedPoolSnapshot.token0.decimals,
+            fromTokenUsdPrice: refreshedPoolSnapshot.token1.usdPrice ?? 0,
+            fromTokenDecimals: refreshedPoolSnapshot.token1.decimals,
+            slippageMultiplier: 1.05,
           });
-        } else if (deficit1 > 0n && deficit0 === 0n && token0Balance > desired.token0) {
-          await swapFromWithinPair({
-            fromToken: refreshedPoolSnapshot.token0.address,
-            toToken: refreshedPoolSnapshot.token1.address,
-            amountOut: deficit1,
-            maxAmountIn: token0Balance - desired.token0,
+
+          usedWithinPair =
+            typeof estimatedAmountIn === 'bigint' &&
+            estimatedAmountIn > 0n &&
+            estimatedAmountIn <= maxAmountIn;
+
+          if (!usedWithinPair) {
+            logInfo('Within-pair swap skipped: insufficient surplus to cover deficit', {
+              direction: `${refreshedPoolSnapshot.token1.symbol}->${refreshedPoolSnapshot.token0.symbol}`,
+              maxAmountIn: maxAmountIn.toString(),
+              estimatedAmountIn: estimatedAmountIn?.toString() ?? null,
+              deficitOut: deficit0.toString(),
+              fundingTokenAddress: normalizedFundingToken ?? null,
+            });
+          } else {
+            await swapFromWithinPair({
+              fromToken: refreshedPoolSnapshot.token1.address,
+              toToken: refreshedPoolSnapshot.token0.address,
+              amountOut: deficit0,
+              maxAmountIn,
+            });
+          }
+        }
+
+        if (!usedWithinPair && deficit1 > 0n && deficit0 === 0n && token0Balance > desired.token0) {
+          const maxAmountIn = token0Balance - desired.token0;
+          const estimatedAmountIn = estimateExactInBaseUnitsFromUsd({
+            amountOutBaseUnits: deficit1,
+            toTokenUsdPrice: refreshedPoolSnapshot.token1.usdPrice ?? 0,
+            toTokenDecimals: refreshedPoolSnapshot.token1.decimals,
+            fromTokenUsdPrice: refreshedPoolSnapshot.token0.usdPrice ?? 0,
+            fromTokenDecimals: refreshedPoolSnapshot.token0.decimals,
+            slippageMultiplier: 1.05,
           });
-        } else {
+
+          usedWithinPair =
+            typeof estimatedAmountIn === 'bigint' &&
+            estimatedAmountIn > 0n &&
+            estimatedAmountIn <= maxAmountIn;
+
+          if (!usedWithinPair) {
+            logInfo('Within-pair swap skipped: insufficient surplus to cover deficit', {
+              direction: `${refreshedPoolSnapshot.token0.symbol}->${refreshedPoolSnapshot.token1.symbol}`,
+              maxAmountIn: maxAmountIn.toString(),
+              estimatedAmountIn: estimatedAmountIn?.toString() ?? null,
+              deficitOut: deficit1.toString(),
+              fundingTokenAddress: normalizedFundingToken ?? null,
+            });
+          } else {
+            await swapFromWithinPair({
+              fromToken: refreshedPoolSnapshot.token0.address,
+              toToken: refreshedPoolSnapshot.token1.address,
+              amountOut: deficit1,
+              maxAmountIn,
+            });
+          }
+        }
+
+        if (!usedWithinPair) {
           // External funding required (either both tokens short, or the available token pair value
           // is not sufficient to convert within-pair without underfunding the other side).
           const targets: Array<{ toToken: `0x${string}`; amountOut: bigint }> = [];
