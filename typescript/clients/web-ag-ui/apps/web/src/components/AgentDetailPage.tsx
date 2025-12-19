@@ -14,12 +14,13 @@ import {
 } from 'lucide-react';
 import { signDelegation } from '@metamask/delegation-toolkit/actions';
 import { formatUnits } from 'viem';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import type {
   AgentProfile,
   AgentMetrics,
   AgentInterrupt,
   FundingTokenOption,
+  OnboardingState,
   Pool,
   OperatorConfigInput,
   FundingTokenInput,
@@ -65,6 +66,7 @@ interface AgentDetailPageProps {
   haltReason?: string;
   executionError?: string;
   delegationsBypassActive?: boolean;
+  onboarding?: OnboardingState;
   // Transaction history and telemetry
   transactions?: Transaction[];
   telemetry?: TelemetryItem[];
@@ -106,6 +108,7 @@ export function AgentDetailPage({
   haltReason,
   executionError,
   delegationsBypassActive,
+  onboarding,
   transactions = [],
   telemetry = [],
   allocationAmount,
@@ -321,6 +324,7 @@ export function AgentDetailPage({
               haltReason={haltReason}
               executionError={executionError}
               delegationsBypassActive={delegationsBypassActive}
+              onboarding={onboarding}
               telemetry={telemetry}
               allocationAmount={allocationAmount}
               onAllocationChange={onAllocationChange}
@@ -618,6 +622,7 @@ interface AgentBlockersTabProps {
   haltReason?: string;
   executionError?: string;
   delegationsBypassActive?: boolean;
+  onboarding?: OnboardingState;
   telemetry?: TelemetryItem[];
   allocationAmount?: number;
   onAllocationChange?: (amount: number) => void;
@@ -649,16 +654,22 @@ function AgentBlockersTab({
   haltReason,
   executionError,
   delegationsBypassActive,
+  onboarding,
   telemetry = [],
   allocationAmount,
   onAllocationChange,
 }: AgentBlockersTabProps) {
-  const { walletClient, chainId, switchChain, isLoading: isWalletLoading, error: walletError } =
-    usePrivyWalletClient();
+  const {
+    walletClient,
+    privyWallet,
+    chainId,
+    switchChain,
+    isLoading: isWalletLoading,
+    error: walletError,
+  } = usePrivyWalletClient();
 
-  const [currentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(1);
   const [poolAddress, setPoolAddress] = useState('');
-  const [walletAddress, setWalletAddress] = useState('');
   const [baseContributionUsd, setBaseContributionUsd] = useState(
     allocationAmount?.toString() ?? '',
   );
@@ -677,8 +688,15 @@ function AgentBlockersTab({
       return;
     }
 
-    if (!isHexAddress(walletAddress)) {
-      setError('Wallet address must be a 0x-prefixed hex string.');
+    const operatorWalletAddress = privyWallet?.address ?? '';
+
+    if (!operatorWalletAddress) {
+      setError('Connect a wallet to continue.');
+      return;
+    }
+
+    if (!isHexAddress(operatorWalletAddress)) {
+      setError('Connected wallet address is not a valid 0x-prefixed hex string.');
       return;
     }
 
@@ -695,11 +713,12 @@ function AgentBlockersTab({
 
     onInterruptSubmit?.({
       poolAddress: poolAddress as `0x${string}`,
-      walletAddress: walletAddress as `0x${string}`,
+      walletAddress: operatorWalletAddress as `0x${string}`,
       ...(baseContributionNumber !== undefined
         ? { baseContributionUsd: baseContributionNumber }
         : {}),
     });
+    setCurrentStep(2);
   };
 
   const formatDate = (timestamp?: string) => {
@@ -714,9 +733,19 @@ function AgentBlockersTab({
     });
   };
 
-  const showOperatorConfigForm = activeInterrupt?.type === 'operator-config-request';
-  const showFundingTokenForm = activeInterrupt?.type === 'clmm-funding-token-request';
-  const showDelegationSigningForm = activeInterrupt?.type === 'clmm-delegation-signing-request';
+  const showOperatorConfigForm =
+    currentStep === 1 && activeInterrupt?.type === 'operator-config-request';
+  const showFundingTokenForm =
+    currentStep === 2 && activeInterrupt?.type === 'clmm-funding-token-request';
+  const showDelegationSigningForm =
+    currentStep === 3 && activeInterrupt?.type === 'clmm-delegation-signing-request';
+
+  useEffect(() => {
+    const nextStep = onboarding?.step;
+    if (typeof nextStep === 'number' && Number.isFinite(nextStep) && nextStep > 0) {
+      setCurrentStep(nextStep);
+    }
+  }, [onboarding?.step]);
 
   const fundingOptions: FundingTokenOption[] = showFundingTokenForm
     ? [...(activeInterrupt as { options: FundingTokenOption[] }).options].sort((a, b) => {
@@ -748,6 +777,7 @@ function AgentBlockersTab({
       return;
     }
 
+    setCurrentStep(3);
     onInterruptSubmit?.({
       fundingTokenAddress: fundingTokenAddress as `0x${string}`,
     });
@@ -755,6 +785,7 @@ function AgentBlockersTab({
 
   const handleRejectDelegations = () => {
     setError(null);
+    setCurrentStep(5);
     onInterruptSubmit?.({ outcome: 'rejected' });
   };
 
@@ -799,6 +830,7 @@ function AgentBlockersTab({
       }
 
       const response: DelegationSigningResponse = { outcome: 'signed', signedDelegations };
+      setCurrentStep(5);
       onInterruptSubmit?.(response);
     } catch (signError: unknown) {
       const message =
@@ -930,22 +962,12 @@ function AgentBlockersTab({
                   </div>
                 </div>
 
-                <div className="mb-6">
-                  <label className="block text-sm text-gray-400 mb-2">Wallet Address</label>
-                  <input
-                    type="text"
-                    value={walletAddress}
-                    onChange={(e) => setWalletAddress(e.target.value.trim())}
-                    placeholder="0x..."
-                    className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
-                  />
-                </div>
-
                 {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
 
                 <div className="flex justify-end">
                   <button
                     type="submit"
+                    disabled={isWalletLoading}
                     className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
                   >
                     Next
@@ -1066,9 +1088,13 @@ function AgentBlockersTab({
             ) : (
               <div className="text-center py-12">
                 <div className="text-gray-600 text-4xl mb-4">⏳</div>
-                <h3 className="text-lg font-medium text-white mb-2">Waiting for agent</h3>
+                <h3 className="text-lg font-medium text-white mb-2">
+                  {currentStep > 1 ? 'Processing…' : 'Waiting for agent'}
+                </h3>
                 <p className="text-gray-500 text-sm">
-                  The agent will prompt you when it needs configuration input.
+                  {currentStep > 1
+                    ? 'The agent is processing your last submission and will request the next input if needed.'
+                    : 'The agent will prompt you when it needs configuration input.'}
                 </p>
                 {!taskId && (
                   <p className="text-gray-600 text-xs mt-4">

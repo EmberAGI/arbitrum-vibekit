@@ -57,6 +57,12 @@ export type AgentInterrupt =
   | FundingTokenRequestInterrupt
   | DelegationSigningRequestInterrupt;
 
+export type OnboardingState = {
+  step: number;
+  totalSteps?: number;
+  key?: string;
+};
+
 export interface OperatorConfigInput {
   poolAddress: `0x${string}`;
   walletAddress: `0x${string}`;
@@ -111,6 +117,7 @@ export interface AgentView {
       timestamp?: string;
     };
   };
+  onboarding?: OnboardingState;
   poolArtifact?: unknown;
   operatorInput?: unknown;
   fundingTokenInput?: unknown;
