@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import {
   EmberApiRequestError,
+  formatEmberApiError,
   type ClmmRebalanceRequest,
   type ClmmSwapRequest,
   type TransactionInformation,
@@ -127,6 +128,37 @@ function stableTokenDecimals(address: `0x${string}`): number | null {
     default:
       return null;
   }
+}
+
+function stableTokenLabel(address: string): string | null {
+  const normalized = address.toLowerCase();
+  switch (normalized) {
+    case '0xaf88d065e77c8cc2239327c5edb3a432268e5831':
+    case '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8':
+      return 'USDC';
+    case '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9':
+      return 'USDT';
+    case '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1':
+      return 'DAI';
+    default:
+      return null;
+  }
+}
+
+function tokenLabelForUser(params: {
+  address: string;
+  selectedPool: { token0: { address: string; symbol?: string }; token1: { address: string; symbol?: string } };
+}): string {
+  const normalized = params.address.toLowerCase();
+  const token0 = params.selectedPool.token0.address.toLowerCase();
+  const token1 = params.selectedPool.token1.address.toLowerCase();
+  if (normalized === token0) {
+    return params.selectedPool.token0.symbol ?? 'the first pool token';
+  }
+  if (normalized === token1) {
+    return params.selectedPool.token1.symbol ?? 'the second pool token';
+  }
+  return stableTokenLabel(params.address) ?? 'a token';
 }
 
 function isKnownEmberSwapUpstream400Error(error: unknown): boolean {
@@ -313,39 +345,51 @@ export const collectDelegationsNode = async (
     }
 
     for (const target of swapTargets) {
+      const fundingDecimals = stableTokenDecimals(fundingToken);
+      const request: ClmmSwapRequest =
+        fundingDecimals !== null
+          ? {
+              walletAddress: delegatorAddress,
+              amount: parseUnits(
+                Math.max(1, Math.min(10, baseContributionUsd / 2)).toFixed(fundingDecimals),
+                fundingDecimals,
+              ).toString(),
+              amountType: 'exactIn',
+              fromTokenUid: { chainId: chainIdString, address: fundingToken },
+              toTokenUid: { chainId: chainIdString, address: target.toToken },
+            }
+          : {
+              walletAddress: delegatorAddress,
+              amount: target.amountOut.toString(),
+              amountType: 'exactOut',
+              fromTokenUid: { chainId: chainIdString, address: fundingToken },
+              toTokenUid: { chainId: chainIdString, address: target.toToken },
+            };
+
       try {
-        const fundingDecimals = stableTokenDecimals(fundingToken);
-        const request: ClmmSwapRequest =
-          fundingDecimals !== null
-            ? {
-                walletAddress: delegatorAddress,
-                amount: parseUnits(
-                  Math.max(1, Math.min(10, baseContributionUsd / 2)).toFixed(fundingDecimals),
-                  fundingDecimals,
-                ).toString(),
-                amountType: 'exactIn',
-                fromTokenUid: { chainId: chainIdString, address: fundingToken },
-                toTokenUid: { chainId: chainIdString, address: target.toToken },
-              }
-            : {
-                walletAddress: delegatorAddress,
-                amount: target.amountOut.toString(),
-                amountType: 'exactOut',
-                fromTokenUid: { chainId: chainIdString, address: fundingToken },
-                toTokenUid: { chainId: chainIdString, address: target.toToken },
-              };
         const response = await camelotClient.requestSwap(request);
         plannedTransactions.push(...asEmberTransactions(response.transactions));
       } catch (error) {
         if (isKnownEmberSwapUpstream400Error(error)) {
+          const fromLabel = tokenLabelForUser({ address: fundingToken, selectedPool });
+          const toLabel = tokenLabelForUser({ address: target.toToken, selectedPool });
           warnings.push(
-            `WARNING: Failed to request swap plan from fundingToken=${fundingToken} to token=${target.toToken}: Ember /swap returned HTTP 500 with an embedded upstream 400 (known provider limitation; try amountType=exactIn and/or a larger amount).`,
+            `We couldn’t prepare a swap from ${fromLabel} to ${toLabel}. Try again with a slightly larger amount.`,
           );
           continue;
         }
         const message = error instanceof Error ? error.message : String(error);
+        logInfo('collectDelegations: failed to request swap plan (funding token)', {
+          request,
+          fundingToken,
+          toToken: target.toToken,
+          message,
+          emberError: formatEmberApiError(error),
+        });
+        const fromLabel = tokenLabelForUser({ address: fundingToken, selectedPool });
+        const toLabel = tokenLabelForUser({ address: target.toToken, selectedPool });
         warnings.push(
-          `WARNING: Failed to request swap plan from fundingToken=${fundingToken} to token=${target.toToken}: ${message}`,
+          `We couldn’t prepare a swap from ${fromLabel} to ${toLabel}. Please try again.`,
         );
       }
     }
@@ -366,7 +410,20 @@ export const collectDelegationsNode = async (
     plannedTransactions.push(...asEmberTransactions(response.transactions));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    warnings.push(`WARNING: Failed to request swap plan token0→token1: ${message}`);
+    const fromLabel = tokenLabelForUser({ address: selectedPool.token0.address, selectedPool });
+    const toLabel = tokenLabelForUser({ address: selectedPool.token1.address, selectedPool });
+    logInfo('collectDelegations: failed to request swap plan token0→token1', {
+      request: {
+        walletAddress: delegatorAddress,
+        amount: sampleSwapAmount0.toString(),
+        amountType: 'exactIn',
+        fromTokenUid: { chainId: chainIdString, address: selectedPool.token0.address },
+        toTokenUid: { chainId: chainIdString, address: selectedPool.token1.address },
+      } satisfies ClmmSwapRequest,
+      message,
+      emberError: formatEmberApiError(error),
+    });
+    warnings.push(`We couldn’t prepare a swap from ${fromLabel} to ${toLabel}. Please try again.`);
   }
   try {
     const request: ClmmSwapRequest = {
@@ -380,7 +437,20 @@ export const collectDelegationsNode = async (
     plannedTransactions.push(...asEmberTransactions(response.transactions));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    warnings.push(`WARNING: Failed to request swap plan token1→token0: ${message}`);
+    const fromLabel = tokenLabelForUser({ address: selectedPool.token1.address, selectedPool });
+    const toLabel = tokenLabelForUser({ address: selectedPool.token0.address, selectedPool });
+    logInfo('collectDelegations: failed to request swap plan token1→token0', {
+      request: {
+        walletAddress: delegatorAddress,
+        amount: sampleSwapAmount1.toString(),
+        amountType: 'exactIn',
+        fromTokenUid: { chainId: chainIdString, address: selectedPool.token1.address },
+        toTokenUid: { chainId: chainIdString, address: selectedPool.token0.address },
+      } satisfies ClmmSwapRequest,
+      message,
+      emberError: formatEmberApiError(error),
+    });
+    warnings.push(`We couldn’t prepare a swap from ${fromLabel} to ${toLabel}. Please try again.`);
   }
 
   try {
@@ -410,12 +480,15 @@ export const collectDelegationsNode = async (
     plannedTransactions.push(...asEmberTransactions(response.transactions));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    warnings.push(`WARNING: Failed to request supply plan for delegation generation: ${message}`);
+    logInfo('collectDelegations: failed to request supply plan', {
+      message,
+      emberError: formatEmberApiError(error),
+    });
+    warnings.push('We couldn’t prepare the liquidity steps right now. Please try again.');
   }
 
   if (plannedTransactions.length === 0) {
-    const failureMessage =
-      'ERROR: Unable to generate any Ember transactions for delegation planning; cannot safely derive delegations.';
+    const failureMessage = 'We couldn’t prepare the steps needed to continue. Please try again.';
     logInfo('collectDelegations: no planned transactions', { failureMessage });
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
@@ -447,7 +520,8 @@ export const collectDelegationsNode = async (
 
   const request: DelegationSigningInterrupt = {
     type: 'clmm-delegation-signing-request',
-    message: 'Review and sign the required delegations. If anything looks unsafe, reject and adjust your configuration.',
+    message:
+      'Review and approve the permissions needed to manage your liquidity position. If anything looks unfamiliar, cancel and ask for help.',
     payloadSchema: z.toJSONSchema(DelegationSigningResponseJsonSchema),
     chainId: delegationRequest.chainId,
     delegationManager: delegationRequest.environment.DelegationManager,
@@ -461,7 +535,7 @@ export const collectDelegationsNode = async (
   const awaitingInput = buildTaskStatus(
     state.view.task,
     'input-required',
-    'Awaiting delegation signatures to continue CLMM onboarding.',
+    'Waiting for you to approve the required permissions to continue setup.',
   );
   await copilotkitEmitState(config, {
     view: {

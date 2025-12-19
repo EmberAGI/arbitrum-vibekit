@@ -39,6 +39,7 @@ export type DelegationIntent = {
   target: `0x${string}`;
   selector: `0x${string}`;
   allowedCalldata: readonly AllowedCalldataPin[];
+  exampleCalldata?: `0x${string}`;
 };
 
 export type UnsignedDelegation = Omit<Delegation, 'signature'>;
@@ -127,15 +128,93 @@ const UNISWAP_V3_ROUTER_ABI = [
   },
 ] as const satisfies Abi;
 
-const SELECTOR_LABELS: Record<`0x${string}`, string> = {
-  '0x095ea7b3': 'ERC20.approve',
-  '0x04e45aaf': 'UniswapV3Router.exactInputSingle',
-  '0x0c49ccbe': 'LiquidityManager.decreaseLiquidity',
-  '0xfc6f7865': 'LiquidityManager.collect',
-  '0x42966c68': 'LiquidityManager.burn',
-  [MULTICALL_SELECTORS.uniswapV3StyleMulticallBytesArray]: 'Multicall.multicall(bytes[])',
-  [MULTICALL_SELECTORS.squidFundAndRunMulticall]: 'Squid.fundAndRunMulticall',
+const SELECTORS = {
+  erc20Approve: '0x095ea7b3',
+  uniswapV3ExactInputSingle: '0x04e45aaf',
+  liquidityManagerDecreaseLiquidity: '0x0c49ccbe',
+  liquidityManagerCollect: '0xfc6f7865',
+  liquidityManagerBurn: '0x42966c68',
+} as const satisfies Record<string, `0x${string}`>;
+
+const KNOWN_ARBITRUM_TOKEN_LABELS: Record<`0x${string}`, string> = {
+  '0xaf88d065e77c8cc2239327c5edb3a432268e5831': 'USDC',
+  '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8': 'USDC',
+  '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9': 'USDT',
+  '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1': 'DAI',
+  '0x82af49447d8a07e3bd95bd0d56f35241523fbab1': 'WETH',
+  '0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f': 'WBTC',
 };
+
+function tokenLabel(params: { chainId: number; address: `0x${string}` }): string | null {
+  const normalized = params.address.toLowerCase() as `0x${string}`;
+  if (params.chainId === 42161) {
+    return KNOWN_ARBITRUM_TOKEN_LABELS[normalized] ?? null;
+  }
+  return null;
+}
+
+function describeDelegationIntentForUser(params: { chainId: number; intent: DelegationIntent }): string {
+  const selector = params.intent.selector.toLowerCase() as `0x${string}`;
+  const target = params.intent.target.toLowerCase() as `0x${string}`;
+
+  if (selector === SELECTORS.erc20Approve) {
+    const label = tokenLabel({ chainId: params.chainId, address: target });
+    return label
+      ? `Let the app use your ${label} to complete your request.`
+      : 'Let the app use one of your tokens to complete your request.';
+  }
+
+  if (selector === SELECTORS.uniswapV3ExactInputSingle) {
+    const exampleCalldata = params.intent.exampleCalldata;
+    if (exampleCalldata) {
+      try {
+        const decoded = decodeFunctionData({ abi: UNISWAP_V3_ROUTER_ABI, data: exampleCalldata });
+        if (decoded.functionName === 'exactInputSingle') {
+          const args = decoded.args?.[0];
+          if (typeof args === 'object' && args !== null && 'tokenIn' in args && 'tokenOut' in args) {
+            const tokenIn = (args as { tokenIn: unknown }).tokenIn;
+            const tokenOut = (args as { tokenOut: unknown }).tokenOut;
+            if (
+              typeof tokenIn === 'string' &&
+              /^0x[0-9a-fA-F]{40}$/u.test(tokenIn) &&
+              typeof tokenOut === 'string' &&
+              /^0x[0-9a-fA-F]{40}$/u.test(tokenOut)
+            ) {
+              const inLabel =
+                tokenLabel({ chainId: params.chainId, address: tokenIn.toLowerCase() as `0x${string}` }) ?? 'a token';
+              const outLabel =
+                tokenLabel({ chainId: params.chainId, address: tokenOut.toLowerCase() as `0x${string}` }) ??
+                'another token';
+              return `Swap ${inLabel} for ${outLabel}.`;
+            }
+          }
+        }
+      } catch {
+        // ignore and fall back to generic copy
+      }
+    }
+    return 'Swap one token for another.';
+  }
+
+  if (selector === SELECTORS.liquidityManagerDecreaseLiquidity) {
+    return 'Withdraw some of your funds from your liquidity position.';
+  }
+  if (selector === SELECTORS.liquidityManagerCollect) {
+    return "Claim what's ready to claim from your liquidity position.";
+  }
+  if (selector === SELECTORS.liquidityManagerBurn) {
+    return 'Close your liquidity position.';
+  }
+
+  if (
+    selector === MULTICALL_SELECTORS.uniswapV3StyleMulticallBytesArray ||
+    selector === MULTICALL_SELECTORS.squidFundAndRunMulticall
+  ) {
+    return 'Complete a multi-step action as part of your request.';
+  }
+
+  return 'Complete a required step to manage your liquidity position.';
+}
 
 function parseChainId(chainId: string): number {
   const trimmed = chainId.trim();
@@ -397,11 +476,13 @@ export function normalizeAndExpandTransactions(params: {
     const value = parseValue(tx.value);
     if (value > 0n) {
       warnings.push(
-        `WARNING: Transaction includes non-zero value (to=${tx.to}, selector=${deriveSelector(tx.data)}, value=${value.toString()}); value is not enforceable via function-call caveats.`,
+        'One step includes sending extra network currency along with it. This kind of permission can’t strictly limit that part, so please review carefully.',
       );
     }
     if (tx.data === '0x') {
-      warnings.push(`WARNING: Transaction has empty calldata (to=${tx.to}); selector pinning may be ineffective.`);
+      warnings.push(
+        'One step is missing some details, which can make the permission broader than intended. Please review carefully.',
+      );
     }
     return {
       to: tx.to,
@@ -416,7 +497,9 @@ export function normalizeAndExpandTransactions(params: {
   for (const tx of normalized) {
     const outcome = expandMulticallIfSupported(tx);
     if (outcome.warning) {
-      warnings.push(`WARNING: ${outcome.warning}`);
+      warnings.push(
+        'Some steps are bundled together in a way that can make permissions broader than expected. Please review carefully.',
+      );
     }
     expanded.push(...outcome.expanded);
   }
@@ -443,7 +526,7 @@ export function buildDelegationRequestBundle(params: {
     const allowedCalldata = pinsForTransaction({ tx, delegatorAddress: params.delegatorAddress });
     const key = `${tx.to.toLowerCase()}:${tx.selector.toLowerCase()}:${pinKey(allowedCalldata)}`;
     if (!intentsMap.has(key)) {
-      intentsMap.set(key, { target: tx.to, selector: tx.selector, allowedCalldata });
+      intentsMap.set(key, { target: tx.to, selector: tx.selector, allowedCalldata, exampleCalldata: tx.data });
     }
   }
 
@@ -465,9 +548,7 @@ export function buildDelegationRequestBundle(params: {
   const delegationIntents = [...intentsMap.values()];
 
   const delegationDescriptions = delegationIntents.map((intent) => {
-    const label = SELECTOR_LABELS[intent.selector] ?? intent.selector;
-    const pinSummary = intent.allowedCalldata.length > 0 ? ` (${intent.allowedCalldata.length} calldata pins)` : '';
-    return `Allow ${label} on ${intent.target}${pinSummary}`;
+    return describeDelegationIntentForUser({ chainId: normalization.chainId, intent });
   });
 
   const delegationsToSign: UnsignedDelegation[] = delegationIntents.map((intent) => {
