@@ -1,6 +1,6 @@
 import { createExecution, ExecutionMode } from '@metamask/delegation-toolkit';
 import { DelegationManager } from '@metamask/delegation-toolkit/contracts';
-import type { TransactionReceipt } from 'viem';
+import { createClient, http, publicActions, type TransactionReceipt } from 'viem';
 
 import type { createClients } from '../clients/clients.js';
 import type { TransactionInformation } from '../clients/emberApi.js';
@@ -9,7 +9,7 @@ import {
   normalizeAndExpandTransactions,
   txMatchesDelegationIntent,
 } from '../delegations/emberDelegations.js';
-import type { DelegationBundle } from '../workflow/context.js';
+import { logInfo, type DelegationBundle } from '../workflow/context.js';
 
 type Execution = {
   target: `0x${string}`;
@@ -51,6 +51,17 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
   if (params.transactions.length === 0) {
     throw new Error('No transactions provided for delegated execution');
   }
+
+  const senderAddress = params.clients.wallet.account.address.toLowerCase() as `0x${string}`;
+  const expectedDelegate = params.delegationBundle.delegateeAddress.toLowerCase() as `0x${string}`;
+
+  logInfo('Delegated execution starting', {
+    senderAddress,
+    expectedDelegate,
+    delegatorAddress: params.delegationBundle.delegatorAddress,
+    delegationManager: params.delegationBundle.delegationManager,
+    transactionCount: params.transactions.length,
+  });
 
   const emberTxs = EmberEvmTransactionSchema.array().parse(params.transactions);
   const normalization = normalizeAndExpandTransactions({ transactions: emberTxs });
@@ -117,8 +128,48 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
   const executions = orderedIntentIndices.map((index) => executionsByIntentIndex.get(index) ?? []);
   const modes = executions.map((group) => (group.length === 1 ? ExecutionMode.SingleDefault : ExecutionMode.BatchDefault));
 
+  const uniqueDelegates = new Set(
+    permissionContexts
+      .flat()
+      .map((delegation) => delegation.delegate.toLowerCase()),
+  );
+  const uniqueDelegators = new Set(
+    permissionContexts
+      .flat()
+      .map((delegation) => delegation.delegator.toLowerCase()),
+  );
+
+  logInfo('Delegated execution plan prepared', {
+    chainId: normalization.chainId,
+    groupCount: executions.length,
+    totalCalls: executions.reduce((sum, group) => sum + group.length, 0),
+    uniqueDelegates: [...uniqueDelegates],
+    uniqueDelegators: [...uniqueDelegators],
+    expectedDelegate,
+    senderAddress,
+  });
+
+  if (senderAddress !== expectedDelegate) {
+    logInfo('Delegated execution sender mismatch (will likely revert InvalidDelegate)', {
+      senderAddress,
+      expectedDelegate,
+    });
+  }
+
+  const rpcUrl = (params.clients.public as unknown as { transport?: { url?: unknown } }).transport?.url;
+  const resolvedRpcUrl =
+    typeof rpcUrl === 'string'
+      ? rpcUrl
+      : process.env['ARBITRUM_RPC_URL'] ?? 'https://arb-mainnet.g.alchemy.com/v2/demo-key';
+
+  const simulationClient = createClient({
+    account: params.clients.wallet.account,
+    chain: params.clients.wallet.chain,
+    transport: http(resolvedRpcUrl),
+  }).extend(publicActions);
+
   const simulation = await DelegationManager.simulate.redeemDelegations({
-    client: params.clients.public,
+    client: simulationClient,
     delegationManagerAddress: params.delegationBundle.delegationManager,
     delegations: permissionContexts,
     modes,
