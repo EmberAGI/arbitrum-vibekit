@@ -1,43 +1,166 @@
 import { erc20Abi, parseUnits } from 'viem';
 
 import type { createClients } from '../clients/clients.js';
-import type {
-  EmberCamelotClient} from '../clients/emberApi.js';
+import type { EmberCamelotClient } from '../clients/emberApi.js';
 import {
+  formatEmberApiError,
   fetchPoolSnapshot,
   type ClmmRebalanceRequest,
+  type ClmmSwapRequest,
   type ClmmWithdrawRequest,
   type TransactionInformation,
 } from '../clients/emberApi.js';
-import {
-  ARBITRUM_CHAIN_ID,
-  CAMELOT_POSITION_MANAGER_ADDRESS,
-} from '../config/constants.js';
-import { ensureAllowance } from '../core/allowances.js';
+import { ARBITRUM_CHAIN_ID } from '../config/constants.js';
 import { buildRange, deriveMidPrice } from '../core/decision-engine.js';
+import { redeemDelegationsAndExecuteTransactions } from '../core/delegatedExecution.js';
 import { executeTransaction } from '../core/transaction.js';
 import { type CamelotPool, type ClmmAction, type ResolvedOperatorConfig } from '../domain/types.js';
 
-import { logInfo, normalizeHexAddress } from './context.js';
-
-type TokenAllocation = {
-  token0: bigint;
-  token1: bigint;
-};
+import { logInfo, normalizeHexAddress, type DelegationBundle } from './context.js';
+import { estimateTokenAllocationsUsd } from './planning/allocations.js';
 
 const MAX_WITHDRAW_ATTEMPTS = 3;
+
+function stableTokenDecimals(address: `0x${string}`): number | null {
+  const normalized = address.toLowerCase();
+  switch (normalized) {
+    case '0xaf88d065e77c8cc2239327c5edb3a432268e5831': // USDC
+    case '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8': // USDC.e
+    case '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9': // USDT
+      return 6;
+    case '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1': // DAI
+      return 18;
+    default:
+      return null;
+  }
+}
+
+function buildStableSwapExactInAmount(params: {
+  baseContributionUsd: number;
+  swapCount: number;
+  decimals: number;
+}): string {
+  const count = Math.max(1, Math.floor(params.swapCount));
+  const perSwapUsd = params.baseContributionUsd / count;
+  const boundedUsd = Math.max(1, Math.min(10, perSwapUsd));
+  return parseUnits(boundedUsd.toFixed(params.decimals), params.decimals).toString();
+}
+
+function summarizeSwapRequest(request: ClmmSwapRequest) {
+  return {
+    walletAddress: request.walletAddress,
+    amountType: request.amountType,
+    amount: request.amount,
+    fromTokenUid: request.fromTokenUid,
+    toTokenUid: request.toTokenUid,
+  };
+}
+
+function isKnownEmberSwapUpstream400(error: unknown): boolean {
+  const emberError = formatEmberApiError(error);
+  return (
+    emberError?.path === '/swap' &&
+    emberError.status === 500 &&
+    emberError.upstreamStatus === 400
+  );
+}
+
+function estimateExactInFromUsd(params: {
+  amountOutBaseUnits: bigint;
+  toTokenUsdPrice: number;
+  toTokenDecimals: number;
+  fromTokenUsdPrice: number;
+  fromTokenDecimals: number;
+  slippageMultiplier: number;
+  maxAmountInBaseUnits?: bigint;
+}): string {
+  if (params.amountOutBaseUnits <= 0n) {
+    return '0';
+  }
+  if (params.toTokenUsdPrice <= 0 || params.fromTokenUsdPrice <= 0) {
+    return '0';
+  }
+
+  const amountOut =
+    Number(params.amountOutBaseUnits) / Math.pow(10, params.toTokenDecimals);
+  if (!Number.isFinite(amountOut) || amountOut <= 0) {
+    return '0';
+  }
+
+  const usdOut = amountOut * params.toTokenUsdPrice;
+  const usdIn = usdOut * params.slippageMultiplier;
+  const fromAmount = usdIn / params.fromTokenUsdPrice;
+  if (!Number.isFinite(fromAmount) || fromAmount <= 0) {
+    return '0';
+  }
+
+  let amountInBaseUnits = parseUnits(fromAmount.toFixed(params.fromTokenDecimals), params.fromTokenDecimals);
+  if (amountInBaseUnits <= 0n) {
+    amountInBaseUnits = 1n;
+  }
+  if (typeof params.maxAmountInBaseUnits === 'bigint' && params.maxAmountInBaseUnits > 0n) {
+    amountInBaseUnits =
+      amountInBaseUnits > params.maxAmountInBaseUnits ? params.maxAmountInBaseUnits : amountInBaseUnits;
+  }
+  return amountInBaseUnits.toString();
+}
+
+function estimateExactInBaseUnitsFromUsd(params: {
+  amountOutBaseUnits: bigint;
+  toTokenUsdPrice: number;
+  toTokenDecimals: number;
+  fromTokenUsdPrice: number;
+  fromTokenDecimals: number;
+  slippageMultiplier: number;
+}): bigint | null {
+  const estimated = estimateExactInFromUsd(params);
+  if (estimated === '0') {
+    return null;
+  }
+  try {
+    return BigInt(estimated);
+  } catch {
+    return null;
+  }
+}
+
+function summarizeSupplyRequest(request: ClmmRebalanceRequest) {
+  return {
+    walletAddress: request.walletAddress,
+    supplyChain: request.supplyChain,
+    poolIdentifier: request.poolIdentifier,
+    range: request.range,
+    payableTokens: request.payableTokens.map((token) => ({
+      tokenUid: token.tokenUid,
+      amount: token.amount,
+    })),
+  };
+}
+
+function summarizeWithdrawRequest(request: ClmmWithdrawRequest) {
+  return {
+    walletAddress: request.walletAddress,
+    poolTokenUid: request.poolTokenUid,
+  };
+}
 
 export async function executeDecision({
   action,
   camelotClient,
   pool,
   operatorConfig,
+  delegationBundle,
+  fundingTokenAddress,
+  delegationsBypassActive,
   clients,
 }: {
   action: ClmmAction;
   camelotClient: EmberCamelotClient;
   pool: CamelotPool;
   operatorConfig: ResolvedOperatorConfig;
+  delegationBundle?: DelegationBundle;
+  fundingTokenAddress?: `0x${string}`;
+  delegationsBypassActive?: boolean;
   clients: ReturnType<typeof createClients>;
 }): Promise<{ txHash?: string; gasSpentWei?: bigint }> {
   const walletAddress = operatorConfig.walletAddress;
@@ -67,6 +190,7 @@ export async function executeDecision({
       camelotClient,
       withdrawPayload,
       clients,
+      delegationBundle: delegationsBypassActive ? undefined : delegationBundle,
     });
     lastTxHash = withdrawalOutcome.lastHash;
     if (withdrawalOutcome.gasSpentWei !== undefined) {
@@ -109,52 +233,246 @@ export async function executeDecision({
       }
       action.targetRange = refreshedTargetRange;
 
-      const allocations = estimateTokenAllocations(
+      const desired = estimateTokenAllocationsUsd(
         refreshedPoolSnapshot,
         operatorConfig.baseContributionUsd,
       );
-      const tokenBudget = await resolveTokenBudget({
-        publicClient: clients.public,
-        walletAddress,
-        pool: refreshedPoolSnapshot,
-        desired: allocations,
-      });
+      const [token0Balance, token1Balance] = await Promise.all([
+        readTokenBalance(clients.public, refreshedPoolSnapshot.token0.address, walletAddress),
+        readTokenBalance(clients.public, refreshedPoolSnapshot.token1.address, walletAddress),
+      ]);
 
-      if (!tokenBudget) {
-        logInfo('Skipping supply: wallet lacks required token balances', {
-          walletAddress,
-          token0Required: allocations.token0.toString(),
-          token1Required: allocations.token1.toString(),
-        });
-        return { txHash: lastTxHash, gasSpentWei: totalGasSpentWei };
+      const deficit0 = desired.token0 > token0Balance ? desired.token0 - token0Balance : 0n;
+      const deficit1 = desired.token1 > token1Balance ? desired.token1 - token1Balance : 0n;
+
+      const swapTransactions: TransactionInformation[] = [];
+      const normalizedFundingToken = fundingTokenAddress
+        ? normalizeHexAddress(fundingTokenAddress, 'funding token address')
+        : undefined;
+
+      if (deficit0 > 0n || deficit1 > 0n) {
+        const swapFromWithinPair = async (params: {
+          fromToken: `0x${string}`;
+          toToken: `0x${string}`;
+          amountOut: bigint;
+          maxAmountIn: bigint;
+        }) => {
+          const exactOutRequest: ClmmSwapRequest = {
+            walletAddress,
+            amount: params.amountOut.toString(),
+            amountType: 'exactOut',
+            fromTokenUid: { chainId: chainIdString, address: params.fromToken },
+            toTokenUid: { chainId: chainIdString, address: params.toToken },
+          };
+          let response: Awaited<ReturnType<EmberCamelotClient['requestSwap']>>;
+          try {
+            response = await camelotClient.requestSwap(exactOutRequest);
+          } catch (error: unknown) {
+            logInfo('Ember /swap request failed', {
+              request: summarizeSwapRequest(exactOutRequest),
+              emberError: formatEmberApiError(error),
+              error: error instanceof Error ? error.message : String(error),
+            });
+
+            if (!isKnownEmberSwapUpstream400(error)) {
+              throw error;
+            }
+
+            const fromTokenIsToken0 =
+              refreshedPoolSnapshot.token0.address.toLowerCase() === params.fromToken.toLowerCase();
+            const fromMeta = fromTokenIsToken0
+              ? refreshedPoolSnapshot.token0
+              : refreshedPoolSnapshot.token1;
+            const toMeta = fromTokenIsToken0 ? refreshedPoolSnapshot.token1 : refreshedPoolSnapshot.token0;
+
+            const amountIn = estimateExactInFromUsd({
+              amountOutBaseUnits: params.amountOut,
+              toTokenUsdPrice: toMeta.usdPrice ?? 0,
+              toTokenDecimals: toMeta.decimals,
+              fromTokenUsdPrice: fromMeta.usdPrice ?? 0,
+              fromTokenDecimals: fromMeta.decimals,
+              slippageMultiplier: 1.05,
+              maxAmountInBaseUnits: params.maxAmountIn,
+            });
+
+            if (amountIn === '0') {
+              throw error;
+            }
+
+            const exactInRequest: ClmmSwapRequest = {
+              walletAddress,
+              amount: amountIn,
+              amountType: 'exactIn',
+              fromTokenUid: { chainId: chainIdString, address: params.fromToken },
+              toTokenUid: { chainId: chainIdString, address: params.toToken },
+            };
+
+            logInfo('Retrying Ember /swap with exactIn after upstream 400', {
+              previous: summarizeSwapRequest(exactOutRequest),
+              retry: summarizeSwapRequest(exactInRequest),
+            });
+
+            response = await camelotClient.requestSwap(exactInRequest);
+          }
+          swapTransactions.push(...response.transactions);
+        };
+
+        const swapFromExternalFundingExactOut = async (params: {
+          toToken: `0x${string}`;
+          amountOut: bigint;
+        }) => {
+          if (!normalizedFundingToken) {
+            throw new Error(
+              'Swap funding token not configured. Re-hire the agent or provide pool tokens to proceed.',
+            );
+          }
+          const request: ClmmSwapRequest = {
+            walletAddress,
+            amount: params.amountOut.toString(),
+            amountType: 'exactOut',
+            fromTokenUid: { chainId: chainIdString, address: normalizedFundingToken },
+            toTokenUid: { chainId: chainIdString, address: params.toToken },
+          };
+          let response: Awaited<ReturnType<EmberCamelotClient['requestSwap']>>;
+          try {
+            response = await camelotClient.requestSwap(request);
+          } catch (error: unknown) {
+            logInfo('Ember /swap request failed', {
+              request: summarizeSwapRequest(request),
+              emberError: formatEmberApiError(error),
+              error: error instanceof Error ? error.message : String(error),
+            });
+            throw error;
+          }
+          swapTransactions.push(...response.transactions);
+        };
+
+        // Prefer swaps within the pool token pair when possible (no external funding).
+        let usedWithinPair = false;
+
+        if (deficit0 > 0n && deficit1 === 0n && token1Balance > desired.token1) {
+          const maxAmountIn = token1Balance - desired.token1;
+          const estimatedAmountIn = estimateExactInBaseUnitsFromUsd({
+            amountOutBaseUnits: deficit0,
+            toTokenUsdPrice: refreshedPoolSnapshot.token0.usdPrice ?? 0,
+            toTokenDecimals: refreshedPoolSnapshot.token0.decimals,
+            fromTokenUsdPrice: refreshedPoolSnapshot.token1.usdPrice ?? 0,
+            fromTokenDecimals: refreshedPoolSnapshot.token1.decimals,
+            slippageMultiplier: 1.05,
+          });
+
+          usedWithinPair =
+            typeof estimatedAmountIn === 'bigint' &&
+            estimatedAmountIn > 0n &&
+            estimatedAmountIn <= maxAmountIn;
+
+          if (!usedWithinPair) {
+            logInfo('Within-pair swap skipped: insufficient surplus to cover deficit', {
+              direction: `${refreshedPoolSnapshot.token1.symbol}->${refreshedPoolSnapshot.token0.symbol}`,
+              maxAmountIn: maxAmountIn.toString(),
+              estimatedAmountIn: estimatedAmountIn?.toString() ?? null,
+              deficitOut: deficit0.toString(),
+              fundingTokenAddress: normalizedFundingToken ?? null,
+            });
+          } else {
+            await swapFromWithinPair({
+              fromToken: refreshedPoolSnapshot.token1.address,
+              toToken: refreshedPoolSnapshot.token0.address,
+              amountOut: deficit0,
+              maxAmountIn,
+            });
+          }
+        }
+
+        if (!usedWithinPair && deficit1 > 0n && deficit0 === 0n && token0Balance > desired.token0) {
+          const maxAmountIn = token0Balance - desired.token0;
+          const estimatedAmountIn = estimateExactInBaseUnitsFromUsd({
+            amountOutBaseUnits: deficit1,
+            toTokenUsdPrice: refreshedPoolSnapshot.token1.usdPrice ?? 0,
+            toTokenDecimals: refreshedPoolSnapshot.token1.decimals,
+            fromTokenUsdPrice: refreshedPoolSnapshot.token0.usdPrice ?? 0,
+            fromTokenDecimals: refreshedPoolSnapshot.token0.decimals,
+            slippageMultiplier: 1.05,
+          });
+
+          usedWithinPair =
+            typeof estimatedAmountIn === 'bigint' &&
+            estimatedAmountIn > 0n &&
+            estimatedAmountIn <= maxAmountIn;
+
+          if (!usedWithinPair) {
+            logInfo('Within-pair swap skipped: insufficient surplus to cover deficit', {
+              direction: `${refreshedPoolSnapshot.token0.symbol}->${refreshedPoolSnapshot.token1.symbol}`,
+              maxAmountIn: maxAmountIn.toString(),
+              estimatedAmountIn: estimatedAmountIn?.toString() ?? null,
+              deficitOut: deficit1.toString(),
+              fundingTokenAddress: normalizedFundingToken ?? null,
+            });
+          } else {
+            await swapFromWithinPair({
+              fromToken: refreshedPoolSnapshot.token0.address,
+              toToken: refreshedPoolSnapshot.token1.address,
+              amountOut: deficit1,
+              maxAmountIn,
+            });
+          }
+        }
+
+        if (!usedWithinPair) {
+          // External funding required (either both tokens short, or the available token pair value
+          // is not sufficient to convert within-pair without underfunding the other side).
+          const targets: Array<{ toToken: `0x${string}`; amountOut: bigint }> = [];
+          if (deficit0 > 0n) {
+            targets.push({ toToken: refreshedPoolSnapshot.token0.address, amountOut: deficit0 });
+          }
+          if (deficit1 > 0n) {
+            targets.push({ toToken: refreshedPoolSnapshot.token1.address, amountOut: deficit1 });
+          }
+
+          const fundingStableDecimals =
+            normalizedFundingToken ? stableTokenDecimals(normalizedFundingToken) : null;
+
+          if (normalizedFundingToken && fundingStableDecimals !== null && targets.length > 0) {
+            // Swap providers often reject `exactOut` for small outputs (or certain routes).
+            // When funding with a known stablecoin, prefer `exactIn` bounded by baseContributionUsd,
+            // mirroring the working demo/liquidity behavior.
+            const exactInAmount = buildStableSwapExactInAmount({
+              baseContributionUsd: operatorConfig.baseContributionUsd,
+              swapCount: targets.length,
+              decimals: fundingStableDecimals,
+            });
+
+            for (const target of targets) {
+              const request: ClmmSwapRequest = {
+                walletAddress,
+                amount: exactInAmount,
+                amountType: 'exactIn',
+                fromTokenUid: { chainId: chainIdString, address: normalizedFundingToken },
+                toTokenUid: { chainId: chainIdString, address: target.toToken },
+              };
+              let response: Awaited<ReturnType<EmberCamelotClient['requestSwap']>>;
+              try {
+                response = await camelotClient.requestSwap(request);
+              } catch (error: unknown) {
+                logInfo('Ember /swap request failed', {
+                  request: summarizeSwapRequest(request),
+                  emberError: formatEmberApiError(error),
+                  error: error instanceof Error ? error.message : String(error),
+                });
+                throw error;
+              }
+              swapTransactions.push(...response.transactions);
+            }
+          } else {
+            for (const target of targets) {
+              await swapFromExternalFundingExactOut({
+                toToken: target.toToken,
+                amountOut: target.amountOut,
+              });
+            }
+          }
+        }
       }
-
-      if (tokenBudget.token0 < allocations.token0 || tokenBudget.token1 < allocations.token1) {
-        logInfo('Clamped supply allocation to wallet balances', {
-          walletAddress,
-          token0Planned: allocations.token0.toString(),
-          token0Using: tokenBudget.token0.toString(),
-          token1Planned: allocations.token1.toString(),
-          token1Using: tokenBudget.token1.toString(),
-        });
-      }
-
-      await ensureAllowance({
-        publicClient: clients.public,
-        tokenAddress: refreshedPoolSnapshot.token0.address,
-        ownerAccount: walletAddress,
-        spenderAddress: CAMELOT_POSITION_MANAGER_ADDRESS,
-        requiredAmount: tokenBudget.token0,
-        clients,
-      });
-      await ensureAllowance({
-        publicClient: clients.public,
-        tokenAddress: refreshedPoolSnapshot.token1.address,
-        ownerAccount: walletAddress,
-        spenderAddress: CAMELOT_POSITION_MANAGER_ADDRESS,
-        requiredAmount: tokenBudget.token1,
-        clients,
-      });
 
       const rebalancePayload: ClmmRebalanceRequest = {
         walletAddress,
@@ -171,14 +489,14 @@ export async function executeDecision({
               chainId: chainIdString,
               address: refreshedPoolSnapshot.token0.address,
             },
-            amount: tokenBudget.token0.toString(),
+            amount: desired.token0.toString(),
           },
           {
             tokenUid: {
               chainId: chainIdString,
               address: refreshedPoolSnapshot.token1.address,
             },
-            amount: tokenBudget.token1.toString(),
+            amount: desired.token1.toString(),
           },
         ],
       };
@@ -188,13 +506,23 @@ export async function executeDecision({
         poolAddress: poolIdentifier.address,
         tickLower: action.targetRange.lowerTick,
         tickUpper: action.targetRange.upperTick,
-        tokenBudget: {
-          token0: tokenBudget.token0.toString(),
-          token1: tokenBudget.token1.toString(),
+        desired: {
+          token0: desired.token0.toString(),
+          token1: desired.token1.toString(),
         },
       });
 
-      const rebalancePlan = await camelotClient.requestRebalance(rebalancePayload);
+      let rebalancePlan: Awaited<ReturnType<EmberCamelotClient['requestRebalance']>>;
+      try {
+        rebalancePlan = await camelotClient.requestRebalance(rebalancePayload);
+      } catch (error: unknown) {
+        logInfo('Ember /liquidity/supply request failed', {
+          request: summarizeSupplyRequest(rebalancePayload),
+          emberError: formatEmberApiError(error),
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
       logInfo('Received Ember supply plan', {
         requestId: rebalancePlan.requestId,
         transactionCount: rebalancePlan.transactions.length,
@@ -214,8 +542,9 @@ export async function executeDecision({
       }
 
       const supplyOutcome = await executePlanTransactions({
-        plan: rebalancePlan,
+        plan: { transactions: [...swapTransactions, ...rebalancePlan.transactions] },
         clients,
+        delegationBundle: delegationsBypassActive ? undefined : delegationBundle,
       });
       lastTxHash = supplyOutcome.lastHash ?? lastTxHash;
       if (supplyOutcome.gasSpentWei !== undefined) {
@@ -288,10 +617,12 @@ async function executeWithdrawalPlans({
   camelotClient,
   withdrawPayload,
   clients,
+  delegationBundle,
 }: {
   camelotClient: EmberCamelotClient;
   withdrawPayload: ClmmWithdrawRequest;
   clients: ReturnType<typeof createClients>;
+  delegationBundle?: DelegationBundle;
 }): Promise<{ lastHash?: string; gasSpentWei?: bigint }> {
   let lastHash: string | undefined;
   let totalGasSpentWei: bigint | undefined;
@@ -306,7 +637,12 @@ async function executeWithdrawalPlans({
         break;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        logInfo('Withdrawal request failed', { attempt: attempt + 1, error: message });
+        logInfo('Ember /liquidity/withdraw request failed', {
+          attempt: attempt + 1,
+          request: summarizeWithdrawRequest(withdrawPayload),
+          emberError: formatEmberApiError(error),
+          error: message,
+        });
         if (attempt + 1 >= MAX_WITHDRAW_ATTEMPTS) {
           throw new Error(
             `Ember withdrawal request failed after ${MAX_WITHDRAW_ATTEMPTS} attempts: ${message}`,
@@ -327,7 +663,7 @@ async function executeWithdrawalPlans({
       attempt: planIndex + 1,
       transactionCount: plan.transactions.length,
     });
-    const outcome = await executePlanTransactions({ plan, clients });
+    const outcome = await executePlanTransactions({ plan, clients, delegationBundle });
     lastHash = outcome.lastHash ?? lastHash;
     if (outcome.gasSpentWei !== undefined) {
       totalGasSpentWei = (totalGasSpentWei ?? 0n) + outcome.gasSpentWei;
@@ -338,10 +674,25 @@ async function executeWithdrawalPlans({
 async function executePlanTransactions({
   plan,
   clients,
+  delegationBundle,
 }: {
   plan: { transactions: TransactionInformation[] };
   clients: ReturnType<typeof createClients>;
+  delegationBundle?: DelegationBundle;
 }): Promise<{ lastHash?: string; gasSpentWei?: bigint }> {
+  if (delegationBundle) {
+    const { txHash, receipt } = await redeemDelegationsAndExecuteTransactions({
+      clients,
+      delegationBundle,
+      transactions: plan.transactions,
+    });
+    const gasSpentWei =
+      receipt.gasUsed !== undefined && receipt.effectiveGasPrice !== undefined
+        ? receipt.gasUsed * receipt.effectiveGasPrice
+        : undefined;
+    return { lastHash: txHash, gasSpentWei };
+  }
+
   let lastHash: string | undefined;
   let totalGasSpentWei: bigint | undefined;
   for (const tx of plan.transactions) {
@@ -352,38 +703,6 @@ async function executePlanTransactions({
     }
   }
   return { lastHash, gasSpentWei: totalGasSpentWei };
-}
-
-async function resolveTokenBudget({
-  publicClient,
-  walletAddress,
-  pool,
-  desired,
-}: {
-  publicClient: ReturnType<typeof createClients>['public'];
-  walletAddress: `0x${string}`;
-  pool: CamelotPool;
-  desired: TokenAllocation;
-}): Promise<TokenAllocation | undefined> {
-  const [token0Balance, token1Balance] = await Promise.all([
-    readTokenBalance(publicClient, pool.token0.address, walletAddress),
-    readTokenBalance(publicClient, pool.token1.address, walletAddress),
-  ]);
-
-  const token0 = token0Balance < desired.token0 ? token0Balance : desired.token0;
-  const token1 = token1Balance < desired.token1 ? token1Balance : desired.token1;
-  if (token0 === 0n || token1 === 0n) {
-    logInfo('Wallet lacks sufficient balance to supply both tokens', {
-      walletAddress,
-      token0Balance: token0Balance.toString(),
-      token1Balance: token1Balance.toString(),
-      token0Required: desired.token0.toString(),
-      token1Required: desired.token1.toString(),
-    });
-    return undefined;
-  }
-
-  return { token0, token1 };
 }
 
 function readTokenBalance(
@@ -450,30 +769,4 @@ function assertUnreachable(value: never): never {
       : undefined;
   const detail = kind ? `: ${kind}` : '';
   throw new Error(`Unsupported action kind${detail}`);
-}
-
-function estimateTokenAllocations(pool: CamelotPool, baseContributionUsd: number) {
-  const half = baseContributionUsd / 2;
-  const midPrice = deriveMidPrice(pool);
-  const token0Price =
-    pool.token0.usdPrice ??
-    (pool.token1.usdPrice && midPrice > 0 ? pool.token1.usdPrice * midPrice : undefined);
-  const token1Price =
-    pool.token1.usdPrice ??
-    (pool.token0.usdPrice && midPrice > 0 ? pool.token0.usdPrice / midPrice : undefined);
-
-  if (!token0Price || !token1Price || token0Price <= 0 || token1Price <= 0) {
-    throw new Error('Token USD prices unavailable; cannot size allowances');
-  }
-
-  const amount0 = parseUnits(
-    (half / token0Price).toFixed(pool.token0.decimals),
-    pool.token0.decimals,
-  );
-  const amount1 = parseUnits(
-    (half / token1Price).toFixed(pool.token1.decimals),
-    pool.token1.decimals,
-  );
-
-  return { token0: amount0, token1: amount1 };
 }

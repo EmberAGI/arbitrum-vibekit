@@ -6,12 +6,17 @@ import { OperatorConfigInputSchema } from '../../domain/types.js';
 import {
   buildTaskStatus,
   logInfo,
+  type OnboardingState,
   type ClmmState,
   type OperatorInterrupt,
   type ClmmUpdate,
 } from '../context.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
+
+const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
+  totalSteps: 3,
+};
 
 export const collectOperatorInputNode = async (
   state: ClmmState,
@@ -64,7 +69,11 @@ export const collectOperatorInputNode = async (
   );
 
   await copilotkitEmitState(config, {
-    view: { task: awaitingInput.task, activity: { events: [awaitingInput.statusEvent], telemetry: [] } },
+    view: {
+      onboarding: { ...ONBOARDING, step: 1 },
+      task: awaitingInput.task,
+      activity: { events: [awaitingInput.statusEvent], telemetry: [] },
+    },
   });
 
   logInfo('collectOperatorInput: calling interrupt() - graph should pause here');
@@ -124,6 +133,7 @@ export const collectOperatorInputNode = async (
   return {
     view: {
       operatorInput: parsed.data,
+      onboarding: { ...ONBOARDING, step: 2 },
       task,
       activity: { events: [statusEvent], telemetry: [] },
     },

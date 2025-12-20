@@ -1,15 +1,88 @@
 // Agent state types matching CopilotKit/LangGraph schema
 
-export interface OperatorInterrupt {
-  type: string;
+export type FundingTokenOption = {
+  address: `0x${string}`;
+  symbol: string;
+  decimals: number;
+  balance: string;
+};
+
+export type OperatorConfigRequestInterrupt = {
+  type: 'operator-config-request';
   message: string;
-}
+  payloadSchema?: unknown;
+  artifactId?: string;
+};
+
+export type FundingTokenRequestInterrupt = {
+  type: 'clmm-funding-token-request';
+  message: string;
+  payloadSchema?: unknown;
+  options: FundingTokenOption[];
+};
+
+export type DelegationCaveat = {
+  enforcer: `0x${string}`;
+  terms: `0x${string}`;
+  args: `0x${string}`;
+};
+
+export type UnsignedDelegation = {
+  delegate: `0x${string}`;
+  delegator: `0x${string}`;
+  authority: `0x${string}`;
+  caveats: DelegationCaveat[];
+  salt: `0x${string}`;
+};
+
+export type SignedDelegation = UnsignedDelegation & {
+  signature: `0x${string}`;
+};
+
+export type DelegationSigningRequestInterrupt = {
+  type: 'clmm-delegation-signing-request';
+  message: string;
+  payloadSchema?: unknown;
+  chainId: number;
+  delegationManager: `0x${string}`;
+  delegatorAddress: `0x${string}`;
+  delegateeAddress: `0x${string}`;
+  delegationsToSign: UnsignedDelegation[];
+  descriptions: string[];
+  warnings: string[];
+};
+
+export type AgentInterrupt =
+  | OperatorConfigRequestInterrupt
+  | FundingTokenRequestInterrupt
+  | DelegationSigningRequestInterrupt;
+
+export type OnboardingState = {
+  step: number;
+  totalSteps?: number;
+  key?: string;
+};
 
 export interface OperatorConfigInput {
   poolAddress: `0x${string}`;
   walletAddress: `0x${string}`;
   baseContributionUsd?: number;
 }
+
+export interface FundingTokenInput {
+  fundingTokenAddress: `0x${string}`;
+}
+
+export interface DelegationSigningResponseSigned {
+  outcome: 'signed';
+  signedDelegations: SignedDelegation[];
+}
+
+export interface DelegationSigningResponseRejected {
+  outcome: 'rejected';
+}
+
+export type DelegationSigningResponse = DelegationSigningResponseSigned | DelegationSigningResponseRejected;
 
 export interface Pool {
   address: string;
@@ -44,12 +117,16 @@ export interface AgentView {
       timestamp?: string;
     };
   };
+  onboarding?: OnboardingState;
   poolArtifact?: unknown;
   operatorInput?: unknown;
+  fundingTokenInput?: unknown;
   selectedPool?: unknown;
   operatorConfig?: unknown;
+  delegationBundle?: unknown;
   haltReason?: string;
   executionError?: string;
+  delegationsBypassActive?: boolean;
   profile?: AgentViewProfile;
   activity?: AgentViewActivity;
   metrics?: AgentViewMetrics;

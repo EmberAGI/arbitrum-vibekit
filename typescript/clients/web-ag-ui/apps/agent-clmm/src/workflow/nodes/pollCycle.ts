@@ -1,7 +1,7 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
-import { fetchPoolSnapshot } from '../../clients/emberApi.js';
+import { formatEmberApiError, fetchPoolSnapshot } from '../../clients/emberApi.js';
 import {
   ARBITRUM_CHAIN_ID,
   DATA_STALE_CYCLE_LIMIT,
@@ -98,10 +98,12 @@ export const pollCycleNode = async (
         : typeof unknownError === 'string'
           ? unknownError
           : 'Unknown error';
+    const emberError = formatEmberApiError(unknownError);
     logInfo('Pool snapshot fetch failed; falling back to cache', {
       iteration,
       staleCycles,
       error: cause,
+      ...(emberError ? { emberError } : {}),
     });
     if (staleCycles > DATA_STALE_CYCLE_LIMIT) {
       const failureMessage = `ERROR: Abort: Ember API unreachable for ${staleCycles} consecutive cycles (last error: ${cause})`;
@@ -362,6 +364,9 @@ export const pollCycleNode = async (
           camelotClient,
           pool: poolSnapshot,
           operatorConfig,
+          delegationBundle: state.view.delegationBundle,
+          fundingTokenAddress: state.view.fundingTokenInput?.fundingTokenAddress,
+          delegationsBypassActive: state.view.delegationsBypassActive,
           clients,
         });
         txHash = result?.txHash;
@@ -369,16 +374,23 @@ export const pollCycleNode = async (
       } catch (executionError: unknown) {
         // Transaction failed (e.g., reverted on-chain) - log and gracefully stop this cycle
         // The cron job will retry on the next scheduled run
-        const errorMessage =
+        const emberError = formatEmberApiError(executionError);
+        const rawMessage =
           executionError instanceof Error
             ? executionError.message
             : typeof executionError === 'string'
               ? executionError
               : 'Unknown execution error';
+        const errorMessage = emberError
+          ? `Ember API ${emberError.status}${
+              emberError.upstreamStatus ? ` (upstream ${emberError.upstreamStatus})` : ''
+            }${emberError.path ? ` ${emberError.path}` : ''}: ${rawMessage}`
+          : rawMessage;
         logInfo('Action execution failed', {
           iteration,
           action: decision.kind,
           error: errorMessage,
+          ...(emberError ? { emberError } : {}),
         });
 
         // Schedule cron before returning so next cycle will run

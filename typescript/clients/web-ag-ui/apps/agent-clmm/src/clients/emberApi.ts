@@ -15,10 +15,98 @@ const HTTP_TIMEOUT_MS = 60_000;
 const CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM =
   'Algebra_0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B_42161';
 
+export class EmberApiRequestError extends Error {
+  readonly status: number;
+  readonly url: string;
+  readonly bodyText: string;
+
+  constructor(params: { message: string; status: number; url: string; bodyText: string }) {
+    super(params.message);
+    this.name = 'EmberApiRequestError';
+    this.status = params.status;
+    this.url = params.url;
+    this.bodyText = params.bodyText;
+  }
+}
+
+export type EmberApiErrorLog = {
+  status: number;
+  url: string;
+  path?: string;
+  bodyText: string;
+  upstreamStatus?: number;
+  hints: string[];
+};
+
+function parseUpstreamAxiosStatus(bodyText: string): number | undefined {
+  const match = /status code\s+(\d{3})/iu.exec(bodyText);
+  if (!match?.[1]) {
+    return undefined;
+  }
+  const code = Number(match[1]);
+  return Number.isFinite(code) ? code : undefined;
+}
+
+function safeParsePath(url: string): string | undefined {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return undefined;
+  }
+}
+
+function buildEmberErrorHints(log: {
+  path?: string;
+  status: number;
+  upstreamStatus?: number;
+  bodyText: string;
+}): string[] {
+  const hints: string[] = [];
+  if (log.path === '/swap' && log.status === 500 && log.upstreamStatus === 400) {
+    hints.push(
+      'Ember is returning HTTP 500 with an embedded upstream 400 from its swap provider.',
+      'Common causes: invalid token addresses, amount=0, unsupported route/provider, or provider-side temporary failures.',
+    );
+  }
+  if (log.path === '/liquidity/supply' && log.status === 500 && log.upstreamStatus === 400) {
+    hints.push(
+      'Ember is returning HTTP 500 with an embedded upstream 400 during supply planning.',
+      'Common causes: invalid poolIdentifier, invalid range/minPrice/maxPrice, or invalid payableTokens (token uid / amount).',
+    );
+  }
+  if (log.path === '/liquidity/withdraw' && log.status === 500 && /token id not found/iu.test(log.bodyText)) {
+    hints.push(
+      'Ember /liquidity/withdraw expects an LP-token identifier; for Camelot CLMM this is often not available as an ERC-20 token uid.',
+      'Try resolving poolTokenUid via /liquidity/positions, or provide a wallet with an existing position in the pool.',
+    );
+  }
+  return hints;
+}
+
+export function formatEmberApiError(error: unknown): EmberApiErrorLog | null {
+  if (!(error instanceof EmberApiRequestError)) {
+    return null;
+  }
+  const path = safeParsePath(error.url);
+  const upstreamStatus = parseUpstreamAxiosStatus(error.bodyText);
+  const base = {
+    status: error.status,
+    url: error.url,
+    path,
+    bodyText: error.bodyText,
+    upstreamStatus,
+  };
+  return { ...base, hints: buildEmberErrorHints(base) };
+}
+
+const HexPrefixedStringSchema = z
+  .templateLiteral(['0x', z.string()])
+  .transform((value) => value.toLowerCase() as `0x${string}`);
+
 const TransactionInformationSchema = z.object({
   type: z.enum(['EVM_TX']),
-  to: z.templateLiteral(['0x', z.string()]),
-  data: z.templateLiteral(['0x', z.string()]),
+  to: HexPrefixedStringSchema,
+  data: HexPrefixedStringSchema,
   value: z.string(),
   chainId: z.string(),
 });
@@ -27,14 +115,14 @@ export type TransactionInformation = z.infer<typeof TransactionInformationSchema
 const PayableTokenSchema = z.object({
   tokenUid: z.object({
     chainId: z.string(),
-    address: z.templateLiteral(['0x', z.string()]),
+    address: HexPrefixedStringSchema,
   }),
   amount: z.string(),
 });
 
 const PoolIdentifierSchema = z.object({
   chainId: z.string(),
-  address: z.templateLiteral(['0x', z.string()]),
+  address: HexPrefixedStringSchema,
 });
 
 const ClmmRangeSchema = z.union([
@@ -49,7 +137,7 @@ const ClmmRangeSchema = z.union([
 ]);
 
 const ClmmRebalanceRequestSchema = z.object({
-  walletAddress: z.templateLiteral(['0x', z.string()]),
+  walletAddress: HexPrefixedStringSchema,
   supplyChain: z.string(),
   poolIdentifier: PoolIdentifierSchema,
   range: ClmmRangeSchema,
@@ -65,15 +153,34 @@ const ClmmRebalanceResponseSchema = z.object({
 export type ClmmRebalanceResponse = z.infer<typeof ClmmRebalanceResponseSchema>;
 
 const ClmmWithdrawRequestSchema = z.object({
-  walletAddress: z.templateLiteral(['0x', z.string()]),
+  walletAddress: HexPrefixedStringSchema,
   poolTokenUid: PoolIdentifierSchema,
 });
 export type ClmmWithdrawRequest = z.infer<typeof ClmmWithdrawRequestSchema>;
+
+const SwapTokenIdentifierSchema = z.object({
+  chainId: z.string(),
+  address: HexPrefixedStringSchema,
+});
+
+const ClmmSwapRequestSchema = z.object({
+  walletAddress: HexPrefixedStringSchema,
+  amount: z.string(),
+  amountType: z.enum(['exactIn', 'exactOut']),
+  fromTokenUid: SwapTokenIdentifierSchema,
+  toTokenUid: SwapTokenIdentifierSchema,
+});
+export type ClmmSwapRequest = z.infer<typeof ClmmSwapRequestSchema>;
 
 type PoolListResponse = z.infer<typeof PoolListResponseSchema>;
 type WalletPositionsResponse = z.infer<typeof WalletPositionsResponseSchema>;
 type EmberLiquidityPool = PoolListResponse['liquidityPools'][number];
 type EmberWalletPosition = WalletPositionsResponse['positions'][number];
+
+export type EmberWalletPositionUid = {
+  poolTokenUid: { chainId: string; address: `0x${string}` };
+  providerId: string;
+};
 
 export class EmberCamelotClient {
   constructor(private readonly baseUrl: string) {}
@@ -96,7 +203,12 @@ export class EmberCamelotClient {
 
     if (!response.ok) {
       const text = await response.text().catch(() => 'No error body');
-      throw new Error(`Ember API request failed (${response.status}): ${text}`);
+      throw new EmberApiRequestError({
+        message: `Ember API request failed (${response.status}): ${text}`,
+        status: response.status,
+        url,
+        bodyText: text,
+      });
     }
 
     const json: unknown = await response.json();
@@ -150,6 +262,32 @@ export class EmberCamelotClient {
       .filter((position): position is WalletPosition => Boolean(position));
   }
 
+  async listWalletPositionUids(
+    walletAddress: `0x${string}`,
+    chainId: number,
+  ): Promise<EmberWalletPositionUid[]> {
+    const query = new URLSearchParams();
+    query.set('chainId', String(chainId));
+    query.append('providerIds', CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM);
+    const data = await this.fetchEndpoint<WalletPositionsResponse>(
+      `/liquidity/positions/${walletAddress}?${query.toString()}`,
+      WalletPositionsResponseSchema,
+    );
+
+    return data.positions
+      .filter(
+        (position) =>
+          position.providerId.toLowerCase() === CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM.toLowerCase(),
+      )
+      .map((position) => ({
+        poolTokenUid: {
+          chainId: position.poolIdentifier.chainId,
+          address: normalizeAddress(position.poolIdentifier.address),
+        },
+        providerId: position.providerId,
+      }));
+  }
+
   async requestRebalance(payload: ClmmRebalanceRequest): Promise<ClmmRebalanceResponse> {
     const body = await this.fetchEndpoint<ClmmRebalanceResponse>(
       `/liquidity/supply`,
@@ -172,6 +310,15 @@ export class EmberCamelotClient {
         body: JSON.stringify(ClmmWithdrawRequestSchema.parse(payload)),
       },
     );
+
+    return body;
+  }
+
+  async requestSwap(payload: ClmmSwapRequest): Promise<ClmmRebalanceResponse> {
+    const body = await this.fetchEndpoint<ClmmRebalanceResponse>(`/swap`, ClmmRebalanceResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify(ClmmSwapRequestSchema.parse(payload)),
+    });
 
     return body;
   }

@@ -77,9 +77,23 @@ export async function loadBootstrapContext(store?: BaseStore): Promise<Bootstrap
     // Recreate the PrivateKeyAccount from the stored private key
     // This ensures the account has all its methods (signTransaction, etc.)
     const account = privateKeyToAccount(storedContext.privateKey);
+    const derivedAgentWalletAddress = normalizeHexAddress(account.address, 'agent wallet address');
+    const storedAgentWalletAddress = normalizeHexAddress(
+      storedContext.agentWalletAddress,
+      'stored agent wallet address',
+    );
+
+    // Self-heal: the stored wallet address can drift (e.g. key rotation, store corruption).
+    // Delegation execution requires the delegate address to match the transaction sender.
+    if (storedAgentWalletAddress.toLowerCase() !== derivedAgentWalletAddress.toLowerCase()) {
+      await saveBootstrapContext(
+        { privateKey: storedContext.privateKey, agentWalletAddress: derivedAgentWalletAddress },
+        resolvedStore,
+      );
+    }
     return {
       account,
-      agentWalletAddress: storedContext.agentWalletAddress,
+      agentWalletAddress: derivedAgentWalletAddress,
     };
   }
 

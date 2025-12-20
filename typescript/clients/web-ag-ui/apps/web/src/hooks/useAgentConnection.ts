@@ -11,8 +11,10 @@ import {
   type AgentViewProfile,
   type AgentViewMetrics,
   type AgentViewActivity,
-  type OperatorInterrupt,
+  type AgentInterrupt,
   type OperatorConfigInput,
+  type FundingTokenInput,
+  type DelegationSigningResponse,
   type Transaction,
   defaultView,
   defaultProfile,
@@ -27,15 +29,18 @@ export type {
   AgentViewProfile,
   AgentViewMetrics,
   AgentViewActivity,
-  OperatorInterrupt,
+  AgentInterrupt,
   OperatorConfigInput,
+  FundingTokenInput,
   Transaction,
 };
 
-const isOperatorConfigRequest = (value: unknown): value is OperatorInterrupt =>
+const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
   typeof value === 'object' &&
   value !== null &&
-  (value as { type?: string }).type === 'operator-config-request';
+  ((value as { type?: string }).type === 'operator-config-request' ||
+    (value as { type?: string }).type === 'clmm-funding-token-request' ||
+    (value as { type?: string }).type === 'clmm-delegation-signing-request');
 
 export interface UseAgentConnectionResult {
   config: AgentConfig;
@@ -53,12 +58,14 @@ export interface UseAgentConnectionResult {
   isHiring: boolean;
   isFiring: boolean;
 
-  activeInterrupt: OperatorInterrupt | null;
+  activeInterrupt: AgentInterrupt | null;
 
   runHire: () => void;
   runFire: () => void;
   runSync: () => void;
-  resolveInterrupt: (input: OperatorConfigInput) => void;
+  resolveInterrupt: (
+    input: OperatorConfigInput | FundingTokenInput | DelegationSigningResponse | { [key: string]: unknown },
+  ) => void;
   updateSettings: (amount: number) => void;
 }
 
@@ -74,8 +81,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   });
   const { threadId } = useCopilotContext();
 
-  const { activeInterrupt, resolve } = useLangGraphInterruptCustomUI<OperatorInterrupt>({
-    enabled: isOperatorConfigRequest,
+  const { activeInterrupt, resolve } = useLangGraphInterruptCustomUI<AgentInterrupt>({
+    enabled: isAgentInterrupt,
   });
 
   useEffect(() => {
@@ -132,7 +139,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   }, [run, isFiring]);
 
   const resolveInterrupt = useCallback(
-    (input: OperatorConfigInput) => {
+    (
+      input: OperatorConfigInput | FundingTokenInput | DelegationSigningResponse | { [key: string]: unknown },
+    ) => {
       resolve(JSON.stringify(input));
     },
     [resolve],

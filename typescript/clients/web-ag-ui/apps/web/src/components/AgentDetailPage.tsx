@@ -12,16 +12,24 @@ import {
   Check,
   RefreshCw,
 } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { signDelegation } from '@metamask/delegation-toolkit/actions';
+import { formatUnits } from 'viem';
+import { useEffect, useState, type FormEvent } from 'react';
 import type {
   AgentProfile,
   AgentMetrics,
-  OperatorInterrupt,
+  AgentInterrupt,
+  FundingTokenOption,
+  OnboardingState,
   Pool,
   OperatorConfigInput,
+  FundingTokenInput,
+  DelegationSigningResponse,
+  UnsignedDelegation,
   Transaction,
   TelemetryItem,
 } from '../types/agent';
+import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem };
 
@@ -47,14 +55,18 @@ interface AgentDetailPageProps {
   onSync: () => void;
   onBack: () => void;
   // Interrupt handling
-  activeInterrupt?: OperatorInterrupt | null;
+  activeInterrupt?: AgentInterrupt | null;
   allowedPools: Pool[];
-  onInterruptSubmit?: (input: OperatorConfigInput) => void;
+  onInterruptSubmit?: (
+    input: OperatorConfigInput | FundingTokenInput | DelegationSigningResponse,
+  ) => void;
   // Task state
   taskId?: string;
   taskStatus?: string;
   haltReason?: string;
   executionError?: string;
+  delegationsBypassActive?: boolean;
+  onboarding?: OnboardingState;
   // Transaction history and telemetry
   transactions?: Transaction[];
   telemetry?: TelemetryItem[];
@@ -95,6 +107,8 @@ export function AgentDetailPage({
   taskStatus,
   haltReason,
   executionError,
+  delegationsBypassActive,
+  onboarding,
   transactions = [],
   telemetry = [],
   allocationAmount,
@@ -309,6 +323,8 @@ export function AgentDetailPage({
               taskStatus={taskStatus}
               haltReason={haltReason}
               executionError={executionError}
+              delegationsBypassActive={delegationsBypassActive}
+              onboarding={onboarding}
               telemetry={telemetry}
               allocationAmount={allocationAmount}
               onAllocationChange={onAllocationChange}
@@ -596,13 +612,17 @@ function TransactionHistoryTab({ transactions }: TransactionHistoryTabProps) {
 
 // Agent Blockers Tab Component
 interface AgentBlockersTabProps {
-  activeInterrupt?: OperatorInterrupt | null;
+  activeInterrupt?: AgentInterrupt | null;
   allowedPools: Pool[];
-  onInterruptSubmit?: (input: OperatorConfigInput) => void;
+  onInterruptSubmit?: (
+    input: OperatorConfigInput | FundingTokenInput | DelegationSigningResponse,
+  ) => void;
   taskId?: string;
   taskStatus?: string;
   haltReason?: string;
   executionError?: string;
+  delegationsBypassActive?: boolean;
+  onboarding?: OnboardingState;
   telemetry?: TelemetryItem[];
   allocationAmount?: number;
   onAllocationChange?: (amount: number) => void;
@@ -633,16 +653,28 @@ function AgentBlockersTab({
   taskStatus,
   haltReason,
   executionError,
+  delegationsBypassActive,
+  onboarding,
   telemetry = [],
   allocationAmount,
   onAllocationChange,
 }: AgentBlockersTabProps) {
-  const [currentStep] = useState(1);
+  const {
+    walletClient,
+    privyWallet,
+    chainId,
+    switchChain,
+    isLoading: isWalletLoading,
+    error: walletError,
+  } = usePrivyWalletClient();
+
+  const [currentStep, setCurrentStep] = useState(1);
   const [poolAddress, setPoolAddress] = useState('');
-  const [walletAddress, setWalletAddress] = useState('');
   const [baseContributionUsd, setBaseContributionUsd] = useState(
     allocationAmount?.toString() ?? '',
   );
+  const [fundingTokenAddress, setFundingTokenAddress] = useState('');
+  const [isSigningDelegations, setIsSigningDelegations] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
@@ -656,8 +688,15 @@ function AgentBlockersTab({
       return;
     }
 
-    if (!isHexAddress(walletAddress)) {
-      setError('Wallet address must be a 0x-prefixed hex string.');
+    const operatorWalletAddress = privyWallet?.address ?? '';
+
+    if (!operatorWalletAddress) {
+      setError('Connect a wallet to continue.');
+      return;
+    }
+
+    if (!isHexAddress(operatorWalletAddress)) {
+      setError('Connected wallet address is not a valid 0x-prefixed hex string.');
       return;
     }
 
@@ -674,11 +713,12 @@ function AgentBlockersTab({
 
     onInterruptSubmit?.({
       poolAddress: poolAddress as `0x${string}`,
-      walletAddress: walletAddress as `0x${string}`,
+      walletAddress: operatorWalletAddress as `0x${string}`,
       ...(baseContributionNumber !== undefined
         ? { baseContributionUsd: baseContributionNumber }
         : {}),
     });
+    setCurrentStep(2);
   };
 
   const formatDate = (timestamp?: string) => {
@@ -693,8 +733,113 @@ function AgentBlockersTab({
     });
   };
 
-  // If there's an active interrupt, show the operator config form
-  const showInterruptForm = activeInterrupt?.type === 'operator-config-request';
+  const showOperatorConfigForm =
+    currentStep === 1 && activeInterrupt?.type === 'operator-config-request';
+  const showFundingTokenForm =
+    currentStep === 2 && activeInterrupt?.type === 'clmm-funding-token-request';
+  const showDelegationSigningForm =
+    currentStep === 3 && activeInterrupt?.type === 'clmm-delegation-signing-request';
+
+  useEffect(() => {
+    const nextStep = onboarding?.step;
+    if (typeof nextStep === 'number' && Number.isFinite(nextStep) && nextStep > 0) {
+      setCurrentStep(nextStep);
+    }
+  }, [onboarding?.step]);
+
+  const fundingOptions: FundingTokenOption[] = showFundingTokenForm
+    ? [...(activeInterrupt as { options: FundingTokenOption[] }).options].sort((a, b) => {
+        try {
+          const aBal = BigInt(a.balance);
+          const bBal = BigInt(b.balance);
+          if (aBal === bBal) return a.symbol.localeCompare(b.symbol);
+          return aBal > bBal ? -1 : 1;
+        } catch {
+          return a.symbol.localeCompare(b.symbol);
+        }
+      })
+    : [];
+
+  const formatFundingBalance = (option: FundingTokenOption) => {
+    try {
+      return formatUnits(BigInt(option.balance), option.decimals);
+    } catch {
+      return option.balance;
+    }
+  };
+
+  const handleFundingTokenSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+
+    if (!isHexAddress(fundingTokenAddress)) {
+      setError('Funding token address must be a 0x-prefixed hex string.');
+      return;
+    }
+
+    setCurrentStep(3);
+    onInterruptSubmit?.({
+      fundingTokenAddress: fundingTokenAddress as `0x${string}`,
+    });
+  };
+
+  const handleRejectDelegations = () => {
+    setError(null);
+    setCurrentStep(5);
+    onInterruptSubmit?.({ outcome: 'rejected' });
+  };
+
+  const handleSignDelegations = async (delegationsToSign: UnsignedDelegation[]) => {
+    setError(null);
+    if (showDelegationSigningForm !== true) return;
+
+    const interrupt = activeInterrupt as unknown as {
+      chainId: number;
+      delegationManager: `0x${string}`;
+      delegationsToSign: UnsignedDelegation[];
+    };
+
+    if (!walletClient) {
+      setError('Connect a wallet to sign delegations.');
+      return;
+    }
+    if (isWalletLoading) {
+      setError('Wallet is still loading. Try again in a moment.');
+      return;
+    }
+    if (walletError) {
+      setError(walletError.message);
+      return;
+    }
+    if (chainId !== interrupt.chainId) {
+      setError(`Switch your wallet to chainId=${interrupt.chainId} to sign delegations.`);
+      return;
+    }
+
+    setIsSigningDelegations(true);
+    try {
+      const signedDelegations = [];
+      for (const delegation of delegationsToSign) {
+        const signature = await signDelegation(walletClient, {
+          delegation,
+          delegationManager: interrupt.delegationManager,
+          chainId: interrupt.chainId,
+          account: walletClient.account,
+        });
+        signedDelegations.push({ ...delegation, signature });
+      }
+
+      const response: DelegationSigningResponse = { outcome: 'signed', signedDelegations };
+      setCurrentStep(5);
+      onInterruptSubmit?.(response);
+    } catch (signError: unknown) {
+      const message =
+        signError instanceof Error ? signError.message : typeof signError === 'string' ? signError : 'Unknown error';
+      setError(`Failed to sign delegations: ${message}`);
+    } finally {
+      setIsSigningDelegations(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -706,6 +851,15 @@ function AgentBlockersTab({
             <span className="font-medium">Agent Blocked</span>
           </div>
           <p className="text-red-300 text-sm">{haltReason || executionError}</p>
+        </div>
+      )}
+
+      {delegationsBypassActive && (
+        <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4">
+          <div className="text-yellow-300 text-sm font-medium mb-1">Delegation bypass active</div>
+          <p className="text-yellow-200 text-xs">
+            `CLMM_DELEGATIONS_BYPASS=true` is set. The agent will use its own wallet for liquidity management (not your wallet).
+          </p>
         </div>
       )}
 
@@ -765,7 +919,7 @@ function AgentBlockersTab({
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
           {/* Form Area */}
           <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-            {showInterruptForm ? (
+            {showOperatorConfigForm ? (
               <form onSubmit={handleSubmit}>
                 <h3 className="text-lg font-semibold text-white mb-4">Agent Preferences</h3>
                 {activeInterrupt?.message && (
@@ -808,15 +962,39 @@ function AgentBlockersTab({
                   </div>
                 </div>
 
+                {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isWalletLoading}
+                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </form>
+            ) : showFundingTokenForm ? (
+              <form onSubmit={handleFundingTokenSubmit}>
+                <h3 className="text-lg font-semibold text-white mb-4">Select Funding Token</h3>
+                {activeInterrupt?.message && (
+                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                )}
+
                 <div className="mb-6">
-                  <label className="block text-sm text-gray-400 mb-2">Wallet Address</label>
-                  <input
-                    type="text"
-                    value={walletAddress}
-                    onChange={(e) => setWalletAddress(e.target.value.trim())}
-                    placeholder="0x..."
-                    className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
-                  />
+                  <label className="block text-sm text-gray-400 mb-2">Funding Token</label>
+                  <select
+                    value={fundingTokenAddress}
+                    onChange={(e) => setFundingTokenAddress(e.target.value)}
+                    className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white focus:border-[#fd6731] focus:outline-none transition-colors"
+                  >
+                    <option value="">Choose a token...</option>
+                    {fundingOptions.map((option) => (
+                      <option key={option.address} value={option.address}>
+                        {option.symbol} — {formatFundingBalance(option)} ({option.address.slice(0, 8)}…)
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
@@ -830,12 +1008,93 @@ function AgentBlockersTab({
                   </button>
                 </div>
               </form>
+            ) : showDelegationSigningForm ? (
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-4">Review & Sign Delegations</h3>
+                {activeInterrupt?.message && (
+                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                )}
+
+                <div className="space-y-4 mb-6">
+                  {(activeInterrupt as unknown as { warnings?: string[] }).warnings?.length ? (
+                    <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4">
+                      <div className="text-yellow-300 text-sm font-medium mb-2">Warnings</div>
+                      <ul className="space-y-1 text-yellow-200 text-xs">
+                        {(activeInterrupt as unknown as { warnings: string[] }).warnings.map((w) => (
+                          <li key={w}>{w}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+                    <div className="text-gray-300 text-sm font-medium mb-2">What you are authorizing</div>
+                    <ul className="space-y-1 text-gray-400 text-xs">
+                      {(activeInterrupt as unknown as { descriptions?: string[] }).descriptions?.map((d) => (
+                        <li key={d}>{d}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+
+                {walletError && !error && (
+                  <p className="text-red-400 text-sm mb-4">{walletError.message}</p>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={handleRejectDelegations}
+                    className="px-4 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 text-sm transition-colors"
+                    disabled={isSigningDelegations}
+                  >
+                    Reject
+                  </button>
+                  <div className="flex items-center gap-2">
+                    {chainId !== null &&
+                      (activeInterrupt as unknown as { chainId?: number }).chainId !== undefined &&
+                      chainId !== (activeInterrupt as unknown as { chainId: number }).chainId && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            switchChain((activeInterrupt as unknown as { chainId: number }).chainId).catch(
+                              () => void 0,
+                            )
+                          }
+                          className="px-4 py-2 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white text-sm transition-colors"
+                          disabled={isSigningDelegations}
+                        >
+                          Switch Chain
+                        </button>
+                      )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleSignDelegations(
+                          (activeInterrupt as unknown as { delegationsToSign: UnsignedDelegation[] })
+                            .delegationsToSign,
+                        )
+                      }
+                      className="px-6 py-2.5 rounded-lg bg-[#fd6731] hover:bg-[#fd6731]/90 text-white font-medium transition-colors disabled:opacity-60"
+                      disabled={isSigningDelegations || !walletClient}
+                    >
+                      {isSigningDelegations ? 'Signing…' : 'Sign & Continue'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             ) : (
               <div className="text-center py-12">
                 <div className="text-gray-600 text-4xl mb-4">⏳</div>
-                <h3 className="text-lg font-medium text-white mb-2">Waiting for agent</h3>
+                <h3 className="text-lg font-medium text-white mb-2">
+                  {currentStep > 1 ? 'Processing…' : 'Waiting for agent'}
+                </h3>
                 <p className="text-gray-500 text-sm">
-                  The agent will prompt you when it needs configuration input.
+                  {currentStep > 1
+                    ? 'The agent is processing your last submission and will request the next input if needed.'
+                    : 'The agent will prompt you when it needs configuration input.'}
                 </p>
                 {!taskId && (
                   <p className="text-gray-600 text-xs mt-4">

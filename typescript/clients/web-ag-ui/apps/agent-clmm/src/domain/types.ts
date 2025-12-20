@@ -115,6 +115,14 @@ export interface OperatorConfigInput extends OperatorConfigInputBase {
   walletAddress: `0x${string}`;
 }
 
+export const FundingTokenInputSchema = z.object({
+  fundingTokenAddress: z.templateLiteral(['0x', z.string()]),
+});
+type FundingTokenInputBase = z.infer<typeof FundingTokenInputSchema>;
+export interface FundingTokenInput extends FundingTokenInputBase {
+  fundingTokenAddress: `0x${string}`;
+}
+
 export type ResolvedOperatorConfig = {
   walletAddress: `0x${string}`;
   baseContributionUsd: number;

@@ -186,6 +186,8 @@ export default function HomePage() {
           taskStatus={agent.view.task?.taskStatus?.state}
           haltReason={agent.view.haltReason}
           executionError={agent.view.executionError}
+          delegationsBypassActive={agent.view.delegationsBypassActive}
+          onboarding={agent.view.onboarding}
           transactions={mappedTransactions}
           telemetry={mappedTelemetry}
           allocationAmount={agent.settings.amount}

@@ -12,6 +12,8 @@ import {
 } from './workflow/context.js';
 import { configureCronExecutor } from './workflow/cronScheduler.js';
 import { bootstrapNode } from './workflow/nodes/bootstrap.js';
+import { collectDelegationsNode } from './workflow/nodes/collectDelegations.js';
+import { collectFundingTokenInputNode } from './workflow/nodes/collectFundingTokenInput.js';
 import { collectOperatorInputNode } from './workflow/nodes/collectOperatorInput.js';
 import { fireCommandNode } from './workflow/nodes/fireCommand.js';
 import { hireCommandNode } from './workflow/nodes/hireCommand.js';
@@ -54,6 +56,8 @@ const workflow = new StateGraph(ClmmStateAnnotation)
   .addNode('bootstrap', bootstrapNode)
   .addNode('listPools', listPoolsNode)
   .addNode('collectOperatorInput', collectOperatorInputNode)
+  .addNode('collectFundingTokenInput', collectFundingTokenInputNode)
+  .addNode('collectDelegations', collectDelegationsNode)
   .addNode('prepareOperator', prepareOperatorNode)
   .addNode('pollCycle', pollCycleNode, { ends: ['summarize'] })
   .addNode('summarize', summarizeNode)
@@ -65,7 +69,9 @@ const workflow = new StateGraph(ClmmStateAnnotation)
   .addEdge('syncState', END)
   .addConditionalEdges('bootstrap', resolvePostBootstrap)
   .addEdge('listPools', 'collectOperatorInput')
-  .addEdge('collectOperatorInput', 'prepareOperator')
+  .addEdge('collectOperatorInput', 'collectFundingTokenInput')
+  .addEdge('collectFundingTokenInput', 'collectDelegations')
+  .addEdge('collectDelegations', 'prepareOperator')
   .addEdge('prepareOperator', 'pollCycle')
   .addEdge('pollCycle', 'summarize')
   .addEdge('summarize', END);
@@ -163,4 +169,11 @@ if (invokedAsEntryPoint) {
 }
 
 export { executeDecision } from './workflow/execution.js';
-export type { ClmmEvent, ClmmState, OperatorInterrupt } from './workflow/context.js';
+export type {
+  ClmmEvent,
+  ClmmState,
+  DelegationBundle,
+  DelegationSigningInterrupt,
+  FundingTokenInterrupt,
+  OperatorInterrupt,
+} from './workflow/context.js';
