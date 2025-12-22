@@ -11,11 +11,15 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { useLogin, useLogout, usePrivy } from '@privy-io/react-auth';
 import { supportedEvmChains, getEvmChainOrDefault } from '@/config/evmChains';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
+import { useAgentConnection } from '@/hooks/useAgentConnection';
+import { DEFAULT_AGENT_ID } from '@/config/agents';
 
 export interface AgentActivity {
   id: string;
@@ -25,22 +29,8 @@ export interface AgentActivity {
   timestamp?: string;
 }
 
-interface AppSidebarProps {
-  currentPage: 'chat' | 'hire' | 'acquire' | 'leaderboard';
-  onNavigate: (page: 'chat' | 'hire' | 'acquire' | 'leaderboard') => void;
-  blockedAgents: AgentActivity[];
-  activeAgents: AgentActivity[];
-  completedAgents: AgentActivity[];
-  selectedNetwork?: string;
-}
-
-export function AppSidebar({
-  currentPage,
-  onNavigate,
-  blockedAgents,
-  activeAgents,
-  completedAgents,
-}: AppSidebarProps) {
+export function AppSidebar() {
+  const pathname = usePathname();
   const [isAgentsExpanded, setIsAgentsExpanded] = useState(true);
   const [isBlockedExpanded, setIsBlockedExpanded] = useState(true);
   const [isActiveExpanded, setIsActiveExpanded] = useState(true);
@@ -60,11 +50,47 @@ export function AppSidebar({
     error: smartAccountError,
   } = useUpgradeToSmartAccount();
 
+  // Get agent activity data
+  const agent = useAgentConnection(DEFAULT_AGENT_ID);
+
+  const blockedAgents: AgentActivity[] =
+    agent.view.haltReason || agent.view.executionError || agent.activeInterrupt
+      ? [
+          {
+            id: `${agent.config.id}-blocked`,
+            name: agent.config.name,
+            subtitle: agent.activeInterrupt
+              ? 'Set up agent'
+              : agent.view.haltReason ?? agent.view.executionError ?? 'Blocked',
+            status: 'blocked',
+          },
+        ]
+      : [];
+
+  const activeAgents: AgentActivity[] = agent.isActive
+    ? [
+        {
+          id: agent.config.id,
+          name: agent.config.name,
+          subtitle: agent.view.task?.id
+            ? `Task: ${agent.view.task.id.slice(0, 8)}...`
+            : `Command: ${agent.view.command}`,
+          status: 'active',
+        },
+      ]
+    : [];
+
+  const completedAgents: AgentActivity[] = [];
+
   const selectedChain = getEvmChainOrDefault(chainId);
 
   const formatAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;
 
   const canSelectChain = ready && authenticated && Boolean(privyWallet) && !isWalletLoading;
+
+  const isHireAgentsActive = pathname === '/hire-agents' || pathname?.startsWith('/hire-agents/');
+  const isAcquireActive = pathname === '/acquire';
+  const isLeaderboardActive = pathname === '/leaderboard';
 
   return (
     <div className="flex flex-col h-full w-[260px] bg-[#1a1a1a] border-r border-[#2a2a2a]">
@@ -101,9 +127,7 @@ export function AppSidebar({
               <button
                 onClick={() => setIsAgentsExpanded(!isAgentsExpanded)}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-colors ${
-                  currentPage === 'hire' || currentPage === 'acquire'
-                    ? 'bg-[#252525]'
-                    : 'hover:bg-[#252525]'
+                  isHireAgentsActive || isAcquireActive ? 'bg-[#252525]' : 'hover:bg-[#252525]'
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -119,49 +143,49 @@ export function AppSidebar({
 
               {isAgentsExpanded && (
                 <div className="ml-7 mt-1 space-y-1">
-                  <button
-                    onClick={() => onNavigate('hire')}
+                  <Link
+                    href="/hire-agents"
                     className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors relative ${
-                      currentPage === 'hire'
+                      isHireAgentsActive
                         ? 'text-white bg-[#2a2a2a]'
                         : 'text-gray-400 hover:text-white hover:bg-[#252525]'
                     }`}
                   >
-                    {currentPage === 'hire' && (
+                    {isHireAgentsActive && (
                       <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-[#fd6731] rounded-r" />
                     )}
                     Hire
-                  </button>
-                  <button
-                    onClick={() => onNavigate('acquire')}
+                  </Link>
+                  <Link
+                    href="/acquire"
                     className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors relative ${
-                      currentPage === 'acquire'
+                      isAcquireActive
                         ? 'text-white bg-[#2a2a2a]'
                         : 'text-gray-400 hover:text-white hover:bg-[#252525]'
                     }`}
                   >
-                    {currentPage === 'acquire' && (
+                    {isAcquireActive && (
                       <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-[#fd6731] rounded-r" />
                     )}
                     Acquire
-                  </button>
+                  </Link>
                 </div>
               )}
             </div>
 
             {/* Leaderboard */}
-            <button
-              onClick={() => onNavigate('leaderboard')}
+            <Link
+              href="/leaderboard"
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors relative ${
-                currentPage === 'leaderboard' ? 'bg-[#252525]' : 'hover:bg-[#252525]'
+                isLeaderboardActive ? 'bg-[#252525]' : 'hover:bg-[#252525]'
               }`}
             >
-              {currentPage === 'leaderboard' && (
+              {isLeaderboardActive && (
                 <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-[#fd6731] rounded-r" />
               )}
               <Trophy className="w-4 h-4" />
               <span className="text-sm font-medium">Leaderboard</span>
-            </button>
+            </Link>
           </div>
         </div>
 
