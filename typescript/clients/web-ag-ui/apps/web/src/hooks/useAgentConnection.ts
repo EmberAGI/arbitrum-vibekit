@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useCoAgent, useCopilotContext } from '@copilotkit/react-core';
 import { v7 } from 'uuid';
 import { useLangGraphInterruptCustomUI } from '../app/hooks/useLangGraphInterruptCustomUI';
@@ -46,6 +46,9 @@ const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
   ((value as { type?: string }).type === 'operator-config-request' ||
     (value as { type?: string }).type === 'clmm-funding-token-request' ||
     (value as { type?: string }).type === 'clmm-delegation-signing-request');
+
+// Module-level flag to prevent multiple initial syncs across hook instances
+const initialSyncDoneByThread: Record<string, boolean> = {};
 
 export interface UseAgentConnectionResult {
   config: AgentConfig;
@@ -115,6 +118,18 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     },
     [run],
   );
+
+  // Initial sync when thread is established - runs once per thread across all hook instances
+  useEffect(() => {
+    if (threadId && !initialSyncDoneByThread[threadId]) {
+      initialSyncDoneByThread[threadId] = true;
+      // Small delay to let the thread settle before syncing
+      const timer = setTimeout(() => {
+        runCommand('sync');
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [threadId, runCommand]);
 
   // Extract state with defaults
   const view = state?.view ?? defaultView;
