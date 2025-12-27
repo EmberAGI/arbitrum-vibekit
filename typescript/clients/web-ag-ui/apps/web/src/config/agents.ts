@@ -9,6 +9,9 @@ export interface AgentConfig {
   creatorVerified: boolean;
   avatar: string;
   avatarBg: string;
+  // Featured agents config
+  isFeatured?: boolean;
+  featuredRank?: number;
 }
 
 export const AGENT_REGISTRY: Record<string, AgentConfig> = {
@@ -21,6 +24,8 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     creatorVerified: true,
     avatar: '🏰',
     avatarBg: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+    isFeatured: true,
+    featuredRank: 1,
   },
 };
 
@@ -49,6 +54,12 @@ function formatAgentName(agentId: string): string {
 
 export function getAllAgents(): AgentConfig[] {
   return Object.values(AGENT_REGISTRY);
+}
+
+export function getFeaturedAgents(): AgentConfig[] {
+  return Object.values(AGENT_REGISTRY)
+    .filter((agent) => agent.isFeatured)
+    .sort((a, b) => (a.featuredRank ?? 999) - (b.featuredRank ?? 999));
 }
 
 export const DEFAULT_AGENT_ID = process.env.NEXT_PUBLIC_DEFAULT_AGENT_ID || 'agent-clmm';

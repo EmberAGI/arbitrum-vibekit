@@ -53,11 +53,22 @@ export function AppSidebar() {
   // Get agent activity data
   const agent = useAgentConnection(DEFAULT_AGENT_ID);
 
-  const blockedAgents: AgentActivity[] =
+  // Derive task status - only show a card if there's a task ID
+  const taskId = agent.view.task?.id;
+  const taskState = agent.view.task?.taskStatus?.state;
+
+  // Determine which category this task belongs to (mutually exclusive)
+  const isBlocked = Boolean(
     agent.view.haltReason || agent.view.executionError || agent.activeInterrupt
+  );
+  const isCompleted = taskState === 'completed' || taskState === 'canceled';
+  const isRunning = taskId && agent.isActive && !isBlocked && !isCompleted;
+
+  const blockedAgents: AgentActivity[] =
+    taskId && isBlocked
       ? [
           {
-            id: `${agent.config.id}-blocked`,
+            id: taskId,
             name: agent.config.name,
             subtitle: agent.activeInterrupt
               ? 'Set up agent'
@@ -67,20 +78,29 @@ export function AppSidebar() {
         ]
       : [];
 
-  const activeAgents: AgentActivity[] = agent.isActive
-    ? [
-        {
-          id: agent.config.id,
-          name: agent.config.name,
-          subtitle: agent.view.task?.id
-            ? `Task: ${agent.view.task.id.slice(0, 8)}...`
-            : `Command: ${agent.view.command}`,
-          status: 'active',
-        },
-      ]
-    : [];
+  const activeAgents: AgentActivity[] =
+    taskId && isRunning
+      ? [
+          {
+            id: taskId,
+            name: agent.config.name,
+            subtitle: `Task: ${taskId.slice(0, 8)}...`,
+            status: 'active',
+          },
+        ]
+      : [];
 
-  const completedAgents: AgentActivity[] = [];
+  const completedAgents: AgentActivity[] =
+    taskId && isCompleted
+      ? [
+          {
+            id: taskId,
+            name: agent.config.name,
+            subtitle: taskState === 'canceled' ? 'Canceled' : 'Completed',
+            status: 'completed',
+          },
+        ]
+      : [];
 
   const selectedChain = getEvmChainOrDefault(chainId);
 

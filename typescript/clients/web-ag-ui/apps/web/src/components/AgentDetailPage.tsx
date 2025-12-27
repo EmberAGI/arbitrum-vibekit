@@ -19,6 +19,8 @@ import type {
   AgentProfile,
   AgentMetrics,
   AgentInterrupt,
+  AgentSettings,
+  AgentViewMetrics,
   FundingTokenOption,
   OnboardingState,
   Pool,
@@ -28,10 +30,11 @@ import type {
   UnsignedDelegation,
   Transaction,
   TelemetryItem,
+  ClmmEvent,
 } from '../types/agent';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 
-export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem };
+export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
 interface AgentDetailPageProps {
   agentId: string;
@@ -46,9 +49,11 @@ interface AgentDetailPageProps {
   avatarBg?: string;
   profile: AgentProfile;
   metrics: AgentMetrics;
+  fullMetrics?: AgentViewMetrics;
   isHired: boolean;
   isHiring: boolean;
   isFiring?: boolean;
+  isSyncing?: boolean;
   currentCommand?: string;
   onHire: () => void;
   onFire: () => void;
@@ -67,12 +72,13 @@ interface AgentDetailPageProps {
   executionError?: string;
   delegationsBypassActive?: boolean;
   onboarding?: OnboardingState;
-  // Transaction history and telemetry
+  // Activity data
   transactions?: Transaction[];
   telemetry?: TelemetryItem[];
+  events?: ClmmEvent[];
   // Settings
-  allocationAmount?: number;
-  onAllocationChange?: (amount: number) => void;
+  settings?: AgentSettings;
+  onSettingsChange?: (updates: Partial<AgentSettings>) => void;
 }
 
 type TabType = 'blockers' | 'metrics' | 'transactions' | 'settings' | 'chat';
@@ -92,9 +98,11 @@ export function AgentDetailPage({
   avatarBg = DEFAULT_AVATAR_BG,
   profile,
   metrics,
+  fullMetrics,
   isHired,
   isHiring,
   isFiring,
+  isSyncing,
   currentCommand,
   onHire,
   onFire,
@@ -111,8 +119,9 @@ export function AgentDetailPage({
   onboarding,
   transactions = [],
   telemetry = [],
-  allocationAmount,
-  onAllocationChange,
+  events = [],
+  settings,
+  onSettingsChange,
 }: AgentDetailPageProps) {
   const [activeTab, setActiveTab] = useState<TabType>(isHired ? 'blockers' : 'metrics');
 
@@ -176,10 +185,11 @@ export function AgentDetailPage({
             {/* Sync Button */}
             <button
               onClick={onSync}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white text-sm transition-colors"
+              disabled={isSyncing}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white text-sm transition-colors disabled:opacity-60"
             >
-              <RefreshCw className="w-4 h-4" />
-              Refresh
+              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+              {isSyncing ? 'Syncing...' : 'Refresh'}
             </button>
           </nav>
 
@@ -326,24 +336,18 @@ export function AgentDetailPage({
               delegationsBypassActive={delegationsBypassActive}
               onboarding={onboarding}
               telemetry={telemetry}
-              allocationAmount={allocationAmount}
-              onAllocationChange={onAllocationChange}
+              settings={settings}
+              onSettingsChange={onSettingsChange}
             />
           )}
 
           {activeTab === 'metrics' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <MetricsCard
-                title="APY Change"
-                hasData={profile.apy !== undefined}
-                subtitle="Showing APY performance"
-              />
-              <MetricsCard
-                title="Total Users"
-                hasData={profile.totalUsers !== undefined}
-                subtitle="Showing user growth"
-              />
-            </div>
+            <MetricsTab
+              profile={profile}
+              metrics={metrics}
+              fullMetrics={fullMetrics}
+              events={events}
+            />
           )}
 
           {activeTab === 'transactions' && (
@@ -351,10 +355,10 @@ export function AgentDetailPage({
           )}
 
           {activeTab === 'settings' && (
-            <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-8 text-center">
-              <div className="text-gray-600 text-4xl mb-2">⚙️</div>
-              <p className="text-gray-500">Settings coming soon</p>
-            </div>
+            <SettingsTab
+              settings={settings}
+              onSettingsChange={onSettingsChange}
+            />
           )}
         </div>
       </div>
@@ -490,18 +494,11 @@ export function AgentDetailPage({
             </div>
 
             {activeTab === 'metrics' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <MetricsCard
-                  title="APY Change"
-                  hasData={profile.apy !== undefined}
-                  subtitle="Showing APY performance"
-                />
-                <MetricsCard
-                  title="Total Users"
-                  hasData={profile.totalUsers !== undefined}
-                  subtitle="Showing user growth"
-                />
-              </div>
+              <MetricsTab
+                profile={profile}
+                metrics={metrics}
+                events={[]}
+              />
             )}
           </div>
         </div>
@@ -624,8 +621,8 @@ interface AgentBlockersTabProps {
   delegationsBypassActive?: boolean;
   onboarding?: OnboardingState;
   telemetry?: TelemetryItem[];
-  allocationAmount?: number;
-  onAllocationChange?: (amount: number) => void;
+  settings?: AgentSettings;
+  onSettingsChange?: (updates: Partial<AgentSettings>) => void;
 }
 
 const SETUP_STEPS = [
@@ -656,8 +653,8 @@ function AgentBlockersTab({
   delegationsBypassActive,
   onboarding,
   telemetry = [],
-  allocationAmount,
-  onAllocationChange,
+  settings,
+  onSettingsChange,
 }: AgentBlockersTabProps) {
   const {
     walletClient,
@@ -671,7 +668,7 @@ function AgentBlockersTab({
   const [currentStep, setCurrentStep] = useState(1);
   const [poolAddress, setPoolAddress] = useState('');
   const [baseContributionUsd, setBaseContributionUsd] = useState(
-    allocationAmount?.toString() ?? '',
+    settings?.amount?.toString() ?? '',
   );
   const [fundingTokenAddress, setFundingTokenAddress] = useState('');
   const [isSigningDelegations, setIsSigningDelegations] = useState(false);
@@ -708,7 +705,7 @@ function AgentBlockersTab({
         return;
       }
       baseContributionNumber = parsed;
-      onAllocationChange?.(baseContributionNumber);
+      onSettingsChange?.({ amount: baseContributionNumber });
     }
 
     onInterruptSubmit?.({
@@ -1273,42 +1270,233 @@ function PointsColumn({ metrics }: PointsColumnProps) {
   );
 }
 
-interface MetricsCardProps {
-  title: string;
-  hasData: boolean;
-  subtitle: string;
+// Metrics Tab Component
+interface MetricsTabProps {
+  profile: AgentProfile;
+  metrics: AgentMetrics;
+  fullMetrics?: AgentViewMetrics;
+  events: ClmmEvent[];
 }
 
-function MetricsCard({ title, hasData, subtitle }: MetricsCardProps) {
-  return (
-    <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-      <h3 className="text-lg font-semibold text-white mb-4">{title}</h3>
+function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) {
+  const formatDate = (timestamp?: string) => {
+    if (!timestamp) return '—';
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
 
-      {hasData ? (
-        <>
-          <div className="h-32 flex items-end justify-between gap-1 mb-4">
-            {[35, 45, 40, 55, 50, 65, 60, 70, 75, 80, 72, 78].map((height, i) => (
-              <div
-                key={i}
-                className="flex-1 bg-purple-500/30 rounded-t"
-                style={{ height: `${height}%` }}
-              />
+  return (
+    <div className="space-y-6">
+      {/* Key Metrics Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <MetricCard
+          label="Iteration"
+          value={metrics.iteration?.toString() ?? '—'}
+          icon={<TrendingUp className="w-4 h-4 text-teal-400" />}
+        />
+        <MetricCard
+          label="Cycles Since Rebalance"
+          value={metrics.cyclesSinceRebalance?.toString() ?? '—'}
+          icon={<Minus className="w-4 h-4 text-yellow-400" />}
+        />
+        <MetricCard
+          label="Stale Cycles"
+          value={metrics.staleCycles?.toString() ?? '—'}
+          icon={<TrendingDown className="w-4 h-4 text-red-400" />}
+        />
+        <MetricCard
+          label="Previous Price"
+          value={fullMetrics?.previousPrice?.toFixed(6) ?? '—'}
+          icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
+        />
+      </div>
+
+      {/* Profile Stats */}
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Performance</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+            <div className="text-2xl font-bold text-teal-400">
+              {profile.apy !== undefined ? `${profile.apy.toFixed(1)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
+            <div className="text-2xl font-bold text-white">
+              {profile.aum !== undefined ? `$${profile.aum.toLocaleString()}` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Agent Income</div>
+            <div className="text-2xl font-bold text-white">
+              {profile.agentIncome !== undefined ? `$${profile.agentIncome.toLocaleString()}` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Users</div>
+            <div className="text-2xl font-bold text-white">
+              {profile.totalUsers !== undefined ? profile.totalUsers.toLocaleString() : '—'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Latest Cycle Info */}
+      {fullMetrics?.latestCycle && (
+        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Latest Cycle</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Cycle</div>
+              <div className="text-white font-medium">{fullMetrics.latestCycle.cycle}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Action</div>
+              <div className="text-white font-medium">{fullMetrics.latestCycle.action}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Mid Price</div>
+              <div className="text-white font-medium">
+                {fullMetrics.latestCycle.midPrice?.toFixed(6) ?? '—'}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Timestamp</div>
+              <div className="text-white font-medium">
+                {formatDate(fullMetrics.latestCycle.timestamp)}
+              </div>
+            </div>
+          </div>
+          {fullMetrics.latestCycle.reason && (
+            <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Reason</div>
+              <div className="text-gray-300 text-sm">{fullMetrics.latestCycle.reason}</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Activity Stream */}
+      {events.length > 0 && (
+        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {events.slice(-10).reverse().map((event, i) => (
+              <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
+                <div
+                  className={`w-2 h-2 rounded-full mt-2 ${
+                    event.type === 'status'
+                      ? 'bg-blue-400'
+                      : event.type === 'artifact'
+                        ? 'bg-purple-400'
+                        : 'bg-gray-400'
+                  }`}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
+                  <div className="text-sm text-white mt-1">
+                    {event.type === 'status' && event.message}
+                    {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
+                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
+                  </div>
+                </div>
+              </div>
             ))}
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <TrendingUp className="w-4 h-4 text-teal-400" />
-            <span className="text-gray-400">{subtitle}</span>
-          </div>
-        </>
-      ) : (
-        <div className="h-32 flex items-center justify-center">
-          <div className="text-center">
-            <div className="text-gray-600 text-4xl mb-2">📊</div>
-            <p className="text-gray-500 text-sm">No data available yet</p>
-            <p className="text-gray-600 text-xs mt-1">Data will appear once the agent is active</p>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+interface MetricCardProps {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+}
+
+function MetricCard({ label, value, icon }: MetricCardProps) {
+  return (
+    <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] p-4">
+      <div className="flex items-center gap-2 mb-2">
+        {icon}
+        <span className="text-xs text-gray-500 uppercase tracking-wide">{label}</span>
+      </div>
+      <div className="text-xl font-semibold text-white">{value}</div>
+    </div>
+  );
+}
+
+// Settings Tab Component
+interface SettingsTabProps {
+  settings?: AgentSettings;
+  onSettingsChange?: (updates: Partial<AgentSettings>) => void;
+}
+
+function SettingsTab({ settings, onSettingsChange }: SettingsTabProps) {
+  const [localAmount, setLocalAmount] = useState(settings?.amount?.toString() ?? '');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = () => {
+    if (!onSettingsChange) return;
+
+    const amount = localAmount.trim() === '' ? undefined : Number(localAmount);
+    if (amount !== undefined && (Number.isNaN(amount) || amount < 0)) {
+      return;
+    }
+
+    setIsSaving(true);
+    onSettingsChange({ amount });
+    setTimeout(() => setIsSaving(false), 1000);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Allocation Settings</h3>
+        <p className="text-gray-400 text-sm mb-6">
+          Configure the amount of funds allocated to this agent for liquidity operations.
+        </p>
+
+        <div className="max-w-md">
+          <label className="block text-sm text-gray-400 mb-2">Allocated Amount (USD)</label>
+          <div className="flex gap-3">
+            <input
+              type="number"
+              value={localAmount}
+              onChange={(e) => setLocalAmount(e.target.value)}
+              placeholder="Enter amount..."
+              className="flex-1 px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
+            />
+            <button
+              onClick={handleSave}
+              disabled={isSaving || !onSettingsChange}
+              className="px-6 py-3 rounded-lg bg-[#fd6731] hover:bg-[#e55a28] text-white font-medium transition-colors disabled:opacity-60"
+            >
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+          {settings?.amount !== undefined && (
+            <p className="text-xs text-gray-500 mt-2">
+              Current allocation: ${settings.amount.toLocaleString()}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Policies</h3>
+        <p className="text-gray-500 text-sm">
+          Additional policy settings will be available in a future update.
+        </p>
+      </div>
     </div>
   );
 }

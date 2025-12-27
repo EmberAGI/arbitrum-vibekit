@@ -1,5 +1,68 @@
-// Agent state types matching CopilotKit/LangGraph schema
+// Agent state types matching CopilotKit/LangGraph ClmmState schema
 
+// Task states from A2A protocol
+export type TaskState =
+  | 'submitted'
+  | 'working'
+  | 'input-required'
+  | 'completed'
+  | 'canceled'
+  | 'failed'
+  | 'rejected'
+  | 'auth-required'
+  | 'unknown';
+
+export interface TaskStatus {
+  state: TaskState;
+  message?: unknown;
+  timestamp?: string;
+}
+
+export interface Task {
+  id: string;
+  taskStatus: TaskStatus;
+}
+
+// Pool types
+export interface Pool {
+  address: string;
+  token0: { symbol: string };
+  token1: { symbol: string };
+  feeTierBps?: number;
+}
+
+// Transaction types
+export interface Transaction {
+  cycle: number;
+  action: string;
+  txHash?: string;
+  status: 'success' | 'failed';
+  reason?: string;
+  timestamp: string;
+}
+
+// Telemetry types
+export interface TelemetryItem {
+  cycle: number;
+  action: string;
+  reason?: string;
+  midPrice?: number;
+  timestamp?: string;
+}
+
+// Event types for activity streaming
+export interface Artifact {
+  id: string;
+  type: string;
+  data: unknown;
+}
+
+export type ClmmEvent =
+  | { type: 'status'; message: string; task: Task }
+  | { type: 'artifact'; artifact: Artifact; append?: boolean }
+  | { type: 'dispatch-response'; parts: Array<{ kind: string; data: unknown }> };
+
+// Interrupt types
 export type FundingTokenOption = {
   address: `0x${string}`;
   symbol: string;
@@ -10,7 +73,7 @@ export type FundingTokenOption = {
 export type OperatorConfigRequestInterrupt = {
   type: 'operator-config-request';
   message: string;
-  payloadSchema?: unknown;
+  payloadSchema?: Record<string, unknown>;
   artifactId?: string;
 };
 
@@ -57,12 +120,7 @@ export type AgentInterrupt =
   | FundingTokenRequestInterrupt
   | DelegationSigningRequestInterrupt;
 
-export type OnboardingState = {
-  step: number;
-  totalSteps?: number;
-  key?: string;
-};
-
+// Input types for interrupt resolution
 export interface OperatorConfigInput {
   poolAddress: `0x${string}`;
   walletAddress: `0x${string}`;
@@ -82,57 +140,18 @@ export interface DelegationSigningResponseRejected {
   outcome: 'rejected';
 }
 
-export type DelegationSigningResponse = DelegationSigningResponseSigned | DelegationSigningResponseRejected;
+export type DelegationSigningResponse =
+  | DelegationSigningResponseSigned
+  | DelegationSigningResponseRejected;
 
-export interface Pool {
-  address: string;
-  token0: { symbol: string };
-  token1: { symbol: string };
-  feeTierBps?: number;
-}
+// Onboarding state
+export type OnboardingState = {
+  step: number;
+  totalSteps?: number;
+  key?: string;
+};
 
-export interface Transaction {
-  cycle: number;
-  action: string;
-  txHash?: string;
-  status: 'success' | 'failed' | 'pending';
-  reason?: string;
-  timestamp?: string;
-}
-
-export interface TelemetryItem {
-  cycle: number;
-  action: string;
-  reason?: string;
-  midPrice?: number;
-  timestamp?: string;
-}
-
-export interface AgentView {
-  command: string;
-  task?: {
-    id: string;
-    taskStatus?: {
-      state: string;
-      timestamp?: string;
-    };
-  };
-  onboarding?: OnboardingState;
-  poolArtifact?: unknown;
-  operatorInput?: unknown;
-  fundingTokenInput?: unknown;
-  selectedPool?: unknown;
-  operatorConfig?: unknown;
-  delegationBundle?: unknown;
-  haltReason?: string;
-  executionError?: string;
-  delegationsBypassActive?: boolean;
-  profile?: AgentViewProfile;
-  activity?: AgentViewActivity;
-  metrics?: AgentViewMetrics;
-  transactionHistory: Transaction[];
-}
-
+// Profile types (ClmmProfile)
 export interface AgentViewProfile {
   agentIncome?: number;
   aum?: number;
@@ -145,28 +164,66 @@ export interface AgentViewProfile {
   allowedPools: Pool[];
 }
 
+// Activity types (ClmmActivity)
 export interface AgentViewActivity {
   telemetry: TelemetryItem[];
-  events: unknown[];
+  events: ClmmEvent[];
 }
 
+// Metrics types (ClmmMetrics)
 export interface AgentViewMetrics {
-  lastSnapshot?: unknown;
+  lastSnapshot?: Pool;
   previousPrice?: number;
   cyclesSinceRebalance: number;
   staleCycles: number;
   iteration: number;
-  latestCycle?: unknown;
+  latestCycle?: TelemetryItem;
 }
 
+// Settings types (ClmmSettings)
+export interface AgentSettings {
+  amount?: number;
+}
+
+// Private state (ClmmPrivateState) - not exposed to UI but defined for completeness
+export interface AgentPrivateState {
+  mode?: 'debug' | 'production';
+  pollIntervalMs: number;
+  streamLimit: number;
+  cronScheduled: boolean;
+  bootstrapped: boolean;
+}
+
+// View state (ClmmViewState)
+export interface AgentView {
+  command?: string;
+  task?: Task;
+  onboarding?: OnboardingState;
+  poolArtifact?: Artifact;
+  operatorInput?: OperatorConfigInput;
+  fundingTokenInput?: FundingTokenInput;
+  selectedPool?: Pool;
+  operatorConfig?: unknown;
+  delegationBundle?: unknown;
+  haltReason?: string;
+  executionError?: string;
+  delegationsBypassActive?: boolean;
+  profile: AgentViewProfile;
+  activity: AgentViewActivity;
+  metrics: AgentViewMetrics;
+  transactionHistory: Transaction[];
+}
+
+// Full agent state (ClmmState)
 export interface AgentState {
   messages?: unknown[];
-  settings?: {
-    amount: number;
+  copilotkit?: {
+    actions?: unknown[];
+    context?: unknown[];
   };
-  view?: AgentView;
-  private?: unknown;
-  copilotkit?: unknown;
+  settings: AgentSettings;
+  private?: AgentPrivateState;
+  view: AgentView;
 }
 
 // Simplified types for UI components
@@ -214,7 +271,7 @@ export const defaultActivity: AgentViewActivity = {
 };
 
 export const defaultView: AgentView = {
-  command: 'idle',
+  command: undefined,
   task: undefined,
   poolArtifact: undefined,
   operatorInput: undefined,
@@ -222,14 +279,20 @@ export const defaultView: AgentView = {
   operatorConfig: undefined,
   haltReason: undefined,
   executionError: undefined,
+  delegationsBypassActive: undefined,
   profile: defaultProfile,
   activity: defaultActivity,
   metrics: defaultMetrics,
   transactionHistory: [],
 };
 
+export const defaultSettings: AgentSettings = {
+  amount: undefined,
+};
+
 export const initialAgentState: AgentState = {
   messages: [],
-  settings: { amount: 0 },
+  copilotkit: { actions: [], context: [] },
+  settings: defaultSettings,
   view: defaultView,
 };
