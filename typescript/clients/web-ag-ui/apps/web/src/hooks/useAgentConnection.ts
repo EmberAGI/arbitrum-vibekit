@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { useCoAgent, useCopilotContext } from '@copilotkit/react-core';
 import { v7 } from 'uuid';
 import { useLangGraphInterruptCustomUI } from '../app/hooks/useLangGraphInterruptCustomUI';
@@ -92,11 +92,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const [isFiring, setIsFiring] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Track whether a command is currently in-flight to prevent 409 errors
-  const isBusyRef = useRef(false);
-  const pendingCommandRef = useRef<string | null>(null);
-  const initialSyncDoneRef = useRef(false);
-
   const config = getAgentConfig(agentId);
 
   const { state, setState, run } = useCoAgent<AgentState>({
@@ -109,59 +104,17 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     enabled: isAgentInterrupt,
   });
 
-  // Safe run wrapper that prevents concurrent commands
-  const safeRunRef = useRef<
-    ((command: string, onStart?: () => void, onComplete?: () => void) => void) | undefined
-  >(undefined);
-
-  const safeRun = useCallback(
-    (command: string, onStart?: () => void, onComplete?: () => void) => {
-      if (isBusyRef.current) {
-        pendingCommandRef.current = command;
-        return;
-      }
-
-      isBusyRef.current = true;
-      onStart?.();
-
+  // Simple command runner - no queuing, just run the command
+  const runCommand = useCallback(
+    (command: string) => {
       run(() => ({
         id: v7(),
         role: 'user',
         content: JSON.stringify({ command }),
       }));
-
-      // Reset busy state after a delay to allow next command
-      setTimeout(() => {
-        isBusyRef.current = false;
-        onComplete?.();
-
-        // Process any pending command
-        const pending = pendingCommandRef.current;
-        if (pending) {
-          pendingCommandRef.current = null;
-          safeRunRef.current?.(pending);
-        }
-      }, 1500);
     },
     [run],
   );
-
-  // Keep ref in sync with latest safeRun
-  useEffect(() => {
-    safeRunRef.current = safeRun;
-  }, [safeRun]);
-
-  // Initial sync when thread is established (only once)
-  useEffect(() => {
-    if (threadId && !initialSyncDoneRef.current) {
-      initialSyncDoneRef.current = true;
-      // Delay initial sync slightly to avoid race with any immediate user action
-      const timer = setTimeout(() => {
-        safeRun('sync');
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [threadId, safeRun]);
 
   // Extract state with defaults
   const view = state?.view ?? defaultView;
@@ -177,32 +130,26 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const isActive = view.command !== undefined && view.command !== 'idle' && view.command !== 'fire';
 
   const runSync = useCallback(() => {
-    safeRun(
-      'sync',
-      () => setIsSyncing(true),
-      () => setIsSyncing(false),
-    );
-  }, [safeRun]);
+    setIsSyncing(true);
+    runCommand('sync');
+    setTimeout(() => setIsSyncing(false), 2000);
+  }, [runCommand]);
 
   const runHire = useCallback(() => {
     if (!isHired && !isHiring) {
-      safeRun(
-        'hire',
-        () => setIsHiring(true),
-        () => setIsHiring(false),
-      );
+      setIsHiring(true);
+      runCommand('hire');
+      setTimeout(() => setIsHiring(false), 5000);
     }
-  }, [safeRun, isHired, isHiring]);
+  }, [runCommand, isHired, isHiring]);
 
   const runFire = useCallback(() => {
     if (!isFiring) {
-      safeRun(
-        'fire',
-        () => setIsFiring(true),
-        () => setIsFiring(false),
-      );
+      setIsFiring(true);
+      runCommand('fire');
+      setTimeout(() => setIsFiring(false), 3000);
     }
-  }, [safeRun, isFiring]);
+  }, [runCommand, isFiring]);
 
   const resolveInterrupt = useCallback(
     (
@@ -217,7 +164,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [resolve],
   );
 
-  // Settings sync pattern: update local state, then run sync command to merge to backend
+  // Settings sync pattern: update local state only (no automatic sync to avoid 409)
   const updateSettings = useCallback(
     (updates: Partial<AgentSettings>) => {
       setState((prev) => ({
@@ -227,11 +174,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           ...updates,
         },
       }));
-
-      // Run sync command to merge local state changes to backend
-      safeRun('sync');
     },
-    [setState, safeRun],
+    [setState],
   );
 
   return {
