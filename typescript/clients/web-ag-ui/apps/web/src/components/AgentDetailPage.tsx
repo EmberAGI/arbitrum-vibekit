@@ -730,13 +730,23 @@ function AgentBlockersTab({
     });
   };
 
-  const showOperatorConfigForm =
-    currentStep === 1 && activeInterrupt?.type === 'operator-config-request';
-  const showFundingTokenForm =
-    currentStep === 2 && activeInterrupt?.type === 'clmm-funding-token-request';
-  const showDelegationSigningForm =
-    currentStep === 3 && activeInterrupt?.type === 'clmm-delegation-signing-request';
+  // Derive which form to show from the interrupt type (the authoritative source)
+  const showOperatorConfigForm = activeInterrupt?.type === 'operator-config-request';
+  const showFundingTokenForm = activeInterrupt?.type === 'clmm-funding-token-request';
+  const showDelegationSigningForm = activeInterrupt?.type === 'clmm-delegation-signing-request';
 
+  // Sync currentStep with the interrupt type when it changes
+  useEffect(() => {
+    if (showOperatorConfigForm) {
+      setCurrentStep(1);
+    } else if (showFundingTokenForm) {
+      setCurrentStep(2);
+    } else if (showDelegationSigningForm) {
+      setCurrentStep(3);
+    }
+  }, [showOperatorConfigForm, showFundingTokenForm, showDelegationSigningForm]);
+
+  // Also sync from onboarding.step if provided by the agent
   useEffect(() => {
     const nextStep = onboarding?.step;
     if (typeof nextStep === 'number' && Number.isFinite(nextStep) && nextStep > 0) {

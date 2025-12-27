@@ -35,7 +35,7 @@ export default function RootLayout({
             <div className="flex h-screen overflow-hidden">
               <AppSidebar />
               <main
-                className="flex-1 overflow-hidden bg-[#121212]"
+                className="flex-1 overflow-y-auto bg-[#121212]"
                 style={{ '--copilot-kit-primary-color': themeColor } as CopilotKitCSSProperties}
               >
                 {children}

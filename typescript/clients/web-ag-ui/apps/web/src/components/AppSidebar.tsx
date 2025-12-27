@@ -58,9 +58,11 @@ export function AppSidebar() {
   const taskState = agent.view.task?.taskStatus?.state;
 
   // Determine which category this task belongs to (mutually exclusive)
-  const isBlocked = Boolean(
-    agent.view.haltReason || agent.view.executionError || agent.activeInterrupt
-  );
+  // Use taskState 'input-required' or view state flags rather than activeInterrupt
+  // to avoid interference with the page's interrupt handling
+  const needsInput = taskState === 'input-required';
+  const hasError = Boolean(agent.view.haltReason || agent.view.executionError);
+  const isBlocked = needsInput || hasError;
   const isCompleted = taskState === 'completed' || taskState === 'canceled';
   const isRunning = taskId && agent.isActive && !isBlocked && !isCompleted;
 
@@ -70,7 +72,7 @@ export function AppSidebar() {
           {
             id: taskId,
             name: agent.config.name,
-            subtitle: agent.activeInterrupt
+            subtitle: needsInput
               ? 'Set up agent'
               : agent.view.haltReason ?? agent.view.executionError ?? 'Blocked',
             status: 'blocked',
