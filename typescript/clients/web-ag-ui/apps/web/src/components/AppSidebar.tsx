@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useLogin, useLogout, usePrivy } from '@privy-io/react-auth';
 import { supportedEvmChains, getEvmChainOrDefault } from '@/config/evmChains';
@@ -31,6 +31,7 @@ export interface AgentActivity {
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isAgentsExpanded, setIsAgentsExpanded] = useState(true);
   const [isBlockedExpanded, setIsBlockedExpanded] = useState(true);
   const [isActiveExpanded, setIsActiveExpanded] = useState(true);
@@ -58,9 +59,8 @@ export function AppSidebar() {
   const taskState = agent.view.task?.taskStatus?.state;
 
   // Determine which category this task belongs to (mutually exclusive)
-  // Use taskState 'input-required' or view state flags rather than activeInterrupt
-  // to avoid interference with the page's interrupt handling
-  const needsInput = taskState === 'input-required';
+  // Check both taskState and activeInterrupt for blocked detection
+  const needsInput = taskState === 'input-required' || Boolean(agent.activeInterrupt);
   const hasError = Boolean(agent.view.haltReason || agent.view.executionError);
   const isBlocked = needsInput || hasError;
   const isCompleted = taskState === 'completed' || taskState === 'canceled';
@@ -107,6 +107,11 @@ export function AppSidebar() {
   const selectedChain = getEvmChainOrDefault(chainId);
 
   const formatAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;
+
+  // Navigate to agent detail page when clicking on an agent in the sidebar
+  const handleAgentClick = () => {
+    router.push(`/hire-agents/${agent.config.id}`);
+  };
 
   const canSelectChain = ready && authenticated && Boolean(privyWallet) && !isWalletLoading;
 
@@ -226,6 +231,7 @@ export function AppSidebar() {
             onToggle={() => setIsBlockedExpanded(!isBlockedExpanded)}
             badgeColor="bg-red-500/20 text-red-400"
             icon={<AlertCircle className="w-4 h-4 text-red-400" />}
+            onAgentClick={handleAgentClick}
           />
 
           {/* Active Agents */}
@@ -237,6 +243,7 @@ export function AppSidebar() {
             onToggle={() => setIsActiveExpanded(!isActiveExpanded)}
             badgeColor="bg-teal-500/20 text-teal-400"
             icon={<Loader className="w-4 h-4 text-teal-400 animate-spin" />}
+            onAgentClick={handleAgentClick}
           />
 
           {/* Completed Agents */}
@@ -248,6 +255,7 @@ export function AppSidebar() {
             onToggle={() => setIsCompletedExpanded(!isCompletedExpanded)}
             badgeColor="bg-blue-500/20 text-blue-400"
             icon={<CheckCircle className="w-4 h-4 text-blue-400" />}
+            onAgentClick={handleAgentClick}
           />
         </div>
       </div>
@@ -367,6 +375,7 @@ interface ActivitySectionProps {
   onToggle: () => void;
   badgeColor: string;
   icon: React.ReactNode;
+  onAgentClick?: (agentId: string) => void;
 }
 
 function ActivitySection({
@@ -377,6 +386,7 @@ function ActivitySection({
   onToggle,
   badgeColor,
   icon,
+  onAgentClick,
 }: ActivitySectionProps) {
   const hasAgents = agents.length > 0;
 
@@ -413,20 +423,21 @@ function ActivitySection({
 
       {isExpanded && hasAgents && (
         <div className="mt-1 ml-4 space-y-1">
-          {agents.map((agent) => (
+          {agents.map((agentItem) => (
             <div
-              key={agent.id}
+              key={agentItem.id}
+              onClick={() => onAgentClick?.(agentItem.id)}
               className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[#252525] cursor-pointer transition-colors"
             >
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold">
-                {agent.name.charAt(0)}
+                {agentItem.name.charAt(0)}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm text-white truncate">{agent.name}</div>
-                <div className="text-xs text-gray-500 truncate">{agent.subtitle}</div>
+                <div className="text-sm text-white truncate">{agentItem.name}</div>
+                <div className="text-xs text-gray-500 truncate">{agentItem.subtitle}</div>
               </div>
-              {agent.timestamp && (
-                <span className="text-xs text-gray-500">{agent.timestamp}</span>
+              {agentItem.timestamp && (
+                <span className="text-xs text-gray-500">{agentItem.timestamp}</span>
               )}
             </div>
           ))}
