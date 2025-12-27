@@ -2,12 +2,12 @@
 
 import { useRouter } from 'next/navigation';
 import { HireAgentsPage, type Agent, type FeaturedAgent } from '@/components/HireAgentsPage';
-import { useAgentConnection } from '@/hooks/useAgentConnection';
+import { useAgent } from '@/contexts/AgentContext';
 import { DEFAULT_AGENT_ID, getAllAgents, getFeaturedAgents } from '@/config/agents';
 
 export default function HireAgentsRoute() {
   const router = useRouter();
-  const agent = useAgentConnection(DEFAULT_AGENT_ID);
+  const agent = useAgent();
   const registeredAgents = getAllAgents();
   const featuredAgentConfigs = getFeaturedAgents();
 

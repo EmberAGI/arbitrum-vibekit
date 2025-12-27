@@ -18,8 +18,7 @@ import { useLogin, useLogout, usePrivy } from '@privy-io/react-auth';
 import { supportedEvmChains, getEvmChainOrDefault } from '@/config/evmChains';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
-import { useAgentConnection } from '@/hooks/useAgentConnection';
-import { DEFAULT_AGENT_ID } from '@/config/agents';
+import { useAgent } from '@/contexts/AgentContext';
 
 export interface AgentActivity {
   id: string;
@@ -51,8 +50,8 @@ export function AppSidebar() {
     error: smartAccountError,
   } = useUpgradeToSmartAccount();
 
-  // Get agent activity data
-  const agent = useAgentConnection(DEFAULT_AGENT_ID);
+  // Get agent activity data from shared context
+  const agent = useAgent();
 
   // Derive task status - only show a card if there's a task ID
   const taskId = agent.view.task?.id;

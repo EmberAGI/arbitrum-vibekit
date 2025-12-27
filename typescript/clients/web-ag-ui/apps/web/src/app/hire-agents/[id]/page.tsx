@@ -3,8 +3,7 @@
 import { use } from 'react';
 import { useRouter } from 'next/navigation';
 import { AgentDetailPage } from '@/components/AgentDetailPage';
-import { useAgentConnection } from '@/hooks/useAgentConnection';
-import { DEFAULT_AGENT_ID } from '@/config/agents';
+import { useAgent } from '@/contexts/AgentContext';
 
 export default function AgentDetailRoute({
   params,
@@ -13,7 +12,7 @@ export default function AgentDetailRoute({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const agent = useAgentConnection(DEFAULT_AGENT_ID);
+  const agent = useAgent();
 
   const handleBack = () => {
     router.push('/hire-agents');

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useCoAgent, useCopilotContext } from '@copilotkit/react-core';
 import { v7 } from 'uuid';
 import { useLangGraphInterruptCustomUI } from '../app/hooks/useLangGraphInterruptCustomUI';
@@ -47,9 +47,6 @@ const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
     (value as { type?: string }).type === 'clmm-funding-token-request' ||
     (value as { type?: string }).type === 'clmm-delegation-signing-request');
 
-// Module-level flag to prevent multiple initial syncs across hook instances
-const initialSyncDoneByThread: Record<string, boolean> = {};
-
 export interface UseAgentConnectionResult {
   config: AgentConfig;
   isConnected: boolean;
@@ -94,6 +91,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const [isHiring, setIsHiring] = useState(false);
   const [isFiring, setIsFiring] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const initialSyncDone = useRef(false);
 
   const config = getAgentConfig(agentId);
 
@@ -119,15 +117,12 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [run],
   );
 
-  // Initial sync when thread is established - runs once per thread across all hook instances
+  // Initial sync when thread is established - runs once when threadId becomes available
   useEffect(() => {
-    if (threadId && !initialSyncDoneByThread[threadId]) {
-      initialSyncDoneByThread[threadId] = true;
-      // Small delay to let the thread settle before syncing
-      const timer = setTimeout(() => {
-        runCommand('sync');
-      }, 500);
-      return () => clearTimeout(timer);
+    if (threadId && !initialSyncDone.current) {
+      initialSyncDone.current = true;
+      // Run sync immediately to populate initial state
+      runCommand('sync');
     }
   }, [threadId, runCommand]);
 
