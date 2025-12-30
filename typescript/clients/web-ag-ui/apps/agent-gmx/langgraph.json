@@ -1,0 +1,9 @@
+{
+  "node_version": "22",
+  "dockerfile_lines": [],
+  "dependencies": ["."],
+  "graphs": {
+    "agent-gmx": "./src/agent/graph.ts:gmxGraph"
+  },
+  "env": ".env"
+}
