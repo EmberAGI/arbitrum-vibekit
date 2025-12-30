@@ -4,6 +4,7 @@ import type { CamelotPool, WalletPosition } from '../domain/types.js';
 import { CAMELOT_PROTOCOL_ID, computeCamelotPositionValues } from './camelotAdapter.js';
 import { resolveTokenPriceMap } from './pricing.js';
 import type {
+  FlowLogEvent,
   NavSnapshot,
   NavSnapshotTrigger,
   PriceSource,
@@ -79,21 +80,65 @@ function sum(values: number[]): number {
   return values.reduce((total, value) => total + value, 0);
 }
 
+function extractManagedPools(flowLog: FlowLogEvent[] | undefined): Set<string> | null {
+  if (!flowLog) {
+    return null;
+  }
+  const pools = new Set<string>();
+  for (const event of flowLog) {
+    if (event.protocolId !== CAMELOT_PROTOCOL_ID) {
+      continue;
+    }
+    if (event.poolAddress) {
+      pools.add(event.poolAddress.toLowerCase());
+    }
+  }
+  return pools;
+}
+
 export async function createCamelotNavSnapshot(params: {
   contextId: string;
   trigger: NavSnapshotTrigger;
   walletAddress: `0x${string}`;
   chainId: number;
   camelotClient: EmberCamelotClient;
+  flowLog?: FlowLogEvent[];
   transactionHash?: `0x${string}`;
   threadId?: string;
   cycle?: number;
 }): Promise<NavSnapshot> {
-  const [positions, pools] = await Promise.all([
-    params.camelotClient.getWalletPositions(params.walletAddress, params.chainId),
-    params.camelotClient.listCamelotPools(params.chainId),
-  ]);
+  const managedPools = extractManagedPools(params.flowLog);
+  const allPositions = await params.camelotClient.getWalletPositions(
+    params.walletAddress,
+    params.chainId,
+  );
+  const positions =
+    managedPools === null
+      ? allPositions
+      : managedPools.size === 0
+        ? []
+        : allPositions.filter((position) =>
+            managedPools.has(position.poolAddress.toLowerCase()),
+          );
 
+  if (positions.length === 0) {
+    return {
+      contextId: params.contextId,
+      trigger: params.trigger,
+      timestamp: new Date().toISOString(),
+      protocolId: CAMELOT_PROTOCOL_ID,
+      walletAddress: normalizeAddress(params.walletAddress),
+      chainId: params.chainId,
+      totalUsd: 0,
+      positions: [],
+      priceSource: 'unknown',
+      transactionHash: params.transactionHash,
+      threadId: params.threadId,
+      cycle: params.cycle,
+    };
+  }
+
+  const pools = await params.camelotClient.listCamelotPools(params.chainId);
   const poolsByAddress = new Map(pools.map((pool) => [pool.address.toLowerCase(), pool]));
   const tokens = buildTokenDescriptors({
     chainId: params.chainId,

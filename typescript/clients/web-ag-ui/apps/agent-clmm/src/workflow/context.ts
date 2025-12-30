@@ -238,8 +238,19 @@ const defaultViewState = (): ClmmViewState => ({
   transactionHistory: [],
   accounting: {
     navSnapshots: [],
+    flowLog: [],
     latestNavSnapshot: undefined,
     lastUpdated: undefined,
+    lifecycleStart: undefined,
+    lifecycleEnd: undefined,
+    initialAllocationUsd: undefined,
+    cashUsd: undefined,
+    positionsUsd: undefined,
+    aumUsd: undefined,
+    lifetimePnlUsd: undefined,
+    lifetimeReturnPct: undefined,
+    highWaterMarkUsd: undefined,
+    apy: undefined,
   },
 });
 
@@ -296,8 +307,22 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     navSnapshots: right.accounting?.navSnapshots
       ? [...left.accounting.navSnapshots, ...right.accounting.navSnapshots]
       : left.accounting.navSnapshots,
+    flowLog: right.accounting?.flowLog
+      ? [...left.accounting.flowLog, ...right.accounting.flowLog]
+      : left.accounting.flowLog,
     latestNavSnapshot: right.accounting?.latestNavSnapshot ?? left.accounting.latestNavSnapshot,
     lastUpdated: right.accounting?.lastUpdated ?? left.accounting.lastUpdated,
+    lifecycleStart: right.accounting?.lifecycleStart ?? left.accounting.lifecycleStart,
+    lifecycleEnd: right.accounting?.lifecycleEnd ?? left.accounting.lifecycleEnd,
+    initialAllocationUsd: right.accounting?.initialAllocationUsd ?? left.accounting.initialAllocationUsd,
+    cashUsd: right.accounting?.cashUsd ?? left.accounting.cashUsd,
+    positionsUsd: right.accounting?.positionsUsd ?? left.accounting.positionsUsd,
+    aumUsd: right.accounting?.aumUsd ?? left.accounting.aumUsd,
+    lifetimePnlUsd: right.accounting?.lifetimePnlUsd ?? left.accounting.lifetimePnlUsd,
+    lifetimeReturnPct:
+      right.accounting?.lifetimeReturnPct ?? left.accounting.lifetimeReturnPct,
+    highWaterMarkUsd: right.accounting?.highWaterMarkUsd ?? left.accounting.highWaterMarkUsd,
+    apy: right.accounting?.apy ?? left.accounting.apy,
   };
 
   return {
