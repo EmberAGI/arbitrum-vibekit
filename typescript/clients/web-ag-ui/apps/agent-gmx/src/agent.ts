@@ -2,9 +2,9 @@
  * Starter LangGraph.js Template
  * Make this code your own!
  */
-import { StateGraph } from "@langchain/langgraph";
-import { RunnableConfig } from "@langchain/core/runnables";
-import { StateAnnotation } from "./state.js";
+import { StateGraph } from '@langchain/langgraph';
+import { RunnableConfig } from '@langchain/core/runnables';
+import { StateAnnotation } from './agent/state.js';
 
 /**
  * Define a node, these do the work of the graph and should have most of the logic.
@@ -56,11 +56,11 @@ const callModel = async (
    * });
    * ```
    */
-  console.log("Current state:", state);
+  console.log('Current state:', state);
   return {
     messages: [
       {
-        role: "assistant",
+        role: 'assistant',
         content: `Hi there! How are you?`,
       },
     ],
@@ -74,14 +74,12 @@ const callModel = async (
  * @param state - The current state of the research builder
  * @returns Either "callModel" to continue research or END to finish the builder
  */
-export const route = (
-  state: typeof StateAnnotation.State,
-): "__end__" | "callModel" => {
+export const route = (state: typeof StateAnnotation.State): '__end__' | 'callModel' => {
   if (state.messages.length > 0) {
-    return "__end__";
+    return '__end__';
   }
   // Loop back
-  return "callModel";
+  return 'callModel';
 };
 
 // Finally, create the graph itself.
@@ -91,14 +89,14 @@ const builder = new StateGraph(StateAnnotation)
   // updates the types of the StateGraph instance
   // so you have static type checking when it comes time
   // to add the edges.
-  .addNode("callModel", callModel)
+  .addNode('callModel', callModel)
   // Regular edges mean "always transition to node B after node A is done"
   // The "__start__" and "__end__" nodes are "virtual" nodes that are always present
   // and represent the beginning and end of the builder.
-  .addEdge("__start__", "callModel")
+  .addEdge('__start__', 'callModel')
   // Conditional edges optionally route to different nodes (or end)
-  .addConditionalEdges("callModel", route);
+  .addConditionalEdges('callModel', route);
 
 export const graph = builder.compile();
 
-graph.name = "New Agent";
+graph.name = 'New Agent';
