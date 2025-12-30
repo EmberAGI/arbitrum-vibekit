@@ -1,7 +1,8 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
-import { appendNavSnapshots } from '../../accounting/state.js';
+import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
+import type { FlowLogEventInput } from '../../accounting/types.js';
 import { formatEmberApiError, fetchPoolSnapshot } from '../../clients/emberApi.js';
 import {
   ARBITRUM_CHAIN_ID,
@@ -21,7 +22,11 @@ import {
   tickToPrice,
 } from '../../core/decision-engine.js';
 import { type CamelotPool, type ClmmAction, type RebalanceTelemetry } from '../../domain/types.js';
-import { cloneSnapshotForTrigger, createCamelotAccountingSnapshot } from '../accounting.js';
+import {
+  cloneSnapshotForTrigger,
+  createCamelotAccountingSnapshot,
+  resolveAccountingContextId,
+} from '../accounting.js';
 import { buildTelemetryArtifact } from '../artifacts.js';
 import { getCamelotClient, getOnchainClients } from '../clientFactory.js';
 import {
@@ -348,6 +353,7 @@ export const pollCycleNode = async (
   let cyclesSinceRebalance = state.view.metrics.cyclesSinceRebalance ?? 0;
   let txHash: string | undefined;
   let gasSpentWei: bigint | undefined;
+  let executionFlowEvents: FlowLogEventInput[] = [];
 
   if (decision.kind === 'hold') {
     cyclesSinceRebalance += 1;
@@ -373,6 +379,7 @@ export const pollCycleNode = async (
         });
         txHash = result?.txHash;
         gasSpentWei = result?.gasSpentWei;
+        executionFlowEvents = result?.flowEvents ?? [];
       } catch (executionError: unknown) {
         // Transaction failed (e.g., reverted on-chain) - log and gracefully stop this cycle
         // The cron job will retry on the next scheduled run
@@ -429,7 +436,10 @@ export const pollCycleNode = async (
             cycle: iteration,
           });
           if (snapshot) {
-            accountingState = appendNavSnapshots(accountingState, [snapshot]);
+            accountingState = applyAccountingUpdate({
+              existing: accountingState,
+              snapshots: [snapshot],
+            });
           }
         } catch (accountingError: unknown) {
           const message =
@@ -553,12 +563,36 @@ export const pollCycleNode = async (
 
   let accountingState = state.view.accounting;
   try {
+    const contextId = resolveAccountingContextId({ state, threadId });
+    const flowEvents =
+      contextId && executionFlowEvents.length > 0
+        ? executionFlowEvents.map((event) =>
+            createFlowEvent({
+              ...event,
+              contextId,
+              transactionHash: event.transactionHash ?? (txHash as `0x${string}` | undefined),
+            }),
+          )
+        : [];
+
+    if (!contextId && executionFlowEvents.length > 0) {
+      logInfo('Accounting flow events skipped: missing threadId', { iteration });
+    }
+
+    if (flowEvents.length > 0) {
+      accountingState = applyAccountingUpdate({
+        existing: accountingState,
+        flowEvents,
+      });
+    }
+
     const baseSnapshot = await createCamelotAccountingSnapshot({
       state,
       camelotClient,
       trigger: 'cycle',
       threadId,
       cycle: iteration,
+      flowLog: accountingState.flowLog,
     });
 
     if (baseSnapshot) {
@@ -572,7 +606,10 @@ export const pollCycleNode = async (
           }),
         );
       }
-      accountingState = appendNavSnapshots(accountingState, snapshots);
+      accountingState = applyAccountingUpdate({
+        existing: accountingState,
+        snapshots,
+      });
     }
   } catch (accountingError: unknown) {
     const message =

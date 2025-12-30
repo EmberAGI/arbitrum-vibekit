@@ -1,5 +1,7 @@
-import { erc20Abi, parseUnits } from 'viem';
+import { erc20Abi, formatUnits, parseUnits } from 'viem';
 
+import { CAMELOT_PROTOCOL_ID } from '../accounting/camelotAdapter.js';
+import type { FlowLogEventInput } from '../accounting/types.js';
 import type { createClients } from '../clients/clients.js';
 import type { EmberCamelotClient } from '../clients/emberApi.js';
 import {
@@ -162,7 +164,7 @@ export async function executeDecision({
   fundingTokenAddress?: `0x${string}`;
   delegationsBypassActive?: boolean;
   clients: ReturnType<typeof createClients>;
-}): Promise<{ txHash?: string; gasSpentWei?: bigint }> {
+}): Promise<{ txHash?: string; gasSpentWei?: bigint; flowEvents?: FlowLogEventInput[] }> {
   const walletAddress = operatorConfig.walletAddress;
   if (action.kind === 'hold') {
     throw new Error('executeDecision invoked with hold action');
@@ -180,6 +182,40 @@ export async function executeDecision({
   };
   let lastTxHash: string | undefined;
   let totalGasSpentWei: bigint | undefined;
+  const flowEvents: FlowLogEventInput[] = [];
+
+  const recordSwapEvent = (request: ClmmSwapRequest) => {
+    flowEvents.push({
+      type: 'swap',
+      chainId: ARBITRUM_CHAIN_ID,
+      protocolId: CAMELOT_PROTOCOL_ID,
+      fromTokenAddress: request.fromTokenUid.address,
+      toTokenAddress: request.toTokenUid.address,
+      ...(request.amountType === 'exactIn'
+        ? { fromAmountBaseUnits: request.amount }
+        : { toAmountBaseUnits: request.amount }),
+    });
+  };
+
+  const computeUsdValue = (params: {
+    amountBaseUnits: string;
+    decimals: number;
+    usdPrice?: number;
+  }): number | undefined => {
+    if (!params.usdPrice || params.usdPrice <= 0) {
+      return undefined;
+    }
+    let amount: number;
+    try {
+      amount = Number(formatUnits(BigInt(params.amountBaseUnits), params.decimals));
+    } catch {
+      return undefined;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return undefined;
+    }
+    return Number((amount * params.usdPrice).toFixed(6));
+  };
 
   if (
     action.kind === 'adjust-range' ||
@@ -196,6 +232,12 @@ export async function executeDecision({
     if (withdrawalOutcome.gasSpentWei !== undefined) {
       totalGasSpentWei = (totalGasSpentWei ?? 0n) + withdrawalOutcome.gasSpentWei;
     }
+    flowEvents.push({
+      type: 'withdraw',
+      chainId: ARBITRUM_CHAIN_ID,
+      protocolId: CAMELOT_PROTOCOL_ID,
+      poolAddress: pool.address,
+    });
   }
 
   switch (action.kind) {
@@ -265,6 +307,7 @@ export async function executeDecision({
             toTokenUid: { chainId: chainIdString, address: params.toToken },
           };
           let response: Awaited<ReturnType<EmberCamelotClient['requestSwap']>>;
+          let executedRequest: ClmmSwapRequest = exactOutRequest;
           try {
             response = await camelotClient.requestSwap(exactOutRequest);
           } catch (error: unknown) {
@@ -313,7 +356,9 @@ export async function executeDecision({
             });
 
             response = await camelotClient.requestSwap(exactInRequest);
+            executedRequest = exactInRequest;
           }
+          recordSwapEvent(executedRequest);
           swapTransactions.push(...response.transactions);
         };
 
@@ -344,6 +389,7 @@ export async function executeDecision({
             });
             throw error;
           }
+          recordSwapEvent(request);
           swapTransactions.push(...response.transactions);
         };
 
@@ -461,6 +507,7 @@ export async function executeDecision({
                 });
                 throw error;
               }
+              recordSwapEvent(request);
               swapTransactions.push(...response.transactions);
             }
           } else {
@@ -550,11 +597,41 @@ export async function executeDecision({
       if (supplyOutcome.gasSpentWei !== undefined) {
         totalGasSpentWei = (totalGasSpentWei ?? 0n) + supplyOutcome.gasSpentWei;
       }
-      return { txHash: lastTxHash, gasSpentWei: totalGasSpentWei };
+      flowEvents.push(
+        {
+          type: 'supply',
+          chainId: ARBITRUM_CHAIN_ID,
+          protocolId: CAMELOT_PROTOCOL_ID,
+          poolAddress: poolIdentifier.address,
+          tokenAddress: refreshedPoolSnapshot.token0.address,
+          amountBaseUnits: desired.token0.toString(),
+          usdPrice: refreshedPoolSnapshot.token0.usdPrice,
+          usdValue: computeUsdValue({
+            amountBaseUnits: desired.token0.toString(),
+            decimals: refreshedPoolSnapshot.token0.decimals,
+            usdPrice: refreshedPoolSnapshot.token0.usdPrice,
+          }),
+        },
+        {
+          type: 'supply',
+          chainId: ARBITRUM_CHAIN_ID,
+          protocolId: CAMELOT_PROTOCOL_ID,
+          poolAddress: poolIdentifier.address,
+          tokenAddress: refreshedPoolSnapshot.token1.address,
+          amountBaseUnits: desired.token1.toString(),
+          usdPrice: refreshedPoolSnapshot.token1.usdPrice,
+          usdValue: computeUsdValue({
+            amountBaseUnits: desired.token1.toString(),
+            decimals: refreshedPoolSnapshot.token1.decimals,
+            usdPrice: refreshedPoolSnapshot.token1.usdPrice,
+          }),
+        },
+      );
+      return { txHash: lastTxHash, gasSpentWei: totalGasSpentWei, flowEvents };
     }
     case 'exit-range':
     case 'compound-fees':
-      return { txHash: lastTxHash, gasSpentWei: totalGasSpentWei };
+      return { txHash: lastTxHash, gasSpentWei: totalGasSpentWei, flowEvents };
     default:
       assertUnreachable(action);
   }

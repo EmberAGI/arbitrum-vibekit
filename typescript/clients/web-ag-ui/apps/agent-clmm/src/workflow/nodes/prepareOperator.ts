@@ -1,9 +1,11 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
+import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
 import { ARBITRUM_CHAIN_ID, DEFAULT_TICK_BANDWIDTH_BPS } from '../../config/constants.js';
 import { type ResolvedOperatorConfig } from '../../domain/types.js';
+import { resolveAccountingContextId } from '../accounting.js';
 import { getCamelotClient } from '../clientFactory.js';
 import {
   buildTaskStatus,
@@ -16,6 +18,7 @@ import {
 import { loadBootstrapContext } from '../store.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
+type Configurable = { configurable?: { thread_id?: string } };
 
 export const prepareOperatorNode = async (
   state: ClmmState,
@@ -163,6 +166,29 @@ export const prepareOperatorNode = async (
     autoCompoundFees: true,
   };
 
+  let accounting = state.view.accounting;
+  const threadId = (config as Configurable).configurable?.thread_id;
+  const contextId = resolveAccountingContextId({
+    state,
+    threadId,
+  });
+  if (!contextId) {
+    logInfo('Accounting hire event skipped: missing threadId', {
+      poolAddress: selectedPoolAddress,
+    });
+  } else if (!(accounting.lifecycleStart && !accounting.lifecycleEnd)) {
+    const hireEvent = createFlowEvent({
+      type: 'hire',
+      contextId,
+      chainId: ARBITRUM_CHAIN_ID,
+      usdValue: operatorConfig.baseContributionUsd,
+    });
+    accounting = applyAccountingUpdate({
+      existing: accounting,
+      flowEvents: [hireEvent],
+    });
+  }
+
   logInfo('Operator configuration established', {
     poolAddress: selectedPoolAddress,
     operatorWalletAddress,
@@ -202,6 +228,7 @@ export const prepareOperatorNode = async (
       activity: { events, telemetry: state.view.activity.telemetry },
       transactionHistory: state.view.transactionHistory,
       profile: state.view.profile,
+      accounting,
     },
     private: {
       cronScheduled: false, // Will be set to true in pollCycle after first cycle
