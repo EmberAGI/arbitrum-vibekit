@@ -1,6 +1,7 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
+import { appendNavSnapshots } from '../../accounting/state.js';
 import { formatEmberApiError, fetchPoolSnapshot } from '../../clients/emberApi.js';
 import {
   ARBITRUM_CHAIN_ID,
@@ -20,6 +21,7 @@ import {
   tickToPrice,
 } from '../../core/decision-engine.js';
 import { type CamelotPool, type ClmmAction, type RebalanceTelemetry } from '../../domain/types.js';
+import { cloneSnapshotForTrigger, createCamelotAccountingSnapshot } from '../accounting.js';
 import { buildTelemetryArtifact } from '../artifacts.js';
 import { getCamelotClient, getOnchainClients } from '../clientFactory.js';
 import {
@@ -417,6 +419,28 @@ export const pollCycleNode = async (
           },
         });
 
+        let accountingState = state.view.accounting;
+        try {
+          const snapshot = await createCamelotAccountingSnapshot({
+            state,
+            camelotClient,
+            trigger: 'cycle',
+            threadId,
+            cycle: iteration,
+          });
+          if (snapshot) {
+            accountingState = appendNavSnapshots(accountingState, [snapshot]);
+          }
+        } catch (accountingError: unknown) {
+          const message =
+            accountingError instanceof Error
+              ? accountingError.message
+              : typeof accountingError === 'string'
+                ? accountingError
+                : 'Unknown accounting error';
+          logInfo('Accounting snapshot failed after execution error', { iteration, error: message });
+        }
+
         // Return gracefully - don't throw. The cron job will run the next cycle.
         return new Command({
           update: {
@@ -437,6 +461,7 @@ export const pollCycleNode = async (
               transactionHistory: state.view.transactionHistory,
               profile: state.view.profile,
               executionError: errorMessage, // Store error for debugging/display
+              accounting: accountingState,
             },
             private: {
               cronScheduled,
@@ -526,6 +551,39 @@ export const pollCycleNode = async (
           timestamp: cycleTelemetry.timestamp,
         };
 
+  let accountingState = state.view.accounting;
+  try {
+    const baseSnapshot = await createCamelotAccountingSnapshot({
+      state,
+      camelotClient,
+      trigger: 'cycle',
+      threadId,
+      cycle: iteration,
+    });
+
+    if (baseSnapshot) {
+      const snapshots = [baseSnapshot];
+      if (txHash) {
+        snapshots.push(
+          cloneSnapshotForTrigger({
+            snapshot: baseSnapshot,
+            trigger: 'transaction',
+            transactionHash: txHash as `0x${string}`,
+          }),
+        );
+      }
+      accountingState = appendNavSnapshots(accountingState, snapshots);
+    }
+  } catch (accountingError: unknown) {
+    const message =
+      accountingError instanceof Error
+        ? accountingError.message
+        : typeof accountingError === 'string'
+          ? accountingError
+          : 'Unknown accounting error';
+    logInfo('Accounting snapshot failed during poll cycle', { iteration, error: message });
+  }
+
   return new Command({
     update: {
       view: {
@@ -546,6 +604,7 @@ export const pollCycleNode = async (
           ? [...state.view.transactionHistory, transactionEntry]
           : state.view.transactionHistory,
         profile: state.view.profile,
+        accounting: accountingState,
       },
       private: {
         cronScheduled,

@@ -5,6 +5,7 @@ import { Annotation, MemorySaver, messagesStateReducer } from '@langchain/langgr
 import type { Messages } from '@langchain/langgraph';
 import { v7 as uuidv7 } from 'uuid';
 
+import type { AccountingState } from '../accounting/types.js';
 import { resolvePollIntervalMs, resolveStreamLimit } from '../config/constants.js';
 import {
   type CamelotPool,
@@ -64,6 +65,8 @@ export type ClmmMetrics = {
   iteration: number;
   latestCycle?: RebalanceTelemetry;
 };
+
+export type ClmmAccounting = AccountingState;
 
 export type TaskState =
   | 'submitted'
@@ -182,6 +185,7 @@ type ClmmViewState = {
   activity: ClmmActivity;
   metrics: ClmmMetrics;
   transactionHistory: ClmmTransaction[];
+  accounting: ClmmAccounting;
   delegationsBypassActive?: boolean;
 };
 
@@ -232,6 +236,11 @@ const defaultViewState = (): ClmmViewState => ({
     latestCycle: undefined,
   },
   transactionHistory: [],
+  accounting: {
+    navSnapshots: [],
+    latestNavSnapshot: undefined,
+    lastUpdated: undefined,
+  },
 });
 
 const mergeSettings = (left: ClmmSettings, right?: Partial<ClmmSettings>): ClmmSettings => ({
@@ -283,6 +292,13 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     iteration: right.metrics?.iteration ?? left.metrics.iteration ?? 0,
     latestCycle: right.metrics?.latestCycle ?? left.metrics.latestCycle,
   };
+  const nextAccounting: ClmmAccounting = {
+    navSnapshots: right.accounting?.navSnapshots
+      ? [...left.accounting.navSnapshots, ...right.accounting.navSnapshots]
+      : left.accounting.navSnapshots,
+    latestNavSnapshot: right.accounting?.latestNavSnapshot ?? left.accounting.latestNavSnapshot,
+    lastUpdated: right.accounting?.lastUpdated ?? left.accounting.lastUpdated,
+  };
 
   return {
     ...left,
@@ -306,6 +322,7 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     },
     metrics: nextMetrics,
     transactionHistory: nextTransactions,
+    accounting: nextAccounting,
   };
 };
 
