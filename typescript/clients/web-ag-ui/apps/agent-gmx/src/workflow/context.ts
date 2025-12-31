@@ -17,6 +17,10 @@ export type AgentMessage = CopilotKitAIMessage;
 
 type CopilotState = CopilotKitState;
 
+export type GMXSettings = {
+  amount?: number;
+};
+
 /* ============================
    Runtime State
    ============================ */
@@ -127,6 +131,11 @@ const defaultViewState = (): GMXViewState => ({
   trades: [],
 });
 
+const defaultSettingsState = (): GMXSettings => ({
+  amount: undefined,
+});
+
+
 /* ============================
    Merge Helpers
    ============================ */
@@ -148,6 +157,9 @@ const mergeViewState = (left: GMXViewState, right?: Partial<GMXViewState>): GMXV
   trades: right?.trades ? [...left.trades, ...right.trades] : left.trades,
 });
 
+const mergeSettings = (left: GMXSettings, right?: Partial<GMXSettings>): GMXSettings => ({
+  amount: right?.amount ?? left.amount,
+});
 /* ============================
    LangGraph Annotation Root
    ============================ */
@@ -161,6 +173,10 @@ export const GMXStateAnnotation = Annotation.Root({
     default: () => ({ actions: [], context: [] }),
     reducer: (l, r) => ({ actions: r?.actions ?? l.actions, context: r?.context ?? l.context }),
   }),
+  settings:Annotation<GMXSettings, Partial<GMXSettings>>({
+    default:defaultSettingsState,
+    reducer: (l,r) => mergeSettings(left ?? defaultSettingsState(), right)
+  })
   private: Annotation<GMXPrivateState, Partial<GMXPrivateState>>({
     default: defaultPrivateState,
     reducer: (l, r) => mergePrivateState(l ?? defaultPrivateState(), r),
@@ -186,4 +202,75 @@ function buildAgentMessage(message: string): AgentMessage {
     role: 'assistant',
     content: message,
   };
+}
+
+/* ============================
+   Task Types
+   ============================ */
+
+export type TaskState =
+  | 'submitted'
+  | 'working'
+  | 'input-required'
+  | 'completed'
+  | 'canceled'
+  | 'failed'
+  | 'rejected'
+  | 'auth-required'
+  | 'unknown';
+
+export type TaskStatus = {
+  state: TaskState;
+  message?: AgentMessage;
+  timestamp?: string;
+};
+
+export type Task = {
+  id: string;
+  taskStatus: TaskStatus;
+};
+
+/* ============================
+   GMX Events
+   ============================ */
+
+export type GMXEvent =
+  | { type: 'status'; message: string; task: Task }
+  | { type: 'dispatch-response'; parts: Array<{ kind: string; data: unknown }> };
+
+/* ============================
+   Helpers
+   ============================ */
+
+function buildAgentMessage(message: string): AgentMessage {
+  return {
+    id: uuidv7(),
+    role: 'assistant',
+    content: message,
+  };
+}
+
+export function buildTaskStatus(
+  task: Task | undefined,
+  state: TaskState,
+  message: string,
+): { task: Task; statusEvent: GMXEvent } {
+  const timestamp = new Date().toISOString();
+
+  const nextTask: Task = {
+    id: task?.id ?? uuidv7(),
+    taskStatus: {
+      state,
+      message: buildAgentMessage(message),
+      timestamp,
+    },
+  };
+
+  const statusEvent: GMXEvent = {
+    type: 'status',
+    message,
+    task: nextTask,
+  };
+
+  return { task: nextTask, statusEvent };
 }
