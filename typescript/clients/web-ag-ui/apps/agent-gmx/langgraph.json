@@ -3,7 +3,7 @@
   "dockerfile_lines": [],
   "dependencies": ["."],
   "graphs": {
-    "agent-gmx": "./src/agent/agent.ts:gmxGraph"
+    "agent-gmx": "./src/agent.ts:gmxGraph"
   },
   "env": ".env"
 }
