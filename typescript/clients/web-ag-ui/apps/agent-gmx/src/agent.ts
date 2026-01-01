@@ -13,6 +13,8 @@ import {
 import { configureCronExecutor } from './workflow/cronScheduler.ts';
 import { fireCommandNode } from './workflow/nodes/fireCommand.js';
 import { hireCommandNode } from './workflow/nodes/hireCommand.js';
+import { bootstrapNode } from './workflow/nodes/bootstrap.js';
+
 import { resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
 
 const store = new InMemoryStore();
@@ -29,12 +31,14 @@ const agentWalletAddress = normalizeHexAddress(account.address, 'agent wallet ad
 const workflow = new StateGraph(GMXStateAnnotation)
   .addNode('runCommand', runCommandNode)
   .addNode('hireCommand', hireCommandNode)
-  .addNode('fireCommand', fireCommandNode);
+  .addNode('fireCommand', fireCommandNode)
+  .addNode('bootstrap', bootstrapNode);
 
 workflow
   .addEdge(START, 'runCommand')
   .addConditionalEdges('runCommand', resolveCommandTarget)
-  .addEdge('hireCommand', END);
+  .addEdge('hireCommand', 'bootstrap')
+  .addEdge('bootstrap', END);
 //   .addEdge('fireCommand', END);
 
 export const gmxGraph = workflow.compile({

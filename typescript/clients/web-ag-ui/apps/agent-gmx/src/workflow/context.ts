@@ -29,6 +29,7 @@ export type GMXPrivateState = {
   pollIntervalMs: number;
   streamLimit: number;
   cronScheduled: boolean;
+  bootstrapped: boolean;
 };
 
 /* ============================
@@ -60,15 +61,32 @@ export type Task = {
   id: string;
   taskStatus: TaskStatus;
 };
+export type GMXMarket = {
+  longToken: `0x${string}`;
+  shortToken: `0x${string}`;
+};
+export type GMXProfile = {
+  agentIncome?: number;
+  aum?: number;
+  totalUsers?: number;
+  apy?: number;
+  chains?: string[];
+  protocols?: string[];
+  tokens?: string[];
+  markets: GMXMarket[];
+};
 
 export type GMXViewState = {
   command?: string;
   task?: Task;
   lastOrder?: GMXOrderParams;
-  position?: GMXPositionView;
+  positions?: GMXPositionView[];
   trades: GMXTradeLog[];
+  delegationBundle?: DelegationBundle;
   haltReason?: string;
   executionError?: string;
+  profile: GMXProfile;
+  delegationsBypassActive?: boolean;
 };
 
 /* ============================
@@ -109,7 +127,7 @@ export type DelegationBundle = {
 };
 
 export type DelegationSigningInterrupt = {
-  type: 'clmm-delegation-signing-request';
+  type: 'gmx-delegation-signing-request';
   message: string;
   payloadSchema: Record<string, unknown>;
   chainId: number;
@@ -134,7 +152,24 @@ const defaultPrivateState = (): GMXPrivateState => ({
 });
 
 const defaultViewState = (): GMXViewState => ({
+  command: undefined,
+  task: undefined,
+  lastOrder: undefined,
+  positions: [],
   trades: [],
+  delegationBundle: undefined,
+  haltReason: undefined,
+  executionError: undefined,
+  profile: {
+    agentIncome: undefined,
+    aum: undefined,
+    totalUsers: undefined,
+    apy: undefined,
+    chains: [],
+    protocols: [],
+    tokens: [],
+    markets: [],
+  },
 });
 
 const defaultSettingsState = (): GMXSettings => ({
@@ -274,6 +309,21 @@ export function buildTaskStatus(
   return { task: nextTask, statusEvent };
 }
 
+export function logInfo(message: string, metadata?: Record<string, unknown>, options?: LogOptions) {
+  const timestamp = new Date().toISOString();
+  const prefix = `[GMX-Perp][${timestamp}]`;
+  if (metadata && Object.keys(metadata).length > 0) {
+    if (options?.detailed) {
+      console.info(`${prefix} ${message}`);
+      // eslint-disable-next-line no-console
+      console.dir(metadata, { depth: null });
+      return;
+    }
+    console.info(`${prefix} ${message}`, metadata);
+    return;
+  }
+  console.info(`${prefix} ${message}`);
+}
 export const isTaskTerminal = (state: TaskState) =>
   state === 'completed' ||
   state === 'failed' ||

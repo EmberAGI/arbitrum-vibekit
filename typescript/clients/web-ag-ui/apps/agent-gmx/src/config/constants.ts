@@ -1,4 +1,4 @@
-import type { GMXMarket, GMXToken } from '../domain/types.js';
+import type { GMXMarket, GMXToken } from '../domain/types.ts';
 
 /* =========================
    Network / Core Addresses
