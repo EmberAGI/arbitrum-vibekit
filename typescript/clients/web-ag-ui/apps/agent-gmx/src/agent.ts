@@ -1,102 +1,132 @@
-/**
- * Starter LangGraph.js Template
- * Make this code your own!
- */
-import { StateGraph } from '@langchain/langgraph';
-import { RunnableConfig } from '@langchain/core/runnables';
-import { StateAnnotation } from './agent/state.js';
+import { pathToFileURL } from 'node:url';
 
-/**
- * Define a node, these do the work of the graph and should have most of the logic.
- * Must return a subset of the properties set in StateAnnotation.
- * @param state The current state of the graph.
- * @param config Extra parameters passed into the state graph.
- * @returns Some subset of parameters of the graph state, used to update the state
- * for the edges and nodes executed next.
- */
-const callModel = async (
-  state: typeof StateAnnotation.State,
-  _config: RunnableConfig,
-): Promise<typeof StateAnnotation.Update> => {
-  /**
-   * Do some work... (e.g. call an LLM)
-   * For example, with LangChain you could do something like:
-   *
-   * ```bash
-   * $ npm i @langchain/anthropic
-   * ```
-   *
-   * ```ts
-   * import { ChatAnthropic } from "@langchain/anthropic";
-   * const model = new ChatAnthropic({
-   *   model: "claude-3-5-sonnet-20240620",
-   *   apiKey: process.env.ANTHROPIC_API_KEY,
-   * });
-   * const res = await model.invoke(state.messages);
-   * ```
-   *
-   * Or, with an SDK directly:
-   *
-   * ```bash
-   * $ npm i openai
-   * ```
-   *
-   * ```ts
-   * import OpenAI from "openai";
-   * const openai = new OpenAI({
-   *   apiKey: process.env.OPENAI_API_KEY,
-   * });
-   *
-   * const chatCompletion = await openai.chat.completions.create({
-   *   messages: [{
-   *     role: state.messages[0]._getType(),
-   *     content: state.messages[0].content,
-   *   }],
-   *   model: "gpt-4o-mini",
-   * });
-   * ```
-   */
-  console.log('Current state:', state);
-  return {
-    messages: [
-      {
-        role: 'assistant',
-        content: `Hi there! How are you?`,
-      },
-    ],
-  };
-};
+import { END, GraphInterrupt, InMemoryStore, START, StateGraph } from '@langchain/langgraph';
+import { v7 as uuidv7 } from 'uuid';
+import { privateKeyToAccount } from 'viem/accounts';
 
-/**
- * Routing function: Determines whether to continue research or end the builder.
- * This function decides if the gathered information is satisfactory or if more research is needed.
- *
- * @param state - The current state of the research builder
- * @returns Either "callModel" to continue research or END to finish the builder
- */
-export const route = (state: typeof StateAnnotation.State): '__end__' | 'callModel' => {
-  if (state.messages.length > 0) {
-    return '__end__';
+import {
+  GMXStateAnnotation,
+  memory,
+  normalizeHexAddress,
+  type GMXState,
+} from './workflow/context.js';
+import { configureCronExecutor } from './workflow/cronScheduler.ts';
+import { fireCommandNode } from './workflow/nodes/fireCommand.js';
+import { hireCommandNode } from './workflow/nodes/hireCommand.js';
+import { resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
+
+const store = new InMemoryStore();
+
+const rawAgentPrivateKey = process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
+if (!rawAgentPrivateKey) {
+  throw new Error('A2A_TEST_AGENT_NODE_PRIVATE_KEY environment variable is required');
+}
+
+const agentPrivateKey = normalizeHexAddress(rawAgentPrivateKey, 'agent private key');
+const account = privateKeyToAccount(agentPrivateKey);
+const agentWalletAddress = normalizeHexAddress(account.address, 'agent wallet address');
+
+const workflow = new StateGraph(GMXStateAnnotation)
+  .addNode('runCommand', runCommandNode)
+  .addNode('hireCommand', hireCommandNode)
+  .addNode('fireCommand', fireCommandNode);
+
+workflow
+  .addEdge(START, 'runCommand')
+  .addEdge('runCommand', 'hireCommand')
+  .addEdge('hireCommand', 'fireCommand')
+  .addEdge('fireCommand', END);
+
+const gmxGraph = workflow.compile({
+  checkpointer: memory,
+  store,
+});
+
+const runningThreads = new Set<string>();
+
+export async function runGraphOnce(threadId: string) {
+  if (runningThreads.has(threadId)) {
+    console.info(`[cron] Skipping tick - run already in progress (thread=${threadId})`);
+    return;
   }
-  // Loop back
-  return 'callModel';
-};
 
-// Finally, create the graph itself.
-const builder = new StateGraph(StateAnnotation)
-  // Add the nodes to do the work.
-  // Chaining the nodes together in this way
-  // updates the types of the StateGraph instance
-  // so you have static type checking when it comes time
-  // to add the edges.
-  .addNode('callModel', callModel)
-  // Regular edges mean "always transition to node B after node A is done"
-  // The "__start__" and "__end__" nodes are "virtual" nodes that are always present
-  // and represent the beginning and end of the builder.
-  .addEdge('__start__', 'callModel')
-  // Conditional edges optionally route to different nodes (or end)
-  .addConditionalEdges('callModel', route);
+  runningThreads.add(threadId);
+  const startedAt = Date.now();
+  console.info(`[cron] Starting GMX graph run (thread=${threadId})`);
 
-export const graph = builder.compile();
+  const runMessage = {
+    id: uuidv7(),
+    role: 'user' as const,
+    content: JSON.stringify({ command: 'hire' }),
+  };
 
-graph.name = 'New Agent';
+  // Cron jobs are scheduled inside an AG-UI request context, so their ticks inherit
+  // AsyncLocalStorage runnable config (including EventStreamCallbackHandler tied to a
+  // closed SSE stream). Explicitly override callbacks to prevent "WritableStream is closed"
+  // errors during background runs.
+  const config = { configurable: { thread_id: threadId }, callbacks: [] };
+
+  try {
+    // When a graph reaches END, subsequent invoke() calls return immediately without
+    // running any nodes. Use updateState with asNode to "rewind" the execution point
+    // so the graph restarts from runCommand on the next invoke.
+    // Note: updateState(..., asNode="runCommand") treats this patch as the output of
+    // runCommand, so ensure we set view.command to the intended value.
+    await gmxGraph.updateState(
+      config,
+      { messages: [runMessage], view: { command: 'hire' } },
+      'runCommand',
+    );
+
+    // Now invoke - the graph will continue from the node after runCommand
+    await gmxGraph.invoke(null, config);
+    console.info(`[cron] Run complete in ${Date.now() - startedAt}ms`);
+  } catch (error) {
+    if (error instanceof GraphInterrupt) {
+      console.warn(
+        '[cron] Graph interrupted awaiting operator input; supply input via UI and rerun.',
+      );
+      return;
+    }
+
+    console.error('[cron] Graph run failed', error);
+  } finally {
+    runningThreads.delete(threadId);
+  }
+}
+
+export async function startGmxCron(threadId: string) {
+  const initialRunMessage = {
+    id: uuidv7(),
+    role: 'user' as const,
+    content: JSON.stringify({ command: 'cycle' }),
+  };
+
+  // Cron scheduling happens in pollCycle after first cycle completes
+  const stream = await gmxGraph.stream(
+    { messages: [initialRunMessage] },
+    {
+      configurable: { thread_id: threadId },
+    },
+  );
+  for await (const event of stream) {
+    void event;
+  }
+}
+
+configureCronExecutor(runGraphOnce);
+
+const invokedAsEntryPoint =
+  process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+if (invokedAsEntryPoint) {
+  // Thread ids scope LangGraph checkpointing/state. For the cron-driven worker we only need a
+  // stable id for the lifetime of the process, so generate one if not provided.
+  const initialThreadId = process.env['GMX_THREAD_ID'] ?? uuidv7();
+  if (!process.env['GMX_THREAD_ID']) {
+    console.info(`[cron] GMX_THREAD_ID not provided; generated thread id ${initialThreadId}`);
+  }
+
+  await startGmxCron(initialThreadId);
+}
+
+// gmxGraph.name = 'agent-gmx';

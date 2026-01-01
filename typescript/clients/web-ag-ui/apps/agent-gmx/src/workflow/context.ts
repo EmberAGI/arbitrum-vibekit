@@ -203,6 +203,12 @@ function buildAgentMessage(message: string): AgentMessage {
     content: message,
   };
 }
+export function normalizeHexAddress(value: string, label: string): `0x${string}` {
+  if (!value.startsWith('0x')) {
+    throw new Error(`Invalid ${label}: ${value}`);
+  }
+  return value as `0x${string}`;
+}
 
 /* ============================
    Task Types
