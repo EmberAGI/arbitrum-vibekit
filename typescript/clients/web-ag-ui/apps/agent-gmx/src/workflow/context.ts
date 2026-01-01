@@ -56,8 +56,14 @@ export type GMXTradeLog = {
    UI State
    ============================ */
 
+export type Task = {
+  id: string;
+  taskStatus: TaskStatus;
+};
+
 export type GMXViewState = {
   command?: string;
+  task?: Task;
   lastOrder?: GMXOrderParams;
   position?: GMXPositionView;
   trades: GMXTradeLog[];
@@ -135,7 +141,6 @@ const defaultSettingsState = (): GMXSettings => ({
   amount: undefined,
 });
 
-
 /* ============================
    Merge Helpers
    ============================ */
@@ -173,10 +178,10 @@ export const GMXStateAnnotation = Annotation.Root({
     default: () => ({ actions: [], context: [] }),
     reducer: (l, r) => ({ actions: r?.actions ?? l.actions, context: r?.context ?? l.context }),
   }),
-  settings:Annotation<GMXSettings, Partial<GMXSettings>>({
-    default:defaultSettingsState,
-    reducer: (l,r) => mergeSettings(left ?? defaultSettingsState(), right)
-  })
+  settings: Annotation<GMXSettings, Partial<GMXSettings>>({
+    default: defaultSettingsState,
+    reducer: (l, r) => mergeSettings(l ?? defaultSettingsState(), r),
+  }),
   private: Annotation<GMXPrivateState, Partial<GMXPrivateState>>({
     default: defaultPrivateState,
     reducer: (l, r) => mergePrivateState(l ?? defaultPrivateState(), r),
@@ -244,18 +249,6 @@ export type GMXEvent =
   | { type: 'status'; message: string; task: Task }
   | { type: 'dispatch-response'; parts: Array<{ kind: string; data: unknown }> };
 
-/* ============================
-   Helpers
-   ============================ */
-
-function buildAgentMessage(message: string): AgentMessage {
-  return {
-    id: uuidv7(),
-    role: 'assistant',
-    content: message,
-  };
-}
-
 export function buildTaskStatus(
   task: Task | undefined,
   state: TaskState,
@@ -280,3 +273,16 @@ export function buildTaskStatus(
 
   return { task: nextTask, statusEvent };
 }
+
+export const isTaskTerminal = (state: TaskState) =>
+  state === 'completed' ||
+  state === 'failed' ||
+  state === 'canceled' ||
+  state === 'rejected' ||
+  state === 'unknown';
+
+export const isTaskActive = (state: TaskState) =>
+  state === 'submitted' ||
+  state === 'working' ||
+  state === 'input-required' ||
+  state === 'auth-required';

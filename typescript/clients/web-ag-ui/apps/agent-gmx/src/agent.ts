@@ -33,11 +33,11 @@ const workflow = new StateGraph(GMXStateAnnotation)
 
 workflow
   .addEdge(START, 'runCommand')
-  .addEdge('runCommand', 'hireCommand')
-  .addEdge('hireCommand', 'fireCommand')
-  .addEdge('fireCommand', END);
+  .addConditionalEdges('runCommand', resolveCommandTarget)
+  .addEdge('hireCommand', END);
+//   .addEdge('fireCommand', END);
 
-const gmxGraph = workflow.compile({
+export const gmxGraph = workflow.compile({
   checkpointer: memory,
   store,
 });
