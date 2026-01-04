@@ -40,7 +40,7 @@ export type SignedDelegation = UnsignedDelegation & {
 };
 
 export type DelegationSigningRequestInterrupt = {
-  type: 'clmm-delegation-signing-request';
+  type: 'clmm-delegation-signing-request' | 'gmx-delegation-signing-request';
   message: string;
   payloadSchema?: unknown;
   chainId: number;

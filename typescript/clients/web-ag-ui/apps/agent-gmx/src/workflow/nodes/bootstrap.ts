@@ -17,7 +17,7 @@ export const bootstrapNode = async (
     logInfo('Skipping bootstrap; state already initialized for thread', { threadId });
     return new Command({
       update: {},
-      goto: 'end', /// TODO:next gmx state if already bootstrapped
+      goto: 'pollCommand', /// TODO:next gmx state if already bootstrapped
     });
   }
 

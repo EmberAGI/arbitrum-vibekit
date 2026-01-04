@@ -3,12 +3,19 @@ import { z } from 'zod';
 import { type GMXState } from '../context.js';
 
 const commandSchema = z.object({
-  command: z.enum(['hire', 'fire']),
+  command: z.enum(['hire', 'fire', 'poll', 'openPosition', 'closePosition', 'holdPosition']),
 });
 
 type Command = z.infer<typeof commandSchema>['command'];
 
-type CommandTarget = 'hireCommand' | 'fireCommand' | '__end__';
+type CommandTarget =
+  | 'hireCommand'
+  | 'fireCommand'
+  | 'pollCommand'
+  | 'openPositionCommand'
+  | 'closePositionCommand'
+  | 'holdPositionCommand'
+  | '__end__';
 
 function extractCommand(messages: GMXState['messages']): Command | null {
   if (!messages) {
@@ -68,6 +75,14 @@ export function resolveCommandTarget({ messages, private: priv, view }: GMXState
       return 'hireCommand';
     case 'fire':
       return 'fireCommand';
+    case 'poll':
+      return 'pollCommand';
+    case 'openPosition':
+      return 'openPositionCommand';
+    case 'closePosition':
+      return 'closePositionCommand';
+    case 'holdPosition':
+      return 'holdPositionCommand';
     default:
       return '__end__';
   }

@@ -40,7 +40,8 @@ const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
   value !== null &&
   ((value as { type?: string }).type === 'operator-config-request' ||
     (value as { type?: string }).type === 'clmm-funding-token-request' ||
-    (value as { type?: string }).type === 'clmm-delegation-signing-request');
+    (value as { type?: string }).type === 'clmm-delegation-signing-request'||
+    (value as { type?: string }).type === 'gmx-delegation-signing-request');
 
 export interface UseAgentConnectionResult {
   config: AgentConfig;

@@ -14,6 +14,10 @@ import { configureCronExecutor } from './workflow/cronScheduler.ts';
 import { fireCommandNode } from './workflow/nodes/fireCommand.js';
 import { hireCommandNode } from './workflow/nodes/hireCommand.js';
 import { bootstrapNode } from './workflow/nodes/bootstrap.js';
+import { pollCommandNode } from './workflow/nodes/pollCommand.js';
+import { holdPositionCommandNode } from './workflow/nodes/holdPosition.js';
+import { openPositionCommandNode } from './workflow/nodes/openPosition.js';
+import { closePositionCommandNode } from './workflow/nodes/closePosition.js';
 
 import { resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
 
@@ -32,13 +36,18 @@ const workflow = new StateGraph(GMXStateAnnotation)
   .addNode('runCommand', runCommandNode)
   .addNode('hireCommand', hireCommandNode)
   .addNode('fireCommand', fireCommandNode)
-  .addNode('bootstrap', bootstrapNode);
+  .addNode('bootstrap', bootstrapNode)
+  .addNode('pollCommand', pollCommandNode)
+  .addNode('openPositionCommand', openPositionCommandNode)
+  .addNode('closePositionCommand', closePositionCommandNode)
+  .addNode('holdPositionCommand', holdPositionCommandNode);
 
 workflow
   .addEdge(START, 'runCommand')
   .addConditionalEdges('runCommand', resolveCommandTarget)
   .addEdge('hireCommand', 'bootstrap')
-  .addEdge('bootstrap', END);
+  .addEdge('bootstrap', 'pollCommand')
+  .addEdge('pollCommand', END);
 //   .addEdge('fireCommand', END);
 
 export const gmxGraph = workflow.compile({
@@ -134,3 +143,11 @@ if (invokedAsEntryPoint) {
 }
 
 // gmxGraph.name = 'agent-gmx';
+
+/* ============================
+   Helper Function
+   ============================ */
+
+// function resolvePostBootstrap(state: GMXState): 'pollState' | 'syncState' {
+//   return state.view.command === 'sync' ? 'syncState' : 'listPools';
+// }

@@ -81,7 +81,7 @@ export type GMXViewState = {
   task?: Task;
   lastOrder?: GMXOrderParams;
   positions?: GMXPositionView[];
-  trades: GMXTradeLog[];
+  trades?: GMXTradeLog[];
   delegationBundle?: DelegationBundle;
   haltReason?: string;
   executionError?: string;
