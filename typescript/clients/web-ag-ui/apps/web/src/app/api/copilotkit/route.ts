@@ -11,6 +11,7 @@ import { NextRequest } from "next/server";
 const serviceAdapter = new ExperimentalEmptyAdapter();
 
 const CLMM_AGENT_NAME = "agent-clmm";
+const GMX_AGENT_NAME="agent-gmx";
 const LEGACY_AGENT_NAME = "starterAgent";
 
 // 2. Create the CopilotRuntime instance and utilize the LangGraph AG-UI
@@ -22,11 +23,17 @@ const runtime = new CopilotRuntime({
       graphId: CLMM_AGENT_NAME,
       langsmithApiKey: process.env.LANGSMITH_API_KEY || "",
     }),
+    [GMX_AGENT_NAME]: new LangGraphAgent({
+      deploymentUrl: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8124", /// TODO: GMX Agent setup
+      graphId: GMX_AGENT_NAME,
+      langsmithApiKey: process.env.LANGSMITH_API_KEY || "",
+    }),
     [LEGACY_AGENT_NAME]: new LangGraphAgent({
       deploymentUrl: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8124",
       graphId: LEGACY_AGENT_NAME,
       langsmithApiKey: process.env.LANGSMITH_API_KEY || "",
     })
+
   }
 });
 
