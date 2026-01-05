@@ -48,4 +48,4 @@ Thumbs.db
 .vibecode/
 .ember-standalone/
 typescript/lib/agent-node/*.zip
-
+typescript/clients/web/
