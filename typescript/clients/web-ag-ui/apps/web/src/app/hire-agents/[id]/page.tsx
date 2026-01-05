@@ -2,13 +2,8 @@
 
 import { use } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  AgentDetailPage,
-  type Transaction,
-  type TelemetryItem,
-} from '@/components/AgentDetailPage';
-import { useAgentConnection } from '@/hooks/useAgentConnection';
-import { DEFAULT_AGENT_ID } from '@/config/agents';
+import { AgentDetailPage } from '@/components/AgentDetailPage';
+import { useAgent } from '@/contexts/AgentContext';
 
 export default function AgentDetailRoute({
   params,
@@ -17,28 +12,14 @@ export default function AgentDetailRoute({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const agent = useAgentConnection(DEFAULT_AGENT_ID);
+  const agent = useAgent();
 
   const handleBack = () => {
     router.push('/hire-agents');
   };
 
-  const mappedTransactions: Transaction[] = agent.transactionHistory.map((tx) => ({
-    cycle: tx.cycle,
-    action: tx.action,
-    txHash: tx.txHash,
-    status: tx.status,
-    reason: tx.reason,
-    timestamp: tx.timestamp,
-  }));
-
-  const mappedTelemetry: TelemetryItem[] = (agent.activity.telemetry ?? []).map((t) => ({
-    cycle: t.cycle,
-    action: t.action,
-    reason: t.reason,
-    midPrice: t.midPrice,
-    timestamp: t.timestamp,
-  }));
+  // TODO: In the future, use id from params to load the correct agent
+  void id;
 
   return (
     <AgentDetailPage
@@ -65,9 +46,11 @@ export default function AgentDetailRoute({
         cyclesSinceRebalance: agent.metrics.cyclesSinceRebalance,
         staleCycles: agent.metrics.staleCycles,
       }}
+      fullMetrics={agent.metrics}
       isHired={agent.isHired}
       isHiring={agent.isHiring}
       isFiring={agent.isFiring}
+      isSyncing={agent.isSyncing}
       currentCommand={agent.view.command}
       onHire={agent.runHire}
       onFire={agent.runFire}
@@ -82,10 +65,11 @@ export default function AgentDetailRoute({
       executionError={agent.view.executionError}
       delegationsBypassActive={agent.view.delegationsBypassActive}
       onboarding={agent.view.onboarding}
-      transactions={mappedTransactions}
-      telemetry={mappedTelemetry}
-      allocationAmount={agent.settings.amount}
-      onAllocationChange={agent.updateSettings}
+      transactions={agent.transactionHistory}
+      telemetry={agent.activity.telemetry}
+      events={agent.events}
+      settings={agent.settings}
+      onSettingsChange={agent.updateSettings}
     />
   );
 }

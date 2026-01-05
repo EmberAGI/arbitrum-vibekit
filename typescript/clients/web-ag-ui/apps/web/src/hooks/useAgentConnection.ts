@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useCoAgent, useCopilotContext } from '@copilotkit/react-core';
 import { v7 } from 'uuid';
 import { useLangGraphInterruptCustomUI } from '../app/hooks/useLangGraphInterruptCustomUI';
@@ -11,15 +11,18 @@ import {
   type AgentViewProfile,
   type AgentViewMetrics,
   type AgentViewActivity,
+  type AgentSettings,
   type AgentInterrupt,
   type OperatorConfigInput,
   type FundingTokenInput,
   type DelegationSigningResponse,
   type Transaction,
+  type ClmmEvent,
   defaultView,
   defaultProfile,
   defaultMetrics,
   defaultActivity,
+  defaultSettings,
   initialAgentState,
 } from '../types/agent';
 
@@ -29,10 +32,12 @@ export type {
   AgentViewProfile,
   AgentViewMetrics,
   AgentViewActivity,
+  AgentSettings,
   AgentInterrupt,
   OperatorConfigInput,
   FundingTokenInput,
   Transaction,
+  ClmmEvent,
 };
 
 const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
@@ -45,33 +50,48 @@ const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
 export interface UseAgentConnectionResult {
   config: AgentConfig;
   isConnected: boolean;
+  threadId: string | undefined;
 
+  // Full view state
   view: AgentView;
   profile: AgentViewProfile;
   metrics: AgentViewMetrics;
   activity: AgentViewActivity;
   transactionHistory: Transaction[];
-  settings: NonNullable<AgentState['settings']>;
+  events: ClmmEvent[];
+  settings: AgentSettings;
 
+  // Derived state
   isHired: boolean;
   isActive: boolean;
   isHiring: boolean;
   isFiring: boolean;
+  isSyncing: boolean;
 
+  // Interrupt state
   activeInterrupt: AgentInterrupt | null;
 
+  // Commands
   runHire: () => void;
   runFire: () => void;
   runSync: () => void;
   resolveInterrupt: (
-    input: OperatorConfigInput | FundingTokenInput | DelegationSigningResponse | { [key: string]: unknown },
+    input:
+      | OperatorConfigInput
+      | FundingTokenInput
+      | DelegationSigningResponse
+      | { [key: string]: unknown },
   ) => void;
-  updateSettings: (amount: number) => void;
+
+  // Settings management: updates local state then syncs to backend
+  updateSettings: (updates: Partial<AgentSettings>) => void;
 }
 
 export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const [isHiring, setIsHiring] = useState(false);
   const [isFiring, setIsFiring] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const initialSyncDone = useRef(false);
 
   const config = getAgentConfig(agentId);
 
@@ -85,73 +105,84 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     enabled: isAgentInterrupt,
   });
 
-  useEffect(() => {
-    if (threadId) {
+  // Simple command runner - no queuing, just run the command
+  const runCommand = useCallback(
+    (command: string) => {
       run(() => ({
         id: v7(),
         role: 'user',
-        content: JSON.stringify({ command: 'sync' }),
+        content: JSON.stringify({ command }),
       }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threadId]);
+    },
+    [run],
+  );
 
+  // Initial sync when thread is established - runs once when threadId becomes available
+  useEffect(() => {
+    if (threadId && !initialSyncDone.current) {
+      initialSyncDone.current = true;
+      // Run sync immediately to populate initial state
+      runCommand('sync');
+    }
+  }, [threadId, runCommand]);
+
+  // Extract state with defaults
   const view = state?.view ?? defaultView;
   const profile = view.profile ?? defaultProfile;
   const metrics = view.metrics ?? defaultMetrics;
   const activity = view.activity ?? defaultActivity;
   const transactionHistory = view.transactionHistory ?? [];
-  const settings = state?.settings ?? { amount: 0 };
+  const events = activity.events ?? [];
+  const settings = state?.settings ?? defaultSettings;
 
-  const isHired = view.command === 'hire' || view.command === 'run';
-  const isActive = view.command !== 'idle' && view.command !== 'fire';
+  // Derived state
+  const isHired = view.command === 'hire' || view.command === 'run' || view.command === 'cycle';
+  const isActive = view.command !== undefined && view.command !== 'idle' && view.command !== 'fire';
 
   const runSync = useCallback(() => {
-    run(() => ({
-      id: v7(),
-      role: 'user',
-      content: JSON.stringify({ command: 'sync' }),
-    }));
-  }, [run]);
+    setIsSyncing(true);
+    runCommand('sync');
+    setTimeout(() => setIsSyncing(false), 2000);
+  }, [runCommand]);
 
   const runHire = useCallback(() => {
     if (!isHired && !isHiring) {
       setIsHiring(true);
-      run(() => ({
-        id: v7(),
-        role: 'user',
-        content: JSON.stringify({ command: 'hire' }),
-      }));
-      setTimeout(() => setIsHiring(false), 3000);
+      runCommand('hire');
+      setTimeout(() => setIsHiring(false), 5000);
     }
-  }, [run, isHired, isHiring]);
+  }, [runCommand, isHired, isHiring]);
 
   const runFire = useCallback(() => {
     if (!isFiring) {
       setIsFiring(true);
-      run(() => ({
-        id: v7(),
-        role: 'user',
-        content: JSON.stringify({ command: 'fire' }),
-      }));
+      runCommand('fire');
       setTimeout(() => setIsFiring(false), 3000);
     }
-  }, [run, isFiring]);
+  }, [runCommand, isFiring]);
 
   const resolveInterrupt = useCallback(
     (
-      input: OperatorConfigInput | FundingTokenInput | DelegationSigningResponse | { [key: string]: unknown },
+      input:
+        | OperatorConfigInput
+        | FundingTokenInput
+        | DelegationSigningResponse
+        | { [key: string]: unknown },
     ) => {
       resolve(JSON.stringify(input));
     },
     [resolve],
   );
 
+  // Settings sync pattern: update local state only (no automatic sync to avoid 409)
   const updateSettings = useCallback(
-    (amount: number) => {
+    (updates: Partial<AgentSettings>) => {
       setState((prev) => ({
         ...(prev ?? initialAgentState),
-        settings: { ...(prev?.settings ?? initialAgentState.settings), amount },
+        settings: {
+          ...(prev?.settings ?? defaultSettings),
+          ...updates,
+        },
       }));
     },
     [setState],
@@ -160,16 +191,19 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   return {
     config,
     isConnected: !!threadId,
+    threadId,
     view,
     profile,
     metrics,
     activity,
     transactionHistory,
+    events,
     settings,
     isHired,
     isActive,
     isHiring,
     isFiring,
+    isSyncing,
     activeInterrupt: activeInterrupt ?? null,
     runHire,
     runFire,
