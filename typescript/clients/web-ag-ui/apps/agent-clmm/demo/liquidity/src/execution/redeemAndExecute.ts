@@ -22,8 +22,9 @@ import { arbitrum, mainnet } from "viem/chains";
 import type { DelegationIntent, NormalizedTransaction } from "../delegations/emberDelegations.js";
 
 export type RedeemAndExecuteResult = {
-  txHash: Hex;
-  receipt: TransactionReceipt;
+  txHashes: Hex[];
+  receipts: TransactionReceipt[];
+  gasSpentWei?: bigint;
 };
 
 type Execution = {
@@ -330,13 +331,10 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
     );
   }
 
-  const executionsByDelegationIndex = new Map<number, Execution[]>();
-  const firstTxIndexByDelegationIndex = new Map<number, number>();
-  const delegationIndexSequence: number[] = [];
+  const executionSegments: Array<{ intentIndex: number; executions: Execution[] }> = [];
+  const intentSegmentCounts = new Map<number, number>();
 
-  // Partition executions by delegation intent so we can pass one permission context per delegation.
-  // This avoids incorrectly treating multiple root delegations as a single "chain" (which can trigger
-  // InvalidAuthority), and also ensures modes/executions array lengths match.
+  // Partition executions into contiguous intent segments to preserve order.
   for (const [txIndex, tx] of params.transactions.entries()) {
     const matchingIndex = params.delegationIntents.findIndex((intent) => txMatchesDelegationIntent(tx, intent));
     if (matchingIndex === -1) {
@@ -345,78 +343,95 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
       );
     }
 
-    if (!firstTxIndexByDelegationIndex.has(matchingIndex)) {
-      firstTxIndexByDelegationIndex.set(matchingIndex, txIndex);
-      delegationIndexSequence.push(matchingIndex);
-    } else {
-      // If the same delegation is needed again after another delegation has been used, we'd have to
-      // redeem the same delegation multiple times or reorder txs; fail closed.
-      const last = delegationIndexSequence.at(-1);
-      if (last !== matchingIndex) {
-        throw new Error(
-          `Execution plan requires interleaving delegation[${matchingIndex}] across other delegations; the demo executor cannot safely redeem the same delegation multiple times in one tx.`,
-        );
-      }
+    const lastSegment = executionSegments.at(-1);
+    if (!lastSegment || lastSegment.intentIndex !== matchingIndex) {
+      executionSegments.push({ intentIndex: matchingIndex, executions: [] });
+      intentSegmentCounts.set(matchingIndex, (intentSegmentCounts.get(matchingIndex) ?? 0) + 1);
     }
 
-    const list = executionsByDelegationIndex.get(matchingIndex) ?? [];
-    list.push(
+    const currentSegment = executionSegments.at(-1);
+    if (!currentSegment) {
+      throw new Error("Internal error: failed to create execution segment");
+    }
+    currentSegment.executions.push(
       createExecutionSafe({
         target: tx.to,
         value: tx.value,
         callData: tx.data,
       }),
     );
-    executionsByDelegationIndex.set(matchingIndex, list);
   }
 
-  const orderedDelegationIndices = [...executionsByDelegationIndex.keys()].sort((a, b) => {
-    const aIndex = firstTxIndexByDelegationIndex.get(a);
-    const bIndex = firstTxIndexByDelegationIndex.get(b);
-    if (aIndex === undefined || bIndex === undefined) {
-      throw new Error("Internal error: missing firstTxIndexByDelegationIndex entry");
-    }
-    return aIndex - bIndex;
-  });
+  const requiresMultipleRedemptions = [...intentSegmentCounts.values()].some((count) => count > 1);
+  if (requiresMultipleRedemptions) {
+    console.info(
+      `demo/liquidity: split redeems required to preserve intent order (${executionSegments.length} segments)`,
+    );
+  }
 
-  const permissionContexts = orderedDelegationIndices.map((index) => [params.delegations[index]]);
-  const executions = orderedDelegationIndices.map((index) => executionsByDelegationIndex.get(index) ?? []);
-  const modes = executions.map((group) =>
-    group.length === 1 ? ExecutionMode.SingleDefault : ExecutionMode.BatchDefault,
-  );
-
-  maybeLogRedeemPlan({ permissionContexts, modes, executions });
+  const redemptionPlans = requiresMultipleRedemptions
+    ? executionSegments.map((segment) => ({
+        permissionContexts: [[params.delegations[segment.intentIndex]]],
+        executions: [segment.executions],
+        modes: [
+          segment.executions.length === 1 ? ExecutionMode.SingleDefault : ExecutionMode.BatchDefault,
+        ],
+      }))
+    : [
+        {
+          permissionContexts: executionSegments.map((segment) => [params.delegations[segment.intentIndex]]),
+          executions: executionSegments.map((segment) => segment.executions),
+          modes: executionSegments.map((segment) =>
+            segment.executions.length === 1 ? ExecutionMode.SingleDefault : ExecutionMode.BatchDefault,
+          ),
+        },
+      ];
 
   const manualGasLimit = parseOptionalGasLimit(process.env["DEMO_GAS_LIMIT"]);
+  const txHashes: Hex[] = [];
+  const receipts: TransactionReceipt[] = [];
+  let totalGasSpentWei: bigint | undefined;
 
-  try {
-    const simulation = await DelegationManager.simulate.redeemDelegations({
-      client: simulationClient,
-      delegationManagerAddress: environment.DelegationManager,
-      delegations: permissionContexts,
-      modes,
-      executions,
-    });
+  for (const [planIndex, plan] of redemptionPlans.entries()) {
+    maybeLogRedeemPlan({ permissionContexts: plan.permissionContexts, modes: plan.modes, executions: plan.executions });
 
-    const estimatedGas =
-      typeof simulation.request.gas === "bigint" ? simulation.request.gas : undefined;
-    const gas = manualGasLimit ?? (estimatedGas ? (estimatedGas * 12n) / 10n : undefined);
+    try {
+      const simulation = await DelegationManager.simulate.redeemDelegations({
+        client: simulationClient,
+        delegationManagerAddress: environment.DelegationManager,
+        delegations: plan.permissionContexts,
+        modes: plan.modes,
+        executions: plan.executions,
+      });
 
-    const txHash = await walletClient.sendTransaction({
-      to: environment.DelegationManager,
-      data: DelegationManager.encode.redeemDelegations({
-        delegations: permissionContexts,
-        modes,
-        executions,
-      }),
-      value: 0n,
-      ...(gas ? { gas } : {}),
-    });
+      const estimatedGas =
+        typeof simulation.request.gas === "bigint" ? simulation.request.gas : undefined;
+      const gas = manualGasLimit ?? (estimatedGas ? (estimatedGas * 12n) / 10n : undefined);
 
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
-    return { txHash, receipt };
-  } catch (error: unknown) {
-    const message = `redeemDelegations simulation reverted (groupCount=${executions.length}, totalCalls=${executions.reduce((sum, group) => sum + group.length, 0)}):\n${formatViemError(error)}`;
-    throw new Error(message, { cause: error });
+      const txHash = await walletClient.sendTransaction({
+        to: environment.DelegationManager,
+        data: DelegationManager.encode.redeemDelegations({
+          delegations: plan.permissionContexts,
+          modes: plan.modes,
+          executions: plan.executions,
+        }),
+        value: 0n,
+        ...(gas ? { gas } : {}),
+      });
+
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      txHashes.push(txHash);
+      receipts.push(receipt);
+      if (receipt.gasUsed !== undefined && receipt.effectiveGasPrice !== undefined) {
+        totalGasSpentWei =
+          (totalGasSpentWei ?? 0n) + receipt.gasUsed * receipt.effectiveGasPrice;
+      }
+    } catch (error: unknown) {
+      const totalCalls = plan.executions.reduce((sum, group) => sum + group.length, 0);
+      const message = `redeemDelegations simulation reverted (segment=${planIndex + 1}/${redemptionPlans.length}, groupCount=${plan.executions.length}, totalCalls=${totalCalls}):\n${formatViemError(error)}`;
+      throw new Error(message, { cause: error });
+    }
   }
+
+  return { txHashes, receipts, gasSpentWei: totalGasSpentWei };
 }

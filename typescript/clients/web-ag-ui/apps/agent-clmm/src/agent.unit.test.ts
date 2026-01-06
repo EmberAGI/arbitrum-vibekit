@@ -136,6 +136,10 @@ describe('executeDecision', () => {
       requestWithdrawal,
       requestRebalance,
       listCamelotPools: vi.fn().mockResolvedValue([makePool()]),
+      resolvePoolPositions: vi.fn().mockResolvedValue({
+        poolTokenUid: { chainId: '42161', address: '0xpool' },
+        positionCount: 2,
+      }),
     } as unknown as EmberCamelotClient;
 
     executeTransactionMock.mockResolvedValueOnce({
@@ -178,6 +182,10 @@ describe('executeDecision', () => {
       requestWithdrawal,
       requestRebalance,
       listCamelotPools: vi.fn().mockResolvedValue([makePool()]),
+      resolvePoolPositions: vi.fn().mockResolvedValue({
+        poolTokenUid: { chainId: '42161', address: '0xpool' },
+        positionCount: 2,
+      }),
     } as unknown as EmberCamelotClient;
 
     executeTransactionMock
@@ -221,6 +229,10 @@ describe('executeDecision', () => {
       requestWithdrawal,
       requestRebalance,
       listCamelotPools: vi.fn().mockResolvedValue([makePool()]),
+      resolvePoolPositions: vi.fn().mockResolvedValue({
+        poolTokenUid: { chainId: '42161', address: '0xpool' },
+        positionCount: 2,
+      }),
     } as unknown as EmberCamelotClient;
 
     executeTransactionMock.mockResolvedValueOnce({

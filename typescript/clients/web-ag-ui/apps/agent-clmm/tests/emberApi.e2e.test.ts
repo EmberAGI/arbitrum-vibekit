@@ -21,6 +21,7 @@ const EMPTY_WALLET: `0x${string}` = (process.env['CLMM_E2E_EMPTY_WALLET'] ??
   '0x0000000000000000000000000000000000000001') as `0x${string}`;
 const LIVE_LP_WALLET: `0x${string}` = (process.env['CLMM_E2E_LIVE_WALLET'] ??
   '0x2d2c313ec7650995b193a34e16be5b86eede872d') as `0x${string}`;
+const CAMELOT_PROVIDER_ID = 'Algebra_0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B_42161';
 
 type RequestLogEntry = {
   url: string;
@@ -98,6 +99,17 @@ async function execute<T>(run: () => Promise<T>): Promise<ExecutionResult<T>> {
   }
 }
 
+function withProviderId(url: string): string {
+  if (!url.includes('/liquidity/')) {
+    return url;
+  }
+  if (url.includes('providerIds=')) {
+    return url;
+  }
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}providerIds=${encodeURIComponent(CAMELOT_PROVIDER_ID)}`;
+}
+
 async function discoverLiveWalletContext() {
   const [pools, positions] = await Promise.all([
     client.listCamelotPools(ARBITRUM_CHAIN_ID),
@@ -127,8 +139,11 @@ async function fetchLivePoolIdentifier() {
       };
     }>;
   };
+  const query = new URLSearchParams();
+  query.set('chainId', ARBITRUM_CHAIN_ID.toString());
+  query.append('providerIds', CAMELOT_PROVIDER_ID);
   const response = await realFetch(
-    `${BASE_URL}/liquidity/positions/${LIVE_LP_WALLET}?chainId=${ARBITRUM_CHAIN_ID}`,
+    `${BASE_URL}/liquidity/positions/${LIVE_LP_WALLET}?${query.toString()}`,
   );
   if (!response.ok) {
     throw new Error(`Unable to load raw wallet positions (${response.status})`);
@@ -152,6 +167,20 @@ describe('EmberCamelotClient (e2e)', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (...args) => {
       const [input, init] = args;
       logRequest(input, init);
+      const url = extractUrl(input);
+      if (url.includes('/liquidity/')) {
+        const nextUrl = withProviderId(url);
+        if (typeof input === 'string') {
+          return realFetch(nextUrl, init);
+        }
+        if (input instanceof URL) {
+          return realFetch(new URL(nextUrl), init);
+        }
+        if (input instanceof Request) {
+          return realFetch(new Request(nextUrl, input), init);
+        }
+        return realFetch(nextUrl, init);
+      }
       return realFetch(...args);
     });
     restoreFetch = () => {

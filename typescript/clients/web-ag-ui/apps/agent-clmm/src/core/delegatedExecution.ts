@@ -47,7 +47,7 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
   clients: ReturnType<typeof createClients>;
   delegationBundle: DelegationBundle;
   transactions: readonly TransactionInformation[];
-}): Promise<{ txHash: `0x${string}`; receipt: TransactionReceipt }> {
+}): Promise<{ txHashes: `0x${string}`[]; receipts: TransactionReceipt[]; gasSpentWei?: bigint }> {
   if (params.transactions.length === 0) {
     throw new Error('No transactions provided for delegated execution');
   }
@@ -80,9 +80,8 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
     );
   }
 
-  const executionsByIntentIndex = new Map<number, Execution[]>();
-  const firstTxIndexByIntentIndex = new Map<number, number>();
-  const intentIndexSequence: number[] = [];
+  const executionSegments: Array<{ intentIndex: number; executions: Execution[] }> = [];
+  const intentSegmentCounts = new Map<number, number>();
 
   for (const [txIndex, tx] of normalization.normalizedTransactions.entries()) {
     const matchingIndex = intents.findIndex((intent) => txMatchesDelegationIntent(tx, intent));
@@ -92,57 +91,40 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
       );
     }
 
-    if (!firstTxIndexByIntentIndex.has(matchingIndex)) {
-      firstTxIndexByIntentIndex.set(matchingIndex, txIndex);
-      intentIndexSequence.push(matchingIndex);
-    } else {
-      const last = intentIndexSequence.at(-1);
-      if (last !== matchingIndex) {
-        throw new Error(
-          `Execution plan requires interleaving intent[${matchingIndex}] across other intents; refusing to redeem the same delegation multiple times in a single transaction.`,
-        );
-      }
+    const lastSegment = executionSegments.at(-1);
+    if (!lastSegment || lastSegment.intentIndex !== matchingIndex) {
+      executionSegments.push({ intentIndex: matchingIndex, executions: [] });
+      intentSegmentCounts.set(matchingIndex, (intentSegmentCounts.get(matchingIndex) ?? 0) + 1);
     }
 
-    const list = executionsByIntentIndex.get(matchingIndex) ?? [];
-    list.push(
+    const currentSegment = executionSegments.at(-1);
+    if (!currentSegment) {
+      throw new Error('Internal error: failed to create execution segment');
+    }
+    currentSegment.executions.push(
       createExecutionSafe({
         target: tx.to,
         value: tx.value,
         callData: tx.data,
       }),
     );
-    executionsByIntentIndex.set(matchingIndex, list);
   }
 
-  const orderedIntentIndices = [...executionsByIntentIndex.keys()].sort((a, b) => {
-    const aIndex = firstTxIndexByIntentIndex.get(a);
-    const bIndex = firstTxIndexByIntentIndex.get(b);
-    if (aIndex === undefined || bIndex === undefined) {
-      throw new Error('Internal error: missing firstTxIndexByIntentIndex entry');
-    }
-    return aIndex - bIndex;
-  });
-
-  const permissionContexts = orderedIntentIndices.map((index) => [params.delegationBundle.delegations[index]]);
-  const executions = orderedIntentIndices.map((index) => executionsByIntentIndex.get(index) ?? []);
-  const modes = executions.map((group) => (group.length === 1 ? ExecutionMode.SingleDefault : ExecutionMode.BatchDefault));
-
   const uniqueDelegates = new Set(
-    permissionContexts
+    params.delegationBundle.delegations
       .flat()
       .map((delegation) => delegation.delegate.toLowerCase()),
   );
   const uniqueDelegators = new Set(
-    permissionContexts
+    params.delegationBundle.delegations
       .flat()
       .map((delegation) => delegation.delegator.toLowerCase()),
   );
 
   logInfo('Delegated execution plan prepared', {
     chainId: normalization.chainId,
-    groupCount: executions.length,
-    totalCalls: executions.reduce((sum, group) => sum + group.length, 0),
+    segmentCount: executionSegments.length,
+    totalCalls: executionSegments.reduce((sum, segment) => sum + segment.executions.length, 0),
     uniqueDelegates: [...uniqueDelegates],
     uniqueDelegators: [...uniqueDelegators],
     expectedDelegate,
@@ -168,29 +150,103 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
     transport: http(resolvedRpcUrl),
   }).extend(publicActions);
 
-  const simulation = await DelegationManager.simulate.redeemDelegations({
-    client: simulationClient,
-    delegationManagerAddress: params.delegationBundle.delegationManager,
-    delegations: permissionContexts,
-    modes,
-    executions,
-  });
-  const estimatedGas = typeof simulation.request.gas === 'bigint' ? simulation.request.gas : undefined;
-  const gas = estimatedGas ? (estimatedGas * 12n) / 10n : undefined;
+  const requiresMultipleRedemptions = [...intentSegmentCounts.values()].some((count) => count > 1);
+  if (requiresMultipleRedemptions) {
+    const repeatedIntents = [...intentSegmentCounts.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([intentIndex, count]) => ({
+        intentIndex,
+        count,
+        target: params.delegationBundle.intents[intentIndex]?.target,
+        selector: params.delegationBundle.intents[intentIndex]?.selector,
+        description: params.delegationBundle.descriptions[intentIndex],
+      }));
+    logInfo('Delegated execution will split redemptions to preserve intent order', {
+      redemptionCount: executionSegments.length,
+      repeatedIntents,
+    });
+  }
 
-  const txHash = await params.clients.wallet.sendTransaction({
-    account: params.clients.wallet.account,
-    chain: params.clients.wallet.chain,
-    to: params.delegationBundle.delegationManager,
-    data: DelegationManager.encode.redeemDelegations({
-      delegations: permissionContexts,
-      modes,
-      executions,
-    }),
-    value: 0n,
-    ...(gas ? { gas } : {}),
-  });
+  const redemptionPlans = requiresMultipleRedemptions
+    ? executionSegments.map((segment) => ({
+        permissionContexts: [[params.delegationBundle.delegations[segment.intentIndex]]],
+        executions: [segment.executions],
+        modes: [
+          segment.executions.length === 1 ? ExecutionMode.SingleDefault : ExecutionMode.BatchDefault,
+        ],
+      }))
+    : [
+        {
+          permissionContexts: executionSegments.map((segment) => [
+            params.delegationBundle.delegations[segment.intentIndex],
+          ]),
+          executions: executionSegments.map((segment) => segment.executions),
+          modes: executionSegments.map((segment) =>
+            segment.executions.length === 1 ? ExecutionMode.SingleDefault : ExecutionMode.BatchDefault,
+          ),
+        },
+      ];
 
-  const receipt = await params.clients.public.waitForTransactionReceipt({ hash: txHash });
-  return { txHash, receipt };
+  const txHashes: `0x${string}`[] = [];
+  const receipts: TransactionReceipt[] = [];
+  let totalGasSpentWei: bigint | undefined;
+
+  for (const [planIndex, plan] of redemptionPlans.entries()) {
+    const intentIndex =
+      plan.permissionContexts.length === 1
+        ? params.delegationBundle.delegations.findIndex(
+            (delegation) => delegation === plan.permissionContexts[0]?.[0],
+          )
+        : null;
+    const intentSummary =
+      intentIndex !== null && intentIndex >= 0
+        ? {
+            intentIndex,
+            intentTarget: params.delegationBundle.intents[intentIndex]?.target,
+            intentSelector: params.delegationBundle.intents[intentIndex]?.selector,
+            intentDescription: params.delegationBundle.descriptions[intentIndex],
+          }
+        : undefined;
+
+    logInfo('Delegated execution segment prepared', {
+      segmentIndex: planIndex,
+      segmentCount: redemptionPlans.length,
+      groupCount: plan.executions.length,
+      callCount: plan.executions.reduce((sum, group) => sum + group.length, 0),
+      ...(intentSummary ? { intent: intentSummary } : {}),
+    });
+
+    const simulation = await DelegationManager.simulate.redeemDelegations({
+      client: simulationClient,
+      delegationManagerAddress: params.delegationBundle.delegationManager,
+      delegations: plan.permissionContexts,
+      modes: plan.modes,
+      executions: plan.executions,
+    });
+    const estimatedGas = typeof simulation.request.gas === 'bigint' ? simulation.request.gas : undefined;
+    const gas = estimatedGas ? (estimatedGas * 12n) / 10n : undefined;
+
+    const txHash = await params.clients.wallet.sendTransaction({
+      account: params.clients.wallet.account,
+      chain: params.clients.wallet.chain,
+      to: params.delegationBundle.delegationManager,
+      data: DelegationManager.encode.redeemDelegations({
+        delegations: plan.permissionContexts,
+        modes: plan.modes,
+        executions: plan.executions,
+      }),
+      value: 0n,
+      ...(gas ? { gas } : {}),
+    });
+
+    const receipt = await params.clients.public.waitForTransactionReceipt({ hash: txHash });
+    txHashes.push(txHash);
+    receipts.push(receipt);
+    if (receipt.gasUsed !== undefined && receipt.effectiveGasPrice !== undefined) {
+      totalGasSpentWei =
+        (totalGasSpentWei ?? 0n) + receipt.gasUsed * receipt.effectiveGasPrice;
+    }
+  }
+
+  return { txHashes, receipts, gasSpentWei: totalGasSpentWei };
 }

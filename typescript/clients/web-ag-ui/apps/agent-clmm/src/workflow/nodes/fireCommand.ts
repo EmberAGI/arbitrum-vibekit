@@ -1,6 +1,9 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 
-import { buildTaskStatus, isTaskTerminal, type ClmmState, type ClmmUpdate } from '../context.js';
+import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
+import { ARBITRUM_CHAIN_ID } from '../../config/constants.js';
+import { resolveAccountingContextId } from '../accounting.js';
+import { buildTaskStatus, isTaskTerminal, logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
 import { cancelCronForThread } from '../cronScheduler.js';
 
 type Configurable = { configurable?: { thread_id?: string } };
@@ -36,11 +39,32 @@ export const fireCommandNode = async (
   const { task, statusEvent } = buildTaskStatus(currentTask, 'canceled', 'Agent fired! It will stop trading.');
   await copilotkitEmitState(config, { view: { task, activity: { events: [statusEvent], telemetry: [] } } });
 
+  const contextId = resolveAccountingContextId({ state, threadId });
+  const aumUsd = state.view.accounting.aumUsd ?? state.view.accounting.latestNavSnapshot?.totalUsd;
+  const accounting =
+    contextId && aumUsd !== undefined
+      ? applyAccountingUpdate({
+          existing: state.view.accounting,
+          flowEvents: [
+            createFlowEvent({
+              type: 'fire',
+              contextId,
+              chainId: ARBITRUM_CHAIN_ID,
+              usdValue: aumUsd,
+            }),
+          ],
+        })
+      : state.view.accounting;
+  if (!contextId) {
+    logInfo('Accounting fire event skipped: missing threadId', {});
+  }
+
   return {
     view: {
       task,
       command: 'fire',
       activity: { events: [statusEvent], telemetry: [] },
+      accounting,
     },
   };
 };

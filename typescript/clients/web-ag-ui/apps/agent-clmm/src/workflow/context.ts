@@ -5,6 +5,7 @@ import { Annotation, MemorySaver, messagesStateReducer } from '@langchain/langgr
 import type { Messages } from '@langchain/langgraph';
 import { v7 as uuidv7 } from 'uuid';
 
+import type { AccountingState } from '../accounting/types.js';
 import { resolvePollIntervalMs, resolveStreamLimit } from '../config/constants.js';
 import {
   type CamelotPool,
@@ -64,6 +65,8 @@ export type ClmmMetrics = {
   iteration: number;
   latestCycle?: RebalanceTelemetry;
 };
+
+export type ClmmAccounting = AccountingState;
 
 export type TaskState =
   | 'submitted'
@@ -182,6 +185,7 @@ type ClmmViewState = {
   activity: ClmmActivity;
   metrics: ClmmMetrics;
   transactionHistory: ClmmTransaction[];
+  accounting: ClmmAccounting;
   delegationsBypassActive?: boolean;
 };
 
@@ -232,6 +236,22 @@ const defaultViewState = (): ClmmViewState => ({
     latestCycle: undefined,
   },
   transactionHistory: [],
+  accounting: {
+    navSnapshots: [],
+    flowLog: [],
+    latestNavSnapshot: undefined,
+    lastUpdated: undefined,
+    lifecycleStart: undefined,
+    lifecycleEnd: undefined,
+    initialAllocationUsd: undefined,
+    cashUsd: undefined,
+    positionsUsd: undefined,
+    aumUsd: undefined,
+    lifetimePnlUsd: undefined,
+    lifetimeReturnPct: undefined,
+    highWaterMarkUsd: undefined,
+    apy: undefined,
+  },
 });
 
 const mergeSettings = (left: ClmmSettings, right?: Partial<ClmmSettings>): ClmmSettings => ({
@@ -249,20 +269,39 @@ const mergePrivateState = (
   bootstrapped: right?.bootstrapped ?? left.bootstrapped ?? false,
 });
 
+const mergeAppendOrReplace = <T>(left: T[], right?: T[]): T[] => {
+  if (!right) {
+    return left;
+  }
+  if (right.length === 0) {
+    return left;
+  }
+  if (right === left) {
+    return left;
+  }
+  if (right.length >= left.length) {
+    let isPrefix = true;
+    for (let index = 0; index < left.length; index += 1) {
+      if (right[index] !== left[index]) {
+        isPrefix = false;
+        break;
+      }
+    }
+    if (isPrefix) {
+      return right;
+    }
+  }
+  return [...left, ...right];
+};
+
 const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): ClmmViewState => {
   if (!right) {
     return left;
   }
 
-  const nextTelemetry = right.activity?.telemetry
-    ? [...left.activity.telemetry, ...right.activity.telemetry]
-    : left.activity.telemetry;
-  const nextEvents = right.activity?.events
-    ? [...left.activity.events, ...right.activity.events]
-    : left.activity.events;
-  const nextTransactions = right.transactionHistory
-    ? [...left.transactionHistory, ...right.transactionHistory]
-    : left.transactionHistory;
+  const nextTelemetry = mergeAppendOrReplace(left.activity.telemetry, right.activity?.telemetry);
+  const nextEvents = mergeAppendOrReplace(left.activity.events, right.activity?.events);
+  const nextTransactions = mergeAppendOrReplace(left.transactionHistory, right.transactionHistory);
   const nextProfile: ClmmProfile = {
     agentIncome: right.profile?.agentIncome ?? left.profile.agentIncome,
     aum: right.profile?.aum ?? left.profile.aum,
@@ -282,6 +321,26 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     staleCycles: right.metrics?.staleCycles ?? left.metrics.staleCycles ?? 0,
     iteration: right.metrics?.iteration ?? left.metrics.iteration ?? 0,
     latestCycle: right.metrics?.latestCycle ?? left.metrics.latestCycle,
+  };
+  const nextAccounting: ClmmAccounting = {
+    navSnapshots: mergeAppendOrReplace(
+      left.accounting.navSnapshots,
+      right.accounting?.navSnapshots,
+    ),
+    flowLog: mergeAppendOrReplace(left.accounting.flowLog, right.accounting?.flowLog),
+    latestNavSnapshot: right.accounting?.latestNavSnapshot ?? left.accounting.latestNavSnapshot,
+    lastUpdated: right.accounting?.lastUpdated ?? left.accounting.lastUpdated,
+    lifecycleStart: right.accounting?.lifecycleStart ?? left.accounting.lifecycleStart,
+    lifecycleEnd: right.accounting?.lifecycleEnd ?? left.accounting.lifecycleEnd,
+    initialAllocationUsd: right.accounting?.initialAllocationUsd ?? left.accounting.initialAllocationUsd,
+    cashUsd: right.accounting?.cashUsd ?? left.accounting.cashUsd,
+    positionsUsd: right.accounting?.positionsUsd ?? left.accounting.positionsUsd,
+    aumUsd: right.accounting?.aumUsd ?? left.accounting.aumUsd,
+    lifetimePnlUsd: right.accounting?.lifetimePnlUsd ?? left.accounting.lifetimePnlUsd,
+    lifetimeReturnPct:
+      right.accounting?.lifetimeReturnPct ?? left.accounting.lifetimeReturnPct,
+    highWaterMarkUsd: right.accounting?.highWaterMarkUsd ?? left.accounting.highWaterMarkUsd,
+    apy: right.accounting?.apy ?? left.accounting.apy,
   };
 
   return {
@@ -306,6 +365,7 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     },
     metrics: nextMetrics,
     transactionHistory: nextTransactions,
+    accounting: nextAccounting,
   };
 };
 

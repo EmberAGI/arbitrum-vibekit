@@ -1,5 +1,7 @@
-import { erc20Abi, parseUnits } from 'viem';
+import { erc20Abi, formatUnits, parseUnits } from 'viem';
 
+import { CAMELOT_PROTOCOL_ID } from '../accounting/camelotAdapter.js';
+import type { FlowLogEventInput } from '../accounting/types.js';
 import type { createClients } from '../clients/clients.js';
 import type { EmberCamelotClient } from '../clients/emberApi.js';
 import {
@@ -162,7 +164,7 @@ export async function executeDecision({
   fundingTokenAddress?: `0x${string}`;
   delegationsBypassActive?: boolean;
   clients: ReturnType<typeof createClients>;
-}): Promise<{ txHash?: string; gasSpentWei?: bigint }> {
+}): Promise<{ txHash?: string; gasSpentWei?: bigint; flowEvents?: FlowLogEventInput[] }> {
   const walletAddress = operatorConfig.walletAddress;
   if (action.kind === 'hold') {
     throw new Error('executeDecision invoked with hold action');
@@ -173,29 +175,74 @@ export async function executeDecision({
     chainId: chainIdString,
     address: pool.address,
   };
-
-  const withdrawPayload: ClmmWithdrawRequest = {
-    walletAddress,
-    poolTokenUid: poolIdentifier,
-  };
   let lastTxHash: string | undefined;
   let totalGasSpentWei: bigint | undefined;
+  const flowEvents: FlowLogEventInput[] = [];
+
+  const recordSwapEvent = (request: ClmmSwapRequest) => {
+    flowEvents.push({
+      type: 'swap',
+      chainId: ARBITRUM_CHAIN_ID,
+      protocolId: CAMELOT_PROTOCOL_ID,
+      fromTokenAddress: request.fromTokenUid.address,
+      toTokenAddress: request.toTokenUid.address,
+      ...(request.amountType === 'exactIn'
+        ? { fromAmountBaseUnits: request.amount }
+        : { toAmountBaseUnits: request.amount }),
+    });
+  };
+
+  const computeUsdValue = (params: {
+    amountBaseUnits: string;
+    decimals: number;
+    usdPrice?: number;
+  }): number | undefined => {
+    if (!params.usdPrice || params.usdPrice <= 0) {
+      return undefined;
+    }
+    let amount: number;
+    try {
+      amount = Number(formatUnits(BigInt(params.amountBaseUnits), params.decimals));
+    } catch {
+      return undefined;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return undefined;
+    }
+    return Number((amount * params.usdPrice).toFixed(6));
+  };
 
   if (
     action.kind === 'adjust-range' ||
     action.kind === 'exit-range' ||
     action.kind === 'compound-fees'
   ) {
+    const resolvedPoolPositions = await camelotClient.resolvePoolPositions({
+      walletAddress,
+      chainId: ARBITRUM_CHAIN_ID,
+      poolAddress: normalizeHexAddress(pool.address, 'pool address'),
+    });
+    const withdrawPayload: ClmmWithdrawRequest = {
+      walletAddress,
+      poolTokenUid: resolvedPoolPositions.poolTokenUid,
+    };
     const withdrawalOutcome = await executeWithdrawalPlans({
       camelotClient,
       withdrawPayload,
       clients,
       delegationBundle: delegationsBypassActive ? undefined : delegationBundle,
+      positionCount: resolvedPoolPositions.positionCount,
     });
     lastTxHash = withdrawalOutcome.lastHash;
     if (withdrawalOutcome.gasSpentWei !== undefined) {
       totalGasSpentWei = (totalGasSpentWei ?? 0n) + withdrawalOutcome.gasSpentWei;
     }
+    flowEvents.push({
+      type: 'withdraw',
+      chainId: ARBITRUM_CHAIN_ID,
+      protocolId: CAMELOT_PROTOCOL_ID,
+      poolAddress: pool.address,
+    });
   }
 
   switch (action.kind) {
@@ -265,6 +312,7 @@ export async function executeDecision({
             toTokenUid: { chainId: chainIdString, address: params.toToken },
           };
           let response: Awaited<ReturnType<EmberCamelotClient['requestSwap']>>;
+          let executedRequest: ClmmSwapRequest = exactOutRequest;
           try {
             response = await camelotClient.requestSwap(exactOutRequest);
           } catch (error: unknown) {
@@ -313,7 +361,9 @@ export async function executeDecision({
             });
 
             response = await camelotClient.requestSwap(exactInRequest);
+            executedRequest = exactInRequest;
           }
+          recordSwapEvent(executedRequest);
           swapTransactions.push(...response.transactions);
         };
 
@@ -344,6 +394,7 @@ export async function executeDecision({
             });
             throw error;
           }
+          recordSwapEvent(request);
           swapTransactions.push(...response.transactions);
         };
 
@@ -461,6 +512,7 @@ export async function executeDecision({
                 });
                 throw error;
               }
+              recordSwapEvent(request);
               swapTransactions.push(...response.transactions);
             }
           } else {
@@ -550,11 +602,41 @@ export async function executeDecision({
       if (supplyOutcome.gasSpentWei !== undefined) {
         totalGasSpentWei = (totalGasSpentWei ?? 0n) + supplyOutcome.gasSpentWei;
       }
-      return { txHash: lastTxHash, gasSpentWei: totalGasSpentWei };
+      flowEvents.push(
+        {
+          type: 'supply',
+          chainId: ARBITRUM_CHAIN_ID,
+          protocolId: CAMELOT_PROTOCOL_ID,
+          poolAddress: poolIdentifier.address,
+          tokenAddress: refreshedPoolSnapshot.token0.address,
+          amountBaseUnits: desired.token0.toString(),
+          usdPrice: refreshedPoolSnapshot.token0.usdPrice,
+          usdValue: computeUsdValue({
+            amountBaseUnits: desired.token0.toString(),
+            decimals: refreshedPoolSnapshot.token0.decimals,
+            usdPrice: refreshedPoolSnapshot.token0.usdPrice,
+          }),
+        },
+        {
+          type: 'supply',
+          chainId: ARBITRUM_CHAIN_ID,
+          protocolId: CAMELOT_PROTOCOL_ID,
+          poolAddress: poolIdentifier.address,
+          tokenAddress: refreshedPoolSnapshot.token1.address,
+          amountBaseUnits: desired.token1.toString(),
+          usdPrice: refreshedPoolSnapshot.token1.usdPrice,
+          usdValue: computeUsdValue({
+            amountBaseUnits: desired.token1.toString(),
+            decimals: refreshedPoolSnapshot.token1.decimals,
+            usdPrice: refreshedPoolSnapshot.token1.usdPrice,
+          }),
+        },
+      );
+      return { txHash: lastTxHash, gasSpentWei: totalGasSpentWei, flowEvents };
     }
     case 'exit-range':
     case 'compound-fees':
-      return { txHash: lastTxHash, gasSpentWei: totalGasSpentWei };
+      return { txHash: lastTxHash, gasSpentWei: totalGasSpentWei, flowEvents };
     default:
       assertUnreachable(action);
   }
@@ -618,18 +700,24 @@ async function executeWithdrawalPlans({
   withdrawPayload,
   clients,
   delegationBundle,
+  positionCount,
 }: {
   camelotClient: EmberCamelotClient;
   withdrawPayload: ClmmWithdrawRequest;
   clients: ReturnType<typeof createClients>;
   delegationBundle?: DelegationBundle;
+  positionCount?: number;
 }): Promise<{ lastHash?: string; gasSpentWei?: bigint }> {
   let lastHash: string | undefined;
   let totalGasSpentWei: bigint | undefined;
+  const maxPlans =
+    typeof positionCount === 'number' && Number.isFinite(positionCount)
+      ? Math.max(0, Math.floor(positionCount))
+      : Number.POSITIVE_INFINITY;
 
-  // Keep requesting withdrawal plans until the provider reports no further transactions.
-  // This allows multi-step withdrawals (e.g. unwind, collect, etc.) without changing thread state.
-  for (let planIndex = 0; ; planIndex += 1) {
+  // Request one withdrawal plan per active pool position (Ember returns a single-position plan).
+  // Stop early if Ember reports no further transactions.
+  for (let planIndex = 0; planIndex < maxPlans; planIndex += 1) {
     let plan: Awaited<ReturnType<EmberCamelotClient['requestWithdrawal']>> | undefined;
     for (let attempt = 0; attempt < MAX_WITHDRAW_ATTEMPTS; attempt += 1) {
       try {
@@ -669,6 +757,8 @@ async function executeWithdrawalPlans({
       totalGasSpentWei = (totalGasSpentWei ?? 0n) + outcome.gasSpentWei;
     }
   }
+
+  return { lastHash, gasSpentWei: totalGasSpentWei };
 }
 
 async function executePlanTransactions({
@@ -681,16 +771,13 @@ async function executePlanTransactions({
   delegationBundle?: DelegationBundle;
 }): Promise<{ lastHash?: string; gasSpentWei?: bigint }> {
   if (delegationBundle) {
-    const { txHash, receipt } = await redeemDelegationsAndExecuteTransactions({
+    const { txHashes, gasSpentWei } = await redeemDelegationsAndExecuteTransactions({
       clients,
       delegationBundle,
       transactions: plan.transactions,
     });
-    const gasSpentWei =
-      receipt.gasUsed !== undefined && receipt.effectiveGasPrice !== undefined
-        ? receipt.gasUsed * receipt.effectiveGasPrice
-        : undefined;
-    return { lastHash: txHash, gasSpentWei };
+    const lastHash = txHashes.at(-1);
+    return { lastHash, gasSpentWei };
   }
 
   let lastHash: string | undefined;

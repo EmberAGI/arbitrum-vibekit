@@ -1,6 +1,8 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
+import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
+import type { FlowLogEventInput } from '../../accounting/types.js';
 import { formatEmberApiError, fetchPoolSnapshot } from '../../clients/emberApi.js';
 import {
   ARBITRUM_CHAIN_ID,
@@ -20,6 +22,11 @@ import {
   tickToPrice,
 } from '../../core/decision-engine.js';
 import { type CamelotPool, type ClmmAction, type RebalanceTelemetry } from '../../domain/types.js';
+import {
+  cloneSnapshotForTrigger,
+  createCamelotAccountingSnapshot,
+  resolveAccountingContextId,
+} from '../accounting.js';
 import { buildTelemetryArtifact } from '../artifacts.js';
 import { getCamelotClient, getOnchainClients } from '../clientFactory.js';
 import {
@@ -346,6 +353,7 @@ export const pollCycleNode = async (
   let cyclesSinceRebalance = state.view.metrics.cyclesSinceRebalance ?? 0;
   let txHash: string | undefined;
   let gasSpentWei: bigint | undefined;
+  let executionFlowEvents: FlowLogEventInput[] = [];
 
   if (decision.kind === 'hold') {
     cyclesSinceRebalance += 1;
@@ -371,6 +379,7 @@ export const pollCycleNode = async (
         });
         txHash = result?.txHash;
         gasSpentWei = result?.gasSpentWei;
+        executionFlowEvents = result?.flowEvents ?? [];
       } catch (executionError: unknown) {
         // Transaction failed (e.g., reverted on-chain) - log and gracefully stop this cycle
         // The cron job will retry on the next scheduled run
@@ -417,6 +426,31 @@ export const pollCycleNode = async (
           },
         });
 
+        let accountingState = state.view.accounting;
+        try {
+          const snapshot = await createCamelotAccountingSnapshot({
+            state,
+            camelotClient,
+            trigger: 'cycle',
+            threadId,
+            cycle: iteration,
+          });
+          if (snapshot) {
+            accountingState = applyAccountingUpdate({
+              existing: accountingState,
+              snapshots: [snapshot],
+            });
+          }
+        } catch (accountingError: unknown) {
+          const message =
+            accountingError instanceof Error
+              ? accountingError.message
+              : typeof accountingError === 'string'
+                ? accountingError
+                : 'Unknown accounting error';
+          logInfo('Accounting snapshot failed after execution error', { iteration, error: message });
+        }
+
         // Return gracefully - don't throw. The cron job will run the next cycle.
         return new Command({
           update: {
@@ -437,6 +471,7 @@ export const pollCycleNode = async (
               transactionHistory: state.view.transactionHistory,
               profile: state.view.profile,
               executionError: errorMessage, // Store error for debugging/display
+              accounting: accountingState,
             },
             private: {
               cronScheduled,
@@ -526,6 +561,66 @@ export const pollCycleNode = async (
           timestamp: cycleTelemetry.timestamp,
         };
 
+  let accountingState = state.view.accounting;
+  try {
+    const contextId = resolveAccountingContextId({ state, threadId });
+    const flowEvents =
+      contextId && executionFlowEvents.length > 0
+        ? executionFlowEvents.map((event) =>
+            createFlowEvent({
+              ...event,
+              contextId,
+              transactionHash: event.transactionHash ?? (txHash as `0x${string}` | undefined),
+            }),
+          )
+        : [];
+
+    if (!contextId && executionFlowEvents.length > 0) {
+      logInfo('Accounting flow events skipped: missing threadId', { iteration });
+    }
+
+    if (flowEvents.length > 0) {
+      accountingState = applyAccountingUpdate({
+        existing: accountingState,
+        flowEvents,
+      });
+    }
+
+    const baseSnapshot = await createCamelotAccountingSnapshot({
+      state,
+      camelotClient,
+      trigger: 'cycle',
+      threadId,
+      cycle: iteration,
+      flowLog: accountingState.flowLog,
+    });
+
+    if (baseSnapshot) {
+      const snapshots = [baseSnapshot];
+      if (txHash) {
+        snapshots.push(
+          cloneSnapshotForTrigger({
+            snapshot: baseSnapshot,
+            trigger: 'transaction',
+            transactionHash: txHash as `0x${string}`,
+          }),
+        );
+      }
+      accountingState = applyAccountingUpdate({
+        existing: accountingState,
+        snapshots,
+      });
+    }
+  } catch (accountingError: unknown) {
+    const message =
+      accountingError instanceof Error
+        ? accountingError.message
+        : typeof accountingError === 'string'
+          ? accountingError
+          : 'Unknown accounting error';
+    logInfo('Accounting snapshot failed during poll cycle', { iteration, error: message });
+  }
+
   return new Command({
     update: {
       view: {
@@ -546,6 +641,7 @@ export const pollCycleNode = async (
           ? [...state.view.transactionHistory, transactionEntry]
           : state.view.transactionHistory,
         profile: state.view.profile,
+        accounting: accountingState,
       },
       private: {
         cronScheduled,

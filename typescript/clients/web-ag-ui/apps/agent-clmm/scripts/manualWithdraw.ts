@@ -1,14 +1,14 @@
 import { privateKeyToAccount } from 'viem/accounts';
 
-import { createClients } from '../src/clients.js';
+import { createClients } from '../src/clients/clients.js';
 import { ARBITRUM_CHAIN_ID, EMBER_API_BASE_URL } from '../src/constants.js';
 import {
   EmberCamelotClient,
   type ClmmWithdrawRequest,
   type TransactionInformation,
 } from '../src/emberApi.js';
-import { executeTransaction } from '../src/transaction.js';
-import type { WalletPosition } from '../src/types.js';
+import { executeTransaction } from '../src/core/transaction.js';
+import type { WalletPosition } from '../src/domain/types.js';
 
 type WithdrawContext = {
   account: ReturnType<typeof privateKeyToAccount>;
@@ -38,10 +38,13 @@ async function main() {
 
   const payload: ClmmWithdrawRequest = {
     walletAddress: context.walletAddress,
-    poolTokenUid: {
-      address: target.poolAddress,
-      chainId: context.chainId.toString(),
-    },
+    poolTokenUid: (
+      await client.resolvePoolPositions({
+        walletAddress: context.walletAddress,
+        chainId: context.chainId,
+        poolAddress: target.poolAddress,
+      })
+    ).poolTokenUid,
   };
 
   const plan = await client.requestWithdrawal(payload);
