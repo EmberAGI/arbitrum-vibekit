@@ -175,11 +175,6 @@ export async function executeDecision({
     chainId: chainIdString,
     address: pool.address,
   };
-
-  const withdrawPayload: ClmmWithdrawRequest = {
-    walletAddress,
-    poolTokenUid: poolIdentifier,
-  };
   let lastTxHash: string | undefined;
   let totalGasSpentWei: bigint | undefined;
   const flowEvents: FlowLogEventInput[] = [];
@@ -222,6 +217,15 @@ export async function executeDecision({
     action.kind === 'exit-range' ||
     action.kind === 'compound-fees'
   ) {
+    const resolvedPoolTokenUid = await camelotClient.resolvePoolTokenUid({
+      walletAddress,
+      chainId: ARBITRUM_CHAIN_ID,
+      poolAddress: normalizeHexAddress(pool.address, 'pool address'),
+    });
+    const withdrawPayload: ClmmWithdrawRequest = {
+      walletAddress,
+      poolTokenUid: resolvedPoolTokenUid,
+    };
     const withdrawalOutcome = await executeWithdrawalPlans({
       camelotClient,
       withdrawPayload,

@@ -124,6 +124,7 @@ const PoolIdentifierSchema = z.object({
   chainId: z.string(),
   address: HexPrefixedStringSchema,
 });
+export type PoolIdentifier = z.infer<typeof PoolIdentifierSchema>;
 
 const ClmmRangeSchema = z.union([
   z.object({
@@ -288,6 +289,34 @@ export class EmberCamelotClient {
       }));
   }
 
+  async resolvePoolTokenUid(params: {
+    walletAddress: `0x${string}`;
+    chainId: number;
+    poolAddress: `0x${string}`;
+  }): Promise<PoolIdentifier> {
+    const normalizedPool = normalizeAddress(params.poolAddress);
+    const positions = await this.listWalletPositionUids(params.walletAddress, params.chainId);
+    const direct = positions.find(
+      (position) => position.poolTokenUid.address.toLowerCase() === normalizedPool.toLowerCase(),
+    );
+    if (direct) {
+      return direct.poolTokenUid;
+    }
+
+    const resolved = positions.find((position) => {
+      const fromProvider = tryExtractPoolAddressFromProviderId(position.providerId);
+      return fromProvider?.toLowerCase() === normalizedPool.toLowerCase();
+    });
+    if (resolved) {
+      return resolved.poolTokenUid;
+    }
+
+    const available = positions.map((position) => position.poolTokenUid.address).join(', ');
+    throw new Error(
+      `No Ember poolTokenUid found for pool ${normalizedPool} on chain ${params.chainId}. Available=${available || 'none'}`,
+    );
+  }
+
   async requestRebalance(payload: ClmmRebalanceRequest): Promise<ClmmRebalanceResponse> {
     const body = await this.fetchEndpoint<ClmmRebalanceResponse>(
       `/liquidity/supply`,
@@ -354,6 +383,17 @@ export function normalizePool(pool: CamelotPool) {
 function normalizeAddress(address: string): `0x${string}` {
   const normalized = address.startsWith('0x') ? address : `0x${address}`;
   return normalized.toLowerCase() as `0x${string}`;
+}
+
+function tryExtractPoolAddressFromProviderId(providerId: string | null): `0x${string}` | null {
+  if (!providerId) {
+    return null;
+  }
+  const match = providerId.match(/_?(0x[0-9a-fA-F]{40})_?/u);
+  if (!match?.[1]) {
+    return null;
+  }
+  return match[1].toLowerCase() as `0x${string}`;
 }
 
 function priceToTick(price: number, decimalsDiff: number): number {
