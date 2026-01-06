@@ -643,19 +643,33 @@ export async function main() {
         delegationIntents: result.delegationIntents,
         transactions: result.normalizedTransactions,
       });
-      console.info(`demo/liquidity: redeem+execute broadcast txHash=${execution.txHash}`);
       console.info(
-        stringifyWithBigints({
-          message: "demo/liquidity: redeem+execute receipt",
-          group: group.label,
-          status: execution.receipt.status,
-          blockNumber: execution.receipt.blockNumber,
-          transactionIndex: execution.receipt.transactionIndex,
-          gasUsed: execution.receipt.gasUsed,
-          effectiveGasPrice: execution.receipt.effectiveGasPrice,
-          logs: execution.receipt.logs.length,
-        }),
+        `demo/liquidity: redeem+execute broadcast txHashes=${execution.txHashes.join(",")}`,
       );
+      execution.receipts.forEach((receipt, index) => {
+        console.info(
+          stringifyWithBigints({
+            message: "demo/liquidity: redeem+execute receipt",
+            group: group.label,
+            segment: index + 1,
+            status: receipt.status,
+            blockNumber: receipt.blockNumber,
+            transactionIndex: receipt.transactionIndex,
+            gasUsed: receipt.gasUsed,
+            effectiveGasPrice: receipt.effectiveGasPrice,
+            logs: receipt.logs.length,
+          }),
+        );
+      });
+      if (execution.gasSpentWei !== undefined) {
+        console.info(
+          stringifyWithBigints({
+            message: "demo/liquidity: redeem+execute gas summary",
+            group: group.label,
+            gasSpentWei: execution.gasSpentWei,
+          }),
+        );
+      }
     };
 
     // Persist an empty file up-front so failures still leave a "fresh run" artifact for inspection.

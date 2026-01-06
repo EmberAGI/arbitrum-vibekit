@@ -771,16 +771,13 @@ async function executePlanTransactions({
   delegationBundle?: DelegationBundle;
 }): Promise<{ lastHash?: string; gasSpentWei?: bigint }> {
   if (delegationBundle) {
-    const { txHash, receipt } = await redeemDelegationsAndExecuteTransactions({
+    const { txHashes, gasSpentWei } = await redeemDelegationsAndExecuteTransactions({
       clients,
       delegationBundle,
       transactions: plan.transactions,
     });
-    const gasSpentWei =
-      receipt.gasUsed !== undefined && receipt.effectiveGasPrice !== undefined
-        ? receipt.gasUsed * receipt.effectiveGasPrice
-        : undefined;
-    return { lastHash: txHash, gasSpentWei };
+    const lastHash = txHashes.at(-1);
+    return { lastHash, gasSpentWei };
   }
 
   let lastHash: string | undefined;
