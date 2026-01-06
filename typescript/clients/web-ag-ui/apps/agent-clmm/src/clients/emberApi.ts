@@ -183,6 +183,11 @@ export type EmberWalletPositionUid = {
   providerId: string;
 };
 
+export type ResolvedPoolPositions = {
+  poolTokenUid: PoolIdentifier;
+  positionCount: number;
+};
+
 export class EmberCamelotClient {
   constructor(private readonly baseUrl: string) {}
 
@@ -289,26 +294,26 @@ export class EmberCamelotClient {
       }));
   }
 
-  async resolvePoolTokenUid(params: {
+  async resolvePoolPositions(params: {
     walletAddress: `0x${string}`;
     chainId: number;
     poolAddress: `0x${string}`;
-  }): Promise<PoolIdentifier> {
+  }): Promise<ResolvedPoolPositions> {
     const normalizedPool = normalizeAddress(params.poolAddress);
     const positions = await this.listWalletPositionUids(params.walletAddress, params.chainId);
-    const direct = positions.find(
+    const direct = positions.filter(
       (position) => position.poolTokenUid.address.toLowerCase() === normalizedPool.toLowerCase(),
     );
-    if (direct) {
-      return direct.poolTokenUid;
+    if (direct.length > 0) {
+      return { poolTokenUid: direct[0].poolTokenUid, positionCount: direct.length };
     }
 
-    const resolved = positions.find((position) => {
+    const resolved = positions.filter((position) => {
       const fromProvider = tryExtractPoolAddressFromProviderId(position.providerId);
       return fromProvider?.toLowerCase() === normalizedPool.toLowerCase();
     });
-    if (resolved) {
-      return resolved.poolTokenUid;
+    if (resolved.length > 0) {
+      return { poolTokenUid: resolved[0].poolTokenUid, positionCount: resolved.length };
     }
 
     const available = positions.map((position) => position.poolTokenUid.address).join(', ');

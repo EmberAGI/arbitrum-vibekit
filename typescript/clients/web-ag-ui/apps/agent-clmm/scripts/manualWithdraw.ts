@@ -38,11 +38,13 @@ async function main() {
 
   const payload: ClmmWithdrawRequest = {
     walletAddress: context.walletAddress,
-    poolTokenUid: await client.resolvePoolTokenUid({
-      walletAddress: context.walletAddress,
-      chainId: context.chainId,
-      poolAddress: target.poolAddress,
-    }),
+    poolTokenUid: (
+      await client.resolvePoolPositions({
+        walletAddress: context.walletAddress,
+        chainId: context.chainId,
+        poolAddress: target.poolAddress,
+      })
+    ).poolTokenUid,
   };
 
   const plan = await client.requestWithdrawal(payload);

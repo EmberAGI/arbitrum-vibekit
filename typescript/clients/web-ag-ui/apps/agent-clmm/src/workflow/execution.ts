@@ -217,20 +217,21 @@ export async function executeDecision({
     action.kind === 'exit-range' ||
     action.kind === 'compound-fees'
   ) {
-    const resolvedPoolTokenUid = await camelotClient.resolvePoolTokenUid({
+    const resolvedPoolPositions = await camelotClient.resolvePoolPositions({
       walletAddress,
       chainId: ARBITRUM_CHAIN_ID,
       poolAddress: normalizeHexAddress(pool.address, 'pool address'),
     });
     const withdrawPayload: ClmmWithdrawRequest = {
       walletAddress,
-      poolTokenUid: resolvedPoolTokenUid,
+      poolTokenUid: resolvedPoolPositions.poolTokenUid,
     };
     const withdrawalOutcome = await executeWithdrawalPlans({
       camelotClient,
       withdrawPayload,
       clients,
       delegationBundle: delegationsBypassActive ? undefined : delegationBundle,
+      positionCount: resolvedPoolPositions.positionCount,
     });
     lastTxHash = withdrawalOutcome.lastHash;
     if (withdrawalOutcome.gasSpentWei !== undefined) {
@@ -699,18 +700,24 @@ async function executeWithdrawalPlans({
   withdrawPayload,
   clients,
   delegationBundle,
+  positionCount,
 }: {
   camelotClient: EmberCamelotClient;
   withdrawPayload: ClmmWithdrawRequest;
   clients: ReturnType<typeof createClients>;
   delegationBundle?: DelegationBundle;
+  positionCount?: number;
 }): Promise<{ lastHash?: string; gasSpentWei?: bigint }> {
   let lastHash: string | undefined;
   let totalGasSpentWei: bigint | undefined;
+  const maxPlans =
+    typeof positionCount === 'number' && Number.isFinite(positionCount)
+      ? Math.max(0, Math.floor(positionCount))
+      : Number.POSITIVE_INFINITY;
 
-  // Keep requesting withdrawal plans until the provider reports no further transactions.
-  // This allows multi-step withdrawals (e.g. unwind, collect, etc.) without changing thread state.
-  for (let planIndex = 0; ; planIndex += 1) {
+  // Request one withdrawal plan per active pool position (Ember returns a single-position plan).
+  // Stop early if Ember reports no further transactions.
+  for (let planIndex = 0; planIndex < maxPlans; planIndex += 1) {
     let plan: Awaited<ReturnType<EmberCamelotClient['requestWithdrawal']>> | undefined;
     for (let attempt = 0; attempt < MAX_WITHDRAW_ATTEMPTS; attempt += 1) {
       try {
@@ -750,6 +757,8 @@ async function executeWithdrawalPlans({
       totalGasSpentWei = (totalGasSpentWei ?? 0n) + outcome.gasSpentWei;
     }
   }
+
+  return { lastHash, gasSpentWei: totalGasSpentWei };
 }
 
 async function executePlanTransactions({
