@@ -269,20 +269,39 @@ const mergePrivateState = (
   bootstrapped: right?.bootstrapped ?? left.bootstrapped ?? false,
 });
 
+const mergeAppendOrReplace = <T>(left: T[], right?: T[]): T[] => {
+  if (!right) {
+    return left;
+  }
+  if (right.length === 0) {
+    return left;
+  }
+  if (right === left) {
+    return left;
+  }
+  if (right.length >= left.length) {
+    let isPrefix = true;
+    for (let index = 0; index < left.length; index += 1) {
+      if (right[index] !== left[index]) {
+        isPrefix = false;
+        break;
+      }
+    }
+    if (isPrefix) {
+      return right;
+    }
+  }
+  return [...left, ...right];
+};
+
 const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): ClmmViewState => {
   if (!right) {
     return left;
   }
 
-  const nextTelemetry = right.activity?.telemetry
-    ? [...left.activity.telemetry, ...right.activity.telemetry]
-    : left.activity.telemetry;
-  const nextEvents = right.activity?.events
-    ? [...left.activity.events, ...right.activity.events]
-    : left.activity.events;
-  const nextTransactions = right.transactionHistory
-    ? [...left.transactionHistory, ...right.transactionHistory]
-    : left.transactionHistory;
+  const nextTelemetry = mergeAppendOrReplace(left.activity.telemetry, right.activity?.telemetry);
+  const nextEvents = mergeAppendOrReplace(left.activity.events, right.activity?.events);
+  const nextTransactions = mergeAppendOrReplace(left.transactionHistory, right.transactionHistory);
   const nextProfile: ClmmProfile = {
     agentIncome: right.profile?.agentIncome ?? left.profile.agentIncome,
     aum: right.profile?.aum ?? left.profile.aum,
@@ -304,12 +323,11 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     latestCycle: right.metrics?.latestCycle ?? left.metrics.latestCycle,
   };
   const nextAccounting: ClmmAccounting = {
-    navSnapshots: right.accounting?.navSnapshots
-      ? [...left.accounting.navSnapshots, ...right.accounting.navSnapshots]
-      : left.accounting.navSnapshots,
-    flowLog: right.accounting?.flowLog
-      ? [...left.accounting.flowLog, ...right.accounting.flowLog]
-      : left.accounting.flowLog,
+    navSnapshots: mergeAppendOrReplace(
+      left.accounting.navSnapshots,
+      right.accounting?.navSnapshots,
+    ),
+    flowLog: mergeAppendOrReplace(left.accounting.flowLog, right.accounting?.flowLog),
     latestNavSnapshot: right.accounting?.latestNavSnapshot ?? left.accounting.latestNavSnapshot,
     lastUpdated: right.accounting?.lastUpdated ?? left.accounting.lastUpdated,
     lifecycleStart: right.accounting?.lifecycleStart ?? left.accounting.lifecycleStart,
