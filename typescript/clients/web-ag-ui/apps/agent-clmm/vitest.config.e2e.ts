@@ -13,8 +13,5 @@ export default defineConfig({
     hookTimeout: 60_000,
     maxConcurrency: 1,
     minWorkers: 1,
-    typecheck: {
-      tsconfig: './tsconfig.vitest.json',
-    },
   },
 });
