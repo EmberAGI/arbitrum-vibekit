@@ -24,7 +24,7 @@ const runtime = new CopilotRuntime({
       langsmithApiKey: process.env.LANGSMITH_API_KEY || "",
     }),
     [GMX_AGENT_NAME]: new LangGraphAgent({
-      deploymentUrl: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8124", /// TODO: GMX Agent setup
+      deploymentUrl: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8125", /// TODO: GMX Agent setup
       graphId: GMX_AGENT_NAME,
       langsmithApiKey: process.env.LANGSMITH_API_KEY || "",
     }),
