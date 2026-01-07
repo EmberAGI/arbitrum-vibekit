@@ -7,6 +7,7 @@ import type { TransactionInformation } from '../clients/emberApi.js';
 import {
   EmberEvmTransactionSchema,
   normalizeAndExpandTransactions,
+  summarizeNormalizedTransactions,
   txMatchesDelegationIntent,
 } from '../delegations/emberDelegations.js';
 import { logInfo, type DelegationBundle } from '../workflow/context.js';
@@ -65,6 +66,15 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
 
   const emberTxs = EmberEvmTransactionSchema.array().parse(params.transactions);
   const normalization = normalizeAndExpandTransactions({ transactions: emberTxs });
+  const normalizedSummary = summarizeNormalizedTransactions({
+    chainId: normalization.chainId,
+    transactions: normalization.normalizedTransactions,
+  });
+  logInfo(
+    'Delegated execution normalized calls',
+    { callCount: normalizedSummary.length, calls: normalizedSummary },
+    { detailed: true },
+  );
 
   if (normalization.chainId !== params.delegationBundle.chainId) {
     throw new Error(

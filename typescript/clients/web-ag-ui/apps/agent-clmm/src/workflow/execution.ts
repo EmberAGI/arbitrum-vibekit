@@ -363,6 +363,11 @@ export async function executeDecision({
             response = await camelotClient.requestSwap(exactInRequest);
             executedRequest = exactInRequest;
           }
+          logInfo(
+            'Ember swap plan (raw)',
+            { request: summarizeSwapRequest(executedRequest), transactions: response.transactions },
+            { detailed: true },
+          );
           recordSwapEvent(executedRequest);
           swapTransactions.push(...response.transactions);
         };
@@ -394,6 +399,11 @@ export async function executeDecision({
             });
             throw error;
           }
+          logInfo(
+            'Ember swap plan (raw)',
+            { request: summarizeSwapRequest(request), transactions: response.transactions },
+            { detailed: true },
+          );
           recordSwapEvent(request);
           swapTransactions.push(...response.transactions);
         };
@@ -512,6 +522,11 @@ export async function executeDecision({
                 });
                 throw error;
               }
+              logInfo(
+                'Ember swap plan (raw)',
+                { request: summarizeSwapRequest(request), transactions: response.transactions },
+                { detailed: true },
+              );
               recordSwapEvent(request);
               swapTransactions.push(...response.transactions);
             }
@@ -579,6 +594,11 @@ export async function executeDecision({
         requestId: rebalancePlan.requestId,
         transactionCount: rebalancePlan.transactions.length,
       });
+      logInfo(
+        'Ember supply plan (raw)',
+        { transactions: rebalancePlan.transactions },
+        { detailed: true },
+      );
 
       const confirmationSnapshot = await fetchPoolSnapshot(
         camelotClient,

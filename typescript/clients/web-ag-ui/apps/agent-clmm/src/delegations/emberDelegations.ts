@@ -153,6 +153,130 @@ function tokenLabel(params: { chainId: number; address: `0x${string}` }): string
   return null;
 }
 
+function isAddress(value: unknown): value is `0x${string}` {
+  return typeof value === 'string' && /^0x[0-9a-fA-F]{40}$/u.test(value);
+}
+
+function formatNumberish(value: unknown): string | null {
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value.toString();
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  return null;
+}
+
+export type NormalizedTransactionSummary = {
+  index: number;
+  to: `0x${string}`;
+  selector: `0x${string}`;
+  value: string;
+  decoded?: {
+    kind: 'erc20-approve' | 'uniswap-v3-exact-input-single';
+    spender?: `0x${string}`;
+    amount?: string;
+    tokenIn?: `0x${string}`;
+    tokenOut?: `0x${string}`;
+    tokenInLabel?: string;
+    tokenOutLabel?: string;
+    recipient?: `0x${string}`;
+    fee?: string;
+    amountIn?: string;
+    amountOutMinimum?: string;
+    deadline?: string;
+  };
+};
+
+export function summarizeNormalizedTransactions(params: {
+  chainId: number;
+  transactions: readonly NormalizedTransaction[];
+}): NormalizedTransactionSummary[] {
+  return params.transactions.map((tx, index) => {
+    const base: NormalizedTransactionSummary = {
+      index,
+      to: tx.to,
+      selector: tx.selector,
+      value: tx.value.toString(),
+    };
+
+    if (tx.selector === SELECTORS.erc20Approve) {
+      try {
+        const decoded = decodeFunctionData({ abi: erc20Abi, data: tx.data });
+        if (decoded.functionName === 'approve') {
+          const spender = decoded.args?.[0];
+          const amount = decoded.args?.[1];
+          base.decoded = {
+            kind: 'erc20-approve',
+            ...(isAddress(spender)
+              ? { spender: spender.toLowerCase() as `0x${string}` }
+              : {}),
+            ...(formatNumberish(amount) ? { amount: formatNumberish(amount) ?? undefined } : {}),
+          };
+        }
+      } catch {
+        return base;
+      }
+    }
+
+    if (tx.selector === SELECTORS.uniswapV3ExactInputSingle) {
+      try {
+        const decoded = decodeFunctionData({ abi: UNISWAP_V3_ROUTER_ABI, data: tx.data });
+        if (decoded.functionName === 'exactInputSingle') {
+          const paramsObject = decoded.args?.[0];
+          if (typeof paramsObject === 'object' && paramsObject !== null) {
+            const tuple = paramsObject as {
+              tokenIn?: unknown;
+              tokenOut?: unknown;
+              fee?: unknown;
+              recipient?: unknown;
+              amountIn?: unknown;
+              amountOutMinimum?: unknown;
+              deadline?: unknown;
+            };
+            const tokenIn = isAddress(tuple.tokenIn)
+              ? (tuple.tokenIn.toLowerCase() as `0x${string}`)
+              : undefined;
+            const tokenOut = isAddress(tuple.tokenOut)
+              ? (tuple.tokenOut.toLowerCase() as `0x${string}`)
+              : undefined;
+            const recipient = isAddress(tuple.recipient)
+              ? (tuple.recipient.toLowerCase() as `0x${string}`)
+              : undefined;
+            const tokenInLabel = tokenIn ? tokenLabel({ chainId: params.chainId, address: tokenIn }) : null;
+            const tokenOutLabel = tokenOut ? tokenLabel({ chainId: params.chainId, address: tokenOut }) : null;
+            base.decoded = {
+              kind: 'uniswap-v3-exact-input-single',
+              ...(tokenIn ? { tokenIn } : {}),
+              ...(tokenOut ? { tokenOut } : {}),
+              ...(tokenInLabel ? { tokenInLabel } : {}),
+              ...(tokenOutLabel ? { tokenOutLabel } : {}),
+              ...(recipient ? { recipient } : {}),
+              ...(formatNumberish(tuple.fee) ? { fee: formatNumberish(tuple.fee) ?? undefined } : {}),
+              ...(formatNumberish(tuple.amountIn)
+                ? { amountIn: formatNumberish(tuple.amountIn) ?? undefined }
+                : {}),
+              ...(formatNumberish(tuple.amountOutMinimum)
+                ? { amountOutMinimum: formatNumberish(tuple.amountOutMinimum) ?? undefined }
+                : {}),
+              ...(formatNumberish(tuple.deadline)
+                ? { deadline: formatNumberish(tuple.deadline) ?? undefined }
+                : {}),
+            };
+          }
+        }
+      } catch {
+        return base;
+      }
+    }
+
+    return base;
+  });
+}
+
 function describeDelegationIntentForUser(params: { chainId: number; intent: DelegationIntent }): string {
   const selector = params.intent.selector.toLowerCase() as `0x${string}`;
   const target = params.intent.target.toLowerCase() as `0x${string}`;
