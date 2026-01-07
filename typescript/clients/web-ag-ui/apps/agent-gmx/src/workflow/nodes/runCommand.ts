@@ -12,6 +12,7 @@ type CommandTarget =
   | 'hireCommand'
   | 'fireCommand'
   | 'pollCommand'
+  | 'bootstrap'
   | 'openPositionCommand'
   | 'closePositionCommand'
   | 'holdPositionCommand'
@@ -76,13 +77,13 @@ export function resolveCommandTarget({ messages, private: priv, view }: GMXState
     case 'fire':
       return 'fireCommand';
     case 'poll':
-      return 'pollCommand';
+      return priv.bootstrapped ? 'pollCommand' : 'bootstrap';
     case 'openPosition':
-      return 'openPositionCommand';
+      return priv.bootstrapped ? 'openPositionCommand' : 'bootstrap';
     case 'closePosition':
-      return 'closePositionCommand';
+      return priv.bootstrapped ? 'closePositionCommand' : 'bootstrap';
     case 'holdPosition':
-      return 'holdPositionCommand';
+      return priv.bootstrapped ? 'holdPositionCommand' : 'bootstrap';
     default:
       return '__end__';
   }
