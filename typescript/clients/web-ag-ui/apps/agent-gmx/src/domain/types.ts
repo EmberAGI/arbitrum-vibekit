@@ -41,6 +41,36 @@ export const DecreaseSwapTypeSchema = z.union([
 
 export type DecreaseSwapType = z.infer<typeof DecreaseSwapTypeSchema>;
 
+/*
+interface GMXOrderParams {
+  // Basic params
+  orderType: OrderType;
+  direction: PositionDirection;
+  sizeDeltaUsd: bigint; // in USD with 30 decimals
+  acceptablePrice: bigint; // price bound with 30 decimals
+
+  // Token params
+  collateralToken: string;
+  collateralAmount: bigint; // token amount with appropriate decimals
+
+  // Market
+  marketAddress: string;
+
+  // Fees
+  executionFee: bigint; // in native token (ETH)
+
+  // Optional
+  isLong?: boolean;
+  swapPath?: string[];
+  callbackContract?: string;
+  uiFeeReceiver?: string;
+  minOutputAmount?: bigint; // For swaps and decrease orders
+  triggerPrice?: bigint; // For limit/stop orders
+  decreasePositionSwapType?: DecreaseSwapType; // For decrease orders
+  shouldUnwrapNativeToken?: boolean; // For ETH unwrapping
+}
+
+*/
 export const GMXOrderParamsSchema = z.object({
   orderType: OrderTypeSchema,
   direction: PositionDirectionSchema,
