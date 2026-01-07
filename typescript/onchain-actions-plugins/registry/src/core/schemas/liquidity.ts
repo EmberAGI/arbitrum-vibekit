@@ -47,6 +47,7 @@ export const LiquidityPoolSchema = z.object({
   tokens: z.array(LiquidityPoolTokens),
   price: z.string(),
   providerId: z.string(),
+  tickSpacing: z.number().int().optional(),
 });
 export type LiquidityPool = z.infer<typeof LiquidityPoolSchema>;
 
