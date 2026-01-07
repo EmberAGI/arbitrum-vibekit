@@ -24,18 +24,13 @@ export const openPositionCommandNode = async (
     'working',
     `[GMX-Agent] Starting Polling for GMX Market(s)`,
   );
-  const trades: GMXTradeLog = [];
+  console.log(`📈[GMX Agent :: Open Position]\n`, state.view.profile);
 
   return new Command({
     goto: 'pollPosition',
     update: {
       view: {
-        profile: {
-          markets: [], /// TODO: add markets here
-          tokens: [], /// TODO: add tokens here
-        },
         task,
-        trades,
       },
       private: {
         mode,
