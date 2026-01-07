@@ -4,8 +4,8 @@ import {
   AUTO_COMPOUND_COST_RATIO,
   DEFAULT_MIN_TVL_USD,
   DEFAULT_REBALANCE_THRESHOLD_PCT,
-  DEFAULT_TICK_BANDWIDTH_BPS,
   VOLATILE_TICK_BANDWIDTH_BPS,
+  resolveTickBandwidthBps,
 } from '../config/constants.js';
 import type {
   CamelotPool,
@@ -119,7 +119,7 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
   const decimalsDiff = ctx.pool.token0.decimals - ctx.pool.token1.decimals;
   const bandwidthBps =
     ctx.tickBandwidthBps ??
-    (ctx.volatilityPct >= 1.0 ? VOLATILE_TICK_BANDWIDTH_BPS : DEFAULT_TICK_BANDWIDTH_BPS);
+    (ctx.volatilityPct >= 1.0 ? VOLATILE_TICK_BANDWIDTH_BPS : resolveTickBandwidthBps());
   const targetRange = buildRange(ctx.midPrice, bandwidthBps, ctx.pool.tickSpacing, decimalsDiff);
   const exitUnsafePool = shouldExit(ctx.pool);
 
@@ -141,6 +141,15 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
     return {
       kind: 'exit-range',
       reason: 'Pool TVL below safety threshold',
+    };
+  }
+
+  const targetWidth = targetRange.upperTick - targetRange.lowerTick;
+  const positionWidth = ctx.position.tickUpper - ctx.position.tickLower;
+  if (positionWidth !== targetWidth) {
+    return {
+      kind: 'exit-range',
+      reason: 'Active range width differs from target bandwidth; exiting to refresh next cycle',
     };
   }
 

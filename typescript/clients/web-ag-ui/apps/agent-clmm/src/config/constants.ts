@@ -34,6 +34,15 @@ export function resolvePollIntervalMs(): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_POLL_INTERVAL_MS;
 }
 
+export function resolveTickBandwidthBps(): number {
+  const raw = process.env['CLMM_TICK_BANDWIDTH_BPS'];
+  if (!raw) {
+    return DEFAULT_TICK_BANDWIDTH_BPS;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TICK_BANDWIDTH_BPS;
+}
+
 export function resolveStreamLimit(): number {
   const raw = process.env['CLMM_STREAM_LIMIT'];
   if (!raw) {

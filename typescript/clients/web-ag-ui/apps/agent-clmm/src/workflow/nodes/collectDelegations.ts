@@ -459,7 +459,7 @@ export const collectDelegationsNode = async (
     const targetRange = buildRange(
       midPrice,
       DEFAULT_TICK_BANDWIDTH_BPS,
-      selectedPool.tickSpacing ?? 60,
+      selectedPool.tickSpacing ?? 10,
       decimalsDiff,
     );
     const request: ClmmRebalanceRequest = {

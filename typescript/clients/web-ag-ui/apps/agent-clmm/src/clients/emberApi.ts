@@ -369,7 +369,7 @@ export async function fetchPoolSnapshot(
 }
 
 export function normalizePool(pool: CamelotPool) {
-  const tickSpacing = pool.tickSpacing ?? 60;
+  const tickSpacing = pool.tickSpacing ?? 10;
   const tick = pool.tick;
   const liquidity = BigInt(pool.liquidity);
   const token0Usd = pool.token0.usdPrice ?? 0;
@@ -469,7 +469,7 @@ function toCamelotPool(pool: EmberLiquidityPool): CamelotPool | undefined {
       symbol: token1Raw.symbol,
       decimals: token1Raw.decimals,
     },
-    tickSpacing: 60,
+    tickSpacing: pool.tickSpacing ?? 10,
     tick,
     liquidity: '0',
   });
