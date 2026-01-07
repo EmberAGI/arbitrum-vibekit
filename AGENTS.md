@@ -168,8 +168,9 @@ export const newName = () => {
 
 ### Pull Request Workflow
 
-- **All changes must be merged via PR** - direct commits to main are not allowed
-- Create a new branch and draft PR together before making changes
+- **All changes must be merged via PR** - direct merges into `main` or `next` are not allowed
+- Do not automatically create a branch or PR; only do so when explicitly requested
+- When creating a PR, target `next` if it exists in the repo; otherwise target `main`
 - Use descriptive branch names (e.g., `feature/add-swap-adapter`, `fix/token-query-bug`)
 - Keep PRs focused on a single feature or fix
 - Update PR description with summary and test plan before marking ready for review
