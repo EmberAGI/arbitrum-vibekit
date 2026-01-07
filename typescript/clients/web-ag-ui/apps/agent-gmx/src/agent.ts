@@ -20,6 +20,7 @@ import { openPositionCommandNode } from './workflow/nodes/openPosition.js';
 import { closePositionCommandNode } from './workflow/nodes/closePosition.js';
 
 import { resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
+import { saveBootstrapContext } from './workflow/store.js';
 
 const store = new InMemoryStore();
 
@@ -31,6 +32,8 @@ if (!rawAgentPrivateKey) {
 const agentPrivateKey = normalizeHexAddress(rawAgentPrivateKey, 'agent private key');
 const account = privateKeyToAccount(agentPrivateKey);
 const agentWalletAddress = normalizeHexAddress(account.address, 'agent wallet address');
+
+await saveBootstrapContext({ privateKey: agentPrivateKey, agentWalletAddress }, store);
 
 const workflow = new StateGraph(GMXStateAnnotation)
   .addNode('runCommand', runCommandNode)
