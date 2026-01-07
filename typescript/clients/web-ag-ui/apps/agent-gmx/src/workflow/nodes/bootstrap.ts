@@ -62,8 +62,23 @@ export const bootstrapNode = async (
       streamLimit,
     },
     view: {
-      //   activity: { events: [dispatch], telemetry: [] },
-
+      activity: { events: [dispatch], telemetry: [] },
+      profile: {
+        agentIncome: 3250,
+        aum: 15000,
+        totalUsers: 10,
+        apy: 112,
+        chains: ['Arbitrum One'],
+        protocols: ['GMX'],
+        allowedTokens: ['WETH', 'USDC'],
+        allowedMarkets: [
+          {
+            marketToken: '0x70d95587d40A2caf56bd97485aB3Eec10Bee6336',
+            longToken: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
+            shortToken: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+          },
+        ],
+      },
       command: undefined,
       task: undefined,
       lastOrder: undefined,
@@ -72,21 +87,6 @@ export const bootstrapNode = async (
       delegationBundle: undefined,
       haltReason: undefined,
       executionError: undefined,
-      profile: {
-        agentIncome: 3250,
-        aum: 15000,
-        totalUsers: 10,
-        apy: 112,
-        chains: ['Arbitrum One'],
-        protocols: ['GMX'],
-        tokens: ['WETH', 'USDC'],
-        markets: [
-          {
-            longToken: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
-            shortToken: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
-          },
-        ],
-      },
       delegationsBypassActive,
     },
   };

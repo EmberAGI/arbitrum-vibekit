@@ -45,14 +45,6 @@ export type GMXPositionView = {
   unrealizedPnlUsd?: string;
 };
 
-export type GMXTradeLog = {
-  action: 'open-position' | 'close-position';
-  txHash?: string;
-  sizeUsd?: string;
-  direction?: PositionDirection;
-  reason: string;
-  timestamp: string;
-};
 /* ============================
    UI State
    ============================ */
@@ -62,6 +54,7 @@ export type Task = {
   taskStatus: TaskStatus;
 };
 export type GMXMarket = {
+  marketToken: `0x${string}`;
   longToken: `0x${string}`;
   shortToken: `0x${string}`;
 };
@@ -72,8 +65,81 @@ export type GMXProfile = {
   apy?: number;
   chains?: string[];
   protocols?: string[];
-  tokens?: string[];
-  markets: GMXMarket[];
+  allowedTokens?: string[];
+  allowedMarkets?: GMXMarket[];
+};
+
+export type GMXAction =
+  | {
+      kind: 'hold';
+      reason: string;
+    }
+  | {
+      kind: 'open-position';
+      reason: string;
+      marketAddress: `0x${string}`;
+      direction: PositionDirection;
+      sizeUsd: string;
+      leverage: string;
+      collateralToken: `0x${string}`;
+    }
+  | {
+      kind: 'close-position';
+      reason: string;
+      marketAddress: `0x${string}`;
+    };
+
+//   {
+//       kind: 'increase-position';
+//       reason: string;
+//       marketAddress: `0x${string}`;
+//       sizeUsd: string;
+//     }
+//   | {
+//       kind: 'decrease-position';
+//       reason: string;
+//       marketAddress: `0x${string}`;
+//       sizeUsd: string;
+//     }
+//
+
+// GMXTradeLog
+export type GMXTradeTelemetry = {
+  cycle: number;
+  txHash?: string;
+
+  marketAddress: `0x${string}`;
+  action: GMXAction['kind'];
+  positionKey?: `0x${string}`;
+  reason: string;
+
+  direction?: PositionDirection; // Long | Short
+  sizeUsd?: string;
+  leverage?: string;
+
+  entryPrice?: string;
+
+  timestamp: string;
+
+  metrics?: {
+    price?: string;
+    fundingRate?: string;
+    openInterestUsd?: string;
+
+    unrealizedPnlUsd?: string;
+    realizedPnlUsd?: string;
+
+    collateralUsd?: string;
+    leverage?: string;
+
+    gasSpentUsd?: number;
+    gasSpentWei?: string;
+  };
+};
+
+export type GMXActivity = {
+  telemetry: GMXTradeTelemetry[];
+  events: GMXEvent[];
 };
 
 export type GMXViewState = {
@@ -86,6 +152,7 @@ export type GMXViewState = {
   haltReason?: string;
   executionError?: string;
   profile: GMXProfile;
+  activity: GMXActivity;
   delegationsBypassActive?: boolean;
 };
 
@@ -160,6 +227,10 @@ const defaultViewState = (): GMXViewState => ({
   delegationBundle: undefined,
   haltReason: undefined,
   executionError: undefined,
+  activity: {
+    telemetry: [],
+    events: [],
+  },
   profile: {
     agentIncome: undefined,
     aum: undefined,
