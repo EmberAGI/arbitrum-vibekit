@@ -191,6 +191,36 @@ export type NormalizedTransactionSummary = {
   };
 };
 
+export type FundAndRunMulticallFunding = {
+  fundingToken: `0x${string}`;
+  fundingAmount: bigint;
+};
+
+export function decodeFundAndRunMulticallFunding(
+  data: `0x${string}`,
+): FundAndRunMulticallFunding | null {
+  if (data.slice(0, 10).toLowerCase() !== MULTICALL_SELECTORS.squidFundAndRunMulticall) {
+    return null;
+  }
+  try {
+    const decoded = decodeFunctionData({ abi: FUND_AND_RUN_MULTICALL_ABI, data });
+    if (decoded.functionName !== 'fundAndRunMulticall') {
+      return null;
+    }
+    const fundingToken = decoded.args?.[0];
+    const fundingAmount = decoded.args?.[1];
+    if (!isAddress(fundingToken) || typeof fundingAmount !== 'bigint') {
+      return null;
+    }
+    return {
+      fundingToken: fundingToken.toLowerCase() as `0x${string}`,
+      fundingAmount,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function summarizeNormalizedTransactions(params: {
   chainId: number;
   transactions: readonly NormalizedTransaction[];
@@ -461,53 +491,10 @@ function expandMulticallIfSupported(tx: NormalizedTransaction): {
   }
 
   if (tx.selector === MULTICALL_SELECTORS.squidFundAndRunMulticall) {
-    const decoded = decodeFunctionData({
-      abi: FUND_AND_RUN_MULTICALL_ABI,
-      data: tx.data,
-    });
-    if (decoded.functionName !== 'fundAndRunMulticall') {
-      return { expanded: [tx], warning: `Unexpected fundAndRunMulticall decode shape for selector=${tx.selector}` };
-    }
-    const callsArg = decoded.args?.[2];
-    if (!Array.isArray(callsArg) || callsArg.length === 0) {
-      return { expanded: [tx], warning: 'fundAndRunMulticall: empty calls array; leaving unexpanded' };
-    }
-
-    const expanded: NormalizedTransaction[] = [];
-    for (const entry of callsArg) {
-      if (
-        typeof entry !== 'object' ||
-        entry === null ||
-        !('target' in entry) ||
-        !('value' in entry) ||
-        !('callData' in entry)
-      ) {
-        return { expanded: [tx], warning: 'fundAndRunMulticall: unexpected call entry shape; leaving unexpanded' };
-      }
-      const target = (entry as { target: unknown }).target;
-      const value = (entry as { value: unknown }).value;
-      const callData = (entry as { callData: unknown }).callData;
-
-      if (typeof target !== 'string' || !/^0x[0-9a-fA-F]{40}$/u.test(target)) {
-        return { expanded: [tx], warning: 'fundAndRunMulticall: invalid target; leaving unexpanded' };
-      }
-      if (typeof callData !== 'string' || !/^0x[0-9a-fA-F]*$/u.test(callData)) {
-        return { expanded: [tx], warning: 'fundAndRunMulticall: invalid callData; leaving unexpanded' };
-      }
-      if (typeof value !== 'bigint') {
-        return { expanded: [tx], warning: 'fundAndRunMulticall: non-bigint value; leaving unexpanded' };
-      }
-
-      const data = callData.toLowerCase() as `0x${string}`;
-      expanded.push({
-        to: target.toLowerCase() as `0x${string}`,
-        data,
-        selector: deriveSelector(data),
-        value,
-        chainId: tx.chainId,
-      });
-    }
-    return { expanded, warning: null };
+    return {
+      expanded: [tx],
+      warning: 'fundAndRunMulticall: leaving unexpanded to preserve atomic routing semantics',
+    };
   }
 
   return {

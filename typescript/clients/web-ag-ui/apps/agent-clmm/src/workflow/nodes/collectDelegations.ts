@@ -1,6 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
-import { parseUnits } from 'viem';
+import { decodeFunctionData, encodeFunctionData, erc20Abi, parseUnits } from 'viem';
 import { z } from 'zod';
 
 import {
@@ -18,6 +18,7 @@ import {
 import { buildRange, deriveMidPrice } from '../../core/decision-engine.js';
 import {
   buildDelegationRequestBundle,
+  decodeFundAndRunMulticallFunding,
   type DelegationIntent,
   EmberEvmTransactionSchema,
   type EmberEvmTransaction,
@@ -43,6 +44,8 @@ type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
   totalSteps: 3,
 };
+
+const MAX_UINT256 = 2n ** 256n - 1n;
 
 const HexSchema = z
   .string()
@@ -128,6 +131,84 @@ function stableTokenDecimals(address: `0x${string}`): number | null {
     default:
       return null;
   }
+}
+
+function buildApproveTransaction(params: {
+  tokenAddress: `0x${string}`;
+  spender: `0x${string}`;
+  chainId: string;
+}): TransactionInformation {
+  const data = encodeFunctionData({
+    abi: erc20Abi,
+    functionName: 'approve',
+    args: [params.spender, MAX_UINT256],
+  });
+  return {
+    type: 'EVM_TX',
+    to: params.tokenAddress,
+    data,
+    value: '0',
+    chainId: params.chainId,
+  };
+}
+
+function hasApproveTransaction(params: {
+  transactions: readonly TransactionInformation[];
+  tokenAddress: `0x${string}`;
+  spender: `0x${string}`;
+}): boolean {
+  const token = params.tokenAddress.toLowerCase();
+  const spender = params.spender.toLowerCase();
+  return params.transactions.some((tx) => {
+    if (tx.to.toLowerCase() !== token) {
+      return false;
+    }
+    if (!tx.data.startsWith('0x095ea7b3')) {
+      return false;
+    }
+    try {
+      const decoded = decodeFunctionData({ abi: erc20Abi, data: tx.data });
+      if (decoded.functionName !== 'approve') {
+        return false;
+      }
+      const decodedSpender = decoded.args?.[0];
+      return (
+        typeof decodedSpender === 'string' &&
+        decodedSpender.toLowerCase() === spender
+      );
+    } catch {
+      return false;
+    }
+  });
+}
+
+function buildFundingApprovalsFromSwapPlan(params: {
+  transactions: readonly TransactionInformation[];
+  chainId: string;
+}): TransactionInformation[] {
+  const approvals: TransactionInformation[] = [];
+  const seen = new Set<string>();
+
+  for (const tx of params.transactions) {
+    const data = tx.data;
+    const funding = decodeFundAndRunMulticallFunding(data);
+    if (!funding) {
+      continue;
+    }
+    const spender = tx.to.toLowerCase() as `0x${string}`;
+    const token = funding.fundingToken.toLowerCase() as `0x${string}`;
+    const key = `${token}:${spender}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    if (hasApproveTransaction({ transactions: params.transactions, tokenAddress: token, spender })) {
+      continue;
+    }
+    approvals.push(buildApproveTransaction({ tokenAddress: token, spender, chainId: params.chainId }));
+  }
+
+  return approvals;
 }
 
 function stableTokenLabel(address: string): string | null {
@@ -368,7 +449,11 @@ export const collectDelegationsNode = async (
 
       try {
         const response = await camelotClient.requestSwap(request);
-        plannedTransactions.push(...asEmberTransactions(response.transactions));
+        const approvals = buildFundingApprovalsFromSwapPlan({
+          transactions: response.transactions,
+          chainId: chainIdString,
+        });
+        plannedTransactions.push(...asEmberTransactions([...approvals, ...response.transactions]));
       } catch (error) {
         if (isKnownEmberSwapUpstream400Error(error)) {
           const fromLabel = tokenLabelForUser({ address: fundingToken, selectedPool });
@@ -407,7 +492,13 @@ export const collectDelegationsNode = async (
       toTokenUid: { chainId: chainIdString, address: selectedPool.token1.address },
     };
     const response = await camelotClient.requestSwap(request);
-    plannedTransactions.push(...asEmberTransactions(response.transactions));
+    {
+      const approvals = buildFundingApprovalsFromSwapPlan({
+        transactions: response.transactions,
+        chainId: chainIdString,
+      });
+      plannedTransactions.push(...asEmberTransactions([...approvals, ...response.transactions]));
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const fromLabel = tokenLabelForUser({ address: selectedPool.token0.address, selectedPool });
@@ -434,7 +525,13 @@ export const collectDelegationsNode = async (
       toTokenUid: { chainId: chainIdString, address: selectedPool.token0.address },
     };
     const response = await camelotClient.requestSwap(request);
-    plannedTransactions.push(...asEmberTransactions(response.transactions));
+    {
+      const approvals = buildFundingApprovalsFromSwapPlan({
+        transactions: response.transactions,
+        chainId: chainIdString,
+      });
+      plannedTransactions.push(...asEmberTransactions([...approvals, ...response.transactions]));
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const fromLabel = tokenLabelForUser({ address: selectedPool.token1.address, selectedPool });
@@ -477,7 +574,13 @@ export const collectDelegationsNode = async (
       ],
     };
     const response = await camelotClient.requestRebalance(request);
-    plannedTransactions.push(...asEmberTransactions(response.transactions));
+    {
+      const approvals = buildFundingApprovalsFromSwapPlan({
+        transactions: response.transactions,
+        chainId: chainIdString,
+      });
+      plannedTransactions.push(...asEmberTransactions([...approvals, ...response.transactions]));
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logInfo('collectDelegations: failed to request supply plan', {
