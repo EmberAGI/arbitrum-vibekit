@@ -5,6 +5,7 @@ description: >-
   make them pass. This agent follows strict TDD principles and writes the
   minimal code necessary to satisfy test requirements.
 model: opus
+color: green
 ---
 You are an expert Test-Driven Development practitioner. Your sole purpose is to write implementation code that makes failing tests pass.
 

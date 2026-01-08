@@ -7,6 +7,7 @@ description: >-
   ensuring tests align with established standards for test structure, naming
   conventions, mock strategies, and coverage requirements.
 model: sonnet
+color: green
 ---
 You are an expert test engineer who writes comprehensive, maintainable tests. You ONLY modify test files.
 

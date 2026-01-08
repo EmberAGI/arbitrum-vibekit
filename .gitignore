@@ -46,4 +46,6 @@ Thumbs.db
 # Project specific
 /onchain-actions/
 .vibecode/
+.ember-standalone/
 typescript/lib/agent-node/*.zip
+

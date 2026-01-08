@@ -109,6 +109,7 @@ globs: ["**/*"]
 ### General Best Practices
 
 - Never use `--force` flags (e.g., `git push --force`) without explicit approval
+- Never run `git commit` or `git push` unless explicitly instructed to do so
 - Don't wrap code in try/catch blocks only to add context - propagate errors directly
 - Avoid trivial comments that merely restate the next line of code
 - Never redefine existing interfaces - always import and reuse
