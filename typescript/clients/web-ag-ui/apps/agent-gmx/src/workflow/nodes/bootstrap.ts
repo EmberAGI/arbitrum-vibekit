@@ -83,7 +83,6 @@ export const bootstrapNode = async (
       task: undefined,
       lastOrder: undefined,
       positions: [],
-      trades: [],
       delegationBundle: undefined,
       haltReason: undefined,
       executionError: undefined,

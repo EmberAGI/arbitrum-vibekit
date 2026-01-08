@@ -186,11 +186,13 @@ export async function createGmxCalldata(orderParams: GMXOrderParams): Promise<{
 
 // Helper functions for common order types
 export async function createMarketLong(
+  receiver: `0x${string}`,
   sizeUsd: string,
   collateralAmount: string,
   acceptableEthPrice: string = '2500',
 ) {
   return createGmxCalldata({
+    receiver,
     orderType: 2, // OrderType.MarketIncrease
     direction: 0, // PositionDirection.Long
     sizeDeltaUsd: parseUnits(sizeUsd, 30),
@@ -203,11 +205,13 @@ export async function createMarketLong(
 }
 
 export async function createMarketShort(
+  receiver: `0x${string}`,
   sizeUsd: string,
   collateralAmount: string,
   acceptableEthPrice: string = '2600',
 ) {
   return createGmxCalldata({
+    receiver,
     orderType: 2, // OrderType.MarketIncrease
     direction: 1, // PositionDirection.Short
     sizeDeltaUsd: parseUnits(sizeUsd, 30),
@@ -220,6 +224,7 @@ export async function createMarketShort(
 }
 
 export async function createMarketSwap(
+  receiver: `0x${string}`,
   fromToken: string,
   fromAmount: string,
   fromDecimals: number,
@@ -227,6 +232,7 @@ export async function createMarketSwap(
   minOutputAmount: string = '1',
 ) {
   return createGmxCalldata({
+    receiver,
     orderType: 0, // OrderType.MarketSwap,
     direction: 0, // Not used for swaps
     sizeDeltaUsd: 0n,
@@ -242,6 +248,7 @@ export async function createMarketSwap(
 }
 
 export async function createLimitIncrease(
+  receiver: `0x${string}`,
   sizeUsd: string,
   collateralAmount: string,
   triggerPrice: string,
@@ -249,6 +256,7 @@ export async function createLimitIncrease(
   direction: PositionDirection,
 ) {
   return createGmxCalldata({
+    receiver,
     orderType: OrderType.LimitIncrease,
     direction: direction,
     sizeDeltaUsd: parseUnits(sizeUsd, 30),
@@ -262,12 +270,14 @@ export async function createLimitIncrease(
 }
 
 export async function createMarketDecrease(
+  receiver: `0x${string}`,
   sizeUsd: string,
   acceptablePrice: string,
   direction: PositionDirection,
   decreasePositionSwapType: DecreaseSwapType = 0, //DecreaseSwapType.NoSwap
 ) {
   return createGmxCalldata({
+    receiver,
     orderType: OrderType.MarketDecrease,
     direction: direction,
     sizeDeltaUsd: parseUnits(sizeUsd, 30),

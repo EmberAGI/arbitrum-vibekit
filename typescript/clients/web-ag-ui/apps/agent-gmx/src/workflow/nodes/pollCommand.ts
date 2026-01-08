@@ -15,10 +15,9 @@ import {
 import { cancelCronForThread } from '../cronScheduler.js';
 import { Command } from '@langchain/langgraph';
 import { loadBootstrapContext } from '../store.js';
-import { GMXOrderParams } from '../../domain/types.js';
+import { GMXOrderParams, PositionDirection } from '../../domain/types.js';
 import { parseEther, parseUnits } from 'viem';
 import { createGmxCalldata } from '../helpers/create-gmx-calldata.js';
-import { PositionDirection } from '../helpers/utils/types.js';
 
 type Configurable = { configurable?: { thread_id?: string } };
 
@@ -76,20 +75,20 @@ export const pollCommandNode = async (
   logInfo(`Poll Decision: `, decision);
   if (decision.kind === 'open-position') {
     const acceptablePrice = parseUnits('3100', 30); // 3100 $ hardcoded market price of ETH
-    logInfo(
-      `Market ${decision.direction == 0 ? 'Long' : 'Short'} Calldata`,
-      await createGmxCalldata({
-        receiver: agentWalletAddress,
-        orderType: 2,
-        direction: decision.direction ?? 0,
-        sizeDeltaUsd: parseUnits(decision.sizeUsd, 30),
-        acceptablePrice: acceptablePrice,
-        collateralToken: decision.collateralToken,
-        collateralAmount: parseUnits(decision.collateralAmount, 6), // assuming this is USDC for now
-        marketAddress: decision.marketAddress,
-        executionFee: parseEther('0.001'),
-      }),
-    );
+    const { multicallCalldata, orderTypeName } = await createGmxCalldata({
+      receiver: agentWalletAddress,
+      orderType: 2,
+      direction: decision.direction ?? 0,
+      sizeDeltaUsd: parseUnits(decision.sizeUsd, 30),
+      acceptablePrice: acceptablePrice,
+      collateralToken: decision.collateralToken,
+      collateralAmount: parseUnits(decision.collateralAmount, 6), // assuming this is USDC for now
+      marketAddress: decision.marketAddress,
+      executionFee: parseEther('0.001'),
+    });
+    logInfo(`Market ${orderTypeName} ${decision.direction == 0 ? 'Long' : 'Short'} Calldata`, {
+      multicallCalldata,
+    });
   }
 
   /// TODO add states here
@@ -125,7 +124,7 @@ export async function evaluateGMXDecision(ctx: GMXDecisionContext): Promise<GMXA
     return {
       kind: 'open-position',
       marketAddress: ctx.markets[0].marketToken as `0x${string}`,
-      direction: PositionDirection.Long,
+      direction: 0,
       sizeUsd: '10',
       leverage: '2',
       collateralAmount: '5',
@@ -166,7 +165,7 @@ export async function executeGMXDecision({
     // gmxPayload = {
     //   orderType: OrderType.MarketIncrease,
     //   direction: action.direction ?? 0, // hard-coded for long by default
-    //   isLong: action.direction === PositionDirection.Long,
+    //   isLong: action.direction === 0,
     //   marketAddress,
     //   sizeDeltaUsd: parseUnits('2', 30), // naive - 2 USD hardcoded
     //   acceptablePrice: BigInt(0), // market order
