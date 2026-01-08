@@ -1,7 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import {
   buildTaskStatus,
-  type GMXTradeLog,
   isTaskTerminal,
   type GMXState,
   type GMXUpdate,
@@ -11,10 +10,10 @@ import {
   GMXActivity,
   DelegationBundle,
   logInfo,
+  GMXEvent,
 } from '../context.js';
 import { cancelCronForThread } from '../cronScheduler.js';
 import { Command } from '@langchain/langgraph';
-import { createClients } from '../../clients/clients.js';
 import { loadBootstrapContext } from '../store.js';
 import { GMXOrderParams } from '../../domain/types.js';
 import { parseEther, parseUnits } from 'viem';
@@ -28,8 +27,9 @@ type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 export const pollCommandNode = async (
   state: GMXState,
   config: CopilotKitConfig,
-): Promise<GMXUpdate> => {
+): Promise<Command<string, GMXUpdate>> => {
   const mode = state.private.mode ?? 'debug';
+  const pollingEvents: GMXEvent[] = [];
 
   if (!state.private.bootstrapped) {
     return new Command({
@@ -40,14 +40,36 @@ export const pollCommandNode = async (
   const { task, statusEvent } = buildTaskStatus(
     state.view.task,
     'working',
-    `[GMX-Agent] Starting Polling for GMX Market(s)`,
+    `[GMX-Agent] Started Polling for GMX Market(s)`,
   );
-
-  const decision: GMXAction = await evaluateGMXDecision({
-    markets: state.view.profile.allowedMarkets,
-    tokens: state.view.profile.allowedTokens,
-    telemetry: state.view.activity.telemetry,
-  });
+  pollingEvents.push(statusEvent);
+  let decision: GMXAction;
+  try {
+    decision = await evaluateGMXDecision({
+      markets: state.view.profile.allowedMarkets,
+      tokens: state.view.profile.allowedTokens,
+      telemetry: state.view.activity.telemetry,
+    });
+  } catch (err: any) {
+    const failureMessage = (err as unknown as Error).message;
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, {
+      view: {
+        task,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      },
+    });
+    return new Command({
+      update: {
+        view: {
+          haltReason: failureMessage,
+          events: [...pollingEvents, statusEvent],
+          task,
+        },
+      },
+      goto: 'summarize',
+    });
+  }
 
   const { account, agentWalletAddress } = await loadBootstrapContext();
 
@@ -86,14 +108,18 @@ export const pollCommandNode = async (
 
 // Helper
 export type GMXDecisionContext = {
-  markets: GMXMarket[];
-  tokens: string[];
+  markets: GMXMarket[] | undefined;
+  tokens: string[] | undefined;
   telemetry: GMXActivity['telemetry'];
 };
 
-export async function evaluateGMXDecision(ctx: GMXDecisionContext): GMXAction {
+export async function evaluateGMXDecision(ctx: GMXDecisionContext): Promise<GMXAction> {
   const hasOpenPosition = (ctx.telemetry?.length ?? 0) > 0;
+  if (!ctx.markets) {
+    throw new Error('ERROR: Polling node missing required state (markets or tokens)');
+  }
   // Case 1: No position → OPEN
+
   if (!hasOpenPosition) {
     // 10$ position with $5 collateral
     return {
@@ -133,7 +159,7 @@ export async function executeGMXDecision({
     throw new Error('executeDecision invoked with hold action');
   }
   const { account } = await loadBootstrapContext();
-  const gmxPayload: GMXOrderParams = {};
+
   if (action.kind === 'open-position') {
     /// TODO: Bring in the offchain util scripts for creating calldata for GMX execution
     /// TODO: Decide and Remove open, close and hold position Nodes
