@@ -10,13 +10,16 @@ import {
   GMXMarket,
   GMXActivity,
   DelegationBundle,
+  logInfo,
 } from '../context.js';
 import { cancelCronForThread } from '../cronScheduler.js';
 import { Command } from '@langchain/langgraph';
 import { createClients } from '../../clients/clients.js';
 import { loadBootstrapContext } from '../store.js';
 import { GMXOrderParams } from '../../domain/types.js';
-import { parseUnits } from 'viem';
+import { parseEther, parseUnits } from 'viem';
+import { createGmxCalldata } from '../helpers/create-gmx-calldata.js';
+import { PositionDirection } from '../helpers/utils/types.js';
 
 type Configurable = { configurable?: { thread_id?: string } };
 
@@ -27,30 +30,49 @@ export const pollCommandNode = async (
   config: CopilotKitConfig,
 ): Promise<GMXUpdate> => {
   const mode = state.private.mode ?? 'debug';
+
+  if (!state.private.bootstrapped) {
+    return new Command({
+      goto: 'bootstrap',
+    });
+  }
   console.log('Inside Poll Command Node');
   const { task, statusEvent } = buildTaskStatus(
     state.view.task,
     'working',
     `[GMX-Agent] Starting Polling for GMX Market(s)`,
   );
-  const hasPosition = Array.isArray(state.view.positions) && state.view.positions.length > 0;
 
-  if (!hasPosition) {
-    return new Command({
-      goto: 'openPositionCommand',
-      update: {
-        view: {
-          task,
-        },
-        private: {
-          mode,
-        },
-      },
-    });
+  const decision: GMXAction = await evaluateGMXDecision({
+    markets: state.view.profile.allowedMarkets,
+    tokens: state.view.profile.allowedTokens,
+    telemetry: state.view.activity.telemetry,
+  });
+
+  const { account, agentWalletAddress } = await loadBootstrapContext();
+
+  logInfo(`Poll Decision: `, decision);
+  if (decision.kind === 'open-position') {
+    const acceptablePrice = parseUnits('3100', 30); // 3100 $ hardcoded market price of ETH
+    logInfo(
+      `Market ${decision.direction == 0 ? 'Long' : 'Short'} Calldata`,
+      await createGmxCalldata({
+        receiver: agentWalletAddress,
+        orderType: 2,
+        direction: decision.direction ?? 0,
+        sizeDeltaUsd: parseUnits(decision.sizeUsd, 30),
+        acceptablePrice: acceptablePrice,
+        collateralToken: decision.collateralToken,
+        collateralAmount: parseUnits(decision.collateralAmount, 6), // assuming this is USDC for now
+        marketAddress: decision.marketAddress,
+        executionFee: parseEther('0.001'),
+      }),
+    );
   }
 
+  /// TODO add states here
   return new Command({
-    goto: 'holdPositionCommand',
+    goto: 'summarize',
     update: {
       view: {
         task,
@@ -67,21 +89,21 @@ export type GMXDecisionContext = {
   markets: GMXMarket[];
   tokens: string[];
   telemetry: GMXActivity['telemetry'];
-  marketAddress: `0x${string}`;
 };
 
-export function evaluateGMXDecision(ctx: GMXDecisionContext): GMXAction {
+export async function evaluateGMXDecision(ctx: GMXDecisionContext): GMXAction {
   const hasOpenPosition = (ctx.telemetry?.length ?? 0) > 0;
-
   // Case 1: No position → OPEN
   if (!hasOpenPosition) {
+    // 10$ position with $5 collateral
     return {
       kind: 'open-position',
-      marketAddress: ctx.marketAddress,
+      marketAddress: ctx.markets[0].marketToken as `0x${string}`,
       direction: PositionDirection.Long,
       sizeUsd: '10',
       leverage: '2',
-      collateralToken: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // USDC
+      collateralAmount: '5',
+      collateralToken: ctx.markets[0].shortToken, // USDC
       reason: 'No open GMX position detected; opening demo long',
     };
   }
@@ -89,12 +111,12 @@ export function evaluateGMXDecision(ctx: GMXDecisionContext): GMXAction {
   // Case 2: Position exists → CLOSE
   return {
     kind: 'close-position',
-    marketAddress: ctx.marketAddress,
+    marketAddress: ctx.markets[0].marketToken as `0x${string}`,
     reason: 'Existing GMX position detected; closing for demo',
   };
 }
 
-export function executeGMXDecision({
+export async function executeGMXDecision({
   action,
   delegationBundle,
   delegationsBypassActive,
@@ -110,7 +132,7 @@ export function executeGMXDecision({
   if (action.kind === 'hold') {
     throw new Error('executeDecision invoked with hold action');
   }
-  const { account } = loadBootstrapContext();
+  const { account } = await loadBootstrapContext();
   const gmxPayload: GMXOrderParams = {};
   if (action.kind === 'open-position') {
     /// TODO: Bring in the offchain util scripts for creating calldata for GMX execution
