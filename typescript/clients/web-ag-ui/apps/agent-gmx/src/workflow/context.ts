@@ -88,6 +88,11 @@ export type GMXAction =
       kind: 'close-position';
       reason: string;
       marketAddress: `0x${string}`;
+      direction: PositionDirection;
+      sizeUsd: string;
+      leverage: string;
+      collateralToken: `0x${string}`;
+      collateralAmount: string;
     };
 
 //   {

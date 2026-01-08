@@ -72,26 +72,36 @@ export const pollCommandNode = async (
 
   const { account, agentWalletAddress } = await loadBootstrapContext();
 
-  logInfo(`Poll Decision: `, decision);
-  if (decision.kind === 'open-position') {
-    const acceptablePrice = parseUnits('3100', 30); // 3100 $ hardcoded market price of ETH
-    const { multicallCalldata, orderTypeName } = await createGmxCalldata({
+  //   logInfo(`Poll Decision: `, decision);
+  if (decision.kind === 'open-position' || decision.kind === 'close-position') {
+    const acceptablePriceOpenPosition = parseUnits('3100', 30); // 3100 $ hardcoded market price of ETH
+    const acceptablePriceClosePosition = parseUnits('3200', 30); // 3100 $ hardcoded market price of ETH
+
+    const orderParams: GMXOrderParams = {
       receiver: agentWalletAddress,
-      orderType: 2,
+      orderType: decision.kind === 'open-position' ? 2 : 4, // MarketIncrease (Open), MarketDecrease (Close)
       direction: decision.direction ?? 0,
       sizeDeltaUsd: parseUnits(decision.sizeUsd, 30),
-      acceptablePrice: acceptablePrice,
+      acceptablePrice:
+        decision.kind === 'open-position'
+          ? acceptablePriceOpenPosition
+          : acceptablePriceClosePosition,
       collateralToken: decision.collateralToken,
       collateralAmount: parseUnits(decision.collateralAmount, 6), // assuming this is USDC for now
       marketAddress: decision.marketAddress,
       executionFee: parseEther('0.001'),
-    });
-    logInfo(`Market ${orderTypeName} ${decision.direction == 0 ? 'Long' : 'Short'} Calldata`, {
-      multicallCalldata,
-    });
+    };
+    const { multicallCalldata, orderTypeName } = await createGmxCalldata(orderParams);
+    logInfo(
+      `\nDecision ${decision.kind} \nOrder Type: ${orderTypeName} \n${decision.direction == 0 ? 'Long Position' : 'Short Position'} Calldata`,
+      {
+        multicallCalldata,
+      },
+    );
   }
 
-  /// TODO add states here
+  if (decision.kind === 'hold') {
+  }
   return new Command({
     goto: 'summarize',
     update: {
@@ -117,27 +127,41 @@ export async function evaluateGMXDecision(ctx: GMXDecisionContext): Promise<GMXA
   if (!ctx.markets) {
     throw new Error('ERROR: Polling node missing required state (markets or tokens)');
   }
-  // Case 1: No position → OPEN
+  //   // Case 1: No position → OPEN
 
-  if (!hasOpenPosition) {
-    // 10$ position with $5 collateral
-    return {
-      kind: 'open-position',
-      marketAddress: ctx.markets[0].marketToken as `0x${string}`,
-      direction: 0,
-      sizeUsd: '10',
-      leverage: '2',
-      collateralAmount: '5',
-      collateralToken: ctx.markets[0].shortToken, // USDC
-      reason: 'No open GMX position detected; opening demo long',
-    };
-  }
+  //   if (!hasOpenPosition) {
+  //     // 10$ position with $5 collateral
+  //     return {
+  //       kind: 'open-position',
+  //       marketAddress: ctx.markets[0].marketToken as `0x${string}`,
+  //       direction: 0,
+  //       sizeUsd: '10',
+  //       leverage: '2',
+  //       collateralAmount: '5',
+  //       collateralToken: ctx.markets[0].shortToken, // USDC
+  //       reason: 'No open GMX position detected; opening demo long',
+  //     };
+  //   }
 
-  // Case 2: Position exists → CLOSE
+  //   // Case 2: Position exists → CLOSE
+  //   if (hasOpenPosition)
   return {
     kind: 'close-position',
     marketAddress: ctx.markets[0].marketToken as `0x${string}`,
+    direction: 0,
+    sizeUsd: '10',
+    leverage: '2',
+    collateralAmount: '5',
+    collateralToken: ctx.markets[0].shortToken, // USDC
     reason: 'Existing GMX position detected; closing for demo',
+  };
+
+  // Case 3: hold position
+  /// TODO: define position hold
+
+  return {
+    kind: 'hold',
+    reason: 'Agent decision for holding position',
   };
 }
 
