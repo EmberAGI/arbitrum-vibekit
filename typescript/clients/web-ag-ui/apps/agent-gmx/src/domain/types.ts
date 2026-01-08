@@ -72,19 +72,24 @@ interface GMXOrderParams {
 
 */
 export const GMXOrderParamsSchema = z.object({
+  receiver: z.string(),
+  // Basic params
   orderType: OrderTypeSchema,
   direction: PositionDirectionSchema,
+  sizeDeltaUsd: z.bigint(), // in USD with 30 decimals
+  acceptablePrice: z.bigint(), // price bound with 30 decimals
 
-  sizeDeltaUsd: z.bigint(),
-  acceptablePrice: z.bigint(),
-
+  // Token params
   collateralToken: z.string(),
-  collateralAmount: z.bigint(),
+  collateralAmount: z.bigint(), // token amount with appropriate decimals
 
+  // Market
   marketAddress: z.string(),
 
+  // Fees
   executionFee: z.bigint(),
 
+  // Optional
   isLong: z.boolean().optional(),
   swapPath: z.array(z.string()).optional(),
   callbackContract: z.string().optional(),
@@ -96,3 +101,27 @@ export const GMXOrderParamsSchema = z.object({
 });
 
 export type GMXOrderParams = z.infer<typeof GMXOrderParamsSchema>;
+
+// ------ Namings for Debugging ------
+export const ORDER_TYPE_NAME: Record<number, string> = {
+  0: 'MarketSwap',
+  1: 'LimitSwap',
+  2: 'MarketIncrease',
+  3: 'LimitIncrease',
+  4: 'MarketDecrease',
+  5: 'LimitDecrease',
+  6: 'StopLossDecrease',
+  7: 'Liquidation',
+  8: 'StopIncrease',
+};
+
+export const POSITION_DIRECTION_NAME: Record<number, string> = {
+  0: 'Long',
+  1: 'Short',
+};
+
+export const DECREASE_SWAP_TYPE_NAME: Record<number, string> = {
+  0: 'NoSwap',
+  1: 'SwapPnlTokenToCollateralToken',
+  2: 'SwapCollateralTokenToPnlToken',
+};

@@ -82,6 +82,7 @@ export type GMXAction =
       sizeUsd: string;
       leverage: string;
       collateralToken: `0x${string}`;
+      collateralAmount: string;
     }
   | {
       kind: 'close-position';
@@ -379,7 +380,9 @@ export function buildTaskStatus(
 
   return { task: nextTask, statusEvent };
 }
-
+export type LogOptions = {
+  detailed?: boolean;
+};
 export function logInfo(message: string, metadata?: Record<string, unknown>, options?: LogOptions) {
   const timestamp = new Date().toISOString();
   const prefix = `[GMX-Perp][${timestamp}]`;

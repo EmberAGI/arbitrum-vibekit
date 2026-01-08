@@ -7,14 +7,20 @@ import type { GMXMarket, GMXToken } from '../domain/types.ts';
 export const ARBITRUM_CHAIN_ID = 42161;
 
 // GMX v2 core contracts (Arbitrum)
+export const GMX_MARKET_FACTORY = '0xf5F30B10141E1F63FC11eD772931A8294a591996';
 export const GMX_EXCHANGE_ROUTER = '0x1C3fa76e6E1088bCE750f23a5BFcffa1efEF6A41';
 export const GMX_READER_ADDRESS = '0x470fbC46bcC0f16532691Df360A07d8Bf5ee0789';
 export const GMX_DATA_STORE = '0xFD70de6b91282D8017aA4E741e9Ae325CAb992d8';
 
+export const GM_ETH_USDC_MARKET = `0x70d95587d40A2caf56bd97485aB3Eec10Bee6336`;
+export const GM_TOKEN_SWAP_ONLY_USDC_DAI = `0x850de3cdEaADF65ED342c52Be7E46Bb251A87e26`; // TODO: Add USDC-DAI swap-only market address
+export const GM_TOKEN_SWAP_ONLY_USDC_USDT = 0xb686bcb112660343e6d15bdb65297e110c8311c4;
+
 // Tokens (Arbitrum)
+export const ARBITRUM_DAI_ADDRESS = `0xebB0c6991690e0C7c0cFAD3F3Ab69763fD5321DE`; // TODO: Add DAI address
 export const ARBITRUM_WETH_ADDRESS = '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1';
 export const ARBITRUM_USDC_ADDRESS = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831';
-
+export const ZERO_BYTES32 = '0x0000000000000000000000000000000000000000000000000000000000000000';
 /* =========================
    Trading Defaults
    ========================= */
