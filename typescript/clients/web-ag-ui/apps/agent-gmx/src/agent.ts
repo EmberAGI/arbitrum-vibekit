@@ -21,6 +21,7 @@ import { closePositionCommandNode } from './workflow/nodes/closePosition.js';
 
 import { resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
 import { saveBootstrapContext } from './workflow/store.js';
+import { summarizeNode } from './workflow/nodes/summarize.js';
 
 const store = new InMemoryStore();
 
@@ -40,18 +41,15 @@ const workflow = new StateGraph(GMXStateAnnotation)
   .addNode('hireCommand', hireCommandNode)
   .addNode('fireCommand', fireCommandNode)
   .addNode('bootstrap', bootstrapNode)
-  .addNode('pollCommand', pollCommandNode)
-  .addNode('openPositionCommand', openPositionCommandNode)
-  .addNode('closePositionCommand', closePositionCommandNode)
-  .addNode('holdPositionCommand', holdPositionCommandNode);
-
+  .addNode('pollCommand', pollCommandNode, { ends: ['summarize'] })
+  .addNode('summarize', summarizeNode);
 workflow
   .addEdge(START, 'runCommand')
   .addConditionalEdges('runCommand', resolveCommandTarget)
   .addEdge('hireCommand', 'bootstrap')
   .addEdge('bootstrap', 'pollCommand')
-  .addEdge('pollCommand', END);
-//   .addEdge('fireCommand', END);
+  .addEdge('pollCommand', 'summarize')
+  .addEdge('summarize', END);
 
 export const gmxGraph = workflow.compile({
   checkpointer: memory,
