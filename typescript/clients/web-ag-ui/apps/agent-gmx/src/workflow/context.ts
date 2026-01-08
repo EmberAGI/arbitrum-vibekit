@@ -148,7 +148,6 @@ export type GMXViewState = {
   task?: Task;
   lastOrder?: GMXOrderParams;
   positions?: GMXPositionView[];
-  trades?: GMXTradeLog[];
   delegationBundle?: DelegationBundle;
   haltReason?: string;
   executionError?: string;
@@ -224,7 +223,6 @@ const defaultViewState = (): GMXViewState => ({
   task: undefined,
   lastOrder: undefined,
   positions: [],
-  trades: [],
   delegationBundle: undefined,
   haltReason: undefined,
   executionError: undefined,
@@ -239,8 +237,8 @@ const defaultViewState = (): GMXViewState => ({
     apy: undefined,
     chains: [],
     protocols: [],
-    tokens: [],
-    markets: [],
+    allowedMarkets: [],
+    allowedTokens: [],
   },
 });
 
@@ -266,7 +264,7 @@ const mergePrivateState = (
 const mergeViewState = (left: GMXViewState, right?: Partial<GMXViewState>): GMXViewState => ({
   ...left,
   ...right,
-  trades: right?.trades ? [...left.trades, ...right.trades] : left.trades,
+  activity: right?.activity ? { ...left.activity, ...right.activity } : left.activity,
 });
 
 const mergeSettings = (left: GMXSettings, right?: Partial<GMXSettings>): GMXSettings => ({
@@ -341,11 +339,6 @@ export type TaskStatus = {
   state: TaskState;
   message?: AgentMessage;
   timestamp?: string;
-};
-
-export type Task = {
-  id: string;
-  taskStatus: TaskStatus;
 };
 
 /* ============================
