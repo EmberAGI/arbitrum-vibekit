@@ -94,6 +94,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const initialSyncDone = useRef(false);
 
   const config = getAgentConfig(agentId);
+  const prevAgentId = useRef(agentId);
 
   const { state, setState, run } = useCoAgent<AgentState>({
     name: agentId,
@@ -117,14 +118,23 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [run],
   );
 
+  // Reset initial sync when agent changes to ensure new agent gets synced
+  useEffect(() => {
+    if (prevAgentId.current !== agentId) {
+      initialSyncDone.current = false;
+      prevAgentId.current = agentId;
+    }
+  }, [agentId]);
+
   // Initial sync when thread is established - runs once when threadId becomes available
+  // Also runs when agent changes (due to reset above)
   useEffect(() => {
     if (threadId && !initialSyncDone.current) {
       initialSyncDone.current = true;
       // Run sync immediately to populate initial state
       runCommand('sync');
     }
-  }, [threadId, runCommand]);
+  }, [threadId, runCommand, agentId]);
 
   // Extract state with defaults
   const view = state?.view ?? defaultView;

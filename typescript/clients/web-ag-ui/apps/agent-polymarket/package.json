@@ -11,6 +11,7 @@
     "test": "pnpm test:unit",
     "test:unit": "vitest run --config vitest.config.unit.ts",
     "test:watch": "vitest watch",
+    "test:markets": "npx tsx scripts/test-market-fetch.ts",
     "lint": "eslint \"src\" \"tests\" --ext .ts",
     "lint:fix": "eslint \"src\" \"tests\" --ext .ts --fix",
     "typecheck": "tsc --noEmit --project tsconfig.json",

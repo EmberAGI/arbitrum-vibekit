@@ -5,3 +5,6 @@ dist
 *.log
 .turbo
 coverage
+
+# LangGraph API
+.langgraph_api

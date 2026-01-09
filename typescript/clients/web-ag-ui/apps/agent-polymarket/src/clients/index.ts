@@ -3,8 +3,11 @@
  */
 
 export {
+  PolymarketAdapter,
   createAdapterFromEnv,
   createMockAdapter,
+  fetchMarketsFromGamma,
+  fetchMarketPrices,
   type PolymarketAdapterParams,
   type IPolymarketAdapter,
   type PerpetualMarket,
