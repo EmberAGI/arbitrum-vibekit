@@ -126,7 +126,6 @@ export interface LiquidityPosition {
   feesValueUsd?: string;
   rewardsValueUsd?: string;
   positionValueUsd?: string;
-  price: string;
   currentPrice?: string;
   currentTick?: number;
   tickLower?: number;

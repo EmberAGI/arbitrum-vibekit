@@ -63,7 +63,6 @@ export const LiquidityPositionSchema = z.object({
   feesValueUsd: z.string().optional(),
   rewardsValueUsd: z.string().optional(),
   positionValueUsd: z.string().optional(),
-  price: z.string(),
   currentPrice: z.string().optional(),
   currentTick: z.number().int().optional(),
   tickLower: z.number().int().optional(),
