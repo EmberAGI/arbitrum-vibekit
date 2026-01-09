@@ -11,6 +11,7 @@ import { NextRequest } from "next/server";
 const serviceAdapter = new ExperimentalEmptyAdapter();
 
 const CLMM_AGENT_NAME = "agent-clmm";
+const POLYMARKET_AGENT_NAME = "agent-polymarket";
 const LEGACY_AGENT_NAME = "starterAgent";
 
 // 2. Create the CopilotRuntime instance and utilize the LangGraph AG-UI
@@ -20,6 +21,11 @@ const runtime = new CopilotRuntime({
     [CLMM_AGENT_NAME]: new LangGraphAgent({
       deploymentUrl: process.env.LANGGRAPH_DEPLOYMENT_URL || "http://localhost:8124",
       graphId: CLMM_AGENT_NAME,
+      langsmithApiKey: process.env.LANGSMITH_API_KEY || "",
+    }),
+    [POLYMARKET_AGENT_NAME]: new LangGraphAgent({
+      deploymentUrl: process.env.LANGGRAPH_POLYMARKET_URL || "http://localhost:8125",
+      graphId: POLYMARKET_AGENT_NAME,
       langsmithApiKey: process.env.LANGSMITH_API_KEY || "",
     }),
     [LEGACY_AGENT_NAME]: new LangGraphAgent({

@@ -1,0 +1,10 @@
+{
+  "node_version": "22",
+  "dockerfile_lines": [],
+  "dependencies": ["."],
+  "graphs": {
+    "polymarket": "./src/agent.ts:polymarketGraph",
+    "agent-polymarket": "./src/agent.ts:polymarketGraph"
+  },
+  "env": ".env"
+}

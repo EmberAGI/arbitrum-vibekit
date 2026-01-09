@@ -27,6 +27,18 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     isFeatured: true,
     featuredRank: 1,
   },
+  'agent-polymarket': {
+    id: 'agent-polymarket',
+    name: 'Polymarket Arbitrage',
+    description:
+      'Automatically finds and executes arbitrage opportunities on Polymarket prediction markets. Monitors YES/NO token prices and executes when combined prices are below $1.00.',
+    creator: 'Ember AI Team',
+    creatorVerified: true,
+    avatar: '🎯',
+    avatarBg: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+    isFeatured: true,
+    featuredRank: 2,
+  },
 };
 
 export function getAgentConfig(agentId: string): AgentConfig {
