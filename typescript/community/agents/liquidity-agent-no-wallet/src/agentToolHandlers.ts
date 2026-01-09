@@ -82,7 +82,7 @@ export async function handleGetLiquidityPools(
 
     let responseText = 'Available Liquidity Pools:\n';
     liquidityPools.forEach((pool: LiquidityPool) => {
-      responseText += `- ${pool.symbol0}/${pool.symbol1} (Price: ${pool.price})\n`;
+      responseText += `- ${pool.symbol0}/${pool.symbol1} (Price: ${pool.currentPrice})\n`;
     });
 
     return createTaskResult(context.userAddress, TaskState.Completed, responseText, [

@@ -27,11 +27,33 @@ export const LiquiditySuppliedTokenSchema = z.object({
 });
 export type LiquiditySuppliedToken = z.infer<typeof LiquiditySuppliedTokenSchema>;
 
+export const LiquidityRewardsOwedTokenSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  amount: z.string(),
+  usdPrice: z.string().optional(),
+  valueUsd: z.string().optional(),
+  source: z.string(),
+});
+export type LiquidityRewardsOwedToken = z.infer<typeof LiquidityRewardsOwedTokenSchema>;
+
 export const LiquidityPositionSchema = z.object({
+  positionId: z.string(),
   poolIdentifier: TokenIdentifierSchema,
   operator: z.string(),
   suppliedTokens: z.array(LiquiditySuppliedTokenSchema),
+  rewardsOwedTokens: z.array(LiquidityRewardsOwedTokenSchema),
+  feesValueUsd: z.string().optional(),
+  rewardsValueUsd: z.string().optional(),
+  positionValueUsd: z.string().optional(),
   price: z.string(),
+  currentPrice: z.string().optional(),
+  currentTick: z.number().int().optional(),
+  tickLower: z.number().int().optional(),
+  tickUpper: z.number().int().optional(),
+  inRange: z.boolean().optional(),
+  apr: z.string().optional(),
+  apy: z.string().optional(),
+  poolFeeBps: z.number().int().optional(),
   providerId: z.string(),
   positionRange: LiquidityPositionRangeSchema.optional(),
 });
@@ -45,8 +67,12 @@ export type LiquidityPoolTokens = z.infer<typeof LiquidityPoolTokens>;
 export const LiquidityPoolSchema = z.object({
   identifier: TokenIdentifierSchema,
   tokens: z.array(LiquidityPoolTokens),
-  price: z.string(),
+  currentPrice: z.string(),
   providerId: z.string(),
+  feeTierBps: z.number().int().optional(),
+  liquidity: z.string().optional(),
+  tvlUsd: z.string().optional(),
+  volume24hUsd: z.string().optional(),
   tickSpacing: z.number().int().optional(),
 });
 export type LiquidityPool = z.infer<typeof LiquidityPoolSchema>;
@@ -86,7 +112,7 @@ export type WithdrawLiquidityResponse = z.infer<typeof WithdrawLiquidityResponse
 export const GetWalletLiquidityPositionsRequestSchema = z.object({
   walletAddress: z.string(),
   includePrices: z.boolean().optional(),
-  positionIds: z.array(z.number()).optional(),
+  positionIds: z.array(z.string()).optional(),
 });
 export type GetWalletLiquidityPositionsRequest = z.infer<
   typeof GetWalletLiquidityPositionsRequestSchema
