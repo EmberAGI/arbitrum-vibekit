@@ -20,13 +20,6 @@ export const LiquidityPositionRangeSchema = z.object({
 });
 export type LiquidityPositionRange = z.infer<typeof LiquidityPositionRangeSchema>;
 
-export const LiquiditySuppliedTokenSchema = z.object({
-  tokenUid: TokenIdentifierSchema,
-  suppliedAmount: z.string(),
-  owedTokens: z.string(),
-});
-export type LiquiditySuppliedToken = z.infer<typeof LiquiditySuppliedTokenSchema>;
-
 export const LiquidityRewardsOwedTokenSchema = z.object({
   tokenUid: TokenIdentifierSchema,
   amount: z.string(),
@@ -38,6 +31,9 @@ export type LiquidityRewardsOwedToken = z.infer<typeof LiquidityRewardsOwedToken
 
 export const LiquidityPooledTokenSchema = z.object({
   tokenUid: TokenIdentifierSchema,
+  name: z.string(),
+  symbol: z.string(),
+  decimals: z.number().int(),
   amount: z.string(),
   usdPrice: z.string().optional(),
   valueUsd: z.string().optional(),
@@ -46,6 +42,9 @@ export type LiquidityPooledToken = z.infer<typeof LiquidityPooledTokenSchema>;
 
 export const LiquidityFeesOwedTokenSchema = z.object({
   tokenUid: TokenIdentifierSchema,
+  name: z.string(),
+  symbol: z.string(),
+  decimals: z.number().int(),
   amount: z.string(),
   usdPrice: z.string().optional(),
   valueUsd: z.string().optional(),
@@ -56,7 +55,6 @@ export const LiquidityPositionSchema = z.object({
   positionId: z.string(),
   poolIdentifier: TokenIdentifierSchema,
   operator: z.string(),
-  suppliedTokens: z.array(LiquiditySuppliedTokenSchema),
   pooledTokens: z.array(LiquidityPooledTokenSchema),
   feesOwedTokens: z.array(LiquidityFeesOwedTokenSchema),
   rewardsOwedTokens: z.array(LiquidityRewardsOwedTokenSchema),
