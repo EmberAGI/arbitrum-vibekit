@@ -1,7 +1,6 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import {
   buildTaskStatus,
-  isTaskTerminal,
   type GMXState,
   type GMXUpdate,
   type GMXPositionView,
@@ -18,6 +17,8 @@ import { loadBootstrapContext } from '../store.js';
 import { GMXOrderParams, PositionDirection } from '../../domain/types.js';
 import { parseEther, parseUnits } from 'viem';
 import { createGmxCalldata } from '../helpers/create-gmx-calldata.js';
+import { executeTransaction } from '../../core/transaction.js';
+import { createClients } from '../../clients/clients.js';
 
 type Configurable = { configurable?: { thread_id?: string } };
 
@@ -70,7 +71,7 @@ export const pollCommandNode = async (
     });
   }
 
-  const { account, agentWalletAddress } = await loadBootstrapContext();
+  const { agentWalletAddress } = await loadBootstrapContext();
 
   //   logInfo(`Poll Decision: `, decision);
   if (decision.kind === 'open-position' || decision.kind === 'close-position') {
@@ -98,6 +99,11 @@ export const pollCommandNode = async (
         multicallCalldata,
       },
     );
+    logInfo(`⏳ Executing GMX Order`);
+    await executeGMXDecision({
+      marketAddress: decision.marketAddress,
+      data: multicallCalldata as unknown as `0x${string}`,
+    });
   }
 
   if (decision.kind === 'hold') {
@@ -127,38 +133,37 @@ export async function evaluateGMXDecision(ctx: GMXDecisionContext): Promise<GMXA
   if (!ctx.markets) {
     throw new Error('ERROR: Polling node missing required state (markets or tokens)');
   }
-  //   // Case 1: No position → OPEN
+  // Case 1: No position → OPEN
 
-  //   if (!hasOpenPosition) {
-  //     // 10$ position with $5 collateral
-  //     return {
-  //       kind: 'open-position',
-  //       marketAddress: ctx.markets[0].marketToken as `0x${string}`,
-  //       direction: 0,
-  //       sizeUsd: '10',
-  //       leverage: '2',
-  //       collateralAmount: '5',
-  //       collateralToken: ctx.markets[0].shortToken, // USDC
-  //       reason: 'No open GMX position detected; opening demo long',
-  //     };
-  //   }
+  if (!hasOpenPosition) {
+    // 10$ position with $5 collateral
+    return {
+      kind: 'open-position',
+      marketAddress: ctx.markets[0].marketToken as `0x${string}`,
+      direction: 0,
+      sizeUsd: '10',
+      leverage: '2',
+      collateralAmount: '5',
+      collateralToken: ctx.markets[0].shortToken, // USDC
+      reason: 'No open GMX position detected; opening demo long',
+    };
+  }
 
-  //   // Case 2: Position exists → CLOSE
-  //   if (hasOpenPosition)
-  return {
-    kind: 'close-position',
-    marketAddress: ctx.markets[0].marketToken as `0x${string}`,
-    direction: 0,
-    sizeUsd: '10',
-    leverage: '2',
-    collateralAmount: '5',
-    collateralToken: ctx.markets[0].shortToken, // USDC
-    reason: 'Existing GMX position detected; closing for demo',
-  };
+  // Case 2: Position exists → CLOSE
+  if (hasOpenPosition)
+    return {
+      kind: 'close-position',
+      marketAddress: ctx.markets[0].marketToken as `0x${string}`,
+      direction: 0,
+      sizeUsd: '10',
+      leverage: '2',
+      collateralAmount: '5',
+      collateralToken: ctx.markets[0].shortToken, // USDC
+      reason: 'Existing GMX position detected; closing for demo',
+    };
 
   // Case 3: hold position
   /// TODO: define position hold
-
   return {
     kind: 'hold',
     reason: 'Agent decision for holding position',
@@ -166,37 +171,24 @@ export async function evaluateGMXDecision(ctx: GMXDecisionContext): Promise<GMXA
 }
 
 export async function executeGMXDecision({
-  action,
+  data,
+  marketAddress,
   delegationBundle,
   delegationsBypassActive,
-  marketAddress,
-  positionKey,
 }: {
-  action: GMXAction;
+  data: `0x${string}`;
+  marketAddress: `0x${string}`;
   delegationBundle?: DelegationBundle;
   delegationsBypassActive?: boolean;
-  marketAddress: `0x${string}`;
-  positionKey?: `0x${string}`;
 }) {
-  if (action.kind === 'hold') {
-    throw new Error('executeDecision invoked with hold action');
-  }
   const { account } = await loadBootstrapContext();
-
-  if (action.kind === 'open-position') {
-    /// TODO: Bring in the offchain util scripts for creating calldata for GMX execution
-    /// TODO: Decide and Remove open, close and hold position Nodes
-    // gmxPayload = {
-    //   orderType: OrderType.MarketIncrease,
-    //   direction: action.direction ?? 0, // hard-coded for long by default
-    //   isLong: action.direction === 0,
-    //   marketAddress,
-    //   sizeDeltaUsd: parseUnits('2', 30), // naive - 2 USD hardcoded
-    //   acceptablePrice: BigInt(0), // market order
-    //   collateralToken: action.collateralToken ?? action.,
-    //   collateralAmount: BigInt(10) * BigInt(1e6), // 10 USDC
-    //   executionFee: parseEther('0.01'), // ~0.01 ETH
-    // };
-  } else if (action.kind === 'close-position') {
+  if (delegationsBypassActive && delegationBundle) {
   }
+  const clients = createClients(account);
+  let receipt = await executeTransaction(clients, {
+    to: marketAddress,
+    data: data,
+  });
+
+  logInfo(`🧾 Receipt: \n`, receipt);
 }

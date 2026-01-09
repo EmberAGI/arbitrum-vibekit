@@ -1,8 +1,7 @@
 import { createPublicClient, createWalletClient, http, type Account } from 'viem';
 import { arbitrum } from 'viem/chains';
 
-const ARBITRUM_RPC_URL =
-  process.env['ARBITRUM_RPC_URL'] ?? 'https://arb-mainnet.g.alchemy.com/v2/demo-key';
+const ARBITRUM_RPC_URL = process.env['ARBITRUM_RPC_URL'] ?? 'https://arbitrum.meowrpc.com';
 
 type WalletInstance = ReturnType<typeof createWalletClient>;
 
