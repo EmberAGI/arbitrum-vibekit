@@ -141,7 +141,7 @@ export async function handleGetWalletLiquidityPositions(
       responseText += `${index + 1}: ${pos.symbol0}/${pos.symbol1}\n`;
       responseText += `  Amount0: ${pos.amount0} ${pos.symbol0}\n`;
       responseText += `  Amount1: ${pos.amount1} ${pos.symbol1}\n`;
-      responseText += `  Price: ${pos.price}\n`;
+      responseText += `  Current Price: ${pos.currentPrice ?? 'N/A'}\n`;
       responseText += `  Price Range: ${
         pos.positionRange
           ? pos.positionRange.fromPrice + ' to ' + pos.positionRange.toPrice
