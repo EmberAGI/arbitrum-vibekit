@@ -104,6 +104,18 @@ export interface LiquidityPosition {
   amount1: string;
   symbol0: string;
   symbol1: string;
+  pooledTokens: {
+    tokenUid: { chainId: string; address: string };
+    amount: string;
+    usdPrice?: string;
+    valueUsd?: string;
+  }[];
+  feesOwedTokens: {
+    tokenUid: { chainId: string; address: string };
+    amount: string;
+    usdPrice?: string;
+    valueUsd?: string;
+  }[];
   rewardsOwedTokens: {
     tokenUid: { chainId: string; address: string };
     amount: string;

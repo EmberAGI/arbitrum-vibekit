@@ -36,11 +36,29 @@ export const LiquidityRewardsOwedTokenSchema = z.object({
 });
 export type LiquidityRewardsOwedToken = z.infer<typeof LiquidityRewardsOwedTokenSchema>;
 
+export const LiquidityPooledTokenSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  amount: z.string(),
+  usdPrice: z.string().optional(),
+  valueUsd: z.string().optional(),
+});
+export type LiquidityPooledToken = z.infer<typeof LiquidityPooledTokenSchema>;
+
+export const LiquidityFeesOwedTokenSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  amount: z.string(),
+  usdPrice: z.string().optional(),
+  valueUsd: z.string().optional(),
+});
+export type LiquidityFeesOwedToken = z.infer<typeof LiquidityFeesOwedTokenSchema>;
+
 export const LiquidityPositionSchema = z.object({
   positionId: z.string(),
   poolIdentifier: TokenIdentifierSchema,
   operator: z.string(),
   suppliedTokens: z.array(LiquiditySuppliedTokenSchema),
+  pooledTokens: z.array(LiquidityPooledTokenSchema),
+  feesOwedTokens: z.array(LiquidityFeesOwedTokenSchema),
   rewardsOwedTokens: z.array(LiquidityRewardsOwedTokenSchema),
   feesValueUsd: z.string().optional(),
   rewardsValueUsd: z.string().optional(),
