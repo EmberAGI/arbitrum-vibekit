@@ -49,3 +49,6 @@ Thumbs.db
 .ember-standalone/
 typescript/lib/agent-node/*.zip
 typescript/clients/web/
+
+
+test.md
