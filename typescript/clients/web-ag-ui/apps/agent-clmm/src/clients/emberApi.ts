@@ -440,7 +440,7 @@ function toCamelotPool(pool: EmberLiquidityPool): CamelotPool | undefined {
   // `priceToTick` expects token1/token0 (amount1 per amount0), adjusted for decimals.
   // Ember's `price` has been observed to come back as either token0/token1 or token1/token0,
   // so normalize it using a stable-coin heuristic when possible.
-  const rawPrice = Number(pool.price);
+  const rawPrice = Number(pool.currentPrice);
   const token0Stable = isUsdStableToken(token0Address);
   const token1Stable = isUsdStableToken(token1Address);
 
