@@ -62,7 +62,7 @@ export const PoolListResponseSchema = z.object({
     z.object({
       identifier: ChainIdentifierSchema,
       tokens: z.array(EmberPoolTokenSchema).min(2),
-      price: z.string(),
+      currentPrice: z.string().optional(), // API changed: 'price' → 'currentPrice'
       providerId: z.string(),
       poolName: z.string(),
     }),

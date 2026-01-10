@@ -68,7 +68,11 @@ function extractCommand(messages: PolymarketState['messages']): Command | null {
 export function runCommandNode(state: PolymarketState): PolymarketUpdate {
   const parsedCommand = extractCommand(state.messages);
 
-  logInfo('runCommand processing', { command: parsedCommand ?? 'sync' });
+  logInfo('=== POLYMARKET AGENT received command ===', {
+    command: parsedCommand ?? 'sync',
+    lifecycleState: state.view.lifecycleState,
+    bootstrapped: state.private?.bootstrapped ?? false,
+  });
 
   return {
     view: {

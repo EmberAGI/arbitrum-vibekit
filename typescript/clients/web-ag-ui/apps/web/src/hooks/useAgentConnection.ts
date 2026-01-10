@@ -109,18 +109,20 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   // Simple command runner - no queuing, just run the command
   const runCommand = useCallback(
     (command: string) => {
+      console.log(`[useAgentConnection] Running command "${command}" on agent: ${agentId}`);
       run(() => ({
         id: v7(),
         role: 'user',
         content: JSON.stringify({ command }),
       }));
     },
-    [run],
+    [run, agentId],
   );
 
   // Reset initial sync when agent changes to ensure new agent gets synced
   useEffect(() => {
     if (prevAgentId.current !== agentId) {
+      console.log(`[useAgentConnection] Agent changed: ${prevAgentId.current} -> ${agentId}`);
       initialSyncDone.current = false;
       prevAgentId.current = agentId;
     }
@@ -128,11 +130,19 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   // Initial sync when thread is established - runs once when threadId becomes available
   // Also runs when agent changes (due to reset above)
+  // We delay the sync to ensure CopilotKit is fully initialized after remount
   useEffect(() => {
     if (threadId && !initialSyncDone.current) {
+      console.log(`[useAgentConnection] Running initial sync for agent: ${agentId}, thread: ${threadId}`);
       initialSyncDone.current = true;
-      // Run sync immediately to populate initial state
-      runCommand('sync');
+      // Delay sync to ensure CopilotKit is fully initialized after remount
+      // This prevents "Cannot read properties of undefined (reading 'agentName')" errors
+      // 500ms gives CopilotKit time to establish connection to the correct backend
+      const timer = setTimeout(() => {
+        console.log(`[useAgentConnection] Executing sync command for agent: ${agentId}`);
+        runCommand('sync');
+      }, 500);
+      return () => clearTimeout(timer);
     }
   }, [threadId, runCommand, agentId]);
 

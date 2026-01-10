@@ -109,6 +109,18 @@ function parseClobTokenIds(clobTokenIds: string | undefined): ParsedClobTokenIds
   }
 }
 
+/**
+ * Round a price to the market's tick size.
+ * Example: roundToTickSize(0.123, '0.01') => 0.12
+ */
+function roundToTickSize(price: number, tickSize: string): number {
+  const tick = parseFloat(tickSize);
+  const rounded = Math.round(price / tick) * tick;
+  // Fix floating point precision issues
+  const decimals = tickSize.split('.')[1]?.length ?? 0;
+  return parseFloat(rounded.toFixed(decimals));
+}
+
 // ============================================================================
 // PolymarketAdapter Class
 // ============================================================================
@@ -169,6 +181,9 @@ export class PolymarketAdapter implements IPolymarketAdapter {
 
   /**
    * Get market info for order placement.
+   *
+   * Note: Most Polymarket markets use 0.01 tick size. The 0.001 tick size is only
+   * available for specific high-volume markets. We default to 0.01 to be safe.
    */
   private async getMarketInfo(
     tokenId: string,
@@ -178,10 +193,13 @@ export class PolymarketAdapter implements IPolymarketAdapter {
       const validTickSizes = ['0.1', '0.01', '0.001', '0.0001'] as const;
       const tickSize = validTickSizes.includes(market.tickSize as (typeof validTickSizes)[number])
         ? (market.tickSize as '0.1' | '0.01' | '0.001' | '0.0001')
-        : '0.001';
+        : '0.01'; // Default to 0.01 if market tick size is not recognized
+      logInfo('Using market tick size', { tokenId: tokenId.substring(0, 20) + '...', tickSize, marketTickSize: market.tickSize });
       return { tickSize, negRisk: market.negRisk ?? false };
     }
-    return { tickSize: '0.001', negRisk: false };
+    // Default to 0.01 which is the most common tick size on Polymarket
+    logInfo('Market not in cache, using default tick size 0.01', { tokenId: tokenId.substring(0, 20) + '...' });
+    return { tickSize: '0.01', negRisk: false };
   }
 
   /**
@@ -269,14 +287,16 @@ export class PolymarketAdapter implements IPolymarketAdapter {
     const clob = await this.getClobClient();
     const tokenId = request.marketAddress;
     const size = Number(request.amount);
-    const price = request.limitPrice ? Number(request.limitPrice) : 0.5;
+    const rawPrice = request.limitPrice ? Number(request.limitPrice) : 0.5;
 
     if (size > this.maxOrderSize) {
       throw new Error(`Order size ${size} exceeds max allowed ${this.maxOrderSize}`);
     }
 
     const { tickSize, negRisk } = await this.getMarketInfo(tokenId);
-    logInfo('Placing LONG order (BUY YES)', { tokenId: tokenId.substring(0, 20) + '...', price, size });
+    // Round price to tick size to avoid "invalid tick size" errors
+    const price = roundToTickSize(rawPrice, tickSize);
+    logInfo('Placing LONG order (BUY YES)', { tokenId: tokenId.substring(0, 20) + '...', price, rawPrice, tickSize, size });
 
     const response = (await clob.createAndPostOrder(
       {
@@ -318,14 +338,16 @@ export class PolymarketAdapter implements IPolymarketAdapter {
     }
 
     const size = Number(request.amount);
-    const price = request.limitPrice ? Number(request.limitPrice) : 0.5;
+    const rawPrice = request.limitPrice ? Number(request.limitPrice) : 0.5;
 
     if (size > this.maxOrderSize) {
       throw new Error(`Order size ${size} exceeds max allowed ${this.maxOrderSize}`);
     }
 
     const { tickSize, negRisk } = await this.getMarketInfo(yesTokenId);
-    logInfo('Placing SHORT order (BUY NO)', { noTokenId: noTokenId.substring(0, 20) + '...', price, size });
+    // Round price to tick size to avoid "invalid tick size" errors
+    const price = roundToTickSize(rawPrice, tickSize);
+    logInfo('Placing SHORT order (BUY NO)', { noTokenId: noTokenId.substring(0, 20) + '...', price, rawPrice, tickSize, size });
 
     const response = (await clob.createAndPostOrder(
       {
