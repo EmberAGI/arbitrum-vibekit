@@ -27,12 +27,16 @@ interface PolymarketMetricsProps {
   metrics: PolymarketAgentMetrics;
   config: PolymarketStrategyConfig;
   portfolioValueUsd?: number;
+  intraMarketCount?: number;
+  crossMarketCount?: number;
 }
 
 export function PolymarketMetrics({
   metrics,
   config,
   portfolioValueUsd = 0,
+  intraMarketCount = 0,
+  crossMarketCount = 0,
 }: PolymarketMetricsProps) {
   const formatCurrency = (value: number) => {
     const abs = Math.abs(value);
@@ -150,26 +154,33 @@ export function PolymarketMetrics({
           <Target className="w-5 h-5 text-orange-400" />
           Arbitrage Performance
         </h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="rounded-xl bg-[#121212] p-4">
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-              Opportunities Found
+              Total Opportunities
             </div>
             <div className="text-2xl font-bold text-white">{metrics.opportunitiesFound}</div>
           </div>
           <div className="rounded-xl bg-[#121212] p-4">
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-              Opportunities Executed
+              Intra-Market
             </div>
-            <div className="text-2xl font-bold text-teal-400">{metrics.opportunitiesExecuted}</div>
+            <div className="text-2xl font-bold text-blue-400">{intraMarketCount}</div>
           </div>
           <div className="rounded-xl bg-[#121212] p-4">
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Execution Rate</div>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+              Cross-Market
+            </div>
+            <div className="text-2xl font-bold text-purple-400">{crossMarketCount}</div>
+          </div>
+          <div className="rounded-xl bg-[#121212] p-4">
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+              Executed
+            </div>
+            <div className="text-2xl font-bold text-teal-400">{metrics.opportunitiesExecuted}</div>
+            <div className="text-xs text-gray-500 mt-1">
               {metrics.opportunitiesFound > 0
-                ? `${((metrics.opportunitiesExecuted / metrics.opportunitiesFound) * 100).toFixed(
-                    1,
-                  )}%`
+                ? `${((metrics.opportunitiesExecuted / metrics.opportunitiesFound) * 100).toFixed(1)}% rate`
                 : '—'}
             </div>
           </div>

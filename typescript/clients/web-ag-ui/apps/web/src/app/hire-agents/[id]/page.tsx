@@ -39,6 +39,73 @@ export default function AgentDetailRoute({
         profitPotential: number;
         timestamp: string;
       }>;
+      crossMarketOpportunities?: Array<{
+        relationship: {
+          type: 'IMPLIES' | 'REQUIRES' | 'MUTUAL_EXCLUSION' | 'EQUIVALENCE';
+          parentMarket: {
+            id: string;
+            title: string;
+            yesPrice: number;
+          };
+          childMarket: {
+            id: string;
+            title: string;
+            yesPrice: number;
+          };
+          confidence?: 'high' | 'medium' | 'low';
+          reasoning?: string;
+        };
+        violation: {
+          type: 'PRICE_INVERSION' | 'SUM_EXCEEDS_ONE';
+          description: string;
+          severity: number;
+        };
+        trades: {
+          sellMarket: {
+            marketId: string;
+            outcome: 'yes' | 'no';
+            price: number;
+          };
+          buyMarket: {
+            marketId: string;
+            outcome: 'yes' | 'no';
+            price: number;
+          };
+        };
+        expectedProfitPerShare: number;
+        timestamp: string;
+      }>;
+      detectedRelationships?: Array<{
+        id: string;
+        type: 'IMPLIES' | 'REQUIRES' | 'MUTUAL_EXCLUSION' | 'EQUIVALENCE';
+        parentMarket: {
+          id: string;
+          title: string;
+          yesPrice: number;
+        };
+        childMarket: {
+          id: string;
+          title: string;
+          yesPrice: number;
+        };
+        detectedAt: string;
+        confidence?: 'high' | 'medium' | 'low';
+        reasoning?: string;
+      }>;
+      transactionHistory?: Array<{
+        id: string;
+        cycle: number;
+        action: string;
+        marketId: string;
+        marketTitle: string;
+        shares: number;
+        price: number;
+        totalCost: number;
+        status: string;
+        timestamp: string;
+        orderId?: string;
+        error?: string;
+      }>;
       config?: {
         minSpreadThreshold: number;
         maxPositionSizeUsd: number;
@@ -100,6 +167,9 @@ export default function AgentDetailRoute({
         }}
         portfolioValueUsd={polymarketView.portfolioValueUsd ?? 0}
         opportunities={polymarketView.opportunities ?? []}
+        crossMarketOpportunities={polymarketView.crossMarketOpportunities ?? []}
+        detectedRelationships={polymarketView.detectedRelationships ?? []}
+        transactionHistory={polymarketView.transactionHistory ?? []}
         isHired={agent.isHired}
         isHiring={agent.isHiring}
         isFiring={agent.isFiring}

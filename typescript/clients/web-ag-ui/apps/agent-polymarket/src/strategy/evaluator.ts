@@ -1,10 +1,15 @@
 /**
  * Polymarket Strategy - Position Evaluator
  *
- * Evaluates arbitrage opportunities and calculates optimal position sizes.
+ * Evaluates both intra-market and cross-market arbitrage opportunities
+ * and calculates optimal position sizes.
  */
 
-import type { ArbitrageOpportunity, StrategyConfig } from '../workflow/context.js';
+import type {
+  ArbitrageOpportunity,
+  CrossMarketOpportunity,
+  StrategyConfig,
+} from '../workflow/context.js';
 import { logInfo } from '../workflow/context.js';
 
 /**
@@ -196,4 +201,188 @@ export function estimateSlippage(orderSizeUsd: number, marketLiquidity: number):
 
   // Cap slippage at 10%
   return Math.min(slippage, 0.1);
+}
+
+// ============================================================================
+// Cross-Market Arbitrage Position Sizing
+// ============================================================================
+
+/**
+ * Calculated position size for cross-market arbitrage.
+ *
+ * Unlike intra-market where we buy both YES and NO on same market,
+ * cross-market involves buying TWO positions in different markets.
+ *
+ * Note: We BUY the opposite outcome on the overpriced market (not sell),
+ * because Polymarket doesn't support naked shorting.
+ */
+export interface CrossMarketPositionSize {
+  /** Number of shares to trade (same for both sides) */
+  shares: number;
+  /** Cost of buying opposite outcome on overpriced market (was "sellRevenue") */
+  sellRevenueUsd: number;
+  /** Cost of buying the underpriced market */
+  buyCostUsd: number;
+  /** Net cost (sum of both buy orders) */
+  netCostUsd: number;
+  /** Expected profit when markets resolve */
+  expectedProfitUsd: number;
+  /** Return on capital (profit / netCost) */
+  roi: number;
+  /** Estimated slippage on sell side */
+  sellSlippage: number;
+  /** Estimated slippage on buy side */
+  buySlippage: number;
+}
+
+/**
+ * Calculate position size for cross-market arbitrage opportunity.
+ *
+ * For IMPLIES relationship (A → B) with price violation:
+ * - Market A (parent) is overpriced at P(A) > P(B)
+ * - Market B (child) is underpriced
+ *
+ * Strategy (CORRECTED - both are BUY operations):
+ * - BUY Market A NO at price (1 - P(A)) → pay (1 - P(A)) × shares
+ * - BUY Market B YES at price P(B) → pay P(B) × shares
+ * - Net upfront cost: [1 - P(A)] + P(B) per share
+ *
+ * Outcomes (assuming A = YES on parent, B = YES on child):
+ * - If A YES happens: NO loses (-$), YES wins (+$1) = depends on prices
+ * - If A NO happens, B YES happens: NO wins (+$1), YES wins (+$1) = +$2
+ * - If both NO: NO wins (+$1), YES loses (-$) = depends on prices
+ *
+ * The arbitrage profit comes from the price violation.
+ *
+ * @param opportunity - The cross-market opportunity
+ * @param portfolioValue - Total portfolio value in USD
+ * @param config - Strategy configuration
+ * @returns Calculated position size, or null if not viable
+ */
+export function calculateCrossMarketPositionSize(
+  opportunity: CrossMarketOpportunity,
+  portfolioValue: number,
+  config: StrategyConfig,
+): CrossMarketPositionSize | null {
+  const { trades, relationship } = opportunity;
+
+  // Calculate risk-adjusted budget
+  const maxRiskAmount = portfolioValue * (config.portfolioRiskPct / 100);
+  const positionBudget = Math.min(maxRiskAmount, config.maxPositionSizeUsd);
+
+  if (positionBudget < 1) {
+    logInfo('Cross-market position budget too small', { positionBudget, portfolioValue });
+    return null;
+  }
+
+  // For cross-market, we need capital for BOTH buy orders
+  // We buy the opposite outcome on overpriced market + buy underpriced market
+  const buyPrice = trades.buyMarket.price;
+  const sellPrice = trades.sellMarket.price;
+  const oppositePrice = 1.0 - sellPrice; // Complement price for opposite outcome
+
+  // Total cost per share = opposite outcome price + buy market price
+  const costPerShare = oppositePrice + buyPrice;
+
+  // Maximum shares we can afford
+  const maxSharesFromBudget = Math.floor(positionBudget / costPerShare);
+
+  // Also limit by market liquidity (don't trade more than 5% of liquidity)
+  const parentLiquidity = relationship.parentMarket.liquidity;
+  const childLiquidity = relationship.childMarket.liquidity;
+  const minLiquidity = Math.min(parentLiquidity, childLiquidity);
+  const maxSharesFromLiquidity = Math.floor((minLiquidity * 0.05) / costPerShare);
+
+  // Take the smaller limit
+  const shares = Math.min(maxSharesFromBudget, maxSharesFromLiquidity);
+
+  if (shares < 1) {
+    logInfo('Cannot execute cross-market trade - not enough shares', {
+      maxSharesFromBudget,
+      maxSharesFromLiquidity,
+      costPerShare,
+    });
+    return null;
+  }
+
+  // Calculate costs (both are BUY operations now)
+  const sellRevenueUsd = shares * oppositePrice; // Cost of buying opposite outcome
+  const buyCostUsd = shares * buyPrice; // Cost of buying underpriced market
+  const netCostUsd = sellRevenueUsd + buyCostUsd; // Total capital required
+
+  // Expected profit = price spread × shares
+  const expectedProfitUsd = shares * opportunity.expectedProfitPerShare;
+
+  // ROI based on total capital invested
+  const roi = netCostUsd > 0 ? expectedProfitUsd / netCostUsd : 0;
+
+  // Estimate slippage
+  const sellOrderSize = sellRevenueUsd;
+  const buyOrderSize = buyCostUsd;
+  const sellSlippage = estimateSlippage(sellOrderSize, parentLiquidity);
+  const buySlippage = estimateSlippage(buyOrderSize, childLiquidity);
+
+  logInfo('Cross-market position calculated', {
+    shares,
+    sellPrice: sellPrice.toFixed(4),
+    buyPrice: buyPrice.toFixed(4),
+    sellRevenue: sellRevenueUsd.toFixed(2),
+    buyCost: buyCostUsd.toFixed(2),
+    netCost: netCostUsd.toFixed(2),
+    expectedProfit: expectedProfitUsd.toFixed(4),
+    roi: roi === Infinity ? 'Infinite' : (roi * 100).toFixed(2) + '%',
+    sellSlippage: (sellSlippage * 100).toFixed(2) + '%',
+    buySlippage: (buySlippage * 100).toFixed(2) + '%',
+  });
+
+  return {
+    shares,
+    sellRevenueUsd,
+    buyCostUsd,
+    netCostUsd,
+    expectedProfitUsd,
+    roi,
+    sellSlippage,
+    buySlippage,
+  };
+}
+
+/**
+ * Validate if a cross-market position meets minimum requirements.
+ *
+ * @param position - The calculated position size
+ * @param minProfitUsd - Minimum expected profit to execute (default: $0.50)
+ * @param maxSlippage - Maximum acceptable slippage (default: 5%)
+ * @returns True if position should be executed
+ */
+export function isCrossMarketPositionViable(
+  position: CrossMarketPositionSize,
+  minProfitUsd: number = 0.5,
+  maxSlippage: number = 0.05,
+): boolean {
+  // Must have at least 1 share
+  if (position.shares < 1) {
+    return false;
+  }
+
+  // Must meet minimum profit threshold (higher than intra-market due to complexity)
+  if (position.expectedProfitUsd < minProfitUsd) {
+    logInfo('Cross-market position profit too low', {
+      expectedProfit: position.expectedProfitUsd.toFixed(3),
+      minRequired: minProfitUsd.toFixed(3),
+    });
+    return false;
+  }
+
+  // Check slippage tolerance
+  if (position.sellSlippage > maxSlippage || position.buySlippage > maxSlippage) {
+    logInfo('Cross-market position slippage too high', {
+      sellSlippage: (position.sellSlippage * 100).toFixed(2) + '%',
+      buySlippage: (position.buySlippage * 100).toFixed(2) + '%',
+      maxAllowed: (maxSlippage * 100).toFixed(2) + '%',
+    });
+    return false;
+  }
+
+  return true;
 }

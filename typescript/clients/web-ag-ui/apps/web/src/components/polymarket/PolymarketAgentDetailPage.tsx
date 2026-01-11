@@ -4,7 +4,79 @@ import { ChevronRight, Check, RefreshCw, Star } from 'lucide-react';
 import { useState } from 'react';
 import { PolymarketOpportunityCard, type ArbitrageOpportunity } from './PolymarketOpportunityCard';
 import { PolymarketMetrics, type PolymarketAgentMetrics, type PolymarketStrategyConfig } from './PolymarketMetrics';
+import { CrossMarketOpportunityCard } from './CrossMarketOpportunityCard';
+import { RelationshipsTable } from './RelationshipsTable';
 import type { AgentProfile } from '@/types/agent';
+
+interface CrossMarketOpportunity {
+  relationship: {
+    type: 'IMPLIES' | 'REQUIRES' | 'MUTUAL_EXCLUSION' | 'EQUIVALENCE';
+    parentMarket: {
+      id: string;
+      title: string;
+      yesPrice: number;
+    };
+    childMarket: {
+      id: string;
+      title: string;
+      yesPrice: number;
+    };
+    confidence?: 'high' | 'medium' | 'low';
+    reasoning?: string;
+  };
+  violation: {
+    type: 'PRICE_INVERSION' | 'SUM_EXCEEDS_ONE';
+    description: string;
+    severity: number;
+  };
+  trades: {
+    sellMarket: {
+      marketId: string;
+      outcome: 'yes' | 'no';
+      price: number;
+    };
+    buyMarket: {
+      marketId: string;
+      outcome: 'yes' | 'no';
+      price: number;
+    };
+  };
+  expectedProfitPerShare: number;
+  timestamp: string;
+}
+
+interface MarketRelationship {
+  id: string;
+  type: 'IMPLIES' | 'REQUIRES' | 'MUTUAL_EXCLUSION' | 'EQUIVALENCE';
+  parentMarket: {
+    id: string;
+    title: string;
+    yesPrice: number;
+  };
+  childMarket: {
+    id: string;
+    title: string;
+    yesPrice: number;
+  };
+  detectedAt: string;
+  confidence?: 'high' | 'medium' | 'low';
+  reasoning?: string;
+}
+
+interface Transaction {
+  id: string;
+  cycle: number;
+  action: string;
+  marketId: string;
+  marketTitle: string;
+  shares: number;
+  price: number;
+  totalCost: number;
+  status: string;
+  timestamp: string;
+  orderId?: string;
+  error?: string;
+}
 
 interface PolymarketAgentDetailPageProps {
   agentId: string;
@@ -21,6 +93,9 @@ interface PolymarketAgentDetailPageProps {
   config: PolymarketStrategyConfig;
   portfolioValueUsd: number;
   opportunities: ArbitrageOpportunity[];
+  crossMarketOpportunities: CrossMarketOpportunity[];
+  detectedRelationships: MarketRelationship[];
+  transactionHistory: Transaction[];
   isHired: boolean;
   isHiring: boolean;
   isFiring?: boolean;
@@ -32,7 +107,7 @@ interface PolymarketAgentDetailPageProps {
   onBack: () => void;
 }
 
-type TabType = 'opportunities' | 'metrics' | 'settings';
+type TabType = 'opportunities' | 'cross-market' | 'relationships' | 'history' | 'metrics' | 'settings';
 
 const DEFAULT_AVATAR = '🎯';
 const DEFAULT_AVATAR_BG = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
@@ -51,6 +126,9 @@ export function PolymarketAgentDetailPage({
   config,
   portfolioValueUsd,
   opportunities,
+  crossMarketOpportunities,
+  detectedRelationships,
+  transactionHistory,
   isHired,
   isHiring,
   isFiring,
@@ -208,16 +286,35 @@ export function PolymarketAgentDetailPage({
           </div>
 
           {/* Tabs */}
-          <div className="flex items-center gap-1 mb-6 border-b border-[#2a2a2a]">
+          <div className="flex items-center gap-1 mb-6 border-b border-[#2a2a2a] overflow-x-auto">
             <TabButton
               active={activeTab === 'opportunities'}
               onClick={() => setActiveTab('opportunities')}
-              highlight
+              highlight={opportunities.length > 0}
             >
-              Opportunities {opportunities.length > 0 && `(${opportunities.length})`}
+              Intra-Market {opportunities.length > 0 && `(${opportunities.length})`}
+            </TabButton>
+            <TabButton
+              active={activeTab === 'cross-market'}
+              onClick={() => setActiveTab('cross-market')}
+              highlight={crossMarketOpportunities.length > 0}
+            >
+              Cross-Market {crossMarketOpportunities.length > 0 && `(${crossMarketOpportunities.length})`}
+            </TabButton>
+            <TabButton
+              active={activeTab === 'relationships'}
+              onClick={() => setActiveTab('relationships')}
+            >
+              Relationships {detectedRelationships.length > 0 && `(${detectedRelationships.length})`}
+            </TabButton>
+            <TabButton
+              active={activeTab === 'history'}
+              onClick={() => setActiveTab('history')}
+            >
+              History {transactionHistory.length > 0 && `(${transactionHistory.length})`}
             </TabButton>
             <TabButton active={activeTab === 'metrics'} onClick={() => setActiveTab('metrics')}>
-              Metrics & Performance
+              Metrics
             </TabButton>
             <TabButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')}>
               Settings
@@ -229,11 +326,87 @@ export function PolymarketAgentDetailPage({
             <OpportunitiesTab opportunities={opportunities} />
           )}
 
+          {activeTab === 'cross-market' && (
+            <div className="space-y-4">
+              {crossMarketOpportunities.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <p className="text-lg">No cross-market arbitrage opportunities detected yet.</p>
+                  <p className="text-sm mt-2">The agent is scanning for logical relationships between markets.</p>
+                </div>
+              ) : (
+                crossMarketOpportunities.map((opp, idx) => (
+                  <CrossMarketOpportunityCard key={`${opp.relationship.parentMarket.id}-${idx}`} opportunity={opp} />
+                ))
+              )}
+            </div>
+          )}
+
+          {activeTab === 'relationships' && (
+            <div>
+              <div className="mb-4 p-4 bg-blue-900/20 border border-blue-800/50 rounded-lg">
+                <h3 className="text-sm font-semibold text-blue-400 mb-2">Detected Market Relationships</h3>
+                <p className="text-xs text-gray-300">
+                  The agent automatically detects logical relationships between markets (IMPLIES, MUTUAL_EXCLUSION, etc.).
+                  When prices violate these relationships, arbitrage opportunities are created.
+                </p>
+              </div>
+              <RelationshipsTable relationships={detectedRelationships} />
+            </div>
+          )}
+
+          {activeTab === 'history' && (
+            <div className="space-y-4">
+              {transactionHistory.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <p className="text-lg">No transactions yet.</p>
+                  <p className="text-sm mt-2">Trade history will appear here once the agent starts executing.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {transactionHistory.map((tx) => (
+                    <div
+                      key={tx.id}
+                      className="p-4 rounded-lg bg-[#1e1e1e] border border-[#2a2a2a] hover:border-[#3a3a3a] transition-colors"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                            tx.status === 'success' ? 'bg-green-900/30 text-green-400' :
+                            tx.status === 'failed' ? 'bg-red-900/30 text-red-400' :
+                            'bg-yellow-900/30 text-yellow-400'
+                          }`}>
+                            {tx.status.toUpperCase()}
+                          </span>
+                          <span className="text-sm text-gray-400">Cycle {tx.cycle}</span>
+                          <span className="text-sm font-mono text-gray-500">{tx.action}</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-semibold">{tx.shares} shares @ ${tx.price.toFixed(4)}</div>
+                          <div className="text-xs text-gray-400">Total: ${tx.totalCost.toFixed(2)}</div>
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-300 truncate">{tx.marketTitle}</div>
+                      {tx.orderId && (
+                        <div className="text-xs text-gray-500 mt-1 font-mono">Order: {tx.orderId}</div>
+                      )}
+                      {tx.error && (
+                        <div className="text-xs text-red-400 mt-2 p-2 bg-red-900/20 rounded">{tx.error}</div>
+                      )}
+                      <div className="text-xs text-gray-500 mt-2">{new Date(tx.timestamp).toLocaleString()}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'metrics' && (
             <PolymarketMetrics
               metrics={metrics}
               config={config}
               portfolioValueUsd={portfolioValueUsd}
+              intraMarketCount={opportunities.length}
+              crossMarketCount={crossMarketOpportunities.length}
             />
           )}
 

@@ -98,7 +98,10 @@ export interface UserPosition {
  */
 export interface IPolymarketAdapter {
   // Queries
-  getMarkets(request: { chainIds: string[] }): Promise<GetMarketsResponse>;
+  getMarkets(request: {
+    chainIds: string[];
+    status?: 'active' | 'resolved';  // Filter by market status
+  }): Promise<GetMarketsResponse>;
   getPositions(walletAddress: string): Promise<{ positions: UserPosition[] }>;
 
   // Trading - unified order placement for buy/sell YES/NO
@@ -231,11 +234,24 @@ class AgentPolymarketAdapter implements IPolymarketAdapter {
     return null;
   }
 
-  async getMarkets(request: { chainIds: string[] }): Promise<GetMarketsResponse> {
+  async getMarkets(request: {
+    chainIds: string[];
+    status?: 'active' | 'resolved';
+  }): Promise<GetMarketsResponse> {
     if (!request.chainIds.includes('137')) return { markets: [] };
 
     try {
-      const url = `${this.gammaApiUrl}/markets?closed=false&limit=100`;
+      // Build URL with status filter
+      let url = `${this.gammaApiUrl}/markets?limit=100`;
+      if (request.status === 'active') {
+        url += '&closed=false&active=true';
+      } else if (request.status === 'resolved') {
+        url += '&closed=true';
+      } else {
+        // Default to active markets only
+        url += '&closed=false&active=true';
+      }
+
       const response = await fetch(url);
       if (!response.ok) throw new Error(`Gamma API error: ${response.status}`);
 
@@ -244,6 +260,7 @@ class AgentPolymarketAdapter implements IPolymarketAdapter {
       const markets: PerpetualMarket[] = data
         .filter((m) => {
           const tokens = parseClobTokenIds(m.clobTokenIds);
+          // Additional filtering to ensure we only get valid markets
           return m.active && !m.closed && tokens !== null;
         })
         .map((m) => {

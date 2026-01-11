@@ -82,6 +82,49 @@ export type ArbitrageOpportunity = {
   timestamp: string;
 };
 
+// ============================================================================
+// Cross-Market Arbitrage Types
+// ============================================================================
+
+export type RelationshipType =
+  | 'IMPLIES'           // A → B: If A happens, B must happen (P(A) ≤ P(B))
+  | 'REQUIRES'          // B ← A: A requires B to happen first
+  | 'MUTUAL_EXCLUSION'  // A ⊕ B: Both can't happen (P(A) + P(B) ≤ 1.00)
+  | 'EQUIVALENCE';      // A ↔ B: Same event, different phrasing
+
+export type MarketRelationship = {
+  id: string;                    // Unique ID: "parentMarketId->childMarketId"
+  type: RelationshipType;
+  parentMarket: Market;          // For IMPLIES: the more specific/conditional market
+  childMarket: Market;           // For IMPLIES: the more general/required market
+  detectedAt: string;            // ISO timestamp
+  confidence?: 'high' | 'medium' | 'low'; // Detection confidence
+  reasoning?: string;            // LLM reasoning for why relationship exists
+};
+
+export type CrossMarketOpportunity = {
+  relationship: MarketRelationship;
+  violation: {
+    type: 'PRICE_INVERSION' | 'SUM_EXCEEDS_ONE';
+    description: string;
+    severity: number;            // How much it violates (in dollars per share)
+  };
+  trades: {
+    sellMarket: {
+      marketId: string;
+      outcome: 'yes' | 'no';
+      price: number;
+    };
+    buyMarket: {
+      marketId: string;
+      outcome: 'yes' | 'no';
+      price: number;
+    };
+  };
+  expectedProfitPerShare: number;  // Expected profit per share
+  timestamp: string;
+};
+
 export type Position = {
   marketId: string;
   marketTitle: string;
@@ -100,7 +143,9 @@ export type TransactionAction =
   | 'sell-no'
   | 'cancel'
   | 'cancel-all'
-  | 'redeem';
+  | 'redeem'
+  | 'cross-market-buy'   // Cross-market arbitrage buy leg
+  | 'cross-market-sell'; // Cross-market arbitrage sell leg
 
 export type Transaction = {
   id: string;
@@ -189,6 +234,8 @@ export type OnboardingState = {
 export type PolymarketEvent =
   | { type: 'status'; message: string; task: Task }
   | { type: 'opportunity'; opportunity: ArbitrageOpportunity }
+  | { type: 'cross-market-opportunity'; opportunity: CrossMarketOpportunity }
+  | { type: 'relationship'; relationship: MarketRelationship }
   | { type: 'trade'; transaction: Transaction }
   | { type: 'error'; error: string };
 
@@ -205,6 +252,8 @@ export type PolymarketViewState = {
   markets: Market[];
   positions: Position[];
   opportunities: ArbitrageOpportunity[];
+  crossMarketOpportunities: CrossMarketOpportunity[];
+  detectedRelationships: MarketRelationship[];
   transactionHistory: Transaction[];
   metrics: PolymarketMetrics;
   config: StrategyConfig;
@@ -222,6 +271,8 @@ const defaultViewState = (): PolymarketViewState => ({
   markets: [],
   positions: [],
   opportunities: [],
+  crossMarketOpportunities: [],
+  detectedRelationships: [],
   transactionHistory: [],
   metrics: defaultMetrics(),
   config: DEFAULT_STRATEGY_CONFIG,
@@ -307,6 +358,8 @@ const mergeViewState = (
     markets: right.markets ?? left.markets,
     positions: right.positions ?? left.positions,
     opportunities: right.opportunities ?? left.opportunities,
+    crossMarketOpportunities: right.crossMarketOpportunities ?? left.crossMarketOpportunities,
+    detectedRelationships: right.detectedRelationships ?? left.detectedRelationships,
     config: right.config ?? left.config,
     haltReason: right.haltReason ?? left.haltReason,
     executionError: right.executionError ?? left.executionError,
