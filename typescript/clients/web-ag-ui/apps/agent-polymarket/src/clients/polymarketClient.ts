@@ -1,8 +1,8 @@
 /**
  * Polymarket Client
  *
- * Direct integration with @polymarket/clob-client for prediction market trading.
- * This provides market discovery, order placement, and position tracking.
+ * Lightweight client for Polymarket market discovery and price fetching.
+ * For full trading operations, this uses the same approach as the plugin.
  */
 
 import { Wallet } from '@ethersproject/wallet';
@@ -25,11 +25,12 @@ export interface PolymarketAdapterParams {
   privateKey: string;
   signatureType?: number;
   maxOrderSize?: number;
-  maxOrderNotional?: number;
   gammaApiUrl?: string;
-  dataApiUrl?: string;
 }
 
+/**
+ * Simplified market type for agent UI display.
+ */
 export interface PerpetualMarket {
   name: string;
   marketToken: { address: string; chainId: string };
@@ -58,8 +59,52 @@ export interface GetMarketsResponse {
   markets: PerpetualMarket[];
 }
 
+/**
+ * Order request for placing buy/sell orders.
+ */
+export interface PlaceOrderRequest {
+  marketId: string;
+  outcomeId: 'yes' | 'no';
+  side: 'buy' | 'sell';
+  size: string;
+  price?: string;
+  chainId: string;
+}
+
+/**
+ * Response from placing an order.
+ */
+export interface PlaceOrderResponse {
+  transactions: unknown[];
+  orderId?: string;
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * User position in a market.
+ */
+export interface UserPosition {
+  marketId: string;
+  marketTitle: string;
+  outcomeId: 'yes' | 'no';
+  tokenId: string;
+  size: string;
+  currentPrice?: string;
+}
+
+/**
+ * Full adapter interface for cross-arbitrage trading.
+ */
 export interface IPolymarketAdapter {
+  // Queries
   getMarkets(request: { chainIds: string[] }): Promise<GetMarketsResponse>;
+  getPositions(walletAddress: string): Promise<{ positions: UserPosition[] }>;
+
+  // Trading - unified order placement for buy/sell YES/NO
+  placeOrder(request: PlaceOrderRequest): Promise<PlaceOrderResponse>;
+
+  // Convenience methods (deprecated - use placeOrder instead)
   createLongPosition(request: CreatePositionRequest): Promise<CreatePositionResponse>;
   createShortPosition(request: CreatePositionRequest): Promise<CreatePositionResponse>;
 }
@@ -92,10 +137,6 @@ interface ParsedClobTokenIds {
   no: string;
 }
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
 function parseClobTokenIds(clobTokenIds: string | undefined): ParsedClobTokenIds | null {
   if (!clobTokenIds) return null;
   try {
@@ -109,23 +150,18 @@ function parseClobTokenIds(clobTokenIds: string | undefined): ParsedClobTokenIds
   }
 }
 
-/**
- * Round a price to the market's tick size.
- * Example: roundToTickSize(0.123, '0.01') => 0.12
- */
 function roundToTickSize(price: number, tickSize: string): number {
   const tick = parseFloat(tickSize);
   const rounded = Math.round(price / tick) * tick;
-  // Fix floating point precision issues
   const decimals = tickSize.split('.')[1]?.length ?? 0;
   return parseFloat(rounded.toFixed(decimals));
 }
 
 // ============================================================================
-// PolymarketAdapter Class
+// Lightweight Adapter for Agent
 // ============================================================================
 
-export class PolymarketAdapter implements IPolymarketAdapter {
+class AgentPolymarketAdapter implements IPolymarketAdapter {
   private clobClient: ClobClient | null = null;
   private clobClientPromise: Promise<ClobClient> | null = null;
   private readonly host: string;
@@ -142,26 +178,20 @@ export class PolymarketAdapter implements IPolymarketAdapter {
     this.chainId = params.chainId;
     this.funderAddress = params.funderAddress;
     this.signer = new Wallet(params.privateKey);
-    this.signatureType = params.signatureType ?? 1;
+    this.signatureType = params.signatureType ?? 0;
     this.maxOrderSize = params.maxOrderSize ?? 100;
     this.gammaApiUrl = params.gammaApiUrl ?? 'https://gamma-api.polymarket.com';
   }
 
-  /**
-   * Initialize CLOB client with API credentials.
-   */
   private async getClobClient(): Promise<ClobClient> {
-    if (this.clobClient) {
-      return this.clobClient;
-    }
+    if (this.clobClient) return this.clobClient;
 
     if (!this.clobClientPromise) {
       this.clobClientPromise = (async () => {
-        logInfo('Initializing CLOB client', { host: this.host, chainId: this.chainId });
+        logInfo('Initializing CLOB client', { host: this.host });
         const baseClient = new ClobClient(this.host, this.chainId, this.signer);
-        logInfo('Creating/deriving API key...');
         const creds: ApiKeyCreds = await baseClient.createOrDeriveApiKey();
-        logInfo('API key created', { apiKey: creds.key?.substring(0, 8) + '...' });
+        logInfo('API key created');
         const client = new ClobClient(
           this.host,
           this.chainId,
@@ -171,7 +201,6 @@ export class PolymarketAdapter implements IPolymarketAdapter {
           this.funderAddress,
         );
         this.clobClient = client;
-        logInfo('CLOB client initialized successfully');
         return client;
       })();
     }
@@ -179,12 +208,6 @@ export class PolymarketAdapter implements IPolymarketAdapter {
     return this.clobClientPromise;
   }
 
-  /**
-   * Get market info for order placement.
-   *
-   * Note: Most Polymarket markets use 0.01 tick size. The 0.001 tick size is only
-   * available for specific high-volume markets. We default to 0.01 to be safe.
-   */
   private async getMarketInfo(
     tokenId: string,
   ): Promise<{ tickSize: '0.1' | '0.01' | '0.001' | '0.0001'; negRisk: boolean }> {
@@ -193,53 +216,30 @@ export class PolymarketAdapter implements IPolymarketAdapter {
       const validTickSizes = ['0.1', '0.01', '0.001', '0.0001'] as const;
       const tickSize = validTickSizes.includes(market.tickSize as (typeof validTickSizes)[number])
         ? (market.tickSize as '0.1' | '0.01' | '0.001' | '0.0001')
-        : '0.01'; // Default to 0.01 if market tick size is not recognized
-      logInfo('Using market tick size', { tokenId: tokenId.substring(0, 20) + '...', tickSize, marketTickSize: market.tickSize });
+        : '0.01';
       return { tickSize, negRisk: market.negRisk ?? false };
     }
-    // Default to 0.01 which is the most common tick size on Polymarket
-    logInfo('Market not in cache, using default tick size 0.01', { tokenId: tokenId.substring(0, 20) + '...' });
     return { tickSize: '0.01', negRisk: false };
   }
 
-  /**
-   * Get NO token ID for a given YES token ID from cache.
-   */
   private getNoTokenId(yesTokenId: string): string | null {
     for (const [tokenId, market] of this.marketCache.entries()) {
       const tokens = parseClobTokenIds(market.clobTokenIds);
-      if (tokens?.yes === yesTokenId) {
-        return tokens.no;
-      }
-      if (tokenId === yesTokenId) {
-        return tokens?.no ?? null;
-      }
+      if (tokens?.yes === yesTokenId) return tokens.no;
+      if (tokenId === yesTokenId) return tokens?.no ?? null;
     }
     return null;
   }
 
-  /**
-   * Fetch available markets from Gamma API.
-   */
   async getMarkets(request: { chainIds: string[] }): Promise<GetMarketsResponse> {
-    logInfo('getMarkets called', { chainIds: request.chainIds });
-
-    if (!request.chainIds.includes('137')) {
-      return { markets: [] };
-    }
+    if (!request.chainIds.includes('137')) return { markets: [] };
 
     try {
       const url = `${this.gammaApiUrl}/markets?closed=false&limit=100`;
-      logInfo('Fetching markets from Gamma API', { url });
-
       const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error(`Gamma API error: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Gamma API error: ${response.status}`);
 
       const data = (await response.json()) as GammaMarket[];
-      logInfo(`Gamma API returned ${data.length} markets`);
 
       const markets: PerpetualMarket[] = data
         .filter((m) => {
@@ -248,8 +248,6 @@ export class PolymarketAdapter implements IPolymarketAdapter {
         })
         .map((m) => {
           const tokens = parseClobTokenIds(m.clobTokenIds)!;
-
-          // Cache for later use
           this.marketCache.set(tokens.yes, m);
           this.marketCache.set(tokens.no, m);
 
@@ -266,7 +264,6 @@ export class PolymarketAdapter implements IPolymarketAdapter {
           };
         });
 
-      logInfo(`Returning ${markets.length} active markets`);
       return { markets };
     } catch (error) {
       logInfo('Error fetching markets', { error: String(error) });
@@ -275,98 +272,181 @@ export class PolymarketAdapter implements IPolymarketAdapter {
   }
 
   /**
-   * Create a long position (BUY YES token).
+   * Get token ID for a given market and outcome.
+   */
+  private getTokenIdForOutcome(marketId: string, outcomeId: 'yes' | 'no'): string | null {
+    // marketId could be the YES token ID, so check cache
+    const market = this.marketCache.get(marketId);
+    if (market) {
+      const tokens = parseClobTokenIds(market.clobTokenIds);
+      if (tokens) {
+        return outcomeId === 'yes' ? tokens.yes : tokens.no;
+      }
+    }
+    // If marketId is already a token ID, try to find the other token
+    if (outcomeId === 'yes') {
+      return marketId; // Assume marketId is YES token
+    }
+    return this.getNoTokenId(marketId);
+  }
+
+  /**
+   * Place an order - unified method for buy/sell YES/NO.
+   */
+  async placeOrder(request: PlaceOrderRequest): Promise<PlaceOrderResponse> {
+    try {
+      const clob = await this.getClobClient();
+
+      // Resolve token ID from market ID and outcome
+      const tokenId = this.getTokenIdForOutcome(request.marketId, request.outcomeId);
+      if (!tokenId) {
+        return {
+          transactions: [],
+          success: false,
+          error: `Could not resolve token for market ${request.marketId} outcome ${request.outcomeId}`,
+        };
+      }
+
+      const size = Number(request.size);
+      const rawPrice = request.price ? Number(request.price) : 0.5;
+
+      if (size > this.maxOrderSize) {
+        return {
+          transactions: [],
+          success: false,
+          error: `Order size ${size} exceeds max ${this.maxOrderSize}`,
+        };
+      }
+
+      const { tickSize, negRisk } = await this.getMarketInfo(tokenId);
+      const price = roundToTickSize(rawPrice, tickSize);
+      const clobSide = request.side === 'buy' ? Side.BUY : Side.SELL;
+
+      logInfo('Placing order', {
+        tokenId: tokenId.substring(0, 20) + '...',
+        side: request.side,
+        outcome: request.outcomeId,
+        size,
+        price,
+      });
+
+      const response = (await clob.createAndPostOrder(
+        { tokenID: tokenId, price, side: clobSide, size, feeRateBps: 0 },
+        { tickSize, negRisk },
+        OrderType.GTC,
+      )) as { orderID?: string; id?: string; order?: { id: string }; success?: boolean; error?: string };
+
+      const orderId = response?.orderID || response?.id || response?.order?.id;
+
+      if (!orderId && response?.error) {
+        return {
+          transactions: [],
+          success: false,
+          error: response.error,
+        };
+      }
+
+      logInfo('Order placed', { orderId, side: request.side, outcome: request.outcomeId });
+
+      return {
+        transactions: [],
+        orderId,
+        success: true,
+      };
+    } catch (error) {
+      logInfo('Order failed', { error: String(error) });
+      return {
+        transactions: [],
+        success: false,
+        error: String(error),
+      };
+    }
+  }
+
+  /**
+   * Get user positions from the CLOB API.
+   */
+  async getPositions(walletAddress: string): Promise<{ positions: UserPosition[] }> {
+    try {
+      // Fetch balances from data API
+      const dataApiUrl = 'https://data-api.polymarket.com';
+      const url = `${dataApiUrl}/users/${walletAddress}/positions`;
+
+      logInfo('Fetching positions', { walletAddress: walletAddress.substring(0, 10) + '...' });
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        logInfo('Positions API returned error', { status: response.status });
+        return { positions: [] };
+      }
+
+      const data = (await response.json()) as { positions?: { tokenId: string; balance: string }[] };
+      const positions: UserPosition[] = [];
+
+      for (const pos of data.positions ?? []) {
+        if (!pos.balance || pos.balance === '0') continue;
+
+        // Find market in cache
+        const market = this.marketCache.get(pos.tokenId);
+        if (!market) continue;
+
+        const tokens = parseClobTokenIds(market.clobTokenIds);
+        if (!tokens) continue;
+
+        const isYes = pos.tokenId === tokens.yes;
+
+        positions.push({
+          marketId: market.id,
+          marketTitle: market.question,
+          outcomeId: isYes ? 'yes' : 'no',
+          tokenId: pos.tokenId,
+          size: pos.balance,
+        });
+      }
+
+      logInfo('Positions fetched', { count: positions.length });
+      return { positions };
+    } catch (error) {
+      logInfo('Error fetching positions', { error: String(error) });
+      return { positions: [] };
+    }
+  }
+
+  /**
+   * @deprecated Use placeOrder with side='buy' and outcomeId='yes'
    */
   async createLongPosition(request: CreatePositionRequest): Promise<CreatePositionResponse> {
-    logInfo('createLongPosition called', {
-      marketAddress: request.marketAddress.substring(0, 20) + '...',
-      amount: request.amount,
-      limitPrice: request.limitPrice,
+    const result = await this.placeOrder({
+      marketId: request.marketAddress,
+      outcomeId: 'yes',
+      side: 'buy',
+      size: request.amount,
+      price: request.limitPrice,
+      chainId: request.chainId,
     });
 
-    const clob = await this.getClobClient();
-    const tokenId = request.marketAddress;
-    const size = Number(request.amount);
-    const rawPrice = request.limitPrice ? Number(request.limitPrice) : 0.5;
-
-    if (size > this.maxOrderSize) {
-      throw new Error(`Order size ${size} exceeds max allowed ${this.maxOrderSize}`);
-    }
-
-    const { tickSize, negRisk } = await this.getMarketInfo(tokenId);
-    // Round price to tick size to avoid "invalid tick size" errors
-    const price = roundToTickSize(rawPrice, tickSize);
-    logInfo('Placing LONG order (BUY YES)', { tokenId: tokenId.substring(0, 20) + '...', price, rawPrice, tickSize, size });
-
-    const response = (await clob.createAndPostOrder(
-      {
-        tokenID: tokenId,
-        price,
-        side: Side.BUY,
-        size,
-        feeRateBps: 0,
-      },
-      { tickSize, negRisk },
-      OrderType.GTC,
-    )) as { orderID?: string; id?: string; order?: { id: string } };
-
-    const orderId = response?.orderID || response?.id || response?.order?.id;
-    logInfo('Order placed', { orderId });
-
     return {
-      transactions: [],
-      orderId,
+      transactions: result.transactions,
+      orderId: result.orderId,
     };
   }
 
   /**
-   * Create a short position (BUY NO token).
+   * @deprecated Use placeOrder with side='buy' and outcomeId='no'
    */
   async createShortPosition(request: CreatePositionRequest): Promise<CreatePositionResponse> {
-    logInfo('createShortPosition called', {
-      marketAddress: request.marketAddress.substring(0, 20) + '...',
-      amount: request.amount,
-      limitPrice: request.limitPrice,
+    const result = await this.placeOrder({
+      marketId: request.marketAddress,
+      outcomeId: 'no',
+      side: 'buy',
+      size: request.amount,
+      price: request.limitPrice,
+      chainId: request.chainId,
     });
 
-    const clob = await this.getClobClient();
-    const yesTokenId = request.marketAddress;
-    const noTokenId = this.getNoTokenId(yesTokenId);
-
-    if (!noTokenId) {
-      throw new Error(`Could not find NO token for YES token ${yesTokenId}`);
-    }
-
-    const size = Number(request.amount);
-    const rawPrice = request.limitPrice ? Number(request.limitPrice) : 0.5;
-
-    if (size > this.maxOrderSize) {
-      throw new Error(`Order size ${size} exceeds max allowed ${this.maxOrderSize}`);
-    }
-
-    const { tickSize, negRisk } = await this.getMarketInfo(yesTokenId);
-    // Round price to tick size to avoid "invalid tick size" errors
-    const price = roundToTickSize(rawPrice, tickSize);
-    logInfo('Placing SHORT order (BUY NO)', { noTokenId: noTokenId.substring(0, 20) + '...', price, rawPrice, tickSize, size });
-
-    const response = (await clob.createAndPostOrder(
-      {
-        tokenID: noTokenId,
-        price,
-        side: Side.BUY,
-        size,
-        feeRateBps: 0,
-      },
-      { tickSize, negRisk },
-      OrderType.GTC,
-    )) as { orderID?: string; id?: string; order?: { id: string } };
-
-    const orderId = response?.orderID || response?.id || response?.order?.id;
-    logInfo('Order placed', { orderId });
-
     return {
-      transactions: [],
-      orderId,
+      transactions: result.transactions,
+      orderId: result.orderId,
     };
   }
 }
@@ -375,16 +455,10 @@ export class PolymarketAdapter implements IPolymarketAdapter {
 // Factory Functions
 // ============================================================================
 
-// Cached adapter instance
 let cachedAdapter: IPolymarketAdapter | null = null;
 
-/**
- * Create adapter from environment variables.
- */
 export async function createAdapterFromEnv(): Promise<IPolymarketAdapter | null> {
-  if (cachedAdapter) {
-    return cachedAdapter;
-  }
+  if (cachedAdapter) return cachedAdapter;
 
   const privateKey = process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
   const funderAddress = process.env['POLY_FUNDER_ADDRESS'];
@@ -399,17 +473,15 @@ export async function createAdapterFromEnv(): Promise<IPolymarketAdapter | null>
 
   try {
     logInfo('Creating PolymarketAdapter...');
-
-    cachedAdapter = new PolymarketAdapter({
+    cachedAdapter = new AgentPolymarketAdapter({
       chainId: 137,
       host: process.env['POLYMARKET_CLOB_API'] ?? 'https://clob.polymarket.com',
       funderAddress,
       privateKey,
-      signatureType: parseInt(process.env['POLY_SIGNATURE_TYPE'] ?? '1', 10),
+      signatureType: parseInt(process.env['POLY_SIGNATURE_TYPE'] ?? '0', 10),
       maxOrderSize: parseInt(process.env['POLY_MAX_ORDER_SIZE'] ?? '100', 10),
       gammaApiUrl: process.env['POLYMARKET_GAMMA_API'] ?? 'https://gamma-api.polymarket.com',
     });
-
     logInfo('PolymarketAdapter created successfully');
     return cachedAdapter;
   } catch (error) {
@@ -418,49 +490,22 @@ export async function createAdapterFromEnv(): Promise<IPolymarketAdapter | null>
   }
 }
 
-/**
- * Create a mock adapter for testing.
- */
-export function createMockAdapter(): IPolymarketAdapter {
-  return {
-    getMarkets: async () => {
-      logInfo('[MOCK] getMarkets called');
-      return { markets: [] };
-    },
-    createLongPosition: async (request) => {
-      logInfo('[MOCK] createLongPosition called', { market: request.marketAddress.substring(0, 20) });
-      return { transactions: [], orderId: `mock-yes-${Date.now()}` };
-    },
-    createShortPosition: async (request) => {
-      logInfo('[MOCK] createShortPosition called', { market: request.marketAddress.substring(0, 20) });
-      return { transactions: [], orderId: `mock-no-${Date.now()}` };
-    },
-  };
-}
-
 // ============================================================================
 // Direct Market Fetching (no auth required)
 // ============================================================================
 
-/**
- * Fetch markets directly from Gamma API without authentication.
- * This is useful for testing and displaying markets before login.
- */
 export async function fetchMarketsFromGamma(limit = 20): Promise<PerpetualMarket[]> {
   const gammaApiUrl = process.env['POLYMARKET_GAMMA_API'] ?? 'https://gamma-api.polymarket.com';
 
   try {
     const url = `${gammaApiUrl}/markets?closed=false&limit=${limit}`;
-    logInfo('Fetching markets directly from Gamma API', { url });
+    logInfo('Fetching markets from Gamma API', { url });
 
     const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`Gamma API error: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`Gamma API error: ${response.status}`);
 
     const data = (await response.json()) as GammaMarket[];
-    logInfo(`Direct fetch: Gamma API returned ${data.length} markets`);
+    logInfo(`Gamma API returned ${data.length} markets`);
 
     return data
       .filter((m) => {
@@ -469,7 +514,6 @@ export async function fetchMarketsFromGamma(limit = 20): Promise<PerpetualMarket
       })
       .map((m) => {
         const tokens = parseClobTokenIds(m.clobTokenIds)!;
-
         return {
           name: m.question,
           marketToken: { address: tokens.yes, chainId: '137' },
@@ -483,40 +527,92 @@ export async function fetchMarketsFromGamma(limit = 20): Promise<PerpetualMarket
         };
       });
   } catch (error) {
-    logInfo('Error fetching markets directly', { error: String(error) });
+    logInfo('Error fetching markets', { error: String(error) });
     return [];
   }
 }
 
+// ============================================================================
+// Price Fetching from CLOB API (no auth required)
+// ============================================================================
+
+/**
+ * Market prices with bid/ask for both YES and NO tokens.
+ */
+export interface MarketPrices {
+  /** Price to BUY YES tokens (best ask) - 0 means no sellers */
+  yesBuyPrice: number;
+  /** Price to SELL YES tokens (best bid) - 0 means no buyers */
+  yesSellPrice: number;
+  /** Price to BUY NO tokens (best ask) - 0 means no sellers */
+  noBuyPrice: number;
+  /** Price to SELL NO tokens (best bid) - 0 means no buyers */
+  noSellPrice: number;
+  /** Midpoint price for YES token */
+  yesMidpoint: number;
+  /** Midpoint price for NO token */
+  noMidpoint: number;
+}
+
 /**
  * Fetch market prices from CLOB API.
+ * Returns buy, sell, and midpoint prices for YES and NO tokens.
+ *
+ * IMPORTANT: Polymarket CLOB API `side` parameter refers to the ORDER's side, not user action:
+ * - `side=buy`  returns BID price (orders wanting to BUY = what YOU receive when SELLING)
+ * - `side=sell` returns ASK price (orders wanting to SELL = what YOU pay when BUYING)
  */
 export async function fetchMarketPrices(
   yesTokenId: string,
   noTokenId: string,
-): Promise<{ yesPrice: number; noPrice: number }> {
+): Promise<MarketPrices> {
   const clobUrl = process.env['POLYMARKET_CLOB_API'] ?? 'https://clob.polymarket.com';
 
   try {
-    const [yesRes, noRes] = await Promise.all([
-      fetch(`${clobUrl}/price?token_id=${yesTokenId}&side=buy`),
-      fetch(`${clobUrl}/price?token_id=${noTokenId}&side=buy`),
+    // Fetch all prices in parallel
+    // side=sell -> ASK (what you PAY to buy tokens)
+    // side=buy  -> BID (what you GET when selling tokens)
+    const [yesAskRes, yesBidRes, noAskRes, noBidRes, yesMidRes, noMidRes] = await Promise.all([
+      fetch(`${clobUrl}/price?token_id=${yesTokenId}&side=sell`), // ASK = buy price
+      fetch(`${clobUrl}/price?token_id=${yesTokenId}&side=buy`), // BID = sell price
+      fetch(`${clobUrl}/price?token_id=${noTokenId}&side=sell`), // ASK = buy price
+      fetch(`${clobUrl}/price?token_id=${noTokenId}&side=buy`), // BID = sell price
+      fetch(`${clobUrl}/midpoint?token_id=${yesTokenId}`),
+      fetch(`${clobUrl}/midpoint?token_id=${noTokenId}`),
     ]);
 
-    let yesPrice = 0.5;
-    let noPrice = 0.5;
+    const parsePrice = async (res: Response, fallback = 0): Promise<number> => {
+      if (!res.ok) return fallback;
+      const data = (await res.json()) as { price?: string };
+      return parseFloat(data.price ?? String(fallback));
+    };
 
-    if (yesRes.ok) {
-      const data = (await yesRes.json()) as { price?: string };
-      yesPrice = parseFloat(data.price ?? '0.5');
-    }
-    if (noRes.ok) {
-      const data = (await noRes.json()) as { price?: string };
-      noPrice = parseFloat(data.price ?? '0.5');
-    }
+    const parseMidpoint = async (res: Response, fallback = 0.5): Promise<number> => {
+      if (!res.ok) return fallback;
+      const data = (await res.json()) as { mid?: string };
+      return parseFloat(data.mid ?? String(fallback));
+    };
 
-    return { yesPrice, noPrice };
+    // Parse: yesBuyPrice = ASK, yesSellPrice = BID
+    const [yesBuyPrice, yesSellPrice, noBuyPrice, noSellPrice, yesMidpoint, noMidpoint] =
+      await Promise.all([
+        parsePrice(yesAskRes), // ASK = what you pay to BUY YES
+        parsePrice(yesBidRes), // BID = what you get when SELLING YES
+        parsePrice(noAskRes), // ASK = what you pay to BUY NO
+        parsePrice(noBidRes), // BID = what you get when SELLING NO
+        parseMidpoint(yesMidRes),
+        parseMidpoint(noMidRes),
+      ]);
+
+    return { yesBuyPrice, yesSellPrice, noBuyPrice, noSellPrice, yesMidpoint, noMidpoint };
   } catch {
-    return { yesPrice: 0.5, noPrice: 0.5 };
+    return {
+      yesBuyPrice: 0,
+      yesSellPrice: 0,
+      noBuyPrice: 0,
+      noSellPrice: 0,
+      yesMidpoint: 0.5,
+      noMidpoint: 0.5,
+    };
   }
 }

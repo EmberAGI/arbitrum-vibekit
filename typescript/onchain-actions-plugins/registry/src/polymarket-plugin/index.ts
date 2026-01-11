@@ -2,11 +2,19 @@ import type { ChainConfig } from '../chainConfig.js';
 import type {
   ActionDefinition,
   EmberPlugin,
-  PerpetualsActions,
+  PredictionMarketsActions,
 } from '../core/index.js';
 import type { PublicEmberPluginRegistry } from '../registry.js';
 
-import { PolymarketAdapter, type PolymarketAdapterParams } from './adapter.js';
+import {
+  PolymarketAdapter,
+  fetchMarketPrices,
+  type PolymarketAdapterParams,
+  type MarketPrices,
+} from './adapter.js';
+
+// Re-export price fetching utilities
+export { fetchMarketPrices, type MarketPrices };
 
 /**
  * Get the Polymarket Ember plugin for prediction market trading.
@@ -15,12 +23,12 @@ import { PolymarketAdapter, type PolymarketAdapterParams } from './adapter.js';
  */
 export async function getPolymarketEmberPlugin(
   params: PolymarketAdapterParams,
-): Promise<EmberPlugin<'perpetuals'>> {
+): Promise<EmberPlugin<'predictionMarkets'>> {
   const adapter = new PolymarketAdapter(params);
 
   return {
     id: `POLYMARKET_CHAIN_${params.chainId}`,
-    type: 'perpetuals',
+    type: 'predictionMarkets',
     name: `Polymarket prediction markets on Polygon`,
     description: 'Polymarket CLOB integration for prediction market trading',
     website: 'https://polymarket.com',
@@ -30,13 +38,13 @@ export async function getPolymarketEmberPlugin(
       getMarkets: adapter.getMarkets.bind(adapter),
       getPositions: adapter.getPositions.bind(adapter),
       getOrders: adapter.getOrders.bind(adapter),
-      // New comprehensive wallet analysis methods
-      getTradingHistory: adapter.getTradingHistory.bind(adapter),
-      getUserEarnings: adapter.getUserEarnings.bind(adapter),
-      getPriceHistory: adapter.getPriceHistory.bind(adapter),
-      getMarketTrades: adapter.getMarketTrades.bind(adapter),
-      getTokenBalances: adapter.getTokenBalances.bind(adapter),
-      getComprehensiveWalletData: adapter.getComprehensiveWalletData.bind(adapter),
+      // Additional methods exposed on the adapter for advanced usage:
+      // - getTradingHistory
+      // - getUserEarnings
+      // - getPriceHistory
+      // - getMarketTrades
+      // - getTokenBalances
+      // - getComprehensiveWalletData
     },
   };
 }
@@ -44,61 +52,38 @@ export async function getPolymarketEmberPlugin(
 /**
  * Get the Polymarket actions for prediction market trading.
  * @param adapter - An instance of PolymarketAdapter.
- * @returns An array of action definitions for Polymarket perpetuals.
+ * @returns An array of action definitions for Polymarket prediction markets.
  */
 export async function getPolymarketActions(
   adapter: PolymarketAdapter,
-): Promise<ActionDefinition<PerpetualsActions>[]> {
-  // For Polymarket, we map:
-  // - perpetuals-long → BUY YES token
-  // - perpetuals-short → BUY NO token (or SELL YES)
-  // - perpetuals-close → Cancel orders
-
+): Promise<ActionDefinition<PredictionMarketsActions>[]> {
   // Fetch available tokens from markets
   const { usdc, yesTokens, noTokens } = await adapter.getAvailableTokens();
+  const allOutcomeTokens = [...yesTokens, ...noTokens];
 
   return [
     {
-      type: 'perpetuals-long',
-      name: 'Polymarket BUY YES (Long Position)',
+      type: 'predictionMarkets-placeOrder',
+      name: 'Polymarket Place Order',
       inputTokens: async () =>
         Promise.resolve([
           {
             chainId: '137', // Polygon
-            tokens: [usdc, ...yesTokens], // USDC for payment, YES tokens for output
+            tokens: [usdc], // USDC for payment
           },
         ]),
       outputTokens: async () =>
         Promise.resolve([
           {
             chainId: '137',
-            tokens: yesTokens, // YES token addresses
+            tokens: allOutcomeTokens, // All outcome tokens
           },
         ]),
-      callback: adapter.createLongPosition.bind(adapter),
+      callback: adapter.placeOrder.bind(adapter),
     },
     {
-      type: 'perpetuals-short',
-      name: 'Polymarket BUY NO (Short Position)',
-      inputTokens: async () =>
-        Promise.resolve([
-          {
-            chainId: '137',
-            tokens: [usdc, ...noTokens], // USDC for payment, NO tokens for output
-          },
-        ]),
-      outputTokens: async () =>
-        Promise.resolve([
-          {
-            chainId: '137',
-            tokens: noTokens, // NO token addresses
-          },
-        ]),
-      callback: adapter.createShortPosition.bind(adapter),
-    },
-    {
-      type: 'perpetuals-close',
-      name: 'Polymarket Cancel Orders',
+      type: 'predictionMarkets-cancelOrder',
+      name: 'Polymarket Cancel Order',
       inputTokens: async () =>
         Promise.resolve([
           {
@@ -107,7 +92,26 @@ export async function getPolymarketActions(
           },
         ]),
       outputTokens: async () => Promise.resolve([]),
-      callback: adapter.closeOrders.bind(adapter),
+      callback: adapter.cancelOrder.bind(adapter),
+    },
+    {
+      type: 'predictionMarkets-redeem',
+      name: 'Polymarket Redeem Winnings',
+      inputTokens: async () =>
+        Promise.resolve([
+          {
+            chainId: '137',
+            tokens: allOutcomeTokens, // Outcome tokens to redeem
+          },
+        ]),
+      outputTokens: async () =>
+        Promise.resolve([
+          {
+            chainId: '137',
+            tokens: [usdc], // USDC payout
+          },
+        ]),
+      callback: adapter.redeem.bind(adapter),
     },
   ];
 }
@@ -142,7 +146,8 @@ export function registerPolymarket(
       signatureType: params.signatureType,
       maxOrderSize: params.maxOrderSize,
       maxOrderNotional: params.maxOrderNotional,
+      gammaApiUrl: params.gammaApiUrl,
+      dataApiUrl: params.dataApiUrl,
     }),
   );
 }
-

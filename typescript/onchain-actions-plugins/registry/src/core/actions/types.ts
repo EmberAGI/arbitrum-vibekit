@@ -16,6 +16,12 @@ import type {
   PerpetualsCreateLongPositionCallback,
   PerpetualsCreateShortPositionCallback,
 } from './perpetuals.js';
+import type {
+  PredictionMarketsActions,
+  PredictionMarketsCancelOrderCallback,
+  PredictionMarketsPlaceOrderCallback,
+  PredictionMarketsRedeemCallback,
+} from './predictionMarkets.js';
 import type { SwapActionCallback, SwapActions } from './swap.js';
 import type {
   TokenizedYieldActions,
@@ -36,7 +42,8 @@ export type Action =
   | LiquidityActions
   | SwapActions
   | PerpetualsActions
-  | TokenizedYieldActions;
+  | TokenizedYieldActions
+  | PredictionMarketsActions;
 
 /**
  * Type mapping for action callbacks.
@@ -59,6 +66,9 @@ type CallbacksRecord = {
   'tokenizedYield-sellYt': TokenizedYieldSellYtCallback;
   'tokenizedYield-claimRewards': TokenizedYieldClaimRewardsCallback;
   'tokenizedYield-redeemPt': TokenizedYieldRedeemPtCallback;
+  'predictionMarkets-placeOrder': PredictionMarketsPlaceOrderCallback;
+  'predictionMarkets-cancelOrder': PredictionMarketsCancelOrderCallback;
+  'predictionMarkets-redeem': PredictionMarketsRedeemCallback;
 };
 
 /**

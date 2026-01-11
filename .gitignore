@@ -52,4 +52,5 @@ typescript/clients/web/
 
 
 test.md
-typescript/clients/web-ag-ui/apps/agent-polymarket/docs
+
+typescript/community/mcp-tools/*/node-compile-cache/

@@ -17,7 +17,7 @@ import { calculatePositionSize, isPositionViable } from '../../strategy/evaluato
 import { executeArbitrage } from '../../strategy/executor.js';
 import {
   createAdapterFromEnv,
-  createMockAdapter,
+  fetchMarketPrices,
   type IPolymarketAdapter,
   type PerpetualMarket,
 } from '../../clients/polymarketClient.js';
@@ -28,15 +28,13 @@ let adapterInstance: IPolymarketAdapter | null = null;
 /**
  * Get or create the adapter instance.
  */
-async function getAdapter(): Promise<IPolymarketAdapter> {
+async function getAdapter(): Promise<IPolymarketAdapter | null> {
   if (!adapterInstance) {
-    const realAdapter = await createAdapterFromEnv();
-    if (realAdapter) {
-      logInfo('Using real PolymarketAdapter from plugin');
-      adapterInstance = realAdapter;
+    adapterInstance = await createAdapterFromEnv();
+    if (adapterInstance) {
+      logInfo('PolymarketAdapter initialized');
     } else {
-      logInfo('Using mock adapter (no credentials or plugin not available)');
-      adapterInstance = createMockAdapter();
+      logInfo('No adapter available - missing credentials');
     }
   }
   return adapterInstance;
@@ -44,6 +42,7 @@ async function getAdapter(): Promise<IPolymarketAdapter> {
 
 /**
  * Fetch markets using adapter.getMarkets() and convert to our Market type.
+ * Returns at least 3 markets for frontend display.
  */
 async function fetchMarketsFromPlugin(adapter: IPolymarketAdapter): Promise<Market[]> {
   logInfo('Calling adapter.getMarkets()...');
@@ -61,12 +60,24 @@ async function fetchMarketsFromPlugin(adapter: IPolymarketAdapter): Promise<Mark
     // Convert plugin format to our Market type
     const markets: Market[] = [];
 
-    for (const m of response.markets as PerpetualMarket[]) {
+    // Process at least first 5 markets to ensure we have enough for display
+    const marketsToProcess = response.markets.slice(0, 10) as PerpetualMarket[];
+
+    for (const m of marketsToProcess) {
       const yesTokenId = m.longToken.address;
       const noTokenId = m.shortToken.address;
 
-      // Fetch prices from CLOB API
-      const prices = await fetchPricesFromClob(yesTokenId, noTokenId);
+      // Fetch prices from CLOB API using the client's function
+      // yesBuyPrice/noBuyPrice are ASK prices (what you PAY to buy)
+      const prices = await fetchMarketPrices(yesTokenId, noTokenId);
+
+      // Log prices for verification
+      logInfo('Market prices fetched', {
+        market: m.name.substring(0, 40) + '...',
+        yesBuyPrice: prices.yesBuyPrice.toFixed(3),
+        noBuyPrice: prices.noBuyPrice.toFixed(3),
+        combined: (prices.yesBuyPrice + prices.noBuyPrice).toFixed(3),
+      });
 
       markets.push({
         id: m.marketToken.address,
@@ -74,8 +85,8 @@ async function fetchMarketsFromPlugin(adapter: IPolymarketAdapter): Promise<Mark
         description: m.name,
         yesTokenId,
         noTokenId,
-        yesPrice: prices.yes,
-        noPrice: prices.no,
+        yesPrice: prices.yesBuyPrice,
+        noPrice: prices.noBuyPrice,
         volume: 0,
         liquidity: 0,
         endDate: '',
@@ -84,41 +95,11 @@ async function fetchMarketsFromPlugin(adapter: IPolymarketAdapter): Promise<Mark
       });
     }
 
+    logInfo(`Returning ${markets.length} markets for display`);
     return markets;
   } catch (error) {
     logInfo('Error calling adapter.getMarkets()', { error: String(error) });
     return [];
-  }
-}
-
-/**
- * Fetch YES and NO prices from CLOB API.
- */
-async function fetchPricesFromClob(
-  yesTokenId: string,
-  noTokenId: string,
-): Promise<{ yes: number; no: number }> {
-  try {
-    const [yesRes, noRes] = await Promise.all([
-      fetch(`https://clob.polymarket.com/price?token_id=${yesTokenId}&side=buy`),
-      fetch(`https://clob.polymarket.com/price?token_id=${noTokenId}&side=buy`),
-    ]);
-
-    let yesPrice = 0.5;
-    let noPrice = 0.5;
-
-    if (yesRes.ok) {
-      const data = (await yesRes.json()) as { price?: string };
-      yesPrice = parseFloat(data.price ?? '0.5');
-    }
-    if (noRes.ok) {
-      const data = (await noRes.json()) as { price?: string };
-      noPrice = parseFloat(data.price ?? '0.5');
-    }
-
-    return { yes: yesPrice, no: noPrice };
-  } catch {
-    return { yes: 0.5, no: 0.5 };
   }
 }
 
@@ -148,8 +129,24 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
     };
   }
 
-  // Get the adapter (plugin or mock)
+  // Get the adapter
   const adapter = await getAdapter();
+
+  if (!adapter) {
+    const { task, statusEvent } = buildTaskStatus(
+      state.view.task,
+      'failed',
+      `Cycle ${iteration}: No adapter available - check credentials.`,
+    );
+    return {
+      view: {
+        task,
+        metrics: { ...state.view.metrics, iteration, lastPoll: now },
+        events: [statusEvent],
+        executionError: 'Missing Polymarket credentials',
+      },
+    };
+  }
 
   // Step 1: Fetch markets using adapter.getMarkets()
   const markets = await fetchMarketsFromPlugin(adapter);
@@ -221,13 +218,24 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
   const { task, statusEvent } = buildTaskStatus(
     state.view.task,
     'working',
-    `Cycle ${iteration}: Found ${opportunities.length} opportunities, executed ${opportunitiesExecuted}.`,
+    `Cycle ${iteration}: Scanned ${markets.length} markets, found ${opportunities.length} opportunities.`,
   );
 
   const opportunityEvents = opportunities.slice(0, 5).map((opp) => ({
     type: 'opportunity' as const,
     opportunity: opp,
   }));
+
+  // Log first 3 markets for frontend verification
+  const marketsToLog = markets.slice(0, 3);
+  for (const m of marketsToLog) {
+    logInfo('Market for display', {
+      title: m.title.substring(0, 50),
+      yesPrice: m.yesPrice.toFixed(3),
+      noPrice: m.noPrice.toFixed(3),
+      spread: ((1 - m.yesPrice - m.noPrice) * 100).toFixed(2) + '%',
+    });
+  }
 
   logInfo('Poll cycle complete', {
     iteration,

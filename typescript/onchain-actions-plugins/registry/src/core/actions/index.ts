@@ -4,3 +4,9 @@ export type { LiquidityActions } from './liquidity.js';
 export type { SwapActions } from './swap.js';
 export type { PerpetualsActions } from './perpetuals.js';
 export type { TokenizedYieldActions } from './tokenizedYield.js';
+export type {
+  PredictionMarketsActions,
+  PredictionMarketsPlaceOrderCallback,
+  PredictionMarketsCancelOrderCallback,
+  PredictionMarketsRedeemCallback,
+} from './predictionMarkets.js';

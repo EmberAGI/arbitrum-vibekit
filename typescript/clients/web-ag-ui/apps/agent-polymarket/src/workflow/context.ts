@@ -93,10 +93,19 @@ export type Position = {
   unrealizedPnl: number;
 };
 
+export type TransactionAction =
+  | 'buy-yes'
+  | 'buy-no'
+  | 'sell-yes'
+  | 'sell-no'
+  | 'cancel'
+  | 'cancel-all'
+  | 'redeem';
+
 export type Transaction = {
   id: string;
   cycle: number;
-  action: 'buy-yes' | 'buy-no' | 'cancel';
+  action: TransactionAction;
   marketId: string;
   marketTitle?: string;
   shares: number;

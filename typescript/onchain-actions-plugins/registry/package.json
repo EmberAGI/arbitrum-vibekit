@@ -26,7 +26,11 @@
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\"",
-    "test:ci": "echo \"No CI tests defined for ${npm_package_name}\""
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:ci": "vitest run --reporter=junit --outputFile=test-results.xml"
   },
   "dependencies": {
     "@aave/contract-helpers": "^1.32.1",
@@ -41,7 +45,8 @@
   },
   "devDependencies": {
     "@semantic-release/exec": "^7.1.0",
-    "tsdown": "catalog:"
+    "tsdown": "catalog:",
+    "vitest": "catalog:"
   },
   "license": "MIT",
   "publishConfig": {

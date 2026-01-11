@@ -21,13 +21,15 @@ export function initializePublicRegistry(chainConfigs: ChainConfig[]) {
 export { type ChainConfig, PublicEmberPluginRegistry };
 export * from './core/index.js';
 
-// Polymarket plugin exports
+// Polymarket plugin exports (prediction markets)
 export {
   getPolymarketEmberPlugin,
   getPolymarketActions,
   registerPolymarket,
-} from './polymarket-perpetuals-plugin/index.js';
+  fetchMarketPrices,
+  type MarketPrices,
+} from './polymarket-plugin/index.js';
 export {
   PolymarketAdapter,
   type PolymarketAdapterParams,
-} from './polymarket-perpetuals-plugin/adapter.js';
+} from './polymarket-plugin/adapter.js';
