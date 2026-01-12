@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { TokenIdentifierSchema, TokenSchema } from '../core/schemas/core.js';
 import {
   BuyPtRequestSchema,
   BuyPtResponseSchema,
@@ -16,7 +17,6 @@ import {
   SellYtRequestSchema,
   SellYtResponseSchema,
 } from '../core/schemas/tokenizedYield.js';
-import { TokenIdentifierSchema, TokenSchema } from '../core/schemas/core.js';
 
 export const CreateTokenizedYieldBuyPtEndpointRequestSchema =
   BuyPtRequestSchema.omit({ inputToken: true, amount: true }).extend({

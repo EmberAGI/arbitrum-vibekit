@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { PositionSideSchema } from '../core/schemas/perpetuals.js';
+
 import {
   PaginatedPossibleResultsRequestSchema,
   PaginatedPossibleResultsResponseSchema,

@@ -1,12 +1,13 @@
 import { z } from 'zod';
 
+import { TokenIdentifierSchema } from '../core/schemas/core.js';
 import {
   BorrowTokensRequestSchema,
   RepayTokensRequestSchema,
   SupplyTokensRequestSchema,
   WithdrawTokensRequestSchema,
 } from '../core/schemas/lending.js';
-import { TokenIdentifierSchema } from '../core/schemas/core.js';
+
 import {
   PaginatedPossibleResultsRequestSchema,
   PaginatedPossibleResultsResponseSchema,

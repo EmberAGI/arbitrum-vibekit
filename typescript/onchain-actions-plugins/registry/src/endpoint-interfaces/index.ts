@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-namespace */
 import * as lending from './lending.js';
 import * as liquidity from './liquidity.js';
 import * as pagination from './pagination.js';
