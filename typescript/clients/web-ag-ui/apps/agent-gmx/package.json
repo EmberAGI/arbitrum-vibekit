@@ -5,6 +5,7 @@
   "main": "agent-gmx/graph.ts",
   "type": "module",
   "scripts": {
+    "bootstrap:approve-and-transfer": "tsx src/workflow/helpers/standalone-approval-transfer.ts",
     "dev": "npx @langchain/langgraph-cli dev --port 8125 --no-browser",
     "build": "tsc --project tsconfig.json",
     "clean": "rm -rf dist",
@@ -23,6 +24,7 @@
     "@typescript-eslint/eslint-plugin": "^8.46.4",
     "@typescript-eslint/parser": "^8.46.4",
     "@vitest/coverage-v8": "^4.0.8",
+    "dotenv": "^17.2.3",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "2.32.0",

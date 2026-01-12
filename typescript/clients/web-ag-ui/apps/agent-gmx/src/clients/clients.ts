@@ -1,8 +1,10 @@
+import dotenv from 'dotenv';
 import { createPublicClient, createWalletClient, http, type Account } from 'viem';
 import { arbitrum } from 'viem/chains';
+dotenv.config();
 
-const ARBITRUM_RPC_URL = process.env['ARBITRUM_RPC_URL'] ?? 'https://arbitrum.meowrpc.com';
-
+export const ARBITRUM_RPC_URL = process.env['ARBITRUM_RPC_URL'] ?? 'https://arbitrum.meowrpc.com';
+export const CHAIN = arbitrum;
 type WalletInstance = ReturnType<typeof createWalletClient>;
 
 export type OnchainClients = {
@@ -11,6 +13,8 @@ export type OnchainClients = {
 };
 
 export function createClients(account: Account): OnchainClients {
+  console.log(`Arbitrum RPC : ${ARBITRUM_RPC_URL}`);
+
   const transport = http(ARBITRUM_RPC_URL);
   const publicClient = createPublicClient({
     chain: arbitrum,
