@@ -158,8 +158,9 @@ async function fetchMarketsFromPlugin(adapter: IPolymarketAdapter): Promise<Mark
     // Convert plugin format to our Market type
     const markets: Market[] = [];
 
-    // Process first 50 markets to increase cross-market relationship detection
-    const marketsToProcess = response.markets.slice(0, 50) as PerpetualMarket[];
+    // Configurable market limit for testing/production
+    const maxMarkets = parseInt(process.env.POLY_MAX_MARKETS || '50', 10);
+    const marketsToProcess = response.markets.slice(0, maxMarkets) as PerpetualMarket[];
 
     for (const m of marketsToProcess) {
       const yesTokenId = m.longToken.address;
@@ -294,10 +295,11 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
   logInfo('Intra-market opportunities', { raw: rawOpportunities.length, filtered: opportunities.length });
 
   // Step 2B: Scan for cross-market arbitrage opportunities
+  const useLLM = process.env.POLY_USE_LLM_DETECTION === 'true';
   const { opportunities: rawCrossOpps, relationships } = await scanForCrossMarketOpportunities(
     markets,
     state.view.config,
-    false, // useLLM=false for MVP (use pattern matching)
+    useLLM, // Enable LLM batch detection if configured
   );
 
   const crossOpportunities = filterCrossMarketOpportunities(

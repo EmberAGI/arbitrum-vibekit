@@ -204,6 +204,7 @@ class AgentPolymarketAdapter implements IPolymarketAdapter {
           this.funderAddress,
         );
         this.clobClient = client;
+        logInfo('CLOB client initialized successfully');
         return client;
       })();
     }

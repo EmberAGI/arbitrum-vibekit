@@ -18,6 +18,8 @@ import type {
   CrossMarketOpportunity,
 } from '../workflow/context.js';
 import { logInfo } from '../workflow/context.js';
+import { ChatOpenAI } from '@langchain/openai';
+import { z } from 'zod';
 
 // ============================================================================
 // Pattern-Based Detection (Fallback)
@@ -278,6 +280,24 @@ type LLMRelationshipResponse = {
 };
 
 /**
+ * Zod schema for batch LLM response validation.
+ * Note: OpenAI structured outputs require .nullable() instead of .optional()
+ */
+const RelationshipBatchSchema = z.object({
+  relationships: z.array(
+    z.object({
+      market1Id: z.string(),
+      market2Id: z.string(),
+      hasRelationship: z.boolean(),
+      relationshipType: z.enum(['IMPLIES', 'REQUIRES', 'MUTUAL_EXCLUSION', 'EQUIVALENCE']).nullable(),
+      confidence: z.enum(['high', 'medium', 'low']).nullable(),
+      reasoning: z.string().nullable(),
+      parentMarketId: z.string().nullable(),
+    }),
+  ),
+});
+
+/**
  * Use LLM to detect relationships between markets.
  * This is more flexible and can find novel relationships.
  */
@@ -358,71 +378,267 @@ Important: Only return relationships based on LOGICAL/DEFINITIONAL constraints, 
 For example, "Bitcoin price" and "Ethereum price" may be correlated, but neither IMPLIES the other.`;
 }
 
+/**
+ * Build a batch prompt for analyzing ALL market pairs at once.
+ * This is much more efficient than individual calls (1 API call vs n² calls).
+ */
+function buildBatchPrompt(markets: Market[]): string {
+  // Generate all unique pairs
+  const pairs: Array<[number, number]> = [];
+  for (let i = 0; i < markets.length; i++) {
+    for (let j = i + 1; j < markets.length; j++) {
+      pairs.push([i, j]);
+    }
+  }
+
+  const marketsList = markets
+    .map((m, i) => `${i}. [ID: ${m.id}] "${m.title}" - YES: $${m.yesPrice.toFixed(2)}`)
+    .join('\n');
+
+  const pairsList = pairs.map(([i, j]) => `{market1: ${i}, market2: ${j}}`).join(', ');
+
+  return `Analyze the following ${markets.length} prediction markets and identify ALL logical relationships between them.
+
+MARKETS:
+${marketsList}
+
+PAIRS TO ANALYZE (${pairs.length} total):
+${pairsList}
+
+For EACH pair, determine if there is a logical relationship:
+
+1. IMPLIES (A → B): If Market A happens, Market B MUST happen
+   - Example: "Trump wins Florida" → "Republican wins Florida"
+   - Logic: Trump IS a Republican, so his win guarantees Republican win
+   - Price constraint: P(A) ≤ P(B)
+
+2. REQUIRES (A ← B): Market A requires Market B to happen first
+   - Example: "Biden wins election" ← "Biden is Democratic nominee"
+   - Logic: Can't win without being nominated
+   - Price constraint: P(A) ≤ P(B)
+
+3. MUTUAL_EXCLUSION (A ⊕ B): Both markets cannot happen simultaneously
+   - Example: "Democrats win Senate" ⊕ "Republicans win Senate"
+   - Logic: Only one party can have majority
+   - Price constraint: P(A) + P(B) ≤ $1.00
+
+4. EQUIVALENCE (A ↔ B): Same event, different phrasing
+   - Example: "S&P 500 > 5000" ↔ "Stock market hits 5000"
+   - Logic: Literally the same event
+   - Price constraint: P(A) ≈ P(B)
+
+Analyze all ${pairs.length} pairs and return ONLY those with logical relationships:
+
+{
+  "relationships": [
+    {
+      "market1Id": "<market 1 ID>",
+      "market2Id": "<market 2 ID>",
+      "hasRelationship": true,
+      "relationshipType": "IMPLIES" | "REQUIRES" | "MUTUAL_EXCLUSION" | "EQUIVALENCE",
+      "confidence": "high" | "medium" | "low",
+      "reasoning": "Brief explanation",
+      "parentMarketId": "<ID of more specific market>"
+    }
+    // Include ONLY pairs with relationships (omit pairs with no relationship)
+  ]
+}
+
+Important rules:
+- Analyze ALL ${pairs.length} pairs but only include those WITH relationships in the response
+- All returned relationships must have hasRelationship: true
+- Only return relationships based on LOGICAL/DEFINITIONAL constraints, not correlation
+- For IMPLIES/REQUIRES: parentMarketId should be the more SPECIFIC/CONDITIONAL market
+- For time-based relationships: Shorter timeframe IMPLIES longer (Q1 → 2025, not reverse)
+- For candidate→party: Candidate market is parent (more specific)
+
+Be thorough but concise - only include meaningful relationships.`;
+}
+
+/**
+ * Use LLM batch processing to detect all relationships at once.
+ * This replaces the O(n²) nested loop with a single API call.
+ */
+async function detectRelationshipsByLLMBatch(markets: Market[]): Promise<MarketRelationship[]> {
+  const model = process.env.POLY_LLM_MODEL || 'gpt-4o-mini';
+
+  logInfo('Initializing OpenAI batch detection', {
+    model,
+    marketCount: markets.length,
+    pairCount: (markets.length * (markets.length - 1)) / 2,
+  });
+
+  try {
+    // Initialize OpenAI client with timeout
+    const llm = new ChatOpenAI({
+      modelName: model,
+      temperature: 0, // Deterministic for financial decisions
+      maxTokens: 16000, // Large enough for batch responses
+      timeout: 60000, // 60 second timeout
+    });
+
+    // Build batch prompt
+    const batchPrompt = buildBatchPrompt(markets);
+
+    const startTime = Date.now();
+    logInfo('Sending batch LLM request', {
+      promptLength: batchPrompt.length,
+      estimatedTokens: Math.ceil(batchPrompt.length / 4),
+      timestamp: new Date().toISOString(),
+    });
+
+    // Call LLM with structured output and timeout wrapper
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        const elapsed = Date.now() - startTime;
+        reject(new Error(`LLM request timed out after ${elapsed}ms (60s limit)`));
+      }, 60000);
+    });
+
+    const llmPromise = llm.withStructuredOutput(RelationshipBatchSchema).invoke([
+      {
+        role: 'system',
+        content: 'You are a financial analyst detecting logical relationships in prediction markets. Analyze all market pairs thoroughly and return comprehensive results.',
+      },
+      {
+        role: 'user',
+        content: batchPrompt,
+      },
+    ]);
+
+    logInfo('Waiting for LLM response...', {
+      status: 'in-progress',
+      timeoutSeconds: 60,
+    });
+
+    const result = await Promise.race([llmPromise, timeoutPromise]);
+
+    const elapsed = Date.now() - startTime;
+    logInfo('LLM batch response received', {
+      relationshipsAnalyzed: result.relationships.length,
+      relationshipsFound: result.relationships.filter((r) => r.hasRelationship).length,
+      durationMs: elapsed,
+      durationSeconds: (elapsed / 1000).toFixed(2),
+    });
+
+    // Convert LLM response to MarketRelationship objects
+    const relationships: MarketRelationship[] = [];
+    const marketMap = new Map(markets.map((m) => [m.id, m]));
+
+    for (const rel of result.relationships) {
+      if (!rel.hasRelationship || !rel.relationshipType) {
+        continue; // Skip pairs with no relationship
+      }
+
+      const market1 = marketMap.get(rel.market1Id);
+      const market2 = marketMap.get(rel.market2Id);
+
+      if (!market1 || !market2) {
+        logInfo('Skipping relationship - market not found', {
+          market1Id: rel.market1Id,
+          market2Id: rel.market2Id,
+        });
+        continue;
+      }
+
+      // Determine parent/child based on relationship type and parentMarketId
+      const isMarket1Parent = rel.parentMarketId === rel.market1Id;
+      const parentMarket = isMarket1Parent ? market1 : market2;
+      const childMarket = isMarket1Parent ? market2 : market1;
+
+      relationships.push({
+        id: `${parentMarket.id}->${childMarket.id}`,
+        type: rel.relationshipType,
+        parentMarket,
+        childMarket,
+        detectedAt: new Date().toISOString(),
+        confidence: rel.confidence || 'medium',
+        reasoning: rel.reasoning || 'Detected by LLM',
+      });
+    }
+
+    logInfo('Batch detection complete', {
+      relationshipsReturned: relationships.length,
+    });
+
+    return relationships;
+  } catch (error) {
+    logInfo('LLM batch detection failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    // Return empty array on error - caller can fall back to patterns
+    return [];
+  }
+}
+
 // ============================================================================
 // Main Detection Function
 // ============================================================================
 
 /**
  * Detect all market relationships in a list of markets.
- * Uses both pattern matching and LLM analysis.
+ * Uses LLM batch processing for comprehensive analysis.
  *
  * @param markets - List of active markets to analyze
- * @param useLLM - Whether to use LLM detection (default: false for MVP)
+ * @param useLLM - Whether to use LLM detection (default: false)
  * @returns List of detected relationships
  */
 export async function detectMarketRelationships(
   markets: Market[],
   useLLM = false,
 ): Promise<MarketRelationship[]> {
-  const relationships: MarketRelationship[] = [];
-  const checked = new Set<string>();
-
   logInfo('Starting relationship detection', {
     marketCount: markets.length,
     useLLM,
     maxComparisons: (markets.length * (markets.length - 1)) / 2,
   });
 
-  // Compare each pair of markets
-  for (let i = 0; i < markets.length; i++) {
-    for (let j = i + 1; j < markets.length; j++) {
-      const market1 = markets[i]!;
-      const market2 = markets[j]!;
+  if (useLLM) {
+    // Use batch LLM processing - single API call for all pairs
+    const relationships = await detectRelationshipsByLLMBatch(markets);
 
-      // Skip if already checked this pair
-      const pairKey = `${market1.id}-${market2.id}`;
-      if (checked.has(pairKey)) continue;
-      checked.add(pairKey);
+    logInfo('LLM batch detection complete', {
+      detected: relationships.length,
+      byType: countByType(relationships),
+    });
 
-      // Try LLM detection first if enabled
-      let relationship: MarketRelationship | null = null;
-      if (useLLM) {
-        relationship = await detectRelationshipByLLM(market1, market2);
-      }
+    return relationships;
+  } else {
+    // Fall back to pattern matching (nested loop, but no API calls)
+    const relationships: MarketRelationship[] = [];
+    const checked = new Set<string>();
 
-      // Fallback to pattern matching
-      if (!relationship) {
-        relationship = detectRelationshipsByPattern(market1, market2);
-      }
+    for (let i = 0; i < markets.length; i++) {
+      for (let j = i + 1; j < markets.length; j++) {
+        const market1 = markets[i]!;
+        const market2 = markets[j]!;
 
-      if (relationship) {
-        relationships.push(relationship);
-        logInfo('Detected relationship', {
-          type: relationship.type,
-          parent: relationship.parentMarket.title,
-          child: relationship.childMarket.title,
-          confidence: relationship.confidence,
-        });
+        const pairKey = `${market1.id}-${market2.id}`;
+        if (checked.has(pairKey)) continue;
+        checked.add(pairKey);
+
+        const relationship = detectRelationshipsByPattern(market1, market2);
+
+        if (relationship) {
+          relationships.push(relationship);
+          logInfo('Detected relationship', {
+            type: relationship.type,
+            parent: relationship.parentMarket.title.substring(0, 40),
+            child: relationship.childMarket.title.substring(0, 40),
+            confidence: relationship.confidence,
+          });
+        }
       }
     }
+
+    logInfo('Pattern-based detection complete', {
+      detected: relationships.length,
+      byType: countByType(relationships),
+    });
+
+    return relationships;
   }
-
-  logInfo('Relationship detection complete', {
-    detected: relationships.length,
-    byType: countByType(relationships),
-  });
-
-  return relationships;
 }
 
 // ============================================================================
