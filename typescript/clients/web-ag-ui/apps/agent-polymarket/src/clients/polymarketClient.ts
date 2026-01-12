@@ -110,6 +110,26 @@ export interface IPolymarketAdapter {
   // Convenience methods (deprecated - use placeOrder instead)
   createLongPosition(request: CreatePositionRequest): Promise<CreatePositionResponse>;
   createShortPosition(request: CreatePositionRequest): Promise<CreatePositionResponse>;
+
+  // Balance and order status
+  getUSDCBalance(walletAddress: string): Promise<number>;
+  getOrderStatus(orderId: string): Promise<{
+    status: 'open' | 'filled' | 'partially_filled' | 'cancelled';
+    sizeFilled: string;
+    sizeRemaining: string;
+  }>;
+
+  // Market resolution and redemption
+  getMarketResolution(marketId: string): Promise<{
+    resolved: boolean;
+    winningOutcome?: 'yes' | 'no';
+    resolutionDate?: string;
+  }>;
+  redeemPosition(tokenId: string): Promise<{
+    success: boolean;
+    txHash?: string;
+    error?: string;
+  }>;
 }
 
 // ============================================================================
@@ -467,6 +487,163 @@ class AgentPolymarketAdapter implements IPolymarketAdapter {
       orderId: result.orderId,
     };
   }
+
+  /**
+   * Get USDC balance for a wallet address.
+   * Uses RPC call to USDC.e contract on Polygon.
+   *
+   * @param walletAddress - Wallet address to check
+   * @returns USDC balance in USD (6 decimals)
+   */
+  async getUSDCBalance(walletAddress: string): Promise<number> {
+    try {
+      const USDC_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+      const rpcUrl = process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com';
+
+      // balanceOf(address) selector: 0x70a08231
+      const data = `0x70a08231${walletAddress.slice(2).padStart(64, '0')}`;
+
+      const response = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'eth_call',
+          params: [{ to: USDC_ADDRESS, data }, 'latest'],
+          id: 1,
+        }),
+      });
+
+      const result = (await response.json()) as { result?: string };
+      if (result.result && result.result !== '0x') {
+        // USDC has 6 decimals
+        const balanceWei = BigInt(result.result);
+        return Number(balanceWei) / 1_000_000;
+      }
+      return 0;
+    } catch (error) {
+      logInfo('Error fetching USDC balance', { error: String(error) });
+      return 0;
+    }
+  }
+
+  /**
+   * Get order status from CLOB API.
+   *
+   * @param orderId - Order ID returned from placeOrder
+   * @returns Order status details
+   */
+  async getOrderStatus(orderId: string): Promise<{
+    status: 'open' | 'filled' | 'partially_filled' | 'cancelled';
+    sizeFilled: string;
+    sizeRemaining: string;
+  }> {
+    try {
+      const clob = await this.getClobClient();
+      const order = await clob.getOrder(orderId);
+
+      if (!order) {
+        return { status: 'cancelled', sizeFilled: '0', sizeRemaining: '0' };
+      }
+
+      const sizeFilled = order.size_matched || '0';
+      const sizeRemaining = (
+        parseFloat(order.original_size) - parseFloat(sizeFilled)
+      ).toString();
+
+      if (sizeRemaining === '0' || parseFloat(sizeRemaining) <= 0) {
+        return { status: 'filled', sizeFilled, sizeRemaining: '0' };
+      }
+
+      if (parseFloat(sizeFilled) > 0) {
+        return { status: 'partially_filled', sizeFilled, sizeRemaining };
+      }
+
+      return { status: 'open', sizeFilled: '0', sizeRemaining: order.original_size };
+    } catch (error) {
+      logInfo('Error fetching order status', { error: String(error) });
+      return { status: 'cancelled', sizeFilled: '0', sizeRemaining: '0' };
+    }
+  }
+
+  /**
+   * Check if a market has resolved and get the winning outcome.
+   * Queries Gamma API to check market resolution status.
+   */
+  async getMarketResolution(marketId: string): Promise<{
+    resolved: boolean;
+    winningOutcome?: 'yes' | 'no';
+    resolutionDate?: string;
+  }> {
+    try {
+      const url = `${this.gammaApiUrl}/markets/${marketId}`;
+
+      logInfo('Fetching market resolution', { marketId: marketId.substring(0, 16) });
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        logInfo('Market resolution API error', { status: response.status });
+        return { resolved: false };
+      }
+
+      const data = (await response.json()) as {
+        closed?: boolean;
+        outcome?: string;
+        closed_time?: string;
+      };
+
+      // Market is resolved if it's closed and has an outcome
+      const resolved = data.closed === true && !!data.outcome;
+
+      if (!resolved) {
+        return { resolved: false };
+      }
+
+      // Parse outcome (usually '0' for NO, '1' for YES)
+      const winningOutcome = data.outcome === '1' ? ('yes' as const) : ('no' as const);
+
+      return {
+        resolved: true,
+        winningOutcome,
+        resolutionDate: data.closed_time,
+      };
+    } catch (error) {
+      logInfo('Error checking market resolution', { error: String(error) });
+      return { resolved: false };
+    }
+  }
+
+  /**
+   * Redeem a winning position token for USDC.
+   * Calls the CTF Exchange contract to redeem position.
+   */
+  async redeemPosition(tokenId: string): Promise<{
+    success: boolean;
+    txHash?: string;
+    error?: string;
+  }> {
+    try {
+      const clob = await this.getClobClient();
+
+      logInfo('Redeeming position', { tokenId: tokenId.substring(0, 16) });
+
+      // The CLOB client doesn't directly support redemption
+      // This would require direct contract interaction via ethers
+      // For now, we'll return a placeholder that indicates the feature needs implementation
+
+      logInfo('⚠️ Redemption requires direct contract interaction');
+      return {
+        success: false,
+        error: 'Redemption not yet implemented - requires direct CTF Exchange contract call',
+      };
+    } catch (error) {
+      logInfo('Error redeeming position', { error: String(error) });
+      return {
+        success: false,
+        error: String(error),
+      };
+    }
+  }
 }
 
 // ============================================================================
@@ -516,7 +693,10 @@ export async function fetchMarketsFromGamma(limit = 20): Promise<PerpetualMarket
   const gammaApiUrl = process.env['POLYMARKET_GAMMA_API'] ?? 'https://gamma-api.polymarket.com';
 
   try {
-    const url = `${gammaApiUrl}/markets?closed=false&limit=${limit}`;
+    // closed=false ensures market is not resolved/closed
+    // active=true ensures market is currently accepting orders
+    // archived=false ensures market is not archived
+    const url = `${gammaApiUrl}/markets?closed=false&active=true&archived=false&limit=${limit}`;
     logInfo('Fetching markets from Gamma API', { url });
 
     const response = await fetch(url);

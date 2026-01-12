@@ -235,8 +235,26 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
     };
   }
 
+  // Check for kill switch
+  if (process.env.POLY_KILL_SWITCH === 'true') {
+    logInfo('🚨 Kill switch activated - stopping agent');
+    return {
+      view: {
+        lifecycleState: 'stopped',
+        haltReason: 'Kill switch activated (POLY_KILL_SWITCH=true)',
+        metrics: { ...state.view.metrics, iteration, lastPoll: now },
+      },
+    };
+  }
+
   // Check if we should use mock data for testing
   const useMockData = process.env.POLYMARKET_USE_MOCK_DATA === 'true';
+
+  // Check if paper trading mode is enabled
+  const paperTradingMode = process.env.POLY_PAPER_TRADING === 'true';
+
+  // Check if manual approval mode is enabled
+  const manualApprovalMode = process.env.POLY_MANUAL_APPROVAL === 'true';
 //   const useMockData = true;
 
   let markets: Market[] = [];
@@ -344,6 +362,131 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
     cross: crossOpportunities.length,
   });
 
+  // Calculate metrics and events for frontend reporting
+  const totalOpportunitiesFound = opportunities.length + crossOpportunities.length;
+
+  const opportunityEvents = opportunities.slice(0, 3).map((opp) => ({
+    type: 'opportunity' as const,
+    opportunity: opp,
+  }));
+
+  const crossOpportunityEvents = crossOpportunities.slice(0, 3).map((opp) => ({
+    type: 'cross-market-opportunity' as const,
+    opportunity: opp,
+  }));
+
+  const relationshipEvents = relationships.slice(0, 5).map((rel) => ({
+    type: 'relationship' as const,
+    relationship: rel,
+  }));
+
+  // Manual approval mode - create pending trades and interrupt for user review
+  if (manualApprovalMode && !useMockData && allOpportunities.length > 0) {
+    logInfo('📋 Manual approval mode - creating pending trades', {
+      opportunityCount: allOpportunities.length,
+    });
+
+    const pendingTrades: import('../context.js').PendingTrade[] = [];
+    const expiryTime = new Date(Date.now() + 30000).toISOString(); // 30 second expiry
+
+    // Create pending trades for top opportunities (up to 3)
+    for (const opportunity of allOpportunities.slice(0, 3)) {
+      if (opportunity.type === 'intra') {
+        const position = calculatePositionSize(
+          opportunity.opp,
+          state.view.portfolioValueUsd || 1000,
+          state.view.config,
+        );
+
+        if (!position || !isPositionViable(position)) {
+          continue;
+        }
+
+        pendingTrades.push({
+          id: `${iteration}-${Date.now()}-intra`,
+          type: 'intra-market',
+          createdAt: now,
+          expiresAt: expiryTime,
+          status: 'pending',
+          intraOpportunity: opportunity.opp,
+          intraPosition: {
+            yesShares: position.yesShares,
+            noShares: position.noShares,
+            yesCostUsd: position.yesCostUsd,
+            noCostUsd: position.noCostUsd,
+            totalCostUsd: position.totalCostUsd,
+            expectedProfitUsd: position.expectedProfitUsd,
+            roi: position.roi,
+          },
+        });
+      } else {
+        const position = calculateCrossMarketPositionSize(
+          opportunity.opp,
+          state.view.portfolioValueUsd || 1000,
+          state.view.config,
+        );
+
+        if (!position || !isCrossMarketPositionViable(position, 0.5)) {
+          continue;
+        }
+
+        pendingTrades.push({
+          id: `${iteration}-${Date.now()}-cross`,
+          type: 'cross-market',
+          createdAt: now,
+          expiresAt: expiryTime,
+          status: 'pending',
+          crossOpportunity: opportunity.opp,
+          crossPosition: {
+            shares: position.shares,
+            sellRevenueUsd: position.sellRevenueUsd,
+            buyCostUsd: position.buyCostUsd,
+            netCostUsd: position.netCostUsd,
+            expectedProfitUsd: position.expectedProfitUsd,
+            roi: position.roi,
+          },
+        });
+      }
+    }
+
+    if (pendingTrades.length > 0) {
+      logInfo('Created pending trades for approval', {
+        count: pendingTrades.length,
+        expiresAt: expiryTime,
+      });
+
+      const { task, statusEvent } = buildTaskStatus(
+        state.view.task,
+        'working',
+        `Cycle ${iteration}: Found ${pendingTrades.length} opportunities awaiting approval.`,
+      );
+
+      return {
+        view: {
+          task,
+          markets,
+          opportunities,
+          crossMarketOpportunities: crossOpportunities,
+          detectedRelationships: relationships,
+          pendingTrades,
+          metrics: {
+            iteration,
+            lastPoll: now,
+            totalPnl: state.view.metrics.totalPnl,
+            realizedPnl: state.view.metrics.realizedPnl,
+            unrealizedPnl: state.view.metrics.unrealizedPnl,
+            activePositions: state.view.positions.length,
+            opportunitiesFound: state.view.metrics.opportunitiesFound + totalOpportunitiesFound,
+            opportunitiesExecuted: state.view.metrics.opportunitiesExecuted,
+            tradesExecuted: state.view.metrics.tradesExecuted,
+            tradesFailed: state.view.metrics.tradesFailed,
+          },
+          events: [statusEvent, ...opportunityEvents, ...crossOpportunityEvents, ...relationshipEvents],
+        },
+      };
+    }
+  }
+
   // Execute top opportunities (up to 3 per cycle) - only if not in mock mode
   if (!useMockData) {
     // Need adapter for execution
@@ -351,6 +494,9 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
     if (!adapter) {
       logInfo('No adapter available for execution');
     } else {
+      // Get wallet address for balance checks
+      const walletAddress = state.private.walletAddress;
+
       for (const opportunity of allOpportunities) {
         if (opportunity.type === 'intra') {
           // Execute intra-market arbitrage
@@ -367,14 +513,85 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
             continue;
           }
 
-          const result = await executeArbitrage(opportunity.opp, position, adapter, iteration);
-          newTransactions.push(...result.transactions);
+          // Balance verification before trade
+          if (walletAddress) {
+            try {
+              const usdcBalance = await adapter.getUSDCBalance(walletAddress);
+              const requiredBalance = position.totalCostUsd * 1.05; // 5% buffer for fees
 
-          if (result.success) {
-            tradesExecuted += 2; // YES + NO
+              if (usdcBalance < requiredBalance) {
+                logInfo('⚠️ Insufficient USDC balance for trade', {
+                  market: opportunity.opp.marketTitle.substring(0, 30),
+                  required: requiredBalance.toFixed(2),
+                  available: usdcBalance.toFixed(2),
+                });
+                continue;
+              }
+
+              logInfo('Balance check passed', {
+                available: usdcBalance.toFixed(2),
+                required: requiredBalance.toFixed(2),
+              });
+            } catch (error) {
+              logInfo('Balance check failed', { error: String(error) });
+              continue;
+            }
+          }
+
+          // Execute or simulate trade
+          if (paperTradingMode) {
+            // Paper trading mode - simulate without placing real orders
+            logInfo('📝 PAPER TRADE (intra-market)', {
+              market: opportunity.opp.marketTitle.substring(0, 50),
+              yesShares: position.yesShares,
+              noShares: position.noShares,
+              yesCost: position.yesCostUsd.toFixed(2),
+              noCost: position.noCostUsd.toFixed(2),
+              totalCost: position.totalCostUsd.toFixed(2),
+              expectedProfit: position.expectedProfitUsd.toFixed(2),
+            });
+
+            // Create simulated transactions
+            newTransactions.push(
+              {
+                id: `sim-${iteration}-${Date.now()}-yes`,
+                timestamp: now,
+                cycle: iteration,
+                action: 'buy-yes',
+                marketId: opportunity.opp.marketId,
+                marketTitle: opportunity.opp.marketTitle,
+                shares: position.yesShares,
+                price: opportunity.opp.yesPrice,
+                totalCost: position.yesCostUsd,
+                status: 'simulated',
+              },
+              {
+                id: `sim-${iteration}-${Date.now()}-no`,
+                timestamp: now,
+                cycle: iteration,
+                action: 'buy-no',
+                marketId: opportunity.opp.marketId,
+                marketTitle: opportunity.opp.marketTitle,
+                shares: position.noShares,
+                price: opportunity.opp.noPrice,
+                totalCost: position.noCostUsd,
+                status: 'simulated',
+              },
+            );
+
+            tradesExecuted += 2;
             opportunitiesExecuted++;
           } else {
-            tradesFailed += result.transactions.filter((t) => t.status === 'failed').length;
+            // Real execution
+            const result = await executeArbitrage(opportunity.opp, position, adapter, iteration);
+            newTransactions.push(...result.transactions);
+
+            if (result.success) {
+              tradesExecuted += 2; // YES + NO
+              opportunitiesExecuted++;
+            } else {
+              tradesFailed += result.transactions.filter((t) => t.status === 'failed').length;
+            }
           }
         } else {
           // Execute cross-market arbitrage
@@ -392,14 +609,89 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
             continue;
           }
 
-          const result = await executeCrossMarketArbitrage(opportunity.opp, position, adapter, iteration);
-          newTransactions.push(...result.transactions);
+          // Balance verification before trade
+          if (walletAddress) {
+            try {
+              const usdcBalance = await adapter.getUSDCBalance(walletAddress);
+              const requiredBalance = position.netCostUsd * 1.05; // 5% buffer
 
-          if (result.success) {
-            tradesExecuted += 2; // SELL + BUY
+              if (usdcBalance < requiredBalance) {
+                logInfo('⚠️ Insufficient USDC balance for cross-market trade', {
+                  parent: opportunity.opp.relationship.parentMarket.title.substring(0, 30),
+                  child: opportunity.opp.relationship.childMarket.title.substring(0, 30),
+                  required: requiredBalance.toFixed(2),
+                  available: usdcBalance.toFixed(2),
+                });
+                continue;
+              }
+
+              logInfo('Balance check passed', {
+                available: usdcBalance.toFixed(2),
+                required: requiredBalance.toFixed(2),
+              });
+            } catch (error) {
+              logInfo('Balance check failed', { error: String(error) });
+              continue;
+            }
+          }
+
+          // Execute or simulate trade
+          if (paperTradingMode) {
+            // Paper trading mode - simulate without placing real orders
+            logInfo('📝 PAPER TRADE (cross-market)', {
+              relationship: opportunity.opp.relationship.type,
+              parent: opportunity.opp.relationship.parentMarket.title.substring(0, 40),
+              child: opportunity.opp.relationship.childMarket.title.substring(0, 40),
+              shares: position.shares,
+              sellPrice: opportunity.opp.trades.sellMarket.price,
+              buyPrice: opportunity.opp.trades.buyMarket.price,
+              sellRevenue: position.sellRevenueUsd.toFixed(2),
+              buyCost: position.buyCostUsd.toFixed(2),
+              netCost: position.netCostUsd.toFixed(2),
+              expectedProfit: position.expectedProfitUsd.toFixed(2),
+            });
+
+            // Create simulated transactions
+            newTransactions.push(
+              {
+                id: `sim-${iteration}-${Date.now()}-sell`,
+                timestamp: now,
+                cycle: iteration,
+                action: 'cross-market-sell',
+                marketId: opportunity.opp.trades.sellMarket.marketId,
+                marketTitle: opportunity.opp.relationship.parentMarket.title,
+                shares: position.shares,
+                price: opportunity.opp.trades.sellMarket.price,
+                totalCost: -position.sellRevenueUsd, // Negative because we collect revenue
+                status: 'simulated',
+              },
+              {
+                id: `sim-${iteration}-${Date.now()}-buy`,
+                timestamp: now,
+                cycle: iteration,
+                action: 'cross-market-buy',
+                marketId: opportunity.opp.trades.buyMarket.marketId,
+                marketTitle: opportunity.opp.relationship.childMarket.title,
+                shares: position.shares,
+                price: opportunity.opp.trades.buyMarket.price,
+                totalCost: position.buyCostUsd,
+                status: 'simulated',
+              },
+            );
+
+            tradesExecuted += 2;
             opportunitiesExecuted++;
           } else {
-            tradesFailed += result.transactions.filter((t) => t.status === 'failed').length;
+            // Real execution
+            const result = await executeCrossMarketArbitrage(opportunity.opp, position, adapter, iteration);
+            newTransactions.push(...result.transactions);
+
+            if (result.success) {
+              tradesExecuted += 2; // SELL + BUY
+              opportunitiesExecuted++;
+            } else {
+              tradesFailed += result.transactions.filter((t) => t.status === 'failed').length;
+            }
           }
         }
 
@@ -415,27 +707,11 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
   }
 
   // Step 6: Report to frontend
-  const totalOpportunitiesFound = opportunities.length + crossOpportunities.length;
   const { task, statusEvent } = buildTaskStatus(
     state.view.task,
     'working',
     `Cycle ${iteration}: Scanned ${markets.length} markets, found ${totalOpportunitiesFound} opportunities (${opportunities.length} intra, ${crossOpportunities.length} cross).`,
   );
-
-  const opportunityEvents = opportunities.slice(0, 3).map((opp) => ({
-    type: 'opportunity' as const,
-    opportunity: opp,
-  }));
-
-  const crossOpportunityEvents = crossOpportunities.slice(0, 3).map((opp) => ({
-    type: 'cross-market-opportunity' as const,
-    opportunity: opp,
-  }));
-
-  const relationshipEvents = relationships.slice(0, 5).map((rel) => ({
-    type: 'relationship' as const,
-    relationship: rel,
-  }));
 
   // Log first 3 markets for frontend verification
   const marketsToLog = markets.slice(0, 3);

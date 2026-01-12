@@ -5,6 +5,7 @@
  * Sets up initial state and prepares for trading.
  */
 
+import { ethers } from 'ethers';
 import type { PolymarketState, PolymarketUpdate } from '../context.js';
 import { logInfo, buildTaskStatus, DEFAULT_STRATEGY_CONFIG } from '../context.js';
 
@@ -28,8 +29,25 @@ export async function bootstrapNode(state: PolymarketState): Promise<PolymarketU
     pollIntervalMs: parseInt(process.env['POLY_POLL_INTERVAL_MS'] ?? '30000', 10),
   };
 
-  // Get wallet address from environment or private key
-  const walletAddress = process.env['POLY_FUNDER_ADDRESS'];
+  // Get wallet address from environment or derive from private key
+  let walletAddress = process.env['POLY_FUNDER_ADDRESS'];
+
+  if (!walletAddress) {
+    const privateKey = process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
+    if (privateKey) {
+      try {
+        const wallet = new ethers.Wallet(privateKey);
+        walletAddress = wallet.address;
+        logInfo('Wallet address derived from private key', {
+          address: walletAddress.substring(0, 10) + '...',
+        });
+      } catch (error) {
+        logInfo('Failed to derive wallet address from private key', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
 
   // Build task status
   const { task, statusEvent } = buildTaskStatus(

@@ -27,6 +27,151 @@ export interface ExecutionResult {
 }
 
 /**
+ * Order status monitoring result.
+ */
+export interface OrderMonitoringResult {
+  orderId: string;
+  status: 'open' | 'filled' | 'partially_filled' | 'cancelled';
+  sizeFilled: string;
+  sizeRemaining: string;
+  lastChecked: string;
+}
+
+/**
+ * Monitor order status for a list of transactions with order IDs.
+ * Returns updated status for each order.
+ *
+ * @param transactions - List of transactions to monitor (must have orderId)
+ * @param adapter - Polymarket adapter for querying order status
+ * @returns Array of monitoring results
+ */
+export async function monitorOrderStatus(
+  transactions: Transaction[],
+  adapter: IPolymarketAdapter,
+): Promise<OrderMonitoringResult[]> {
+  const results: OrderMonitoringResult[] = [];
+
+  logInfo('Monitoring order status', {
+    transactionCount: transactions.length,
+    orderIds: transactions.map((t) => t.orderId).filter(Boolean),
+  });
+
+  for (const tx of transactions) {
+    if (!tx.orderId) {
+      // Skip transactions without order IDs
+      continue;
+    }
+
+    try {
+      const status = await adapter.getOrderStatus(tx.orderId);
+
+      results.push({
+        orderId: tx.orderId,
+        status: status.status,
+        sizeFilled: status.sizeFilled,
+        sizeRemaining: status.sizeRemaining,
+        lastChecked: new Date().toISOString(),
+      });
+
+      logInfo('Order status checked', {
+        orderId: tx.orderId.substring(0, 16) + '...',
+        status: status.status,
+        filled: status.sizeFilled,
+        remaining: status.sizeRemaining,
+      });
+    } catch (error) {
+      logInfo('Failed to check order status', {
+        orderId: tx.orderId,
+        error: String(error),
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Wait for orders to be filled with timeout.
+ * Polls order status until all orders are filled or timeout is reached.
+ *
+ * @param transactions - List of transactions to monitor
+ * @param adapter - Polymarket adapter for querying order status
+ * @param timeoutMs - Maximum time to wait in milliseconds (default: 30 seconds)
+ * @param pollIntervalMs - How often to check status in milliseconds (default: 5 seconds)
+ * @returns True if all orders filled, false if timeout or partial fill
+ */
+export async function waitForOrderFill(
+  transactions: Transaction[],
+  adapter: IPolymarketAdapter,
+  timeoutMs: number = 30000,
+  pollIntervalMs: number = 5000,
+): Promise<boolean> {
+  const orderIds = transactions.map((t) => t.orderId).filter((id): id is string => !!id);
+
+  if (orderIds.length === 0) {
+    logInfo('No order IDs to monitor');
+    return false;
+  }
+
+  logInfo('Waiting for order fills', {
+    orderCount: orderIds.length,
+    timeoutMs,
+    pollIntervalMs,
+  });
+
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    const results = await monitorOrderStatus(transactions, adapter);
+
+    // Check if all orders are filled
+    const allFilled = results.every((r) => r.status === 'filled');
+
+    if (allFilled) {
+      logInfo('✅ All orders filled', {
+        elapsed: Date.now() - startTime,
+        orderCount: results.length,
+      });
+      return true;
+    }
+
+    // Check for cancelled orders
+    const cancelled = results.filter((r) => r.status === 'cancelled');
+    if (cancelled.length > 0) {
+      logInfo('⚠️ Some orders were cancelled', {
+        cancelledCount: cancelled.length,
+        orderIds: cancelled.map((r) => r.orderId.substring(0, 16)),
+      });
+      return false;
+    }
+
+    // Log partial fills
+    const partialFills = results.filter((r) => r.status === 'partially_filled');
+    if (partialFills.length > 0) {
+      logInfo('⏳ Partial fills detected', {
+        partialCount: partialFills.length,
+        elapsed: Date.now() - startTime,
+      });
+    }
+
+    // Wait before next poll
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+
+  // Timeout reached
+  const finalResults = await monitorOrderStatus(transactions, adapter);
+  const filled = finalResults.filter((r) => r.status === 'filled').length;
+
+  logInfo('⏱️ Order monitoring timeout', {
+    timeoutMs,
+    filledCount: filled,
+    totalCount: finalResults.length,
+  });
+
+  return false;
+}
+
+/**
  * Execute an intra-market arbitrage trade using the plugin.
  *
  * Uses:

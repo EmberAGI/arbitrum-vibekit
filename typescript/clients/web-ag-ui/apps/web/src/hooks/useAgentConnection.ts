@@ -45,7 +45,9 @@ const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
   value !== null &&
   ((value as { type?: string }).type === 'operator-config-request' ||
     (value as { type?: string }).type === 'clmm-funding-token-request' ||
-    (value as { type?: string }).type === 'clmm-delegation-signing-request');
+    (value as { type?: string }).type === 'clmm-delegation-signing-request' ||
+    (value as { type?: string }).type === 'approval-amount-request' ||
+    (value as { type?: string }).type === 'usdc-permit-signature-request');
 
 export interface UseAgentConnectionResult {
   config: AgentConfig;
@@ -85,6 +87,11 @@ export interface UseAgentConnectionResult {
 
   // Settings management: updates local state then syncs to backend
   updateSettings: (updates: Partial<AgentSettings>) => void;
+
+  // State management: direct state updates
+  setState: (
+    update: Partial<AgentState> | ((prev: AgentState | undefined) => AgentState),
+  ) => void;
 }
 
 export function useAgentConnection(agentId: string): UseAgentConnectionResult {
@@ -230,5 +237,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     runSync,
     resolveInterrupt,
     updateSettings,
+    setState,
   };
 }
