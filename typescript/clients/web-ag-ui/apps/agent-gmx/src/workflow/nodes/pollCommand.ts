@@ -15,7 +15,7 @@ import { cancelCronForThread } from '../cronScheduler.js';
 import { Command } from '@langchain/langgraph';
 import { loadBootstrapContext } from '../store.js';
 import { GMXOrderParams, PositionDirection } from '../../domain/types.js';
-import { erc20Abi, parseEther, parseUnits } from 'viem';
+import { erc20Abi, parseEther, parseUnits, TransactionReceipt } from 'viem';
 import { createGmxCalldata } from '../helpers/create-gmx-calldata.js';
 import { executeTransaction } from '../../core/transaction.js';
 import { createClients } from '../../clients/clients.js';
@@ -101,9 +101,49 @@ export const pollCommandNode = async (
       },
     );
     logInfo(`⏳ Executing GMX Order`);
-    await executeGMXDecision({
+    const receipt: TransactionReceipt = await executeGMXDecision({
       orderParams,
       data: multicallCalldata as unknown as `0x${string}`,
+    });
+
+    const updatedTelemetry = [
+      ...state.view.activity.telemetry,
+      {
+        cycle: state.view.activity.telemetry.length + 1,
+        txHash: receipt.transactionHash,
+        marketAddress: decision.marketAddress,
+        action: decision.kind,
+        direction: decision.direction,
+        sizeUsd: decision.sizeUsd,
+        reason: decision.reason,
+        leverage: decision.leverage,
+        entryPrice: `${
+          decision.kind === 'open-position'
+            ? acceptablePriceOpenPosition
+            : acceptablePriceClosePosition
+        }`,
+        timestamp: receipt.logs[0].blockTimestamp?.toString() ?? new Date().toISOString(),
+        metrics: {
+          leverage: decision.leverage,
+          gasSpentWei: receipt.gasUsed.toString(),
+        },
+      },
+    ];
+
+    return new Command({
+      goto: 'summarize',
+      update: {
+        view: {
+          task,
+          activity: {
+            telemetry: updatedTelemetry,
+            events: pollingEvents,
+          },
+        },
+        private: {
+          mode,
+        },
+      },
     });
   }
 
@@ -181,7 +221,7 @@ export async function executeGMXDecision({
   orderParams: GMXOrderParams;
   delegationBundle?: DelegationBundle;
   delegationsBypassActive?: boolean;
-}) {
+}): Promise<TransactionReceipt> {
   const { account, agentWalletAddress } = await loadBootstrapContext();
   logInfo(`👤 Executing GMX Decision with Agent account: `, { agentWalletAddress });
 
@@ -213,4 +253,5 @@ export async function executeGMXDecision({
   });
 
   logInfo(`🧾 Receipt: \n`, receipt);
+  return receipt;
 }
