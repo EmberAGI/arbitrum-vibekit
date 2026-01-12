@@ -15,10 +15,11 @@ import { cancelCronForThread } from '../cronScheduler.js';
 import { Command } from '@langchain/langgraph';
 import { loadBootstrapContext } from '../store.js';
 import { GMXOrderParams, PositionDirection } from '../../domain/types.js';
-import { parseEther, parseUnits } from 'viem';
+import { erc20Abi, parseEther, parseUnits } from 'viem';
 import { createGmxCalldata } from '../helpers/create-gmx-calldata.js';
 import { executeTransaction } from '../../core/transaction.js';
 import { createClients } from '../../clients/clients.js';
+import { GMX_EXCHANGE_ROUTER, GMX_ORDER_VAULT } from '../../constants.js';
 
 type Configurable = { configurable?: { thread_id?: string } };
 
@@ -101,7 +102,7 @@ export const pollCommandNode = async (
     );
     logInfo(`⏳ Executing GMX Order`);
     await executeGMXDecision({
-      marketAddress: decision.marketAddress,
+      orderParams,
       data: multicallCalldata as unknown as `0x${string}`,
     });
   }
@@ -136,14 +137,14 @@ export async function evaluateGMXDecision(ctx: GMXDecisionContext): Promise<GMXA
   // Case 1: No position → OPEN
 
   if (!hasOpenPosition) {
-    // 10$ position with $5 collateral
+    // 10$ position with $5 collateral SHORT
     return {
       kind: 'open-position',
       marketAddress: ctx.markets[0].marketToken as `0x${string}`,
-      direction: 0,
+      direction: 1,
       sizeUsd: '10',
       leverage: '2',
-      collateralAmount: '5',
+      collateralAmount: '0',
       collateralToken: ctx.markets[0].shortToken, // USDC
       reason: 'No open GMX position detected; opening demo long',
     };
@@ -172,22 +173,43 @@ export async function evaluateGMXDecision(ctx: GMXDecisionContext): Promise<GMXA
 
 export async function executeGMXDecision({
   data,
-  marketAddress,
+  orderParams,
   delegationBundle,
   delegationsBypassActive,
 }: {
   data: `0x${string}`;
-  marketAddress: `0x${string}`;
+  orderParams: GMXOrderParams;
   delegationBundle?: DelegationBundle;
   delegationsBypassActive?: boolean;
 }) {
-  const { account } = await loadBootstrapContext();
+  const { account, agentWalletAddress } = await loadBootstrapContext();
+  logInfo(`👤 Executing GMX Decision with Agent account: `, { agentWalletAddress });
+
   if (delegationsBypassActive && delegationBundle) {
   }
   const clients = createClients(account);
+
+  //   const routerAllowance = await clients.public.readContract({
+  //     address: orderParams.collateralToken as `0x${string}`,
+  //     abi: erc20Abi,
+  //     functionName: 'allowance',
+  //     args: [agentWalletAddress, GMX_EXCHANGE_ROUTER],
+  //   });
+
+  //   const vaultAllowance = await clients.public.readContract({
+  //     address: orderParams.collateralToken as `0x${string}`,
+  //     abi: erc20Abi,
+  //     functionName: 'allowance',
+  //     args: [agentWalletAddress, GMX_ORDER_VAULT],
+  //   });
+
+  //   logInfo(`Allowance from ${agentWalletAddress} to ${GMX_EXCHANGE_ROUTER}:`, { routerAllowance });
+  //   logInfo(`Allowance from ${agentWalletAddress} to ${GMX_ORDER_VAULT}:`, { vaultAllowance });
+
   let receipt = await executeTransaction(clients, {
-    to: marketAddress,
+    to: GMX_EXCHANGE_ROUTER, /// TODO Bring this in dynamically if needed
     data: data,
+    value: orderParams.executionFee,
   });
 
   logInfo(`🧾 Receipt: \n`, receipt);

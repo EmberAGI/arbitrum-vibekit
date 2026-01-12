@@ -7,7 +7,7 @@ import {
   ORDER_TYPE_NAME,
   POSITION_DIRECTION_NAME,
   DECREASE_SWAP_TYPE_NAME,
-} from '../../domain/types.ts';
+} from '../../domain/types.js';
 
 import {
   ARBITRUM_CHAIN_ID,
@@ -17,10 +17,10 @@ import {
   GM_TOKEN_SWAP_ONLY_USDC_DAI,
   ZERO_BYTES32,
   GMX_MARKET_FACTORY,
-} from '../../constants.ts';
+} from '../../constants.js';
 
-import exchangeRouter from '../helpers/utils/abis/ExchangeRouter.json';
-import orderVault from '../helpers/utils/abis/OrderVault.json';
+import exchangeRouter from '../helpers/utils/abis/ExchangeRouter.json' with { type: 'json' };
+import orderVault from '../helpers/utils/abis/OrderVault.json' with { type: 'json' };
 
 export async function createGmxCalldata(orderParams: GMXOrderParams): Promise<{
   sendWntCalldata: string;
@@ -30,7 +30,7 @@ export async function createGmxCalldata(orderParams: GMXOrderParams): Promise<{
   orderTypeName: string;
 }> {
   // Get network name and contracts
-  const networkName = ARBITRUM_CHAIN_ID === 421614 ? 'arbitrumSepolia' : 'arbitrum';
+  //   const networkName = ARBITRUM_CHAIN_ID === 421614 ? 'arbitrumSepolia' : 'arbitrum';
 
   //   const exchangeRouter = await import(
   //     `../../lib/gmx-synthetics/deployments/${networkName}/ExchangeRouter.json`,
@@ -43,6 +43,14 @@ export async function createGmxCalldata(orderParams: GMXOrderParams): Promise<{
   //   );
 
   // Default values
+
+  if (
+    orderParams.orderType === 2 &&
+    orderParams.direction === 1 &&
+    orderParams.collateralAmount > 0n
+  ) {
+    throw new Error('GMX v2: SHORT MarketIncrease must not send collateral');
+  }
   const isLong = orderParams.isLong ?? orderParams.direction == 0; //PositionDirection.Long
   const swapPath = orderParams.swapPath || [];
   const callbackContract = orderParams.callbackContract || zeroAddress;
@@ -51,8 +59,12 @@ export async function createGmxCalldata(orderParams: GMXOrderParams): Promise<{
   const triggerPrice = orderParams.triggerPrice || 0n;
   const decreasePositionSwapType = orderParams.decreasePositionSwapType || 0;
   const shouldUnwrapNativeToken = orderParams.shouldUnwrapNativeToken || false;
+  //   const initialCollateralDeltaAmount =
+  //     orderParams.orderType == 2 || orderParams.orderType == 3 ? orderParams.collateralAmount : 0n;
   const initialCollateralDeltaAmount =
-    orderParams.orderType == 2 || orderParams.orderType == 3 ? orderParams.collateralAmount : 0n;
+    orderParams.orderType === 2 && orderParams.direction === 0 ? orderParams.collateralAmount : 0n;
+
+  const shouldSendTokens = orderParams.orderType === 2 && orderParams.direction === 0;
   // For swaps, market address should be zero
   const marketAddress =
     orderParams.orderType == 0 || orderParams.orderType == 1
@@ -97,11 +109,13 @@ export async function createGmxCalldata(orderParams: GMXOrderParams): Promise<{
   //   console.log(`  Calldata: ${sendWntCalldata}`);
 
   // 2. Send collateral tokens
-  const sendTokensCalldata = encodeFunctionData({
-    abi: exchangeRouter.abi,
-    functionName: 'sendTokens',
-    args: [orderParams.collateralToken, orderVault.address, orderParams.collateralAmount],
-  });
+  const sendTokensCalldata = shouldSendTokens
+    ? encodeFunctionData({
+        abi: exchangeRouter.abi,
+        functionName: 'sendTokens',
+        args: [orderParams.collateralToken, orderVault.address, orderParams.collateralAmount],
+      })
+    : null;
 
   console.log('==============================================');
 
@@ -167,7 +181,9 @@ export async function createGmxCalldata(orderParams: GMXOrderParams): Promise<{
   const multicallCalldata = encodeFunctionData({
     abi: exchangeRouter.abi,
     functionName: 'multicall',
-    args: [[sendWntCalldata, sendTokensCalldata, createOrderCalldata]],
+    args: [
+      [sendWntCalldata, ...(shouldSendTokens ? [sendTokensCalldata] : []), createOrderCalldata],
+    ],
   });
 
   //   console.log(`\n🎯 executeBatch Calldata:`);
@@ -257,7 +273,7 @@ export async function createLimitIncrease(
 ) {
   return createGmxCalldata({
     receiver,
-    orderType: OrderType.LimitIncrease,
+    orderType: 3,
     direction: direction,
     sizeDeltaUsd: parseUnits(sizeUsd, 30),
     acceptablePrice: parseUnits(acceptablePrice, 30),
@@ -278,7 +294,7 @@ export async function createMarketDecrease(
 ) {
   return createGmxCalldata({
     receiver,
-    orderType: OrderType.MarketDecrease,
+    orderType: 4,
     direction: direction,
     sizeDeltaUsd: parseUnits(sizeUsd, 30),
     acceptablePrice: parseUnits(acceptablePrice, 30),
@@ -291,17 +307,17 @@ export async function createMarketDecrease(
 }
 
 // POC Usage Examples
-export async function createPOCOrders() {
+export async function createPOCOrders(receiver: `0x${string}`) {
   console.log('Testing POC Order Calldata');
   console.log('================================\n');
 
   // Example 1: Market Long ETH/USDC
   console.log('Market Long Order:');
-  const marketLong = await createMarketLong('500', '0.1', '2500');
+  const marketLong = await createMarketLong(receiver, '500', '0.1', '2500');
 
   // Example 2: Market Short ETH/USDC
   console.log('Market Short Order:');
-  const marketShort = await createMarketShort('500', '0.1', '2600');
+  const marketShort = await createMarketShort(receiver, '500', '0.1', '2600');
 
   // Example 3: Market Swap WETH to DAI
   console.log('Market Swap Order (WETH → DAI):');
@@ -309,11 +325,19 @@ export async function createPOCOrders() {
     GM_ETH_USDC_MARKET, // GM_TOKEN_ETH_WETH_USDC
     GM_TOKEN_SWAP_ONLY_USDC_DAI, // GM_TOKEN_SWAP_ONLY_USDC_DAI
   ];
-  const marketSwap = await createMarketSwap(ARBITRUM_WETH_ADDRESS, '0.1', 18, swapPath, '200');
+  const marketSwap = await createMarketSwap(
+    receiver,
+    ARBITRUM_WETH_ADDRESS,
+    '0.1',
+    18,
+    swapPath,
+    '200',
+  );
 
   // Example 4: Limit Increase Order
   console.log('\n4️⃣ Limit Increase Order:');
   const limitIncrease = await createLimitIncrease(
+    receiver,
     '500',
     '0.1',
     '2400', // Trigger price
@@ -324,6 +348,7 @@ export async function createPOCOrders() {
   // Example 5: Market Decrease Order
   console.log('\n5️⃣ Market Decrease Order:');
   const marketDecrease = await createMarketDecrease(
+    receiver,
     '250', // Decrease half position
     '2550',
     0,
