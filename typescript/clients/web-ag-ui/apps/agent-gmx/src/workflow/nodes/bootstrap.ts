@@ -1,7 +1,13 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
-import { resolvePollIntervalMs, resolveStreamLimit } from '../../config/constants.js';
+import {
+  ARBITRUM_USDC_ADDRESS,
+  ARBITRUM_WETH_ADDRESS,
+  GM_ETH_USDC_MARKET,
+  resolvePollIntervalMs,
+  resolveStreamLimit,
+} from '../../config/constants.js';
 import { logInfo, type GMXEvent, type GMXState, type GMXUpdate } from '../context.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
@@ -73,9 +79,9 @@ export const bootstrapNode = async (
         allowedTokens: ['WETH', 'USDC'],
         allowedMarkets: [
           {
-            marketToken: '0x70d95587d40A2caf56bd97485aB3Eec10Bee6336',
-            longToken: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
-            shortToken: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+            marketToken: GM_ETH_USDC_MARKET,
+            longToken: ARBITRUM_WETH_ADDRESS,
+            shortToken: ARBITRUM_USDC_ADDRESS,
           },
         ],
       },
