@@ -1,7 +1,11 @@
 import { z } from 'zod';
 
-import { TokenIdentifierSchema } from '../core/schemas/core.js';
-import { LiquidityProvisionRangeSchema } from '../core/schemas/liquidity.js';
+import { TokenIdentifierSchema, TokenSchema } from '../core/schemas/core.js';
+import {
+  LiquidityPositionRangeSchema,
+  LiquidityProvisionRangeSchema,
+  LiquidityRewardsOwedTokenSchema,
+} from '../core/schemas/liquidity.js';
 
 import {
   PaginatedPossibleResultsRequestSchema,
@@ -84,3 +88,80 @@ export const CreateLiquidityWithdrawEndpointRequestSchema = z.object({
     .describe('The wallet owning the liquidity position to withdraw'),
   poolTokenUid: TokenIdentifierSchema.describe('The LP token identifier'),
 });
+
+export const LiquidityPositionPooledTokenSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  name: z.string(),
+  symbol: z.string(),
+  decimals: z.number().int(),
+  amount: z.string(),
+  usdPrice: z.string().optional(),
+  valueUsd: z.string().optional(),
+});
+export type LiquidityPositionPooledToken = z.infer<
+  typeof LiquidityPositionPooledTokenSchema
+>;
+
+export const LiquidityPositionFeesOwedTokenSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  name: z.string(),
+  symbol: z.string(),
+  decimals: z.number().int(),
+  amount: z.string(),
+  usdPrice: z.string().optional(),
+  valueUsd: z.string().optional(),
+});
+export type LiquidityPositionFeesOwedToken = z.infer<
+  typeof LiquidityPositionFeesOwedTokenSchema
+>;
+
+export const LiquidityPositionSchema = z.object({
+  positionId: z.string(),
+  poolIdentifier: TokenIdentifierSchema,
+  operator: z.string(),
+  pooledTokens: z.array(LiquidityPositionPooledTokenSchema),
+  feesOwedTokens: z.array(LiquidityPositionFeesOwedTokenSchema),
+  rewardsOwedTokens: z.array(LiquidityRewardsOwedTokenSchema),
+  feesValueUsd: z.string().optional(),
+  rewardsValueUsd: z.string().optional(),
+  positionValueUsd: z.string().optional(),
+  currentPrice: z.string().optional(),
+  currentTick: z.number().int().optional(),
+  tickLower: z.number().int().optional(),
+  tickUpper: z.number().int().optional(),
+  inRange: z.boolean().optional(),
+  apr: z.string().optional(),
+  apy: z.string().optional(),
+  poolFeeBps: z.number().int().optional(),
+  providerId: z.string(),
+  positionRange: LiquidityPositionRangeSchema.optional(),
+  poolName: z.string(),
+});
+export type LiquidityPosition = z.infer<typeof LiquidityPositionSchema>;
+
+export const GetWalletLiquidityPositionsResponseSchema = z.object({
+  positions: z.array(LiquidityPositionSchema),
+});
+export type GetWalletLiquidityPositionsResponse = z.infer<
+  typeof GetWalletLiquidityPositionsResponseSchema
+>;
+
+export const LiquidityPoolSchema = z.object({
+  identifier: TokenIdentifierSchema,
+  tokens: z.array(TokenSchema),
+  currentPrice: z.string(),
+  providerId: z.string(),
+  feeTierBps: z.number().int().optional(),
+  liquidity: z.string().optional(),
+  tvlUsd: z.string().optional(),
+  volume24hUsd: z.string().optional(),
+  tickSpacing: z.number().int().optional(),
+  currentTick: z.number().int().optional(),
+  poolName: z.string(),
+});
+export type LiquidityPool = z.infer<typeof LiquidityPoolSchema>;
+
+export const GetLiquidityPoolsResponseSchema = z.object({
+  liquidityPools: z.array(LiquidityPoolSchema),
+});
+export type GetLiquidityPoolsResponse = z.infer<typeof GetLiquidityPoolsResponseSchema>;

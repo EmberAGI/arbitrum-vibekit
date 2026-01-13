@@ -124,6 +124,26 @@ export namespace EndpointInterfaces {
     liquidity.PossibleLiquidityWithdrawResponseSchema;
   export const CreateLiquidityWithdrawEndpointRequestSchema =
     liquidity.CreateLiquidityWithdrawEndpointRequestSchema;
+  export const LiquidityPositionPooledTokenSchema =
+    liquidity.LiquidityPositionPooledTokenSchema;
+  export type LiquidityPositionPooledToken =
+    liquidity.LiquidityPositionPooledToken;
+  export const LiquidityPositionFeesOwedTokenSchema =
+    liquidity.LiquidityPositionFeesOwedTokenSchema;
+  export type LiquidityPositionFeesOwedToken =
+    liquidity.LiquidityPositionFeesOwedToken;
+  export const LiquidityPositionSchema = liquidity.LiquidityPositionSchema;
+  export type LiquidityPosition = liquidity.LiquidityPosition;
+  export const GetWalletLiquidityPositionsResponseSchema =
+    liquidity.GetWalletLiquidityPositionsResponseSchema;
+  export type GetWalletLiquidityPositionsResponse =
+    liquidity.GetWalletLiquidityPositionsResponse;
+  export const LiquidityPoolSchema = liquidity.LiquidityPoolSchema;
+  export type LiquidityPool = liquidity.LiquidityPool;
+  export const GetLiquidityPoolsResponseSchema =
+    liquidity.GetLiquidityPoolsResponseSchema;
+  export type GetLiquidityPoolsResponse =
+    liquidity.GetLiquidityPoolsResponse;
 
   export const CreateTokenizedYieldBuyPtEndpointRequestSchema =
     tokenizedYield.CreateTokenizedYieldBuyPtEndpointRequestSchema;
