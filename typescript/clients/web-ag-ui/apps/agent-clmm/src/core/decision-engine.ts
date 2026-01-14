@@ -144,6 +144,26 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
     };
   }
 
+  const minAllocationPct = ctx.minAllocationPct;
+  const shouldEnforceAllocation =
+    typeof minAllocationPct === 'number' && Number.isFinite(minAllocationPct) && minAllocationPct > 0;
+  if (
+    shouldEnforceAllocation &&
+    typeof ctx.positionValueUsd === 'number' &&
+    Number.isFinite(ctx.positionValueUsd) &&
+    typeof ctx.targetAllocationUsd === 'number' &&
+    Number.isFinite(ctx.targetAllocationUsd) &&
+    ctx.targetAllocationUsd > 0
+  ) {
+    const allocationPct = (ctx.positionValueUsd / ctx.targetAllocationUsd) * 100;
+    if (Number.isFinite(allocationPct) && allocationPct < minAllocationPct) {
+      return {
+        kind: 'exit-range',
+        reason: `Position allocation ${allocationPct.toFixed(2)}% below minimum ${minAllocationPct.toFixed(2)}%`,
+      };
+    }
+  }
+
   const width = ctx.position.tickUpper - ctx.position.tickLower;
   const innerWidth = Math.round(
     width * (ctx.rebalanceThresholdPct ?? DEFAULT_REBALANCE_THRESHOLD_PCT),

@@ -175,6 +175,9 @@ export type PositionSnapshot = {
 export interface DecisionContext {
   pool: CamelotPool;
   position?: PositionSnapshot;
+  positionValueUsd?: number;
+  targetAllocationUsd?: number;
+  minAllocationPct?: number;
   midPrice: number;
   volatilityPct: number;
   cyclesSinceRebalance: number;

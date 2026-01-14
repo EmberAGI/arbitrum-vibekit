@@ -10,6 +10,7 @@ import {
   DEFAULT_REBALANCE_THRESHOLD_PCT,
   MAX_GAS_SPEND_ETH,
   resolveEthUsdPrice,
+  resolveMinAllocationPct,
   resolvePollIntervalMs,
 } from '../../config/constants.js';
 import {
@@ -288,11 +289,18 @@ export const pollCycleNode = async (
   }
   const maxGasSpendUsd = MAX_GAS_SPEND_ETH * ethUsd;
   const estimatedFeeValueUsd = estimateFeeValueUsd(currentPosition, poolSnapshot);
+  const minAllocationPct = resolveMinAllocationPct();
+  const positionValueUsd =
+    state.view.accounting.positionsUsd ?? state.view.accounting.latestNavSnapshot?.totalUsd;
+  const targetAllocationUsd = operatorConfig.baseContributionUsd;
 
   const rebalanceThresholdPct = DEFAULT_REBALANCE_THRESHOLD_PCT;
   const decision = evaluateDecision({
     pool: poolSnapshot,
     position: currentPosition,
+    positionValueUsd,
+    targetAllocationUsd,
+    minAllocationPct,
     midPrice,
     volatilityPct,
     cyclesSinceRebalance: state.view.metrics.cyclesSinceRebalance ?? 0,
