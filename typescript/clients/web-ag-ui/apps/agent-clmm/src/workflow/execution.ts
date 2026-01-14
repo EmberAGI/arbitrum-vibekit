@@ -1,4 +1,4 @@
-import { erc20Abi, formatUnits, parseUnits } from 'viem';
+import { decodeFunctionData, encodeFunctionData, erc20Abi, formatUnits, parseUnits } from 'viem';
 
 import { CAMELOT_PROTOCOL_ID } from '../accounting/camelotAdapter.js';
 import type { FlowLogEventInput } from '../accounting/types.js';
@@ -16,12 +16,14 @@ import { ARBITRUM_CHAIN_ID } from '../config/constants.js';
 import { buildRange, deriveMidPrice } from '../core/decision-engine.js';
 import { redeemDelegationsAndExecuteTransactions } from '../core/delegatedExecution.js';
 import { executeTransaction } from '../core/transaction.js';
+import { decodeFundAndRunMulticallFunding } from '../delegations/emberDelegations.js';
 import { type CamelotPool, type ClmmAction, type ResolvedOperatorConfig } from '../domain/types.js';
 
 import { logInfo, normalizeHexAddress, type DelegationBundle } from './context.js';
 import { estimateTokenAllocationsUsd } from './planning/allocations.js';
 
 const MAX_WITHDRAW_ATTEMPTS = 3;
+const MAX_UINT256 = 2n ** 256n - 1n;
 
 function stableTokenDecimals(address: `0x${string}`): number | null {
   const normalized = address.toLowerCase();
@@ -46,6 +48,103 @@ function buildStableSwapExactInAmount(params: {
   const perSwapUsd = params.baseContributionUsd / count;
   const boundedUsd = Math.max(1, Math.min(10, perSwapUsd));
   return parseUnits(boundedUsd.toFixed(params.decimals), params.decimals).toString();
+}
+
+function buildApproveTransaction(params: {
+  tokenAddress: `0x${string}`;
+  spender: `0x${string}`;
+  chainId: string;
+}): TransactionInformation {
+  const data = encodeFunctionData({
+    abi: erc20Abi,
+    functionName: 'approve',
+    args: [params.spender, MAX_UINT256],
+  });
+  return {
+    type: 'EVM_TX',
+    to: params.tokenAddress,
+    data: data.toLowerCase() as `0x${string}`,
+    value: '0',
+    chainId: params.chainId,
+  };
+}
+
+function summarizePlanTransactions(transactions: readonly TransactionInformation[]) {
+  return transactions.map((tx, index) => ({
+    index,
+    to: tx.to,
+    selector: tx.data.slice(0, 10).toLowerCase(),
+    value: tx.value ?? '0',
+    chainId: tx.chainId,
+    dataLength: tx.data.length,
+  }));
+}
+
+function hasApproveTransaction(params: {
+  transactions: readonly TransactionInformation[];
+  tokenAddress: `0x${string}`;
+  spender: `0x${string}`;
+}): boolean {
+  const token = params.tokenAddress.toLowerCase();
+  const spender = params.spender.toLowerCase();
+  return params.transactions.some((tx) => {
+    if (tx.to.toLowerCase() !== token) {
+      return false;
+    }
+    if (!tx.data.startsWith('0x095ea7b3')) {
+      return false;
+    }
+    try {
+      const decoded = decodeFunctionData({ abi: erc20Abi, data: tx.data });
+      if (decoded.functionName !== 'approve') {
+        return false;
+      }
+      const decodedSpender = decoded.args?.[0];
+      return typeof decodedSpender === 'string' && decodedSpender.toLowerCase() === spender;
+    } catch {
+      return false;
+    }
+  });
+}
+
+async function buildFundingApprovalsForSwapPlan(params: {
+  transactions: readonly TransactionInformation[];
+  chainId: string;
+  walletAddress: `0x${string}`;
+  clients: ReturnType<typeof createClients>;
+}): Promise<TransactionInformation[]> {
+  const approvals: TransactionInformation[] = [];
+  const seen = new Set<string>();
+
+  for (const tx of params.transactions) {
+    const data = tx.data;
+    const funding = decodeFundAndRunMulticallFunding(data);
+    if (!funding) {
+      continue;
+    }
+    const spender = tx.to.toLowerCase() as `0x${string}`;
+    const token = funding.fundingToken.toLowerCase() as `0x${string}`;
+    const key = `${token}:${spender}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    if (hasApproveTransaction({ transactions: params.transactions, tokenAddress: token, spender })) {
+      continue;
+    }
+    const allowance = await params.clients.public.readContract({
+      address: token,
+      abi: erc20Abi,
+      functionName: 'allowance',
+      args: [params.walletAddress, spender],
+    });
+    if (allowance >= funding.fundingAmount) {
+      continue;
+    }
+    approvals.push(buildApproveTransaction({ tokenAddress: token, spender, chainId: params.chainId }));
+  }
+
+  return approvals;
 }
 
 function summarizeSwapRequest(request: ClmmSwapRequest) {
@@ -363,8 +462,28 @@ export async function executeDecision({
             response = await camelotClient.requestSwap(exactInRequest);
             executedRequest = exactInRequest;
           }
+          logInfo(
+            'Ember swap plan',
+            {
+              request: summarizeSwapRequest(executedRequest),
+              transactionCount: response.transactions.length,
+              transactions: summarizePlanTransactions(response.transactions),
+            },
+          );
+          const approvals = await buildFundingApprovalsForSwapPlan({
+            transactions: response.transactions,
+            chainId: chainIdString,
+            walletAddress,
+            clients,
+          });
+          if (approvals.length > 0) {
+            logInfo('Prepared funding token approvals for swap plan', {
+              approvalCount: approvals.length,
+              spender: response.transactions[0]?.to ?? null,
+            });
+          }
           recordSwapEvent(executedRequest);
-          swapTransactions.push(...response.transactions);
+          swapTransactions.push(...approvals, ...response.transactions);
         };
 
         const swapFromExternalFundingExactOut = async (params: {
@@ -394,8 +513,28 @@ export async function executeDecision({
             });
             throw error;
           }
+          logInfo(
+            'Ember swap plan',
+            {
+              request: summarizeSwapRequest(request),
+              transactionCount: response.transactions.length,
+              transactions: summarizePlanTransactions(response.transactions),
+            },
+          );
+          const approvals = await buildFundingApprovalsForSwapPlan({
+            transactions: response.transactions,
+            chainId: chainIdString,
+            walletAddress,
+            clients,
+          });
+          if (approvals.length > 0) {
+            logInfo('Prepared funding token approvals for swap plan', {
+              approvalCount: approvals.length,
+              spender: response.transactions[0]?.to ?? null,
+            });
+          }
           recordSwapEvent(request);
-          swapTransactions.push(...response.transactions);
+          swapTransactions.push(...approvals, ...response.transactions);
         };
 
         // Prefer swaps within the pool token pair when possible (no external funding).
@@ -512,8 +651,28 @@ export async function executeDecision({
                 });
                 throw error;
               }
+              logInfo(
+                'Ember swap plan',
+                {
+                  request: summarizeSwapRequest(request),
+                  transactionCount: response.transactions.length,
+                  transactions: summarizePlanTransactions(response.transactions),
+                },
+              );
+              const approvals = await buildFundingApprovalsForSwapPlan({
+                transactions: response.transactions,
+                chainId: chainIdString,
+                walletAddress,
+                clients,
+              });
+              if (approvals.length > 0) {
+                logInfo('Prepared funding token approvals for swap plan', {
+                  approvalCount: approvals.length,
+                  spender: response.transactions[0]?.to ?? null,
+                });
+              }
               recordSwapEvent(request);
-              swapTransactions.push(...response.transactions);
+              swapTransactions.push(...approvals, ...response.transactions);
             }
           } else {
             for (const target of targets) {
@@ -579,6 +738,13 @@ export async function executeDecision({
         requestId: rebalancePlan.requestId,
         transactionCount: rebalancePlan.transactions.length,
       });
+      logInfo(
+        'Ember supply plan',
+        {
+          transactionCount: rebalancePlan.transactions.length,
+          transactions: summarizePlanTransactions(rebalancePlan.transactions),
+        },
+      );
 
       const confirmationSnapshot = await fetchPoolSnapshot(
         camelotClient,

@@ -2,7 +2,7 @@ import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
 import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
-import type { FlowLogEventInput } from '../../accounting/types.js';
+import type { AccountingState, FlowLogEventInput } from '../../accounting/types.js';
 import { formatEmberApiError, fetchPoolSnapshot } from '../../clients/emberApi.js';
 import {
   ARBITRUM_CHAIN_ID,
@@ -10,6 +10,7 @@ import {
   DEFAULT_REBALANCE_THRESHOLD_PCT,
   MAX_GAS_SPEND_ETH,
   resolveEthUsdPrice,
+  resolveMinAllocationPct,
   resolvePollIntervalMs,
 } from '../../config/constants.js';
 import {
@@ -45,6 +46,66 @@ type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = {
   configurable?: { thread_id?: string };
 };
+
+function buildAccountingLogSummary(params: {
+  iteration: number;
+  accounting: AccountingState;
+  contextId: string | null;
+  threadId?: string;
+}): Record<string, unknown> {
+  const latestSnapshot = params.accounting.latestNavSnapshot;
+  return {
+    iteration: params.iteration,
+    threadId: params.threadId,
+    contextId: params.contextId,
+    latestSnapshot: latestSnapshot
+      ? {
+          cycle: latestSnapshot.cycle,
+          trigger: latestSnapshot.trigger,
+          timestamp: latestSnapshot.timestamp,
+          totalUsd: latestSnapshot.totalUsd,
+          positions: latestSnapshot.positions.length,
+          feesUsd: latestSnapshot.feesUsd,
+          rewardsUsd: latestSnapshot.rewardsUsd,
+          priceSource: latestSnapshot.priceSource,
+          transactionHash: latestSnapshot.transactionHash,
+          isCurrentCycle: latestSnapshot.cycle === params.iteration,
+        }
+      : null,
+    metrics: {
+      aumUsd: params.accounting.aumUsd,
+      positionsUsd: params.accounting.positionsUsd,
+      cashUsd: params.accounting.cashUsd,
+      lifetimePnlUsd: params.accounting.lifetimePnlUsd,
+      lifetimeReturnPct: params.accounting.lifetimeReturnPct,
+      highWaterMarkUsd: params.accounting.highWaterMarkUsd,
+      apy: params.accounting.apy,
+      initialAllocationUsd: params.accounting.initialAllocationUsd,
+      lifecycleStart: params.accounting.lifecycleStart,
+      lifecycleEnd: params.accounting.lifecycleEnd,
+      lastUpdated: params.accounting.lastUpdated,
+    },
+    counts: {
+      navSnapshots: params.accounting.navSnapshots.length,
+      flowEvents: params.accounting.flowLog.length,
+    },
+  };
+}
+
+function logAccountingSummary(params: {
+  iteration: number;
+  accounting: AccountingState;
+  contextId: string | null;
+  threadId?: string;
+  note?: string;
+}): void {
+  const summary = buildAccountingLogSummary(params);
+  logInfo(
+    'Accounting summary',
+    params.note ? { ...summary, note: params.note } : summary,
+    { detailed: true },
+  );
+}
 
 export const pollCycleNode = async (
   state: ClmmState,
@@ -86,6 +147,11 @@ export const pollCycleNode = async (
   const clients = await getOnchainClients();
 
   const iteration = (state.view.metrics.iteration ?? 0) + 1;
+  const threadId = (config as Configurable).configurable?.thread_id;
+  const contextId = resolveAccountingContextId({ state, threadId });
+  const logCycleAccountingSummary = (accounting: AccountingState, note?: string) => {
+    logAccountingSummary({ iteration, accounting, contextId, threadId, note });
+  };
   logInfo('Polling cycle begin', { iteration, poolAddress: selectedPool.address });
 
   let staleCycles = state.view.metrics.staleCycles ?? 0;
@@ -121,6 +187,7 @@ export const pollCycleNode = async (
           activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
         },
       });
+      logCycleAccountingSummary(state.view.accounting, 'cycle-abort: ember api unreachable');
       return new Command({
         update: {
           view: {
@@ -161,6 +228,7 @@ export const pollCycleNode = async (
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
     });
+    logCycleAccountingSummary(state.view.accounting, 'cycle-abort: missing pool snapshot');
     return new Command({
       update: {
         view: {
@@ -205,6 +273,7 @@ export const pollCycleNode = async (
     const failureMessage = `ERROR: Unable to locate a WETH/USD price for pool ${poolSnapshot.address}`;
     const { task, statusEvent } = buildTaskStatus(taskState, 'failed', failureMessage);
     await copilotkitEmitState(config, { view: { task, events: [statusEvent] } });
+    logCycleAccountingSummary(state.view.accounting, 'cycle-abort: missing eth price');
     return new Command({
       update: {
         view: {
@@ -220,11 +289,18 @@ export const pollCycleNode = async (
   }
   const maxGasSpendUsd = MAX_GAS_SPEND_ETH * ethUsd;
   const estimatedFeeValueUsd = estimateFeeValueUsd(currentPosition, poolSnapshot);
+  const minAllocationPct = resolveMinAllocationPct();
+  const positionValueUsd =
+    state.view.accounting.positionsUsd ?? state.view.accounting.latestNavSnapshot?.totalUsd;
+  const targetAllocationUsd = operatorConfig.baseContributionUsd;
 
   const rebalanceThresholdPct = DEFAULT_REBALANCE_THRESHOLD_PCT;
   const decision = evaluateDecision({
     pool: poolSnapshot,
     position: currentPosition,
+    positionValueUsd,
+    targetAllocationUsd,
+    minAllocationPct,
     midPrice,
     volatilityPct,
     cyclesSinceRebalance: state.view.metrics.cyclesSinceRebalance ?? 0,
@@ -403,7 +479,6 @@ export const pollCycleNode = async (
         });
 
         // Schedule cron before returning so next cycle will run
-        const threadId = (config as Configurable).configurable?.thread_id;
         let cronScheduled = state.private.cronScheduled;
         if (threadId && !cronScheduled) {
           const intervalMs = state.private.pollIntervalMs ?? resolvePollIntervalMs();
@@ -450,6 +525,7 @@ export const pollCycleNode = async (
                 : 'Unknown accounting error';
           logInfo('Accounting snapshot failed after execution error', { iteration, error: message });
         }
+        logCycleAccountingSummary(accountingState, 'cycle-abort: execution failed');
 
         // Return gracefully - don't throw. The cron job will run the next cycle.
         return new Command({
@@ -540,7 +616,6 @@ export const pollCycleNode = async (
   };
 
   // Schedule cron after first cycle completes (ensures no concurrent runs)
-  const threadId = (config as Configurable).configurable?.thread_id;
   let cronScheduled = state.private.cronScheduled;
   if (threadId && !cronScheduled) {
     const intervalMs = state.private.pollIntervalMs ?? resolvePollIntervalMs();
@@ -563,7 +638,6 @@ export const pollCycleNode = async (
 
   let accountingState = state.view.accounting;
   try {
-    const contextId = resolveAccountingContextId({ state, threadId });
     const flowEvents =
       contextId && executionFlowEvents.length > 0
         ? executionFlowEvents.map((event) =>
@@ -620,6 +694,7 @@ export const pollCycleNode = async (
           : 'Unknown accounting error';
     logInfo('Accounting snapshot failed during poll cycle', { iteration, error: message });
   }
+  logCycleAccountingSummary(accountingState, 'cycle-complete');
 
   return new Command({
     update: {

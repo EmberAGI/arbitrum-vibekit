@@ -25,6 +25,21 @@ export const EMBER_API_BASE_URL =
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const DEFAULT_STREAM_LIMIT = -1;
 
+export function resolveMinAllocationPct(): number | undefined {
+  const raw = process.env['CLMM_MIN_ALLOCATION_PCT'];
+  if (!raw) {
+    return undefined;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+  if (parsed <= 0 || parsed > 100) {
+    return undefined;
+  }
+  return parsed;
+}
+
 export function resolvePollIntervalMs(): number {
   const raw = process.env['CLMM_POLL_INTERVAL_MS'];
   if (!raw) {
@@ -32,6 +47,15 @@ export function resolvePollIntervalMs(): number {
   }
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_POLL_INTERVAL_MS;
+}
+
+export function resolveTickBandwidthBps(): number {
+  const raw = process.env['CLMM_TICK_BANDWIDTH_BPS'];
+  if (!raw) {
+    return DEFAULT_TICK_BANDWIDTH_BPS;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TICK_BANDWIDTH_BPS;
 }
 
 export function resolveStreamLimit(): number {

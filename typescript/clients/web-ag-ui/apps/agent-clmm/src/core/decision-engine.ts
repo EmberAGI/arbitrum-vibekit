@@ -4,8 +4,8 @@ import {
   AUTO_COMPOUND_COST_RATIO,
   DEFAULT_MIN_TVL_USD,
   DEFAULT_REBALANCE_THRESHOLD_PCT,
-  DEFAULT_TICK_BANDWIDTH_BPS,
   VOLATILE_TICK_BANDWIDTH_BPS,
+  resolveTickBandwidthBps,
 } from '../config/constants.js';
 import type {
   CamelotPool,
@@ -119,7 +119,7 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
   const decimalsDiff = ctx.pool.token0.decimals - ctx.pool.token1.decimals;
   const bandwidthBps =
     ctx.tickBandwidthBps ??
-    (ctx.volatilityPct >= 1.0 ? VOLATILE_TICK_BANDWIDTH_BPS : DEFAULT_TICK_BANDWIDTH_BPS);
+    (ctx.volatilityPct >= 1.0 ? VOLATILE_TICK_BANDWIDTH_BPS : resolveTickBandwidthBps());
   const targetRange = buildRange(ctx.midPrice, bandwidthBps, ctx.pool.tickSpacing, decimalsDiff);
   const exitUnsafePool = shouldExit(ctx.pool);
 
@@ -142,6 +142,26 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
       kind: 'exit-range',
       reason: 'Pool TVL below safety threshold',
     };
+  }
+
+  const minAllocationPct = ctx.minAllocationPct;
+  const shouldEnforceAllocation =
+    typeof minAllocationPct === 'number' && Number.isFinite(minAllocationPct) && minAllocationPct > 0;
+  if (
+    shouldEnforceAllocation &&
+    typeof ctx.positionValueUsd === 'number' &&
+    Number.isFinite(ctx.positionValueUsd) &&
+    typeof ctx.targetAllocationUsd === 'number' &&
+    Number.isFinite(ctx.targetAllocationUsd) &&
+    ctx.targetAllocationUsd > 0
+  ) {
+    const allocationPct = (ctx.positionValueUsd / ctx.targetAllocationUsd) * 100;
+    if (Number.isFinite(allocationPct) && allocationPct < minAllocationPct) {
+      return {
+        kind: 'exit-range',
+        reason: `Position allocation ${allocationPct.toFixed(2)}% below minimum ${minAllocationPct.toFixed(2)}%`,
+      };
+    }
   }
 
   const width = ctx.position.tickUpper - ctx.position.tickLower;
@@ -172,6 +192,15 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
     return {
       kind: 'compound-fees',
       reason: 'Auto-compound rule satisfied (fees exceed 1% gas threshold)',
+    };
+  }
+
+  const targetWidth = targetRange.upperTick - targetRange.lowerTick;
+  const positionWidth = ctx.position.tickUpper - ctx.position.tickLower;
+  if (positionWidth !== targetWidth) {
+    return {
+      kind: 'exit-range',
+      reason: 'Active range width differs from target bandwidth; exiting to refresh next cycle',
     };
   }
 

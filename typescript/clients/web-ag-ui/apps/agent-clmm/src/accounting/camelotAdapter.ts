@@ -37,16 +37,28 @@ function buildTokenBreakdown(params: {
   priceMap: TokenPriceMap;
   chainId: number;
   category: TokenAmountBreakdown['category'];
+  usdPriceOverride?: number;
+  valueUsdOverride?: number;
 }): TokenAmountBreakdown {
   const normalizedAddress = normalizeAddress(params.tokenAddress);
   const amount = parseBaseUnitsAmount(params.amountBaseUnits, params.decimals);
   const priceKey = toCaip19TokenId({ chainId: params.chainId, address: normalizedAddress });
   const priceQuote = params.priceMap.get(priceKey);
-  const usdPrice = priceQuote?.usdPrice;
+  const overridePrice =
+    params.usdPriceOverride !== undefined && params.usdPriceOverride > 0
+      ? params.usdPriceOverride
+      : undefined;
+  const overrideValue =
+    params.valueUsdOverride !== undefined && Number.isFinite(params.valueUsdOverride)
+      ? params.valueUsdOverride
+      : undefined;
+  const usdPrice = overridePrice ?? priceQuote?.usdPrice;
   const valueUsd =
     amount !== undefined && usdPrice !== undefined
       ? Number((amount * usdPrice).toFixed(6))
-      : undefined;
+      : overrideValue !== undefined
+        ? Number(overrideValue.toFixed(6))
+        : undefined;
 
   return {
     tokenAddress: normalizedAddress,
@@ -56,7 +68,7 @@ function buildTokenBreakdown(params: {
     amount,
     usdPrice,
     valueUsd,
-    source: priceQuote?.source,
+    source: overridePrice !== undefined ? 'ember' : priceQuote?.source,
     category: params.category,
   };
 }
@@ -88,55 +100,97 @@ export function computeCamelotPositionValues(params: {
           priceMap: params.priceMap,
           chainId: params.chainId,
           category: 'supplied',
+          usdPriceOverride: token.usdPrice,
+          valueUsdOverride: token.valueUsd,
         }),
       );
     }
 
     let feesUsd: number | undefined;
-    const pool = params.poolsByAddress.get(position.poolAddress.toLowerCase());
-    if (pool) {
-      const feeTokens: TokenAmountBreakdown[] = [];
-      if (position.tokensOwed0) {
-        feeTokens.push(
-          buildTokenBreakdown({
-            tokenAddress: pool.token0.address,
-            symbol: pool.token0.symbol,
-            decimals: pool.token0.decimals,
-            amountBaseUnits: position.tokensOwed0,
-            priceMap: params.priceMap,
-            chainId: params.chainId,
-            category: 'fees',
-          }),
-        );
+    const feeTokensFromPosition = position.feesOwedTokens ?? [];
+    if (feeTokensFromPosition.length > 0) {
+      const feeTokens = feeTokensFromPosition.map((token) =>
+        buildTokenBreakdown({
+          tokenAddress: token.tokenAddress,
+          symbol: token.symbol,
+          decimals: token.decimals,
+          amountBaseUnits: token.amount,
+          priceMap: params.priceMap,
+          chainId: params.chainId,
+          category: 'fees',
+          usdPriceOverride: token.usdPrice,
+          valueUsdOverride: token.valueUsd,
+        }),
+      );
+      tokens.push(...feeTokens);
+      feesUsd = sumTokenValues(feeTokens);
+    } else {
+      const pool = params.poolsByAddress.get(position.poolAddress.toLowerCase());
+      if (pool) {
+        const feeTokens: TokenAmountBreakdown[] = [];
+        if (position.tokensOwed0) {
+          feeTokens.push(
+            buildTokenBreakdown({
+              tokenAddress: pool.token0.address,
+              symbol: pool.token0.symbol,
+              decimals: pool.token0.decimals,
+              amountBaseUnits: position.tokensOwed0,
+              priceMap: params.priceMap,
+              chainId: params.chainId,
+              category: 'fees',
+            }),
+          );
+        }
+        if (position.tokensOwed1) {
+          feeTokens.push(
+            buildTokenBreakdown({
+              tokenAddress: pool.token1.address,
+              symbol: pool.token1.symbol,
+              decimals: pool.token1.decimals,
+              amountBaseUnits: position.tokensOwed1,
+              priceMap: params.priceMap,
+              chainId: params.chainId,
+              category: 'fees',
+            }),
+          );
+        }
+        if (feeTokens.length > 0) {
+          tokens.push(...feeTokens);
+          feesUsd = sumTokenValues(feeTokens);
+        }
       }
-      if (position.tokensOwed1) {
-        feeTokens.push(
-          buildTokenBreakdown({
-            tokenAddress: pool.token1.address,
-            symbol: pool.token1.symbol,
-            decimals: pool.token1.decimals,
-            amountBaseUnits: position.tokensOwed1,
-            priceMap: params.priceMap,
-            chainId: params.chainId,
-            category: 'fees',
-          }),
-        );
-      }
-      if (feeTokens.length > 0) {
-        tokens.push(...feeTokens);
-        feesUsd = sumTokenValues(feeTokens);
-      }
+    }
+
+    let rewardsUsd: number | undefined;
+    const rewardTokensFromPosition = position.rewardsOwedTokens ?? [];
+    if (rewardTokensFromPosition.length > 0) {
+      const rewardTokens = rewardTokensFromPosition.map((token) =>
+        buildTokenBreakdown({
+          tokenAddress: token.tokenAddress,
+          symbol: token.symbol,
+          decimals: token.decimals,
+          amountBaseUnits: token.amount,
+          priceMap: params.priceMap,
+          chainId: params.chainId,
+          category: 'rewards',
+          usdPriceOverride: token.usdPrice,
+          valueUsdOverride: token.valueUsd,
+        }),
+      );
+      tokens.push(...rewardTokens);
+      rewardsUsd = sumTokenValues(rewardTokens);
     }
 
     const positionValueUsd = Number(sumTokenValues(tokens).toFixed(6));
 
     return {
-      positionId: `camelot-${position.poolAddress}-${index}`,
+      positionId: position.positionId ?? `camelot-${position.poolAddress}-${index}`,
       poolAddress: position.poolAddress,
       protocolId: CAMELOT_PROTOCOL_ID,
       tokens,
       positionValueUsd,
       feesUsd,
+      rewardsUsd,
     };
   });
 }

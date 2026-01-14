@@ -40,6 +40,24 @@ function buildTokenDescriptors(params: {
       });
     }
 
+    for (const token of position.feesOwedTokens ?? []) {
+      addToken({
+        chainId: params.chainId,
+        address: token.tokenAddress,
+        symbol: token.symbol,
+        decimals: token.decimals,
+      });
+    }
+
+    for (const token of position.rewardsOwedTokens ?? []) {
+      addToken({
+        chainId: params.chainId,
+        address: token.tokenAddress,
+        symbol: token.symbol,
+        decimals: token.decimals,
+      });
+    }
+
     if (position.tokensOwed0 || position.tokensOwed1) {
       const pool = params.poolsByAddress.get(position.poolAddress.toLowerCase());
       if (pool) {
@@ -150,6 +168,7 @@ export async function createCamelotNavSnapshot(params: {
     chainId: params.chainId,
     pools,
     tokens,
+    positions,
   });
 
   const positionsValued = computeCamelotPositionValues({

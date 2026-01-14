@@ -3,7 +3,7 @@ import { Command } from '@langchain/langgraph';
 
 import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
-import { ARBITRUM_CHAIN_ID, DEFAULT_TICK_BANDWIDTH_BPS } from '../../config/constants.js';
+import { ARBITRUM_CHAIN_ID, resolveTickBandwidthBps } from '../../config/constants.js';
 import { type ResolvedOperatorConfig } from '../../domain/types.js';
 import { resolveAccountingContextId } from '../accounting.js';
 import { getCamelotClient } from '../clientFactory.js';
@@ -161,8 +161,8 @@ export const prepareOperatorNode = async (
 
   const operatorConfig: ResolvedOperatorConfig = {
     walletAddress: delegationsBypassActive ? agentWalletAddress : operatorWalletAddress,
-    baseContributionUsd: operatorInput.baseContributionUsd ?? 5_000,
-    manualBandwidthBps: DEFAULT_TICK_BANDWIDTH_BPS,
+    baseContributionUsd: operatorInput.baseContributionUsd ?? 10,
+    manualBandwidthBps: resolveTickBandwidthBps(),
     autoCompoundFees: true,
   };
 
