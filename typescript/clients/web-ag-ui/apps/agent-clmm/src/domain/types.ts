@@ -32,18 +32,23 @@ const WalletPositionTokenSchema = z.object({
   symbol: z.string(),
   decimals: z.number().int().nonnegative(),
   amount: z.string().optional(),
+  usdPrice: z.number().nonnegative().optional(),
+  valueUsd: z.number().nonnegative().optional(),
 });
 export type WalletPositionToken = z.infer<typeof WalletPositionTokenSchema>;
 
 export const WalletPositionSchema = z.object({
   poolAddress: z.templateLiteral(['0x', z.string()]),
   operator: z.string(),
+  positionId: z.string().optional(),
   liquidity: z.string().optional(),
   tickLower: z.number().int(),
   tickUpper: z.number().int(),
   tokensOwed0: z.string().optional(),
   tokensOwed1: z.string().optional(),
   suppliedTokens: z.array(WalletPositionTokenSchema).optional(),
+  feesOwedTokens: z.array(WalletPositionTokenSchema).optional(),
+  rewardsOwedTokens: z.array(WalletPositionTokenSchema).optional(),
 });
 export type WalletPosition = z.infer<typeof WalletPositionSchema>;
 
@@ -62,7 +67,7 @@ export const PoolListResponseSchema = z.object({
     z.object({
       identifier: ChainIdentifierSchema,
       tokens: z.array(EmberPoolTokenSchema).min(2),
-      price: z.string(),
+      currentPrice: z.string(),
       tickSpacing: z.number().int().positive().optional(),
       providerId: z.string(),
       poolName: z.string(),
@@ -83,8 +88,14 @@ const EmberPositionRangeSchema = z
   .partial()
   .optional();
 
+const EmberNumberishSchema = z.union([z.string(), z.number()]);
+
 const EmberWalletTokenSchema = EmberPoolTokenSchema.extend({
   amount: z.string().optional(),
+  suppliedAmount: z.string().optional(),
+  owedTokens: z.string().optional(),
+  usdPrice: EmberNumberishSchema.optional(),
+  valueUsd: EmberNumberishSchema.optional(),
 });
 
 export const WalletPositionsResponseSchema = z.object({
@@ -92,10 +103,23 @@ export const WalletPositionsResponseSchema = z.object({
     z.object({
       poolIdentifier: ChainIdentifierSchema,
       operator: z.string(),
+      positionId: z.string().optional(),
       price: z.string().optional(),
       providerId: z.string(),
+      poolName: z.string().optional(),
+      currentPrice: z.string().optional(),
+      currentTick: z.number().int().optional(),
+      tickLower: z.number().int().optional(),
+      tickUpper: z.number().int().optional(),
+      inRange: z.boolean().optional(),
+      feesValueUsd: EmberNumberishSchema.optional(),
+      rewardsValueUsd: EmberNumberishSchema.optional(),
+      positionValueUsd: EmberNumberishSchema.optional(),
       positionRange: EmberPositionRangeSchema,
-      suppliedTokens: z.array(EmberWalletTokenSchema),
+      suppliedTokens: z.array(EmberWalletTokenSchema).optional(),
+      pooledTokens: z.array(EmberWalletTokenSchema).optional(),
+      feesOwedTokens: z.array(EmberWalletTokenSchema).optional(),
+      rewardsOwedTokens: z.array(EmberWalletTokenSchema).optional(),
     }),
   ),
   cursor: z.string().nullable().optional(),

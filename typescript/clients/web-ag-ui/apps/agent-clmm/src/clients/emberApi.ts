@@ -177,6 +177,7 @@ type PoolListResponse = z.infer<typeof PoolListResponseSchema>;
 type WalletPositionsResponse = z.infer<typeof WalletPositionsResponseSchema>;
 type EmberLiquidityPool = PoolListResponse['liquidityPools'][number];
 type EmberWalletPosition = WalletPositionsResponse['positions'][number];
+type EmberWalletToken = NonNullable<EmberWalletPosition['pooledTokens']>[number];
 
 export type EmberWalletPositionUid = {
   poolTokenUid: { chainId: string; address: `0x${string}` };
@@ -416,6 +417,14 @@ function normalizePositionRangePrice(price: number): number {
   return price;
 }
 
+function parseEmberNumber(value: string | number | null | undefined): number | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function toCamelotPool(pool: EmberLiquidityPool): CamelotPool | undefined {
   if (pool.tokens.length < 2) {
     return undefined;
@@ -440,7 +449,7 @@ function toCamelotPool(pool: EmberLiquidityPool): CamelotPool | undefined {
   // `priceToTick` expects token1/token0 (amount1 per amount0), adjusted for decimals.
   // Ember's `price` has been observed to come back as either token0/token1 or token1/token0,
   // so normalize it using a stable-coin heuristic when possible.
-  const rawPrice = Number(pool.price);
+  const rawPrice = Number(pool.currentPrice);
   const token0Stable = isUsdStableToken(token0Address);
   const token1Stable = isUsdStableToken(token1Address);
 
@@ -496,19 +505,51 @@ function toWalletPosition(
     }
   }
 
-  const suppliedTokens =
-    position.suppliedTokens?.map((token) => ({
-      tokenAddress: normalizeAddress(token.tokenUid.address),
-      symbol: token.symbol,
-      decimals: token.decimals,
-      amount: token.amount,
-    })) ?? [];
+  const mapWalletToken = (token: EmberWalletToken) => ({
+    tokenAddress: normalizeAddress(token.tokenUid.address),
+    symbol: token.symbol,
+    decimals: token.decimals,
+    amount: token.amount ?? token.suppliedAmount,
+    usdPrice: parseEmberNumber(token.usdPrice),
+    valueUsd: parseEmberNumber(token.valueUsd),
+  });
+
+  const suppliedTokensSource = position.pooledTokens ?? position.suppliedTokens ?? [];
+  const suppliedTokens = suppliedTokensSource.map((token) => mapWalletToken(token));
+  const feesOwedTokens = (position.feesOwedTokens ?? []).map((token) => mapWalletToken(token));
+  const rewardsOwedTokens = (position.rewardsOwedTokens ?? []).map((token) => mapWalletToken(token));
+
+  let tokensOwed0: string | undefined;
+  let tokensOwed1: string | undefined;
+  if (pool) {
+    const feeTokensSource =
+      position.feesOwedTokens && position.feesOwedTokens.length > 0
+        ? position.feesOwedTokens
+        : position.suppliedTokens ?? [];
+    for (const token of feeTokensSource) {
+      const amount = token.amount ?? token.owedTokens;
+      if (!amount) {
+        continue;
+      }
+      const tokenAddress = normalizeAddress(token.tokenUid.address);
+      if (tokenAddress === pool.token0.address.toLowerCase()) {
+        tokensOwed0 = amount;
+      } else if (tokenAddress === pool.token1.address.toLowerCase()) {
+        tokensOwed1 = amount;
+      }
+    }
+  }
 
   return WalletPositionSchema.parse({
     poolAddress,
     operator: position.operator,
+    positionId: position.positionId,
     tickLower,
     tickUpper,
+    tokensOwed0,
+    tokensOwed1,
     suppliedTokens,
+    feesOwedTokens: feesOwedTokens.length > 0 ? feesOwedTokens : undefined,
+    rewardsOwedTokens: rewardsOwedTokens.length > 0 ? rewardsOwedTokens : undefined,
   });
 }

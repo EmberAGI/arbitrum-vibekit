@@ -50,7 +50,7 @@ describe('EmberCamelotClient (unit)', () => {
                 decimals: 18,
               },
             ],
-            price: '1',
+            currentPrice: '1',
             providerId:
               'Algebra_0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B_42161',
             poolName: 'Algebra Pool',
@@ -71,7 +71,7 @@ describe('EmberCamelotClient (unit)', () => {
                 decimals: 18,
               },
             ],
-            price: '1',
+            currentPrice: '1',
             providerId: 'other-dex',
             poolName: 'Other Pool',
           },
@@ -100,7 +100,7 @@ describe('EmberCamelotClient (unit)', () => {
     expect(pools[0]?.token1.address).toBe('0xtokenb');
   });
 
-  it('normalizes Ember API price quotes into token1/token0 mid prices', async () => {
+  it('normalizes Ember API currentPrice quotes into token1/token0 mid prices', async () => {
     // Ember may quote either token0/token1 or token1/token0; we normalize to token1/token0.
     const marketPrice = '0.00031296844083452509'; // WETH/USDC (token0/token1)
     const fetchSpy = vi.fn().mockResolvedValue(
@@ -122,7 +122,7 @@ describe('EmberCamelotClient (unit)', () => {
                 decimals: 6,
               },
             ],
-            price: marketPrice,
+            currentPrice: marketPrice,
             providerId:
               'Algebra_0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B_42161',
             poolName: 'lp_WETH-USDC',
@@ -167,7 +167,7 @@ describe('EmberCamelotClient (unit)', () => {
                 decimals: 6,
               },
             ],
-            price: token1PerToken0,
+            currentPrice: token1PerToken0,
             providerId:
               'Algebra_0x1a3c9B1d2F0529D97f2afC5136Cc23e58f1FD35B_42161',
             poolName: 'lp_WETH-USDC',
