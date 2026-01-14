@@ -144,15 +144,6 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
     };
   }
 
-  const targetWidth = targetRange.upperTick - targetRange.lowerTick;
-  const positionWidth = ctx.position.tickUpper - ctx.position.tickLower;
-  if (positionWidth !== targetWidth) {
-    return {
-      kind: 'exit-range',
-      reason: 'Active range width differs from target bandwidth; exiting to refresh next cycle',
-    };
-  }
-
   const width = ctx.position.tickUpper - ctx.position.tickLower;
   const innerWidth = Math.round(
     width * (ctx.rebalanceThresholdPct ?? DEFAULT_REBALANCE_THRESHOLD_PCT),
@@ -181,6 +172,15 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
     return {
       kind: 'compound-fees',
       reason: 'Auto-compound rule satisfied (fees exceed 1% gas threshold)',
+    };
+  }
+
+  const targetWidth = targetRange.upperTick - targetRange.lowerTick;
+  const positionWidth = ctx.position.tickUpper - ctx.position.tickLower;
+  if (positionWidth !== targetWidth) {
+    return {
+      kind: 'exit-range',
+      reason: 'Active range width differs from target bandwidth; exiting to refresh next cycle',
     };
   }
 
