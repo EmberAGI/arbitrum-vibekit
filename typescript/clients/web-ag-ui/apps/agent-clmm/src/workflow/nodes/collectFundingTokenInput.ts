@@ -155,7 +155,7 @@ export const collectFundingTokenInputNode = async (
     });
   }
 
-  const baseContributionUsd = operatorInput.baseContributionUsd ?? 5_000;
+  const baseContributionUsd = operatorInput.baseContributionUsd ?? 10;
   try {
     void estimateTokenAllocationsUsd(selectedPool, baseContributionUsd);
   } catch (error) {

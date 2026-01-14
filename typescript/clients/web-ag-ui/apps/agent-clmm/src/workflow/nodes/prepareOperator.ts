@@ -161,7 +161,7 @@ export const prepareOperatorNode = async (
 
   const operatorConfig: ResolvedOperatorConfig = {
     walletAddress: delegationsBypassActive ? agentWalletAddress : operatorWalletAddress,
-    baseContributionUsd: operatorInput.baseContributionUsd ?? 5_000,
+    baseContributionUsd: operatorInput.baseContributionUsd ?? 10,
     manualBandwidthBps: resolveTickBandwidthBps(),
     autoCompoundFees: true,
   };

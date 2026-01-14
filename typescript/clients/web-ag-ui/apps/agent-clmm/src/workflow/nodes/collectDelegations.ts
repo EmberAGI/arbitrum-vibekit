@@ -378,7 +378,7 @@ export const collectDelegationsNode = async (
 
   const delegatorAddress = normalizeHexAddress(operatorInput.walletAddress, 'delegator wallet address');
   const delegateeAddress = normalizeHexAddress(agentWalletAddress, 'delegatee wallet address');
-  const baseContributionUsd = operatorInput.baseContributionUsd ?? 5_000;
+  const baseContributionUsd = operatorInput.baseContributionUsd ?? 10;
 
   const warnings: string[] = [];
 
