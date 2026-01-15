@@ -32,28 +32,65 @@ export class ShallowMemorySaver extends MemorySaver {
     const configurable = config.configurable;
     const threadId = configurable?.thread_id;
     const checkpointId = configurable?.checkpoint_id;
+    const checkpointNamespace = configurable?.checkpoint_ns;
     if (!threadId || !checkpointId) {
       return;
     }
 
     const threadStorage = this.storage[threadId];
     if (threadStorage) {
-      this.pruneThreadStorage(threadStorage, checkpointId, configurable?.checkpoint_ns);
+      this.pruneThreadStorage(threadStorage, checkpointId, checkpointNamespace);
       if (Object.keys(threadStorage).length === 0) {
         delete this.storage[threadId];
       }
     }
 
-    const threadWrites = this.writes[threadId];
-    if (threadWrites) {
-      for (const key of Object.keys(threadWrites)) {
-        if (!key.includes(checkpointId)) {
-          delete threadWrites[key];
-        }
+    const normalizedNamespace = checkpointNamespace ?? null;
+    const currentOuterKey = JSON.stringify([threadId, checkpointNamespace, checkpointId]);
+    for (const key of Object.keys(this.writes)) {
+      if (key === currentOuterKey) {
+        continue;
       }
-      if (Object.keys(threadWrites).length === 0) {
-        delete this.writes[threadId];
+
+      const parsedKey = this.parseOuterKey(key);
+      if (!parsedKey) {
+        continue;
       }
+
+      const [keyThreadId, keyNamespace, keyCheckpointId] = parsedKey;
+      const matchesNamespace = keyNamespace === normalizedNamespace;
+      if (keyThreadId === threadId && matchesNamespace && keyCheckpointId !== checkpointId) {
+        delete this.writes[key];
+      }
+    }
+  }
+
+  private parseOuterKey(key: string): [string, string | null, string] | null {
+    try {
+      const parsed = JSON.parse(key) as unknown;
+      if (!Array.isArray(parsed)) {
+        return null;
+      }
+
+      const values: unknown[] = parsed;
+      if (values.length < 3) {
+        return null;
+      }
+
+      const threadId = values[0];
+      const checkpointNamespace = values[1];
+      const checkpointId = values[2];
+      if (typeof threadId !== 'string' || typeof checkpointId !== 'string') {
+        return null;
+      }
+
+      if (typeof checkpointNamespace === 'string' || checkpointNamespace === null) {
+        return [threadId, checkpointNamespace, checkpointId];
+      }
+
+      return [threadId, null, checkpointId];
+    } catch {
+      return null;
     }
   }
 
