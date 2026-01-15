@@ -125,7 +125,18 @@ async function evaluatePoolFunding(params: {
     return null;
   }
   const baseContributionUsd = Number((allocationUsd / 2).toFixed(6));
-  const desiredAllocation = estimateTokenAllocationsUsd(params.pool, baseContributionUsd);
+  const decimalsDiff = params.pool.token0.decimals - params.pool.token1.decimals;
+  const targetRange = buildRange(
+    deriveMidPrice(params.pool),
+    DEFAULT_TICK_BANDWIDTH_BPS,
+    params.pool.tickSpacing ?? 10,
+    decimalsDiff,
+  );
+  const desiredAllocation = estimateTokenAllocationsUsd(
+    params.pool,
+    baseContributionUsd,
+    targetRange,
+  );
   if (token0Balance < desiredAllocation.token0 || token1Balance < desiredAllocation.token1) {
     return null;
   }
