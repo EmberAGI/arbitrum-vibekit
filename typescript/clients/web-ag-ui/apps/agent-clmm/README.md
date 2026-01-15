@@ -46,6 +46,24 @@ docker build --platform linux/amd64 -t agent-clmm:latest .
 - Integration/e2e tests live in `tests/` and load secrets via Node's native `--env-file` support
 - Logs are suppressed during tests by default; set `LOG_LEVEL=debug` to inspect output
 
+## Checkpointing & History Retention
+
+- The CLMM workflow uses a **shallow checkpointer** that retains only the latest checkpoint per thread.
+- Graph runs default to `durability="exit"` (persist on exit/interrupt boundaries, not every step).
+- Long-running history (telemetry, transactions, accounting flow/snapshots) is written to the LangGraph store and retained as a rolling window.
+- In-checkpoint state history is bounded to prevent runaway growth.
+
+Trade-offs:
+
+- Mid-loop crash recovery is coarse (resume at the last exit/interrupt checkpoint).
+- Time-travel/history debugging via checkpoints is not supported.
+
+Tuning (optional env vars):
+
+- `CLMM_STATE_HISTORY_LIMIT` (default 100) — max in-checkpoint history for UI state
+- `CLMM_ACCOUNTING_HISTORY_LIMIT` (default 200) — max accounting history kept in checkpoints
+- `CLMM_STORE_HISTORY_LIMIT` (default 1000) — rolling store retention per thread namespace
+
 ## Camelot Workflow Demo
 
 Use the demo runner to execute the Camelot CLMM workflow without a front end:
