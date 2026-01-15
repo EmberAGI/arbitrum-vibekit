@@ -1,0 +1,6 @@
+{
+  "langgraph": {
+    "durability": "exit",
+    "checkpointer": "shallow"
+  }
+}

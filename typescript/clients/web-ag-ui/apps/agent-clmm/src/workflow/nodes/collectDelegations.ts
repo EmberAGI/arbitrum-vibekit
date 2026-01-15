@@ -379,6 +379,14 @@ export const collectDelegationsNode = async (
   const delegatorAddress = normalizeHexAddress(operatorInput.walletAddress, 'delegator wallet address');
   const delegateeAddress = normalizeHexAddress(agentWalletAddress, 'delegatee wallet address');
   const baseContributionUsd = operatorInput.baseContributionUsd ?? 10;
+  const decimalsDiff = selectedPool.token0.decimals - selectedPool.token1.decimals;
+  const midPrice = deriveMidPrice(selectedPool);
+  const targetRange = buildRange(
+    midPrice,
+    DEFAULT_TICK_BANDWIDTH_BPS,
+    selectedPool.tickSpacing ?? 10,
+    decimalsDiff,
+  );
 
   const warnings: string[] = [];
 
@@ -387,7 +395,7 @@ export const collectDelegationsNode = async (
 
   let desired: { token0: bigint; token1: bigint };
   try {
-    desired = estimateTokenAllocationsUsd(selectedPool, baseContributionUsd);
+    desired = estimateTokenAllocationsUsd(selectedPool, baseContributionUsd, targetRange);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const failureMessage = `ERROR: Unable to estimate initial token allocations for delegation planning: ${message}`;
@@ -551,14 +559,6 @@ export const collectDelegationsNode = async (
   }
 
   try {
-    const decimalsDiff = selectedPool.token0.decimals - selectedPool.token1.decimals;
-    const midPrice = deriveMidPrice(selectedPool);
-    const targetRange = buildRange(
-      midPrice,
-      DEFAULT_TICK_BANDWIDTH_BPS,
-      selectedPool.tickSpacing ?? 10,
-      decimalsDiff,
-    );
     const request: ClmmRebalanceRequest = {
       walletAddress: delegatorAddress,
       supplyChain: chainIdString,

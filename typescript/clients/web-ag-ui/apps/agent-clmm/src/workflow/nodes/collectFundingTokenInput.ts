@@ -4,7 +4,8 @@ import { erc20Abi, formatUnits } from 'viem';
 import { z } from 'zod';
 
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
-import { ARBITRUM_CHAIN_ID } from '../../config/constants.js';
+import { ARBITRUM_CHAIN_ID, resolveTickBandwidthBps } from '../../config/constants.js';
+import { buildRange, deriveMidPrice } from '../../core/decision-engine.js';
 import { FundingTokenInputSchema, type FundingTokenInput } from '../../domain/types.js';
 import { getCamelotClient, getOnchainClients } from '../clientFactory.js';
 import {
@@ -156,8 +157,15 @@ export const collectFundingTokenInputNode = async (
   }
 
   const baseContributionUsd = operatorInput.baseContributionUsd ?? 10;
+  const decimalsDiff = selectedPool.token0.decimals - selectedPool.token1.decimals;
+  const targetRange = buildRange(
+    deriveMidPrice(selectedPool),
+    resolveTickBandwidthBps(),
+    selectedPool.tickSpacing ?? 10,
+    decimalsDiff,
+  );
   try {
-    void estimateTokenAllocationsUsd(selectedPool, baseContributionUsd);
+    void estimateTokenAllocationsUsd(selectedPool, baseContributionUsd, targetRange);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logInfo('collectFundingTokenInput: unable to compute token allocations; skipping step2', {

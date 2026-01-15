@@ -5,6 +5,11 @@ import { v7 as uuidv7 } from 'uuid';
 import { privateKeyToAccount } from 'viem/accounts';
 
 import {
+  resolveLangGraphDefaults,
+  resolveLangGraphDurability,
+  type LangGraphDurability,
+} from './config/serviceConfig.js';
+import {
   ClmmStateAnnotation,
   memory,
   normalizeHexAddress,
@@ -36,6 +41,7 @@ function resolvePostBootstrap(state: ClmmState): 'listPools' | 'syncState' {
 }
 
 const store = new InMemoryStore();
+const DEFAULT_DURABILITY = resolveLangGraphDefaults().durability;
 
 const rawAgentPrivateKey = process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
 if (!rawAgentPrivateKey) {
@@ -83,7 +89,10 @@ export const clmmGraph = workflow.compile({
 
 const runningThreads = new Set<string>();
 
-export async function runGraphOnce(threadId: string) {
+export async function runGraphOnce(
+  threadId: string,
+  options?: { durability?: LangGraphDurability },
+) {
   if (runningThreads.has(threadId)) {
     console.info(`[cron] Skipping tick - run already in progress (thread=${threadId})`);
     return;
@@ -103,7 +112,11 @@ export async function runGraphOnce(threadId: string) {
   // AsyncLocalStorage runnable config (including EventStreamCallbackHandler tied to a
   // closed SSE stream). Explicitly override callbacks to prevent "WritableStream is closed"
   // errors during background runs.
-  const config = { configurable: { thread_id: threadId }, callbacks: [] };
+  const config = {
+    configurable: { thread_id: threadId },
+    callbacks: [],
+    durability: resolveLangGraphDurability(options?.durability ?? DEFAULT_DURABILITY),
+  };
 
   try {
     // When a graph reaches END, subsequent invoke() calls return immediately without
@@ -134,7 +147,10 @@ export async function runGraphOnce(threadId: string) {
   }
 }
 
-export async function startClmmCron(threadId: string) {
+export async function startClmmCron(
+  threadId: string,
+  options?: { durability?: LangGraphDurability },
+) {
   const initialRunMessage = {
     id: uuidv7(),
     role: 'user' as const,
@@ -146,6 +162,7 @@ export async function startClmmCron(threadId: string) {
     { messages: [initialRunMessage] },
     {
       configurable: { thread_id: threadId },
+      durability: resolveLangGraphDurability(options?.durability ?? DEFAULT_DURABILITY),
     },
   );
   for await (const event of stream) {

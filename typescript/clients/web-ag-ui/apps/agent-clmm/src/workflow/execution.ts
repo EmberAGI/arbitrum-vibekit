@@ -382,6 +382,7 @@ export async function executeDecision({
       const desired = estimateTokenAllocationsUsd(
         refreshedPoolSnapshot,
         operatorConfig.baseContributionUsd,
+        action.targetRange,
       );
       const [token0Balance, token1Balance] = await Promise.all([
         readTokenBalance(clients.public, refreshedPoolSnapshot.token0.address, walletAddress),

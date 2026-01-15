@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { v7 as uuidv7 } from 'uuid';
 
 import { clmmGraph } from './agent.js';
+import { resolveLangGraphDurability, type LangGraphDurability } from './config/serviceConfig.js';
 import { type FundingTokenInput, FundingTokenInputSchema, type OperatorConfigInput, OperatorConfigInputSchema } from './domain/types.js';
 import { runGraphWithAutoResume } from './workflow/autoResumeRunner.js';
 import { type DelegationSigningInterrupt, type FundingTokenInterrupt, type OperatorInterrupt } from './workflow/context.js';
@@ -73,7 +74,11 @@ function isDelegationSigningInterrupt(value: unknown): value is DelegationSignin
   );
 }
 
-export async function startClmmHire(threadId: string, operatorInput: OperatorConfigInput) {
+export async function startClmmHire(
+  threadId: string,
+  operatorInput: OperatorConfigInput,
+  options?: { durability?: LangGraphDurability },
+) {
   const hireMessage = {
     id: uuidv7(),
     role: 'user' as const,
@@ -85,7 +90,10 @@ export async function startClmmHire(threadId: string, operatorInput: OperatorCon
   type ClmmInvokeConfig = Parameters<typeof clmmGraph.invoke>[1];
 
   const initialInput: ClmmInvokeInput = { messages: [hireMessage] } as ClmmInvokeInput;
-  const invokeConfig: ClmmInvokeConfig = { configurable: { thread_id: threadId } } as ClmmInvokeConfig;
+  const invokeConfig: ClmmInvokeConfig = {
+    configurable: { thread_id: threadId },
+    durability: resolveLangGraphDurability(options?.durability),
+  } as ClmmInvokeConfig;
 
   const output = await runGraphWithAutoResume<ClmmInvokeInput, ClmmInvokeOutput, ClmmInvokeConfig>({
     graph: clmmGraph,

@@ -24,6 +24,9 @@ export const EMBER_API_BASE_URL =
 
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const DEFAULT_STREAM_LIMIT = -1;
+const DEFAULT_STATE_HISTORY_LIMIT = 100;
+const DEFAULT_ACCOUNTING_HISTORY_LIMIT = 200;
+const DEFAULT_STORE_HISTORY_LIMIT = 1_000;
 
 export function resolveMinAllocationPct(): number | undefined {
   const raw = process.env['CLMM_MIN_ALLOCATION_PCT'];
@@ -68,6 +71,36 @@ export function resolveStreamLimit(): number {
     return DEFAULT_STREAM_LIMIT;
   }
   return Math.trunc(parsed);
+}
+
+function resolveHistoryLimit(
+  raw: string | undefined,
+  fallback: number,
+): number {
+  if (!raw) {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  const bounded = Math.trunc(parsed);
+  return bounded > 0 ? bounded : fallback;
+}
+
+export function resolveStateHistoryLimit(): number {
+  return resolveHistoryLimit(process.env['CLMM_STATE_HISTORY_LIMIT'], DEFAULT_STATE_HISTORY_LIMIT);
+}
+
+export function resolveAccountingHistoryLimit(): number {
+  return resolveHistoryLimit(
+    process.env['CLMM_ACCOUNTING_HISTORY_LIMIT'],
+    DEFAULT_ACCOUNTING_HISTORY_LIMIT,
+  );
+}
+
+export function resolveStoreHistoryLimit(): number {
+  return resolveHistoryLimit(process.env['CLMM_STORE_HISTORY_LIMIT'], DEFAULT_STORE_HISTORY_LIMIT);
 }
 
 export function resolveEthUsdPrice(pool: CamelotPool): number | undefined {

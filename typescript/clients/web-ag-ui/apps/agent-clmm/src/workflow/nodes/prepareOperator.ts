@@ -15,6 +15,7 @@ import {
   normalizeHexAddress,
   type ClmmEvent,
 } from '../context.js';
+import { appendFlowLogHistory, loadFlowLogHistory } from '../historyStore.js';
 import { loadBootstrapContext } from '../store.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
@@ -168,6 +169,10 @@ export const prepareOperatorNode = async (
 
   let accounting = state.view.accounting;
   const threadId = (config as Configurable).configurable?.thread_id;
+  const storedFlowLog = threadId ? await loadFlowLogHistory({ threadId }) : [];
+  if (storedFlowLog.length > 0) {
+    accounting = { ...accounting, flowLog: storedFlowLog };
+  }
   const contextId = resolveAccountingContextId({
     state,
     threadId,
@@ -183,6 +188,7 @@ export const prepareOperatorNode = async (
       chainId: ARBITRUM_CHAIN_ID,
       usdValue: operatorConfig.baseContributionUsd,
     });
+    await appendFlowLogHistory({ threadId, events: [hireEvent] });
     accounting = applyAccountingUpdate({
       existing: accounting,
       flowEvents: [hireEvent],
