@@ -12,6 +12,7 @@ import {
   resolveStateHistoryLimit,
   resolveStreamLimit,
 } from '../config/constants.js';
+import { createCheckpointer } from '../config/serviceConfig.js';
 import {
   type CamelotPool,
   type FundingTokenInput,
@@ -19,8 +20,6 @@ import {
   type RebalanceTelemetry,
   type ResolvedOperatorConfig,
 } from '../domain/types.js';
-
-import { ShallowMemorySaver } from './shallowMemorySaver.js';
 
 export type AgentMessage = CopilotKitAIMessage;
 
@@ -432,7 +431,7 @@ export const ClmmStateAnnotation = Annotation.Root({
 export type ClmmState = typeof ClmmStateAnnotation.State;
 export type ClmmUpdate = typeof ClmmStateAnnotation.Update;
 
-export const memory = new ShallowMemorySaver();
+export const memory = createCheckpointer();
 
 function buildAgentMessage(message: string): AgentMessage {
   return {
