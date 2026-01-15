@@ -45,12 +45,14 @@ export function tickToPrice(tick: number, decimalsDiff: number) {
   return ratio * Math.pow(10, decimalsDiff);
 }
 
-function snapTick(tick: number, spacing: number) {
-  const remainder = tick % spacing;
-  if (remainder === 0) {
+function snapTickToSpacing(tick: number, spacing: number, mode: 'floor' | 'ceil' | 'round') {
+  if (spacing <= 0) {
     return tick;
   }
-  return tick - remainder;
+  const normalized = tick / spacing;
+  const snapped =
+    mode === 'floor' ? Math.floor(normalized) : mode === 'ceil' ? Math.ceil(normalized) : Math.round(normalized);
+  return snapped * spacing;
 }
 
 export function buildRange(
@@ -62,8 +64,18 @@ export function buildRange(
   const pct = bandwidthBps / 10_000;
   const lowerPrice = midPrice * (1 - pct);
   const upperPrice = midPrice * (1 + pct);
-  const lowerTick = snapTick(priceToTick(lowerPrice, decimalsDiff), tickSpacing);
-  const upperTick = snapTick(priceToTick(upperPrice, decimalsDiff), tickSpacing);
+  const lowerTickEstimate = priceToTick(lowerPrice, decimalsDiff);
+  const upperTickEstimate = priceToTick(upperPrice, decimalsDiff);
+  const rawWidth = Math.max(tickSpacing, upperTickEstimate - lowerTickEstimate);
+  let widthMultiple = Math.max(1, Math.round(rawWidth / tickSpacing));
+  if (widthMultiple % 2 !== 0) {
+    widthMultiple += 1;
+  }
+  const widthTicks = widthMultiple * tickSpacing;
+  const centerTick = snapTickToSpacing(priceToTick(midPrice, decimalsDiff), tickSpacing, 'round');
+  const halfWidth = Math.trunc(widthTicks / 2);
+  const lowerTick = centerTick - halfWidth;
+  const upperTick = centerTick + halfWidth;
 
   return {
     lowerTick,
