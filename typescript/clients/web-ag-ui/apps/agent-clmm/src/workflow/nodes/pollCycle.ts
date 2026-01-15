@@ -39,6 +39,13 @@ import {
 } from '../context.js';
 import { ensureCronForThread } from '../cronScheduler.js';
 import { executeDecision } from '../execution.js';
+import {
+  appendFlowLogHistory,
+  appendNavSnapshotHistory,
+  appendTelemetryHistory,
+  appendTransactionHistory,
+  loadFlowLogHistory,
+} from '../historyStore.js';
 
 const DEBUG_MODE = process.env['DEBUG_MODE'] === 'true';
 
@@ -149,6 +156,7 @@ export const pollCycleNode = async (
   const iteration = (state.view.metrics.iteration ?? 0) + 1;
   const threadId = (config as Configurable).configurable?.thread_id;
   const contextId = resolveAccountingContextId({ state, threadId });
+  const storedFlowLog = threadId ? await loadFlowLogHistory({ threadId }) : [];
   const logCycleAccountingSummary = (accounting: AccountingState, note?: string) => {
     logAccountingSummary({ iteration, accounting, contextId, threadId, note });
   };
@@ -636,7 +644,10 @@ export const pollCycleNode = async (
           timestamp: cycleTelemetry.timestamp,
         };
 
-  let accountingState = state.view.accounting;
+  let accountingState =
+    storedFlowLog.length > 0
+      ? { ...state.view.accounting, flowLog: storedFlowLog }
+      : state.view.accounting;
   try {
     const flowEvents =
       contextId && executionFlowEvents.length > 0
@@ -654,6 +665,7 @@ export const pollCycleNode = async (
     }
 
     if (flowEvents.length > 0) {
+      await appendFlowLogHistory({ threadId, events: flowEvents });
       accountingState = applyAccountingUpdate({
         existing: accountingState,
         flowEvents,
@@ -680,6 +692,7 @@ export const pollCycleNode = async (
           }),
         );
       }
+      await appendNavSnapshotHistory({ threadId, snapshots });
       accountingState = applyAccountingUpdate({
         existing: accountingState,
         snapshots,
@@ -695,6 +708,11 @@ export const pollCycleNode = async (
     logInfo('Accounting snapshot failed during poll cycle', { iteration, error: message });
   }
   logCycleAccountingSummary(accountingState, 'cycle-complete');
+
+  await appendTelemetryHistory({ threadId, telemetry: [cycleTelemetry] });
+  if (transactionEntry) {
+    await appendTransactionHistory({ threadId, transactions: [transactionEntry] });
+  }
 
   return new Command({
     update: {

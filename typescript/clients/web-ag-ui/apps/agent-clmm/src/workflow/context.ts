@@ -1,12 +1,17 @@
 import type { CopilotKitState } from '@copilotkit/sdk-js/langgraph';
 import type { AIMessage as CopilotKitAIMessage } from '@copilotkit/shared';
 import { type Artifact } from '@emberai/agent-node/workflow';
-import { Annotation, MemorySaver, messagesStateReducer } from '@langchain/langgraph';
+import { Annotation, messagesStateReducer } from '@langchain/langgraph';
 import type { Messages } from '@langchain/langgraph';
 import { v7 as uuidv7 } from 'uuid';
 
 import type { AccountingState } from '../accounting/types.js';
-import { resolvePollIntervalMs, resolveStreamLimit } from '../config/constants.js';
+import {
+  resolveAccountingHistoryLimit,
+  resolvePollIntervalMs,
+  resolveStateHistoryLimit,
+  resolveStreamLimit,
+} from '../config/constants.js';
 import {
   type CamelotPool,
   type FundingTokenInput,
@@ -14,6 +19,8 @@ import {
   type RebalanceTelemetry,
   type ResolvedOperatorConfig,
 } from '../domain/types.js';
+
+import { ShallowMemorySaver } from './shallowMemorySaver.js';
 
 export type AgentMessage = CopilotKitAIMessage;
 
@@ -254,6 +261,9 @@ const defaultViewState = (): ClmmViewState => ({
   },
 });
 
+const STATE_HISTORY_LIMIT = resolveStateHistoryLimit();
+const ACCOUNTING_HISTORY_LIMIT = resolveAccountingHistoryLimit();
+
 const mergeSettings = (left: ClmmSettings, right?: Partial<ClmmSettings>): ClmmSettings => ({
   amount: right?.amount ?? left.amount,
 });
@@ -294,14 +304,30 @@ const mergeAppendOrReplace = <T>(left: T[], right?: T[]): T[] => {
   return [...left, ...right];
 };
 
+const limitHistory = <T>(items: T[], limit: number): T[] => {
+  if (limit <= 0 || items.length <= limit) {
+    return items;
+  }
+  return items.slice(-limit);
+};
+
 const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): ClmmViewState => {
   if (!right) {
     return left;
   }
 
-  const nextTelemetry = mergeAppendOrReplace(left.activity.telemetry, right.activity?.telemetry);
-  const nextEvents = mergeAppendOrReplace(left.activity.events, right.activity?.events);
-  const nextTransactions = mergeAppendOrReplace(left.transactionHistory, right.transactionHistory);
+  const nextTelemetry = limitHistory(
+    mergeAppendOrReplace(left.activity.telemetry, right.activity?.telemetry),
+    STATE_HISTORY_LIMIT,
+  );
+  const nextEvents = limitHistory(
+    mergeAppendOrReplace(left.activity.events, right.activity?.events),
+    STATE_HISTORY_LIMIT,
+  );
+  const nextTransactions = limitHistory(
+    mergeAppendOrReplace(left.transactionHistory, right.transactionHistory),
+    STATE_HISTORY_LIMIT,
+  );
   const nextProfile: ClmmProfile = {
     agentIncome: right.profile?.agentIncome ?? left.profile.agentIncome,
     aum: right.profile?.aum ?? left.profile.aum,
@@ -323,11 +349,14 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     latestCycle: right.metrics?.latestCycle ?? left.metrics.latestCycle,
   };
   const nextAccounting: ClmmAccounting = {
-    navSnapshots: mergeAppendOrReplace(
-      left.accounting.navSnapshots,
-      right.accounting?.navSnapshots,
+    navSnapshots: limitHistory(
+      mergeAppendOrReplace(left.accounting.navSnapshots, right.accounting?.navSnapshots),
+      ACCOUNTING_HISTORY_LIMIT,
     ),
-    flowLog: mergeAppendOrReplace(left.accounting.flowLog, right.accounting?.flowLog),
+    flowLog: limitHistory(
+      mergeAppendOrReplace(left.accounting.flowLog, right.accounting?.flowLog),
+      ACCOUNTING_HISTORY_LIMIT,
+    ),
     latestNavSnapshot: right.accounting?.latestNavSnapshot ?? left.accounting.latestNavSnapshot,
     lastUpdated: right.accounting?.lastUpdated ?? left.accounting.lastUpdated,
     lifecycleStart: right.accounting?.lifecycleStart ?? left.accounting.lifecycleStart,
@@ -403,7 +432,7 @@ export const ClmmStateAnnotation = Annotation.Root({
 export type ClmmState = typeof ClmmStateAnnotation.State;
 export type ClmmUpdate = typeof ClmmStateAnnotation.Update;
 
-export const memory = new MemorySaver();
+export const memory = new ShallowMemorySaver();
 
 function buildAgentMessage(message: string): AgentMessage {
   return {

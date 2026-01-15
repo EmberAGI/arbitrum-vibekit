@@ -85,7 +85,10 @@ export async function startClmmHire(threadId: string, operatorInput: OperatorCon
   type ClmmInvokeConfig = Parameters<typeof clmmGraph.invoke>[1];
 
   const initialInput: ClmmInvokeInput = { messages: [hireMessage] } as ClmmInvokeInput;
-  const invokeConfig: ClmmInvokeConfig = { configurable: { thread_id: threadId } } as ClmmInvokeConfig;
+  const invokeConfig: ClmmInvokeConfig = {
+    configurable: { thread_id: threadId },
+    durability: 'exit',
+  } as ClmmInvokeConfig;
 
   const output = await runGraphWithAutoResume<ClmmInvokeInput, ClmmInvokeOutput, ClmmInvokeConfig>({
     graph: clmmGraph,

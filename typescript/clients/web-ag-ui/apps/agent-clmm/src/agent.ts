@@ -36,6 +36,7 @@ function resolvePostBootstrap(state: ClmmState): 'listPools' | 'syncState' {
 }
 
 const store = new InMemoryStore();
+const DEFAULT_DURABILITY = 'exit' as const;
 
 const rawAgentPrivateKey = process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
 if (!rawAgentPrivateKey) {
@@ -103,7 +104,7 @@ export async function runGraphOnce(threadId: string) {
   // AsyncLocalStorage runnable config (including EventStreamCallbackHandler tied to a
   // closed SSE stream). Explicitly override callbacks to prevent "WritableStream is closed"
   // errors during background runs.
-  const config = { configurable: { thread_id: threadId }, callbacks: [] };
+  const config = { configurable: { thread_id: threadId }, callbacks: [], durability: DEFAULT_DURABILITY };
 
   try {
     // When a graph reaches END, subsequent invoke() calls return immediately without
@@ -146,6 +147,7 @@ export async function startClmmCron(threadId: string) {
     { messages: [initialRunMessage] },
     {
       configurable: { thread_id: threadId },
+      durability: DEFAULT_DURABILITY,
     },
   );
   for await (const event of stream) {
