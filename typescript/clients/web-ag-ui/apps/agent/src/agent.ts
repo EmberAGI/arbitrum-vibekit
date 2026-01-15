@@ -11,7 +11,6 @@ import { BaseMessage, SystemMessage } from '@langchain/core/messages';
 import {
   END,
   InMemoryStore,
-  MemorySaver,
   START,
   StateGraph,
   interrupt,
@@ -25,6 +24,8 @@ import {
 import { Annotation } from '@langchain/langgraph';
 import type { AIMessage } from '@copilotkit/shared';
 import { v7 } from 'uuid';
+
+import { ShallowMemorySaver } from './shallowMemorySaver.js';
 
 type Task = {
   id: string;
@@ -215,7 +216,7 @@ const workflow = new StateGraph(AgentStateAnnotation)
   .addEdge('hire_node', END)
   .addEdge('fire_node', END);
 
-const memory = new MemorySaver();
+const memory = new ShallowMemorySaver();
 
 export const graph = workflow.compile({
   checkpointer: memory,
