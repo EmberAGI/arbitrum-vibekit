@@ -1,0 +1,47 @@
+name: web-ag-ui-local
+
+services:
+  agent-clmm:
+    image: node:22
+    working_dir: /app
+    volumes:
+      - ./apps/agent-clmm:/app
+      - agent-clmm-node-modules:/app/node_modules
+      - pnpm-store:/pnpm/store
+    environment:
+      PNPM_HOME: /pnpm
+      PNPM_STORE_DIR: /pnpm/store
+      PATH: /pnpm:$PATH
+    env_file:
+      - ./apps/agent-clmm/.env
+    command: >
+      sh -lc "corepack enable && corepack prepare pnpm@10.7.0 --activate && pnpm install &&
+      npx @langchain/langgraph-cli dev --host 0.0.0.0 --port 8124 --no-browser"
+    ports:
+      - "8124:8124"
+
+  web:
+    image: node:22
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - web-node-modules:/app/node_modules
+      - pnpm-store:/pnpm/store
+    environment:
+      PNPM_HOME: /pnpm
+      PNPM_STORE_DIR: /pnpm/store
+      PATH: /pnpm:$PATH
+      LANGGRAPH_DEPLOYMENT_URL: http://agent-clmm:8124
+      NEXT_TELEMETRY_DISABLED: "1"
+    command: >
+      sh -lc "corepack enable && corepack prepare pnpm@9.15.0 --activate && pnpm install &&
+      pnpm --filter web exec -- next dev -H 0.0.0.0 -p 3000"
+    ports:
+      - "3001:3000"
+    depends_on:
+      - agent-clmm
+
+volumes:
+  agent-clmm-node-modules:
+  web-node-modules:
+  pnpm-store:

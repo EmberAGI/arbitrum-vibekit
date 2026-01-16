@@ -1,0 +1,21 @@
+# syntax=docker/dockerfile:1.7
+FROM node:22
+
+WORKDIR /app
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+
+COPY package.json pnpm-workspace.yaml turbo.json ./
+COPY eslint.config.mjs ./
+COPY apps ./apps
+
+# If a real env file exists in the repo, use it for Next build
+RUN if [ -f /app/apps/web/.env ]; then cp /app/apps/web/.env /app/apps/web/.env.local; fi
+
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install
+RUN pnpm --filter web build
+
+EXPOSE 3000
+CMD ["pnpm", "--filter", "web", "exec", "--", "next", "start", "-p", "3000", "-H", "0.0.0.0"]

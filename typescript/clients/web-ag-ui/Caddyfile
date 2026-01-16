@@ -1,0 +1,7 @@
+{
+  email ops@emberai.xyz
+}
+
+demo.emberai.xyz {
+  reverse_proxy web:3000
+}
