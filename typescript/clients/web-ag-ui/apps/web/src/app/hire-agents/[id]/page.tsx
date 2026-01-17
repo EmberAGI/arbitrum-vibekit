@@ -28,6 +28,40 @@ export default function AgentDetailRoute({
     // Extract Polymarket-specific state from agent.view
     const polymarketView = agent.view as unknown as {
       portfolioValueUsd?: number;
+      approvalStatus?: {
+        needsApproval: boolean;
+        usdcApproved: boolean;
+        ctfApproved: boolean;
+        usdcAllowance: string;
+        hasCtfApproval: boolean;
+      };
+      needsApprovalAmountInput?: boolean;
+      requestedApprovalAmount?: string;
+      needsUsdcPermitSignature?: boolean;
+      usdcPermitTypedData?: {
+        domain: {
+          name: string;
+          version: string;
+          chainId: number;
+          verifyingContract: string;
+        };
+        types: {
+          Permit: Array<{ name: string; type: string }>;
+        };
+        value: {
+          owner: string;
+          spender: string;
+          value: string;
+          nonce: string;
+          deadline: number;
+        };
+      };
+      needsCtfApprovalTransaction?: boolean;
+      ctfApprovalTransaction?: {
+        to: string;
+        data: string;
+        value?: string;
+      };
       opportunities?: Array<{
         marketId: string;
         marketTitle: string;
@@ -38,6 +72,73 @@ export default function AgentDetailRoute({
         spread: number;
         profitPotential: number;
         timestamp: string;
+      }>;
+      crossMarketOpportunities?: Array<{
+        relationship: {
+          type: 'IMPLIES' | 'REQUIRES' | 'MUTUAL_EXCLUSION' | 'EQUIVALENCE';
+          parentMarket: {
+            id: string;
+            title: string;
+            yesPrice: number;
+          };
+          childMarket: {
+            id: string;
+            title: string;
+            yesPrice: number;
+          };
+          confidence?: 'high' | 'medium' | 'low';
+          reasoning?: string;
+        };
+        violation: {
+          type: 'PRICE_INVERSION' | 'SUM_EXCEEDS_ONE';
+          description: string;
+          severity: number;
+        };
+        trades: {
+          sellMarket: {
+            marketId: string;
+            outcome: 'yes' | 'no';
+            price: number;
+          };
+          buyMarket: {
+            marketId: string;
+            outcome: 'yes' | 'no';
+            price: number;
+          };
+        };
+        expectedProfitPerShare: number;
+        timestamp: string;
+      }>;
+      detectedRelationships?: Array<{
+        id: string;
+        type: 'IMPLIES' | 'REQUIRES' | 'MUTUAL_EXCLUSION' | 'EQUIVALENCE';
+        parentMarket: {
+          id: string;
+          title: string;
+          yesPrice: number;
+        };
+        childMarket: {
+          id: string;
+          title: string;
+          yesPrice: number;
+        };
+        detectedAt: string;
+        confidence?: 'high' | 'medium' | 'low';
+        reasoning?: string;
+      }>;
+      transactionHistory?: Array<{
+        id: string;
+        cycle: number;
+        action: string;
+        marketId: string;
+        marketTitle: string;
+        shares: number;
+        price: number;
+        totalCost: number;
+        status: string;
+        timestamp: string;
+        orderId?: string;
+        error?: string;
       }>;
       config?: {
         minSpreadThreshold: number;
@@ -100,6 +201,9 @@ export default function AgentDetailRoute({
         }}
         portfolioValueUsd={polymarketView.portfolioValueUsd ?? 0}
         opportunities={polymarketView.opportunities ?? []}
+        crossMarketOpportunities={polymarketView.crossMarketOpportunities ?? []}
+        detectedRelationships={polymarketView.detectedRelationships ?? []}
+        transactionHistory={polymarketView.transactionHistory ?? []}
         isHired={agent.isHired}
         isHiring={agent.isHiring}
         isFiring={agent.isFiring}
@@ -109,6 +213,35 @@ export default function AgentDetailRoute({
         onFire={agent.runFire}
         onSync={agent.runSync}
         onBack={handleBack}
+        approvalStatus={polymarketView.approvalStatus}
+        needsApprovalAmountInput={polymarketView.needsApprovalAmountInput}
+        requestedApprovalAmount={polymarketView.requestedApprovalAmount}
+        needsUsdcPermitSignature={polymarketView.needsUsdcPermitSignature}
+        usdcPermitTypedData={polymarketView.usdcPermitTypedData}
+        needsCtfApprovalTransaction={polymarketView.needsCtfApprovalTransaction}
+        ctfApprovalTransaction={polymarketView.ctfApprovalTransaction}
+        onApprovalAmountSubmit={(amount: string, userWalletAddress: string) => {
+          console.log('[APPROVAL FLOW] Page callback received amount:', amount);
+          console.log('[APPROVAL FLOW] Page callback received user wallet:', userWalletAddress);
+          console.log('[APPROVAL FLOW] Calling resolveInterrupt with amount and wallet');
+          // Pass data directly in interrupt payload - backend will merge it into state
+          agent.resolveInterrupt({ requestedApprovalAmount: amount, userWalletAddress });
+          console.log('[APPROVAL FLOW] resolveInterrupt called');
+        }}
+        onUsdcPermitSign={async (signature: { v: number; r: string; s: string; deadline: number }) => {
+          console.log('[APPROVAL FLOW] Page callback received permit signature:', signature);
+          console.log('[APPROVAL FLOW] Calling resolveInterrupt with signature');
+          // Pass signature directly in interrupt payload
+          agent.resolveInterrupt({ usdcPermitSignature: signature });
+          console.log('[APPROVAL FLOW] resolveInterrupt called');
+        }}
+        onCtfApprovalSubmit={(txHash: string) => {
+          console.log('[APPROVAL FLOW] Page callback received CTF tx hash:', txHash);
+          console.log('[APPROVAL FLOW] Calling resolveInterrupt with txHash');
+          // Pass txHash directly in interrupt payload
+          agent.resolveInterrupt({ ctfApprovalTxHash: txHash });
+          console.log('[APPROVAL FLOW] resolveInterrupt called');
+        }}
       />
     );
   }

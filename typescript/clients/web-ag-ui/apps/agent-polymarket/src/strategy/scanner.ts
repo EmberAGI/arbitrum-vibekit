@@ -1,12 +1,23 @@
 /**
  * Polymarket Strategy - Market Scanner
  *
- * Scans Polymarket markets for intra-market arbitrage opportunities.
- * An opportunity exists when YES + NO prices sum to less than $1.00.
+ * Scans Polymarket markets for both:
+ * 1. Intra-market arbitrage: YES + NO < $1.00 on same market
+ * 2. Cross-market arbitrage: Logical relationship violations between different markets
  */
 
-import type { Market, ArbitrageOpportunity, StrategyConfig } from '../workflow/context.js';
+import type {
+  Market,
+  ArbitrageOpportunity,
+  CrossMarketOpportunity,
+  MarketRelationship,
+  StrategyConfig,
+} from '../workflow/context.js';
 import { logInfo } from '../workflow/context.js';
+import {
+  detectMarketRelationships,
+  checkPriceViolation,
+} from './relationshipDetector.js';
 
 /**
  * Scan markets for intra-market arbitrage opportunities.
@@ -151,4 +162,146 @@ export function calculateAnnualizedReturn(spread: number, daysUntil: number): nu
 
   // Simple annualization: (spread / daysUntil) * 365
   return (spread / daysUntil) * 365;
+}
+
+// ============================================================================
+// Cross-Market Arbitrage Scanner
+// ============================================================================
+
+/**
+ * Scan markets for cross-market arbitrage opportunities based on logical relationships.
+ *
+ * Process:
+ * 1. Detect logical relationships between markets (IMPLIES, MUTUAL_EXCLUSION, etc.)
+ * 2. Check each relationship for price violations
+ * 3. Return opportunities sorted by expected profit
+ *
+ * @param markets - Array of active markets to analyze
+ * @param config - Strategy configuration
+ * @param useLLM - Whether to use LLM for relationship detection (default: false)
+ * @returns Tuple of [opportunities, relationships] for tracking
+ */
+export async function scanForCrossMarketOpportunities(
+  markets: Market[],
+  config: StrategyConfig,
+  useLLM = false,
+): Promise<{
+  opportunities: CrossMarketOpportunity[];
+  relationships: MarketRelationship[];
+}> {
+  logInfo('Starting cross-market opportunity scan', {
+    marketCount: markets.length,
+    useLLM,
+  });
+
+  // Step 1: Detect relationships between markets
+  const relationships = await detectMarketRelationships(markets, useLLM);
+
+  logInfo(`Detected ${relationships.length} market relationships`, {
+    byType: countRelationshipTypes(relationships),
+  });
+
+  // Step 2: Check each relationship for price violations
+  const opportunities: CrossMarketOpportunity[] = [];
+
+  for (const relationship of relationships) {
+    const opportunity = checkPriceViolation(relationship);
+
+    if (opportunity) {
+      opportunities.push(opportunity);
+
+      logInfo('Cross-market opportunity found', {
+        type: relationship.type,
+        parent: relationship.parentMarket.title.substring(0, 40),
+        child: relationship.childMarket.title.substring(0, 40),
+        violation: opportunity.violation.type,
+        expectedProfit: `$${opportunity.expectedProfitPerShare.toFixed(3)}`,
+      });
+    }
+  }
+
+  // Step 3: Sort by expected profit (highest first)
+  opportunities.sort((a, b) => b.expectedProfitPerShare - a.expectedProfitPerShare);
+
+  if (opportunities.length > 0) {
+    logInfo(`Found ${opportunities.length} cross-market opportunities`, {
+      bestProfit: `$${opportunities[0]?.expectedProfitPerShare.toFixed(3)} per share`,
+      totalRelationships: relationships.length,
+    });
+  }
+
+  return { opportunities, relationships };
+}
+
+/**
+ * Filter cross-market opportunities based on risk and execution constraints.
+ *
+ * @param opportunities - Raw opportunities from scanner
+ * @param config - Strategy configuration
+ * @param currentExposure - Current total USD exposure
+ * @returns Filtered opportunities ready for execution
+ */
+export function filterCrossMarketOpportunities(
+  opportunities: CrossMarketOpportunity[],
+  config: StrategyConfig,
+  currentExposure: number,
+): CrossMarketOpportunity[] {
+  const remainingCapacity = config.maxTotalExposureUsd - currentExposure;
+
+  if (remainingCapacity <= 0) {
+    logInfo('Max exposure reached, skipping cross-market opportunities', {
+      currentExposure,
+      maxExposure: config.maxTotalExposureUsd,
+    });
+    return [];
+  }
+
+  return opportunities.filter((opp) => {
+    // Minimum profit threshold: $0.50 per share to cover transaction costs
+    const minProfitThreshold = 0.005; // $0.005 = 0.5 cents per share
+    if (opp.expectedProfitPerShare < minProfitThreshold) {
+      return false;
+    }
+
+    // Skip opportunities with very low liquidity markets
+    const minLiquidity = 1000; // $1,000 minimum liquidity
+    if (
+      opp.relationship.parentMarket.liquidity < minLiquidity ||
+      opp.relationship.childMarket.liquidity < minLiquidity
+    ) {
+      return false;
+    }
+
+    // Skip if markets resolve at very different times (risk of holding one side too long)
+    const parentEndDate = new Date(opp.relationship.parentMarket.endDate);
+    const childEndDate = new Date(opp.relationship.childMarket.endDate);
+    const daysDiff = Math.abs(parentEndDate.getTime() - childEndDate.getTime()) / (1000 * 60 * 60 * 24);
+
+    // Max 30 days difference in resolution
+    if (daysDiff > 30) {
+      logInfo('Skipping opportunity due to resolution time mismatch', {
+        parent: opp.relationship.parentMarket.title.substring(0, 30),
+        child: opp.relationship.childMarket.title.substring(0, 30),
+        daysDiff: daysDiff.toFixed(0),
+      });
+      return false;
+    }
+
+    return true;
+  });
+}
+
+/**
+ * Helper: Count relationships by type for logging
+ */
+function countRelationshipTypes(
+  relationships: MarketRelationship[],
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+
+  for (const rel of relationships) {
+    counts[rel.type] = (counts[rel.type] || 0) + 1;
+  }
+
+  return counts;
 }

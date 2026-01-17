@@ -38,6 +38,11 @@ export function usePrivyWalletClient(): UsePrivyWalletClientReturn {
   const hasInitializedDefaultChain = useRef(false);
 
   const privyWallet = useMemo(() => {
+    // Priority 1: External wallet (MetaMask, Coinbase, etc.)
+    const externalWallet = wallets.find((wallet) => wallet.walletClientType !== 'privy');
+    if (externalWallet) return externalWallet;
+
+    // Priority 2: Embedded Privy wallet
     return wallets.find((wallet) => wallet.walletClientType === 'privy') ?? null;
   }, [wallets]);
 

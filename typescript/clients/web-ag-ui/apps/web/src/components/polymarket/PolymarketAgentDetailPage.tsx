@@ -2,9 +2,118 @@
 
 import { ChevronRight, Check, RefreshCw, Star } from 'lucide-react';
 import { useState } from 'react';
+import { hexToSignature } from 'viem';
+import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { PolymarketOpportunityCard, type ArbitrageOpportunity } from './PolymarketOpportunityCard';
 import { PolymarketMetrics, type PolymarketAgentMetrics, type PolymarketStrategyConfig } from './PolymarketMetrics';
+import { CrossMarketOpportunityCard } from './CrossMarketOpportunityCard';
+import { RelationshipsTable } from './RelationshipsTable';
 import type { AgentProfile } from '@/types/agent';
+
+interface CrossMarketOpportunity {
+  relationship: {
+    type: 'IMPLIES' | 'REQUIRES' | 'MUTUAL_EXCLUSION' | 'EQUIVALENCE';
+    parentMarket: {
+      id: string;
+      title: string;
+      yesPrice: number;
+    };
+    childMarket: {
+      id: string;
+      title: string;
+      yesPrice: number;
+    };
+    confidence?: 'high' | 'medium' | 'low';
+    reasoning?: string;
+  };
+  violation: {
+    type: 'PRICE_INVERSION' | 'SUM_EXCEEDS_ONE';
+    description: string;
+    severity: number;
+  };
+  trades: {
+    sellMarket: {
+      marketId: string;
+      outcome: 'yes' | 'no';
+      price: number;
+    };
+    buyMarket: {
+      marketId: string;
+      outcome: 'yes' | 'no';
+      price: number;
+    };
+  };
+  expectedProfitPerShare: number;
+  timestamp: string;
+}
+
+interface MarketRelationship {
+  id: string;
+  type: 'IMPLIES' | 'REQUIRES' | 'MUTUAL_EXCLUSION' | 'EQUIVALENCE';
+  parentMarket: {
+    id: string;
+    title: string;
+    yesPrice: number;
+  };
+  childMarket: {
+    id: string;
+    title: string;
+    yesPrice: number;
+  };
+  detectedAt: string;
+  confidence?: 'high' | 'medium' | 'low';
+  reasoning?: string;
+}
+
+interface Transaction {
+  id: string;
+  cycle: number;
+  action: string;
+  marketId: string;
+  marketTitle: string;
+  shares: number;
+  price: number;
+  totalCost: number;
+  status: string;
+  timestamp: string;
+  orderId?: string;
+  error?: string;
+}
+
+interface ApprovalStatus {
+  ctfApproved: boolean;
+  usdcApproved: boolean;
+  polBalance: number;
+  usdcBalance: number;
+  needsApproval: boolean;
+}
+
+interface EIP712TypedData {
+  domain: {
+    name: string;
+    version: string;
+    chainId?: number;
+    salt?: string;
+    verifyingContract: string;
+  };
+  types: {
+    Permit: Array<{ name: string; type: string }>;
+  };
+  value: {
+    owner: string;
+    spender: string;
+    value: string;
+    nonce: string;
+    deadline: number;
+  };
+}
+
+interface ApprovalTransaction {
+  to: string;
+  data: string;
+  description: string;
+  gasLimit?: number;
+}
 
 interface PolymarketAgentDetailPageProps {
   agentId: string;
@@ -21,6 +130,9 @@ interface PolymarketAgentDetailPageProps {
   config: PolymarketStrategyConfig;
   portfolioValueUsd: number;
   opportunities: ArbitrageOpportunity[];
+  crossMarketOpportunities: CrossMarketOpportunity[];
+  detectedRelationships: MarketRelationship[];
+  transactionHistory: Transaction[];
   isHired: boolean;
   isHiring: boolean;
   isFiring?: boolean;
@@ -30,9 +142,21 @@ interface PolymarketAgentDetailPageProps {
   onFire: () => void;
   onSync: () => void;
   onBack: () => void;
+
+  // Approval flow props
+  approvalStatus?: ApprovalStatus;
+  needsApprovalAmountInput?: boolean;
+  requestedApprovalAmount?: string;
+  needsUsdcPermitSignature?: boolean;
+  usdcPermitTypedData?: EIP712TypedData;
+  needsCtfApprovalTransaction?: boolean;
+  ctfApprovalTransaction?: ApprovalTransaction;
+  onApprovalAmountSubmit?: (amount: string, userWalletAddress: string) => void;
+  onUsdcPermitSign?: (signature: { v: number; r: string; s: string; deadline: number }) => void;
+  onCtfApprovalSubmit?: (txHash: string) => void;
 }
 
-type TabType = 'opportunities' | 'metrics' | 'settings';
+type TabType = 'approvals' | 'opportunities' | 'cross-market' | 'relationships' | 'history' | 'metrics' | 'settings';
 
 const DEFAULT_AVATAR = '🎯';
 const DEFAULT_AVATAR_BG = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
@@ -51,6 +175,9 @@ export function PolymarketAgentDetailPage({
   config,
   portfolioValueUsd,
   opportunities,
+  crossMarketOpportunities,
+  detectedRelationships,
+  transactionHistory,
   isHired,
   isHiring,
   isFiring,
@@ -60,8 +187,24 @@ export function PolymarketAgentDetailPage({
   onFire,
   onSync,
   onBack,
+  // Approval flow props
+  approvalStatus,
+  needsApprovalAmountInput,
+  requestedApprovalAmount,
+  needsUsdcPermitSignature,
+  usdcPermitTypedData,
+  needsCtfApprovalTransaction,
+  ctfApprovalTransaction,
+  onApprovalAmountSubmit,
+  onUsdcPermitSign,
+  onCtfApprovalSubmit,
 }: PolymarketAgentDetailPageProps) {
-  const [activeTab, setActiveTab] = useState<TabType>(isHired ? 'opportunities' : 'metrics');
+  // Show approvals tab if any approval step is active
+  const needsApprovals = needsApprovalAmountInput || needsUsdcPermitSignature || needsCtfApprovalTransaction;
+  const [activeTab, setActiveTab] = useState<TabType>(needsApprovals ? 'approvals' : isHired ? 'opportunities' : 'metrics');
+
+  // Wallet client for signing permits and transactions
+  const { walletClient, chainId, switchChain } = usePrivyWalletClient();
 
   const formatCurrency = (value: number | undefined) => {
     if (value === undefined || value === null) return null;
@@ -208,16 +351,44 @@ export function PolymarketAgentDetailPage({
           </div>
 
           {/* Tabs */}
-          <div className="flex items-center gap-1 mb-6 border-b border-[#2a2a2a]">
+          <div className="flex items-center gap-1 mb-6 border-b border-[#2a2a2a] overflow-x-auto">
+            {needsApprovals && (
+              <TabButton
+                active={activeTab === 'approvals'}
+                onClick={() => setActiveTab('approvals')}
+                highlight={true}
+              >
+                Setup Required
+              </TabButton>
+            )}
             <TabButton
               active={activeTab === 'opportunities'}
               onClick={() => setActiveTab('opportunities')}
-              highlight
+              highlight={opportunities.length > 0}
             >
-              Opportunities {opportunities.length > 0 && `(${opportunities.length})`}
+              Intra-Market {opportunities.length > 0 && `(${opportunities.length})`}
+            </TabButton>
+            <TabButton
+              active={activeTab === 'cross-market'}
+              onClick={() => setActiveTab('cross-market')}
+              highlight={crossMarketOpportunities.length > 0}
+            >
+              Cross-Market {crossMarketOpportunities.length > 0 && `(${crossMarketOpportunities.length})`}
+            </TabButton>
+            <TabButton
+              active={activeTab === 'relationships'}
+              onClick={() => setActiveTab('relationships')}
+            >
+              Relationships {detectedRelationships.length > 0 && `(${detectedRelationships.length})`}
+            </TabButton>
+            <TabButton
+              active={activeTab === 'history'}
+              onClick={() => setActiveTab('history')}
+            >
+              History {transactionHistory.length > 0 && `(${transactionHistory.length})`}
             </TabButton>
             <TabButton active={activeTab === 'metrics'} onClick={() => setActiveTab('metrics')}>
-              Metrics & Performance
+              Metrics
             </TabButton>
             <TabButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')}>
               Settings
@@ -225,8 +396,251 @@ export function PolymarketAgentDetailPage({
           </div>
 
           {/* Tab Content */}
+          {activeTab === 'approvals' && (
+            <div className="space-y-6">
+              <div className="p-4 bg-purple-900/20 border border-purple-800/50 rounded-lg">
+                <h3 className="text-sm font-semibold text-purple-400 mb-2">Setup Required</h3>
+                <p className="text-xs text-gray-300">
+                  To trade on Polymarket, the agent needs approval to spend USDC and CTF tokens on your behalf.
+                  This is a one-time setup process.
+                </p>
+              </div>
+
+              {/* Step 1: USDC Amount Input */}
+              {needsApprovalAmountInput && (
+                <div className="p-6 rounded-lg bg-[#1e1e1e] border border-[#2a2a2a]">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-8 h-8 rounded-full bg-purple-500/20 border border-purple-500 flex items-center justify-center text-sm font-bold text-purple-400">
+                      1
+                    </div>
+                    <h3 className="text-lg font-semibold text-white">Set USDC Approval Amount</h3>
+                  </div>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Enter the maximum amount of USDC the agent can spend. You can always revoke this later.
+                  </p>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      console.log('[APPROVAL FLOW] Form submitted');
+                      const formData = new FormData(e.currentTarget);
+                      const amount = formData.get('amount') as string;
+                      const userWalletAddress = walletClient?.account?.address;
+                      console.log('[APPROVAL FLOW] Form extracted amount:', amount);
+                      console.log('[APPROVAL FLOW] User wallet address:', userWalletAddress);
+                      console.log('[APPROVAL FLOW] Has callback?', !!onApprovalAmountSubmit);
+                      if (amount && userWalletAddress && onApprovalAmountSubmit) {
+                        console.log('[APPROVAL FLOW] Calling onApprovalAmountSubmit callback with wallet');
+                        onApprovalAmountSubmit(amount, userWalletAddress);
+                      } else {
+                        console.error('[APPROVAL FLOW] Missing amount, wallet or callback', {
+                          hasAmount: !!amount,
+                          hasWallet: !!userWalletAddress,
+                          hasCallback: !!onApprovalAmountSubmit,
+                        });
+                        if (!userWalletAddress) {
+                          alert('Please connect your wallet first');
+                        }
+                      }
+                    }}
+                    className="space-y-4"
+                  >
+                    <div>
+                      <label htmlFor="approval-amount" className="block text-sm font-medium text-gray-300 mb-2">
+                        USDC Amount
+                      </label>
+                      <input
+                        id="approval-amount"
+                        name="amount"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="e.g., 1000"
+                        required
+                        className="w-full px-4 py-3 rounded-lg bg-[#0f0f0f] border border-[#2a2a2a] text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-3 rounded-xl font-medium bg-purple-500 hover:bg-purple-600 text-white transition-colors"
+                    >
+                      Continue
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Step 2: USDC Permit Signature */}
+              {needsUsdcPermitSignature && usdcPermitTypedData && (
+                <div className="p-6 rounded-lg bg-[#1e1e1e] border border-[#2a2a2a]">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-8 h-8 rounded-full bg-purple-500/20 border border-purple-500 flex items-center justify-center text-sm font-bold text-purple-400">
+                      2
+                    </div>
+                    <h3 className="text-lg font-semibold text-white">Sign USDC Approval</h3>
+                  </div>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Sign a gasless approval message. This won&apos;t cost you any gas - the backend will submit it for you.
+                  </p>
+                  <div className="p-4 rounded-lg bg-[#0f0f0f] border border-[#2a2a2a] mb-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm text-gray-400">Amount:</span>
+                      <span className="text-sm text-white font-mono">
+                        {requestedApprovalAmount} USDC
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm text-gray-400">Spender:</span>
+                      <span className="text-xs text-white font-mono">
+                        {usdcPermitTypedData.value.spender.substring(0, 10)}...
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-400">Gas Cost:</span>
+                      <span className="text-sm text-teal-400 font-semibold">FREE (Gasless)</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!onUsdcPermitSign || !walletClient || !usdcPermitTypedData) return;
+                      try {
+                        // Ensure we're on Polygon (chainId 137)
+                        if (chainId !== 137) {
+                          await switchChain(137);
+                        }
+
+                        // Sign EIP-712 typed data
+                        const signature = await walletClient.signTypedData({
+                          account: walletClient.account,
+                          domain: {
+                            ...usdcPermitTypedData.domain,
+                            verifyingContract: usdcPermitTypedData.domain.verifyingContract as `0x${string}`,
+                            salt: usdcPermitTypedData.domain.salt as `0x${string}` | undefined,
+                          },
+                          types: usdcPermitTypedData.types,
+                          primaryType: 'Permit',
+                          message: usdcPermitTypedData.value,
+                        });
+
+                        // Split signature into v, r, s components using viem
+                        const { v, r, s } = hexToSignature(signature);
+
+                        // Submit signature to backend
+                        onUsdcPermitSign({
+                          v: Number(v),
+                          r,
+                          s,
+                          deadline: usdcPermitTypedData.value.deadline,
+                        });
+                      } catch (error) {
+                        console.error('Failed to sign USDC permit:', error);
+                        alert('Failed to sign permit. Please try again.');
+                      }
+                    }}
+                    disabled={!walletClient}
+                    className={`w-full py-3 rounded-xl font-medium transition-colors ${
+                      !walletClient
+                        ? 'bg-gray-500 cursor-not-allowed'
+                        : 'bg-purple-500 hover:bg-purple-600'
+                    } text-white`}
+                  >
+                    {!walletClient ? 'Connect Wallet' : 'Sign Message'}
+                  </button>
+                </div>
+              )}
+
+              {/* Approval Status Summary */}
+              {approvalStatus && (
+                <div className="p-4 rounded-lg bg-[#0f0f0f] border border-[#2a2a2a]">
+                  <h3 className="text-sm font-semibold text-gray-300 mb-3">Approval Status</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-400">USDC Approval</span>
+                      <span className={`text-sm font-semibold ${approvalStatus.usdcApproved ? 'text-teal-400' : 'text-gray-500'}`}>
+                        {approvalStatus.usdcApproved ? '✓ Approved' : '⏳ Pending'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'opportunities' && (
             <OpportunitiesTab opportunities={opportunities} />
+          )}
+
+          {activeTab === 'cross-market' && (
+            <div className="space-y-4">
+              {crossMarketOpportunities.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <p className="text-lg">No cross-market arbitrage opportunities detected yet.</p>
+                  <p className="text-sm mt-2">The agent is scanning for logical relationships between markets.</p>
+                </div>
+              ) : (
+                crossMarketOpportunities.map((opp, idx) => (
+                  <CrossMarketOpportunityCard key={`${opp.relationship.parentMarket.id}-${idx}`} opportunity={opp} />
+                ))
+              )}
+            </div>
+          )}
+
+          {activeTab === 'relationships' && (
+            <div>
+              <div className="mb-4 p-4 bg-blue-900/20 border border-blue-800/50 rounded-lg">
+                <h3 className="text-sm font-semibold text-blue-400 mb-2">Detected Market Relationships</h3>
+                <p className="text-xs text-gray-300">
+                  The agent automatically detects logical relationships between markets (IMPLIES, MUTUAL_EXCLUSION, etc.).
+                  When prices violate these relationships, arbitrage opportunities are created.
+                </p>
+              </div>
+              <RelationshipsTable relationships={detectedRelationships} />
+            </div>
+          )}
+
+          {activeTab === 'history' && (
+            <div className="space-y-4">
+              {transactionHistory.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <p className="text-lg">No transactions yet.</p>
+                  <p className="text-sm mt-2">Trade history will appear here once the agent starts executing.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {transactionHistory.map((tx) => (
+                    <div
+                      key={tx.id}
+                      className="p-4 rounded-lg bg-[#1e1e1e] border border-[#2a2a2a] hover:border-[#3a3a3a] transition-colors"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                            tx.status === 'success' ? 'bg-green-900/30 text-green-400' :
+                            tx.status === 'failed' ? 'bg-red-900/30 text-red-400' :
+                            'bg-yellow-900/30 text-yellow-400'
+                          }`}>
+                            {tx.status.toUpperCase()}
+                          </span>
+                          <span className="text-sm text-gray-400">Cycle {tx.cycle}</span>
+                          <span className="text-sm font-mono text-gray-500">{tx.action}</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-semibold">{tx.shares} shares @ ${tx.price.toFixed(4)}</div>
+                          <div className="text-xs text-gray-400">Total: ${tx.totalCost.toFixed(2)}</div>
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-300 truncate">{tx.marketTitle}</div>
+                      {tx.orderId && (
+                        <div className="text-xs text-gray-500 mt-1 font-mono">Order: {tx.orderId}</div>
+                      )}
+                      {tx.error && (
+                        <div className="text-xs text-red-400 mt-2 p-2 bg-red-900/20 rounded">{tx.error}</div>
+                      )}
+                      <div className="text-xs text-gray-500 mt-2">{new Date(tx.timestamp).toLocaleString()}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {activeTab === 'metrics' && (
@@ -234,6 +648,8 @@ export function PolymarketAgentDetailPage({
               metrics={metrics}
               config={config}
               portfolioValueUsd={portfolioValueUsd}
+              intraMarketCount={opportunities.length}
+              crossMarketCount={crossMarketOpportunities.length}
             />
           )}
 

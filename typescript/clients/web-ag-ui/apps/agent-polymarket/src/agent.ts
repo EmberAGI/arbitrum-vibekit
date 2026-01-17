@@ -31,21 +31,64 @@ import { syncStateNode } from './workflow/nodes/syncState.js';
 import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { pollCycleNode } from './workflow/nodes/pollCycle.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
+import { checkApprovalsNode } from './workflow/nodes/checkApprovals.js';
+import { collectApprovalAmountNode } from './workflow/nodes/collectApprovalAmount.js';
+import { collectTradeApprovalNode } from './workflow/nodes/collectTradeApproval.js';
+import { syncPositionsNode } from './workflow/nodes/syncPositions.js';
+import { redeemPositionsNode } from './workflow/nodes/redeemPositions.js';
 
 // ============================================================================
 // Graph Definition
 // ============================================================================
 
 /**
- * Routes after bootstrap based on lifecycle state.
+ * Routes after bootstrap - always check approvals first.
  */
-function resolvePostBootstrap(state: PolymarketState): 'pollCycle' | 'syncState' {
-  // If we just booted and lifecycle is running, go to poll
+function resolvePostBootstrap(state: PolymarketState): 'checkApprovals' | 'syncState' {
+  // If lifecycle is running, check approvals before trading
   if (state.view.lifecycleState === 'running') {
-    return 'pollCycle';
+    return 'checkApprovals';
   }
-  // Otherwise just sync state
+  // Otherwise just sync state (agent not active)
   return 'syncState';
+}
+
+/**
+ * Routes after pollCycle - check if there are pending trades awaiting approval.
+ */
+function resolvePostPollCycle(state: PolymarketState): 'collectTradeApproval' | 'summarize' {
+  // If there are pending trades, go to approval flow
+  if (state.view.pendingTrades && state.view.pendingTrades.length > 0) {
+    return 'collectTradeApproval';
+  }
+  // Otherwise summarize and end cycle
+  return 'summarize';
+}
+
+/**
+ * Routes after summarize - check if we should sync positions/redeem.
+ */
+function resolvePostSummarize(
+  state: PolymarketState,
+): 'syncPositions' | 'redeemPositions' | typeof END {
+  // Check if position syncing is enabled (default: true)
+  const syncEnabled = process.env.POLY_SYNC_POSITIONS !== 'false';
+
+  // Check if auto-redemption is enabled (default: false for safety)
+  const redeemEnabled = process.env.POLY_AUTO_REDEEM === 'true';
+
+  // Sync positions on every 5th cycle to keep data fresh
+  if (syncEnabled && state.view.metrics.iteration % 5 === 0) {
+    return 'syncPositions';
+  }
+
+  // Check for redemptions on every 10th cycle (less frequent)
+  if (redeemEnabled && state.view.metrics.iteration % 10 === 0) {
+    return 'redeemPositions';
+  }
+
+  // Otherwise end
+  return END;
 }
 
 const workflow = new StateGraph(PolymarketStateAnnotation)
@@ -58,10 +101,17 @@ const workflow = new StateGraph(PolymarketStateAnnotation)
 
   // Setup nodes
   .addNode('bootstrap', bootstrapNode)
+  .addNode('checkApprovals', checkApprovalsNode)
+  .addNode('collectApprovalAmount', collectApprovalAmountNode)
 
   // Strategy nodes
   .addNode('pollCycle', pollCycleNode)
+  .addNode('collectTradeApproval', collectTradeApprovalNode)
   .addNode('summarize', summarizeNode)
+
+  // Position management nodes
+  .addNode('syncPositions', syncPositionsNode)
+  .addNode('redeemPositions', redeemPositionsNode)
 
   // Edges from START
   .addEdge(START, 'runCommand')
@@ -69,9 +119,12 @@ const workflow = new StateGraph(PolymarketStateAnnotation)
   // Command routing
   .addConditionalEdges('runCommand', resolveCommandTarget)
 
-  // Hire flow
+  // Hire flow (with automatic approval handling)
   .addEdge('hireCommand', 'bootstrap')
   .addConditionalEdges('bootstrap', resolvePostBootstrap)
+
+  // Note: Approvals are handled automatically in checkApprovals node
+  // No interrupt needed - agent signs with its own private key
 
   // Fire flow
   .addEdge('fireCommand', END)
@@ -79,10 +132,14 @@ const workflow = new StateGraph(PolymarketStateAnnotation)
   // Sync flow
   .addEdge('syncState', END)
 
-  // Cycle flow
-  .addEdge('runCycleCommand', 'pollCycle')
-  .addEdge('pollCycle', 'summarize')
-  .addEdge('summarize', END);
+  // Cycle flow (with trade approval check)
+  .addEdge('runCycleCommand', 'checkApprovals')
+  .addConditionalEdges('pollCycle', resolvePostPollCycle) // Route based on pending trades
+  .addConditionalEdges('summarize', resolvePostSummarize) // Route to position management or end
+
+  // Position management flow
+  .addEdge('syncPositions', END)
+  .addEdge('redeemPositions', END);
 
 export const polymarketGraph = workflow.compile({
   checkpointer: memory,

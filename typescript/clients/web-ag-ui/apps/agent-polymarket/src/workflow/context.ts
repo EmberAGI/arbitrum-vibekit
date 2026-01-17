@@ -10,6 +10,12 @@ import type { AIMessage as CopilotKitAIMessage } from '@copilotkit/shared';
 import { Annotation, MemorySaver, messagesStateReducer } from '@langchain/langgraph';
 import type { Messages } from '@langchain/langgraph';
 import { v7 as uuidv7 } from 'uuid';
+import type {
+  ApprovalStatus,
+  ApprovalTransaction,
+  EIP712TypedData,
+  PermitSignature,
+} from '../clients/approvals.js';
 
 // Re-export agent message type
 export type AgentMessage = CopilotKitAIMessage;
@@ -82,6 +88,49 @@ export type ArbitrageOpportunity = {
   timestamp: string;
 };
 
+// ============================================================================
+// Cross-Market Arbitrage Types
+// ============================================================================
+
+export type RelationshipType =
+  | 'IMPLIES'           // A → B: If A happens, B must happen (P(A) ≤ P(B))
+  | 'REQUIRES'          // B ← A: A requires B to happen first
+  | 'MUTUAL_EXCLUSION'  // A ⊕ B: Both can't happen (P(A) + P(B) ≤ 1.00)
+  | 'EQUIVALENCE';      // A ↔ B: Same event, different phrasing
+
+export type MarketRelationship = {
+  id: string;                    // Unique ID: "parentMarketId->childMarketId"
+  type: RelationshipType;
+  parentMarket: Market;          // For IMPLIES: the more specific/conditional market
+  childMarket: Market;           // For IMPLIES: the more general/required market
+  detectedAt: string;            // ISO timestamp
+  confidence?: 'high' | 'medium' | 'low'; // Detection confidence
+  reasoning?: string;            // LLM reasoning for why relationship exists
+};
+
+export type CrossMarketOpportunity = {
+  relationship: MarketRelationship;
+  violation: {
+    type: 'PRICE_INVERSION' | 'SUM_EXCEEDS_ONE';
+    description: string;
+    severity: number;            // How much it violates (in dollars per share)
+  };
+  trades: {
+    sellMarket: {
+      marketId: string;
+      outcome: 'yes' | 'no';
+      price: number;
+    };
+    buyMarket: {
+      marketId: string;
+      outcome: 'yes' | 'no';
+      price: number;
+    };
+  };
+  expectedProfitPerShare: number;  // Expected profit per share
+  timestamp: string;
+};
+
 export type Position = {
   marketId: string;
   marketTitle: string;
@@ -100,7 +149,9 @@ export type TransactionAction =
   | 'sell-no'
   | 'cancel'
   | 'cancel-all'
-  | 'redeem';
+  | 'redeem'
+  | 'cross-market-buy'   // Cross-market arbitrage buy leg
+  | 'cross-market-sell'; // Cross-market arbitrage sell leg
 
 export type Transaction = {
   id: string;
@@ -111,10 +162,50 @@ export type Transaction = {
   shares: number;
   price: number;
   totalCost: number;
-  status: 'pending' | 'success' | 'failed';
+  status: 'pending' | 'success' | 'failed' | 'simulated';
   timestamp: string;
   orderId?: string;
   error?: string;
+};
+
+/**
+ * Pending trade awaiting user approval.
+ * Captures opportunity details so trades can be reviewed before execution.
+ */
+export type PendingTrade = {
+  id: string;
+  type: 'intra-market' | 'cross-market';
+  createdAt: string;
+  expiresAt: string; // Opportunities expire quickly, show countdown
+  status: 'pending' | 'approved' | 'rejected' | 'expired';
+
+  // Intra-market opportunity (only set if type === 'intra-market')
+  intraOpportunity?: ArbitrageOpportunity;
+  intraPosition?: {
+    yesShares: number;
+    noShares: number;
+    yesCostUsd: number;
+    noCostUsd: number;
+    totalCostUsd: number;
+    expectedProfitUsd: number;
+    roi: number;
+  };
+
+  // Cross-market opportunity (only set if type === 'cross-market')
+  crossOpportunity?: CrossMarketOpportunity;
+  crossPosition?: {
+    shares: number;
+    sellRevenueUsd: number;
+    buyCostUsd: number;
+    netCostUsd: number;
+    expectedProfitUsd: number;
+    roi: number;
+  };
+
+  // User decision tracking
+  rejectionReason?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
 };
 
 // ============================================================================
@@ -189,6 +280,8 @@ export type OnboardingState = {
 export type PolymarketEvent =
   | { type: 'status'; message: string; task: Task }
   | { type: 'opportunity'; opportunity: ArbitrageOpportunity }
+  | { type: 'cross-market-opportunity'; opportunity: CrossMarketOpportunity }
+  | { type: 'relationship'; relationship: MarketRelationship }
   | { type: 'trade'; transaction: Transaction }
   | { type: 'error'; error: string };
 
@@ -205,10 +298,29 @@ export type PolymarketViewState = {
   markets: Market[];
   positions: Position[];
   opportunities: ArbitrageOpportunity[];
+  crossMarketOpportunities: CrossMarketOpportunity[];
+  detectedRelationships: MarketRelationship[];
   transactionHistory: Transaction[];
+  pendingTrades?: PendingTrade[]; // Trades awaiting manual approval
   metrics: PolymarketMetrics;
   config: StrategyConfig;
   events: PolymarketEvent[];
+  approvalStatus?: ApprovalStatus;
+
+  // Approval flow state
+  needsApprovalAmountInput?: boolean; // Signal frontend to show USDC approval amount input
+  requestedApprovalAmount?: string; // USDC amount user wants to approve (e.g., "1000")
+
+  // USDC Permit (gasless) state
+  needsUsdcPermitSignature?: boolean; // Signal frontend to request permit signature
+  usdcPermitTypedData?: EIP712TypedData; // Typed data for user to sign
+  usdcPermitSignature?: PermitSignature; // Signature from user (v, r, s, deadline)
+
+  // CTF Approval (gas required) state
+  needsCtfApprovalTransaction?: boolean; // Signal frontend to request CTF approval tx
+  ctfApprovalTransaction?: ApprovalTransaction; // Transaction for user to sign
+  ctfApprovalTxHash?: string; // Transaction hash after user submits
+
   haltReason?: string;
   executionError?: string;
 };
@@ -222,6 +334,8 @@ const defaultViewState = (): PolymarketViewState => ({
   markets: [],
   positions: [],
   opportunities: [],
+  crossMarketOpportunities: [],
+  detectedRelationships: [],
   transactionHistory: [],
   metrics: defaultMetrics(),
   config: DEFAULT_STRATEGY_CONFIG,
@@ -239,7 +353,8 @@ export type PolymarketPrivateState = {
   pollIntervalMs: number;
   cronScheduled: boolean;
   bootstrapped: boolean;
-  walletAddress?: string;
+  walletAddress?: string; // Backend wallet address (for execution)
+  userWalletAddress?: string; // User wallet address (for signing/approvals)
   privateKey?: string;
 };
 
@@ -249,6 +364,7 @@ const defaultPrivateState = (): PolymarketPrivateState => ({
   cronScheduled: false,
   bootstrapped: false,
   walletAddress: undefined,
+  userWalletAddress: undefined,
   privateKey: undefined,
 });
 
@@ -278,6 +394,11 @@ const mergeViewState = (
   left: PolymarketViewState,
   right?: Partial<PolymarketViewState>,
 ): PolymarketViewState => {
+  console.log('[STATE MERGE] mergeViewState called');
+  console.log('[STATE MERGE] Left requestedApprovalAmount:', left.requestedApprovalAmount);
+  console.log('[STATE MERGE] Right requestedApprovalAmount:', right?.requestedApprovalAmount);
+  console.log('[STATE MERGE] Right keys:', right ? Object.keys(right) : 'none');
+
   if (!right) return left;
 
   const nextTransactions = mergeAppendOrReplace(left.transactionHistory, right.transactionHistory);
@@ -296,7 +417,7 @@ const mergeViewState = (
     tradesFailed: right.metrics?.tradesFailed ?? left.metrics.tradesFailed,
   };
 
-  return {
+  const merged = {
     ...left,
     ...right,
     command: right.command ?? left.command,
@@ -307,6 +428,8 @@ const mergeViewState = (
     markets: right.markets ?? left.markets,
     positions: right.positions ?? left.positions,
     opportunities: right.opportunities ?? left.opportunities,
+    crossMarketOpportunities: right.crossMarketOpportunities ?? left.crossMarketOpportunities,
+    detectedRelationships: right.detectedRelationships ?? left.detectedRelationships,
     config: right.config ?? left.config,
     haltReason: right.haltReason ?? left.haltReason,
     executionError: right.executionError ?? left.executionError,
@@ -314,6 +437,10 @@ const mergeViewState = (
     events: nextEvents,
     metrics: nextMetrics,
   };
+
+  console.log('[STATE MERGE] Merged requestedApprovalAmount:', merged.requestedApprovalAmount);
+
+  return merged;
 };
 
 const mergePrivateState = (
@@ -325,6 +452,7 @@ const mergePrivateState = (
   cronScheduled: right?.cronScheduled ?? left.cronScheduled,
   bootstrapped: right?.bootstrapped ?? left.bootstrapped,
   walletAddress: right?.walletAddress ?? left.walletAddress,
+  userWalletAddress: right?.userWalletAddress ?? left.userWalletAddress,
   privateKey: right?.privateKey ?? left.privateKey,
 });
 
