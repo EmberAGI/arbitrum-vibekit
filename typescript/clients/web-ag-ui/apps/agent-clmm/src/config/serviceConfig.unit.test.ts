@@ -44,20 +44,18 @@ describe('serviceConfig', () => {
     process.env = { ...ORIGINAL_ENV };
   });
 
-  it('falls back to defaults when no config is found', async () => {
+  it('throws when no config is found', async () => {
     // Given a cwd with no config/service.json in its ancestry
     tempDir = createTempDir();
     vi.spyOn(process, 'cwd').mockReturnValue(tempDir);
 
     // When loading the service config
     const configModule = await loadModule();
-    const defaults = configModule.resolveLangGraphDefaults();
 
-    // Then default durability/checkpointer values are returned
-    expect(defaults).toEqual({
-      durability: 'exit',
-      checkpointer: 'shallow',
-    });
+    // Then it fails fast due to missing config
+    expect(() => configModule.resolveLangGraphDefaults()).toThrow(
+      /service config not found/i,
+    );
   });
 
   it('loads config from AGENT_CONFIG_DIR when present', async () => {
@@ -79,6 +77,18 @@ describe('serviceConfig', () => {
       checkpointer: 'full',
     });
     expect(checkpointer).toBeInstanceOf(MemorySaver);
+  });
+
+  it('throws when AGENT_CONFIG_DIR is set but service.json is missing', async () => {
+    // Given AGENT_CONFIG_DIR pointing at a directory with no service.json
+    tempDir = createTempDir();
+    process.env['AGENT_CONFIG_DIR'] = tempDir;
+
+    // When loading the service config
+    const configModule = await loadModule();
+
+    // Then it fails fast with an explicit error
+    expect(() => configModule.resolveLangGraphDefaults()).toThrow(/AGENT_CONFIG_DIR/i);
   });
 
   it('loads config from config/service.json relative to cwd', async () => {

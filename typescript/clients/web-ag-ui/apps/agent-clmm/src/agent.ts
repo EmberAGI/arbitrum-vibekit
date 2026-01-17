@@ -16,6 +16,7 @@ import {
   type ClmmState,
 } from './workflow/context.js';
 import { configureCronExecutor } from './workflow/cronScheduler.js';
+import { configureLangGraphApiCheckpointer } from './workflow/langgraphApiCheckpointer.js';
 import { bootstrapNode } from './workflow/nodes/bootstrap.js';
 import { collectDelegationsNode } from './workflow/nodes/collectDelegations.js';
 import { collectFundingTokenInputNode } from './workflow/nodes/collectFundingTokenInput.js';
@@ -42,6 +43,8 @@ function resolvePostBootstrap(state: ClmmState): 'listPools' | 'syncState' {
 
 const store = new InMemoryStore();
 const DEFAULT_DURABILITY = resolveLangGraphDefaults().durability;
+
+await configureLangGraphApiCheckpointer();
 
 const rawAgentPrivateKey = process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
 if (!rawAgentPrivateKey) {
