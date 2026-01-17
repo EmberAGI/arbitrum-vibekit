@@ -54,3 +54,5 @@ typescript/clients/web/
 test.md
 
 typescript/community/mcp-tools/*/node-compile-cache/
+CROSS_MARKET_ARBITRAGE_STRATEGIES.md
+POLYMARKET_INTEGRATION.md
