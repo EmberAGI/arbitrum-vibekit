@@ -88,9 +88,13 @@ export interface UserPosition {
   marketId: string;
   marketTitle: string;
   outcomeId: 'yes' | 'no';
+  outcomeName?: string;
   tokenId: string;
   size: string;
   currentPrice?: string;
+  avgPrice?: string;
+  pnl?: string;
+  pnlPercent?: string;
 }
 
 /**
@@ -406,46 +410,156 @@ class AgentPolymarketAdapter implements IPolymarketAdapter {
    */
   async getPositions(walletAddress: string): Promise<{ positions: UserPosition[] }> {
     try {
-      // Fetch balances from data API
-      const dataApiUrl = 'https://data-api.polymarket.com';
-      const url = `${dataApiUrl}/users/${walletAddress}/positions`;
+      // Use new Data API positions endpoint - much better data with PnL!
+      const url = `https://data-api.polymarket.com/positions?sizeThreshold=0&limit=100&sortBy=TOKENS&sortDirection=DESC&user=${walletAddress}`;
 
-      logInfo('Fetching positions', { walletAddress: walletAddress.substring(0, 10) + '...' });
+      logInfo('Fetching positions from Data API', { walletAddress: walletAddress.substring(0, 10) + '...' });
 
       const response = await fetch(url);
       if (!response.ok) {
         logInfo('Positions API returned error', { status: response.status });
-        return { positions: [] };
+        logInfo('Falling back to blockchain query...');
+        return await this.getPositionsFromBlockchain(walletAddress);
       }
 
-      const data = (await response.json()) as { positions?: { tokenId: string; balance: string }[] };
-      const positions: UserPosition[] = [];
+      const data = (await response.json()) as Array<{
+        asset: string;
+        conditionId: string;
+        size: number;
+        avgPrice: number;
+        currentValue: number;
+        curPrice: number;
+        cashPnl: number;
+        percentPnl: number;
+        title: string;
+        outcome: string;
+        slug: string;
+      }>;
 
-      for (const pos of data.positions ?? []) {
-        if (!pos.balance || pos.balance === '0') continue;
+      const positions: UserPosition[] = data.map((pos) => ({
+        marketId: pos.conditionId,
+        marketTitle: pos.title,
+        outcomeId: pos.outcome.toLowerCase() as 'yes' | 'no',
+        outcomeName: pos.outcome,
+        tokenId: pos.asset,
+        size: (pos.size * 1_000_000).toString(), // Convert to raw units (6 decimals)
+        currentPrice: pos.curPrice.toString(),
+        avgPrice: pos.avgPrice.toString(),
+        pnl: pos.cashPnl.toString(),
+        pnlPercent: pos.percentPnl.toString(),
+      }));
 
-        // Find market in cache
-        const market = this.marketCache.get(pos.tokenId);
-        if (!market) continue;
-
-        const tokens = parseClobTokenIds(market.clobTokenIds);
-        if (!tokens) continue;
-
-        const isYes = pos.tokenId === tokens.yes;
-
-        positions.push({
-          marketId: market.id,
-          marketTitle: market.question,
-          outcomeId: isYes ? 'yes' : 'no',
-          tokenId: pos.tokenId,
-          size: pos.balance,
-        });
-      }
-
-      logInfo('Positions fetched', { count: positions.length });
+      logInfo('Positions fetched from Data API', { count: positions.length });
       return { positions };
     } catch (error) {
       logInfo('Error fetching positions', { error: String(error) });
+      logInfo('Falling back to blockchain query...');
+      return await this.getPositionsFromBlockchain(walletAddress);
+    }
+  }
+
+  /**
+   * Fallback: Get positions by querying blockchain directly for token balances.
+   * Strategy: Use trading history to identify markets where user has traded,
+   * then only check balances for those specific markets.
+   */
+  private async getPositionsFromBlockchain(walletAddress: string): Promise<{ positions: UserPosition[] }> {
+    logInfo('getPositionsFromBlockchain called', { walletAddress: walletAddress.substring(0, 10) + '...' });
+
+    try {
+      const CTF_CONTRACT = '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045';
+      const RPC_URL = process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com';
+      const positions: UserPosition[] = [];
+
+      // Step 1: Get trading history to find markets where user has traded
+      const clob = await this.getClobClient();
+      const trades = await clob.getTrades({ maker_address: walletAddress }, false);
+
+      if (trades.length === 0) {
+        logInfo('No trading history found, no positions to check');
+        return { positions: [] };
+      }
+
+      // Step 2: Extract unique token IDs from trading history
+      const tradeTokenIds = new Set<string>();
+      for (const trade of trades) {
+        tradeTokenIds.add(trade.asset_id); // The actual token ID that was traded
+      }
+
+      logInfo(`Found ${tradeTokenIds.size} unique token IDs from trading history`);
+
+      // Step 3: For each token ID, check balance and fetch market details
+      for (const tokenId of tradeTokenIds) {
+        try {
+          logInfo('Processing token', { tokenId: tokenId.substring(0, 20) });
+
+          // Query balance for this token
+          const balanceData = `0x00fdd58e${walletAddress.slice(2).padStart(64, '0')}${BigInt(tokenId).toString(16).padStart(64, '0')}`;
+          const balanceRes = await fetch(RPC_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              method: 'eth_call',
+              params: [{ to: CTF_CONTRACT, data: balanceData }, 'latest'],
+              id: 1,
+            }),
+          });
+          const balanceResult = (await balanceRes.json()) as { result?: string };
+
+          if (!balanceResult.result || balanceResult.result === '0x' || BigInt(balanceResult.result) === 0n) {
+            logInfo('No balance for token', { tokenId: tokenId.substring(0, 20) });
+            continue;
+          }
+
+          const balance = BigInt(balanceResult.result);
+          logInfo('Found balance', { tokenId: tokenId.substring(0, 20), balance: balance.toString() });
+
+          // Fetch market details from Gamma API using clob_token_ids
+          const url = `${this.gammaApiUrl}/markets?clob_token_ids=${tokenId}`;
+          const res = await fetch(url);
+          if (!res.ok) {
+            logInfo('Failed to fetch market for token', { tokenId: tokenId.substring(0, 20), status: res.status });
+            continue;
+          }
+
+          const data = (await res.json()) as GammaMarket[];
+          const market = data[0];
+          if (!market) {
+            logInfo('No market found for token', { tokenId: tokenId.substring(0, 20) });
+            continue;
+          }
+
+          // Cache the market
+          this.marketCache.set(market.id, market);
+
+          const tokens = parseClobTokenIds(market.clobTokenIds);
+          if (!tokens) continue;
+
+          const isYes = tokenId === tokens.yes;
+          const otherTokenId = isYes ? tokens.no : tokens.yes;
+
+          // Fetch current price
+          const prices = await fetchMarketPrices(tokens.yes, tokens.no);
+
+          positions.push({
+            marketId: market.id,
+            marketTitle: market.question,
+            outcomeId: isYes ? 'yes' : 'no',
+            outcomeName: isYes ? 'Yes' : 'No',
+            tokenId: tokenId,
+            size: balance.toString(),
+            currentPrice: (isYes ? prices.yesMidpoint : prices.noMidpoint).toString(),
+          });
+        } catch (error) {
+          logInfo('Error processing token', { tokenId: tokenId.substring(0, 20), error: String(error) });
+        }
+      }
+
+      logInfo('Positions found via blockchain', { count: positions.length });
+      return { positions };
+    } catch (error) {
+      logInfo('Error getting positions from blockchain', { error: String(error) });
       return { positions: [] };
     }
   }
@@ -567,6 +681,119 @@ class AgentPolymarketAdapter implements IPolymarketAdapter {
   }
 
   /**
+   * Get open orders from CLOB API.
+   */
+  async getOrders(walletAddress: string): Promise<{
+    orders: Array<{
+      orderId: string;
+      marketId: string;
+      outcomeId: string;
+      side: 'buy' | 'sell';
+      price: string;
+      size: string;
+      filledSize: string;
+      status: string;
+      createdAt: string;
+    }>;
+  }> {
+    try {
+      const clob = await this.getClobClient();
+      const openOrders = await clob.getOpenOrders();
+
+      const orders = Array.isArray(openOrders) ? openOrders : [];
+
+      return {
+        orders: orders.map((o: any) => ({
+          orderId: o.id,
+          marketId: o.asset_id,
+          outcomeId: 'unknown',
+          side: o.side === 'BUY' ? 'buy' : 'sell',
+          price: o.price || '0',
+          size: o.original_size || '0',
+          filledSize: o.size_matched || '0',
+          status: 'open',
+          createdAt: o.created_at?.toString() || new Date().toISOString(),
+        })),
+      };
+    } catch (error) {
+      logInfo('Error fetching orders', { error: String(error) });
+      return { orders: [] };
+    }
+  }
+
+  /**
+   * Get trading history from Data API with market details.
+   * Uses the /activity endpoint which has all data pre-enriched.
+   */
+  async getTradingHistoryWithDetails(
+    walletAddress: string,
+    options?: { limit?: number },
+  ): Promise<Array<{
+    id: string;
+    market: string;
+    marketTitle: string;
+    side: string;
+    outcome: string;
+    size: string;
+    price: string;
+    matchTime: string;
+    transactionHash?: string;
+    usdcSize?: string;
+  }>> {
+    try {
+      const limit = options?.limit || 100;
+      const url = `https://data-api.polymarket.com/activity?limit=${limit}&sortBy=TIMESTAMP&sortDirection=DESC&user=${walletAddress}`;
+
+      logInfo('Fetching activity from Data API', { limit });
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        logInfo('Activity API returned error', { status: response.status });
+        return [];
+      }
+
+      const data = (await response.json()) as Array<{
+        proxyWallet: string;
+        timestamp: number;
+        conditionId: string;
+        type: string;
+        size: number;
+        usdcSize: number;
+        transactionHash: string;
+        price: number;
+        asset: string;
+        side: string;
+        outcomeIndex: number;
+        title: string;
+        slug: string;
+        outcome: string;
+      }>;
+
+      // Filter only TRADE type and map to our format
+      const trades = data
+        .filter((activity) => activity.type === 'TRADE')
+        .map((activity) => ({
+          id: activity.transactionHash,
+          market: activity.conditionId,
+          marketTitle: activity.title,
+          side: activity.side,
+          outcome: activity.outcome,
+          size: activity.size.toString(),
+          price: activity.price.toString(),
+          matchTime: activity.timestamp.toString(),
+          transactionHash: activity.transactionHash,
+          usdcSize: activity.usdcSize.toString(),
+        }));
+
+      logInfo('Activity fetched from Data API', { count: trades.length });
+      return trades;
+    } catch (error) {
+      logInfo('Error fetching trading history', { error: String(error) });
+      return [];
+    }
+  }
+
+  /**
    * Check if a market has resolved and get the winning outcome.
    * Queries Gamma API to check market resolution status.
    */
@@ -656,18 +883,21 @@ export async function createAdapterFromEnv(): Promise<IPolymarketAdapter | null>
   if (cachedAdapter) return cachedAdapter;
 
   const privateKey = process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
-  const funderAddress = process.env['POLY_FUNDER_ADDRESS'];
 
-  if (!privateKey || !funderAddress) {
-    logInfo('Missing credentials for PolymarketAdapter', {
-      hasPrivateKey: !!privateKey,
-      hasFunderAddress: !!funderAddress,
-    });
+  if (!privateKey) {
+    logInfo('Missing A2A_TEST_AGENT_NODE_PRIVATE_KEY');
     return null;
   }
 
   try {
-    logInfo('Creating PolymarketAdapter...');
+    // Derive funderAddress from private key
+    const wallet = new Wallet(privateKey);
+    const funderAddress = wallet.address;
+
+    logInfo('Creating PolymarketAdapter...', {
+      funderAddress: funderAddress.substring(0, 10) + '...'
+    });
+
     cachedAdapter = new AgentPolymarketAdapter({
       chainId: 137,
       host: process.env['POLYMARKET_CLOB_API'] ?? 'https://clob.polymarket.com',

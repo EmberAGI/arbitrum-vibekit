@@ -48,17 +48,26 @@ async function main() {
       process.exit(1);
   }
 
-  // 3. Fetch One Active Market
-  console.log('🔍 Fetching one active market...');
-  const markets = await fetchMarketsFromGamma(20);
+  // 3. Fetch Active Markets and Pick Random One
+  console.log('🔍 Fetching active markets...');
+
+  // IMPORTANT: Call adapter.getMarkets() to populate the market cache
+  // This is needed so the adapter can resolve YES/NO token IDs
+  const adapterMarkets = await adapter.getMarkets({ chainIds: ['137'], status: 'active' });
+  const markets = adapterMarkets.markets;
   if (markets.length === 0) {
        console.error('❌ No active markets found');
        process.exit(1);
   }
 
-  // Pick one with decent liquidity or random
-  const targetMarket = markets[0];
-  console.log(`✅ Selected Market: "${targetMarket.name}"`);
+  console.log(`   Found ${markets.length} active markets`);
+
+  // Pick a random market
+  const randomIndex = Math.floor(Math.random() * markets.length);
+  const targetMarket = markets[randomIndex];
+
+  console.log(`\n✅ Randomly Selected Market #${randomIndex + 1}:`);
+  console.log(`   Question: "${targetMarket.name}"`);
   console.log(`   YES Token: ${targetMarket.longToken.address}`);
   console.log(`   NO Token: ${targetMarket.shortToken.address}`);
 
@@ -97,64 +106,63 @@ async function main() {
        console.log('   ✅ CTF already approved');
   }
 
-  // 5. Buy YES
-  console.log('\n📈 Executing Buy YES...');
+  // 5. Calculate Order Size Based on Available USDC
+  console.log('\n💰 Calculating Order Size...');
   const yesTokenId = targetMarket.longToken.address;
   const noTokenId = targetMarket.shortToken.address;
 
   const prices = await fetchMarketPrices(yesTokenId, noTokenId);
   console.log(`   YES Buy Price (Ask): ${prices.yesBuyPrice}`);
+  console.log(`   NO Buy Price (Ask): ${prices.noBuyPrice}`);
 
-  if (prices.yesBuyPrice > 0) {
-      const price = (prices.yesBuyPrice + 0.01).toFixed(2); // slightly higher to cross spread if needed, or just match
-      const size = "5"; // Buy 5 shares
+  // Available budget: 2 USDC
+  // Polymarket minimum order size: $1 USD
+  // Strategy: Place single order for YES (full budget) to meet minimum
+  const totalBudget = 1.8; // Use 1.8 to leave buffer for fees
 
-      console.log(`   Placing order: Buy YES, Size: ${size}, Price: ${price}`);
+  // Calculate size for YES (leave 5% buffer)
+  const yesSize = prices.yesBuyPrice > 0
+    ? Math.floor((totalBudget / prices.yesBuyPrice) * 0.95)
+    : 0;
+
+  const yesCost = yesSize * prices.yesBuyPrice;
+
+  console.log(`   Strategy: Buy YES only (Polymarket requires $1 minimum per order)`);
+  console.log(`   Calculated YES Size: ${yesSize} shares (~$${yesCost.toFixed(2)})`);
+
+  if (yesCost < 1.0) {
+      console.warn(`   ⚠️ Order cost $${yesCost.toFixed(2)} is below $1 minimum, increasing size...`);
+      // Adjust to meet $1 minimum
+      const minSize = Math.ceil(1.0 / prices.yesBuyPrice);
+      const adjustedCost = minSize * prices.yesBuyPrice;
+      console.log(`   Adjusted YES Size: ${minSize} shares (~$${adjustedCost.toFixed(2)})`);
+  }
+
+  // 6. Buy YES at EXACT ask price (guaranteed fill)
+  console.log('\n📈 Executing Buy YES...');
+
+  if (prices.yesBuyPrice > 0 && yesSize > 0) {
+      const price = prices.yesBuyPrice.toFixed(2); // EXACT ask price for immediate fill
+
+      console.log(`   Placing order: Buy YES, Size: ${yesSize}, Price: ${price} (exact ask)`);
 
       const res = await adapter.placeOrder({
           marketId: targetMarket.longToken.address,
           outcomeId: 'yes',
           side: 'buy',
-          size: size,
+          size: yesSize.toString(),
           price: price,
           chainId: '137'
       });
 
       if (res.success) {
           console.log(`   ✅ Buy YES Success! Order ID: ${res.orderId}`);
+          console.log(`   🎉 Order placed and should fill immediately at market price!`);
       } else {
           console.error(`   ❌ Buy YES Failed: ${res.error}`);
       }
   } else {
-      console.log('   ⚠️ No liquidity for YES, skipping buy');
-  }
-
-  // 6. Buy NO
-  console.log('\n📉 Executing Buy NO...');
-  console.log(`   NO Buy Price (Ask): ${prices.noBuyPrice}`);
-
-  if (prices.noBuyPrice > 0) {
-      const price = (prices.noBuyPrice + 0.01).toFixed(2);
-      const size = "5";
-
-      console.log(`   Placing order: Buy NO, Size: ${size}, Price: ${price}`);
-
-       const res = await adapter.placeOrder({
-          marketId: targetMarket.longToken.address,
-          outcomeId: 'no',
-          side: 'buy',
-          size: size,
-          price: price,
-          chainId: '137'
-      });
-
-       if (res.success) {
-          console.log(`   ✅ Buy NO Success! Order ID: ${res.orderId}`);
-      } else {
-          console.error(`   ❌ Buy NO Failed: ${res.error}`);
-      }
-  } else {
-       console.log('   ⚠️ No liquidity for NO, skipping buy');
+      console.log('   ⚠️ No liquidity for YES or size too small, skipping buy');
   }
 
   console.log('\n✨ Test Script Complete');

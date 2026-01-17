@@ -941,49 +941,59 @@ export class PolymarketAdapter {
 
   /**
    * Get user positions (YES/NO token holdings).
+   * Uses the improved Data API /positions endpoint with PnL data.
    */
   async getPositions(request: GetPositionsRequest): Promise<GetPositionsResponse> {
     debugLog('getPositions called', { walletAddress: request.walletAddress });
 
     try {
-      // Fetch positions from data API
-      const url = `${this.dataApiUrl}/users/${request.walletAddress}/positions`;
+      // Use new Data API positions endpoint - much better data with PnL!
+      const url = `https://data-api.polymarket.com/positions?sizeThreshold=0&limit=100&sortBy=TOKENS&sortDirection=DESC&user=${request.walletAddress}`;
       const response = await fetch(url);
 
       if (!response.ok) {
+        debugLog('Positions API returned error', { status: response.status });
         // If data API fails, use blockchain fallback directly
         return await this.getPositionsFromBlockchain(request);
       }
 
-      const data = (await response.json()) as { positions: PolymarketPositionRaw[] };
-      const positions: PredictionPosition[] = [];
+      const data = (await response.json()) as Array<{
+        asset: string;
+        conditionId: string;
+        size: number;
+        avgPrice: number;
+        initialValue: number;
+        currentValue: number;
+        curPrice: number;
+        cashPnl: number;
+        percentPnl: number;
+        title: string;
+        outcome: string;
+        slug: string;
+      }>;
 
-      for (const pos of data.positions) {
-        const market = await this.fetchMarketData(pos.tokenId);
-        if (!market) continue;
+      const positions: PredictionPosition[] = data.map((pos) => ({
+        marketId: pos.conditionId,
+        outcomeId: pos.outcome.toLowerCase(),
+        tokenId: pos.asset,
+        chainId: '137',
+        walletAddress: request.walletAddress,
+        size: (pos.size * 1_000_000).toString(), // Convert to raw units (6 decimals)
+        avgPrice: pos.avgPrice.toString(),
+        cost: pos.initialValue.toString(),
+        pnl: pos.cashPnl.toString(),
+        currentPrice: pos.curPrice.toString(),
+        currentValue: pos.currentValue.toString(),
+        quoteTokenAddress: POLYMARKET_USDC_ADDRESS,
+        marketTitle: pos.title,
+        outcomeName: pos.outcome,
+      }));
 
-        const tokens = parseClobTokenIds(market.clobTokenIds);
-        if (!tokens) continue;
-
-        const isYesToken = pos.tokenId === tokens.yes;
-        const sizeInTokens = pos.balance || '0';
-
-        positions.push({
-          marketId: market.id,
-          outcomeId: isYesToken ? 'yes' : 'no',
-          tokenId: pos.tokenId,
-          chainId: '137',
-          walletAddress: request.walletAddress,
-          size: sizeInTokens,
-          quoteTokenAddress: POLYMARKET_USDC_ADDRESS,
-          marketTitle: market.question,
-          outcomeName: isYesToken ? 'Yes' : 'No',
-        });
-      }
-
+      debugLog('Positions fetched from Data API', { count: positions.length });
       return { positions };
     } catch (error) {
       console.error('Error fetching positions:', error);
+      debugLog('Falling back to blockchain query', { error });
       return await this.getPositionsFromBlockchain(request);
     }
   }
@@ -1222,7 +1232,7 @@ export class PolymarketAdapter {
 
   /**
    * Get user's trading history with market descriptions.
-   * This enriches each trade with the full market title and description.
+   * Uses the improved Data API /activity endpoint with all data pre-enriched.
    */
   async getTradingHistoryWithDetails(
     walletAddress: string,
@@ -1245,60 +1255,65 @@ export class PolymarketAdapter {
     price: string;
     matchTime: string;
     fee_rate_bps?: string;
+    transactionHash?: string;
+    usdcSize?: string;
   }[]> {
     debugLog('getTradingHistoryWithDetails called', { walletAddress, options });
 
-    // Get raw trades first
-    const trades = await this.getTradingHistory(walletAddress, options);
+    try {
+      const limit = options?.limit || 100;
+      const url = `https://data-api.polymarket.com/activity?limit=${limit}&sortBy=TIMESTAMP&sortDirection=DESC&user=${walletAddress}`;
 
-    if (trades.length === 0) {
+      debugLog('Fetching activity from Data API', { limit });
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        debugLog('Activity API returned error', { status: response.status });
+        return [];
+      }
+
+      const data = (await response.json()) as Array<{
+        proxyWallet: string;
+        timestamp: number;
+        conditionId: string;
+        type: string;
+        size: number;
+        usdcSize: number;
+        transactionHash: string;
+        price: number;
+        asset: string;
+        side: string;
+        outcomeIndex: number;
+        title: string;
+        slug: string;
+        outcome: string;
+      }>;
+
+      // Filter only TRADE type and map to our format
+      const trades = data
+        .filter((activity) => activity.type === 'TRADE')
+        .map((activity) => ({
+          id: activity.transactionHash,
+          market: activity.conditionId,
+          marketTitle: activity.title,
+          marketDescription: activity.slug,
+          marketSlug: activity.slug,
+          side: activity.side,
+          outcome: activity.outcome,
+          size: activity.size.toString(),
+          price: activity.price.toString(),
+          matchTime: activity.timestamp.toString(),
+          transactionHash: activity.transactionHash,
+          usdcSize: activity.usdcSize.toString(),
+        }));
+
+      debugLog('Activity fetched from Data API', { count: trades.length });
+      return trades;
+    } catch (error) {
+      console.error('Error fetching trading history:', error);
+      debugLog('Error fetching trading history', error);
       return [];
     }
-
-    // Collect unique market IDs (condition IDs)
-    const uniqueMarkets = new Set(trades.map((t) => t.market));
-    debugLog('Unique markets in trades', { count: uniqueMarkets.size });
-
-    // Fetch market details for each unique market
-    const marketDetails = new Map<
-      string,
-      { title: string; description?: string; slug?: string; endDate?: string }
-    >();
-
-    for (const marketId of uniqueMarkets) {
-      const market = await this.fetchMarketData(marketId);
-      if (market) {
-        marketDetails.set(marketId, {
-          title: market.question,
-          slug: market.slug,
-          endDate: market.endDateIso || market.endDate,
-        });
-        debugLog('Found market details', { marketId: marketId.substring(0, 20), title: market.question });
-      } else {
-        debugLog('Market details not found', { marketId: marketId.substring(0, 20) });
-      }
-    }
-
-    // Enrich trades with market details
-    const enrichedTrades = trades.map((trade) => {
-      const details = marketDetails.get(trade.market);
-      return {
-        id: trade.id,
-        market: trade.market,
-        marketTitle: details?.title || `Unknown Market (${trade.market.substring(0, 20)}...)`,
-        marketDescription: details?.slug,
-        marketSlug: details?.slug,
-        side: trade.side,
-        outcome: trade.outcome,
-        size: trade.size,
-        price: trade.price,
-        matchTime: trade.match_time?.toString() || '',
-        fee_rate_bps: trade.fee_rate_bps,
-      };
-    });
-
-    debugLog('Enriched trades', { count: enrichedTrades.length });
-    return enrichedTrades;
   }
 
   /**
