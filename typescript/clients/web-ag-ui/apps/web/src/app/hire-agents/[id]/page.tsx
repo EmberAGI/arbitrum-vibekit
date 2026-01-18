@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AgentDetailPage } from '@/components/AgentDetailPage';
 import { PolymarketAgentDetailPage } from '@/components/polymarket/PolymarketAgentDetailPage';
 import { useAgent } from '@/contexts/AgentContext';
+import { usePolymarketPolling } from '@/hooks/usePolymarketPolling';
 
 export default function AgentDetailRoute({
   params,
@@ -18,6 +19,27 @@ export default function AgentDetailRoute({
   // Note: Agent context syncing is handled by the layout.tsx in this folder
   // The layout ensures the agent is loaded BEFORE this page renders
 
+  // Extract Polymarket-specific state for polling (safe type cast)
+  const polymarketLifecycleState = (agent.view as { lifecycleState?: string }).lifecycleState;
+
+  // Get poll interval from environment variable (Next.js requires NEXT_PUBLIC_ prefix for client-side)
+  // Falls back to agent config, then to 60 seconds default
+  const envPollInterval = process.env.NEXT_PUBLIC_POLY_POLL_INTERVAL_MS
+    ? parseInt(process.env.NEXT_PUBLIC_POLY_POLL_INTERVAL_MS, 10)
+    : undefined;
+  const configPollInterval = (agent.view as { config?: { pollIntervalMs?: number } }).config?.pollIntervalMs;
+  const polymarketPollInterval = envPollInterval ?? configPollInterval ?? 60000;
+
+  // Frontend-triggered polling for Polymarket agent
+  // Called unconditionally at top level to follow React hooks rules
+  // The hook internally checks if enabled and if lifecycleState is 'running'
+  usePolymarketPolling(
+    id === 'agent-polymarket',
+    polymarketLifecycleState,
+    agent.runCommand,
+    polymarketPollInterval,
+  );
+
   const handleBack = () => {
     router.push('/hire-agents');
   };
@@ -27,6 +49,7 @@ export default function AgentDetailRoute({
   if (id === 'agent-polymarket') {
     // Extract Polymarket-specific state from agent.view
     const polymarketView = agent.view as unknown as {
+      lifecycleState?: 'running' | 'stopped' | 'waiting-funds' | 'disabled';
       portfolioValueUsd?: number;
       approvalStatus?: {
         needsApproval: boolean;
