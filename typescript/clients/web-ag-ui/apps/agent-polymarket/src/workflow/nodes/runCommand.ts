@@ -88,6 +88,8 @@ export function runCommandNode(state: PolymarketState): PolymarketUpdate {
   const parsed = extractCommand(state.messages);
   const command = parsed?.command ?? 'sync';
 
+  console.log('[runCommand] Command:', command, parsed?.data ? 'with data' : '');
+
   logInfo('=== POLYMARKET AGENT received command ===', {
     command,
     hasData: !!parsed?.data,
@@ -97,6 +99,7 @@ export function runCommandNode(state: PolymarketState): PolymarketUpdate {
 
   // For updateApproval command, store the data in state
   if (command === 'updateApproval' && parsed?.data) {
+    console.log('[runCommand] updateApproval:', parsed.data.approvalAmount);
     return {
       view: {
         command,
@@ -129,18 +132,27 @@ export function resolveCommandTarget(state: PolymarketState): CommandTarget {
     return 'syncState';
   }
 
+  let target: CommandTarget;
   switch (resolvedCommand) {
     case 'hire':
-      return 'hireCommand';
+      target = 'hireCommand';
+      break;
     case 'fire':
-      return 'fireCommand';
+      target = 'fireCommand';
+      break;
     case 'cycle':
-      return state.private.bootstrapped ? 'runCycleCommand' : 'hireCommand';
+      target = state.private.bootstrapped ? 'runCycleCommand' : 'hireCommand';
+      break;
     case 'sync':
-      return state.private.bootstrapped ? 'syncState' : 'hireCommand';
+      target = state.private.bootstrapped ? 'syncState' : 'hireCommand';
+      break;
     case 'updateApproval':
-      return 'updateApprovalCommand';
+      target = 'updateApprovalCommand';
+      break;
     default:
-      return 'syncState';
+      target = 'syncState';
   }
+
+  console.log('[resolveCommandTarget] →', target);
+  return target;
 }

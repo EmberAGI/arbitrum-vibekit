@@ -19,6 +19,8 @@ export function updateApprovalCommandNode(state: PolymarketState): PolymarketUpd
   const approvalAmount = state.view.requestedApprovalAmount;
   const userWalletAddress = state.private.userWalletAddress;
 
+  console.log('[updateApprovalCommand] amount:', approvalAmount, 'wallet:', userWalletAddress?.slice(0, 10));
+
   logInfo('Processing updateApproval command', {
     approvalAmount,
     hasUserWallet: !!userWalletAddress,

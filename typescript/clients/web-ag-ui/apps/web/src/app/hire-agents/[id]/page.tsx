@@ -278,7 +278,10 @@ export default function AgentDetailRoute({
         }}
         onUpdateApproval={(amount: string, userWalletAddress: string) => {
           console.log('[SETTINGS] Update approval requested:', amount, userWalletAddress);
-          // Use dedicated updateApproval command with data payload
+
+          // Use CopilotKit's runCommand instead of direct API calls
+          // This keeps CopilotKit in sync with backend state and prevents conflicts
+          // The interrupt mechanism (useLangGraphInterruptCustomUI) handles permit signing UI
           agent.runCommand('updateApproval', {
             approvalAmount: amount,
             userWalletAddress,

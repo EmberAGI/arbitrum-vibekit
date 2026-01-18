@@ -122,15 +122,22 @@ function findAgentNameInObject(obj: Record<string, unknown>, depth = 0): string 
  * Routes requests to the appropriate runtime based on agent name.
  */
 export const POST = async (req: NextRequest) => {
+  console.log('\n========================================');
+  console.log('[CopilotKit Route] POST request received');
+  console.log('========================================');
+
   // Clone the request to read the body
   const clonedReq = req.clone();
 
   let agentName: string | null = null;
+  let requestBody: Record<string, unknown> | null = null;
 
   try {
-    const body = await clonedReq.json() as Record<string, unknown>;
-    agentName = extractAgentName(body);
-  } catch {
+    requestBody = await clonedReq.json() as Record<string, unknown>;
+    console.log('[CopilotKit Route] Request body operationName:', requestBody?.operationName);
+    agentName = extractAgentName(requestBody);
+  } catch (error) {
+    console.log('[CopilotKit Route] Failed to parse request body:', error);
     // If we can't parse the body, default to CLMM
   }
 

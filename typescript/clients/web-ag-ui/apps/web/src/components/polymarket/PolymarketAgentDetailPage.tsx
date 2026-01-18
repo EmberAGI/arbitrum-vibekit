@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronRight, Check, RefreshCw, Star } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { hexToSignature, createPublicClient, http, formatUnits } from 'viem';
 import { polygon } from 'viem/chains';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
@@ -249,6 +249,24 @@ export function PolymarketAgentDetailPage({
   // Show approvals tab if any approval step is active
   const needsApprovals = needsApprovalAmountInput || needsUsdcPermitSignature || needsCtfApprovalTransaction;
   const [activeTab, setActiveTab] = useState<TabType>(needsApprovals ? 'approvals' : isHired ? 'opportunities' : 'metrics');
+
+  // Track previous approval states to detect transitions
+  const prevNeedsUsdcPermitRef = useRef(needsUsdcPermitSignature);
+  const prevNeedsCtfApprovalRef = useRef(needsCtfApprovalTransaction);
+
+  // Auto-switch to approvals tab when permit signing becomes required (e.g., from Settings update)
+  useEffect(() => {
+    const usdcPermitJustRequired = needsUsdcPermitSignature && !prevNeedsUsdcPermitRef.current;
+    const ctfApprovalJustRequired = needsCtfApprovalTransaction && !prevNeedsCtfApprovalRef.current;
+
+    if (usdcPermitJustRequired || ctfApprovalJustRequired) {
+      // Use a microtask to avoid the cascading render warning
+      queueMicrotask(() => setActiveTab('approvals'));
+    }
+
+    prevNeedsUsdcPermitRef.current = needsUsdcPermitSignature;
+    prevNeedsCtfApprovalRef.current = needsCtfApprovalTransaction;
+  }, [needsUsdcPermitSignature, needsCtfApprovalTransaction]);
 
   // Wallet client for signing permits and transactions
   const { walletClient, chainId, switchChain } = usePrivyWalletClient();

@@ -36,6 +36,11 @@ const MIN_USDC_BALANCE = 1; // $1
  * Interrupt if approvals or funding needed.
  */
 export async function checkApprovalsNode(state: PolymarketState): Promise<Command<PolymarketUpdate>> {
+  console.log('[checkApprovals] Node entered', {
+    forceApprovalUpdate: state.view.forceApprovalUpdate,
+    requestedApprovalAmount: state.view.requestedApprovalAmount,
+  });
+
   logInfo('🔍 checkApprovals node reached', {
     lifecycleState: state.view.lifecycleState,
     hasWalletAddress: !!state.private.walletAddress,
@@ -79,6 +84,7 @@ export async function checkApprovalsNode(state: PolymarketState): Promise<Comman
   // CTF approval is only needed for selling positions (can be added later)
   // Also handle approval updates from Settings even if already approved
   if (!status.usdcApproved || isApprovalUpdateRequest) {
+    console.log('[checkApprovals] USDC approval needed', { usdcApproved: status.usdcApproved, isApprovalUpdateRequest });
     logInfo('🔐 USDC approval required for trading', {
       usdcApproved: status.usdcApproved,
       address: targetAddress,
@@ -126,10 +132,9 @@ export async function checkApprovalsNode(state: PolymarketState): Promise<Comman
     try {
       // Must use the same address that will sign the permit (user's wallet)
       usdcPermitTypedData = await buildUsdcPermitTypedData(targetAddress, approvalAmount, rpcUrl);
-      logInfo('📝 USDC permit typed data generated (user will sign, backend submits)', {
-        owner: targetAddress,
-      });
+      console.log('[checkApprovals] Permit typed data generated for:', targetAddress);
     } catch (error) {
+      console.error('[checkApprovals] Failed to generate permit:', error);
       logInfo('❌ Failed to generate USDC permit typed data', {
         error: error instanceof Error ? error.message : String(error),
       });
@@ -144,6 +149,7 @@ export async function checkApprovalsNode(state: PolymarketState): Promise<Comman
     }
 
     // Route to collectApprovalAmount with the permit data (no CTF needed for buy orders)
+    console.log('[checkApprovals] Routing to collectApprovalAmount for permit signature');
     return new Command({
       update: {
         view: {
@@ -206,6 +212,26 @@ export async function checkApprovalsNode(state: PolymarketState): Promise<Comman
     ctfApproved: status.ctfApproved,
     usdcApproved: status.usdcApproved,
   });
+
+  // If this was an approval update from Settings (not initial onboarding or regular cycle),
+  // end here instead of going to pollCycle
+  if (state.view.command === 'updateApproval') {
+    console.log('[checkApprovals] This was an approval update, ending instead of going to pollCycle');
+    logInfo('✅ Approval update complete - not triggering poll cycle');
+    return new Command({
+      update: {
+        view: {
+          approvalStatus: status,
+          pendingApprovalTransactions: undefined,
+          haltReason: undefined,
+          command: undefined, // Clear command so it doesn't affect next cycle
+          forceApprovalUpdate: undefined,
+          requestedApprovalAmount: undefined,
+        },
+      },
+      goto: 'summarize', // Go to summarize which will end (not loop back)
+    });
+  }
 
   return new Command({
     update: {

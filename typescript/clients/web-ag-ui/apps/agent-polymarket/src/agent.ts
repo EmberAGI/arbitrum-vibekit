@@ -78,8 +78,9 @@ function resolvePostSummarize(
   // Check if auto-redemption is enabled (default: false for safety)
   const redeemEnabled = process.env.POLY_AUTO_REDEEM === 'true';
 
-  // Check if continuous polling is enabled (default: true for agent mode)
-  const continuousPolling = process.env.POLY_CONTINUOUS_POLLING !== 'false';
+  // Check if continuous polling is enabled (default: false to allow commands between cycles)
+  // When disabled, the cron scheduler handles periodic polling instead of waitAndLoop
+  const continuousPolling = process.env.POLY_CONTINUOUS_POLLING === 'true';
 
   // Check max iterations (default: unlimited, set to limit cycles)
   const maxIterations = parseInt(process.env.POLY_MAX_ITERATIONS ?? '0', 10);
