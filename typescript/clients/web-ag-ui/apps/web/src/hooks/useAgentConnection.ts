@@ -77,6 +77,7 @@ export interface UseAgentConnectionResult {
   runHire: () => void;
   runFire: () => void;
   runSync: () => void;
+  runCommand: (command: string, data?: Record<string, unknown>) => void; // Generic command runner with optional data
   resolveInterrupt: (
     input:
       | OperatorConfigInput
@@ -90,7 +91,7 @@ export interface UseAgentConnectionResult {
 
   // State management: direct state updates
   setState: (
-    update: Partial<AgentState> | ((prev: AgentState | undefined) => AgentState),
+    update: AgentState | ((prev: AgentState | undefined) => AgentState),
   ) => void;
 }
 
@@ -115,12 +116,12 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   // Simple command runner - no queuing, just run the command
   const runCommand = useCallback(
-    (command: string) => {
-      console.log(`[useAgentConnection] Running command "${command}" on agent: ${agentId}`);
+    (command: string, data?: Record<string, unknown>) => {
+      console.log(`[useAgentConnection] Running command "${command}" on agent: ${agentId}`, data ? { data } : '');
       run(() => ({
         id: v7(),
         role: 'user',
-        content: JSON.stringify({ command }),
+        content: JSON.stringify(data ? { command, data } : { command }),
       }));
     },
     [run, agentId],
@@ -235,6 +236,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     runHire,
     runFire,
     runSync,
+    runCommand,
     resolveInterrupt,
     updateSettings,
     setState,

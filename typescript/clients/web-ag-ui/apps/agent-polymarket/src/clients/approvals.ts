@@ -62,6 +62,9 @@ export type ApprovalStatus = {
   /** USDC.e balance (in USDC units, 6 decimals) */
   usdcBalance: number;
 
+  /** USDC.e allowance for CTF Exchange (in USDC units, 6 decimals) */
+  usdcAllowance?: number;
+
   /** Whether any approvals are needed */
   needsApproval: boolean;
 };
@@ -127,11 +130,15 @@ export async function checkApprovalStatus(
     const usdcBalanceRaw = await usdcContract.balanceOf(walletAddress);
     const usdcBalance = parseFloat(ethers.formatUnits(usdcBalanceRaw, 6));
 
+    // Convert allowance to USDC units (6 decimals)
+    const usdcAllowanceValue = parseFloat(ethers.formatUnits(usdcAllowance, 6));
+
     const status: ApprovalStatus = {
       ctfApproved,
       usdcApproved,
       polBalance,
       usdcBalance,
+      usdcAllowance: usdcAllowanceValue,
       needsApproval: !ctfApproved || !usdcApproved,
     };
 
@@ -139,6 +146,7 @@ export async function checkApprovalStatus(
       wallet: walletAddress.substring(0, 10) + '...',
       ctfApproved,
       usdcApproved,
+      usdcAllowance: usdcAllowanceValue.toFixed(2),
       polBalance: polBalance.toFixed(4),
       usdcBalance: usdcBalance.toFixed(2),
     });

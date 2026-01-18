@@ -16,6 +16,14 @@ import type {
   EIP712TypedData,
   PermitSignature,
 } from '../clients/approvals.js';
+import type {
+  TradingHistoryItem as ImportedTradingHistoryItem,
+  UserPosition as ImportedUserPosition,
+} from '../clients/polymarketClient.js';
+
+// Re-export types for convenience
+export type TradingHistoryItem = ImportedTradingHistoryItem;
+export type UserPosition = ImportedUserPosition;
 
 // Re-export agent message type
 export type AgentMessage = CopilotKitAIMessage;
@@ -74,6 +82,8 @@ export type Market = {
   endDate: string;
   resolved: boolean;
   active: boolean;
+  /** Minimum order size in shares (fetched from CLOB API, default: 5) */
+  minOrderSize?: number;
 };
 
 export type ArbitrageOpportunity = {
@@ -86,6 +96,8 @@ export type ArbitrageOpportunity = {
   spread: number;           // 1.0 - (yesPrice + noPrice)
   profitPotential: number;  // Expected profit per $1 invested
   timestamp: string;
+  /** Minimum order size in shares (from CLOB API, default: 5) */
+  minOrderSize: number;
 };
 
 // ============================================================================
@@ -129,6 +141,8 @@ export type CrossMarketOpportunity = {
   };
   expectedProfitPerShare: number;  // Expected profit per share
   timestamp: string;
+  /** Minimum order size (max of both markets' minOrderSize) */
+  minOrderSize?: number;
 };
 
 export type Position = {
@@ -167,6 +181,7 @@ export type Transaction = {
   orderId?: string;
   error?: string;
 };
+
 
 /**
  * Pending trade awaiting user approval.
@@ -215,6 +230,8 @@ export type PendingTrade = {
 export type StrategyConfig = {
   /** Minimum spread (YES + NO < 1 - threshold) to consider opportunity (default: 0.02 = 2%) */
   minSpreadThreshold: number;
+  /** Minimum USD value per order (default: 1, cannot be lower) */
+  minPositionSizeUsd: number;
   /** Maximum USD value per position (default: 100) */
   maxPositionSizeUsd: number;
   /** Percentage of portfolio to risk per trade (default: 3%) */
@@ -223,14 +240,18 @@ export type StrategyConfig = {
   pollIntervalMs: number;
   /** Maximum total exposure across all positions (default: 500) */
   maxTotalExposureUsd: number;
+  /** Minimum share size required by Polymarket (default: 5) */
+  minShareSize: number;
 };
 
 export const DEFAULT_STRATEGY_CONFIG: StrategyConfig = {
   minSpreadThreshold: 0.02,
+  minPositionSizeUsd: 1,
   maxPositionSizeUsd: 100,
   portfolioRiskPct: 3,
   pollIntervalMs: 30000,
   maxTotalExposureUsd: 500,
+  minShareSize: 5,
 };
 
 // ============================================================================
@@ -297,10 +318,12 @@ export type PolymarketViewState = {
   portfolioValueUsd: number;
   markets: Market[];
   positions: Position[];
+  userPositions: UserPosition[]; // User positions from Polymarket Data API
   opportunities: ArbitrageOpportunity[];
   crossMarketOpportunities: CrossMarketOpportunity[];
   detectedRelationships: MarketRelationship[];
   transactionHistory: Transaction[];
+  tradingHistory: TradingHistoryItem[]; // Real trading history from Polymarket Data API
   pendingTrades?: PendingTrade[]; // Trades awaiting manual approval
   metrics: PolymarketMetrics;
   config: StrategyConfig;
@@ -310,6 +333,7 @@ export type PolymarketViewState = {
   // Approval flow state
   needsApprovalAmountInput?: boolean; // Signal frontend to show USDC approval amount input
   requestedApprovalAmount?: string; // USDC amount user wants to approve (e.g., "1000")
+  forceApprovalUpdate?: boolean; // Flag to regenerate permit even if already approved (for Settings updates)
 
   // USDC Permit (gasless) state
   needsUsdcPermitSignature?: boolean; // Signal frontend to request permit signature
@@ -333,10 +357,12 @@ const defaultViewState = (): PolymarketViewState => ({
   portfolioValueUsd: 0,
   markets: [],
   positions: [],
+  userPositions: [],
   opportunities: [],
   crossMarketOpportunities: [],
   detectedRelationships: [],
   transactionHistory: [],
+  tradingHistory: [],
   metrics: defaultMetrics(),
   config: DEFAULT_STRATEGY_CONFIG,
   events: [],
@@ -402,6 +428,7 @@ const mergeViewState = (
   if (!right) return left;
 
   const nextTransactions = mergeAppendOrReplace(left.transactionHistory, right.transactionHistory);
+  const nextTradingHistory = mergeAppendOrReplace(left.tradingHistory, right.tradingHistory);
   const nextEvents = mergeAppendOrReplace(left.events, right.events);
 
   const nextMetrics: PolymarketMetrics = {
@@ -427,6 +454,7 @@ const mergeViewState = (
     portfolioValueUsd: right.portfolioValueUsd ?? left.portfolioValueUsd,
     markets: right.markets ?? left.markets,
     positions: right.positions ?? left.positions,
+    userPositions: right.userPositions ?? left.userPositions,
     opportunities: right.opportunities ?? left.opportunities,
     crossMarketOpportunities: right.crossMarketOpportunities ?? left.crossMarketOpportunities,
     detectedRelationships: right.detectedRelationships ?? left.detectedRelationships,
@@ -434,6 +462,7 @@ const mergeViewState = (
     haltReason: right.haltReason ?? left.haltReason,
     executionError: right.executionError ?? left.executionError,
     transactionHistory: nextTransactions,
+    tradingHistory: nextTradingHistory,
     events: nextEvents,
     metrics: nextMetrics,
   };

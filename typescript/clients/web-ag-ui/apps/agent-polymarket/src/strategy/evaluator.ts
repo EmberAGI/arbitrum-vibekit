@@ -76,9 +76,18 @@ export function calculatePositionSize(
   // How many share pairs can we buy with our budget?
   const maxPairs = Math.floor(positionBudget / costPerPair);
 
-  // Need at least 1 pair
-  if (maxPairs < 1) {
-    logInfo('Cannot buy at least 1 share pair', { positionBudget, costPerPair });
+  // Use opportunity's minOrderSize (fetched from API) or fall back to config
+  const minShares = opportunity.minOrderSize ?? config.minShareSize ?? 5;
+
+  // Need at least minShares pairs to meet Polymarket minimum
+  if (maxPairs < minShares) {
+    logInfo('Cannot meet minimum share size requirement', {
+      positionBudget,
+      costPerPair,
+      maxPairs,
+      minShares,
+      source: opportunity.minOrderSize ? 'API' : 'config',
+    });
     return null;
   }
 
@@ -266,15 +275,6 @@ export function calculateCrossMarketPositionSize(
 ): CrossMarketPositionSize | null {
   const { trades, relationship } = opportunity;
 
-  // Calculate risk-adjusted budget
-  const maxRiskAmount = portfolioValue * (config.portfolioRiskPct / 100);
-  const positionBudget = Math.min(maxRiskAmount, config.maxPositionSizeUsd);
-
-  if (positionBudget < 1) {
-    logInfo('Cross-market position budget too small', { positionBudget, portfolioValue });
-    return null;
-  }
-
   // For cross-market, we need capital for BOTH buy orders
   // We buy the opposite outcome on overpriced market + buy underpriced market
   const buyPrice = trades.buyMarket.price;
@@ -283,6 +283,35 @@ export function calculateCrossMarketPositionSize(
 
   // Total cost per share = opposite outcome price + buy market price
   const costPerShare = oppositePrice + buyPrice;
+
+  // Get minimum shares required
+  const minShares = opportunity.minOrderSize ?? config.minShareSize ?? 5;
+  const minBudgetRequired = minShares * costPerShare;
+
+  // Calculate risk-adjusted budget
+  const maxRiskAmount = portfolioValue * (config.portfolioRiskPct / 100);
+  let positionBudget = Math.min(maxRiskAmount, config.maxPositionSizeUsd);
+
+  // Ensure budget covers minimum shares if portfolio allows
+  if (positionBudget < minBudgetRequired && portfolioValue >= minBudgetRequired) {
+    positionBudget = minBudgetRequired;
+    logInfo('Adjusted cross-market budget to minimum required', {
+      originalBudget: maxRiskAmount.toFixed(2),
+      adjustedBudget: positionBudget.toFixed(2),
+      minShares,
+      costPerShare: costPerShare.toFixed(2),
+    });
+  }
+
+  if (positionBudget < minBudgetRequired) {
+    logInfo('Cross-market position budget too small for minimum shares', {
+      positionBudget: positionBudget.toFixed(2),
+      portfolioValue: portfolioValue.toFixed(2),
+      minBudgetRequired: minBudgetRequired.toFixed(2),
+      minShares,
+    });
+    return null;
+  }
 
   // Maximum shares we can afford
   const maxSharesFromBudget = Math.floor(positionBudget / costPerShare);
@@ -296,11 +325,14 @@ export function calculateCrossMarketPositionSize(
   // Take the smaller limit
   const shares = Math.min(maxSharesFromBudget, maxSharesFromLiquidity);
 
-  if (shares < 1) {
-    logInfo('Cannot execute cross-market trade - not enough shares', {
+  // Check liquidity constraint (minShares already defined above)
+  if (shares < minShares) {
+    logInfo('Cannot execute cross-market trade - liquidity constraint', {
       maxSharesFromBudget,
       maxSharesFromLiquidity,
       costPerShare,
+      shares,
+      minShares,
     });
     return null;
   }
@@ -351,13 +383,13 @@ export function calculateCrossMarketPositionSize(
  * Validate if a cross-market position meets minimum requirements.
  *
  * @param position - The calculated position size
- * @param minProfitUsd - Minimum expected profit to execute (default: $0.50)
+ * @param minProfitUsd - Minimum expected profit to execute (default: $0.01)
  * @param maxSlippage - Maximum acceptable slippage (default: 5%)
  * @returns True if position should be executed
  */
 export function isCrossMarketPositionViable(
   position: CrossMarketPositionSize,
-  minProfitUsd: number = 0.5,
+  minProfitUsd: number = 0.01,
   maxSlippage: number = 0.05,
 ): boolean {
   // Must have at least 1 share

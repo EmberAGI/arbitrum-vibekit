@@ -59,6 +59,9 @@ export function scanForOpportunities(
 
     // Check if spread exceeds threshold
     if (spread >= config.minSpreadThreshold) {
+      // Use market's minOrderSize if available, otherwise use config default
+      const minOrderSize = market.minOrderSize ?? config.minShareSize ?? 5;
+
       opportunities.push({
         marketId: market.id,
         marketTitle: market.title,
@@ -69,6 +72,7 @@ export function scanForOpportunities(
         spread,
         profitPotential: spread, // Profit per $1 invested (both sides)
         timestamp: now,
+        minOrderSize,
       });
 
       logInfo('Arbitrage opportunity found', {
@@ -76,6 +80,7 @@ export function scanForOpportunities(
         yesPrice: market.yesPrice.toFixed(3),
         noPrice: market.noPrice.toFixed(3),
         spread: (spread * 100).toFixed(2) + '%',
+        minOrderSize,
       });
     }
   }
@@ -189,6 +194,14 @@ export async function scanForCrossMarketOpportunities(
   opportunities: CrossMarketOpportunity[];
   relationships: MarketRelationship[];
 }> {
+  console.log('\n' + '*'.repeat(80));
+  console.log('🔎 [CROSS-MARKET SCANNER] Starting scan for arbitrage opportunities');
+  console.log('*'.repeat(80));
+  console.log('Markets to analyze:', markets.length);
+  console.log('Use LLM detection:', useLLM);
+  console.log('Min spread threshold:', config.minSpreadThreshold);
+  console.log('*'.repeat(80) + '\n');
+
   logInfo('Starting cross-market opportunity scan', {
     marketCount: markets.length,
     useLLM,

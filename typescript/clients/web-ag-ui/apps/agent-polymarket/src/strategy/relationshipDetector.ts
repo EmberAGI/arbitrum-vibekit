@@ -462,6 +462,15 @@ Be thorough but concise - only include meaningful relationships.`;
 async function detectRelationshipsByLLMBatch(markets: Market[]): Promise<MarketRelationship[]> {
   const model = process.env.POLY_LLM_MODEL || 'gpt-4o-mini';
 
+  console.log('\n' + '='.repeat(80));
+  console.log('🤖 [LLM BATCH DETECTION] Starting batch relationship detection');
+  console.log('='.repeat(80));
+  console.log('Model:', model);
+  console.log('Markets to analyze:', markets.length);
+  console.log('Pairs to analyze:', (markets.length * (markets.length - 1)) / 2);
+  console.log('OpenAI API Key:', process.env.OPENAI_API_KEY ? '✅ Set' : '❌ NOT SET');
+  console.log('='.repeat(80) + '\n');
+
   logInfo('Initializing OpenAI batch detection', {
     model,
     marketCount: markets.length,
@@ -506,6 +515,9 @@ async function detectRelationshipsByLLMBatch(markets: Market[]): Promise<MarketR
       },
     ]);
 
+    console.log('🤖 [LLM] Sending request to OpenAI...');
+    console.log('🤖 [LLM] Waiting for response (timeout: 60s)...');
+
     logInfo('Waiting for LLM response...', {
       status: 'in-progress',
       timeoutSeconds: 60,
@@ -514,6 +526,23 @@ async function detectRelationshipsByLLMBatch(markets: Market[]): Promise<MarketR
     const result = await Promise.race([llmPromise, timeoutPromise]);
 
     const elapsed = Date.now() - startTime;
+
+    console.log('\n' + '='.repeat(80));
+    console.log('🤖 [LLM RESPONSE] Received from OpenAI');
+    console.log('='.repeat(80));
+    console.log('Duration:', (elapsed / 1000).toFixed(2), 'seconds');
+    console.log('Relationships analyzed:', result.relationships.length);
+    console.log('Relationships with matches:', result.relationships.filter((r) => r.hasRelationship).length);
+    if (result.relationships.length > 0) {
+      console.log('\nRelationships found:');
+      result.relationships.forEach((rel, i) => {
+        if (rel.hasRelationship) {
+          console.log(`  ${i + 1}. ${rel.relationshipType} (${rel.confidence}): ${rel.reasoning?.substring(0, 60)}...`);
+        }
+      });
+    }
+    console.log('='.repeat(80) + '\n');
+
     logInfo('LLM batch response received', {
       relationshipsAnalyzed: result.relationships.length,
       relationshipsFound: result.relationships.filter((r) => r.hasRelationship).length,
@@ -563,6 +592,12 @@ async function detectRelationshipsByLLMBatch(markets: Market[]): Promise<MarketR
 
     return relationships;
   } catch (error) {
+    console.log('\n' + '='.repeat(80));
+    console.log('❌ [LLM ERROR] Batch detection failed');
+    console.log('='.repeat(80));
+    console.log('Error:', error instanceof Error ? error.message : String(error));
+    console.log('='.repeat(80) + '\n');
+
     logInfo('LLM batch detection failed', {
       error: error instanceof Error ? error.message : String(error),
     });
@@ -588,6 +623,14 @@ export async function detectMarketRelationships(
   markets: Market[],
   useLLM = false,
 ): Promise<MarketRelationship[]> {
+  console.log('\n' + '-'.repeat(80));
+  console.log('🔍 [RELATIONSHIP DETECTION] Starting analysis');
+  console.log('-'.repeat(80));
+  console.log('Mode:', useLLM ? '🤖 LLM Batch Processing' : '📋 Pattern Matching (fallback)');
+  console.log('Markets:', markets.length);
+  console.log('Max comparisons:', (markets.length * (markets.length - 1)) / 2);
+  console.log('-'.repeat(80) + '\n');
+
   logInfo('Starting relationship detection', {
     marketCount: markets.length,
     useLLM,
@@ -595,8 +638,20 @@ export async function detectMarketRelationships(
   });
 
   if (useLLM) {
+    // Limit markets for LLM to avoid timeout (default: 10 markets = 45 pairs)
+    const maxMarketsForLLM = parseInt(process.env.POLY_LLM_MAX_MARKETS ?? '10', 10);
+    const marketsForLLM = markets.slice(0, maxMarketsForLLM);
+
+    if (markets.length > maxMarketsForLLM) {
+      logInfo(`Limiting LLM analysis to ${maxMarketsForLLM} markets (from ${markets.length})`, {
+        original: markets.length,
+        limited: maxMarketsForLLM,
+        pairs: (maxMarketsForLLM * (maxMarketsForLLM - 1)) / 2,
+      });
+    }
+
     // Use batch LLM processing - single API call for all pairs
-    const relationships = await detectRelationshipsByLLMBatch(markets);
+    const relationships = await detectRelationshipsByLLMBatch(marketsForLLM);
 
     logInfo('LLM batch detection complete', {
       detected: relationships.length,
@@ -683,6 +738,12 @@ function checkImpliesViolation(
     const severity = parentPrice - childPrice; // Price difference
     const expectedProfitPerShare = severity; // Direct profit from price difference
 
+    // Use the max of both markets' minOrderSize (or default to 5)
+    const minOrderSize = Math.max(
+      parentMarket.minOrderSize ?? 5,
+      childMarket.minOrderSize ?? 5,
+    );
+
     return {
       relationship,
       violation: {
@@ -704,6 +765,7 @@ function checkImpliesViolation(
       },
       expectedProfitPerShare,
       timestamp: new Date().toISOString(),
+      minOrderSize,
     };
   }
 
@@ -724,6 +786,12 @@ function checkMutualExclusionViolation(
   if (sumPrices > threshold) {
     const severity = sumPrices - 1.0;
     const expectedProfitPerShare = severity; // Profit from selling both
+
+    // Use the max of both markets' minOrderSize (or default to 5)
+    const minOrderSize = Math.max(
+      parentMarket.minOrderSize ?? 5,
+      childMarket.minOrderSize ?? 5,
+    );
 
     return {
       relationship,
@@ -746,6 +814,7 @@ function checkMutualExclusionViolation(
       },
       expectedProfitPerShare,
       timestamp: new Date().toISOString(),
+      minOrderSize,
     };
   }
 
@@ -769,6 +838,12 @@ function checkEquivalenceViolation(
     const lowerPriceMarket =
       parentMarket.yesPrice > childMarket.yesPrice ? childMarket : parentMarket;
 
+    // Use the max of both markets' minOrderSize (or default to 5)
+    const minOrderSize = Math.max(
+      parentMarket.minOrderSize ?? 5,
+      childMarket.minOrderSize ?? 5,
+    );
+
     return {
       relationship,
       violation: {
@@ -790,6 +865,7 @@ function checkEquivalenceViolation(
       },
       expectedProfitPerShare: priceDiff,
       timestamp: new Date().toISOString(),
+      minOrderSize,
     };
   }
 

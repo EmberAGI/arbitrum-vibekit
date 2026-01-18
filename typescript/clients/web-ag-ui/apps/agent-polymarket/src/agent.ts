@@ -29,6 +29,7 @@ import { hireCommandNode } from './workflow/nodes/hireCommand.js';
 import { fireCommandNode } from './workflow/nodes/fireCommand.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
 import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
+import { updateApprovalCommandNode } from './workflow/nodes/updateApprovalCommand.js';
 import { pollCycleNode } from './workflow/nodes/pollCycle.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { checkApprovalsNode } from './workflow/nodes/checkApprovals.js';
@@ -66,16 +67,22 @@ function resolvePostPollCycle(state: PolymarketState): 'collectTradeApproval' | 
 }
 
 /**
- * Routes after summarize - check if we should sync positions/redeem.
+ * Routes after summarize - check if we should sync positions/redeem or loop back.
  */
 function resolvePostSummarize(
   state: PolymarketState,
-): 'syncPositions' | 'redeemPositions' | typeof END {
+): 'syncPositions' | 'redeemPositions' | 'waitAndLoop' | typeof END {
   // Check if position syncing is enabled (default: true)
   const syncEnabled = process.env.POLY_SYNC_POSITIONS !== 'false';
 
   // Check if auto-redemption is enabled (default: false for safety)
   const redeemEnabled = process.env.POLY_AUTO_REDEEM === 'true';
+
+  // Check if continuous polling is enabled (default: true for agent mode)
+  const continuousPolling = process.env.POLY_CONTINUOUS_POLLING !== 'false';
+
+  // Check max iterations (default: unlimited, set to limit cycles)
+  const maxIterations = parseInt(process.env.POLY_MAX_ITERATIONS ?? '0', 10);
 
   // Sync positions on every 5th cycle to keep data fresh
   if (syncEnabled && state.view.metrics.iteration % 5 === 0) {
@@ -87,8 +94,43 @@ function resolvePostSummarize(
     return 'redeemPositions';
   }
 
+  // Loop back for continuous polling if enabled and running
+  if (
+    continuousPolling &&
+    state.view.lifecycleState === 'running' &&
+    (maxIterations === 0 || state.view.metrics.iteration < maxIterations)
+  ) {
+    return 'waitAndLoop';
+  }
+
   // Otherwise end
   return END;
+}
+
+/**
+ * Wait and loop node - waits for poll interval then loops back to checkApprovals.
+ */
+async function waitAndLoopNode(state: PolymarketState): Promise<{ view: { metrics: { lastPoll: string } } }> {
+  const pollIntervalMs = parseInt(process.env.POLY_POLL_INTERVAL_MS ?? '60000', 10);
+  const intervalSec = (pollIntervalMs / 1000).toFixed(0);
+
+  logInfo(`⏳ Waiting ${intervalSec}s before next poll cycle...`, {
+    iteration: state.view.metrics.iteration,
+    pollIntervalMs,
+  });
+
+  // Wait for the poll interval
+  await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+
+  logInfo('⏰ Poll interval elapsed, starting next cycle');
+
+  return {
+    view: {
+      metrics: {
+        lastPoll: new Date().toISOString(),
+      },
+    },
+  };
 }
 
 const workflow = new StateGraph(PolymarketStateAnnotation)
@@ -97,6 +139,7 @@ const workflow = new StateGraph(PolymarketStateAnnotation)
   .addNode('hireCommand', hireCommandNode)
   .addNode('fireCommand', fireCommandNode)
   .addNode('runCycleCommand', runCycleCommandNode)
+  .addNode('updateApprovalCommand', updateApprovalCommandNode)
   .addNode('syncState', syncStateNode)
 
   // Setup nodes
@@ -112,6 +155,9 @@ const workflow = new StateGraph(PolymarketStateAnnotation)
   // Position management nodes
   .addNode('syncPositions', syncPositionsNode)
   .addNode('redeemPositions', redeemPositionsNode)
+
+  // Continuous polling node
+  .addNode('waitAndLoop', waitAndLoopNode)
 
   // Edges from START
   .addEdge(START, 'runCommand')
@@ -137,9 +183,15 @@ const workflow = new StateGraph(PolymarketStateAnnotation)
   .addConditionalEdges('pollCycle', resolvePostPollCycle) // Route based on pending trades
   .addConditionalEdges('summarize', resolvePostSummarize) // Route to position management or end
 
+  // Update approval flow (from Settings tab)
+  .addEdge('updateApprovalCommand', 'checkApprovals')
+
   // Position management flow
   .addEdge('syncPositions', END)
-  .addEdge('redeemPositions', END);
+  .addEdge('redeemPositions', END)
+
+  // Continuous polling loop
+  .addEdge('waitAndLoop', 'checkApprovals');
 
 export const polymarketGraph = workflow.compile({
   checkpointer: memory,
@@ -157,10 +209,12 @@ let cronInterval: ReturnType<typeof setInterval> | null = null;
  */
 export async function runGraphOnce(threadId: string): Promise<void> {
   if (runningThreads.has(threadId)) {
+    console.log('⏭️ [CRON] Skipping tick - run already in progress');
     logInfo('Skipping tick - run already in progress', { threadId });
     return;
   }
 
+  console.log('🔄 [CRON] Starting new poll cycle');
   runningThreads.add(threadId);
   const startedAt = Date.now();
   logInfo('Starting graph run', { threadId });
@@ -185,8 +239,11 @@ export async function runGraphOnce(threadId: string): Promise<void> {
       callbacks: [],
     });
 
+    const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1);
+    console.log(`✅ [CRON] Poll cycle complete (${elapsedSec}s)`);
     logInfo(`Graph run complete in ${Date.now() - startedAt}ms`);
   } catch (error) {
+    console.log('❌ [CRON] Graph run failed:', String(error));
     logInfo('Graph run failed', { error: String(error) });
   } finally {
     runningThreads.delete(threadId);
@@ -198,13 +255,20 @@ export async function runGraphOnce(threadId: string): Promise<void> {
  */
 export function startCron(threadId: string, intervalMs: number = 30000): void {
   if (cronInterval) {
+    console.log('⚠️ [CRON] Cron already running');
     logInfo('Cron already running');
     return;
   }
 
+  const intervalSec = (intervalMs / 1000).toFixed(0);
+  console.log(`⏰ [CRON] Starting cron scheduler (every ${intervalSec}s)`);
+  console.log(`Thread ID: ${threadId}`);
   logInfo('Starting cron scheduler', { threadId, intervalMs });
 
+  let tickCount = 0;
   cronInterval = setInterval(() => {
+    tickCount++;
+    console.log(`\n⏰ [CRON] Tick #${tickCount} - ${new Date().toISOString()}`);
     void runGraphOnce(threadId);
   }, intervalMs);
 }

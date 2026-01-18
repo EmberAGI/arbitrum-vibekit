@@ -10,21 +10,37 @@ import type { PolymarketState, PolymarketUpdate } from '../context.js';
 import { logInfo } from '../context.js';
 
 const commandSchema = z.object({
-  command: z.enum(['hire', 'fire', 'cycle', 'sync']),
+  command: z.enum(['hire', 'fire', 'cycle', 'sync', 'updateApproval']),
+  data: z
+    .object({
+      approvalAmount: z.string(),
+      userWalletAddress: z.string(),
+    })
+    .optional(),
 });
 
 type Command = z.infer<typeof commandSchema>['command'];
+type CommandData = z.infer<typeof commandSchema>['data'];
 
 type CommandTarget =
   | 'hireCommand'
   | 'fireCommand'
   | 'runCycleCommand'
-  | 'syncState';
+  | 'syncState'
+  | 'updateApprovalCommand';
 
 /**
- * Extract command from messages array.
+ * Parsed command with optional data payload
  */
-function extractCommand(messages: PolymarketState['messages']): Command | null {
+type ParsedCommand = {
+  command: Command;
+  data?: CommandData;
+};
+
+/**
+ * Extract command and data from messages array.
+ */
+function extractCommand(messages: PolymarketState['messages']): ParsedCommand | null {
   if (!messages) {
     return null;
   }
@@ -55,7 +71,10 @@ function extractCommand(messages: PolymarketState['messages']): Command | null {
     if (!parsed.success) {
       return null;
     }
-    return parsed.data.command;
+    return {
+      command: parsed.data.command,
+      data: parsed.data.data,
+    };
   } catch (error) {
     logInfo('Failed to parse command content', { error: String(error) });
     return null;
@@ -66,17 +85,33 @@ function extractCommand(messages: PolymarketState['messages']): Command | null {
  * Parse the command from the latest message and update state.
  */
 export function runCommandNode(state: PolymarketState): PolymarketUpdate {
-  const parsedCommand = extractCommand(state.messages);
+  const parsed = extractCommand(state.messages);
+  const command = parsed?.command ?? 'sync';
 
   logInfo('=== POLYMARKET AGENT received command ===', {
-    command: parsedCommand ?? 'sync',
+    command,
+    hasData: !!parsed?.data,
     lifecycleState: state.view.lifecycleState,
     bootstrapped: state.private?.bootstrapped ?? false,
   });
 
+  // For updateApproval command, store the data in state
+  if (command === 'updateApproval' && parsed?.data) {
+    return {
+      view: {
+        command,
+        requestedApprovalAmount: parsed.data.approvalAmount,
+        forceApprovalUpdate: true,
+      },
+      private: {
+        userWalletAddress: parsed.data.userWalletAddress,
+      },
+    };
+  }
+
   return {
     view: {
-      command: parsedCommand ?? 'sync',
+      command,
     },
   };
 }
@@ -85,7 +120,8 @@ export function runCommandNode(state: PolymarketState): PolymarketUpdate {
  * Resolve which node to route to based on the command.
  */
 export function resolveCommandTarget(state: PolymarketState): CommandTarget {
-  const resolvedCommand = state.view.command ?? extractCommand(state.messages);
+  const parsed = extractCommand(state.messages);
+  const resolvedCommand = state.view.command ?? parsed?.command;
 
   logInfo('Resolving command target', { command: resolvedCommand });
 
@@ -102,6 +138,8 @@ export function resolveCommandTarget(state: PolymarketState): CommandTarget {
       return state.private.bootstrapped ? 'runCycleCommand' : 'hireCommand';
     case 'sync':
       return state.private.bootstrapped ? 'syncState' : 'hireCommand';
+    case 'updateApproval':
+      return 'updateApprovalCommand';
     default:
       return 'syncState';
   }

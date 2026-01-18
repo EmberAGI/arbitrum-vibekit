@@ -32,8 +32,9 @@ export default function AgentDetailRoute({
         needsApproval: boolean;
         usdcApproved: boolean;
         ctfApproved: boolean;
-        usdcAllowance: string;
-        hasCtfApproval: boolean;
+        usdcAllowance?: number;
+        polBalance: number;
+        usdcBalance: number;
       };
       needsApprovalAmountInput?: boolean;
       requestedApprovalAmount?: string;
@@ -60,7 +61,8 @@ export default function AgentDetailRoute({
       ctfApprovalTransaction?: {
         to: string;
         data: string;
-        value?: string;
+        description: string;
+        gasLimit?: number;
       };
       opportunities?: Array<{
         marketId: string;
@@ -140,6 +142,30 @@ export default function AgentDetailRoute({
         orderId?: string;
         error?: string;
       }>;
+      userPositions?: Array<{
+        marketId: string;
+        marketTitle: string;
+        outcomeId: 'yes' | 'no';
+        outcomeName?: string;
+        tokenId: string;
+        size: string;
+        currentPrice?: string;
+        avgPrice?: string;
+        pnl?: string;
+        pnlPercent?: string;
+      }>;
+      tradingHistory?: Array<{
+        id: string;
+        market: string;
+        marketTitle: string;
+        side: string;
+        outcome: string;
+        size: string;
+        price: string;
+        matchTime: string;
+        transactionHash?: string;
+        usdcSize?: string;
+      }>;
       config?: {
         minSpreadThreshold: number;
         maxPositionSizeUsd: number;
@@ -160,6 +186,12 @@ export default function AgentDetailRoute({
         tradesFailed: number;
       };
     };
+
+    // Debug: Log polymarket view data
+    console.log('[PAGE] polymarketView data:');
+    console.log('[PAGE] - userPositions:', polymarketView.userPositions?.length ?? 0, polymarketView.userPositions);
+    console.log('[PAGE] - tradingHistory:', polymarketView.tradingHistory?.length ?? 0, polymarketView.tradingHistory);
+    console.log('[PAGE] - full view keys:', Object.keys(polymarketView));
 
     return (
       <PolymarketAgentDetailPage
@@ -204,6 +236,8 @@ export default function AgentDetailRoute({
         crossMarketOpportunities={polymarketView.crossMarketOpportunities ?? []}
         detectedRelationships={polymarketView.detectedRelationships ?? []}
         transactionHistory={polymarketView.transactionHistory ?? []}
+        positions={polymarketView.userPositions ?? []}
+        tradingHistory={polymarketView.tradingHistory ?? []}
         isHired={agent.isHired}
         isHiring={agent.isHiring}
         isFiring={agent.isFiring}
@@ -241,6 +275,34 @@ export default function AgentDetailRoute({
           // Pass txHash directly in interrupt payload
           agent.resolveInterrupt({ ctfApprovalTxHash: txHash });
           console.log('[APPROVAL FLOW] resolveInterrupt called');
+        }}
+        onUpdateApproval={(amount: string, userWalletAddress: string) => {
+          console.log('[SETTINGS] Update approval requested:', amount, userWalletAddress);
+          // Use dedicated updateApproval command with data payload
+          agent.runCommand('updateApproval', {
+            approvalAmount: amount,
+            userWalletAddress,
+          });
+        }}
+        onUpdateConfig={(configUpdate: Partial<typeof polymarketView.config>) => {
+          console.log('[SETTINGS] Config update requested:', configUpdate);
+
+          // Update config via state
+          agent.setState({
+            view: {
+              ...polymarketView,
+              config: {
+                ...polymarketView.config,
+                ...configUpdate,
+              },
+            },
+            settings: agent.settings,
+          } as any);
+
+          // Sync to apply changes
+          setTimeout(() => {
+            agent.runSync();
+          }, 300);
         }}
       />
     );

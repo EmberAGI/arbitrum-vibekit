@@ -17,6 +17,7 @@ export interface PolymarketAgentMetrics {
 
 export interface PolymarketStrategyConfig {
   minSpreadThreshold: number;
+  minPositionSizeUsd?: number; // Minimum order size (default: $1)
   maxPositionSizeUsd: number;
   portfolioRiskPct: number;
   pollIntervalMs: number;

@@ -29,7 +29,7 @@ const MIN_POL_BALANCE = 0.01; // ~$0.02 at current prices
 /**
  * Minimum USDC balance required to start trading
  */
-const MIN_USDC_BALANCE = 10; // $10
+const MIN_USDC_BALANCE = 1; // $1
 
 /**
  * Check contract approvals and wallet balances.
@@ -72,9 +72,13 @@ export async function checkApprovalsNode(state: PolymarketState): Promise<Comman
   // Check approval status and balances
   const status = await checkApprovalStatus(targetAddress, rpcUrl);
 
+  // Check if user is requesting approval update from Settings
+  const isApprovalUpdateRequest = state.view.forceApprovalUpdate && state.view.requestedApprovalAmount;
+
   // FIRST: Check USDC approval - only needed for buy orders
   // CTF approval is only needed for selling positions (can be added later)
-  if (!status.usdcApproved) {
+  // Also handle approval updates from Settings even if already approved
+  if (!status.usdcApproved || isApprovalUpdateRequest) {
     logInfo('🔐 USDC approval required for trading', {
       usdcApproved: status.usdcApproved,
       address: targetAddress,
@@ -83,8 +87,8 @@ export async function checkApprovalsNode(state: PolymarketState): Promise<Comman
     // Check if user already provided the approval amount
     const approvalAmount = state.view.requestedApprovalAmount;
 
-    if (!approvalAmount) {
-      // Need user input - interrupt and ask for amount
+    if (!approvalAmount && !isApprovalUpdateRequest) {
+      // Need user input - interrupt and ask for amount (only for initial approval, not updates)
       logInfo('💬 Asking user for USDC approval amount');
 
       return new Command({
@@ -104,6 +108,18 @@ export async function checkApprovalsNode(state: PolymarketState): Promise<Comman
     }
 
     // User provided amount - generate USDC permit typed data (gasless signature)
+    if (!approvalAmount) {
+      logInfo('❌ Approval amount is missing');
+      return new Command({
+        update: {
+          view: {
+            haltReason: 'Approval amount is required',
+          },
+        },
+        goto: 'summarize',
+      });
+    }
+
     logInfo('✅ User provided approval amount', { amount: approvalAmount });
 
     let usdcPermitTypedData;
@@ -135,7 +151,8 @@ export async function checkApprovalsNode(state: PolymarketState): Promise<Comman
           needsApprovalAmountInput: false,
           needsUsdcPermitSignature: true, // Request USDC signature
           usdcPermitTypedData, // Data for user to sign
-          onboarding: {
+          forceApprovalUpdate: undefined, // Clear the flag after generating permit
+          onboarding: isApprovalUpdateRequest ? undefined : {
             step: 2,
             totalSteps: 2,
             key: 'usdc-permit-signature',
