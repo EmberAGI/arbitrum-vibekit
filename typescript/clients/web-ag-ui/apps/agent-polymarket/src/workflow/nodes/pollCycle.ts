@@ -15,6 +15,7 @@ import type {
   Transaction,
   CrossMarketOpportunity as CrossMarketOpp,
   MarketRelationship,
+  UserPosition,
 } from '../context.js';
 import { logInfo, buildTaskStatus } from '../context.js';
 import {
@@ -33,8 +34,10 @@ import { executeArbitrage, executeCrossMarketArbitrage } from '../../strategy/ex
 import {
   createAdapterFromEnv,
   fetchMarketPrices,
+  fetchOrderBookInfo,
   type IPolymarketAdapter,
   type PerpetualMarket,
+  type TradingHistoryItem,
 } from '../../clients/polymarketClient.js';
 
 // Singleton adapter instance
@@ -53,6 +56,54 @@ async function getAdapter(): Promise<IPolymarketAdapter | null> {
     }
   }
   return adapterInstance;
+}
+
+/**
+ * Fetch user positions from Polymarket Data API.
+ */
+async function fetchUserPositions(adapter: IPolymarketAdapter, userWalletAddress?: string): Promise<UserPosition[]> {
+  console.log('[POLL CYCLE] fetchUserPositions called with wallet:', userWalletAddress);
+
+  if (!userWalletAddress) {
+    console.log('[POLL CYCLE] No user wallet address - skipping positions fetch');
+    return [];
+  }
+
+  try {
+    console.log('[POLL CYCLE] Fetching positions from adapter...');
+    const result = await adapter.getPositions(userWalletAddress);
+    console.log('[POLL CYCLE] Positions fetched:', result.positions.length, 'positions');
+    logInfo(`Fetched ${result.positions.length} user positions`);
+    return result.positions as UserPosition[];
+  } catch (error) {
+    console.log('[POLL CYCLE] Error fetching positions:', error);
+    logInfo('Error fetching user positions', { error: String(error) });
+    return [];
+  }
+}
+
+/**
+ * Fetch trading history from Polymarket Data API.
+ */
+async function fetchTradingHistory(adapter: IPolymarketAdapter, userWalletAddress?: string): Promise<TradingHistoryItem[]> {
+  console.log('[POLL CYCLE] fetchTradingHistory called with wallet:', userWalletAddress);
+
+  if (!userWalletAddress) {
+    console.log('[POLL CYCLE] No user wallet address - skipping trading history fetch');
+    return [];
+  }
+
+  try {
+    console.log('[POLL CYCLE] Fetching trading history from adapter...');
+    const trades = await adapter.getTradingHistoryWithDetails(userWalletAddress, { limit: 50 });
+    console.log('[POLL CYCLE] Trading history fetched:', trades.length, 'trades');
+    logInfo(`Fetched ${trades.length} trading history items`);
+    return trades;
+  } catch (error) {
+    console.log('[POLL CYCLE] Error fetching trading history:', error);
+    logInfo('Error fetching trading history', { error: String(error) });
+    return [];
+  }
 }
 
 /**
@@ -137,16 +188,23 @@ function getMockMarkets(): Market[] {
   ];
 }
 
+// Track offset for rotating through markets each poll cycle
+let currentMarketOffset = parseInt(process.env.POLY_MARKET_OFFSET || '0', 10);
+const OFFSET_INCREMENT = 50; // Rotate through markets in chunks of 50
+
 /**
  * Fetch markets using adapter.getMarkets() and convert to our Market type.
- * Returns at least 3 markets for frontend display.
+ * Rotates through different market offsets each poll cycle to get fresh data.
  */
-async function fetchMarketsFromPlugin(adapter: IPolymarketAdapter): Promise<Market[]> {
-  logInfo('Calling adapter.getMarkets()...');
+async function fetchMarketsFromPlugin(adapter: IPolymarketAdapter, iteration: number): Promise<Market[]> {
+  // Rotate offset every poll cycle to get different markets
+  const offset = (currentMarketOffset + (iteration * OFFSET_INCREMENT)) % 500; // Cycle through first 500 markets
+
+  logInfo('Calling adapter.getMarkets()', { offset, iteration });
 
   try {
-    // Explicitly fetch only active markets (not closed/resolved)
-    const response = await adapter.getMarkets({ chainIds: ['137'], status: 'active' });
+    // Explicitly fetch only active markets with offset for pagination
+    const response = await adapter.getMarkets({ chainIds: ['137'], status: 'active', offset });
 
     if (!response.markets || response.markets.length === 0) {
       logInfo('No markets returned from adapter');
@@ -166,9 +224,12 @@ async function fetchMarketsFromPlugin(adapter: IPolymarketAdapter): Promise<Mark
       const yesTokenId = m.longToken.address;
       const noTokenId = m.shortToken.address;
 
-      // Fetch prices from CLOB API using the client's function
+      // Fetch prices and order book info from CLOB API in parallel
       // yesBuyPrice/noBuyPrice are ASK prices (what you PAY to buy)
-      const prices = await fetchMarketPrices(yesTokenId, noTokenId);
+      const [prices, orderBookInfo] = await Promise.all([
+        fetchMarketPrices(yesTokenId, noTokenId),
+        fetchOrderBookInfo(yesTokenId),
+      ]);
 
       // Log prices for verification
       logInfo('Market prices fetched', {
@@ -176,6 +237,7 @@ async function fetchMarketsFromPlugin(adapter: IPolymarketAdapter): Promise<Mark
         yesBuyPrice: prices.yesBuyPrice.toFixed(3),
         noBuyPrice: prices.noBuyPrice.toFixed(3),
         combined: (prices.yesBuyPrice + prices.noBuyPrice).toFixed(3),
+        minOrderSize: orderBookInfo.minOrderSize,
       });
 
       // Try to get cached market data for liquidity/volume
@@ -198,6 +260,7 @@ async function fetchMarketsFromPlugin(adapter: IPolymarketAdapter): Promise<Mark
         endDate,
         resolved: false,
         active: true,
+        minOrderSize: orderBookInfo.minOrderSize,
       });
     }
 
@@ -257,7 +320,14 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
   const manualApprovalMode = process.env.POLY_MANUAL_APPROVAL === 'true';
 //   const useMockData = true;
 
+  // Get user wallet address for fetching positions and trading history
+  // Fallback to POLY_FUNDER_ADDRESS from env if userWalletAddress not set yet
+  const userWalletAddress = state.private.userWalletAddress || process.env.POLY_FUNDER_ADDRESS;
+  console.log('[POLL CYCLE] Using wallet address for positions/history:', userWalletAddress);
+
   let markets: Market[] = [];
+  let userPositions: UserPosition[] = [];
+  let tradingHistory: TradingHistoryItem[] = [];
 
   if (useMockData) {
     // Use mock data for frontend testing
@@ -283,8 +353,22 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
       };
     }
 
-    // Step 1: Fetch markets using adapter.getMarkets()
-    markets = await fetchMarketsFromPlugin(adapter);
+    // Fetch markets, positions, and trading history in parallel
+    const [fetchedMarkets, fetchedPositions, fetchedHistory] = await Promise.all([
+      fetchMarketsFromPlugin(adapter, iteration),
+      fetchUserPositions(adapter, userWalletAddress),
+      fetchTradingHistory(adapter, userWalletAddress),
+    ]);
+
+    markets = fetchedMarkets;
+    userPositions = fetchedPositions;
+    tradingHistory = fetchedHistory;
+
+    console.log('[POLL CYCLE] Fetched data:', {
+      markets: markets.length,
+      userPositions: userPositions.length,
+      tradingHistory: tradingHistory.length,
+    });
   }
 
   if (markets.length === 0) {
@@ -297,6 +381,8 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
       view: {
         task,
         markets: [],
+        userPositions,
+        tradingHistory,
         metrics: { ...state.view.metrics, iteration, lastPoll: now },
         events: [statusEvent],
       },
@@ -314,11 +400,24 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
 
   // Step 2B: Scan for cross-market arbitrage opportunities
   const useLLM = process.env.POLY_USE_LLM_DETECTION === 'true';
+
+  logInfo('🤖 [LLM FLOW] Starting cross-market scan', {
+    useLLM,
+    marketCount: markets.length,
+    llmModel: process.env.POLY_LLM_MODEL || 'gpt-4o-mini',
+    envVar: 'POLY_USE_LLM_DETECTION=' + process.env.POLY_USE_LLM_DETECTION,
+  });
+
   const { opportunities: rawCrossOpps, relationships } = await scanForCrossMarketOpportunities(
     markets,
     state.view.config,
     useLLM, // Enable LLM batch detection if configured
   );
+
+  logInfo('🤖 [LLM FLOW] Cross-market scan complete', {
+    relationshipsDetected: relationships.length,
+    opportunitiesFound: rawCrossOpps.length,
+  });
 
   const crossOpportunities = filterCrossMarketOpportunities(
     rawCrossOpps,
@@ -337,6 +436,11 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
   let tradesExecuted = 0;
   let tradesFailed = 0;
   let opportunitiesExecuted = 0;
+
+  // Get execution control settings from environment
+  const minProfitThreshold = parseFloat(process.env.POLY_MIN_PROFIT_USD || '0.01');
+  const maxOpportunitiesPerCycle = parseInt(process.env.POLY_MAX_OPPORTUNITIES_PER_CYCLE || '3', 10);
+  const executeAllOpportunities = process.env.POLY_EXECUTE_ALL_OPPORTUNITIES === 'true';
 
   // Combine and sort all opportunities by profit potential
   type CombinedOpportunity =
@@ -360,6 +464,9 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
     total: allOpportunities.length,
     intra: opportunities.length,
     cross: crossOpportunities.length,
+    minProfitThreshold,
+    maxOpportunitiesPerCycle,
+    executeAllOpportunities,
   });
 
   // Calculate metrics and events for frontend reporting
@@ -426,7 +533,7 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
           state.view.config,
         );
 
-        if (!position || !isCrossMarketPositionViable(position, 0.5)) {
+        if (!position || !isCrossMarketPositionViable(position, minProfitThreshold)) {
           continue;
         }
 
@@ -469,6 +576,8 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
           crossMarketOpportunities: crossOpportunities,
           detectedRelationships: relationships,
           pendingTrades,
+          userPositions,
+          tradingHistory,
           metrics: {
             iteration,
             lastPoll: now,
@@ -601,7 +710,7 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
             state.view.config,
           );
 
-          if (!position || !isCrossMarketPositionViable(position, 0.5)) {
+          if (!position || !isCrossMarketPositionViable(position, minProfitThreshold)) {
             logInfo('Cross-market position not viable', {
               parent: opportunity.opp.relationship.parentMarket.title.substring(0, 30),
               child: opportunity.opp.relationship.childMarket.title.substring(0, 30),
@@ -695,9 +804,12 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
           }
         }
 
-        // Limit opportunities per cycle
-        if (opportunitiesExecuted >= 3) {
-          logInfo('Max opportunities per cycle reached');
+        // Limit opportunities per cycle (unless EXECUTE_ALL is true)
+        if (!executeAllOpportunities && opportunitiesExecuted >= maxOpportunitiesPerCycle) {
+          logInfo('Max opportunities per cycle reached', {
+            executed: opportunitiesExecuted,
+            maxAllowed: maxOpportunitiesPerCycle,
+          });
           break;
         }
       }
@@ -733,6 +845,11 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
     opportunitiesExecuted,
   });
 
+  console.log('[POLL CYCLE] Final return with positions/history:', {
+    userPositions: userPositions.length,
+    tradingHistory: tradingHistory.length,
+  });
+
   return {
     view: {
       task,
@@ -740,6 +857,8 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
       opportunities,
       crossMarketOpportunities: crossOpportunities,
       detectedRelationships: relationships,
+      userPositions,
+      tradingHistory,
       transactionHistory: [...state.view.transactionHistory, ...newTransactions],
       metrics: {
         iteration,

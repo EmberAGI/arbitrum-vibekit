@@ -231,6 +231,14 @@ export async function executeArbitrage(
     yesTransaction.status = 'success';
     yesTransaction.orderId = yesOrderId;
     transactions.push(yesTransaction);
+
+    console.log('📊 [ORDER PLACED] YES Token Order');
+    console.log('Market:', opportunity.marketTitle.substring(0, 60));
+    console.log('Order ID:', yesOrderId);
+    console.log('Shares:', position.yesShares);
+    console.log('Price:', opportunity.yesPrice.toFixed(4));
+    console.log('Total Cost:', '$' + position.yesCostUsd.toFixed(2));
+
     logInfo('YES order placed', { orderId: yesOrderId });
 
     // Step 2: BUY NO tokens via adapter.createShortPosition()
@@ -270,6 +278,17 @@ export async function executeArbitrage(
     noTransaction.status = 'success';
     noTransaction.orderId = noOrderId;
     transactions.push(noTransaction);
+
+    console.log('📊 [ORDER PLACED] NO Token Order');
+    console.log('Market:', opportunity.marketTitle.substring(0, 60));
+    console.log('Order ID:', noOrderId);
+    console.log('Shares:', position.noShares);
+    console.log('Price:', opportunity.noPrice.toFixed(4));
+    console.log('Total Cost:', '$' + position.noCostUsd.toFixed(2));
+    console.log('✅ Both orders placed successfully!');
+    console.log('Total Investment:', '$' + position.totalCostUsd.toFixed(2));
+    console.log('Expected Profit:', '$' + position.expectedProfitUsd.toFixed(3));
+
     logInfo('NO order placed', { orderId: noOrderId });
 
     return {
@@ -331,9 +350,8 @@ export async function executeCrossMarketArbitrage(
     const sellOutcome = opportunity.trades.sellMarket.outcome;
     const sellPrice = opportunity.trades.sellMarket.price;
 
-    // Find the token ID for the market we're selling
+    // Get the market we're selling
     const sellMarket = opportunity.relationship.parentMarket;
-    const sellTokenId = sellOutcome === 'yes' ? sellMarket.yesTokenId : sellMarket.noTokenId;
 
     const sellTransaction: Transaction = {
       id: uuidv7(),
@@ -362,8 +380,9 @@ export async function executeCrossMarketArbitrage(
     const oppositeOutcome = sellOutcome === 'yes' ? 'no' : 'yes';
     const oppositePrice = 1.0 - sellPrice;
 
+    // Use yesTokenId as marketId - adapter expects YES token ID and resolves the correct token
     const sellResult = await adapter.placeOrder({
-      marketId: sellMarketId,
+      marketId: sellMarket.yesTokenId,  // Must use YES token ID, not market.id
       outcomeId: oppositeOutcome,  // Buy the OPPOSITE outcome
       side: 'buy',                  // BUY, not sell!
       size: position.shares.toString(),
@@ -385,6 +404,15 @@ export async function executeCrossMarketArbitrage(
     sellTransaction.status = 'success';
     sellTransaction.orderId = sellResult.orderId;
     transactions.push(sellTransaction);
+
+    console.log('📊 [CROSS-MARKET ORDER] SELL (Buy Opposite) Order Placed');
+    console.log('Market:', sellMarket.title.substring(0, 60));
+    console.log('Order ID:', sellResult.orderId);
+    console.log('Outcome:', oppositeOutcome.toUpperCase() + ' (opposite of ' + sellOutcome.toUpperCase() + ')');
+    console.log('Shares:', position.shares);
+    console.log('Price:', oppositePrice.toFixed(4));
+    console.log('Cost:', '$' + position.sellRevenueUsd.toFixed(2));
+
     logInfo('Sell order placed successfully', { orderId: sellResult.orderId });
 
     // Step 2: BUY the underpriced market
@@ -393,7 +421,6 @@ export async function executeCrossMarketArbitrage(
     const buyPrice = opportunity.trades.buyMarket.price;
 
     const buyMarket = opportunity.relationship.childMarket;
-    const buyTokenId = buyOutcome === 'yes' ? buyMarket.yesTokenId : buyMarket.noTokenId;
 
     const buyTransaction: Transaction = {
       id: uuidv7(),
@@ -415,9 +442,9 @@ export async function executeCrossMarketArbitrage(
       price: buyPrice.toFixed(4),
     });
 
-    // Execute buy order
+    // Execute buy order - use yesTokenId as marketId
     const buyResult = await adapter.placeOrder({
-      marketId: buyMarketId,
+      marketId: buyMarket.yesTokenId,  // Must use YES token ID, not market.id
       outcomeId: buyOutcome,
       side: 'buy',
       size: position.shares.toString(),
@@ -446,6 +473,19 @@ export async function executeCrossMarketArbitrage(
     buyTransaction.status = 'success';
     buyTransaction.orderId = buyResult.orderId;
     transactions.push(buyTransaction);
+
+    console.log('📊 [CROSS-MARKET ORDER] BUY Order Placed');
+    console.log('Market:', buyMarket.title.substring(0, 60));
+    console.log('Order ID:', buyResult.orderId);
+    console.log('Outcome:', buyOutcome.toUpperCase());
+    console.log('Shares:', position.shares);
+    console.log('Price:', buyPrice.toFixed(4));
+    console.log('Cost:', '$' + position.buyCostUsd.toFixed(2));
+    console.log('✅ Cross-market arbitrage executed successfully!');
+    console.log('Total Investment:', '$' + position.netCostUsd.toFixed(2));
+    console.log('Expected Profit:', '$' + position.expectedProfitUsd.toFixed(3));
+    console.log('ROI:', (position.roi * 100).toFixed(2) + '%');
+
     logInfo('Buy order placed successfully', { orderId: buyResult.orderId });
 
     // Success! Both legs executed

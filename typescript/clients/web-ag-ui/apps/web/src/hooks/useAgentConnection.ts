@@ -77,6 +77,7 @@ export interface UseAgentConnectionResult {
   runHire: () => void;
   runFire: () => void;
   runSync: () => void;
+  runCommand: (command: string, data?: Record<string, unknown>) => void; // Generic command runner with optional data
   resolveInterrupt: (
     input:
       | OperatorConfigInput
@@ -90,8 +91,11 @@ export interface UseAgentConnectionResult {
 
   // State management: direct state updates
   setState: (
-    update: Partial<AgentState> | ((prev: AgentState | undefined) => AgentState),
+    update: AgentState | ((prev: AgentState | undefined) => AgentState),
   ) => void;
+
+  // Update view state from direct API response (avoids starting a new run)
+  setStateFromApiResponse: (viewUpdate: Partial<AgentView>) => void;
 }
 
 export function useAgentConnection(agentId: string): UseAgentConnectionResult {
@@ -115,15 +119,27 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   // Simple command runner - no queuing, just run the command
   const runCommand = useCallback(
-    (command: string) => {
-      console.log(`[useAgentConnection] Running command "${command}" on agent: ${agentId}`);
-      run(() => ({
+    (command: string, data?: Record<string, unknown>) => {
+      console.log(`[useAgentConnection] Running command "${command}" on agent: ${agentId}`, data ? { data } : '');
+      console.log(`[useAgentConnection] threadId: ${threadId}`);
+      console.log(`[useAgentConnection] state.view.command: ${state?.view?.command}`);
+      console.log(`[useAgentConnection] activeInterrupt: ${activeInterrupt ? JSON.stringify(activeInterrupt) : 'none'}`);
+
+      const message = {
         id: v7(),
-        role: 'user',
-        content: JSON.stringify({ command }),
-      }));
+        role: 'user' as const,
+        content: JSON.stringify(data ? { command, data } : { command }),
+      };
+      console.log(`[useAgentConnection] Sending message:`, message);
+
+      try {
+        const result = run(() => message);
+        console.log(`[useAgentConnection] run() returned:`, result);
+      } catch (error) {
+        console.error(`[useAgentConnection] run() threw error:`, error);
+      }
     },
-    [run, agentId],
+    [run, agentId, threadId, state?.view?.command, activeInterrupt],
   );
 
   // Reset initial sync when agent changes to ensure new agent gets synced
@@ -215,6 +231,21 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     [setState],
   );
 
+  // Update state from direct API response (avoids starting a new run like runSync would)
+  const setStateFromApiResponse = useCallback(
+    (viewUpdate: Partial<AgentView>) => {
+      console.log('[useAgentConnection] setStateFromApiResponse called with:', Object.keys(viewUpdate));
+      setState((prev) => ({
+        ...(prev ?? initialAgentState),
+        view: {
+          ...(prev?.view ?? defaultView),
+          ...viewUpdate,
+        },
+      }));
+    },
+    [setState],
+  );
+
   return {
     config,
     isConnected: !!threadId,
@@ -235,8 +266,10 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     runHire,
     runFire,
     runSync,
+    runCommand,
     resolveInterrupt,
     updateSettings,
     setState,
+    setStateFromApiResponse,
   };
 }

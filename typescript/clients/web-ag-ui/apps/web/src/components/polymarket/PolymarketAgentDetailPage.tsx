@@ -1,8 +1,9 @@
 'use client';
 
 import { ChevronRight, Check, RefreshCw, Star } from 'lucide-react';
-import { useState } from 'react';
-import { hexToSignature } from 'viem';
+import { useState, useEffect, useRef } from 'react';
+import { hexToSignature, createPublicClient, http, formatUnits } from 'viem';
+import { polygon } from 'viem/chains';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { PolymarketOpportunityCard, type ArbitrageOpportunity } from './PolymarketOpportunityCard';
 import { PolymarketMetrics, type PolymarketAgentMetrics, type PolymarketStrategyConfig } from './PolymarketMetrics';
@@ -85,7 +86,34 @@ interface ApprovalStatus {
   usdcApproved: boolean;
   polBalance: number;
   usdcBalance: number;
+  usdcAllowance?: number;
   needsApproval: boolean;
+}
+
+export interface UserPosition {
+  marketId: string;
+  marketTitle: string;
+  outcomeId: 'yes' | 'no';
+  outcomeName?: string;
+  tokenId: string;
+  size: string;
+  currentPrice?: string;
+  avgPrice?: string;
+  pnl?: string;
+  pnlPercent?: string;
+}
+
+export interface TradingHistoryItem {
+  id: string;
+  market: string;
+  marketTitle: string;
+  side: string;
+  outcome: string;
+  size: string;
+  price: string;
+  matchTime: string;
+  transactionHash?: string;
+  usdcSize?: string;
 }
 
 interface EIP712TypedData {
@@ -154,9 +182,17 @@ interface PolymarketAgentDetailPageProps {
   onApprovalAmountSubmit?: (amount: string, userWalletAddress: string) => void;
   onUsdcPermitSign?: (signature: { v: number; r: string; s: string; deadline: number }) => void;
   onCtfApprovalSubmit?: (txHash: string) => void;
+
+  // Positions and trading history
+  positions?: UserPosition[];
+  tradingHistory?: TradingHistoryItem[];
+
+  // Settings update callbacks
+  onUpdateApproval?: (amount: string, userWalletAddress: string) => void;
+  onUpdateConfig?: (config: Partial<PolymarketStrategyConfig>) => void;
 }
 
-type TabType = 'approvals' | 'opportunities' | 'cross-market' | 'relationships' | 'history' | 'metrics' | 'settings';
+type TabType = 'approvals' | 'opportunities' | 'cross-market' | 'relationships' | 'positions' | 'history' | 'metrics' | 'settings';
 
 const DEFAULT_AVATAR = '🎯';
 const DEFAULT_AVATAR_BG = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
@@ -198,10 +234,39 @@ export function PolymarketAgentDetailPage({
   onApprovalAmountSubmit,
   onUsdcPermitSign,
   onCtfApprovalSubmit,
+  // Positions and trading history
+  positions = [],
+  tradingHistory = [],
+  // Settings update callbacks
+  onUpdateApproval,
+  onUpdateConfig,
 }: PolymarketAgentDetailPageProps) {
+  // Debug: Log received positions and trading history
+  console.log('[UI] PolymarketAgentDetailPage received:');
+  console.log('[UI] - positions:', positions?.length ?? 0, positions);
+  console.log('[UI] - tradingHistory:', tradingHistory?.length ?? 0, tradingHistory);
+
   // Show approvals tab if any approval step is active
   const needsApprovals = needsApprovalAmountInput || needsUsdcPermitSignature || needsCtfApprovalTransaction;
   const [activeTab, setActiveTab] = useState<TabType>(needsApprovals ? 'approvals' : isHired ? 'opportunities' : 'metrics');
+
+  // Track previous approval states to detect transitions
+  const prevNeedsUsdcPermitRef = useRef(needsUsdcPermitSignature);
+  const prevNeedsCtfApprovalRef = useRef(needsCtfApprovalTransaction);
+
+  // Auto-switch to approvals tab when permit signing becomes required (e.g., from Settings update)
+  useEffect(() => {
+    const usdcPermitJustRequired = needsUsdcPermitSignature && !prevNeedsUsdcPermitRef.current;
+    const ctfApprovalJustRequired = needsCtfApprovalTransaction && !prevNeedsCtfApprovalRef.current;
+
+    if (usdcPermitJustRequired || ctfApprovalJustRequired) {
+      // Use a microtask to avoid the cascading render warning
+      queueMicrotask(() => setActiveTab('approvals'));
+    }
+
+    prevNeedsUsdcPermitRef.current = needsUsdcPermitSignature;
+    prevNeedsCtfApprovalRef.current = needsCtfApprovalTransaction;
+  }, [needsUsdcPermitSignature, needsCtfApprovalTransaction]);
 
   // Wallet client for signing permits and transactions
   const { walletClient, chainId, switchChain } = usePrivyWalletClient();
@@ -382,10 +447,17 @@ export function PolymarketAgentDetailPage({
               Relationships {detectedRelationships.length > 0 && `(${detectedRelationships.length})`}
             </TabButton>
             <TabButton
+              active={activeTab === 'positions'}
+              onClick={() => setActiveTab('positions')}
+              highlight={positions.length > 0}
+            >
+              Positions {positions.length > 0 && `(${positions.length})`}
+            </TabButton>
+            <TabButton
               active={activeTab === 'history'}
               onClick={() => setActiveTab('history')}
             >
-              History {transactionHistory.length > 0 && `(${transactionHistory.length})`}
+              History {(tradingHistory.length > 0 || transactionHistory.length > 0) && `(${tradingHistory.length + transactionHistory.length})`}
             </TabButton>
             <TabButton active={activeTab === 'metrics'} onClick={() => setActiveTab('metrics')}>
               Metrics
@@ -597,50 +669,12 @@ export function PolymarketAgentDetailPage({
             </div>
           )}
 
+          {activeTab === 'positions' && (
+            <PositionsTab positions={positions} />
+          )}
+
           {activeTab === 'history' && (
-            <div className="space-y-4">
-              {transactionHistory.length === 0 ? (
-                <div className="text-center py-12 text-gray-400">
-                  <p className="text-lg">No transactions yet.</p>
-                  <p className="text-sm mt-2">Trade history will appear here once the agent starts executing.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {transactionHistory.map((tx) => (
-                    <div
-                      key={tx.id}
-                      className="p-4 rounded-lg bg-[#1e1e1e] border border-[#2a2a2a] hover:border-[#3a3a3a] transition-colors"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-3">
-                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                            tx.status === 'success' ? 'bg-green-900/30 text-green-400' :
-                            tx.status === 'failed' ? 'bg-red-900/30 text-red-400' :
-                            'bg-yellow-900/30 text-yellow-400'
-                          }`}>
-                            {tx.status.toUpperCase()}
-                          </span>
-                          <span className="text-sm text-gray-400">Cycle {tx.cycle}</span>
-                          <span className="text-sm font-mono text-gray-500">{tx.action}</span>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm font-semibold">{tx.shares} shares @ ${tx.price.toFixed(4)}</div>
-                          <div className="text-xs text-gray-400">Total: ${tx.totalCost.toFixed(2)}</div>
-                        </div>
-                      </div>
-                      <div className="text-sm text-gray-300 truncate">{tx.marketTitle}</div>
-                      {tx.orderId && (
-                        <div className="text-xs text-gray-500 mt-1 font-mono">Order: {tx.orderId}</div>
-                      )}
-                      {tx.error && (
-                        <div className="text-xs text-red-400 mt-2 p-2 bg-red-900/20 rounded">{tx.error}</div>
-                      )}
-                      <div className="text-xs text-gray-500 mt-2">{new Date(tx.timestamp).toLocaleString()}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <HistoryTab transactionHistory={transactionHistory} tradingHistory={tradingHistory} />
           )}
 
           {activeTab === 'metrics' && (
@@ -654,7 +688,13 @@ export function PolymarketAgentDetailPage({
           )}
 
           {activeTab === 'settings' && (
-            <SettingsTab config={config} />
+            <SettingsTab
+              config={config}
+              approvalStatus={approvalStatus}
+              userWalletAddress={walletClient?.account?.address}
+              onUpdateApproval={onUpdateApproval}
+              onUpdateConfig={onUpdateConfig}
+            />
           )}
         </div>
       </div>
@@ -807,19 +847,526 @@ function OpportunitiesTab({ opportunities }: OpportunitiesTabProps) {
   );
 }
 
+// Positions Tab Component
+interface PositionsTabProps {
+  positions: UserPosition[];
+}
+
+function PositionsTab({ positions }: PositionsTabProps) {
+  const formatNumber = (value: string | undefined) => {
+    if (!value) return '—';
+    const num = parseFloat(value);
+    if (isNaN(num)) return '—';
+    // If the value is in raw units (6 decimals), convert to readable
+    if (num > 1000000) {
+      return (num / 1000000).toFixed(2);
+    }
+    return num.toFixed(2);
+  };
+
+  const formatPrice = (value: string | undefined) => {
+    if (!value) return '—';
+    const num = parseFloat(value);
+    if (isNaN(num)) return '—';
+    return `$${num.toFixed(4)}`;
+  };
+
+  const formatPnl = (pnl: string | undefined, pnlPercent: string | undefined) => {
+    if (!pnl) return { text: '—', color: 'text-gray-400' };
+    const pnlNum = parseFloat(pnl);
+    if (isNaN(pnlNum)) return { text: '—', color: 'text-gray-400' };
+    const pctNum = pnlPercent ? parseFloat(pnlPercent) : null;
+    const pctText = pctNum !== null ? ` (${pctNum >= 0 ? '+' : ''}${pctNum.toFixed(1)}%)` : '';
+    return {
+      text: `${pnlNum >= 0 ? '+' : ''}$${Math.abs(pnlNum).toFixed(2)}${pctText}`,
+      color: pnlNum >= 0 ? 'text-teal-400' : 'text-red-400',
+    };
+  };
+
+  if (positions.length === 0) {
+    return (
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-8 text-center">
+        <div className="text-gray-600 text-4xl mb-2">📊</div>
+        <p className="text-gray-500">No open positions</p>
+        <p className="text-gray-600 text-sm mt-1">
+          Your Polymarket positions will appear here once you start trading.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] overflow-hidden">
+        <div className="p-4 border-b border-[#2a2a2a]">
+          <h3 className="text-lg font-semibold text-white">Open Positions ({positions.length})</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="text-left text-xs text-gray-500 uppercase border-b border-[#2a2a2a]">
+                <th className="px-4 py-3">Market</th>
+                <th className="px-4 py-3">Outcome</th>
+                <th className="px-4 py-3 text-right">Size</th>
+                <th className="px-4 py-3 text-right">Avg Price</th>
+                <th className="px-4 py-3 text-right">Current Price</th>
+                <th className="px-4 py-3 text-right">P&L</th>
+              </tr>
+            </thead>
+            <tbody>
+              {positions.map((pos, idx) => {
+                const pnlInfo = formatPnl(pos.pnl, pos.pnlPercent);
+                return (
+                  <tr
+                    key={`${pos.tokenId}-${idx}`}
+                    className="border-b border-[#2a2a2a] last:border-0 hover:bg-[#252525] transition-colors"
+                  >
+                    <td className="px-4 py-4">
+                      <div className="text-sm text-white max-w-[300px] truncate" title={pos.marketTitle}>
+                        {pos.marketTitle}
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                        pos.outcomeId === 'yes'
+                          ? 'bg-teal-900/30 text-teal-400'
+                          : 'bg-red-900/30 text-red-400'
+                      }`}>
+                        {pos.outcomeName || pos.outcomeId.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <span className="text-white font-mono">{formatNumber(pos.size)}</span>
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <span className="text-gray-300 font-mono">{formatPrice(pos.avgPrice)}</span>
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <span className="text-gray-300 font-mono">{formatPrice(pos.currentPrice)}</span>
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <span className={`font-semibold ${pnlInfo.color}`}>{pnlInfo.text}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// History Tab Component
+interface HistoryTabProps {
+  transactionHistory: Transaction[];
+  tradingHistory: TradingHistoryItem[];
+}
+
+function HistoryTab({ transactionHistory, tradingHistory }: HistoryTabProps) {
+  const [activeSection, setActiveSection] = useState<'trades' | 'agent'>('trades');
+
+  const formatTimestamp = (timestamp: string) => {
+    // Handle both ISO strings and Unix timestamps
+    const num = parseInt(timestamp, 10);
+    if (!isNaN(num) && num > 1000000000) {
+      // Unix timestamp in seconds
+      return new Date(num * 1000).toLocaleString();
+    }
+    return new Date(timestamp).toLocaleString();
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Section Toggle */}
+      <div className="flex gap-2 p-1 bg-[#1e1e1e] rounded-lg w-fit">
+        <button
+          onClick={() => setActiveSection('trades')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeSection === 'trades'
+              ? 'bg-purple-500 text-white'
+              : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          Polymarket Trades ({tradingHistory.length})
+        </button>
+        <button
+          onClick={() => setActiveSection('agent')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeSection === 'agent'
+              ? 'bg-purple-500 text-white'
+              : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          Agent Transactions ({transactionHistory.length})
+        </button>
+      </div>
+
+      {/* Polymarket Trades Section */}
+      {activeSection === 'trades' && (
+        <div className="space-y-2">
+          {tradingHistory.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <p className="text-lg">No trades found.</p>
+              <p className="text-sm mt-2">Your Polymarket trading history will appear here.</p>
+            </div>
+          ) : (
+            tradingHistory.map((trade, idx) => (
+              <div
+                key={`${trade.id}-${idx}`}
+                className="p-4 rounded-lg bg-[#1e1e1e] border border-[#2a2a2a] hover:border-[#3a3a3a] transition-colors"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                      trade.side.toUpperCase() === 'BUY'
+                        ? 'bg-teal-900/30 text-teal-400'
+                        : 'bg-red-900/30 text-red-400'
+                    }`}>
+                      {trade.side.toUpperCase()}
+                    </span>
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                      trade.outcome.toUpperCase() === 'YES'
+                        ? 'bg-blue-900/30 text-blue-400'
+                        : 'bg-orange-900/30 text-orange-400'
+                    }`}>
+                      {trade.outcome.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-semibold text-white">
+                      {parseFloat(trade.size).toFixed(2)} shares @ ${parseFloat(trade.price).toFixed(4)}
+                    </div>
+                    {trade.usdcSize && (
+                      <div className="text-xs text-gray-400">
+                        ${parseFloat(trade.usdcSize).toFixed(2)} USDC
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="text-sm text-gray-300 truncate">{trade.marketTitle}</div>
+                {trade.transactionHash && (
+                  <a
+                    href={`https://polygonscan.com/tx/${trade.transactionHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-purple-400 hover:text-purple-300 mt-1 font-mono inline-block"
+                  >
+                    {trade.transactionHash.substring(0, 16)}...
+                  </a>
+                )}
+                <div className="text-xs text-gray-500 mt-2">{formatTimestamp(trade.matchTime)}</div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Agent Transactions Section */}
+      {activeSection === 'agent' && (
+        <div className="space-y-2">
+          {transactionHistory.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <p className="text-lg">No agent transactions yet.</p>
+              <p className="text-sm mt-2">Agent-executed trades will appear here.</p>
+            </div>
+          ) : (
+            transactionHistory.map((tx) => (
+              <div
+                key={tx.id}
+                className="p-4 rounded-lg bg-[#1e1e1e] border border-[#2a2a2a] hover:border-[#3a3a3a] transition-colors"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                      tx.status === 'success' ? 'bg-green-900/30 text-green-400' :
+                      tx.status === 'failed' ? 'bg-red-900/30 text-red-400' :
+                      'bg-yellow-900/30 text-yellow-400'
+                    }`}>
+                      {tx.status.toUpperCase()}
+                    </span>
+                    <span className="text-sm text-gray-400">Cycle {tx.cycle}</span>
+                    <span className="text-sm font-mono text-gray-500">{tx.action}</span>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-semibold">{tx.shares} shares @ ${tx.price.toFixed(4)}</div>
+                    <div className="text-xs text-gray-400">Total: ${tx.totalCost.toFixed(2)}</div>
+                  </div>
+                </div>
+                <div className="text-sm text-gray-300 truncate">{tx.marketTitle}</div>
+                {tx.orderId && (
+                  <div className="text-xs text-gray-500 mt-1 font-mono">Order: {tx.orderId}</div>
+                )}
+                {tx.error && (
+                  <div className="text-xs text-red-400 mt-2 p-2 bg-red-900/20 rounded">{tx.error}</div>
+                )}
+                <div className="text-xs text-gray-500 mt-2">{new Date(tx.timestamp).toLocaleString()}</div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Contract addresses for Polygon Mainnet
+const USDC_E_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' as const;
+const CTF_EXCHANGE_ADDRESS = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E' as const;
+
+// Use environment variable for RPC URL (NEXT_PUBLIC_ prefix required for client-side access)
+// Falls back to polygon-rpc.com if not set
+const POLYGON_RPC_URL = process.env.NEXT_PUBLIC_POLYGON_RPC_URL || 'https://polygon-rpc.com';
+
 // Settings Tab Component
 interface SettingsTabProps {
   config: PolymarketStrategyConfig;
+  approvalStatus?: ApprovalStatus;
+  userWalletAddress?: string;
+  onUpdateApproval?: (amount: string, userWalletAddress: string) => void;
+  onUpdateConfig?: (config: Partial<PolymarketStrategyConfig>) => void;
 }
 
-function SettingsTab({ config }: SettingsTabProps) {
+function SettingsTab({ config, approvalStatus, userWalletAddress, onUpdateApproval, onUpdateConfig }: SettingsTabProps) {
+  const [isEditingConfig, setIsEditingConfig] = useState(false);
+  const [showApprovalInput, setShowApprovalInput] = useState(false);
+  const [approvalAmount, setApprovalAmount] = useState('');
+  const [configError, setConfigError] = useState<string | null>(null);
+  // State for user's actual USDC.e allowance to CTF Exchange
+  const [userAllowance, setUserAllowance] = useState<number | null>(null);
+  const [isLoadingAllowance, setIsLoadingAllowance] = useState(false);
+  const [editedConfig, setEditedConfig] = useState({
+    minPositionSizeUsd: config.minPositionSizeUsd ?? 1,
+    maxPositionSizeUsd: config.maxPositionSizeUsd,
+    portfolioRiskPct: config.portfolioRiskPct,
+    pollIntervalMs: config.pollIntervalMs,
+    maxTotalExposureUsd: config.maxTotalExposureUsd,
+  });
+
+  // Fetch user's USDC.e allowance to CTF Exchange when wallet is connected
+  useEffect(() => {
+    if (!userWalletAddress) {
+      setUserAllowance(null);
+      return;
+    }
+
+    const fetchAllowance = async () => {
+      setIsLoadingAllowance(true);
+      try {
+        const client = createPublicClient({
+          chain: polygon,
+          transport: http(POLYGON_RPC_URL),
+        });
+
+        const allowance = await client.readContract({
+          address: USDC_E_ADDRESS,
+          abi: [
+            {
+              name: 'allowance',
+              type: 'function',
+              stateMutability: 'view',
+              inputs: [
+                { name: 'owner', type: 'address' },
+                { name: 'spender', type: 'address' },
+              ],
+              outputs: [{ type: 'uint256' }],
+            },
+          ],
+          functionName: 'allowance',
+          args: [userWalletAddress as `0x${string}`, CTF_EXCHANGE_ADDRESS],
+        });
+
+        // Convert from 6 decimals to USDC units
+        const allowanceInUsdc = parseFloat(formatUnits(allowance, 6));
+        console.log('[SETTINGS] Fetched user USDC.e allowance:', allowanceInUsdc, 'for wallet:', userWalletAddress);
+        setUserAllowance(allowanceInUsdc);
+      } catch (error) {
+        console.error('[SETTINGS] Failed to fetch user allowance:', error);
+        setUserAllowance(null);
+      } finally {
+        setIsLoadingAllowance(false);
+      }
+    };
+
+    fetchAllowance();
+  }, [userWalletAddress]);
+
+  const handleSaveConfig = () => {
+    // Validate min position size (must be >= $1)
+    if (editedConfig.minPositionSizeUsd < 1) {
+      setConfigError('Minimum position size cannot be less than $1');
+      return;
+    }
+    // Validate max >= min
+    if (editedConfig.maxPositionSizeUsd < editedConfig.minPositionSizeUsd) {
+      setConfigError('Maximum position size must be greater than or equal to minimum');
+      return;
+    }
+    setConfigError(null);
+    if (onUpdateConfig) {
+      onUpdateConfig(editedConfig);
+    }
+    setIsEditingConfig(false);
+  };
+
+  const handleApprovalSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (approvalAmount && onUpdateApproval && userWalletAddress) {
+      console.log('[SETTINGS] Submitting approval update:', approvalAmount, 'for wallet:', userWalletAddress);
+      onUpdateApproval(approvalAmount, userWalletAddress);
+      setShowApprovalInput(false);
+      setApprovalAmount('');
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Approvals Section */}
       <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Strategy Configuration</h3>
+        <h3 className="text-lg font-semibold text-white mb-4">Token Approvals</h3>
         <p className="text-gray-400 text-sm mb-6">
-          Current agent configuration for arbitrage trading
+          Manage your USDC.e allowance to CTF Exchange for trading on Polymarket
         </p>
+
+        <div className="space-y-4">
+          {/* USDC.e Allowance - Shows USER's actual allowance to CTF Exchange */}
+          <div className="flex items-center justify-between py-3 border-b border-[#2a2a2a]">
+            <div>
+              <div className="text-white font-medium">Your USDC.e Allowance</div>
+              <div className="text-sm text-gray-500 mt-0.5">
+                Amount CTF Exchange can spend from your wallet
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-white font-semibold">
+                {isLoadingAllowance ? (
+                  'Loading...'
+                ) : userAllowance !== null ? (
+                  `$${userAllowance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                ) : !userWalletAddress ? (
+                  'Connect wallet'
+                ) : (
+                  'Not Set'
+                )}
+              </span>
+              {onUpdateApproval && (
+                <button
+                  onClick={() => setShowApprovalInput(!showApprovalInput)}
+                  className="px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 text-sm hover:bg-purple-500/30 transition-colors"
+                >
+                  Update
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Approval Input Form */}
+          {showApprovalInput && (
+            <form onSubmit={handleApprovalSubmit} className="p-4 bg-[#252525] rounded-lg">
+              <label className="block text-sm text-gray-400 mb-2">New USDC Approval Amount</label>
+              {!userWalletAddress ? (
+                <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg mb-3">
+                  <p className="text-yellow-400 text-sm">Please connect your wallet to update approval</p>
+                </div>
+              ) : null}
+              <div className="flex gap-3">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={approvalAmount}
+                  onChange={(e) => setApprovalAmount(e.target.value)}
+                  placeholder="e.g., 1000"
+                  className="flex-1 px-4 py-2 rounded-lg bg-[#1e1e1e] border border-[#3a3a3a] text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  disabled={!userWalletAddress}
+                />
+                <button
+                  type="submit"
+                  disabled={!approvalAmount || !userWalletAddress}
+                  className="px-4 py-2 rounded-lg bg-purple-500 text-white font-medium hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Sign Approval
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                This will generate a gasless permit signature for you to sign
+              </p>
+            </form>
+          )}
+
+          {/* CTF Approval Status */}
+          <div className="flex items-center justify-between py-3 border-b border-[#2a2a2a]">
+            <div>
+              <div className="text-white font-medium">CTF Token Approval</div>
+              <div className="text-sm text-gray-500 mt-0.5">
+                Required for trading prediction market tokens
+              </div>
+            </div>
+            <span className={`font-semibold ${
+              approvalStatus?.ctfApproved ? 'text-teal-400' : 'text-gray-500'
+            }`}>
+              {approvalStatus?.ctfApproved ? 'Approved' : 'Not Approved'}
+            </span>
+          </div>
+
+          {/* Balance Info */}
+          {approvalStatus && (
+            <>
+              <div className="flex items-center justify-between py-3 border-b border-[#2a2a2a]">
+                <div>
+                  <div className="text-white font-medium">USDC Balance</div>
+                  <div className="text-sm text-gray-500 mt-0.5">Available for trading</div>
+                </div>
+                <span className="text-white font-semibold">
+                  ${approvalStatus.usdcBalance.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <div className="text-white font-medium">POL Balance</div>
+                  <div className="text-sm text-gray-500 mt-0.5">For gas fees</div>
+                </div>
+                <span className="text-white font-semibold">
+                  {approvalStatus.polBalance.toFixed(4)} POL
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Strategy Configuration */}
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-white">Strategy Configuration</h3>
+            <p className="text-gray-400 text-sm mt-1">
+              {isEditingConfig ? 'Edit your trading parameters' : 'Current agent configuration for arbitrage trading'}
+            </p>
+          </div>
+          {onUpdateConfig && (
+            <button
+              onClick={() => {
+                if (isEditingConfig) {
+                  // Reset to original values
+                  setEditedConfig({
+                    minPositionSizeUsd: config.minPositionSizeUsd ?? 1,
+                    maxPositionSizeUsd: config.maxPositionSizeUsd,
+                    portfolioRiskPct: config.portfolioRiskPct,
+                    pollIntervalMs: config.pollIntervalMs,
+                    maxTotalExposureUsd: config.maxTotalExposureUsd,
+                  });
+                  setConfigError(null);
+                }
+                setIsEditingConfig(!isEditingConfig);
+              }}
+              className="px-4 py-2 rounded-lg bg-[#2a2a2a] text-white text-sm hover:bg-[#333] transition-colors"
+            >
+              {isEditingConfig ? 'Cancel' : 'Edit'}
+            </button>
+          )}
+        </div>
 
         <div className="space-y-4">
           <SettingRow
@@ -827,26 +1374,93 @@ function SettingsTab({ config }: SettingsTabProps) {
             value={`${(config.minSpreadThreshold * 100).toFixed(1)}%`}
             description="Minimum price difference to consider an opportunity"
           />
-          <SettingRow
-            label="Max Position Size"
-            value={`$${config.maxPositionSizeUsd}`}
-            description="Maximum USD value per single position"
-          />
-          <SettingRow
-            label="Portfolio Risk Per Trade"
-            value={`${config.portfolioRiskPct}%`}
-            description="Percentage of portfolio to risk on each trade"
-          />
-          <SettingRow
-            label="Poll Interval"
-            value={`${config.pollIntervalMs / 1000}s`}
-            description="How often the agent checks for opportunities"
-          />
-          <SettingRow
-            label="Max Total Exposure"
-            value={`$${config.maxTotalExposureUsd}`}
-            description="Maximum total USD exposure across all positions"
-          />
+
+          {isEditingConfig ? (
+            <>
+              <EditableSettingRow
+                label="Min Position Size"
+                value={editedConfig.minPositionSizeUsd}
+                onChange={(val) => setEditedConfig(prev => ({ ...prev, minPositionSizeUsd: Math.max(1, val) }))}
+                description="Minimum USD value per order (cannot be less than $1)"
+                prefix="$"
+                min={1}
+              />
+              <EditableSettingRow
+                label="Max Position Size"
+                value={editedConfig.maxPositionSizeUsd}
+                onChange={(val) => setEditedConfig(prev => ({ ...prev, maxPositionSizeUsd: val }))}
+                description="Maximum USD value per single position"
+                prefix="$"
+                min={1}
+              />
+              <EditableSettingRow
+                label="Portfolio Risk Per Trade"
+                value={editedConfig.portfolioRiskPct}
+                onChange={(val) => setEditedConfig(prev => ({ ...prev, portfolioRiskPct: val }))}
+                description="Percentage of portfolio to risk on each trade"
+                suffix="%"
+                min={0.1}
+                max={100}
+              />
+              <EditableSettingRow
+                label="Poll Interval"
+                value={editedConfig.pollIntervalMs / 1000}
+                onChange={(val) => setEditedConfig(prev => ({ ...prev, pollIntervalMs: val * 1000 }))}
+                description="How often the agent checks for opportunities (seconds)"
+                suffix="s"
+                min={5}
+              />
+              <EditableSettingRow
+                label="Max Total Exposure"
+                value={editedConfig.maxTotalExposureUsd}
+                onChange={(val) => setEditedConfig(prev => ({ ...prev, maxTotalExposureUsd: val }))}
+                description="Maximum total USD exposure across all positions"
+                prefix="$"
+                min={1}
+              />
+              {configError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-red-400 text-sm">{configError}</p>
+                </div>
+              )}
+              <div className="pt-4">
+                <button
+                  onClick={handleSaveConfig}
+                  className="w-full py-3 rounded-xl font-medium bg-purple-500 hover:bg-purple-600 text-white transition-colors"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <SettingRow
+                label="Min Position Size"
+                value={`$${config.minPositionSizeUsd ?? 1}`}
+                description="Minimum USD value per order"
+              />
+              <SettingRow
+                label="Max Position Size"
+                value={`$${config.maxPositionSizeUsd}`}
+                description="Maximum USD value per single position"
+              />
+              <SettingRow
+                label="Portfolio Risk Per Trade"
+                value={`${config.portfolioRiskPct}%`}
+                description="Percentage of portfolio to risk on each trade"
+              />
+              <SettingRow
+                label="Poll Interval"
+                value={`${config.pollIntervalMs / 1000}s`}
+                description="How often the agent checks for opportunities"
+              />
+              <SettingRow
+                label="Max Total Exposure"
+                value={`$${config.maxTotalExposureUsd}`}
+                description="Maximum total USD exposure across all positions"
+              />
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -938,6 +1552,55 @@ function SettingRow({ label, value, description }: SettingRowProps) {
         <div className="text-sm text-gray-500 mt-0.5">{description}</div>
       </div>
       <div className="text-white font-semibold">{value}</div>
+    </div>
+  );
+}
+
+interface EditableSettingRowProps {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  description: string;
+  prefix?: string;
+  suffix?: string;
+  min?: number;
+  max?: number;
+}
+
+function EditableSettingRow({
+  label,
+  value,
+  onChange,
+  description,
+  prefix,
+  suffix,
+  min,
+  max,
+}: EditableSettingRowProps) {
+  return (
+    <div className="flex items-center justify-between py-3 border-b border-[#2a2a2a] last:border-0">
+      <div className="flex-1">
+        <div className="text-white font-medium">{label}</div>
+        <div className="text-sm text-gray-500 mt-0.5">{description}</div>
+      </div>
+      <div className="flex items-center gap-2">
+        {prefix && <span className="text-gray-400">{prefix}</span>}
+        <input
+          type="number"
+          value={value}
+          onChange={(e) => {
+            const val = parseFloat(e.target.value);
+            if (!isNaN(val)) {
+              onChange(val);
+            }
+          }}
+          min={min}
+          max={max}
+          step={value < 10 ? 0.1 : 1}
+          className="w-24 px-3 py-1.5 rounded-lg bg-[#0f0f0f] border border-[#3a3a3a] text-white text-right font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500"
+        />
+        {suffix && <span className="text-gray-400">{suffix}</span>}
+      </div>
     </div>
   );
 }

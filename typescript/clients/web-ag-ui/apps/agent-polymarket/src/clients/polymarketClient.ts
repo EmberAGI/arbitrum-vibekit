@@ -98,6 +98,22 @@ export interface UserPosition {
 }
 
 /**
+ * Trading history item from Polymarket Data API.
+ */
+export interface TradingHistoryItem {
+  id: string;
+  market: string;
+  marketTitle: string;
+  side: string;
+  outcome: string;
+  size: string;
+  price: string;
+  matchTime: string;
+  transactionHash?: string;
+  usdcSize?: string;
+}
+
+/**
  * Full adapter interface for cross-arbitrage trading.
  */
 export interface IPolymarketAdapter {
@@ -105,8 +121,10 @@ export interface IPolymarketAdapter {
   getMarkets(request: {
     chainIds: string[];
     status?: 'active' | 'resolved';  // Filter by market status
+    offset?: number;  // Pagination offset for rotating through markets
   }): Promise<GetMarketsResponse>;
   getPositions(walletAddress: string): Promise<{ positions: UserPosition[] }>;
+  getTradingHistoryWithDetails(walletAddress: string, options?: { limit?: number }): Promise<TradingHistoryItem[]>;
 
   // Trading - unified order placement for buy/sell YES/NO
   placeOrder(request: PlaceOrderRequest): Promise<PlaceOrderResponse>;
@@ -262,12 +280,17 @@ class AgentPolymarketAdapter implements IPolymarketAdapter {
   async getMarkets(request: {
     chainIds: string[];
     status?: 'active' | 'resolved';
+    offset?: number;
   }): Promise<GetMarketsResponse> {
     if (!request.chainIds.includes('137')) return { markets: [] };
 
     try {
-      // Build URL with status filter
-      let url = `${this.gammaApiUrl}/markets?limit=100`;
+      // Get offset from request or env (with rotation)
+      const baseOffset = request.offset ?? parseInt(process.env.POLY_MARKET_OFFSET || '0', 10);
+      const limit = parseInt(process.env.POLY_MARKET_FETCH_LIMIT || '100', 10);
+
+      // Build URL with status filter and offset
+      let url = `${this.gammaApiUrl}/markets?limit=${limit}&offset=${baseOffset}`;
       if (request.status === 'active') {
         url += '&closed=false&active=true';
       } else if (request.status === 'resolved') {
@@ -276,6 +299,8 @@ class AgentPolymarketAdapter implements IPolymarketAdapter {
         // Default to active markets only
         url += '&closed=false&active=true';
       }
+
+      logInfo('Fetching markets from Gamma API', { url: url.substring(0, 80), offset: baseOffset, limit });
 
       const response = await fetch(url);
       if (!response.ok) throw new Error(`Gamma API error: ${response.status}`);
@@ -1042,5 +1067,72 @@ export async function fetchMarketPrices(
       yesMidpoint: 0.5,
       noMidpoint: 0.5,
     };
+  }
+}
+
+// ============================================================================
+// Order Book Info (includes min_order_size)
+// ============================================================================
+
+/**
+ * Order book information from CLOB API.
+ */
+export interface OrderBookInfo {
+  /** Minimum order size in shares (e.g., "5") */
+  minOrderSize: number;
+  /** Tick size for price increments (e.g., "0.001") */
+  tickSize: number;
+  /** Token ID */
+  assetId: string;
+}
+
+/**
+ * Fetch order book info from CLOB API.
+ * This includes min_order_size which is required for order validation.
+ *
+ * @param tokenId - The token ID (YES or NO token)
+ * @returns Order book info with min_order_size, or default values on error
+ */
+export async function fetchOrderBookInfo(tokenId: string): Promise<OrderBookInfo> {
+  const clobUrl = process.env['POLYMARKET_CLOB_API'] ?? 'https://clob.polymarket.com';
+
+  try {
+    const response = await fetch(`${clobUrl}/book?token_id=${tokenId}`);
+
+    if (!response.ok) {
+      logInfo('Failed to fetch order book info', {
+        tokenId: tokenId.substring(0, 20) + '...',
+        status: response.status,
+      });
+      return { minOrderSize: 5, tickSize: 0.001, assetId: tokenId };
+    }
+
+    const data = (await response.json()) as {
+      min_order_size?: string | null;
+      tick_size?: string | null;
+      asset_id?: string | null;
+    };
+
+    const minOrderSize = data.min_order_size ? parseFloat(data.min_order_size) : 5;
+    const tickSize = data.tick_size ? parseFloat(data.tick_size) : 0.001;
+
+    logInfo('Fetched order book info', {
+      tokenId: tokenId.substring(0, 20) + '...',
+      minOrderSize,
+      tickSize,
+    });
+
+    return {
+      minOrderSize: isNaN(minOrderSize) ? 5 : minOrderSize,
+      tickSize: isNaN(tickSize) ? 0.001 : tickSize,
+      assetId: data.asset_id ?? tokenId,
+    };
+  } catch (error) {
+    logInfo('Error fetching order book info', {
+      tokenId: tokenId.substring(0, 20) + '...',
+      error: String(error),
+    });
+    // Return safe defaults
+    return { minOrderSize: 5, tickSize: 0.001, assetId: tokenId };
   }
 }

@@ -52,29 +52,15 @@ export async function collectApprovalAmountNode(
   state: PolymarketState,
   config: CopilotKitConfig,
 ): Promise<Command<PolymarketUpdate>> {
-  console.log('[APPROVAL FLOW] collectApprovalAmount node ENTERED');
-  console.log('[APPROVAL FLOW] State.view keys:', Object.keys(state.view || {}));
-  console.log('[APPROVAL FLOW] State.view:', JSON.stringify(state.view, null, 2));
-
   const walletAddress = state.private.walletAddress;
   const rpcUrl = process.env.POLYGON_RPC_URL || 'https://polygon.llamarpc.com';
   let approvalAmount = state.view.requestedApprovalAmount;
-  let userWalletAddress = state.private.userWalletAddress; // Initialize from state
-
-  console.log('[APPROVAL FLOW] Extracted values:', {
-    hasWalletAddress: !!walletAddress,
-    approvalAmount,
-    hasApprovalAmount: !!approvalAmount,
-    needsUsdcPermit: state.view.needsUsdcPermitSignature,
-    needsCtfApproval: state.view.needsCtfApprovalTransaction,
-  });
+  let userWalletAddress = state.private.userWalletAddress;
 
   logInfo('🔍 collectApprovalAmount node reached', {
-    hasWalletAddress: !!walletAddress,
     hasApprovalAmount: !!approvalAmount,
-    approvalAmount, // Add actual value
+    approvalAmount,
     needsUsdcPermit: state.view.needsUsdcPermitSignature,
-    needsCtfApproval: state.view.needsCtfApprovalTransaction,
   });
 
   if (!walletAddress) {
@@ -93,7 +79,6 @@ export async function collectApprovalAmountNode(
   // Step 1: Collect USDC Amount
   // ==========================================
   if (!approvalAmount) {
-    console.log('[APPROVAL FLOW] No approval amount found - triggering interrupt');
     logInfo('💤 Waiting for user to input USDC approval amount');
 
     // Emit state before interrupt
@@ -117,18 +102,15 @@ export async function collectApprovalAmountNode(
     };
 
     // Interrupt and wait for user input
-    console.log('[APPROVAL FLOW] Calling interrupt() - waiting for user input...');
     const incoming: unknown = await interrupt(request);
-    console.log('[APPROVAL FLOW] Interrupt resolved! Received:', incoming);
 
     // Parse JSON string from frontend
     let inputToParse: unknown = incoming;
     if (typeof incoming === 'string') {
       try {
         inputToParse = JSON.parse(incoming);
-        console.log('[APPROVAL FLOW] Parsed JSON:', inputToParse);
-      } catch (error) {
-        console.error('[APPROVAL FLOW] Failed to parse interrupt JSON:', error);
+      } catch {
+        logInfo('❌ Failed to parse interrupt JSON');
         return new Command({
           update: {
             view: {
@@ -143,7 +125,7 @@ export async function collectApprovalAmountNode(
     // Validate with Zod
     const parsed = ApprovalAmountSchema.safeParse(inputToParse);
     if (!parsed.success) {
-      console.error('[APPROVAL FLOW] Validation failed:', parsed.error);
+      logInfo('❌ Validation failed', { error: parsed.error.message });
       return new Command({
         update: {
           view: {
@@ -159,17 +141,14 @@ export async function collectApprovalAmountNode(
     const userAddress = parsed.data.userWalletAddress;
 
     if (userAddress) {
-      logInfo('✅ User wallet address received from frontend', { address: userAddress });
+      logInfo('✅ User wallet address received', { address: userAddress.slice(0, 10) + '...' });
       userWalletAddress = userAddress;
     } else {
-      logInfo('⚠️ No user wallet address received from frontend - permit signature may fail');
+      logInfo('⚠️ No user wallet address received - permit signature may fail');
     }
-
-    console.log('[APPROVAL FLOW] Validated approval amount:', approvalAmount);
-    console.log('[APPROVAL FLOW] Validated user wallet:', userWalletAddress);
   }
 
-  console.log('[APPROVAL FLOW] Approval amount FOUND:', approvalAmount);
+  logInfo('✅ Approval amount confirmed', { amount: approvalAmount });
 
   // Validate the amount is a valid number
   const amountNum = parseFloat(approvalAmount);
@@ -239,18 +218,17 @@ export async function collectApprovalAmountNode(
       };
 
       // Interrupt and wait for user signature
-      console.log('[APPROVAL FLOW] Calling interrupt() - waiting for USDC permit signature...');
+      console.log('[APPROVAL FLOW] Waiting for USDC permit signature...');
       const incoming: unknown = await interrupt(request);
-      console.log('[APPROVAL FLOW] USDC permit interrupt resolved! Received:', incoming);
+      console.log('[APPROVAL FLOW] Permit interrupt resolved');
 
       // Parse JSON string from frontend
       let inputToParse: unknown = incoming;
       if (typeof incoming === 'string') {
         try {
           inputToParse = JSON.parse(incoming);
-          console.log('[APPROVAL FLOW] Parsed USDC permit JSON:', inputToParse);
         } catch (error) {
-          console.error('[APPROVAL FLOW] Failed to parse permit interrupt JSON:', error);
+          console.error('[APPROVAL FLOW] Failed to parse permit JSON:', error);
           return new Command({
             update: {
               view: {
