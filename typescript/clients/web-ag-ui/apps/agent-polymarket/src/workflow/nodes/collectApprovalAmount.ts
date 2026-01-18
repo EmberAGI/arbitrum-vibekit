@@ -323,11 +323,13 @@ export async function collectApprovalAmountNode(
 
         if (!receipt || receipt.status !== 1) {
           logInfo('❌ USDC permit transaction failed');
+          console.log('[APPROVAL FLOW] Tx failed, going to summarize with command: idle');
           return new Command({
             update: {
               view: {
                 haltReason: 'USDC permit transaction failed. Please try again.',
                 usdcPermitSignature: undefined,
+                command: 'idle', // Keep isHired=true even on error
               },
             },
             goto: 'summarize',
@@ -335,6 +337,7 @@ export async function collectApprovalAmountNode(
         }
 
         logInfo('✅ USDC permit confirmed on-chain');
+        console.log('[APPROVAL FLOW] Permit confirmed, returning to checkApprovals');
 
         // Clear USDC permit state and continue to check CTF
         return new Command({
@@ -351,12 +354,14 @@ export async function collectApprovalAmountNode(
         logInfo('❌ Failed to submit USDC permit', {
           error: error instanceof Error ? error.message : String(error),
         });
+        console.log('[APPROVAL FLOW] Tx error, going to summarize with command: idle');
 
         return new Command({
           update: {
             view: {
               haltReason: `Failed to submit USDC permit: ${error instanceof Error ? error.message : String(error)}`,
               usdcPermitSignature: undefined,
+              command: 'idle', // Keep isHired=true even on error
             },
           },
           goto: 'summarize',
@@ -396,6 +401,7 @@ export async function collectApprovalAmountNode(
             view: {
               haltReason: 'USDC permit transaction failed. Please try again.',
               usdcPermitSignature: undefined,
+              command: 'idle', // Keep isHired=true even on error
             },
           },
           goto: 'summarize',
@@ -425,6 +431,7 @@ export async function collectApprovalAmountNode(
           view: {
             haltReason: `Failed to submit USDC permit: ${error instanceof Error ? error.message : String(error)}`,
             usdcPermitSignature: undefined,
+            command: 'idle', // Keep isHired=true even on error
           },
         },
         goto: 'summarize',
@@ -451,6 +458,7 @@ export async function collectApprovalAmountNode(
           haltReason: 'USDC approval not confirmed on-chain. Please try again.',
           approvalStatus: finalStatus,
           requestedApprovalAmount: undefined,
+          command: 'idle', // Keep isHired=true even on error
         },
       },
       goto: 'summarize',

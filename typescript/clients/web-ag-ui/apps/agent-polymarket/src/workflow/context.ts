@@ -428,7 +428,9 @@ const mergeViewState = (
   if (!right) return left;
 
   const nextTransactions = mergeAppendOrReplace(left.transactionHistory, right.transactionHistory);
-  const nextTradingHistory = mergeAppendOrReplace(left.tradingHistory, right.tradingHistory);
+  // tradingHistory comes from API (complete list), so replace instead of append
+  // Only use mergeAppendOrReplace for agent-generated data like transactionHistory and events
+  const nextTradingHistory = right.tradingHistory ?? left.tradingHistory;
   const nextEvents = mergeAppendOrReplace(left.events, right.events);
 
   const nextMetrics: PolymarketMetrics = {

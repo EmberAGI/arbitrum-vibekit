@@ -179,7 +179,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const settings = state?.settings ?? defaultSettings;
 
   // Derived state
-  const isHired = view.command === 'hire' || view.command === 'run' || view.command === 'cycle';
+  // isHired should be true for any command except 'fire' and undefined (initial state)
+  // This is a temporary fix - ideally we'd use lifecycleState from agent-specific view
+  // Commands that indicate hired: hire, run, cycle, sync, updateApproval
+  // Commands that indicate NOT hired: fire, undefined
+  const isHired = view.command !== undefined && view.command !== 'fire';
   const isActive = view.command !== undefined && view.command !== 'idle' && view.command !== 'fire';
 
   const runSync = useCallback(() => {

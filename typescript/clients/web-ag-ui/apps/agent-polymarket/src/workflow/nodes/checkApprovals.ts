@@ -217,6 +217,7 @@ export async function checkApprovalsNode(state: PolymarketState): Promise<Comman
   // end here instead of going to pollCycle
   if (state.view.command === 'updateApproval') {
     console.log('[checkApprovals] This was an approval update, ending instead of going to pollCycle');
+    console.log('[checkApprovals] Setting command: idle to maintain isHired=true');
     logInfo('✅ Approval update complete - not triggering poll cycle');
     return new Command({
       update: {
@@ -224,7 +225,7 @@ export async function checkApprovalsNode(state: PolymarketState): Promise<Comman
           approvalStatus: status,
           pendingApprovalTransactions: undefined,
           haltReason: undefined,
-          command: undefined, // Clear command so it doesn't affect next cycle
+          command: 'idle', // Use 'idle' to keep isHired=true but indicate no active command
           forceApprovalUpdate: undefined,
           requestedApprovalAmount: undefined,
         },
