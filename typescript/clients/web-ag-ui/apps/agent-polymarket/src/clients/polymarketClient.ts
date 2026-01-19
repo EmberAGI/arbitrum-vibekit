@@ -12,7 +12,9 @@ import {
   Side,
   type ApiKeyCreds,
 } from '@polymarket/clob-client';
+import { ethers } from 'ethers';
 import { logInfo } from '../workflow/context.js';
+import { POLYGON_CONTRACTS, CONTRACT_ABIS } from '../constants/contracts.js';
 
 // ============================================================================
 // Types
@@ -142,12 +144,28 @@ export interface IPolymarketAdapter {
   }>;
 
   // Market resolution and redemption
-  getMarketResolution(marketId: string): Promise<{
+  /**
+   * Check if a market has resolved and get the winning outcome.
+   *
+   * @param tokenId - The CLOB token ID (decimal string like '38429637...')
+   */
+  getMarketResolution(tokenId: string): Promise<{
     resolved: boolean;
     winningOutcome?: 'yes' | 'no';
     resolutionDate?: string;
   }>;
-  redeemPosition(tokenId: string): Promise<{
+
+  /**
+   * Redeem a winning position for USDC after market resolution.
+   *
+   * @param tokenId - The CLOB token ID (decimal string like '38429637...')
+   * @param outcomeId - The outcome held ('yes' or 'no')
+   * @returns Transaction result with hash on success
+   */
+  redeemPosition(
+    tokenId: string,
+    outcomeId: 'yes' | 'no',
+  ): Promise<{
     success: boolean;
     txHash?: string;
     error?: string;
@@ -820,17 +838,21 @@ class AgentPolymarketAdapter implements IPolymarketAdapter {
 
   /**
    * Check if a market has resolved and get the winning outcome.
-   * Queries Gamma API to check market resolution status.
+   * Uses the Gamma API clob_token_ids parameter for accurate lookup.
+   *
+   * @param tokenId - The CLOB token ID (decimal string like '38429637...')
    */
-  async getMarketResolution(marketId: string): Promise<{
+  async getMarketResolution(tokenId: string): Promise<{
     resolved: boolean;
     winningOutcome?: 'yes' | 'no';
     resolutionDate?: string;
   }> {
     try {
-      const url = `${this.gammaApiUrl}/markets/${marketId}`;
+      // Use clob_token_ids for reliable market lookup
+      // This returns the exact market for the given token
+      const url = `${this.gammaApiUrl}/markets?clob_token_ids=${tokenId}`;
 
-      logInfo('Fetching market resolution', { marketId: marketId.substring(0, 16) });
+      logInfo('Fetching market resolution', { tokenId: tokenId.substring(0, 20) });
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -838,21 +860,32 @@ class AgentPolymarketAdapter implements IPolymarketAdapter {
         return { resolved: false };
       }
 
-      const data = (await response.json()) as {
-        closed?: boolean;
-        outcome?: string;
-        closed_time?: string;
-      };
+      const rawData = await response.json();
+      const data = Array.isArray(rawData) ? rawData[0] : rawData;
+
+      if (!data) {
+        logInfo('No market found for token ID', { tokenId: tokenId.substring(0, 20) });
+        return { resolved: false };
+      }
 
       // Market is resolved if it's closed and has an outcome
       const resolved = data.closed === true && !!data.outcome;
 
       if (!resolved) {
+        logInfo('Market not yet resolved', {
+          market: data.question?.substring(0, 40),
+          closed: data.closed,
+        });
         return { resolved: false };
       }
 
       // Parse outcome (usually '0' for NO, '1' for YES)
       const winningOutcome = data.outcome === '1' ? ('yes' as const) : ('no' as const);
+
+      logInfo('Market resolved', {
+        market: data.question?.substring(0, 40),
+        winningOutcome,
+      });
 
       return {
         resolved: true,
@@ -866,33 +899,170 @@ class AgentPolymarketAdapter implements IPolymarketAdapter {
   }
 
   /**
-   * Redeem a winning position token for USDC.
-   * Calls the CTF Exchange contract to redeem position.
+   * Redeem a winning position for USDC after market resolution.
+   *
+   * Calls the CTF Contract's redeemPositions function directly.
+   * Reference: registry/polymarket-plugin/adapter.ts redeem function
+   *
+   * @param tokenId - The CLOB token ID (decimal string like '38429637...')
+   * @param outcomeId - The outcome held ('yes' or 'no')
    */
-  async redeemPosition(tokenId: string): Promise<{
+  async redeemPosition(
+    tokenId: string,
+    outcomeId: 'yes' | 'no',
+  ): Promise<{
     success: boolean;
     txHash?: string;
     error?: string;
   }> {
     try {
-      const clob = await this.getClobClient();
+      logInfo('Redeeming position', {
+        tokenId: tokenId.substring(0, 20),
+        outcomeId,
+      });
 
-      logInfo('Redeeming position', { tokenId: tokenId.substring(0, 16) });
+      // 1. Fetch market data using clob_token_ids for reliable lookup
+      const url = `${this.gammaApiUrl}/markets?clob_token_ids=${tokenId}`;
 
-      // The CLOB client doesn't directly support redemption
-      // This would require direct contract interaction via ethers
-      // For now, we'll return a placeholder that indicates the feature needs implementation
+      const response = await fetch(url);
 
-      logInfo('⚠️ Redemption requires direct contract interaction');
-      return {
-        success: false,
-        error: 'Redemption not yet implemented - requires direct CTF Exchange contract call',
+      if (!response.ok) {
+        return {
+          success: false,
+          error: `Failed to fetch market data: ${response.status}`,
+        };
+      }
+
+      const rawData = await response.json();
+      const market = (Array.isArray(rawData) ? rawData[0] : rawData) as GammaMarket & {
+        conditionId?: string; // camelCase from Gamma API
       };
+
+      if (!market) {
+        return {
+          success: false,
+          error: `Market not found for token ID: ${tokenId.substring(0, 20)}`,
+        };
+      }
+
+      // 2. Verify market is closed (resolved)
+      if (!market.closed) {
+        return {
+          success: false,
+          error: 'Market is not resolved yet. Cannot redeem until market closes.',
+        };
+      }
+
+      // 3. Determine which contract to use based on negRisk flag
+      // negRisk markets use NEG_RISK_ADAPTER, regular markets use CTF_EXCHANGE
+      const operatorAddress = market.negRisk
+        ? POLYGON_CONTRACTS.NEG_RISK_ADAPTER
+        : POLYGON_CONTRACTS.CTF_EXCHANGE;
+
+      logInfo('Redemption contract selected', {
+        negRisk: market.negRisk,
+        operator: operatorAddress.substring(0, 10) + '...',
+      });
+
+      // 4. Determine index sets based on outcome
+      // For binary markets: YES = 1, NO = 2
+      const indexSets = outcomeId === 'yes' ? [1] : [2];
+
+      // 5. Get condition ID from market data - this is required for the contract call
+      // Gamma API returns conditionId (camelCase)
+      const conditionId = market.conditionId ?? market.id;
+      if (!conditionId) {
+        return {
+          success: false,
+          error: 'Market data missing conditionId - cannot redeem',
+        };
+      }
+
+      // 6. Set up provider and wallet
+      const rpcUrl = process.env['POLYGON_RPC_URL'] ?? 'https://polygon-rpc.com';
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
+      const wallet = new ethers.Wallet(this.signer.privateKey, provider);
+
+      // 7. Create CTF contract instance
+      const ctfContract = new ethers.Contract(
+        POLYGON_CONTRACTS.CTF_CONTRACT,
+        CONTRACT_ABIS.CTF_CONTRACT,
+        wallet,
+      );
+
+      // 8. Check if we have approval for the operator
+      const isApproved = await ctfContract.isApprovedForAll(
+        wallet.address,
+        operatorAddress,
+      );
+
+      if (!isApproved) {
+        logInfo('Setting approval for redemption operator', {
+          operator: operatorAddress.substring(0, 10) + '...',
+        });
+
+        // Set approval for the operator
+        const approvalTx = await ctfContract.setApprovalForAll(operatorAddress, true);
+        const approvalReceipt = await approvalTx.wait();
+
+        if (!approvalReceipt || approvalReceipt.status !== 1) {
+          return {
+            success: false,
+            error: 'Failed to set approval for redemption',
+          };
+        }
+
+        logInfo('✅ Approval set for redemption operator', {
+          txHash: approvalTx.hash,
+        });
+      }
+
+      // 9. Prepare conditionId as bytes32
+      // The conditionId might be a hex string that needs padding
+      const conditionIdBytes32 = conditionId.startsWith('0x')
+        ? ethers.zeroPadValue(conditionId, 32)
+        : ethers.zeroPadValue(`0x${conditionId}`, 32);
+
+      // 10. Call redeemPositions
+      logInfo('Calling redeemPositions', {
+        collateral: POLYGON_CONTRACTS.USDC_E.substring(0, 10) + '...',
+        conditionId: conditionIdBytes32.substring(0, 18) + '...',
+        indexSets,
+      });
+
+      const tx = await ctfContract.redeemPositions(
+        POLYGON_CONTRACTS.USDC_E, // collateralToken
+        ethers.ZeroHash, // parentCollectionId = bytes32(0)
+        conditionIdBytes32, // conditionId
+        indexSets, // indexSets
+      );
+
+      logInfo('Redemption transaction sent', { hash: tx.hash });
+
+      const receipt = await tx.wait();
+
+      if (receipt && receipt.status === 1) {
+        logInfo('✅ Position redeemed successfully', {
+          txHash: tx.hash,
+          gasUsed: receipt.gasUsed.toString(),
+        });
+
+        return {
+          success: true,
+          txHash: tx.hash,
+        };
+      } else {
+        return {
+          success: false,
+          error: 'Redemption transaction failed',
+        };
+      }
     } catch (error) {
-      logInfo('Error redeeming position', { error: String(error) });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logInfo('Error redeeming position', { error: errorMessage });
       return {
         success: false,
-        error: String(error),
+        error: errorMessage,
       };
     }
   }

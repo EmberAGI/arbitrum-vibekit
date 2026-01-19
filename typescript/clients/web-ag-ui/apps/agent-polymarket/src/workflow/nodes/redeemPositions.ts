@@ -57,7 +57,8 @@ export async function redeemPositionsNode(
     // Check each position for market resolution
     for (const position of positions) {
       try {
-        const resolution = await adapter.getMarketResolution(position.marketId);
+        // Use tokenId for reliable API lookup (marketId is conditionId which doesn't work well with Gamma API)
+        const resolution = await adapter.getMarketResolution(position.tokenId);
 
         if (!resolution.resolved) {
           // Market not resolved yet
@@ -95,8 +96,8 @@ export async function redeemPositionsNode(
 
         totalRedemptionValue += redemptionValue;
 
-        // Attempt to redeem (note: requires contract implementation)
-        const result = await adapter.redeemPosition(position.tokenId);
+        // Attempt to redeem via contract call (use tokenId for reliable lookup)
+        const result = await adapter.redeemPosition(position.tokenId, position.side);
 
         if (result.success) {
           // Redemption successful - create transaction record

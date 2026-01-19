@@ -28,11 +28,21 @@ export const POLYGON_CONTRACTS = {
 export const CONTRACT_ABIS = {
   /**
    * CTF Contract (ERC-1155)
-   * Used for: Checking and setting approval for trading position tokens
+   * Used for: Checking and setting approval for trading position tokens,
+   * and redeeming winning positions after market resolution.
+   *
+   * redeemPositions signature:
+   *   function redeemPositions(
+   *     address collateralToken,    // USDC address
+   *     bytes32 parentCollectionId, // bytes32(0) for root
+   *     bytes32 conditionId,        // Market condition ID
+   *     uint256[] indexSets         // [1] for YES, [2] for NO, [1, 2] for both
+   *   )
    */
   CTF_CONTRACT: [
     'function isApprovedForAll(address owner, address operator) view returns (bool)',
     'function setApprovalForAll(address operator, bool approved)',
+    'function redeemPositions(address collateralToken, bytes32 parentCollectionId, bytes32 conditionId, uint256[] indexSets)',
   ],
 
   /**

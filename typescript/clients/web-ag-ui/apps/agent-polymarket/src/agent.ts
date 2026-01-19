@@ -92,6 +92,7 @@ function resolvePostSummarize(
 
   // Check for redemptions on every 10th cycle (less frequent)
   if (redeemEnabled && state.view.metrics.iteration % 10 === 0) {
+    console.log(`[Cycle ${state.view.metrics.iteration}] 🔄 Triggering redemption check`);
     return 'redeemPositions';
   }
 
