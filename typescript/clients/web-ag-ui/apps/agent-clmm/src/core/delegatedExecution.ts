@@ -233,18 +233,60 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
       modes: plan.modes,
       executions: plan.executions,
     });
-    const estimatedGas = typeof simulation.request.gas === 'bigint' ? simulation.request.gas : undefined;
-    const gas = estimatedGas ? (estimatedGas * 12n) / 10n : undefined;
+    const estimatedGasFromSimulation =
+      typeof simulation.request.gas === 'bigint' ? simulation.request.gas : undefined;
+
+    const data = DelegationManager.encode.redeemDelegations({
+      delegations: plan.permissionContexts,
+      modes: plan.modes,
+      executions: plan.executions,
+    });
+
+    let estimatedGasFromNode: bigint | undefined;
+    try {
+      estimatedGasFromNode = await params.clients.public.estimateGas({
+        account: params.clients.wallet.account,
+        to: params.delegationBundle.delegationManager,
+        data,
+        value: 0n,
+      });
+    } catch (error) {
+      logInfo(
+        'Delegated execution gas estimate failed; falling back to simulation estimate',
+        {
+          error: error instanceof Error ? error.message : String(error),
+          planIndex,
+        },
+      );
+    }
+
+    const baseEstimate =
+      estimatedGasFromNode && estimatedGasFromSimulation
+        ? estimatedGasFromNode > estimatedGasFromSimulation
+          ? estimatedGasFromNode
+          : estimatedGasFromSimulation
+        : estimatedGasFromNode ?? estimatedGasFromSimulation;
+    const gasFloor = 200_000n;
+    const bufferedGas = baseEstimate ? (baseEstimate * 3n) / 2n : undefined;
+    const gas = bufferedGas ? (bufferedGas > gasFloor ? bufferedGas : gasFloor) : gasFloor;
+
+    logInfo(
+      'Delegated execution gas selected',
+      {
+        planIndex,
+        gasFloor: gasFloor.toString(),
+        estimateFromNode: estimatedGasFromNode?.toString(),
+        estimateFromSimulation: estimatedGasFromSimulation?.toString(),
+        selectedGas: gas.toString(),
+      },
+      { detailed: true },
+    );
 
     const txHash = await params.clients.wallet.sendTransaction({
       account: params.clients.wallet.account,
       chain: params.clients.wallet.chain,
       to: params.delegationBundle.delegationManager,
-      data: DelegationManager.encode.redeemDelegations({
-        delegations: plan.permissionContexts,
-        modes: plan.modes,
-        executions: plan.executions,
-      }),
+      data,
       value: 0n,
       ...(gas ? { gas } : {}),
     });

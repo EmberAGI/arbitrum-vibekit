@@ -9,41 +9,32 @@ import { ShallowMemorySaver } from '../workflow/shallowMemorySaver.js';
 export type LangGraphCheckpointerMode = 'shallow' | 'full';
 export type LangGraphDurability = 'async' | 'exit' | 'sync';
 
-type LangGraphDefaults = {
-  durability: LangGraphDurability;
-  checkpointer: LangGraphCheckpointerMode;
-};
-
 type ServiceConfig = {
-  langgraph?: {
-    durability?: LangGraphDurability;
-    checkpointer?: LangGraphCheckpointerMode;
+  langgraph: {
+    durability: LangGraphDurability;
+    checkpointer: LangGraphCheckpointerMode;
   };
 };
 
+type LangGraphDefaults = ServiceConfig['langgraph'];
+
 const ServiceConfigSchema = z.object({
-  langgraph: z
-    .object({
-      durability: z.enum(['async', 'exit', 'sync']).optional(),
-      checkpointer: z.enum(['shallow', 'full']).optional(),
-    })
-    .optional(),
+  langgraph: z.object({
+    durability: z.enum(['async', 'exit', 'sync']),
+    checkpointer: z.enum(['shallow', 'full']),
+  }),
 });
 
-const DEFAULT_LANGGRAPH: LangGraphDefaults = {
-  durability: 'exit',
-  checkpointer: 'shallow',
-};
-
-let cachedDefaults: LangGraphDefaults | undefined;
+let cachedDefaults: ServiceConfig['langgraph'] | undefined;
 
 function findServiceConfigPath(): string | undefined {
   const explicitDir = process.env['AGENT_CONFIG_DIR'];
   if (explicitDir) {
     const candidate = join(explicitDir, 'service.json');
-    if (existsSync(candidate)) {
-      return candidate;
+    if (!existsSync(candidate)) {
+      throw new Error(`AGENT_CONFIG_DIR is set but service.json was not found at ${candidate}`);
     }
+    return candidate;
   }
 
   let current = process.cwd();
@@ -60,10 +51,10 @@ function findServiceConfigPath(): string | undefined {
   }
 }
 
-function loadServiceConfig(): ServiceConfig | undefined {
+function loadServiceConfig(): ServiceConfig {
   const configPath = findServiceConfigPath();
   if (!configPath) {
-    return undefined;
+    throw new Error('LangGraph service config not found (expected config/service.json).');
   }
 
   const raw = readFileSync(configPath, 'utf8');
@@ -78,8 +69,8 @@ export function resolveLangGraphDefaults(): LangGraphDefaults {
   if (!cachedDefaults) {
     const config = loadServiceConfig();
     cachedDefaults = {
-      durability: config?.langgraph?.durability ?? DEFAULT_LANGGRAPH.durability,
-      checkpointer: config?.langgraph?.checkpointer ?? DEFAULT_LANGGRAPH.checkpointer,
+      durability: config.langgraph.durability,
+      checkpointer: config.langgraph.checkpointer,
     };
   }
   return cachedDefaults;
