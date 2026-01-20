@@ -86,7 +86,7 @@ export function RelationshipsTable({ relationships }: RelationshipsTableProps) {
     } else if (type === 'MUTUAL_EXCLUSION') {
       // P(A) + P(B) should be <= 1.00
       const sum = parentMarket.yesPrice + childMarket.yesPrice;
-      const isValid = sum <= 1.01;
+      const isValid = sum <= 1.005;
       return {
         valid: isValid,
         icon: isValid ? (

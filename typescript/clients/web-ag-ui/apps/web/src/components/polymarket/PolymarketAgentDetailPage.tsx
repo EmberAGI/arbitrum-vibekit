@@ -1099,7 +1099,14 @@ function HistoryTab({ transactionHistory, tradingHistory }: HistoryTabProps) {
                   <div className="text-xs text-gray-500 mt-1 font-mono">Order: {tx.orderId}</div>
                 )}
                 {tx.error && (
-                  <div className="text-xs text-red-400 mt-2 p-2 bg-red-900/20 rounded">{tx.error}</div>
+                  <div className="text-xs text-red-400 mt-2 p-2 bg-red-900/20 rounded">
+                    {/* Clean and truncate error messages */}
+                    {tx.error.includes('<!DOCTYPE') || tx.error.includes('<html')
+                      ? 'API error - likely rate limited or blocked'
+                      : tx.error.length > 100
+                        ? tx.error.substring(0, 100) + '...'
+                        : tx.error}
+                  </div>
                 )}
                 <div className="text-xs text-gray-500 mt-2">{new Date(tx.timestamp).toLocaleString()}</div>
               </div>

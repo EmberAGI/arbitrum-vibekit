@@ -479,11 +479,12 @@ async function detectRelationshipsByLLMBatch(markets: Market[]): Promise<MarketR
 
   try {
     // Initialize OpenAI client with timeout
+    // Increased timeout to 120s for large batch analysis (30 markets = 435 pairs)
     const llm = new ChatOpenAI({
       modelName: model,
       temperature: 0, // Deterministic for financial decisions
       maxTokens: 16000, // Large enough for batch responses
-      timeout: 60000, // 60 second timeout
+      timeout: 120000, // 120 second timeout (increased from 60s)
     });
 
     // Build batch prompt
@@ -497,11 +498,12 @@ async function detectRelationshipsByLLMBatch(markets: Market[]): Promise<MarketR
     });
 
     // Call LLM with structured output and timeout wrapper
+    // Timeout increased to 120s for large batch analysis
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => {
         const elapsed = Date.now() - startTime;
-        reject(new Error(`LLM request timed out after ${elapsed}ms (60s limit)`));
-      }, 60000);
+        reject(new Error(`LLM request timed out after ${elapsed}ms (120s limit)`));
+      }, 120000);
     });
 
     const llmPromise = llm.withStructuredOutput(RelationshipBatchSchema).invoke([
@@ -516,11 +518,11 @@ async function detectRelationshipsByLLMBatch(markets: Market[]): Promise<MarketR
     ]);
 
     console.log('🤖 [LLM] Sending request to OpenAI...');
-    console.log('🤖 [LLM] Waiting for response (timeout: 60s)...');
+    console.log('🤖 [LLM] Waiting for response (timeout: 120s)...');
 
     logInfo('Waiting for LLM response...', {
       status: 'in-progress',
-      timeoutSeconds: 60,
+      timeoutSeconds: 120,
     });
 
     const result = await Promise.race([llmPromise, timeoutPromise]);
@@ -638,8 +640,8 @@ export async function detectMarketRelationships(
   });
 
   if (useLLM) {
-    // Limit markets for LLM to avoid timeout (default: 10 markets = 45 pairs)
-    const maxMarketsForLLM = parseInt(process.env.POLY_LLM_MAX_MARKETS ?? '10', 10);
+    // Limit markets for LLM to avoid timeout (default: 15 markets = 105 pairs)
+    const maxMarketsForLLM = parseInt(process.env.POLY_LLM_MAX_MARKETS ?? '15', 10);
     const marketsForLLM = markets.slice(0, maxMarketsForLLM);
 
     if (markets.length > maxMarketsForLLM) {
@@ -658,42 +660,77 @@ export async function detectMarketRelationships(
       byType: countByType(relationships),
     });
 
+    // FALLBACK: If LLM returns no relationships (timeout/error), try pattern detection
+    if (relationships.length === 0) {
+      console.log('\n' + '⚠'.repeat(40));
+      console.log('⚠️ [LLM FALLBACK] LLM returned no relationships, trying pattern detection...');
+      console.log('⚠'.repeat(40) + '\n');
+
+      logInfo('LLM returned no relationships, falling back to pattern detection', {
+        llmAttempted: true,
+        marketCount: marketsForLLM.length,
+      });
+
+      // Fall back to pattern matching
+      const patternRelationships = detectRelationshipsWithPatterns(marketsForLLM);
+
+      if (patternRelationships.length > 0) {
+        logInfo('Pattern fallback found relationships', {
+          detected: patternRelationships.length,
+          byType: countByType(patternRelationships),
+        });
+      }
+
+      return patternRelationships;
+    }
+
     return relationships;
   } else {
     // Fall back to pattern matching (nested loop, but no API calls)
-    const relationships: MarketRelationship[] = [];
-    const checked = new Set<string>();
+    return detectRelationshipsWithPatterns(markets);
+  }
+}
 
-    for (let i = 0; i < markets.length; i++) {
-      for (let j = i + 1; j < markets.length; j++) {
-        const market1 = markets[i]!;
-        const market2 = markets[j]!;
+/**
+ * Detect relationships using pattern matching only.
+ * This is a fast, deterministic fallback that doesn't require API calls.
+ *
+ * @param markets - List of markets to analyze
+ * @returns List of detected relationships
+ */
+function detectRelationshipsWithPatterns(markets: Market[]): MarketRelationship[] {
+  const relationships: MarketRelationship[] = [];
+  const checked = new Set<string>();
 
-        const pairKey = `${market1.id}-${market2.id}`;
-        if (checked.has(pairKey)) continue;
-        checked.add(pairKey);
+  for (let i = 0; i < markets.length; i++) {
+    for (let j = i + 1; j < markets.length; j++) {
+      const market1 = markets[i]!;
+      const market2 = markets[j]!;
 
-        const relationship = detectRelationshipsByPattern(market1, market2);
+      const pairKey = `${market1.id}-${market2.id}`;
+      if (checked.has(pairKey)) continue;
+      checked.add(pairKey);
 
-        if (relationship) {
-          relationships.push(relationship);
-          logInfo('Detected relationship', {
-            type: relationship.type,
-            parent: relationship.parentMarket.title.substring(0, 40),
-            child: relationship.childMarket.title.substring(0, 40),
-            confidence: relationship.confidence,
-          });
-        }
+      const relationship = detectRelationshipsByPattern(market1, market2);
+
+      if (relationship) {
+        relationships.push(relationship);
+        logInfo('Detected relationship (pattern)', {
+          type: relationship.type,
+          parent: relationship.parentMarket.title.substring(0, 40),
+          child: relationship.childMarket.title.substring(0, 40),
+          confidence: relationship.confidence,
+        });
       }
     }
-
-    logInfo('Pattern-based detection complete', {
-      detected: relationships.length,
-      byType: countByType(relationships),
-    });
-
-    return relationships;
   }
+
+  logInfo('Pattern-based detection complete', {
+    detected: relationships.length,
+    byType: countByType(relationships),
+  });
+
+  return relationships;
 }
 
 // ============================================================================
@@ -782,7 +819,7 @@ function checkMutualExclusionViolation(
   const sumPrices = parentMarket.yesPrice + childMarket.yesPrice;
 
   // Violation: Sum > 1.00 (with 1% threshold)
-  const threshold = 1.01;
+  const threshold = 1.005;
   if (sumPrices > threshold) {
     const severity = sumPrices - 1.0;
     const expectedProfitPerShare = severity; // Profit from selling both
@@ -808,8 +845,8 @@ function checkMutualExclusionViolation(
         },
         buyMarket: {
           marketId: childMarket.id,
-          outcome: 'yes',
-          price: childMarket.yesPrice,
+          outcome: 'no', // Buy NO on child market for MUTUAL_EXCLUSION arbitrage
+          price: childMarket.noPrice, // Use NO price since we're buying NO
         },
       },
       expectedProfitPerShare,

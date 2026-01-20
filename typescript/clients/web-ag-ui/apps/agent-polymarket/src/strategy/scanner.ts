@@ -110,14 +110,23 @@ export function filterOpportunities(
   config: StrategyConfig,
   currentExposure: number,
 ): ArbitrageOpportunity[] {
+  const bypassExposure = process.env.POLY_BYPASS_EXPOSURE_CHECK === 'true';
   const remainingCapacity = config.maxTotalExposureUsd - currentExposure;
 
-  if (remainingCapacity <= 0) {
+  if (!bypassExposure && remainingCapacity <= 0) {
     logInfo('Max exposure reached, skipping all opportunities', {
       currentExposure,
       maxExposure: config.maxTotalExposureUsd,
     });
     return [];
+  }
+
+  if (bypassExposure && remainingCapacity <= 0) {
+    logInfo('Bypassing exposure check for testing (intra-market)', {
+      currentExposure,
+      maxExposure: config.maxTotalExposureUsd,
+      bypass: true,
+    });
   }
 
   // Filter to opportunities we can afford to execute
@@ -259,9 +268,10 @@ export function filterCrossMarketOpportunities(
   config: StrategyConfig,
   currentExposure: number,
 ): CrossMarketOpportunity[] {
+  const bypassExposure = process.env.POLY_BYPASS_EXPOSURE_CHECK === 'true';
   const remainingCapacity = config.maxTotalExposureUsd - currentExposure;
 
-  if (remainingCapacity <= 0) {
+  if (!bypassExposure && remainingCapacity <= 0) {
     logInfo('Max exposure reached, skipping cross-market opportunities', {
       currentExposure,
       maxExposure: config.maxTotalExposureUsd,
@@ -269,36 +279,78 @@ export function filterCrossMarketOpportunities(
     return [];
   }
 
+  if (bypassExposure && remainingCapacity <= 0) {
+    logInfo('Bypassing exposure check for testing', {
+      currentExposure,
+      maxExposure: config.maxTotalExposureUsd,
+      bypass: true,
+    });
+  }
+
   return opportunities.filter((opp) => {
     // Minimum profit threshold: $0.50 per share to cover transaction costs
     const minProfitThreshold = 0.005; // $0.005 = 0.5 cents per share
     if (opp.expectedProfitPerShare < minProfitThreshold) {
+      logInfo('⛔ Filtering opportunity: profit too low', {
+        type: opp.relationship.type,
+        parent: opp.relationship.parentMarket.title.substring(0, 30),
+        expectedProfit: opp.expectedProfitPerShare.toFixed(4),
+        minRequired: minProfitThreshold,
+      });
       return false;
     }
 
     // Skip opportunities with very low liquidity markets
+    // NOTE: If liquidity is 0, it means data wasn't fetched - allow these through
     const minLiquidity = 1000; // $1,000 minimum liquidity
+    const parentLiquidity = opp.relationship.parentMarket.liquidity;
+    const childLiquidity = opp.relationship.childMarket.liquidity;
+
+    // Only filter if liquidity IS set and is below threshold
+    // (liquidity=0 often means data wasn't available, not that market has no liquidity)
     if (
-      opp.relationship.parentMarket.liquidity < minLiquidity ||
-      opp.relationship.childMarket.liquidity < minLiquidity
+      (parentLiquidity > 0 && parentLiquidity < minLiquidity) ||
+      (childLiquidity > 0 && childLiquidity < minLiquidity)
     ) {
+      logInfo('⛔ Filtering opportunity: liquidity too low', {
+        type: opp.relationship.type,
+        parent: opp.relationship.parentMarket.title.substring(0, 30),
+        parentLiquidity,
+        childLiquidity,
+        minRequired: minLiquidity,
+      });
       return false;
     }
 
     // Skip if markets resolve at very different times (risk of holding one side too long)
     const parentEndDate = new Date(opp.relationship.parentMarket.endDate);
     const childEndDate = new Date(opp.relationship.childMarket.endDate);
-    const daysDiff = Math.abs(parentEndDate.getTime() - childEndDate.getTime()) / (1000 * 60 * 60 * 24);
 
-    // Max 30 days difference in resolution
-    if (daysDiff > 30) {
-      logInfo('Skipping opportunity due to resolution time mismatch', {
-        parent: opp.relationship.parentMarket.title.substring(0, 30),
-        child: opp.relationship.childMarket.title.substring(0, 30),
-        daysDiff: daysDiff.toFixed(0),
-      });
-      return false;
+    // Check for invalid dates (empty string endDate results in Invalid Date)
+    const parentValid = !isNaN(parentEndDate.getTime());
+    const childValid = !isNaN(childEndDate.getTime());
+
+    // Only filter if both dates are valid and differ by >30 days
+    if (parentValid && childValid) {
+      const daysDiff = Math.abs(parentEndDate.getTime() - childEndDate.getTime()) / (1000 * 60 * 60 * 24);
+
+      // Max 30 days difference in resolution
+      if (daysDiff > 30) {
+        logInfo('⛔ Filtering opportunity: resolution time mismatch', {
+          type: opp.relationship.type,
+          parent: opp.relationship.parentMarket.title.substring(0, 30),
+          child: opp.relationship.childMarket.title.substring(0, 30),
+          daysDiff: daysDiff.toFixed(0),
+        });
+        return false;
+      }
     }
+
+    logInfo('✅ Opportunity passed filter', {
+      type: opp.relationship.type,
+      parent: opp.relationship.parentMarket.title.substring(0, 30),
+      expectedProfit: opp.expectedProfitPerShare.toFixed(4),
+    });
 
     return true;
   });

@@ -17,6 +17,53 @@ import { logInfo } from '../workflow/context.js';
 import { POLYGON_CONTRACTS, CONTRACT_ABIS } from '../constants/contracts.js';
 
 // ============================================================================
+// Error Handling Utilities
+// ============================================================================
+
+/**
+ * Parse and clean error messages for display.
+ * Handles HTML responses, Cloudflare blocks, and long error strings.
+ */
+function parseErrorMessage(error: unknown): string {
+  const errorStr = String(error);
+
+  // Check for Cloudflare block
+  if (errorStr.includes('Cloudflare') || errorStr.includes('cf-error') || errorStr.includes('cf-wrapper')) {
+    return 'Cloudflare block - IP rate limited. Wait before retrying.';
+  }
+
+  // Check for HTML response (generic)
+  if (errorStr.includes('<!DOCTYPE') || errorStr.includes('<html')) {
+    // Try to extract meaningful text
+    if (errorStr.includes('blocked')) {
+      return 'Request blocked by security. Wait and retry.';
+    }
+    return 'API returned error page - likely rate limited.';
+  }
+
+  // Check for common HTTP errors
+  if (errorStr.includes('403') || errorStr.includes('Forbidden')) {
+    return 'Access forbidden (403) - check API credentials.';
+  }
+  if (errorStr.includes('429') || errorStr.includes('Too Many')) {
+    return 'Rate limited (429) - too many requests.';
+  }
+  if (errorStr.includes('500') || errorStr.includes('Internal Server')) {
+    return 'Server error (500) - Polymarket API issue.';
+  }
+  if (errorStr.includes('timeout') || errorStr.includes('ETIMEDOUT')) {
+    return 'Request timeout - network issue.';
+  }
+
+  // Truncate long errors
+  if (errorStr.length > 150) {
+    return errorStr.substring(0, 150) + '...';
+  }
+
+  return errorStr;
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -307,7 +354,7 @@ class AgentPolymarketAdapter implements IPolymarketAdapter {
       const baseOffset = request.offset ?? parseInt(process.env.POLY_MARKET_OFFSET || '0', 10);
       const limit = parseInt(process.env.POLY_MARKET_FETCH_LIMIT || '100', 10);
 
-      // Build URL with status filter and offset
+      // Build URL with status filter, offset, and sort by volume for better liquidity
       let url = `${this.gammaApiUrl}/markets?limit=${limit}&offset=${baseOffset}`;
       if (request.status === 'active') {
         url += '&closed=false&active=true';
@@ -317,6 +364,8 @@ class AgentPolymarketAdapter implements IPolymarketAdapter {
         // Default to active markets only
         url += '&closed=false&active=true';
       }
+      // Sort by volume descending to get high-liquidity markets first
+      url += '&order=volume&ascending=false';
 
       logInfo('Fetching markets from Gamma API', { url: url.substring(0, 80), offset: baseOffset, limit });
 
@@ -439,11 +488,12 @@ class AgentPolymarketAdapter implements IPolymarketAdapter {
         success: true,
       };
     } catch (error) {
-      logInfo('Order failed', { error: String(error) });
+      const cleanError = parseErrorMessage(error);
+      logInfo('Order failed', { error: cleanError });
       return {
         transactions: [],
         success: false,
-        error: String(error),
+        error: cleanError,
       };
     }
   }

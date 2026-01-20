@@ -27,6 +27,10 @@ export async function bootstrapNode(state: PolymarketState): Promise<PolymarketU
     maxPositionSizeUsd: parseFloat(process.env['POLY_MAX_POSITION_SIZE_USD'] ?? '100'),
     portfolioRiskPct: parseFloat(process.env['POLY_PORTFOLIO_RISK_PCT'] ?? '3'),
     pollIntervalMs: parseInt(process.env['POLY_POLL_INTERVAL_MS'] ?? '30000', 10),
+    // IMPORTANT: Set this higher than your current exposure to allow opportunities
+    // Default 500 is very low - set to your desired max exposure limit
+    maxTotalExposureUsd: parseFloat(process.env['POLY_MAX_TOTAL_EXPOSURE_USD'] ?? '500'),
+    minShareSize: parseFloat(process.env['POLY_MIN_SHARE_SIZE'] ?? '5'),
   };
 
   // Get wallet address from environment or derive from private key
@@ -59,7 +63,9 @@ export async function bootstrapNode(state: PolymarketState): Promise<PolymarketU
   logInfo('Bootstrap complete', {
     minSpread: config.minSpreadThreshold,
     maxPosition: config.maxPositionSizeUsd,
+    maxTotalExposure: config.maxTotalExposureUsd,
     pollInterval: config.pollIntervalMs,
+    minShareSize: config.minShareSize,
   });
 
   return {
