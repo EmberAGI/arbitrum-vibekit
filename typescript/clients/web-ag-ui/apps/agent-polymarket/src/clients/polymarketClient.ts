@@ -535,7 +535,7 @@ class AgentPolymarketAdapter implements IPolymarketAdapter {
         outcomeId: pos.outcome.toLowerCase() as 'yes' | 'no',
         outcomeName: pos.outcome,
         tokenId: pos.asset,
-        size: (pos.size * 1_000_000).toString(), // Convert to raw units (6 decimals)
+        size: pos.size.toString(), // Data API returns human-readable size (no conversion needed)
         currentPrice: pos.curPrice.toString(),
         avgPrice: pos.avgPrice.toString(),
         pnl: pos.cashPnl.toString(),
@@ -605,8 +605,10 @@ class AgentPolymarketAdapter implements IPolymarketAdapter {
             continue;
           }
 
-          const balance = BigInt(balanceResult.result);
-          logInfo('Found balance', { tokenId: tokenId.substring(0, 20), balance: balance.toString() });
+          const rawBalance = BigInt(balanceResult.result);
+          // Convert from raw units (6 decimals) to human-readable shares
+          const balance = Number(rawBalance) / 1_000_000;
+          logInfo('Found balance', { tokenId: tokenId.substring(0, 20), rawBalance: rawBalance.toString(), shares: balance });
 
           // Fetch market details from Gamma API using clob_token_ids
           const url = `${this.gammaApiUrl}/markets?clob_token_ids=${tokenId}`;
