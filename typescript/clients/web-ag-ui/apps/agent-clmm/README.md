@@ -52,6 +52,7 @@ docker build --platform linux/amd64 -t agent-clmm:latest .
 - Graph runs default to `durability="exit"` (persist on exit/interrupt boundaries, not every step).
 - Long-running history (telemetry, transactions, accounting flow/snapshots) is written to the LangGraph store and retained as a rolling window.
 - In-checkpoint state history is bounded to prevent runaway growth.
+- The LangGraph CLI ships its own `@langchain/langgraph-api` dependency tree, so we patch both the CLI and app checkpointer instances to enforce pruning (tests cover both).
 
 Trade-offs:
 
