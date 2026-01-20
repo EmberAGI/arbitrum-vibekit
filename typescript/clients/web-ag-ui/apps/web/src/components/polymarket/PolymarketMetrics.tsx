@@ -30,6 +30,8 @@ interface PolymarketMetricsProps {
   portfolioValueUsd?: number;
   intraMarketCount?: number;
   crossMarketCount?: number;
+  /** Optional override for displaying total PnL (e.g. from Polymarket positions) */
+  totalPnlOverride?: number;
 }
 
 export function PolymarketMetrics({
@@ -38,6 +40,7 @@ export function PolymarketMetrics({
   portfolioValueUsd = 0,
   intraMarketCount = 0,
   crossMarketCount = 0,
+  totalPnlOverride,
 }: PolymarketMetricsProps) {
   const formatCurrency = (value: number) => {
     const abs = Math.abs(value);
@@ -55,6 +58,8 @@ export function PolymarketMetrics({
       second: '2-digit',
     });
   };
+
+  const totalPnl = typeof totalPnlOverride === 'number' ? totalPnlOverride : metrics.totalPnl;
 
   const successRate =
     metrics.tradesExecuted > 0
@@ -80,10 +85,10 @@ export function PolymarketMetrics({
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total P&L</div>
             <div
               className={`text-2xl font-bold ${
-                metrics.totalPnl >= 0 ? 'text-teal-400' : 'text-red-400'
+                totalPnl >= 0 ? 'text-teal-400' : 'text-red-400'
               }`}
             >
-              {formatCurrency(metrics.totalPnl)}
+              {formatCurrency(totalPnl)}
             </div>
           </div>
           <div className="rounded-xl bg-[#121212] p-4">

@@ -107,6 +107,32 @@ async function fetchTradingHistory(adapter: IPolymarketAdapter, userWalletAddres
 }
 
 /**
+ * Calculate portfolio value from user positions.
+ * Portfolio value = sum of (size * currentPrice) for all positions.
+ */
+function calculatePortfolioValue(positions: UserPosition[]): number {
+  if (!positions || positions.length === 0) {
+    return 0;
+  }
+
+  let totalValue = 0;
+  for (const pos of positions) {
+    const size = parseFloat(pos.size);
+    const price = pos.currentPrice ? parseFloat(pos.currentPrice) : 0;
+    if (!isNaN(size) && !isNaN(price)) {
+      totalValue += size * price;
+    }
+  }
+
+  logInfo('Calculated portfolio value', {
+    positionCount: positions.length,
+    portfolioValue: totalValue.toFixed(2),
+  });
+
+  return totalValue;
+}
+
+/**
  * Generate mock markets for frontend testing.
  * Set POLYMARKET_USE_MOCK_DATA=true to use this instead of real API.
  */
@@ -371,6 +397,9 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
     });
   }
 
+  // Calculate portfolio value from user positions (do this early so it's available in all return paths)
+  const portfolioValueUsd = calculatePortfolioValue(userPositions);
+
   if (markets.length === 0) {
     const { task, statusEvent } = buildTaskStatus(
       state.view.task,
@@ -383,6 +412,7 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
         markets: [],
         userPositions,
         tradingHistory,
+        portfolioValueUsd,
         metrics: { ...state.view.metrics, iteration, lastPoll: now },
         events: [statusEvent],
       },
@@ -578,13 +608,14 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
           pendingTrades,
           userPositions,
           tradingHistory,
+          portfolioValueUsd,
           metrics: {
             iteration,
             lastPoll: now,
             totalPnl: state.view.metrics.totalPnl,
             realizedPnl: state.view.metrics.realizedPnl,
             unrealizedPnl: state.view.metrics.unrealizedPnl,
-            activePositions: state.view.positions.length,
+            activePositions: userPositions.length,
             opportunitiesFound: state.view.metrics.opportunitiesFound + totalOpportunitiesFound,
             opportunitiesExecuted: state.view.metrics.opportunitiesExecuted,
             tradesExecuted: state.view.metrics.tradesExecuted,
@@ -848,6 +879,7 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
   console.log('[POLL CYCLE] Final return with positions/history:', {
     userPositions: userPositions.length,
     tradingHistory: tradingHistory.length,
+    portfolioValueUsd,
   });
 
   return {
@@ -859,6 +891,7 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
       detectedRelationships: relationships,
       userPositions,
       tradingHistory,
+      portfolioValueUsd,
       transactionHistory: [...state.view.transactionHistory, ...newTransactions],
       metrics: {
         iteration,
@@ -866,7 +899,7 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
         totalPnl: state.view.metrics.totalPnl,
         realizedPnl: state.view.metrics.realizedPnl,
         unrealizedPnl: state.view.metrics.unrealizedPnl,
-        activePositions: state.view.positions.length,
+        activePositions: userPositions.length,
         opportunitiesFound: state.view.metrics.opportunitiesFound + totalOpportunitiesFound,
         opportunitiesExecuted: state.view.metrics.opportunitiesExecuted + opportunitiesExecuted,
         tradesExecuted: state.view.metrics.tradesExecuted + tradesExecuted,

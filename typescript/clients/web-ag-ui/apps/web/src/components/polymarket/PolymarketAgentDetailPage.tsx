@@ -246,6 +246,18 @@ export function PolymarketAgentDetailPage({
   console.log('[UI] - positions:', positions?.length ?? 0, positions);
   console.log('[UI] - tradingHistory:', tradingHistory?.length ?? 0, tradingHistory);
 
+  // Prefer real P&L from Polymarket positions when available (Data API),
+  // fall back to agent-computed metrics otherwise.
+  const totalPnlFromPositions = Array.isArray(positions)
+    ? positions.reduce((sum, pos) => {
+        const pnl = pos.pnl ? parseFloat(pos.pnl) : 0;
+        return Number.isFinite(pnl) ? sum + pnl : sum;
+      }, 0)
+    : 0;
+
+  const totalPnlDisplay =
+    (positions?.length ?? 0) > 0 ? totalPnlFromPositions : metrics.totalPnl;
+
   // Show approvals tab if any approval step is active
   const needsApprovals = needsApprovalAmountInput || needsUsdcPermitSignature || needsCtfApprovalTransaction;
   const [activeTab, setActiveTab] = useState<TabType>(needsApprovals ? 'approvals' : isHired ? 'opportunities' : 'metrics');
@@ -400,7 +412,11 @@ export function PolymarketAgentDetailPage({
             {/* Stats Row */}
             <div className="grid grid-cols-6 gap-4 mt-6 pt-6 border-t border-[#2a2a2a]">
               <StatBox label="Portfolio" value={formatCurrency(portfolioValueUsd)} />
-              <StatBox label="Total P&L" value={formatCurrency(metrics.totalPnl)} valueColor={metrics.totalPnl >= 0 ? 'text-teal-400' : 'text-red-400'} />
+              <StatBox
+                label="Total P&L"
+                value={formatCurrency(totalPnlDisplay)}
+                valueColor={totalPnlDisplay >= 0 ? 'text-teal-400' : 'text-red-400'}
+              />
               <StatBox label="Opportunities" value={metrics.opportunitiesFound.toString()} />
               <StatBox label="Executed" value={metrics.opportunitiesExecuted.toString()} valueColor="text-teal-400" />
               <StatBox label="Active Positions" value={metrics.activePositions.toString()} />
@@ -684,6 +700,8 @@ export function PolymarketAgentDetailPage({
               portfolioValueUsd={portfolioValueUsd}
               intraMarketCount={opportunities.length}
               crossMarketCount={crossMarketOpportunities.length}
+              // Keep Metrics tab in sync with the header Total P&L display
+              totalPnlOverride={totalPnlDisplay}
             />
           )}
 
