@@ -177,18 +177,18 @@ export function evaluateDecision(ctx: DecisionContext): ClmmAction {
   }
 
   const width = ctx.position.tickUpper - ctx.position.tickLower;
-  const innerWidth = Math.round(
-    width * (ctx.rebalanceThresholdPct ?? DEFAULT_REBALANCE_THRESHOLD_PCT),
-  );
+  const rebalanceThresholdPct = ctx.rebalanceThresholdPct ?? DEFAULT_REBALANCE_THRESHOLD_PCT;
+  const innerWidth = Math.round(width * rebalanceThresholdPct);
   const padding = Math.max(1, Math.floor((width - innerWidth) / 2));
   const innerLower = ctx.position.tickLower + padding;
   const innerUpper = ctx.position.tickUpper - padding;
   const currentTick = ctx.pool.tick;
 
   if (currentTick <= innerLower || currentTick >= innerUpper) {
+    const innerBandPercent = Math.round(rebalanceThresholdPct * 100);
     return {
       kind: 'adjust-range',
-      reason: 'Price drifted outside the 60% inner safety band',
+      reason: `Price drifted outside the ${innerBandPercent}% inner safety band`,
       targetRange,
     };
   }
