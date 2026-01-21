@@ -3,10 +3,7 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": ".",
-    "paths": {
-      "@copilotkit/sdk-js/langgraph": ["src/types/copilotkit-langgraph.d.ts"]
-    }
+    "rootDir": "."
   },
   "include": [
     "src/**/*.ts",

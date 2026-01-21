@@ -24,9 +24,5 @@
     "@langchain/core": "^1.0.1",
     "@langchain/langgraph": "1.0.2"
   },
-  "pnpm": {
-    "patchedDependencies": {
-      "@copilotkit/sdk-js@1.51.2": "patches/@copilotkit__sdk-js@1.51.2.patch"
-    }
-  }
+  "pnpm": {}
 }
