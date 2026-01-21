@@ -1,8 +1,25 @@
-# Polymarket Agent - User Flow & Frontend Integration
+# Polymarket Agent - Complete Flow & Integration Guide
 
 ## Overview
 
-The Polymarket Arbitrage Agent is an automated trading bot that monitors prediction markets for **intra-market arbitrage opportunities**. When YES + NO token prices sum to less than $1.00, the agent can buy both tokens to guarantee profit when the market resolves.
+The Polymarket Arbitrage Agent is an **autonomous trading system** that monitors prediction markets for **two types of arbitrage opportunities**:
+
+1. **Intra-Market Arbitrage**: YES + NO prices sum to less than $1.00
+2. **Cross-Market Arbitrage**: Logical relationships between markets are violated by pricing
+
+The agent uses **LangGraph** for workflow orchestration, **LLM** (optional) for relationship detection, and integrates with Polymarket's Gamma, CLOB, and Data APIs.
+
+---
+
+## Table of Contents
+
+1. [User Flow](#user-flow)
+2. [Trading Cycle Flow](#trading-cycle-flow)
+3. [LangGraph Workflow](#langgraph-workflow)
+4. [Frontend Integration](#frontend-integration)
+5. [Data Flow](#data-flow)
+6. [State Management](#state-management)
+7. [Environment Variables](#environment-variables)
 
 ---
 
@@ -10,29 +27,32 @@ The Polymarket Arbitrage Agent is an automated trading bot that monitors predict
 
 ### Phase 1: Discovery (Pre-Hire)
 
+Users can view live market data without connecting a wallet:
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    AGENT DISCOVERY PAGE                          │
 ├─────────────────────────────────────────────────────────────────┤
-│  🎯 Polymarket Arbitrage                                         │
+│  🎯 Polymarket Arbitrage Agent                                   │
 │  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━                             │
+│                                                                   │
+│  Strategy: Dual arbitrage (Intra-market + Cross-market)         │
+│  Network: Polygon • Protocol: Polymarket CLOB                   │
 │                                                                   │
 │  Agent Stats:                                                     │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐            │
-│  │ AUM      │ │ APY      │ │ Users    │ │ Income   │            │
-│  │ $50,000  │ │ 12.5%    │ │ 150      │ │ $2,500   │            │
+│  │ AUM      │ │ APY      │ │ Opps     │ │ Win Rate │            │
+│  │ $50,000  │ │ 12.5%    │ │ 247      │ │ 94%      │            │
 │  └──────────┘ └──────────┘ └──────────┘ └──────────┘            │
 │                                                                   │
-│  Network: Polygon                                                 │
-│  Protocol: Polymarket CLOB                                        │
-│                                                                   │
 │  ┌─────────────────────────────────────────────────────────────┐ │
-│  │ Live Market Preview (no wallet required)                     │ │
+│  │ Live Opportunities (no wallet required)                      │ │
 │  ├─────────────────────────────────────────────────────────────┤ │
-│  │ Market                          │ YES   │ NO    │ Spread   │ │
-│  │ Will X happen by Dec 2025?      │ $0.45 │ $0.52 │ 3% 🔥    │ │
-│  │ Will Y reach 100?               │ $0.30 │ $0.68 │ 2% 🔥    │ │
-│  │ Will Z be announced?            │ $0.80 │ $0.19 │ 1%       │ │
+│  │ Type          │ Markets              │ Spread │ Profit      │ │
+│  ├─────────────────────────────────────────────────────────────┤ │
+│  │ Intra-Market  │ Bitcoin $100k 2025   │ 3.5% 🔥│ $0.035/sh  │ │
+│  │ Cross-Market  │ Trump FL → GOP FL    │ 2.8% 🔥│ $0.028/sh  │ │
+│  │ Intra-Market  │ ETH $5k by Dec       │ 2.1% 🔥│ $0.021/sh  │ │
 │  └─────────────────────────────────────────────────────────────┘ │
 │                                                                   │
 │  [        HIRE AGENT        ]                                    │
@@ -40,263 +60,1002 @@ The Polymarket Arbitrage Agent is an automated trading bot that monitors predict
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Key Features:**
-- Users can see live Polymarket data WITHOUT connecting a wallet
-- Market opportunities are displayed with spreads highlighted
-- The "HIRE" button initiates the onboarding flow
-
 ---
 
 ### Phase 2: Onboarding (Hire Flow)
 
-When user clicks "Hire", the agent starts the onboarding process:
+When user clicks "Hire", the agent starts a **multi-step onboarding**:
 
 ```
-Step 1: Wallet Connection & Configuration
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Step 1: Wallet Connection
+━━━━━━━━━━━━━━━━━━━━━━━
 ┌──────────────────────────────────────────────────┐
-│  Connect Wallet                                   │
-│  ─────────────                                   │
-│  Please connect your Polygon wallet to continue. │
+│  Connect Polygon Wallet                           │
+│  ────────────────────                            │
+│  Please connect your wallet to get started.      │
 │                                                  │
 │  [  Connect Wallet  ]                            │
 │                                                  │
-│  Allocated Funds (USDC):                         │
-│  ┌────────────────────────────────────────────┐  │
-│  │ $100                                       │  │
-│  └────────────────────────────────────────────┘  │
-│                                                  │
-│  Risk Settings:                                  │
-│  • Max position size: $100                       │
-│  • Risk per trade: 3%                            │
-│  • Min spread threshold: 2%                      │
+│  Once connected, you'll approve USDC spending    │
+│  and CTF token transfers (gasless signature +    │
+│  one-time gas transaction).                      │
 │                                                  │
 │  [  Next  ]                                      │
 └──────────────────────────────────────────────────┘
 
-Step 2: Review & Confirm
+Step 2: USDC Approval (EIP-2612 Permit - Gasless)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┌──────────────────────────────────────────────────┐
+│  Approve USDC Spending                            │
+│  ─────────────────────                           │
+│  The agent needs permission to spend USDC.       │
+│                                                  │
+│  Approval Amount:                                │
+│  ┌────────────────────────────────────────────┐  │
+│  │ 1000 USDC                                  │  │
+│  └────────────────────────────────────────────┘  │
+│                                                  │
+│  ℹ️  This is a gasless signature (EIP-2612)     │
+│     No gas fees required!                       │
+│                                                  │
+│  [  Sign Permit  ]                               │
+└──────────────────────────────────────────────────┘
+
+Step 3: CTF Approval (Standard ERC-20 - Requires Gas)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┌──────────────────────────────────────────────────┐
+│  Approve CTF Tokens                               │
+│  ──────────────────                              │
+│  The exchange needs permission to transfer CTF   │
+│  tokens (YES/NO outcome tokens).                 │
+│                                                  │
+│  ⛽ Estimated Gas: ~0.0001 MATIC ($0.02)         │
+│                                                  │
+│  [  Approve CTF  ]                               │
+└──────────────────────────────────────────────────┘
+
+Step 4: Configure Strategy
 ━━━━━━━━━━━━━━━━━━━━━━━
 ┌──────────────────────────────────────────────────┐
-│  Review Configuration                             │
-│  ────────────────────                            │
+│  Strategy Settings                                │
+│  ─────────────────                               │
 │                                                  │
-│  Strategy: Intra-Market Arbitrage                │
-│  Network: Polygon (Chain ID: 137)                │
-│  Protocol: Polymarket CLOB                       │
+│  📊 Risk Management                              │
+│  • Max position size: $100                       │
+│  • Portfolio risk %: 3%                          │
+│  • Max total exposure: $500                      │
 │                                                  │
-│  Allocation: $100 USDC                           │
-│  Max Exposure: $500                              │
-│  Polling: Every 30 seconds                       │
+│  🎯 Opportunity Filters                          │
+│  • Min spread (intra): 2%                        │
+│  • Min profit (cross): $0.01                     │
+│  • Max slippage: 5%                              │
+│                                                  │
+│  🤖 Detection Settings                           │
+│  □ Enable LLM relationship detection             │
+│     (more comprehensive, slower, costs $0.01-0.05)│
+│  □ Enable manual trade approval                  │
+│     (review trades before execution)             │
 │                                                  │
 │  [  Start Agent  ]                               │
 └──────────────────────────────────────────────────┘
 ```
 
+**Approval Flow Details**:
+1. **USDC Permit**: Gasless signature (EIP-2612), allows agent to spend USDC
+2. **CTF Approval**: One-time gas transaction, allows exchange to transfer outcome tokens
+3. Both approvals are checked before every trade and only requested once
+
 ---
 
 ### Phase 3: Running (Active Trading)
 
-Once hired, the agent enters the running state:
+Once hired and approved, the agent enters the **running state**:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  🎯 Polymarket Arbitrage              [Running] ⬤              │
+│  🎯 Polymarket Arbitrage              [Running] ⬤  Cycle #42   │
 │  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━               │
 │                                                                   │
 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐              │
 │  │ Portfolio    │ │ Total P&L    │ │ Active       │              │
-│  │ $105.42      │ │ +$5.42       │ │ Positions: 3 │              │
+│  │ $1,105.42    │ │ +$105.42     │ │ Positions: 8 │              │
+│  │              │ │ (10.5%)      │ │              │              │
 │  └──────────────┘ └──────────────┘ └──────────────┘              │
 │                                                                   │
-│  [Opportunities] [Positions] [Transactions] [Settings]          │
+│  [Opportunities] [Relationships] [Positions] [History] [Settings]│
 │  ═════════════════════════════════════════════════════          │
 │                                                                   │
-│  Current Opportunities                                           │
+│  Current Opportunities (Sorted by Profit)                        │
 │  ┌───────────────────────────────────────────────────────────┐   │
-│  │ Market                      │ YES   │ NO    │ Spread │ Act │  │
+│  │ Type    │ Markets                  │ Profit  │ ROI  │ Act │  │
 │  ├───────────────────────────────────────────────────────────┤   │
-│  │ Will X happen?              │ $0.45 │ $0.52 │ 3.0% 🔥│ ⚡  │  │
-│  │ Will Y reach target?        │ $0.38 │ $0.59 │ 3.0% 🔥│ ⚡  │  │
-│  │ Will Z be announced?        │ $0.72 │ $0.26 │ 2.0% 🔥│ ⚡  │  │
+│  │ Cross 🔗│ Bitcoin Q1→2025          │ $0.25   │ 33% 🔥│ ⚡ │  │
+│  │ Intra ◆ │ ETH $5k by Dec           │ $0.035  │ 3.5%🔥│ ⚡ │  │
+│  │ Cross 🔗│ Trump FL→GOP FL          │ $0.028  │ 4%  🔥│ ⚡ │  │
+│  │ Intra ◆ │ S&P 6000 by 2025         │ $0.021  │ 2.1% │    │  │
+│  └───────────────────────────────────────────────────────────┘   │
+│                                                                   │
+│  Detected Relationships (LLM + Patterns)                         │
+│  ┌───────────────────────────────────────────────────────────┐   │
+│  │ Type        │ Markets                     │ Status        │  │
+│  ├───────────────────────────────────────────────────────────┤   │
+│  │ IMPLIES     │ Trump wins FL → GOP wins FL │ Violation 🔥  │  │
+│  │ IMPLIES     │ BTC Q1 2025 → BTC 2025      │ Violation 🔥  │  │
+│  │ MUTUAL_EXCL │ Dem wins FL ⊕ GOP wins FL   │ Valid ✓       │  │
+│  │ EQUIVALENCE │ ETH $5k ↔ ETH hits $5k      │ Valid ✓       │  │
 │  └───────────────────────────────────────────────────────────┘   │
 │                                                                   │
 │  Recent Activity                                                  │
 │  ┌───────────────────────────────────────────────────────────┐   │
-│  │ ● Cycle 42: Found 3 opportunities, executed 2             │   │
-│  │ ● Cycle 41: No opportunities (spreads too low)            │   │
-│  │ ● Cycle 40: Found 1 opportunity, executed 1               │   │
+│  │ ● Cycle 42: Found 4 opps (2 intra, 2 cross), executed 3  │   │
+│  │ ● Cycle 41: Synced positions, unrealized P&L: +$12.50    │   │
+│  │ ● Cycle 40: Redeemed 2 resolved markets, +$24.00         │   │
+│  │ ● Cycle 39: Found 1 opp (cross), executed 1              │   │
 │  └───────────────────────────────────────────────────────────┘   │
 │                                                                   │
-│  [  Sync  ]  [  Fire  ]                                          │
+│  [  Sync Positions  ]  [  Redeem Resolved  ]  [  Fire Agent  ]  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+**Key UI Sections**:
+- **Opportunities**: Live intra-market + cross-market arbitrage opportunities
+- **Relationships**: Detected logical relationships (IMPLIES, REQUIRES, MUTUAL_EXCLUSION, EQUIVALENCE)
+- **Positions**: Current YES/NO token holdings with P&L
+- **History**: Transaction log with trade details
+- **Settings**: Adjust risk parameters, LLM toggle, manual approval mode
+
 ---
 
-## Frontend Components
+### Phase 4: Manual Approval Mode (Optional)
 
-### 1. MarketOpportunityCard
+If `POLY_MANUAL_APPROVAL=true`, users review trades before execution:
 
-Displays a single market with its prices and arbitrage status:
-
-```tsx
-interface MarketOpportunityCardProps {
-  market: {
-    id: string;
-    title: string;
-    yesPrice: number;
-    noPrice: number;
-    spread: number;
-    volume: number;
-  };
-  onTrade?: () => void;
-}
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  🔔 Pending Trades (Awaiting Your Approval)                     │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━                      │
+│                                                                   │
+│  Opportunity #1: Cross-Market (IMPLIES)                          │
+│  ┌───────────────────────────────────────────────────────────┐   │
+│  │ Markets:                                                   │   │
+│  │   Parent: "Bitcoin hits $100k in Q1 2025" @ $0.60 (sell) │   │
+│  │   Child:  "Bitcoin hits $100k in 2025" @ $0.35 (buy)     │   │
+│  │                                                           │   │
+│  │ Position:                                                 │   │
+│  │   Shares: 40                                              │   │
+│  │   Sell cost: $16.00 (buy NO at $0.40)                    │   │
+│  │   Buy cost: $14.00                                        │   │
+│  │   Total: $30.00                                           │   │
+│  │                                                           │   │
+│  │ Expected:                                                 │   │
+│  │   Profit: $10.00                                          │   │
+│  │   ROI: 33.3%                                              │   │
+│  │                                                           │   │
+│  │ Expires in: 28 seconds                                    │   │
+│  │                                                           │   │
+│  │ [  Approve  ]  [  Reject  ]                               │   │
+│  └───────────────────────────────────────────────────────────┘   │
+│                                                                   │
+│  Opportunity #2: Intra-Market                                    │
+│  ┌───────────────────────────────────────────────────────────┐   │
+│  │ Market: "Ethereum price above $5000 in 2025"              │   │
+│  │                                                           │   │
+│  │ Position:                                                 │   │
+│  │   YES shares: 31 @ $0.48 = $14.88                        │   │
+│  │   NO shares: 31 @ $0.48 = $14.88                         │   │
+│  │   Total: $29.76                                           │   │
+│  │                                                           │   │
+│  │ Expected:                                                 │   │
+│  │   Profit: $1.24 (when market resolves)                   │   │
+│  │   ROI: 4.2%                                               │   │
+│  │                                                           │   │
+│  │ Expires in: 25 seconds                                    │   │
+│  │                                                           │   │
+│  │ [  Approve  ]  [  Reject  ]                               │   │
+│  └───────────────────────────────────────────────────────────┘   │
+│                                                                   │
+│  [  Approve All  ]  [  Reject All  ]                             │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### 2. OpportunitiesPanel
+**Notes**:
+- Pending trades expire after 30 seconds (prices change quickly)
+- User can approve/reject individual trades or all at once
+- After approval, agent executes immediately
 
-Real-time list of arbitrage opportunities:
+---
 
-```tsx
-interface OpportunitiesPanelProps {
-  opportunities: ArbitrageOpportunity[];
-  config: StrategyConfig;
-  isLoading?: boolean;
-}
+## Trading Cycle Flow
+
+Each cycle (default: every 30 seconds) follows this flow:
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ CYCLE START (Iteration #42)                                      │
+└────────────────────────┬─────────────────────────────────────────┘
+                         │
+┌────────────────────────▼─────────────────────────────────────────┐
+│ 1. CHECK APPROVALS                                               │
+│    ├─ Check USDC permit signature                                │
+│    ├─ Check CTF approval transaction                             │
+│    └─ Halt if approvals missing (prompt user)                    │
+└────────────────────────┬─────────────────────────────────────────┘
+                         │
+┌────────────────────────▼─────────────────────────────────────────┐
+│ 2. FETCH MARKETS (Parallel)                                      │
+│    ├─ Gamma API: Get 50 markets (rotating offset)                │
+│    ├─ For each market:                                           │
+│    │  ├─ CLOB API: Get YES/NO buy prices                         │
+│    │  ├─ CLOB API: Get order book (liquidity, min order size)    │
+│    │  └─ Cache market data                                       │
+│    ├─ Data API: Get user positions (size, value, P&L)            │
+│    ├─ Data API: Get trading history (last 50 trades)             │
+│    └─ Calculate portfolio value from positions                   │
+└────────────────────────┬─────────────────────────────────────────┘
+                         │
+┌────────────────────────▼─────────────────────────────────────────┐
+│ 3. SCAN INTRA-MARKET OPPORTUNITIES                               │
+│    ├─ For each market:                                           │
+│    │  └─ Check: yesPrice + noPrice < 1.0 - threshold            │
+│    ├─ Filter by:                                                 │
+│    │  ├─ Min spread (default: 2%)                                │
+│    │  ├─ Exposure limits                                         │
+│    │  └─ Liquidity                                               │
+│    └─ Sort by profit potential (highest first)                   │
+└────────────────────────┬─────────────────────────────────────────┘
+                         │
+┌────────────────────────▼─────────────────────────────────────────┐
+│ 4. DETECT RELATIONSHIPS                                          │
+│    │                                                              │
+│    ├─ If LLM enabled (POLY_USE_LLM_DETECTION=true):              │
+│    │  ├─ Limit to POLY_LLM_MAX_MARKETS (default: 25)             │
+│    │  ├─ Build batch prompt with all market pairs                │
+│    │  ├─ Call OpenAI (model: gpt-4o or gpt-4o-mini)              │
+│    │  ├─ Timeout: 120 seconds                                    │
+│    │  ├─ Parse response (Zod schema validation)                  │
+│    │  └─ Fallback to patterns if timeout/error                   │
+│    │                                                              │
+│    └─ If LLM disabled (pattern matching):                        │
+│       ├─ For each market pair:                                   │
+│       │  └─ Match against 40+ regex patterns                     │
+│       └─ Return detected relationships                           │
+│                                                                   │
+│    Relationship Types:                                           │
+│    • IMPLIES (A → B): If A happens, B must happen                │
+│    • REQUIRES (A ← B): A requires B to happen first              │
+│    • MUTUAL_EXCLUSION (A ⊕ B): Both can't happen                 │
+│    • EQUIVALENCE (A ↔ B): Same event, different phrasing         │
+└────────────────────────┬─────────────────────────────────────────┘
+                         │
+┌────────────────────────▼─────────────────────────────────────────┐
+│ 5. SCAN CROSS-MARKET OPPORTUNITIES                               │
+│    ├─ For each relationship:                                     │
+│    │  ├─ Check price violation:                                  │
+│    │  │  ├─ IMPLIES/REQUIRES: P(parent) > P(child) + 0.01        │
+│    │  │  ├─ MUTUAL_EXCL: P(A) + P(B) > 1.005                     │
+│    │  │  └─ EQUIVALENCE: |P(A) - P(B)| > 0.05                    │
+│    │  └─ Create CrossMarketOpportunity if violated               │
+│    ├─ Filter by:                                                 │
+│    │  ├─ Min profit per share ($0.005)                           │
+│    │  ├─ Min liquidity ($1,000 if available)                     │
+│    │  └─ Resolution timing (max 30 days difference)              │
+│    └─ Sort by expected profit per share                          │
+└────────────────────────┬─────────────────────────────────────────┘
+                         │
+┌────────────────────────▼─────────────────────────────────────────┐
+│ 6. COMBINE & PRIORITIZE OPPORTUNITIES                            │
+│    ├─ Merge intra-market + cross-market opportunities            │
+│    ├─ Sort all by profit potential (highest first)               │
+│    └─ Take top N (default: 3, or all if EXECUTE_ALL=true)        │
+└────────────────────────┬─────────────────────────────────────────┘
+                         │
+                ┌────────┴────────┐
+                │                 │
+         ┌──────▼──────┐   ┌──────▼──────┐
+         │ Manual Mode │   │  Auto Mode  │
+         └──────┬──────┘   └──────┬──────┘
+                │                 │
+┌───────────────▼─────────────────▼───────────────────────────────┐
+│ 7. POSITION SIZING & EXECUTION                                   │
+│                                                                   │
+│ For Intra-Market:                                                │
+│    ├─ Budget = min(portfolio * risk%, maxPositionSize)           │
+│    ├─ Shares = floor(budget / (yesPrice + noPrice))              │
+│    ├─ Check: shares >= minOrderSize (from CLOB API)              │
+│    ├─ Check: expectedProfit >= minProfit ($0.01)                 │
+│    ├─ Check: ROI >= 1%                                           │
+│    ├─ Balance check: USDC >= totalCost * 1.05 (5% buffer)        │
+│    └─ Execute:                                                   │
+│       ├─ adapter.createLongPosition() → YES order                │
+│       └─ adapter.createShortPosition() → NO order                │
+│                                                                   │
+│ For Cross-Market:                                                │
+│    ├─ Cost/share = (1 - sellPrice) + buyPrice                    │
+│    ├─ Budget = min(portfolio * risk%, maxPositionSize)           │
+│    ├─ Max shares (budget) = floor(budget / costPerShare)         │
+│    ├─ Max shares (liquidity) = floor(minLiq * 5% / costPerShare) │
+│    ├─ Shares = min(budgetShares, liquidityShares)                │
+│    ├─ Check: shares >= minOrderSize                              │
+│    ├─ Check: expectedProfit >= minProfit                         │
+│    ├─ Check: slippage <= maxSlippage (5%)                        │
+│    ├─ Balance check: USDC >= netCost * 1.05                      │
+│    └─ Execute:                                                   │
+│       ├─ adapter.placeOrder() → Buy opposite on overpriced       │
+│       └─ adapter.placeOrder() → Buy underpriced                  │
+│                                                                   │
+│ Paper Trading Mode (POLY_PAPER_TRADING=true):                   │
+│    ├─ Skip actual execution                                      │
+│    ├─ Create simulated Transaction[] with status='simulated'     │
+│    └─ Update metrics as if executed                              │
+└────────────────────────┬─────────────────────────────────────────┘
+                         │
+┌────────────────────────▼─────────────────────────────────────────┐
+│ 8. SUMMARIZE CYCLE                                               │
+│    ├─ Aggregate metrics (opportunitiesFound, tradesExecuted)     │
+│    ├─ Create summary event for frontend                          │
+│    └─ Update iteration counter                                   │
+└────────────────────────┬─────────────────────────────────────────┘
+                         │
+                ┌────────┴────────┐
+                │                 │
+         ┌──────▼──────┐   ┌──────▼──────┐
+         │ Every 5th?  │   │ Every 10th? │
+         └──────┬──────┘   └──────┬──────┘
+                │                 │
+         ┌──────▼──────┐   ┌──────▼──────┐
+         │ Sync Pos    │   │ Redeem      │
+         └──────┬──────┘   └──────┬──────┘
+                │                 │
+┌───────────────▼─────────────────▼───────────────────────────────┐
+│ 9. SYNC POSITIONS (every 5th cycle)                             │
+│    ├─ Data API: getPositions(userWalletAddress)                  │
+│    ├─ Update userPositions in state                              │
+│    └─ Calculate unrealizedPnl from positions                     │
+└──────────────────────────────────────────────────────────────────┘
+                         │
+┌────────────────────────▼─────────────────────────────────────────┐
+│ 10. REDEEM POSITIONS (every 10th cycle)                         │
+│    ├─ Data API: getPositions(userWalletAddress)                  │
+│    ├─ Filter: outcome != 'null' (resolved markets)               │
+│    ├─ For each resolved position:                                │
+│    │  ├─ adapter.redeemPosition()                                │
+│    │  └─ Convert CTF tokens → USDC                               │
+│    └─ Update realizedPnl                                         │
+└────────────────────────┬─────────────────────────────────────────┘
+                         │
+┌────────────────────────▼─────────────────────────────────────────┐
+│ 11. WAIT & LOOP (if POLY_CONTINUOUS_POLLING=true)               │
+│    ├─ Wait POLY_POLL_INTERVAL_MS (default: 30s)                  │
+│    └─ Loop back to Step 1                                        │
+│                                                                   │
+│    OR END (if continuous polling disabled, wait for cron)        │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-### 3. PositionsTable
+---
 
-Shows current YES/NO token positions:
+## LangGraph Workflow
+
+The agent uses **LangGraph** for state management and workflow orchestration:
+
+### Workflow Graph
+
+```
+                          ┌──────────────┐
+                          │    START     │
+                          └──────┬───────┘
+                                 │
+                          ┌──────▼───────┐
+                          │  runCommand  │◄─────────┐
+                          └──────┬───────┘          │
+                                 │                  │
+                    ┌────────────┴────────────┐     │
+                    │                         │     │
+         ┌──────────▼─────────┐    ┌─────────▼──────────┐
+         │   hireCommand      │    │  cycleCommand      │
+         └──────────┬─────────┘    └─────────┬──────────┘
+                    │                        │
+         ┌──────────▼─────────┐              │
+         │    bootstrap       │              │
+         │                    │              │
+         │  • Load creds      │              │
+         │  • Init wallet     │              │
+         │  • lifecycleState  │              │
+         │    → 'running'     │              │
+         └──────────┬─────────┘              │
+                    │                        │
+            ┌───────┴────────┬───────────────┘
+            │                │
+   ┌────────▼────────┐  ┌────▼────────┐
+   │ checkApprovals  │  │  syncState  │
+   │                 │  │             │
+   │ • USDC permit   │  └────┬────────┘
+   │ • CTF approval  │       │
+   └────────┬────────┘       │
+            │                │
+            │                │
+   ┌────────▼────────┐       │
+   │   pollCycle     │       │
+   │                 │       │
+   │ • Fetch markets │       │
+   │ • Detect rels   │       │
+   │ • Scan opps     │       │
+   │ • Execute       │       │
+   └────────┬────────┘       │
+            │                │
+      ┌─────┴─────┐          │
+      │           │          │
+┌─────▼─────┐  ┌──▼─────────────┐
+│ Manual?   │  │   summarize    │
+│ Pending   │  │                │
+│ Trades?   │  │ • Aggregate    │
+└─────┬─────┘  │ • Update       │
+      │        └───────┬────────┘
+      │                │
+┌─────▼─────┐   ┌──────┴──────┐
+│ collect   │   │             │
+│ Trade     │ ┌─▼─────────┐ ┌─▼──────────┐
+│ Approval  │ │ syncPos   │ │ redeemPos  │
+└─────┬─────┘ │ (5th)     │ │ (10th)     │
+      │       └─────┬─────┘ └─────┬──────┘
+      │             │               │
+      └─────────────┴───────────────┴─────────►  END
+                                                  │
+                                                  │
+                                    (continuous   │
+                                     polling      │
+                                     loops back)  │
+```
+
+### Key Nodes
+
+| Node | Purpose | Triggers |
+|------|---------|----------|
+| `runCommand` | Command dispatcher | Frontend/Cron calls |
+| `hireCommand` | Agent activation | User clicks "Hire" |
+| `bootstrap` | Load credentials, init wallet | After hire |
+| `checkApprovals` | Verify USDC permit + CTF approval | Before each cycle |
+| `pollCycle` | **Main trading loop** | Every cycle |
+| `collectTradeApproval` | Manual trade approval | If pending trades exist |
+| `summarize` | Aggregate cycle results | After pollCycle |
+| `syncPositions` | Fetch real positions | Every 5th cycle |
+| `redeemPositions` | Auto-redeem resolved markets | Every 10th cycle |
+| `waitAndLoop` | Wait then loop back | Continuous polling mode |
+
+### Conditional Routing
+
+```typescript
+// From: runCommand
+switch (command) {
+  case 'hire': → hireCommand
+  case 'fire': → fireCommand
+  case 'cycle': → runCycleCommand
+  case 'sync': → syncState
+  case 'updateApproval': → updateApprovalCommand
+}
+
+// From: bootstrap
+if (lifecycleState === 'running'):
+  → checkApprovals
+else:
+  → syncState
+
+// From: pollCycle
+if (pendingTrades.length > 0):
+  → collectTradeApproval
+else:
+  → summarize
+
+// From: summarize
+if (iteration % 5 === 0):
+  → syncPositions
+elif (iteration % 10 === 0):
+  → redeemPositions
+elif (continuousPolling && running):
+  → waitAndLoop
+else:
+  → END
+```
+
+---
+
+## Frontend Integration
+
+### Component Hierarchy
+
+```
+PolymarketAgentPage
+├── AgentHeader (Status, P&L, Portfolio Value)
+├── TabNavigation
+│   ├── OpportunitiesTab
+│   │   ├── IntraMarketOpportunities
+│   │   └── CrossMarketOpportunities
+│   ├── RelationshipsTab
+│   │   └── RelationshipsTable
+│   ├── PositionsTab
+│   │   ├── UserPositionsTable (from Polymarket Data API)
+│   │   └── PortfolioSummary
+│   ├── TransactionsTab
+│   │   ├── AgentTransactionHistory
+│   │   └── RealTradingHistory (from Polymarket Data API)
+│   └── SettingsTab
+│       ├── RiskManagement
+│       ├── OpportunityFilters
+│       ├── DetectionSettings (LLM toggle)
+│       └── ApprovalSettings
+├── PendingTradesModal (if manual approval mode)
+└── AgentControls (Sync, Redeem, Fire)
+```
+
+### Key Components
+
+#### 1. OpportunityCard
+
+```tsx
+interface OpportunityCardProps {
+  type: 'intra-market' | 'cross-market';
+  opportunity: ArbitrageOpportunity | CrossMarketOpportunity;
+  onExecute?: () => void;
+}
+
+// Displays:
+// - Market title(s)
+// - Prices (YES/NO or parent/child)
+// - Spread/violation severity
+// - Expected profit & ROI
+// - Execute button (if auto mode)
+```
+
+#### 2. RelationshipsTable
+
+```tsx
+interface RelationshipsTableProps {
+  relationships: MarketRelationship[];
+  opportunities: CrossMarketOpportunity[];
+}
+
+// Displays:
+// - Relationship type (IMPLIES, REQUIRES, etc.)
+// - Parent/child markets
+// - Current prices
+// - Violation status (Valid/Violation)
+// - Confidence score
+// - Reasoning (from LLM)
+```
+
+#### 3. PositionsTable
 
 ```tsx
 interface PositionsTableProps {
-  positions: Position[];
+  userPositions: UserPosition[];  // From Polymarket Data API
   onClose?: (position: Position) => void;
 }
+
+// Displays:
+// - Market title
+// - Side (YES/NO)
+// - Size (shares)
+// - Cost basis
+// - Current value
+// - Unrealized P&L
+// - Outcome (if resolved)
 ```
 
-### 4. MetricsDisplay
-
-Agent performance metrics:
+#### 4. PendingTradeApprovalModal
 
 ```tsx
-interface MetricsDisplayProps {
-  metrics: PolymarketMetrics;
-  config: StrategyConfig;
+interface PendingTradeApprovalModalProps {
+  pendingTrades: PendingTrade[];
+  onApprove: (tradeId: string) => void;
+  onReject: (tradeId: string) => void;
 }
+
+// Displays:
+// - Trade type (intra/cross)
+// - Markets involved
+// - Position sizing (shares, costs)
+// - Expected profit & ROI
+// - Expiration countdown
+// - Approve/Reject buttons
 ```
 
----
+### State Synchronization
 
-## Agent Commands
+The frontend uses **CopilotKit** to sync with LangGraph state:
 
-The agent responds to these commands from the frontend:
+```typescript
+const { state } = useCopilotKitState<PolymarketState>();
 
-| Command | Description | State Transition |
-|---------|-------------|------------------|
-| `hire` | Start the agent | disabled → waiting-funds → running |
-| `fire` | Stop the agent | running → stopping → stopped |
-| `sync` | Refresh state | No transition (stays running) |
-| `cycle` | Force a poll cycle | Executed during running state |
+// Access agent state:
+const markets = state.view.markets;
+const opportunities = state.view.opportunities;
+const crossOpportunities = state.view.crossMarketOpportunities;
+const relationships = state.view.detectedRelationships;
+const userPositions = state.view.userPositions;
+const tradingHistory = state.view.tradingHistory;
+const portfolioValue = state.view.portfolioValueUsd;
+const metrics = state.view.metrics;
+const approvalStatus = state.view.approvalStatus;
+const pendingTrades = state.view.pendingTrades;
+
+// Send commands:
+const { runCommand } = useCopilotKitCommands();
+await runCommand('cycle');  // Trigger cycle
+await runCommand('sync');   // Sync state
+await runCommand('fire');   // Stop agent
+```
 
 ---
 
 ## Data Flow
 
+### Architecture Diagram
+
 ```
 ┌──────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │   Frontend   │────▶│   LangGraph      │────▶│   Polymarket    │
 │   (Next.js)  │     │   Agent          │     │   APIs          │
+│              │◀────│   (TypeScript)   │◀────│                 │
 └──────────────┘     └──────────────────┘     └─────────────────┘
        │                     │                        │
        │                     │                        │
        ▼                     ▼                        ▼
-  User Actions          Agent State              Market Data
-  - Hire/Fire           - Lifecycle              - Gamma API
-  - Configure           - Positions              - CLOB API
-  - View Metrics        - Transactions           - Prices
+  User Actions          Agent State              API Data
+  - Hire/Fire           - Lifecycle              - Markets (Gamma)
+  - Approve trades      - Opportunities          - Prices (CLOB)
+  - Configure           - Positions              - Orders (CLOB)
+  - View metrics        - Transactions           - Positions (Data)
+                        - Relationships          - History (Data)
+                        - Approvals
 ```
 
-### API Endpoints Used
+### API Endpoints
 
-1. **Gamma API** (https://gamma-api.polymarket.com)
-   - `GET /markets` - Fetch available markets
-   - No authentication required
+#### Polymarket APIs
 
-2. **CLOB API** (https://clob.polymarket.com)
-   - `GET /price` - Fetch current prices
-   - `POST /order` - Place orders (requires auth)
-   - `GET /orders` - Get open orders (requires auth)
+1. **Gamma API** (`https://gamma-api.polymarket.com`)
+   - `GET /markets?chainIds[]=137&status=active&offset=0&limit=50`
+   - Returns: Market metadata, tokens, end dates
+
+2. **CLOB API** (`https://clob.polymarket.com`)
+   - `GET /price?token_id={yesTokenId}&side=BUY`
+   - `GET /book?token_id={yesTokenId}`
+   - `POST /order` (requires auth signature)
+   - `GET /order/{orderId}`
+   - Returns: Prices, order book, order status
+
+3. **Data API** (`https://data-api.polymarket.com`)
+   - `GET /positions?user={address}`
+   - `GET /history?user={address}&limit=50`
+   - Returns: User positions, trading history
+
+#### LLM API
+
+4. **OpenAI API** (`https://api.openai.com/v1/chat/completions`)
+   - Model: `gpt-4o` or `gpt-4o-mini`
+   - Used for: Batch relationship detection
+   - Cost: ~$0.01-0.05 per cycle (if enabled)
 
 ---
 
-## State Machine
+## State Management
 
+### State Schema
+
+```typescript
+{
+  messages: Messages[];           // LangGraph conversation
+  copilotkit: { actions, context },
+  view: {                         // Frontend-visible
+    // Lifecycle
+    lifecycleState: 'disabled' | 'waiting-funds' | 'running' | 'stopping' | 'stopped',
+    command: string,
+    task: Task,
+
+    // Market Data
+    markets: Market[],
+    opportunities: ArbitrageOpportunity[],
+    crossMarketOpportunities: CrossMarketOpportunity[],
+    detectedRelationships: MarketRelationship[],
+
+    // Positions & History
+    positions: Position[],                 // Calculated
+    userPositions: UserPosition[],         // From API
+    transactionHistory: Transaction[],     // Agent-generated
+    tradingHistory: TradingHistoryItem[], // From API
+    portfolioValueUsd: number,
+
+    // Pending Trades
+    pendingTrades?: PendingTrade[],
+
+    // Metrics
+    metrics: {
+      iteration: number,
+      lastPoll: string,
+      totalPnl: number,
+      realizedPnl: number,
+      unrealizedPnl: number,
+      activePositions: number,
+      opportunitiesFound: number,
+      opportunitiesExecuted: number,
+      tradesExecuted: number,
+      tradesFailed: number,
+    },
+
+    // Configuration
+    config: StrategyConfig,
+
+    // Approvals
+    approvalStatus: { usdc, ctf },
+    needsUsdcPermitSignature: boolean,
+    usdcPermitTypedData: EIP712TypedData,
+    needsCtfApprovalTransaction: boolean,
+    ctfApprovalTransaction: ApprovalTransaction,
+
+    // Events
+    events: PolymarketEvent[],
+  },
+  private: {                      // Internal only
+    walletAddress: string,
+    userWalletAddress: string,
+    privateKey: string,
+    bootstrapped: boolean,
+  },
+}
 ```
-                    ┌─────────┐
-                    │ disabled│
-                    └────┬────┘
-                         │ hire
-                         ▼
-                  ┌──────────────┐
-                  │waiting-funds │
-                  └──────┬───────┘
-                         │ funds received
-                         ▼
-                    ┌─────────┐
-              ┌────▶│ running │◀────┐
-              │     └────┬────┘     │
-              │          │ fire     │ sync
-              │          ▼          │
-              │    ┌──────────┐     │
-              │    │ stopping │─────┘
-              │    └────┬─────┘
-              │         │ positions closed
-              │         ▼
-              │    ┌─────────┐
-              └────│ stopped │
-                   └─────────┘
+
+### State Merge Logic
+
+```typescript
+// Arrays that APPEND (incremental):
+- transactionHistory
+- events
+
+// Arrays that REPLACE (complete snapshot):
+- markets
+- opportunities
+- crossMarketOpportunities
+- detectedRelationships
+- userPositions
+- tradingHistory
 ```
 
 ---
 
 ## Environment Variables
 
+### Essential (Required)
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `POLY_PRIVATE_KEY` | Backend wallet private key | `0x123...` |
+| `POLY_FUNDER_ADDRESS` | Backend wallet address | `0xabc...` |
+| `POLY_USER_WALLET_ADDRESS` | Frontend wallet address | `0xdef...` |
+| `OPENAI_API_KEY` | OpenAI API key (if LLM enabled) | `sk-...` |
+
+### Strategy Configuration
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `A2A_TEST_AGENT_NODE_PRIVATE_KEY` | - | Private key for signing orders |
-| `POLY_FUNDER_ADDRESS` | - | Wallet address for trades |
-| `POLY_MIN_SPREAD_THRESHOLD` | `0.02` | Minimum spread (2%) |
-| `POLY_MAX_POSITION_SIZE_USD` | `100` | Max USD per position |
-| `POLY_PORTFOLIO_RISK_PCT` | `3` | Risk % per trade |
-| `POLY_POLL_INTERVAL_MS` | `30000` | Polling interval (30s) |
-| `POLYMARKET_CLOB_API` | `https://clob.polymarket.com` | CLOB API URL |
-| `POLYMARKET_GAMMA_API` | `https://gamma-api.polymarket.com` | Gamma API URL |
-`
+| `POLY_MIN_SPREAD_THRESHOLD` | `0.02` | Min intra-market spread (2%) |
+| `POLY_MIN_PROFIT_USD` | `0.01` | Min profit per trade ($0.01) |
+| `POLY_MAX_POSITION_SIZE_USD` | `100` | Max capital per trade |
+| `POLY_PORTFOLIO_RISK_PCT` | `3` | Portfolio risk % per trade |
+| `POLY_MAX_TOTAL_EXPOSURE_USD` | `500` | Total capital limit |
+| `POLY_MIN_SHARE_SIZE` | `5` | Fallback min share size |
+
+### Detection Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POLY_USE_LLM_DETECTION` | `false` | Enable LLM relationship detection |
+| `POLY_LLM_MODEL` | `gpt-4o-mini` | LLM model (gpt-4o, gpt-4o-mini) |
+| `POLY_LLM_MAX_MARKETS` | `25` | Max markets to send to LLM |
+
+### Execution Controls
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POLY_MAX_OPPORTUNITIES_PER_CYCLE` | `3` | Max trades per cycle |
+| `POLY_EXECUTE_ALL_OPPORTUNITIES` | `false` | Execute all viable opps |
+| `POLY_MANUAL_APPROVAL` | `false` | Enable manual trade approval |
+| `POLY_PAPER_TRADING` | `false` | Simulate trades (no execution) |
+| `POLY_BYPASS_EXPOSURE_CHECK` | `false` | Bypass exposure limits (testing) |
+
+### Polling & Lifecycle
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POLY_POLL_INTERVAL_MS` | `30000` | Polling interval (30 seconds) |
+| `POLY_CONTINUOUS_POLLING` | `false` | Loop continuously vs cron-driven |
+| `POLY_MAX_ITERATIONS` | `0` | Max cycles (0 = unlimited) |
+| `POLY_SYNC_POSITIONS` | `true` | Sync positions every 5th cycle |
+| `POLY_AUTO_REDEEM` | `false` | Auto-redeem every 10th cycle |
+| `POLY_KILL_SWITCH` | `false` | Emergency stop |
+
+### Market Fetching
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POLY_MARKET_FETCH_LIMIT` | `50` | Markets to fetch from Gamma |
+| `POLY_MAX_MARKETS` | `50` | Markets to analyze per cycle |
+| `POLY_MARKET_OFFSET` | `0` | Initial offset (rotates automatically) |
+
+### Testing
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POLYMARKET_USE_MOCK_DATA` | `false` | Use mock data (testing) |
+| `LOG_LEVEL` | `info` | Logging level (debug, info, warn, error) |
+
 ---
 
-## Testing the Integration
+## Quick Start
 
-### 1. Verify Market Fetching
+### 1. Setup Environment
 
 ```bash
-cd apps/agent-polymarket
-pnpm test:markets
+# Copy example env
+cp .env.example .env
+
+# Configure required variables
+POLY_PRIVATE_KEY=0x...
+POLY_FUNDER_ADDRESS=0x...
+POLY_USER_WALLET_ADDRESS=0x...
+OPENAI_API_KEY=sk-...  # Optional, for LLM detection
 ```
 
-This fetches live market data and displays opportunities.
-
-### 2. Run the Agent Locally
+### 2. Install Dependencies
 
 ```bash
+pnpm install
+```
+
+### 3. Run Agent
+
+```bash
+# Development mode (with hot reload)
 pnpm dev
+
+# Start LangGraph server on port 8125
 ```
 
-This starts the LangGraph development server on port 8125.
+### 4. Test via Frontend
 
-### 3. Test via Frontend
+```bash
+# In separate terminal, start web app
+cd apps/web
+pnpm dev
 
-1. Start the web app: `cd apps/web && pnpm dev`
-2. Navigate to `/hire-agents/agent-polymarket`
-3. Click "Hire" and follow the onboarding flow
+# Navigate to:
+http://localhost:3000/hire-agents/agent-polymarket
+
+# Click "Hire" and follow onboarding flow
+```
+
+### 5. Monitor Activity
+
+```bash
+# Watch agent logs
+tail -f logs/polymarket-agent.log
+
+# View cycle output
+# Shows: markets fetched, opportunities found, trades executed
+```
+
+---
+
+## Testing & Debugging
+
+### View Mock Data
+
+```bash
+# Decode and display mock file
+pnpm view:mock squid squid-route-1-137-0xa0b86...
+
+# Service: squid, dune, birdeye, polymarket
+# Mock name: filename without .json
+```
+
+### Run Specific Tests
+
+```bash
+# Unit tests
+pnpm test:unit
+
+# Integration tests
+pnpm test:int
+
+# Specific file
+pnpm test:int tests/scanner.int.test.ts
+
+# Specific test
+pnpm test:int -t "should detect IMPLIES relationship"
+```
+
+### Record New Mocks
+
+```bash
+# Record real API responses
+pnpm test:record-mocks
+
+# Requires API keys in .env
+# Saves to tests/mocks/data/
+```
+
+### Debug Failing Tests
+
+```bash
+# Show console logs during tests
+LOG_LEVEL=debug pnpm test:int
+
+# Show errors only
+LOG_LEVEL=error pnpm test:int
+```
+
+---
+
+## Troubleshooting
+
+### Agent Not Finding Opportunities
+
+**Check**:
+1. Market fetch limit: `POLY_MAX_MARKETS` (increase to scan more markets)
+2. Spread threshold: `POLY_MIN_SPREAD_THRESHOLD` (lower to find more opps)
+3. LLM enabled: `POLY_USE_LLM_DETECTION=true` (finds more cross-market opps)
+4. Paper trading: `POLY_PAPER_TRADING=true` (simulates trades without execution)
+
+### Trades Not Executing
+
+**Check**:
+1. Approvals: USDC permit + CTF approval (check `approvalStatus` in state)
+2. Balance: USDC balance >= trade cost * 1.05
+3. Exposure limits: Current exposure < `POLY_MAX_TOTAL_EXPOSURE_USD`
+4. Min profit: Trades meet `POLY_MIN_PROFIT_USD` threshold
+5. Manual approval: `POLY_MANUAL_APPROVAL=false` for auto-execution
+
+### LLM Detection Timeout
+
+**Check**:
+1. Market limit: `POLY_LLM_MAX_MARKETS` (reduce from 25 to 15)
+2. Model: `POLY_LLM_MODEL=gpt-4o-mini` (faster than gpt-4o)
+3. Timeout: 120s built-in, may need faster model or fewer markets
+
+### Position Sync Not Working
+
+**Check**:
+1. Wallet address: `POLY_USER_WALLET_ADDRESS` must be set
+2. API access: Polymarket Data API may have rate limits
+3. Sync enabled: `POLY_SYNC_POSITIONS=true`
+4. Frequency: Only syncs every 5th cycle
+
+---
+
+## Performance Optimization
+
+### Reduce Cycle Time
+
+1. Lower market count: `POLY_MAX_MARKETS=25`
+2. Disable LLM: `POLY_USE_LLM_DETECTION=false`
+3. Use pattern matching only (faster, deterministic)
+
+### Reduce API Costs
+
+1. Use LLM selectively: Only enable for specific market types
+2. Smaller LLM model: `POLY_LLM_MODEL=gpt-4o-mini` (~50% cheaper)
+3. Reduce LLM market limit: `POLY_LLM_MAX_MARKETS=15`
+
+### Increase Opportunity Detection
+
+1. Enable LLM: `POLY_USE_LLM_DETECTION=true`
+2. Increase market count: `POLY_MAX_MARKETS=100`
+3. Lower thresholds: `POLY_MIN_SPREAD_THRESHOLD=0.01`
+4. Execute all opportunities: `POLY_EXECUTE_ALL_OPPORTUNITIES=true`
+
+---
+
+For detailed architecture, strategy, and workflow documentation, see:
+- [01-architecture-overview.md](./01-architecture-overview.md)
+- [02-strategy-deep-dive.md](./02-strategy-deep-dive.md)
+- [03-langgraph-workflow.md](./03-langgraph-workflow.md)
+- [strategy-overview.md](./strategy-overview.md)
