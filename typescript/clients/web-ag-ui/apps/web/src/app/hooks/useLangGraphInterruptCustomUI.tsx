@@ -1,4 +1,6 @@
-import { useLangGraphInterrupt } from '@copilotkit/react-core';
+'use client';
+
+import { useAgent } from '@copilotkit/react-core/v2';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
@@ -16,19 +18,36 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *   return <MyForm data={activeInterrupt} onSubmit={resolve} />;
  * }
  */
+type InterruptEvent = {
+  type?: string;
+  name?: string;
+  value?: unknown;
+};
+
+function parseInterruptValue(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
 export function useLangGraphInterruptCustomUI<T>(options: {
   enabled: (eventValue: unknown) => eventValue is T;
+  agentId?: string;
 }): {
   activeInterrupt: T | null;
   resolve: (value: string) => void;
   dismiss: () => void;
 } {
+  const { enabled, agentId } = options;
+  const { agent } = useAgent({ agentId });
   const [activeInterrupt, setActiveInterrupt] = useState<T | null>(null);
   const activeInterruptRef = useRef<T | null>(null);
-  const pendingInterruptRef = useRef<T | null>(null);
-  const resolveRef = useRef<((value: string) => void) | null>(null);
   const lastResolvedKeyRef = useRef<string | null>(null);
-  const pendingScheduleRef = useRef(false);
 
   useEffect(() => {
     activeInterruptRef.current = activeInterrupt;
@@ -48,74 +67,56 @@ export function useLangGraphInterruptCustomUI<T>(options: {
     return [type, message, artifactId, chainId, optionsLen, delegationsLen].join('|');
   }, []);
 
-  const promotePendingInterrupt = useCallback(() => {
-    const pending = pendingInterruptRef.current;
-    if (!pending) return;
-
-    const pendingKey = interruptKey(pending);
-    if (pendingKey && pendingKey === lastResolvedKeyRef.current) {
-      pendingInterruptRef.current = null;
+  useEffect(() => {
+    if (!agent) {
       return;
     }
 
-    const activeKey = interruptKey(activeInterruptRef.current);
-    if (!activeInterruptRef.current || (pendingKey && activeKey && pendingKey !== activeKey)) {
-      lastResolvedKeyRef.current = null;
-      setActiveInterrupt(pending);
-    }
+    const { unsubscribe } = agent.subscribe({
+      onEvent: ({ event }) => {
+        const customEvent = event as InterruptEvent;
+        if (customEvent.type !== 'CUSTOM' || customEvent.name !== 'on_interrupt') {
+          return;
+        }
 
-    pendingInterruptRef.current = null;
-  }, [interruptKey]);
+        const parsed = parseInterruptValue(customEvent.value);
+        if (!enabled(parsed)) {
+          return;
+        }
 
-  useLangGraphInterrupt<T>({
-    enabled: ({ eventValue }) => {
-      const isMatch = options.enabled(eventValue);
-      if (!isMatch) return false;
+        const key = interruptKey(parsed);
+        if (key && key === lastResolvedKeyRef.current) {
+          return;
+        }
 
-      const key = interruptKey(eventValue);
-      if (key && key === lastResolvedKeyRef.current) {
-        return false;
-      }
+        const activeKey = interruptKey(activeInterruptRef.current);
+        if (!activeInterruptRef.current || (key && activeKey && key !== activeKey)) {
+          lastResolvedKeyRef.current = null;
+          setActiveInterrupt(parsed);
+        }
+      },
+      onRunStartedEvent: () => {
+        lastResolvedKeyRef.current = null;
+      },
+    });
 
-      const activeKey = interruptKey(activeInterruptRef.current);
-      if (key && activeKey && key === activeKey) {
-        return true;
-      }
-
-      pendingInterruptRef.current = eventValue;
-      if (!pendingScheduleRef.current) {
-        pendingScheduleRef.current = true;
-        setTimeout(() => {
-          pendingScheduleRef.current = false;
-          promotePendingInterrupt();
-        }, 0);
-      }
-
-      return true;
-    },
-    render: ({ resolve }) => {
-      resolveRef.current = resolve;
-      return <></>;
-    },
-  });
+    return () => {
+      unsubscribe();
+    };
+  }, [agent, enabled, interruptKey]);
 
   const resolve = useCallback(
     (value: string) => {
       lastResolvedKeyRef.current = interruptKey(activeInterruptRef.current);
-      if (resolveRef.current) {
-        resolveRef.current(value);
-      }
+      void agent.runAgent({ forwardedProps: { command: { resume: value } } });
       setActiveInterrupt(null);
-      pendingInterruptRef.current = null;
     },
-    [interruptKey],
+    [agent, interruptKey],
   );
 
   const dismiss = useCallback(() => {
     lastResolvedKeyRef.current = interruptKey(activeInterruptRef.current);
     setActiveInterrupt(null);
-    pendingInterruptRef.current = null;
-    resolveRef.current = null;
   }, [interruptKey]);
 
   return { activeInterrupt, resolve, dismiss };

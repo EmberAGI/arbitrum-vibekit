@@ -1,0 +1,39 @@
+diff --git a/dist/chunk-5AVAJKYU.mjs b/dist/chunk-5AVAJKYU.mjs
+index aa890d5c7c79c57d101aff53e850166908ead45d..9a15ebf3f7cf1230a29de52650ef23900fa16b08 100644
+--- a/dist/chunk-5AVAJKYU.mjs
++++ b/dist/chunk-5AVAJKYU.mjs
+@@ -303,8 +303,9 @@ function copilotKitInterrupt({ message, action, args }) {
+ __name(copilotKitInterrupt, "copilotKitInterrupt");
+ 
+ // src/langgraph/middleware.ts
+-import { createMiddleware, AIMessage as AIMessage2 } from "langchain";
++import { AIMessage as AIMessage2 } from "@langchain/core/messages";
+ import * as z from "zod";
++var createMiddleware = (input) => input;
+ var copilotKitStateSchema = z.object({
+   copilotkit: z.object({
+     actions: z.array(z.any()),
+diff --git a/dist/langgraph.js b/dist/langgraph.js
+index 45418e10adb6113d2ecfd967c2fc6a316e36c6c7..b4661f4c1da9d3dd3afbe97cdd9253c6da14b47d 100644
+--- a/dist/langgraph.js
++++ b/dist/langgraph.js
+@@ -346,8 +346,9 @@ function copilotKitInterrupt({ message, action, args }) {
+ __name(copilotKitInterrupt, "copilotKitInterrupt");
+ 
+ // src/langgraph/middleware.ts
+-var import_langchain = require("langchain");
++var import_langchain = require("@langchain/core/messages");
+ var z = __toESM(require("zod"));
++var createMiddleware = (input) => input;
+ var copilotKitStateSchema = z.object({
+   copilotkit: z.object({
+     actions: z.array(z.any()),
+@@ -457,7 +458,7 @@ var middlewareInput = {
+   }
+ };
+ var createCopilotKitMiddleware = /* @__PURE__ */ __name(() => {
+-  return (0, import_langchain.createMiddleware)(middlewareInput);
++  return createMiddleware(middlewareInput);
+ }, "createCopilotKitMiddleware");
+ var copilotkitMiddleware = createCopilotKitMiddleware();
+ // Annotate the CommonJS export names for ESM import in node:

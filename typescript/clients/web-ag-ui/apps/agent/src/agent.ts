@@ -16,16 +16,15 @@ import {
   interrupt,
 } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
-import {
-  convertActionsToDynamicStructuredTools,
-  copilotkitEmitState,
-  CopilotKitStateAnnotation,
-} from '@copilotkit/sdk-js/langgraph';
+import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 import { Annotation } from '@langchain/langgraph';
 import type { AIMessage } from '@copilotkit/shared';
 import { v7 } from 'uuid';
 
 import { createCheckpointer } from './config/serviceConfig.js';
+
+const { convertActionsToDynamicStructuredTools, copilotkitEmitState, CopilotKitStateAnnotation } =
+  copilotkitLanggraph;
 
 type Task = {
   id: string;

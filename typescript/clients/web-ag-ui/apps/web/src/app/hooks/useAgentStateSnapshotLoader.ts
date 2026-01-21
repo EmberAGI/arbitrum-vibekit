@@ -1,5 +1,6 @@
-import { useCopilotContext } from '@copilotkit/react-core';
-import { parseJson } from '@copilotkit/shared';
+'use client';
+
+import { useAgent } from '@copilotkit/react-core/v2';
 
 type SnapshotResult<TState> = {
   threadId: string;
@@ -14,20 +15,28 @@ type SnapshotResult<TState> = {
  * - Returns null when the thread does not exist or has no state
  */
 export function useAgentStateSnapshotLoader<TState>(agentName: string) {
-  const { runtimeClient } = useCopilotContext();
+  const { agent } = useAgent({ agentId: agentName });
 
   return async (threadId: string): Promise<SnapshotResult<TState> | null> => {
-    const { data } = await runtimeClient.loadAgentState({ threadId, agentName });
-    const payload = data?.loadAgentState;
+    if (!threadId) {
+      return null;
+    }
 
-    if (!payload?.threadExists || !payload.state) {
+    if (agent.threadId !== threadId) {
+      // eslint-disable-next-line react-hooks/immutability -- align agent thread with requested snapshot
+      agent.threadId = threadId;
+    }
+
+    try {
+      await agent.connectAgent();
+    } catch {
       return null;
     }
 
     return {
-      threadId: payload.threadId,
-      state: parseJson(payload.state, {}) as TState,
-      messages: parseJson(payload.messages, []),
+      threadId: agent.threadId,
+      state: agent.state as TState,
+      messages: agent.messages,
     };
   };
 }

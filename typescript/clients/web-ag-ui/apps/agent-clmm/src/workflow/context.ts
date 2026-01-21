@@ -1,9 +1,10 @@
-import type { CopilotKitState } from '@copilotkit/sdk-js/langgraph';
 import type { AIMessage as CopilotKitAIMessage } from '@copilotkit/shared';
 import { type Artifact } from '@emberai/agent-node/workflow';
 import { Annotation, messagesStateReducer } from '@langchain/langgraph';
 import type { Messages } from '@langchain/langgraph';
 import { v7 as uuidv7 } from 'uuid';
+
+import type { CopilotKitState } from '@copilotkit/sdk-js/langgraph';
 
 import type { AccountingState } from '../accounting/types.js';
 import {
@@ -403,6 +404,8 @@ const mergeCopilotkit = (
 ): CopilotState['copilotkit'] => ({
   actions: right?.actions ?? left.actions ?? [],
   context: right?.context ?? left.context ?? [],
+  interceptedToolCalls: right?.interceptedToolCalls ?? left.interceptedToolCalls ?? [],
+  originalAIMessageId: right?.originalAIMessageId ?? left.originalAIMessageId ?? '',
 });
 
 export const ClmmStateAnnotation = Annotation.Root({
@@ -411,8 +414,22 @@ export const ClmmStateAnnotation = Annotation.Root({
     reducer: messagesStateReducer,
   }),
   copilotkit: Annotation<CopilotState['copilotkit'], Partial<CopilotState['copilotkit']>>({
-    default: () => ({ actions: [], context: [] }),
-    reducer: (left, right) => mergeCopilotkit(left ?? { actions: [], context: [] }, right),
+    default: () => ({
+      actions: [],
+      context: [],
+      interceptedToolCalls: [],
+      originalAIMessageId: '',
+    }),
+    reducer: (left, right) =>
+      mergeCopilotkit(
+        left ?? {
+          actions: [],
+          context: [],
+          interceptedToolCalls: [],
+          originalAIMessageId: '',
+        },
+        right,
+      ),
   }),
   settings: Annotation<ClmmSettings, Partial<ClmmSettings>>({
     default: defaultSettingsState,
