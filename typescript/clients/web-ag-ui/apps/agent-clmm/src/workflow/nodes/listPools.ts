@@ -1,6 +1,6 @@
+import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
-import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 
 import { ARBITRUM_CHAIN_ID } from '../../config/constants.js';
 import { type CamelotPool } from '../../domain/types.js';

@@ -1,10 +1,10 @@
+import type { CopilotKitState } from '@copilotkit/sdk-js/langgraph';
 import type { AIMessage as CopilotKitAIMessage } from '@copilotkit/shared';
 import { type Artifact } from '@emberai/agent-node/workflow';
 import { Annotation, messagesStateReducer } from '@langchain/langgraph';
 import type { Messages } from '@langchain/langgraph';
 import { v7 as uuidv7 } from 'uuid';
 
-import type { CopilotKitState } from '@copilotkit/sdk-js/langgraph';
 
 import type { AccountingState } from '../accounting/types.js';
 import {
@@ -24,7 +24,12 @@ import {
 
 export type AgentMessage = CopilotKitAIMessage;
 
-type CopilotState = CopilotKitState;
+type CopilotState = Omit<CopilotKitState, 'copilotkit'> & {
+  copilotkit: CopilotKitState['copilotkit'] & {
+    interceptedToolCalls: unknown[];
+    originalAIMessageId: string;
+  };
+};
 
 export type ClmmSettings = {
   amount?: number;

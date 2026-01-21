@@ -1,8 +1,8 @@
+import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
 import { decodeFunctionData, encodeFunctionData, erc20Abi, parseUnits } from 'viem';
 import { z } from 'zod';
 
-import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 
 import {
   EmberApiRequestError,

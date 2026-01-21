@@ -1,6 +1,6 @@
+import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
-import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 
 import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
 import type { AccountingState, FlowLogEventInput } from '../../accounting/types.js';

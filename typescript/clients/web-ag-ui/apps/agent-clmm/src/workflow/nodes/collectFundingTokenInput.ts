@@ -1,8 +1,8 @@
+import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
 import { erc20Abi, formatUnits } from 'viem';
 import { z } from 'zod';
 
-import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
 import { ARBITRUM_CHAIN_ID, resolveTickBandwidthBps } from '../../config/constants.js';

@@ -1,6 +1,6 @@
+import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
-import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 
 import { resolvePollIntervalMs, resolveStreamLimit } from '../../config/constants.js';
 import { logInfo, type ClmmEvent, type ClmmState, type ClmmUpdate } from '../context.js';

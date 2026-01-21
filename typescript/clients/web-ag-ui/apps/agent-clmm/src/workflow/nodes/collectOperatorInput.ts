@@ -1,7 +1,7 @@
+import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
 import { z } from 'zod';
 
-import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 
 import { OperatorConfigInputSchema } from '../../domain/types.js';
 import {
