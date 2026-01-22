@@ -6,7 +6,15 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint \"src\" --ext .ts,.tsx"
+    "lint": "eslint \"src\" --ext .ts,.tsx",
+    "lint:fix": "eslint \"src\" --ext .ts,.tsx --fix",
+    "format": "prettier \"{src,tests}/**/*.{ts,tsx,js,jsx,json,md}\" --write",
+    "format:check": "prettier \"{src,tests}/**/*.{ts,tsx,js,jsx,json,md}\" --check",
+    "test": "pnpm test:unit && pnpm test:e2e",
+    "test:unit": "vitest run --config vitest.config.unit.ts",
+    "test:e2e": "bash -lc 'ENV_FILE=.env.test; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test.example; exec node --env-file=\"$ENV_FILE\" ./node_modules/vitest/vitest.mjs run --config vitest.config.e2e.ts --no-file-parallelism --maxConcurrency=1 \"$@\"' --",
+    "test:watch": "vitest watch --config vitest.config.unit.ts",
+    "test:ci": "pnpm test:unit && pnpm test:e2e"
   },
   "dependencies": {
     "@ag-ui/client": "^0.0.43",
@@ -32,13 +40,16 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.7",
     "eslint-plugin-next": "^0.0.0",
+    "jsdom": "^27.4.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.8"
   }
 }
