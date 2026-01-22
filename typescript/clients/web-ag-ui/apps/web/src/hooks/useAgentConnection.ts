@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAgent } from '@copilotkit/react-core/v2';
-import { v7 as uuidv7 } from 'uuid';
+import { v5 as uuidv5, v7 as uuidv7 } from 'uuid';
 import { useLangGraphInterruptCustomUI } from '../app/hooks/useLangGraphInterruptCustomUI';
 import { getAgentConfig, type AgentConfig } from '../config/agents';
 import { usePrivyWalletClient } from './usePrivyWalletClient';
@@ -98,7 +98,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const [isHiring, setIsHiring] = useState(false);
   const [isFiring, setIsFiring] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const initialSyncDone = useRef(false);
+  const initialAttachDone = useRef(false);
+  const queuedCommands = useRef<string[]>([]);
 
   const config = getAgentConfig(agentId);
 
@@ -116,7 +117,10 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       return stored;
     }
 
-    const nextThreadId = uuidv7();
+    const nextThreadId = uuidv5(
+      `${agentId}:${privyWallet.address.toLowerCase()}`,
+      uuidv5.URL,
+    );
     window.localStorage.setItem(storageKey, nextThreadId);
     return nextThreadId;
   }, [agentId, privyWallet]);
@@ -132,7 +136,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   }, [agent, threadId]);
 
   useEffect(() => {
-    initialSyncDone.current = false;
+    initialAttachDone.current = false;
   }, [threadId]);
 
   const { activeInterrupt, resolve } = useLangGraphInterruptCustomUI<AgentInterrupt>({
@@ -140,10 +144,21 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     agentId,
   });
 
-  // Simple command runner - no queuing, just run the command
+  const attachToThread = useCallback(() => {
+    if (!threadId) {
+      return;
+    }
+    void Promise.resolve(agent.connectAgent?.()).catch(() => undefined);
+  }, [agent, threadId]);
+
   const runCommand = useCallback(
     (command: string) => {
       if (!threadId) {
+        return;
+      }
+      if (agent.isRunning) {
+        queuedCommands.current.push(command);
+        attachToThread();
         return;
       }
       const message = {
@@ -154,17 +169,34 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       agent.addMessage(message);
       void agent.runAgent();
     },
-    [agent, threadId],
+    [agent, attachToThread, threadId],
   );
 
-  // Initial sync when thread is established - runs once when threadId becomes available
+  // Attach to the LangGraph thread when threadId becomes available
   useEffect(() => {
-    if (threadId && !initialSyncDone.current) {
-      initialSyncDone.current = true;
-      // Run sync immediately to populate initial state
-      runCommand('sync');
+    if (!threadId || initialAttachDone.current) {
+      return;
     }
-  }, [threadId, runCommand]);
+    initialAttachDone.current = true;
+    attachToThread();
+  }, [attachToThread, threadId]);
+
+  useEffect(() => {
+    if (!threadId || agent.isRunning || queuedCommands.current.length === 0) {
+      return;
+    }
+    const nextCommand = queuedCommands.current.shift();
+    if (!nextCommand) {
+      return;
+    }
+    const message = {
+      id: uuidv7(),
+      role: 'user' as const,
+      content: JSON.stringify({ command: nextCommand }),
+    };
+    agent.addMessage(message);
+    void agent.runAgent();
+  }, [agent, agent.isRunning, threadId]);
 
   // Extract state with defaults
   const state = (agent.state as AgentState | undefined) ?? initialAgentState;
@@ -181,10 +213,13 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const isActive = view.command !== undefined && view.command !== 'idle' && view.command !== 'fire';
 
   const runSync = useCallback(() => {
+    if (!threadId) {
+      return;
+    }
     setIsSyncing(true);
-    runCommand('sync');
+    attachToThread();
     setTimeout(() => setIsSyncing(false), 2000);
-  }, [runCommand]);
+  }, [attachToThread, threadId]);
 
   const runHire = useCallback(() => {
     if (!isHired && !isHiring) {
