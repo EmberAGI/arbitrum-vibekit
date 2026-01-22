@@ -531,7 +531,7 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
       if (opportunity.type === 'intra') {
         const position = calculatePositionSize(
           opportunity.opp,
-          state.view.portfolioValueUsd || 1000,
+          state.view.approvalStatus,
           state.view.config,
         );
 
@@ -559,7 +559,7 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
       } else {
         const position = calculateCrossMarketPositionSize(
           opportunity.opp,
-          state.view.portfolioValueUsd || 1000,
+          state.view.approvalStatus,
           state.view.config,
         );
 
@@ -642,7 +642,7 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
           // Execute intra-market arbitrage
           const position = calculatePositionSize(
             opportunity.opp,
-            state.view.portfolioValueUsd || 1000,
+            state.view.approvalStatus,
             state.view.config,
           );
 
@@ -737,7 +737,7 @@ export async function pollCycleNode(state: PolymarketState): Promise<PolymarketU
           // Execute cross-market arbitrage
           const position = calculateCrossMarketPositionSize(
             opportunity.opp,
-            state.view.portfolioValueUsd || 1000,
+            state.view.approvalStatus,
             state.view.config,
           );
 

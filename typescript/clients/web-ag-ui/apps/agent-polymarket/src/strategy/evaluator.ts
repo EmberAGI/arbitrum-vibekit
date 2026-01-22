@@ -11,6 +11,7 @@ import type {
   StrategyConfig,
 } from '../workflow/context.js';
 import { logInfo } from '../workflow/context.js';
+import type { ApprovalStatus } from '../clients/approvals.js';
 
 /**
  * Calculated position size for an arbitrage trade.
@@ -43,24 +44,37 @@ export interface PositionSize {
  * - Profit per share pair = $1.00 - (yesPrice + noPrice) = spread
  *
  * @param opportunity - The arbitrage opportunity
- * @param portfolioValue - Total portfolio value in USD
+ * @param approvalStatus - Approval status containing USDC balance and allowance
  * @param config - Strategy configuration
  * @returns Calculated position size, or null if not viable
  */
 export function calculatePositionSize(
   opportunity: ArbitrageOpportunity,
-  portfolioValue: number,
+  approvalStatus: ApprovalStatus | undefined,
   config: StrategyConfig,
 ): PositionSize | null {
-  // Calculate risk-adjusted position size (% of portfolio)
-  const maxRiskAmount = portfolioValue * (config.portfolioRiskPct / 100);
+  // Calculate available capital based on what contract can actually spend
+  const usdcBalance = approvalStatus?.usdcBalance ?? 0;
+  const usdcAllowance = approvalStatus?.usdcAllowance ?? 0;
 
-  // Cap at max position size
-  const positionBudget = Math.min(maxRiskAmount, config.maxPositionSizeUsd);
+  // Position budget is the minimum of:
+  // 1. User's configured max position size
+  // 2. Available USDC in wallet
+  // 3. Approved USDC allowance (most restrictive in DeFi)
+  const positionBudget = Math.min(
+    config.maxPositionSizeUsd,
+    usdcBalance,
+    usdcAllowance,
+  );
 
   // Need minimum viable position
   if (positionBudget < 1) {
-    logInfo('Position budget too small', { positionBudget, portfolioValue });
+    logInfo('Position budget too small', {
+      positionBudget,
+      usdcBalance,
+      usdcAllowance,
+      maxPositionSize: config.maxPositionSizeUsd,
+    });
     return null;
   }
 
@@ -264,13 +278,13 @@ export interface CrossMarketPositionSize {
  * The arbitrage profit comes from the price violation.
  *
  * @param opportunity - The cross-market opportunity
- * @param portfolioValue - Total portfolio value in USD
+ * @param approvalStatus - Approval status containing USDC balance and allowance
  * @param config - Strategy configuration
  * @returns Calculated position size, or null if not viable
  */
 export function calculateCrossMarketPositionSize(
   opportunity: CrossMarketOpportunity,
-  portfolioValue: number,
+  approvalStatus: ApprovalStatus | undefined,
   config: StrategyConfig,
 ): CrossMarketPositionSize | null {
   const { trades, relationship } = opportunity;
@@ -288,25 +302,25 @@ export function calculateCrossMarketPositionSize(
   const minShares = opportunity.minOrderSize ?? config.minShareSize ?? 5;
   const minBudgetRequired = minShares * costPerShare;
 
-  // Calculate risk-adjusted budget
-  const maxRiskAmount = portfolioValue * (config.portfolioRiskPct / 100);
-  let positionBudget = Math.min(maxRiskAmount, config.maxPositionSizeUsd);
+  // Calculate available capital based on what contract can actually spend
+  const usdcBalance = approvalStatus?.usdcBalance ?? 0;
+  const usdcAllowance = approvalStatus?.usdcAllowance ?? 0;
 
-  // Ensure budget covers minimum shares if portfolio allows
-  if (positionBudget < minBudgetRequired && portfolioValue >= minBudgetRequired) {
-    positionBudget = minBudgetRequired;
-    logInfo('Adjusted cross-market budget to minimum required', {
-      originalBudget: maxRiskAmount.toFixed(2),
-      adjustedBudget: positionBudget.toFixed(2),
-      minShares,
-      costPerShare: costPerShare.toFixed(2),
-    });
-  }
+  // Position budget is the minimum of:
+  // 1. User's configured max position size
+  // 2. Available USDC in wallet
+  // 3. Approved USDC allowance (most restrictive in DeFi)
+  const positionBudget = Math.min(
+    config.maxPositionSizeUsd,
+    usdcBalance,
+    usdcAllowance,
+  );
 
   if (positionBudget < minBudgetRequired) {
     logInfo('Cross-market position budget too small for minimum shares', {
       positionBudget: positionBudget.toFixed(2),
-      portfolioValue: portfolioValue.toFixed(2),
+      usdcBalance: usdcBalance.toFixed(2),
+      usdcAllowance: usdcAllowance.toFixed(2),
       minBudgetRequired: minBudgetRequired.toFixed(2),
       minShares,
     });

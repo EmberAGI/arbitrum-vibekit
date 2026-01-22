@@ -8,10 +8,12 @@ import type { Market, StrategyConfig } from '../../src/workflow/context.js';
 
 const defaultConfig: StrategyConfig = {
   minSpreadThreshold: 0.02,
+  minPositionSizeUsd: 1,
   maxPositionSizeUsd: 100,
   portfolioRiskPct: 3,
   pollIntervalMs: 30000,
   maxTotalExposureUsd: 500,
+  minShareSize: 5,
 };
 
 describe('scanForOpportunities', () => {

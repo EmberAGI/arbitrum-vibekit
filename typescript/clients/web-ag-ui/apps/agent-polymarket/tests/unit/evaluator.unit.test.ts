@@ -5,13 +5,16 @@
 import { describe, it, expect } from 'vitest';
 import { calculatePositionSize, isPositionViable } from '../../src/strategy/evaluator.js';
 import type { ArbitrageOpportunity, StrategyConfig } from '../../src/workflow/context.js';
+import type { ApprovalStatus } from '../../src/clients/approvals.js';
 
 const defaultConfig: StrategyConfig = {
   minSpreadThreshold: 0.02,
+  minPositionSizeUsd: 1,
   maxPositionSizeUsd: 100,
   portfolioRiskPct: 3,
   pollIntervalMs: 30000,
   maxTotalExposureUsd: 500,
+  minShareSize: 5,
 };
 
 const sampleOpportunity: ArbitrageOpportunity = {
@@ -24,11 +27,22 @@ const sampleOpportunity: ArbitrageOpportunity = {
   spread: 0.03,
   profitPotential: 0.03,
   timestamp: new Date().toISOString(),
+  minOrderSize: 5,
 };
+
+const createApprovalStatus = (usdcBalance: number, usdcAllowance: number): ApprovalStatus => ({
+  ctfApproved: true,
+  usdcApproved: true,
+  polBalance: 1.0,
+  usdcBalance,
+  usdcAllowance,
+  needsApproval: false,
+});
 
 describe('calculatePositionSize', () => {
   it('should calculate correct shares for equal dollar split', () => {
-    const position = calculatePositionSize(sampleOpportunity, 1000, defaultConfig);
+    const approvalStatus = createApprovalStatus(1000, 1000);
+    const position = calculatePositionSize(sampleOpportunity, approvalStatus, defaultConfig);
 
     expect(position).not.toBeNull();
     expect(position!.yesShares).toBeGreaterThan(0);
@@ -37,14 +51,16 @@ describe('calculatePositionSize', () => {
   });
 
   it('should cap position at maxPositionSizeUsd', () => {
-    const position = calculatePositionSize(sampleOpportunity, 10000, defaultConfig);
+    const approvalStatus = createApprovalStatus(10000, 10000);
+    const position = calculatePositionSize(sampleOpportunity, approvalStatus, defaultConfig);
 
     expect(position).not.toBeNull();
     expect(position!.totalCostUsd).toBeLessThanOrEqual(defaultConfig.maxPositionSizeUsd);
   });
 
-  it('should return null for tiny portfolios', () => {
-    const position = calculatePositionSize(sampleOpportunity, 10, {
+  it('should return null for insufficient balance', () => {
+    const approvalStatus = createApprovalStatus(0.5, 0.5);
+    const position = calculatePositionSize(sampleOpportunity, approvalStatus, {
       ...defaultConfig,
       maxPositionSizeUsd: 1,
     });
@@ -52,8 +68,18 @@ describe('calculatePositionSize', () => {
     expect(position).toBeNull();
   });
 
+  it('should be limited by allowance when allowance < balance', () => {
+    const approvalStatus = createApprovalStatus(1000, 50);
+    const position = calculatePositionSize(sampleOpportunity, approvalStatus, defaultConfig);
+
+    expect(position).not.toBeNull();
+    // Position should be capped by allowance (50), not balance (1000) or maxPositionSize (100)
+    expect(position!.totalCostUsd).toBeLessThanOrEqual(50);
+  });
+
   it('should calculate expected profit correctly', () => {
-    const position = calculatePositionSize(sampleOpportunity, 1000, defaultConfig);
+    const approvalStatus = createApprovalStatus(1000, 1000);
+    const position = calculatePositionSize(sampleOpportunity, approvalStatus, defaultConfig);
 
     expect(position).not.toBeNull();
     expect(position!.expectedProfitUsd).toBeGreaterThan(0);

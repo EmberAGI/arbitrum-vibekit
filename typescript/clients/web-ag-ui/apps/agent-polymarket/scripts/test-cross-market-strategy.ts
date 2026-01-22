@@ -12,6 +12,19 @@ import { detectMarketRelationships, checkPriceViolation } from '../src/strategy/
 import { scanForCrossMarketOpportunities } from '../src/strategy/scanner.js';
 import { calculateCrossMarketPositionSize, isCrossMarketPositionViable } from '../src/strategy/evaluator.js';
 import { DEFAULT_STRATEGY_CONFIG } from '../src/workflow/context.js';
+import type { ApprovalStatus } from '../src/clients/approvals.js';
+
+// Helper function to create approval status for testing
+function createApprovalStatus(usdcBalance: number, usdcAllowance: number): ApprovalStatus {
+  return {
+    ctfApproved: true,
+    usdcApproved: true,
+    polBalance: 1.0,
+    usdcBalance,
+    usdcAllowance,
+    needsApproval: false,
+  };
+}
 
 // ============================================================================
 // Mock Market Data
@@ -164,15 +177,18 @@ async function testPositionSizing() {
     return;
   }
 
-  const portfolioValue = 10000; // $10,000 test portfolio
-  console.log(`\nPortfolio Value: $${portfolioValue.toLocaleString()}`);
-  console.log(`Risk per trade: ${DEFAULT_STRATEGY_CONFIG.portfolioRiskPct}%`);
+  const usdcBalance = 10000; // $10,000 USDC balance
+  const usdcAllowance = 10000; // $10,000 USDC approved
+  const approvalStatus = createApprovalStatus(usdcBalance, usdcAllowance);
+
+  console.log(`\nUSDC Balance: $${usdcBalance.toLocaleString()}`);
+  console.log(`USDC Allowance: $${usdcAllowance.toLocaleString()}`);
   console.log(`Max position size: $${DEFAULT_STRATEGY_CONFIG.maxPositionSizeUsd}\n`);
 
   for (const opp of result.opportunities) {
     console.log(`\n📊 Position for: ${opp.relationship.parentMarket.title.substring(0, 40)}...`);
 
-    const position = calculateCrossMarketPositionSize(opp, portfolioValue, DEFAULT_STRATEGY_CONFIG);
+    const position = calculateCrossMarketPositionSize(opp, approvalStatus, DEFAULT_STRATEGY_CONFIG);
 
     if (!position) {
       console.log('   ❌ Position not viable');
@@ -214,11 +230,13 @@ async function testCompleteFlow() {
   console.log(`3. Filtered to ${result.opportunities.length} executable opportunities`);
 
   // Step 4: Calculate positions
-  const portfolioValue = 10000;
+  const usdcBalance = 10000;
+  const usdcAllowance = 10000;
+  const approvalStatus = createApprovalStatus(usdcBalance, usdcAllowance);
   const viablePositions: Array<{ opp: typeof result.opportunities[0]; pos: any }> = [];
 
   for (const opp of result.opportunities) {
-    const pos = calculateCrossMarketPositionSize(opp, portfolioValue, DEFAULT_STRATEGY_CONFIG);
+    const pos = calculateCrossMarketPositionSize(opp, approvalStatus, DEFAULT_STRATEGY_CONFIG);
     if (pos && isCrossMarketPositionViable(pos)) {
       viablePositions.push({ opp, pos });
     }
@@ -248,7 +266,7 @@ async function testCompleteFlow() {
     }
 
     console.log(`\n💰 Total Expected Profit: $${totalExpectedProfit.toFixed(2)}`);
-    console.log(`📈 Portfolio ROI: ${((totalExpectedProfit / portfolioValue) * 100).toFixed(2)}%`);
+    console.log(`📈 Available Capital ROI: ${((totalExpectedProfit / usdcBalance) * 100).toFixed(2)}%`);
   } else {
     console.log('\n⚠️ No viable positions to execute with current parameters');
   }
