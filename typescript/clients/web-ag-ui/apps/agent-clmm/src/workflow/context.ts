@@ -284,6 +284,16 @@ const mergePrivateState = (
   bootstrapped: right?.bootstrapped ?? left.bootstrapped ?? false,
 });
 
+const areItemsEquivalent = <T>(left: T, right: T): boolean => {
+  if (Object.is(left, right)) {
+    return true;
+  }
+  if (typeof left !== 'object' || left === null || typeof right !== 'object' || right === null) {
+    return false;
+  }
+  return JSON.stringify(left) === JSON.stringify(right);
+};
+
 const mergeAppendOrReplace = <T>(left: T[], right?: T[]): T[] => {
   if (!right) {
     return left;
@@ -297,7 +307,7 @@ const mergeAppendOrReplace = <T>(left: T[], right?: T[]): T[] => {
   if (right.length >= left.length) {
     let isPrefix = true;
     for (let index = 0; index < left.length; index += 1) {
-      if (right[index] !== left[index]) {
+      if (!areItemsEquivalent(right[index], left[index])) {
         isPrefix = false;
         break;
       }
