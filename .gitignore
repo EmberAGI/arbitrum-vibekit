@@ -48,5 +48,8 @@ Thumbs.db
 .vibecode/
 .opencode/
 .ember-standalone/
+.claude/
+.codex/
+.cursor/
 typescript/lib/agent-node/*.zip
 typescript/clients/web/
