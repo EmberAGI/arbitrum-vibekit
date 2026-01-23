@@ -1,13 +1,9 @@
 Please also reference the following rules as needed. The list below is provided in TOON format, and `@` stands for the project root directory.
 
 rules[1]:
-  - path: @.codex/memories/msw-handlers.md
+  - path: @.opencode/memories/msw-handlers.md
     description: MSW handler rules for integration test fidelity
     applyTo[1]: **/tests/mocks/**/*
-
-# Additional Conventions Beyond the Built-in Functions
-
-As this project's AI coding tool, you must follow the additional conventions below, in addition to the built-in functions.
 
 ## Development Guidelines
 
