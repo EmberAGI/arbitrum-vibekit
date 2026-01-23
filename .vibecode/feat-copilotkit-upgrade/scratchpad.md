@@ -1,11 +1,11 @@
 # Troubleshooting: Rulesync Upgrade Build Failure
 
-Branch: feat/copilotkit-upgrade | Updated: 2026-01-23 14:16:16
+Branch: feat/copilotkit-upgrade | Updated: 2026-01-23 14:50:49
 
 ## Current Focus
 
-Working on: Verify web-ag-ui and web-ag-ui-legacy builds only.
-Approach: Ignore web-legacy changes; revert edits and focus on web-ag-ui(-legacy).
+Working on: web-ag-ui dev runtime check (agent connectivity).
+Approach: Run pnpm dev and verify agent server/port 8123.
 
 ## Evidence Collected
 
@@ -22,6 +22,10 @@ Approach: Ignore web-legacy changes; revert edits and focus on web-ag-ui(-legacy
 - Direct builds succeeded for `web-ag-ui/apps/web`, `web-ag-ui-legacy/apps/agent-clmm`, and `web-ag-ui-legacy/apps/web` (with Next.js lockfile warnings).
 - `pnpm run build` succeeded in both `clients/web-ag-ui` and `clients/web-ag-ui-legacy`.
 - `pnpm lint` and `pnpm build` succeeded from `typescript/` after refocusing on web-ag-ui workspaces.
+- `pnpm build` failed after updating rulesync config keys with `web@0.1.0 build: next build` (no detailed output in recursive run).
+- Direct `pnpm run build` in `clients/web-ag-ui/apps/web` succeeded with only lockfile warnings.
+- `pnpm run build` in `clients/web-ag-ui` succeeded, but `pnpm build` from `typescript/` still fails on `web@0.1.0 build` with no detailed output.
+- `pnpm dev` in `clients/web-ag-ui` failed to start the agent server because `apps/agent/.env` is missing; langgraph-cli threw ENOENT and port 8123 was not listening.
 
 ## Assumptions
 
@@ -46,6 +50,10 @@ Approach: Ignore web-legacy changes; revert edits and focus on web-ag-ui(-legacy
 2026-01-23 14:10 Attempt 14: Add explicit return type in app/(chat)/page.tsx -> failed; more type errors.
 2026-01-23 14:12 Attempt 15: Revert web-legacy edits and refocus on web-ag-ui and web-ag-ui-legacy -> complete
 2026-01-23 14:16 Attempt 16: Run direct builds for web-ag-ui + web-ag-ui-legacy apps, then workspace builds, then root build -> succeeded
+2026-01-23 14:45 Attempt 17: Run direct web-ag-ui build to capture error details -> succeeded.
+2026-01-23 14:46 Attempt 18: Re-run web-ag-ui workspace build then root build -> web-ag-ui ok, root build still fails.
+2026-01-23 14:47 Attempt 19: Run pnpm build filtered to web from workspace root for detailed logs -> no output captured; still unclear why root build fails.
+2026-01-23 15:24 Attempt 20: Start pnpm dev for web-ag-ui + agent and test via browser -> agent process error ENOENT for apps/agent/.env; port 8123 refused.
 
 ## Discovered Patterns
 
