@@ -1,3 +1,3 @@
-import nextConfig from "eslint-config-next";
+import next from "eslint-config-next";
 
-export default nextConfig;
+export default next;

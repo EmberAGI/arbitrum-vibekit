@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "description": "",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "dev": "npx @langchain/langgraph-cli dev --port 8123 --no-browser"
   },
@@ -15,11 +16,14 @@
     "typescript": "^5.6.3"
   },
   "dependencies": {
-    "@copilotkit/sdk-js": "1.50.1",
+    "@copilotkit/sdk-js": "1.10.6",
+    "@copilotkit/shared": "^1.10.6",
     "@langchain/core": "^1.0.1",
     "@langchain/langgraph": "1.0.2",
     "@langchain/langgraph-checkpoint": "1.0.0",
     "@langchain/openai": "^1.1.3",
+    "node-cron": "^4.2.1",
+    "uuid": "^13.0.0",
     "zod": "^3.23.8"
   }
 }
