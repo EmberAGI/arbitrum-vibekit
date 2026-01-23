@@ -1,6 +1,9 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
+import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 
 import { buildTaskStatus, type ClmmState, type ClmmUpdate } from '../context.js';
+
+
+const { copilotkitEmitState } = copilotkitLanggraph;
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 

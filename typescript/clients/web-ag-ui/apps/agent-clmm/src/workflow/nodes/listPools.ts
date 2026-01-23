@@ -1,5 +1,6 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
+import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
+
 
 import { ARBITRUM_CHAIN_ID } from '../../config/constants.js';
 import { type CamelotPool } from '../../domain/types.js';
@@ -13,6 +14,8 @@ import {
   type ClmmUpdate,
 } from '../context.js';
 import { isPoolAllowed } from '../pools.js';
+
+const { copilotkitEmitState } = copilotkitLanggraph;
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 

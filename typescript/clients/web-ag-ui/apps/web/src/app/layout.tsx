@@ -1,13 +1,9 @@
 import type { Metadata } from 'next';
 
-import { CopilotKit } from '@copilotkit/react-core';
-import { CopilotPopup, CopilotKitCSSProperties } from '@copilotkit/react-ui';
 import { ProvidersNoSSR } from '../components/ProvidersNoSSR';
-import { AppSidebar } from '../components/AppSidebar';
-import { AgentProvider } from '../contexts/AgentContext';
-import { DEFAULT_AGENT_ID } from '../config/agents';
+import { CopilotKitShell } from '../components/CopilotKitShell';
 import './globals.css';
-import '@copilotkit/react-ui/styles.css';
+import '@copilotkit/react-core/v2/styles.css';
 
 export const metadata: Metadata = {
   title: 'Ember AI - Hire Agents',
@@ -19,8 +15,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const themeColor = '#fd6731';
-
   return (
     <html lang="en" className="dark" style={{ colorScheme: 'dark' }}>
       <head>
@@ -32,21 +26,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased bg-[#121212] text-white dark">
         <ProvidersNoSSR>
-          <CopilotKit runtimeUrl="/api/copilotkit" agent={DEFAULT_AGENT_ID} threadId={undefined}>
-            <AgentProvider>
-              <div className="flex h-screen overflow-hidden">
-                <AppSidebar />
-                <main
-                  className="flex-1 overflow-y-auto bg-[#121212]"
-                  style={{ '--copilot-kit-primary-color': themeColor } as CopilotKitCSSProperties}
-                >
-                  {children}
-                </main>
-                {/* Hidden popup for AG-UI interrupt handling */}
-                <CopilotPopup defaultOpen={false} clickOutsideToClose={false} />
-              </div>
-            </AgentProvider>
-          </CopilotKit>
+          <CopilotKitShell>{children}</CopilotKitShell>
         </ProvidersNoSSR>
       </body>
     </html>

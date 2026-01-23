@@ -1,12 +1,16 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
+import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 
 import { buildSummaryArtifact } from '../artifacts.js';
 import {
+
+
   buildTaskStatus,
   type ClmmState,
   type ClmmUpdate,
   type TaskState,
 } from '../context.js';
+
+const { copilotkitEmitState } = copilotkitLanggraph;
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -15,11 +19,11 @@ export const summarizeNode = async (
   config: CopilotKitConfig,
 ): Promise<ClmmUpdate> => {
   const summaryArtifact = buildSummaryArtifact(state.view.activity.telemetry ?? []);
-  const finalState: TaskState = state.view.haltReason ? 'failed' : 'completed';
+  const finalState: TaskState = state.view.haltReason ? 'failed' : 'working';
   const { task, statusEvent: completion } = buildTaskStatus(
     state.view.task,
     finalState,
-    state.view.haltReason ?? 'CLMM workflow completed.',
+    state.view.haltReason ?? 'CLMM cycle complete; monitoring continues.',
   );
   await copilotkitEmitState(config, {
     view: { task, activity: { events: [completion] } },
@@ -28,7 +32,7 @@ export const summarizeNode = async (
     view: {
       task,
       activity: {
-        telemetry: [],
+        telemetry: state.view.activity.telemetry ?? [],
         events: [
           {
             type: 'artifact',

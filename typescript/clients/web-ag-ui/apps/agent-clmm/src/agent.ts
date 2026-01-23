@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url';
 
-import { END, GraphInterrupt, InMemoryStore, START, StateGraph } from '@langchain/langgraph';
+import { END, InMemoryStore, START, StateGraph } from '@langchain/langgraph';
+import { Client } from '@langchain/langgraph-sdk';
 import { v7 as uuidv7 } from 'uuid';
 import { privateKeyToAccount } from 'viem/accounts';
 
@@ -9,6 +10,7 @@ import {
   resolveLangGraphDurability,
   type LangGraphDurability,
 } from './config/serviceConfig.js';
+import { resolveThreadId } from './utils/threadId.js';
 import {
   ClmmStateAnnotation,
   memory,
@@ -43,6 +45,42 @@ function resolvePostBootstrap(state: ClmmState): 'listPools' | 'syncState' {
 
 const store = new InMemoryStore();
 const DEFAULT_DURABILITY = resolveLangGraphDefaults().durability;
+const CLMM_GRAPH_ID = 'agent-clmm';
+const langGraphClient = new Client({
+  apiUrl: process.env['LANGGRAPH_DEPLOYMENT_URL'] ?? 'http://localhost:8124',
+});
+let cachedAssistantId: string | null = null;
+
+async function resolveAssistantId(): Promise<string> {
+  if (cachedAssistantId) {
+    return cachedAssistantId;
+  }
+
+  const assistants = await langGraphClient.assistants.search({ graphId: CLMM_GRAPH_ID, limit: 1 });
+  if (assistants.length > 0) {
+    cachedAssistantId = assistants[0]?.assistant_id ?? null;
+    if (cachedAssistantId) {
+      return cachedAssistantId;
+    }
+  }
+
+  const created = await langGraphClient.assistants.create({
+    assistantId: CLMM_GRAPH_ID,
+    graphId: CLMM_GRAPH_ID,
+    name: CLMM_GRAPH_ID,
+    ifExists: 'do_nothing',
+  });
+  cachedAssistantId = created.assistant_id;
+  return cachedAssistantId;
+}
+
+async function ensureThreadExists(threadId: string): Promise<void> {
+  await langGraphClient.threads.create({
+    threadId,
+    graphId: CLMM_GRAPH_ID,
+    ifExists: 'do_nothing',
+  });
+}
 
 await configureLangGraphApiCheckpointer();
 
@@ -111,39 +149,37 @@ export async function runGraphOnce(
     content: JSON.stringify({ command: 'cycle' }),
   };
 
-  // Cron jobs are scheduled inside an AG-UI request context, so their ticks inherit
-  // AsyncLocalStorage runnable config (including EventStreamCallbackHandler tied to a
-  // closed SSE stream). Explicitly override callbacks to prevent "WritableStream is closed"
-  // errors during background runs.
-  const config = {
-    configurable: { thread_id: threadId },
-    callbacks: [],
-    durability: resolveLangGraphDurability(options?.durability ?? DEFAULT_DURABILITY),
-  };
-
   try {
+    const assistantId = await resolveAssistantId();
+    await ensureThreadExists(threadId);
+
     // When a graph reaches END, subsequent invoke() calls return immediately without
     // running any nodes. Use updateState with asNode to "rewind" the execution point
-    // so the graph restarts from runCommand on the next invoke.
+    // so the graph restarts from runCommand on the next run.
     // Note: updateState(..., asNode="runCommand") treats this patch as the output of
     // runCommand, so ensure we set view.command to the intended value.
-    await clmmGraph.updateState(
-      config,
-      { messages: [runMessage], view: { command: 'cycle' } },
-      'runCommand',
-    );
+    await langGraphClient.threads.updateState(threadId, {
+      values: { messages: [runMessage], view: { command: 'cycle' } },
+      asNode: 'runCommand',
+    });
 
-    // Now invoke - the graph will continue from the node after runCommand
-    await clmmGraph.invoke(null, config);
-    console.info(`[cron] Run complete in ${Date.now() - startedAt}ms`);
-  } catch (error) {
-    if (error instanceof GraphInterrupt) {
+    const run = await langGraphClient.runs.create(threadId, assistantId, {
+      input: null,
+      streamMode: ['events', 'values', 'updates'],
+      streamResumable: true,
+      durability: resolveLangGraphDurability(options?.durability ?? DEFAULT_DURABILITY),
+    });
+
+    await langGraphClient.runs.join(threadId, run.run_id);
+    const state = await langGraphClient.threads.getState(threadId);
+    const interrupts = state.tasks?.[0]?.interrupts ?? [];
+    if (interrupts.length > 0) {
       console.warn(
         '[cron] Graph interrupted awaiting operator input; supply input via UI and rerun.',
       );
-      return;
     }
-
+    console.info(`[cron] Run complete in ${Date.now() - startedAt}ms`);
+  } catch (error) {
     console.error('[cron] Graph run failed', error);
   } finally {
     runningThreads.delete(threadId);
@@ -154,23 +190,7 @@ export async function startClmmCron(
   threadId: string,
   options?: { durability?: LangGraphDurability },
 ) {
-  const initialRunMessage = {
-    id: uuidv7(),
-    role: 'user' as const,
-    content: JSON.stringify({ command: 'cycle' }),
-  };
-
-  // Cron scheduling happens in pollCycle after first cycle completes
-  const stream = await clmmGraph.stream(
-    { messages: [initialRunMessage] },
-    {
-      configurable: { thread_id: threadId },
-      durability: resolveLangGraphDurability(options?.durability ?? DEFAULT_DURABILITY),
-    },
-  );
-  for await (const event of stream) {
-    void event;
-  }
+  await runGraphOnce(threadId, options);
 }
 
 configureCronExecutor(runGraphOnce);
@@ -178,12 +198,11 @@ configureCronExecutor(runGraphOnce);
 const invokedAsEntryPoint =
   process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
 if (invokedAsEntryPoint) {
-  // Thread ids scope LangGraph checkpointing/state. For the cron-driven worker we only need a
-  // stable id for the lifetime of the process, so generate one if not provided.
-  const initialThreadId = process.env['CLMM_THREAD_ID'] ?? uuidv7();
-  if (!process.env['CLMM_THREAD_ID']) {
-    console.info(`[cron] CLMM_THREAD_ID not provided; generated thread id ${initialThreadId}`);
-  }
+  const initialThreadId = resolveThreadId({
+    agentId: CLMM_GRAPH_ID,
+    walletAddress: process.env['CLMM_WALLET_ADDRESS'],
+    sourceLabel: 'cron',
+  });
 
   await startClmmCron(initialThreadId);
 }

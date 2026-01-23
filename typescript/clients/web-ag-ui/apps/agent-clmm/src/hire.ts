@@ -5,9 +5,12 @@ import { v7 as uuidv7 } from 'uuid';
 import { clmmGraph } from './agent.js';
 import { resolveLangGraphDurability, type LangGraphDurability } from './config/serviceConfig.js';
 import { type FundingTokenInput, FundingTokenInputSchema, type OperatorConfigInput, OperatorConfigInputSchema } from './domain/types.js';
+import { resolveThreadId } from './utils/threadId.js';
 import { runGraphWithAutoResume } from './workflow/autoResumeRunner.js';
 import { type DelegationSigningInterrupt, type FundingTokenInterrupt, type OperatorInterrupt } from './workflow/context.js';
 import { cancelCronForThread } from './workflow/cronScheduler.js';
+
+const CLMM_GRAPH_ID = 'agent-clmm';
 
 function resolveOperatorInputFromEnv(): OperatorConfigInput {
   const rawJson = process.env['CLMM_OPERATOR_INPUT_JSON'];
@@ -140,12 +143,12 @@ export async function startClmmHire(
 const invokedAsEntryPoint =
   process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
 if (invokedAsEntryPoint) {
-  const threadId = process.env['CLMM_THREAD_ID'] ?? uuidv7();
-  if (!process.env['CLMM_THREAD_ID']) {
-    console.info(`[hire] CLMM_THREAD_ID not provided; generated thread id ${threadId}`);
-  }
-
   const operatorInput = resolveOperatorInputFromEnv();
+  const threadId = resolveThreadId({
+    agentId: CLMM_GRAPH_ID,
+    walletAddress: operatorInput.walletAddress,
+    sourceLabel: 'hire',
+  });
   await startClmmHire(threadId, operatorInput);
 
   if (process.env['CLMM_KEEP_ALIVE'] === 'false') {

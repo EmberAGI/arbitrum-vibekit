@@ -1,5 +1,6 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
+import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
+
 
 import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
 import { fetchPoolSnapshot } from '../../clients/emberApi.js';
@@ -17,6 +18,8 @@ import {
 } from '../context.js';
 import { appendFlowLogHistory, loadFlowLogHistory } from '../historyStore.js';
 import { loadBootstrapContext } from '../store.js';
+
+const { copilotkitEmitState } = copilotkitLanggraph;
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = { configurable?: { thread_id?: string } };

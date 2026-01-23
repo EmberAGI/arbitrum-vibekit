@@ -5,6 +5,7 @@ import { Annotation, messagesStateReducer } from '@langchain/langgraph';
 import type { Messages } from '@langchain/langgraph';
 import { v7 as uuidv7 } from 'uuid';
 
+
 import type { AccountingState } from '../accounting/types.js';
 import {
   resolveAccountingHistoryLimit,
@@ -23,7 +24,12 @@ import {
 
 export type AgentMessage = CopilotKitAIMessage;
 
-type CopilotState = CopilotKitState;
+type CopilotState = Omit<CopilotKitState, 'copilotkit'> & {
+  copilotkit: CopilotKitState['copilotkit'] & {
+    interceptedToolCalls: unknown[];
+    originalAIMessageId: string;
+  };
+};
 
 export type ClmmSettings = {
   amount?: number;
@@ -278,6 +284,16 @@ const mergePrivateState = (
   bootstrapped: right?.bootstrapped ?? left.bootstrapped ?? false,
 });
 
+const areItemsEquivalent = <T>(left: T, right: T): boolean => {
+  if (Object.is(left, right)) {
+    return true;
+  }
+  if (typeof left !== 'object' || left === null || typeof right !== 'object' || right === null) {
+    return false;
+  }
+  return JSON.stringify(left) === JSON.stringify(right);
+};
+
 const mergeAppendOrReplace = <T>(left: T[], right?: T[]): T[] => {
   if (!right) {
     return left;
@@ -291,7 +307,7 @@ const mergeAppendOrReplace = <T>(left: T[], right?: T[]): T[] => {
   if (right.length >= left.length) {
     let isPrefix = true;
     for (let index = 0; index < left.length; index += 1) {
-      if (right[index] !== left[index]) {
+      if (!areItemsEquivalent(right[index], left[index])) {
         isPrefix = false;
         break;
       }
@@ -403,6 +419,8 @@ const mergeCopilotkit = (
 ): CopilotState['copilotkit'] => ({
   actions: right?.actions ?? left.actions ?? [],
   context: right?.context ?? left.context ?? [],
+  interceptedToolCalls: right?.interceptedToolCalls ?? left.interceptedToolCalls ?? [],
+  originalAIMessageId: right?.originalAIMessageId ?? left.originalAIMessageId ?? '',
 });
 
 export const ClmmStateAnnotation = Annotation.Root({
@@ -411,8 +429,22 @@ export const ClmmStateAnnotation = Annotation.Root({
     reducer: messagesStateReducer,
   }),
   copilotkit: Annotation<CopilotState['copilotkit'], Partial<CopilotState['copilotkit']>>({
-    default: () => ({ actions: [], context: [] }),
-    reducer: (left, right) => mergeCopilotkit(left ?? { actions: [], context: [] }, right),
+    default: () => ({
+      actions: [],
+      context: [],
+      interceptedToolCalls: [],
+      originalAIMessageId: '',
+    }),
+    reducer: (left, right) =>
+      mergeCopilotkit(
+        left ?? {
+          actions: [],
+          context: [],
+          interceptedToolCalls: [],
+          originalAIMessageId: '',
+        },
+        right,
+      ),
   }),
   settings: Annotation<ClmmSettings, Partial<ClmmSettings>>({
     default: defaultSettingsState,

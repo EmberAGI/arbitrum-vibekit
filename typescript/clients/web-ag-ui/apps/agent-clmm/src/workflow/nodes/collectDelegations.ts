@@ -1,7 +1,8 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
+import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
 import { decodeFunctionData, encodeFunctionData, erc20Abi, parseUnits } from 'viem';
 import { z } from 'zod';
+
 
 import {
   EmberApiRequestError,
@@ -38,6 +39,8 @@ import {
 } from '../context.js';
 import { estimateTokenAllocationsUsd } from '../planning/allocations.js';
 import { loadBootstrapContext } from '../store.js';
+
+const { copilotkitEmitState } = copilotkitLanggraph;
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 

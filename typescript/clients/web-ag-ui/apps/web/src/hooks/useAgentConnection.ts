@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { useCoAgent, useCopilotContext } from '@copilotkit/react-core';
-import { v7 } from 'uuid';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useAgent } from '@copilotkit/react-core/v2';
+import { v5 as uuidv5, v7 as uuidv7 } from 'uuid';
 import { useLangGraphInterruptCustomUI } from '../app/hooks/useLangGraphInterruptCustomUI';
 import { getAgentConfig, type AgentConfig } from '../config/agents';
+import { usePrivyWalletClient } from './usePrivyWalletClient';
 import {
   type AgentState,
   type AgentView,
@@ -39,6 +40,12 @@ export type {
   Transaction,
   ClmmEvent,
 };
+
+const THREAD_STORAGE_PREFIX = 'clmm-thread-id';
+
+function buildThreadStorageKey(agentId: string, walletAddress: string): string {
+  return `${THREAD_STORAGE_PREFIX}:${agentId}:${walletAddress.toLowerCase()}`;
+}
 
 const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
   typeof value === 'object' &&
@@ -91,59 +98,128 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const [isHiring, setIsHiring] = useState(false);
   const [isFiring, setIsFiring] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const initialSyncDone = useRef(false);
+  const initialAttachDone = useRef(false);
+  const queuedCommands = useRef<string[]>([]);
 
   const config = getAgentConfig(agentId);
 
-  const { state, setState, run } = useCoAgent<AgentState>({
-    name: agentId,
-    initialState: initialAgentState,
-  });
-  const { threadId } = useCopilotContext();
+  const { agent } = useAgent({ agentId });
+  const { privyWallet } = usePrivyWalletClient();
+
+  const threadId = useMemo(() => {
+    if (!privyWallet?.address || typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const storageKey = buildThreadStorageKey(agentId, privyWallet.address);
+    const stored = window.localStorage.getItem(storageKey);
+    if (stored) {
+      return stored;
+    }
+
+    const nextThreadId = uuidv5(
+      `${agentId}:${privyWallet.address.toLowerCase()}`,
+      uuidv5.URL,
+    );
+    window.localStorage.setItem(storageKey, nextThreadId);
+    return nextThreadId;
+  }, [agentId, privyWallet]);
+
+  useEffect(() => {
+    if (!threadId) {
+      return;
+    }
+    if (agent.threadId !== threadId) {
+      // eslint-disable-next-line react-hooks/immutability -- agent threadId must be set for runtime attachment
+      agent.threadId = threadId;
+    }
+  }, [agent, threadId]);
+
+  useEffect(() => {
+    initialAttachDone.current = false;
+  }, [threadId]);
 
   const { activeInterrupt, resolve } = useLangGraphInterruptCustomUI<AgentInterrupt>({
     enabled: isAgentInterrupt,
+    agentId,
   });
 
-  // Simple command runner - no queuing, just run the command
+  const attachToThread = useCallback(() => {
+    if (!threadId) {
+      return;
+    }
+    void Promise.resolve(agent.connectAgent?.()).catch(() => undefined);
+  }, [agent, threadId]);
+
   const runCommand = useCallback(
     (command: string) => {
-      run(() => ({
-        id: v7(),
-        role: 'user',
+      if (!threadId) {
+        return;
+      }
+      if (agent.isRunning) {
+        queuedCommands.current.push(command);
+        attachToThread();
+        return;
+      }
+      const message = {
+        id: uuidv7(),
+        role: 'user' as const,
         content: JSON.stringify({ command }),
-      }));
+      };
+      agent.addMessage(message);
+      void agent.runAgent();
     },
-    [run],
+    [agent, attachToThread, threadId],
   );
 
-  // Initial sync when thread is established - runs once when threadId becomes available
+  // Attach to the LangGraph thread when threadId becomes available
   useEffect(() => {
-    if (threadId && !initialSyncDone.current) {
-      initialSyncDone.current = true;
-      // Run sync immediately to populate initial state
-      runCommand('sync');
+    if (!threadId || initialAttachDone.current) {
+      return;
     }
-  }, [threadId, runCommand]);
+    initialAttachDone.current = true;
+    attachToThread();
+  }, [attachToThread, threadId]);
+
+  useEffect(() => {
+    if (!threadId || agent.isRunning || queuedCommands.current.length === 0) {
+      return;
+    }
+    const nextCommand = queuedCommands.current.shift();
+    if (!nextCommand) {
+      return;
+    }
+    const message = {
+      id: uuidv7(),
+      role: 'user' as const,
+      content: JSON.stringify({ command: nextCommand }),
+    };
+    agent.addMessage(message);
+    void agent.runAgent();
+  }, [agent, agent.isRunning, threadId]);
 
   // Extract state with defaults
-  const view = state?.view ?? defaultView;
+  const state = (agent.state as AgentState | undefined) ?? initialAgentState;
+  const view = state.view ?? defaultView;
   const profile = view.profile ?? defaultProfile;
   const metrics = view.metrics ?? defaultMetrics;
   const activity = view.activity ?? defaultActivity;
   const transactionHistory = view.transactionHistory ?? [];
   const events = activity.events ?? [];
-  const settings = state?.settings ?? defaultSettings;
+  const settings = state.settings ?? defaultSettings;
 
   // Derived state
   const isHired = view.command === 'hire' || view.command === 'run' || view.command === 'cycle';
   const isActive = view.command !== undefined && view.command !== 'idle' && view.command !== 'fire';
 
   const runSync = useCallback(() => {
+    if (!threadId) {
+      return;
+    }
     setIsSyncing(true);
-    runCommand('sync');
+    attachToThread();
     setTimeout(() => setIsSyncing(false), 2000);
-  }, [runCommand]);
+  }, [attachToThread, threadId]);
 
   const runHire = useCallback(() => {
     if (!isHired && !isHiring) {
@@ -177,15 +253,16 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   // Settings sync pattern: update local state only (no automatic sync to avoid 409)
   const updateSettings = useCallback(
     (updates: Partial<AgentSettings>) => {
-      setState((prev) => ({
-        ...(prev ?? initialAgentState),
+      const currentState = (agent.state as AgentState | undefined) ?? initialAgentState;
+      agent.setState({
+        ...currentState,
         settings: {
-          ...(prev?.settings ?? defaultSettings),
+          ...(currentState.settings ?? defaultSettings),
           ...updates,
         },
-      }));
+      });
     },
-    [setState],
+    [agent],
   );
 
   return {

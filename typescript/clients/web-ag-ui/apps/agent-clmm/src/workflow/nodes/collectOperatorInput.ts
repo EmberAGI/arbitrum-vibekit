@@ -1,9 +1,12 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
+import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
 import { z } from 'zod';
 
+
 import { OperatorConfigInputSchema } from '../../domain/types.js';
 import {
+
+
   buildTaskStatus,
   logInfo,
   type OnboardingState,
@@ -11,6 +14,8 @@ import {
   type OperatorInterrupt,
   type ClmmUpdate,
 } from '../context.js';
+
+const { copilotkitEmitState } = copilotkitLanggraph;
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 

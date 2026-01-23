@@ -1,5 +1,6 @@
-import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
+import * as copilotkitLanggraph from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
+
 
 import { applyAccountingUpdate, createFlowEvent } from '../../accounting/state.js';
 import type { AccountingState, FlowLogEventInput } from '../../accounting/types.js';
@@ -40,12 +41,16 @@ import {
 import { ensureCronForThread } from '../cronScheduler.js';
 import { executeDecision } from '../execution.js';
 import {
+
+
   appendFlowLogHistory,
   appendNavSnapshotHistory,
   appendTelemetryHistory,
   appendTransactionHistory,
   loadFlowLogHistory,
 } from '../historyStore.js';
+
+const { copilotkitEmitState } = copilotkitLanggraph;
 
 const DEBUG_MODE = process.env['DEBUG_MODE'] === 'true';
 
