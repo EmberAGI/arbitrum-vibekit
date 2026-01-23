@@ -1,5 +1,5 @@
 {
-  "targets": ["cursor", "claudecode", "codexcli"],
+  "targets": ["cursor", "claudecode", "codexcli", "opencode"],
   "features": ["rules", "commands", "subagents"],
   "baseDirs": ["."],
   "delete": true,
