@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useCopilotContext } from '@copilotkit/react-core';
-import { useAgent, useCopilotKit } from '@copilotkitnext/react';
+import { useAgent, useCopilotKit } from '@copilotkit/react-core/v2';
 import { v7 } from 'uuid';
 import { useLangGraphInterruptCustomUI } from '../app/hooks/useLangGraphInterruptCustomUI';
 import { getAgentConfig, type AgentConfig } from '../config/agents';

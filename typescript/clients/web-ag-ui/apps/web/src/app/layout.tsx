@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 
 import { CopilotKit } from '@copilotkit/react-core';
 import { CopilotPopup, CopilotKitCSSProperties } from '@copilotkit/react-ui';
+import { v5 as uuidv5 } from 'uuid';
 import { ProvidersNoSSR } from '../components/ProvidersNoSSR';
 import { AppSidebarNoSSR } from '../components/AppSidebarNoSSR';
 import { AgentProvider } from '../contexts/AgentContext';
@@ -20,6 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const themeColor = '#fd6731';
+  const threadId = uuidv5(`copilotkit:${DEFAULT_AGENT_ID}`, uuidv5.URL);
 
   return (
     <html lang="en" className="dark" style={{ colorScheme: 'dark' }}>
@@ -32,7 +34,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased bg-[#121212] text-white dark">
         <ProvidersNoSSR>
-          <CopilotKit runtimeUrl="/api/copilotkit" agent={DEFAULT_AGENT_ID} threadId={undefined}>
+          <CopilotKit runtimeUrl="/api/copilotkit" agent={DEFAULT_AGENT_ID} threadId={threadId}>
             <AgentProvider>
               <div className="flex h-screen overflow-hidden">
                 <AppSidebarNoSSR />
