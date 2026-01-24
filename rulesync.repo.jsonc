@@ -1,6 +1,6 @@
 {
   "targets": ["cursor", "claudecode", "codexcli", "opencode"],
-  "features": ["rules", "commands", "subagents", "skills"],
+  "features": ["rules", "mcp", "commands", "subagents", "skills"],
   "baseDirs": ["."],
   "delete": true,
   "verbose": false,

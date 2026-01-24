@@ -48,6 +48,8 @@ Thumbs.db
 .vibecode/
 .opencode/
 .ember-standalone/
+.mcp.json
+opencode.json
 .claude/
 .codex/
 .cursor/
