@@ -23,5 +23,11 @@
   "overrides": {
     "@langchain/core": "^1.0.1",
     "@langchain/langgraph": "1.0.2"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "@ag-ui/langgraph@0.0.20": "patches/@ag-ui__langgraph@0.0.20.patch",
+      "@copilotkitnext/runtime@0.0.33": "patches/@copilotkitnext__runtime@0.0.33.patch"
+    }
   }
 }
