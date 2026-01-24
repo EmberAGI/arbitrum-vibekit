@@ -5,7 +5,7 @@
       "type": "http",
       "url": "https://mcp.context7.com/mcp",
       "headers": {
-        "CONTEXT7_API_KEY": "ctx7sk-964a9b32-1e37-4df8-bbea-43742472f06b"
+        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
       }
     }
   }
