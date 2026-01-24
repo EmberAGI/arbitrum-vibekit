@@ -2,7 +2,11 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useCopilotContext } from '@copilotkit/react-core';
-import { useAgent, useCopilotKit } from '@copilotkit/react-core/v2';
+import {
+  useAgent,
+  useCopilotKit,
+  CopilotKitCoreRuntimeConnectionStatus,
+} from '@copilotkit/react-core/v2';
 import { v7 } from 'uuid';
 import { useLangGraphInterruptCustomUI } from '../app/hooks/useLangGraphInterruptCustomUI';
 import { getAgentConfig, type AgentConfig } from '../config/agents';
@@ -93,6 +97,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const [isFiring, setIsFiring] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const lastSyncedAgentRef = useRef<unknown>(null);
+  const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
 
   const config = getAgentConfig(agentId);
 
@@ -102,6 +107,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     updates: ['OnStateChanged'] as NonNullable<Parameters<typeof useAgent>[0]>['updates'],
   });
   const { threadId } = useCopilotContext();
+  const runtimeStatus = copilotkit.runtimeConnectionStatus;
 
   const { activeInterrupt, resolve } = useLangGraphInterruptCustomUI<AgentInterrupt>({
     enabled: isAgentInterrupt,
@@ -154,12 +160,38 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   // Initial sync when thread is established - runs once per agent instance
   useEffect(() => {
+    agentRef.current = agent ?? null;
+  }, [agent]);
+
+  useEffect(() => {
     if (!threadId || !agent) return;
+    if (runtimeStatus !== CopilotKitCoreRuntimeConnectionStatus.Connected) return;
     if (lastSyncedAgentRef.current === agent) return;
 
-    lastSyncedAgentRef.current = agent;
-    runCommand('sync');
-  }, [threadId, agent, runCommand]);
+    let cancelled = false;
+
+    const connectAndSync = async () => {
+      const currentAgent = agentRef.current;
+      if (!currentAgent) return;
+      currentAgent.threadId = threadId;
+
+      try {
+        await copilotkit.connectAgent({ agent: currentAgent });
+      } catch (error) {
+        // Errors are already reported via CopilotKit core subscribers.
+      }
+
+      if (cancelled) return;
+      runCommand('sync');
+      lastSyncedAgentRef.current = agent;
+    };
+
+    void connectAndSync();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [threadId, agent, runtimeStatus, copilotkit, runCommand]);
 
   // Extract state with defaults
   const currentState =
