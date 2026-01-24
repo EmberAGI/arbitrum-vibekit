@@ -32,6 +32,14 @@ workspace builds.
 - v1.50.x dependency alignment for CopilotKit packages across agent + web.
 - Starter validation pass (lint/build) before migration.
 
+## Process
+
+1. Validate the fresh CopilotKit starter (lint/build) before migrating legacy code.
+2. Port the CLMM agent modules, keeping v1.50 wiring and port 8124 defaults.
+3. Migrate the web UI by copying legacy UI files where no adaptation is required and adjusting runtime wiring where needed (agent id, endpoints, CopilotKit layout).
+4. Add required assets/configs from legacy (icons, env examples) and update routes/hooks to match the new app structure.
+5. Run `pnpm lint` and `pnpm build` after migration to confirm the workspace is clean.
+
 ## Migration Notes
 
 - Use `pnpm`-based tooling (no `npm`/`npx`).

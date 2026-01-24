@@ -1,78 +1,80 @@
-# Troubleshooting: Rulesync Upgrade Build Failure
+# Troubleshooting: Update pnpm lockfile
 
-Branch: feat/copilotkit-upgrade | Updated: 2026-01-23 14:50:49
+Branch: feat/copilotkit-upgrade | Updated: 2026-01-23
 
 ## Current Focus
 
-Working on: web-ag-ui dev runtime check (agent connectivity).
-Approach: Run pnpm dev and verify agent server/port 8123.
+Working on: agent state not updating in UI
+Approach: subscribe to agent state updates from useAgent and validate UI refresh
 
 ## Evidence Collected
 
-- `pnpm -r --stream --filter '!./community/**' --filter '!test-utils' --filter '!./clients/web-legacy' --filter '!web-ag-ui' run build` failed with `langgraph-js-starter@0.1.0 build: turbo run build` exit status 1.
-- `pnpm --filter langgraph-js-starter run build` succeeded; Next.js reported multiple lockfiles and `shiki` externalization warnings during Turbopack build.
-- `pnpm build` failed with `web@0.1.0 build: next build` exit status 1.
-- `pnpm --filter web run build` and `pnpm -r --filter web run build` both succeeded with only Turbopack warnings.
-- Added `shiki` dependency in `clients/web-ag-ui/apps/web`; `pnpm lint` succeeded; `pnpm build` still failed with `langgraph-js-starter@0.1.0 build: turbo run build`.
-- `pnpm -r --if-present --workspace-concurrency=1 --stream run build` failed first at `clients/web-ag-ui-legacy` with `web-ag-ui@0.1.0 build: turbo run build --output-logs=full --log-order=stream --summarize`.
-- `pnpm run build` in `clients/web-ag-ui-legacy` failed because `apps/web` could not find `next` (`node_modules` missing) and turbo warned about missing `pnpm-lock.yaml`.
-- `pnpm install` in `clients/web-ag-ui-legacy` completed; `pnpm run build` succeeded afterward with only Next.js lockfile warnings.
-- `pnpm -r --if-present --workspace-concurrency=1 --stream run build` now fails first at `clients/web-legacy` with `vibekit-web-client@0.1.0 build: next build`.
-- Reverted edits in `clients/web-legacy` per instruction; no further work planned there.
-- Direct builds succeeded for `web-ag-ui/apps/web`, `web-ag-ui-legacy/apps/agent-clmm`, and `web-ag-ui-legacy/apps/web` (with Next.js lockfile warnings).
-- `pnpm run build` succeeded in both `clients/web-ag-ui` and `clients/web-ag-ui-legacy`.
-- `pnpm lint` and `pnpm build` succeeded from `typescript/` after refocusing on web-ag-ui workspaces.
-- `pnpm build` failed after updating rulesync config keys with `web@0.1.0 build: next build` (no detailed output in recursive run).
-- Direct `pnpm run build` in `clients/web-ag-ui/apps/web` succeeded with only lockfile warnings.
-- `pnpm run build` in `clients/web-ag-ui` succeeded, but `pnpm build` from `typescript/` still fails on `web@0.1.0 build` with no detailed output.
-- `pnpm dev` in `clients/web-ag-ui` failed to start the agent server because `apps/agent/.env` is missing; langgraph-cli threw ENOENT and port 8123 was not listening.
+- pnpm install --lockfile-only failed with ERR_PNPM_CATALOG_ENTRY_NOT_FOUND_FOR_SPEC
+- Error message: "No catalog entry 'prettier' was found for catalog 'default'."
+- Added catalog entries to web-ag-ui pnpm-workspace.yaml for prettier/tsx/viem
+- pnpm install --lockfile-only succeeded with peer dependency warnings
+- pnpm dev log shows agent failed with ERR_MODULE_NOT_FOUND for @langchain/langgraph
+- apps/agent/node_modules was removed earlier; pnpm dev relies on it
+- Reinstalled workspace node_modules and restarted pnpm dev; web and agent-clmm started cleanly
+- agent-browser snapshot shows "Application error" client-side exception on / and /hire-agents
+- Browser console shows repeated HMR WebSocket connection refused messages
+- Runtime info endpoint responds with agent-clmm metadata
+- No stack trace captured yet; will isolate by removing CopilotPopup/AppSidebar temporarily
+- Runtime thread state includes populated view/profile after sync
+- Web inspector shows agent-clmm state still default and no AG-UI events
+- Suspect initial sync runs before runtime agent registry is ready; run happens on provisional agent instance
+- UI still shows default state even after runtime connection log indicates connected
+- Build failed when importing UseAgentUpdate from @copilotkitnext/react; export missing in runtime bundle
+- TypeScript build failed when importing UseAgentUpdate type because module does not export it
+- TypeScript build failed when onRuntimeConnectionStatusChanged event param was assumed to include runtimeConnectionStatus
 
 ## Assumptions
 
-- Failure may be within `clients/web-ag-ui` build pipeline.
-- Could be an existing issue unrelated to the rulesync upgrade.
+- Workspace is using pnpm catalog configuration that is missing prettier entry
+- Lockfile update requires a valid catalog entry or disabling catalog resolution
 
 ## Attempts Log
 
-2026-01-23 13:38 Attempt 1: Re-run clients/web-ag-ui build for full error output -> succeeded with Turbopack warnings about shiki externals and multiple lockfiles.
-2026-01-23 13:39 Attempt 2: Re-run pnpm build at workspace root to confirm success -> failed with `web@0.1.0 build: next build`.
-2026-01-23 13:39 Attempt 3: Run direct and filtered web builds to compare behavior -> web builds succeeded, recursive pnpm build still fails.
-2026-01-23 13:47 Attempt 4: Add `shiki` dependency to apps/web and re-run lint/build -> lint ok; build still fails with `langgraph-js-starter@0.1.0 build: turbo run build`.
-2026-01-23 13:48 Attempt 5: Run per-package builds with pnpm recursive `--if-present` before retrying web-ag-ui/root -> failed at web-ag-ui-legacy.
-2026-01-23 14:01 Attempt 6: Run web-ag-ui-legacy build directly for detailed error output -> failed due to missing node_modules in apps/web.
-2026-01-23 14:02 Attempt 7: Install dependencies in web-ag-ui-legacy workspace and retry build -> install ok.
-2026-01-23 14:04 Attempt 8: Re-run web-ag-ui-legacy build -> succeeded with Next.js lockfile warnings.
-2026-01-23 14:06 Attempt 9: Run per-package builds again -> failed at web-legacy.
-2026-01-23 14:06 Attempt 10: Run web-legacy build directly for detailed error output -> failed with TS type annotation error.
-2026-01-23 14:07 Attempt 11: Add explicit PageProps and return type in web-legacy page -> failed; Next.js expected params as Promise.
-2026-01-23 14:08 Attempt 12: Update PageProps to Promise params while keeping explicit return type -> failed; new Layout type inference error.
-2026-01-23 14:09 Attempt 13: Add explicit LayoutProps and return type in layout -> failed; new Page inference error.
-2026-01-23 14:10 Attempt 14: Add explicit return type in app/(chat)/page.tsx -> failed; more type errors.
-2026-01-23 14:12 Attempt 15: Revert web-legacy edits and refocus on web-ag-ui and web-ag-ui-legacy -> complete
-2026-01-23 14:16 Attempt 16: Run direct builds for web-ag-ui + web-ag-ui-legacy apps, then workspace builds, then root build -> succeeded
-2026-01-23 14:45 Attempt 17: Run direct web-ag-ui build to capture error details -> succeeded.
-2026-01-23 14:46 Attempt 18: Re-run web-ag-ui workspace build then root build -> web-ag-ui ok, root build still fails.
-2026-01-23 14:47 Attempt 19: Run pnpm build filtered to web from workspace root for detailed logs -> no output captured; still unclear why root build fails.
-2026-01-23 15:24 Attempt 20: Start pnpm dev for web-ag-ui + agent and test via browser -> agent process error ENOENT for apps/agent/.env; port 8123 refused.
+2026-01-23 Attempt 1: pnpm install --lockfile-only in typescript/clients/web-ag-ui -> failed with missing prettier catalog entry
+2026-01-23 Attempt 2: added catalog entries to web-ag-ui pnpm-workspace.yaml and reran pnpm install --lockfile-only -> succeeded with peer dependency warnings
+2026-01-23 Attempt 3: pnpm lint in typescript/clients/web-ag-ui -> failed due to missing apps/agent node_modules
+2026-01-23 Attempt 4: pnpm install in typescript/clients/web-ag-ui -> succeeded
+2026-01-23 Attempt 5: pnpm lint && pnpm build in typescript/clients/web-ag-ui -> succeeded
+2026-01-23 Attempt 6: pnpm dev in typescript/clients/web-ag-ui -> agent failed with ERR_MODULE_NOT_FOUND for @langchain/langgraph
+2026-01-23 Attempt 7: pnpm install then pnpm dev in typescript/clients/web-ag-ui -> agent and agent-clmm started without errors
+2026-01-23 Attempt 8: agent-browser open http://localhost:3000 and /hire-agents -> client-side exception page, console shows HMR websocket errors
+2026-01-23 Attempt 9: added global error handler, captured stack pointing to unbound HttpAgent.runAgent in useAgentConnection runCommand
+2026-01-23 Attempt 10: updated runCommand to call copilotkit.runAgent with bound agent; added @copilotkitnext/react dependency
+2026-01-23 Attempt 11: restarted dev server, confirmed page loads without client errors
+2026-01-24 Attempt 12: confirmed runtime state has values but UI inspector shows default state; suspect sync runs on provisional agent
+2026-01-24 Attempt 13: migrated useAgentConnection to useAgent and gated sync on runtime connection -> UI still shows default metrics
+2026-01-23 Attempt 14: planned to subscribe to agent state changes and store in React state to force UI updates
+2026-01-23 Attempt 15: updated useAgent to request OnStateChanged updates to trigger rerenders
+2026-01-23 Attempt 16: switched to type-only UseAgentUpdate import with string literal for updates to avoid runtime export
+2026-01-23 Attempt 17: use string literal with useAgent parameter type extraction to avoid importing UseAgentUpdate
+2026-01-23 Attempt 18: update runtime connection subscription to read copilotkit.runtimeConnectionStatus directly
+2026-01-23 Attempt 19: add agent.subscribe onStateChanged/onRunInitialized to sync local state
+2026-01-23 Attempt 20: remove local state to satisfy lint and keep onRunInitialized state sync
+2026-01-23 Attempt 21: remove runtimeStatus gating; sync once per agent instance
 
 ## Discovered Patterns
 
-- Turbopack warnings about `shiki` externalization appear consistently but do not fail direct builds.
+- None yet
 
 ## Blockers/Questions
 
-- Focus only on web-ag-ui and web-ag-ui-legacy; ignore web-legacy for build validation.
+- None
 
 ## Resolution (when solved)
 
 ### Root Cause
 
-TBD
+- Pending
 
 ### Solution
 
-TBD
+- Pending
 
 ### Learnings
 
-TBD
+- Pending
