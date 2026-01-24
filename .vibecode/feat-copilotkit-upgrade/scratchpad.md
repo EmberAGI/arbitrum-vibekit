@@ -5,7 +5,7 @@ Branch: feat/copilotkit-upgrade | Updated: 2026-01-23
 ## Current Focus
 
 Working on: agent state not updating in UI
-Approach: subscribe to agent state updates from useAgent and validate UI refresh
+Approach: remove runtime-status gating, sync once per agent instance, validate UI refresh
 
 ## Evidence Collected
 
@@ -27,6 +27,8 @@ Approach: subscribe to agent state updates from useAgent and validate UI refresh
 - Build failed when importing UseAgentUpdate from @copilotkitnext/react; export missing in runtime bundle
 - TypeScript build failed when importing UseAgentUpdate type because module does not export it
 - TypeScript build failed when onRuntimeConnectionStatusChanged event param was assumed to include runtimeConnectionStatus
+- Removed runtime-status gate; sync now runs once per agent instance
+- agent-browser snapshot shows metrics updated (Users 42, Agent Income $3,250, APY 120.5%, AUM $25,000)
 
 ## Assumptions
 
@@ -56,6 +58,7 @@ Approach: subscribe to agent state updates from useAgent and validate UI refresh
 2026-01-23 Attempt 19: add agent.subscribe onStateChanged/onRunInitialized to sync local state
 2026-01-23 Attempt 20: remove local state to satisfy lint and keep onRunInitialized state sync
 2026-01-23 Attempt 21: remove runtimeStatus gating; sync once per agent instance
+2026-01-23 Attempt 22: reload UI and confirm state updates after sync
 
 ## Discovered Patterns
 
@@ -69,12 +72,12 @@ Approach: subscribe to agent state updates from useAgent and validate UI refresh
 
 ### Root Cause
 
-- Pending
+- Initial sync was gated by runtime connection status, so sync never ran for the correct agent instance and UI stayed at defaults
 
 ### Solution
 
-- Pending
+- Run sync once per agent instance without runtime-status gating; rely on agent updates to populate state
 
 ### Learnings
 
-- Pending
+- The runtime connection status can lag agent availability; gating sync on it can suppress the first state update
