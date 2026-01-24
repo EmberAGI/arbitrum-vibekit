@@ -1,83 +1,54 @@
-# Troubleshooting: Update pnpm lockfile
+# Troubleshooting: LangGraphAgent Connect Support
 
-Branch: feat/copilotkit-upgrade | Updated: 2026-01-23
+Branch: feat/copilotkit-upgrade | Updated: 2026-01-24
 
 ## Current Focus
 
-Working on: agent state not updating in UI
-Approach: remove runtime-status gating, sync once per agent instance, validate UI refresh
+Working on: Dashboard metrics no longer updating
+Approach: Investigate connect snapshot/stream flow regressions
 
 ## Evidence Collected
 
-- pnpm install --lockfile-only failed with ERR_PNPM_CATALOG_ENTRY_NOT_FOUND_FOR_SPEC
-- Error message: "No catalog entry 'prettier' was found for catalog 'default'."
-- Added catalog entries to web-ag-ui pnpm-workspace.yaml for prettier/tsx/viem
-- pnpm install --lockfile-only succeeded with peer dependency warnings
-- pnpm dev log shows agent failed with ERR_MODULE_NOT_FOUND for @langchain/langgraph
-- apps/agent/node_modules was removed earlier; pnpm dev relies on it
-- Reinstalled workspace node_modules and restarted pnpm dev; web and agent-clmm started cleanly
-- agent-browser snapshot shows "Application error" client-side exception on / and /hire-agents
-- Browser console shows repeated HMR WebSocket connection refused messages
-- Runtime info endpoint responds with agent-clmm metadata
-- No stack trace captured yet; will isolate by removing CopilotPopup/AppSidebar temporarily
-- Runtime thread state includes populated view/profile after sync
-- Web inspector shows agent-clmm state still default and no AG-UI events
-- Suspect initial sync runs before runtime agent registry is ready; run happens on provisional agent instance
-- UI still shows default state even after runtime connection log indicates connected
-- Build failed when importing UseAgentUpdate from @copilotkitnext/react; export missing in runtime bundle
-- TypeScript build failed when importing UseAgentUpdate type because module does not export it
-- TypeScript build failed when onRuntimeConnectionStatusChanged event param was assumed to include runtimeConnectionStatus
-- Removed runtime-status gate; sync now runs once per agent instance
-- agent-browser snapshot shows metrics updated (Users 42, Agent Income $3,250, APY 120.5%, AUM $25,000)
+- User request: implement connect directly in LangGraphAgent via pnpm patch for upstream PR.
+- Client uses deterministic thread IDs for persistence.
+- UI report: top metrics (7D income, APY, users, AUM, points) no longer updating.
+- Connect implementation called getSchemaKeys before loading assistant, so schemaKeys fell back to constant keys (messages/tools) and filtered out view metrics from snapshots.
+- Agent-browser snapshot shows table row values still $0/0 and CopilotKit inspector reports "No events yet" even though runtime connection is established.
+- Browser console shows repeated `Agent execution failed: TypeError: Failed to fetch` for connect/run requests, indicating runtime requests aren't completing.
+- LangGraph thread state at `http://localhost:8124/threads/c0bf.../state` includes profile metrics (agentIncome 3250, apy 120.5, users 42, aum 25000).
+- LangGraph assistant schemas response includes only config/context schemas (no input/output), so schema filtering should be bypassed.
+- CopilotKit runtime connect handler streamed no events because it only replayed stored runs, not agent connect snapshots.
 
 ## Assumptions
 
-- Workspace is using pnpm catalog configuration that is missing prettier entry
-- Lockfile update requires a valid catalog entry or disabling catalog resolution
+- Thread-level streaming is available through the LangGraph SDK.
+- CopilotKit connect clients can consume AG-UI events produced by LangGraphAgent.
 
 ## Attempts Log
 
-2026-01-23 Attempt 1: pnpm install --lockfile-only in typescript/clients/web-ag-ui -> failed with missing prettier catalog entry
-2026-01-23 Attempt 2: added catalog entries to web-ag-ui pnpm-workspace.yaml and reran pnpm install --lockfile-only -> succeeded with peer dependency warnings
-2026-01-23 Attempt 3: pnpm lint in typescript/clients/web-ag-ui -> failed due to missing apps/agent node_modules
-2026-01-23 Attempt 4: pnpm install in typescript/clients/web-ag-ui -> succeeded
-2026-01-23 Attempt 5: pnpm lint && pnpm build in typescript/clients/web-ag-ui -> succeeded
-2026-01-23 Attempt 6: pnpm dev in typescript/clients/web-ag-ui -> agent failed with ERR_MODULE_NOT_FOUND for @langchain/langgraph
-2026-01-23 Attempt 7: pnpm install then pnpm dev in typescript/clients/web-ag-ui -> agent and agent-clmm started without errors
-2026-01-23 Attempt 8: agent-browser open http://localhost:3000 and /hire-agents -> client-side exception page, console shows HMR websocket errors
-2026-01-23 Attempt 9: added global error handler, captured stack pointing to unbound HttpAgent.runAgent in useAgentConnection runCommand
-2026-01-23 Attempt 10: updated runCommand to call copilotkit.runAgent with bound agent; added @copilotkitnext/react dependency
-2026-01-23 Attempt 11: restarted dev server, confirmed page loads without client errors
-2026-01-24 Attempt 12: confirmed runtime state has values but UI inspector shows default state; suspect sync runs on provisional agent
-2026-01-24 Attempt 13: migrated useAgentConnection to useAgent and gated sync on runtime connection -> UI still shows default metrics
-2026-01-23 Attempt 14: planned to subscribe to agent state changes and store in React state to force UI updates
-2026-01-23 Attempt 15: updated useAgent to request OnStateChanged updates to trigger rerenders
-2026-01-23 Attempt 16: switched to type-only UseAgentUpdate import with string literal for updates to avoid runtime export
-2026-01-23 Attempt 17: use string literal with useAgent parameter type extraction to avoid importing UseAgentUpdate
-2026-01-23 Attempt 18: update runtime connection subscription to read copilotkit.runtimeConnectionStatus directly
-2026-01-23 Attempt 19: add agent.subscribe onStateChanged/onRunInitialized to sync local state
-2026-01-23 Attempt 20: remove local state to satisfy lint and keep onRunInitialized state sync
-2026-01-23 Attempt 21: remove runtimeStatus gating; sync once per agent instance
-2026-01-23 Attempt 22: reload UI and confirm state updates after sync
+2026-01-24 Attempt 1: Added assistant preload before getSchemaKeys in connect; repatched @ag-ui/langgraph and restarted web app.
+2026-01-24 Attempt 2: Added explicit connect + sync after runtime connection; verified browser console still reports fetch failures to runtime.
+2026-01-24 Attempt 3: Patched CopilotKit runtime connect handler to call agent.connect when available; metrics now populate in UI.
 
 ## Discovered Patterns
 
-- None yet
+- None yet.
 
 ## Blockers/Questions
 
-- None
+- None yet.
 
 ## Resolution (when solved)
 
 ### Root Cause
 
-- Initial sync was gated by runtime connection status, so sync never ran for the correct agent instance and UI stayed at defaults
+- Runtime `agent/connect` handler only replayed historical run events and never invoked `LangGraphAgent.connect`, so no snapshots were emitted for existing thread state.
 
 ### Solution
 
-- Run sync once per agent instance without runtime-status gating; rely on agent updates to populate state
+- Patched `@copilotkitnext/runtime` connect handler to call `agent.connect` when available and stream the resulting snapshot events.
+- Relaxed `@ag-ui/langgraph` schema fallback filtering so state values are not dropped when schemas are missing.
 
 ### Learnings
 
-- The runtime connection status can lag agent availability; gating sync on it can suppress the first state update
+TBD
