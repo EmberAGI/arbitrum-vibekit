@@ -3,7 +3,7 @@
  * It defines the workflow graph, state, tools, nodes and edges.
  */
 
-import { CopilotKitStateAnnotation } from '@copilotkit/sdk-js/langgraph';
+import { CopilotKitStateAnnotation, copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
 import { v7 } from 'uuid';
 import { z } from 'zod';
@@ -38,6 +38,13 @@ type TaskStatus = {
   timestamp?: string; // ISO 8601
 };
 
+type StreamProgress = {
+  step: number;
+  total: number;
+};
+
+type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
+
 // 1. Define our agent state, which includes CopilotKit state to
 //    provide actions to the state.
 const AgentStateAnnotation = Annotation.Root({
@@ -45,13 +52,16 @@ const AgentStateAnnotation = Annotation.Root({
   command: Annotation<string>,
   amount: Annotation<number>,
   task: Annotation<Task>,
+  progress: Annotation<StreamProgress>,
 });
 
 // 2. Define the type for our agent state
 export type AgentState = typeof AgentStateAnnotation.State;
 
 const commandSchema = z.object({
-  command: z.enum(['hire', 'fire']),
+  command: z.enum(['hire', 'fire', 'stream']),
+  steps: z.number().int().positive().optional(),
+  delayMs: z.number().int().positive().optional(),
 });
 
 // 5. Define the chat node, which will handle the chat logic
@@ -140,7 +150,52 @@ function fire_node(state: AgentState) {
   };
 }
 
-type CommandTarget = 'hire_node' | 'fire_node' | '__end__';
+const streamDefaults = {
+  steps: 10,
+  delayMs: 600,
+};
+
+const parseStreamCommand = (state: AgentState) => {
+  const lastMessage = state.messages[state.messages.length - 1];
+  if (!lastMessage || typeof lastMessage.content !== 'string') {
+    return streamDefaults;
+  }
+
+  try {
+    const parsed = commandSchema.safeParse(JSON.parse(lastMessage.content));
+    if (!parsed.success || parsed.data.command !== 'stream') {
+      return streamDefaults;
+    }
+
+    return {
+      steps: parsed.data.steps ?? streamDefaults.steps,
+      delayMs: parsed.data.delayMs ?? streamDefaults.delayMs,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(errorMessage);
+    return streamDefaults;
+  }
+};
+
+const pause = (delayMs: number) => new Promise((resolve) => setTimeout(resolve, delayMs));
+
+async function stream_node(state: AgentState, config: CopilotKitConfig) {
+  const { steps, delayMs } = parseStreamCommand(state);
+
+  for (let step = 1; step <= steps; step += 1) {
+    await copilotkitEmitState(config, { progress: { step, total: steps } });
+    await pause(delayMs);
+  }
+
+  return {
+    ...state,
+    command: 'stream',
+    progress: { step: steps, total: steps },
+  };
+}
+
+type CommandTarget = 'hire_node' | 'fire_node' | 'stream_node' | '__end__';
 type ParsedCommand = z.infer<typeof commandSchema>['command'];
 
 function runCommand({ messages }: AgentState): CommandTarget {
@@ -173,6 +228,8 @@ function runCommand({ messages }: AgentState): CommandTarget {
       return 'hire_node';
     case 'fire':
       return 'fire_node';
+    case 'stream':
+      return 'stream_node';
     default:
       return '__end__';
   }
@@ -204,10 +261,12 @@ const workflow = new StateGraph(AgentStateAnnotation)
   .addNode('chat_node', chat_node)
   .addNode('hire_node', hire_node)
   .addNode('fire_node', fire_node)
+  .addNode('stream_node', stream_node)
   .addEdge(START, 'chat_node')
   .addConditionalEdges('chat_node', runCommand)
   .addEdge('hire_node', END)
-  .addEdge('fire_node', END);
+  .addEdge('fire_node', END)
+  .addEdge('stream_node', END);
 
 const memory = createCheckpointer();
 
