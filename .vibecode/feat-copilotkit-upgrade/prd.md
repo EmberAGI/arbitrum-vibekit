@@ -165,6 +165,81 @@ Open integration checks for Phase 2:
 - Confirm how `Last-Event-ID` is surfaced to `connect()` (header vs input field) in the CopilotKit runtime.
 - Decide whether cron should be refactored to create API runs so `connect()` can attach to cron-driven activity.
 
+## Phase 2 Implementation Plan (Detailed)
+
+Phase 2 requires a reliable live run to attach to plus the runtime/agent wiring to surface it through AG-UI. The following steps are ordered to be handed off directly to an implementation owner.
+
+1) Extend `apps/agent` to generate a live run stream
+
+- File: `typescript/clients/web-ag-ui/apps/agent/src/agent.ts`
+- Add a `progress` field to the LangGraph state annotation (number or object with `step`/`total`).
+- Extend the `commandSchema` enum to include `stream` (and optionally a `steps` or `delayMs` field).
+- Add a `stream_node` that:
+  - Loops for a fixed number of steps (e.g., 6-10), `await`s a short delay (250-750ms).
+  - Updates `state.progress` each step and calls `copilotkitEmitState` to emit intermediate snapshots.
+  - Returns the final state with `progress` set to 100% (or `step === total`).
+- Update the `runCommand` switch to route the `stream` command to the new node.
+- Ensure no `any` types, no test changes, and keep the node side-effect-free beyond state updates and logging.
+
+2) Register the starter agent in the CopilotKit runtime
+
+- File: `typescript/clients/web-ag-ui/apps/web/src/app/api/copilotkit/route.ts`
+- Add a second LangGraph agent entry in `CopilotRuntime`:
+  - Agent id: `starterAgent` (matches `apps/agent/langgraph.json`).
+  - `deploymentUrl`: `http://localhost:8123`.
+  - `graphId`: `starterAgent`.
+- Keep `agent-clmm` unchanged so existing flows are not affected.
+
+3) Implement Phase 2 connect logic in `@ag-ui/langgraph`
+
+- File: `typescript/clients/web-ag-ui/patches/@ag-ui__langgraph@0.0.20.patch`
+- In `LangGraphAgent.connect`:
+  - Always emit `RUN_STARTED` locally before streaming (use the active run id when available).
+  - Fetch `threads.getState(threadId)` and emit `STATE_SNAPSHOT` (+ `MESSAGES_SNAPSHOT` when present).
+  - Detect an active run via `client.runs.list({ threadId })` and pick the most recent `pending`/`running` run.
+  - If active run found, call `client.runs.joinStream(threadId, runId, { streamMode, lastEventId })` and forward events via `handleStreamEvents`.
+  - When the run stream ends, emit `RUN_FINISHED` (or `RUN_ERROR` on failure) and close.
+  - If no active run, emit `RUN_FINISHED` after the snapshot.
+
+4) Optional (not required for agent-browser validation)
+
+- Add `starterAgent` to `apps/web/src/config/agents.ts` if you want to point the UI at it, but this is not required for agent-browser testing.
+
+## Phase 2 Test Plan (agent-browser)
+
+Testing uses the existing dev workflow and agent-browser, no new UI work required.
+
+1) Start services
+
+- Command: `pnpm dev`
+- Run from: `typescript/clients/web-ag-ui`
+- Expect: `apps/web` on 3000, `apps/agent` on 8123 (plus existing agents).
+
+2) Run a live streaming command
+
+- Open agent-browser.
+- Runtime URL: `http://localhost:3000/api/copilotkit`.
+- Agent ID: `starterAgent`.
+- Send a message payload that triggers the new `stream` command (example content: `{"command":"stream"}`).
+- Confirm the run starts and state snapshots begin updating.
+
+3) Validate connect to active run
+
+- While the stream is still running, call `connect` from agent-browser.
+- Expect:
+  - `RUN_STARTED` emitted immediately.
+  - Multiple `STATE_SNAPSHOT` events while the run is active (progress increments).
+  - `RUN_FINISHED` when the stream ends.
+- Failure conditions:
+  - Only one snapshot with no subsequent events.
+  - `RUN_FINISHED` before the stream completes.
+  - No events after connect while run is active.
+
+4) Regression check
+
+- Connect when no run is active.
+- Expect `RUN_STARTED` -> snapshot(s) -> `RUN_FINISHED`.
+
 ## Implementation Outline (Handoff-Ready)
 
 Target implementation location:
