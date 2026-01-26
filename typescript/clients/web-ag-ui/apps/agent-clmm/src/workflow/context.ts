@@ -1,8 +1,6 @@
-import type { CopilotKitState } from '@copilotkit/sdk-js/langgraph';
 import type { AIMessage as CopilotKitAIMessage } from '@copilotkit/shared';
 import { type Artifact } from '@emberai/agent-node/workflow';
-import { Annotation, messagesStateReducer } from '@langchain/langgraph';
-import type { Messages } from '@langchain/langgraph';
+import { Annotation } from '@langchain/langgraph';
 import { v7 as uuidv7 } from 'uuid';
 
 import type { AccountingState } from '../accounting/types.js';
@@ -23,7 +21,19 @@ import {
 
 export type AgentMessage = CopilotKitAIMessage;
 
-type CopilotState = CopilotKitState;
+type ClmmMessage = Record<string, unknown> | string;
+type ClmmMessageUpdate = ClmmMessage | ClmmMessage[];
+
+const clmmMessagesReducer = (left: ClmmMessageUpdate, right: ClmmMessageUpdate): ClmmMessage[] => {
+  const leftMessages = Array.isArray(left) ? left : [left];
+  const rightMessages = Array.isArray(right) ? right : [right];
+  return [...leftMessages, ...rightMessages];
+};
+
+type CopilotkitState = {
+  actions: Array<unknown>;
+  context: Array<{ description: string; value: string }>;
+};
 
 export type ClmmSettings = {
   amount?: number;
@@ -398,19 +408,19 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
 };
 
 const mergeCopilotkit = (
-  left: CopilotState['copilotkit'],
-  right?: Partial<CopilotState['copilotkit']>,
-): CopilotState['copilotkit'] => ({
+  left: CopilotkitState,
+  right?: Partial<CopilotkitState>,
+): CopilotkitState => ({
   actions: right?.actions ?? left.actions ?? [],
   context: right?.context ?? left.context ?? [],
 });
 
 export const ClmmStateAnnotation = Annotation.Root({
-  messages: Annotation<Messages>({
+  messages: Annotation<ClmmMessage[], ClmmMessageUpdate>({
     default: () => [],
-    reducer: messagesStateReducer,
+    reducer: clmmMessagesReducer,
   }),
-  copilotkit: Annotation<CopilotState['copilotkit'], Partial<CopilotState['copilotkit']>>({
+  copilotkit: Annotation<CopilotkitState, Partial<CopilotkitState>>({
     default: () => ({ actions: [], context: [] }),
     reducer: (left, right) => mergeCopilotkit(left ?? { actions: [], context: [] }, right),
   }),
