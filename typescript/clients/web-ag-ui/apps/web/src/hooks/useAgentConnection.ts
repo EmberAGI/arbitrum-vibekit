@@ -170,20 +170,18 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
     let cancelled = false;
 
-    const connectAndSync = async () => {
+    const connectAndSync = () => {
       const currentAgent = agentRef.current;
       if (!currentAgent) return;
       currentAgent.threadId = threadId;
+      lastSyncedAgentRef.current = agent;
 
-      try {
-        await copilotkit.connectAgent({ agent: currentAgent });
-      } catch (error) {
+      void copilotkit.connectAgent({ agent: currentAgent }).catch(() => {
         // Errors are already reported via CopilotKit core subscribers.
-      }
+      });
 
       if (cancelled) return;
       runCommand('sync');
-      lastSyncedAgentRef.current = agent;
     };
 
     void connectAndSync();

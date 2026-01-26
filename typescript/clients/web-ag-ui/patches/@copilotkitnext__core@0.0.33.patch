@@ -1,0 +1,212 @@
+diff --git a/dist/index.js b/dist/index.js
+index c8f4bc3add666d767fdb7c11a53a39ac2004819a..32f6f9759fc2e601ba40bf744898be4107d6336e 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1302,6 +1302,8 @@ var StateManager = class {
+   stateByRun = /* @__PURE__ */ new Map();
+   // Message tracking: agentId -> threadId -> messageId -> runId
+   messageToRun = /* @__PURE__ */ new Map();
++  // Current run tracking: agentId -> threadId -> runId
++  currentRunByThread = /* @__PURE__ */ new Map();
+   // Agent subscriptions for cleanup
+   agentSubscriptions = /* @__PURE__ */ new Map();
+   /**
+@@ -1378,12 +1380,34 @@ var StateManager = class {
+     const threadStates = this.stateByRun.get(agentId)?.get(threadId);
+     return threadStates ? Array.from(threadStates.keys()) : [];
+   }
++  /**
++   * Get current runId for a thread
++   */
++  getCurrentRunId(agentId, threadId) {
++    return this.currentRunByThread.get(agentId)?.get(threadId);
++  }
++  /**
++   * Set current runId for a thread
++   */
++  setCurrentRunId(agentId, threadId, runId) {
++    if (!this.currentRunByThread.has(agentId)) {
++      this.currentRunByThread.set(agentId, /* @__PURE__ */ new Map());
++    }
++    const agentRuns = this.currentRunByThread.get(agentId);
++    if (runId) {
++      agentRuns.set(threadId, runId);
++      return;
++    }
++    agentRuns.delete(threadId);
++  }
+   /**
+    * Handle run started event
+    */
+   handleRunStarted(agent, event, state) {
+     if (!agent.agentId) return;
+     const { threadId, runId } = event;
++    this.clearThreadState(agent.agentId, threadId);
++    this.setCurrentRunId(agent.agentId, threadId, runId);
+     this.saveState(agent.agentId, threadId, runId, state);
+   }
+   /**
+@@ -1400,8 +1424,9 @@ var StateManager = class {
+   handleStateSnapshot(agent, event, input, state) {
+     if (!agent.agentId) return;
+     const { threadId, runId } = input;
++    const activeRunId = this.getCurrentRunId(agent.agentId, threadId) ?? runId;
+     const mergedState = { ...state, ...event.snapshot };
+-    this.saveState(agent.agentId, threadId, runId, mergedState);
++    this.saveState(agent.agentId, threadId, activeRunId, mergedState);
+   }
+   /**
+    * Handle state delta event
+@@ -1409,7 +1434,8 @@ var StateManager = class {
+   handleStateDelta(agent, event, input, state) {
+     if (!agent.agentId) return;
+     const { threadId, runId } = input;
+-    this.saveState(agent.agentId, threadId, runId, state);
++    const activeRunId = this.getCurrentRunId(agent.agentId, threadId) ?? runId;
++    this.saveState(agent.agentId, threadId, activeRunId, state);
+   }
+   /**
+    * Handle messages snapshot event
+@@ -1417,8 +1443,9 @@ var StateManager = class {
+   handleMessagesSnapshot(agent, event, input, messages) {
+     if (!agent.agentId) return;
+     const { threadId, runId } = input;
++    const activeRunId = this.getCurrentRunId(agent.agentId, threadId) ?? runId;
+     for (const message of event.messages) {
+-      this.associateMessageWithRun(agent.agentId, threadId, message.id, runId);
++      this.associateMessageWithRun(agent.agentId, threadId, message.id, activeRunId);
+     }
+   }
+   /**
+@@ -1427,7 +1454,8 @@ var StateManager = class {
+   handleNewMessage(agent, message, input) {
+     if (!agent.agentId || !input) return;
+     const { threadId, runId } = input;
+-    this.associateMessageWithRun(agent.agentId, threadId, message.id, runId);
++    const activeRunId = this.getCurrentRunId(agent.agentId, threadId) ?? runId;
++    this.associateMessageWithRun(agent.agentId, threadId, message.id, activeRunId);
+   }
+   /**
+    * Save state for a specific run
+@@ -1463,6 +1491,7 @@ var StateManager = class {
+   clearAgentState(agentId) {
+     this.stateByRun.delete(agentId);
+     this.messageToRun.delete(agentId);
++    this.currentRunByThread.delete(agentId);
+   }
+   /**
+    * Clear all state for a thread
+@@ -1470,6 +1499,7 @@ var StateManager = class {
+   clearThreadState(agentId, threadId) {
+     this.stateByRun.get(agentId)?.delete(threadId);
+     this.messageToRun.get(agentId)?.delete(threadId);
++    this.currentRunByThread.get(agentId)?.delete(threadId);
+   }
+ };
+ 
+diff --git a/dist/index.mjs b/dist/index.mjs
+index a7923e7a8777dc80c760e6bbe3553f9aeabf7dec..ac0f9b73b8a406a51f8e4ebd1762bf8b2ab90e18 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -1270,6 +1270,8 @@ var StateManager = class {
+   stateByRun = /* @__PURE__ */ new Map();
+   // Message tracking: agentId -> threadId -> messageId -> runId
+   messageToRun = /* @__PURE__ */ new Map();
++  // Current run tracking: agentId -> threadId -> runId
++  currentRunByThread = /* @__PURE__ */ new Map();
+   // Agent subscriptions for cleanup
+   agentSubscriptions = /* @__PURE__ */ new Map();
+   /**
+@@ -1346,12 +1348,34 @@ var StateManager = class {
+     const threadStates = this.stateByRun.get(agentId)?.get(threadId);
+     return threadStates ? Array.from(threadStates.keys()) : [];
+   }
++  /**
++   * Get current runId for a thread
++   */
++  getCurrentRunId(agentId, threadId) {
++    return this.currentRunByThread.get(agentId)?.get(threadId);
++  }
++  /**
++   * Set current runId for a thread
++   */
++  setCurrentRunId(agentId, threadId, runId) {
++    if (!this.currentRunByThread.has(agentId)) {
++      this.currentRunByThread.set(agentId, /* @__PURE__ */ new Map());
++    }
++    const agentRuns = this.currentRunByThread.get(agentId);
++    if (runId) {
++      agentRuns.set(threadId, runId);
++      return;
++    }
++    agentRuns.delete(threadId);
++  }
+   /**
+    * Handle run started event
+    */
+   handleRunStarted(agent, event, state) {
+     if (!agent.agentId) return;
+     const { threadId, runId } = event;
++    this.clearThreadState(agent.agentId, threadId);
++    this.setCurrentRunId(agent.agentId, threadId, runId);
+     this.saveState(agent.agentId, threadId, runId, state);
+   }
+   /**
+@@ -1368,8 +1392,9 @@ var StateManager = class {
+   handleStateSnapshot(agent, event, input, state) {
+     if (!agent.agentId) return;
+     const { threadId, runId } = input;
++    const activeRunId = this.getCurrentRunId(agent.agentId, threadId) ?? runId;
+     const mergedState = { ...state, ...event.snapshot };
+-    this.saveState(agent.agentId, threadId, runId, mergedState);
++    this.saveState(agent.agentId, threadId, activeRunId, mergedState);
+   }
+   /**
+    * Handle state delta event
+@@ -1377,7 +1402,8 @@ var StateManager = class {
+   handleStateDelta(agent, event, input, state) {
+     if (!agent.agentId) return;
+     const { threadId, runId } = input;
+-    this.saveState(agent.agentId, threadId, runId, state);
++    const activeRunId = this.getCurrentRunId(agent.agentId, threadId) ?? runId;
++    this.saveState(agent.agentId, threadId, activeRunId, state);
+   }
+   /**
+    * Handle messages snapshot event
+@@ -1385,8 +1411,9 @@ var StateManager = class {
+   handleMessagesSnapshot(agent, event, input, messages) {
+     if (!agent.agentId) return;
+     const { threadId, runId } = input;
++    const activeRunId = this.getCurrentRunId(agent.agentId, threadId) ?? runId;
+     for (const message of event.messages) {
+-      this.associateMessageWithRun(agent.agentId, threadId, message.id, runId);
++      this.associateMessageWithRun(agent.agentId, threadId, message.id, activeRunId);
+     }
+   }
+   /**
+@@ -1395,7 +1422,8 @@ var StateManager = class {
+   handleNewMessage(agent, message, input) {
+     if (!agent.agentId || !input) return;
+     const { threadId, runId } = input;
+-    this.associateMessageWithRun(agent.agentId, threadId, message.id, runId);
++    const activeRunId = this.getCurrentRunId(agent.agentId, threadId) ?? runId;
++    this.associateMessageWithRun(agent.agentId, threadId, message.id, activeRunId);
+   }
+   /**
+    * Save state for a specific run
+@@ -1431,6 +1459,7 @@ var StateManager = class {
+   clearAgentState(agentId) {
+     this.stateByRun.delete(agentId);
+     this.messageToRun.delete(agentId);
++    this.currentRunByThread.delete(agentId);
+   }
+   /**
+    * Clear all state for a thread
+@@ -1438,6 +1467,7 @@ var StateManager = class {
+   clearThreadState(agentId, threadId) {
+     this.stateByRun.get(agentId)?.delete(threadId);
+     this.messageToRun.get(agentId)?.delete(threadId);
++    this.currentRunByThread.get(agentId)?.delete(threadId);
+   }
+ };
+ 
