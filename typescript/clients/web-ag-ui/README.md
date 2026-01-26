@@ -29,25 +29,18 @@ This project is organized as a monorepo using [Turborepo](https://turbo.build) a
 pnpm install
 ```
 
-2. Configure the web app (Privy):
-```bash
-cd apps/web
-cp .env.example .env.local
-```
-Then set `NEXT_PUBLIC_PRIVY_APP_ID` in `apps/web/.env.local`.
-
-3. Set up your OpenAI API key:
+2. Set up your OpenAI API key:
 ```bash
 cd apps/agent
 echo "OPENAI_API_KEY=your-openai-api-key-here" > .env
 ```
 
-4. Start the development servers:
+3. Start the development servers:
 ```bash
 pnpm dev
 ```
 
-This will start the Next.js app (on port 3000), the default LangGraph agent (on port 8123), and the CLMM agent (on port 8124) using Turborepo.
+This will start both the Next.js app (on port 3000) and the LangGraph agent (on port 8123) using Turborepo.
 
 ## Available Scripts
 

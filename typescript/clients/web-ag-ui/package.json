@@ -1,19 +1,19 @@
 {
-  "name": "web-ag-ui",
+  "name": "langgraph-js-starter",
   "version": "0.1.0",
   "private": true,
   "workspaces": [
     "apps/*"
   ],
   "scripts": {
-    "dev": "turbo run dev --output-logs=full --log-order=stream",
-    "build": "turbo run build --output-logs=full --log-order=stream --summarize",
-    "lint": "turbo run lint --output-logs=full --log-order=stream --summarize"
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint"
   },
   "devDependencies": {
     "@langchain/langgraph-cli": "^1.0.4",
     "eslint": "^9.39.1",
-    "eslint-config-next": "^16.0.7",
+    "eslint-config-next": "^16.0.8",
     "turbo": "^2.3.3"
   },
   "packageManager": "pnpm@9.15.0",
@@ -23,5 +23,11 @@
   "overrides": {
     "@langchain/core": "^1.0.1",
     "@langchain/langgraph": "1.0.2"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "@ag-ui/langgraph@0.0.20": "patches/@ag-ui__langgraph@0.0.20.patch",
+      "@copilotkitnext/runtime@0.0.33": "patches/@copilotkitnext__runtime@0.0.33.patch"
+    }
   }
 }

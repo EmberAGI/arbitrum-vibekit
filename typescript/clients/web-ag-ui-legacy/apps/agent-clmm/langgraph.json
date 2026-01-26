@@ -1,0 +1,10 @@
+{
+  "node_version": "22",
+  "dockerfile_lines": [],
+  "dependencies": ["."],
+  "graphs": {
+    "starterAgent": "./src/agent.ts:clmmGraph",
+    "agent-clmm": "./src/agent.ts:clmmGraph"
+  },
+  "env": ".env"
+}

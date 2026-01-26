@@ -53,4 +53,3 @@ export function useMetamaskSmartAccount(): UseMetamaskSmartAccountReturn {
     error: (query.error as Error | null) ?? null,
   };
 }
-

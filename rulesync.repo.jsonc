@@ -1,10 +1,11 @@
 {
-  "targets": ["cursor", "claudecode", "codexcli"],
-  "features": ["rules", "commands", "subagents"],
+  "targets": ["cursor", "claudecode", "codexcli", "opencode"],
+  "features": ["rules", "mcp", "commands", "subagents", "skills"],
   "baseDirs": ["."],
   "delete": true,
   "verbose": false,
   "global": false,
-  "simulatedCommands": true,
-  "simulatedSubagents": false
+  "simulateCommands": false,
+  "simulateSubagents": false,
+  "simulateSkills": false
 }
