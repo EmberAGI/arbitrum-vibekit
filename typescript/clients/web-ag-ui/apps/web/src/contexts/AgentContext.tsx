@@ -12,7 +12,12 @@ const AgentContext = createContext<UseAgentConnectionResult | null>(null);
 export function AgentProvider({ children }: { children: ReactNode }) {
   const agent = useAgentConnection(DEFAULT_AGENT_ID);
 
-  return <AgentContext.Provider value={agent}>{children}</AgentContext.Provider>;
+  return (
+    <AgentContext.Provider value={agent}>
+      {children}
+      {agent.interruptRenderer}
+    </AgentContext.Provider>
+  );
 }
 
 export function useAgent(): UseAgentConnectionResult {

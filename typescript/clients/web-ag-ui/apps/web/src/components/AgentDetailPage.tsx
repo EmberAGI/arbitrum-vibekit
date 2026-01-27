@@ -124,6 +124,7 @@ export function AgentDetailPage({
   onSettingsChange,
 }: AgentDetailPageProps) {
   const [activeTab, setActiveTab] = useState<TabType>(isHired ? 'blockers' : 'metrics');
+  const resolvedTab: TabType = activeInterrupt ? 'blockers' : activeTab;
 
   const formatAddress = (address: string) => {
     if (address.length <= 10) return address;
@@ -300,31 +301,31 @@ export function AgentDetailPage({
           {/* Tabs */}
           <div className="flex items-center gap-1 mb-6 border-b border-[#2a2a2a]">
             <TabButton
-              active={activeTab === 'blockers'}
+              active={resolvedTab === 'blockers'}
               onClick={() => setActiveTab('blockers')}
               highlight
             >
               Agent Blockers
             </TabButton>
-            <TabButton active={activeTab === 'metrics'} onClick={() => setActiveTab('metrics')}>
+            <TabButton active={resolvedTab === 'metrics'} onClick={() => setActiveTab('metrics')}>
               Metrics
             </TabButton>
             <TabButton
-              active={activeTab === 'transactions'}
+              active={resolvedTab === 'transactions'}
               onClick={() => setActiveTab('transactions')}
             >
               Transaction history
             </TabButton>
-            <TabButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')}>
+            <TabButton active={resolvedTab === 'settings'} onClick={() => setActiveTab('settings')}>
               Settings and policies
             </TabButton>
-            <TabButton active={activeTab === 'chat'} onClick={() => {}} disabled>
+            <TabButton active={resolvedTab === 'chat'} onClick={() => {}} disabled>
               Chat
             </TabButton>
           </div>
 
           {/* Tab Content */}
-          {activeTab === 'blockers' && (
+          {resolvedTab === 'blockers' && (
             <AgentBlockersTab
               activeInterrupt={activeInterrupt}
               allowedPools={allowedPools}
@@ -341,7 +342,7 @@ export function AgentDetailPage({
             />
           )}
 
-          {activeTab === 'metrics' && (
+          {resolvedTab === 'metrics' && (
             <MetricsTab
               profile={profile}
               metrics={metrics}
@@ -350,11 +351,11 @@ export function AgentDetailPage({
             />
           )}
 
-          {activeTab === 'transactions' && (
+          {resolvedTab === 'transactions' && (
             <TransactionHistoryTab transactions={transactions} />
           )}
 
-          {activeTab === 'settings' && (
+          {resolvedTab === 'settings' && (
             <SettingsTab
               settings={settings}
               onSettingsChange={onSettingsChange}

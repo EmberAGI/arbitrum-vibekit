@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useCopilotContext } from '@copilotkit/react-core';
+import { useCopilotContext, useLangGraphInterruptRender } from '@copilotkit/react-core';
 import {
   useAgent,
   useCopilotKit,
@@ -56,6 +56,7 @@ export interface UseAgentConnectionResult {
   config: AgentConfig;
   isConnected: boolean;
   threadId: string | undefined;
+  interruptRenderer: ReturnType<typeof useLangGraphInterruptRender>;
 
   // Full view state
   view: AgentView;
@@ -97,6 +98,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const [isFiring, setIsFiring] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const lastSyncedAgentRef = useRef<unknown>(null);
+  const lastSyncedThreadRef = useRef<string | null>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
   const messagesSnapshotRef = useRef(false);
   const runInFlightRef = useRef(false);
@@ -114,6 +116,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const { activeInterrupt, resolve } = useLangGraphInterruptCustomUI<AgentInterrupt>({
     enabled: isAgentInterrupt,
   });
+  const interruptRenderer = useLangGraphInterruptRender(agent);
 
   // Simple command runner - no queuing, just run the command
   const runCommand = useCallback(
@@ -130,14 +133,10 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       };
 
       agent.addMessage(message);
-      void copilotkit
-        .runAgent({ agent })
-        .catch((error) => {
-          console.error('Agent run failed', error);
-        })
-        .finally(() => {
-          runInFlightRef.current = false;
-        });
+      void copilotkit.runAgent({ agent }).catch((error) => {
+        runInFlightRef.current = false;
+        console.error('Agent run failed', error);
+      });
 
       return true;
     },
@@ -148,12 +147,54 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     return Boolean(value && typeof value === 'object' && Object.keys(value as Record<string, unknown>).length > 0);
   }, []);
 
+  const needsSync = useCallback((value: unknown): boolean => {
+    if (!value || typeof value !== 'object') return true;
+    const state = value as AgentState;
+    const view = state.view;
+    if (!view) return true;
+
+    const profile = view.profile ?? defaultProfile;
+    const metrics = view.metrics ?? defaultMetrics;
+    const activity = view.activity ?? defaultActivity;
+
+    const hasProfile =
+      profile.totalUsers !== undefined ||
+      profile.agentIncome !== undefined ||
+      profile.aum !== undefined ||
+      profile.apy !== undefined ||
+      profile.pools.length > 0 ||
+      profile.allowedPools.length > 0;
+    const hasMetrics =
+      metrics.iteration !== 0 ||
+      metrics.cyclesSinceRebalance !== 0 ||
+      metrics.staleCycles !== 0 ||
+      metrics.lastSnapshot !== undefined ||
+      metrics.latestCycle !== undefined ||
+      metrics.previousPrice !== undefined;
+    const hasActivity = activity.telemetry.length > 0 || activity.events.length > 0;
+    const hasHistory = view.transactionHistory.length > 0;
+    const hasCommand = Boolean(view.command || view.task);
+
+    return !(hasProfile || hasMetrics || hasActivity || hasHistory || hasCommand);
+  }, []);
+
   useEffect(() => {
     if (!agent) {
       return undefined;
     }
 
+    const clearRunFlag = () => {
+      runInFlightRef.current = false;
+    };
+
     const subscription = agent.subscribe({
+      onRunStartedEvent: () => {
+        runInFlightRef.current = true;
+      },
+      onRunFinishedEvent: clearRunFlag,
+      onRunErrorEvent: clearRunFlag,
+      onRunFailed: clearRunFlag,
+      onRunFinalized: clearRunFlag,
       onRunInitialized: ({ state }) => {
         if (hasStateValues(state)) {
           agent.setState(state);
@@ -181,6 +222,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   useEffect(() => {
     runInFlightRef.current = false;
+    lastSyncedThreadRef.current = null;
   }, [threadId]);
 
   useEffect(() => {
@@ -202,15 +244,22 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       });
 
       const startTime = Date.now();
+      const syncDeadline = startTime + 8000;
       const scheduleSync = () => {
         if (cancelled) return;
         if (messagesSnapshotRef.current || Date.now() - startTime > 2000) {
           const shouldSync =
             !runInFlightRef.current &&
-            !hasStateValues(currentAgent.state) &&
-            currentAgent.messages.length === 0;
+            lastSyncedThreadRef.current !== threadId &&
+            needsSync(currentAgent.state);
           if (shouldSync) {
-            runCommand('sync');
+            if (runCommand('sync')) {
+              lastSyncedThreadRef.current = threadId;
+              return;
+            }
+            if (Date.now() < syncDeadline) {
+              setTimeout(scheduleSync, 250);
+            }
           }
           return;
         }
@@ -225,7 +274,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     return () => {
       cancelled = true;
     };
-  }, [threadId, agent, runtimeStatus, copilotkit, runCommand, hasStateValues]);
+  }, [threadId, agent, runtimeStatus, copilotkit, runCommand, hasStateValues, needsSync]);
 
   // Extract state with defaults
   const currentState =
@@ -295,6 +344,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     config,
     isConnected: !!threadId,
     threadId,
+    interruptRenderer,
     view,
     profile,
     metrics,
