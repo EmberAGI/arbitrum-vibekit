@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "lint": "turbo run lint"
+    "lint": "turbo run lint",
+    "reset:langgraph": "for port in 3000 8123 8124; do pid=$(lsof -ti tcp:$port -sTCP:LISTEN); if [ -n \"$pid\" ]; then kill $pid; fi; done; rm -rf apps/agent-clmm/.langgraph_api apps/agent/.langgraph_api"
   },
   "devDependencies": {
     "@langchain/langgraph-cli": "^1.0.4",
