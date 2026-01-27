@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 import { CopilotKit } from '@copilotkit/react-core';
-import { CopilotPopup, CopilotKitCSSProperties } from '@copilotkit/react-ui';
+import { CopilotKitCSSProperties } from '@copilotkit/react-ui';
 import { v5 as uuidv5 } from 'uuid';
 import { ProvidersNoSSR } from '../components/ProvidersNoSSR';
 import { AppSidebarNoSSR } from '../components/AppSidebarNoSSR';
@@ -44,8 +44,8 @@ export default function RootLayout({
                 >
                   {children}
                 </main>
-                {/* Hidden popup for AG-UI interrupt handling */}
-                <CopilotPopup defaultOpen={false} clickOutsideToClose={false} />
+                {/* CopilotPopup disabled while troubleshooting connect loops */}
+                {/* <CopilotPopup defaultOpen={false} clickOutsideToClose={false} /> */}
               </div>
             </AgentProvider>
           </CopilotKit>

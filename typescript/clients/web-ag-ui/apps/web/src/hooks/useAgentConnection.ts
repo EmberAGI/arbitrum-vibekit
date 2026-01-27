@@ -98,6 +98,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const [isSyncing, setIsSyncing] = useState(false);
   const lastSyncedAgentRef = useRef<unknown>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
+  const messagesSnapshotRef = useRef(false);
+  const runInFlightRef = useRef(false);
 
   const config = getAgentConfig(agentId);
 
@@ -116,19 +118,30 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   // Simple command runner - no queuing, just run the command
   const runCommand = useCallback(
     (command: string) => {
-      if (!agent) return;
-      void copilotkit.runAgent({
-        agent,
-        withMessages: [
-          {
-            id: v7(),
-            role: 'user',
-            content: JSON.stringify({ command }),
-          },
-        ],
-      });
+      if (!agent || !threadId) return false;
+      if (runInFlightRef.current) return false;
+
+      runInFlightRef.current = true;
+
+      const message = {
+        id: v7(),
+        role: 'user' as const,
+        content: JSON.stringify({ command }),
+      };
+
+      agent.addMessage(message);
+      void copilotkit
+        .runAgent({ agent })
+        .catch((error) => {
+          console.error('Agent run failed', error);
+        })
+        .finally(() => {
+          runInFlightRef.current = false;
+        });
+
+      return true;
     },
-    [agent, copilotkit],
+    [agent, copilotkit, threadId],
   );
 
   const hasStateValues = useCallback((value: unknown): value is AgentState => {
@@ -153,6 +166,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
         agent.setState(initialAgentState);
       },
+      onMessagesSnapshotEvent: () => {
+        messagesSnapshotRef.current = true;
+      },
     });
 
     return () => subscription.unsubscribe();
@@ -162,6 +178,10 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   useEffect(() => {
     agentRef.current = agent ?? null;
   }, [agent]);
+
+  useEffect(() => {
+    runInFlightRef.current = false;
+  }, [threadId]);
 
   useEffect(() => {
     if (!threadId || !agent) return;
@@ -175,13 +195,29 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       if (!currentAgent) return;
       currentAgent.threadId = threadId;
       lastSyncedAgentRef.current = agent;
+      messagesSnapshotRef.current = false;
 
       void copilotkit.connectAgent({ agent: currentAgent }).catch(() => {
         // Errors are already reported via CopilotKit core subscribers.
       });
 
-      if (cancelled) return;
-      runCommand('sync');
+      const startTime = Date.now();
+      const scheduleSync = () => {
+        if (cancelled) return;
+        if (messagesSnapshotRef.current || Date.now() - startTime > 2000) {
+          const shouldSync =
+            !runInFlightRef.current &&
+            !hasStateValues(currentAgent.state) &&
+            currentAgent.messages.length === 0;
+          if (shouldSync) {
+            runCommand('sync');
+          }
+          return;
+        }
+        setTimeout(scheduleSync, 100);
+      };
+
+      scheduleSync();
     };
 
     void connectAndSync();
@@ -189,7 +225,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     return () => {
       cancelled = true;
     };
-  }, [threadId, agent, runtimeStatus, copilotkit, runCommand]);
+  }, [threadId, agent, runtimeStatus, copilotkit, runCommand, hasStateValues]);
 
   // Extract state with defaults
   const currentState =
@@ -207,23 +243,23 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const isActive = view.command !== undefined && view.command !== 'idle' && view.command !== 'fire';
 
   const runSync = useCallback(() => {
+    if (!runCommand('sync')) return;
     setIsSyncing(true);
-    runCommand('sync');
     setTimeout(() => setIsSyncing(false), 2000);
   }, [runCommand]);
 
   const runHire = useCallback(() => {
     if (!isHired && !isHiring) {
+      if (!runCommand('hire')) return;
       setIsHiring(true);
-      runCommand('hire');
       setTimeout(() => setIsHiring(false), 5000);
     }
   }, [runCommand, isHired, isHiring]);
 
   const runFire = useCallback(() => {
     if (!isFiring) {
+      if (!runCommand('fire')) return;
       setIsFiring(true);
-      runCommand('fire');
       setTimeout(() => setIsFiring(false), 3000);
     }
   }, [runCommand, isFiring]);
