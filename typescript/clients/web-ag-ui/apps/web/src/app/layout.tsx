@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-import { CopilotKitCSSProperties } from '@copilotkit/react-ui';
+import type { CopilotKitCSSProperties } from '@copilotkit/react-ui';
 import { ProvidersNoSSR } from '../components/ProvidersNoSSR';
 import { AppSidebarNoSSR } from '../components/AppSidebarNoSSR';
 import { AgentRuntimeProvider } from '../components/AgentRuntimeProvider';
