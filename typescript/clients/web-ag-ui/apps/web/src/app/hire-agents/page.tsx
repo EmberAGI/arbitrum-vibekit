@@ -3,16 +3,17 @@
 import { useRouter } from 'next/navigation';
 import { HireAgentsPage, type Agent, type FeaturedAgent } from '@/components/HireAgentsPage';
 import { useAgent } from '@/contexts/AgentContext';
-import { DEFAULT_AGENT_ID, getAllAgents, getFeaturedAgents } from '@/config/agents';
+import { getAllAgents, getFeaturedAgents } from '@/config/agents';
 
 export default function HireAgentsRoute() {
   const router = useRouter();
   const agent = useAgent();
   const registeredAgents = getAllAgents();
   const featuredAgentConfigs = getFeaturedAgents();
+  const activeAgentId = agent.config.id;
 
   const agentList: Agent[] = registeredAgents.map((agentConfig) => {
-    if (agentConfig.id === DEFAULT_AGENT_ID) {
+    if (agentConfig.id === activeAgentId) {
       // Connected agent - use real data from state
       return {
         id: agentConfig.id,
@@ -46,7 +47,7 @@ export default function HireAgentsRoute() {
       creatorVerified: agentConfig.creatorVerified,
       avatar: agentConfig.avatar,
       avatarBg: agentConfig.avatarBg,
-      status: 'unavailable' as const,
+      status: 'for_hire' as const,
       isActive: false,
       isFeatured: agentConfig.isFeatured,
       featuredRank: agentConfig.featuredRank,
@@ -55,7 +56,7 @@ export default function HireAgentsRoute() {
 
   // Build featured agents list from config, prioritizing real data when available
   const featuredAgents: FeaturedAgent[] = featuredAgentConfigs.map((config) => {
-    if (config.id === DEFAULT_AGENT_ID) {
+    if (config.id === activeAgentId) {
       // Use real data from connected agent
       return {
         id: config.id,
@@ -85,7 +86,7 @@ export default function HireAgentsRoute() {
       creatorVerified: config.creatorVerified,
       avatar: config.avatar,
       avatarBg: config.avatarBg,
-      status: 'unavailable' as const,
+      status: 'for_hire' as const,
     };
   });
 

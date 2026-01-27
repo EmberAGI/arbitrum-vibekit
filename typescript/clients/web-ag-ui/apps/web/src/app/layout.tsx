@@ -1,12 +1,9 @@
 import type { Metadata } from 'next';
 
-import { CopilotKit } from '@copilotkit/react-core';
 import { CopilotKitCSSProperties } from '@copilotkit/react-ui';
-import { v5 as uuidv5 } from 'uuid';
 import { ProvidersNoSSR } from '../components/ProvidersNoSSR';
 import { AppSidebarNoSSR } from '../components/AppSidebarNoSSR';
-import { AgentProvider } from '../contexts/AgentContext';
-import { DEFAULT_AGENT_ID } from '../config/agents';
+import { AgentRuntimeProvider } from '../components/AgentRuntimeProvider';
 import './globals.css';
 import '@copilotkit/react-ui/styles.css';
 
@@ -19,9 +16,8 @@ export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
-}>) {
+  }>) {
   const themeColor = '#fd6731';
-  const threadId = uuidv5(`copilotkit:${DEFAULT_AGENT_ID}`, uuidv5.URL);
 
   return (
     <html lang="en" className="dark" style={{ colorScheme: 'dark' }}>
@@ -34,21 +30,19 @@ export default function RootLayout({
       </head>
       <body className="antialiased bg-[#121212] text-white dark">
         <ProvidersNoSSR>
-          <CopilotKit runtimeUrl="/api/copilotkit" agent={DEFAULT_AGENT_ID} threadId={threadId}>
-            <AgentProvider>
-              <div className="flex h-screen overflow-hidden">
-                <AppSidebarNoSSR />
-                <main
-                  className="flex-1 overflow-y-auto bg-[#121212]"
-                  style={{ '--copilot-kit-primary-color': themeColor } as CopilotKitCSSProperties}
-                >
-                  {children}
-                </main>
-                {/* CopilotPopup disabled while troubleshooting connect loops */}
-                {/* <CopilotPopup defaultOpen={false} clickOutsideToClose={false} /> */}
-              </div>
-            </AgentProvider>
-          </CopilotKit>
+          <AgentRuntimeProvider>
+            <div className="flex h-screen overflow-hidden">
+              <AppSidebarNoSSR />
+              <main
+                className="flex-1 overflow-y-auto bg-[#121212]"
+                style={{ '--copilot-kit-primary-color': themeColor } as CopilotKitCSSProperties}
+              >
+                {children}
+              </main>
+              {/* CopilotPopup disabled while troubleshooting connect loops */}
+              {/* <CopilotPopup defaultOpen={false} clickOutsideToClose={false} /> */}
+            </div>
+          </AgentRuntimeProvider>
         </ProvidersNoSSR>
       </body>
     </html>

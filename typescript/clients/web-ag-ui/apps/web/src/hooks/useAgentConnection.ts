@@ -173,9 +173,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       metrics.previousPrice !== undefined;
     const hasActivity = activity.telemetry.length > 0 || activity.events.length > 0;
     const hasHistory = view.transactionHistory.length > 0;
-    const hasCommand = Boolean(view.command || view.task);
 
-    return !(hasProfile || hasMetrics || hasActivity || hasHistory || hasCommand);
+    return !(hasProfile || hasMetrics || hasActivity || hasHistory);
   }, []);
 
   useEffect(() => {

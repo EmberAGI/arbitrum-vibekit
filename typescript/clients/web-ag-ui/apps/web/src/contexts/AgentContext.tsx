@@ -9,8 +9,14 @@ import { DEFAULT_AGENT_ID } from '../config/agents';
 
 const AgentContext = createContext<UseAgentConnectionResult | null>(null);
 
-export function AgentProvider({ children }: { children: ReactNode }) {
-  const agent = useAgentConnection(DEFAULT_AGENT_ID);
+export function AgentProvider({
+  children,
+  agentId = DEFAULT_AGENT_ID,
+}: {
+  children: ReactNode;
+  agentId?: string;
+}) {
+  const agent = useAgentConnection(agentId);
 
   return (
     <AgentContext.Provider value={agent}>
