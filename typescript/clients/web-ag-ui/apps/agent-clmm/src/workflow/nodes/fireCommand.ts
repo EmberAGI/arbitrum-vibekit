@@ -37,7 +37,12 @@ export const fireCommandNode = async (
     };
   }
 
-  const { task, statusEvent } = buildTaskStatus(currentTask, 'canceled', 'Agent fired! It will stop trading.');
+  const onboardingComplete = Boolean(state.view.operatorConfig);
+  const terminalState = onboardingComplete ? 'completed' : 'canceled';
+  const terminalMessage = onboardingComplete
+    ? 'Agent fired. Workflow completed.'
+    : 'Agent fired before onboarding completed.';
+  const { task, statusEvent } = buildTaskStatus(currentTask, terminalState, terminalMessage);
   await copilotkitEmitState(config, { view: { task, activity: { events: [statusEvent], telemetry: [] } } });
 
   const contextId = resolveAccountingContextId({ state, threadId });
