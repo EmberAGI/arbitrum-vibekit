@@ -7,9 +7,10 @@
   ],
   "scripts": {
     "dev": "turbo run dev",
+    "dev:wallet-bypass": "NEXT_PUBLIC_WALLET_BYPASS=true CLMM_DELEGATIONS_BYPASS=true turbo run dev --filter=web --filter=agent --filter=agent-clmm",
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "reset:langgraph": "for port in 3000 8123 8124; do pid=$(lsof -ti tcp:$port -sTCP:LISTEN); if [ -n \"$pid\" ]; then kill $pid; fi; done; rm -rf apps/agent-clmm/.langgraph_api apps/agent/.langgraph_api"
+    "reset:langgraph": "for port in 3000 8123 8124; do pid=$(lsof -ti tcp:$port -sTCP:LISTEN); if [ -n \"$pid\" ]; then kill $pid; fi; done; pids=$(ps -axo pid=,command= | awk '/langgraph-api\\/dist\\/cli\\/entrypoint\\.mjs/ && /apps\\/(agent|agent-clmm)/ {print $1}'); if [ -n \"$pids\" ]; then kill $pids; fi; rm -rf apps/agent-clmm/.langgraph_api apps/agent/.langgraph_api"
   },
   "devDependencies": {
     "@langchain/langgraph-cli": "^1.0.4",
