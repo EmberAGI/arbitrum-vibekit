@@ -12,7 +12,6 @@ export const MOCK_DELEGATION_MANAGER =
   '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as const;
 export const MOCK_DELEGATION_ENFORCER =
   '0xcccccccccccccccccccccccccccccccccccccccc' as const;
-const ZERO_ADDRESS = `0x${'0'.repeat(40)}` as const;
 const ZERO_WORD = `0x${'0'.repeat(64)}` as const;
 const SALT_WORD = `0x${'1'.repeat(64)}` as const;
 
@@ -141,7 +140,7 @@ export function buildMockDelegations(
     {
       delegate: MOCK_AGENT_WALLET_ADDRESS,
       delegator: delegatorAddress,
-      authority: ZERO_ADDRESS,
+      authority: ZERO_WORD,
       caveats: [
         {
           enforcer: MOCK_DELEGATION_ENFORCER,
