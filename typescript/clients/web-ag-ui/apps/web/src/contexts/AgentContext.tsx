@@ -5,9 +5,41 @@ import {
   useAgentConnection,
   type UseAgentConnectionResult,
 } from '../hooks/useAgentConnection';
-import { DEFAULT_AGENT_ID } from '../config/agents';
+import { DEFAULT_AGENT_ID, getAgentConfig } from '../config/agents';
+import {
+  defaultActivity,
+  defaultMetrics,
+  defaultProfile,
+  defaultSettings,
+  defaultView,
+} from '../types/agent';
 
 const AgentContext = createContext<UseAgentConnectionResult | null>(null);
+
+const inactiveAgent: UseAgentConnectionResult = {
+  config: getAgentConfig('inactive-agent'),
+  isConnected: false,
+  threadId: undefined,
+  interruptRenderer: null,
+  view: defaultView,
+  profile: defaultProfile,
+  metrics: defaultMetrics,
+  activity: defaultActivity,
+  transactionHistory: [],
+  events: [],
+  settings: defaultSettings,
+  isHired: false,
+  isActive: false,
+  isHiring: false,
+  isFiring: false,
+  isSyncing: false,
+  activeInterrupt: null,
+  runHire: () => undefined,
+  runFire: () => undefined,
+  runSync: () => undefined,
+  resolveInterrupt: () => undefined,
+  updateSettings: () => undefined,
+};
 
 export function AgentProvider({
   children,
@@ -24,6 +56,10 @@ export function AgentProvider({
       {agent.interruptRenderer}
     </AgentContext.Provider>
   );
+}
+
+export function InactiveAgentProvider({ children }: { children: ReactNode }) {
+  return <AgentContext.Provider value={inactiveAgent}>{children}</AgentContext.Provider>;
 }
 
 export function useAgent(): UseAgentConnectionResult {
