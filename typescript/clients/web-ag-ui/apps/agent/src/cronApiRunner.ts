@@ -53,7 +53,7 @@ const ThreadResponseSchema = z
   })
   .catchall(z.unknown());
 
-const DEFAULT_INTERVAL_MS = 30_000;
+const DEFAULT_INTERVAL_MS = 5_000;
 
 const parseNumber = (value?: string): number | undefined => {
   if (!value) {
