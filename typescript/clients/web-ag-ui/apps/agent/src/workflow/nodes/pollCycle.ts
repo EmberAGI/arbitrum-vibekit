@@ -17,6 +17,8 @@ type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = { configurable?: { thread_id?: string } };
 
 const ACTIONS: ClmmActionKind[] = ['hold', 'adjust-range', 'compound-fees', 'enter-range'];
+const CONNECT_DELAY_MS = 3000;
+const CONNECT_DELAY_STEPS = 3;
 
 function actionForIteration(iteration: number): ClmmActionKind {
   const index = (iteration - 1) % ACTIONS.length;
@@ -68,6 +70,14 @@ function computeVolatilityPct(previousPrice: number | undefined, midPrice: numbe
     return 0;
   }
   return Number(((Math.abs(midPrice - previousPrice) / previousPrice) * 100).toFixed(4));
+}
+
+function shouldDelayIteration(iteration: number): boolean {
+  return iteration % 3 === 0;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 export const pollCycleNode = async (
@@ -177,7 +187,7 @@ export const pollCycleNode = async (
     : 0;
 
   const cycleStatusMessage = `[Cycle ${iteration}] ${action}: ${reason}${txHash ? ` (tx: ${txHash.slice(0, 10)}...)` : ''}`;
-  const { task, statusEvent } = buildTaskStatus(state.view.task, 'working', cycleStatusMessage);
+  let { task, statusEvent } = buildTaskStatus(state.view.task, 'working', cycleStatusMessage);
   await copilotkitEmitState(config, {
     view: {
       task,
@@ -185,6 +195,24 @@ export const pollCycleNode = async (
       metrics: { latestCycle: cycleTelemetry },
     },
   });
+
+  if (shouldDelayIteration(iteration)) {
+    const stepDelayMs = Math.max(1, Math.floor(CONNECT_DELAY_MS / CONNECT_DELAY_STEPS));
+    for (let step = 1; step <= CONNECT_DELAY_STEPS; step += 1) {
+      const waitMessage = `[Cycle ${iteration}] streaming… (${step}/${CONNECT_DELAY_STEPS})`;
+      const updated = buildTaskStatus(task, 'working', waitMessage);
+      task = updated.task;
+      statusEvent = updated.statusEvent;
+      await copilotkitEmitState(config, {
+        view: {
+          task,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          metrics: { latestCycle: cycleTelemetry },
+        },
+      });
+      await delay(stepDelayMs);
+    }
+  }
 
   const telemetryEvent: ClmmEvent = {
     type: 'artifact',
