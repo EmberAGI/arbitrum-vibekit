@@ -20,13 +20,14 @@ import { hireCommandNode } from './workflow/nodes/hireCommand.js';
 import { listPoolsNode } from './workflow/nodes/listPools.js';
 import { pollCycleNode } from './workflow/nodes/pollCycle.js';
 import { prepareOperatorNode } from './workflow/nodes/prepareOperator.js';
-import { resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
+import { extractCommand, resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
 import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
 
 function resolvePostBootstrap(state: ClmmState): 'listPools' | 'syncState' {
-  return state.view.command === 'sync' ? 'syncState' : 'listPools';
+  const command = extractCommand(state.messages) ?? state.view.command;
+  return command === 'sync' ? 'syncState' : 'listPools';
 }
 
 const workflow = new StateGraph(ClmmStateAnnotation)
