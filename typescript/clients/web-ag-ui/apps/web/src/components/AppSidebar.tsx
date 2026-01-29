@@ -19,6 +19,9 @@ import { supportedEvmChains, getEvmChainOrDefault } from '@/config/evmChains';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
 import { useAgent } from '@/contexts/AgentContext';
+import { useAgentList } from '@/contexts/AgentListContext';
+import { getAllAgents } from '@/config/agents';
+import type { TaskState } from '@/types/agent';
 
 export interface AgentActivity {
   id: string;
@@ -57,56 +60,75 @@ export function AppSidebar() {
 
   // Get agent activity data from shared context
   const agent = useAgent();
+  const { agents: listAgents } = useAgentList();
 
-  // Derive task status - only show a card if there's a task ID
-  const taskId = agent.view.task?.id;
-  const taskState = agent.view.task?.taskStatus?.state;
+  const agentConfigs = getAllAgents();
+  const isInactiveRuntime = agent.config.id === 'inactive-agent';
+  const runtimeAgentId = isInactiveRuntime ? null : agent.config.id;
+  const runtimeTaskId = agent.view.task?.id;
+  const runtimeTaskState = agent.view.task?.taskStatus?.state as TaskState | undefined;
+  const runtimeHaltReason = agent.view.haltReason;
+  const runtimeExecutionError = agent.view.executionError;
+  const runtimeNeedsInput = Boolean(agent.activeInterrupt);
 
-  // Determine which category this task belongs to (mutually exclusive)
-  // Check both taskState and activeInterrupt for blocked detection
-  const needsInput = taskState === 'input-required' || Boolean(agent.activeInterrupt);
-  const hasError = Boolean(agent.view.haltReason || agent.view.executionError);
-  const isBlocked = needsInput || hasError;
-  const isCompleted = taskState === 'completed' || taskState === 'canceled';
-  const isRunning = taskId && agent.isActive && !isBlocked && !isCompleted;
+  const blockedAgents: AgentActivity[] = [];
+  const activeAgents: AgentActivity[] = [];
+  const completedAgents: AgentActivity[] = [];
 
-  const blockedAgents: AgentActivity[] =
-    taskId && isBlocked
-      ? [
-          {
-            id: taskId,
-            name: agent.config.name,
-            subtitle: needsInput
-              ? 'Set up agent'
-              : agent.view.haltReason ?? agent.view.executionError ?? 'Blocked',
-            status: 'blocked',
-          },
-        ]
-      : [];
+  agentConfigs.forEach((config) => {
+    const listEntry = listAgents[config.id];
+    const useRuntime = runtimeAgentId === config.id && Boolean(runtimeTaskId);
+    const entry = useRuntime
+      ? {
+          ...listEntry,
+          taskId: runtimeTaskId,
+          taskState: runtimeTaskState,
+          haltReason: runtimeHaltReason,
+          executionError: runtimeExecutionError,
+        }
+      : listEntry;
 
-  const activeAgents: AgentActivity[] =
-    taskId && isRunning
-      ? [
-          {
-            id: taskId,
-            name: agent.config.name,
-            subtitle: `Task: ${taskId.slice(0, 8)}...`,
-            status: 'active',
-          },
-        ]
-      : [];
+    const taskState = entry?.taskState;
+    if (!taskState) {
+      return;
+    }
 
-  const completedAgents: AgentActivity[] =
-    taskId && isCompleted
-      ? [
-          {
-            id: taskId,
-            name: agent.config.name,
-            subtitle: taskState === 'canceled' ? 'Canceled' : 'Completed',
-            status: 'completed',
-          },
-        ]
-      : [];
+    const taskId = entry.taskId ?? config.id;
+    const needsInput =
+      taskState === 'input-required' || (runtimeAgentId === config.id && runtimeNeedsInput);
+    const hasError = taskState === 'failed' || Boolean(entry.haltReason || entry.executionError);
+    const isBlocked = needsInput || hasError;
+    const isCompleted = taskState === 'completed' || taskState === 'canceled';
+
+    if (isBlocked) {
+      blockedAgents.push({
+        id: config.id,
+        name: config.name,
+        subtitle: needsInput
+          ? 'Set up agent'
+          : entry.haltReason ?? entry.executionError ?? 'Blocked',
+        status: 'blocked',
+      });
+      return;
+    }
+
+    if (isCompleted) {
+      completedAgents.push({
+        id: config.id,
+        name: config.name,
+        subtitle: taskState === 'canceled' ? 'Canceled' : 'Completed',
+        status: 'completed',
+      });
+      return;
+    }
+
+    activeAgents.push({
+      id: config.id,
+      name: config.name,
+      subtitle: taskId ? `Task: ${taskId.slice(0, 8)}...` : `Task: ${taskState}`,
+      status: 'active',
+    });
+  });
 
   const selectedChain = getEvmChainOrDefault(chainId);
 
@@ -187,8 +209,8 @@ export function AppSidebar() {
   }, [privyWallet?.address]);
 
   // Navigate to agent detail page when clicking on an agent in the sidebar
-  const handleAgentClick = () => {
-    router.push(`/hire-agents/${agent.config.id}`);
+  const handleAgentClick = (agentId: string) => {
+    router.push(`/hire-agents/${agentId}`);
   };
 
   const canSelectChain = ready && authenticated && Boolean(privyWallet) && !isWalletLoading;

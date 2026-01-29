@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useCopilotContext } from '@copilotkit/react-core';
+import { useCopilotContext, useLangGraphInterruptRender } from '@copilotkit/react-core';
 import {
   useAgent,
   useCopilotKit,
@@ -56,6 +56,7 @@ export interface UseAgentConnectionResult {
   config: AgentConfig;
   isConnected: boolean;
   threadId: string | undefined;
+  interruptRenderer: ReturnType<typeof useLangGraphInterruptRender>;
 
   // Full view state
   view: AgentView;
@@ -96,8 +97,14 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const [isHiring, setIsHiring] = useState(false);
   const [isFiring, setIsFiring] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const lastSyncedAgentRef = useRef<unknown>(null);
+  const lastConnectedThreadRef = useRef<string | null>(null);
+  const lastSyncedThreadRef = useRef<string | null>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
+  const messagesSnapshotRef = useRef(false);
+  const runInFlightRef = useRef(false);
+  const connectSeqRef = useRef(0);
+  const agentDebugIdsRef = useRef(new WeakMap<object, number>());
+  const nextAgentDebugIdRef = useRef(1);
 
   const config = getAgentConfig(agentId);
 
@@ -112,27 +119,93 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const { activeInterrupt, resolve } = useLangGraphInterruptCustomUI<AgentInterrupt>({
     enabled: isAgentInterrupt,
   });
+  const interruptRenderer = useLangGraphInterruptRender(agent);
+
+  const debugConnect = process.env.NEXT_PUBLIC_AGENT_CONNECT_DEBUG === 'true';
+
+  const getAgentDebugId = useCallback(
+    (value: ReturnType<typeof useAgent>['agent'] | null) => {
+      if (!value) return 'none';
+      const key = value as unknown as object;
+      const cached = agentDebugIdsRef.current.get(key);
+      if (cached) return `agent#${cached}`;
+      const nextId = nextAgentDebugIdRef.current;
+      nextAgentDebugIdRef.current = nextId + 1;
+      agentDebugIdsRef.current.set(key, nextId);
+      return `agent#${nextId}`;
+    },
+    [],
+  );
+
+  const logConnectEvent = useCallback(
+    (event: string, payload: Record<string, unknown>) => {
+      if (!debugConnect) return;
+      console.debug('[agent-connect]', {
+        ts: new Date().toISOString(),
+        event,
+        ...payload,
+      });
+    },
+    [debugConnect],
+  );
 
   // Simple command runner - no queuing, just run the command
   const runCommand = useCallback(
     (command: string) => {
-      if (!agent) return;
-      void copilotkit.runAgent({
-        agent,
-        withMessages: [
-          {
-            id: v7(),
-            role: 'user',
-            content: JSON.stringify({ command }),
-          },
-        ],
+      if (!agent || !threadId) return false;
+      if (runInFlightRef.current) return false;
+
+      runInFlightRef.current = true;
+
+      const message = {
+        id: v7(),
+        role: 'user' as const,
+        content: JSON.stringify({ command }),
+      };
+
+      agent.addMessage(message);
+      void copilotkit.runAgent({ agent }).catch((error) => {
+        runInFlightRef.current = false;
+        console.error('Agent run failed', error);
       });
+
+      return true;
     },
-    [agent, copilotkit],
+    [agent, copilotkit, threadId],
   );
 
   const hasStateValues = useCallback((value: unknown): value is AgentState => {
     return Boolean(value && typeof value === 'object' && Object.keys(value as Record<string, unknown>).length > 0);
+  }, []);
+
+  const needsSync = useCallback((value: unknown): boolean => {
+    if (!value || typeof value !== 'object') return true;
+    const state = value as AgentState;
+    const view = state.view;
+    if (!view) return true;
+
+    const profile = view.profile ?? defaultProfile;
+    const metrics = view.metrics ?? defaultMetrics;
+    const activity = view.activity ?? defaultActivity;
+
+    const hasProfile =
+      profile.totalUsers !== undefined ||
+      profile.agentIncome !== undefined ||
+      profile.aum !== undefined ||
+      profile.apy !== undefined ||
+      profile.pools.length > 0 ||
+      profile.allowedPools.length > 0;
+    const hasMetrics =
+      metrics.iteration !== 0 ||
+      metrics.cyclesSinceRebalance !== 0 ||
+      metrics.staleCycles !== 0 ||
+      metrics.lastSnapshot !== undefined ||
+      metrics.latestCycle !== undefined ||
+      metrics.previousPrice !== undefined;
+    const hasActivity = activity.telemetry.length > 0 || activity.events.length > 0;
+    const hasHistory = view.transactionHistory.length > 0;
+
+    return !(hasProfile || hasMetrics || hasActivity || hasHistory);
   }, []);
 
   useEffect(() => {
@@ -140,7 +213,18 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       return undefined;
     }
 
+    const clearRunFlag = () => {
+      runInFlightRef.current = false;
+    };
+
     const subscription = agent.subscribe({
+      onRunStartedEvent: () => {
+        runInFlightRef.current = true;
+      },
+      onRunFinishedEvent: clearRunFlag,
+      onRunErrorEvent: clearRunFlag,
+      onRunFailed: clearRunFlag,
+      onRunFinalized: clearRunFlag,
       onRunInitialized: ({ state }) => {
         if (hasStateValues(state)) {
           agent.setState(state);
@@ -153,6 +237,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
         agent.setState(initialAgentState);
       },
+      onMessagesSnapshotEvent: () => {
+        messagesSnapshotRef.current = true;
+      },
     });
 
     return () => subscription.unsubscribe();
@@ -164,34 +251,104 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   }, [agent]);
 
   useEffect(() => {
+    if (!agent) return undefined;
+
+    return () => {
+      logConnectEvent('cleanup', {
+        agentId,
+        agent: getAgentDebugId(agent),
+        threadId,
+      });
+      agent.abortRun();
+      void agent.detachActiveRun();
+    };
+  }, [agent, agentId, getAgentDebugId, logConnectEvent, threadId]);
+
+  useEffect(() => {
+    runInFlightRef.current = false;
+    lastSyncedThreadRef.current = null;
+    lastConnectedThreadRef.current = null;
+  }, [threadId]);
+
+  useEffect(() => {
     if (!threadId || !agent) return;
     if (runtimeStatus !== CopilotKitCoreRuntimeConnectionStatus.Connected) return;
-    if (lastSyncedAgentRef.current === agent) return;
+    if (lastConnectedThreadRef.current === threadId) return;
 
     let cancelled = false;
+    const connectSeq = connectSeqRef.current + 1;
+    connectSeqRef.current = connectSeq;
 
-    const connectAndSync = async () => {
+    const connectAndSync = () => {
       const currentAgent = agentRef.current;
       if (!currentAgent) return;
       currentAgent.threadId = threadId;
+      lastConnectedThreadRef.current = threadId;
+      messagesSnapshotRef.current = false;
 
-      try {
-        await copilotkit.connectAgent({ agent: currentAgent });
-      } catch (error) {
+      const hasConnectAgent = typeof currentAgent.connectAgent === 'function';
+
+      logConnectEvent('start', {
+        agentId,
+        seq: connectSeq,
+        threadId,
+        agent: getAgentDebugId(currentAgent),
+        hasConnectAgent,
+      });
+
+      void copilotkit.connectAgent({ agent: currentAgent }).catch(() => {
         // Errors are already reported via CopilotKit core subscribers.
-      }
+      });
 
-      if (cancelled) return;
-      runCommand('sync');
-      lastSyncedAgentRef.current = agent;
+      const startTime = Date.now();
+      const syncDeadline = startTime + 8000;
+      const scheduleSync = () => {
+        if (cancelled) return;
+        if (messagesSnapshotRef.current || Date.now() - startTime > 2000) {
+          const shouldSync =
+            !runInFlightRef.current &&
+            lastSyncedThreadRef.current !== threadId &&
+            needsSync(currentAgent.state);
+          if (shouldSync) {
+            if (runCommand('sync')) {
+              lastSyncedThreadRef.current = threadId;
+              return;
+            }
+            if (Date.now() < syncDeadline) {
+              setTimeout(scheduleSync, 250);
+            }
+          }
+          return;
+        }
+        setTimeout(scheduleSync, 100);
+      };
+
+      scheduleSync();
     };
 
     void connectAndSync();
 
     return () => {
       cancelled = true;
+      logConnectEvent('effect-cleanup', {
+        agentId,
+        seq: connectSeq,
+        threadId,
+        agent: getAgentDebugId(agentRef.current),
+      });
     };
-  }, [threadId, agent, runtimeStatus, copilotkit, runCommand]);
+  }, [
+    threadId,
+    agent,
+    runtimeStatus,
+    copilotkit,
+    runCommand,
+    hasStateValues,
+    needsSync,
+    agentId,
+    getAgentDebugId,
+    logConnectEvent,
+  ]);
 
   // Extract state with defaults
   const currentState =
@@ -209,23 +366,23 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const isActive = view.command !== undefined && view.command !== 'idle' && view.command !== 'fire';
 
   const runSync = useCallback(() => {
+    if (!runCommand('sync')) return;
     setIsSyncing(true);
-    runCommand('sync');
     setTimeout(() => setIsSyncing(false), 2000);
   }, [runCommand]);
 
   const runHire = useCallback(() => {
     if (!isHired && !isHiring) {
+      if (!runCommand('hire')) return;
       setIsHiring(true);
-      runCommand('hire');
       setTimeout(() => setIsHiring(false), 5000);
     }
   }, [runCommand, isHired, isHiring]);
 
   const runFire = useCallback(() => {
     if (!isFiring) {
+      if (!runCommand('fire')) return;
       setIsFiring(true);
-      runCommand('fire');
       setTimeout(() => setIsFiring(false), 3000);
     }
   }, [runCommand, isFiring]);
@@ -261,6 +418,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     config,
     isConnected: !!threadId,
     threadId,
+    interruptRenderer,
     view,
     profile,
     metrics,

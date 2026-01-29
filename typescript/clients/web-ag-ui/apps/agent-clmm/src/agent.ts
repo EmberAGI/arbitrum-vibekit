@@ -27,7 +27,7 @@ import { hireCommandNode } from './workflow/nodes/hireCommand.js';
 import { listPoolsNode } from './workflow/nodes/listPools.js';
 import { pollCycleNode } from './workflow/nodes/pollCycle.js';
 import { prepareOperatorNode } from './workflow/nodes/prepareOperator.js';
-import { resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
+import { extractCommand, resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
 import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
@@ -39,7 +39,8 @@ import { saveBootstrapContext } from './workflow/store.js';
  * - hire/cycle: continue to listPools for full setup flow
  */
 function resolvePostBootstrap(state: ClmmState): 'listPools' | 'syncState' {
-  return state.view.command === 'sync' ? 'syncState' : 'listPools';
+  const command = extractCommand(state.messages) ?? state.view.command;
+  return command === 'sync' ? 'syncState' : 'listPools';
 }
 
 const store = new InMemoryStore();
@@ -119,6 +120,47 @@ async function parseJsonResponse<T>(response: Response, schema: z.ZodSchema<T>):
   return schema.parse(payload);
 }
 
+type ThreadStateValues = Record<string, unknown>;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+function extractThreadStateValues(payload: unknown): ThreadStateValues | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  const values = payload['values'];
+  if (isRecord(values)) {
+    return values;
+  }
+
+  const state = payload['state'];
+  if (isRecord(state)) {
+    return state;
+  }
+
+  const data = payload['data'];
+  if (isRecord(data)) {
+    return data;
+  }
+
+  if (isRecord(payload['view'])) {
+    return payload;
+  }
+
+  return null;
+}
+
+async function fetchThreadStateValues(
+  baseUrl: string,
+  threadId: string,
+): Promise<ThreadStateValues | null> {
+  const response = await fetch(`${baseUrl}/threads/${threadId}/state`);
+  const payload = await parseJsonResponse(response, z.unknown());
+  return extractThreadStateValues(payload);
+}
+
 async function ensureThread(baseUrl: string, threadId: string, graphId: string) {
   const metadata = { graph_id: graphId };
   const response = await fetch(`${baseUrl}/threads`, {
@@ -137,11 +179,24 @@ async function ensureThread(baseUrl: string, threadId: string, graphId: string) 
 }
 
 async function updateCycleState(baseUrl: string, threadId: string, runMessage: { id: string; role: 'user'; content: string }) {
+  let existingView: Record<string, unknown> | null = null;
+  try {
+    const currentState = await fetchThreadStateValues(baseUrl, threadId);
+    if (currentState && isRecord(currentState['view'])) {
+      existingView = currentState['view'];
+    }
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';
+    console.warn('[cron] Unable to fetch thread state before cycle update', { threadId, error: message });
+  }
+
+  const view = existingView ? { ...existingView, command: 'cycle' } : { command: 'cycle' };
   const response = await fetch(`${baseUrl}/threads/${threadId}/state`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      values: { messages: [runMessage], view: { command: 'cycle' } },
+      values: { messages: [runMessage], view },
       as_node: 'runCommand',
     }),
   });

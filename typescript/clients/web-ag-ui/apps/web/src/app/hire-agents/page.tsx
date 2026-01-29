@@ -2,51 +2,37 @@
 
 import { useRouter } from 'next/navigation';
 import { HireAgentsPage, type Agent, type FeaturedAgent } from '@/components/HireAgentsPage';
-import { useAgent } from '@/contexts/AgentContext';
-import { DEFAULT_AGENT_ID, getAllAgents, getFeaturedAgents } from '@/config/agents';
+import { useAgentList } from '@/contexts/AgentListContext';
+import { getAllAgents, getFeaturedAgents } from '@/config/agents';
 
 export default function HireAgentsRoute() {
   const router = useRouter();
-  const agent = useAgent();
+  const { agents: agentStates } = useAgentList();
   const registeredAgents = getAllAgents();
   const featuredAgentConfigs = getFeaturedAgents();
 
   const agentList: Agent[] = registeredAgents.map((agentConfig) => {
-    if (agentConfig.id === DEFAULT_AGENT_ID) {
-      // Connected agent - use real data from state
-      return {
-        id: agentConfig.id,
-        rank: agentConfig.featuredRank ?? 1,
-        name: agentConfig.name,
-        creator: agentConfig.creator,
-        creatorVerified: agentConfig.creatorVerified,
-        rating: undefined, // Real rating not available
-        weeklyIncome: agent.profile.agentIncome,
-        apy: agent.profile.apy,
-        users: agent.profile.totalUsers,
-        aum: agent.profile.aum,
-        points: agent.metrics.iteration,
-        pointsTrend: agent.metrics.iteration && agent.metrics.iteration > 0 ? 'up' : undefined,
-        trendMultiplier: agent.metrics.iteration ? `${agent.metrics.iteration}x` : undefined,
-        avatar: agentConfig.avatar,
-        avatarBg: agentConfig.avatarBg,
-        status: agent.isHired ? 'hired' : 'for_hire',
-        isActive: agent.isActive,
-        isFeatured: agentConfig.isFeatured,
-        featuredRank: agentConfig.featuredRank,
-      };
-    }
+    const listState = agentStates[agentConfig.id];
+    const profile = listState?.profile;
+    const metrics = listState?.metrics;
 
-    // Other registered agents - no live data available
     return {
       id: agentConfig.id,
       rank: agentConfig.featuredRank,
       name: agentConfig.name,
       creator: agentConfig.creator,
       creatorVerified: agentConfig.creatorVerified,
+      rating: undefined, // Real rating not available
+      weeklyIncome: profile?.agentIncome,
+      apy: profile?.apy,
+      users: profile?.totalUsers,
+      aum: profile?.aum,
+      points: metrics?.iteration,
+      pointsTrend: metrics?.iteration && metrics.iteration > 0 ? 'up' : undefined,
+      trendMultiplier: metrics?.iteration ? `${metrics.iteration}x` : undefined,
       avatar: agentConfig.avatar,
       avatarBg: agentConfig.avatarBg,
-      status: 'unavailable' as const,
+      status: 'for_hire' as const,
       isActive: false,
       isFeatured: agentConfig.isFeatured,
       featuredRank: agentConfig.featuredRank,
@@ -55,44 +41,31 @@ export default function HireAgentsRoute() {
 
   // Build featured agents list from config, prioritizing real data when available
   const featuredAgents: FeaturedAgent[] = featuredAgentConfigs.map((config) => {
-    if (config.id === DEFAULT_AGENT_ID) {
-      // Use real data from connected agent
-      return {
-        id: config.id,
-        rank: config.featuredRank,
-        name: config.name,
-        creator: config.creator,
-        creatorVerified: config.creatorVerified,
-        rating: undefined, // Real rating not available
-        users: agent.profile.totalUsers,
-        aum: agent.profile.aum,
-        apy: agent.profile.apy,
-        weeklyIncome: agent.profile.agentIncome,
-        avatar: config.avatar,
-        avatarBg: config.avatarBg,
-        pointsTrend: agent.metrics.iteration && agent.metrics.iteration > 0 ? 'up' : undefined,
-        trendMultiplier: agent.metrics.iteration ? `${agent.metrics.iteration}x` : undefined,
-        status: agent.isHired ? 'hired' : 'for_hire',
-      };
-    }
+    const listState = agentStates[config.id];
+    const profile = listState?.profile;
+    const metrics = listState?.metrics;
 
-    // Other featured agents - config only, no live data
     return {
       id: config.id,
       rank: config.featuredRank,
       name: config.name,
       creator: config.creator,
       creatorVerified: config.creatorVerified,
+      rating: undefined, // Real rating not available
+      users: profile?.totalUsers,
+      aum: profile?.aum,
+      apy: profile?.apy,
+      weeklyIncome: profile?.agentIncome,
       avatar: config.avatar,
       avatarBg: config.avatarBg,
-      status: 'unavailable' as const,
+      pointsTrend: metrics?.iteration && metrics.iteration > 0 ? 'up' : undefined,
+      trendMultiplier: metrics?.iteration ? `${metrics.iteration}x` : undefined,
+      status: 'for_hire' as const,
     };
   });
 
   const handleHireAgent = (agentId: string) => {
-    if (agentId === agent.config.id) {
-      agent.runHire();
-    }
+    router.push(`/hire-agents/${agentId}`);
   };
 
   const handleViewAgent = (agentId: string) => {

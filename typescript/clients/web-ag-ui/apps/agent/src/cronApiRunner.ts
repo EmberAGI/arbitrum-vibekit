@@ -53,9 +53,7 @@ const ThreadResponseSchema = z
   })
   .catchall(z.unknown());
 
-const DEFAULT_INTERVAL_MS = 30_000;
-const DEFAULT_STREAM_STEPS = 6;
-const DEFAULT_STREAM_DELAY_MS = 600;
+const DEFAULT_INTERVAL_MS = 5_000;
 
 const parseNumber = (value?: string): number | undefined => {
   if (!value) {
@@ -93,27 +91,19 @@ const resolveThreadId = () => process.env.STARTER_THREAD_ID ?? uuidv7();
 const resolveIntervalMs = () =>
   parseNumber(process.env.STARTER_CRON_INTERVAL_MS) ?? DEFAULT_INTERVAL_MS;
 
-const resolveStreamSteps = () =>
-  parseNumber(process.env.STARTER_CRON_STEPS) ?? DEFAULT_STREAM_STEPS;
-
-const resolveStreamDelayMs = () =>
-  parseNumber(process.env.STARTER_CRON_DELAY_MS) ?? DEFAULT_STREAM_DELAY_MS;
-
-const buildStreamMessage = (steps: number, delayMs: number): MessageInput => ({
+const buildCycleMessage = (): MessageInput => ({
   id: uuidv7(),
   role: 'user',
-  content: JSON.stringify({ command: 'stream', steps, delayMs }),
+  content: JSON.stringify({ command: 'cycle' }),
 });
 
 const buildRunPayload = (params: {
   graphId: string;
   threadId: string;
-  steps: number;
-  delayMs: number;
 }): RunCreatePayload => ({
   assistant_id: params.graphId,
   input: {
-    messages: [buildStreamMessage(params.steps, params.delayMs)],
+    messages: [buildCycleMessage()],
   },
   config: {
     configurable: {
@@ -156,8 +146,6 @@ const createRun = async (params: {
   baseUrl: string;
   threadId: string;
   graphId: string;
-  steps: number;
-  delayMs: number;
 }) => {
   const response = await fetch(`${params.baseUrl}/threads/${params.threadId}/runs`, {
     method: 'POST',
@@ -168,8 +156,6 @@ const createRun = async (params: {
       buildRunPayload({
         graphId: params.graphId,
         threadId: params.threadId,
-        steps: params.steps,
-        delayMs: params.delayMs,
       }),
     ),
   });
@@ -189,8 +175,6 @@ const startStarterCron = async () => {
   const graphId = process.env.LANGGRAPH_GRAPH_ID ?? 'starterAgent';
   const threadId = resolveThreadId();
   const intervalMs = resolveIntervalMs();
-  const steps = resolveStreamSteps();
-  const delayMs = resolveStreamDelayMs();
   const cronExpression =
     process.env.STARTER_CRON_EXPRESSION ?? toCronExpression(intervalMs);
 
@@ -206,13 +190,11 @@ const startStarterCron = async () => {
     graphId,
     cron: cronExpression,
     intervalMs,
-    steps,
-    delayMs,
   });
 
   cron.schedule(cronExpression, () => {
     console.info('[starter-cron] Tick', { threadId, cron: cronExpression });
-    void createRun({ baseUrl, threadId, graphId, steps, delayMs }).then((runId) => {
+    void createRun({ baseUrl, threadId, graphId }).then((runId) => {
       if (runId) {
         console.info('[starter-cron] Run created', { threadId, runId });
       }

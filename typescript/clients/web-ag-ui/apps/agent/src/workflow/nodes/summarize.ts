@@ -19,7 +19,7 @@ export const summarizeNode = async (
   const { task, statusEvent: completion } = buildTaskStatus(
     state.view.task,
     finalState,
-    state.view.haltReason ?? 'CLMM cycle summarized.',
+    state.view.haltReason ?? 'Mock CLMM cycle summarized.',
   );
   await copilotkitEmitState(config, {
     view: { task, activity: { events: [completion] } },

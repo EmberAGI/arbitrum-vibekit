@@ -124,6 +124,7 @@ export function AgentDetailPage({
   onSettingsChange,
 }: AgentDetailPageProps) {
   const [activeTab, setActiveTab] = useState<TabType>(isHired ? 'blockers' : 'metrics');
+  const resolvedTab: TabType = activeInterrupt ? 'blockers' : activeTab;
 
   const formatAddress = (address: string) => {
     if (address.length <= 10) return address;
@@ -300,31 +301,31 @@ export function AgentDetailPage({
           {/* Tabs */}
           <div className="flex items-center gap-1 mb-6 border-b border-[#2a2a2a]">
             <TabButton
-              active={activeTab === 'blockers'}
+              active={resolvedTab === 'blockers'}
               onClick={() => setActiveTab('blockers')}
               highlight
             >
               Agent Blockers
             </TabButton>
-            <TabButton active={activeTab === 'metrics'} onClick={() => setActiveTab('metrics')}>
+            <TabButton active={resolvedTab === 'metrics'} onClick={() => setActiveTab('metrics')}>
               Metrics
             </TabButton>
             <TabButton
-              active={activeTab === 'transactions'}
+              active={resolvedTab === 'transactions'}
               onClick={() => setActiveTab('transactions')}
             >
               Transaction history
             </TabButton>
-            <TabButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')}>
+            <TabButton active={resolvedTab === 'settings'} onClick={() => setActiveTab('settings')}>
               Settings and policies
             </TabButton>
-            <TabButton active={activeTab === 'chat'} onClick={() => {}} disabled>
+            <TabButton active={resolvedTab === 'chat'} onClick={() => {}} disabled>
               Chat
             </TabButton>
           </div>
 
           {/* Tab Content */}
-          {activeTab === 'blockers' && (
+          {resolvedTab === 'blockers' && (
             <AgentBlockersTab
               activeInterrupt={activeInterrupt}
               allowedPools={allowedPools}
@@ -341,7 +342,7 @@ export function AgentDetailPage({
             />
           )}
 
-          {activeTab === 'metrics' && (
+          {resolvedTab === 'metrics' && (
             <MetricsTab
               profile={profile}
               metrics={metrics}
@@ -350,11 +351,11 @@ export function AgentDetailPage({
             />
           )}
 
-          {activeTab === 'transactions' && (
+          {resolvedTab === 'transactions' && (
             <TransactionHistoryTab transactions={transactions} />
           )}
 
-          {activeTab === 'settings' && (
+          {resolvedTab === 'settings' && (
             <SettingsTab
               settings={settings}
               onSettingsChange={onSettingsChange}
@@ -664,6 +665,9 @@ function AgentBlockersTab({
     isLoading: isWalletLoading,
     error: walletError,
   } = usePrivyWalletClient();
+  const walletBypassEnabled = process.env.NEXT_PUBLIC_WALLET_BYPASS === 'true';
+  const walletBypassAddress =
+    process.env.NEXT_PUBLIC_WALLET_BYPASS_ADDRESS ?? '0x0000000000000000000000000000000000000000';
 
   const [currentStep, setCurrentStep] = useState(1);
   const [poolAddress, setPoolAddress] = useState('');
@@ -685,15 +689,24 @@ function AgentBlockersTab({
       return;
     }
 
-    const operatorWalletAddress = privyWallet?.address ?? '';
+    const operatorWalletAddress =
+      privyWallet?.address ?? (walletBypassEnabled ? walletBypassAddress : '');
 
     if (!operatorWalletAddress) {
-      setError('Connect a wallet to continue.');
+      setError(
+        walletBypassEnabled
+          ? 'Connect a wallet or set NEXT_PUBLIC_WALLET_BYPASS_ADDRESS to continue.'
+          : 'Connect a wallet to continue.',
+      );
       return;
     }
 
     if (!isHexAddress(operatorWalletAddress)) {
-      setError('Connected wallet address is not a valid 0x-prefixed hex string.');
+      setError(
+        walletBypassEnabled
+          ? 'NEXT_PUBLIC_WALLET_BYPASS_ADDRESS must be a valid 0x-prefixed hex string.'
+          : 'Connected wallet address is not a valid 0x-prefixed hex string.',
+      );
       return;
     }
 
@@ -866,6 +879,17 @@ function AgentBlockersTab({
           <div className="text-yellow-300 text-sm font-medium mb-1">Delegation bypass active</div>
           <p className="text-yellow-200 text-xs">
             `CLMM_DELEGATIONS_BYPASS=true` is set. The agent will use its own wallet for liquidity management (not your wallet).
+          </p>
+        </div>
+      )}
+
+      {walletBypassEnabled && (
+        <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4">
+          <div className="text-yellow-300 text-sm font-medium mb-1">Wallet bypass enabled</div>
+          <p className="text-yellow-200 text-xs">
+            `NEXT_PUBLIC_WALLET_BYPASS=true` is set. When no wallet is connected, the UI will use
+            {` ${walletBypassAddress} `}for onboarding. Run the agent with
+            {` CLMM_DELEGATIONS_BYPASS=true `}to skip delegation signing.
           </p>
         </div>
       )}
@@ -1048,6 +1072,12 @@ function AgentBlockersTab({
 
                 {walletError && !error && (
                   <p className="text-red-400 text-sm mb-4">{walletError.message}</p>
+                )}
+                {walletBypassEnabled && !walletClient && !error && !walletError && (
+                  <p className="text-yellow-300 text-sm mb-4">
+                    Wallet bypass is enabled. To skip delegation signing, run the agent with
+                    {` CLMM_DELEGATIONS_BYPASS=true`}.
+                  </p>
                 )}
 
                 <div className="flex items-center justify-between">

@@ -33,7 +33,7 @@ export function extractCommand(messages: ClmmState['messages']): Command | null 
   } else if (Array.isArray(lastMessage)) {
     content = undefined;
   } else if (typeof lastMessage === 'object' && lastMessage !== null && 'content' in lastMessage) {
-    const value = (lastMessage as { content: unknown }).content;
+    const value = (lastMessage as { content?: unknown }).content;
     content = typeof value === 'string' ? value : undefined;
   }
   if (!content) {
