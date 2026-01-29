@@ -1,8 +1,18 @@
 diff --git a/dist/index.js b/dist/index.js
-index c8f4bc3add666d767fdb7c11a53a39ac2004819a..32f6f9759fc2e601ba40bf744898be4107d6336e 100644
+index c8f4bc3add666d767fdb7c11a53a39ac2004819a..0c18e855e74d629fe0667152af41900fd87654b9 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -1302,6 +1302,8 @@ var StateManager = class {
+@@ -62,6 +62,9 @@ var ProxiedCopilotRuntimeAgent = class extends import_client.HttpAgent {
+     }
+   }
+   abortRun() {
++    // Ensure any in-flight /connect or /run HTTP stream is aborted on the client.
++    // Without this, navigation away can leave the streaming fetch open indefinitely.
++    super.abortRun();
+     if (!this.agentId || !this.threadId) {
+       return;
+     }
+@@ -1302,6 +1305,8 @@ var StateManager = class {
    stateByRun = /* @__PURE__ */ new Map();
    // Message tracking: agentId -> threadId -> messageId -> runId
    messageToRun = /* @__PURE__ */ new Map();
@@ -11,7 +21,7 @@ index c8f4bc3add666d767fdb7c11a53a39ac2004819a..32f6f9759fc2e601ba40bf744898be41
    // Agent subscriptions for cleanup
    agentSubscriptions = /* @__PURE__ */ new Map();
    /**
-@@ -1378,12 +1380,34 @@ var StateManager = class {
+@@ -1378,12 +1383,34 @@ var StateManager = class {
      const threadStates = this.stateByRun.get(agentId)?.get(threadId);
      return threadStates ? Array.from(threadStates.keys()) : [];
    }
@@ -46,7 +56,7 @@ index c8f4bc3add666d767fdb7c11a53a39ac2004819a..32f6f9759fc2e601ba40bf744898be41
      this.saveState(agent.agentId, threadId, runId, state);
    }
    /**
-@@ -1400,8 +1424,9 @@ var StateManager = class {
+@@ -1400,8 +1427,9 @@ var StateManager = class {
    handleStateSnapshot(agent, event, input, state) {
      if (!agent.agentId) return;
      const { threadId, runId } = input;
@@ -57,7 +67,7 @@ index c8f4bc3add666d767fdb7c11a53a39ac2004819a..32f6f9759fc2e601ba40bf744898be41
    }
    /**
     * Handle state delta event
-@@ -1409,7 +1434,8 @@ var StateManager = class {
+@@ -1409,7 +1437,8 @@ var StateManager = class {
    handleStateDelta(agent, event, input, state) {
      if (!agent.agentId) return;
      const { threadId, runId } = input;
@@ -67,7 +77,7 @@ index c8f4bc3add666d767fdb7c11a53a39ac2004819a..32f6f9759fc2e601ba40bf744898be41
    }
    /**
     * Handle messages snapshot event
-@@ -1417,8 +1443,9 @@ var StateManager = class {
+@@ -1417,8 +1446,9 @@ var StateManager = class {
    handleMessagesSnapshot(agent, event, input, messages) {
      if (!agent.agentId) return;
      const { threadId, runId } = input;
@@ -78,7 +88,7 @@ index c8f4bc3add666d767fdb7c11a53a39ac2004819a..32f6f9759fc2e601ba40bf744898be41
      }
    }
    /**
-@@ -1427,7 +1454,8 @@ var StateManager = class {
+@@ -1427,7 +1457,8 @@ var StateManager = class {
    handleNewMessage(agent, message, input) {
      if (!agent.agentId || !input) return;
      const { threadId, runId } = input;
@@ -88,7 +98,7 @@ index c8f4bc3add666d767fdb7c11a53a39ac2004819a..32f6f9759fc2e601ba40bf744898be41
    }
    /**
     * Save state for a specific run
-@@ -1463,6 +1491,7 @@ var StateManager = class {
+@@ -1463,6 +1494,7 @@ var StateManager = class {
    clearAgentState(agentId) {
      this.stateByRun.delete(agentId);
      this.messageToRun.delete(agentId);
@@ -96,7 +106,7 @@ index c8f4bc3add666d767fdb7c11a53a39ac2004819a..32f6f9759fc2e601ba40bf744898be41
    }
    /**
     * Clear all state for a thread
-@@ -1470,6 +1499,7 @@ var StateManager = class {
+@@ -1470,6 +1502,7 @@ var StateManager = class {
    clearThreadState(agentId, threadId) {
      this.stateByRun.get(agentId)?.delete(threadId);
      this.messageToRun.get(agentId)?.delete(threadId);
@@ -105,10 +115,20 @@ index c8f4bc3add666d767fdb7c11a53a39ac2004819a..32f6f9759fc2e601ba40bf744898be41
  };
  
 diff --git a/dist/index.mjs b/dist/index.mjs
-index a7923e7a8777dc80c760e6bbe3553f9aeabf7dec..ac0f9b73b8a406a51f8e4ebd1762bf8b2ab90e18 100644
+index a7923e7a8777dc80c760e6bbe3553f9aeabf7dec..57dad224f495a2c46dacc91575bfa7533bfdbbcd 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -1270,6 +1270,8 @@ var StateManager = class {
+@@ -30,6 +30,9 @@ var ProxiedCopilotRuntimeAgent = class extends HttpAgent {
+     }
+   }
+   abortRun() {
++    // Ensure any in-flight /connect or /run HTTP stream is aborted on the client.
++    // Without this, navigation away can leave the streaming fetch open indefinitely.
++    super.abortRun();
+     if (!this.agentId || !this.threadId) {
+       return;
+     }
+@@ -1270,6 +1273,8 @@ var StateManager = class {
    stateByRun = /* @__PURE__ */ new Map();
    // Message tracking: agentId -> threadId -> messageId -> runId
    messageToRun = /* @__PURE__ */ new Map();
@@ -117,7 +137,7 @@ index a7923e7a8777dc80c760e6bbe3553f9aeabf7dec..ac0f9b73b8a406a51f8e4ebd1762bf8b
    // Agent subscriptions for cleanup
    agentSubscriptions = /* @__PURE__ */ new Map();
    /**
-@@ -1346,12 +1348,34 @@ var StateManager = class {
+@@ -1346,12 +1351,34 @@ var StateManager = class {
      const threadStates = this.stateByRun.get(agentId)?.get(threadId);
      return threadStates ? Array.from(threadStates.keys()) : [];
    }
@@ -152,7 +172,7 @@ index a7923e7a8777dc80c760e6bbe3553f9aeabf7dec..ac0f9b73b8a406a51f8e4ebd1762bf8b
      this.saveState(agent.agentId, threadId, runId, state);
    }
    /**
-@@ -1368,8 +1392,9 @@ var StateManager = class {
+@@ -1368,8 +1395,9 @@ var StateManager = class {
    handleStateSnapshot(agent, event, input, state) {
      if (!agent.agentId) return;
      const { threadId, runId } = input;
@@ -163,7 +183,7 @@ index a7923e7a8777dc80c760e6bbe3553f9aeabf7dec..ac0f9b73b8a406a51f8e4ebd1762bf8b
    }
    /**
     * Handle state delta event
-@@ -1377,7 +1402,8 @@ var StateManager = class {
+@@ -1377,7 +1405,8 @@ var StateManager = class {
    handleStateDelta(agent, event, input, state) {
      if (!agent.agentId) return;
      const { threadId, runId } = input;
@@ -173,7 +193,7 @@ index a7923e7a8777dc80c760e6bbe3553f9aeabf7dec..ac0f9b73b8a406a51f8e4ebd1762bf8b
    }
    /**
     * Handle messages snapshot event
-@@ -1385,8 +1411,9 @@ var StateManager = class {
+@@ -1385,8 +1414,9 @@ var StateManager = class {
    handleMessagesSnapshot(agent, event, input, messages) {
      if (!agent.agentId) return;
      const { threadId, runId } = input;
@@ -184,7 +204,7 @@ index a7923e7a8777dc80c760e6bbe3553f9aeabf7dec..ac0f9b73b8a406a51f8e4ebd1762bf8b
      }
    }
    /**
-@@ -1395,7 +1422,8 @@ var StateManager = class {
+@@ -1395,7 +1425,8 @@ var StateManager = class {
    handleNewMessage(agent, message, input) {
      if (!agent.agentId || !input) return;
      const { threadId, runId } = input;
@@ -194,7 +214,7 @@ index a7923e7a8777dc80c760e6bbe3553f9aeabf7dec..ac0f9b73b8a406a51f8e4ebd1762bf8b
    }
    /**
     * Save state for a specific run
-@@ -1431,6 +1459,7 @@ var StateManager = class {
+@@ -1431,6 +1462,7 @@ var StateManager = class {
    clearAgentState(agentId) {
      this.stateByRun.delete(agentId);
      this.messageToRun.delete(agentId);
@@ -202,7 +222,7 @@ index a7923e7a8777dc80c760e6bbe3553f9aeabf7dec..ac0f9b73b8a406a51f8e4ebd1762bf8b
    }
    /**
     * Clear all state for a thread
-@@ -1438,6 +1467,7 @@ var StateManager = class {
+@@ -1438,6 +1470,7 @@ var StateManager = class {
    clearThreadState(agentId, threadId) {
      this.stateByRun.get(agentId)?.delete(threadId);
      this.messageToRun.get(agentId)?.delete(threadId);

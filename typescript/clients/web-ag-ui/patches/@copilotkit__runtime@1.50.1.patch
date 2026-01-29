@@ -1,0 +1,32 @@
+diff --git a/dist/index.js b/dist/index.js
+index fd5b8a29eabb222e8c11e48104bfc20f392bb1b6..2b237ba3324d0a9b68f12c9b73b724be04335634 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -3300,6 +3300,11 @@ var TelemetryAgentRunner = class {
+   * Delegates to the underlying runner's connect method
+   */
+   connect(...args) {
++    const input = args[0];
++    console.debug("[TelemetryAgentRunner.connect]", {
++      runner: this._runner && this._runner.constructor ? this._runner.constructor.name : typeof this._runner,
++      threadId: input == null ? void 0 : input.threadId
++    });
+     return this._runner.connect(...args);
+   }
+   /**
+diff --git a/dist/index.mjs b/dist/index.mjs
+index cdf20397ff2299da69ff0a270fced67aa074d3fc..2a0071ccefa627338a2a00e2e96583d89e6507f5 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -3293,6 +3293,11 @@ var TelemetryAgentRunner = class {
+   * Delegates to the underlying runner's connect method
+   */
+   connect(...args) {
++    const input = args[0];
++    console.debug("[TelemetryAgentRunner.connect]", {
++      runner: this._runner && this._runner.constructor ? this._runner.constructor.name : typeof this._runner,
++      threadId: input == null ? void 0 : input.threadId
++    });
+     return this._runner.connect(...args);
+   }
+   /**
