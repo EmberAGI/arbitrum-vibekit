@@ -2,6 +2,7 @@ venv/
 __pycache__/
 *.pyc
 .env
+!.env.test.example
 .vercel
 
 # LangGraph API

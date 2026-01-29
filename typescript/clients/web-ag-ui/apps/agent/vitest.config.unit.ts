@@ -8,6 +8,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles,
+    passWithNoTests: true,
     include: ['src/**/*.unit.test.ts', 'tests/**/*.unit.test.ts'],
     exclude: ['src/**/*.int.test.ts', 'src/**/*.e2e.test.ts'],
     coverage: {
