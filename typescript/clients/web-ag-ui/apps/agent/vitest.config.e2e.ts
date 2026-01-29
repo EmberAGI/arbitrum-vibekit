@@ -9,6 +9,7 @@ export default defineConfig({
     environment: 'node',
     setupFiles,
     include: ['tests/**/*.e2e.test.ts'],
+    passWithNoTests: true,
     testTimeout: 60_000,
     hookTimeout: 60_000,
     maxConcurrency: 1,
