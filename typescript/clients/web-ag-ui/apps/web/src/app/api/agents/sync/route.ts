@@ -22,6 +22,18 @@ const ThreadStateSchema = z
       .object({
         profile: z.record(z.unknown()).optional(),
         metrics: z.record(z.unknown()).optional(),
+        task: z
+          .object({
+            id: z.string().optional(),
+            taskStatus: z
+              .object({
+                state: z.string().optional(),
+              })
+              .optional(),
+          })
+          .optional(),
+        haltReason: z.string().optional(),
+        executionError: z.string().optional(),
       })
       .optional(),
   })
@@ -127,24 +139,11 @@ async function updateSyncState(baseUrl: string, threadId: string) {
     content: JSON.stringify({ command: 'sync' }),
   };
 
-  let existingView: Record<string, unknown> | null = null;
-  try {
-    const currentState = await fetchThreadStateValues(baseUrl, threadId);
-    if (currentState && isRecord(currentState['view'])) {
-      existingView = currentState['view'];
-    }
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';
-    console.warn('[agent-sync] Unable to fetch thread state before sync', { threadId, error: message });
-  }
-
-  const view = existingView ? { ...existingView, command: 'sync' } : { command: 'sync' };
   const response = await fetch(`${baseUrl}/threads/${threadId}/state`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      values: { messages: [runMessage], view },
+      values: { messages: [runMessage] },
       as_node: 'runCommand',
     }),
   });
@@ -226,11 +225,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await waitForRunCompletion(baseUrl, threadId, run.run_id);
     const state = await fetchViewState(baseUrl, threadId);
 
+    const task = state?.view?.task;
+    const taskId = task?.id ?? null;
+    const hasTask = Boolean(taskId);
     return NextResponse.json(
       {
         agentId: parsed.data.agentId,
         profile: state?.view?.profile ?? null,
         metrics: state?.view?.metrics ?? null,
+        taskId,
+        taskState: hasTask ? task?.taskStatus?.state ?? null : null,
+        haltReason: hasTask ? state?.view?.haltReason ?? null : null,
+        executionError: hasTask ? state?.view?.executionError ?? null : null,
       },
       { status: 200 },
     );
