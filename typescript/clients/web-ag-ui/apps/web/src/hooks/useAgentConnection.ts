@@ -97,11 +97,14 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const [isHiring, setIsHiring] = useState(false);
   const [isFiring, setIsFiring] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const lastSyncedAgentRef = useRef<unknown>(null);
+  const lastConnectedThreadRef = useRef<string | null>(null);
   const lastSyncedThreadRef = useRef<string | null>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
   const messagesSnapshotRef = useRef(false);
   const runInFlightRef = useRef(false);
+  const connectSeqRef = useRef(0);
+  const agentDebugIdsRef = useRef(new WeakMap<object, number>());
+  const nextAgentDebugIdRef = useRef(1);
 
   const config = getAgentConfig(agentId);
 
@@ -117,6 +120,34 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     enabled: isAgentInterrupt,
   });
   const interruptRenderer = useLangGraphInterruptRender(agent);
+
+  const debugConnect = process.env.NEXT_PUBLIC_AGENT_CONNECT_DEBUG === 'true';
+
+  const getAgentDebugId = useCallback(
+    (value: ReturnType<typeof useAgent>['agent'] | null) => {
+      if (!value) return 'none';
+      const key = value as unknown as object;
+      const cached = agentDebugIdsRef.current.get(key);
+      if (cached) return `agent#${cached}`;
+      const nextId = nextAgentDebugIdRef.current;
+      nextAgentDebugIdRef.current = nextId + 1;
+      agentDebugIdsRef.current.set(key, nextId);
+      return `agent#${nextId}`;
+    },
+    [],
+  );
+
+  const logConnectEvent = useCallback(
+    (event: string, payload: Record<string, unknown>) => {
+      if (!debugConnect) return;
+      console.debug('[agent-connect]', {
+        ts: new Date().toISOString(),
+        event,
+        ...payload,
+      });
+    },
+    [debugConnect],
+  );
 
   // Simple command runner - no queuing, just run the command
   const runCommand = useCallback(
@@ -220,23 +251,50 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   }, [agent]);
 
   useEffect(() => {
+    if (!agent) return undefined;
+
+    return () => {
+      logConnectEvent('cleanup', {
+        agentId,
+        agent: getAgentDebugId(agent),
+        threadId,
+      });
+      agent.abortRun();
+      void agent.detachActiveRun();
+    };
+  }, [agent, agentId, getAgentDebugId, logConnectEvent, threadId]);
+
+  useEffect(() => {
     runInFlightRef.current = false;
     lastSyncedThreadRef.current = null;
+    lastConnectedThreadRef.current = null;
   }, [threadId]);
 
   useEffect(() => {
     if (!threadId || !agent) return;
     if (runtimeStatus !== CopilotKitCoreRuntimeConnectionStatus.Connected) return;
-    if (lastSyncedAgentRef.current === agent) return;
+    if (lastConnectedThreadRef.current === threadId) return;
 
     let cancelled = false;
+    const connectSeq = connectSeqRef.current + 1;
+    connectSeqRef.current = connectSeq;
 
     const connectAndSync = () => {
       const currentAgent = agentRef.current;
       if (!currentAgent) return;
       currentAgent.threadId = threadId;
-      lastSyncedAgentRef.current = agent;
+      lastConnectedThreadRef.current = threadId;
       messagesSnapshotRef.current = false;
+
+      const hasConnectAgent = typeof currentAgent.connectAgent === 'function';
+
+      logConnectEvent('start', {
+        agentId,
+        seq: connectSeq,
+        threadId,
+        agent: getAgentDebugId(currentAgent),
+        hasConnectAgent,
+      });
 
       void copilotkit.connectAgent({ agent: currentAgent }).catch(() => {
         // Errors are already reported via CopilotKit core subscribers.
@@ -272,8 +330,25 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
     return () => {
       cancelled = true;
+      logConnectEvent('effect-cleanup', {
+        agentId,
+        seq: connectSeq,
+        threadId,
+        agent: getAgentDebugId(agentRef.current),
+      });
     };
-  }, [threadId, agent, runtimeStatus, copilotkit, runCommand, hasStateValues, needsSync]);
+  }, [
+    threadId,
+    agent,
+    runtimeStatus,
+    copilotkit,
+    runCommand,
+    hasStateValues,
+    needsSync,
+    agentId,
+    getAgentDebugId,
+    logConnectEvent,
+  ]);
 
   // Extract state with defaults
   const currentState =
