@@ -19,4 +19,3 @@ export function getEvmChainOrDefault(chainId: number | null | undefined): Chain 
   if (typeof chainId !== 'number') return defaultEvmChain;
   return getSupportedEvmChain(chainId) ?? defaultEvmChain;
 }
-

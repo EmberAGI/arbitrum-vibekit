@@ -1,0 +1,74 @@
+diff --git a/dist/chunk-CYGKHYOB.mjs b/dist/chunk-CYGKHYOB.mjs
+index f08fbd41fe3e7cb829def4d82f6f6e30929b9790..dc7f4ee269ee96a2dbe09511bedbbdb606fd474e 100644
+--- a/dist/chunk-CYGKHYOB.mjs
++++ b/dist/chunk-CYGKHYOB.mjs
+@@ -518,9 +518,17 @@ async function handleConnectAgent({
+           { status: 400 }
+         );
+       }
+-      runtime.runner.connect({
++      const registeredAgent = agents[agentId];
++      const agent = typeof registeredAgent.clone === "function" ? registeredAgent.clone() : registeredAgent;
++      if (agent) {
++        agent.setMessages(input.messages);
++        agent.setState(input.state);
++        agent.threadId = input.threadId;
++      }
++      const events$ = agent && typeof agent.connect === "function" ? agent.connect(input) : runtime.runner.connect({
+         threadId: input.threadId
+-      }).subscribe({
++      });
++      events$.subscribe({
+         next: async (event) => {
+           if (!request.signal.aborted && !streamClosed) {
+             try {
+diff --git a/dist/express.js b/dist/express.js
+index 074ed112f287403dc665a89d7386c971dd92cd3b..e1251865747819a131f736269f3edc98e3978357 100644
+--- a/dist/express.js
++++ b/dist/express.js
+@@ -225,9 +225,17 @@ async function handleConnectAgent({
+           { status: 400 }
+         );
+       }
+-      runtime.runner.connect({
+-        threadId: input.threadId
+-      }).subscribe({
++    const registeredAgent = agents[agentId];
++    const agent = typeof registeredAgent.clone === "function" ? registeredAgent.clone() : registeredAgent;
++    if (agent) {
++      agent.setMessages(input.messages);
++      agent.setState(input.state);
++      agent.threadId = input.threadId;
++    }
++    const events$ = agent && typeof agent.connect === "function" ? agent.connect(input) : runtime.runner.connect({
++      threadId: input.threadId
++    });
++    events$.subscribe({
+         next: async (event) => {
+           if (!request.signal.aborted && !streamClosed) {
+             try {
+diff --git a/dist/index.js b/dist/index.js
+index 7674d2075147e2179024f3046a26f5f1d8633617..305ad26d9ca36316db328e194c5c3b23aef19bd9 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -718,9 +718,17 @@ async function handleConnectAgent({
+           { status: 400 }
+         );
+       }
+-      runtime.runner.connect({
+-        threadId: input.threadId
+-      }).subscribe({
++    const registeredAgent = agents[agentId];
++    const agent = typeof registeredAgent.clone === "function" ? registeredAgent.clone() : registeredAgent;
++    if (agent) {
++      agent.setMessages(input.messages);
++      agent.setState(input.state);
++      agent.threadId = input.threadId;
++    }
++    const events$ = agent && typeof agent.connect === "function" ? agent.connect(input) : runtime.runner.connect({
++      threadId: input.threadId
++    });
++    events$.subscribe({
+         next: async (event) => {
+           if (!request.signal.aborted && !streamClosed) {
+             try {
