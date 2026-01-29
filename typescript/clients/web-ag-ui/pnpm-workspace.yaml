@@ -1,2 +1,7 @@
 packages:
   - "apps/*"
+
+catalog:
+  prettier: ^3.6.2
+  tsx: ^4.20.6
+  viem: ^2.26.3

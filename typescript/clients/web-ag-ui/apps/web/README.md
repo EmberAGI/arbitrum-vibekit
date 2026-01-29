@@ -21,6 +21,12 @@ pnpm lint
 pnpm lint:fix
 ```
 
+## 🔧 Environment
+
+Optional configuration:
+
+- `NEXT_PUBLIC_AGENT_LIST_SYNC_POLL_MS` — polling interval (ms) for list-page sync refresh. Defaults to `15000`.
+
 ## 📁 Project Structure
 
 ```

@@ -15,6 +15,17 @@ export interface AgentConfig {
 }
 
 export const AGENT_REGISTRY: Record<string, AgentConfig> = {
+  starterAgent: {
+    id: 'starterAgent',
+    name: 'Mock CLMM',
+    description:
+      'Deterministic mock CLMM workflow used for onboarding and cron UI testing without real transactions.',
+    creator: 'Ember AI Team',
+    creatorVerified: true,
+    avatar: '🧪',
+    avatarBg: 'linear-gradient(135deg, #0ea5e9 0%, #22d3ee 100%)',
+    isFeatured: false,
+  },
   'agent-clmm': {
     id: 'agent-clmm',
     name: 'Camelot CLMM',
@@ -54,6 +65,10 @@ function formatAgentName(agentId: string): string {
 
 export function getAllAgents(): AgentConfig[] {
   return Object.values(AGENT_REGISTRY);
+}
+
+export function isRegisteredAgentId(agentId: string): boolean {
+  return Boolean(AGENT_REGISTRY[agentId]);
 }
 
 export function getFeaturedAgents(): AgentConfig[] {

@@ -4,6 +4,5 @@
   "dependencies": ["."],
   "graphs": {
     "starterAgent": "./src/agent.ts:graph"
-  },
-  "env": ".env"
+  }
 }

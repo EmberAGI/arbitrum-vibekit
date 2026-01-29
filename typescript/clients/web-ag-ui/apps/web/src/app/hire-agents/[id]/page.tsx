@@ -13,17 +13,17 @@ export default function AgentDetailRoute({
   const { id } = use(params);
   const router = useRouter();
   const agent = useAgent();
+  const activeAgentId = agent.config.id;
+  const routeAgentId = id;
+  const selectedAgentId = activeAgentId === routeAgentId ? routeAgentId : activeAgentId;
 
   const handleBack = () => {
     router.push('/hire-agents');
   };
 
-  // TODO: In the future, use id from params to load the correct agent
-  void id;
-
   return (
     <AgentDetailPage
-      agentId={agent.config.id}
+      agentId={selectedAgentId}
       agentName={agent.config.name}
       agentDescription={agent.config.description}
       creatorName={agent.config.creator}

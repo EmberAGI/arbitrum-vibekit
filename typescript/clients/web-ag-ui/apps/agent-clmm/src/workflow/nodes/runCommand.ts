@@ -16,7 +16,7 @@ type CommandTarget =
   | 'syncState'
   | '__end__';
 
-function extractCommand(messages: ClmmState['messages']): Command | null {
+export function extractCommand(messages: ClmmState['messages']): Command | null {
   if (!messages) {
     return null;
   }
@@ -54,17 +54,19 @@ function extractCommand(messages: ClmmState['messages']): Command | null {
 
 export function runCommandNode(state: ClmmState): ClmmState {
   const parsedCommand = extractCommand(state.messages);
+  const nextCommand =
+    parsedCommand === 'sync' ? state.view.command : parsedCommand ?? state.view.command;
   return {
     ...state,
     view: {
       ...state.view,
-      command: parsedCommand ?? undefined,
+      command: nextCommand,
     },
   };
 }
 
 export function resolveCommandTarget({ messages, private: priv, view }: ClmmState): CommandTarget {
-  const resolvedCommand = view.command ?? extractCommand(messages);
+  const resolvedCommand = extractCommand(messages) ?? view.command;
   if (!resolvedCommand) {
     return '__end__';
   }
