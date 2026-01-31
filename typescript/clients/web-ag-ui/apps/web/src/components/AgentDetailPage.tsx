@@ -288,7 +288,7 @@ export function AgentDetailPage({
               <StatBox label="Total Users" value={formatNumber(profile.totalUsers)} />
               <StatBox label="APY" value={formatPercent(profile.apy)} valueColor="text-teal-400" />
               <StatBox label="Your Assets" value={null} />
-              <StatBox label="Your PnL" value={null} />
+              <StatBox label="Your PnL" value={formatCurrency(metrics.lifetimePnlUsd)} />
             </div>
 
             {/* Tags Row */}
@@ -1347,8 +1347,118 @@ function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) 
     });
   };
 
+  const formatDuration = (startTimestamp?: string, endTimestamp?: string) => {
+    if (!startTimestamp || !endTimestamp) return '—';
+    const start = new Date(startTimestamp).getTime();
+    if (Number.isNaN(start)) return '—';
+    const end = new Date(endTimestamp).getTime();
+    if (Number.isNaN(end)) return '—';
+    const deltaMs = end - start;
+    if (deltaMs <= 0) return '—';
+    const minutes = Math.floor(deltaMs / (1000 * 60));
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    if (days > 0) {
+      return `${days}d ${hours % 24}h`;
+    }
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}m`;
+    }
+    return `${minutes}m`;
+  };
+
+  const formatTokenAmount = (token: NonNullable<AgentViewMetrics['latestSnapshot']>['positionTokens'][number]) => {
+    if (token.amount !== undefined) {
+      return token.amount.toLocaleString(undefined, { maximumFractionDigits: 6 });
+    }
+    if (token.amountBaseUnits) {
+      return formatUnits(BigInt(token.amountBaseUnits), token.decimals);
+    }
+    return '—';
+  };
+
+  const latestSnapshot = fullMetrics?.latestSnapshot;
+  const poolSnapshot = fullMetrics?.lastSnapshot;
+  const poolName = poolSnapshot
+    ? `${poolSnapshot.token0.symbol}/${poolSnapshot.token1.symbol}`
+    : '—';
+  const positionTokens = latestSnapshot?.positionTokens ?? [];
+
   return (
     <div className="space-y-6">
+      {/* Profile Stats */}
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Your Performance</h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+            <div className="text-2xl font-bold text-teal-400">
+              {metrics.apy !== undefined ? `${metrics.apy.toFixed(1)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
+            <div className="text-2xl font-bold text-white">
+              {metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Earned Income</div>
+            <div className="text-2xl font-bold text-white">
+              {profile.agentIncome !== undefined ? `$${profile.agentIncome.toLocaleString()}` : '—'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Your Position */}
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Your Position</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Pool</div>
+            <div className="text-white font-medium">{poolName}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Size</div>
+            <div className="text-white font-medium">
+              {latestSnapshot?.totalUsd !== undefined
+                ? `$${latestSnapshot.totalUsd.toLocaleString()}`
+                : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Opened</div>
+            <div className="text-white font-medium">
+              {formatDuration(latestSnapshot?.positionOpenedAt, latestSnapshot?.timestamp)}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Fees (USD)</div>
+            <div className="text-white font-medium">
+              {latestSnapshot?.feesUsd !== undefined
+                ? `$${latestSnapshot.feesUsd.toLocaleString()}`
+                : '—'}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Token Amounts</div>
+          {positionTokens.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {positionTokens.map((token) => (
+                <div key={token.address} className="flex items-center justify-between">
+                  <span className="text-gray-300">{token.symbol}</span>
+                  <span className="text-white font-medium">{formatTokenAmount(token)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-gray-400 text-sm">—</div>
+          )}
+        </div>
+      </div>
+
       {/* Key Metrics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
@@ -1371,37 +1481,6 @@ function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) 
           value={fullMetrics?.previousPrice?.toFixed(6) ?? '—'}
           icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
         />
-      </div>
-
-      {/* Profile Stats */}
-      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Performance</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
-            <div className="text-2xl font-bold text-teal-400">
-              {profile.apy !== undefined ? `${profile.apy.toFixed(1)}%` : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
-            <div className="text-2xl font-bold text-white">
-              {profile.aum !== undefined ? `$${profile.aum.toLocaleString()}` : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Agent Income</div>
-            <div className="text-2xl font-bold text-white">
-              {profile.agentIncome !== undefined ? `$${profile.agentIncome.toLocaleString()}` : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Users</div>
-            <div className="text-2xl font-bold text-white">
-              {profile.totalUsers !== undefined ? profile.totalUsers.toLocaleString() : '—'}
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Latest Cycle Info */}

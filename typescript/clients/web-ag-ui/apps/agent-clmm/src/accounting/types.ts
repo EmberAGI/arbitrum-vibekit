@@ -48,6 +48,7 @@ export type NavSnapshot = {
   totalUsd: number;
   positions: PositionValue[];
   feesUsd?: number;
+  feesApy?: number;
   rewardsUsd?: number;
   priceSource: PriceSourceSummary;
   transactionHash?: `0x${string}`;

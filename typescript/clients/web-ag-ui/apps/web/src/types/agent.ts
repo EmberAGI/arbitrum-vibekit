@@ -179,6 +179,25 @@ export interface AgentViewMetrics {
   staleCycles: number;
   iteration: number;
   latestCycle?: TelemetryItem;
+  aumUsd?: number;
+  apy?: number;
+  lifetimePnlUsd?: number;
+  latestSnapshot?: {
+    poolAddress?: `0x${string}`;
+    totalUsd?: number;
+    feesUsd?: number;
+    feesApy?: number;
+    timestamp?: string;
+    positionOpenedAt?: string;
+    positionTokens: Array<{
+      address: `0x${string}`;
+      symbol: string;
+      decimals: number;
+      amount?: number;
+      amountBaseUnits?: string;
+      valueUsd?: number;
+    }>;
+  };
 }
 
 // Settings types (ClmmSettings)
@@ -242,6 +261,9 @@ export interface AgentMetrics {
   iteration?: number;
   cyclesSinceRebalance?: number;
   staleCycles?: number;
+  aumUsd?: number;
+  apy?: number;
+  lifetimePnlUsd?: number;
 }
 
 // Default values for state initialization
@@ -264,6 +286,10 @@ export const defaultMetrics: AgentViewMetrics = {
   staleCycles: 0,
   iteration: 0,
   latestCycle: undefined,
+  aumUsd: undefined,
+  apy: undefined,
+  lifetimePnlUsd: undefined,
+  latestSnapshot: undefined,
 };
 
 export const defaultActivity: AgentViewActivity = {

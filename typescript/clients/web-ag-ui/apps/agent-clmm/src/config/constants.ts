@@ -54,6 +54,18 @@ export function resolvePollIntervalMs(): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_POLL_INTERVAL_MS;
 }
 
+export function resolveRebalanceThresholdPct(): number {
+  const raw = process.env['CLMM_REBALANCE_THRESHOLD_PCT'];
+  if (!raw) {
+    return DEFAULT_REBALANCE_THRESHOLD_PCT;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 100) {
+    return DEFAULT_REBALANCE_THRESHOLD_PCT;
+  }
+  return parsed / 100;
+}
+
 export function resolveTickBandwidthBps(): number {
   const raw = process.env['CLMM_TICK_BANDWIDTH_BPS'];
   if (!raw) {
