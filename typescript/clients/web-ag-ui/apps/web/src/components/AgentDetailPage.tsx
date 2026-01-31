@@ -680,6 +680,13 @@ function AgentBlockersTab({
   const [error, setError] = useState<string | null>(null);
 
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
+  const uniqueAllowedPools: Pool[] = [];
+  const seenPoolAddresses = new Set<string>();
+  for (const pool of allowedPools) {
+    if (seenPoolAddresses.has(pool.address)) continue;
+    seenPoolAddresses.add(pool.address);
+    uniqueAllowedPools.push(pool);
+  }
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -980,7 +987,7 @@ function AgentBlockersTab({
                       className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white focus:border-[#fd6731] focus:outline-none transition-colors"
                     >
                       <option value="">Choose a pool...</option>
-                      {allowedPools.map((pool) => (
+                      {uniqueAllowedPools.map((pool) => (
                         <option key={pool.address} value={pool.address}>
                           {pool.token0.symbol}/{pool.token1.symbol} — {pool.address.slice(0, 10)}
                           ...

@@ -224,16 +224,19 @@ export class EmberCamelotClient {
 
   async listCamelotPools(chainId: number): Promise<CamelotPool[]> {
     let cursor: string | null | undefined = undefined;
-    const seenCursors = new Set<string>();
+    let page = 1;
+    let totalPages: number | undefined = undefined;
     const pools: CamelotPool[] = [];
+    const seenPages = new Set<string>();
 
-    do {
+    while (true) {
       const query = new URLSearchParams();
       // Ember's swagger docs omit chainId, but the endpoint supports it (required for CLMM usage).
       query.set('chainId', String(chainId));
       query.append('providerIds', CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM);
       if (cursor) {
         query.set('cursor', cursor);
+        query.set('page', String(page));
       }
 
       const data = await this.fetchEndpoint<PoolListResponse>(
@@ -252,17 +255,41 @@ export class EmberCamelotClient {
 
       pools.push(...pagePools);
 
-      cursor = data.cursor ?? null;
-      if (cursor) {
-        if (seenCursors.has(cursor)) {
-          break;
-        }
-        seenCursors.add(cursor);
-      }
-    } while (cursor);
+      const nextCursor = data.cursor ?? null;
+      const currentPage = data.currentPage ?? page;
+      const resolvedTotalPages: number = Number.isFinite(data.totalPages)
+        ? Number(data.totalPages)
+        : Number.isFinite(totalPages)
+          ? Number(totalPages)
+          : currentPage;
 
-    enrichCamelotPoolUsdPrices(pools);
-    return pools;
+      if (!nextCursor || currentPage >= resolvedTotalPages) {
+        break;
+      }
+
+      const nextPage = currentPage + 1;
+      const pageKey = `${nextCursor}:${nextPage}`;
+      if (seenPages.has(pageKey)) {
+        break;
+      }
+      seenPages.add(pageKey);
+
+      cursor = nextCursor;
+      page = nextPage;
+      totalPages = resolvedTotalPages;
+    }
+
+    const dedupedPools = new Map<string, CamelotPool>();
+    for (const pool of pools) {
+      const key = pool.address.toLowerCase();
+      if (!dedupedPools.has(key)) {
+        dedupedPools.set(key, pool);
+      }
+    }
+
+    const results = Array.from(dedupedPools.values());
+    enrichCamelotPoolUsdPrices(results);
+    return results;
   }
 
   async getWalletPositions(
