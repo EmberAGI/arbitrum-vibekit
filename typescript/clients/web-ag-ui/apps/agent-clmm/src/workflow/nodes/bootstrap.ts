@@ -80,6 +80,7 @@ export const bootstrapNode = async (
         previousPrice: undefined,
         cyclesSinceRebalance: 0,
         staleCycles: 0,
+        rebalanceCycles: 0,
         iteration: 0,
         latestCycle: undefined,
       },

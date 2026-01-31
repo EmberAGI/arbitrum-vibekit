@@ -78,8 +78,28 @@ export type ClmmMetrics = {
   previousPrice?: number;
   cyclesSinceRebalance: number;
   staleCycles: number;
+  rebalanceCycles?: number;
   iteration: number;
   latestCycle?: RebalanceTelemetry;
+  aumUsd?: number;
+  apy?: number;
+  lifetimePnlUsd?: number;
+  latestSnapshot?: {
+    poolAddress?: `0x${string}`;
+    totalUsd?: number;
+    feesUsd?: number;
+    feesApy?: number;
+    timestamp?: string;
+    positionOpenedAt?: string;
+    positionTokens: Array<{
+      address: `0x${string}`;
+      symbol: string;
+      decimals: number;
+      amount?: number;
+      amountBaseUnits?: string;
+      valueUsd?: number;
+    }>;
+  };
 };
 
 export type ClmmAccounting = AccountingState;
@@ -123,6 +143,7 @@ export type FundingTokenOption = {
   symbol: string;
   decimals: number;
   balance: string; // base units (decimal string)
+  valueUsd?: number;
 };
 
 export type FundingTokenInterrupt = {
@@ -248,8 +269,13 @@ const defaultViewState = (): ClmmViewState => ({
     previousPrice: undefined,
     cyclesSinceRebalance: 0,
     staleCycles: 0,
+    rebalanceCycles: 0,
     iteration: 0,
     latestCycle: undefined,
+    aumUsd: undefined,
+    apy: undefined,
+    lifetimePnlUsd: undefined,
+    latestSnapshot: undefined,
   },
   transactionHistory: [],
   accounting: {
@@ -354,8 +380,13 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     cyclesSinceRebalance:
       right.metrics?.cyclesSinceRebalance ?? left.metrics.cyclesSinceRebalance ?? 0,
     staleCycles: right.metrics?.staleCycles ?? left.metrics.staleCycles ?? 0,
+    rebalanceCycles: right.metrics?.rebalanceCycles ?? left.metrics.rebalanceCycles ?? 0,
     iteration: right.metrics?.iteration ?? left.metrics.iteration ?? 0,
     latestCycle: right.metrics?.latestCycle ?? left.metrics.latestCycle,
+    aumUsd: right.metrics?.aumUsd ?? left.metrics.aumUsd,
+    apy: right.metrics?.apy ?? left.metrics.apy,
+    lifetimePnlUsd: right.metrics?.lifetimePnlUsd ?? left.metrics.lifetimePnlUsd,
+    latestSnapshot: right.metrics?.latestSnapshot ?? left.metrics.latestSnapshot,
   };
   const nextAccounting: ClmmAccounting = {
     navSnapshots: limitHistory(

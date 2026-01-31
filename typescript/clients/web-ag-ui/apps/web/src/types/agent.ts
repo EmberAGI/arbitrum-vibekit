@@ -68,6 +68,7 @@ export type FundingTokenOption = {
   symbol: string;
   decimals: number;
   balance: string;
+  valueUsd?: number;
 };
 
 export type OperatorConfigRequestInterrupt = {
@@ -124,7 +125,7 @@ export type AgentInterrupt =
 export interface OperatorConfigInput {
   poolAddress: `0x${string}`;
   walletAddress: `0x${string}`;
-  baseContributionUsd?: number;
+  baseContributionUsd: number;
 }
 
 export interface FundingTokenInput {
@@ -176,8 +177,28 @@ export interface AgentViewMetrics {
   previousPrice?: number;
   cyclesSinceRebalance: number;
   staleCycles: number;
+  rebalanceCycles?: number;
   iteration: number;
   latestCycle?: TelemetryItem;
+  aumUsd?: number;
+  apy?: number;
+  lifetimePnlUsd?: number;
+  latestSnapshot?: {
+    poolAddress?: `0x${string}`;
+    totalUsd?: number;
+    feesUsd?: number;
+    feesApy?: number;
+    timestamp?: string;
+    positionOpenedAt?: string;
+    positionTokens: Array<{
+      address: `0x${string}`;
+      symbol: string;
+      decimals: number;
+      amount?: number;
+      amountBaseUnits?: string;
+      valueUsd?: number;
+    }>;
+  };
 }
 
 // Settings types (ClmmSettings)
@@ -241,6 +262,10 @@ export interface AgentMetrics {
   iteration?: number;
   cyclesSinceRebalance?: number;
   staleCycles?: number;
+  rebalanceCycles?: number;
+  aumUsd?: number;
+  apy?: number;
+  lifetimePnlUsd?: number;
 }
 
 // Default values for state initialization
@@ -261,8 +286,13 @@ export const defaultMetrics: AgentViewMetrics = {
   previousPrice: undefined,
   cyclesSinceRebalance: 0,
   staleCycles: 0,
+  rebalanceCycles: 0,
   iteration: 0,
   latestCycle: undefined,
+  aumUsd: undefined,
+  apy: undefined,
+  lifetimePnlUsd: undefined,
+  latestSnapshot: undefined,
 };
 
 export const defaultActivity: AgentViewActivity = {

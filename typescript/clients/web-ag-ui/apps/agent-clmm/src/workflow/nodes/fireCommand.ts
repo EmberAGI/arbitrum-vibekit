@@ -6,6 +6,7 @@ import { resolveAccountingContextId } from '../accounting.js';
 import { buildTaskStatus, isTaskTerminal, logInfo, type ClmmState, type ClmmUpdate } from '../context.js';
 import { cancelCronForThread } from '../cronScheduler.js';
 import { appendFlowLogHistory, loadFlowLogHistory } from '../historyStore.js';
+import { applyAccountingToView } from '../viewMapping.js';
 
 type Configurable = { configurable?: { thread_id?: string } };
 
@@ -70,12 +71,20 @@ export const fireCommandNode = async (
     logInfo('Accounting fire event skipped: missing threadId', {});
   }
 
+  const { profile, metrics } = applyAccountingToView({
+    profile: state.view.profile,
+    metrics: state.view.metrics,
+    accounting,
+  });
+
   return {
     view: {
       task,
       command: 'fire',
       activity: { events: [statusEvent], telemetry: [] },
       accounting,
+      profile,
+      metrics,
     },
   };
 };

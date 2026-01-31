@@ -21,6 +21,8 @@ export const DEFAULT_DEBUG_ALLOWED_TOKENS = new Set([
 
 export const EMBER_API_BASE_URL =
   process.env['EMBER_API_BASE_URL']?.replace(/\/$/, '') ?? 'https://api.emberai.xyz';
+export const ONCHAIN_ACTIONS_BASE_URL =
+  process.env['ONCHAIN_ACTIONS_BASE_URL']?.replace(/\/$/, '') ?? 'https://api.emberai.xyz';
 
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const DEFAULT_STREAM_LIMIT = -1;
@@ -50,6 +52,18 @@ export function resolvePollIntervalMs(): number {
   }
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_POLL_INTERVAL_MS;
+}
+
+export function resolveRebalanceThresholdPct(): number {
+  const raw = process.env['CLMM_REBALANCE_THRESHOLD_PCT'];
+  if (!raw) {
+    return DEFAULT_REBALANCE_THRESHOLD_PCT;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 100) {
+    return DEFAULT_REBALANCE_THRESHOLD_PCT;
+  }
+  return parsed / 100;
 }
 
 export function resolveTickBandwidthBps(): number {

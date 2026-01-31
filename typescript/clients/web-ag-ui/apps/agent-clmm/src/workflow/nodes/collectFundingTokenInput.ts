@@ -7,7 +7,7 @@ import { fetchPoolSnapshot } from '../../clients/emberApi.js';
 import { ARBITRUM_CHAIN_ID, resolveTickBandwidthBps } from '../../config/constants.js';
 import { buildRange, deriveMidPrice } from '../../core/decision-engine.js';
 import { FundingTokenInputSchema, type FundingTokenInput } from '../../domain/types.js';
-import { getCamelotClient, getOnchainClients } from '../clientFactory.js';
+import { getCamelotClient, getOnchainActionsClient, getOnchainClients } from '../clientFactory.js';
 import {
   buildTaskStatus,
   logInfo,
@@ -19,25 +19,13 @@ import {
   type OnboardingState,
 } from '../context.js';
 import { estimateTokenAllocationsUsd } from '../planning/allocations.js';
+import { loadBootstrapContext } from '../store.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
 const ONBOARDING: Pick<OnboardingState, 'key' | 'totalSteps'> = {
   totalSteps: 3,
 };
-
-const ARBITRUM_FUNDING_TOKEN_CANDIDATES: ReadonlyArray<{
-  address: `0x${string}`;
-  symbol: string;
-  decimals: number;
-}> = [
-  { address: '0xaf88d065e77c8cc2239327c5edb3a432268e5831', symbol: 'USDC', decimals: 6 },
-  { address: '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8', symbol: 'USDC.e', decimals: 6 },
-  { address: '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', symbol: 'USDT', decimals: 6 },
-  { address: '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1', symbol: 'DAI', decimals: 18 },
-  { address: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1', symbol: 'WETH', decimals: 18 },
-  { address: '0x912ce59144191c1204e64559fe8253a0e49e6548', symbol: 'ARB', decimals: 18 },
-] as const;
 
 function uniqByAddress<T extends { address: `0x${string}` }>(items: readonly T[]): T[] {
   const seen = new Set<string>();
@@ -51,6 +39,13 @@ function uniqByAddress<T extends { address: `0x${string}` }>(items: readonly T[]
     result.push(item);
   }
   return result;
+}
+
+function formatTokenSymbol(params: { symbol?: string; address: `0x${string}` }): string {
+  if (params.symbol && params.symbol.trim().length > 0) {
+    return params.symbol.trim();
+  }
+  return `${params.address.slice(0, 6)}…${params.address.slice(-4)}`;
 }
 
 async function readErc20Balance(params: {
@@ -112,21 +107,21 @@ export const collectFundingTokenInputNode = async (
   }
 
   if (state.view.delegationsBypassActive === true) {
-    logInfo('collectFundingTokenInput: bypass active; skipping step');
-    return {
-      view: {
-        selectedPool: state.view.selectedPool,
-        fundingTokenInput: state.view.fundingTokenInput,
-        onboarding: { ...ONBOARDING, step: 3 },
-      },
-    };
+    logInfo('collectFundingTokenInput: bypass active; using agent wallet for funding');
   }
 
   const camelotClient = getCamelotClient();
   const clients = await getOnchainClients();
 
   const selectedPoolAddress = normalizeHexAddress(operatorInput.poolAddress, 'pool address');
-  const operatorWalletAddress = normalizeHexAddress(operatorInput.walletAddress, 'wallet address');
+  const delegationsBypassActive = state.view.delegationsBypassActive === true;
+  const walletAddressSource = delegationsBypassActive
+    ? (await loadBootstrapContext()).agentWalletAddress
+    : operatorInput.walletAddress;
+  const operatorWalletAddress = normalizeHexAddress(
+    walletAddressSource,
+    delegationsBypassActive ? 'agent wallet address' : 'wallet address',
+  );
 
   const selectedPool =
     state.view.profile.allowedPools?.find(
@@ -156,7 +151,7 @@ export const collectFundingTokenInputNode = async (
     });
   }
 
-  const baseContributionUsd = operatorInput.baseContributionUsd ?? 10;
+  const baseContributionUsd = operatorInput.baseContributionUsd;
   const decimalsDiff = selectedPool.token0.decimals - selectedPool.token1.decimals;
   const targetRange = buildRange(
     deriveMidPrice(selectedPool),
@@ -241,42 +236,96 @@ export const collectFundingTokenInputNode = async (
     operatorWalletAddress,
   });
 
-  const candidateOptions = uniqByAddress([
-    {
-      address: selectedPool.token0.address,
-      symbol: selectedPool.token0.symbol,
-      decimals: selectedPool.token0.decimals,
-    },
-    {
-      address: selectedPool.token1.address,
-      symbol: selectedPool.token1.symbol,
-      decimals: selectedPool.token1.decimals,
-    },
-    ...ARBITRUM_FUNDING_TOKEN_CANDIDATES,
-  ]);
-
-  const optionBalances = await Promise.all(
-    candidateOptions.map(async (option): Promise<FundingTokenOption> => {
-      const balance = await readErc20Balance({
-        publicClient: clients.public,
-        tokenAddress: option.address,
-        walletAddress: operatorWalletAddress,
-      });
-      return {
-        address: option.address,
-        symbol: option.symbol,
-        decimals: option.decimals,
-        balance: balance.toString(),
-      };
-    }),
+  const onchainActionsClient = getOnchainActionsClient();
+  let walletBalances;
+  try {
+    walletBalances = await onchainActionsClient.listWalletBalances(operatorWalletAddress);
+  } catch (error) {
+    const failureMessage = 'Failed to fetch wallet balances for funding-token selection.';
+    logInfo('collectFundingTokenInput: wallet balances lookup failed', {
+      operatorWalletAddress,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    });
+    return {
+      view: {
+        haltReason: failureMessage,
+        task,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      },
+    };
+  }
+  walletBalances = walletBalances.filter(
+    (balance) => balance.tokenUid.chainId === String(ARBITRUM_CHAIN_ID),
   );
+
+  const optionBalances = walletBalances
+    .map((balance): FundingTokenOption | null => {
+      try {
+        if (BigInt(balance.amount) <= 0n) {
+          return null;
+        }
+      } catch {
+        return null;
+      }
+      if (balance.decimals === undefined) {
+        return null;
+      }
+      const address = normalizeHexAddress(balance.tokenUid.address, 'funding token address');
+      return {
+        address,
+        symbol: formatTokenSymbol({ symbol: balance.symbol, address }),
+        decimals: balance.decimals,
+        balance: balance.amount,
+        valueUsd: balance.valueUsd,
+      };
+    })
+    .filter((option): option is FundingTokenOption => Boolean(option));
+
+  const availableOptions = uniqByAddress(optionBalances).sort((a, b) => {
+    const aValue = typeof a.valueUsd === 'number' && Number.isFinite(a.valueUsd) ? a.valueUsd : null;
+    const bValue = typeof b.valueUsd === 'number' && Number.isFinite(b.valueUsd) ? b.valueUsd : null;
+    if (aValue !== null && bValue !== null && aValue !== bValue) {
+      return bValue - aValue;
+    }
+    if (aValue !== null && bValue === null) {
+      return -1;
+    }
+    if (aValue === null && bValue !== null) {
+      return 1;
+    }
+    return a.symbol.localeCompare(b.symbol);
+  });
+
+  if (availableOptions.length === 0) {
+    const walletLabel = delegationsBypassActive ? 'agent wallet' : 'wallet';
+    const failureMessage = `No funding tokens available in the ${walletLabel} on Arbitrum. Fund the ${walletLabel} with tokens to continue.`;
+    logInfo('collectFundingTokenInput: no funding token balances available', {
+      operatorWalletAddress,
+      candidateCount: optionBalances.length,
+    });
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    });
+    return {
+      view: {
+        haltReason: failureMessage,
+        task,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      },
+    };
+  }
 
   const request: FundingTokenInterrupt = {
     type: 'clmm-funding-token-request',
     message:
       'Your wallet does not appear to hold enough value in the pool token pair for the selected allocation. Select a funding token to swap from (no guessing).',
     payloadSchema: z.toJSONSchema(FundingTokenInputSchema),
-    options: optionBalances,
+    options: availableOptions,
   };
 
   const awaitingInput = buildTaskStatus(
@@ -294,7 +343,8 @@ export const collectFundingTokenInputNode = async (
   });
 
   logInfo('collectFundingTokenInput: calling interrupt() - awaiting funding token selection', {
-    optionCount: optionBalances.length,
+    candidateCount: optionBalances.length,
+    optionCount: availableOptions.length,
   });
 
   const incoming: unknown = await interrupt(request);

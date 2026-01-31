@@ -45,6 +45,10 @@ export default function AgentDetailRoute({
         iteration: agent.metrics.iteration,
         cyclesSinceRebalance: agent.metrics.cyclesSinceRebalance,
         staleCycles: agent.metrics.staleCycles,
+        rebalanceCycles: agent.metrics.rebalanceCycles,
+        aumUsd: agent.metrics.aumUsd,
+        apy: agent.metrics.apy,
+        lifetimePnlUsd: agent.metrics.lifetimePnlUsd,
       }}
       fullMetrics={agent.metrics}
       isHired={agent.isHired}

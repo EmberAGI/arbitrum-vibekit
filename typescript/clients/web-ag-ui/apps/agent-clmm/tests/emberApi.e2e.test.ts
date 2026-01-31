@@ -215,6 +215,22 @@ describe('EmberCamelotClient (e2e)', () => {
   );
 
   it(
+    'returns unique Camelot pools across pagination',
+    async () => {
+      // Given the pool list endpoint is paginated
+      const pools = await client.listCamelotPools(ARBITRUM_CHAIN_ID);
+
+      // When we normalize addresses
+      const addresses = pools.map((pool) => pool.address.toLowerCase());
+      const uniqueAddresses = new Set(addresses);
+
+      // Then there should be no duplicates across pages
+      expect(uniqueAddresses.size).toBe(addresses.length);
+    },
+    LIVE_TEST_TIMEOUT_MS,
+  );
+
+  it(
     'queries GET /liquidity/positions/{walletAddress} for wallet balances',
     async () => {
       // Given the docs expose wallet-specific positions at /liquidity/positions/{walletAddress}

@@ -17,6 +17,7 @@ import {
 } from '../context.js';
 import { appendFlowLogHistory, loadFlowLogHistory } from '../historyStore.js';
 import { loadBootstrapContext } from '../store.js';
+import { applyAccountingToView } from '../viewMapping.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = { configurable?: { thread_id?: string } };
@@ -162,7 +163,7 @@ export const prepareOperatorNode = async (
 
   const operatorConfig: ResolvedOperatorConfig = {
     walletAddress: delegationsBypassActive ? agentWalletAddress : operatorWalletAddress,
-    baseContributionUsd: operatorInput.baseContributionUsd ?? 10,
+    baseContributionUsd: operatorInput.baseContributionUsd,
     manualBandwidthBps: resolveTickBandwidthBps(),
     autoCompoundFees: true,
   };
@@ -218,22 +219,29 @@ export const prepareOperatorNode = async (
 
   const events: ClmmEvent[] = [statusEvent];
 
+  const { profile: nextProfile, metrics: nextMetrics } = applyAccountingToView({
+    profile: state.view.profile,
+    metrics: {
+      lastSnapshot: selectedPool,
+      previousPrice: undefined,
+      cyclesSinceRebalance: 0,
+      staleCycles: 0,
+      rebalanceCycles: 0,
+      iteration: 0,
+      latestCycle: undefined,
+    },
+    accounting,
+  });
+
   return {
     view: {
       operatorConfig,
       selectedPool,
-      metrics: {
-        lastSnapshot: selectedPool,
-        previousPrice: undefined,
-        cyclesSinceRebalance: 0,
-        staleCycles: 0,
-        iteration: 0,
-        latestCycle: undefined,
-      },
+      metrics: nextMetrics,
       task,
       activity: { events, telemetry: state.view.activity.telemetry },
       transactionHistory: state.view.transactionHistory,
-      profile: state.view.profile,
+      profile: nextProfile,
       accounting,
     },
     private: {

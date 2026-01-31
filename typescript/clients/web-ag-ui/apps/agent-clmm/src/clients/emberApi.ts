@@ -223,23 +223,73 @@ export class EmberCamelotClient {
   }
 
   async listCamelotPools(chainId: number): Promise<CamelotPool[]> {
-    const query = new URLSearchParams();
-    // Ember's swagger docs omit chainId, but the endpoint supports it (required for CLMM usage).
-    query.set('chainId', String(chainId));
-    query.append('providerIds', CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM);
-    const data = await this.fetchEndpoint<PoolListResponse>(
-      `/liquidity/pools?${query.toString()}`,
-      PoolListResponseSchema,
-    );
-    const pools = data.liquidityPools
-      .filter(
-        (pool) =>
-          pool.providerId.toLowerCase() === CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM.toLowerCase(),
-      )
-      .map((pool) => toCamelotPool(pool))
-      .filter((pool): pool is CamelotPool => Boolean(pool));
-    enrichCamelotPoolUsdPrices(pools);
-    return pools;
+    let cursor: string | null | undefined = undefined;
+    let page = 1;
+    let totalPages: number | undefined = undefined;
+    const pools: CamelotPool[] = [];
+    const seenPages = new Set<string>();
+
+    while (true) {
+      const query = new URLSearchParams();
+      // Ember's swagger docs omit chainId, but the endpoint supports it (required for CLMM usage).
+      query.set('chainId', String(chainId));
+      query.append('providerIds', CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM);
+      if (cursor) {
+        query.set('cursor', cursor);
+        query.set('page', String(page));
+      }
+
+      const data = await this.fetchEndpoint<PoolListResponse>(
+        `/liquidity/pools?${query.toString()}`,
+        PoolListResponseSchema,
+      );
+
+      const pagePools = data.liquidityPools
+        .filter(
+          (pool) =>
+            pool.providerId.toLowerCase() ===
+            CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM.toLowerCase(),
+        )
+        .map((pool) => toCamelotPool(pool))
+        .filter((pool): pool is CamelotPool => Boolean(pool));
+
+      pools.push(...pagePools);
+
+      const nextCursor = data.cursor ?? null;
+      const currentPage = data.currentPage ?? page;
+      const resolvedTotalPages: number = Number.isFinite(data.totalPages)
+        ? Number(data.totalPages)
+        : Number.isFinite(totalPages)
+          ? Number(totalPages)
+          : currentPage;
+
+      if (!nextCursor || currentPage >= resolvedTotalPages) {
+        break;
+      }
+
+      const nextPage = currentPage + 1;
+      const pageKey = `${nextCursor}:${nextPage}`;
+      if (seenPages.has(pageKey)) {
+        break;
+      }
+      seenPages.add(pageKey);
+
+      cursor = nextCursor;
+      page = nextPage;
+      totalPages = resolvedTotalPages;
+    }
+
+    const dedupedPools = new Map<string, CamelotPool>();
+    for (const pool of pools) {
+      const key = pool.address.toLowerCase();
+      if (!dedupedPools.has(key)) {
+        dedupedPools.set(key, pool);
+      }
+    }
+
+    const results = Array.from(dedupedPools.values());
+    enrichCamelotPoolUsdPrices(results);
+    return results;
   }
 
   async getWalletPositions(

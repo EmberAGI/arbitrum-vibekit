@@ -7,7 +7,6 @@ import {
   Printer,
   MoreHorizontal,
   TrendingUp,
-  TrendingDown,
   Minus,
   Check,
   RefreshCw,
@@ -35,6 +34,8 @@ import type {
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
+
+const MIN_BASE_CONTRIBUTION_USD = 10;
 
 interface AgentDetailPageProps {
   agentId: string;
@@ -286,7 +287,7 @@ export function AgentDetailPage({
               <StatBox label="Total Users" value={formatNumber(profile.totalUsers)} />
               <StatBox label="APY" value={formatPercent(profile.apy)} valueColor="text-teal-400" />
               <StatBox label="Your Assets" value={null} />
-              <StatBox label="Your PnL" value={null} />
+              <StatBox label="Your PnL" value={formatCurrency(metrics.lifetimePnlUsd)} />
             </div>
 
             {/* Tags Row */}
@@ -679,6 +680,13 @@ function AgentBlockersTab({
   const [error, setError] = useState<string | null>(null);
 
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
+  const uniqueAllowedPools: Pool[] = [];
+  const seenPoolAddresses = new Set<string>();
+  for (const pool of allowedPools) {
+    if (seenPoolAddresses.has(pool.address)) continue;
+    seenPoolAddresses.add(pool.address);
+    uniqueAllowedPools.push(pool);
+  }
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -710,23 +718,29 @@ function AgentBlockersTab({
       return;
     }
 
-    let baseContributionNumber: number | undefined;
-    if (baseContributionUsd.trim() !== '') {
-      const parsed = Number(baseContributionUsd);
-      if (Number.isNaN(parsed) || parsed <= 0) {
-        setError('Base contribution must be a positive number when provided.');
-        return;
-      }
-      baseContributionNumber = parsed;
-      onSettingsChange?.({ amount: baseContributionNumber });
+    const trimmedContribution = baseContributionUsd.trim();
+    const parsedContribution =
+      trimmedContribution === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedContribution);
+    if (!Number.isFinite(parsedContribution)) {
+      setError('Base contribution must be a valid number.');
+      return;
     }
+    if (parsedContribution < MIN_BASE_CONTRIBUTION_USD) {
+      setError(`Base contribution must be at least $${MIN_BASE_CONTRIBUTION_USD}.`);
+      return;
+    }
+
+    if (trimmedContribution === '') {
+      setBaseContributionUsd(`${MIN_BASE_CONTRIBUTION_USD}`);
+    }
+
+    const baseContributionNumber = parsedContribution;
+    onSettingsChange?.({ amount: baseContributionNumber });
 
     onInterruptSubmit?.({
       poolAddress: poolAddress as `0x${string}`,
       walletAddress: operatorWalletAddress as `0x${string}`,
-      ...(baseContributionNumber !== undefined
-        ? { baseContributionUsd: baseContributionNumber }
-        : {}),
+      baseContributionUsd: baseContributionNumber,
     });
     setCurrentStep(2);
   };
@@ -769,6 +783,13 @@ function AgentBlockersTab({
 
   const fundingOptions: FundingTokenOption[] = showFundingTokenForm
     ? [...(activeInterrupt as { options: FundingTokenOption[] }).options].sort((a, b) => {
+        const aValue = typeof a.valueUsd === 'number' && Number.isFinite(a.valueUsd) ? a.valueUsd : null;
+        const bValue = typeof b.valueUsd === 'number' && Number.isFinite(b.valueUsd) ? b.valueUsd : null;
+        if (aValue !== null && bValue !== null && aValue !== bValue) {
+          return bValue - aValue;
+        }
+        if (aValue !== null && bValue === null) return -1;
+        if (aValue === null && bValue !== null) return 1;
         try {
           const aBal = BigInt(a.balance);
           const bBal = BigInt(b.balance);
@@ -966,7 +987,7 @@ function AgentBlockersTab({
                       className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white focus:border-[#fd6731] focus:outline-none transition-colors"
                     >
                       <option value="">Choose a pool...</option>
-                      {allowedPools.map((pool) => (
+                      {uniqueAllowedPools.map((pool) => (
                         <option key={pool.address} value={pool.address}>
                           {pool.token0.symbol}/{pool.token1.symbol} — {pool.address.slice(0, 10)}
                           ...
@@ -981,7 +1002,8 @@ function AgentBlockersTab({
                       type="number"
                       value={baseContributionUsd}
                       onChange={(e) => setBaseContributionUsd(e.target.value)}
-                      placeholder="$12,561"
+                      placeholder={`$${MIN_BASE_CONTRIBUTION_USD}`}
+                      min={MIN_BASE_CONTRIBUTION_USD}
                       className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
                     />
                     <button
@@ -1272,7 +1294,7 @@ function PointsColumn({ metrics }: PointsColumnProps) {
   const hasAnyMetric =
     metrics.iteration !== undefined ||
     metrics.cyclesSinceRebalance !== undefined ||
-    metrics.staleCycles !== undefined;
+    metrics.rebalanceCycles !== undefined;
 
   if (!hasAnyMetric) {
     return (
@@ -1299,10 +1321,10 @@ function PointsColumn({ metrics }: PointsColumnProps) {
             <span className="text-sm text-white">{metrics.cyclesSinceRebalance}x</span>
           </div>
         )}
-        {metrics.staleCycles !== undefined && metrics.staleCycles > 0 && (
+        {metrics.rebalanceCycles !== undefined && (
           <div className="flex items-center gap-2">
-            <TrendingDown className="w-4 h-4 text-red-400" />
-            <span className="text-sm text-white">{metrics.staleCycles}x</span>
+            <RefreshCw className="w-4 h-4 text-blue-400" />
+            <span className="text-sm text-white">{metrics.rebalanceCycles}x</span>
           </div>
         )}
       </div>
@@ -1331,8 +1353,118 @@ function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) 
     });
   };
 
+  const formatDuration = (startTimestamp?: string, endTimestamp?: string) => {
+    if (!startTimestamp || !endTimestamp) return '—';
+    const start = new Date(startTimestamp).getTime();
+    if (Number.isNaN(start)) return '—';
+    const end = new Date(endTimestamp).getTime();
+    if (Number.isNaN(end)) return '—';
+    const deltaMs = end - start;
+    if (deltaMs <= 0) return '—';
+    const minutes = Math.floor(deltaMs / (1000 * 60));
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    if (days > 0) {
+      return `${days}d ${hours % 24}h`;
+    }
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}m`;
+    }
+    return `${minutes}m`;
+  };
+
+  const formatTokenAmount = (token: NonNullable<AgentViewMetrics['latestSnapshot']>['positionTokens'][number]) => {
+    if (token.amount !== undefined) {
+      return token.amount.toLocaleString(undefined, { maximumFractionDigits: 6 });
+    }
+    if (token.amountBaseUnits) {
+      return formatUnits(BigInt(token.amountBaseUnits), token.decimals);
+    }
+    return '—';
+  };
+
+  const latestSnapshot = fullMetrics?.latestSnapshot;
+  const poolSnapshot = fullMetrics?.lastSnapshot;
+  const poolName = poolSnapshot
+    ? `${poolSnapshot.token0.symbol}/${poolSnapshot.token1.symbol}`
+    : '—';
+  const positionTokens = latestSnapshot?.positionTokens ?? [];
+
   return (
     <div className="space-y-6">
+      {/* Profile Stats */}
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Your Performance</h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+            <div className="text-2xl font-bold text-teal-400">
+              {metrics.apy !== undefined ? `${metrics.apy.toFixed(1)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
+            <div className="text-2xl font-bold text-white">
+              {metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Earned Income</div>
+            <div className="text-2xl font-bold text-white">
+              {profile.agentIncome !== undefined ? `$${profile.agentIncome.toLocaleString()}` : '—'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Your Position */}
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Your Position</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Pool</div>
+            <div className="text-white font-medium">{poolName}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Size</div>
+            <div className="text-white font-medium">
+              {latestSnapshot?.totalUsd !== undefined
+                ? `$${latestSnapshot.totalUsd.toLocaleString()}`
+                : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Opened</div>
+            <div className="text-white font-medium">
+              {formatDuration(latestSnapshot?.positionOpenedAt, latestSnapshot?.timestamp)}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Fees (USD)</div>
+            <div className="text-white font-medium">
+              {latestSnapshot?.feesUsd !== undefined
+                ? `$${latestSnapshot.feesUsd.toLocaleString()}`
+                : '—'}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Token Amounts</div>
+          {positionTokens.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {positionTokens.map((token) => (
+                <div key={token.address} className="flex items-center justify-between">
+                  <span className="text-gray-300">{token.symbol}</span>
+                  <span className="text-white font-medium">{formatTokenAmount(token)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-gray-400 text-sm">—</div>
+          )}
+        </div>
+      </div>
+
       {/* Key Metrics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
@@ -1346,46 +1478,15 @@ function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) 
           icon={<Minus className="w-4 h-4 text-yellow-400" />}
         />
         <MetricCard
-          label="Stale Cycles"
-          value={metrics.staleCycles?.toString() ?? '—'}
-          icon={<TrendingDown className="w-4 h-4 text-red-400" />}
+          label="Rebalance Cycles"
+          value={metrics.rebalanceCycles?.toString() ?? '—'}
+          icon={<RefreshCw className="w-4 h-4 text-blue-400" />}
         />
         <MetricCard
           label="Previous Price"
           value={fullMetrics?.previousPrice?.toFixed(6) ?? '—'}
           icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
         />
-      </div>
-
-      {/* Profile Stats */}
-      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Performance</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
-            <div className="text-2xl font-bold text-teal-400">
-              {profile.apy !== undefined ? `${profile.apy.toFixed(1)}%` : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
-            <div className="text-2xl font-bold text-white">
-              {profile.aum !== undefined ? `$${profile.aum.toLocaleString()}` : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Agent Income</div>
-            <div className="text-2xl font-bold text-white">
-              {profile.agentIncome !== undefined ? `$${profile.agentIncome.toLocaleString()}` : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Users</div>
-            <div className="text-2xl font-bold text-white">
-              {profile.totalUsers !== undefined ? profile.totalUsers.toLocaleString() : '—'}
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Latest Cycle Info */}
@@ -1487,13 +1588,18 @@ function SettingsTab({ settings, onSettingsChange }: SettingsTabProps) {
   const handleSave = () => {
     if (!onSettingsChange) return;
 
-    const amount = localAmount.trim() === '' ? undefined : Number(localAmount);
-    if (amount !== undefined && (Number.isNaN(amount) || amount < 0)) {
+    const trimmedAmount = localAmount.trim();
+    const parsedAmount =
+      trimmedAmount === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount < MIN_BASE_CONTRIBUTION_USD) {
       return;
     }
 
     setIsSaving(true);
-    onSettingsChange({ amount });
+    if (trimmedAmount === '') {
+      setLocalAmount(`${MIN_BASE_CONTRIBUTION_USD}`);
+    }
+    onSettingsChange({ amount: parsedAmount });
     setTimeout(() => setIsSaving(false), 1000);
   };
 
@@ -1512,7 +1618,8 @@ function SettingsTab({ settings, onSettingsChange }: SettingsTabProps) {
               type="number"
               value={localAmount}
               onChange={(e) => setLocalAmount(e.target.value)}
-              placeholder="Enter amount..."
+              placeholder={`$${MIN_BASE_CONTRIBUTION_USD}`}
+              min={MIN_BASE_CONTRIBUTION_USD}
               className="flex-1 px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
             />
             <button

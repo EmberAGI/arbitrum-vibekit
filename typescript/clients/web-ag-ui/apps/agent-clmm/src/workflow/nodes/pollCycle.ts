@@ -7,11 +7,11 @@ import { formatEmberApiError, fetchPoolSnapshot } from '../../clients/emberApi.j
 import {
   ARBITRUM_CHAIN_ID,
   DATA_STALE_CYCLE_LIMIT,
-  DEFAULT_REBALANCE_THRESHOLD_PCT,
   MAX_GAS_SPEND_ETH,
   resolveEthUsdPrice,
   resolveMinAllocationPct,
   resolvePollIntervalMs,
+  resolveRebalanceThresholdPct,
 } from '../../config/constants.js';
 import {
   buildRange,
@@ -46,6 +46,7 @@ import {
   appendTransactionHistory,
   loadFlowLogHistory,
 } from '../historyStore.js';
+import { applyAccountingToView } from '../viewMapping.js';
 
 const DEBUG_MODE = process.env['DEBUG_MODE'] === 'true';
 
@@ -302,7 +303,7 @@ export const pollCycleNode = async (
     state.view.accounting.positionsUsd ?? state.view.accounting.latestNavSnapshot?.totalUsd;
   const targetAllocationUsd = operatorConfig.baseContributionUsd;
 
-  const rebalanceThresholdPct = DEFAULT_REBALANCE_THRESHOLD_PCT;
+  const rebalanceThresholdPct = resolveRebalanceThresholdPct();
   const decision = evaluateDecision({
     pool: poolSnapshot,
     position: currentPosition,
@@ -435,6 +436,7 @@ export const pollCycleNode = async (
   logInfo('Decision evaluated', { iteration, decision: decisionSummary });
 
   let cyclesSinceRebalance = state.view.metrics.cyclesSinceRebalance ?? 0;
+  let rebalanceCycles = state.view.metrics.rebalanceCycles ?? 0;
   let txHash: string | undefined;
   let gasSpentWei: bigint | undefined;
   let executionFlowEvents: FlowLogEventInput[] = [];
@@ -535,25 +537,33 @@ export const pollCycleNode = async (
         }
         logCycleAccountingSummary(accountingState, 'cycle-abort: execution failed');
 
+        const { profile: nextProfile, metrics: nextMetrics } = applyAccountingToView({
+          profile: state.view.profile,
+          metrics: {
+            ...state.view.metrics,
+            lastSnapshot: poolSnapshot,
+            previousPrice: midPrice,
+            cyclesSinceRebalance: state.view.metrics.cyclesSinceRebalance ?? 0,
+            staleCycles,
+            rebalanceCycles,
+            iteration,
+            latestCycle: state.view.metrics.latestCycle,
+          },
+          accounting: accountingState,
+        });
+
         // Return gracefully - don't throw. The cron job will run the next cycle.
         return new Command({
           update: {
             view: {
-              metrics: {
-                lastSnapshot: poolSnapshot,
-                previousPrice: midPrice,
-                cyclesSinceRebalance: state.view.metrics.cyclesSinceRebalance ?? 0, // Don't reset - we didn't complete
-                staleCycles,
-                iteration,
-                latestCycle: state.view.metrics.latestCycle,
-              },
+              metrics: nextMetrics,
               task: failedTask,
               activity: {
                 telemetry: state.view.activity.telemetry,
                 events: [...preCycleEvents, failureEvent],
               },
               transactionHistory: state.view.transactionHistory,
-              profile: state.view.profile,
+              profile: nextProfile,
               executionError: errorMessage, // Store error for debugging/display
               accounting: accountingState,
             },
@@ -566,6 +576,9 @@ export const pollCycleNode = async (
       }
     }
     cyclesSinceRebalance = 0;
+    if (decision.kind === 'enter-range' || decision.kind === 'adjust-range') {
+      rebalanceCycles += 1;
+    }
     logInfo('Action execution complete', {
       iteration,
       action: decision.kind,
@@ -714,17 +727,25 @@ export const pollCycleNode = async (
     await appendTransactionHistory({ threadId, transactions: [transactionEntry] });
   }
 
+  const { profile: nextProfile, metrics: nextMetrics } = applyAccountingToView({
+    profile: state.view.profile,
+    metrics: {
+      ...state.view.metrics,
+      lastSnapshot: poolSnapshot,
+      previousPrice: midPrice,
+      cyclesSinceRebalance,
+      staleCycles,
+      rebalanceCycles,
+      iteration,
+      latestCycle: cycleTelemetry,
+    },
+    accounting: accountingState,
+  });
+
   return new Command({
     update: {
       view: {
-        metrics: {
-          lastSnapshot: poolSnapshot,
-          previousPrice: midPrice,
-          cyclesSinceRebalance,
-          staleCycles,
-          iteration,
-          latestCycle: cycleTelemetry,
-        },
+        metrics: nextMetrics,
         task,
         activity: {
           telemetry: [cycleTelemetry],
@@ -733,7 +754,7 @@ export const pollCycleNode = async (
         transactionHistory: transactionEntry
           ? [...state.view.transactionHistory, transactionEntry]
           : state.view.transactionHistory,
-        profile: state.view.profile,
+        profile: nextProfile,
         accounting: accountingState,
       },
       private: {

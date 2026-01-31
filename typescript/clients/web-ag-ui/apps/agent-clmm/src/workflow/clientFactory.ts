@@ -7,12 +7,14 @@
  */
 import { type OnchainClients, createClients } from '../clients/clients.js';
 import { EmberCamelotClient } from '../clients/emberApi.js';
-import { EMBER_API_BASE_URL } from '../config/constants.js';
+import { OnchainActionsClient } from '../clients/onchainActions.js';
+import { EMBER_API_BASE_URL, ONCHAIN_ACTIONS_BASE_URL } from '../config/constants.js';
 
 import { loadBootstrapContext } from './store.js';
 
 let cachedCamelotClient: EmberCamelotClient | null = null;
 let cachedOnchainClients: OnchainClients | null = null;
+let cachedOnchainActionsClient: OnchainActionsClient | null = null;
 
 /**
  * Get or create the Ember Camelot API client.
@@ -23,6 +25,13 @@ export function getCamelotClient(): EmberCamelotClient {
     cachedCamelotClient = new EmberCamelotClient(EMBER_API_BASE_URL);
   }
   return cachedCamelotClient;
+}
+
+export function getOnchainActionsClient(): OnchainActionsClient {
+  if (!cachedOnchainActionsClient) {
+    cachedOnchainActionsClient = new OnchainActionsClient(ONCHAIN_ACTIONS_BASE_URL);
+  }
+  return cachedOnchainActionsClient;
 }
 
 /**
@@ -43,4 +52,5 @@ export async function getOnchainClients(): Promise<OnchainClients> {
 export function clearClientCache(): void {
   cachedCamelotClient = null;
   cachedOnchainClients = null;
+  cachedOnchainActionsClient = null;
 }

@@ -94,9 +94,8 @@ export function AppSidebar() {
     }
 
     const taskId = entry.taskId ?? config.id;
-    const needsInput =
-      taskState === 'input-required' || (runtimeAgentId === config.id && runtimeNeedsInput);
-    const hasError = taskState === 'failed' || Boolean(entry.haltReason || entry.executionError);
+    const needsInput = taskState === 'input-required' && runtimeNeedsInput;
+    const hasError = taskState === 'failed';
     const isBlocked = needsInput || hasError;
     const isCompleted = taskState === 'completed' || taskState === 'canceled';
 
@@ -104,9 +103,7 @@ export function AppSidebar() {
       blockedAgents.push({
         id: config.id,
         name: config.name,
-        subtitle: needsInput
-          ? 'Set up agent'
-          : entry.haltReason ?? entry.executionError ?? 'Blocked',
+        subtitle: needsInput ? 'Set up agent' : 'Blocked',
         status: 'blocked',
       });
       return;
