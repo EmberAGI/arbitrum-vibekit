@@ -112,7 +112,7 @@ function extractManagedPools(flowLog: FlowLogEvent[] | undefined): Set<string> |
   }
   const pools = new Set<string>();
   for (const event of flowLog) {
-    if (event.protocolId !== CAMELOT_PROTOCOL_ID) {
+    if (event.protocolId && event.protocolId !== CAMELOT_PROTOCOL_ID) {
       continue;
     }
     if (event.poolAddress) {
