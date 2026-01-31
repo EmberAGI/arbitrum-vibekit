@@ -132,7 +132,7 @@ export type WalletPositionsResponse = z.infer<typeof WalletPositionsResponseSche
 export const OperatorConfigInputSchema = z.object({
   poolAddress: z.templateLiteral(['0x', z.string()]),
   walletAddress: z.templateLiteral(['0x', z.string()]),
-  baseContributionUsd: z.number().positive().optional(),
+  baseContributionUsd: z.number().min(10),
 });
 type OperatorConfigInputBase = z.infer<typeof OperatorConfigInputSchema>;
 export interface OperatorConfigInput extends OperatorConfigInputBase {

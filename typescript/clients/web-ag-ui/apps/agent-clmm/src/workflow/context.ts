@@ -123,6 +123,7 @@ export type FundingTokenOption = {
   symbol: string;
   decimals: number;
   balance: string; // base units (decimal string)
+  valueUsd?: number;
 };
 
 export type FundingTokenInterrupt = {

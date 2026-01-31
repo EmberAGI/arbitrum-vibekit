@@ -223,21 +223,44 @@ export class EmberCamelotClient {
   }
 
   async listCamelotPools(chainId: number): Promise<CamelotPool[]> {
-    const query = new URLSearchParams();
-    // Ember's swagger docs omit chainId, but the endpoint supports it (required for CLMM usage).
-    query.set('chainId', String(chainId));
-    query.append('providerIds', CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM);
-    const data = await this.fetchEndpoint<PoolListResponse>(
-      `/liquidity/pools?${query.toString()}`,
-      PoolListResponseSchema,
-    );
-    const pools = data.liquidityPools
-      .filter(
-        (pool) =>
-          pool.providerId.toLowerCase() === CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM.toLowerCase(),
-      )
-      .map((pool) => toCamelotPool(pool))
-      .filter((pool): pool is CamelotPool => Boolean(pool));
+    let cursor: string | null | undefined = undefined;
+    const seenCursors = new Set<string>();
+    const pools: CamelotPool[] = [];
+
+    do {
+      const query = new URLSearchParams();
+      // Ember's swagger docs omit chainId, but the endpoint supports it (required for CLMM usage).
+      query.set('chainId', String(chainId));
+      query.append('providerIds', CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM);
+      if (cursor) {
+        query.set('cursor', cursor);
+      }
+
+      const data = await this.fetchEndpoint<PoolListResponse>(
+        `/liquidity/pools?${query.toString()}`,
+        PoolListResponseSchema,
+      );
+
+      const pagePools = data.liquidityPools
+        .filter(
+          (pool) =>
+            pool.providerId.toLowerCase() ===
+            CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM.toLowerCase(),
+        )
+        .map((pool) => toCamelotPool(pool))
+        .filter((pool): pool is CamelotPool => Boolean(pool));
+
+      pools.push(...pagePools);
+
+      cursor = data.cursor ?? null;
+      if (cursor) {
+        if (seenCursors.has(cursor)) {
+          break;
+        }
+        seenCursors.add(cursor);
+      }
+    } while (cursor);
+
     enrichCamelotPoolUsdPrices(pools);
     return pools;
   }

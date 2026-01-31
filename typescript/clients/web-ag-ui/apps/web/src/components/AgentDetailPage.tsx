@@ -36,6 +36,8 @@ import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
+const MIN_BASE_CONTRIBUTION_USD = 10;
+
 interface AgentDetailPageProps {
   agentId: string;
   agentName: string;
@@ -710,23 +712,29 @@ function AgentBlockersTab({
       return;
     }
 
-    let baseContributionNumber: number | undefined;
-    if (baseContributionUsd.trim() !== '') {
-      const parsed = Number(baseContributionUsd);
-      if (Number.isNaN(parsed) || parsed <= 0) {
-        setError('Base contribution must be a positive number when provided.');
-        return;
-      }
-      baseContributionNumber = parsed;
-      onSettingsChange?.({ amount: baseContributionNumber });
+    const trimmedContribution = baseContributionUsd.trim();
+    const parsedContribution =
+      trimmedContribution === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedContribution);
+    if (!Number.isFinite(parsedContribution)) {
+      setError('Base contribution must be a valid number.');
+      return;
     }
+    if (parsedContribution < MIN_BASE_CONTRIBUTION_USD) {
+      setError(`Base contribution must be at least $${MIN_BASE_CONTRIBUTION_USD}.`);
+      return;
+    }
+
+    if (trimmedContribution === '') {
+      setBaseContributionUsd(`${MIN_BASE_CONTRIBUTION_USD}`);
+    }
+
+    const baseContributionNumber = parsedContribution;
+    onSettingsChange?.({ amount: baseContributionNumber });
 
     onInterruptSubmit?.({
       poolAddress: poolAddress as `0x${string}`,
       walletAddress: operatorWalletAddress as `0x${string}`,
-      ...(baseContributionNumber !== undefined
-        ? { baseContributionUsd: baseContributionNumber }
-        : {}),
+      baseContributionUsd: baseContributionNumber,
     });
     setCurrentStep(2);
   };
@@ -769,6 +777,13 @@ function AgentBlockersTab({
 
   const fundingOptions: FundingTokenOption[] = showFundingTokenForm
     ? [...(activeInterrupt as { options: FundingTokenOption[] }).options].sort((a, b) => {
+        const aValue = typeof a.valueUsd === 'number' && Number.isFinite(a.valueUsd) ? a.valueUsd : null;
+        const bValue = typeof b.valueUsd === 'number' && Number.isFinite(b.valueUsd) ? b.valueUsd : null;
+        if (aValue !== null && bValue !== null && aValue !== bValue) {
+          return bValue - aValue;
+        }
+        if (aValue !== null && bValue === null) return -1;
+        if (aValue === null && bValue !== null) return 1;
         try {
           const aBal = BigInt(a.balance);
           const bBal = BigInt(b.balance);
@@ -981,7 +996,8 @@ function AgentBlockersTab({
                       type="number"
                       value={baseContributionUsd}
                       onChange={(e) => setBaseContributionUsd(e.target.value)}
-                      placeholder="$12,561"
+                      placeholder={`$${MIN_BASE_CONTRIBUTION_USD}`}
+                      min={MIN_BASE_CONTRIBUTION_USD}
                       className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
                     />
                     <button
@@ -1487,13 +1503,18 @@ function SettingsTab({ settings, onSettingsChange }: SettingsTabProps) {
   const handleSave = () => {
     if (!onSettingsChange) return;
 
-    const amount = localAmount.trim() === '' ? undefined : Number(localAmount);
-    if (amount !== undefined && (Number.isNaN(amount) || amount < 0)) {
+    const trimmedAmount = localAmount.trim();
+    const parsedAmount =
+      trimmedAmount === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount < MIN_BASE_CONTRIBUTION_USD) {
       return;
     }
 
     setIsSaving(true);
-    onSettingsChange({ amount });
+    if (trimmedAmount === '') {
+      setLocalAmount(`${MIN_BASE_CONTRIBUTION_USD}`);
+    }
+    onSettingsChange({ amount: parsedAmount });
     setTimeout(() => setIsSaving(false), 1000);
   };
 
@@ -1512,7 +1533,8 @@ function SettingsTab({ settings, onSettingsChange }: SettingsTabProps) {
               type="number"
               value={localAmount}
               onChange={(e) => setLocalAmount(e.target.value)}
-              placeholder="Enter amount..."
+              placeholder={`$${MIN_BASE_CONTRIBUTION_USD}`}
+              min={MIN_BASE_CONTRIBUTION_USD}
               className="flex-1 px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
             />
             <button

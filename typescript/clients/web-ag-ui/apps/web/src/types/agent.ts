@@ -68,6 +68,7 @@ export type FundingTokenOption = {
   symbol: string;
   decimals: number;
   balance: string;
+  valueUsd?: number;
 };
 
 export type OperatorConfigRequestInterrupt = {
@@ -124,7 +125,7 @@ export type AgentInterrupt =
 export interface OperatorConfigInput {
   poolAddress: `0x${string}`;
   walletAddress: `0x${string}`;
-  baseContributionUsd?: number;
+  baseContributionUsd: number;
 }
 
 export interface FundingTokenInput {
