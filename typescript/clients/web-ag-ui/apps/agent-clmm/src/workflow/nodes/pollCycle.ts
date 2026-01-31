@@ -436,6 +436,7 @@ export const pollCycleNode = async (
   logInfo('Decision evaluated', { iteration, decision: decisionSummary });
 
   let cyclesSinceRebalance = state.view.metrics.cyclesSinceRebalance ?? 0;
+  let rebalanceCycles = state.view.metrics.rebalanceCycles ?? 0;
   let txHash: string | undefined;
   let gasSpentWei: bigint | undefined;
   let executionFlowEvents: FlowLogEventInput[] = [];
@@ -539,10 +540,12 @@ export const pollCycleNode = async (
         const { profile: nextProfile, metrics: nextMetrics } = applyAccountingToView({
           profile: state.view.profile,
           metrics: {
+            ...state.view.metrics,
             lastSnapshot: poolSnapshot,
             previousPrice: midPrice,
             cyclesSinceRebalance: state.view.metrics.cyclesSinceRebalance ?? 0,
             staleCycles,
+            rebalanceCycles,
             iteration,
             latestCycle: state.view.metrics.latestCycle,
           },
@@ -573,6 +576,9 @@ export const pollCycleNode = async (
       }
     }
     cyclesSinceRebalance = 0;
+    if (decision.kind === 'enter-range' || decision.kind === 'adjust-range') {
+      rebalanceCycles += 1;
+    }
     logInfo('Action execution complete', {
       iteration,
       action: decision.kind,
@@ -724,10 +730,12 @@ export const pollCycleNode = async (
   const { profile: nextProfile, metrics: nextMetrics } = applyAccountingToView({
     profile: state.view.profile,
     metrics: {
+      ...state.view.metrics,
       lastSnapshot: poolSnapshot,
       previousPrice: midPrice,
       cyclesSinceRebalance,
       staleCycles,
+      rebalanceCycles,
       iteration,
       latestCycle: cycleTelemetry,
     },

@@ -205,7 +205,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       metrics.aumUsd !== undefined ||
       metrics.apy !== undefined ||
       metrics.lifetimePnlUsd !== undefined ||
-      metrics.latestSnapshot !== undefined;
+      metrics.latestSnapshot !== undefined ||
+      metrics.rebalanceCycles !== undefined;
     const hasActivity = activity.telemetry.length > 0 || activity.events.length > 0;
     const hasHistory = view.transactionHistory.length > 0;
 

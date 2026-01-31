@@ -78,6 +78,7 @@ export type ClmmMetrics = {
   previousPrice?: number;
   cyclesSinceRebalance: number;
   staleCycles: number;
+  rebalanceCycles?: number;
   iteration: number;
   latestCycle?: RebalanceTelemetry;
   aumUsd?: number;
@@ -268,6 +269,7 @@ const defaultViewState = (): ClmmViewState => ({
     previousPrice: undefined,
     cyclesSinceRebalance: 0,
     staleCycles: 0,
+    rebalanceCycles: 0,
     iteration: 0,
     latestCycle: undefined,
     aumUsd: undefined,
@@ -378,6 +380,7 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     cyclesSinceRebalance:
       right.metrics?.cyclesSinceRebalance ?? left.metrics.cyclesSinceRebalance ?? 0,
     staleCycles: right.metrics?.staleCycles ?? left.metrics.staleCycles ?? 0,
+    rebalanceCycles: right.metrics?.rebalanceCycles ?? left.metrics.rebalanceCycles ?? 0,
     iteration: right.metrics?.iteration ?? left.metrics.iteration ?? 0,
     latestCycle: right.metrics?.latestCycle ?? left.metrics.latestCycle,
     aumUsd: right.metrics?.aumUsd ?? left.metrics.aumUsd,

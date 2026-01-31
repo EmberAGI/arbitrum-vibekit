@@ -194,7 +194,8 @@ export function applyAccountingToMetrics(
   accounting: AccountingState,
 ): ClmmMetrics {
   const nextMetrics: ClmmMetrics = { ...metrics };
-  const snapshotCycle = accounting.latestNavSnapshot?.cycle;
+  const latestNavSnapshot = accounting.latestNavSnapshot;
+  const snapshotCycle = latestNavSnapshot?.cycle;
   if (typeof snapshotCycle === 'number' && snapshotCycle > nextMetrics.iteration) {
     nextMetrics.iteration = snapshotCycle;
   }
@@ -203,25 +204,26 @@ export function applyAccountingToMetrics(
     flowLog: accounting.flowLog,
     poolAddress,
   });
-  const snapshotTimestamp = accounting.latestNavSnapshot?.timestamp;
+  const snapshotTimestamp = latestNavSnapshot?.timestamp;
   const computedFeesApy = computeFeesApy({
-    totalUsd: accounting.latestNavSnapshot?.totalUsd,
-    feesUsd: accounting.latestNavSnapshot?.feesUsd,
+    totalUsd: latestNavSnapshot?.totalUsd,
+    feesUsd: latestNavSnapshot?.feesUsd,
     positionOpenedAt,
     snapshotTimestamp,
   });
+  const hasPosition = (latestNavSnapshot?.positions.length ?? 0) > 0;
+  const incomingApy =
+    computedFeesApy ??
+    latestNavSnapshot?.feesApy ??
+    (hasPosition ? accounting.apy : undefined);
   if (accounting.aumUsd !== undefined) {
     nextMetrics.aumUsd = accounting.aumUsd;
   }
   if (accounting.lifetimePnlUsd !== undefined) {
     nextMetrics.lifetimePnlUsd = accounting.lifetimePnlUsd;
   }
-  if (computedFeesApy !== undefined) {
-    nextMetrics.apy = Number(computedFeesApy.toFixed(6));
-  } else if (accounting.latestNavSnapshot?.feesApy !== undefined) {
-    nextMetrics.apy = accounting.latestNavSnapshot.feesApy;
-  } else if (accounting.apy !== undefined) {
-    nextMetrics.apy = accounting.apy;
+  if (incomingApy !== undefined) {
+    nextMetrics.apy = Number(incomingApy.toFixed(6));
   }
   nextMetrics.latestSnapshot = buildLatestSnapshot({
     accounting,

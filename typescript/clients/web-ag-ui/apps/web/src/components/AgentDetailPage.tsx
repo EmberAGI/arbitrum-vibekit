@@ -7,7 +7,6 @@ import {
   Printer,
   MoreHorizontal,
   TrendingUp,
-  TrendingDown,
   Minus,
   Check,
   RefreshCw,
@@ -1288,7 +1287,7 @@ function PointsColumn({ metrics }: PointsColumnProps) {
   const hasAnyMetric =
     metrics.iteration !== undefined ||
     metrics.cyclesSinceRebalance !== undefined ||
-    metrics.staleCycles !== undefined;
+    metrics.rebalanceCycles !== undefined;
 
   if (!hasAnyMetric) {
     return (
@@ -1315,10 +1314,10 @@ function PointsColumn({ metrics }: PointsColumnProps) {
             <span className="text-sm text-white">{metrics.cyclesSinceRebalance}x</span>
           </div>
         )}
-        {metrics.staleCycles !== undefined && metrics.staleCycles > 0 && (
+        {metrics.rebalanceCycles !== undefined && (
           <div className="flex items-center gap-2">
-            <TrendingDown className="w-4 h-4 text-red-400" />
-            <span className="text-sm text-white">{metrics.staleCycles}x</span>
+            <RefreshCw className="w-4 h-4 text-blue-400" />
+            <span className="text-sm text-white">{metrics.rebalanceCycles}x</span>
           </div>
         )}
       </div>
@@ -1472,9 +1471,9 @@ function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) 
           icon={<Minus className="w-4 h-4 text-yellow-400" />}
         />
         <MetricCard
-          label="Stale Cycles"
-          value={metrics.staleCycles?.toString() ?? '—'}
-          icon={<TrendingDown className="w-4 h-4 text-red-400" />}
+          label="Rebalance Cycles"
+          value={metrics.rebalanceCycles?.toString() ?? '—'}
+          icon={<RefreshCw className="w-4 h-4 text-blue-400" />}
         />
         <MetricCard
           label="Previous Price"

@@ -177,6 +177,7 @@ export interface AgentViewMetrics {
   previousPrice?: number;
   cyclesSinceRebalance: number;
   staleCycles: number;
+  rebalanceCycles?: number;
   iteration: number;
   latestCycle?: TelemetryItem;
   aumUsd?: number;
@@ -261,6 +262,7 @@ export interface AgentMetrics {
   iteration?: number;
   cyclesSinceRebalance?: number;
   staleCycles?: number;
+  rebalanceCycles?: number;
   aumUsd?: number;
   apy?: number;
   lifetimePnlUsd?: number;
@@ -284,6 +286,7 @@ export const defaultMetrics: AgentViewMetrics = {
   previousPrice: undefined,
   cyclesSinceRebalance: 0,
   staleCycles: 0,
+  rebalanceCycles: 0,
   iteration: 0,
   latestCycle: undefined,
   aumUsd: undefined,
