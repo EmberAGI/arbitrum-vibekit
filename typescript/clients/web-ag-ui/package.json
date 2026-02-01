@@ -7,7 +7,7 @@
   ],
   "scripts": {
     "dev": "turbo run dev",
-    "dev:wallet-bypass": "NEXT_PUBLIC_WALLET_BYPASS=true CLMM_DELEGATIONS_BYPASS=true turbo run dev --filter=web --filter=agent --filter=agent-clmm",
+    "dev:wallet-bypass": "NEXT_PUBLIC_WALLET_BYPASS=true CLMM_DELEGATIONS_BYPASS=true PENDLE_DELEGATIONS_BYPASS=true GMX_ALLORA_DELEGATIONS_BYPASS=true turbo run dev --filter=web --filter=agent --filter=agent-clmm --filter=agent-pendle --filter=agent-gmx-allora",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "reset:langgraph": "bash scripts/reset-langgraph.sh"

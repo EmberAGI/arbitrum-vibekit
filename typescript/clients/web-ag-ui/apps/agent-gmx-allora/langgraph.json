@@ -1,0 +1,8 @@
+{
+  "node_version": "20",
+  "dockerfile_lines": [],
+  "dependencies": ["."],
+  "graphs": {
+    "agent-gmx-allora": "./src/agent.ts:graph"
+  }
+}

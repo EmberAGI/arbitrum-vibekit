@@ -19,6 +19,8 @@ import {
   type AgentSettings,
   type AgentInterrupt,
   type OperatorConfigInput,
+  type PendleSetupInput,
+  type GmxSetupInput,
   type FundingTokenInput,
   type DelegationSigningResponse,
   type Transaction,
@@ -40,6 +42,8 @@ export type {
   AgentSettings,
   AgentInterrupt,
   OperatorConfigInput,
+  PendleSetupInput,
+  GmxSetupInput,
   FundingTokenInput,
   Transaction,
   ClmmEvent,
@@ -49,8 +53,14 @@ const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
   typeof value === 'object' &&
   value !== null &&
   ((value as { type?: string }).type === 'operator-config-request' ||
+    (value as { type?: string }).type === 'pendle-setup-request' ||
+    (value as { type?: string }).type === 'gmx-setup-request' ||
     (value as { type?: string }).type === 'clmm-funding-token-request' ||
-    (value as { type?: string }).type === 'clmm-delegation-signing-request');
+    (value as { type?: string }).type === 'pendle-funding-token-request' ||
+    (value as { type?: string }).type === 'gmx-funding-token-request' ||
+    (value as { type?: string }).type === 'clmm-delegation-signing-request' ||
+    (value as { type?: string }).type === 'pendle-delegation-signing-request' ||
+    (value as { type?: string }).type === 'gmx-delegation-signing-request');
 
 export interface UseAgentConnectionResult {
   config: AgentConfig;
@@ -84,9 +94,10 @@ export interface UseAgentConnectionResult {
   resolveInterrupt: (
     input:
       | OperatorConfigInput
+      | PendleSetupInput
+      | GmxSetupInput
       | FundingTokenInput
-      | DelegationSigningResponse
-      | { [key: string]: unknown },
+      | DelegationSigningResponse,
   ) => void;
 
   // Settings management: updates local state then syncs to backend
@@ -396,9 +407,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     (
       input:
         | OperatorConfigInput
+        | PendleSetupInput
         | FundingTokenInput
-        | DelegationSigningResponse
-        | { [key: string]: unknown },
+        | DelegationSigningResponse,
     ) => {
       resolve(JSON.stringify(input));
     },
