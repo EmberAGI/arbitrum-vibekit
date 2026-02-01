@@ -4,6 +4,7 @@ packages:
   - 'examples/*'
   - 'templates/*'
   - 'clients/*'
+  - 'clients/web-ag-ui/apps/*'
   - 'onchain-actions-plugins/*'
   - '!**/dist/**'
   - '!**/node_modules/**'

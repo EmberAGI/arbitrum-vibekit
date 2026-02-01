@@ -1,0 +1,12 @@
+dist
+coverage
+node_modules
+.env
+.env.*
+!.env.example
+txs.json
+txs.log
+supply-request.json
+
+# Local demo inputs (copy from intent.example.json)
+intent.json

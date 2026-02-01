@@ -1,0 +1,8 @@
+{
+  "node_version": "20",
+  "dockerfile_lines": [],
+  "dependencies": ["."],
+  "graphs": {
+    "agent-pendle": "./src/agent.ts:graph"
+  }
+}

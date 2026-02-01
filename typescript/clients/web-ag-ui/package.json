@@ -1,0 +1,39 @@
+{
+  "name": "langgraph-js-starter",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:wallet-bypass": "NEXT_PUBLIC_WALLET_BYPASS=true CLMM_DELEGATIONS_BYPASS=true PENDLE_DELEGATIONS_BYPASS=true GMX_ALLORA_DELEGATIONS_BYPASS=true turbo run dev --filter=web --filter=agent --filter=agent-clmm --filter=agent-pendle --filter=agent-gmx-allora",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "reset:langgraph": "bash scripts/reset-langgraph.sh"
+  },
+  "devDependencies": {
+    "@langchain/langgraph-cli": "^1.0.4",
+    "eslint": "^9.39.1",
+    "eslint-config-next": "^16.0.8",
+    "turbo": "^2.3.3"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "overrides": {
+    "@langchain/core": "^1.0.1",
+    "@langchain/langgraph": "1.0.2"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "@ag-ui/langgraph@0.0.20": "patches/@ag-ui__langgraph@0.0.20.patch",
+      "@copilotkitnext/runtime@0.0.33": "patches/@copilotkitnext__runtime@0.0.33.patch",
+      "@copilotkitnext/core@0.0.33": "patches/@copilotkitnext__core@0.0.33.patch",
+      "@copilotkit/react-core@1.50.1": "patches/@copilotkit__react-core@1.50.1.patch",
+      "@ag-ui/client@0.0.42": "patches/@ag-ui__client@0.0.42.patch",
+      "@copilotkit/runtime@1.50.1": "patches/@copilotkit__runtime@1.50.1.patch"
+    }
+  }
+}

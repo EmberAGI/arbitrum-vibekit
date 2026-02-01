@@ -46,4 +46,12 @@ Thumbs.db
 # Project specific
 /onchain-actions/
 .vibecode/
+.opencode/
+.ember-standalone/
+.mcp.json
+opencode.json
+.claude/
+.codex/
+.cursor/
 typescript/lib/agent-node/*.zip
+typescript/clients/web/

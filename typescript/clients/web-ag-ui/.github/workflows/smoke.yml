@@ -1,0 +1,141 @@
+name: Smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 0 * * 0" # Run weekly at midnight UTC
+
+jobs:
+  smoke:
+    name: ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [20, 22]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build
+        run: pnpm build
+      - name: Start and check main app (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          # Start the server in background
+          cd apps/web && pnpm start &
+          SERVER_PID=$!
+
+          # Wait for server to start (max 30 seconds)
+          timeout=30
+          elapsed=0
+          started=false
+
+          while [ $elapsed -lt $timeout ] && [ "$started" = false ]; do
+            if curl -s http://localhost:3000 > /dev/null 2>&1; then
+              started=true
+              echo "✅ Main app started successfully"
+            else
+              sleep 1
+              elapsed=$((elapsed + 1))
+            fi
+          done
+
+          # Clean up background process
+          kill $SERVER_PID 2>/dev/null || true
+
+          if [ "$started" = false ]; then
+            echo "❌ Main app failed to start within 30 seconds"
+            exit 1
+          fi
+        shell: bash
+
+      - name: Start and check main app (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          # Start the server in background
+          cd apps/web
+          pnpm start &
+
+          # Wait for server to start (max 30 seconds)
+          $timeout = 30
+          $elapsed = 0
+          $started = $false
+
+          while ($elapsed -lt $timeout -and -not $started) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://localhost:3000" -TimeoutSec 1 -ErrorAction SilentlyContinue
+              if ($response.StatusCode -eq 200) {
+                $started = $true
+                Write-Host "✅ Main app started successfully"
+              }
+            } catch {
+              Start-Sleep -Seconds 1
+              $elapsed++
+            }
+          }
+
+          if (-not $started) {
+            Write-Host "❌ Main app failed to start within 30 seconds"
+            exit 1
+          }
+        shell: pwsh
+
+  notify-slack:
+    name: Notify Slack on Failure
+    runs-on: ubuntu-latest
+    needs: smoke
+    if: |
+      failure() &&
+      github.event_name == 'schedule'
+    steps:
+      - name: Notify Slack
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": ":warning: *Smoke test failed for `with-langgraph-js` :warning:.*",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ":warning: *Smoke test failed for <https://github.com/copilotkit/with-langgraph-js|with-langgraph-js> :warning:*\n\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run details>"
+                  }
+                }
+              ]
+            }
