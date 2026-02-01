@@ -108,7 +108,7 @@ const DelegationSigningResponseJsonSchema = z.union([
 ]);
 
 function isDelegationsBypassActive(): boolean {
-  return process.env['CLMM_DELEGATIONS_BYPASS'] === 'true';
+  return process.env['DELEGATIONS_BYPASS'] === 'true';
 }
 
 function minNonZero(value: bigint): bigint {

@@ -6,6 +6,9 @@ const currentFilePath = fileURLToPath(import.meta.url);
 const currentDirPath = path.dirname(currentFilePath);
 
 const nextConfig: NextConfig = {
+  env: {
+    DELEGATIONS_BYPASS: process.env.DELEGATIONS_BYPASS,
+  },
   serverExternalPackages: ["@copilotkit/runtime"],
   turbopack: {
     root: path.join(currentDirPath, "../.."),

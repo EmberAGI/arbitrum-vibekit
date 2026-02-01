@@ -121,7 +121,7 @@ export async function startClmmHire(
       }
       if (isDelegationSigningInterrupt(value)) {
         throw new Error(
-          'Delegation signing is required. This CLI auto-resume does not support wallet signing; rerun with CLMM_DELEGATIONS_BYPASS=true or complete onboarding via the web UI.',
+          'Delegation signing is required. This CLI auto-resume does not support wallet signing; rerun with DELEGATIONS_BYPASS=true or complete onboarding via the web UI.',
         );
       }
       throw new Error(
