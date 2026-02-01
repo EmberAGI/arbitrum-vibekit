@@ -82,8 +82,9 @@ Think harder about the following steps to ensure thorough analysis and proper ex
 
 3. Handle branch creation:
    - If on main:
-     - First fetch latest changes: `git fetch origin main`
-     - Create and switch to new branch from origin/main
+     - First fetch latest changes: `git fetch origin main` and `git fetch origin next`
+     - If `next` exists on origin, create and switch to new branch from origin/next; otherwise use origin/main
+       - Detect branch: `git show-ref --verify --quiet refs/remotes/origin/next`
    - If on existing branch: use current branch
    - Ensure branch name follows conventions
 
@@ -135,7 +136,12 @@ Think harder about the following steps to ensure thorough analysis and proper ex
    - Push the branch with `-u` flag
    - Use `gh pr create` with draft flag
    - Set title from arguments or commit message
+   - Target base branch: use `next` if it exists on origin, otherwise `main`
    - Add initial PR body with template
+   - **MANDATORY**: Populate every section with concrete content derived from `git diff` / `git status`
+   - **MANDATORY**: Remove all HTML comment placeholders before submitting the PR body
+   - If testing was not run, explicitly say "Not run (not requested)" in Testing
+   - If details are unclear, ask the user instead of leaving placeholders
 
 ## PR Template
 

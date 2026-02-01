@@ -26,7 +26,39 @@ export const LiquidityPositionRangeSchema = z.object({
 });
 export type LiquidityPositionRange = z.infer<typeof LiquidityPositionRangeSchema>;
 
+export const LiquidityRewardsOwedTokenSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  amount: z.string(),
+  usdPrice: z.string().optional(),
+  valueUsd: z.string().optional(),
+  source: z.string(),
+});
+export type LiquidityRewardsOwedToken = z.infer<typeof LiquidityRewardsOwedTokenSchema>;
+
+export const LiquidityPooledTokenSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  name: z.string(),
+  symbol: z.string(),
+  decimals: z.number().int(),
+  amount: z.string(),
+  usdPrice: z.string().optional(),
+  valueUsd: z.string().optional(),
+});
+export type LiquidityPooledToken = z.infer<typeof LiquidityPooledTokenSchema>;
+
+export const LiquidityFeesOwedTokenSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  name: z.string(),
+  symbol: z.string(),
+  decimals: z.number().int(),
+  amount: z.string(),
+  usdPrice: z.string().optional(),
+  valueUsd: z.string().optional(),
+});
+export type LiquidityFeesOwedToken = z.infer<typeof LiquidityFeesOwedTokenSchema>;
+
 export const LiquidityPositionSchema = z.object({
+  positionId: z.string(),
   tokenId: z.string(),
   poolAddress: z.string(),
   operator: z.string(),
@@ -38,7 +70,20 @@ export const LiquidityPositionSchema = z.object({
   amount1: z.string(),
   symbol0: z.string(),
   symbol1: z.string(),
-  price: z.string(),
+  pooledTokens: z.array(LiquidityPooledTokenSchema),
+  feesOwedTokens: z.array(LiquidityFeesOwedTokenSchema),
+  rewardsOwedTokens: z.array(LiquidityRewardsOwedTokenSchema),
+  feesValueUsd: z.string().optional(),
+  rewardsValueUsd: z.string().optional(),
+  positionValueUsd: z.string().optional(),
+  currentPrice: z.string().optional(),
+  currentTick: z.number().int().optional(),
+  tickLower: z.number().int().optional(),
+  tickUpper: z.number().int().optional(),
+  inRange: z.boolean().optional(),
+  apr: z.string().optional(),
+  apy: z.string().optional(),
+  poolFeeBps: z.number().int().optional(),
   providerId: z.string(),
   positionRange: LiquidityPositionRangeSchema.optional(),
 });
@@ -49,8 +94,12 @@ export const LiquidityPoolSchema = z.object({
   token1: TokenIdentifierSchema,
   symbol0: z.string(),
   symbol1: z.string(),
-  price: z.string(),
+  currentPrice: z.string(),
   providerId: z.string(),
+  feeTierBps: z.number().int().optional(),
+  liquidity: z.string().optional(),
+  tvlUsd: z.string().optional(),
+  volume24hUsd: z.string().optional(),
 });
 export type LiquidityPool = z.infer<typeof LiquidityPoolSchema>;
 
