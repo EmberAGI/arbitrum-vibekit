@@ -90,6 +90,12 @@ export function HireAgentsPage({
       return matchesSearch && matchesFilter;
     })
     .sort((a, b) => {
+      if (a.id === 'agent-clmm' && b.id !== 'agent-clmm') {
+        return -1;
+      }
+      if (b.id === 'agent-clmm' && a.id !== 'agent-clmm') {
+        return 1;
+      }
       switch (sortBy) {
         case 'income':
           return (b.weeklyIncome ?? 0) - (a.weeklyIncome ?? 0);
