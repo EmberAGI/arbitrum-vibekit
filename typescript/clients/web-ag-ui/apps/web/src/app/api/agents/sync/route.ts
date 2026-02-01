@@ -52,6 +52,14 @@ const AGENT_RUNTIME_CONFIGS: Record<string, AgentRuntimeConfig> = {
     deploymentUrl: process.env.LANGGRAPH_DEPLOYMENT_URL || 'http://localhost:8124',
     graphId: 'agent-clmm',
   },
+  'agent-pendle': {
+    deploymentUrl: process.env.LANGGRAPH_PENDLE_DEPLOYMENT_URL || 'http://localhost:8125',
+    graphId: 'agent-pendle',
+  },
+  'agent-gmx-allora': {
+    deploymentUrl: process.env.LANGGRAPH_GMX_ALLORA_DEPLOYMENT_URL || 'http://localhost:8126',
+    graphId: 'agent-gmx-allora',
+  },
   starterAgent: {
     deploymentUrl: 'http://localhost:8123',
     graphId: 'starterAgent',

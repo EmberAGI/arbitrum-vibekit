@@ -2,7 +2,7 @@
 
 set -u
 
-ports=(3000 3001 3002 3003 3004 3005 8123 8124)
+ports=(3000 3001 3002 3003 3004 3005 8123 8124 8125 8126)
 
 kill_pids() {
   local pids="$1"
@@ -27,7 +27,7 @@ kill_ports() {
 
 kill_langgraph() {
   local pids
-  pids=$(ps -axo pid=,command= | awk -v p1="langgraph-api/dist/cli/entrypoint.mjs" -v p2="apps/(agent|agent-clmm)" '$0 ~ p1 && $0 ~ p2 {print $1}')
+  pids=$(ps -axo pid=,command= | awk -v p1="langgraph-api/dist/cli/entrypoint.mjs" -v p2="apps/(agent|agent-clmm|agent-pendle|agent-gmx-allora)" '$0 ~ p1 && $0 ~ p2 {print $1}')
   kill_pids "$pids"
 }
 
@@ -38,7 +38,7 @@ kill_next_dev() {
 }
 
 cleanup_state() {
-  rm -rf apps/agent-clmm/.langgraph_api apps/agent/.langgraph_api apps/web/.next/dev/lock
+  rm -rf apps/agent-clmm/.langgraph_api apps/agent/.langgraph_api apps/agent-pendle/.langgraph_api apps/agent-gmx-allora/.langgraph_api apps/web/.next/dev/lock
 }
 
 kill_ports

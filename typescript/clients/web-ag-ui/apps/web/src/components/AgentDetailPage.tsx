@@ -24,6 +24,8 @@ import type {
   OnboardingState,
   Pool,
   OperatorConfigInput,
+  PendleSetupInput,
+  GmxSetupInput,
   FundingTokenInput,
   DelegationSigningResponse,
   UnsignedDelegation,
@@ -64,7 +66,12 @@ interface AgentDetailPageProps {
   activeInterrupt?: AgentInterrupt | null;
   allowedPools: Pool[];
   onInterruptSubmit?: (
-    input: OperatorConfigInput | FundingTokenInput | DelegationSigningResponse,
+    input:
+      | OperatorConfigInput
+      | PendleSetupInput
+      | GmxSetupInput
+      | FundingTokenInput
+      | DelegationSigningResponse,
   ) => void;
   // Task state
   taskId?: string;
@@ -88,6 +95,7 @@ const DEFAULT_AVATAR = '🤖';
 const DEFAULT_AVATAR_BG = 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)';
 
 export function AgentDetailPage({
+  agentId,
   agentName,
   agentDescription,
   creatorName,
@@ -328,6 +336,7 @@ export function AgentDetailPage({
           {/* Tab Content */}
           {resolvedTab === 'blockers' && (
             <AgentBlockersTab
+              agentId={agentId}
               activeInterrupt={activeInterrupt}
               allowedPools={allowedPools}
               onInterruptSubmit={onInterruptSubmit}
@@ -611,10 +620,16 @@ function TransactionHistoryTab({ transactions }: TransactionHistoryTabProps) {
 
 // Agent Blockers Tab Component
 interface AgentBlockersTabProps {
+  agentId: string;
   activeInterrupt?: AgentInterrupt | null;
   allowedPools: Pool[];
   onInterruptSubmit?: (
-    input: OperatorConfigInput | FundingTokenInput | DelegationSigningResponse,
+    input:
+      | OperatorConfigInput
+      | PendleSetupInput
+      | GmxSetupInput
+      | FundingTokenInput
+      | DelegationSigningResponse,
   ) => void;
   taskId?: string;
   taskStatus?: string;
@@ -645,6 +660,7 @@ const SETUP_STEPS = [
 ];
 
 function AgentBlockersTab({
+  agentId,
   activeInterrupt,
   allowedPools,
   onInterruptSubmit,
@@ -669,12 +685,27 @@ function AgentBlockersTab({
   const walletBypassEnabled = process.env.NEXT_PUBLIC_WALLET_BYPASS === 'true';
   const walletBypassAddress =
     process.env.NEXT_PUBLIC_WALLET_BYPASS_ADDRESS ?? '0x0000000000000000000000000000000000000000';
+  const isPendleAgent = agentId === 'agent-pendle';
+  const isGmxAlloraAgent = agentId === 'agent-gmx-allora';
+  const delegationsBypassEnv = isPendleAgent
+    ? 'PENDLE_DELEGATIONS_BYPASS'
+    : isGmxAlloraAgent
+      ? 'GMX_ALLORA_DELEGATIONS_BYPASS'
+      : 'CLMM_DELEGATIONS_BYPASS';
+  const delegationContextLabel = isPendleAgent
+    ? 'Pendle execution'
+    : isGmxAlloraAgent
+      ? 'GMX perps execution'
+      : 'liquidity management';
+  const connectedWalletAddress =
+    privyWallet?.address ?? (walletBypassEnabled ? walletBypassAddress : '');
 
   const [currentStep, setCurrentStep] = useState(1);
   const [poolAddress, setPoolAddress] = useState('');
   const [baseContributionUsd, setBaseContributionUsd] = useState(
     settings?.amount?.toString() ?? '',
   );
+  const [targetMarket, setTargetMarket] = useState<'BTC' | 'ETH'>('BTC');
   const [fundingTokenAddress, setFundingTokenAddress] = useState('');
   const [isSigningDelegations, setIsSigningDelegations] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -745,6 +776,114 @@ function AgentBlockersTab({
     setCurrentStep(2);
   };
 
+  const handlePendleSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+
+    const operatorWalletAddress =
+      privyWallet?.address ?? (walletBypassEnabled ? walletBypassAddress : '');
+
+    if (!operatorWalletAddress) {
+      setError(
+        walletBypassEnabled
+          ? 'Connect a wallet or set NEXT_PUBLIC_WALLET_BYPASS_ADDRESS to continue.'
+          : 'Connect a wallet to continue.',
+      );
+      return;
+    }
+
+    if (!isHexAddress(operatorWalletAddress)) {
+      setError(
+        walletBypassEnabled
+          ? 'NEXT_PUBLIC_WALLET_BYPASS_ADDRESS must be a valid 0x-prefixed hex string.'
+          : 'Connected wallet address is not a valid 0x-prefixed hex string.',
+      );
+      return;
+    }
+
+    const trimmedContribution = baseContributionUsd.trim();
+    const parsedContribution =
+      trimmedContribution === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedContribution);
+    if (!Number.isFinite(parsedContribution)) {
+      setError('Funding amount must be a valid number.');
+      return;
+    }
+    if (parsedContribution < MIN_BASE_CONTRIBUTION_USD) {
+      setError(`Funding amount must be at least $${MIN_BASE_CONTRIBUTION_USD}.`);
+      return;
+    }
+
+    if (trimmedContribution === '') {
+      setBaseContributionUsd(`${MIN_BASE_CONTRIBUTION_USD}`);
+    }
+
+    const baseContributionNumber = parsedContribution;
+    onSettingsChange?.({ amount: baseContributionNumber });
+
+    onInterruptSubmit?.({
+      walletAddress: operatorWalletAddress as `0x${string}`,
+      baseContributionUsd: baseContributionNumber,
+    });
+    setCurrentStep(2);
+  };
+
+  const handleGmxSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+
+    const operatorWalletAddress =
+      privyWallet?.address ?? (walletBypassEnabled ? walletBypassAddress : '');
+
+    if (!operatorWalletAddress) {
+      setError(
+        walletBypassEnabled
+          ? 'Connect a wallet or set NEXT_PUBLIC_WALLET_BYPASS_ADDRESS to continue.'
+          : 'Connect a wallet to continue.',
+      );
+      return;
+    }
+
+    if (!isHexAddress(operatorWalletAddress)) {
+      setError(
+        walletBypassEnabled
+          ? 'NEXT_PUBLIC_WALLET_BYPASS_ADDRESS must be a valid 0x-prefixed hex string.'
+          : 'Connected wallet address is not a valid 0x-prefixed hex string.',
+      );
+      return;
+    }
+
+    if (targetMarket !== 'BTC' && targetMarket !== 'ETH') {
+      setError('Select a valid GMX market (BTC or ETH).');
+      return;
+    }
+
+    const trimmedContribution = baseContributionUsd.trim();
+    const parsedContribution =
+      trimmedContribution === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedContribution);
+    if (!Number.isFinite(parsedContribution)) {
+      setError('USDC allocation must be a valid number.');
+      return;
+    }
+    if (parsedContribution < MIN_BASE_CONTRIBUTION_USD) {
+      setError(`USDC allocation must be at least $${MIN_BASE_CONTRIBUTION_USD}.`);
+      return;
+    }
+
+    if (trimmedContribution === '') {
+      setBaseContributionUsd(`${MIN_BASE_CONTRIBUTION_USD}`);
+    }
+
+    const baseContributionNumber = parsedContribution;
+    onSettingsChange?.({ amount: baseContributionNumber });
+
+    onInterruptSubmit?.({
+      walletAddress: operatorWalletAddress as `0x${string}`,
+      baseContributionUsd: baseContributionNumber,
+      targetMarket,
+    });
+    setCurrentStep(2);
+  };
+
   const formatDate = (timestamp?: string) => {
     if (!timestamp) return '—';
     const date = new Date(timestamp);
@@ -759,19 +898,33 @@ function AgentBlockersTab({
 
   // Derive which form to show from the interrupt type (the authoritative source)
   const showOperatorConfigForm = activeInterrupt?.type === 'operator-config-request';
-  const showFundingTokenForm = activeInterrupt?.type === 'clmm-funding-token-request';
-  const showDelegationSigningForm = activeInterrupt?.type === 'clmm-delegation-signing-request';
+  const showPendleSetupForm = activeInterrupt?.type === 'pendle-setup-request';
+  const showGmxSetupForm = activeInterrupt?.type === 'gmx-setup-request';
+  const showFundingTokenForm =
+    activeInterrupt?.type === 'clmm-funding-token-request' ||
+    activeInterrupt?.type === 'pendle-funding-token-request' ||
+    activeInterrupt?.type === 'gmx-funding-token-request';
+  const showDelegationSigningForm =
+    activeInterrupt?.type === 'clmm-delegation-signing-request' ||
+    activeInterrupt?.type === 'pendle-delegation-signing-request' ||
+    activeInterrupt?.type === 'gmx-delegation-signing-request';
 
   // Sync currentStep with the interrupt type when it changes
   useEffect(() => {
-    if (showOperatorConfigForm) {
+    if (showOperatorConfigForm || showPendleSetupForm || showGmxSetupForm) {
       setCurrentStep(1);
     } else if (showFundingTokenForm) {
       setCurrentStep(2);
     } else if (showDelegationSigningForm) {
       setCurrentStep(3);
     }
-  }, [showOperatorConfigForm, showFundingTokenForm, showDelegationSigningForm]);
+  }, [
+    showOperatorConfigForm,
+    showPendleSetupForm,
+    showGmxSetupForm,
+    showFundingTokenForm,
+    showDelegationSigningForm,
+  ]);
 
   // Also sync from onboarding.step if provided by the agent
   useEffect(() => {
@@ -899,7 +1052,8 @@ function AgentBlockersTab({
         <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4">
           <div className="text-yellow-300 text-sm font-medium mb-1">Delegation bypass active</div>
           <p className="text-yellow-200 text-xs">
-            `CLMM_DELEGATIONS_BYPASS=true` is set. The agent will use its own wallet for liquidity management (not your wallet).
+            {` ${delegationsBypassEnv}=true `}is set. The agent will use its own wallet for
+            {` ${delegationContextLabel} `}(not your wallet).
           </p>
         </div>
       )}
@@ -910,7 +1064,7 @@ function AgentBlockersTab({
           <p className="text-yellow-200 text-xs">
             `NEXT_PUBLIC_WALLET_BYPASS=true` is set. When no wallet is connected, the UI will use
             {` ${walletBypassAddress} `}for onboarding. Run the agent with
-            {` CLMM_DELEGATIONS_BYPASS=true `}to skip delegation signing.
+            {` ${delegationsBypassEnv}=true `}to skip delegation signing.
           </p>
         </div>
       )}
@@ -971,7 +1125,105 @@ function AgentBlockersTab({
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
           {/* Form Area */}
           <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-            {showOperatorConfigForm ? (
+            {showPendleSetupForm ? (
+              <form onSubmit={handlePendleSetupSubmit}>
+                <h3 className="text-lg font-semibold text-white mb-4">Pendle Setup</h3>
+                {activeInterrupt?.message && (
+                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                )}
+
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Funding Amount (USD)</label>
+                    <input
+                      type="number"
+                      value={baseContributionUsd}
+                      onChange={(e) => setBaseContributionUsd(e.target.value)}
+                      placeholder={`$${MIN_BASE_CONTRIBUTION_USD}`}
+                      min={MIN_BASE_CONTRIBUTION_USD}
+                      className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
+                    />
+                  </div>
+
+                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+                    <div className="text-gray-300 text-sm font-medium mb-2">Auto-selected yield</div>
+                    <p className="text-gray-400 text-xs">
+                      The agent will automatically select the highest-yield YT market and rotate when yields change.
+                    </p>
+                    <p className="text-gray-500 text-xs mt-3">
+                      Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
+                    </p>
+                  </div>
+                </div>
+
+                {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isWalletLoading}
+                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </form>
+            ) : showGmxSetupForm ? (
+              <form onSubmit={handleGmxSetupSubmit}>
+                <h3 className="text-lg font-semibold text-white mb-4">GMX Allora Setup</h3>
+                {activeInterrupt?.message && (
+                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                )}
+
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Target Market</label>
+                    <select
+                      value={targetMarket}
+                      onChange={(e) => setTargetMarket(e.target.value as 'BTC' | 'ETH')}
+                      className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white focus:border-[#fd6731] focus:outline-none transition-colors"
+                    >
+                      <option value="BTC">BTC / USDC</option>
+                      <option value="ETH">ETH / USDC</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">USDC Allocation</label>
+                    <input
+                      type="number"
+                      value={baseContributionUsd}
+                      onChange={(e) => setBaseContributionUsd(e.target.value)}
+                      placeholder={`$${MIN_BASE_CONTRIBUTION_USD}`}
+                      min={MIN_BASE_CONTRIBUTION_USD}
+                      className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
+                    />
+                  </div>
+
+                  <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
+                    <div className="text-gray-300 text-sm font-medium mb-2">Allora Signal Source</div>
+                    <p className="text-gray-400 text-xs">
+                      The agent consumes 8-hour Allora prediction feeds and enforces max 2x leverage.
+                    </p>
+                    <p className="text-gray-500 text-xs mt-3">
+                      Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
+                    </p>
+                  </div>
+                </div>
+
+                {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isWalletLoading}
+                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </form>
+            ) : showOperatorConfigForm ? (
               <form onSubmit={handleSubmit}>
                 <h3 className="text-lg font-semibold text-white mb-4">Agent Preferences</h3>
                 {activeInterrupt?.message && (
@@ -1098,7 +1350,7 @@ function AgentBlockersTab({
                 {walletBypassEnabled && !walletClient && !error && !walletError && (
                   <p className="text-yellow-300 text-sm mb-4">
                     Wallet bypass is enabled. To skip delegation signing, run the agent with
-                    {` CLMM_DELEGATIONS_BYPASS=true`}.
+                    {` ${delegationsBypassEnv}=true`}.
                   </p>
                 )}
 

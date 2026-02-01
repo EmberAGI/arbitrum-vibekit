@@ -78,8 +78,20 @@ export type OperatorConfigRequestInterrupt = {
   artifactId?: string;
 };
 
+export type PendleSetupRequestInterrupt = {
+  type: 'pendle-setup-request';
+  message: string;
+  payloadSchema?: Record<string, unknown>;
+};
+
+export type GmxSetupRequestInterrupt = {
+  type: 'gmx-setup-request';
+  message: string;
+  payloadSchema?: Record<string, unknown>;
+};
+
 export type FundingTokenRequestInterrupt = {
-  type: 'clmm-funding-token-request';
+  type: 'clmm-funding-token-request' | 'pendle-funding-token-request' | 'gmx-funding-token-request';
   message: string;
   payloadSchema?: unknown;
   options: FundingTokenOption[];
@@ -104,7 +116,10 @@ export type SignedDelegation = UnsignedDelegation & {
 };
 
 export type DelegationSigningRequestInterrupt = {
-  type: 'clmm-delegation-signing-request';
+  type:
+    | 'clmm-delegation-signing-request'
+    | 'pendle-delegation-signing-request'
+    | 'gmx-delegation-signing-request';
   message: string;
   payloadSchema?: unknown;
   chainId: number;
@@ -118,6 +133,8 @@ export type DelegationSigningRequestInterrupt = {
 
 export type AgentInterrupt =
   | OperatorConfigRequestInterrupt
+  | PendleSetupRequestInterrupt
+  | GmxSetupRequestInterrupt
   | FundingTokenRequestInterrupt
   | DelegationSigningRequestInterrupt;
 
@@ -126,6 +143,17 @@ export interface OperatorConfigInput {
   poolAddress: `0x${string}`;
   walletAddress: `0x${string}`;
   baseContributionUsd: number;
+}
+
+export interface PendleSetupInput {
+  walletAddress: `0x${string}`;
+  baseContributionUsd: number;
+}
+
+export interface GmxSetupInput {
+  walletAddress: `0x${string}`;
+  baseContributionUsd: number;
+  targetMarket: 'BTC' | 'ETH';
 }
 
 export interface FundingTokenInput {
@@ -221,7 +249,7 @@ export interface AgentView {
   task?: Task;
   onboarding?: OnboardingState;
   poolArtifact?: Artifact;
-  operatorInput?: OperatorConfigInput;
+  operatorInput?: OperatorConfigInput | PendleSetupInput | GmxSetupInput;
   fundingTokenInput?: FundingTokenInput;
   selectedPool?: Pool;
   operatorConfig?: unknown;

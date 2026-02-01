@@ -15,17 +15,6 @@ export interface AgentConfig {
 }
 
 export const AGENT_REGISTRY: Record<string, AgentConfig> = {
-  starterAgent: {
-    id: 'starterAgent',
-    name: 'Mock CLMM',
-    description:
-      'Deterministic mock CLMM workflow used for onboarding and cron UI testing without real transactions.',
-    creator: 'Ember AI Team',
-    creatorVerified: true,
-    avatar: '🧪',
-    avatarBg: 'linear-gradient(135deg, #0ea5e9 0%, #22d3ee 100%)',
-    isFeatured: false,
-  },
   'agent-clmm': {
     id: 'agent-clmm',
     name: 'Camelot CLMM',
@@ -37,6 +26,30 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     avatarBg: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
     isFeatured: true,
     featuredRank: 1,
+  },
+  'agent-pendle': {
+    id: 'agent-pendle',
+    name: 'Pendle Yield',
+    description:
+      'Automatically allocates stablecoins into the highest-yielding Pendle YT markets and rotates when yields shift.',
+    creator: 'Ember AI Team',
+    creatorVerified: true,
+    avatar: '🪙',
+    avatarBg: 'linear-gradient(135deg, #f97316 0%, #facc15 100%)',
+    isFeatured: true,
+    featuredRank: 2,
+  },
+  'agent-gmx-allora': {
+    id: 'agent-gmx-allora',
+    name: 'GMX Allora Trader',
+    description:
+      'Trades GMX perps on Arbitrum using Allora 8-hour prediction feeds with strict low-leverage controls.',
+    creator: 'Ember AI Team',
+    creatorVerified: true,
+    avatar: '📈',
+    avatarBg: 'linear-gradient(135deg, #10b981 0%, #22c55e 100%)',
+    isFeatured: true,
+    featuredRank: 3,
   },
 };
 
