@@ -92,6 +92,7 @@ export interface LiquidityPair {
 }
 
 export interface LiquidityPosition {
+  positionId: string;
   tokenId: string;
   poolAddress: string;
   operator: string;
@@ -103,7 +104,42 @@ export interface LiquidityPosition {
   amount1: string;
   symbol0: string;
   symbol1: string;
-  price: string;
+  pooledTokens: {
+    tokenUid: { chainId: string; address: string };
+    name: string;
+    symbol: string;
+    decimals: number;
+    amount: string;
+    usdPrice?: string;
+    valueUsd?: string;
+  }[];
+  feesOwedTokens: {
+    tokenUid: { chainId: string; address: string };
+    name: string;
+    symbol: string;
+    decimals: number;
+    amount: string;
+    usdPrice?: string;
+    valueUsd?: string;
+  }[];
+  rewardsOwedTokens: {
+    tokenUid: { chainId: string; address: string };
+    amount: string;
+    usdPrice?: string;
+    valueUsd?: string;
+    source: string;
+  }[];
+  feesValueUsd?: string;
+  rewardsValueUsd?: string;
+  positionValueUsd?: string;
+  currentPrice?: string;
+  currentTick?: number;
+  tickLower?: number;
+  tickUpper?: number;
+  inRange?: boolean;
+  apr?: string;
+  apy?: string;
+  poolFeeBps?: number;
   providerId: string;
   positionRange?: {
     fromPrice: string;
