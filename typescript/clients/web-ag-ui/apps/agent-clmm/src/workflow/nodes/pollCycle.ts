@@ -476,6 +476,9 @@ export const pollCycleNode = async (
             : typeof executionError === 'string'
               ? executionError
               : 'Unknown execution error';
+        const rateLimitDetected = /Status:\s*429\b|"code"\s*:\s*429\b|code:\s*429\b/iu.test(
+          rawMessage,
+        );
         const errorMessage = emberError
           ? `Ember API ${emberError.status}${
               emberError.upstreamStatus ? ` (upstream ${emberError.upstreamStatus})` : ''
@@ -497,7 +500,9 @@ export const pollCycleNode = async (
           cronScheduled = true;
         }
 
-        const failureStatusMessage = `[Cycle ${iteration}] ${decision.kind} FAILED: ${errorMessage}`;
+        const failureStatusMessage = rateLimitDetected
+          ? `[Cycle ${iteration}] warning: RPC rate limit (HTTP 429). Will retry next cycle.`
+          : `[Cycle ${iteration}] ${decision.kind} FAILED: ${errorMessage}`;
         const { task: failedTask, statusEvent: failureEvent } = buildTaskStatus(
           taskState,
           'working', // Use 'working' not 'failed' - we'll retry on next cron cycle
@@ -507,7 +512,7 @@ export const pollCycleNode = async (
           view: {
             task: failedTask,
             activity: { events: [failureEvent], telemetry: state.view.activity.telemetry },
-            executionError: errorMessage,
+            ...(rateLimitDetected ? {} : { executionError: errorMessage }),
           },
         });
 

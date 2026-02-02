@@ -222,7 +222,10 @@ export async function createCamelotNavSnapshot(params: {
     };
   }
 
-  const pools = await params.camelotClient.listCamelotPools(params.chainId);
+  const poolAddresses = Array.from(
+    new Set(positions.map((position) => normalizeAddress(position.poolAddress))),
+  );
+  const pools = await params.camelotClient.listCamelotPools(params.chainId, { poolAddresses });
   const poolsByAddress = new Map(pools.map((pool) => [pool.address.toLowerCase(), pool]));
   const tokens = buildTokenDescriptors({
     chainId: params.chainId,

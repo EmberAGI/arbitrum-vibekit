@@ -222,18 +222,34 @@ export class EmberCamelotClient {
     return schema.parseAsync(json);
   }
 
-  async listCamelotPools(chainId: number): Promise<CamelotPool[]> {
+  async listCamelotPools(
+    chainId: number,
+    options?: {
+      poolAddresses?: readonly `0x${string}`[];
+      targetPoolAddress?: `0x${string}`;
+      requiredTokenAddresses?: readonly `0x${string}`[];
+    },
+  ): Promise<CamelotPool[]> {
     let cursor: string | null | undefined = undefined;
     let page = 1;
     let totalPages: number | undefined = undefined;
     const pools: CamelotPool[] = [];
     const seenPages = new Set<string>();
+    const poolAddresses =
+      options?.poolAddresses?.map((address) => normalizeAddress(address)) ?? [];
+    const targetAddress = options?.targetPoolAddress?.toLowerCase();
+    const requiredTokenAddresses =
+      options?.requiredTokenAddresses?.map((address) => address.toLowerCase()) ?? [];
+    let targetFound = false;
 
     while (true) {
       const query = new URLSearchParams();
       // Ember's swagger docs omit chainId, but the endpoint supports it (required for CLMM usage).
       query.set('chainId', String(chainId));
       query.append('providerIds', CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM);
+      for (const address of poolAddresses) {
+        query.append('poolAddresses', address);
+      }
       if (cursor) {
         query.set('cursor', cursor);
         query.set('page', String(page));
@@ -254,6 +270,22 @@ export class EmberCamelotClient {
         .filter((pool): pool is CamelotPool => Boolean(pool));
 
       pools.push(...pagePools);
+      if (targetAddress && !targetFound) {
+        targetFound = pagePools.some((pool) => pool.address.toLowerCase() === targetAddress);
+      }
+
+      if (targetFound && requiredTokenAddresses.length > 0) {
+        const prices = enrichCamelotPoolUsdPrices(pools);
+        const requirementsMet = requiredTokenAddresses.every((address) => {
+          const price = prices.get(address);
+          return typeof price === 'number' && Number.isFinite(price) && price > 0;
+        });
+        if (requirementsMet) {
+          break;
+        }
+      } else if (targetFound) {
+        break;
+      }
 
       const nextCursor = data.cursor ?? null;
       const currentPage = data.currentPage ?? page;
@@ -303,18 +335,21 @@ export class EmberCamelotClient {
       `/liquidity/positions/${walletAddress}?${query.toString()}`,
       WalletPositionsResponseSchema,
     );
-    if (data.positions.length === 0) {
+    const camelotPositions = data.positions.filter(
+      (position) =>
+        position.providerId.toLowerCase() === CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM.toLowerCase(),
+    );
+    if (camelotPositions.length === 0) {
       return [];
     }
 
-    const pools = await this.listCamelotPools(chainId);
+    const poolAddresses = Array.from(
+      new Set(camelotPositions.map((position) => normalizeAddress(position.poolIdentifier.address))),
+    );
+    const pools = await this.listCamelotPools(chainId, { poolAddresses });
     const poolMap = new Map(pools.map((pool) => [pool.address.toLowerCase(), pool]));
 
-    return data.positions
-      .filter(
-        (position) =>
-          position.providerId.toLowerCase() === CAMELOT_ALGEBRA_PROVIDER_ID_ARBITRUM.toLowerCase(),
-      )
+    return camelotPositions
       .map((position) => toWalletPosition(position, poolMap))
       .filter((position): position is WalletPosition => Boolean(position));
   }
@@ -414,7 +449,10 @@ export async function fetchPoolSnapshot(
   poolAddress: `0x${string}`,
   chainId: number,
 ) {
-  const pools = await client.listCamelotPools(chainId);
+  const pools = await client.listCamelotPools(chainId, {
+    poolAddresses: [poolAddress],
+    targetPoolAddress: poolAddress,
+  });
   const normalizedAddress = poolAddress.toLowerCase();
   return pools.find((pool) => pool.address.toLowerCase() === normalizedAddress);
 }
@@ -495,6 +533,8 @@ function toCamelotPool(pool: EmberLiquidityPool): CamelotPool | undefined {
 
   const token0Address = normalizeAddress(token0Raw.tokenUid.address);
   const token1Address = normalizeAddress(token1Raw.tokenUid.address);
+  const token0UsdPrice = parseEmberNumber(pool.token0PriceUsd);
+  const token1UsdPrice = parseEmberNumber(pool.token1PriceUsd);
 
   // `priceToTick` expects token1/token0 (amount1 per amount0), adjusted for decimals.
   // Ember's `price` has been observed to come back as either token0/token1 or token1/token0,
@@ -522,11 +562,13 @@ function toCamelotPool(pool: EmberLiquidityPool): CamelotPool | undefined {
       address: token0Address,
       symbol: token0Raw.symbol,
       decimals: token0Raw.decimals,
+      usdPrice: token0UsdPrice,
     },
     token1: {
       address: token1Address,
       symbol: token1Raw.symbol,
       decimals: token1Raw.decimals,
+      usdPrice: token1UsdPrice,
     },
     tickSpacing: pool.tickSpacing ?? 10,
     tick,

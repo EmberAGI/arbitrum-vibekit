@@ -682,23 +682,19 @@ function AgentBlockersTab({
     isLoading: isWalletLoading,
     error: walletError,
   } = usePrivyWalletClient();
-  const walletBypassEnabled = process.env.NEXT_PUBLIC_WALLET_BYPASS === 'true';
+  const delegationsBypassEnabled = process.env.DELEGATIONS_BYPASS === 'true';
   const walletBypassAddress =
     process.env.NEXT_PUBLIC_WALLET_BYPASS_ADDRESS ?? '0x0000000000000000000000000000000000000000';
   const isPendleAgent = agentId === 'agent-pendle';
   const isGmxAlloraAgent = agentId === 'agent-gmx-allora';
-  const delegationsBypassEnv = isPendleAgent
-    ? 'PENDLE_DELEGATIONS_BYPASS'
-    : isGmxAlloraAgent
-      ? 'GMX_ALLORA_DELEGATIONS_BYPASS'
-      : 'CLMM_DELEGATIONS_BYPASS';
+  const delegationsBypassEnv = 'DELEGATIONS_BYPASS';
   const delegationContextLabel = isPendleAgent
     ? 'Pendle execution'
     : isGmxAlloraAgent
       ? 'GMX perps execution'
       : 'liquidity management';
   const connectedWalletAddress =
-    privyWallet?.address ?? (walletBypassEnabled ? walletBypassAddress : '');
+    privyWallet?.address ?? (delegationsBypassEnabled ? walletBypassAddress : '');
 
   const [currentStep, setCurrentStep] = useState(1);
   const [poolAddress, setPoolAddress] = useState('');
@@ -709,6 +705,9 @@ function AgentBlockersTab({
   const [fundingTokenAddress, setFundingTokenAddress] = useState('');
   const [isSigningDelegations, setIsSigningDelegations] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isTerminalTask =
+    taskStatus === 'failed' || taskStatus === 'canceled' || taskStatus === 'rejected';
+  const showBlockingError = Boolean(haltReason || executionError) && isTerminalTask;
 
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
   const uniqueAllowedPools: Pool[] = [];
@@ -729,11 +728,11 @@ function AgentBlockersTab({
     }
 
     const operatorWalletAddress =
-      privyWallet?.address ?? (walletBypassEnabled ? walletBypassAddress : '');
+      privyWallet?.address ?? (delegationsBypassEnabled ? walletBypassAddress : '');
 
     if (!operatorWalletAddress) {
       setError(
-        walletBypassEnabled
+        delegationsBypassEnabled
           ? 'Connect a wallet or set NEXT_PUBLIC_WALLET_BYPASS_ADDRESS to continue.'
           : 'Connect a wallet to continue.',
       );
@@ -742,7 +741,7 @@ function AgentBlockersTab({
 
     if (!isHexAddress(operatorWalletAddress)) {
       setError(
-        walletBypassEnabled
+        delegationsBypassEnabled
           ? 'NEXT_PUBLIC_WALLET_BYPASS_ADDRESS must be a valid 0x-prefixed hex string.'
           : 'Connected wallet address is not a valid 0x-prefixed hex string.',
       );
@@ -781,11 +780,11 @@ function AgentBlockersTab({
     setError(null);
 
     const operatorWalletAddress =
-      privyWallet?.address ?? (walletBypassEnabled ? walletBypassAddress : '');
+      privyWallet?.address ?? (delegationsBypassEnabled ? walletBypassAddress : '');
 
     if (!operatorWalletAddress) {
       setError(
-        walletBypassEnabled
+        delegationsBypassEnabled
           ? 'Connect a wallet or set NEXT_PUBLIC_WALLET_BYPASS_ADDRESS to continue.'
           : 'Connect a wallet to continue.',
       );
@@ -794,7 +793,7 @@ function AgentBlockersTab({
 
     if (!isHexAddress(operatorWalletAddress)) {
       setError(
-        walletBypassEnabled
+        delegationsBypassEnabled
           ? 'NEXT_PUBLIC_WALLET_BYPASS_ADDRESS must be a valid 0x-prefixed hex string.'
           : 'Connected wallet address is not a valid 0x-prefixed hex string.',
       );
@@ -832,11 +831,11 @@ function AgentBlockersTab({
     setError(null);
 
     const operatorWalletAddress =
-      privyWallet?.address ?? (walletBypassEnabled ? walletBypassAddress : '');
+      privyWallet?.address ?? (delegationsBypassEnabled ? walletBypassAddress : '');
 
     if (!operatorWalletAddress) {
       setError(
-        walletBypassEnabled
+        delegationsBypassEnabled
           ? 'Connect a wallet or set NEXT_PUBLIC_WALLET_BYPASS_ADDRESS to continue.'
           : 'Connect a wallet to continue.',
       );
@@ -845,7 +844,7 @@ function AgentBlockersTab({
 
     if (!isHexAddress(operatorWalletAddress)) {
       setError(
-        walletBypassEnabled
+        delegationsBypassEnabled
           ? 'NEXT_PUBLIC_WALLET_BYPASS_ADDRESS must be a valid 0x-prefixed hex string.'
           : 'Connected wallet address is not a valid 0x-prefixed hex string.',
       );
@@ -1038,7 +1037,7 @@ function AgentBlockersTab({
   return (
     <div className="space-y-6">
       {/* Error/Halt Display */}
-      {(haltReason || executionError) && (
+      {showBlockingError && (
         <div className="rounded-xl bg-red-500/10 border border-red-500/30 p-4">
           <div className="flex items-center gap-2 text-red-400 mb-2">
             <span className="text-lg">⚠️</span>
@@ -1058,11 +1057,11 @@ function AgentBlockersTab({
         </div>
       )}
 
-      {walletBypassEnabled && (
+      {delegationsBypassEnabled && (
         <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4">
           <div className="text-yellow-300 text-sm font-medium mb-1">Wallet bypass enabled</div>
           <p className="text-yellow-200 text-xs">
-            `NEXT_PUBLIC_WALLET_BYPASS=true` is set. When no wallet is connected, the UI will use
+            `DELEGATIONS_BYPASS=true` is set. When no wallet is connected, the UI will use
             {` ${walletBypassAddress} `}for onboarding. Run the agent with
             {` ${delegationsBypassEnv}=true `}to skip delegation signing.
           </p>
@@ -1347,7 +1346,7 @@ function AgentBlockersTab({
                 {walletError && !error && (
                   <p className="text-red-400 text-sm mb-4">{walletError.message}</p>
                 )}
-                {walletBypassEnabled && !walletClient && !error && !walletError && (
+                {delegationsBypassEnabled && !walletClient && !error && !walletError && (
                   <p className="text-yellow-300 text-sm mb-4">
                     Wallet bypass is enabled. To skip delegation signing, run the agent with
                     {` ${delegationsBypassEnv}=true`}.

@@ -25,7 +25,7 @@ export const bootstrapNode = async (
   const mode = process.env['PENDLE_MODE'] === 'production' ? 'production' : 'debug';
   const pollIntervalMs = resolvePollIntervalMs();
   const streamLimit = resolveStreamLimit();
-  const delegationsBypassActive = process.env['PENDLE_DELEGATIONS_BYPASS'] === 'true';
+  const delegationsBypassActive = process.env['DELEGATIONS_BYPASS'] === 'true';
 
   logInfo('Initialized Pendle workflow context', {
     mode,
