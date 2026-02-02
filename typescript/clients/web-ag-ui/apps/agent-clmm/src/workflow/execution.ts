@@ -46,7 +46,7 @@ function buildStableSwapExactInAmount(params: {
 }): string {
   const count = Math.max(1, Math.floor(params.swapCount));
   const perSwapUsd = params.baseContributionUsd / count;
-  const boundedUsd = Math.max(1, Math.min(10, perSwapUsd));
+  const boundedUsd = Math.max(2, Math.min(10, perSwapUsd));
   return parseUnits(boundedUsd.toFixed(params.decimals), params.decimals).toString();
 }
 
@@ -624,11 +624,43 @@ export async function executeDecision({
             normalizedFundingToken ? stableTokenDecimals(normalizedFundingToken) : null;
 
           if (normalizedFundingToken && fundingStableDecimals !== null && targets.length > 0) {
+            const deficitUsdValues: number[] = [];
+            let hasUnknownDeficit = false;
+            if (deficit0 > 0n) {
+              const value = computeUsdValue({
+                amountBaseUnits: deficit0.toString(),
+                decimals: refreshedPoolSnapshot.token0.decimals,
+                usdPrice: refreshedPoolSnapshot.token0.usdPrice,
+              });
+              if (value === undefined) {
+                hasUnknownDeficit = true;
+              } else {
+                deficitUsdValues.push(value);
+              }
+            }
+            if (deficit1 > 0n) {
+              const value = computeUsdValue({
+                amountBaseUnits: deficit1.toString(),
+                decimals: refreshedPoolSnapshot.token1.decimals,
+                usdPrice: refreshedPoolSnapshot.token1.usdPrice,
+              });
+              if (value === undefined) {
+                hasUnknownDeficit = true;
+              } else {
+                deficitUsdValues.push(value);
+              }
+            }
+            const totalDeficitUsd = deficitUsdValues.reduce((sum, value) => sum + value, 0);
+            const fundingUsd =
+              !hasUnknownDeficit && totalDeficitUsd > 0
+                ? Math.min(operatorConfig.baseContributionUsd, totalDeficitUsd)
+                : operatorConfig.baseContributionUsd;
+
             // Swap providers often reject `exactOut` for small outputs (or certain routes).
             // When funding with a known stablecoin, prefer `exactIn` bounded by baseContributionUsd,
             // mirroring the working demo/liquidity behavior.
             const exactInAmount = buildStableSwapExactInAmount({
-              baseContributionUsd: operatorConfig.baseContributionUsd,
+              baseContributionUsd: fundingUsd,
               swapCount: targets.length,
               decimals: fundingStableDecimals,
             });
