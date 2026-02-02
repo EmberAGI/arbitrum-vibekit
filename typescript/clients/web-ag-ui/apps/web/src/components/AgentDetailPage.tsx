@@ -705,6 +705,9 @@ function AgentBlockersTab({
   const [fundingTokenAddress, setFundingTokenAddress] = useState('');
   const [isSigningDelegations, setIsSigningDelegations] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isTerminalTask =
+    taskStatus === 'failed' || taskStatus === 'canceled' || taskStatus === 'rejected';
+  const showBlockingError = Boolean(haltReason || executionError) && isTerminalTask;
 
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
   const uniqueAllowedPools: Pool[] = [];
@@ -1034,7 +1037,7 @@ function AgentBlockersTab({
   return (
     <div className="space-y-6">
       {/* Error/Halt Display */}
-      {(haltReason || executionError) && (
+      {showBlockingError && (
         <div className="rounded-xl bg-red-500/10 border border-red-500/30 p-4">
           <div className="flex items-center gap-2 text-red-400 mb-2">
             <span className="text-lg">⚠️</span>
