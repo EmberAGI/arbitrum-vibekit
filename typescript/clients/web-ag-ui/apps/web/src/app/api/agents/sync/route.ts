@@ -2,11 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 
-import { getAgentThreadId } from '@/utils/agentThread';
-
 const BodySchema = z.object({
   agentId: z.string().min(1),
-  threadId: z.string().optional(),
+  threadId: z.string().min(1),
 });
 
 const RunResponseSchema = z
@@ -224,7 +222,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const baseUrl = normalizeBaseUrl(runtime.deploymentUrl);
-  const threadId = parsed.data.threadId ?? getAgentThreadId(parsed.data.agentId);
+  const threadId = parsed.data.threadId;
 
   try {
     await ensureThread(baseUrl, threadId, runtime.graphId);

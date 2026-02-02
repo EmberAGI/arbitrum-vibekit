@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { z } from 'zod';
 
 import { getAllAgents, isRegisteredAgentId } from '../config/agents';
+import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 import { getAgentThreadId } from '../utils/agentThread';
 import type { AgentViewMetrics, AgentViewProfile, TaskState } from '../types/agent';
 
@@ -65,11 +66,14 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
   const agentIds = useMemo(() => getAllAgents().map((agent) => agent.id), []);
   const pathname = usePathname();
   const activeAgentId = useMemo(() => resolveAgentIdFromPath(pathname), [pathname]);
+  const { privyWallet } = usePrivyWalletClient();
+  const privyAddress = privyWallet?.address ?? null;
   const [agents, setAgents] = useState<Record<string, AgentListEntry>>(() =>
     buildInitialState(agentIds),
   );
   const startedRef = useRef(false);
   const inFlightRef = useRef<Set<string>>(new Set());
+  const lastPrivyAddressRef = useRef<string | null>(null);
   const agentsRef = useRef<Record<string, AgentListEntry>>(agents);
 
   const upsertAgent = useCallback((agentId: string, update: Partial<AgentListEntry>) => {
@@ -86,6 +90,17 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
     agentsRef.current = agents;
   }, [agents]);
 
+  useEffect(() => {
+    const normalized = privyAddress?.toLowerCase() ?? null;
+    if (normalized === lastPrivyAddressRef.current) {
+      return;
+    }
+    lastPrivyAddressRef.current = normalized;
+    startedRef.current = false;
+    inFlightRef.current = new Set();
+    setAgents(buildInitialState(agentIds));
+  }, [agentIds, privyAddress]);
+
   const syncAgent = useCallback(
     async (agentId: string, options?: { force?: boolean }) => {
       const force = options?.force ?? false;
@@ -97,7 +112,11 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
       }
 
       inFlightRef.current.add(agentId);
-      const threadId = getAgentThreadId(agentId);
+      const threadId = getAgentThreadId(agentId, privyAddress);
+      if (!threadId) {
+        inFlightRef.current.delete(agentId);
+        return;
+      }
 
       try {
         const response = await fetch('/api/agents/sync', {
@@ -137,18 +156,21 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
         inFlightRef.current.delete(agentId);
       }
     },
-    [upsertAgent],
+    [privyAddress, upsertAgent],
   );
 
   useEffect(() => {
     if (startedRef.current) {
       return;
     }
+    if (!privyAddress) {
+      return;
+    }
     startedRef.current = true;
     agentIds.forEach((agentId) => {
       void syncAgent(agentId);
     });
-  }, [agentIds, syncAgent]);
+  }, [agentIds, privyAddress, syncAgent]);
 
   useEffect(() => {
     const rawInterval = Number(process.env.NEXT_PUBLIC_AGENT_LIST_SYNC_POLL_MS ?? 15000);

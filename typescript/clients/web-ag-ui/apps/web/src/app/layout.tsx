@@ -4,6 +4,7 @@ import type { CopilotKitCSSProperties } from '@copilotkit/react-ui';
 import { ProvidersNoSSR } from '../components/ProvidersNoSSR';
 import { AppSidebarNoSSR } from '../components/AppSidebarNoSSR';
 import { AgentRuntimeProvider } from '../components/AgentRuntimeProvider';
+import { PrivyGateBanner } from '../components/PrivyGateBanner';
 import './globals.css';
 import '@copilotkit/react-ui/styles.css';
 
@@ -31,6 +32,7 @@ export default function RootLayout({
       <body className="antialiased bg-[#121212] text-white dark">
         <ProvidersNoSSR>
           <AgentRuntimeProvider>
+            <PrivyGateBanner />
             <div className="flex h-screen overflow-hidden">
               <AppSidebarNoSSR />
               <main
