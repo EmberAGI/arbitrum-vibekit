@@ -1,4 +1,29 @@
 services:
+  traefik:
+    image: traefik:v3.0
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.cloudflare.acme.storage=/acme/acme.json
+      - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
+      - --experimental.plugins.trauth.moduleName=github.com/leonjza/trauth
+      - --experimental.plugins.trauth.version=v1.6.7
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./auth/users.htpasswd:/etc/traefik/users.htpasswd:ro
+      - ./traefik/acme.json:/acme/acme.json
+    env_file:
+      - traefik.env
+    restart: unless-stopped
+
   web:
     build:
       context: .
@@ -13,6 +38,20 @@ services:
       LANGGRAPH_GMX_ALLORA_DEPLOYMENT_URL: http://agent-gmx-allora:8126
     env_file:
       - apps/web/.env
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.demo.rule=Host(`demo.emberai.xyz`)
+      - traefik.http.routers.demo.entrypoints=websecure
+      - traefik.http.routers.demo.tls=true
+      - traefik.http.routers.demo.tls.certresolver=cloudflare
+      - traefik.http.routers.demo.middlewares=site-auth@docker
+      - traefik.http.services.demo.loadbalancer.server.port=3000
+      - traefik.http.middlewares.site-auth.plugin.trauth.domain=demo.emberai.xyz
+      - traefik.http.middlewares.site-auth.plugin.trauth.usersfile=/etc/traefik/users.htpasswd
+      - traefik.http.middlewares.site-auth.plugin.trauth.cookiekey=LrHdvWlGPwCrzgB6fXpLBH3u1uwb9b3x
+      - traefik.http.middlewares.site-auth.plugin.trauth.cookiename=trauth
+      - traefik.http.middlewares.site-auth.plugin.trauth.cookiesecure=true
+      - traefik.http.middlewares.site-auth.plugin.trauth.cookiehttponly=true
     ports:
       - "3000:3000"
     restart: unless-stopped
