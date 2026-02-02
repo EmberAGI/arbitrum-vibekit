@@ -62,12 +62,16 @@ const EmberPoolTokenSchema = z.object({
   isVetted: z.boolean().optional(),
 });
 
+const EmberNumberishSchema = z.union([z.string(), z.number()]);
+
 export const PoolListResponseSchema = z.object({
   liquidityPools: z.array(
     z.object({
       identifier: ChainIdentifierSchema,
       tokens: z.array(EmberPoolTokenSchema).min(2),
       currentPrice: z.string(),
+      token0PriceUsd: EmberNumberishSchema.optional(),
+      token1PriceUsd: EmberNumberishSchema.optional(),
       tickSpacing: z.number().int().positive().optional(),
       providerId: z.string(),
       poolName: z.string(),
@@ -87,8 +91,6 @@ const EmberPositionRangeSchema = z
   })
   .partial()
   .optional();
-
-const EmberNumberishSchema = z.union([z.string(), z.number()]);
 
 const EmberWalletTokenSchema = EmberPoolTokenSchema.extend({
   amount: z.string().optional(),
