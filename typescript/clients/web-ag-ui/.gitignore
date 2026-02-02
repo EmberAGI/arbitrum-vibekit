@@ -26,6 +26,8 @@ node_modules
 # misc
 .DS_Store
 *.pem
+auth/users.htpasswd
+traefik/acme.json
 
 # debug
 npm-debug.log*
@@ -37,6 +39,7 @@ yarn-error.log*
 .env*
 !.env.example
 !.env.test.example
+traefik.env
 
 # vercel
 .vercel
