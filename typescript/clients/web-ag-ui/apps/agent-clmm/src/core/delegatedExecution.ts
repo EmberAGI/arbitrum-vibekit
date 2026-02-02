@@ -1,8 +1,8 @@
 import { createExecution, ExecutionMode } from '@metamask/delegation-toolkit';
 import { DelegationManager } from '@metamask/delegation-toolkit/contracts';
-import { createClient, http, publicActions, type TransactionReceipt } from 'viem';
+import { createClient, publicActions, type TransactionReceipt } from 'viem';
 
-import type { createClients } from '../clients/clients.js';
+import { createRpcTransport, type createClients } from '../clients/clients.js';
 import type { TransactionInformation } from '../clients/emberApi.js';
 import {
   EmberEvmTransactionSchema,
@@ -157,7 +157,7 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
   const simulationClient = createClient({
     account: params.clients.wallet.account,
     chain: params.clients.wallet.chain,
-    transport: http(resolvedRpcUrl),
+    transport: createRpcTransport(resolvedRpcUrl),
   }).extend(publicActions);
 
   const requiresMultipleRedemptions = [...intentSegmentCounts.values()].some((count) => count > 1);

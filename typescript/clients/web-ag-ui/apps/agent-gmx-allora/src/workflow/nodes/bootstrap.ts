@@ -25,7 +25,7 @@ export const bootstrapNode = async (
   const mode = process.env['GMX_ALLORA_MODE'] === 'production' ? 'production' : 'debug';
   const pollIntervalMs = resolvePollIntervalMs();
   const streamLimit = resolveStreamLimit();
-  const delegationsBypassActive = process.env['GMX_ALLORA_DELEGATIONS_BYPASS'] === 'true';
+  const delegationsBypassActive = process.env['DELEGATIONS_BYPASS'] === 'true';
 
   logInfo('Initialized GMX Allora workflow context', {
     mode,

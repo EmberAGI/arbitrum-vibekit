@@ -1,8 +1,12 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalEnv": ["NEXT_PUBLIC_WALLET_BYPASS", "CLMM_DELEGATIONS_BYPASS"],
+  "globalEnv": ["DELEGATIONS_BYPASS"],
   "tasks": {
     "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "start": {
       "cache": false,
       "persistent": true
     },
