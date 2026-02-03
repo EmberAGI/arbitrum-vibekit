@@ -1,4 +1,5 @@
 import { registerAave } from './aave-lending-plugin/index.js';
+import { registerRadiant } from './radiant-lending-plugin/index.js';
 import type { ChainConfig } from './chainConfig.js';
 import { PublicEmberPluginRegistry } from './registry.js';
 
@@ -13,6 +14,9 @@ export function initializePublicRegistry(chainConfigs: ChainConfig[]) {
   for (const chainConfig of chainConfigs) {
     // Create aave plugins for each chain config
     registerAave(chainConfig, registry);
+    
+    // Create radiant plugins for each chain config
+    registerRadiant(chainConfig, registry);
   }
 
   return registry;
