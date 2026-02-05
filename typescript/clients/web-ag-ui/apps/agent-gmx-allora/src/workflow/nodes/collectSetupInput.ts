@@ -78,7 +78,7 @@ export const collectSetupInputNode = async (
   const { task, statusEvent } = buildTaskStatus(
     awaitingInput.task,
     'working',
-    'Market and allocation received. Preparing funding token options.',
+    'Market and USDC allocation received. Preparing funding token options.',
   );
   await copilotkitEmitState(config, {
     view: { task, activity: { events: [statusEvent], telemetry: [] } },

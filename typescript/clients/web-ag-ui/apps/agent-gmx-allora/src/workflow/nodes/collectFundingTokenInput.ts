@@ -1,15 +1,13 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command, interrupt } from '@langchain/langgraph';
-import { z } from 'zod';
+import { Command } from '@langchain/langgraph';
 
-import { FundingTokenInputSchema, type FundingTokenInput } from '../../domain/types.js';
+import { type FundingTokenInput } from '../../domain/types.js';
 import {
   buildTaskStatus,
   logInfo,
   normalizeHexAddress,
   type ClmmState,
   type ClmmUpdate,
-  type FundingTokenInterrupt,
   type OnboardingState,
 } from '../context.js';
 import { FUNDING_TOKENS } from '../seedData.js';
@@ -51,17 +49,10 @@ export const collectFundingTokenInputNode = async (
     });
   }
 
-  const request: FundingTokenInterrupt = {
-    type: 'gmx-funding-token-request',
-    message: 'Select the token to swap into USDC collateral for GMX perps.',
-    payloadSchema: z.toJSONSchema(FundingTokenInputSchema),
-    options: FUNDING_TOKENS,
-  };
-
   const awaitingInput = buildTaskStatus(
     state.view.task,
-    'input-required',
-    'Awaiting funding-token selection to continue onboarding.',
+    'working',
+    'Using USDC as collateral for GMX perps.',
   );
   await copilotkitEmitState(config, {
     view: {
@@ -71,21 +62,9 @@ export const collectFundingTokenInputNode = async (
     },
   });
 
-  const incoming: unknown = await interrupt(request);
-
-  let inputToParse: unknown = incoming;
-  if (typeof incoming === 'string') {
-    try {
-      inputToParse = JSON.parse(incoming);
-    } catch {
-      // ignore
-    }
-  }
-
-  const parsed = FundingTokenInputSchema.safeParse(inputToParse);
-  if (!parsed.success) {
-    const issues = parsed.error.issues.map((issue) => issue.message).join('; ');
-    const failureMessage = `Invalid funding-token input: ${issues}`;
+  const usdcOption = FUNDING_TOKENS.find((option) => option.symbol.toUpperCase() === 'USDC');
+  if (!usdcOption) {
+    const failureMessage = 'ERROR: USDC funding option unavailable for GMX onboarding.';
     const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
@@ -100,31 +79,13 @@ export const collectFundingTokenInputNode = async (
   }
 
   const normalizedFundingToken = normalizeHexAddress(
-    parsed.data.fundingTokenAddress,
+    usdcOption.address,
     'funding token address',
   );
-  const isAllowed = FUNDING_TOKENS.some(
-    (option) => option.address.toLowerCase() === normalizedFundingToken.toLowerCase(),
-  );
-  if (!isAllowed) {
-    const failureMessage = `Invalid funding-token input: address ${normalizedFundingToken} not in allowed options`;
-    const { task, statusEvent } = buildTaskStatus(awaitingInput.task, 'failed', failureMessage);
-    await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
-    });
-    return {
-      view: {
-        haltReason: failureMessage,
-        task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      },
-    };
-  }
-
   const { task, statusEvent } = buildTaskStatus(
     awaitingInput.task,
     'working',
-    'Funding token selected. Preparing delegation request.',
+    'USDC collateral selected. Preparing delegation request.',
   );
   await copilotkitEmitState(config, {
     view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
