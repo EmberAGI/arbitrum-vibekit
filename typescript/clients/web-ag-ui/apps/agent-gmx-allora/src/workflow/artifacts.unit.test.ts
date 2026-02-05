@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ExecutionPlan } from '../core/executionPlan.js';
+import type { GmxAlloraTelemetry } from '../domain/types.js';
 
-import { buildExecutionPlanArtifact, buildExecutionResultArtifact } from './artifacts.js';
+import {
+  buildExecutionPlanArtifact,
+  buildExecutionResultArtifact,
+  buildTelemetryArtifact,
+} from './artifacts.js';
 
 describe('buildExecutionPlanArtifact', () => {
   it('wraps execution plan data into an artifact', () => {
@@ -34,5 +39,25 @@ describe('buildExecutionPlanArtifact', () => {
 
     expect(artifact.artifactId).toBe('gmx-allora-execution-result');
     expect(artifact.parts[0]?.data).toEqual({ action: 'long', ok: true });
+  });
+
+  it('wraps telemetry data into an artifact', () => {
+    const telemetry: GmxAlloraTelemetry = {
+      cycle: 3,
+      action: 'hold',
+      reason: 'No position',
+      marketSymbol: 'BTC/USDC',
+      timestamp: '2026-02-05T20:00:00.000Z',
+      prediction: {
+        topicId: 14,
+        combinedValue: 47000,
+        confidence: 0.42,
+      },
+    };
+
+    const artifact = buildTelemetryArtifact(telemetry);
+
+    expect(artifact.artifactId).toBe('gmx-allora-telemetry');
+    expect(artifact.parts[0]?.data).toEqual(telemetry);
   });
 });

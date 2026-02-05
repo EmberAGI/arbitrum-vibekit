@@ -14,6 +14,7 @@
     "test:int": "bash -lc 'ENV_FILE=.env.test; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test.example; exec tsx --env-file=\"$ENV_FILE\" ./node_modules/vitest/vitest.mjs run --config vitest.config.int.ts \"$@\"' --",
     "test:e2e": "bash -lc 'ENV_FILE=.env.test; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test.example; exec tsx --env-file=\"$ENV_FILE\" ./node_modules/vitest/vitest.mjs run --config vitest.config.e2e.ts --no-file-parallelism --maxConcurrency=1 \"$@\"' --",
     "test:watch": "vitest watch",
+    "test:coverage": "vitest run --config vitest.config.coverage.ts",
     "test:ci": "pnpm test:unit && pnpm test:int",
     "lint": "eslint \"src\" --ext .ts",
     "lint:fix": "eslint \"src\" --ext .ts --fix",

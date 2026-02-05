@@ -165,4 +165,136 @@ describe('OnchainActionsClient', () => {
     const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     expect(requestInit?.method).toBe('POST');
   });
+
+  it('lists perpetual positions across paginated responses', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            positions: [
+              {
+                chainId: '42161',
+                key: '0xpos1',
+                contractKey: '0xcontract',
+                account: '0xwallet',
+                marketAddress: '0xmarket',
+                sizeInUsd: '100',
+                sizeInTokens: '0.01',
+                collateralAmount: '50',
+                pendingBorrowingFeesUsd: '0',
+                increasedAtTime: '0',
+                decreasedAtTime: '0',
+                positionSide: 'long',
+                isLong: true,
+                fundingFeeAmount: '0',
+                claimableLongTokenAmount: '0',
+                claimableShortTokenAmount: '0',
+                isOpening: false,
+                pnl: '0',
+                positionFeeAmount: '0',
+                traderDiscountAmount: '0',
+                uiFeeAmount: '0',
+                collateralToken: {
+                  tokenUid: { chainId: '42161', address: '0xusdc' },
+                  name: 'USD Coin',
+                  symbol: 'USDC',
+                  isNative: false,
+                  decimals: 6,
+                  iconUri: null,
+                  isVetted: true,
+                },
+              },
+            ],
+            cursor: 'next',
+            currentPage: 1,
+            totalPages: 2,
+            totalItems: 2,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            positions: [
+              {
+                chainId: '42161',
+                key: '0xpos2',
+                contractKey: '0xcontract',
+                account: '0xwallet',
+                marketAddress: '0xmarket',
+                sizeInUsd: '200',
+                sizeInTokens: '0.02',
+                collateralAmount: '100',
+                pendingBorrowingFeesUsd: '0',
+                increasedAtTime: '0',
+                decreasedAtTime: '0',
+                positionSide: 'short',
+                isLong: false,
+                fundingFeeAmount: '0',
+                claimableLongTokenAmount: '0',
+                claimableShortTokenAmount: '0',
+                isOpening: false,
+                pnl: '0',
+                positionFeeAmount: '0',
+                traderDiscountAmount: '0',
+                uiFeeAmount: '0',
+                collateralToken: {
+                  tokenUid: { chainId: '42161', address: '0xusdc' },
+                  name: 'USD Coin',
+                  symbol: 'USDC',
+                  isNative: false,
+                  decimals: 6,
+                  iconUri: null,
+                  isVetted: true,
+                },
+              },
+            ],
+            cursor: 'next',
+            currentPage: 2,
+            totalPages: 2,
+            totalItems: 2,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new OnchainActionsClient('https://api.example.test');
+    const positions = await client.listPerpetualPositions({
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      chainIds: ['42161'],
+    });
+
+    expect(positions).toHaveLength(2);
+    expect(positions[0]?.key).toBe('0xpos1');
+    expect(positions[1]?.key).toBe('0xpos2');
+  });
+
+  it('raises an error when the API returns a non-200 response', async () => {
+    const fetchMock = vi.fn(
+      () =>
+        new Response('bad request', {
+          status: 400,
+          headers: { 'Content-Type': 'text/plain' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new OnchainActionsClient('https://api.example.test');
+
+    await expect(
+      client.createPerpetualLong({
+        amount: 100n,
+        walletAddress: '0x0000000000000000000000000000000000000001',
+        chainId: '42161',
+        marketAddress: '0xmarket',
+        payTokenAddress: '0xusdc',
+        collateralTokenAddress: '0xusdc',
+        leverage: '2',
+      }),
+    ).rejects.toThrow('Onchain actions request failed (400)');
+  });
 });
