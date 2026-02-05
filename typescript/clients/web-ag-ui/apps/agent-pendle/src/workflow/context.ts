@@ -189,6 +189,7 @@ type ClmmViewState = {
   fundingTokenInput?: FundingTokenInput;
   selectedPool?: PendleYieldToken;
   operatorConfig?: ResolvedPendleConfig;
+  setupComplete?: boolean;
   delegationBundle?: DelegationBundle;
   haltReason?: string;
   executionError?: string;
@@ -220,6 +221,7 @@ const defaultViewState = (): ClmmViewState => ({
   fundingTokenInput: undefined,
   selectedPool: undefined,
   operatorConfig: undefined,
+  setupComplete: false,
   delegationBundle: undefined,
   haltReason: undefined,
   executionError: undefined,
@@ -347,6 +349,7 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     fundingTokenInput: right.fundingTokenInput ?? left.fundingTokenInput,
     selectedPool: right.selectedPool ?? left.selectedPool,
     operatorConfig: right.operatorConfig ?? left.operatorConfig,
+    setupComplete: right.setupComplete ?? left.setupComplete,
     delegationBundle: right.delegationBundle ?? left.delegationBundle,
     haltReason: right.haltReason ?? left.haltReason,
     executionError: right.executionError ?? left.executionError,

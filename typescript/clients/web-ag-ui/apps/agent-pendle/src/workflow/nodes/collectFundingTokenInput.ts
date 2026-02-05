@@ -2,7 +2,10 @@ import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
 import { z } from 'zod';
 
+import { resolveStablecoinWhitelist } from '../../config/constants.js';
+import { buildFundingTokenOptions } from '../../core/pendleFunding.js';
 import { FundingTokenInputSchema, type FundingTokenInput } from '../../domain/types.js';
+import { getOnchainActionsClient } from '../clientFactory.js';
 import {
   buildTaskStatus,
   logInfo,
@@ -12,7 +15,6 @@ import {
   type FundingTokenInterrupt,
   type OnboardingState,
 } from '../context.js';
-import { FUNDING_TOKENS } from '../seedData.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -51,11 +53,64 @@ export const collectFundingTokenInputNode = async (
     });
   }
 
+  const onchainActionsClient = getOnchainActionsClient();
+  const operatorWalletAddress = normalizeHexAddress(operatorInput.walletAddress, 'wallet address');
+
+  let options = [];
+  try {
+    const balances = await onchainActionsClient.listWalletBalances(operatorWalletAddress);
+    options = buildFundingTokenOptions({
+      balances,
+      whitelistSymbols: resolveStablecoinWhitelist(),
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const failureMessage = `ERROR: Unable to fetch wallet balances: ${message}`;
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    });
+    return new Command({
+      update: {
+        view: {
+          haltReason: failureMessage,
+          task,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          profile: state.view.profile,
+          metrics: state.view.metrics,
+          transactionHistory: state.view.transactionHistory,
+        },
+      },
+      goto: 'summarize',
+    });
+  }
+
+  if (options.length === 0) {
+    const failureMessage = 'ERROR: No eligible stablecoin balances found for funding token selection.';
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    });
+    return new Command({
+      update: {
+        view: {
+          haltReason: failureMessage,
+          task,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          profile: state.view.profile,
+          metrics: state.view.metrics,
+          transactionHistory: state.view.transactionHistory,
+        },
+      },
+      goto: 'summarize',
+    });
+  }
+
   const request: FundingTokenInterrupt = {
     type: 'pendle-funding-token-request',
     message: 'Select the starting stablecoin to fund the Pendle position.',
     payloadSchema: z.toJSONSchema(FundingTokenInputSchema),
-    options: FUNDING_TOKENS,
+    options,
   };
 
   const awaitingInput = buildTaskStatus(
@@ -103,7 +158,7 @@ export const collectFundingTokenInputNode = async (
     parsed.data.fundingTokenAddress,
     'funding token address',
   );
-  const isAllowed = FUNDING_TOKENS.some(
+  const isAllowed = options.some(
     (option) => option.address.toLowerCase() === normalizedFundingToken.toLowerCase(),
   );
   if (!isAllowed) {

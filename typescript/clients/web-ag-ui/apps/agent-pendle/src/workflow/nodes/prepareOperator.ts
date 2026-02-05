@@ -1,7 +1,13 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
-import { type ResolvedPendleConfig } from '../../domain/types.js';
+import {
+  resolvePendleChainIds,
+  resolveStablecoinWhitelist,
+} from '../../config/constants.js';
+import { buildEligibleYieldTokens } from '../../core/pendleMarkets.js';
+import type { ResolvedPendleConfig } from '../../domain/types.js';
+import { getOnchainActionsClient, getOnchainClients } from '../clientFactory.js';
 import {
   buildTaskStatus,
   logInfo,
@@ -10,9 +16,23 @@ import {
   type ClmmState,
   type ClmmUpdate,
 } from '../context.js';
-import { AGENT_WALLET_ADDRESS, YIELD_TOKENS } from '../seedData.js';
+import { executeInitialDeposit } from '../execution.js';
+import { AGENT_WALLET_ADDRESS } from '../seedData.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
+
+const resolveFundingAmount = (amountUsd: number, decimals: number): string => {
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
+    throw new Error(`Invalid funding amount: ${amountUsd}`);
+  }
+  if (!Number.isInteger(decimals) || decimals < 0) {
+    throw new Error(`Invalid token decimals: ${decimals}`);
+  }
+  const fixed = amountUsd.toFixed(decimals);
+  const normalized = fixed.replace('.', '');
+  const trimmed = normalized.replace(/^0+/, '');
+  return trimmed.length > 0 ? trimmed : '0';
+};
 
 export const prepareOperatorNode = async (
   state: ClmmState,
@@ -92,12 +112,46 @@ export const prepareOperatorNode = async (
     });
   }
 
-  const bestYieldToken = [...YIELD_TOKENS].sort((a, b) => {
-    if (b.apy !== a.apy) {
-      return b.apy - a.apy;
-    }
-    return a.ytSymbol.localeCompare(b.ytSymbol);
-  })[0];
+  const onchainActionsClient = getOnchainActionsClient();
+  let eligibleYieldTokens = [];
+  let tokenizedMarkets = [];
+  let supportedTokens = [];
+  try {
+    const chainIds = resolvePendleChainIds();
+    const [markets, fetchedTokens] = await Promise.all([
+      onchainActionsClient.listTokenizedYieldMarkets({ chainIds }),
+      onchainActionsClient.listTokens({ chainIds }),
+    ]);
+    tokenizedMarkets = markets;
+    supportedTokens = fetchedTokens;
+    eligibleYieldTokens = buildEligibleYieldTokens({
+      markets,
+      supportedTokens: fetchedTokens,
+      whitelistSymbols: resolveStablecoinWhitelist(),
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const failureMessage = `ERROR: Failed to fetch Pendle markets: ${message}`;
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    });
+    return new Command({
+      update: {
+        view: {
+          haltReason: failureMessage,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          task,
+          profile: state.view.profile,
+          transactionHistory: state.view.transactionHistory,
+          metrics: state.view.metrics,
+        },
+      },
+      goto: 'summarize',
+    });
+  }
+
+  const bestYieldToken = eligibleYieldTokens[0];
 
   if (!bestYieldToken) {
     const failureMessage = 'ERROR: No Pendle YT markets available to select';
@@ -147,10 +201,116 @@ export const prepareOperatorNode = async (
   });
 
   const events: ClmmEvent[] = [statusEvent];
+  let setupComplete = state.view.setupComplete === true;
+  let setupTxHash: `0x${string}` | undefined;
+
+  if (!setupComplete) {
+    const targetMarket = tokenizedMarkets.find(
+      (market) => market.marketIdentifier.address.toLowerCase() === bestYieldToken.marketAddress.toLowerCase(),
+    );
+    const fundingToken = supportedTokens.find(
+      (token) => token.tokenUid.address.toLowerCase() === fundingTokenAddress.toLowerCase(),
+    );
+
+    if (!targetMarket || !fundingToken) {
+      const failureMessage = 'ERROR: Missing tokenized yield data for initial deposit';
+      const { task, statusEvent: errorEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      await copilotkitEmitState(config, {
+        view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
+      });
+      return new Command({
+        update: {
+          view: {
+            haltReason: failureMessage,
+            executionError: failureMessage,
+            activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
+            task,
+            profile: state.view.profile,
+            transactionHistory: state.view.transactionHistory,
+            metrics: state.view.metrics,
+          },
+        },
+        goto: 'summarize',
+      });
+    }
+
+    let fundingAmount: string;
+    try {
+      fundingAmount = resolveFundingAmount(operatorConfig.baseContributionUsd, fundingToken.decimals);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      const failureMessage = `ERROR: Unable to resolve funding amount: ${message}`;
+      const { task, statusEvent: errorEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      await copilotkitEmitState(config, {
+        view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
+      });
+      return new Command({
+        update: {
+          view: {
+            haltReason: failureMessage,
+            executionError: failureMessage,
+            activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
+            task,
+            profile: state.view.profile,
+            transactionHistory: state.view.transactionHistory,
+            metrics: state.view.metrics,
+          },
+        },
+        goto: 'summarize',
+      });
+    }
+
+    try {
+      const clients = getOnchainClients();
+      const execution = await executeInitialDeposit({
+        onchainActionsClient,
+        clients,
+        walletAddress: operatorConfig.walletAddress,
+        fundingToken,
+        targetMarket,
+        fundingAmount,
+      });
+      setupTxHash = execution.lastTxHash;
+      setupComplete = true;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      const failureMessage = `ERROR: Pendle initial deposit failed: ${message}`;
+      const { task, statusEvent: errorEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      await copilotkitEmitState(config, {
+        view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
+      });
+      return new Command({
+        update: {
+          view: {
+            haltReason: failureMessage,
+            executionError: failureMessage,
+            activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
+            task,
+            profile: state.view.profile,
+            transactionHistory: state.view.transactionHistory,
+            metrics: state.view.metrics,
+          },
+        },
+        goto: 'summarize',
+      });
+    }
+  }
+
+  const transactionEntry = setupTxHash
+    ? {
+        cycle: 0,
+        action: 'setup',
+        txHash: setupTxHash,
+        status: 'success' as const,
+        reason: `Initial deposit into ${bestYieldToken.ytSymbol}`,
+        timestamp: new Date().toISOString(),
+      }
+    : undefined;
 
   return {
     view: {
       operatorConfig,
+      setupComplete,
       selectedPool: bestYieldToken,
       metrics: {
         lastSnapshot: bestYieldToken,
@@ -162,8 +322,14 @@ export const prepareOperatorNode = async (
       },
       task,
       activity: { events, telemetry: state.view.activity.telemetry },
-      transactionHistory: state.view.transactionHistory,
-      profile: state.view.profile,
+      transactionHistory: transactionEntry
+        ? [...state.view.transactionHistory, transactionEntry]
+        : state.view.transactionHistory,
+      profile: {
+        ...state.view.profile,
+        pools: eligibleYieldTokens,
+        allowedPools: eligibleYieldTokens,
+      },
     },
     private: {
       cronScheduled: false,
