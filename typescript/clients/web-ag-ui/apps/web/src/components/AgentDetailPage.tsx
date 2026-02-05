@@ -499,9 +499,9 @@ export function AgentDetailPage({
             {activeTab === 'metrics' && (
               <MetricsTab profile={profile} metrics={metrics} fullMetrics={fullMetrics} events={events} />
             )}
-	          </div>
-	        </div>
-	      </div>
+          </div>
+        </div>
+      </div>
 	    </div>
 	  );
 }
@@ -1913,8 +1913,7 @@ function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) 
                     </div>
                     <div className="text-sm text-white mt-1">
                       {event.type === 'status' && event.message}
-                      {event.type === 'artifact' &&
-                        `Artifact: ${formatArtifactLabel(event.artifact)}`}
+                      {event.type === 'artifact' && `Artifact: ${formatArtifactLabel(event.artifact)}`}
                       {event.type === 'dispatch-response' &&
                         `Response with ${event.parts?.length ?? 0} parts`}
                     </div>
@@ -1924,6 +1923,117 @@ function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) 
                       </div>
                     )}
                   </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<MetricsTabProps, 'agentId'>) {
+  const formatDate = (timestamp?: string) => {
+    if (!timestamp) return '—';
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const strategy = fullMetrics?.pendle;
+  const latestCycle = fullMetrics?.latestCycle;
+
+  const rewardLines = strategy?.position?.claimableRewards ?? [];
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Strategy</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Target YT</div>
+            <div className="text-white font-medium">{strategy?.ytSymbol ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Underlying</div>
+            <div className="text-white font-medium">{strategy?.underlyingSymbol ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Current APY</div>
+            <div className="text-white font-medium">
+              {strategy?.currentApy !== undefined ? `${strategy.currentApy.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Contribution</div>
+            <div className="text-white font-medium">
+              {strategy?.baseContributionUsd !== undefined ? `$${strategy.baseContributionUsd.toLocaleString()}` : '—'}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-[#2a2a2a] grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Maturity</div>
+            <div className="text-white font-medium">{strategy?.maturity ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Best APY</div>
+            <div className="text-white font-medium">
+              {strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Delta</div>
+            <div className="text-white font-medium">
+              {strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Funding Token</div>
+            <div className="text-white font-medium">
+              {strategy?.fundingTokenAddress ? strategy.fundingTokenAddress.slice(0, 10) + '…' : '—'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Position</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">PT</div>
+            <div className="text-white font-medium">
+              {strategy?.position?.ptSymbol ? `${strategy.position.ptSymbol} ${strategy.position.ptAmount ?? ''}`.trim() : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">YT</div>
+            <div className="text-white font-medium">
+              {strategy?.position?.ytSymbol ? `${strategy.position.ytSymbol} ${strategy.position.ytAmount ?? ''}`.trim() : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+            <div className="text-white font-medium">{metrics.apy !== undefined ? `${metrics.apy.toFixed(2)}%` : '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
+            <div className="text-white font-medium">{metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : '—'}</div>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Claimable Rewards</div>
+          {rewardLines.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {rewardLines.map((reward) => (
+                <div key={reward.symbol} className="flex items-center justify-between">
+                  <span className="text-gray-300">{reward.symbol}</span>
+                  <span className="text-white font-medium">{reward.amount}</span>
                 </div>
               ))}
           </div>

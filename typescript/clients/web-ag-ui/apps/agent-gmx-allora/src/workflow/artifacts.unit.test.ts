@@ -3,11 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ExecutionPlan } from '../core/executionPlan.js';
 import type { GmxAlloraTelemetry } from '../domain/types.js';
 
-import {
-  buildExecutionPlanArtifact,
-  buildExecutionResultArtifact,
-  buildTelemetryArtifact,
-} from './artifacts.js';
+import { buildExecutionPlanArtifact, buildExecutionResultArtifact, buildTelemetryArtifact } from './artifacts.js';
 
 describe('buildExecutionPlanArtifact', () => {
   it('wraps execution plan data into an artifact', () => {

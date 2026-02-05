@@ -43,7 +43,6 @@ describe('GMX Allora happy path (e2e)', () => {
 
       const walletAddress = resolveEnvAddress('SMOKE_WALLET');
       const payTokenAddress = resolveEnvAddress('SMOKE_USDC_ADDRESS');
-
       const market =
         markets.find(
           (entry) =>
@@ -54,7 +53,6 @@ describe('GMX Allora happy path (e2e)', () => {
       if (!market) {
         throw new Error('Expected at least one perpetual market from onchain-actions.');
       }
-
       const inference = await fetchAlloraInference({
         baseUrl: resolveAlloraApiBaseUrl(),
         chainId: resolveAlloraChainId(),
@@ -84,4 +82,3 @@ describe('GMX Allora happy path (e2e)', () => {
     }
   });
 });
-

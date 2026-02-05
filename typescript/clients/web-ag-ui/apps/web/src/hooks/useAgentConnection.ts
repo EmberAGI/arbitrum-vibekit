@@ -485,6 +485,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       input:
         | OperatorConfigInput
         | PendleSetupInput
+        | GmxSetupInput
         | FundWalletAcknowledgement
         | FundingTokenInput
         | DelegationSigningResponse,
