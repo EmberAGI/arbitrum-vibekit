@@ -4,9 +4,21 @@ import type { ExecutionPlan } from '../core/executionPlan.js';
 
 import { executePerpetualPlan } from './execution.js';
 
-const createPerpetualLong = vi.fn(() => Promise.resolve(undefined));
-const createPerpetualShort = vi.fn(() => Promise.resolve(undefined));
-const createPerpetualClose = vi.fn(() => Promise.resolve(undefined));
+const createPerpetualLong = vi.fn(() =>
+  Promise.resolve({
+    transactions: [
+      {
+        type: 'evm',
+        to: '0xrouter',
+        data: '0xdeadbeef',
+        chainId: '42161',
+        value: '0',
+      },
+    ],
+  }),
+);
+const createPerpetualShort = vi.fn(() => Promise.resolve({ transactions: [] }));
+const createPerpetualClose = vi.fn(() => Promise.resolve({ transactions: [] }));
 
 const client = {
   createPerpetualLong,
@@ -28,7 +40,7 @@ describe('executePerpetualPlan', () => {
     const plan: ExecutionPlan = {
       action: 'long',
       request: {
-        amount: 100n,
+        amount: '100',
         walletAddress: '0x0000000000000000000000000000000000000001',
         chainId: '42161',
         marketAddress: '0xmarket',
@@ -42,6 +54,8 @@ describe('executePerpetualPlan', () => {
 
     expect(result.ok).toBe(true);
     expect(createPerpetualLong).toHaveBeenCalled();
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions?.[0]?.to).toBe('0xrouter');
   });
 
   it('captures execution errors', async () => {

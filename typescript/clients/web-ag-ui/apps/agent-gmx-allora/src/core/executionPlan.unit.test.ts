@@ -28,7 +28,7 @@ describe('buildPerpetualExecutionPlan', () => {
 
     expect(plan.action).toBe('long');
     expect(plan.request).toEqual({
-      amount: 160n,
+      amount: '160',
       walletAddress: '0xwallet',
       chainId: '42161',
       marketAddress: '0xmarket',

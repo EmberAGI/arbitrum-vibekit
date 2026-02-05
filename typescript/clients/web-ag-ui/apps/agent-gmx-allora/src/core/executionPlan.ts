@@ -3,7 +3,7 @@ import type { GmxAlloraTelemetry } from '../domain/types.js';
 export type ExecutionPlan = {
   action: 'none' | 'long' | 'short' | 'close';
   request?: {
-    amount?: bigint;
+    amount?: string;
     walletAddress?: `0x${string}`;
     chainId?: string;
     marketAddress?: string;
@@ -31,14 +31,14 @@ function formatNumber(value: number | undefined): string | undefined {
   return String(value);
 }
 
-function toBigIntAmount(value: number | undefined): bigint | undefined {
+function toAmountString(value: number | undefined): string | undefined {
   if (value === undefined) {
     return undefined;
   }
   if (!Number.isFinite(value) || value <= 0) {
     return undefined;
   }
-  return BigInt(Math.round(value));
+  return String(Math.round(value));
 }
 
 export function buildPerpetualExecutionPlan(params: BuildPlanParams): ExecutionPlan {
@@ -52,7 +52,7 @@ export function buildPerpetualExecutionPlan(params: BuildPlanParams): ExecutionP
     return {
       action: telemetry.side === 'long' ? 'long' : 'short',
       request: {
-        amount: toBigIntAmount(telemetry.sizeUsd),
+        amount: toAmountString(telemetry.sizeUsd),
         walletAddress: params.walletAddress,
         chainId: params.chainId,
         marketAddress: params.marketAddress,

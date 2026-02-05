@@ -122,16 +122,29 @@ describe('OnchainActionsClient', () => {
   it('posts perpetual long requests', async () => {
     const fetchMock = vi.fn(
       () =>
-        new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
+        new Response(
+          JSON.stringify({
+            transactions: [
+              {
+                type: 'evm',
+                to: '0xrouter',
+                data: '0xdeadbeef',
+                // Intentionally omit `value` so the client normalizes to "0".
+                chainId: '42161',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
     );
     vi.stubGlobal('fetch', fetchMock);
 
     const client = new OnchainActionsClient('https://api.example.test');
-    await client.createPerpetualLong({
-      amount: 100n,
+    const response = await client.createPerpetualLong({
+      amount: '100',
       walletAddress: '0x0000000000000000000000000000000000000001',
       chainId: '42161',
       marketAddress: '0xmarket',
@@ -142,12 +155,15 @@ describe('OnchainActionsClient', () => {
 
     const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     expect(requestInit?.method).toBe('POST');
+
+    const transactions = (response as { transactions?: Array<{ value?: string }> }).transactions;
+    expect(transactions?.[0]?.value).toBe('0');
   });
 
   it('posts perpetual close requests', async () => {
     const fetchMock = vi.fn(
       () =>
-        new Response(JSON.stringify({ ok: true }), {
+        new Response(JSON.stringify({ transactions: [] }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),
@@ -287,7 +303,7 @@ describe('OnchainActionsClient', () => {
 
     await expect(
       client.createPerpetualLong({
-        amount: 100n,
+        amount: '100',
         walletAddress: '0x0000000000000000000000000000000000000001',
         chainId: '42161',
         marketAddress: '0xmarket',

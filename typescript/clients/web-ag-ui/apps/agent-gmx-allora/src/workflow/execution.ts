@@ -1,9 +1,10 @@
-import type { OnchainActionsClient } from '../clients/onchainActions.js';
+import type { OnchainActionsClient, TransactionPlan } from '../clients/onchainActions.js';
 import type { ExecutionPlan } from '../core/executionPlan.js';
 
 export type ExecutionResult = {
   action: ExecutionPlan['action'];
   ok: boolean;
+  transactions?: TransactionPlan[];
   error?: string;
 };
 
@@ -22,21 +23,21 @@ export async function executePerpetualPlan(params: {
 
   try {
     if (plan.action === 'long') {
-      await params.client.createPerpetualLong(
+      const response = await params.client.createPerpetualLong(
         plan.request as Parameters<OnchainActionsClient['createPerpetualLong']>[0],
       );
-      return { action: plan.action, ok: true };
+      return { action: plan.action, ok: true, transactions: response.transactions };
     }
     if (plan.action === 'short') {
-      await params.client.createPerpetualShort(
+      const response = await params.client.createPerpetualShort(
         plan.request as Parameters<OnchainActionsClient['createPerpetualShort']>[0],
       );
-      return { action: plan.action, ok: true };
+      return { action: plan.action, ok: true, transactions: response.transactions };
     }
-    await params.client.createPerpetualClose(
+    const response = await params.client.createPerpetualClose(
       plan.request as Parameters<OnchainActionsClient['createPerpetualClose']>[0],
     );
-    return { action: plan.action, ok: true };
+    return { action: plan.action, ok: true, transactions: response.transactions };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return { action: plan.action, ok: false, error: message };

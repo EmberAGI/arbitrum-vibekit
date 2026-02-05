@@ -100,7 +100,23 @@ const PerpetualPositionsResponseSchema = PaginationSchema.extend({
   positions: z.array(PerpetualPositionSchema),
 });
 
-const PerpetualActionResponseSchema = z.object({}).catchall(z.unknown());
+export const TransactionPlanSchema = z.object({
+  type: z.string(),
+  to: z.string(),
+  data: z.string(),
+  value: z
+    .string()
+    .optional()
+    .transform((value) => value ?? '0'),
+  chainId: z.string(),
+});
+export type TransactionPlan = z.infer<typeof TransactionPlanSchema>;
+
+const PerpetualActionResponseSchema = z
+  .object({
+    transactions: z.array(TransactionPlanSchema),
+  })
+  .catchall(z.unknown());
 export type PerpetualActionResponse = z.infer<typeof PerpetualActionResponseSchema>;
 
 export class OnchainActionsRequestError extends Error {
@@ -118,7 +134,8 @@ export class OnchainActionsRequestError extends Error {
 }
 
 export type PerpetualLongRequest = {
-  amount: bigint;
+  // REST API accepts a bigint-like decimal string; avoid JSON number precision loss.
+  amount: string;
   walletAddress: `0x${string}`;
   chainId: string;
   marketAddress: string;
