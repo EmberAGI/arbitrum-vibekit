@@ -19,6 +19,7 @@ const DEFAULT_STABLECOIN_WHITELIST = [
 const DEFAULT_CHAIN_IDS = [ARBITRUM_CHAIN_ID.toString()];
 const DEFAULT_REBALANCE_THRESHOLD_PCT = 0.5;
 const DEFAULT_DELEGATIONS_BYPASS = false;
+const DEFAULT_SMOKE_MODE = false;
 
 export const ONCHAIN_ACTIONS_BASE_URL =
   process.env['ONCHAIN_ACTIONS_BASE_URL']?.replace(/\/$/, '') ?? 'https://api.emberai.xyz';
@@ -79,6 +80,15 @@ export function resolveDelegationsBypass(): boolean {
   const raw = process.env['DELEGATIONS_BYPASS'];
   if (!raw) {
     return DEFAULT_DELEGATIONS_BYPASS;
+  }
+  const normalized = raw.trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
+export function resolvePendleSmokeMode(): boolean {
+  const raw = process.env['PENDLE_SMOKE_MODE'];
+  if (!raw) {
+    return DEFAULT_SMOKE_MODE;
   }
   const normalized = raw.trim().toLowerCase();
   return normalized === 'true' || normalized === '1' || normalized === 'yes';

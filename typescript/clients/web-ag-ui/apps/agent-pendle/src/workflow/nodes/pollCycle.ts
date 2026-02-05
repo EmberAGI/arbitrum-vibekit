@@ -3,6 +3,7 @@ import { Command } from '@langchain/langgraph';
 
 import {
   resolvePendleChainIds,
+  resolvePendleSmokeMode,
   resolvePollIntervalMs,
   resolveRebalanceThresholdPct,
   resolveStablecoinWhitelist,
@@ -188,6 +189,7 @@ export const pollCycleNode = async (
   );
   const rolloverNeeded = isMaturedMarket(selectedMarket.maturity);
   const compoundEligible = selectedPosition ? hasClaimableRewards(selectedPosition) : false;
+  const smokeMode = resolvePendleSmokeMode();
 
   let action: PendleActionKind;
   let nextMarket = decision.nextToken;
@@ -203,6 +205,12 @@ export const pollCycleNode = async (
     nextMarket = decision.nextToken;
   }
   const nextApy = nextMarket.apy;
+
+  if (smokeMode && !selectedPosition && (action === 'rebalance' || action === 'rollover' || action === 'compound')) {
+    // In smoke mode we prioritize validating UI + cron updates over requiring a real onchain position.
+    action = 'hold';
+    nextMarket = selectedMarket;
+  }
 
   let reason = 'Yield delta below rebalance threshold.';
   switch (action) {
@@ -261,36 +269,38 @@ export const pollCycleNode = async (
     }
 
     try {
-      const clients = getOnchainClients();
-      if (action === 'compound') {
-        const execution = await executeCompound({
-          onchainActionsClient,
-          clients,
-          walletAddress: operatorConfig.walletAddress,
-          position: selectedPosition,
-          currentMarket: currentTokenized,
-        });
-        executionTxHash = execution.lastTxHash;
-      } else if (action === 'rollover') {
-        const execution = await executeRollover({
-          onchainActionsClient,
-          clients,
-          walletAddress: operatorConfig.walletAddress,
-          position: selectedPosition,
-          currentMarket: currentTokenized,
-          targetMarket: nextTokenized!,
-        });
-        executionTxHash = execution.lastTxHash;
-      } else {
-        const execution = await executeRebalance({
-          onchainActionsClient,
-          clients,
-          walletAddress: operatorConfig.walletAddress,
-          position: selectedPosition,
-          currentMarket: currentTokenized,
-          targetMarket: nextTokenized!,
-        });
-        executionTxHash = execution.lastTxHash;
+      if (!smokeMode) {
+        const clients = getOnchainClients();
+        if (action === 'compound') {
+          const execution = await executeCompound({
+            onchainActionsClient,
+            clients,
+            walletAddress: operatorConfig.walletAddress,
+            position: selectedPosition,
+            currentMarket: currentTokenized,
+          });
+          executionTxHash = execution.lastTxHash;
+        } else if (action === 'rollover') {
+          const execution = await executeRollover({
+            onchainActionsClient,
+            clients,
+            walletAddress: operatorConfig.walletAddress,
+            position: selectedPosition,
+            currentMarket: currentTokenized,
+            targetMarket: nextTokenized!,
+          });
+          executionTxHash = execution.lastTxHash;
+        } else {
+          const execution = await executeRebalance({
+            onchainActionsClient,
+            clients,
+            walletAddress: operatorConfig.walletAddress,
+            position: selectedPosition,
+            currentMarket: currentTokenized,
+            targetMarket: nextTokenized!,
+          });
+          executionTxHash = execution.lastTxHash;
+        }
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';

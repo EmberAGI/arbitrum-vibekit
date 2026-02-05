@@ -3,6 +3,7 @@ import { Command } from '@langchain/langgraph';
 
 import {
   resolvePendleChainIds,
+  resolvePendleSmokeMode,
   resolveStablecoinWhitelist,
 } from '../../config/constants.js';
 import { buildEligibleYieldTokens } from '../../core/pendleMarkets.js';
@@ -33,6 +34,8 @@ const resolveFundingAmount = (amountUsd: number, decimals: number): string => {
   const trimmed = normalized.replace(/^0+/, '');
   return trimmed.length > 0 ? trimmed : '0';
 };
+
+const SMOKE_SETUP_TX_HASH = `0x${'0'.repeat(64)}` as const;
 
 export const prepareOperatorNode = async (
   state: ClmmState,
@@ -205,6 +208,11 @@ export const prepareOperatorNode = async (
   let setupTxHash: `0x${string}` | undefined;
 
   if (!setupComplete) {
+    if (resolvePendleSmokeMode()) {
+      // Smoke mode is meant for UI and cron validation without requiring a funded agent wallet.
+      setupTxHash = SMOKE_SETUP_TX_HASH;
+      setupComplete = true;
+    } else {
     const targetMarket = tokenizedMarkets.find(
       (market) => market.marketIdentifier.address.toLowerCase() === bestYieldToken.marketAddress.toLowerCase(),
     );
@@ -293,6 +301,7 @@ export const prepareOperatorNode = async (
         },
         goto: 'summarize',
       });
+    }
     }
   }
 
