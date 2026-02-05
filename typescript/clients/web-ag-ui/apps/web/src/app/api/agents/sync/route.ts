@@ -114,13 +114,40 @@ function extractThreadStateValues(payload: unknown): Record<string, unknown> | n
   return null;
 }
 
+function threadHasPendingInterrupts(payload: unknown): boolean {
+  if (!isRecord(payload)) {
+    return false;
+  }
+
+  const tasks = payload['tasks'];
+  if (!Array.isArray(tasks)) {
+    return false;
+  }
+
+  return tasks.some((task) => {
+    if (!isRecord(task)) {
+      return false;
+    }
+    const interrupts = task['interrupts'];
+    return Array.isArray(interrupts) && interrupts.length > 0;
+  });
+}
+
+async function fetchThreadStatePayload(baseUrl: string, threadId: string): Promise<unknown> {
+  const response = await fetch(`${baseUrl}/threads/${threadId}/state`);
+  return parseJsonResponse(response, z.unknown());
+}
+
 async function fetchThreadStateValues(
   baseUrl: string,
   threadId: string,
-): Promise<Record<string, unknown> | null> {
-  const response = await fetch(`${baseUrl}/threads/${threadId}/state`);
-  const payload = await parseJsonResponse(response, z.unknown());
-  return extractThreadStateValues(payload);
+): Promise<{ payload: unknown; values: Record<string, unknown> | null; hasInterrupts: boolean }> {
+  const payload = await fetchThreadStatePayload(baseUrl, threadId);
+  return {
+    payload,
+    values: extractThreadStateValues(payload),
+    hasInterrupts: threadHasPendingInterrupts(payload),
+  };
 }
 
 async function ensureThread(baseUrl: string, threadId: string, graphId: string) {
@@ -197,7 +224,7 @@ async function waitForRunCompletion(baseUrl: string, threadId: string, runId: st
 }
 
 async function fetchViewState(baseUrl: string, threadId: string): Promise<ThreadState | null> {
-  const values = await fetchThreadStateValues(baseUrl, threadId);
+  const { values } = await fetchThreadStateValues(baseUrl, threadId);
   if (!values) {
     return null;
   }
@@ -228,9 +255,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     await ensureThread(baseUrl, threadId, runtime.graphId);
-    await updateSyncState(baseUrl, threadId);
-    const run = await createRun(baseUrl, threadId, runtime.graphId);
-    await waitForRunCompletion(baseUrl, threadId, run.run_id);
+
+    // IMPORTANT: Agent list sync is a read-only operation. If we mutate thread state while an
+    // onboarding interrupt is pending (e.g. Pendle setup), we can accidentally clobber the
+    // interrupt checkpoint and the UI will show "Waiting for agent".
+    //
+    // So we only "poke" the graph when there is no view state to return AND there are no pending interrupts.
+    const initialState = await fetchThreadStateValues(baseUrl, threadId);
+
+    if (!initialState.hasInterrupts) {
+      const hasView = Boolean(initialState.values && isRecord(initialState.values['view']));
+      if (!hasView) {
+        await updateSyncState(baseUrl, threadId);
+        const run = await createRun(baseUrl, threadId, runtime.graphId);
+        await waitForRunCompletion(baseUrl, threadId, run.run_id);
+      }
+    }
+
     const state = await fetchViewState(baseUrl, threadId);
 
     const task = state?.view?.task;
