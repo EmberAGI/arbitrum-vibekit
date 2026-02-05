@@ -14,7 +14,7 @@
     "test:watch": "vitest watch --config vitest.config.unit.ts",
     "test:unit": "vitest run --config vitest.config.unit.ts",
     "test:int": "vitest run --config vitest.config.unit.ts",
-    "test:e2e": "vitest run --config vitest.config.e2e.ts",
+    "test:e2e": "vitest run --config vitest.config.e2e.ts --no-file-parallelism --maxConcurrency=1",
     "test:ci": "pnpm test:unit && pnpm test:int",
     "test:coverage": "vitest run --config vitest.config.unit.ts --coverage"
   },
