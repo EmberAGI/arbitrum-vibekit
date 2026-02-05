@@ -7,12 +7,15 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
-    "test": "pnpm test:unit",
-    "test:ci": "pnpm test:unit",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --write",
+    "format:check": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --check",
+    "test": "pnpm test:unit && pnpm test:int && pnpm test:e2e",
     "test:watch": "vitest watch --config vitest.config.unit.ts",
     "test:unit": "vitest run --config vitest.config.unit.ts",
     "test:int": "vitest run --config vitest.config.unit.ts",
-    "test:e2e": "vitest run --config vitest.config.unit.ts",
+    "test:e2e": "vitest run --config vitest.config.e2e.ts",
+    "test:ci": "pnpm test:unit && pnpm test:int",
     "test:coverage": "vitest run --config vitest.config.unit.ts --coverage"
   },
   "dependencies": {

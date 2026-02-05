@@ -120,11 +120,12 @@ describe('OnchainActionsClient', () => {
   });
 
   it('posts perpetual long requests', async () => {
-    const fetchMock = vi.fn(() =>
-      new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
+    const fetchMock = vi.fn(
+      () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
     );
     vi.stubGlobal('fetch', fetchMock);
 
@@ -144,11 +145,12 @@ describe('OnchainActionsClient', () => {
   });
 
   it('posts perpetual close requests', async () => {
-    const fetchMock = vi.fn(() =>
-      new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
+    const fetchMock = vi.fn(
+      () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
     );
     vi.stubGlobal('fetch', fetchMock);
 

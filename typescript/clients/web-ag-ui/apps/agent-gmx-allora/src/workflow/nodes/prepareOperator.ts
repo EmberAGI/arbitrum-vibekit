@@ -92,9 +92,7 @@ export const prepareOperatorNode = async (
     });
   }
 
-  const targetMarket = MARKETS.find(
-    (market) => market.baseSymbol === operatorInput.targetMarket,
-  );
+  const targetMarket = MARKETS.find((market) => market.baseSymbol === operatorInput.targetMarket);
 
   if (!targetMarket) {
     const failureMessage = `ERROR: Unsupported GMX market ${operatorInput.targetMarket}`;

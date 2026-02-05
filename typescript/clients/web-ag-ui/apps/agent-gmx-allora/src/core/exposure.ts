@@ -9,7 +9,9 @@ function parseUsd(value: string | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function isTradeAction(action: GmxAlloraTelemetry['action']): action is 'open' | 'reduce' | 'close' {
+function isTradeAction(
+  action: GmxAlloraTelemetry['action'],
+): action is 'open' | 'reduce' | 'close' {
   return action === 'open' || action === 'reduce' || action === 'close';
 }
 

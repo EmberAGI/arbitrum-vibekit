@@ -278,9 +278,7 @@ export function AgentDetailPage({
                     onClick={onFire}
                     disabled={isFiring}
                     className={`px-4 py-1.5 rounded-lg text-white text-sm font-medium transition-colors ${
-                      isFiring
-                        ? 'bg-gray-600 cursor-wait'
-                        : 'bg-[#fd6731] hover:bg-[#e55a28]'
+                      isFiring ? 'bg-gray-600 cursor-wait' : 'bg-[#fd6731] hover:bg-[#e55a28]'
                     }`}
                   >
                     {isFiring ? 'Firing...' : 'Fire'}
@@ -363,15 +361,10 @@ export function AgentDetailPage({
             />
           )}
 
-          {resolvedTab === 'transactions' && (
-            <TransactionHistoryTab transactions={transactions} />
-          )}
+          {resolvedTab === 'transactions' && <TransactionHistoryTab transactions={transactions} />}
 
           {resolvedTab === 'settings' && (
-            <SettingsTab
-              settings={settings}
-              onSettingsChange={onSettingsChange}
-            />
+            <SettingsTab settings={settings} onSettingsChange={onSettingsChange} />
           )}
         </div>
       </div>
@@ -507,13 +500,7 @@ export function AgentDetailPage({
             </div>
 
             {activeTab === 'metrics' && (
-              <MetricsTab
-                agentId={agentId}
-                profile={profile}
-                metrics={metrics}
-                fullMetrics={fullMetrics}
-                events={[]}
-              />
+              <MetricsTab profile={profile} metrics={metrics} events={[]} />
             )}
           </div>
         </div>
@@ -588,35 +575,38 @@ function TransactionHistoryTab({ transactions }: TransactionHistoryTabProps) {
         <p className="text-sm text-gray-500">{transactions.length} transactions</p>
       </div>
       <div className="divide-y divide-[#2a2a2a]">
-        {transactions.slice(-10).reverse().map((tx, index) => (
-          <div key={`${tx.cycle}-${index}`} className="p-4 hover:bg-[#252525] transition-colors">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-white">
-                  Cycle {tx.cycle} • {tx.action}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {tx.txHash ? `${tx.txHash.slice(0, 12)}…` : 'pending'}
-                  {tx.reason ? ` · ${tx.reason}` : ''}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    tx.status === 'success'
-                      ? 'bg-teal-500/20 text-teal-400'
-                      : tx.status === 'failed'
-                        ? 'bg-red-500/20 text-red-400'
-                        : 'bg-yellow-500/20 text-yellow-400'
-                  }`}
-                >
-                  {tx.status}
-                </span>
-                <span className="text-xs text-gray-500">{formatDate(tx.timestamp)}</span>
+        {transactions
+          .slice(-10)
+          .reverse()
+          .map((tx, index) => (
+            <div key={`${tx.cycle}-${index}`} className="p-4 hover:bg-[#252525] transition-colors">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-white">
+                    Cycle {tx.cycle} • {tx.action}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {tx.txHash ? `${tx.txHash.slice(0, 12)}…` : 'pending'}
+                    {tx.reason ? ` · ${tx.reason}` : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      tx.status === 'success'
+                        ? 'bg-teal-500/20 text-teal-400'
+                        : tx.status === 'failed'
+                          ? 'bg-red-500/20 text-red-400'
+                          : 'bg-yellow-500/20 text-yellow-400'
+                    }`}
+                  >
+                    {tx.status}
+                  </span>
+                  <span className="text-xs text-gray-500">{formatDate(tx.timestamp)}</span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
       </div>
     </div>
   );
@@ -943,8 +933,10 @@ function AgentBlockersTab({
 
   const fundingOptions: FundingTokenOption[] = showFundingTokenForm
     ? [...(activeInterrupt as { options: FundingTokenOption[] }).options].sort((a, b) => {
-        const aValue = typeof a.valueUsd === 'number' && Number.isFinite(a.valueUsd) ? a.valueUsd : null;
-        const bValue = typeof b.valueUsd === 'number' && Number.isFinite(b.valueUsd) ? b.valueUsd : null;
+        const aValue =
+          typeof a.valueUsd === 'number' && Number.isFinite(a.valueUsd) ? a.valueUsd : null;
+        const bValue =
+          typeof b.valueUsd === 'number' && Number.isFinite(b.valueUsd) ? b.valueUsd : null;
         if (aValue !== null && bValue !== null && aValue !== bValue) {
           return bValue - aValue;
         }
@@ -1035,7 +1027,11 @@ function AgentBlockersTab({
       onInterruptSubmit?.(response);
     } catch (signError: unknown) {
       const message =
-        signError instanceof Error ? signError.message : typeof signError === 'string' ? signError : 'Unknown error';
+        signError instanceof Error
+          ? signError.message
+          : typeof signError === 'string'
+            ? signError
+            : 'Unknown error';
       setError(`Failed to sign delegations: ${message}`);
     } finally {
       setIsSigningDelegations(false);
@@ -1104,19 +1100,19 @@ function AgentBlockersTab({
         <div className="rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] p-4">
           <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Latest Activity</div>
           <div className="space-y-2">
-            {telemetry.slice(-3).reverse().map((t, i) => (
-              <div
-                key={`${t.cycle}-${i}`}
-                className="flex items-center justify-between text-sm"
-              >
-                <div>
-                  <span className="text-white">Cycle {t.cycle}</span>
-                  <span className="text-gray-500 mx-2">•</span>
-                  <span className="text-gray-400">{t.action}</span>
+            {telemetry
+              .slice(-3)
+              .reverse()
+              .map((t, i) => (
+                <div key={`${t.cycle}-${i}`} className="flex items-center justify-between text-sm">
+                  <div>
+                    <span className="text-white">Cycle {t.cycle}</span>
+                    <span className="text-gray-500 mx-2">•</span>
+                    <span className="text-gray-400">{t.action}</span>
+                  </div>
+                  <span className="text-xs text-gray-500">{formatDate(t.timestamp)}</span>
                 </div>
-                <span className="text-xs text-gray-500">{formatDate(t.timestamp)}</span>
-              </div>
-            ))}
+              ))}
           </div>
         </div>
       )}
@@ -1125,8 +1121,8 @@ function AgentBlockersTab({
       <div>
         <h2 className="text-xl font-semibold text-white mb-2">Set up agent</h2>
         <p className="text-gray-400 text-sm mb-6">
-          Get this agent started working on your wallet in a few steps, delegate assets and set
-          your preferences.
+          Get this agent started working on your wallet in a few steps, delegate assets and set your
+          preferences.
         </p>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
@@ -1153,12 +1149,18 @@ function AgentBlockersTab({
                   </div>
 
                   <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">Auto-selected yield</div>
+                    <div className="text-gray-300 text-sm font-medium mb-2">
+                      Auto-selected yield
+                    </div>
                     <p className="text-gray-400 text-xs">
-                      The agent will automatically select the highest-yield YT market and rotate when yields change.
+                      The agent will automatically select the highest-yield YT market and rotate
+                      when yields change.
                     </p>
                     <p className="text-gray-500 text-xs mt-3">
-                      Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
+                      Wallet:{' '}
+                      {connectedWalletAddress
+                        ? `${connectedWalletAddress.slice(0, 10)}…`
+                        : 'Not connected'}
                     </p>
                   </div>
                 </div>
@@ -1208,12 +1210,18 @@ function AgentBlockersTab({
                   </div>
 
                   <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">Allora Signal Source</div>
+                    <div className="text-gray-300 text-sm font-medium mb-2">
+                      Allora Signal Source
+                    </div>
                     <p className="text-gray-400 text-xs">
-                      The agent consumes 8-hour Allora prediction feeds and enforces max 2x leverage.
+                      The agent consumes 8-hour Allora prediction feeds and enforces max 2x
+                      leverage.
                     </p>
                     <p className="text-gray-500 text-xs mt-3">
-                      Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
+                      Wallet:{' '}
+                      {connectedWalletAddress
+                        ? `${connectedWalletAddress.slice(0, 10)}…`
+                        : 'Not connected'}
                     </p>
                   </div>
                 </div>
@@ -1256,7 +1264,9 @@ function AgentBlockersTab({
                   </div>
 
                   <div>
-                    <label className="block text-sm text-gray-400 mb-2">Allocated Funds (USD)</label>
+                    <label className="block text-sm text-gray-400 mb-2">
+                      Allocated Funds (USD)
+                    </label>
                     <input
                       type="number"
                       value={baseContributionUsd}
@@ -1303,7 +1313,8 @@ function AgentBlockersTab({
                     <option value="">Choose a token...</option>
                     {fundingOptions.map((option) => (
                       <option key={option.address} value={option.address}>
-                        {option.symbol} — {formatFundingBalance(option)} ({option.address.slice(0, 8)}…)
+                        {option.symbol} — {formatFundingBalance(option)} (
+                        {option.address.slice(0, 8)}…)
                       </option>
                     ))}
                   </select>
@@ -1332,17 +1343,23 @@ function AgentBlockersTab({
                     <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4">
                       <div className="text-yellow-300 text-sm font-medium mb-2">Warnings</div>
                       <ul className="space-y-1 text-yellow-200 text-xs">
-                        {(activeInterrupt as unknown as { warnings: string[] }).warnings.map((w) => (
-                          <li key={w}>{w}</li>
-                        ))}
+                        {(activeInterrupt as unknown as { warnings: string[] }).warnings.map(
+                          (w) => (
+                            <li key={w}>{w}</li>
+                          ),
+                        )}
                       </ul>
                     </div>
                   ) : null}
 
                   <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
-                    <div className="text-gray-300 text-sm font-medium mb-2">What you are authorizing</div>
+                    <div className="text-gray-300 text-sm font-medium mb-2">
+                      What you are authorizing
+                    </div>
                     <ul className="space-y-1 text-gray-400 text-xs">
-                      {(activeInterrupt as unknown as { descriptions?: string[] }).descriptions?.map((d) => (
+                      {(
+                        activeInterrupt as unknown as { descriptions?: string[] }
+                      ).descriptions?.map((d) => (
                         <li key={d}>{d}</li>
                       ))}
                     </ul>
@@ -1377,9 +1394,9 @@ function AgentBlockersTab({
                         <button
                           type="button"
                           onClick={() =>
-                            switchChain((activeInterrupt as unknown as { chainId: number }).chainId).catch(
-                              () => void 0,
-                            )
+                            switchChain(
+                              (activeInterrupt as unknown as { chainId: number }).chainId,
+                            ).catch(() => void 0)
                           }
                           className="px-4 py-2 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white text-sm transition-colors"
                           disabled={isSigningDelegations}
@@ -1391,8 +1408,11 @@ function AgentBlockersTab({
                       type="button"
                       onClick={() =>
                         handleSignDelegations(
-                          (activeInterrupt as unknown as { delegationsToSign: UnsignedDelegation[] })
-                            .delegationsToSign,
+                          (
+                            activeInterrupt as unknown as {
+                              delegationsToSign: UnsignedDelegation[];
+                            }
+                          ).delegationsToSign,
                         )
                       }
                       className="px-6 py-2.5 rounded-lg bg-[#fd6731] hover:bg-[#fd6731]/90 text-white font-medium transition-colors disabled:opacity-60"
@@ -1637,7 +1657,9 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
     return `${minutes}m`;
   };
 
-  const formatTokenAmount = (token: NonNullable<AgentViewMetrics['latestSnapshot']>['positionTokens'][number]) => {
+  const formatTokenAmount = (
+    token: NonNullable<AgentViewMetrics['latestSnapshot']>['positionTokens'][number],
+  ) => {
     if (token.amount !== undefined) {
       return token.amount.toLocaleString(undefined, { maximumFractionDigits: 6 });
     }
@@ -1791,27 +1813,34 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
         <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
           <div className="space-y-3 max-h-64 overflow-y-auto">
-            {events.slice(-10).reverse().map((event, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
-                <div
-                  className={`w-2 h-2 rounded-full mt-2 ${
-                    event.type === 'status'
-                      ? 'bg-blue-400'
-                      : event.type === 'artifact'
-                        ? 'bg-purple-400'
-                        : 'bg-gray-400'
-                  }`}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
-                  <div className="text-sm text-white mt-1">
-                    {event.type === 'status' && event.message}
-                    {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
-                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
+            {events
+              .slice(-10)
+              .reverse()
+              .map((event, i) => (
+                <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
+                  <div
+                    className={`w-2 h-2 rounded-full mt-2 ${
+                      event.type === 'status'
+                        ? 'bg-blue-400'
+                        : event.type === 'artifact'
+                          ? 'bg-purple-400'
+                          : 'bg-gray-400'
+                    }`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-gray-500 uppercase tracking-wide">
+                      {event.type}
+                    </div>
+                    <div className="text-sm text-white mt-1">
+                      {event.type === 'status' && event.message}
+                      {event.type === 'artifact' &&
+                        `Artifact: ${event.artifact?.type ?? 'unknown'}`}
+                      {event.type === 'dispatch-response' &&
+                        `Response with ${event.parts?.length ?? 0} parts`}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
           </div>
         </div>
       )}
@@ -2049,8 +2078,7 @@ function SettingsTab({ settings, onSettingsChange }: SettingsTabProps) {
     if (!onSettingsChange) return;
 
     const trimmedAmount = localAmount.trim();
-    const parsedAmount =
-      trimmedAmount === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedAmount);
+    const parsedAmount = trimmedAmount === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedAmount);
     if (!Number.isFinite(parsedAmount) || parsedAmount < MIN_BASE_CONTRIBUTION_USD) {
       return;
     }

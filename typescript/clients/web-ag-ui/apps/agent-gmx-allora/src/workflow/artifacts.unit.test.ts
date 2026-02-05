@@ -4,7 +4,6 @@ import type { ExecutionPlan } from '../core/executionPlan.js';
 
 import { buildExecutionPlanArtifact, buildExecutionResultArtifact } from './artifacts.js';
 
-
 describe('buildExecutionPlanArtifact', () => {
   it('wraps execution plan data into an artifact', () => {
     const plan: ExecutionPlan = {

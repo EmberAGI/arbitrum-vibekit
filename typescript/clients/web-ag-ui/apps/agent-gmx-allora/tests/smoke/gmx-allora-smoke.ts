@@ -12,7 +12,7 @@ import {
 
 const resolveBaseUrl = (): string =>
   resolveOnchainActionsBaseUrl({
-    endpoint: process.env['ONCHAIN_ACTIONS_API_URL'] ?? process.env['ONCHAIN_ACTIONS_BASE_URL'],
+    endpoint: process.env['ONCHAIN_ACTIONS_BASE_URL'],
     logger: (message, metadata) => {
       console.info(`[smoke] ${message}`, metadata);
     },
@@ -124,6 +124,9 @@ const run = async () => {
     (message) => {
       if (message.includes('Expected bigint')) {
         return 'API expects bigint amount type (upstream mismatch)';
+      }
+      if (message.includes('No long actions found')) {
+        return 'no long actions available (transactions-only env)';
       }
       return null;
     },

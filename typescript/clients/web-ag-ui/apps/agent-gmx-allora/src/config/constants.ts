@@ -13,17 +13,13 @@ type OnchainActionsBaseUrlOptions = {
 
 export function resolveOnchainActionsBaseUrl(options?: OnchainActionsBaseUrlOptions): string {
   const envBaseUrl = process.env['ONCHAIN_ACTIONS_BASE_URL'];
-  const envOpenApiUrl = process.env['ONCHAIN_ACTIONS_OPENAPI_URL'];
-  const rawEndpoint =
-    options?.endpoint ?? envBaseUrl ?? envOpenApiUrl ?? DEFAULT_ONCHAIN_ACTIONS_BASE_URL;
+  const rawEndpoint = options?.endpoint ?? envBaseUrl ?? DEFAULT_ONCHAIN_ACTIONS_BASE_URL;
 
   const source = options?.endpoint
     ? 'override'
     : envBaseUrl
       ? 'ONCHAIN_ACTIONS_BASE_URL'
-      : envOpenApiUrl
-        ? 'ONCHAIN_ACTIONS_OPENAPI_URL'
-        : 'default';
+      : 'default';
 
   const endpoint = rawEndpoint.replace(/\/$/u, '');
   const isOpenApi = endpoint.endsWith('/openapi.json');

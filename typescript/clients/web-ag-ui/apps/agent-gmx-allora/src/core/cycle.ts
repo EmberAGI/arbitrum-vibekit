@@ -72,8 +72,6 @@ export function buildCycleTelemetry(params: BuildCycleTelemetryParams): {
 
   return {
     telemetry,
-    nextCyclesSinceTrade: isTradeAction(decision.action)
-      ? 0
-      : params.cyclesSinceTrade + 1,
+    nextCyclesSinceTrade: isTradeAction(decision.action) ? 0 : params.cyclesSinceTrade + 1,
   };
 }

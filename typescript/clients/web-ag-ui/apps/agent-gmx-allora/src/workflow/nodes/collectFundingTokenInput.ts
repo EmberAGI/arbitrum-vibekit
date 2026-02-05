@@ -78,10 +78,7 @@ export const collectFundingTokenInputNode = async (
     };
   }
 
-  const normalizedFundingToken = normalizeHexAddress(
-    usdcOption.address,
-    'funding token address',
-  );
+  const normalizedFundingToken = normalizeHexAddress(usdcOption.address, 'funding token address');
   const { task, statusEvent } = buildTaskStatus(
     awaitingInput.task,
     'working',

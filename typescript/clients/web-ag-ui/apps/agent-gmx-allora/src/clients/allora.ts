@@ -63,7 +63,10 @@ export function parseAlloraInferenceResponse(payload: unknown): AlloraInference 
   if (rawParse.success) {
     const parsed: RawInference = rawParse.data;
     const topicId = parseFiniteNumber(parsed.network_inferences.topic_id, 'topic_id');
-    const combinedValue = parseFiniteNumber(parsed.network_inferences.combined_value, 'combined_value');
+    const combinedValue = parseFiniteNumber(
+      parsed.network_inferences.combined_value,
+      'combined_value',
+    );
     const confidenceIntervalValues = parsed.confidence_interval_values.map((value) =>
       parseFiniteNumber(value, 'confidence_interval_values'),
     );

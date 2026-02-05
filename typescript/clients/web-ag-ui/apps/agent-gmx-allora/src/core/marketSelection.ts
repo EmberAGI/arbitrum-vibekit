@@ -6,7 +6,9 @@ type MarketSelectionParams = {
   quoteSymbol: string;
 };
 
-export function selectGmxPerpetualMarket(params: MarketSelectionParams): PerpetualMarket | undefined {
+export function selectGmxPerpetualMarket(
+  params: MarketSelectionParams,
+): PerpetualMarket | undefined {
   const base = params.baseSymbol.toUpperCase();
   const quote = params.quoteSymbol.toUpperCase();
 

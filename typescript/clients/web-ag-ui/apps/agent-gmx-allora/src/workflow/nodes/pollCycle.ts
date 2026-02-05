@@ -146,7 +146,10 @@ export const pollCycleNode = async (
       const failureMessage = `ERROR: No GMX ${selectedPool.baseSymbol}/${selectedPool.quoteSymbol} market available`;
       const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
       await copilotkitEmitState(config, {
-        view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+        view: {
+          task,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        },
       });
       return new Command({
         update: {

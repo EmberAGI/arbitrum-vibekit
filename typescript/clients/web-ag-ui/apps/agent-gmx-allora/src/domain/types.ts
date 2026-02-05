@@ -57,13 +57,7 @@ export type ResolvedGmxConfig = {
   maxLeverage: number;
 };
 
-export type GmxAlloraActionKind =
-  | 'signal'
-  | 'open'
-  | 'reduce'
-  | 'close'
-  | 'hold'
-  | 'cooldown';
+export type GmxAlloraActionKind = 'signal' | 'open' | 'reduce' | 'close' | 'hold' | 'cooldown';
 
 export type GmxAlloraTelemetry = {
   cycle: number;

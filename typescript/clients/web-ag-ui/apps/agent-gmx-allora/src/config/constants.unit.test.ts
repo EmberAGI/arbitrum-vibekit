@@ -38,7 +38,6 @@ describe('config/constants', () => {
 
   it('uses defaults without logging when no overrides are supplied', () => {
     delete process.env.ONCHAIN_ACTIONS_BASE_URL;
-    delete process.env.ONCHAIN_ACTIONS_OPENAPI_URL;
 
     const logger = vi.fn();
     const baseUrl = resolveOnchainActionsBaseUrl({ logger });
