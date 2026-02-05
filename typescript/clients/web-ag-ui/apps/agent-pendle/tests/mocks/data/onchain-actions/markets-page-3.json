@@ -1,0 +1,28 @@
+{
+  "metadata": {
+    "service": "onchain-actions",
+    "endpoint": "/tokenizedYield/markets",
+    "method": "GET",
+    "recordedAt": "2026-02-05T18:11:31.797Z"
+  },
+  "request": {
+    "params": {
+      "chainIds": "42161",
+      "cursor": "1f6fc10a-36ff-40f3-a419-3fc91522d56f",
+      "page": "3"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "connection": "keep-alive",
+      "content-length": "1102",
+      "content-type": "application/json; charset=utf-8",
+      "date": "Thu, 05 Feb 2026 18:11:31 GMT",
+      "etag": "W/\"44e-RlKcpXAkwWemM1tlFSi77S6WkyQ\"",
+      "keep-alive": "timeout=5",
+      "x-powered-by": "Express"
+    },
+    "rawBody": "eyJtYXJrZXRzIjpbeyJtYXJrZXRJZGVudGlmaWVyIjp7ImFkZHJlc3MiOiIweDA5MzRlNTkyY2VlOTMyYjA0YjM5NjcxNjJiM2NkNmM4NTc0OGM0NzAiLCJjaGFpbklkIjoiNDIxNjEifSwiZXhwaXJ5IjoiMjAyNi0wNi0yNVQwMDowMDowMC4wMDBaIiwiZGV0YWlscyI6e30sInB0VG9rZW4iOnsidG9rZW5VaWQiOnsiYWRkcmVzcyI6IjB4OTdjMWE0QUUzRTBEQTgwMDlhRmYxM2UzZTNFRTdlQTVlZTRBZmU4NCIsImNoYWluSWQiOiI0MjE2MSJ9LCJuYW1lIjoiUFQgZ1VTREMgKFVTREMpIiwic3ltYm9sIjoiUFQtZ1VTREMtMjVKVU4yMDI2IiwiZGVjaW1hbHMiOjYsImlzTmF0aXZlIjpmYWxzZSwiaWNvblVyaSI6Imh0dHBzOi8vc3RvcmFnZS5nb29nbGVhcGlzLmNvbS9wcm9kLXBlbmRsZS1idWNrZXQtYS9pbWFnZXMvdXBsb2Fkcy9mYzUwN2UxOC1kZGNkLTQ4Y2UtODUxOC04ZjM2MTA3MTlhMmIuc3ZnIiwiaXNWZXR0ZWQiOnRydWV9LCJ5dFRva2VuIjp7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweDA4NzAxZEI0RDMxRTBFODhiRDMzOEZkZUIzOEZGMzkxQ0M3NUJjRjgiLCJjaGFpbklkIjoiNDIxNjEifSwibmFtZSI6IllUIGdVU0RDIChVU0RDKSIsInN5bWJvbCI6IllULWdVU0RDLTI1SlVOMjAyNiIsImRlY2ltYWxzIjo2LCJpc05hdGl2ZSI6ZmFsc2UsImljb25VcmkiOiJodHRwczovL3N0b3JhZ2UuZ29vZ2xlYXBpcy5jb20vcHJvZC1wZW5kbGUtYnVja2V0LWEvaW1hZ2VzL3VwbG9hZHMvMjE1ODkwNjgtM2NkYy00YmMwLWFiOTEtMTQzYjZhNTNkN2E3LnN2ZyIsImlzVmV0dGVkIjp0cnVlfSwidW5kZXJseWluZ1Rva2VuIjp7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweGQzNDQzZWUxZTkxYUYyOGU1RkI4NThGYmQwRDcyQTYzYkE4MDQ2RTAiLCJjaGFpbklkIjoiNDIxNjEifSwibmFtZSI6IkdhaW5zIE5ldHdvcmsgVVNEQyIsInN5bWJvbCI6ImdVU0RDIiwiZGVjaW1hbHMiOjYsImlzTmF0aXZlIjpmYWxzZSwiaWNvblVyaSI6IiIsImlzVmV0dGVkIjpmYWxzZX19XSwiY3Vyc29yIjoiMWY2ZmMxMGEtMzZmZi00MGYzLWE0MTktM2ZjOTE1MjJkNTZmIiwiY3VycmVudFBhZ2UiOjMsInRvdGFsUGFnZXMiOjMsInRvdGFsSXRlbXMiOjExfQ=="
+  }
+}

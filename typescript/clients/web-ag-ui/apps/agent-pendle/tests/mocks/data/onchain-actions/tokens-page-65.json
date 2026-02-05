@@ -1,0 +1,28 @@
+{
+  "metadata": {
+    "service": "onchain-actions",
+    "endpoint": "/tokens",
+    "method": "GET",
+    "recordedAt": "2026-02-05T18:11:31.725Z"
+  },
+  "request": {
+    "params": {
+      "chainIds": "42161",
+      "cursor": "d5447210-f56b-4135-9ee6-87f8752ec21d",
+      "page": "65"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "connection": "keep-alive",
+      "content-length": "965",
+      "content-type": "application/json; charset=utf-8",
+      "date": "Thu, 05 Feb 2026 18:11:31 GMT",
+      "etag": "W/\"3c5-+kELoSRXoemxD5RacHeloA/1ibA\"",
+      "keep-alive": "timeout=5",
+      "x-powered-by": "Express"
+    },
+    "rawBody": "eyJ0b2tlbnMiOlt7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweDUzMzc2REU3N2MxRGRhNDc4ZTBCRTZjMjk2MjU1MTkzNGQwODRlZDUiLCJjaGFpbklkIjoiNDIxNjEifSwic3ltYm9sIjoiIiwibmFtZSI6IiIsImRlY2ltYWxzIjoxOCwiaWNvblVyaSI6IiIsImlzTmF0aXZlIjpmYWxzZSwiaXNWZXR0ZWQiOmZhbHNlfSx7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweDMxNTViNDk0QjkyODc4OTMxQzMzMmE3ODEwMTNCMkExQjRkMDJDQjEiLCJjaGFpbklkIjoiNDIxNjEifSwic3ltYm9sIjoiIiwibmFtZSI6IiIsImRlY2ltYWxzIjoxOCwiaWNvblVyaSI6IiIsImlzTmF0aXZlIjpmYWxzZSwiaXNWZXR0ZWQiOmZhbHNlfSx7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweDhDZjZiMTJGNkI4MjZlM0QyYjIyOTU4NTE2OTgzMzkzZkRENGIyNEQiLCJjaGFpbklkIjoiNDIxNjEifSwic3ltYm9sIjoiIiwibmFtZSI6IiIsImRlY2ltYWxzIjoxOCwiaWNvblVyaSI6IiIsImlzTmF0aXZlIjpmYWxzZSwiaXNWZXR0ZWQiOmZhbHNlfSx7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweDFmMzU3MkJhZUUzNjM2MEQyM0U5NzZjMjQ0RTA4MTYwNTIzQ2U3ZUIiLCJjaGFpbklkIjoiNDIxNjEifSwic3ltYm9sIjoiIiwibmFtZSI6IiIsImRlY2ltYWxzIjoxOCwiaWNvblVyaSI6IiIsImlzTmF0aXZlIjpmYWxzZSwiaXNWZXR0ZWQiOmZhbHNlfSx7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweDliNkZGMDI1QWVFMjQ1RDMxNGMwOUY1N0I3MmYwZEU2RTIzMWMzYTYiLCJjaGFpbklkIjoiNDIxNjEifSwic3ltYm9sIjoiIiwibmFtZSI6IiIsImRlY2ltYWxzIjoxOCwiaWNvblVyaSI6IiIsImlzTmF0aXZlIjpmYWxzZSwiaXNWZXR0ZWQiOmZhbHNlfV0sImN1cnNvciI6ImQ1NDQ3MjEwLWY1NmItNDEzNS05ZWU2LTg3Zjg3NTJlYzIxZCIsImN1cnJlbnRQYWdlIjo2NSwidG90YWxQYWdlcyI6OTQsInRvdGFsSXRlbXMiOjQ2N30="
+  }
+}

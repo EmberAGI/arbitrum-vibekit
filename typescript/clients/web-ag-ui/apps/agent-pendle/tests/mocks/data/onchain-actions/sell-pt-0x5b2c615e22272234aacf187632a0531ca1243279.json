@@ -1,0 +1,37 @@
+{
+  "metadata": {
+    "service": "onchain-actions",
+    "endpoint": "/tokenizedYield/sellPt",
+    "method": "POST",
+    "recordedAt": "2026-02-05T18:04:17.790Z"
+  },
+  "request": {
+    "body": {
+      "walletAddress": "0x3fd83e40F96C3c81A807575F959e55C34a40e523",
+      "ptTokenUid": {
+        "address": "0x5B2C615E22272234AACF187632a0531cA1243279",
+        "chainId": "42161"
+      },
+      "amount": "1000000",
+      "slippage": "0.5"
+    }
+  },
+  "response": {
+    "status": 500,
+    "headers": {
+      "alt-svc": "h3=\":443\"; ma=86400",
+      "cf-cache-status": "DYNAMIC",
+      "cf-ray": "9c9454512b586947-ATL",
+      "connection": "keep-alive",
+      "content-length": "59",
+      "content-type": "application/json; charset=utf-8",
+      "date": "Thu, 05 Feb 2026 18:04:17 GMT",
+      "etag": "W/\"3b-RT+unTGdofAhr3UQgNl8lQhSAOE\"",
+      "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+      "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=w6nlKSlW6pKbN%2F%2F3MdYmSc3YV8Qf0Pn7lwnTEeW8%2FagM%2FrcnrTNLHUUFbHMMS5TU45%2FcgBhk1r43XtxLNYCrkhwZ5bPzJS37sK8%2BfHlROA%3D%3D\"}]}",
+      "server": "cloudflare",
+      "x-powered-by": "Express"
+    },
+    "rawBody": "eyJlcnJvciI6IkFib3J0RXJyb3I6IFJlcXVlc3QgZmFpbGVkIHdpdGggc3RhdHVzIGNvZGUgNDA0In0="
+  }
+}

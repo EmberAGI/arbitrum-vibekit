@@ -1,0 +1,28 @@
+{
+  "metadata": {
+    "service": "onchain-actions",
+    "endpoint": "/tokens",
+    "method": "GET",
+    "recordedAt": "2026-02-05T18:11:31.720Z"
+  },
+  "request": {
+    "params": {
+      "chainIds": "42161",
+      "cursor": "d5447210-f56b-4135-9ee6-87f8752ec21d",
+      "page": "56"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "connection": "keep-alive",
+      "content-length": "1023",
+      "content-type": "application/json; charset=utf-8",
+      "date": "Thu, 05 Feb 2026 18:11:31 GMT",
+      "etag": "W/\"3ff-wJAp/QCCHW/LaFmijV/JbuGKN+Y\"",
+      "keep-alive": "timeout=5",
+      "x-powered-by": "Express"
+    },
+    "rawBody": "eyJ0b2tlbnMiOlt7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweDgyNjU2QjAxMjExZUQ3NjBGM2NBN0Y1OTdiMDU5MjhjZDcyYzE5NzEiLCJjaGFpbklkIjoiNDIxNjEifSwic3ltYm9sIjoiQ1VTRCIsIm5hbWUiOiJDcnlwdG9ob3N0IEJyaWRnZWQgVVNEIiwiZGVjaW1hbHMiOjE4LCJpY29uVXJpIjoiIiwiaXNOYXRpdmUiOmZhbHNlLCJpc1ZldHRlZCI6ZmFsc2V9LHsidG9rZW5VaWQiOnsiYWRkcmVzcyI6IjB4MjkxMzQ0RkJhYUM0ZkUxNDYzMjA2MUU0YzMzNkZlM0I5NGM1MjMyMCIsImNoYWluSWQiOiI0MjE2MSJ9LCJzeW1ib2wiOiJBUkIrKyIsIm5hbWUiOiJBUkIrKyIsImRlY2ltYWxzIjoxOCwiaWNvblVyaSI6IiIsImlzTmF0aXZlIjpmYWxzZSwiaXNWZXR0ZWQiOmZhbHNlfSx7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweDhkQTAyYjVBNTRFMjBGNTVEZTVBOEUyOTNkYjk5YzllYzBkQTdCMDciLCJjaGFpbklkIjoiNDIxNjEifSwic3ltYm9sIjoiV0xGSSIsIm5hbWUiOiJXTEZJIiwiZGVjaW1hbHMiOjE4LCJpY29uVXJpIjoiIiwiaXNOYXRpdmUiOmZhbHNlLCJpc1ZldHRlZCI6ZmFsc2V9LHsidG9rZW5VaWQiOnsiYWRkcmVzcyI6IjB4YjAyQUNlNGMzODRCRjAwQjlDODAwRUVDQ2U2RTAxN2E3OTI2MmIwNyIsImNoYWluSWQiOiI0MjE2MSJ9LCJzeW1ib2wiOiJXTEZJIiwibmFtZSI6IldMRkkiLCJkZWNpbWFscyI6MTgsImljb25VcmkiOiIiLCJpc05hdGl2ZSI6ZmFsc2UsImlzVmV0dGVkIjpmYWxzZX0seyJ0b2tlblVpZCI6eyJhZGRyZXNzIjoiMHg0ZDJhOWQwYkM4N0IxMmRkNTU5REQzMTZCM0VEQ0I0N2Q4MjVFMWM2IiwiY2hhaW5JZCI6IjQyMTYxIn0sInN5bWJvbCI6Ind1dCIsIm5hbWUiOiJ3dXQiLCJkZWNpbWFscyI6MTgsImljb25VcmkiOiIiLCJpc05hdGl2ZSI6ZmFsc2UsImlzVmV0dGVkIjpmYWxzZX1dLCJjdXJzb3IiOiJkNTQ0NzIxMC1mNTZiLTQxMzUtOWVlNi04N2Y4NzUyZWMyMWQiLCJjdXJyZW50UGFnZSI6NTYsInRvdGFsUGFnZXMiOjk0LCJ0b3RhbEl0ZW1zIjo0Njd9"
+  }
+}

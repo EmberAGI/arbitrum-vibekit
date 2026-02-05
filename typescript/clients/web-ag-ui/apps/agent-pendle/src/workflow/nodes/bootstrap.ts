@@ -1,7 +1,11 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
-import { resolvePollIntervalMs, resolveStreamLimit } from '../../config/constants.js';
+import {
+  resolveDelegationsBypass,
+  resolvePollIntervalMs,
+  resolveStreamLimit,
+} from '../../config/constants.js';
 import { logInfo, type ClmmEvent, type ClmmState, type ClmmUpdate } from '../context.js';
 import { STABLECOIN_WHITELIST } from '../seedData.js';
 
@@ -25,7 +29,7 @@ export const bootstrapNode = async (
   const mode = process.env['PENDLE_MODE'] === 'production' ? 'production' : 'debug';
   const pollIntervalMs = resolvePollIntervalMs();
   const streamLimit = resolveStreamLimit();
-  const delegationsBypassActive = process.env['DELEGATIONS_BYPASS'] === 'true';
+  const delegationsBypassActive = resolveDelegationsBypass();
 
   logInfo('Initialized Pendle workflow context', {
     mode,

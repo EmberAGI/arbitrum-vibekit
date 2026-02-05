@@ -4,6 +4,7 @@ import {
   resolvePendleChainIds,
   resolvePollIntervalMs,
   resolveRebalanceThresholdPct,
+  resolveDelegationsBypass,
   resolveStablecoinWhitelist,
   resolveStateHistoryLimit,
   resolveStreamLimit,
@@ -40,5 +41,25 @@ describe('config/constants', () => {
     expect(resolveStablecoinWhitelist()).toEqual(['USDe', 'USDai']);
     expect(resolveStreamLimit()).toBe(42);
     expect(resolveStateHistoryLimit()).toBe(55);
+  });
+
+  it('parses delegations bypass flag', () => {
+    delete process.env.DELEGATIONS_BYPASS;
+    expect(resolveDelegationsBypass()).toBe(false);
+
+    process.env.DELEGATIONS_BYPASS = 'true';
+    expect(resolveDelegationsBypass()).toBe(true);
+
+    process.env.DELEGATIONS_BYPASS = 'TRUE';
+    expect(resolveDelegationsBypass()).toBe(true);
+
+    process.env.DELEGATIONS_BYPASS = '1';
+    expect(resolveDelegationsBypass()).toBe(true);
+
+    process.env.DELEGATIONS_BYPASS = 'yes';
+    expect(resolveDelegationsBypass()).toBe(true);
+
+    process.env.DELEGATIONS_BYPASS = 'false';
+    expect(resolveDelegationsBypass()).toBe(false);
   });
 });
