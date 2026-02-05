@@ -4,14 +4,19 @@ const setupFiles = ['./tests/setup/vitest.setup.ts'];
 
 export default defineConfig({
   test: {
-    name: 'integration',
+    name: 'coverage',
     globals: true,
     environment: 'node',
     setupFiles,
-    include: ['src/**/*.int.test.ts'],
     passWithNoTests: true,
-    testTimeout: 30_000,
-    hookTimeout: 30_000,
+    include: ['src/**/*.unit.test.ts', 'src/**/*.int.test.ts'],
+    exclude: ['src/**/*.e2e.test.ts'],
+    coverage: {
+      enabled: true,
+      provider: 'v8',
+      reportsDirectory: './coverage',
+      reporter: ['text', 'lcov'],
+    },
     typecheck: {
       tsconfig: './tsconfig.vitest.json',
     },
