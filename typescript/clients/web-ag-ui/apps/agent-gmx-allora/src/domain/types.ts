@@ -30,7 +30,7 @@ export type AlloraPrediction = z.infer<typeof AlloraPredictionSchema>;
 
 export const GmxSetupInputSchema = z.object({
   walletAddress: z.templateLiteral(['0x', z.string()]),
-  baseContributionUsd: z.number().positive().optional(),
+  usdcAllocation: z.number().positive(),
   targetMarket: z.enum(['BTC', 'ETH']),
 });
 
