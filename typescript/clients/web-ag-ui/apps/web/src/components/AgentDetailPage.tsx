@@ -683,8 +683,10 @@ function AgentBlockersTab({
     error: walletError,
   } = usePrivyWalletClient();
   const delegationsBypassEnabled = process.env.DELEGATIONS_BYPASS === 'true';
+  // Treat empty-string env as unset so the UI does not render a blank address.
   const walletBypassAddress =
-    process.env.NEXT_PUBLIC_WALLET_BYPASS_ADDRESS ?? '0x0000000000000000000000000000000000000000';
+    process.env.NEXT_PUBLIC_WALLET_BYPASS_ADDRESS?.trim() ||
+    '0x0000000000000000000000000000000000000000';
   const isPendleAgent = agentId === 'agent-pendle';
   const isGmxAlloraAgent = agentId === 'agent-gmx-allora';
   const delegationsBypassEnv = 'DELEGATIONS_BYPASS';
