@@ -35,6 +35,7 @@ import type {
 } from '../types/agent';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
 import { formatPoolPair } from '../utils/poolFormat';
+import { resolveMetricsTabLabel } from '../utils/agentUi';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
@@ -316,7 +317,7 @@ export function AgentDetailPage({
               Agent Blockers
             </TabButton>
             <TabButton active={resolvedTab === 'metrics'} onClick={() => setActiveTab('metrics')}>
-              Metrics
+              {resolveMetricsTabLabel(agentId)}
             </TabButton>
             <TabButton
               active={resolvedTab === 'transactions'}
@@ -352,13 +353,7 @@ export function AgentDetailPage({
           )}
 
           {resolvedTab === 'metrics' && (
-            <MetricsTab
-              agentId={agentId}
-              profile={profile}
-              metrics={metrics}
-              fullMetrics={fullMetrics}
-              events={events}
-            />
+            <MetricsTab profile={profile} metrics={metrics} fullMetrics={fullMetrics} events={events} />
           )}
 
           {resolvedTab === 'transactions' && <TransactionHistoryTab transactions={transactions} />}
@@ -480,33 +475,33 @@ export function AgentDetailPage({
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setActiveTab('metrics')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === 'metrics'
-                    ? 'bg-[#fd6731] text-white'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Metrics
-              </button>
-              <button
-                disabled
-                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 cursor-not-allowed"
-              >
+	            <div className="flex items-center gap-2">
+	              <button
+	                onClick={() => setActiveTab('metrics')}
+	                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+	                  activeTab === 'metrics'
+	                    ? 'bg-[#fd6731] text-white'
+	                    : 'text-gray-400 hover:text-white'
+	                }`}
+	              >
+	                {resolveMetricsTabLabel(agentId)}
+	              </button>
+	              <button
+	                disabled
+	                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 cursor-not-allowed"
+	              >
                 Chat
               </button>
             </div>
 
             {activeTab === 'metrics' && (
-              <MetricsTab profile={profile} metrics={metrics} events={[]} />
+              <MetricsTab profile={profile} metrics={metrics} fullMetrics={fullMetrics} events={events} />
             )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+	          </div>
+	        </div>
+	      </div>
+	    </div>
+	  );
 }
 
 // Tab Button Component
@@ -1613,17 +1608,63 @@ function PointsColumn({ metrics }: PointsColumnProps) {
 
 // Metrics Tab Component
 interface MetricsTabProps {
-  agentId: string;
   profile: AgentProfile;
   metrics: AgentMetrics;
   fullMetrics?: AgentViewMetrics;
   events: ClmmEvent[];
 }
 
-function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsTabProps) {
-  if (agentId === 'agent-pendle') {
-    return <PendleMetricsTab profile={profile} metrics={metrics} fullMetrics={fullMetrics} events={events} />;
-  }
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord | undefined {
+  return value && typeof value === 'object' ? (value as UnknownRecord) : undefined;
+}
+
+function getNestedRecord(value: unknown, key: string): UnknownRecord | undefined {
+  const record = asRecord(value);
+  const nested = record ? record[key] : undefined;
+  return asRecord(nested);
+}
+
+function getStringField(value: unknown, key: string): string | undefined {
+  const record = asRecord(value);
+  const candidate = record ? record[key] : undefined;
+  return typeof candidate === 'string' ? candidate : undefined;
+}
+
+function getNumberField(value: unknown, key: string): number | undefined {
+  const record = asRecord(value);
+  const candidate = record ? record[key] : undefined;
+  return typeof candidate === 'number' ? candidate : undefined;
+}
+
+function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) {
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+
+  const formatArtifactLabel = (artifact: unknown): string => {
+    if (!isRecord(artifact)) return 'unknown';
+
+    const name = artifact['name'];
+    if (typeof name === 'string' && name.trim().length > 0) return name;
+
+    const artifactId = artifact['artifactId'];
+    if (typeof artifactId === 'string' && artifactId.trim().length > 0) return artifactId;
+
+    const type = artifact['type'];
+    if (typeof type === 'string' && type.trim().length > 0) return type;
+
+    const id = artifact['id'];
+    if (typeof id === 'string' && id.trim().length > 0) return id;
+
+    return 'unknown';
+  };
+
+  const formatArtifactDescription = (artifact: unknown): string | null => {
+    if (!isRecord(artifact)) return null;
+    const description = artifact['description'];
+    return typeof description === 'string' && description.trim().length > 0 ? description : null;
+  };
 
   const formatDate = (timestamp?: string) => {
     if (!timestamp) return '—';
@@ -1673,6 +1714,8 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
   const poolSnapshot = fullMetrics?.lastSnapshot;
   const poolName = formatPoolPair(poolSnapshot);
   const positionTokens = latestSnapshot?.positionTokens ?? [];
+  const resolvedApy = metrics.apy ?? profile.apy;
+  const resolvedAum = metrics.aumUsd ?? profile.aum;
 
   return (
     <div className="space-y-6">
@@ -1683,13 +1726,13 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
             <div className="text-2xl font-bold text-teal-400">
-              {metrics.apy !== undefined ? `${metrics.apy.toFixed(1)}%` : '—'}
+              {resolvedApy !== undefined ? `${resolvedApy.toFixed(1)}%` : '—'}
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
             <div className="text-2xl font-bold text-white">
-              {metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : '—'}
+              {resolvedAum !== undefined ? `$${resolvedAum.toLocaleString()}` : '—'}
             </div>
           </div>
           <div>
@@ -1834,10 +1877,15 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
                     <div className="text-sm text-white mt-1">
                       {event.type === 'status' && event.message}
                       {event.type === 'artifact' &&
-                        `Artifact: ${event.artifact?.type ?? 'unknown'}`}
+                        `Artifact: ${formatArtifactLabel(event.artifact)}`}
                       {event.type === 'dispatch-response' &&
                         `Response with ${event.parts?.length ?? 0} parts`}
                     </div>
+                    {event.type === 'artifact' && formatArtifactDescription(event.artifact) && (
+                      <div className="text-xs text-gray-400 mt-1 truncate">
+                        {formatArtifactDescription(event.artifact)}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1848,203 +1896,8 @@ function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsT
   );
 }
 
-function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<MetricsTabProps, 'agentId'>) {
-  const formatDate = (timestamp?: string) => {
-    if (!timestamp) return '—';
-    const date = new Date(timestamp);
-    if (Number.isNaN(date.getTime())) return '—';
-    return date.toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const strategy = fullMetrics?.pendle;
-  const latestCycle = fullMetrics?.latestCycle;
-
-  const rewardLines = strategy?.position?.claimableRewards ?? [];
-
-  return (
-    <div className="space-y-6">
-      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Strategy</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Target YT</div>
-            <div className="text-white font-medium">{strategy?.ytSymbol ?? '—'}</div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Underlying</div>
-            <div className="text-white font-medium">{strategy?.underlyingSymbol ?? '—'}</div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Current APY</div>
-            <div className="text-white font-medium">
-              {strategy?.currentApy !== undefined ? `${strategy.currentApy.toFixed(2)}%` : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Contribution</div>
-            <div className="text-white font-medium">
-              {strategy?.baseContributionUsd !== undefined ? `$${strategy.baseContributionUsd.toLocaleString()}` : '—'}
-            </div>
-          </div>
-        </div>
-        <div className="mt-4 pt-4 border-t border-[#2a2a2a] grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Maturity</div>
-            <div className="text-white font-medium">{strategy?.maturity ?? '—'}</div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Best APY</div>
-            <div className="text-white font-medium">
-              {strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Delta</div>
-            <div className="text-white font-medium">
-              {strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Funding Token</div>
-            <div className="text-white font-medium">
-              {strategy?.fundingTokenAddress ? strategy.fundingTokenAddress.slice(0, 10) + '…' : '—'}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Position</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">PT</div>
-            <div className="text-white font-medium">
-              {strategy?.position?.ptSymbol ? `${strategy.position.ptSymbol} ${strategy.position.ptAmount ?? ''}`.trim() : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">YT</div>
-            <div className="text-white font-medium">
-              {strategy?.position?.ytSymbol ? `${strategy.position.ytSymbol} ${strategy.position.ytAmount ?? ''}`.trim() : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
-            <div className="text-white font-medium">{metrics.apy !== undefined ? `${metrics.apy.toFixed(2)}%` : '—'}</div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
-            <div className="text-white font-medium">{metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : '—'}</div>
-          </div>
-        </div>
-        <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
-          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Claimable Rewards</div>
-          {rewardLines.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {rewardLines.map((reward) => (
-                <div key={reward.symbol} className="flex items-center justify-between">
-                  <span className="text-gray-300">{reward.symbol}</span>
-                  <span className="text-white font-medium">{reward.amount}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-gray-400 text-sm">—</div>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MetricCard
-          label="Iteration"
-          value={metrics.iteration?.toString() ?? '—'}
-          icon={<TrendingUp className="w-4 h-4 text-teal-400" />}
-        />
-        <MetricCard
-          label="Cycles Since Rotation"
-          value={metrics.cyclesSinceRebalance?.toString() ?? '—'}
-          icon={<Minus className="w-4 h-4 text-yellow-400" />}
-        />
-        <MetricCard
-          label="Best APY"
-          value={strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : '—'}
-          icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
-        />
-        <MetricCard
-          label="APY Delta"
-          value={strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : '—'}
-          icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
-        />
-      </div>
-
-      {latestCycle && (
-        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Latest Cycle</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Cycle</div>
-              <div className="text-white font-medium">{latestCycle.cycle}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Action</div>
-              <div className="text-white font-medium">{latestCycle.action}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
-              <div className="text-white font-medium">
-                {latestCycle.apy !== undefined ? `${latestCycle.apy.toFixed(2)}%` : '—'}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Timestamp</div>
-              <div className="text-white font-medium">{formatDate(latestCycle.timestamp)}</div>
-            </div>
-          </div>
-          {latestCycle.reason && (
-            <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Reason</div>
-              <div className="text-gray-300 text-sm">{latestCycle.reason}</div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {events.length > 0 && (
-        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
-          <div className="space-y-3 max-h-64 overflow-y-auto">
-            {events.slice(-10).reverse().map((event, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
-                <div
-                  className={`w-2 h-2 rounded-full mt-2 ${
-                    event.type === 'status'
-                      ? 'bg-blue-400'
-                      : event.type === 'artifact'
-                        ? 'bg-purple-400'
-                        : 'bg-gray-400'
-                  }`}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
-                  <div className="text-sm text-white mt-1">
-                    {event.type === 'status' && event.message}
-                    {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
-                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+// GMX Allora uses the same Metrics/Activity layout as other agents. Any agent-specific
+// surface area should be reflected through standard artifacts/events.
 
 interface MetricCardProps {
   label: string;
