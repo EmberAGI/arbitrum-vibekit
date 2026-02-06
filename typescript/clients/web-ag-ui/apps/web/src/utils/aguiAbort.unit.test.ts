@@ -5,7 +5,6 @@ import { transformHttpEventStream } from '@ag-ui/client';
 function createAbortError(): Error {
   // DOMException is available in Node 18+; fall back to a named Error.
   try {
-    // eslint-disable-next-line no-new
     return new DOMException('aborted', 'AbortError') as unknown as Error;
   } catch {
     const error = new Error('aborted');
