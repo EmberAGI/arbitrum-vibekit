@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AlloraInference } from '../src/clients/allora.js';
 import type { PerpetualMarket, PerpetualPosition } from '../src/clients/onchainActions.js';
@@ -159,6 +159,35 @@ const baseMarket: PerpetualMarket = {
 };
 
 describe('pollCycleNode (integration)', () => {
+  beforeEach(() => {
+    fetchAlloraInferenceMock.mockReset();
+    listPerpetualMarketsMock.mockReset();
+    listPerpetualPositionsMock.mockReset();
+    createPerpetualLongMock.mockReset();
+    createPerpetualShortMock.mockReset();
+    createPerpetualCloseMock.mockReset();
+    copilotkitEmitStateMock.mockReset();
+  });
+
+  it('falls back to cached state when Allora fetch fails transiently', async () => {
+    fetchAlloraInferenceMock.mockRejectedValueOnce(new TypeError('fetch failed'));
+
+    const state = buildBaseState();
+    state.view.metrics.previousPrice = 47000;
+
+    const result = await pollCycleNode(state, {});
+    const update = (result as { update: ClmmState }).update;
+
+    expect(update.view?.haltReason).toBeUndefined();
+    expect(update.view?.metrics.staleCycles).toBe(1);
+    expect(update.view?.metrics.previousPrice).toBe(47000);
+
+    const statusMessages = (update.view?.activity.events ?? [])
+      .filter((event) => event.type === 'status')
+      .map((event) => event.message);
+    expect(statusMessages.join(' ')).toContain('WARNING');
+  });
+
   it('emits telemetry and execution plan artifacts on open action', async () => {
     fetchAlloraInferenceMock.mockResolvedValueOnce({
       topicId: 14,

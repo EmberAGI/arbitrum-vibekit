@@ -41,6 +41,7 @@ const DECISION_THRESHOLD = 0.62;
 const COOLDOWN_CYCLES = 2;
 const CONNECT_DELAY_MS = 2500;
 const CONNECT_DELAY_STEPS = 3;
+const ALLORA_STALE_CYCLE_LIMIT = 3;
 
 function shouldDelayIteration(iteration: number): boolean {
   return iteration % 3 === 0;
@@ -87,6 +88,7 @@ export const pollCycleNode = async (
   const topicLabel = ALLORA_TOPIC_LABELS[topicKey];
 
   let prediction: AlloraPrediction;
+  let staleCycles = state.view.metrics.staleCycles ?? 0;
   try {
     const inference = await fetchAlloraInference({
       baseUrl: resolveAlloraApiBaseUrl(),
@@ -94,6 +96,7 @@ export const pollCycleNode = async (
       topicId,
       apiKey: resolveAlloraApiKey(),
     });
+    staleCycles = 0;
     const currentPrice = state.view.metrics.previousPrice ?? inference.combinedValue;
     prediction = buildAlloraPrediction({
       inference,
@@ -103,17 +106,71 @@ export const pollCycleNode = async (
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    const failureMessage = `ERROR: Failed to fetch Allora prediction: ${message}`;
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    staleCycles += 1;
+
+    // Auth errors are configuration errors; surface them immediately.
+    if (message.includes('(401)') || message.includes('(403)')) {
+      const failureMessage = `ERROR: Failed to fetch Allora prediction: ${message}`;
+      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      await copilotkitEmitState(config, {
+        view: {
+          task,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        },
+      });
+      return new Command({
+        update: {
+          view: {
+            haltReason: failureMessage,
+            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+            metrics: { ...state.view.metrics, staleCycles, iteration },
+            task,
+            profile: state.view.profile,
+            transactionHistory: state.view.transactionHistory,
+          },
+        },
+        goto: 'summarize',
+      });
+    }
+
+    // Transient failures should not brick the agent; skip trades and retry on the next cycle.
+    if (staleCycles > ALLORA_STALE_CYCLE_LIMIT) {
+      const failureMessage = `ERROR: Abort: Allora API unreachable for ${staleCycles} consecutive cycles (last error: ${message})`;
+      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      await copilotkitEmitState(config, {
+        view: {
+          task,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        },
+      });
+      return new Command({
+        update: {
+          view: {
+            haltReason: failureMessage,
+            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+            metrics: { ...state.view.metrics, staleCycles, iteration },
+            task,
+            profile: state.view.profile,
+            transactionHistory: state.view.transactionHistory,
+          },
+        },
+        goto: 'summarize',
+      });
+    }
+
+    const warningMessage = `WARNING: Allora prediction unavailable (attempt ${staleCycles}/${ALLORA_STALE_CYCLE_LIMIT}); skipping trades this cycle.`;
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'working', warningMessage);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: {
+        task,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      },
     });
     return new Command({
       update: {
         view: {
-          haltReason: failureMessage,
           activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          metrics: state.view.metrics,
+          metrics: { ...state.view.metrics, staleCycles, iteration },
           task,
           profile: state.view.profile,
           transactionHistory: state.view.transactionHistory,
