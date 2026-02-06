@@ -352,7 +352,9 @@ async function startOnchainActions(): Promise<{ baseUrl: string; cleanup: Cleanu
   await waitForHttpOk(HEALTH_URL, 60_000);
   if (exitError) throw exitError;
 
-  await waitForNonEmptyMarkets(MARKETS_URL, 120_000);
+  // onchain-actions performs a fairly heavy initial import (and may be rate-limited by CoinGecko),
+  // so give it enough time to hydrate the GMX markets list before running UI/system E2E tests.
+  await waitForNonEmptyMarkets(MARKETS_URL, 240_000);
   if (exitError) throw exitError;
 
   return {
