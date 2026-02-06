@@ -9,6 +9,18 @@ import fs from 'node:fs';
 type Cleanup = () => Promise<void> | void;
 type Child = ReturnType<typeof spawn>;
 
+function shouldPersistE2EProcesses(): boolean {
+  return process.env['WEB_E2E_PERSIST'] === 'true';
+}
+
+function resolveBooleanEnv(name: string, fallback: boolean): boolean {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  return fallback;
+}
+
 function resolvePnpmInvocation(): { command: string; prefixArgs: string[] } {
   const execPath = process.env.npm_execpath;
   const nodePath = process.env.npm_node_execpath;
@@ -151,19 +163,29 @@ function spawnProcess(params: {
   cwd: string;
   args: string[];
   env?: NodeJS.ProcessEnv;
+  persist?: boolean;
 }): { child: Child; output: string[]; cleanup: Cleanup } {
   const pnpm = resolvePnpmInvocation();
+  const persist = params.persist ?? false;
   const child = spawn(pnpm.command, [...pnpm.prefixArgs, ...params.args], {
     cwd: params.cwd,
     env: { ...process.env, ...params.env },
-    stdio: 'pipe',
+    detached: persist,
+    // When persisting processes for manual QA, avoid stdio pipes so the vitest
+    // process can exit without being held open by open pipe handles.
+    stdio: persist ? 'ignore' : 'pipe',
   });
 
   const output: string[] = [];
-  child.stdout?.on('data', (chunk: Buffer) => output.push(chunk.toString('utf8')));
-  child.stderr?.on('data', (chunk: Buffer) => output.push(chunk.toString('utf8')));
+  if (!persist) {
+    child.stdout?.on('data', (chunk: Buffer) => output.push(chunk.toString('utf8')));
+    child.stderr?.on('data', (chunk: Buffer) => output.push(chunk.toString('utf8')));
+  } else {
+    child.unref();
+  }
 
   const cleanup: Cleanup = async () => {
+    if (persist) return;
     if (child.exitCode !== null) return;
     child.kill('SIGTERM');
     await new Promise((r) => setTimeout(r, 2_000));
@@ -309,6 +331,7 @@ async function startOnchainActions(): Promise<{ baseUrl: string; cleanup: Cleanu
       error: error instanceof Error ? error.message : String(error),
     });
   }
+  const persist = shouldPersistE2EProcesses();
   const server = spawn(pnpmBin, ['dev'], {
     cwd: ONCHAIN_ACTIONS_DIR,
     env: {
@@ -335,8 +358,12 @@ async function startOnchainActions(): Promise<{ baseUrl: string; cleanup: Cleanu
       DUST_CHAIN_RECEIVER_ADDRESS:
         process.env['DUST_CHAIN_RECEIVER_ADDRESS'] ?? '0x0000000000000000000000000000000000000000',
     },
-    stdio: 'inherit',
+    detached: persist,
+    stdio: persist ? 'ignore' : 'inherit',
   });
+  if (persist) {
+    server.unref();
+  }
 
   let exitError: Error | undefined;
   server.once('exit', (code, signal) => {
@@ -360,6 +387,7 @@ async function startOnchainActions(): Promise<{ baseUrl: string; cleanup: Cleanu
   return {
     baseUrl,
     cleanup: async () => {
+      if (persist) return;
       if (server.exitCode === null) {
         server.kill('SIGTERM');
         for (let i = 0; i < 20; i += 1) {
@@ -433,15 +461,59 @@ async function startMockAlloraServer(): Promise<{
   };
 }
 
+async function startDetachedMockAlloraServer(params: {
+  port: number;
+}): Promise<{ baseUrl: string; cleanup: Cleanup }> {
+  const persist = true;
+  const pnpm = resolvePnpmInvocation();
+  const child = spawn(
+    pnpm.command,
+    [...pnpm.prefixArgs, 'exec', 'tsx', 'tests/setup/mockAlloraServer.ts'],
+    {
+      cwd: process.cwd(), // apps/web
+      env: {
+        ...process.env,
+        PORT: String(params.port),
+      },
+      detached: persist,
+      stdio: 'ignore',
+    },
+  );
+  child.unref();
+
+  const baseUrl = `http://127.0.0.1:${params.port}`;
+  await waitForHttp({ url: `${baseUrl}/health`, timeoutMs: 2_000 }).catch(() => {
+    // The mock server doesn't implement /health; we just need the port open for the Allora path.
+    // We'll validate readiness by hitting a known Allora route.
+  });
+  await waitForHttp({
+    url: `${baseUrl}/v2/allora/consumer/test?allora_topic_id=14`,
+    timeoutMs: 10_000,
+    predicate: (res) => res.status === 200,
+  });
+
+  return { baseUrl, cleanup: async () => {} };
+}
+
 export default async function systemGlobalSetup(): Promise<Cleanup> {
+  const persist = shouldPersistE2EProcesses();
+
   // 1) Start onchain-actions + memgraph.
   const onchain = await startOnchainActions();
   const onchainCleanup = onchain.cleanup;
   const onchainBaseUrl = onchain.baseUrl;
 
   // 2) Start mock Allora API and point the agent runtime at it.
-  const mockAllora = await startMockAlloraServer();
-  process.env.ALLORA_API_BASE_URL = mockAllora.baseUrl;
+  const shouldUseRealAllora = resolveBooleanEnv('WEB_E2E_USE_REAL_ALLORA', false);
+  const mockAllora = persist ? undefined : await startMockAlloraServer();
+
+  const alloraBaseUrl = shouldUseRealAllora
+    ? process.env['ALLORA_API_BASE_URL'] ?? 'https://api.allora.network'
+    : persist
+      ? (await startDetachedMockAlloraServer({ port: 63381 })).baseUrl
+      : mockAllora!.baseUrl;
+
+  process.env.ALLORA_API_BASE_URL = alloraBaseUrl;
 
   // 3) Start LangGraph runtime for agent-gmx-allora.
   const langgraphPort = await getFreePort();
@@ -468,8 +540,9 @@ export default async function systemGlobalSetup(): Promise<Cleanup> {
       DELEGATIONS_BYPASS: 'true',
       GMX_ALLORA_MODE: 'debug',
       ONCHAIN_ACTIONS_BASE_URL: onchainBaseUrl,
-      ALLORA_API_BASE_URL: mockAllora.baseUrl,
+      ALLORA_API_BASE_URL: alloraBaseUrl,
     },
+    persist,
   });
 
   // Server returns 404 on unknown thread state, but that still proves it's accepting connections.
@@ -506,6 +579,7 @@ export default async function systemGlobalSetup(): Promise<Cleanup> {
       LANGGRAPH_DEPLOYMENT_URL: langgraphBaseUrl,
       LANGGRAPH_PENDLE_DEPLOYMENT_URL: langgraphBaseUrl,
     },
+    persist,
   });
 
   await waitForHttp({
@@ -516,10 +590,22 @@ export default async function systemGlobalSetup(): Promise<Cleanup> {
     predicate: (res) => res.status === 200,
   });
 
+  console.log('[web-e2e] services ready', {
+    persist,
+    webBaseUrl,
+    langgraphBaseUrl,
+    onchainActionsBaseUrl: onchainBaseUrl,
+    alloraMockBaseUrl: shouldUseRealAllora ? undefined : alloraBaseUrl,
+  });
+
   return async () => {
+    if (persist) {
+      console.log('[web-e2e] WEB_E2E_PERSIST=true; leaving services running for manual QA');
+      return;
+    }
     await web.cleanup();
     await langgraph.cleanup();
-    await mockAllora.cleanup();
+    await mockAllora?.cleanup();
     await onchainCleanup();
   };
 }
