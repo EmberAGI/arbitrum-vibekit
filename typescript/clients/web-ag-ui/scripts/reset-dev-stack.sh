@@ -12,6 +12,15 @@ kill_pids() {
   fi
 }
 
+kill_playwright_headless() {
+  # Smoke scripts (and other test tooling) can leave headless Chromium running if interrupted.
+  # Those stale processes may keep polling the dev server, making logs appear "busy" even when
+  # you haven't manually opened the UI.
+  local pids
+  pids=$(ps -axo pid=,command= | awk '$0 ~ /chrome-headless-shell/ && $0 ~ /playwright_chromiumdev_profile/ {print $1}')
+  kill_pids "$pids"
+}
+
 kill_ports() {
   if ! command -v lsof >/dev/null 2>&1; then
     echo "lsof not found; skipping port-based cleanup."
@@ -44,6 +53,7 @@ cleanup_state() {
 kill_ports
 kill_langgraph
 kill_next_dev
+kill_playwright_headless
 cleanup_state
 
 exit 0
