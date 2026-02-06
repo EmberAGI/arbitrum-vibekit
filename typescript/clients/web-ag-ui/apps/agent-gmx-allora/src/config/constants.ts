@@ -57,7 +57,7 @@ export function resolveAlloraChainId(): string {
 export const ALLORA_HORIZON_HOURS = 8;
 export const ALLORA_TOPIC_IDS = {
   BTC: 14,
-  ETH: 9,
+  ETH: 2,
 } as const;
 
 export const ALLORA_TOPIC_LABELS = {

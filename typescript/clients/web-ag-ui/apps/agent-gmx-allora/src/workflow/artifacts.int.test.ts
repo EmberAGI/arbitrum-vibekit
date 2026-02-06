@@ -29,7 +29,7 @@ describe('buildSummaryArtifact (integration)', () => {
         reason: 'Signal bearish',
         marketSymbol: 'ETH/USDC',
         timestamp: '2026-02-05T14:00:00.000Z',
-        prediction: { topicId: 9, combinedValue: 2600, confidence: 0.8 },
+        prediction: { topicId: 2, combinedValue: 2600, confidence: 0.8 },
         txHash: '0xabc',
       },
     ];

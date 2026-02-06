@@ -395,7 +395,7 @@ async function startMockAlloraServer(): Promise<{
     }
 
     const topicId = url.searchParams.get('allora_topic_id') ?? '0';
-    const combined = topicId === '14' ? '48000' : topicId === '9' ? '2600' : '100';
+    const combined = topicId === '14' ? '48000' : topicId === '2' ? '2600' : '100';
 
     res.setHeader('content-type', 'application/json');
     res.statusCode = 200;
