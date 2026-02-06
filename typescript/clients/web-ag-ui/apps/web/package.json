@@ -36,6 +36,7 @@
     "zod": "^3.24.4"
   },
   "devDependencies": {
+    "@ag-ui/client": "0.0.42",
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
@@ -44,6 +45,7 @@
     "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^9",
     "eslint-config-next": "16.0.8",
+    "rxjs": "7.8.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite-tsconfig-paths": "^6.0.5",

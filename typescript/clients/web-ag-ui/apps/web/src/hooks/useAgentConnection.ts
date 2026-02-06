@@ -33,6 +33,7 @@ import {
   initialAgentState,
 } from '../types/agent';
 import { applyAgentSyncToState, parseAgentSyncResponse } from '../utils/agentSync';
+import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
 
 export type {
   AgentState,
@@ -277,8 +278,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         agent: getAgentDebugId(agent),
         threadId,
       });
-      agent.abortRun();
-      void agent.detachActiveRun();
+      void cleanupAgentConnection(agent);
     };
   }, [agent, agentId, getAgentDebugId, logConnectEvent, threadId]);
 
