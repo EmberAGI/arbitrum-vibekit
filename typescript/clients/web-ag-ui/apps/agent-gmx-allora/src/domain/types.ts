@@ -28,17 +28,34 @@ export const AlloraPredictionSchema = z.object({
 });
 export type AlloraPrediction = z.infer<typeof AlloraPredictionSchema>;
 
-export const GmxSetupInputSchema = z.object({
+const GmxSetupInputWithUsdcAllocationSchema = z.object({
   walletAddress: z.templateLiteral(['0x', z.string()]),
   usdcAllocation: z.number().positive(),
   targetMarket: z.enum(['BTC', 'ETH']),
 });
 
-type GmxSetupInputBase = z.infer<typeof GmxSetupInputSchema>;
-export interface GmxSetupInput extends GmxSetupInputBase {
+const GmxSetupInputWithBaseContributionSchema = z.object({
+  walletAddress: z.templateLiteral(['0x', z.string()]),
+  // Web UI currently uses this field name.
+  baseContributionUsd: z.number().positive(),
+  targetMarket: z.enum(['BTC', 'ETH']),
+});
+
+// NOTE: No transforms here. This schema is used both for parsing and for
+// `z.toJSONSchema(...)` in the interrupt payload. Zod transforms cannot be
+// represented in JSON Schema.
+export const GmxSetupInputSchema = z.union([
+  GmxSetupInputWithUsdcAllocationSchema,
+  GmxSetupInputWithBaseContributionSchema,
+]);
+
+// Normalized internal shape used by the workflow once onboarding is complete.
+// (The interrupt schema accepts multiple input shapes for backwards/UX reasons.)
+export type GmxSetupInput = {
   walletAddress: `0x${string}`;
+  usdcAllocation: number;
   targetMarket: 'BTC' | 'ETH';
-}
+};
 
 export const FundingTokenInputSchema = z.object({
   fundingTokenAddress: z.templateLiteral(['0x', z.string()]),

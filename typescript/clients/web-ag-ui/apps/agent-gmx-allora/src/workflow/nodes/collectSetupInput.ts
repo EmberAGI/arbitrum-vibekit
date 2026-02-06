@@ -75,6 +75,15 @@ export const collectSetupInputNode = async (
     };
   }
 
+  const normalized =
+    'usdcAllocation' in parsed.data
+      ? parsed.data
+      : {
+          walletAddress: parsed.data.walletAddress,
+          usdcAllocation: parsed.data.baseContributionUsd,
+          targetMarket: parsed.data.targetMarket,
+        };
+
   const { task, statusEvent } = buildTaskStatus(
     awaitingInput.task,
     'working',
@@ -86,7 +95,7 @@ export const collectSetupInputNode = async (
 
   return {
     view: {
-      operatorInput: parsed.data,
+      operatorInput: normalized,
       onboarding: { ...ONBOARDING, step: 2 },
       task,
       activity: { events: [statusEvent], telemetry: [] },
