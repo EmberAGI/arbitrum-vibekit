@@ -121,6 +121,15 @@ export type PendleSetupRequestInterrupt = {
   payloadSchema?: Record<string, unknown>;
 };
 
+export type PendleFundWalletRequestInterrupt = {
+  type: 'pendle-fund-wallet-request';
+  message: string;
+  payloadSchema?: Record<string, unknown>;
+  artifactId?: string;
+  walletAddress?: `0x${string}`;
+  whitelistSymbols?: string[];
+};
+
 export type GmxSetupRequestInterrupt = {
   type: 'gmx-setup-request';
   message: string;
@@ -171,6 +180,7 @@ export type DelegationSigningRequestInterrupt = {
 export type AgentInterrupt =
   | OperatorConfigRequestInterrupt
   | PendleSetupRequestInterrupt
+  | PendleFundWalletRequestInterrupt
   | GmxSetupRequestInterrupt
   | FundingTokenRequestInterrupt
   | DelegationSigningRequestInterrupt;
@@ -185,6 +195,10 @@ export interface OperatorConfigInput {
 export interface PendleSetupInput {
   walletAddress: `0x${string}`;
   baseContributionUsd: number;
+}
+
+export interface FundWalletAcknowledgement {
+  acknowledged: true;
 }
 
 export interface GmxSetupInput {
