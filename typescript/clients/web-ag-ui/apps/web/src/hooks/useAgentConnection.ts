@@ -23,6 +23,7 @@ import {
   type GmxSetupInput,
   type FundingTokenInput,
   type DelegationSigningResponse,
+  type FundWalletAcknowledgement,
   type Transaction,
   type ClmmEvent,
   defaultView,
@@ -33,6 +34,7 @@ import {
   initialAgentState,
 } from '../types/agent';
 import { applyAgentSyncToState, parseAgentSyncResponse } from '../utils/agentSync';
+import { scheduleCycleAfterInterruptResolution } from '../utils/interruptAutoCycle';
 
 export type {
   AgentState,
@@ -45,6 +47,7 @@ export type {
   OperatorConfigInput,
   PendleSetupInput,
   GmxSetupInput,
+  FundWalletAcknowledgement,
   FundingTokenInput,
   Transaction,
   ClmmEvent,
@@ -55,6 +58,7 @@ const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
   value !== null &&
   ((value as { type?: string }).type === 'operator-config-request' ||
     (value as { type?: string }).type === 'pendle-setup-request' ||
+    (value as { type?: string }).type === 'pendle-fund-wallet-request' ||
     (value as { type?: string }).type === 'gmx-setup-request' ||
     (value as { type?: string }).type === 'clmm-funding-token-request' ||
     (value as { type?: string }).type === 'pendle-funding-token-request' ||
@@ -97,6 +101,7 @@ export interface UseAgentConnectionResult {
       | OperatorConfigInput
       | PendleSetupInput
       | GmxSetupInput
+      | FundWalletAcknowledgement
       | FundingTokenInput
       | DelegationSigningResponse,
   ) => void;
@@ -461,12 +466,17 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       input:
         | OperatorConfigInput
         | PendleSetupInput
+        | FundWalletAcknowledgement
         | FundingTokenInput
         | DelegationSigningResponse,
     ) => {
       resolve(JSON.stringify(input));
+      scheduleCycleAfterInterruptResolution({
+        interruptType: activeInterrupt?.type,
+        runCommand,
+      });
     },
-    [resolve],
+    [activeInterrupt?.type, resolve, runCommand],
   );
 
   // Settings sync pattern: update local state only (no automatic sync to avoid 409)
