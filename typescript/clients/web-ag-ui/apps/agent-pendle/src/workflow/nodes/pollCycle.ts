@@ -81,20 +81,11 @@ export const pollCycleNode = async (
 
   if (!operatorConfig) {
     const message =
-      'Pendle strategy configuration missing. Continuing onboarding to establish configuration.';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'working', message);
+      'WARNING: Pendle strategy configuration missing. Complete onboarding (funding token + strategy setup) before running cycles.';
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
     });
-
-    const nextNode =
-      !state.view.operatorInput
-        ? 'collectSetupInput'
-        : !state.view.fundingTokenInput
-          ? 'collectFundingTokenInput'
-          : state.view.delegationsBypassActive !== true && !state.view.delegationBundle
-            ? 'collectDelegations'
-            : 'prepareOperator';
 
     return new Command({
       update: {
@@ -108,7 +99,7 @@ export const pollCycleNode = async (
           transactionHistory: state.view.transactionHistory,
         },
       },
-      goto: nextNode,
+      goto: '__end__',
     });
   }
 

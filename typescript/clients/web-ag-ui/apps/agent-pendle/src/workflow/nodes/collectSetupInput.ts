@@ -1,5 +1,5 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { interrupt, type Command } from '@langchain/langgraph';
+import { Command, interrupt } from '@langchain/langgraph';
 import { z } from 'zod';
 
 import { PendleSetupInputSchema } from '../../domain/types.js';
@@ -64,16 +64,19 @@ export const collectSetupInputNode = async (
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: [] } },
     });
-    return {
-      view: {
-        haltReason: failureMessage,
-        task,
-        activity: { events: [statusEvent], telemetry: [] },
-        profile: state.view.profile,
-        metrics: state.view.metrics,
-        transactionHistory: state.view.transactionHistory,
+    return new Command({
+      update: {
+        view: {
+          haltReason: failureMessage,
+          task,
+          activity: { events: [statusEvent], telemetry: [] },
+          profile: state.view.profile,
+          metrics: state.view.metrics,
+          transactionHistory: state.view.transactionHistory,
+        },
       },
-    };
+      goto: 'summarize',
+    });
   }
 
   const { task, statusEvent } = buildTaskStatus(
