@@ -2,12 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { OnchainClients } from '../clients/clients.js';
 
-import {
-  clearClientCache,
-  getOnchainActionsClient,
-  getOnchainClients,
-} from './clientFactory.js';
-
 const { createClientsMock } = vi.hoisted(() => ({
   createClientsMock: vi.fn(),
 }));
@@ -31,12 +25,16 @@ vi.mock('viem/accounts', () => ({
 describe('clientFactory', () => {
   afterEach(() => {
     delete process.env.A2A_TEST_AGENT_NODE_PRIVATE_KEY;
-    clearClientCache();
+    delete process.env.ONCHAIN_ACTIONS_API_URL;
+    vi.resetModules();
     createClientsMock.mockReset();
     onchainActionsCtorMock.mockReset();
   });
 
-  it('creates and caches the onchain actions client', () => {
+  it('creates and caches the onchain actions client', async () => {
+    delete process.env.ONCHAIN_ACTIONS_API_URL;
+
+    const { getOnchainActionsClient } = await import('./clientFactory.js');
     const first = getOnchainActionsClient();
     const second = getOnchainActionsClient();
 
@@ -49,6 +47,7 @@ describe('clientFactory', () => {
     process.env.A2A_TEST_AGENT_NODE_PRIVATE_KEY =
       '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
+    const { getOnchainClients } = await import('./clientFactory.js');
     const { privateKeyToAccount } = await import('viem/accounts');
 
     const account = { address: '0x0000000000000000000000000000000000000001' };

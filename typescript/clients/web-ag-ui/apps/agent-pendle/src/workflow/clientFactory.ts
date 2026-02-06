@@ -5,7 +5,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 
 import { type OnchainClients, createClients } from '../clients/clients.js';
 import { OnchainActionsClient } from '../clients/onchainActions.js';
-import { ONCHAIN_ACTIONS_BASE_URL } from '../config/constants.js';
+import { ONCHAIN_ACTIONS_API_URL } from '../config/constants.js';
 
 import { normalizeHexAddress } from './context.js';
 
@@ -14,7 +14,7 @@ let cachedOnchainClients: OnchainClients | null = null;
 
 export function getOnchainActionsClient(): OnchainActionsClient {
   if (!cachedOnchainActionsClient) {
-    cachedOnchainActionsClient = new OnchainActionsClient(ONCHAIN_ACTIONS_BASE_URL);
+    cachedOnchainActionsClient = new OnchainActionsClient(ONCHAIN_ACTIONS_API_URL);
   }
   return cachedOnchainActionsClient;
 }

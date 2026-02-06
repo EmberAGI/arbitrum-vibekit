@@ -2,7 +2,7 @@
   "$schema": "https://turbo.build/schema.json",
     "globalEnv": [
       "DELEGATIONS_BYPASS",
-      "ONCHAIN_ACTIONS_BASE_URL",
+      "ONCHAIN_ACTIONS_API_URL",
       "PENDLE_SMOKE_MODE",
       "PENDLE_POLL_INTERVAL_MS",
       "A2A_TEST_AGENT_NODE_PRIVATE_KEY",

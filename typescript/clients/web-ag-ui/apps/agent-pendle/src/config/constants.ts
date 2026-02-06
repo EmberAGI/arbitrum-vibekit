@@ -21,8 +21,8 @@ const DEFAULT_REBALANCE_THRESHOLD_PCT = 0.5;
 const DEFAULT_DELEGATIONS_BYPASS = false;
 const DEFAULT_SMOKE_MODE = false;
 
-export const ONCHAIN_ACTIONS_BASE_URL =
-  process.env['ONCHAIN_ACTIONS_BASE_URL']?.replace(/\/$/, '') ?? 'https://api.emberai.xyz';
+export const ONCHAIN_ACTIONS_API_URL =
+  process.env['ONCHAIN_ACTIONS_API_URL']?.replace(/\/$/, '') ?? 'https://api.emberai.xyz';
 
 const DEFAULT_POLL_INTERVAL_MS = 3_600_000;
 const DEFAULT_STREAM_LIMIT = -1;
