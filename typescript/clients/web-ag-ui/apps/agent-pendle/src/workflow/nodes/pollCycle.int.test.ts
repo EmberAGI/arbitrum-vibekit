@@ -641,7 +641,7 @@ describe('pollCycleNode', () => {
     expect(executeRebalanceMock).not.toHaveBeenCalled();
   });
 
-  it('fails when operator config is missing', async () => {
+  it('routes back into onboarding when operator config is missing', async () => {
     const state: ClmmState = {
       messages: [],
       copilotkit: { actions: [], context: [] },
@@ -692,9 +692,12 @@ describe('pollCycleNode', () => {
 
     const result = await pollCycleNode(state, {});
     const update = (result as { update?: ClmmUpdate }).update;
+    const goto = (result as { goto?: string | string[] }).goto;
+    const resolvedGoto = Array.isArray(goto) ? goto[0] : goto;
 
     expect(result).toBeInstanceOf(Command);
-    expect(update?.view?.haltReason).toContain('missing Pendle strategy configuration');
+    expect(resolvedGoto).toBe('collectSetupInput');
+    expect(update?.view?.haltReason).toBe('');
   });
 
   it('downgrades to hold in smoke mode when no position exists', async () => {

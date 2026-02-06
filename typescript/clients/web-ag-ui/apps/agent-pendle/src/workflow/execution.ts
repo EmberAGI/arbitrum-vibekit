@@ -6,6 +6,7 @@ import type {
   TokenizedYieldMarket,
   TokenizedYieldPosition,
 } from '../clients/onchainActions.js';
+import { type PendleTxExecutionMode } from '../config/constants.js';
 import { executeTransaction } from '../core/transaction.js';
 
 import { logInfo, normalizeHexAddress } from './context.js';
@@ -97,12 +98,28 @@ async function executePlanTransactions(params: {
   };
 }
 
+async function planOrExecuteTransactions(params: {
+  txExecutionMode: PendleTxExecutionMode;
+  clients?: OnchainClients;
+  transactions: TransactionPlan[];
+}): Promise<ExecutionResult> {
+  if (params.txExecutionMode === 'plan') {
+    // Plan mode builds the transactions via onchain-actions but does not submit anything.
+    return { txHashes: [] };
+  }
+  if (!params.clients) {
+    throw new Error('Onchain clients are required to execute Pendle transactions');
+  }
+  return executePlanTransactions({ clients: params.clients, transactions: params.transactions });
+}
+
 export async function executeRebalance(params: {
   onchainActionsClient: Pick<
     OnchainActionsClient,
     'createTokenizedYieldSellPt' | 'createSwap' | 'createTokenizedYieldBuyPt'
   >;
-  clients: OnchainClients;
+  txExecutionMode: PendleTxExecutionMode;
+  clients?: OnchainClients;
   walletAddress: `0x${string}`;
   position: TokenizedYieldPosition;
   currentMarket: TokenizedYieldMarket;
@@ -154,7 +171,11 @@ export async function executeRebalance(params: {
     toMarket: params.targetMarket.marketIdentifier.address,
   });
 
-  return executePlanTransactions({ clients: params.clients, transactions });
+  return planOrExecuteTransactions({
+    txExecutionMode: params.txExecutionMode,
+    clients: params.clients,
+    transactions,
+  });
 }
 
 export async function executeRollover(params: {
@@ -162,7 +183,8 @@ export async function executeRollover(params: {
     OnchainActionsClient,
     'createTokenizedYieldRedeemPt' | 'createSwap' | 'createTokenizedYieldBuyPt'
   >;
-  clients: OnchainClients;
+  txExecutionMode: PendleTxExecutionMode;
+  clients?: OnchainClients;
   walletAddress: `0x${string}`;
   position: TokenizedYieldPosition;
   currentMarket: TokenizedYieldMarket;
@@ -220,7 +242,11 @@ export async function executeRollover(params: {
     toMarket: params.targetMarket.marketIdentifier.address,
   });
 
-  return executePlanTransactions({ clients: params.clients, transactions });
+  return planOrExecuteTransactions({
+    txExecutionMode: params.txExecutionMode,
+    clients: params.clients,
+    transactions,
+  });
 }
 
 export async function executeCompound(params: {
@@ -228,7 +254,8 @@ export async function executeCompound(params: {
     OnchainActionsClient,
     'createTokenizedYieldClaimRewards' | 'createSwap' | 'createTokenizedYieldBuyPt'
   >;
-  clients: OnchainClients;
+  txExecutionMode: PendleTxExecutionMode;
+  clients?: OnchainClients;
   walletAddress: `0x${string}`;
   position: TokenizedYieldPosition;
   currentMarket: TokenizedYieldMarket;
@@ -280,12 +307,17 @@ export async function executeCompound(params: {
     market: params.currentMarket.marketIdentifier.address,
   });
 
-  return executePlanTransactions({ clients: params.clients, transactions });
+  return planOrExecuteTransactions({
+    txExecutionMode: params.txExecutionMode,
+    clients: params.clients,
+    transactions,
+  });
 }
 
 export async function executeInitialDeposit(params: {
   onchainActionsClient: Pick<OnchainActionsClient, 'createSwap' | 'createTokenizedYieldBuyPt'>;
-  clients: OnchainClients;
+  txExecutionMode: PendleTxExecutionMode;
+  clients?: OnchainClients;
   walletAddress: `0x${string}`;
   fundingToken: Token;
   targetMarket: TokenizedYieldMarket;
@@ -329,5 +361,9 @@ export async function executeInitialDeposit(params: {
     market: params.targetMarket.marketIdentifier.address,
   });
 
-  return executePlanTransactions({ clients: params.clients, transactions });
+  return planOrExecuteTransactions({
+    txExecutionMode: params.txExecutionMode,
+    clients: params.clients,
+    transactions,
+  });
 }

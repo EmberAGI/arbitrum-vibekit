@@ -275,6 +275,7 @@ describe('executeInitialDeposit', () => {
     const result = await executeInitialDeposit({
       onchainActionsClient,
       clients,
+      txExecutionMode: 'execute',
       walletAddress: '0x0000000000000000000000000000000000000001',
       fundingToken,
       targetMarket,
@@ -300,6 +301,87 @@ describe('executeInitialDeposit', () => {
     expect(executeTransactionMock.mock.calls[0]?.[1]).toMatchObject({ to: '0xswap' });
     expect(executeTransactionMock.mock.calls[1]?.[1]).toMatchObject({ to: '0xbuy' });
     expect(result.lastTxHash).toBe('0xbuyhash');
+  });
+
+  it('builds a plan but does not submit when tx execution mode is plan', async () => {
+    const onchainActionsClient: Pick<
+      OnchainActionsClient,
+      'createSwap' | 'createTokenizedYieldBuyPt'
+    > = {
+      createSwap: vi.fn().mockResolvedValue({
+        exactFromAmount: '10000000',
+        exactToAmount: '9900000',
+        transactions: [
+          { type: 'EVM_TX', to: '0xswap', data: '0x04', value: '0', chainId: '42161' },
+        ],
+      }),
+      createTokenizedYieldBuyPt: vi.fn().mockResolvedValue({
+        transactions: [
+          { type: 'EVM_TX', to: '0xbuy', data: '0x05', value: '0', chainId: '42161' },
+        ],
+      }),
+    };
+
+    const clients = {} as OnchainClients;
+
+    const fundingToken = {
+      tokenUid: { chainId: '42161', address: '0xusdc' },
+      name: 'USDC',
+      symbol: 'USDC',
+      isNative: false,
+      decimals: 6,
+      iconUri: undefined,
+      isVetted: true,
+    };
+
+    const targetMarket: TokenizedYieldMarket = {
+      marketIdentifier: { chainId: '42161', address: '0xmarket-new' },
+      expiry: '2030-01-01',
+      details: {},
+      ptToken: {
+        tokenUid: { chainId: '42161', address: '0xpt-new' },
+        name: 'PT-NEW',
+        symbol: 'PT-NEW',
+        isNative: false,
+        decimals: 18,
+        iconUri: undefined,
+        isVetted: true,
+      },
+      ytToken: {
+        tokenUid: { chainId: '42161', address: '0xyt-new' },
+        name: 'YT-NEW',
+        symbol: 'YT-NEW',
+        isNative: false,
+        decimals: 18,
+        iconUri: undefined,
+        isVetted: true,
+      },
+      underlyingToken: {
+        tokenUid: { chainId: '42161', address: '0xusdai' },
+        name: 'USDai',
+        symbol: 'USDai',
+        isNative: false,
+        decimals: 18,
+        iconUri: undefined,
+        isVetted: true,
+      },
+    };
+
+    const result = await executeInitialDeposit({
+      onchainActionsClient,
+      clients,
+      txExecutionMode: 'plan',
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      fundingToken,
+      targetMarket,
+      fundingAmount: '10000000',
+    });
+
+    expect(onchainActionsClient.createSwap).toHaveBeenCalledTimes(1);
+    expect(onchainActionsClient.createTokenizedYieldBuyPt).toHaveBeenCalledTimes(1);
+    expect(executeTransactionMock).not.toHaveBeenCalled();
+    expect(result.txHashes).toEqual([]);
+    expect(result.lastTxHash).toBeUndefined();
   });
 });
 

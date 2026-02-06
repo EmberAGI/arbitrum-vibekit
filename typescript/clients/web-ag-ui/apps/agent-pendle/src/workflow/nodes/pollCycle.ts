@@ -4,6 +4,7 @@ import { Command } from '@langchain/langgraph';
 import {
   resolvePendleChainIds,
   resolvePendleSmokeMode,
+  resolvePendleTxExecutionMode,
   resolvePollIntervalMs,
   resolveRebalanceThresholdPct,
   resolveStablecoinWhitelist,
@@ -70,23 +71,35 @@ export const pollCycleNode = async (
   const { operatorConfig, selectedPool } = state.view;
 
   if (!operatorConfig) {
-    const failureMessage = 'ERROR: Polling node missing Pendle strategy configuration';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const message =
+      'Pendle strategy configuration missing. Continuing onboarding to establish configuration.';
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'working', message);
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
     });
+
+    const nextNode =
+      !state.view.operatorInput
+        ? 'collectSetupInput'
+        : !state.view.fundingTokenInput
+          ? 'collectFundingTokenInput'
+          : state.view.delegationsBypassActive !== true && !state.view.delegationBundle
+            ? 'collectDelegations'
+            : 'prepareOperator';
+
     return new Command({
       update: {
         view: {
-          haltReason: failureMessage,
+          haltReason: '',
+          executionError: '',
+          task,
           activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
           metrics: state.view.metrics,
-          task,
           profile: state.view.profile,
           transactionHistory: state.view.transactionHistory,
         },
       },
-      goto: 'summarize',
+      goto: nextNode,
     });
   }
 
@@ -190,6 +203,7 @@ export const pollCycleNode = async (
   const rolloverNeeded = isMaturedMarket(selectedMarket.maturity);
   const compoundEligible = selectedPosition ? hasClaimableRewards(selectedPosition) : false;
   const smokeMode = resolvePendleSmokeMode();
+  const txExecutionMode = resolvePendleTxExecutionMode();
 
   let action: PendleActionKind;
   let nextMarket = decision.nextToken;
@@ -270,10 +284,11 @@ export const pollCycleNode = async (
 
     try {
       if (!smokeMode) {
-        const clients = getOnchainClients();
+        const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
         if (action === 'compound') {
           const execution = await executeCompound({
             onchainActionsClient,
+            txExecutionMode,
             clients,
             walletAddress: operatorConfig.walletAddress,
             position: selectedPosition,
@@ -283,6 +298,7 @@ export const pollCycleNode = async (
         } else if (action === 'rollover') {
           const execution = await executeRollover({
             onchainActionsClient,
+            txExecutionMode,
             clients,
             walletAddress: operatorConfig.walletAddress,
             position: selectedPosition,
@@ -293,6 +309,7 @@ export const pollCycleNode = async (
         } else {
           const execution = await executeRebalance({
             onchainActionsClient,
+            txExecutionMode,
             clients,
             walletAddress: operatorConfig.walletAddress,
             position: selectedPosition,

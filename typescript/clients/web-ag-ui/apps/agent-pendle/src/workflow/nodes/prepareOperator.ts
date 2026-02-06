@@ -1,9 +1,11 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
+import { parseUnits } from 'viem';
 
 import {
   resolvePendleChainIds,
   resolvePendleSmokeMode,
+  resolvePendleTxExecutionMode,
   resolveStablecoinWhitelist,
 } from '../../config/constants.js';
 import { buildEligibleYieldTokens } from '../../core/pendleMarkets.js';
@@ -30,9 +32,11 @@ const resolveFundingAmount = (amountUsd: number, decimals: number): string => {
     throw new Error(`Invalid token decimals: ${decimals}`);
   }
   const fixed = amountUsd.toFixed(decimals);
-  const normalized = fixed.replace('.', '');
-  const trimmed = normalized.replace(/^0+/, '');
-  return trimmed.length > 0 ? trimmed : '0';
+  const baseUnits = parseUnits(fixed, decimals);
+  if (baseUnits <= 0n) {
+    throw new Error(`Resolved funding amount is too small: ${amountUsd}`);
+  }
+  return baseUnits.toString();
 };
 
 const SMOKE_SETUP_TX_HASH = `0x${'0'.repeat(64)}` as const;
@@ -206,6 +210,7 @@ export const prepareOperatorNode = async (
   const events: ClmmEvent[] = [statusEvent];
   let setupComplete = state.view.setupComplete === true;
   let setupTxHash: `0x${string}` | undefined;
+  const txExecutionMode = resolvePendleTxExecutionMode();
 
   if (!setupComplete) {
     if (resolvePendleSmokeMode()) {
@@ -213,95 +218,110 @@ export const prepareOperatorNode = async (
       setupTxHash = SMOKE_SETUP_TX_HASH;
       setupComplete = true;
     } else {
-    const targetMarket = tokenizedMarkets.find(
-      (market) => market.marketIdentifier.address.toLowerCase() === bestYieldToken.marketAddress.toLowerCase(),
-    );
-    const fundingToken = supportedTokens.find(
-      (token) => token.tokenUid.address.toLowerCase() === fundingTokenAddress.toLowerCase(),
-    );
+      const targetMarket = tokenizedMarkets.find(
+        (market) =>
+          market.marketIdentifier.address.toLowerCase() ===
+          bestYieldToken.marketAddress.toLowerCase(),
+      );
+      const fundingToken = supportedTokens.find(
+        (token) => token.tokenUid.address.toLowerCase() === fundingTokenAddress.toLowerCase(),
+      );
 
-    if (!targetMarket || !fundingToken) {
-      const failureMessage = 'ERROR: Missing tokenized yield data for initial deposit';
-      const { task, statusEvent: errorEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-      await copilotkitEmitState(config, {
-        view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
-      });
-      return new Command({
-        update: {
-          view: {
-            haltReason: failureMessage,
-            executionError: failureMessage,
-            activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
-            task,
-            profile: state.view.profile,
-            transactionHistory: state.view.transactionHistory,
-            metrics: state.view.metrics,
+      if (!targetMarket || !fundingToken) {
+        const failureMessage = 'ERROR: Missing tokenized yield data for initial deposit';
+        const { task, statusEvent: errorEvent } = buildTaskStatus(
+          state.view.task,
+          'failed',
+          failureMessage,
+        );
+        await copilotkitEmitState(config, {
+          view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
+        });
+        return new Command({
+          update: {
+            view: {
+              haltReason: failureMessage,
+              executionError: failureMessage,
+              activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
+              task,
+              profile: state.view.profile,
+              transactionHistory: state.view.transactionHistory,
+              metrics: state.view.metrics,
+            },
           },
-        },
-        goto: 'summarize',
-      });
-    }
+          goto: 'summarize',
+        });
+      }
 
-    let fundingAmount: string;
-    try {
-      fundingAmount = resolveFundingAmount(operatorConfig.baseContributionUsd, fundingToken.decimals);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      const failureMessage = `ERROR: Unable to resolve funding amount: ${message}`;
-      const { task, statusEvent: errorEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-      await copilotkitEmitState(config, {
-        view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
-      });
-      return new Command({
-        update: {
-          view: {
-            haltReason: failureMessage,
-            executionError: failureMessage,
-            activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
-            task,
-            profile: state.view.profile,
-            transactionHistory: state.view.transactionHistory,
-            metrics: state.view.metrics,
+      let fundingAmount: string;
+      try {
+        fundingAmount = resolveFundingAmount(operatorConfig.baseContributionUsd, fundingToken.decimals);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        const failureMessage = `ERROR: Unable to resolve funding amount: ${message}`;
+        const { task, statusEvent: errorEvent } = buildTaskStatus(
+          state.view.task,
+          'failed',
+          failureMessage,
+        );
+        await copilotkitEmitState(config, {
+          view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
+        });
+        return new Command({
+          update: {
+            view: {
+              haltReason: failureMessage,
+              executionError: failureMessage,
+              activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
+              task,
+              profile: state.view.profile,
+              transactionHistory: state.view.transactionHistory,
+              metrics: state.view.metrics,
+            },
           },
-        },
-        goto: 'summarize',
-      });
-    }
+          goto: 'summarize',
+        });
+      }
 
-    try {
-      const clients = getOnchainClients();
-      const execution = await executeInitialDeposit({
-        onchainActionsClient,
-        clients,
-        walletAddress: operatorConfig.walletAddress,
-        fundingToken,
-        targetMarket,
-        fundingAmount,
-      });
-      setupTxHash = execution.lastTxHash;
-      setupComplete = true;
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      const failureMessage = `ERROR: Pendle initial deposit failed: ${message}`;
-      const { task, statusEvent: errorEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
-      await copilotkitEmitState(config, {
-        view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
-      });
-      return new Command({
-        update: {
-          view: {
-            haltReason: failureMessage,
-            executionError: failureMessage,
-            activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
-            task,
-            profile: state.view.profile,
-            transactionHistory: state.view.transactionHistory,
-            metrics: state.view.metrics,
+      try {
+        const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
+        const execution = await executeInitialDeposit({
+          onchainActionsClient,
+          clients,
+          txExecutionMode,
+          walletAddress: operatorConfig.walletAddress,
+          fundingToken,
+          targetMarket,
+          fundingAmount,
+        });
+        setupTxHash = execution.lastTxHash;
+        setupComplete = true;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        const failureMessage = `ERROR: Pendle initial deposit failed: ${message}`;
+        const { task, statusEvent: errorEvent } = buildTaskStatus(
+          state.view.task,
+          'failed',
+          failureMessage,
+        );
+        await copilotkitEmitState(config, {
+          view: { task, activity: { events: [errorEvent], telemetry: state.view.activity.telemetry } },
+        });
+        return new Command({
+          update: {
+            view: {
+              haltReason: failureMessage,
+              executionError: failureMessage,
+              activity: { events: [errorEvent], telemetry: state.view.activity.telemetry },
+              task,
+              profile: state.view.profile,
+              transactionHistory: state.view.transactionHistory,
+              metrics: state.view.metrics,
+            },
           },
-        },
-        goto: 'summarize',
-      });
-    }
+          goto: 'summarize',
+        });
+      }
     }
   }
 

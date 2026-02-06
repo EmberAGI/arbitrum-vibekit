@@ -20,6 +20,9 @@ const DEFAULT_CHAIN_IDS = [ARBITRUM_CHAIN_ID.toString()];
 const DEFAULT_REBALANCE_THRESHOLD_PCT = 0.5;
 const DEFAULT_DELEGATIONS_BYPASS = false;
 const DEFAULT_SMOKE_MODE = false;
+const DEFAULT_TX_EXECUTION_MODE: PendleTxExecutionMode = 'execute';
+
+export type PendleTxExecutionMode = 'execute' | 'plan';
 
 export const ONCHAIN_ACTIONS_API_URL =
   process.env['ONCHAIN_ACTIONS_API_URL']?.replace(/\/$/, '') ?? 'https://api.emberai.xyz';
@@ -92,6 +95,17 @@ export function resolvePendleSmokeMode(): boolean {
   }
   const normalized = raw.trim().toLowerCase();
   return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
+export function resolvePendleTxExecutionMode(): PendleTxExecutionMode {
+  const raw = process.env['PENDLE_TX_EXECUTION_MODE'];
+  if (!raw) {
+    // In delegation bypass mode we typically do not have a signing key available locally,
+    // but we still want to exercise tx building for smoke testing.
+    return resolveDelegationsBypass() ? 'plan' : DEFAULT_TX_EXECUTION_MODE;
+  }
+  const normalized = raw.trim().toLowerCase();
+  return normalized === 'plan' ? 'plan' : DEFAULT_TX_EXECUTION_MODE;
 }
 
 export function resolveStreamLimit(): number {
