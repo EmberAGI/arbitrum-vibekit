@@ -12,6 +12,10 @@ function createJsonResponse(payload: unknown, init?: ResponseInit): Response {
   });
 }
 
+function createTextResponse(payload: string, init?: ResponseInit): Response {
+  return new Response(payload, { status: 200, ...init });
+}
+
 function extractJsonBody(init?: RequestInit): unknown {
   if (!init?.body) {
     return null;
@@ -114,12 +118,6 @@ describe('POST /api/agents/sync', () => {
     const initial = makeThreadState({ hasInterrupts: true, hasView: true, taskState: 'submitted' });
 
     const fetchMock = makeFetchMock((call) => {
-      if (call.url.endsWith('/threads') && call.init?.method === 'POST') {
-        return createJsonResponse({ thread_id: threadId });
-      }
-      if (call.url.endsWith(`/threads/${threadId}`) && call.init?.method === 'PATCH') {
-        return createJsonResponse({ thread_id: threadId });
-      }
       if (call.url.endsWith(`/threads/${threadId}/state`) && (!call.init || call.init.method === 'GET')) {
         return createJsonResponse(initial);
       }
@@ -141,6 +139,8 @@ describe('POST /api/agents/sync', () => {
 
       expect(didCallSyncStateMutation(fetchMock.calls)).toBe(false);
       expect(fetchMock.calls.some((c) => c.url.includes(`/threads/${threadId}/runs`))).toBe(false);
+      expect(fetchMock.calls.some((c) => c.url.endsWith('/threads') && c.init?.method === 'POST')).toBe(false);
+      expect(fetchMock.calls.some((c) => c.url.endsWith(`/threads/${threadId}`) && c.init?.method === 'PATCH')).toBe(false);
     } finally {
       vi.unstubAllGlobals();
     }
@@ -156,12 +156,6 @@ describe('POST /api/agents/sync', () => {
     let stateReads = 0;
 
     const fetchMock = makeFetchMock((call) => {
-      if (call.url.endsWith('/threads') && call.init?.method === 'POST') {
-        return createJsonResponse({ thread_id: threadId });
-      }
-      if (call.url.endsWith(`/threads/${threadId}`) && call.init?.method === 'PATCH') {
-        return createJsonResponse({ thread_id: threadId });
-      }
       if (call.url.endsWith(`/threads/${threadId}/state`) && (!call.init || call.init.method === 'GET')) {
         stateReads += 1;
         return createJsonResponse(stateReads === 1 ? initial : afterPoke);
@@ -185,6 +179,49 @@ describe('POST /api/agents/sync', () => {
 
       expect(didCallSyncStateMutation(fetchMock.calls)).toBe(true);
       expect(fetchMock.calls.some((c) => c.url.includes(`/threads/${threadId}/runs`))).toBe(true);
+      expect(fetchMock.calls.some((c) => c.url.endsWith('/threads') && c.init?.method === 'POST')).toBe(false);
+      expect(fetchMock.calls.some((c) => c.url.endsWith(`/threads/${threadId}`) && c.init?.method === 'PATCH')).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('creates the thread only when it does not exist', async () => {
+    const threadId = 'missing-thread';
+    const agentId = 'agent-pendle';
+
+    const afterCreate = makeThreadState({ hasInterrupts: false, hasView: true, taskState: 'submitted' });
+
+    let stateReads = 0;
+
+    const fetchMock = makeFetchMock((call) => {
+      if (call.url.endsWith(`/threads/${threadId}/state`) && (!call.init || call.init.method === 'GET')) {
+        stateReads += 1;
+        if (stateReads === 1) {
+          return createTextResponse('not found', { status: 404 });
+        }
+        return createJsonResponse(afterCreate);
+      }
+      if (call.url.endsWith('/threads') && call.init?.method === 'POST') {
+        return createJsonResponse({ thread_id: threadId });
+      }
+      if (call.url.endsWith(`/threads/${threadId}`) && call.init?.method === 'PATCH') {
+        return createJsonResponse({ thread_id: threadId });
+      }
+      throw new Error(`Unexpected fetch: ${call.init?.method ?? 'GET'} ${call.url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock.fn);
+    try {
+      const res = await POST(makeRequestJson({ agentId, threadId }) as never);
+      expect(res.status).toBe(200);
+
+      expect(fetchMock.calls.some((c) => c.url.endsWith('/threads') && c.init?.method === 'POST')).toBe(
+        true,
+      );
+      expect(fetchMock.calls.some((c) => c.url.endsWith(`/threads/${threadId}`) && c.init?.method === 'PATCH')).toBe(
+        true,
+      );
     } finally {
       vi.unstubAllGlobals();
     }

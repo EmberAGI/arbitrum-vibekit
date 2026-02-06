@@ -20,8 +20,13 @@ const ThreadStateSchema = z
   .object({
     view: z
       .object({
+        command: z.string().optional(),
+        onboarding: z.record(z.unknown()).optional(),
+        delegationsBypassActive: z.boolean().optional(),
         profile: z.record(z.unknown()).optional(),
         metrics: z.record(z.unknown()).optional(),
+        activity: z.record(z.unknown()).optional(),
+        transactionHistory: z.array(z.unknown()).optional(),
         task: z
           .object({
             id: z.string().optional(),
@@ -133,20 +138,32 @@ function threadHasPendingInterrupts(payload: unknown): boolean {
   });
 }
 
-async function fetchThreadStatePayload(baseUrl: string, threadId: string): Promise<unknown> {
+async function fetchThreadStatePayload(baseUrl: string, threadId: string): Promise<unknown | null> {
   const response = await fetch(`${baseUrl}/threads/${threadId}/state`);
+  if (response.status === 404) {
+    return null;
+  }
   return parseJsonResponse(response, z.unknown());
 }
 
 async function fetchThreadStateValues(
   baseUrl: string,
   threadId: string,
-): Promise<{ payload: unknown; values: Record<string, unknown> | null; hasInterrupts: boolean }> {
+): Promise<{
+  payload: unknown | null;
+  values: Record<string, unknown> | null;
+  hasInterrupts: boolean;
+  exists: boolean;
+}> {
   const payload = await fetchThreadStatePayload(baseUrl, threadId);
+  if (!payload) {
+    return { payload: null, values: null, hasInterrupts: false, exists: false };
+  }
   return {
     payload,
     values: extractThreadStateValues(payload),
     hasInterrupts: threadHasPendingInterrupts(payload),
+    exists: true,
   };
 }
 
@@ -254,14 +271,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const threadId = parsed.data.threadId ?? getAgentThreadId(parsed.data.agentId);
 
   try {
-    await ensureThread(baseUrl, threadId, runtime.graphId);
-
     // IMPORTANT: Agent list sync is a read-only operation. If we mutate thread state while an
     // onboarding interrupt is pending (e.g. Pendle setup), we can accidentally clobber the
     // interrupt checkpoint and the UI will show "Waiting for agent".
     //
     // So we only "poke" the graph when there is no view state to return AND there are no pending interrupts.
-    const initialState = await fetchThreadStateValues(baseUrl, threadId);
+    let initialState = await fetchThreadStateValues(baseUrl, threadId);
+    if (!initialState.exists) {
+      await ensureThread(baseUrl, threadId, runtime.graphId);
+      initialState = await fetchThreadStateValues(baseUrl, threadId);
+    }
 
     if (!initialState.hasInterrupts) {
       const hasView = Boolean(initialState.values && isRecord(initialState.values['view']));
@@ -280,8 +299,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(
       {
         agentId: parsed.data.agentId,
+        command: state?.view?.command ?? null,
+        onboarding: state?.view?.onboarding ?? null,
+        delegationsBypassActive: state?.view?.delegationsBypassActive ?? null,
         profile: state?.view?.profile ?? null,
         metrics: state?.view?.metrics ?? null,
+        activity: state?.view?.activity ?? null,
+        transactionHistory: state?.view?.transactionHistory ?? null,
+        task: task ?? null,
         taskId,
         taskState: hasTask ? task?.taskStatus?.state ?? null : null,
         haltReason: hasTask ? state?.view?.haltReason ?? null : null,
