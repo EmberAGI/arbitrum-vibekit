@@ -64,6 +64,15 @@ function hasClaimableRewards(position: { yt: { claimableRewards: { exactAmount: 
   });
 }
 
+function toRewardMetrics(
+  rewards: Array<{ token: { symbol: string }; exactAmount: string }>,
+): Array<{ symbol: string; amount: string }> {
+  return rewards.map((reward) => ({
+    symbol: reward.token.symbol,
+    amount: reward.exactAmount,
+  }));
+}
+
 export const pollCycleNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
@@ -355,6 +364,7 @@ export const pollCycleNode = async (
         ? buildTxHash(iteration)
         : undefined;
   const timestamp = new Date().toISOString();
+  const strategyMarketAddress = nextMarket.marketAddress;
   const cycleTelemetry: PendleTelemetry = {
     cycle: iteration,
     action,
@@ -430,15 +440,33 @@ export const pollCycleNode = async (
       }
     : undefined;
 
-  const baseAum = state.view.profile.aum ?? 42_000;
-  const baseIncome = state.view.profile.agentIncome ?? 4_100;
-  const aumDelta = action === 'hold' ? 15 : 120;
-  const incomeDelta = action === 'hold' ? 1.5 : 6;
+  const configuredAumUsd = Number(
+    operatorConfig.baseContributionUsd ?? state.settings.amount ?? 0,
+  );
+  const aumUsd = Number.isFinite(configuredAumUsd) && configuredAumUsd > 0 ? configuredAumUsd : undefined;
+
+  const normalizedFundingTokenAddress = operatorConfig.fundingTokenAddress;
+  const normalizedMarketAddress = strategyMarketAddress;
+  const nextPosition = positions.find(
+    (entry) => entry.marketIdentifier.address.toLowerCase() === normalizedMarketAddress.toLowerCase(),
+  );
+
+  const positionMetric = nextPosition
+    ? {
+        marketAddress: normalizedMarketAddress,
+        ptSymbol: nextPosition.pt.token.symbol,
+        ptAmount: nextPosition.pt.exactAmount,
+        ytSymbol: nextPosition.yt.token.symbol,
+        ytAmount: nextPosition.yt.exactAmount,
+        claimableRewards: toRewardMetrics(nextPosition.yt.claimableRewards),
+      }
+    : undefined;
+
   const nextProfile = {
     ...state.view.profile,
-    aum: Number((baseAum + aumDelta).toFixed(2)),
-    agentIncome: Number((baseIncome + incomeDelta).toFixed(2)),
-    apy: Number(nextApy.toFixed(2)),
+    aum: aumUsd,
+    agentIncome: state.view.profile.agentIncome,
+    apy: Number.isFinite(nextApy) ? Number(nextApy.toFixed(2)) : state.view.profile.apy,
     pools: eligibleMarkets,
     allowedPools: eligibleMarkets,
   };
@@ -453,6 +481,21 @@ export const pollCycleNode = async (
           staleCycles: state.view.metrics.staleCycles ?? 0,
           iteration,
           latestCycle: cycleTelemetry,
+          aumUsd,
+          apy: Number.isFinite(nextApy) ? Number(nextApy.toFixed(2)) : undefined,
+          lifetimePnlUsd: state.view.metrics.lifetimePnlUsd,
+          pendle: {
+            marketAddress: normalizedMarketAddress,
+            ytSymbol: nextMarket.ytSymbol,
+            underlyingSymbol: nextMarket.underlyingSymbol,
+            maturity: nextMarket.maturity,
+            baseContributionUsd: aumUsd,
+            fundingTokenAddress: normalizedFundingTokenAddress,
+            currentApy: Number.isFinite(nextApy) ? Number(nextApy.toFixed(4)) : undefined,
+            bestApy: Number.isFinite(bestMarket.apy) ? Number(bestMarket.apy.toFixed(4)) : undefined,
+            apyDelta: Number.isFinite(decision.apyDelta) ? formatDelta(decision.apyDelta) : undefined,
+            position: positionMetric,
+          },
         },
         task,
         activity: {

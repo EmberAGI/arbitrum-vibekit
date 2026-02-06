@@ -1587,6 +1587,16 @@ describe('pollCycleNode', () => {
     const telemetry = update?.view?.activity?.telemetry?.[0];
     expect(telemetry?.action).toBe('compound');
     expect(telemetry?.txHash).toBe('0xcompoundhash');
+    const nextMetrics = update?.view?.metrics;
+    expect(nextMetrics?.aumUsd).toBe(10);
+    expect(nextMetrics?.apy).toBe(5);
+    expect(nextMetrics?.pendle?.ytSymbol).toBe('YT-CUR');
+    expect(nextMetrics?.pendle?.position?.ytSymbol).toBe('YT-CUR');
+    expect(nextMetrics?.pendle?.position?.ptSymbol).toBe('PT-CUR');
+    expect(nextMetrics?.pendle?.position?.claimableRewards?.[0]).toEqual({
+      symbol: 'USDe',
+      amount: '10',
+    });
     expect(executeCompoundMock).toHaveBeenCalledTimes(1);
     expect(executeRebalanceMock).not.toHaveBeenCalled();
   });

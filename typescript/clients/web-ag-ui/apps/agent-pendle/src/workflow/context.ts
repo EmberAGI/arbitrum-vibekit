@@ -71,6 +71,33 @@ export type ClmmTransaction = {
   timestamp: string;
 };
 
+export type PendleRewardMetric = {
+  symbol: string;
+  amount: string;
+};
+
+export type PendlePositionMetric = {
+  marketAddress: string;
+  ptSymbol?: string;
+  ptAmount?: string;
+  ytSymbol?: string;
+  ytAmount?: string;
+  claimableRewards?: PendleRewardMetric[];
+};
+
+export type PendleStrategyMetric = {
+  marketAddress: string;
+  ytSymbol: string;
+  underlyingSymbol?: string;
+  maturity?: string;
+  baseContributionUsd?: number;
+  fundingTokenAddress?: string;
+  currentApy?: number;
+  bestApy?: number;
+  apyDelta?: number;
+  position?: PendlePositionMetric;
+};
+
 export type ClmmMetrics = {
   lastSnapshot?: PendleYieldToken;
   previousApy?: number;
@@ -78,6 +105,10 @@ export type ClmmMetrics = {
   staleCycles: number;
   iteration: number;
   latestCycle?: PendleTelemetry;
+  aumUsd?: number;
+  apy?: number;
+  lifetimePnlUsd?: number;
+  pendle?: PendleStrategyMetric;
 };
 
 export type TaskState =
@@ -248,6 +279,10 @@ const defaultViewState = (): ClmmViewState => ({
     staleCycles: 0,
     iteration: 0,
     latestCycle: undefined,
+    aumUsd: undefined,
+    apy: undefined,
+    lifetimePnlUsd: undefined,
+    pendle: undefined,
   },
   transactionHistory: [],
 });
@@ -336,6 +371,10 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     staleCycles: right.metrics?.staleCycles ?? left.metrics.staleCycles,
     iteration: right.metrics?.iteration ?? left.metrics.iteration,
     latestCycle: right.metrics?.latestCycle ?? left.metrics.latestCycle,
+    aumUsd: right.metrics?.aumUsd ?? left.metrics.aumUsd,
+    apy: right.metrics?.apy ?? left.metrics.apy,
+    lifetimePnlUsd: right.metrics?.lifetimePnlUsd ?? left.metrics.lifetimePnlUsd,
+    pendle: right.metrics?.pendle ?? left.metrics.pendle,
   };
 
   return {
