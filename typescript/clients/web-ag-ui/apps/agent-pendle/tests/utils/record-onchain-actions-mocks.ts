@@ -1,4 +1,4 @@
-import { getAddress } from 'viem';
+import { getAddress, parseUnits } from 'viem';
 
 import { recordMockData } from '../mocks/utils/mock-loader.js';
 
@@ -189,7 +189,7 @@ const pickPlanningMarket = async (params: {
   walletAddress: `0x${string}`;
   markets: Array<{
     marketIdentifier?: { address?: string; chainId?: string };
-    underlyingToken?: { tokenUid?: { chainId?: string } };
+    underlyingToken?: { tokenUid?: { chainId?: string }; decimals?: number; symbol?: string };
   }>;
 }): Promise<{ address: string; index: number }> => {
   for (let index = 0; index < params.markets.length; index += 1) {
@@ -202,6 +202,13 @@ const pickPlanningMarket = async (params: {
     if (!marketAddress || !underlyingUid || market.marketIdentifier?.chainId !== DEFAULT_CHAIN_ID) {
       continue;
     }
+    const decimals = market.underlyingToken?.decimals;
+    const symbol = market.underlyingToken?.symbol ?? 'underlying';
+    if (!Number.isInteger(decimals) || decimals === undefined || decimals < 0) {
+      continue;
+    }
+    const amountHuman = symbol.toLowerCase().includes('usd') ? '3' : '0.01';
+    const amount = parseUnits(amountHuman, decimals).toString();
     const response = await probeEndpoint({
       baseUrl: params.baseUrl,
       method: 'POST',
@@ -210,7 +217,7 @@ const pickPlanningMarket = async (params: {
         walletAddress: params.walletAddress,
         marketAddress,
         inputTokenUid: underlyingUid,
-        amount: '1000000',
+        amount,
         slippage: '0.5',
       },
     });
@@ -268,7 +275,7 @@ const main = async (): Promise<void> => {
     walletAddress,
     markets: markets as Array<{
       marketIdentifier?: { address?: string; chainId?: string };
-      underlyingToken?: { tokenUid?: { chainId?: string } };
+      underlyingToken?: { tokenUid?: { chainId?: string }; decimals?: number; symbol?: string };
     }>,
   });
 

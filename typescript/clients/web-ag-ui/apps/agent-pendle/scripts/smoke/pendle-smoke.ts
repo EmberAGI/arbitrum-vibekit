@@ -1,4 +1,4 @@
-import { getAddress } from 'viem';
+import { getAddress, parseUnits } from 'viem';
 
 import { OnchainActionsClient } from '../../src/clients/onchainActions.js';
 import { resolvePendleChainIds } from '../../src/config/constants.js';
@@ -25,6 +25,17 @@ const client = new OnchainActionsClient(baseUrl);
 const run = async () => {
   console.log('[smoke] Using onchain-actions base URL:', baseUrl);
   console.log('[smoke] Chain IDs:', chainIds.join(','));
+
+  const toAmountBaseUnits = (value: string, decimals: number): string => {
+    if (!Number.isInteger(decimals) || decimals < 0) {
+      throw new Error(`Invalid token decimals: ${decimals}`);
+    }
+    const baseUnits = parseUnits(value, decimals);
+    if (baseUnits <= 0n) {
+      throw new Error(`Resolved amount is too small: ${value}`);
+    }
+    return baseUnits.toString();
+  };
 
   const markets = await client.listTokenizedYieldMarkets({ chainIds });
   if (markets.length === 0) {
@@ -163,7 +174,7 @@ const run = async () => {
       try {
         await client.createSwap({
           walletAddress,
-          amount: '1000000',
+          amount: toAmountBaseUnits('1', usdcToken.decimals),
           amountType: 'exactIn',
           fromTokenUid: normalizedFrom,
           toTokenUid: normalizedTo,
@@ -200,22 +211,23 @@ const run = async () => {
       const errors: string[] = [];
       for (const candidate of markets) {
         const candidateAddress = getAddress(candidate.marketIdentifier.address);
-      const candidateUnderlying = normalizeTokenUid(candidate.underlyingToken.tokenUid);
-      try {
-        await client.createTokenizedYieldBuyPt({
-          walletAddress,
-          marketAddress: candidateAddress,
-          inputTokenUid: candidateUnderlying,
-          amount: '1000000',
-          slippage: '0.5',
-        });
-        selectedMarket = candidate;
-        return;
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        errors.push(`${candidateAddress}: ${message}`);
+        const candidateUnderlying = normalizeTokenUid(candidate.underlyingToken.tokenUid);
+        const amount = toAmountBaseUnits('3', candidate.underlyingToken.decimals);
+        try {
+          await client.createTokenizedYieldBuyPt({
+            walletAddress,
+            marketAddress: candidateAddress,
+            inputTokenUid: candidateUnderlying,
+            amount,
+            slippage: '0.5',
+          });
+          selectedMarket = candidate;
+          return;
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          errors.push(`${candidateAddress}: ${message}`);
+        }
       }
-    }
       throw new Error(
         `Unable to plan buy PT for any market. ${errors.slice(0, 3).join(' | ')}`,
       );
@@ -238,7 +250,7 @@ const run = async () => {
       await client.createTokenizedYieldSellPt({
         walletAddress,
         ptTokenUid,
-        amount: '1000000',
+        amount: toAmountBaseUnits('1', selectedMarket.ptToken.decimals),
         slippage: '0.5',
       });
     },
@@ -252,7 +264,7 @@ const run = async () => {
       await client.createTokenizedYieldRedeemPt({
         walletAddress,
         ptTokenUid,
-        amount: '1000000',
+        amount: toAmountBaseUnits('1', selectedMarket.ptToken.decimals),
       });
     },
     (message) => (message.includes('status code 400') ? 'pendle redeem rejected' : null),
