@@ -158,6 +158,15 @@ export type FundingTokenInterrupt = {
   options: FundingTokenOption[];
 };
 
+export type PendleFundWalletInterrupt = {
+  type: 'pendle-fund-wallet-request';
+  message: string;
+  payloadSchema: Record<string, unknown>;
+  artifactId: string;
+  walletAddress: `0x${string}`;
+  whitelistSymbols: string[];
+};
+
 export type DelegationCaveat = {
   enforcer: `0x${string}`;
   terms: `0x${string}`;

@@ -183,14 +183,20 @@ export const collectDelegationsNode = async (
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
     });
-    return {
-      view: {
-        haltReason: failureMessage,
-        task,
-        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-        onboarding: { ...ONBOARDING, step: 3 },
+    return new Command({
+      update: {
+        view: {
+          haltReason: failureMessage,
+          task,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          onboarding: { ...ONBOARDING, step: 3 },
+          profile: state.view.profile,
+          metrics: state.view.metrics,
+          transactionHistory: state.view.transactionHistory,
+        },
       },
-    };
+      goto: 'summarize',
+    });
   }
 
   if (parsed.data.outcome === 'rejected') {
