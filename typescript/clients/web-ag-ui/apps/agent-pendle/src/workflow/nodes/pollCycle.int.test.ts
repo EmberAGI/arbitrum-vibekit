@@ -641,7 +641,7 @@ describe('pollCycleNode', () => {
     expect(executeRebalanceMock).not.toHaveBeenCalled();
   });
 
-  it('routes back into onboarding when operator config is missing', async () => {
+  it('halts when operator config is missing (no onboarding recursion)', async () => {
     const state: ClmmState = {
       messages: [],
       copilotkit: { actions: [], context: [] },
@@ -696,8 +696,9 @@ describe('pollCycleNode', () => {
     const resolvedGoto = Array.isArray(goto) ? goto[0] : goto;
 
     expect(result).toBeInstanceOf(Command);
-    expect(resolvedGoto).toBe('collectSetupInput');
-    expect(update?.view?.haltReason).toBe('');
+    expect(resolvedGoto).toBe('__end__');
+    expect(update?.view?.task?.taskStatus?.state).toBe('input-required');
+    expect(update?.view?.task?.taskStatus?.message?.content).toContain('strategy configuration missing');
   });
 
   it('downgrades to hold in smoke mode when no position exists', async () => {

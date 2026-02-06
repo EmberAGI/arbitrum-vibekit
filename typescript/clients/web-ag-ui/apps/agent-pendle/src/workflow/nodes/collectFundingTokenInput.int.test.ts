@@ -383,8 +383,114 @@ describe('collectFundingTokenInputNode', () => {
     };
 
     const result = await collectFundingTokenInputNode(state, {});
-    const update = result as ClmmUpdate;
+    expect(result).toBeInstanceOf(Command);
+    const update = (result as { update?: ClmmUpdate }).update;
+    const haltReason: string | undefined = update?.view?.haltReason;
 
-    expect(update.view?.haltReason).toContain('not in allowed options');
+    expect(haltReason).toContain('not in allowed options');
+  });
+
+  it('fails when no eligible stablecoin balances exist', async () => {
+    process.env.PENDLE_STABLECOIN_WHITELIST = 'USDai,USDC';
+    const fetchMock = vi.fn((input: string | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/wallet/balances/')) {
+        return new Response(
+          JSON.stringify({
+            balances: [
+              {
+                tokenUid: { chainId: '42161', address: '0xeth' },
+                amount: '1',
+                symbol: 'ETH',
+                valueUsd: 2000,
+                decimals: 18,
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response('Not found', { status: 404 });
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { interrupt } = await import('@langchain/langgraph');
+    const interruptMock = vi.mocked(interrupt);
+    const capturedTypes: string[] = [];
+    interruptMock.mockImplementation((request: { type?: string }) => {
+      if (request.type) {
+        capturedTypes.push(request.type);
+      }
+      if (request.type === 'pendle-fund-wallet-request') {
+        return JSON.stringify({ acknowledged: true });
+      }
+      return JSON.stringify({ acknowledged: true });
+    });
+
+    const state: ClmmState = {
+      messages: [],
+      copilotkit: { actions: [], context: [] },
+      settings: { amount: undefined },
+      private: {
+        mode: undefined,
+        pollIntervalMs: 5_000,
+        streamLimit: -1,
+        cronScheduled: false,
+        bootstrapped: true,
+      },
+      view: {
+        command: undefined,
+        task: undefined,
+        poolArtifact: undefined,
+        operatorInput: {
+          walletAddress: '0x0000000000000000000000000000000000000001',
+          baseContributionUsd: 10,
+        },
+        onboarding: undefined,
+        fundingTokenInput: undefined,
+        selectedPool: undefined,
+        operatorConfig: undefined,
+        delegationBundle: undefined,
+        haltReason: undefined,
+        executionError: undefined,
+        delegationsBypassActive: true,
+        profile: {
+          agentIncome: undefined,
+          aum: undefined,
+          totalUsers: undefined,
+          apy: undefined,
+          chains: [],
+          protocols: [],
+          tokens: [],
+          pools: [],
+          allowedPools: [],
+        },
+        activity: { telemetry: [], events: [] },
+        metrics: {
+          lastSnapshot: undefined,
+          previousApy: undefined,
+          cyclesSinceRebalance: 0,
+          staleCycles: 0,
+          iteration: 0,
+          latestCycle: undefined,
+        },
+        transactionHistory: [],
+      },
+    };
+
+    const result = await collectFundingTokenInputNode(state, {});
+
+    // The "fund wallet" interrupt is an ack-only flow. After acknowledgement we end the run
+    // and let the UI trigger a new cycle which re-checks balances and proceeds.
+    expect(result).toBeInstanceOf(Command);
+    const goto = (result as Command<string, ClmmUpdate>).goto;
+    expect(Array.isArray(goto) ? goto[0] : goto).toBe('__end__');
+    expect(capturedTypes[0]).toBe('pendle-fund-wallet-request');
+    expect(capturedTypes).not.toContain('pendle-funding-token-request');
   });
 });
