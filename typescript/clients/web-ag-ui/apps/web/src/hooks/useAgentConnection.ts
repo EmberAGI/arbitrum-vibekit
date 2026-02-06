@@ -34,6 +34,7 @@ import {
 } from '../types/agent';
 import { applyAgentSyncToState, parseAgentSyncResponse } from '../utils/agentSync';
 import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
+import { fireAgentRun } from '../utils/fireAgentRun';
 
 export type {
   AgentState,
@@ -452,12 +453,24 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   }, [runCommand, isHired, isHiring]);
 
   const runFire = useCallback(() => {
-    if (!isFiring) {
-      if (!runCommand('fire')) return;
-      setIsFiring(true);
+    if (isFiring) return;
+
+    setIsFiring(true);
+    const currentAgent = agentRef.current;
+    void fireAgentRun({
+      agent: currentAgent,
+      copilotkit,
+      threadId,
+      runInFlightRef,
+      createId: v7,
+    }).then((ok) => {
+      if (!ok) {
+        setIsFiring(false);
+        return;
+      }
       setTimeout(() => setIsFiring(false), 3000);
-    }
-  }, [runCommand, isFiring]);
+    });
+  }, [copilotkit, isFiring, threadId]);
 
   const resolveInterrupt = useCallback(
     (
