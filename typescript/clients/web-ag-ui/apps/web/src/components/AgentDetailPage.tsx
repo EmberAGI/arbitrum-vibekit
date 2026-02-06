@@ -355,6 +355,7 @@ export function AgentDetailPage({
 
           {resolvedTab === 'metrics' && (
             <MetricsTab
+              agentId={agentId}
               profile={profile}
               metrics={metrics}
               fullMetrics={fullMetrics}
@@ -507,8 +508,10 @@ export function AgentDetailPage({
 
             {activeTab === 'metrics' && (
               <MetricsTab
+                agentId={agentId}
                 profile={profile}
                 metrics={metrics}
+                fullMetrics={fullMetrics}
                 events={[]}
               />
             )}
@@ -1590,13 +1593,18 @@ function PointsColumn({ metrics }: PointsColumnProps) {
 
 // Metrics Tab Component
 interface MetricsTabProps {
+  agentId: string;
   profile: AgentProfile;
   metrics: AgentMetrics;
   fullMetrics?: AgentViewMetrics;
   events: ClmmEvent[];
 }
 
-function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) {
+function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsTabProps) {
+  if (agentId === 'agent-pendle') {
+    return <PendleMetricsTab profile={profile} metrics={metrics} fullMetrics={fullMetrics} events={events} />;
+  }
+
   const formatDate = (timestamp?: string) => {
     if (!timestamp) return '—';
     const date = new Date(timestamp);
@@ -1779,6 +1787,204 @@ function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) 
       )}
 
       {/* Activity Stream */}
+      {events.length > 0 && (
+        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {events.slice(-10).reverse().map((event, i) => (
+              <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
+                <div
+                  className={`w-2 h-2 rounded-full mt-2 ${
+                    event.type === 'status'
+                      ? 'bg-blue-400'
+                      : event.type === 'artifact'
+                        ? 'bg-purple-400'
+                        : 'bg-gray-400'
+                  }`}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
+                  <div className="text-sm text-white mt-1">
+                    {event.type === 'status' && event.message}
+                    {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
+                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<MetricsTabProps, 'agentId'>) {
+  const formatDate = (timestamp?: string) => {
+    if (!timestamp) return '—';
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const strategy = fullMetrics?.pendle;
+  const latestCycle = fullMetrics?.latestCycle;
+
+  const rewardLines = strategy?.position?.claimableRewards ?? [];
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Strategy</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Target YT</div>
+            <div className="text-white font-medium">{strategy?.ytSymbol ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Underlying</div>
+            <div className="text-white font-medium">{strategy?.underlyingSymbol ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Current APY</div>
+            <div className="text-white font-medium">
+              {strategy?.currentApy !== undefined ? `${strategy.currentApy.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Contribution</div>
+            <div className="text-white font-medium">
+              {strategy?.baseContributionUsd !== undefined ? `$${strategy.baseContributionUsd.toLocaleString()}` : '—'}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-[#2a2a2a] grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Maturity</div>
+            <div className="text-white font-medium">{strategy?.maturity ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Best APY</div>
+            <div className="text-white font-medium">
+              {strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Delta</div>
+            <div className="text-white font-medium">
+              {strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Funding Token</div>
+            <div className="text-white font-medium">
+              {strategy?.fundingTokenAddress ? strategy.fundingTokenAddress.slice(0, 10) + '…' : '—'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Position</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">PT</div>
+            <div className="text-white font-medium">
+              {strategy?.position?.ptSymbol ? `${strategy.position.ptSymbol} ${strategy.position.ptAmount ?? ''}`.trim() : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">YT</div>
+            <div className="text-white font-medium">
+              {strategy?.position?.ytSymbol ? `${strategy.position.ytSymbol} ${strategy.position.ytAmount ?? ''}`.trim() : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+            <div className="text-white font-medium">{metrics.apy !== undefined ? `${metrics.apy.toFixed(2)}%` : '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
+            <div className="text-white font-medium">{metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : '—'}</div>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Claimable Rewards</div>
+          {rewardLines.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {rewardLines.map((reward) => (
+                <div key={reward.symbol} className="flex items-center justify-between">
+                  <span className="text-gray-300">{reward.symbol}</span>
+                  <span className="text-white font-medium">{reward.amount}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-gray-400 text-sm">—</div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <MetricCard
+          label="Iteration"
+          value={metrics.iteration?.toString() ?? '—'}
+          icon={<TrendingUp className="w-4 h-4 text-teal-400" />}
+        />
+        <MetricCard
+          label="Cycles Since Rotation"
+          value={metrics.cyclesSinceRebalance?.toString() ?? '—'}
+          icon={<Minus className="w-4 h-4 text-yellow-400" />}
+        />
+        <MetricCard
+          label="Best APY"
+          value={strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : '—'}
+          icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
+        />
+        <MetricCard
+          label="APY Delta"
+          value={strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : '—'}
+          icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
+        />
+      </div>
+
+      {latestCycle && (
+        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Latest Cycle</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Cycle</div>
+              <div className="text-white font-medium">{latestCycle.cycle}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Action</div>
+              <div className="text-white font-medium">{latestCycle.action}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+              <div className="text-white font-medium">
+                {latestCycle.apy !== undefined ? `${latestCycle.apy.toFixed(2)}%` : '—'}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Timestamp</div>
+              <div className="text-white font-medium">{formatDate(latestCycle.timestamp)}</div>
+            </div>
+          </div>
+          {latestCycle.reason && (
+            <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Reason</div>
+              <div className="text-gray-300 text-sm">{latestCycle.reason}</div>
+            </div>
+          )}
+        </div>
+      )}
+
       {events.length > 0 && (
         <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>

@@ -49,7 +49,42 @@ export interface TelemetryItem {
   action: string;
   reason?: string;
   midPrice?: number;
+  apy?: number;
+  ytSymbol?: string;
+  metrics?: {
+    bestApy?: number;
+    currentApy?: number;
+    apyDelta?: number;
+    rebalanceThresholdPct?: number;
+  };
   timestamp?: string;
+}
+
+export interface PendleRewardMetric {
+  symbol: string;
+  amount: string;
+}
+
+export interface PendlePositionMetric {
+  marketAddress: string;
+  ptSymbol?: string;
+  ptAmount?: string;
+  ytSymbol?: string;
+  ytAmount?: string;
+  claimableRewards?: PendleRewardMetric[];
+}
+
+export interface PendleStrategyMetric {
+  marketAddress: string;
+  ytSymbol: string;
+  underlyingSymbol?: string;
+  maturity?: string;
+  baseContributionUsd?: number;
+  fundingTokenAddress?: string;
+  currentApy?: number;
+  bestApy?: number;
+  apyDelta?: number;
+  position?: PendlePositionMetric;
 }
 
 // Event types for activity streaming
@@ -205,6 +240,7 @@ export interface AgentViewActivity {
 export interface AgentViewMetrics {
   lastSnapshot?: Pool;
   previousPrice?: number;
+  previousApy?: number;
   cyclesSinceRebalance: number;
   staleCycles: number;
   rebalanceCycles?: number;
@@ -213,6 +249,7 @@ export interface AgentViewMetrics {
   aumUsd?: number;
   apy?: number;
   lifetimePnlUsd?: number;
+  pendle?: PendleStrategyMetric;
   latestSnapshot?: {
     poolAddress?: `0x${string}`;
     totalUsd?: number;
@@ -314,6 +351,7 @@ export const defaultProfile: AgentViewProfile = {
 export const defaultMetrics: AgentViewMetrics = {
   lastSnapshot: undefined,
   previousPrice: undefined,
+  previousApy: undefined,
   cyclesSinceRebalance: 0,
   staleCycles: 0,
   rebalanceCycles: 0,
@@ -322,6 +360,7 @@ export const defaultMetrics: AgentViewMetrics = {
   aumUsd: undefined,
   apy: undefined,
   lifetimePnlUsd: undefined,
+  pendle: undefined,
   latestSnapshot: undefined,
 };
 
