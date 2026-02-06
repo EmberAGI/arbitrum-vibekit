@@ -37,6 +37,7 @@ import { applyAgentSyncToState, parseAgentSyncResponse } from '../utils/agentSyn
 import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
 import { fireAgentRun } from '../utils/fireAgentRun';
 import { scheduleCycleAfterInterruptResolution } from '../utils/interruptAutoCycle';
+import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
 
 export type {
   AgentState,
