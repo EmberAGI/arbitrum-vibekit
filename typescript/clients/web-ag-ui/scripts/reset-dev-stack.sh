@@ -8,6 +8,8 @@ ports=(3000 3001 3002 3003 3004 3005 8123 8124 8125 8126 50051)
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+
 kill_pids() {
   local pids="$1"
   if [ -n "$pids" ]; then
