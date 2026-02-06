@@ -26,8 +26,10 @@ export interface Task {
 // Pool types
 export interface Pool {
   address: string;
-  token0: { symbol: string };
-  token1: { symbol: string };
+  // Some agents (e.g. Pendle) do not model pools as token0/token1 pairs.
+  // Keep the UI resilient so a missing snapshot doesn't crash the detail page.
+  token0?: { symbol?: string } | null;
+  token1?: { symbol?: string } | null;
   feeTierBps?: number;
 }
 

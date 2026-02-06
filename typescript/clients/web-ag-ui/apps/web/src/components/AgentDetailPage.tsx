@@ -34,6 +34,7 @@ import type {
   ClmmEvent,
 } from '../types/agent';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
+import { formatPoolPair } from '../utils/poolFormat';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
@@ -682,10 +683,12 @@ function AgentBlockersTab({
     isLoading: isWalletLoading,
     error: walletError,
   } = usePrivyWalletClient();
-  const delegationsBypassEnabled = process.env.DELEGATIONS_BYPASS === 'true';
+  const delegationsBypassEnabled =
+    (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_DELEGATIONS_BYPASS : undefined) ===
+    'true';
   // Treat empty-string env as unset so the UI does not render a blank address.
   const walletBypassAddress =
-    process.env.NEXT_PUBLIC_WALLET_BYPASS_ADDRESS?.trim() ||
+    (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_WALLET_BYPASS_ADDRESS : undefined)?.trim() ||
     '0x0000000000000000000000000000000000000000';
   const isPendleAgent = agentId === 'agent-pendle';
   const isGmxAlloraAgent = agentId === 'agent-gmx-allora';
@@ -1242,7 +1245,7 @@ function AgentBlockersTab({
                       <option value="">Choose a pool...</option>
                       {uniqueAllowedPools.map((pool) => (
                         <option key={pool.address} value={pool.address}>
-                          {pool.token0.symbol}/{pool.token1.symbol} — {pool.address.slice(0, 10)}
+                          {formatPoolPair(pool)} — {pool.address.slice(0, 10)}
                           ...
                         </option>
                       ))}
@@ -1638,9 +1641,7 @@ function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) 
 
   const latestSnapshot = fullMetrics?.latestSnapshot;
   const poolSnapshot = fullMetrics?.lastSnapshot;
-  const poolName = poolSnapshot
-    ? `${poolSnapshot.token0.symbol}/${poolSnapshot.token1.symbol}`
-    : '—';
+  const poolName = formatPoolPair(poolSnapshot);
   const positionTokens = latestSnapshot?.positionTokens ?? [];
 
   return (
