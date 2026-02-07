@@ -8,7 +8,7 @@ import {
   resolvePendleTxExecutionMode,
   resolveStablecoinWhitelist,
 } from '../../config/constants.js';
-import { buildEligibleYieldTokens } from '../../core/pendleMarkets.js';
+import { buildEligibleYieldTokens, toYieldToken } from '../../core/pendleMarkets.js';
 import type { ResolvedPendleConfig } from '../../domain/types.js';
 import { getOnchainActionsClient, getOnchainClients } from '../clientFactory.js';
 import {
@@ -21,6 +21,7 @@ import {
 } from '../context.js';
 import { executeInitialDeposit } from '../execution.js';
 import { AGENT_WALLET_ADDRESS } from '../seedData.js';
+import { buildPendleLatestSnapshot } from '../viewMapping.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -123,6 +124,8 @@ export const prepareOperatorNode = async (
   let eligibleYieldTokens = [];
   let tokenizedMarkets = [];
   let supportedTokens = [];
+  let existingMarketAddress: string | undefined;
+  let existingFundingTokenAddress: `0x${string}` | undefined;
   try {
     const chainIds = resolvePendleChainIds();
     const [markets, fetchedTokens] = await Promise.all([
@@ -136,6 +139,31 @@ export const prepareOperatorNode = async (
       supportedTokens: fetchedTokens,
       whitelistSymbols: resolveStablecoinWhitelist(),
     });
+
+    try {
+      const positions = await onchainActionsClient.listTokenizedYieldPositions({
+        walletAddress: operatorWalletAddress,
+        chainIds,
+      });
+      const positionMarketAddress = positions[0]?.marketIdentifier.address;
+      if (positionMarketAddress) {
+        const matchedMarket = markets.find(
+          (market) => market.marketIdentifier.address.toLowerCase() === positionMarketAddress.toLowerCase(),
+        );
+        if (matchedMarket) {
+          existingMarketAddress = matchedMarket.marketIdentifier.address;
+          existingFundingTokenAddress = normalizeHexAddress(
+            matchedMarket.underlyingToken.tokenUid.address,
+            'funding token address',
+          );
+        }
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      logInfo('Unable to detect existing Pendle positions during setup; continuing with market selection', {
+        error: message,
+      });
+    }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const failureMessage = `ERROR: Failed to fetch Pendle markets: ${message}`;
@@ -181,27 +209,53 @@ export const prepareOperatorNode = async (
     });
   }
 
+  const selectedYieldToken =
+    state.view.selectedPool ??
+    (existingMarketAddress
+      ? eligibleYieldTokens.find(
+          (token) => token.marketAddress.toLowerCase() === existingMarketAddress.toLowerCase(),
+        ) ??
+        (() => {
+          const matched = tokenizedMarkets.find(
+            (market) =>
+              market.marketIdentifier.address.toLowerCase() === existingMarketAddress?.toLowerCase(),
+          );
+          return matched ? toYieldToken(matched) : undefined;
+        })()
+      : undefined) ??
+    bestYieldToken;
+
+  const hasExistingPositionInSelectedMarket =
+    Boolean(existingMarketAddress) &&
+    selectedYieldToken.marketAddress.toLowerCase() === existingMarketAddress?.toLowerCase();
+
+  const fundingTokenAddressResolved =
+    hasExistingPositionInSelectedMarket && existingFundingTokenAddress
+      ? existingFundingTokenAddress
+      : fundingTokenAddress;
+
   const operatorConfig: ResolvedPendleConfig = {
     walletAddress: delegationsBypassActive ? AGENT_WALLET_ADDRESS : operatorWalletAddress,
     baseContributionUsd: operatorInput.baseContributionUsd ?? 10,
-    fundingTokenAddress,
-    targetYieldToken: bestYieldToken,
+    fundingTokenAddress: fundingTokenAddressResolved,
+    targetYieldToken: selectedYieldToken,
   };
 
   logInfo('Pendle strategy configuration established', {
     operatorWalletAddress,
     baseContributionUsd: operatorConfig.baseContributionUsd,
-    fundingToken: fundingTokenAddress,
-    ytToken: bestYieldToken.ytSymbol,
-    apy: bestYieldToken.apy,
+    fundingToken: operatorConfig.fundingTokenAddress,
+    ytToken: selectedYieldToken.ytSymbol,
+    apy: selectedYieldToken.apy,
+    positionDetected: Boolean(existingMarketAddress),
   });
 
   const { task, statusEvent } = buildTaskStatus(
     state.view.task,
     'working',
     delegationsBypassActive
-      ? `Delegation bypass active. Allocating into ${bestYieldToken.ytSymbol} from agent wallet.`
-      : `Delegations active. Allocating into ${bestYieldToken.ytSymbol} from user wallet ${operatorWalletAddress}.`,
+      ? `Delegation bypass active. Allocating into ${selectedYieldToken.ytSymbol} from agent wallet.`
+      : `Delegations active. Allocating into ${selectedYieldToken.ytSymbol} from user wallet ${operatorWalletAddress}.`,
   );
   await copilotkitEmitState(config, {
     view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
@@ -213,7 +267,10 @@ export const prepareOperatorNode = async (
   const txExecutionMode = resolvePendleTxExecutionMode();
 
   if (!setupComplete) {
-    if (resolvePendleSmokeMode()) {
+    if (hasExistingPositionInSelectedMarket) {
+      // Do not force an initial deposit when the wallet already holds a PT position.
+      setupComplete = true;
+    } else if (resolvePendleSmokeMode()) {
       // Smoke mode is meant for UI and cron validation without requiring a funded agent wallet.
       setupTxHash = SMOKE_SETUP_TX_HASH;
       setupComplete = true;
@@ -221,10 +278,11 @@ export const prepareOperatorNode = async (
       const targetMarket = tokenizedMarkets.find(
         (market) =>
           market.marketIdentifier.address.toLowerCase() ===
-          bestYieldToken.marketAddress.toLowerCase(),
+          selectedYieldToken.marketAddress.toLowerCase(),
       );
       const fundingToken = supportedTokens.find(
-        (token) => token.tokenUid.address.toLowerCase() === fundingTokenAddress.toLowerCase(),
+        (token) =>
+          token.tokenUid.address.toLowerCase() === operatorConfig.fundingTokenAddress.toLowerCase(),
       );
 
       if (!targetMarket || !fundingToken) {
@@ -331,38 +389,48 @@ export const prepareOperatorNode = async (
         action: 'setup',
         txHash: setupTxHash,
         status: 'success' as const,
-        reason: `Initial deposit into ${bestYieldToken.ytSymbol}`,
+        reason: `Initial deposit into ${selectedYieldToken.ytSymbol}`,
         timestamp: new Date().toISOString(),
       }
     : undefined;
+
+  const timestamp = new Date().toISOString();
+  const positionOpenedAt = state.view.metrics.latestSnapshot?.positionOpenedAt ?? timestamp;
+  const latestSnapshot = buildPendleLatestSnapshot({
+    operatorConfig,
+    totalUsd: operatorConfig.baseContributionUsd,
+    timestamp,
+    positionOpenedAt,
+  });
 
   return {
     view: {
       operatorConfig,
       setupComplete,
-      selectedPool: bestYieldToken,
+      selectedPool: selectedYieldToken,
       metrics: {
-        lastSnapshot: bestYieldToken,
+        lastSnapshot: selectedYieldToken,
         previousApy: undefined,
         cyclesSinceRebalance: 0,
         staleCycles: 0,
         iteration: 0,
         latestCycle: undefined,
         aumUsd: operatorConfig.baseContributionUsd,
-        apy: Number.isFinite(bestYieldToken.apy) ? Number(bestYieldToken.apy.toFixed(2)) : undefined,
+        apy: Number.isFinite(selectedYieldToken.apy) ? Number(selectedYieldToken.apy.toFixed(2)) : undefined,
         lifetimePnlUsd: undefined,
         pendle: {
-          marketAddress: bestYieldToken.marketAddress,
-          ytSymbol: bestYieldToken.ytSymbol,
-          underlyingSymbol: bestYieldToken.underlyingSymbol,
-          maturity: bestYieldToken.maturity,
+          marketAddress: selectedYieldToken.marketAddress,
+          ytSymbol: selectedYieldToken.ytSymbol,
+          underlyingSymbol: selectedYieldToken.underlyingSymbol,
+          maturity: selectedYieldToken.maturity,
           baseContributionUsd: operatorConfig.baseContributionUsd,
-          fundingTokenAddress,
-          currentApy: Number.isFinite(bestYieldToken.apy) ? Number(bestYieldToken.apy.toFixed(4)) : undefined,
+          fundingTokenAddress: operatorConfig.fundingTokenAddress,
+          currentApy: Number.isFinite(selectedYieldToken.apy) ? Number(selectedYieldToken.apy.toFixed(4)) : undefined,
           bestApy: Number.isFinite(bestYieldToken.apy) ? Number(bestYieldToken.apy.toFixed(4)) : undefined,
           apyDelta: undefined,
           position: undefined,
         },
+        latestSnapshot,
       },
       task,
       activity: { events, telemetry: state.view.activity.telemetry },
@@ -372,9 +440,19 @@ export const prepareOperatorNode = async (
       profile: {
         ...state.view.profile,
         aum: operatorConfig.baseContributionUsd,
-        apy: Number.isFinite(bestYieldToken.apy) ? Number(bestYieldToken.apy.toFixed(2)) : undefined,
-        pools: eligibleYieldTokens,
-        allowedPools: eligibleYieldTokens,
+        apy: Number.isFinite(selectedYieldToken.apy) ? Number(selectedYieldToken.apy.toFixed(2)) : undefined,
+        pools: [
+          selectedYieldToken,
+          ...eligibleYieldTokens.filter(
+            (token) => token.marketAddress.toLowerCase() !== selectedYieldToken.marketAddress.toLowerCase(),
+          ),
+        ],
+        allowedPools: [
+          selectedYieldToken,
+          ...eligibleYieldTokens.filter(
+            (token) => token.marketAddress.toLowerCase() !== selectedYieldToken.marketAddress.toLowerCase(),
+          ),
+        ],
       },
     },
     private: {

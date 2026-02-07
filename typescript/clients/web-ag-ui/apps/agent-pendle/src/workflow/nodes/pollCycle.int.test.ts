@@ -226,6 +226,9 @@ describe('pollCycleNode', () => {
         fundingTokenInput: undefined,
         selectedPool: {
           marketAddress: '0xmarket-current',
+          ptAddress: '0xpt-cur',
+          ytAddress: '0xyt-cur',
+          ptSymbol: 'PT-CUR',
           ytSymbol: 'YT-CUR',
           underlyingSymbol: 'USDe',
           apy: 5,
@@ -237,6 +240,9 @@ describe('pollCycleNode', () => {
           fundingTokenAddress: '0x0000000000000000000000000000000000000002',
           targetYieldToken: {
             marketAddress: '0xmarket-current',
+            ptAddress: '0xpt-cur',
+            ytAddress: '0xyt-cur',
+            ptSymbol: 'PT-CUR',
             ytSymbol: 'YT-CUR',
             underlyingSymbol: 'USDe',
             apy: 5,
@@ -390,6 +396,9 @@ describe('pollCycleNode', () => {
         fundingTokenInput: undefined,
         selectedPool: {
           marketAddress: '0xmarket-stale',
+          ptAddress: '0xpt-stale',
+          ytAddress: '0xyt-stale',
+          ptSymbol: 'PT-STALE',
           ytSymbol: 'YT-STALE',
           underlyingSymbol: 'USDC',
           apy: 4,
@@ -401,6 +410,9 @@ describe('pollCycleNode', () => {
           fundingTokenAddress: '0x0000000000000000000000000000000000000002',
           targetYieldToken: {
             marketAddress: '0xmarket-stale',
+            ptAddress: '0xpt-stale',
+            ytAddress: '0xyt-stale',
+            ptSymbol: 'PT-STALE',
             ytSymbol: 'YT-STALE',
             underlyingSymbol: 'USDC',
             apy: 4,
@@ -586,6 +598,9 @@ describe('pollCycleNode', () => {
         fundingTokenInput: undefined,
         selectedPool: {
           marketAddress: '0xmarket-current',
+          ptAddress: '0xpt-cur',
+          ytAddress: '0xyt-cur',
+          ptSymbol: 'PT-CUR',
           ytSymbol: 'YT-CUR',
           underlyingSymbol: 'USDe',
           apy: 4.8,
@@ -597,6 +612,9 @@ describe('pollCycleNode', () => {
           fundingTokenAddress: '0x0000000000000000000000000000000000000002',
           targetYieldToken: {
             marketAddress: '0xmarket-current',
+            ptAddress: '0xpt-cur',
+            ytAddress: '0xyt-cur',
+            ptSymbol: 'PT-CUR',
             ytSymbol: 'YT-CUR',
             underlyingSymbol: 'USDe',
             apy: 4.8,
@@ -851,6 +869,8 @@ describe('pollCycleNode', () => {
         fundingTokenInput: undefined,
         selectedPool: {
           marketAddress: '0xmarket-current',
+          ptAddress: '0xpt-cur',
+          ytAddress: '0xyt-cur',
           ptSymbol: 'PT-CUR',
           ytSymbol: 'YT-CUR',
           underlyingSymbol: 'USDe',
@@ -863,6 +883,8 @@ describe('pollCycleNode', () => {
           fundingTokenAddress: '0xusdai',
           targetYieldToken: {
             marketAddress: '0xmarket-current',
+            ptAddress: '0xpt-cur',
+            ytAddress: '0xyt-cur',
             ptSymbol: 'PT-CUR',
             ytSymbol: 'YT-CUR',
             underlyingSymbol: 'USDe',
@@ -1051,6 +1073,9 @@ describe('pollCycleNode', () => {
         fundingTokenInput: undefined,
         selectedPool: {
           marketAddress: '0xmarket-current',
+          ptAddress: '0xpt-cur',
+          ytAddress: '0xyt-cur',
+          ptSymbol: 'PT-CUR',
           ytSymbol: 'YT-CUR',
           underlyingSymbol: 'USDe',
           apy: 4,
@@ -1062,6 +1087,9 @@ describe('pollCycleNode', () => {
           fundingTokenAddress: '0x0000000000000000000000000000000000000002',
           targetYieldToken: {
             marketAddress: '0xmarket-current',
+            ptAddress: '0xpt-cur',
+            ytAddress: '0xyt-cur',
+            ptSymbol: 'PT-CUR',
             ytSymbol: 'YT-CUR',
             underlyingSymbol: 'USDe',
             apy: 4,
@@ -1283,6 +1311,9 @@ describe('pollCycleNode', () => {
         fundingTokenInput: undefined,
         selectedPool: {
           marketAddress: '0xmarket-current',
+          ptAddress: '0xpt-cur',
+          ytAddress: '0xyt-cur',
+          ptSymbol: 'PT-CUR',
           ytSymbol: 'YT-CUR',
           underlyingSymbol: 'USDe',
           apy: 5,
@@ -1294,6 +1325,9 @@ describe('pollCycleNode', () => {
           fundingTokenAddress: '0xusde',
           targetYieldToken: {
             marketAddress: '0xmarket-current',
+            ptAddress: '0xpt-cur',
+            ytAddress: '0xyt-cur',
+            ptSymbol: 'PT-CUR',
             ytSymbol: 'YT-CUR',
             underlyingSymbol: 'USDe',
             apy: 5,
@@ -1533,6 +1567,9 @@ describe('pollCycleNode', () => {
         fundingTokenInput: undefined,
         selectedPool: {
           marketAddress: '0xmarket-current',
+          ptAddress: '0xpt-cur',
+          ytAddress: '0xyt-cur',
+          ptSymbol: 'PT-CUR',
           ytSymbol: 'YT-CUR',
           underlyingSymbol: 'USDe',
           apy: 5,
@@ -1544,6 +1581,9 @@ describe('pollCycleNode', () => {
           fundingTokenAddress: '0xusde',
           targetYieldToken: {
             marketAddress: '0xmarket-current',
+            ptAddress: '0xpt-cur',
+            ytAddress: '0xyt-cur',
+            ptSymbol: 'PT-CUR',
             ytSymbol: 'YT-CUR',
             underlyingSymbol: 'USDe',
             apy: 5,
