@@ -15,3 +15,6 @@ This agent uses Allora prediction feeds to make deterministic trading decisions 
 - Plan-building mode (no submission) is implemented.
 - Next: validate onchain-actions read-path correctness (markets/positions/balances) before enabling transaction submission.
 
+## Environment
+
+- `GMX_MIN_NATIVE_ETH_WEI`: minimum native ETH (in wei) required in the execution wallet before the agent will proceed (defaults to `2000000000000000` = 0.002 ETH).

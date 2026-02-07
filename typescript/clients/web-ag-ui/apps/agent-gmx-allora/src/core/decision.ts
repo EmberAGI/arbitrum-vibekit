@@ -20,7 +20,7 @@ type TradeDecision = {
 
 const MAX_LEVERAGE_CAP = 2;
 const SAFETY_BUFFER = 0.2;
-const MIN_OPEN_SIZE_USD = 2;
+const MIN_OPEN_SIZE_USD = 1;
 
 const formatNumber = (value: number) => String(value);
 

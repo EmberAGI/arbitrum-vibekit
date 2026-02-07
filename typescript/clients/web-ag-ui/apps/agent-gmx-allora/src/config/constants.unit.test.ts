@@ -1,8 +1,52 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { resolveOnchainActionsBaseUrl } from './constants.js';
+import { resolveMinNativeEthWei, resolveOnchainActionsBaseUrl } from './constants.js';
 
 describe('config/constants', () => {
+  const restoreEnv = (key: string, previous: string | undefined) => {
+    if (previous === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = previous;
+    }
+  };
+
+  it('defaults the minimum native ETH threshold when the env var is unset', () => {
+    const previous = process.env.GMX_MIN_NATIVE_ETH_WEI;
+    delete process.env.GMX_MIN_NATIVE_ETH_WEI;
+
+    expect(resolveMinNativeEthWei()).toBe(2_000_000_000_000_000n);
+
+    restoreEnv('GMX_MIN_NATIVE_ETH_WEI', previous);
+  });
+
+  it('uses the minimum native ETH threshold override when supplied', () => {
+    const previous = process.env.GMX_MIN_NATIVE_ETH_WEI;
+    process.env.GMX_MIN_NATIVE_ETH_WEI = '12345';
+
+    expect(resolveMinNativeEthWei()).toBe(12_345n);
+
+    restoreEnv('GMX_MIN_NATIVE_ETH_WEI', previous);
+  });
+
+  it('falls back to defaults when the minimum native ETH threshold override is invalid', () => {
+    const previous = process.env.GMX_MIN_NATIVE_ETH_WEI;
+    process.env.GMX_MIN_NATIVE_ETH_WEI = 'not-a-number';
+
+    expect(resolveMinNativeEthWei()).toBe(2_000_000_000_000_000n);
+
+    restoreEnv('GMX_MIN_NATIVE_ETH_WEI', previous);
+  });
+
+  it('falls back to defaults when the minimum native ETH threshold override is non-positive', () => {
+    const previous = process.env.GMX_MIN_NATIVE_ETH_WEI;
+    process.env.GMX_MIN_NATIVE_ETH_WEI = '0';
+
+    expect(resolveMinNativeEthWei()).toBe(2_000_000_000_000_000n);
+
+    restoreEnv('GMX_MIN_NATIVE_ETH_WEI', previous);
+  });
+
   it('normalizes the OpenAPI endpoint to a base URL and logs the change', () => {
     process.env.ONCHAIN_ACTIONS_BASE_URL = 'https://api.emberai.xyz/openapi.json';
 
