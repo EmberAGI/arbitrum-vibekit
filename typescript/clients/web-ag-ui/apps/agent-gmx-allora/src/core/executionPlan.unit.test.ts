@@ -38,7 +38,7 @@ describe('buildPerpetualExecutionPlan', () => {
     });
   });
 
-  it('builds a close request for reduce actions', () => {
+  it('builds a reduce request for reduce actions', () => {
     const telemetry: GmxAlloraTelemetry = {
       cycle: 2,
       action: 'reduce',
@@ -57,14 +57,15 @@ describe('buildPerpetualExecutionPlan', () => {
       walletAddress: '0xwallet',
       payTokenAddress: '0xusdc',
       collateralTokenAddress: '0xusdc',
+      positionContractKey: '0xposition',
+      positionSizeInUsd: '2000000000000000000000000000000',
     });
 
-    expect(plan.action).toBe('close');
+    expect(plan.action).toBe('reduce');
     expect(plan.request).toEqual({
       walletAddress: '0xwallet',
-      marketAddress: '0xmarket',
-      positionSide: 'short',
-      isLimit: false,
+      key: '0xposition',
+      sizeDeltaUsd: '1000000000000000000000000000000',
     });
   });
 });

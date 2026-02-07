@@ -157,6 +157,14 @@ export type PerpetualCloseRequest = {
   isLimit?: boolean;
 };
 
+export type PerpetualReduceRequest = {
+  walletAddress: `0x${string}`;
+  key: string;
+  // onchain-actions expects a bigint-like decimal string (GMX USD units, 30 decimals).
+  sizeDeltaUsd: string;
+  providerName?: string;
+};
+
 export class OnchainActionsClient {
   constructor(private readonly baseUrl: string) {}
 
@@ -284,6 +292,13 @@ export class OnchainActionsClient {
 
   async createPerpetualClose(request: PerpetualCloseRequest): Promise<PerpetualActionResponse> {
     return this.fetchEndpoint('/perpetuals/close', PerpetualActionResponseSchema, {
+      method: 'POST',
+      body: this.stringifyPayload(request),
+    });
+  }
+
+  async createPerpetualReduce(request: PerpetualReduceRequest): Promise<PerpetualActionResponse> {
+    return this.fetchEndpoint('/perpetuals/reduce', PerpetualActionResponseSchema, {
       method: 'POST',
       body: this.stringifyPayload(request),
     });

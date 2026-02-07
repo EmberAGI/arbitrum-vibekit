@@ -62,12 +62,18 @@ function formatRebalance(telemetry: GmxAlloraTelemetry): string {
     case 'cooldown':
       return 'Rebalance: COOLDOWN (no trade)';
     case 'signal':
-      return 'Allora signal summarized';
+      return formatSignal(telemetry.prediction) ?? 'Allora signal summarized';
     default: {
       const exhaustive: never = telemetry.action;
       return `Rebalance: ${String(exhaustive)}`;
     }
   }
+}
+
+function createExecutionPlanSlug(plan: ExecutionPlan): string {
+  // Stable placeholder for the UI before we have a concrete `transactions[]` plan.
+  const digest = crypto.createHash('sha256').update(JSON.stringify(plan)).digest('hex');
+  return `planreq_${digest.slice(0, 10)}`;
 }
 
 function createTxPlanSlug(transactions: TransactionPlan[] | undefined): string | null {
@@ -113,7 +119,10 @@ export function buildExecutionPlanArtifact(params: {
 }): Artifact {
   const rebalance = formatRebalance(params.telemetry);
   const signal = formatSignal(params.telemetry.prediction);
-  const description = signal ? `${rebalance} · ${signal}` : rebalance;
+  const planSlug = createExecutionPlanSlug(params.plan);
+  const description = [rebalance, signal, `plan ${planSlug}`]
+    .filter((value): value is string => Boolean(value))
+    .join(' · ');
 
   return {
     artifactId: 'gmx-allora-execution-plan',
@@ -126,7 +135,7 @@ export function buildExecutionPlanArtifact(params: {
       },
       {
         kind: 'data',
-        data: params.plan,
+        data: { ...params.plan, planSlug },
       },
     ],
   };

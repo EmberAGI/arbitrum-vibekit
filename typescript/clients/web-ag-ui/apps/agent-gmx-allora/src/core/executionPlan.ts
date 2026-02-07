@@ -1,7 +1,7 @@
 import type { GmxAlloraTelemetry } from '../domain/types.js';
 
 export type ExecutionPlan = {
-  action: 'none' | 'long' | 'short' | 'close';
+  action: 'none' | 'long' | 'short' | 'close' | 'reduce';
   request?: {
     amount?: string;
     walletAddress?: `0x${string}`;
@@ -12,6 +12,8 @@ export type ExecutionPlan = {
     leverage?: string;
     positionSide?: 'long' | 'short';
     isLimit?: boolean;
+    key?: string;
+    sizeDeltaUsd?: string;
   };
 };
 
@@ -22,6 +24,8 @@ type BuildPlanParams = {
   walletAddress: `0x${string}`;
   payTokenAddress: `0x${string}`;
   collateralTokenAddress: `0x${string}`;
+  positionContractKey?: string;
+  positionSizeInUsd?: string;
 };
 
 function formatNumber(value: number | undefined): string | undefined {
@@ -39,6 +43,31 @@ function toAmountString(value: number | undefined): string | undefined {
     return undefined;
   }
   return String(Math.round(value));
+}
+
+function toGmxUsdDelta(positionSizeInUsd: string | undefined): string | undefined {
+  if (!positionSizeInUsd) {
+    return undefined;
+  }
+
+  let size: bigint;
+  try {
+    size = BigInt(positionSizeInUsd);
+  } catch {
+    return undefined;
+  }
+
+  if (size <= 0n) {
+    return undefined;
+  }
+
+  // Deterministic default: reduce by 50% of current notional.
+  const delta = size / 2n;
+  if (delta <= 0n) {
+    return undefined;
+  }
+
+  return delta.toString();
 }
 
 export function buildPerpetualExecutionPlan(params: BuildPlanParams): ExecutionPlan {
@@ -66,6 +95,23 @@ export function buildPerpetualExecutionPlan(params: BuildPlanParams): ExecutionP
   if (telemetry.action === 'reduce' || telemetry.action === 'close') {
     if (!telemetry.side) {
       return { action: 'none' };
+    }
+
+    if (telemetry.action === 'reduce') {
+      const key = params.positionContractKey;
+      const sizeDeltaUsd = toGmxUsdDelta(params.positionSizeInUsd);
+      if (!key || !sizeDeltaUsd) {
+        return { action: 'none' };
+      }
+
+      return {
+        action: 'reduce',
+        request: {
+          walletAddress: params.walletAddress,
+          key,
+          sizeDeltaUsd,
+        },
+      };
     }
 
     return {

@@ -11,7 +11,7 @@ export type ExecutionResult = {
 export async function executePerpetualPlan(params: {
   client: Pick<
     OnchainActionsClient,
-    'createPerpetualLong' | 'createPerpetualShort' | 'createPerpetualClose'
+    'createPerpetualLong' | 'createPerpetualShort' | 'createPerpetualClose' | 'createPerpetualReduce'
   >;
   plan: ExecutionPlan;
 }): Promise<ExecutionResult> {
@@ -31,6 +31,12 @@ export async function executePerpetualPlan(params: {
     if (plan.action === 'short') {
       const response = await params.client.createPerpetualShort(
         plan.request as Parameters<OnchainActionsClient['createPerpetualShort']>[0],
+      );
+      return { action: plan.action, ok: true, transactions: response.transactions };
+    }
+    if (plan.action === 'reduce') {
+      const response = await params.client.createPerpetualReduce(
+        plan.request as Parameters<OnchainActionsClient['createPerpetualReduce']>[0],
       );
       return { action: plan.action, ok: true, transactions: response.transactions };
     }

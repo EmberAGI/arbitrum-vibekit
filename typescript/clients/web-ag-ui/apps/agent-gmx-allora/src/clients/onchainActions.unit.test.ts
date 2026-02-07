@@ -182,6 +182,28 @@ describe('OnchainActionsClient', () => {
     expect(requestInit?.method).toBe('POST');
   });
 
+  it('posts perpetual reduce requests', async () => {
+    const fetchMock = vi.fn(
+      () =>
+        new Response(JSON.stringify({ transactions: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new OnchainActionsClient('https://api.example.test');
+    await client.createPerpetualReduce({
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      key: '0xposition',
+      sizeDeltaUsd: '1000000000000000000000000000000',
+    });
+
+    const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe('https://api.example.test/perpetuals/reduce');
+    expect((requestInit as RequestInit | undefined)?.method).toBe('POST');
+  });
+
   it('lists perpetual positions across paginated responses', async () => {
     const fetchMock = vi
       .fn()

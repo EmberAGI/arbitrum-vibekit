@@ -19,11 +19,13 @@ const createPerpetualLong = vi.fn(() =>
 );
 const createPerpetualShort = vi.fn(() => Promise.resolve({ transactions: [] }));
 const createPerpetualClose = vi.fn(() => Promise.resolve({ transactions: [] }));
+const createPerpetualReduce = vi.fn(() => Promise.resolve({ transactions: [] }));
 
 const client = {
   createPerpetualLong,
   createPerpetualShort,
   createPerpetualClose,
+  createPerpetualReduce,
 };
 
 describe('executePerpetualPlan', () => {
@@ -56,6 +58,22 @@ describe('executePerpetualPlan', () => {
     expect(createPerpetualLong).toHaveBeenCalled();
     expect(result.transactions).toHaveLength(1);
     expect(result.transactions?.[0]?.to).toBe('0xrouter');
+  });
+
+  it('executes reduce plans', async () => {
+    const plan: ExecutionPlan = {
+      action: 'reduce',
+      request: {
+        walletAddress: '0x0000000000000000000000000000000000000001',
+        key: '0xposition',
+        sizeDeltaUsd: '1000000000000000000000000000000',
+      },
+    };
+
+    const result = await executePerpetualPlan({ client, plan });
+
+    expect(result.ok).toBe(true);
+    expect(createPerpetualReduce).toHaveBeenCalled();
   });
 
   it('captures execution errors', async () => {

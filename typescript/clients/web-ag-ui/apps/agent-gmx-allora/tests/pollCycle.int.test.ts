@@ -13,6 +13,7 @@ const {
   createPerpetualLongMock,
   createPerpetualShortMock,
   createPerpetualCloseMock,
+  createPerpetualReduceMock,
 } = vi.hoisted(() => ({
   copilotkitEmitStateMock: vi.fn(async () => undefined),
   fetchAlloraInferenceMock: vi.fn<[], Promise<AlloraInference>>(),
@@ -21,6 +22,7 @@ const {
   createPerpetualLongMock: vi.fn<[], Promise<unknown>>(),
   createPerpetualShortMock: vi.fn<[], Promise<unknown>>(),
   createPerpetualCloseMock: vi.fn<[], Promise<unknown>>(),
+  createPerpetualReduceMock: vi.fn<[], Promise<unknown>>(),
 }));
 
 vi.mock('@copilotkit/sdk-js/langgraph', () => ({
@@ -44,6 +46,7 @@ vi.mock('../src/workflow/clientFactory.js', () => ({
     createPerpetualLong: createPerpetualLongMock,
     createPerpetualShort: createPerpetualShortMock,
     createPerpetualClose: createPerpetualCloseMock,
+    createPerpetualReduce: createPerpetualReduceMock,
   }),
 }));
 
@@ -166,6 +169,7 @@ describe('pollCycleNode (integration)', () => {
     createPerpetualLongMock.mockReset();
     createPerpetualShortMock.mockReset();
     createPerpetualCloseMock.mockReset();
+    createPerpetualReduceMock.mockReset();
     copilotkitEmitStateMock.mockReset();
   });
 
@@ -208,6 +212,66 @@ describe('pollCycleNode (integration)', () => {
 
     expect(artifactIds).toContain('gmx-allora-telemetry');
     expect(artifactIds).toContain('gmx-allora-execution-plan');
+  });
+
+  it('executes reduce plans via onchain-actions reduce endpoint when position exists', async () => {
+    fetchAlloraInferenceMock.mockResolvedValueOnce({
+      topicId: 14,
+      combinedValue: 47000,
+      confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+    });
+    listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValueOnce([
+      {
+        chainId: '42161',
+        key: '0xpos1',
+        contractKey: '0xposition',
+        account: '0xwallet',
+        marketAddress: '0xmarket',
+        sizeInUsd: '2000000000000000000000000000000',
+        sizeInTokens: '0.01',
+        collateralAmount: '50',
+        pendingBorrowingFeesUsd: '0',
+        increasedAtTime: '0',
+        decreasedAtTime: '0',
+        positionSide: 'long',
+        isLong: true,
+        fundingFeeAmount: '0',
+        claimableLongTokenAmount: '0',
+        claimableShortTokenAmount: '0',
+        isOpening: false,
+        pnl: '0',
+        positionFeeAmount: '0',
+        traderDiscountAmount: '0',
+        uiFeeAmount: '0',
+        collateralToken: {
+          tokenUid: { chainId: '42161', address: '0xusdc' },
+          name: 'USD Coin',
+          symbol: 'USDC',
+          isNative: false,
+          decimals: 6,
+          iconUri: null,
+          isVetted: true,
+        },
+      },
+    ]);
+
+    const state = buildBaseState();
+    state.view.metrics.previousPrice = 46000;
+    state.view.metrics.latestCycle = {
+      cycle: 0,
+      action: 'open',
+      reason: 'previous open',
+      marketSymbol: 'BTC/USDC',
+      side: 'long',
+      leverage: 2,
+      sizeUsd: 160,
+      timestamp: '2026-02-05T12:00:00.000Z',
+    };
+
+    await pollCycleNode(state, {});
+
+    expect(createPerpetualReduceMock).toHaveBeenCalled();
   });
 
   it('fails the cycle when no GMX market matches', async () => {

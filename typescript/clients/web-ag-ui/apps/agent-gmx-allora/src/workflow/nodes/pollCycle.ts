@@ -2,6 +2,7 @@ import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
 import { fetchAlloraInference } from '../../clients/allora.js';
+import type { PerpetualPosition } from '../../clients/onchainActions.js';
 import {
   ALLORA_HORIZON_HOURS,
   ALLORA_TOPIC_IDS,
@@ -10,7 +11,7 @@ import {
   resolveAlloraApiBaseUrl,
   resolveAlloraApiKey,
   resolveAlloraChainId,
-  resolveAlloraInferenceCacheTtlMs,
+  resolveAllora8hInferenceCacheTtlMs,
   resolvePollIntervalMs,
 } from '../../config/constants.js';
 import { buildAlloraPrediction } from '../../core/alloraPrediction.js';
@@ -96,7 +97,7 @@ export const pollCycleNode = async (
       chainId: resolveAlloraChainId(),
       topicId,
       apiKey: resolveAlloraApiKey(),
-      cacheTtlMs: resolveAlloraInferenceCacheTtlMs(),
+      cacheTtlMs: resolveAllora8hInferenceCacheTtlMs(),
     });
     staleCycles = 0;
     const currentPrice = state.view.metrics.previousPrice ?? inference.combinedValue;
@@ -183,7 +184,7 @@ export const pollCycleNode = async (
   }
 
   let gmxMarketAddress: string;
-  let positions = [];
+  let positions: PerpetualPosition[] = [];
   try {
     const onchainActionsClient = getOnchainActionsClient();
     const chainIds = [ARBITRUM_CHAIN_ID.toString()];
@@ -314,6 +315,17 @@ export const pollCycleNode = async (
     artifact: buildTelemetryArtifact(exposureAdjusted),
     append: true,
   };
+
+  const normalizedTargetMarket = gmxMarketAddress.toLowerCase();
+  const positionForReduce =
+    exposureAdjusted.action === 'reduce' && exposureAdjusted.side
+      ? positions.find(
+          (position) =>
+            position.marketAddress.toLowerCase() === normalizedTargetMarket &&
+            position.positionSide === exposureAdjusted.side,
+        )
+      : undefined;
+
   const executionPlan = buildPerpetualExecutionPlan({
     telemetry: exposureAdjusted,
     chainId: ARBITRUM_CHAIN_ID.toString(),
@@ -321,6 +333,8 @@ export const pollCycleNode = async (
     walletAddress: operatorConfig.walletAddress,
     payTokenAddress: operatorConfig.fundingTokenAddress,
     collateralTokenAddress: operatorConfig.fundingTokenAddress,
+    positionContractKey: positionForReduce?.contractKey,
+    positionSizeInUsd: positionForReduce?.sizeInUsd,
   });
   const executionResult = await executePerpetualPlan({
     client: getOnchainActionsClient(),
