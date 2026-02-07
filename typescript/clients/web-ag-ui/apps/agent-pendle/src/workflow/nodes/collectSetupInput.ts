@@ -27,7 +27,7 @@ export const collectSetupInputNode = async (
   const request: PendleSetupInterrupt = {
     type: 'pendle-setup-request',
     message:
-      'Enter the amount to deploy. The agent will auto-select the highest-yield YT market.',
+      'Enter the amount to deploy. If your wallet already has a Pendle PT position, the agent will manage that position; otherwise it will auto-select the highest-yield YT market.',
     payloadSchema: z.toJSONSchema(PendleSetupInputSchema),
   };
 

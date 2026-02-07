@@ -65,7 +65,7 @@ const resolveApy = (market: TokenizedYieldMarket): number => {
   return 0;
 };
 
-const toYieldToken = (market: TokenizedYieldMarket): PendleYieldToken => ({
+export const toYieldToken = (market: TokenizedYieldMarket): PendleYieldToken => ({
   marketAddress: normalizeHex(market.marketIdentifier.address) as `0x${string}`,
   ptAddress: normalizeHex(market.ptToken.tokenUid.address) as `0x${string}`,
   ytAddress: normalizeHex(market.ytToken.tokenUid.address) as `0x${string}`,

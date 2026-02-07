@@ -2,8 +2,9 @@ import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
 import { z } from 'zod';
 
-import { resolveStablecoinWhitelist } from '../../config/constants.js';
+import { resolvePendleChainIds, resolveStablecoinWhitelist } from '../../config/constants.js';
 import { buildFundingTokenOptions } from '../../core/pendleFunding.js';
+import { toYieldToken } from '../../core/pendleMarkets.js';
 import { FundingTokenInputSchema, type FundingTokenInput } from '../../domain/types.js';
 import { getOnchainActionsClient } from '../clientFactory.js';
 import {
@@ -60,6 +61,53 @@ export const collectFundingTokenInputNode = async (
 
   const onchainActionsClient = getOnchainActionsClient();
   const operatorWalletAddress = normalizeHexAddress(operatorInput.walletAddress, 'wallet address');
+
+  // If the wallet already holds a tokenized yield position, use that market's underlying token
+  // as the funding token and skip the selection interrupt entirely.
+  try {
+    const chainIds = resolvePendleChainIds();
+    const positions = await onchainActionsClient.listTokenizedYieldPositions({
+      walletAddress: operatorWalletAddress,
+      chainIds,
+    });
+    if (positions.length > 0) {
+      const markets = await onchainActionsClient.listTokenizedYieldMarkets({ chainIds });
+      const positionMarketAddress = positions[0].marketIdentifier.address.toLowerCase();
+      const matchedMarket = markets.find(
+        (market) => market.marketIdentifier.address.toLowerCase() === positionMarketAddress,
+      );
+      if (matchedMarket) {
+        const normalizedFundingToken = normalizeHexAddress(
+          matchedMarket.underlyingToken.tokenUid.address,
+          'funding token address',
+        );
+        const input: FundingTokenInput = { fundingTokenAddress: normalizedFundingToken };
+        const { task, statusEvent } = buildTaskStatus(
+          state.view.task,
+          'working',
+          `Detected an existing Pendle position. Using ${matchedMarket.underlyingToken.symbol} as the funding token.`,
+        );
+        await copilotkitEmitState(config, {
+          view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+        });
+
+        return {
+          view: {
+            fundingTokenInput: input,
+            selectedPool: toYieldToken(matchedMarket),
+            onboarding: { ...ONBOARDING, step: 3 },
+            task,
+            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          },
+        };
+      }
+    }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    logInfo('Unable to detect existing Pendle positions; falling back to funding token selection', {
+      error: message,
+    });
+  }
 
   const whitelistSymbols = resolveStablecoinWhitelist();
   const loadOptions = async (): Promise<FundingTokenInterrupt['options']> => {
