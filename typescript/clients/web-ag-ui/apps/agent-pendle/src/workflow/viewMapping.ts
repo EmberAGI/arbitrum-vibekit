@@ -72,6 +72,39 @@ function computeTokenValueUsd(params: {
   return unitPriceUsd * positionTokenAmount;
 }
 
+function estimatePtPresentValueUsd(params: {
+  ptNotional: number;
+  impliedApyPct: number;
+  maturity: string;
+  timestamp: string;
+}): number | undefined {
+  const { ptNotional, impliedApyPct, maturity, timestamp } = params;
+  if (!Number.isFinite(ptNotional) || ptNotional <= 0) {
+    return undefined;
+  }
+  if (!Number.isFinite(impliedApyPct) || impliedApyPct <= 0) {
+    return undefined;
+  }
+
+  const maturityMs = Date.parse(maturity);
+  const nowMs = Date.parse(timestamp);
+  if (Number.isNaN(maturityMs) || Number.isNaN(nowMs)) {
+    return undefined;
+  }
+
+  const msRemaining = Math.max(0, maturityMs - nowMs);
+  const yearsRemaining = msRemaining / (365 * 24 * 60 * 60 * 1000);
+  const rate = impliedApyPct / 100;
+
+  // Pendle PT redeems 1 underlying at maturity. For stable underlyings, discounting
+  // by implied APY is a good approximation of the PT's present value.
+  const discount = 1 + rate * yearsRemaining;
+  if (!Number.isFinite(discount) || discount <= 0) {
+    return undefined;
+  }
+  return ptNotional / discount;
+}
+
 export function buildPendleLatestSnapshot(params: {
   operatorConfig: ResolvedPendleConfig;
   totalUsd?: number;
@@ -134,6 +167,7 @@ export function buildPendleLatestSnapshotFromOnchain(params: {
 }): PendleLatestSnapshot {
   const market = params.operatorConfig.targetYieldToken;
   const baseContributionUsd = params.operatorConfig.baseContributionUsd;
+  const impliedApyPct = market.impliedApyPct ?? market.apy;
 
   const balances = params.walletBalances ?? [];
   const positionTokens: PendleLatestSnapshot['positionTokens'] = [];
@@ -141,14 +175,24 @@ export function buildPendleLatestSnapshotFromOnchain(params: {
   let totalUsd: number | undefined;
 
   if (position) {
-    const ptBalance = balances.length > 0 ? findWalletBalance(balances, position.pt.token.tokenUid.address) : undefined;
+    const ptBalance =
+      balances.length > 0 ? findWalletBalance(balances, position.pt.token.tokenUid.address) : undefined;
+    const ptNotional = safeFormatUnits(position.pt.exactAmount, position.pt.token.decimals);
     const ptUsd =
       balances.length > 0
         ? computeTokenValueUsd({
             walletBalance: ptBalance,
             tokenDecimals: position.pt.token.decimals,
             positionAmountBaseUnits: position.pt.exactAmount,
-          })
+          }) ??
+          (ptNotional !== undefined
+            ? estimatePtPresentValueUsd({
+                ptNotional,
+                impliedApyPct,
+                maturity: market.maturity,
+                timestamp: params.timestamp,
+              })
+            : undefined)
         : undefined;
     positionTokens.push({
       address: normalizeHexAddress(position.pt.token.tokenUid.address, 'position PT token address'),
@@ -158,7 +202,8 @@ export function buildPendleLatestSnapshotFromOnchain(params: {
       valueUsd: ptUsd,
     });
 
-    const ytBalance = balances.length > 0 ? findWalletBalance(balances, position.yt.token.tokenUid.address) : undefined;
+    const ytBalance =
+      balances.length > 0 ? findWalletBalance(balances, position.yt.token.tokenUid.address) : undefined;
     const ytUsd =
       balances.length > 0
         ? computeTokenValueUsd({
@@ -205,12 +250,26 @@ export function buildPendleLatestSnapshotFromOnchain(params: {
     const ptBalance = balances.length > 0 ? findWalletBalance(balances, market.ptAddress) : undefined;
     const ytBalance = balances.length > 0 ? findWalletBalance(balances, market.ytAddress) : undefined;
 
+    const ptNotional = ptBalance?.amount
+      ? safeFormatUnits(ptBalance.amount, ptBalance.decimals ?? PT_DECIMALS_FALLBACK)
+      : undefined;
+    const ptUsd =
+      ptBalance?.valueUsd ??
+      (ptNotional !== undefined
+        ? estimatePtPresentValueUsd({
+            ptNotional,
+            impliedApyPct,
+            maturity: market.maturity,
+            timestamp: params.timestamp,
+          })
+        : undefined);
+
     positionTokens.push({
       address: market.ptAddress,
       symbol: market.ptSymbol,
       decimals: ptBalance?.decimals ?? PT_DECIMALS_FALLBACK,
       amountBaseUnits: ptBalance?.amount,
-      valueUsd: ptBalance?.valueUsd,
+      valueUsd: ptUsd,
     });
     positionTokens.push({
       address: market.ytAddress,
