@@ -38,7 +38,11 @@ function toAmountString(value: number | undefined): string | undefined {
   if (!Number.isFinite(value) || value <= 0) {
     return undefined;
   }
-  return String(Math.round(value));
+  const rounded = Math.round(value);
+  if (!Number.isFinite(rounded) || rounded <= 0) {
+    return undefined;
+  }
+  return String(rounded);
 }
 
 export function buildPerpetualExecutionPlan(params: BuildPlanParams): ExecutionPlan {
@@ -49,10 +53,15 @@ export function buildPerpetualExecutionPlan(params: BuildPlanParams): ExecutionP
       return { action: 'none' };
     }
 
+    const amount = toAmountString(telemetry.sizeUsd);
+    if (!amount) {
+      return { action: 'none' };
+    }
+
     return {
       action: telemetry.side === 'long' ? 'long' : 'short',
       request: {
-        amount: toAmountString(telemetry.sizeUsd),
+        amount,
         walletAddress: params.walletAddress,
         chainId: params.chainId,
         marketAddress: params.marketAddress,

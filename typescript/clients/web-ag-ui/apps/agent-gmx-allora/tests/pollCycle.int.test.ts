@@ -210,6 +210,78 @@ describe('pollCycleNode (integration)', () => {
     expect(artifactIds).toContain('gmx-allora-execution-plan');
   });
 
+  it('plans a short when the prediction is below the previous price', async () => {
+    fetchAlloraInferenceMock.mockResolvedValueOnce({
+      topicId: 14,
+      combinedValue: 47000,
+      confidenceIntervalValues: [47000],
+    });
+    listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValueOnce([]);
+    createPerpetualShortMock.mockResolvedValueOnce({ transactions: [] });
+
+    const state = buildBaseState();
+    state.view.metrics.previousPrice = 48000;
+
+    await pollCycleNode(state, {});
+
+    expect(createPerpetualShortMock).toHaveBeenCalledTimes(1);
+    expect(createPerpetualLongMock).not.toHaveBeenCalled();
+  });
+
+  it('plans a close when direction flips while an open position is recorded', async () => {
+    fetchAlloraInferenceMock.mockResolvedValueOnce({
+      topicId: 14,
+      combinedValue: 47000,
+      confidenceIntervalValues: [47000],
+    });
+    listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValueOnce([]);
+    createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
+
+    const state = buildBaseState();
+    state.view.metrics.previousPrice = 48000;
+    state.view.metrics.latestCycle = {
+      cycle: 1,
+      action: 'open',
+      reason: 'previous open',
+      marketSymbol: 'BTC/USDC',
+      side: 'long',
+      leverage: 2,
+      sizeUsd: 100,
+      timestamp: '2026-02-05T12:00:00.000Z',
+      metrics: {
+        confidence: 1,
+        decisionThreshold: 0.62,
+        cooldownRemaining: 0,
+      },
+    };
+
+    await pollCycleNode(state, {});
+
+    expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not attempt to open positions when the configured allocation is too small', async () => {
+    fetchAlloraInferenceMock.mockResolvedValueOnce({
+      topicId: 14,
+      combinedValue: 47000,
+      confidenceIntervalValues: [47000],
+    });
+    listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValueOnce([]);
+
+    const state = buildBaseState();
+    state.view.metrics.previousPrice = 45000;
+    state.view.operatorConfig.baseContributionUsd = 1;
+
+    await pollCycleNode(state, {});
+
+    expect(createPerpetualLongMock).not.toHaveBeenCalled();
+    expect(createPerpetualShortMock).not.toHaveBeenCalled();
+    expect(createPerpetualCloseMock).not.toHaveBeenCalled();
+  });
+
   it('fails the cycle when no GMX market matches', async () => {
     fetchAlloraInferenceMock.mockResolvedValueOnce({
       topicId: 14,

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Manual smoke checks for Phase 2 execution planning against onchain-actions and Allora.
+Manual smoke checks for Phase 2 transaction planning against onchain-actions and Allora.
 
 ## Environment Variables
 

@@ -20,6 +20,7 @@ type TradeDecision = {
 
 const MAX_LEVERAGE_CAP = 2;
 const SAFETY_BUFFER = 0.2;
+const MIN_OPEN_SIZE_USD = 2;
 
 const formatNumber = (value: number) => String(value);
 
@@ -61,6 +62,13 @@ export function decideTradeAction(params: DecideTradeActionParams): TradeDecisio
       leverage,
       sizeUsd,
       reason: `Signal persists in ${side}; reducing exposure.`,
+    };
+  }
+
+  if (sizeUsd < MIN_OPEN_SIZE_USD) {
+    return {
+      action: 'hold',
+      reason: `Configured allocation yields ~$${formatNumber(sizeUsd)} position size, below the minimum supported size; holding position.`,
     };
   }
 
