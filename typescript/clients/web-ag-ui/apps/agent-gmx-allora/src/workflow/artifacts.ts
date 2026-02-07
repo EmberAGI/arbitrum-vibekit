@@ -35,6 +35,8 @@ export function buildExecutionResultArtifact(result: {
   action: ExecutionPlan['action'];
   ok: boolean;
   error?: string;
+  txHashes?: `0x${string}`[];
+  lastTxHash?: `0x${string}`;
 }): Artifact {
   return {
     artifactId: 'gmx-allora-execution-result',

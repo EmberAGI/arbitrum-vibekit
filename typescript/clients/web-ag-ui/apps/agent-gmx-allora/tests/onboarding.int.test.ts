@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { privateKeyToAccount } from 'viem/accounts';
 
 import type { ClmmState } from '../src/workflow/context.js';
 import { collectDelegationsNode } from '../src/workflow/nodes/collectDelegations.js';
@@ -148,6 +149,54 @@ describe('GMX Allora onboarding (integration)', () => {
     expect(prepared.view?.operatorConfig?.fundingTokenAddress).toBe(
       FUNDING_TOKENS.find((token) => token.symbol === 'USDC')?.address,
     );
+  });
+
+  it('uses the embedded execution wallet address when tx execution mode is execute', async () => {
+    const previousMode = process.env.GMX_ALLORA_TX_EXECUTION_MODE;
+    const previousKey = process.env.GMX_ALLORA_EMBEDDED_PRIVATE_KEY;
+
+    process.env.GMX_ALLORA_TX_EXECUTION_MODE = 'execute';
+    process.env.GMX_ALLORA_EMBEDDED_PRIVATE_KEY = `0x${'1'.repeat(64)}`;
+
+    const state = buildBaseState();
+    const embeddedAccount = privateKeyToAccount(process.env.GMX_ALLORA_EMBEDDED_PRIVATE_KEY as `0x${string}`);
+
+    listWalletBalancesMock.mockResolvedValueOnce([
+      {
+        tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+        amount: '2000000000000000',
+        symbol: 'ETH',
+        decimals: 18,
+      },
+    ]);
+
+    interruptMock.mockResolvedValueOnce({
+      walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      usdcAllocation: 250,
+      targetMarket: 'BTC',
+    });
+
+    try {
+      const setupUpdate = await collectSetupInputNode(state, {});
+      const stateAfterSetup = mergeState(state, setupUpdate);
+
+      const fundingUpdate = await collectFundingTokenInputNode(stateAfterSetup, {});
+      const stateAfterFunding = mergeState(stateAfterSetup, fundingUpdate);
+
+      const delegationsUpdate = await collectDelegationsNode(stateAfterFunding, {});
+      const stateAfterDelegations = mergeState(stateAfterFunding, delegationsUpdate);
+
+      const prepared = await prepareOperatorNode(stateAfterDelegations, {});
+
+      expect(prepared.view?.operatorConfig?.walletAddress.toLowerCase()).toBe(
+        embeddedAccount.address.toLowerCase(),
+      );
+    } finally {
+      if (previousMode === undefined) delete process.env.GMX_ALLORA_TX_EXECUTION_MODE;
+      else process.env.GMX_ALLORA_TX_EXECUTION_MODE = previousMode;
+      if (previousKey === undefined) delete process.env.GMX_ALLORA_EMBEDDED_PRIVATE_KEY;
+      else process.env.GMX_ALLORA_EMBEDDED_PRIVATE_KEY = previousKey;
+    }
   });
 
   it('blocks onboarding when native ETH balance is below the minimum threshold', async () => {

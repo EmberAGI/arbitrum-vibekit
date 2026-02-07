@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { resolveMinNativeEthWei, resolveOnchainActionsBaseUrl } from './constants.js';
+import {
+  resolveGmxAlloraTxExecutionMode,
+  resolveMinNativeEthWei,
+  resolveOnchainActionsBaseUrl,
+} from './constants.js';
 
 describe('config/constants', () => {
   const restoreEnv = (key: string, previous: string | undefined) => {
@@ -45,6 +49,24 @@ describe('config/constants', () => {
     expect(resolveMinNativeEthWei()).toBe(2_000_000_000_000_000n);
 
     restoreEnv('GMX_MIN_NATIVE_ETH_WEI', previous);
+  });
+
+  it('defaults GMX Allora tx execution mode to plan', () => {
+    const previous = process.env.GMX_ALLORA_TX_EXECUTION_MODE;
+    delete process.env.GMX_ALLORA_TX_EXECUTION_MODE;
+
+    expect(resolveGmxAlloraTxExecutionMode()).toBe('plan');
+
+    restoreEnv('GMX_ALLORA_TX_EXECUTION_MODE', previous);
+  });
+
+  it('supports overriding GMX Allora tx execution mode via env', () => {
+    const previous = process.env.GMX_ALLORA_TX_EXECUTION_MODE;
+    process.env.GMX_ALLORA_TX_EXECUTION_MODE = 'execute';
+
+    expect(resolveGmxAlloraTxExecutionMode()).toBe('execute');
+
+    restoreEnv('GMX_ALLORA_TX_EXECUTION_MODE', previous);
   });
 
   it('normalizes the OpenAPI endpoint to a base URL and logs the change', () => {

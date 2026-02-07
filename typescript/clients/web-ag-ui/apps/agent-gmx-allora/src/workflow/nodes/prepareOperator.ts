@@ -1,8 +1,13 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
+import { privateKeyToAccount } from 'viem/accounts';
 import { z } from 'zod';
 
-import { ARBITRUM_CHAIN_ID, resolveMinNativeEthWei } from '../../config/constants.js';
+import {
+  ARBITRUM_CHAIN_ID,
+  resolveGmxAlloraTxExecutionMode,
+  resolveMinNativeEthWei,
+} from '../../config/constants.js';
 import { type ResolvedGmxConfig } from '../../domain/types.js';
 import { getOnchainActionsClient } from '../clientFactory.js';
 import {
@@ -55,6 +60,18 @@ function extractNativeEthWei(params: {
   } catch {
     return 0n;
   }
+}
+
+function resolveEmbeddedExecutionWalletAddress(): `0x${string}` | undefined {
+  const raw = process.env['GMX_ALLORA_EMBEDDED_PRIVATE_KEY'];
+  if (!raw) {
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  if (!/^0x[0-9a-fA-F]{64}$/u.test(trimmed)) {
+    return undefined;
+  }
+  return privateKeyToAccount(trimmed as `0x${string}`).address;
 }
 
 export const prepareOperatorNode = async (
@@ -132,10 +149,23 @@ export const prepareOperatorNode = async (
         },
       },
       goto: 'summarize',
-    });
-  }
+	    });
+	  }
 
-  const operatorExecutionWallet = delegationsBypassActive ? AGENT_WALLET_ADDRESS : operatorWalletAddress;
+  const txExecutionMode = resolveGmxAlloraTxExecutionMode();
+  const embeddedExecutionWalletAddress = resolveEmbeddedExecutionWalletAddress();
+
+  const operatorExecutionWallet =
+    delegationsBypassActive && txExecutionMode === 'execute'
+      ? embeddedExecutionWalletAddress ??
+        (() => {
+          throw new Error(
+            'GMX_ALLORA_EMBEDDED_PRIVATE_KEY is required when GMX_ALLORA_TX_EXECUTION_MODE=execute and delegations bypass is active.',
+          );
+        })()
+      : delegationsBypassActive
+        ? AGENT_WALLET_ADDRESS
+        : operatorWalletAddress;
   const minNativeEthWei = resolveMinNativeEthWei();
   const onchainActionsClient = getOnchainActionsClient();
   const balances = await onchainActionsClient.listWalletBalances({

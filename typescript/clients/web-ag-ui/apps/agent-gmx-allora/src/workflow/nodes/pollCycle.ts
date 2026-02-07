@@ -10,6 +10,7 @@ import {
   resolveAlloraApiBaseUrl,
   resolveAlloraApiKey,
   resolveAlloraChainId,
+  resolveGmxAlloraTxExecutionMode,
   resolvePollIntervalMs,
 } from '../../config/constants.js';
 import { buildAlloraPrediction } from '../../core/alloraPrediction.js';
@@ -23,7 +24,7 @@ import {
   buildExecutionResultArtifact,
   buildTelemetryArtifact,
 } from '../artifacts.js';
-import { getOnchainActionsClient } from '../clientFactory.js';
+import { getEmbeddedOnchainClients, getOnchainActionsClient } from '../clientFactory.js';
 import {
   buildTaskStatus,
   logInfo,
@@ -327,9 +328,12 @@ export const pollCycleNode = async (
     payTokenDecimals,
     collateralTokenAddress: operatorConfig.fundingTokenAddress,
   });
+  const txExecutionMode = resolveGmxAlloraTxExecutionMode();
   const executionResult = await executePerpetualPlan({
     client: getOnchainActionsClient(),
     plan: executionPlan,
+    txExecutionMode,
+    clients: txExecutionMode === 'execute' ? getEmbeddedOnchainClients() : undefined,
   });
   const executionPlanEvent: ClmmEvent | undefined =
     executionPlan.action === 'none'
@@ -348,6 +352,8 @@ export const pollCycleNode = async (
             action: executionResult.action,
             ok: executionResult.ok,
             error: executionResult.error,
+            txHashes: executionResult.txHashes,
+            lastTxHash: executionResult.lastTxHash,
           }),
           append: true,
         };
@@ -361,12 +367,13 @@ export const pollCycleNode = async (
     cronScheduled = true;
   }
 
-  const transactionEntry = txHash
+  const submittedTxHash = executionResult.lastTxHash;
+  const transactionEntry = submittedTxHash
     ? {
         cycle: iteration,
         action,
-        txHash,
-        status: 'success' as const,
+        txHash: submittedTxHash,
+        status: executionResult.ok ? ('success' as const) : ('failed' as const),
         reason,
         timestamp: exposureAdjusted.timestamp,
       }

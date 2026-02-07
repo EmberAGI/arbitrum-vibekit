@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ExecutionPlan } from '../core/executionPlan.js';
 
@@ -27,6 +27,49 @@ const client = {
 };
 
 describe('executePerpetualPlan', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('submits planned transactions when tx execution mode is execute', async () => {
+    const sendTransaction = vi.fn(() => Promise.resolve('0xdeadbeef' as const));
+    const waitForTransactionReceipt = vi.fn(() =>
+      Promise.resolve({ transactionHash: '0xdeadbeef' as const }),
+    );
+
+    const plan: ExecutionPlan = {
+      action: 'long',
+      request: {
+        amount: '1000000',
+        walletAddress: '0x0000000000000000000000000000000000000001',
+        chainId: '42161',
+        marketAddress: '0xmarket',
+        payTokenAddress: '0xusdc',
+        collateralTokenAddress: '0xusdc',
+        leverage: '2',
+      },
+    };
+
+    const result = await executePerpetualPlan({
+      client,
+      plan,
+      txExecutionMode: 'execute',
+      clients: {
+        public: { waitForTransactionReceipt },
+        wallet: {
+          sendTransaction,
+          account: {} as never,
+          chain: {} as never,
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(sendTransaction).toHaveBeenCalled();
+    expect(waitForTransactionReceipt).toHaveBeenCalled();
+    expect(result.txHashes?.[0]).toBe('0xdeadbeef');
+  });
+
   it('executes short plans', async () => {
     const plan: ExecutionPlan = {
       action: 'short',
