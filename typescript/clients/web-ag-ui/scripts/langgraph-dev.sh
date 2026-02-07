@@ -7,8 +7,11 @@ shift
 # Load .env for LangGraph CLI processes.
 # Precedence rule: do not override variables already set in the environment
 # (so `DELEGATIONS_BYPASS=true turbo run dev` continues to win over `.env`).
-ENV_FILE=".env"
-if [ -f "$ENV_FILE" ]; then
+#
+# We load the closest `.env` first, then parent `.env` files (if any) to fill in
+# missing keys like ONCHAIN_ACTIONS_API_URL that may be configured at repo root.
+load_env_file() {
+  local env_file="$1"
   while IFS= read -r line || [ -n "$line" ]; do
     # Trim Windows CR if present.
     line="${line%%$'\r'}"
@@ -38,8 +41,21 @@ if [ -f "$ENV_FILE" ]; then
 
       export "${key}=${value}"
     fi
-  done < "$ENV_FILE"
-fi
+  done < "$env_file"
+}
+
+dir="$PWD"
+while true; do
+  env_file="$dir/.env"
+  if [ -f "$env_file" ]; then
+    load_env_file "$env_file"
+  fi
+
+  parent="$(dirname "$dir")"
+  if [ "$parent" = "$dir" ]; then
+    break
+  fi
+  dir="$parent"
+done
 
 exec npx @langchain/langgraph-cli dev --port "$PORT" --no-browser "$@"
-
