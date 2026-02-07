@@ -23,6 +23,7 @@ import type {
   FundingTokenOption,
   OnboardingState,
   Pool,
+  PendleMarket,
   OperatorConfigInput,
   PendleSetupInput,
   FundWalletAcknowledgement,
@@ -66,7 +67,7 @@ interface AgentDetailPageProps {
   onBack: () => void;
   // Interrupt handling
   activeInterrupt?: AgentInterrupt | null;
-  allowedPools: Pool[];
+  allowedPools: Array<Pool | PendleMarket>;
   onInterruptSubmit?: (
     input:
       | OperatorConfigInput
@@ -628,7 +629,7 @@ function TransactionHistoryTab({ transactions }: TransactionHistoryTabProps) {
 interface AgentBlockersTabProps {
   agentId: string;
   activeInterrupt?: AgentInterrupt | null;
-  allowedPools: Pool[];
+  allowedPools: Array<Pool | PendleMarket>;
   onInterruptSubmit?: (
     input:
       | OperatorConfigInput
@@ -723,7 +724,10 @@ function AgentBlockersTab({
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
   const uniqueAllowedPools: Pool[] = [];
   const seenPoolAddresses = new Set<string>();
-  for (const pool of allowedPools) {
+  const isPool = (value: Pool | PendleMarket): value is Pool => 'address' in value;
+  for (const poolCandidate of allowedPools) {
+    if (!isPool(poolCandidate)) continue;
+    const pool = poolCandidate;
     if (seenPoolAddresses.has(pool.address)) continue;
     seenPoolAddresses.add(pool.address);
     uniqueAllowedPools.push(pool);
@@ -1869,10 +1873,52 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
     });
   };
 
+  const formatUsd = (value?: number) => {
+    if (value === undefined) return '—';
+    return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
+  };
+
+  const formatTokenAmount = (params: {
+    amountBaseUnits?: string;
+    decimals: number;
+    fallbackRaw?: string;
+  }): string => {
+    const { amountBaseUnits, decimals, fallbackRaw } = params;
+    if (!amountBaseUnits) {
+      return fallbackRaw ?? '—';
+    }
+    try {
+      const formatted = formatUnits(BigInt(amountBaseUnits), decimals);
+      const [whole, fraction] = formatted.split('.');
+      if (!fraction) return whole;
+      return `${whole}.${fraction.slice(0, 6)}`; // keep UI compact
+    } catch {
+      return fallbackRaw ?? '—';
+    }
+  };
+
   const strategy = fullMetrics?.pendle;
   const latestCycle = fullMetrics?.latestCycle;
+  const latestSnapshot = fullMetrics?.latestSnapshot;
+  const snapshot = latestSnapshot?.pendle;
+  const snapshotTokens = latestSnapshot?.positionTokens ?? [];
+
+  const ptSymbol = snapshot?.ptSymbol ?? strategy?.position?.ptSymbol;
+  const ytSymbol = snapshot?.ytSymbol ?? strategy?.position?.ytSymbol;
+  const ptToken = ptSymbol ? snapshotTokens.find((token) => token.symbol === ptSymbol) : undefined;
+  const ytToken = ytSymbol ? snapshotTokens.find((token) => token.symbol === ytSymbol) : undefined;
 
   const rewardLines = strategy?.position?.claimableRewards ?? [];
+  const impliedYieldPct = snapshot?.impliedApyPct ?? strategy?.currentApy ?? metrics.apy;
+  const apyDetails = [
+    { label: 'Implied', value: snapshot?.impliedApyPct },
+    { label: 'Aggregated', value: snapshot?.aggregatedApyPct },
+    { label: 'Underlying', value: snapshot?.underlyingApyPct },
+    { label: 'Swap Fee', value: snapshot?.swapFeeApyPct },
+    { label: 'Pendle', value: snapshot?.pendleApyPct },
+    { label: 'YT Float', value: snapshot?.ytFloatingApyPct },
+    { label: 'Max Boost', value: snapshot?.maxBoostedApyPct },
+  ].filter((entry) => entry.value !== undefined);
 
   return (
     <div className="space-y-6">
@@ -1924,6 +1970,22 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
             </div>
           </div>
         </div>
+
+        {apyDetails.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">APY Details</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {apyDetails.map((entry) => (
+                <div key={entry.label}>
+                  <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">{entry.label}</div>
+                  <div className="text-white font-medium">
+                    {entry.value !== undefined ? `${entry.value.toFixed(2)}%` : '—'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
@@ -1932,22 +1994,63 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">PT</div>
             <div className="text-white font-medium">
-              {strategy?.position?.ptSymbol ? `${strategy.position.ptSymbol} ${strategy.position.ptAmount ?? ''}`.trim() : '—'}
+              {ptSymbol
+                ? `${ptSymbol} ${formatTokenAmount({
+                    amountBaseUnits: ptToken?.amountBaseUnits,
+                    decimals: ptToken?.decimals ?? 18,
+                    fallbackRaw: strategy?.position?.ptAmount,
+                  })}`.trim()
+                : '—'}
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">YT</div>
             <div className="text-white font-medium">
-              {strategy?.position?.ytSymbol ? `${strategy.position.ytSymbol} ${strategy.position.ytAmount ?? ''}`.trim() : '—'}
+              {ytSymbol
+                ? `${ytSymbol} ${formatTokenAmount({
+                    amountBaseUnits: ytToken?.amountBaseUnits,
+                    decimals: ytToken?.decimals ?? 18,
+                    fallbackRaw: strategy?.position?.ytAmount,
+                  })}`.trim()
+                : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Implied Yield</div>
+            <div className="text-white font-medium">
+              {impliedYieldPct !== undefined ? `${impliedYieldPct.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Value</div>
+            <div className="text-white font-medium">{formatUsd(latestSnapshot?.totalUsd)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Net PnL</div>
+            <div className="text-white font-medium">
+              {snapshot?.netPnlUsd !== undefined ? (
+                <>
+                  {formatUsd(snapshot.netPnlUsd)}
+                  {snapshot.netPnlPct !== undefined && (
+                    <span className="text-gray-400">{` (${snapshot.netPnlPct.toFixed(2)}%)`}</span>
+                  )}
+                </>
+              ) : (
+                '—'
+              )}
             </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
-            <div className="text-white font-medium">{metrics.apy !== undefined ? `${metrics.apy.toFixed(2)}%` : '—'}</div>
+            <div className="text-white font-medium">
+              {metrics.apy !== undefined ? `${metrics.apy.toFixed(2)}%` : '—'}
+            </div>
           </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
-            <div className="text-white font-medium">{metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : '—'}</div>
+            <div className="text-white font-medium">
+              {metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : '—'}
+            </div>
           </div>
         </div>
         <div className="mt-4 pt-4 border-t border-[#2a2a2a]">

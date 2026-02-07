@@ -33,6 +33,18 @@ export interface Pool {
   feeTierBps?: number;
 }
 
+// Pendle market snapshot type emitted by agent-pendle.
+export interface PendleMarket {
+  marketAddress: `0x${string}`;
+  ptAddress: `0x${string}`;
+  ytAddress: `0x${string}`;
+  ptSymbol: string;
+  ytSymbol: string;
+  underlyingSymbol: string;
+  apy: number; // percent, e.g. 17.88
+  maturity: string; // ISO-ish date string
+}
+
 // Transaction types
 export interface Transaction {
   cycle: number;
@@ -240,8 +252,8 @@ export interface AgentViewProfile {
   chains: string[];
   protocols: string[];
   tokens: string[];
-  pools: Pool[];
-  allowedPools: Pool[];
+  pools: Array<Pool | PendleMarket>;
+  allowedPools: Array<Pool | PendleMarket>;
 }
 
 // Activity types (ClmmActivity)
@@ -279,6 +291,22 @@ export interface AgentViewMetrics {
       amountBaseUnits?: string;
       valueUsd?: number;
     }>;
+    pendle?: {
+      marketAddress: `0x${string}`;
+      ptSymbol: string;
+      ytSymbol: string;
+      underlyingSymbol: string;
+      maturity: string;
+      impliedApyPct?: number;
+      underlyingApyPct?: number;
+      pendleApyPct?: number;
+      aggregatedApyPct?: number;
+      swapFeeApyPct?: number;
+      ytFloatingApyPct?: number;
+      maxBoostedApyPct?: number;
+      netPnlUsd?: number;
+      netPnlPct?: number;
+    };
   };
 }
 
