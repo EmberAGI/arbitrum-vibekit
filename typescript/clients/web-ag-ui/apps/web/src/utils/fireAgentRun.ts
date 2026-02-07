@@ -28,7 +28,11 @@ export async function fireAgentRun<TRunAgentParams extends { agent: unknown }>(p
   // prevents new commands. `fire` is special: it must always work as an escape hatch.
   if (runInFlightRef.current) {
     try {
-      agent.abortRun?.();
+      try {
+        agent.abortRun?.();
+      } catch {
+        // CopilotKit may throw if a run is already ending/ended; this is best-effort only.
+      }
     } finally {
       await Promise.resolve(agent.detachActiveRun?.()).catch(() => {
         // best-effort; ignore
@@ -52,4 +56,3 @@ export async function fireAgentRun<TRunAgentParams extends { agent: unknown }>(p
 
   return true;
 }
-

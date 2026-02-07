@@ -53,5 +53,37 @@ describe('fireAgentRun', () => {
     expect(agent.addMessage).not.toHaveBeenCalled();
     expect(copilotkit.runAgent).not.toHaveBeenCalled();
   });
-});
 
+  it('still sends the fire command when abortRun throws a non-terminal error', async () => {
+    const calls: string[] = [];
+
+    const agent = {
+      abortRun: vi.fn(() => {
+        calls.push('abortRun');
+        throw new Error('Run ended without emitting a terminal event');
+      }),
+      detachActiveRun: vi.fn(async () => calls.push('detachActiveRun')),
+      addMessage: vi.fn(() => calls.push('addMessage')),
+    };
+    const copilotkit = {
+      runAgent: vi.fn(async () => calls.push('runAgent')),
+    };
+
+    const runInFlightRef = { current: true };
+
+    const ok = await fireAgentRun({
+      agent,
+      copilotkit,
+      threadId: 'thread-1',
+      runInFlightRef,
+      createId: () => 'msg-1',
+    });
+
+    expect(ok).toBe(true);
+    expect(agent.abortRun).toHaveBeenCalledTimes(1);
+    expect(agent.detachActiveRun).toHaveBeenCalledTimes(1);
+    expect(agent.addMessage).toHaveBeenCalledTimes(1);
+    expect(copilotkit.runAgent).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual(['abortRun', 'detachActiveRun', 'addMessage', 'runAgent']);
+  });
+});
