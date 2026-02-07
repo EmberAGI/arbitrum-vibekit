@@ -2,6 +2,7 @@ export const ARBITRUM_CHAIN_ID = 42161;
 
 const DEFAULT_STABLECOIN_WHITELIST = [
   'USDai',
+  'sUSDai',
   'reUSD',
   'NUSD',
   'rUSD',
