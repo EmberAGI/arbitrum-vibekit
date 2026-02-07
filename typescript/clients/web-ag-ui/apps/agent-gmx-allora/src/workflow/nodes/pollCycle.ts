@@ -10,6 +10,7 @@ import {
   resolveAlloraApiBaseUrl,
   resolveAlloraApiKey,
   resolveAlloraChainId,
+  resolveAlloraInferenceCacheTtlMs,
   resolvePollIntervalMs,
 } from '../../config/constants.js';
 import { buildAlloraPrediction } from '../../core/alloraPrediction.js';
@@ -95,6 +96,7 @@ export const pollCycleNode = async (
       chainId: resolveAlloraChainId(),
       topicId,
       apiKey: resolveAlloraApiKey(),
+      cacheTtlMs: resolveAlloraInferenceCacheTtlMs(),
     });
     staleCycles = 0;
     const currentPrice = state.view.metrics.previousPrice ?? inference.combinedValue;
@@ -329,7 +331,7 @@ export const pollCycleNode = async (
       ? undefined
       : {
           type: 'artifact',
-          artifact: buildExecutionPlanArtifact(executionPlan),
+          artifact: buildExecutionPlanArtifact({ plan: executionPlan, telemetry: exposureAdjusted }),
           append: true,
         };
   const executionResultEvent: ClmmEvent | undefined =
@@ -341,6 +343,10 @@ export const pollCycleNode = async (
             action: executionResult.action,
             ok: executionResult.ok,
             error: executionResult.error,
+            txHashes: executionResult.txHashes,
+            lastTxHash: executionResult.lastTxHash,
+            telemetry: exposureAdjusted,
+            transactions: executionResult.transactions,
           }),
           append: true,
         };

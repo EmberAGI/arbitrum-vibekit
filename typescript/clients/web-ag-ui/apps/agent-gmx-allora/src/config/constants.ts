@@ -3,6 +3,7 @@ export const ARBITRUM_CHAIN_ID = 42161;
 const DEFAULT_ONCHAIN_ACTIONS_BASE_URL = 'https://api.emberai.xyz';
 const DEFAULT_ALLORA_API_BASE_URL = 'https://api.allora.network';
 const DEFAULT_ALLORA_CHAIN_ID = 'allora-mainnet-1';
+const DEFAULT_ALLORA_INFERENCE_CACHE_TTL_MS = 30_000;
 
 type OnchainActionsBaseUrlLogger = (message: string, metadata?: Record<string, unknown>) => void;
 
@@ -52,6 +53,20 @@ export function resolveAlloraApiKey(): string | undefined {
 
 export function resolveAlloraChainId(): string {
   return process.env['ALLORA_CHAIN_ID']?.trim() || DEFAULT_ALLORA_CHAIN_ID;
+}
+
+export function resolveAlloraInferenceCacheTtlMs(): number {
+  const raw = process.env['ALLORA_INFERENCE_CACHE_TTL_MS'];
+  if (!raw) {
+    return DEFAULT_ALLORA_INFERENCE_CACHE_TTL_MS;
+  }
+
+  const parsed = Number(raw);
+  // Allow disabling caching by setting <= 0 or invalid values.
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+  return Math.trunc(parsed);
 }
 
 export const ALLORA_HORIZON_HOURS = 8;
