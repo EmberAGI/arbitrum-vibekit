@@ -1,9 +1,29 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
-import { resolvePollIntervalMs } from '../../config/constants.js';
-import { type AlloraPrediction, type GmxAlloraTelemetry } from '../../domain/types.js';
-import { buildTelemetryArtifact } from '../artifacts.js';
+import { fetchAlloraInference } from '../../clients/allora.js';
+import {
+  ALLORA_HORIZON_HOURS,
+  ALLORA_TOPIC_IDS,
+  ALLORA_TOPIC_LABELS,
+  ARBITRUM_CHAIN_ID,
+  resolveAlloraApiBaseUrl,
+  resolveAlloraApiKey,
+  resolveAlloraChainId,
+  resolvePollIntervalMs,
+} from '../../config/constants.js';
+import { buildAlloraPrediction } from '../../core/alloraPrediction.js';
+import { buildCycleTelemetry } from '../../core/cycle.js';
+import { buildPerpetualExecutionPlan } from '../../core/executionPlan.js';
+import { applyExposureLimits } from '../../core/exposure.js';
+import { selectGmxPerpetualMarket } from '../../core/marketSelection.js';
+import type { AlloraPrediction } from '../../domain/types.js';
+import {
+  buildExecutionPlanArtifact,
+  buildExecutionResultArtifact,
+  buildTelemetryArtifact,
+} from '../artifacts.js';
+import { getOnchainActionsClient } from '../clientFactory.js';
 import {
   buildTaskStatus,
   logInfo,
@@ -12,7 +32,7 @@ import {
   type ClmmUpdate,
 } from '../context.js';
 import { ensureCronForThread } from '../cronScheduler.js';
-import { ALLORA_PREDICTIONS } from '../seedData.js';
+import { executePerpetualPlan } from '../execution.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = { configurable?: { thread_id?: string } };
@@ -21,10 +41,7 @@ const DECISION_THRESHOLD = 0.62;
 const COOLDOWN_CYCLES = 2;
 const CONNECT_DELAY_MS = 2500;
 const CONNECT_DELAY_STEPS = 3;
-
-function buildTxHash(iteration: number): string {
-  return `0x${iteration.toString(16).padStart(64, '0')}`;
-}
+const ALLORA_STALE_CYCLE_LIMIT = 3;
 
 function shouldDelayIteration(iteration: number): boolean {
   return iteration % 3 === 0;
@@ -34,20 +51,8 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function adjustPrediction(prediction: AlloraPrediction, iteration: number): AlloraPrediction {
-  const confidenceDelta = ((iteration % 3) - 1) * 0.05;
-  const confidence = Math.min(0.9, Math.max(0.45, prediction.confidence + confidenceDelta));
-  const flipDirection = iteration % 5 === 0;
-  const direction = flipDirection ? (prediction.direction === 'up' ? 'down' : 'up') : prediction.direction;
-  const priceDrift = (iteration % 4) * (direction === 'up' ? 45 : -35);
-
-  return {
-    ...prediction,
-    confidence: Number(confidence.toFixed(2)),
-    direction,
-    predictedPrice: Number((prediction.predictedPrice + priceDrift).toFixed(2)),
-    timestamp: new Date().toISOString(),
-  };
+function resolveTopicKey(symbol: string): 'BTC' | 'ETH' {
+  return symbol === 'BTC' ? 'BTC' : 'ETH';
 }
 
 export const pollCycleNode = async (
@@ -78,60 +83,201 @@ export const pollCycleNode = async (
   }
 
   const iteration = (state.view.metrics.iteration ?? 0) + 1;
-  const basePrediction = ALLORA_PREDICTIONS[selectedPool.baseSymbol === 'BTC' ? 'BTC' : 'ETH'];
-  const prediction = adjustPrediction(basePrediction, iteration);
-  const strongSignal = prediction.confidence >= DECISION_THRESHOLD;
+  const topicKey = resolveTopicKey(selectedPool.baseSymbol);
+  const topicId = ALLORA_TOPIC_IDS[topicKey];
+  const topicLabel = ALLORA_TOPIC_LABELS[topicKey];
 
-  const cyclesSinceTrade = state.view.metrics.cyclesSinceRebalance ?? 0;
-  const cooldownRemaining =
-    iteration === 1 ? 0 : Math.max(0, COOLDOWN_CYCLES - cyclesSinceTrade);
-  const inCooldown = cooldownRemaining > 0;
+  let prediction: AlloraPrediction;
+  let staleCycles = state.view.metrics.staleCycles ?? 0;
+  try {
+    const inference = await fetchAlloraInference({
+      baseUrl: resolveAlloraApiBaseUrl(),
+      chainId: resolveAlloraChainId(),
+      topicId,
+      apiKey: resolveAlloraApiKey(),
+    });
+    staleCycles = 0;
+    const currentPrice = state.view.metrics.previousPrice ?? inference.combinedValue;
+    prediction = buildAlloraPrediction({
+      inference,
+      currentPrice,
+      topic: topicLabel,
+      horizonHours: ALLORA_HORIZON_HOURS,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    staleCycles += 1;
 
-  let action: GmxAlloraTelemetry['action'] = 'hold';
-  let reason = 'Signal below confidence threshold; holding position.';
-
-  if (inCooldown) {
-    action = 'cooldown';
-    reason = `Cooldown active for ${cooldownRemaining} more cycle(s).`;
-  } else if (strongSignal) {
-    if (iteration % 7 === 0) {
-      action = 'close';
-      reason = 'Strong signal reversal detected; closing position.';
-    } else if (iteration % 5 === 0) {
-      action = 'reduce';
-      reason = 'Reducing exposure after consecutive signals.';
-    } else {
-      action = 'open';
-      reason = `Opening ${prediction.direction} position based on Allora signal.`;
+    // Auth errors are configuration errors; surface them immediately.
+    if (message.includes('(401)') || message.includes('(403)')) {
+      const failureMessage = `ERROR: Failed to fetch Allora prediction: ${message}`;
+      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      await copilotkitEmitState(config, {
+        view: {
+          task,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        },
+      });
+      return new Command({
+        update: {
+          view: {
+            haltReason: failureMessage,
+            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+            metrics: { ...state.view.metrics, staleCycles, iteration },
+            task,
+            profile: state.view.profile,
+            transactionHistory: state.view.transactionHistory,
+          },
+        },
+        goto: 'summarize',
+      });
     }
+
+    // Transient failures should not brick the agent; skip trades and retry on the next cycle.
+    if (staleCycles > ALLORA_STALE_CYCLE_LIMIT) {
+      const failureMessage = `ERROR: Abort: Allora API unreachable for ${staleCycles} consecutive cycles (last error: ${message})`;
+      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      await copilotkitEmitState(config, {
+        view: {
+          task,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        },
+      });
+      return new Command({
+        update: {
+          view: {
+            haltReason: failureMessage,
+            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+            metrics: { ...state.view.metrics, staleCycles, iteration },
+            task,
+            profile: state.view.profile,
+            transactionHistory: state.view.transactionHistory,
+          },
+        },
+        goto: 'summarize',
+      });
+    }
+
+    const warningMessage = `WARNING: Allora prediction unavailable (attempt ${staleCycles}/${ALLORA_STALE_CYCLE_LIMIT}); skipping trades this cycle.`;
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'working', warningMessage);
+    await copilotkitEmitState(config, {
+      view: {
+        task,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+      },
+    });
+    return new Command({
+      update: {
+        view: {
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          metrics: { ...state.view.metrics, staleCycles, iteration },
+          task,
+          profile: state.view.profile,
+          transactionHistory: state.view.transactionHistory,
+        },
+      },
+      goto: 'summarize',
+    });
   }
 
-  const side = prediction.direction === 'up' ? 'long' : 'short';
-  const leverage = Math.min(operatorConfig.maxLeverage, 2);
-  const sizeUsd = Number((operatorConfig.baseContributionUsd * 0.9).toFixed(2));
-  const txHash = ['open', 'reduce', 'close'].includes(action) ? buildTxHash(iteration) : undefined;
-  const timestamp = new Date().toISOString();
+  let gmxMarketAddress: string;
+  let positions = [];
+  try {
+    const onchainActionsClient = getOnchainActionsClient();
+    const chainIds = [ARBITRUM_CHAIN_ID.toString()];
+    const [markets, walletPositions] = await Promise.all([
+      onchainActionsClient.listPerpetualMarkets({ chainIds }),
+      onchainActionsClient.listPerpetualPositions({
+        walletAddress: operatorConfig.walletAddress,
+        chainIds,
+      }),
+    ]);
 
-  const telemetry: GmxAlloraTelemetry = {
-    cycle: iteration,
-    action,
-    reason,
-    marketSymbol: `${selectedPool.baseSymbol}/${selectedPool.quoteSymbol}`,
-    side: ['open', 'reduce', 'close'].includes(action) ? side : undefined,
-    leverage: ['open', 'reduce', 'close'].includes(action) ? leverage : undefined,
-    sizeUsd: ['open', 'reduce', 'close'].includes(action) ? sizeUsd : undefined,
+    const selectedMarket = selectGmxPerpetualMarket({
+      markets,
+      baseSymbol: selectedPool.baseSymbol,
+      quoteSymbol: selectedPool.quoteSymbol,
+    });
+
+    if (!selectedMarket) {
+      const failureMessage = `ERROR: No GMX ${selectedPool.baseSymbol}/${selectedPool.quoteSymbol} market available`;
+      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      await copilotkitEmitState(config, {
+        view: {
+          task,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        },
+      });
+      return new Command({
+        update: {
+          view: {
+            haltReason: failureMessage,
+            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+            metrics: state.view.metrics,
+            task,
+            profile: state.view.profile,
+            transactionHistory: state.view.transactionHistory,
+          },
+        },
+        goto: 'summarize',
+      });
+    }
+
+    gmxMarketAddress = selectedMarket.marketToken.address;
+    positions = walletPositions;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const failureMessage = `ERROR: Failed to fetch GMX markets/positions: ${message}`;
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    });
+    return new Command({
+      update: {
+        view: {
+          haltReason: failureMessage,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          metrics: state.view.metrics,
+          task,
+          profile: state.view.profile,
+          transactionHistory: state.view.transactionHistory,
+        },
+      },
+      goto: 'summarize',
+    });
+  }
+
+  const previousCycle = state.view.metrics.latestCycle;
+  const { telemetry, nextCyclesSinceTrade: initialCyclesSinceTrade } = buildCycleTelemetry({
     prediction,
-    txHash,
-    timestamp,
-    metrics: {
-      confidence: prediction.confidence,
-      decisionThreshold: DECISION_THRESHOLD,
-      cooldownRemaining,
-    },
-  };
+    decisionThreshold: DECISION_THRESHOLD,
+    cooldownCycles: COOLDOWN_CYCLES,
+    maxLeverage: operatorConfig.maxLeverage,
+    baseContributionUsd: operatorConfig.baseContributionUsd,
+    previousAction: previousCycle?.action,
+    previousSide: previousCycle?.side,
+    cyclesSinceTrade: state.view.metrics.cyclesSinceRebalance ?? 0,
+    isFirstCycle: iteration === 1,
+    iteration,
+    marketSymbol: `${selectedPool.baseSymbol}/${selectedPool.quoteSymbol}`,
+  });
+
+  const exposureAdjusted = applyExposureLimits({
+    telemetry,
+    positions,
+    targetMarketAddress: gmxMarketAddress,
+    maxMarketExposureUsd: operatorConfig.baseContributionUsd * operatorConfig.maxLeverage,
+    maxTotalExposureUsd: operatorConfig.baseContributionUsd * operatorConfig.maxLeverage,
+  });
 
   const nextCyclesSinceTrade =
-    ['open', 'reduce', 'close'].includes(action) ? 0 : cyclesSinceTrade + 1;
+    exposureAdjusted.action === 'hold' && telemetry.action === 'open'
+      ? (state.view.metrics.cyclesSinceRebalance ?? 0) + 1
+      : initialCyclesSinceTrade;
+
+  const action = exposureAdjusted.action;
+  const reason = exposureAdjusted.reason;
+  const txHash = exposureAdjusted.txHash;
 
   const cycleStatusMessage = `[Cycle ${iteration}] ${action}: ${reason}${txHash ? ` (tx: ${txHash.slice(0, 10)}...)` : ''}`;
   let { task, statusEvent } = buildTaskStatus(state.view.task, 'working', cycleStatusMessage);
@@ -139,14 +285,14 @@ export const pollCycleNode = async (
     view: {
       task,
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      metrics: { latestCycle: telemetry },
+      metrics: { latestCycle: exposureAdjusted },
     },
   });
 
   if (shouldDelayIteration(iteration)) {
     const stepDelayMs = Math.max(1, Math.floor(CONNECT_DELAY_MS / CONNECT_DELAY_STEPS));
     for (let step = 1; step <= CONNECT_DELAY_STEPS; step += 1) {
-      const waitMessage = `[Cycle ${iteration}] streaming… (${step}/${CONNECT_DELAY_STEPS})`;
+      const waitMessage = `[Cycle ${iteration}] streaming... (${step}/${CONNECT_DELAY_STEPS})`;
       const updated = buildTaskStatus(task, 'working', waitMessage);
       task = updated.task;
       statusEvent = updated.statusEvent;
@@ -154,7 +300,7 @@ export const pollCycleNode = async (
         view: {
           task,
           activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          metrics: { latestCycle: telemetry },
+          metrics: { latestCycle: exposureAdjusted },
         },
       });
       await delay(stepDelayMs);
@@ -163,9 +309,41 @@ export const pollCycleNode = async (
 
   const telemetryEvent: ClmmEvent = {
     type: 'artifact',
-    artifact: buildTelemetryArtifact(telemetry),
+    artifact: buildTelemetryArtifact(exposureAdjusted),
     append: true,
   };
+  const executionPlan = buildPerpetualExecutionPlan({
+    telemetry: exposureAdjusted,
+    chainId: ARBITRUM_CHAIN_ID.toString(),
+    marketAddress: gmxMarketAddress as `0x${string}`,
+    walletAddress: operatorConfig.walletAddress,
+    payTokenAddress: operatorConfig.fundingTokenAddress,
+    collateralTokenAddress: operatorConfig.fundingTokenAddress,
+  });
+  const executionResult = await executePerpetualPlan({
+    client: getOnchainActionsClient(),
+    plan: executionPlan,
+  });
+  const executionPlanEvent: ClmmEvent | undefined =
+    executionPlan.action === 'none'
+      ? undefined
+      : {
+          type: 'artifact',
+          artifact: buildExecutionPlanArtifact(executionPlan),
+          append: true,
+        };
+  const executionResultEvent: ClmmEvent | undefined =
+    executionPlan.action === 'none'
+      ? undefined
+      : {
+          type: 'artifact',
+          artifact: buildExecutionResultArtifact({
+            action: executionResult.action,
+            ok: executionResult.ok,
+            error: executionResult.error,
+          }),
+          append: true,
+        };
 
   let cronScheduled = state.private.cronScheduled;
   const threadId = (config as Configurable).configurable?.thread_id;
@@ -183,7 +361,7 @@ export const pollCycleNode = async (
         txHash,
         status: 'success' as const,
         reason,
-        timestamp,
+        timestamp: exposureAdjusted.timestamp,
       }
     : undefined;
 
@@ -206,12 +384,16 @@ export const pollCycleNode = async (
           cyclesSinceRebalance: nextCyclesSinceTrade,
           staleCycles: state.view.metrics.staleCycles ?? 0,
           iteration,
-          latestCycle: telemetry,
+          latestCycle: exposureAdjusted,
         },
         task,
         activity: {
-          telemetry: [telemetry],
-          events: [telemetryEvent, statusEvent],
+          telemetry: [exposureAdjusted],
+          events: executionPlanEvent
+            ? executionResultEvent
+              ? [telemetryEvent, executionPlanEvent, executionResultEvent, statusEvent]
+              : [telemetryEvent, executionPlanEvent, statusEvent]
+            : [telemetryEvent, statusEvent],
         },
         transactionHistory: transactionEntry
           ? [...state.view.transactionHistory, transactionEntry]

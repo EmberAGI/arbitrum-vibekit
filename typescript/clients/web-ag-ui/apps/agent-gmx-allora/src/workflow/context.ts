@@ -361,7 +361,10 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
   };
 };
 
-const mergeCopilotkit = (left: CopilotkitState, right?: Partial<CopilotkitState>): CopilotkitState => ({
+const mergeCopilotkit = (
+  left: CopilotkitState,
+  right?: Partial<CopilotkitState>,
+): CopilotkitState => ({
   actions: right?.actions ?? left.actions ?? [],
   context: right?.context ?? left.context ?? [],
 });

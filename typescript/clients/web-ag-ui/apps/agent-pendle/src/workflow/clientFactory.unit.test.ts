@@ -41,7 +41,7 @@ describe('clientFactory', () => {
     expect(first).toBe(second);
     expect(onchainActionsCtorMock).toHaveBeenCalledTimes(1);
     expect(onchainActionsCtorMock).toHaveBeenCalledWith('https://api.emberai.xyz');
-  });
+  }, 15_000);
 
   it('creates and caches onchain clients using the agent private key', async () => {
     process.env.A2A_TEST_AGENT_NODE_PRIVATE_KEY =

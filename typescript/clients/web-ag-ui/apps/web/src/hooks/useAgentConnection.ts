@@ -34,6 +34,7 @@ import {
   initialAgentState,
 } from '../types/agent';
 import { applyAgentSyncToState, parseAgentSyncResponse } from '../utils/agentSync';
+import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
 import { fireAgentRun } from '../utils/fireAgentRun';
 import { scheduleCycleAfterInterruptResolution } from '../utils/interruptAutoCycle';
 
@@ -141,19 +142,16 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   const debugConnect = process.env.NEXT_PUBLIC_AGENT_CONNECT_DEBUG === 'true';
 
-  const getAgentDebugId = useCallback(
-    (value: ReturnType<typeof useAgent>['agent'] | null) => {
-      if (!value) return 'none';
-      const key = value as unknown as object;
-      const cached = agentDebugIdsRef.current.get(key);
-      if (cached) return `agent#${cached}`;
-      const nextId = nextAgentDebugIdRef.current;
-      nextAgentDebugIdRef.current = nextId + 1;
-      agentDebugIdsRef.current.set(key, nextId);
-      return `agent#${nextId}`;
-    },
-    [],
-  );
+  const getAgentDebugId = useCallback((value: ReturnType<typeof useAgent>['agent'] | null) => {
+    if (!value) return 'none';
+    const key = value as unknown as object;
+    const cached = agentDebugIdsRef.current.get(key);
+    if (cached) return `agent#${cached}`;
+    const nextId = nextAgentDebugIdRef.current;
+    nextAgentDebugIdRef.current = nextId + 1;
+    agentDebugIdsRef.current.set(key, nextId);
+    return `agent#${nextId}`;
+  }, []);
 
   const logConnectEvent = useCallback(
     (event: string, payload: Record<string, unknown>) => {
@@ -193,7 +191,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   );
 
   const hasStateValues = useCallback((value: unknown): value is AgentState => {
-    return Boolean(value && typeof value === 'object' && Object.keys(value as Record<string, unknown>).length > 0);
+    return Boolean(
+      value &&
+      typeof value === 'object' &&
+      Object.keys(value as Record<string, unknown>).length > 0,
+    );
   }, []);
 
   const needsSync = useCallback((value: unknown): boolean => {
@@ -282,8 +284,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         agent: getAgentDebugId(agent),
         threadId,
       });
-      agent.abortRun();
-      void agent.detachActiveRun();
+      void cleanupAgentConnection(agent);
     };
   }, [agent, agentId, getAgentDebugId, logConnectEvent, threadId]);
 
@@ -427,7 +428,9 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   // Extract state with defaults
   const currentState =
-    agent.state && Object.keys(agent.state).length > 0 ? (agent.state as AgentState) : initialAgentState;
+    agent.state && Object.keys(agent.state).length > 0
+      ? (agent.state as AgentState)
+      : initialAgentState;
   const view = currentState.view ?? defaultView;
   const profile = view.profile ?? defaultProfile;
   const metrics = view.metrics ?? defaultMetrics;
@@ -480,6 +483,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       input:
         | OperatorConfigInput
         | PendleSetupInput
+        | GmxSetupInput
         | FundWalletAcknowledgement
         | FundingTokenInput
         | DelegationSigningResponse,

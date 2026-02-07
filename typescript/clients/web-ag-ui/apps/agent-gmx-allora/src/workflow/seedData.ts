@@ -1,17 +1,10 @@
 import type { AlloraPrediction, GmxMarket } from '../domain/types.js';
 
-import type {
-  DelegationIntentSummary,
-  FundingTokenOption,
-  UnsignedDelegation,
-} from './context.js';
+import type { DelegationIntentSummary, FundingTokenOption, UnsignedDelegation } from './context.js';
 
-export const AGENT_WALLET_ADDRESS =
-  '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as const;
-export const DELEGATION_MANAGER =
-  '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as const;
-export const DELEGATION_ENFORCER =
-  '0xcccccccccccccccccccccccccccccccccccccccc' as const;
+export const AGENT_WALLET_ADDRESS = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as const;
+export const DELEGATION_MANAGER = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as const;
+export const DELEGATION_ENFORCER = '0xcccccccccccccccccccccccccccccccccccccccc' as const;
 const ZERO_WORD = `0x${'0'.repeat(64)}` as const;
 const SALT_WORD = `0x${'1'.repeat(64)}` as const;
 
@@ -104,13 +97,9 @@ export const DELEGATION_DESCRIPTIONS = [
   'Use Allora predictions to size low-leverage trades.',
 ];
 
-export const DELEGATION_WARNINGS = [
-  'This delegation flow is for testing only.',
-];
+export const DELEGATION_WARNINGS = ['This delegation flow is for testing only.'];
 
-export function buildDelegations(
-  delegatorAddress: `0x${string}`,
-): UnsignedDelegation[] {
+export function buildDelegations(delegatorAddress: `0x${string}`): UnsignedDelegation[] {
   return [
     {
       delegate: AGENT_WALLET_ADDRESS,

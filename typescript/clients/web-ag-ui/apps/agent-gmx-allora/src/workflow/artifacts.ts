@@ -1,5 +1,6 @@
 import { type Artifact } from '@emberai/agent-node/workflow';
 
+import type { ExecutionPlan } from '../core/executionPlan.js';
 import { type GmxAlloraTelemetry } from '../domain/types.js';
 
 export function buildTelemetryArtifact(entry: GmxAlloraTelemetry): Artifact {
@@ -11,6 +12,38 @@ export function buildTelemetryArtifact(entry: GmxAlloraTelemetry): Artifact {
       {
         kind: 'data',
         data: entry,
+      },
+    ],
+  };
+}
+
+export function buildExecutionPlanArtifact(plan: ExecutionPlan): Artifact {
+  return {
+    artifactId: 'gmx-allora-execution-plan',
+    name: 'gmx-allora-execution-plan.json',
+    description: 'GMX Allora execution plan',
+    parts: [
+      {
+        kind: 'data',
+        data: plan,
+      },
+    ],
+  };
+}
+
+export function buildExecutionResultArtifact(result: {
+  action: ExecutionPlan['action'];
+  ok: boolean;
+  error?: string;
+}): Artifact {
+  return {
+    artifactId: 'gmx-allora-execution-result',
+    name: 'gmx-allora-execution-result.json',
+    description: 'GMX Allora execution result',
+    parts: [
+      {
+        kind: 'data',
+        data: result,
       },
     ],
   };

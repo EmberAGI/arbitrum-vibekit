@@ -195,8 +195,18 @@ export function HireAgentsPage({
           <FilterTabs
             tabs={[
               { id: 'all', label: 'All' },
-              { id: 'hired', label: 'Hired', count: hiredCount, color: 'bg-teal-500/20 text-teal-400' },
-              { id: 'for_hire', label: 'For Hire', count: forHireCount, color: 'bg-[#fd6731]/20 text-[#fd6731]' },
+              {
+                id: 'hired',
+                label: 'Hired',
+                count: hiredCount,
+                color: 'bg-teal-500/20 text-teal-400',
+              },
+              {
+                id: 'for_hire',
+                label: 'For Hire',
+                count: forHireCount,
+                color: 'bg-[#fd6731]/20 text-[#fd6731]',
+              },
             ]}
             activeTab={filterStatus}
             onTabChange={(tab) => setFilterStatus(tab as typeof filterStatus)}
@@ -238,7 +248,7 @@ function generateAbstractPattern(agentId: string): string {
   let hash = 0;
   for (let i = 0; i < agentId.length; i++) {
     const char = agentId.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
+    hash = (hash << 5) - hash + char;
     hash = hash & hash;
   }
 
@@ -289,7 +299,9 @@ function generateAbstractPattern(agentId: string): string {
     const x = 15 + seed * 70;
     const y = 15 + ((seed * 2.3) % 1) * 70;
     const r = 5 + seed * 12;
-    accents.push(`<circle cx="${x}" cy="${y}" r="${r}" fill="white" opacity="${0.15 + seed * 0.2}"/>`);
+    accents.push(
+      `<circle cx="${x}" cy="${y}" r="${r}" fill="white" opacity="${0.15 + seed * 0.2}"/>`,
+    );
   }
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
@@ -337,9 +349,7 @@ function FeaturedAgentCard({
       {/* Header row: rank, stars, creator, menu */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <div className="flex items-center gap-2 text-sm">
-          {hasRank && (
-            <span className="text-gray-500 font-medium">#{agent.rank}</span>
-          )}
+          {hasRank && <span className="text-gray-500 font-medium">#{agent.rank}</span>}
           {hasRating && (
             <div className="flex items-center">
               {[...Array(5)].map((_, i) => (
@@ -370,9 +380,7 @@ function FeaturedAgentCard({
 
       {/* Main content: Name and avatar */}
       <div className="px-4 pb-4">
-        <h3 className="font-bold text-white text-lg leading-snug mb-3">
-          {agent.name}
-        </h3>
+        <h3 className="font-bold text-white text-lg leading-snug mb-3">{agent.name}</h3>
 
         <div className="flex items-center gap-3">
           {/* Large circular avatar */}
@@ -389,9 +397,7 @@ function FeaturedAgentCard({
           {hasTrend && (
             <div className="flex items-center gap-1.5 bg-[#fd6731]/15 px-2.5 py-1 rounded-full">
               <Flame className="w-4 h-4 text-[#fd6731]" />
-              <span className="text-sm font-semibold text-[#fd6731]">
-                {agent.trendMultiplier}
-              </span>
+              <span className="text-sm font-semibold text-[#fd6731]">{agent.trendMultiplier}</span>
             </div>
           )}
         </div>
@@ -406,7 +412,9 @@ function FeaturedAgentCard({
           </div>
         </div>
         <div>
-          <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-0.5">7d Agent Income</div>
+          <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-0.5">
+            7d Agent Income
+          </div>
           <div className="text-white font-semibold text-base">
             {hasWeeklyIncome ? `$${agent.weeklyIncome?.toLocaleString()}` : '—'}
           </div>
