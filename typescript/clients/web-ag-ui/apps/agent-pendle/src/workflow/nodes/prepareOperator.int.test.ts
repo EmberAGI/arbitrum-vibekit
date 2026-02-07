@@ -188,6 +188,12 @@ describe('prepareOperatorNode', () => {
         fundingAmount: '10000000',
       }),
     );
+    expect(update.view?.operatorConfig?.walletAddress).toBe(
+      '0x0000000000000000000000000000000000000001',
+    );
+    expect(update.view?.operatorConfig?.executionWalletAddress).toBe(
+      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    );
     expect(update.view?.selectedPool?.ytSymbol).toBe('YT-BEST');
     expect(update.view?.setupComplete).toBe(true);
   });

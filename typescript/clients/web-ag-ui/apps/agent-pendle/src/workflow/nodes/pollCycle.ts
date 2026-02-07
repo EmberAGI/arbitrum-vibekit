@@ -291,7 +291,7 @@ export const pollCycleNode = async (
             onchainActionsClient,
             txExecutionMode,
             clients,
-            walletAddress: operatorConfig.walletAddress,
+            walletAddress: operatorConfig.executionWalletAddress,
             position: selectedPosition,
             currentMarket: currentTokenized,
           });
@@ -301,7 +301,7 @@ export const pollCycleNode = async (
             onchainActionsClient,
             txExecutionMode,
             clients,
-            walletAddress: operatorConfig.walletAddress,
+            walletAddress: operatorConfig.executionWalletAddress,
             position: selectedPosition,
             currentMarket: currentTokenized,
             targetMarket: nextTokenized!,
@@ -312,7 +312,7 @@ export const pollCycleNode = async (
             onchainActionsClient,
             txExecutionMode,
             clients,
-            walletAddress: operatorConfig.walletAddress,
+            walletAddress: operatorConfig.executionWalletAddress,
             position: selectedPosition,
             currentMarket: currentTokenized,
             targetMarket: nextTokenized!,
@@ -459,11 +459,13 @@ export const pollCycleNode = async (
     targetYieldToken: nextMarket,
   };
   const positionOpenedAt = state.view.metrics.latestSnapshot?.positionOpenedAt ?? timestamp;
+  const positionOpenedTotalUsd = state.view.metrics.latestSnapshot?.positionOpenedTotalUsd;
   let latestSnapshot = buildPendleLatestSnapshot({
     operatorConfig: snapshotConfig,
     totalUsd: aumUsd,
     timestamp,
     positionOpenedAt,
+    positionOpenedTotalUsd,
   });
 
   try {
@@ -474,6 +476,7 @@ export const pollCycleNode = async (
       walletBalances,
       timestamp,
       positionOpenedAt,
+      positionOpenedTotalUsd,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';

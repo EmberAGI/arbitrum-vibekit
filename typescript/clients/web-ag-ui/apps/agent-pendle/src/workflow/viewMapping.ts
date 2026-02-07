@@ -8,6 +8,7 @@ import type { PendleLatestSnapshot } from './context.js';
 
 const PT_DECIMALS_FALLBACK = 18;
 const YT_DECIMALS_FALLBACK = 18;
+const PT_USD_ESTIMATE_RELATIVE_DIFF_THRESHOLD = 0.2;
 
 function computeNetPnlPct(netPnlUsd: number, baseContributionUsd: number): number | undefined {
   if (!Number.isFinite(baseContributionUsd) || baseContributionUsd <= 0) {
@@ -105,28 +106,50 @@ function estimatePtPresentValueUsd(params: {
   return ptNotional / discount;
 }
 
+function resolvePtValueUsd(params: {
+  walletUsd?: number;
+  estimatedUsd?: number;
+}): number | undefined {
+  const { walletUsd, estimatedUsd } = params;
+  if (estimatedUsd === undefined) {
+    return walletUsd;
+  }
+  if (walletUsd === undefined) {
+    return estimatedUsd;
+  }
+  // Some balance providers misprice PT tokens. If we can estimate PV from implied APY and
+  // the wallet quote is far off, prefer the estimate (stablecoin markets only in this agent).
+  const relativeDiff = Math.abs(walletUsd - estimatedUsd) / Math.max(estimatedUsd, 1e-9);
+  return relativeDiff > PT_USD_ESTIMATE_RELATIVE_DIFF_THRESHOLD ? estimatedUsd : walletUsd;
+}
+
 export function buildPendleLatestSnapshot(params: {
   operatorConfig: ResolvedPendleConfig;
   totalUsd?: number;
   timestamp: string;
   positionOpenedAt: string;
+  positionOpenedTotalUsd?: number;
 }): PendleLatestSnapshot {
   const market = params.operatorConfig.targetYieldToken;
   const baseContributionUsd = params.operatorConfig.baseContributionUsd;
   const totalUsd =
     params.totalUsd ?? (Number.isFinite(baseContributionUsd) ? baseContributionUsd : undefined);
+  const positionOpenedTotalUsd = params.positionOpenedTotalUsd ?? totalUsd;
   const netPnlUsd =
-    totalUsd !== undefined && Number.isFinite(baseContributionUsd)
-      ? totalUsd - baseContributionUsd
+    totalUsd !== undefined && positionOpenedTotalUsd !== undefined
+      ? totalUsd - positionOpenedTotalUsd
       : undefined;
   const netPnlPct =
-    netPnlUsd !== undefined ? computeNetPnlPct(netPnlUsd, baseContributionUsd) : undefined;
+    netPnlUsd !== undefined && positionOpenedTotalUsd !== undefined
+      ? computeNetPnlPct(netPnlUsd, positionOpenedTotalUsd)
+      : undefined;
 
   return {
     poolAddress: market.marketAddress,
     totalUsd,
     timestamp: params.timestamp,
     positionOpenedAt: params.positionOpenedAt,
+    positionOpenedTotalUsd,
     positionTokens: [
       {
         address: market.ptAddress,
@@ -164,9 +187,9 @@ export function buildPendleLatestSnapshotFromOnchain(params: {
   walletBalances?: WalletBalance[];
   timestamp: string;
   positionOpenedAt: string;
+  positionOpenedTotalUsd?: number;
 }): PendleLatestSnapshot {
   const market = params.operatorConfig.targetYieldToken;
-  const baseContributionUsd = params.operatorConfig.baseContributionUsd;
   const impliedApyPct = market.impliedApyPct ?? market.apy;
 
   const balances = params.walletBalances ?? [];
@@ -178,22 +201,24 @@ export function buildPendleLatestSnapshotFromOnchain(params: {
     const ptBalance =
       balances.length > 0 ? findWalletBalance(balances, position.pt.token.tokenUid.address) : undefined;
     const ptNotional = safeFormatUnits(position.pt.exactAmount, position.pt.token.decimals);
-    const ptUsd =
+    const ptUsdFromWallet =
       balances.length > 0
         ? computeTokenValueUsd({
             walletBalance: ptBalance,
             tokenDecimals: position.pt.token.decimals,
             positionAmountBaseUnits: position.pt.exactAmount,
-          }) ??
-          (ptNotional !== undefined
-            ? estimatePtPresentValueUsd({
-                ptNotional,
-                impliedApyPct,
-                maturity: market.maturity,
-                timestamp: params.timestamp,
-              })
-            : undefined)
+          })
         : undefined;
+    const ptUsdEstimated =
+      ptNotional !== undefined
+        ? estimatePtPresentValueUsd({
+            ptNotional,
+            impliedApyPct,
+            maturity: market.maturity,
+            timestamp: params.timestamp,
+          })
+        : undefined;
+    const ptUsd = resolvePtValueUsd({ walletUsd: ptUsdFromWallet, estimatedUsd: ptUsdEstimated });
     positionTokens.push({
       address: normalizeHexAddress(position.pt.token.tokenUid.address, 'position PT token address'),
       symbol: position.pt.token.symbol,
@@ -253,16 +278,16 @@ export function buildPendleLatestSnapshotFromOnchain(params: {
     const ptNotional = ptBalance?.amount
       ? safeFormatUnits(ptBalance.amount, ptBalance.decimals ?? PT_DECIMALS_FALLBACK)
       : undefined;
-    const ptUsd =
-      ptBalance?.valueUsd ??
-      (ptNotional !== undefined
+    const ptUsdEstimated =
+      ptNotional !== undefined
         ? estimatePtPresentValueUsd({
             ptNotional,
             impliedApyPct,
             maturity: market.maturity,
             timestamp: params.timestamp,
           })
-        : undefined);
+        : undefined;
+    const ptUsd = resolvePtValueUsd({ walletUsd: ptBalance?.valueUsd, estimatedUsd: ptUsdEstimated });
 
     positionTokens.push({
       address: market.ptAddress,
@@ -293,15 +318,22 @@ export function buildPendleLatestSnapshotFromOnchain(params: {
     }
   }
 
-  const netPnlUsd = totalUsd !== undefined ? totalUsd - baseContributionUsd : undefined;
+  const positionOpenedTotalUsd = params.positionOpenedTotalUsd ?? totalUsd;
+  const netPnlUsd =
+    totalUsd !== undefined && positionOpenedTotalUsd !== undefined
+      ? totalUsd - positionOpenedTotalUsd
+      : undefined;
   const netPnlPct =
-    netPnlUsd !== undefined ? computeNetPnlPct(netPnlUsd, baseContributionUsd) : undefined;
+    netPnlUsd !== undefined && positionOpenedTotalUsd !== undefined
+      ? computeNetPnlPct(netPnlUsd, positionOpenedTotalUsd)
+      : undefined;
 
   return {
     poolAddress: market.marketAddress,
     totalUsd,
     timestamp: params.timestamp,
     positionOpenedAt: params.positionOpenedAt,
+    positionOpenedTotalUsd,
     positionTokens,
     pendle: {
       marketAddress: market.marketAddress,
