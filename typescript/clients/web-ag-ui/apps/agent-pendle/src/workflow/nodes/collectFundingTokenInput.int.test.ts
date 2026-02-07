@@ -240,6 +240,172 @@ describe('collectFundingTokenInputNode', () => {
     });
   });
 
+  it('auto-selects the funding token when the wallet already has a Pendle position', async () => {
+    const MARKET_ADDRESS = '0x00000000000000000000000000000000000000aa';
+    const PT_ADDRESS = '0x00000000000000000000000000000000000000bb';
+    const YT_ADDRESS = '0x00000000000000000000000000000000000000cc';
+    const UNDERLYING_ADDRESS = '0x00000000000000000000000000000000000000dd';
+
+    const fetchMock = vi.fn((input: string | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/tokenizedYield/positions/')) {
+        return new Response(
+          JSON.stringify({
+            positions: [
+              {
+                marketIdentifier: { chainId: '42161', address: MARKET_ADDRESS },
+                pt: {
+                  token: {
+                    tokenUid: { chainId: '42161', address: PT_ADDRESS },
+                    name: 'PT-sUSDai',
+                    symbol: 'PT-sUSDai',
+                    isNative: false,
+                    decimals: 18,
+                    iconUri: null,
+                    isVetted: true,
+                  },
+                  exactAmount: '1',
+                },
+                yt: {
+                  token: {
+                    tokenUid: { chainId: '42161', address: YT_ADDRESS },
+                    name: 'YT-sUSDai',
+                    symbol: 'YT-sUSDai',
+                    isNative: false,
+                    decimals: 18,
+                    iconUri: null,
+                    isVetted: true,
+                  },
+                  exactAmount: '0',
+                  claimableRewards: [],
+                },
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (url.includes('/tokenizedYield/markets')) {
+        return new Response(
+          JSON.stringify({
+            markets: [
+              {
+                marketIdentifier: { chainId: '42161', address: MARKET_ADDRESS },
+                expiry: '2030-01-01',
+                details: { impliedApy: 0.1788 },
+                ptToken: {
+                  tokenUid: { chainId: '42161', address: PT_ADDRESS },
+                  name: 'PT-sUSDai',
+                  symbol: 'PT-sUSDai',
+                  isNative: false,
+                  decimals: 18,
+                  iconUri: null,
+                  isVetted: true,
+                },
+                ytToken: {
+                  tokenUid: { chainId: '42161', address: YT_ADDRESS },
+                  name: 'YT-sUSDai',
+                  symbol: 'YT-sUSDai',
+                  isNative: false,
+                  decimals: 18,
+                  iconUri: null,
+                  isVetted: true,
+                },
+                underlyingToken: {
+                  tokenUid: { chainId: '42161', address: UNDERLYING_ADDRESS },
+                  name: 'sUSDai',
+                  symbol: 'sUSDai',
+                  isNative: false,
+                  decimals: 18,
+                  iconUri: null,
+                  isVetted: true,
+                },
+              },
+            ],
+            cursor: null,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response('Not found', { status: 404 });
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { interrupt } = await import('@langchain/langgraph');
+    const interruptMock = vi.mocked(interrupt);
+    interruptMock.mockReset();
+
+    const state: ClmmState = {
+      messages: [],
+      copilotkit: { actions: [], context: [] },
+      settings: { amount: undefined },
+      private: {
+        mode: undefined,
+        pollIntervalMs: 5_000,
+        streamLimit: -1,
+        cronScheduled: false,
+        bootstrapped: true,
+      },
+      view: {
+        command: undefined,
+        task: undefined,
+        poolArtifact: undefined,
+        operatorInput: {
+          walletAddress: '0x0000000000000000000000000000000000000001',
+          baseContributionUsd: 10,
+        },
+        onboarding: undefined,
+        fundingTokenInput: undefined,
+        selectedPool: undefined,
+        operatorConfig: undefined,
+        delegationBundle: undefined,
+        haltReason: undefined,
+        executionError: undefined,
+        delegationsBypassActive: true,
+        profile: {
+          agentIncome: undefined,
+          aum: undefined,
+          totalUsers: undefined,
+          apy: undefined,
+          chains: [],
+          protocols: [],
+          tokens: [],
+          pools: [],
+          allowedPools: [],
+        },
+        activity: { telemetry: [], events: [] },
+        metrics: {
+          lastSnapshot: undefined,
+          previousApy: undefined,
+          cyclesSinceRebalance: 0,
+          staleCycles: 0,
+          iteration: 0,
+          latestCycle: undefined,
+        },
+        transactionHistory: [],
+      },
+    };
+
+    const result = await collectFundingTokenInputNode(state, {});
+
+    expect(interruptMock).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      view: {
+        fundingTokenInput: { fundingTokenAddress: UNDERLYING_ADDRESS },
+        selectedPool: { marketAddress: MARKET_ADDRESS, underlyingSymbol: 'sUSDai' },
+        onboarding: { step: 3 },
+      },
+    });
+  });
+
   it('fails when operator input is missing', async () => {
     const state: ClmmState = {
       messages: [],
