@@ -214,6 +214,16 @@ export class OnchainActionsRequestError extends Error {
 export class OnchainActionsClient {
   constructor(private readonly baseUrl: string) {}
 
+  private isRetryableFetchError(error: unknown): boolean {
+    // Node's global fetch throws a TypeError on network failure (e.g. ECONNREFUSED).
+    // We retry these for GETs since local onchain-actions can take a moment to come up.
+    return error instanceof TypeError;
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   private buildQuery(params: Record<string, string | string[] | undefined>): URLSearchParams {
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) {
@@ -237,26 +247,66 @@ export class OnchainActionsClient {
     init?: RequestInit,
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    const response = await fetch(url, {
-      ...init,
-      signal: init?.signal ?? AbortSignal.timeout(60_000),
-      headers: {
-        'Content-Type': 'application/json',
-        ...(init?.headers ?? {}),
-      },
-    });
+    const method = (init?.method ?? 'GET').toUpperCase();
+    const retryAttempts = method === 'GET' ? 10 : 1;
+    let lastFetchError: unknown;
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => 'No error body');
-      throw new OnchainActionsRequestError({
-        message: `Onchain actions request failed (${response.status}): ${text}`,
-        status: response.status,
-        url,
-        bodyText: text,
-      });
+    // Retry GET network failures briefly to reduce flakiness when the local
+    // onchain-actions service is still booting up.
+    for (let attempt = 1; attempt <= retryAttempts; attempt += 1) {
+      try {
+        const response = await fetch(url, {
+          ...init,
+          signal: init?.signal ?? AbortSignal.timeout(60_000),
+          headers: {
+            'Content-Type': 'application/json',
+            ...(init?.headers ?? {}),
+          },
+        });
+
+        if (!response.ok) {
+          const text = await response.text().catch(() => 'No error body');
+          throw new OnchainActionsRequestError({
+            message: `Onchain actions request failed (${response.status}): ${text}`,
+            status: response.status,
+            url,
+            bodyText: text,
+          });
+        }
+
+        return schema.parse(await response.json());
+      } catch (error: unknown) {
+        // Only retry on network-level failures. Do not retry schema parse errors or HTTP errors.
+        if (
+          attempt < retryAttempts &&
+          !(error instanceof OnchainActionsRequestError) &&
+          this.isRetryableFetchError(error)
+        ) {
+          lastFetchError = error;
+          const backoffMs = Math.min(200 * attempt, 2_000);
+          await this.sleep(backoffMs);
+          continue;
+        }
+
+        if (error instanceof OnchainActionsRequestError) {
+          throw error;
+        }
+        if (error instanceof Error) {
+          throw new Error(`Onchain actions request failed (network error): ${error.message}`, {
+            cause: error,
+          });
+        }
+        throw new Error('Onchain actions request failed (network error)', { cause: error });
+      }
     }
 
-    return schema.parse(await response.json());
+    // Should never happen, but keep TS happy.
+    if (lastFetchError instanceof Error) {
+      throw new Error(`Onchain actions request failed (network error): ${lastFetchError.message}`, {
+        cause: lastFetchError,
+      });
+    }
+    throw new Error('Onchain actions request failed (network error)', { cause: lastFetchError });
   }
 
   async listTokens(params?: { chainIds?: string[] }): Promise<Token[]> {
