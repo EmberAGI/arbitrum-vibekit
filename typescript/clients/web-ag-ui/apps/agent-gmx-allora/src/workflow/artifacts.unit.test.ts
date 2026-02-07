@@ -20,11 +20,32 @@ describe('buildExecutionPlanArtifact', () => {
       },
     };
 
-    const artifact = buildExecutionPlanArtifact(plan);
+    const telemetry: GmxAlloraTelemetry = {
+      cycle: 1,
+      action: 'open',
+      reason: 'Signal bullish',
+      marketSymbol: 'BTC/USDC',
+      side: 'long',
+      leverage: 2,
+      sizeUsd: 250,
+      timestamp: '2026-02-05T20:00:00.000Z',
+      prediction: {
+        topic: 'BTC/USD - Price Prediction - 8h',
+        horizonHours: 8,
+        confidence: 0.71,
+        direction: 'up',
+        predictedPrice: 47000,
+        timestamp: '2026-02-05T20:00:00.000Z',
+      },
+    };
+
+    const artifact = buildExecutionPlanArtifact({ plan, telemetry });
 
     expect(artifact.artifactId).toBe('gmx-allora-execution-plan');
     expect(artifact.name).toBe('gmx-allora-execution-plan.json');
-    expect(artifact.parts[0]?.data).toEqual(plan);
+    expect(artifact.description.toLowerCase()).toContain('bullish');
+    expect(artifact.parts[0]?.kind).toBe('text');
+    expect(artifact.parts[1]?.data).toEqual(plan);
   });
 
   it('wraps execution result data into an artifact', () => {
@@ -34,7 +55,7 @@ describe('buildExecutionPlanArtifact', () => {
     });
 
     expect(artifact.artifactId).toBe('gmx-allora-execution-result');
-    expect(artifact.parts[0]?.data).toEqual({ action: 'long', ok: true });
+    expect(artifact.parts[1]?.data).toMatchObject({ action: 'long', ok: true });
   });
 
   it('wraps telemetry data into an artifact', () => {
@@ -45,15 +66,19 @@ describe('buildExecutionPlanArtifact', () => {
       marketSymbol: 'BTC/USDC',
       timestamp: '2026-02-05T20:00:00.000Z',
       prediction: {
-        topicId: 14,
-        combinedValue: 47000,
+        topic: 'BTC/USD - Price Prediction - 8h',
+        horizonHours: 8,
         confidence: 0.42,
+        direction: 'down',
+        predictedPrice: 47000,
+        timestamp: '2026-02-05T20:00:00.000Z',
       },
     };
 
     const artifact = buildTelemetryArtifact(telemetry);
 
     expect(artifact.artifactId).toBe('gmx-allora-telemetry');
-    expect(artifact.parts[0]?.data).toEqual(telemetry);
+    expect(artifact.description.length).toBeGreaterThan(0);
+    expect(artifact.parts[1]?.data).toEqual(telemetry);
   });
 });

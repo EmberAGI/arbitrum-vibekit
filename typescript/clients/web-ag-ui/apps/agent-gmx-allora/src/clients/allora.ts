@@ -101,19 +101,109 @@ export async function fetchAlloraInference(params: {
   chainId: string;
   topicId: number;
   apiKey?: string;
+  cacheTtlMs?: number;
 }): Promise<AlloraInference> {
   const base = params.baseUrl.replace(/\/$/u, '');
   const query = new URLSearchParams({ allora_topic_id: params.topicId.toString() });
   const url = `${base}/v2/allora/consumer/${params.chainId}?${query.toString()}`;
-  const response = await fetch(url, {
-    headers: params.apiKey ? { 'x-api-key': params.apiKey } : undefined,
-  });
+  const cacheTtlMs = params.cacheTtlMs ?? 0;
 
-  const bodyText = await response.text();
-  if (!response.ok) {
-    throw new Error(`Allora API request failed (${response.status}): ${bodyText}`);
+  if (cacheTtlMs > 0) {
+    const cached = getCachedInference({ cacheKey: url, now: Date.now() });
+    if (cached) {
+      return cached;
+    }
+    const inflight = inflightRequests.get(url);
+    if (inflight) {
+      return inflight;
+    }
   }
 
-  const payload = bodyText.trim().length > 0 ? (JSON.parse(bodyText) as unknown) : {};
-  return parseAlloraInferenceResponse(payload);
+  const request = (async () => {
+    const response = await fetch(url, {
+      headers: params.apiKey ? { 'x-api-key': params.apiKey } : undefined,
+    });
+
+    const bodyText = await response.text();
+    if (!response.ok) {
+      throw new Error(`Allora API request failed (${response.status}): ${bodyText}`);
+    }
+
+    const payload = bodyText.trim().length > 0 ? (JSON.parse(bodyText) as unknown) : {};
+    const parsed = parseAlloraInferenceResponse(payload);
+    if (cacheTtlMs > 0) {
+      storeCachedInference({ cacheKey: url, now: Date.now(), ttlMs: cacheTtlMs, value: parsed });
+    }
+    return parsed;
+  })();
+
+  if (cacheTtlMs > 0) {
+    inflightRequests.set(url, request);
+    try {
+      return await request;
+    } finally {
+      inflightRequests.delete(url);
+    }
+  }
+
+  return await request;
+}
+
+type CacheEntry = { expiresAt: number; value: AlloraInference };
+
+const MAX_CACHE_ENTRIES = 32;
+const inferenceCache = new Map<string, CacheEntry>();
+const inflightRequests = new Map<string, Promise<AlloraInference>>();
+
+function getCachedInference(params: { cacheKey: string; now: number }): AlloraInference | null {
+  const cached = inferenceCache.get(params.cacheKey);
+  if (!cached) {
+    return null;
+  }
+  if (cached.expiresAt <= params.now) {
+    inferenceCache.delete(params.cacheKey);
+    return null;
+  }
+  return cached.value;
+}
+
+function storeCachedInference(params: {
+  cacheKey: string;
+  now: number;
+  ttlMs: number;
+  value: AlloraInference;
+}): void {
+  if (params.ttlMs <= 0) {
+    return;
+  }
+  inferenceCache.set(params.cacheKey, { expiresAt: params.now + params.ttlMs, value: params.value });
+  pruneCache(params.now);
+}
+
+function pruneCache(now: number): void {
+  // Fast path: keep under limit without scanning.
+  if (inferenceCache.size <= MAX_CACHE_ENTRIES) {
+    return;
+  }
+
+  // Drop expired first.
+  for (const [key, entry] of inferenceCache) {
+    if (entry.expiresAt <= now) {
+      inferenceCache.delete(key);
+    }
+  }
+
+  // If still too large, evict oldest insertions (Map iteration order).
+  while (inferenceCache.size > MAX_CACHE_ENTRIES) {
+    const oldest = inferenceCache.keys().next();
+    if (oldest.done) {
+      break;
+    }
+    inferenceCache.delete(oldest.value);
+  }
+}
+
+export function clearAlloraInferenceCache(): void {
+  inferenceCache.clear();
+  inflightRequests.clear();
 }
