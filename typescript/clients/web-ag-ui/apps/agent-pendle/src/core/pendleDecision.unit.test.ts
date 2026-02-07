@@ -6,6 +6,9 @@ import { evaluateRebalanceDecision, rankYieldTokens } from './pendleDecision.js'
 
 const token = (overrides: Partial<PendleYieldToken>): PendleYieldToken => ({
   marketAddress: '0x0000000000000000000000000000000000000001',
+  ptAddress: '0x0000000000000000000000000000000000000001',
+  ytAddress: '0x0000000000000000000000000000000000000001',
+  ptSymbol: 'PT-USD',
   ytSymbol: 'YT-USD',
   underlyingSymbol: 'USD',
   apy: 5,
