@@ -3,6 +3,7 @@ import { Command, interrupt } from '@langchain/langgraph';
 import { z } from 'zod';
 
 import { ARBITRUM_CHAIN_ID } from '../../config/constants.js';
+import { getAgentWalletAddress } from '../clientFactory.js';
 import {
   buildTaskStatus,
   logInfo,
@@ -15,7 +16,6 @@ import {
   type SignedDelegation,
 } from '../context.js';
 import {
-  AGENT_WALLET_ADDRESS,
   DELEGATION_DESCRIPTIONS,
   DELEGATION_INTENTS,
   DELEGATION_MANAGER,
@@ -136,7 +136,30 @@ export const collectDelegationsNode = async (
   }
 
   const delegatorAddress = normalizeHexAddress(operatorInput.walletAddress, 'delegator wallet address');
-  const delegateeAddress = AGENT_WALLET_ADDRESS;
+  let delegateeAddress: `0x${string}`;
+  try {
+    delegateeAddress = getAgentWalletAddress();
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const failureMessage = `ERROR: Unable to resolve agent wallet address: ${message}`;
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    });
+    return new Command({
+      update: {
+        view: {
+          haltReason: failureMessage,
+          task,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          profile: state.view.profile,
+          metrics: state.view.metrics,
+          transactionHistory: state.view.transactionHistory,
+        },
+      },
+      goto: 'summarize',
+    });
+  }
 
   const request: DelegationSigningInterrupt = {
     type: 'pendle-delegation-signing-request',
@@ -146,7 +169,7 @@ export const collectDelegationsNode = async (
     delegationManager: DELEGATION_MANAGER,
     delegatorAddress,
     delegateeAddress,
-    delegationsToSign: buildDelegations(delegatorAddress),
+    delegationsToSign: buildDelegations(delegatorAddress, delegateeAddress),
     descriptions: [...DELEGATION_DESCRIPTIONS],
     warnings: [...DELEGATION_WARNINGS],
   };

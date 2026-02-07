@@ -6,8 +6,6 @@ import type {
   UnsignedDelegation,
 } from './context.js';
 
-export const AGENT_WALLET_ADDRESS =
-  '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as const;
 export const DELEGATION_MANAGER =
   '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as const;
 export const DELEGATION_ENFORCER =
@@ -178,10 +176,11 @@ export const DELEGATION_WARNINGS = [
 
 export function buildDelegations(
   delegatorAddress: `0x${string}`,
+  delegateeAddress: `0x${string}`,
 ): UnsignedDelegation[] {
   return [
     {
-      delegate: AGENT_WALLET_ADDRESS,
+      delegate: delegateeAddress,
       delegator: delegatorAddress,
       authority: ZERO_WORD,
       caveats: [

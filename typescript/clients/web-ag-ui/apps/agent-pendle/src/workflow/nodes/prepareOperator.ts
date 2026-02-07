@@ -10,7 +10,11 @@ import {
 } from '../../config/constants.js';
 import { buildEligibleYieldTokens, toYieldToken } from '../../core/pendleMarkets.js';
 import type { ResolvedPendleConfig } from '../../domain/types.js';
-import { getOnchainActionsClient, getOnchainClients } from '../clientFactory.js';
+import {
+  getAgentWalletAddress,
+  getOnchainActionsClient,
+  getOnchainClients,
+} from '../clientFactory.js';
 import {
   buildTaskStatus,
   logInfo,
@@ -20,7 +24,6 @@ import {
   type ClmmUpdate,
 } from '../context.js';
 import { executeInitialDeposit } from '../execution.js';
-import { AGENT_WALLET_ADDRESS } from '../seedData.js';
 import { buildPendleLatestSnapshot, buildPendleLatestSnapshotFromOnchain } from '../viewMapping.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
@@ -239,11 +242,38 @@ export const prepareOperatorNode = async (
       ? existingFundingTokenAddress
       : fundingTokenAddress;
 
+  let executionWalletAddress: `0x${string}` = operatorWalletAddress;
+  if (delegationsBypassActive) {
+    try {
+      executionWalletAddress = getAgentWalletAddress();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      const failureMessage = `ERROR: Delegations bypass requires a real agent wallet. ${message}`;
+      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      await copilotkitEmitState(config, {
+        view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      });
+      return new Command({
+        update: {
+          view: {
+            haltReason: failureMessage,
+            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+            task,
+            profile: state.view.profile,
+            transactionHistory: state.view.transactionHistory,
+            metrics: state.view.metrics,
+          },
+        },
+        goto: 'summarize',
+      });
+    }
+  }
+
   const operatorConfig: ResolvedPendleConfig = {
     // Always keep the owner wallet address for reading positions/balances.
     walletAddress: operatorWalletAddress,
     // Use a dedicated execution wallet when delegations bypass is enabled.
-    executionWalletAddress: delegationsBypassActive ? AGENT_WALLET_ADDRESS : operatorWalletAddress,
+    executionWalletAddress,
     baseContributionUsd: operatorInput.baseContributionUsd ?? 10,
     fundingTokenAddress: fundingTokenAddressResolved,
     targetYieldToken: selectedYieldToken,
