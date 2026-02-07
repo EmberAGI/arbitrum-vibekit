@@ -21,6 +21,7 @@ import {
 } from '../context.js';
 import { executeInitialDeposit } from '../execution.js';
 import { AGENT_WALLET_ADDRESS } from '../seedData.js';
+import { buildPendleLatestSnapshot } from '../viewMapping.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -336,6 +337,15 @@ export const prepareOperatorNode = async (
       }
     : undefined;
 
+  const timestamp = new Date().toISOString();
+  const positionOpenedAt = state.view.metrics.latestSnapshot?.positionOpenedAt ?? timestamp;
+  const latestSnapshot = buildPendleLatestSnapshot({
+    operatorConfig,
+    totalUsd: operatorConfig.baseContributionUsd,
+    timestamp,
+    positionOpenedAt,
+  });
+
   return {
     view: {
       operatorConfig,
@@ -363,6 +373,7 @@ export const prepareOperatorNode = async (
           apyDelta: undefined,
           position: undefined,
         },
+        latestSnapshot,
       },
       task,
       activity: { events, telemetry: state.view.activity.telemetry },

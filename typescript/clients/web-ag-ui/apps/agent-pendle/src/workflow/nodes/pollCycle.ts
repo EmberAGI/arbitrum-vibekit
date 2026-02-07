@@ -23,6 +23,7 @@ import {
 } from '../context.js';
 import { ensureCronForThread } from '../cronScheduler.js';
 import { executeCompound, executeRebalance, executeRollover } from '../execution.js';
+import { buildPendleLatestSnapshot, buildPendleLatestSnapshotFromOnchain } from '../viewMapping.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = { configurable?: { thread_id?: string } };
@@ -453,6 +454,34 @@ export const pollCycleNode = async (
       }
     : undefined;
 
+  const snapshotConfig = {
+    ...operatorConfig,
+    targetYieldToken: nextMarket,
+  };
+  const positionOpenedAt = state.view.metrics.latestSnapshot?.positionOpenedAt ?? timestamp;
+  let latestSnapshot = buildPendleLatestSnapshot({
+    operatorConfig: snapshotConfig,
+    totalUsd: aumUsd,
+    timestamp,
+    positionOpenedAt,
+  });
+
+  try {
+    const walletBalances = await onchainActionsClient.listWalletBalances(operatorConfig.walletAddress);
+    latestSnapshot = buildPendleLatestSnapshotFromOnchain({
+      operatorConfig: snapshotConfig,
+      position: nextPosition,
+      walletBalances,
+      timestamp,
+      positionOpenedAt,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    logInfo('Unable to hydrate Pendle snapshot from wallet balances; falling back to configured snapshot', {
+      error: message,
+    });
+  }
+
   const nextProfile = {
     ...state.view.profile,
     aum: aumUsd,
@@ -487,6 +516,7 @@ export const pollCycleNode = async (
             apyDelta: Number.isFinite(decision.apyDelta) ? formatDelta(decision.apyDelta) : undefined,
             position: positionMetric,
           },
+          latestSnapshot,
         },
         task,
         activity: {
