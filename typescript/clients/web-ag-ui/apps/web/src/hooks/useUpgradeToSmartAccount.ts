@@ -70,7 +70,9 @@ export function useUpgradeToSmartAccount(): UseUpgradeToSmartAccountReturn {
   useEffect(() => {
     if (!privyWallet?.address) return;
     if (typeof isDeployed !== 'boolean') return;
-    console.info(`[wallet upgrade] smart account deployed for ${privyWallet.address}: ${isDeployed}`);
+    console.info(
+      `[wallet upgrade] smart account deployed for ${privyWallet.address}: ${isDeployed}`,
+    );
   }, [isDeployed, privyWallet?.address]);
 
   const upgradeMutation = useMutation({
@@ -119,7 +121,9 @@ export function useUpgradeToSmartAccount(): UseUpgradeToSmartAccountReturn {
       return data.transactionHash;
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['smartAccount', privyWallet?.address, chainId] });
+      void queryClient.invalidateQueries({
+        queryKey: ['smartAccount', privyWallet?.address, chainId],
+      });
     },
   });
 

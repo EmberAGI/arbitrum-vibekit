@@ -23,6 +23,7 @@ import {
   type GmxSetupInput,
   type FundingTokenInput,
   type DelegationSigningResponse,
+  type FundWalletAcknowledgement,
   type Transaction,
   type ClmmEvent,
   defaultView,
@@ -32,6 +33,10 @@ import {
   defaultSettings,
   initialAgentState,
 } from '../types/agent';
+import { applyAgentSyncToState, parseAgentSyncResponse } from '../utils/agentSync';
+import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
+import { fireAgentRun } from '../utils/fireAgentRun';
+import { scheduleCycleAfterInterruptResolution } from '../utils/interruptAutoCycle';
 
 export type {
   AgentState,
@@ -44,6 +49,7 @@ export type {
   OperatorConfigInput,
   PendleSetupInput,
   GmxSetupInput,
+  FundWalletAcknowledgement,
   FundingTokenInput,
   Transaction,
   ClmmEvent,
@@ -54,6 +60,7 @@ const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
   value !== null &&
   ((value as { type?: string }).type === 'operator-config-request' ||
     (value as { type?: string }).type === 'pendle-setup-request' ||
+    (value as { type?: string }).type === 'pendle-fund-wallet-request' ||
     (value as { type?: string }).type === 'gmx-setup-request' ||
     (value as { type?: string }).type === 'clmm-funding-token-request' ||
     (value as { type?: string }).type === 'pendle-funding-token-request' ||
@@ -96,6 +103,7 @@ export interface UseAgentConnectionResult {
       | OperatorConfigInput
       | PendleSetupInput
       | GmxSetupInput
+      | FundWalletAcknowledgement
       | FundingTokenInput
       | DelegationSigningResponse,
   ) => void;
@@ -134,19 +142,16 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   const debugConnect = process.env.NEXT_PUBLIC_AGENT_CONNECT_DEBUG === 'true';
 
-  const getAgentDebugId = useCallback(
-    (value: ReturnType<typeof useAgent>['agent'] | null) => {
-      if (!value) return 'none';
-      const key = value as unknown as object;
-      const cached = agentDebugIdsRef.current.get(key);
-      if (cached) return `agent#${cached}`;
-      const nextId = nextAgentDebugIdRef.current;
-      nextAgentDebugIdRef.current = nextId + 1;
-      agentDebugIdsRef.current.set(key, nextId);
-      return `agent#${nextId}`;
-    },
-    [],
-  );
+  const getAgentDebugId = useCallback((value: ReturnType<typeof useAgent>['agent'] | null) => {
+    if (!value) return 'none';
+    const key = value as unknown as object;
+    const cached = agentDebugIdsRef.current.get(key);
+    if (cached) return `agent#${cached}`;
+    const nextId = nextAgentDebugIdRef.current;
+    nextAgentDebugIdRef.current = nextId + 1;
+    agentDebugIdsRef.current.set(key, nextId);
+    return `agent#${nextId}`;
+  }, []);
 
   const logConnectEvent = useCallback(
     (event: string, payload: Record<string, unknown>) => {
@@ -186,7 +191,11 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   );
 
   const hasStateValues = useCallback((value: unknown): value is AgentState => {
-    return Boolean(value && typeof value === 'object' && Object.keys(value as Record<string, unknown>).length > 0);
+    return Boolean(
+      value &&
+      typeof value === 'object' &&
+      Object.keys(value as Record<string, unknown>).length > 0,
+    );
   }, []);
 
   const needsSync = useCallback((value: unknown): boolean => {
@@ -275,8 +284,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         agent: getAgentDebugId(agent),
         threadId,
       });
-      agent.abortRun();
-      void agent.detachActiveRun();
+      void cleanupAgentConnection(agent);
     };
   }, [agent, agentId, getAgentDebugId, logConnectEvent, threadId]);
 
@@ -366,9 +374,63 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     logConnectEvent,
   ]);
 
+  // Poll `/api/agents/sync` to pick up backend-driven state changes (cron ticks, external runs).
+  // CopilotKit connect should stream state, but this provides a deterministic fallback for the detail page.
+  useEffect(() => {
+    if (!threadId) return undefined;
+    if (!agent) return undefined;
+
+    const rawInterval = Number(process.env.NEXT_PUBLIC_AGENT_DETAIL_SYNC_POLL_MS ?? 5000);
+    const intervalMs = Number.isFinite(rawInterval) && rawInterval > 0 ? rawInterval : 5000;
+
+    let cancelled = false;
+    let inFlight = false;
+
+    const tick = async () => {
+      if (cancelled) return;
+      if (inFlight) return;
+      if (runInFlightRef.current) return;
+
+      inFlight = true;
+      try {
+        const response = await fetch('/api/agents/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId, threadId }),
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const parsed = parseAgentSyncResponse(await response.json().catch(() => null));
+        const currentAgent = agentRef.current;
+        if (!currentAgent) {
+          return;
+        }
+        const currentState =
+          hasStateValues(currentAgent.state) ? (currentAgent.state as AgentState) : initialAgentState;
+        currentAgent.setState(applyAgentSyncToState(currentState, parsed));
+      } catch {
+        // Silence sync errors; connect stream still drives primary updates.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void tick();
+    const timer = window.setInterval(() => void tick(), intervalMs);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [agent, agentId, hasStateValues, threadId]);
+
   // Extract state with defaults
   const currentState =
-    agent.state && Object.keys(agent.state).length > 0 ? (agent.state as AgentState) : initialAgentState;
+    agent.state && Object.keys(agent.state).length > 0
+      ? (agent.state as AgentState)
+      : initialAgentState;
   const view = currentState.view ?? defaultView;
   const profile = view.profile ?? defaultProfile;
   const metrics = view.metrics ?? defaultMetrics;
@@ -396,24 +458,43 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   }, [runCommand, isHired, isHiring]);
 
   const runFire = useCallback(() => {
-    if (!isFiring) {
-      if (!runCommand('fire')) return;
-      setIsFiring(true);
+    if (isFiring) return;
+
+    setIsFiring(true);
+    const currentAgent = agentRef.current;
+    void fireAgentRun({
+      agent: currentAgent,
+      runAgent: async (value) =>
+        copilotkit.runAgent({ agent: value } as unknown as Parameters<typeof copilotkit.runAgent>[0]),
+      threadId,
+      runInFlightRef,
+      createId: v7,
+    }).then((ok) => {
+      if (!ok) {
+        setIsFiring(false);
+        return;
+      }
       setTimeout(() => setIsFiring(false), 3000);
-    }
-  }, [runCommand, isFiring]);
+    });
+  }, [copilotkit, isFiring, threadId]);
 
   const resolveInterrupt = useCallback(
     (
       input:
         | OperatorConfigInput
         | PendleSetupInput
+        | GmxSetupInput
+        | FundWalletAcknowledgement
         | FundingTokenInput
         | DelegationSigningResponse,
     ) => {
       resolve(JSON.stringify(input));
+      scheduleCycleAfterInterruptResolution({
+        interruptType: activeInterrupt?.type,
+        runCommand,
+      });
     },
-    [resolve],
+    [activeInterrupt?.type, resolve, runCommand],
   );
 
   // Settings sync pattern: update local state only (no automatic sync to avoid 409)

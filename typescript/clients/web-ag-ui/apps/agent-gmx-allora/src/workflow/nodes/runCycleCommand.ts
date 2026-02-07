@@ -13,7 +13,9 @@ export const runCycleCommandNode = async (
     'working',
     'Running scheduled GMX Allora cycle.',
   );
-  await copilotkitEmitState(config, { view: { task, activity: { events: [statusEvent], telemetry: [] } } });
+  await copilotkitEmitState(config, {
+    view: { task, activity: { events: [statusEvent], telemetry: [] } },
+  });
 
   return {
     view: {

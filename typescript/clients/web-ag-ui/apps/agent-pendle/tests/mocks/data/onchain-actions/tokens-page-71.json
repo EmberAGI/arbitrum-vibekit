@@ -1,0 +1,28 @@
+{
+  "metadata": {
+    "service": "onchain-actions",
+    "endpoint": "/tokens",
+    "method": "GET",
+    "recordedAt": "2026-02-05T18:11:31.728Z"
+  },
+  "request": {
+    "params": {
+      "chainIds": "42161",
+      "cursor": "d5447210-f56b-4135-9ee6-87f8752ec21d",
+      "page": "71"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "connection": "keep-alive",
+      "content-length": "1144",
+      "content-type": "application/json; charset=utf-8",
+      "date": "Thu, 05 Feb 2026 18:11:31 GMT",
+      "etag": "W/\"478-X0yk51K6eZkcp6WUjs2AgG0kQ/g\"",
+      "keep-alive": "timeout=5",
+      "x-powered-by": "Express"
+    },
+    "rawBody": "eyJ0b2tlbnMiOlt7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweGY2NEJjYTlEMWYyN2IyNjU3YjdBMjU3OTVmY0FGMUM3MDg2ODI0RjMiLCJjaGFpbklkIjoiNDIxNjEifSwic3ltYm9sIjoiIiwibmFtZSI6IiIsImRlY2ltYWxzIjoxOCwiaWNvblVyaSI6IiIsImlzTmF0aXZlIjpmYWxzZSwiaXNWZXR0ZWQiOmZhbHNlfSx7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweDNkMTVmRDQ2Q0U5ZTU1MTQ5ODMyOEIxQzgzMDcxRDk1MDlFMkMzYTAiLCJjaGFpbklkIjoiNDIxNjEifSwic3ltYm9sIjoidW5pRVRIIiwibmFtZSI6IlVuaXZlcnNhbCBFVEgiLCJkZWNpbWFscyI6MTgsImljb25VcmkiOiIiLCJpc05hdGl2ZSI6ZmFsc2UsImlzVmV0dGVkIjpmYWxzZX0seyJ0b2tlblVpZCI6eyJhZGRyZXNzIjoiMHg1YjU2ZjRiZjk0ODA3QjU0N0VCNUU3ZUJhNUNkOEMwMzNhZjgzYWVkIiwiY2hhaW5JZCI6IjQyMTYxIn0sInN5bWJvbCI6IlNZLXVuaUVUSCIsIm5hbWUiOiJ1bmlFVEgiLCJkZWNpbWFscyI6MTgsImljb25VcmkiOiJodHRwczovL3N0b3JhZ2UuZ29vZ2xlYXBpcy5jb20vcHJvZC1wZW5kbGUtYnVja2V0LWEvaW1hZ2VzL3VwbG9hZHMvZTBiYzcyYzktNDMxYy00ZDViLTljMzgtM2I5ZDU2YzNmNTEzLnN2ZyIsImlzTmF0aXZlIjpmYWxzZSwiaXNWZXR0ZWQiOnRydWV9LHsidG9rZW5VaWQiOnsiYWRkcmVzcyI6IjB4ZDM0NDNlZTFlOTFhRjI4ZTVGQjg1OEZiZDBENzJBNjNiQTgwNDZFMCIsImNoYWluSWQiOiI0MjE2MSJ9LCJzeW1ib2wiOiJnVVNEQyIsIm5hbWUiOiJHYWlucyBOZXR3b3JrIFVTREMiLCJkZWNpbWFscyI6NiwiaWNvblVyaSI6IiIsImlzTmF0aXZlIjpmYWxzZSwiaXNWZXR0ZWQiOmZhbHNlfSx7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweDEzQWQ1MWVkNEYxQjdlOURjMTY4ZDhhMDBjQjNmNGRERDg1RWZBNjAiLCJjaGFpbklkIjoiNDIxNjEifSwic3ltYm9sIjoiTERPIiwibmFtZSI6IkxpZG8gREFPIFRva2VuIiwiZGVjaW1hbHMiOjE4LCJpY29uVXJpIjoiIiwiaXNOYXRpdmUiOmZhbHNlLCJpc1ZldHRlZCI6ZmFsc2V9XSwiY3Vyc29yIjoiZDU0NDcyMTAtZjU2Yi00MTM1LTllZTYtODdmODc1MmVjMjFkIiwiY3VycmVudFBhZ2UiOjcxLCJ0b3RhbFBhZ2VzIjo5NCwidG90YWxJdGVtcyI6NDY3fQ=="
+  }
+}

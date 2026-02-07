@@ -14,8 +14,6 @@ import { AGENT_WALLET_ADDRESS, MARKETS } from '../seedData.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
-const DEFAULT_ALLOCATION_USD = 100;
-
 export const prepareOperatorNode = async (
   state: ClmmState,
   config: CopilotKitConfig,
@@ -94,9 +92,7 @@ export const prepareOperatorNode = async (
     });
   }
 
-  const targetMarket = MARKETS.find(
-    (market) => market.baseSymbol === operatorInput.targetMarket,
-  );
+  const targetMarket = MARKETS.find((market) => market.baseSymbol === operatorInput.targetMarket);
 
   if (!targetMarket) {
     const failureMessage = `ERROR: Unsupported GMX market ${operatorInput.targetMarket}`;
@@ -121,7 +117,7 @@ export const prepareOperatorNode = async (
 
   const operatorConfig: ResolvedGmxConfig = {
     walletAddress: delegationsBypassActive ? AGENT_WALLET_ADDRESS : operatorWalletAddress,
-    baseContributionUsd: operatorInput.baseContributionUsd ?? DEFAULT_ALLOCATION_USD,
+    baseContributionUsd: operatorInput.usdcAllocation,
     fundingTokenAddress,
     targetMarket,
     maxLeverage: targetMarket.maxLeverage,
@@ -129,7 +125,7 @@ export const prepareOperatorNode = async (
 
   logInfo('GMX Allora strategy configuration established', {
     operatorWalletAddress,
-    baseContributionUsd: operatorConfig.baseContributionUsd,
+    usdcAllocation: operatorConfig.baseContributionUsd,
     fundingToken: fundingTokenAddress,
     market: `${targetMarket.baseSymbol}/${targetMarket.quoteSymbol}`,
     maxLeverage: targetMarket.maxLeverage,

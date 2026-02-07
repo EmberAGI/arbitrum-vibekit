@@ -40,7 +40,9 @@ export const fireCommandNode = async (
     ? 'Agent fired. Workflow completed.'
     : 'Agent fired before onboarding completed.';
   const { task, statusEvent } = buildTaskStatus(currentTask, terminalState, terminalMessage);
-  await copilotkitEmitState(config, { view: { task, activity: { events: [statusEvent], telemetry: [] } } });
+  await copilotkitEmitState(config, {
+    view: { task, activity: { events: [statusEvent], telemetry: [] } },
+  });
 
   return {
     view: {

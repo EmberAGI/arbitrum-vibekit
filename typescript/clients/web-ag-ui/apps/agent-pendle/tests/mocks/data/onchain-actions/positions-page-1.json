@@ -1,0 +1,26 @@
+{
+  "metadata": {
+    "service": "onchain-actions",
+    "endpoint": "/tokenizedYield/positions/0x3fd83e40F96C3c81A807575F959e55C34a40e523",
+    "method": "GET",
+    "recordedAt": "2026-02-05T18:11:32.225Z"
+  },
+  "request": {
+    "params": {
+      "chainIds": "42161"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "connection": "keep-alive",
+      "content-length": "110",
+      "content-type": "application/json; charset=utf-8",
+      "date": "Thu, 05 Feb 2026 18:11:32 GMT",
+      "etag": "W/\"6e-/Yc8ZFQKjsG2dnTrTUcagB8mzGI\"",
+      "keep-alive": "timeout=5",
+      "x-powered-by": "Express"
+    },
+    "rawBody": "eyJwb3NpdGlvbnMiOltdLCJjdXJzb3IiOiIxYjhlNGRlYS0zZDViLTQ3MDktYmEwMC04ZmE3NDI5Y2Q5OGUiLCJjdXJyZW50UGFnZSI6MSwidG90YWxQYWdlcyI6MCwidG90YWxJdGVtcyI6MH0="
+  }
+}

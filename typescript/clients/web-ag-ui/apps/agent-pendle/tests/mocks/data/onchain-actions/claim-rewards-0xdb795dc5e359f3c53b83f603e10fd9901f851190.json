@@ -1,0 +1,36 @@
+{
+  "metadata": {
+    "service": "onchain-actions",
+    "endpoint": "/tokenizedYield/claimRewards",
+    "method": "POST",
+    "recordedAt": "2026-02-05T18:04:19.497Z"
+  },
+  "request": {
+    "body": {
+      "walletAddress": "0x3fd83e40F96C3c81A807575F959e55C34a40e523",
+      "ytTokenUid": {
+        "address": "0xdB795Dc5E359f3c53B83F603e10Fd9901F851190",
+        "chainId": "42161"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "alt-svc": "h3=\":443\"; ma=86400",
+      "cf-cache-status": "DYNAMIC",
+      "cf-ray": "9c945455cd2d6947-ATL",
+      "connection": "keep-alive",
+      "content-encoding": "br",
+      "content-type": "application/json; charset=utf-8",
+      "date": "Thu, 05 Feb 2026 18:04:19 GMT",
+      "etag": "W/\"2bc-A2PU01jp8OCJkUxlmXujGfMFt98\"",
+      "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+      "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=ESsy%2B06S04F6v9Oq8S7DrtlkDmKlUf0Zut5ibylC1ROtrBEq28VZlShG0C57ayEFtQZf6BGVDcLIR%2BoUQIPFL2p9Z7Abmopi3v8j31AvYQ%3D%3D\"}]}",
+      "server": "cloudflare",
+      "transfer-encoding": "chunked",
+      "x-powered-by": "Express"
+    },
+    "rawBody": "eyJ0cmFuc2FjdGlvbnMiOlt7InR5cGUiOiJFVk1fVFgiLCJ0byI6IjB4ODg4ODg4ODg4ODg5NzU4Rjc2ZTcxMDNjNkNiRjIzQUJiRjU4Rjk0NiIsImRhdGEiOiIweDA3NDFhODAzMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDBhMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwYzAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGUwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwZDRmNDgwOTY1ZDIzNDdkNDIxZjFiZWM3ZjU0NTY4MmU1ZWMyMTUxZDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAxMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiY2hhaW5JZCI6IjQyMTYxIn1dfQ=="
+  }
+}

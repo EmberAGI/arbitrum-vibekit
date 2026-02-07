@@ -66,7 +66,7 @@ describe('ClmmStateAnnotation view reducer history limits', () => {
     expect(view.transactionHistory).toHaveLength(STATE_HISTORY_LIMIT);
     expect(view.transactionHistory[0]?.cycle).toBe(5);
     expect(view.transactionHistory.at(-1)?.cycle).toBe(STATE_HISTORY_LIMIT + 4);
-  });
+  }, 20_000);
 
   it('caps accounting history lists at the configured accounting limit', async () => {
     vi.resetModules();

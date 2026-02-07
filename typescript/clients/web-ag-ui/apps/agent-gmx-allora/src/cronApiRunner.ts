@@ -97,10 +97,7 @@ const buildCycleMessage = (): MessageInput => ({
   content: JSON.stringify({ command: 'cycle' }),
 });
 
-const buildRunPayload = (params: {
-  graphId: string;
-  threadId: string;
-}): RunCreatePayload => ({
+const buildRunPayload = (params: { graphId: string; threadId: string }): RunCreatePayload => ({
   assistant_id: params.graphId,
   input: {
     messages: [buildCycleMessage()],
@@ -142,11 +139,7 @@ const ensureThread = async (baseUrl: string, threadId: string) => {
   await parseJsonResponse(response, ThreadResponseSchema);
 };
 
-const createRun = async (params: {
-  baseUrl: string;
-  threadId: string;
-  graphId: string;
-}) => {
+const createRun = async (params: { baseUrl: string; threadId: string; graphId: string }) => {
   const response = await fetch(`${params.baseUrl}/threads/${params.threadId}/runs`, {
     method: 'POST',
     headers: {
@@ -175,8 +168,7 @@ const startStarterCron = async () => {
   const graphId = process.env.LANGGRAPH_GRAPH_ID ?? 'agent-gmx-allora';
   const threadId = resolveThreadId();
   const intervalMs = resolveIntervalMs();
-  const cronExpression =
-    process.env.STARTER_CRON_EXPRESSION ?? toCronExpression(intervalMs);
+  const cronExpression = process.env.STARTER_CRON_EXPRESSION ?? toCronExpression(intervalMs);
 
   if (!process.env.STARTER_THREAD_ID) {
     console.info(`[starter-cron] STARTER_THREAD_ID not provided; using ${threadId}`);

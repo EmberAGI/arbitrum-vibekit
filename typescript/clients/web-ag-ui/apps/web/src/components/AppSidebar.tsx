@@ -48,8 +48,13 @@ export function AppSidebar() {
   const { ready, authenticated } = usePrivy();
   const { login } = useLogin();
   const { logout } = useLogout();
-  const { privyWallet, chainId, switchChain, isLoading: isWalletLoading, error: walletError } =
-    usePrivyWalletClient();
+  const {
+    privyWallet,
+    chainId,
+    switchChain,
+    isLoading: isWalletLoading,
+    error: walletError,
+  } = usePrivyWalletClient();
   const {
     isDeployed: isSmartAccountDeployed,
     isLoading: isSmartAccountLoading,
@@ -456,7 +461,9 @@ export function AppSidebar() {
               type="button"
               onClick={() => setIsAddressPopoverOpen((prev) => !prev)}
               className="text-xs text-gray-300 hover:text-white"
-              aria-label={isAddressPopoverOpen ? 'Hide full wallet address' : 'Show full wallet address'}
+              aria-label={
+                isAddressPopoverOpen ? 'Hide full wallet address' : 'Show full wallet address'
+              }
             >
               {isAddressPopoverOpen ? (
                 <ChevronDown className="w-4 h-4 rotate-180" />

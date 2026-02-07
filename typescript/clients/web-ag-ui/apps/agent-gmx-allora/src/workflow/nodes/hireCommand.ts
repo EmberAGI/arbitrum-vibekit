@@ -33,7 +33,9 @@ export const hireCommandNode = async (
     'submitted',
     `Agent hired!${amount ? ` Trading ${amount} tokens...` : ''}`,
   );
-  await copilotkitEmitState(config, { view: { task, activity: { events: [statusEvent], telemetry: [] } } });
+  await copilotkitEmitState(config, {
+    view: { task, activity: { events: [statusEvent], telemetry: [] } },
+  });
 
   return {
     view: {

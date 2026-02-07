@@ -20,8 +20,13 @@ const ThreadStateSchema = z
   .object({
     view: z
       .object({
+        command: z.string().optional(),
+        onboarding: z.record(z.unknown()).optional(),
+        delegationsBypassActive: z.boolean().optional(),
         profile: z.record(z.unknown()).optional(),
         metrics: z.record(z.unknown()).optional(),
+        activity: z.record(z.unknown()).optional(),
+        transactionHistory: z.array(z.unknown()).optional(),
         task: z
           .object({
             id: z.string().optional(),
@@ -114,13 +119,52 @@ function extractThreadStateValues(payload: unknown): Record<string, unknown> | n
   return null;
 }
 
+function threadHasPendingInterrupts(payload: unknown): boolean {
+  if (!isRecord(payload)) {
+    return false;
+  }
+
+  const tasks = payload['tasks'];
+  if (!Array.isArray(tasks)) {
+    return false;
+  }
+
+  return tasks.some((task) => {
+    if (!isRecord(task)) {
+      return false;
+    }
+    const interrupts = task['interrupts'];
+    return Array.isArray(interrupts) && interrupts.length > 0;
+  });
+}
+
+async function fetchThreadStatePayload(baseUrl: string, threadId: string): Promise<unknown | null> {
+  const response = await fetch(`${baseUrl}/threads/${threadId}/state`);
+  if (response.status === 404) {
+    return null;
+  }
+  return parseJsonResponse(response, z.unknown());
+}
+
 async function fetchThreadStateValues(
   baseUrl: string,
   threadId: string,
-): Promise<Record<string, unknown> | null> {
-  const response = await fetch(`${baseUrl}/threads/${threadId}/state`);
-  const payload = await parseJsonResponse(response, z.unknown());
-  return extractThreadStateValues(payload);
+): Promise<{
+  payload: unknown | null;
+  values: Record<string, unknown> | null;
+  hasInterrupts: boolean;
+  exists: boolean;
+}> {
+  const payload = await fetchThreadStatePayload(baseUrl, threadId);
+  if (!payload) {
+    return { payload: null, values: null, hasInterrupts: false, exists: false };
+  }
+  return {
+    payload,
+    values: extractThreadStateValues(payload),
+    hasInterrupts: threadHasPendingInterrupts(payload),
+    exists: true,
+  };
 }
 
 async function ensureThread(baseUrl: string, threadId: string, graphId: string) {
@@ -197,13 +241,16 @@ async function waitForRunCompletion(baseUrl: string, threadId: string, runId: st
 }
 
 async function fetchViewState(baseUrl: string, threadId: string): Promise<ThreadState | null> {
-  const values = await fetchThreadStateValues(baseUrl, threadId);
+  const { values } = await fetchThreadStateValues(baseUrl, threadId);
   if (!values) {
     return null;
   }
   const parsed = ThreadStateSchema.safeParse(values);
   if (!parsed.success) {
-    console.warn('[agent-sync] Unable to parse thread state', { threadId, error: parsed.error.message });
+    console.warn('[agent-sync] Unable to parse thread state', {
+      threadId,
+      error: parsed.error.message,
+    });
     return null;
   }
   return parsed.data;
@@ -220,17 +267,36 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const runtime = resolveAgentRuntime(parsed.data.agentId);
   if (!runtime) {
-    return NextResponse.json({ error: 'Unknown agent', agentId: parsed.data.agentId }, { status: 404 });
+    return NextResponse.json(
+      { error: 'Unknown agent', agentId: parsed.data.agentId },
+      { status: 404 },
+    );
   }
 
   const baseUrl = normalizeBaseUrl(runtime.deploymentUrl);
   const threadId = parsed.data.threadId ?? getAgentThreadId(parsed.data.agentId);
 
   try {
-    await ensureThread(baseUrl, threadId, runtime.graphId);
-    await updateSyncState(baseUrl, threadId);
-    const run = await createRun(baseUrl, threadId, runtime.graphId);
-    await waitForRunCompletion(baseUrl, threadId, run.run_id);
+    // IMPORTANT: Agent list sync is a read-only operation. If we mutate thread state while an
+    // onboarding interrupt is pending (e.g. Pendle setup), we can accidentally clobber the
+    // interrupt checkpoint and the UI will show "Waiting for agent".
+    //
+    // So we only "poke" the graph when there is no view state to return AND there are no pending interrupts.
+    let initialState = await fetchThreadStateValues(baseUrl, threadId);
+    if (!initialState.exists) {
+      await ensureThread(baseUrl, threadId, runtime.graphId);
+      initialState = await fetchThreadStateValues(baseUrl, threadId);
+    }
+
+    if (!initialState.hasInterrupts) {
+      const hasView = Boolean(initialState.values && isRecord(initialState.values['view']));
+      if (!hasView) {
+        await updateSyncState(baseUrl, threadId);
+        const run = await createRun(baseUrl, threadId, runtime.graphId);
+        await waitForRunCompletion(baseUrl, threadId, run.run_id);
+      }
+    }
+
     const state = await fetchViewState(baseUrl, threadId);
 
     const task = state?.view?.task;
@@ -239,21 +305,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(
       {
         agentId: parsed.data.agentId,
+        command: state?.view?.command ?? null,
+        onboarding: state?.view?.onboarding ?? null,
+        delegationsBypassActive: state?.view?.delegationsBypassActive ?? null,
         profile: state?.view?.profile ?? null,
         metrics: state?.view?.metrics ?? null,
+        activity: state?.view?.activity ?? null,
+        transactionHistory: state?.view?.transactionHistory ?? null,
+        task: task ?? null,
         taskId,
-        taskState: hasTask ? task?.taskStatus?.state ?? null : null,
-        haltReason: hasTask ? state?.view?.haltReason ?? null : null,
-        executionError: hasTask ? state?.view?.executionError ?? null : null,
+        taskState: hasTask ? (task?.taskStatus?.state ?? null) : null,
+        haltReason: hasTask ? (state?.view?.haltReason ?? null) : null,
+        executionError: hasTask ? (state?.view?.executionError ?? null) : null,
       },
       { status: 200 },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[agent-sync] Sync failed', { agentId: parsed.data.agentId, error: message });
-    return NextResponse.json(
-      { error: 'Sync failed', details: message },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: 'Sync failed', details: message }, { status: 500 });
   }
 }

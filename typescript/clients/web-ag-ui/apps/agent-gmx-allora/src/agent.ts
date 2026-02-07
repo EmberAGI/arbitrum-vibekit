@@ -19,7 +19,11 @@ import { fireCommandNode } from './workflow/nodes/fireCommand.js';
 import { hireCommandNode } from './workflow/nodes/hireCommand.js';
 import { pollCycleNode } from './workflow/nodes/pollCycle.js';
 import { prepareOperatorNode } from './workflow/nodes/prepareOperator.js';
-import { extractCommand, resolveCommandTarget, runCommandNode } from './workflow/nodes/runCommand.js';
+import {
+  extractCommand,
+  resolveCommandTarget,
+  runCommandNode,
+} from './workflow/nodes/runCommand.js';
 import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
@@ -162,7 +166,10 @@ async function updateCycleState(
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error';
-    console.warn('[cron] Unable to fetch thread state before cycle update', { threadId, error: message });
+    console.warn('[cron] Unable to fetch thread state before cycle update', {
+      threadId,
+      error: message,
+    });
   }
 
   const view = existingView ? { ...existingView, command: 'cycle' } : { command: 'cycle' };
@@ -201,7 +208,9 @@ async function createRun(params: {
 
   if (response.status === 422) {
     const payloadText = await response.text();
-    console.info(`[cron] Run rejected; thread busy (thread=${params.threadId})`, { detail: payloadText });
+    console.info(`[cron] Run rejected; thread busy (thread=${params.threadId})`, {
+      detail: payloadText,
+    });
     return undefined;
   }
 
@@ -219,11 +228,14 @@ async function waitForRunStreamCompletion(params: {
   threadId: string;
   runId: string;
 }): Promise<RunStatus> {
-  const response = await fetch(`${params.baseUrl}/threads/${params.threadId}/runs/${params.runId}/stream`, {
-    headers: {
-      Accept: 'text/event-stream',
+  const response = await fetch(
+    `${params.baseUrl}/threads/${params.threadId}/runs/${params.runId}/stream`,
+    {
+      headers: {
+        Accept: 'text/event-stream',
+      },
     },
-  });
+  );
   if (!response.ok) {
     const payloadText = await response.text();
     throw new Error(`LangGraph run stream failed (${response.status}): ${payloadText}`);
@@ -273,7 +285,9 @@ export async function runGraphOnce(
     }
     const status = await waitForRunStreamCompletion({ baseUrl, threadId, runId });
     if (status === 'interrupted') {
-      console.warn('[cron] Graph interrupted awaiting operator input; supply input via UI and rerun.');
+      console.warn(
+        '[cron] Graph interrupted awaiting operator input; supply input via UI and rerun.',
+      );
       return;
     }
     if (status && status !== 'success') {
@@ -288,10 +302,7 @@ export async function runGraphOnce(
   }
 }
 
-export async function startCron(
-  threadId: string,
-  options?: { durability?: LangGraphDurability },
-) {
+export async function startCron(threadId: string, options?: { durability?: LangGraphDurability }) {
   await runGraphOnce(threadId, options);
 }
 

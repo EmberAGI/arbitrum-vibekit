@@ -40,7 +40,9 @@ const workflow = new StateGraph(ClmmStateAnnotation)
   .addNode('collectFundingTokenInput', collectFundingTokenInputNode)
   .addNode('collectDelegations', collectDelegationsNode)
   .addNode('prepareOperator', prepareOperatorNode)
-  .addNode('pollCycle', pollCycleNode, { ends: ['summarize'] })
+  .addNode('pollCycle', pollCycleNode, {
+    ends: ['summarize', 'collectSetupInput', 'collectFundingTokenInput', 'collectDelegations', 'prepareOperator'],
+  })
   .addNode('summarize', summarizeNode)
   .addEdge(START, 'runCommand')
   .addConditionalEdges('runCommand', resolveCommandTarget)

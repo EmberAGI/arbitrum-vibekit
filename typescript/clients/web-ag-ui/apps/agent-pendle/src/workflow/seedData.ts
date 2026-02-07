@@ -32,6 +32,9 @@ const USDE_ADDRESS = '0x1414141414141414141414141414141414141414' as const;
 export const YIELD_TOKENS: PendleYieldToken[] = [
   {
     marketAddress: '0xaaaa000000000000000000000000000000000001',
+    ptAddress: '0xaaaa000000000000000000000000000000000101',
+    ytAddress: '0xaaaa000000000000000000000000000000000201',
+    ptSymbol: 'PT-USDe',
     ytSymbol: 'YT-USDe',
     underlyingSymbol: 'USDe',
     apy: 18.45,
@@ -39,6 +42,9 @@ export const YIELD_TOKENS: PendleYieldToken[] = [
   },
   {
     marketAddress: '0xaaaa000000000000000000000000000000000002',
+    ptAddress: '0xaaaa000000000000000000000000000000000102',
+    ytAddress: '0xaaaa000000000000000000000000000000000202',
+    ptSymbol: 'PT-syrupUSDC',
     ytSymbol: 'YT-syrupUSDC',
     underlyingSymbol: 'syrupUSDC',
     apy: 15.2,
@@ -46,6 +52,9 @@ export const YIELD_TOKENS: PendleYieldToken[] = [
   },
   {
     marketAddress: '0xaaaa000000000000000000000000000000000003',
+    ptAddress: '0xaaaa000000000000000000000000000000000103',
+    ytAddress: '0xaaaa000000000000000000000000000000000203',
+    ptSymbol: 'PT-USD3',
     ytSymbol: 'YT-USD3',
     underlyingSymbol: 'USD3',
     apy: 12.9,
@@ -53,6 +62,9 @@ export const YIELD_TOKENS: PendleYieldToken[] = [
   },
   {
     marketAddress: '0xaaaa000000000000000000000000000000000004',
+    ptAddress: '0xaaaa000000000000000000000000000000000104',
+    ytAddress: '0xaaaa000000000000000000000000000000000204',
+    ptSymbol: 'PT-reUSD',
     ytSymbol: 'YT-reUSD',
     underlyingSymbol: 'reUSD',
     apy: 10.4,
@@ -186,6 +198,7 @@ export function buildDelegations(
 
 export const STABLECOIN_WHITELIST = [
   'USDai',
+  'sUSDai',
   'reUSD',
   'NUSD',
   'rUSD',

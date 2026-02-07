@@ -1,0 +1,209 @@
+import { z } from 'zod';
+
+type RawInference = {
+  network_inferences: {
+    topic_id: string | number;
+    combined_value: string;
+  };
+  confidence_interval_values: string[];
+};
+
+const RawInferenceSchema = z.object({
+  network_inferences: z.object({
+    topic_id: z.union([z.string(), z.number()]),
+    combined_value: z.string(),
+  }),
+  confidence_interval_values: z.array(z.string()),
+});
+
+type ConsumerInferencePayload = {
+  request_id?: string;
+  status?: boolean;
+  data?: {
+    inference_data?: {
+      network_inference_normalized?: string;
+      network_inference?: string;
+      topic_id?: string | number;
+    };
+  };
+};
+
+const ConsumerInferenceSchema = z.object({
+  request_id: z.string().optional(),
+  status: z.boolean().optional(),
+  data: z
+    .object({
+      inference_data: z
+        .object({
+          network_inference_normalized: z.string().optional(),
+          network_inference: z.string().optional(),
+          topic_id: z.union([z.string(), z.number()]).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+
+export type AlloraInference = {
+  topicId: number;
+  combinedValue: number;
+  confidenceIntervalValues: number[];
+};
+
+function parseFiniteNumber(value: string | number, label: string): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Invalid ${label}: ${value}`);
+  }
+  return parsed;
+}
+
+export function parseAlloraInferenceResponse(payload: unknown): AlloraInference {
+  const rawParse = RawInferenceSchema.safeParse(payload);
+  if (rawParse.success) {
+    const parsed: RawInference = rawParse.data;
+    const topicId = parseFiniteNumber(parsed.network_inferences.topic_id, 'topic_id');
+    const combinedValue = parseFiniteNumber(
+      parsed.network_inferences.combined_value,
+      'combined_value',
+    );
+    const confidenceIntervalValues = parsed.confidence_interval_values.map((value) =>
+      parseFiniteNumber(value, 'confidence_interval_values'),
+    );
+
+    return {
+      topicId,
+      combinedValue,
+      confidenceIntervalValues,
+    };
+  }
+
+  const consumerParsed: ConsumerInferencePayload = ConsumerInferenceSchema.parse(payload);
+  const inference = consumerParsed.data?.inference_data;
+  if (!inference?.network_inference_normalized && !inference?.network_inference) {
+    throw new Error('Allora inference payload missing network_inference');
+  }
+
+  const combinedValue = parseFiniteNumber(
+    inference.network_inference_normalized ?? inference.network_inference ?? '',
+    'combined_value',
+  );
+  const topicId = parseFiniteNumber(inference.topic_id ?? '', 'topic_id');
+  return {
+    topicId,
+    combinedValue,
+    confidenceIntervalValues: [combinedValue],
+  };
+}
+
+export async function fetchAlloraInference(params: {
+  baseUrl: string;
+  chainId: string;
+  topicId: number;
+  apiKey?: string;
+  cacheTtlMs?: number;
+}): Promise<AlloraInference> {
+  const base = params.baseUrl.replace(/\/$/u, '');
+  const query = new URLSearchParams({ allora_topic_id: params.topicId.toString() });
+  const url = `${base}/v2/allora/consumer/${params.chainId}?${query.toString()}`;
+  const cacheTtlMs = params.cacheTtlMs ?? 0;
+
+  if (cacheTtlMs > 0) {
+    const cached = getCachedInference({ cacheKey: url, now: Date.now() });
+    if (cached) {
+      return cached;
+    }
+    const inflight = inflightRequests.get(url);
+    if (inflight) {
+      return inflight;
+    }
+  }
+
+  const request = (async () => {
+    const response = await fetch(url, {
+      headers: params.apiKey ? { 'x-api-key': params.apiKey } : undefined,
+    });
+
+    const bodyText = await response.text();
+    if (!response.ok) {
+      throw new Error(`Allora API request failed (${response.status}): ${bodyText}`);
+    }
+
+    const payload = bodyText.trim().length > 0 ? (JSON.parse(bodyText) as unknown) : {};
+    const parsed = parseAlloraInferenceResponse(payload);
+    if (cacheTtlMs > 0) {
+      storeCachedInference({ cacheKey: url, now: Date.now(), ttlMs: cacheTtlMs, value: parsed });
+    }
+    return parsed;
+  })();
+
+  if (cacheTtlMs > 0) {
+    inflightRequests.set(url, request);
+    try {
+      return await request;
+    } finally {
+      inflightRequests.delete(url);
+    }
+  }
+
+  return await request;
+}
+
+type CacheEntry = { expiresAt: number; value: AlloraInference };
+
+const MAX_CACHE_ENTRIES = 32;
+const inferenceCache = new Map<string, CacheEntry>();
+const inflightRequests = new Map<string, Promise<AlloraInference>>();
+
+function getCachedInference(params: { cacheKey: string; now: number }): AlloraInference | null {
+  const cached = inferenceCache.get(params.cacheKey);
+  if (!cached) {
+    return null;
+  }
+  if (cached.expiresAt <= params.now) {
+    inferenceCache.delete(params.cacheKey);
+    return null;
+  }
+  return cached.value;
+}
+
+function storeCachedInference(params: {
+  cacheKey: string;
+  now: number;
+  ttlMs: number;
+  value: AlloraInference;
+}): void {
+  if (params.ttlMs <= 0) {
+    return;
+  }
+  inferenceCache.set(params.cacheKey, { expiresAt: params.now + params.ttlMs, value: params.value });
+  pruneCache(params.now);
+}
+
+function pruneCache(now: number): void {
+  // Fast path: keep under limit without scanning.
+  if (inferenceCache.size <= MAX_CACHE_ENTRIES) {
+    return;
+  }
+
+  // Drop expired first.
+  for (const [key, entry] of inferenceCache) {
+    if (entry.expiresAt <= now) {
+      inferenceCache.delete(key);
+    }
+  }
+
+  // If still too large, evict oldest insertions (Map iteration order).
+  while (inferenceCache.size > MAX_CACHE_ENTRIES) {
+    const oldest = inferenceCache.keys().next();
+    if (oldest.done) {
+      break;
+    }
+    inferenceCache.delete(oldest.value);
+  }
+}
+
+export function clearAlloraInferenceCache(): void {
+  inferenceCache.clear();
+  inflightRequests.clear();
+}

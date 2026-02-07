@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Usage:
+#   mnemonic                 # prompts for seed phrase and prints index 0
+#   mnemonic --index 0       # prompts for seed phrase
+#   mnemonic --index 0 --count 5
+#
+# Output is JSON lines with address + privateKey. Do not paste your seed phrase into commands
+# (shell history). This wrapper prompts with `read -s`.
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [ -z "${MNEMONIC:-}" ]; then
+  printf "MNEMONIC (input hidden): "
+  # shellcheck disable=SC2162
+  read -s MNEMONIC
+  printf "\n"
+  export MNEMONIC
+fi
+
+exec pnpm -C "$ROOT_DIR" --filter agent-gmx-allora exec tsx scripts/mnemonic-to-private-key.ts "$@"

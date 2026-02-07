@@ -135,7 +135,10 @@ export const collectDelegationsNode = async (
     });
   }
 
-  const delegatorAddress = normalizeHexAddress(operatorInput.walletAddress, 'delegator wallet address');
+  const delegatorAddress = normalizeHexAddress(
+    operatorInput.walletAddress,
+    'delegator wallet address',
+  );
   const delegateeAddress = AGENT_WALLET_ADDRESS;
 
   const request: DelegationSigningInterrupt = {

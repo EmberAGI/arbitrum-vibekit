@@ -1,0 +1,19 @@
+{
+  "name": "gmx-allora-agent",
+  "version": "0.1.0",
+  "description": "GMX Allora trading agent",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc --build",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "test:watch": "vitest",
+    "test:ci": "vitest run --passWithNoTests",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx}\""
+  }
+}
