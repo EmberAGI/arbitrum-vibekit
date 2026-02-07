@@ -17,6 +17,7 @@ import {
 } from '../src/emberApi.js';
 const BASE_URL = process.env['EMBER_API_BASE_URL']?.replace(/\/$/, '') ?? 'https://api.emberai.xyz';
 const LIVE_TEST_TIMEOUT_MS = Number(process.env['EMBER_E2E_TIMEOUT_MS'] ?? 45_000);
+const RUN_LIVE = process.env['CLMM_E2E_LIVE'] === 'true';
 const EMPTY_WALLET: `0x${string}` = (process.env['CLMM_E2E_EMPTY_WALLET'] ??
   '0x0000000000000000000000000000000000000001') as `0x${string}`;
 const LIVE_LP_WALLET: `0x${string}` = (process.env['CLMM_E2E_LIVE_WALLET'] ??
@@ -33,6 +34,7 @@ const requestLog: RequestLogEntry[] = [];
 const client = new EmberCamelotClient(BASE_URL);
 const realFetch = globalThis.fetch.bind(globalThis);
 type ExecutionResult<T> = { data: T; error?: undefined } | { data?: undefined; error: Error };
+const describeLive = RUN_LIVE ? describe : describe.skip;
 
 function extractUrl(input: Parameters<typeof globalThis.fetch>[0]): string {
   if (typeof input === 'string') {
@@ -160,7 +162,7 @@ async function fetchLivePoolIdentifier() {
   };
 }
 
-describe('EmberCamelotClient (e2e)', () => {
+describeLive('EmberCamelotClient (e2e)', () => {
   let restoreFetch: (() => void) | undefined;
 
   beforeAll(() => {

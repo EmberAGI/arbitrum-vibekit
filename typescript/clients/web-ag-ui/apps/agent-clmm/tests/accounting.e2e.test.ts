@@ -22,6 +22,15 @@ const MIN_AVAILABLE_USD = 1;
 
 const client = new EmberCamelotClient(BASE_URL);
 
+const hasLivePrivateKey = (() => {
+  const raw = process.env[E2E_PRIVATE_KEY_ENV];
+  if (!raw || raw === 'replace-with-private-key') {
+    return false;
+  }
+  return /^0x[0-9a-fA-F]{64}$/u.test(raw.trim());
+})();
+const describeLive = hasLivePrivateKey ? describe : describe.skip;
+
 function normalizeHexAddress(value: string, label: string): `0x${string}` {
   const trimmed = value.trim();
   if (!trimmed.startsWith('0x')) {
@@ -216,7 +225,7 @@ async function waitForPositionsToClear(walletAddress: `0x${string}`) {
   throw new Error('Wallet still has active positions after exit-range.');
 }
 
-describe('Accounting (e2e)', () => {
+describeLive('Accounting (e2e)', () => {
   let walletAddress: `0x${string}`;
   let clients: ReturnType<typeof createClients>;
   let initialAllocationUsd = 0;
