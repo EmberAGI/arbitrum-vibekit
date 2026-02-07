@@ -2,7 +2,9 @@
 
 set -u
 
-ports=(3000 3001 3002 3003 3004 3005 8123 8124 8125 8126)
+# Web QA uses 3000, LangGraph dev servers use 8123-8126.
+# onchain-actions defaults to 3001 but local dev commonly runs it on 50051.
+ports=(3000 3001 3002 3003 3004 3005 8123 8124 8125 8126 50051)
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
