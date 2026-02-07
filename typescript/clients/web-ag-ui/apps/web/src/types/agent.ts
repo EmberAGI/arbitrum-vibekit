@@ -148,6 +148,14 @@ export type GmxSetupRequestInterrupt = {
   payloadSchema?: Record<string, unknown>;
 };
 
+export type GmxFundWalletRequestInterrupt = {
+  type: 'gmx-fund-wallet-request';
+  message: string;
+  payloadSchema?: Record<string, unknown>;
+  walletAddress?: `0x${string}`;
+  minNativeEthWei?: string;
+};
+
 export type FundingTokenRequestInterrupt = {
   type: 'clmm-funding-token-request' | 'pendle-funding-token-request' | 'gmx-funding-token-request';
   message: string;
@@ -194,6 +202,7 @@ export type AgentInterrupt =
   | PendleSetupRequestInterrupt
   | PendleFundWalletRequestInterrupt
   | GmxSetupRequestInterrupt
+  | GmxFundWalletRequestInterrupt
   | FundingTokenRequestInterrupt
   | DelegationSigningRequestInterrupt;
 

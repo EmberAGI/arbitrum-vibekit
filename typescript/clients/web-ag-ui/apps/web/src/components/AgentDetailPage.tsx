@@ -900,6 +900,7 @@ function AgentBlockersTab({
   const showOperatorConfigForm = activeInterrupt?.type === 'operator-config-request';
   const showPendleSetupForm = activeInterrupt?.type === 'pendle-setup-request';
   const showPendleFundWalletForm = activeInterrupt?.type === 'pendle-fund-wallet-request';
+  const showGmxFundWalletForm = activeInterrupt?.type === 'gmx-fund-wallet-request';
   const showGmxSetupForm = activeInterrupt?.type === 'gmx-setup-request';
   const showFundingTokenForm =
     activeInterrupt?.type === 'clmm-funding-token-request' ||
@@ -912,7 +913,13 @@ function AgentBlockersTab({
 
   // Sync currentStep with the interrupt type when it changes
   useEffect(() => {
-    if (showOperatorConfigForm || showPendleSetupForm || showPendleFundWalletForm || showGmxSetupForm) {
+    if (
+      showOperatorConfigForm ||
+      showPendleSetupForm ||
+      showPendleFundWalletForm ||
+      showGmxFundWalletForm ||
+      showGmxSetupForm
+    ) {
       setCurrentStep(1);
     } else if (showFundingTokenForm) {
       setCurrentStep(2);
@@ -923,6 +930,7 @@ function AgentBlockersTab({
     showOperatorConfigForm,
     showPendleSetupForm,
     showPendleFundWalletForm,
+    showGmxFundWalletForm,
     showGmxSetupForm,
     showFundingTokenForm,
     showDelegationSigningForm,
@@ -1197,6 +1205,35 @@ function AgentBlockersTab({
                     </li>
                     <li>
                       Eligible: {(activeInterrupt as unknown as { whitelistSymbols?: string[] }).whitelistSymbols?.join(', ') || 'USDai, USDC'}
+                    </li>
+                    <li>
+                      Wallet: {(activeInterrupt as unknown as { walletAddress?: string }).walletAddress || connectedWalletAddress || 'Unknown'}
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => onInterruptSubmit?.({ acknowledged: true })}
+                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+            ) : showGmxFundWalletForm ? (
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-4">Fund Wallet</h3>
+                {activeInterrupt?.message && (
+                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                )}
+
+                <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4 mb-6">
+                  <div className="text-yellow-300 text-sm font-medium mb-2">What to do</div>
+                  <ul className="space-y-1 text-yellow-200 text-xs">
+                    <li>
+                      Add a small balance of native ETH on Arbitrum for gas and GMX execution fees, then click Continue.
                     </li>
                     <li>
                       Wallet: {(activeInterrupt as unknown as { walletAddress?: string }).walletAddress || connectedWalletAddress || 'Unknown'}

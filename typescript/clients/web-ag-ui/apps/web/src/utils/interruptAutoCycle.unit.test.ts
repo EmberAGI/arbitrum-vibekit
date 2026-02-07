@@ -46,5 +46,20 @@ describe('scheduleCycleAfterInterruptResolution', () => {
     vi.advanceTimersByTime(100);
     expect(runCommand).toHaveBeenCalledTimes(3);
   });
-});
 
+  it('triggers an auto-cycle after GMX fund-wallet acknowledgement', () => {
+    vi.useFakeTimers();
+    const runCommand = vi.fn<(command: string) => boolean>().mockImplementationOnce(() => true);
+
+    scheduleCycleAfterInterruptResolution({
+      interruptType: 'gmx-fund-wallet-request',
+      runCommand,
+      retryMs: 10,
+      maxMs: 50,
+      now: () => Date.now(),
+    });
+
+    vi.advanceTimersByTime(10);
+    expect(runCommand).toHaveBeenCalledWith('cycle');
+  });
+});

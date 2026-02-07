@@ -61,6 +61,7 @@ const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
   ((value as { type?: string }).type === 'operator-config-request' ||
     (value as { type?: string }).type === 'pendle-setup-request' ||
     (value as { type?: string }).type === 'pendle-fund-wallet-request' ||
+    (value as { type?: string }).type === 'gmx-fund-wallet-request' ||
     (value as { type?: string }).type === 'gmx-setup-request' ||
     (value as { type?: string }).type === 'clmm-funding-token-request' ||
     (value as { type?: string }).type === 'pendle-funding-token-request' ||
