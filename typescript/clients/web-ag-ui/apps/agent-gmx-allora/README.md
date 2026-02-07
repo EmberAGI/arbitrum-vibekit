@@ -15,6 +15,17 @@ This agent uses Allora prediction feeds to make deterministic trading decisions 
 - Plan-building mode (no submission) is implemented.
 - Next: validate onchain-actions read-path correctness (markets/positions/balances) before enabling transaction submission.
 
+## Transaction Submission Behavior
+
+The agent always uses onchain-actions to build a `transactions[]` plan for the chosen action (`long`, `short`, `close`).
+
+- `GMX_ALLORA_TX_SUBMISSION_MODE=plan`:
+  - The agent emits the planned `transactions[]` in artifacts/history and does not broadcast anything.
+- `GMX_ALLORA_TX_SUBMISSION_MODE=submit`:
+  - `long`: build `transactions[]` via onchain-actions, then broadcast each transaction sequentially and wait for receipts; record `txHashes` and `lastTxHash` in artifacts/history.
+  - `short`: same as `long`.
+  - `close`: submission is blocked (onchain-actions currently maps GMX `close` to order cancellation, not position decrease/close).
+
 ## Environment
 
 - `GMX_MIN_NATIVE_ETH_WEI`: minimum native ETH (in wei) required in the operator wallet before the agent will proceed (defaults to `2000000000000000` = 0.002 ETH).
