@@ -9,6 +9,27 @@ function resolvePort(): number {
 
 const port = resolvePort();
 
+const topicCallCounts = new Map<string, number>();
+
+function nextTopicCall(topicId: string): number {
+  const current = topicCallCounts.get(topicId) ?? 0;
+  const next = current + 1;
+  topicCallCounts.set(topicId, next);
+  return next;
+}
+
+function resolveCombinedValue(topicId: string, callNumber: number): string {
+  // Alternate values per topic to simulate bullish/bearish cycles.
+  const isOdd = callNumber % 2 === 1;
+  if (topicId === '14') {
+    return isOdd ? '65000' : '25000';
+  }
+  if (topicId === '2') {
+    return isOdd ? '4500' : '1200';
+  }
+  return isOdd ? '200' : '50';
+}
+
 const server = http.createServer((req, res) => {
   if (!req.url) {
     res.statusCode = 400;
@@ -25,7 +46,8 @@ const server = http.createServer((req, res) => {
   }
 
   const topicId = url.searchParams.get('allora_topic_id') ?? '0';
-  const combined = topicId === '14' ? '48000' : topicId === '2' ? '2600' : '100';
+  const callNumber = nextTopicCall(topicId);
+  const combined = resolveCombinedValue(topicId, callNumber);
 
   res.setHeader('content-type', 'application/json');
   res.statusCode = 200;
