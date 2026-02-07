@@ -37,8 +37,6 @@ import { applyAgentSyncToState, parseAgentSyncResponse } from '../utils/agentSyn
 import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
 import { fireAgentRun } from '../utils/fireAgentRun';
 import { scheduleCycleAfterInterruptResolution } from '../utils/interruptAutoCycle';
-import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
-import { fireAgentRun } from '../utils/fireAgentRun';
 
 export type {
   AgentState,
@@ -481,9 +479,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   const resolveInterrupt = useCallback(
     (
-<<<<<<< HEAD
-      input: OperatorConfigInput | PendleSetupInput | FundingTokenInput | DelegationSigningResponse,
-=======
       input:
         | OperatorConfigInput
         | PendleSetupInput
@@ -491,7 +486,6 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         | FundWalletAcknowledgement
         | FundingTokenInput
         | DelegationSigningResponse,
->>>>>>> a4e1e054 (fix(web): handle pendle fund-wallet interrupt and auto-cycle)
     ) => {
       resolve(JSON.stringify(input));
       scheduleCycleAfterInterruptResolution({

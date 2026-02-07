@@ -1946,7 +1946,6 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
   };
 
   const strategy = fullMetrics?.pendle;
-  const latestCycle = fullMetrics?.latestCycle;
 
   const rewardLines = strategy?.position?.claimableRewards ?? [];
 
@@ -2036,9 +2035,12 @@ function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<Metric
                   <span className="text-white font-medium">{reward.amount}</span>
                 </div>
               ))}
-          </div>
+            </div>
+          ) : (
+            <div className="text-sm text-gray-400">—</div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

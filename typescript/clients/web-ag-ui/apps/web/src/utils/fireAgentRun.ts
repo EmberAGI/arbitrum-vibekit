@@ -6,15 +6,17 @@ type AgentLike = {
   detachActiveRun?: () => Promise<void> | void;
 };
 
-type CopilotkitLike = {
-  runAgent: (params: { agent: AgentLike }) => Promise<unknown>;
+type CopilotkitLike<TRunAgentParams extends { agent: unknown }> = {
+  // CopilotKit v2 runAgent params are stricter than we want to depend on here.
+  // Infer the concrete params type from the passed copilotkit instance.
+  runAgent: (params: TRunAgentParams) => Promise<unknown>;
 };
 
 type BoolRef = { current: boolean };
 
-export async function fireAgentRun(params: {
-  agent: AgentLike | null;
-  copilotkit: CopilotkitLike;
+export async function fireAgentRun<TRunAgentParams extends { agent: unknown }>(params: {
+  agent: (TRunAgentParams['agent'] & AgentLike) | null;
+  copilotkit: CopilotkitLike<TRunAgentParams>;
   threadId: string | undefined;
   runInFlightRef: BoolRef;
   createId: typeof uuidv7;
@@ -44,10 +46,9 @@ export async function fireAgentRun(params: {
   });
 
   // Fire-and-forget: UI state updates will flow in via the AG-UI stream / sync poller.
-  void params.copilotkit.runAgent({ agent }).catch(() => {
+  void params.copilotkit.runAgent({ agent } as TRunAgentParams).catch(() => {
     // Errors are surfaced via CopilotKit / agent subscribers.
   });
 
   return true;
 }
-
