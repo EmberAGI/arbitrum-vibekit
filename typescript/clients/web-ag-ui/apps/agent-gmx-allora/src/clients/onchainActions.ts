@@ -59,9 +59,11 @@ const PerpetualMarketSchema = z.object({
   shortBorrowingFee: z.string(),
   chainId: z.string(),
   name: z.string(),
-  indexToken: TokenSchemaBridge,
-  longToken: TokenSchemaBridge,
-  shortToken: TokenSchemaBridge,
+  // Some markets returned by onchain-actions omit indexToken. Keep the boundary
+  // validation, but allow skipping incomplete markets in our selection logic.
+  indexToken: TokenSchemaBridge.optional(),
+  longToken: TokenSchemaBridge.optional(),
+  shortToken: TokenSchemaBridge.optional(),
 });
 export type PerpetualMarket = z.infer<typeof PerpetualMarketSchema>;
 
