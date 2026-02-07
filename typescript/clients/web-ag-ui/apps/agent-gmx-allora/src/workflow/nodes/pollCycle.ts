@@ -343,8 +343,6 @@ export const pollCycleNode = async (
             action: executionResult.action,
             ok: executionResult.ok,
             error: executionResult.error,
-            txHashes: executionResult.txHashes,
-            lastTxHash: executionResult.lastTxHash,
             telemetry: exposureAdjusted,
             transactions: executionResult.transactions,
           }),
