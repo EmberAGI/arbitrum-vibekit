@@ -12,6 +12,10 @@ type CommandTarget =
   | 'hireCommand'
   | 'fireCommand'
   | 'runCycleCommand'
+  | 'collectSetupInput'
+  | 'collectFundingTokenInput'
+  | 'collectDelegations'
+  | 'prepareOperator'
   | 'bootstrap'
   | 'syncState'
   | '__end__';
@@ -69,6 +73,30 @@ export function resolveCommandTarget({ messages, private: priv, view }: ClmmStat
   const resolvedCommand = extractCommand(messages) ?? view.command;
   if (!resolvedCommand) {
     return '__end__';
+  }
+
+  if (resolvedCommand === 'cycle') {
+    if (!priv.bootstrapped) {
+      return 'bootstrap';
+    }
+
+    // Cycle commands can be triggered by cron / API runners or UI interactions while
+    // onboarding is still in progress. Route "cycle" into the next missing onboarding
+    // step instead of letting it hit `pollCycle` and terminal-fail.
+    if (!view.operatorInput) {
+      return 'collectSetupInput';
+    }
+    if (!view.fundingTokenInput) {
+      return 'collectFundingTokenInput';
+    }
+    if (view.delegationsBypassActive !== true && !view.delegationBundle) {
+      return 'collectDelegations';
+    }
+    if (!view.operatorConfig || view.setupComplete !== true) {
+      return 'prepareOperator';
+    }
+
+    return 'runCycleCommand';
   }
 
   switch (resolvedCommand) {

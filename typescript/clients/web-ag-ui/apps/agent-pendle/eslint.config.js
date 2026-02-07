@@ -82,7 +82,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/**/*.unit.test.ts', 'tests/**/*.ts'],
+    files: ['src/**/*.unit.test.ts', 'src/**/*.int.test.ts', 'tests/**/*.ts'],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'warn',
       '@typescript-eslint/no-unsafe-member-access': 'warn',

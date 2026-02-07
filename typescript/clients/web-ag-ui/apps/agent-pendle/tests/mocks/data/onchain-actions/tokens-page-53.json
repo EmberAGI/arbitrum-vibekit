@@ -1,0 +1,28 @@
+{
+  "metadata": {
+    "service": "onchain-actions",
+    "endpoint": "/tokens",
+    "method": "GET",
+    "recordedAt": "2026-02-05T18:11:31.718Z"
+  },
+  "request": {
+    "params": {
+      "chainIds": "42161",
+      "cursor": "d5447210-f56b-4135-9ee6-87f8752ec21d",
+      "page": "53"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "connection": "keep-alive",
+      "content-length": "1035",
+      "content-type": "application/json; charset=utf-8",
+      "date": "Thu, 05 Feb 2026 18:11:31 GMT",
+      "etag": "W/\"40b-MX1FGFPGNlZTqIZH2AeOxdPt9UU\"",
+      "keep-alive": "timeout=5",
+      "x-powered-by": "Express"
+    },
+    "rawBody": "eyJ0b2tlbnMiOlt7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweDcxNjI1Q2NkODE1N2MxMjMxNzJENDU3QUU5NDdGYjQxMzBhMDU5MzIiLCJjaGFpbklkIjoiNDIxNjEifSwic3ltYm9sIjoiQVRMQVMiLCJuYW1lIjoiQXRsYXNQYWlycyIsImRlY2ltYWxzIjoxOCwiaWNvblVyaSI6IiIsImlzTmF0aXZlIjpmYWxzZSwiaXNWZXR0ZWQiOmZhbHNlfSx7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweDAyZjkyODAwRjU3QkNENzQwNjZGNTcwOUYxRGFhMUE0MzAyRGY4NzUiLCJjaGFpbklkIjoiNDIxNjEifSwic3ltYm9sIjoiUEVBUyIsIm5hbWUiOiJQZWFwb2RzIiwiZGVjaW1hbHMiOjE4LCJpY29uVXJpIjoiIiwiaXNOYXRpdmUiOmZhbHNlLCJpc1ZldHRlZCI6ZmFsc2V9LHsidG9rZW5VaWQiOnsiYWRkcmVzcyI6IjB4RUQ2NUM1MDg1YTE4RmExNjBBZjAzMTNFNjBkY2M3OTA1RTk0NERjNyIsImNoYWluSWQiOiI0MjE2MSJ9LCJzeW1ib2wiOiJFVEh4IiwibmFtZSI6IkVUSHgiLCJkZWNpbWFscyI6MTgsImljb25VcmkiOiIiLCJpc05hdGl2ZSI6ZmFsc2UsImlzVmV0dGVkIjpmYWxzZX0seyJ0b2tlblVpZCI6eyJhZGRyZXNzIjoiMHg4MGM0MDM4MDdiMTAzMmQ3Q0IxOWI2RDYxMmNFMjNmMDVBMjEzRDM2IiwiY2hhaW5JZCI6IjQyMTYxIn0sInN5bWJvbCI6IlJFTlpPU0lMTysrIiwibmFtZSI6IlJFTlpPU0lMTysrIiwiZGVjaW1hbHMiOjE4LCJpY29uVXJpIjoiIiwiaXNOYXRpdmUiOmZhbHNlLCJpc1ZldHRlZCI6ZmFsc2V9LHsidG9rZW5VaWQiOnsiYWRkcmVzcyI6IjB4MTBhQWVEMjg5YTdiMUIwMTU1YkY0Yjg2Yzg2MmYyOTdFODQ0NjVlMCIsImNoYWluSWQiOiI0MjE2MSJ9LCJzeW1ib2wiOiJSQkMiLCJuYW1lIjoiUlVCSUMgVE9LRU4iLCJkZWNpbWFscyI6MTgsImljb25VcmkiOiIiLCJpc05hdGl2ZSI6ZmFsc2UsImlzVmV0dGVkIjpmYWxzZX1dLCJjdXJzb3IiOiJkNTQ0NzIxMC1mNTZiLTQxMzUtOWVlNi04N2Y4NzUyZWMyMWQiLCJjdXJyZW50UGFnZSI6NTMsInRvdGFsUGFnZXMiOjk0LCJ0b3RhbEl0ZW1zIjo0Njd9"
+  }
+}

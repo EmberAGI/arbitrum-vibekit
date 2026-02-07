@@ -1,0 +1,30 @@
+{
+  "metadata": {
+    "service": "onchain-actions",
+    "endpoint": "/tokenizedYield/claimRewards",
+    "method": "POST",
+    "recordedAt": "2026-02-05T18:11:42.769Z"
+  },
+  "request": {
+    "body": {
+      "walletAddress": "0x3fd83e40F96C3c81A807575F959e55C34a40e523",
+      "ytTokenUid": {
+        "address": "0x12dA049222953b558008789D1b54A0630d6eF51E",
+        "chainId": "42161"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "connection": "keep-alive",
+      "content-length": "700",
+      "content-type": "application/json; charset=utf-8",
+      "date": "Thu, 05 Feb 2026 18:11:42 GMT",
+      "etag": "W/\"2bc-A2PU01jp8OCJkUxlmXujGfMFt98\"",
+      "keep-alive": "timeout=5",
+      "x-powered-by": "Express"
+    },
+    "rawBody": "eyJ0cmFuc2FjdGlvbnMiOlt7InR5cGUiOiJFVk1fVFgiLCJ0byI6IjB4ODg4ODg4ODg4ODg5NzU4Rjc2ZTcxMDNjNkNiRjIzQUJiRjU4Rjk0NiIsImRhdGEiOiIweDA3NDFhODAzMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDBhMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwYzAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMGUwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwZDRmNDgwOTY1ZDIzNDdkNDIxZjFiZWM3ZjU0NTY4MmU1ZWMyMTUxZDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAxMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiY2hhaW5JZCI6IjQyMTYxIn1dfQ=="
+  }
+}

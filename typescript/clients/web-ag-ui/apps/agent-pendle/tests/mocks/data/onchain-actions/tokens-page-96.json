@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "service": "onchain-actions",
+    "endpoint": "/tokens",
+    "method": "GET",
+    "recordedAt": "2026-02-05T18:08:24.900Z"
+  },
+  "request": {
+    "params": {
+      "chainIds": "42161",
+      "cursor": "571d8c02-cc68-45a2-8ef3-2bbebdc0b26c",
+      "page": "96"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "alt-svc": "h3=\":443\"; ma=86400",
+      "cf-cache-status": "DYNAMIC",
+      "cf-ray": "9c945a5b6a0d0ba1-ATL",
+      "connection": "keep-alive",
+      "content-encoding": "br",
+      "content-type": "application/json; charset=utf-8",
+      "date": "Thu, 05 Feb 2026 18:08:24 GMT",
+      "etag": "W/\"444-nOa9PZaIZxaZA6wh7OOdnKk5Xz4\"",
+      "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+      "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=qHbh1wxC2bHxSk%2BU7rUIHO2ApmJaLmVMqOZYoTrMxj7pU6as738dsrBLxE2S8NpbnWwRTua5N76sR3xiGjRAKQ22SJBRitDMo%2FTV%2BhhgoA%3D%3D\"}]}",
+      "server": "cloudflare",
+      "transfer-encoding": "chunked",
+      "x-powered-by": "Express"
+    },
+    "rawBody": "eyJ0b2tlbnMiOlt7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweDA3OGYzNTgyMDg2ODUwNDZhMTFDODVlOGFkMzI4OTVERUQzM0EyNDkiLCJjaGFpbklkIjoiNDIxNjEifSwic3ltYm9sIjoiYUFyYldCVEMiLCJuYW1lIjoiQWF2ZSBBcmJpdHJ1bSBXQlRDIiwiZGVjaW1hbHMiOjgsImljb25VcmkiOiIiLCJpc05hdGl2ZSI6ZmFsc2UsImlzVmV0dGVkIjpmYWxzZX0seyJ0b2tlblVpZCI6eyJhZGRyZXNzIjoiMHhlNTBmQTliM2M1NkZmQjE1OWNCMEZDQTYxRjVjOUQ3NTBlODEyOGM4IiwiY2hhaW5JZCI6IjQyMTYxIn0sInN5bWJvbCI6ImFBcmJXRVRIIiwibmFtZSI6IkFhdmUgQXJiaXRydW0gV0VUSCIsImRlY2ltYWxzIjoxOCwiaWNvblVyaSI6IiIsImlzTmF0aXZlIjpmYWxzZSwiaXNWZXR0ZWQiOmZhbHNlfSx7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweDZhYjcwN0FjYTk1M2VEQWVGQmM0ZkQyM2JBNzMyOTQyNDE0OTA2MjAiLCJjaGFpbklkIjoiNDIxNjEifSwic3ltYm9sIjoiYUFyYlVTRFQiLCJuYW1lIjoiQWF2ZSBBcmJpdHJ1bSBVU0RUIiwiZGVjaW1hbHMiOjYsImljb25VcmkiOiIiLCJpc05hdGl2ZSI6ZmFsc2UsImlzVmV0dGVkIjpmYWxzZX0seyJ0b2tlblVpZCI6eyJhZGRyZXNzIjoiMHhmMzI5ZTM2QzdiRjZFNUU4NmNlMjE1MDg3NWE4NENlNzdmNDc3Mzc1IiwiY2hhaW5JZCI6IjQyMTYxIn0sInN5bWJvbCI6ImFBcmJBQVZFIiwibmFtZSI6IkFhdmUgQXJiaXRydW0gQUFWRSIsImRlY2ltYWxzIjoxOCwiaWNvblVyaSI6IiIsImlzTmF0aXZlIjpmYWxzZSwiaXNWZXR0ZWQiOmZhbHNlfSx7InRva2VuVWlkIjp7ImFkZHJlc3MiOiIweDZkODAxMTNlNTMzYTJDMGZlODJFYUJEMzVmMTg3NURjRUE4OUVhOTciLCJjaGFpbklkIjoiNDIxNjEifSwic3ltYm9sIjoiYUFyYkVVUlMiLCJuYW1lIjoiQWF2ZSBBcmJpdHJ1bSBFVVJTIiwiZGVjaW1hbHMiOjIsImljb25VcmkiOiIiLCJpc05hdGl2ZSI6ZmFsc2UsImlzVmV0dGVkIjpmYWxzZX1dLCJjdXJzb3IiOiI1NzFkOGMwMi1jYzY4LTQ1YTItOGVmMy0yYmJlYmRjMGIyNmMiLCJjdXJyZW50UGFnZSI6OTYsInRvdGFsUGFnZXMiOjk5LCJ0b3RhbEl0ZW1zIjo0OTV9"
+  }
+}

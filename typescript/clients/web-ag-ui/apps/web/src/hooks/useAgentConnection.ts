@@ -23,6 +23,7 @@ import {
   type GmxSetupInput,
   type FundingTokenInput,
   type DelegationSigningResponse,
+  type FundWalletAcknowledgement,
   type Transaction,
   type ClmmEvent,
   defaultView,
@@ -32,6 +33,8 @@ import {
   defaultSettings,
   initialAgentState,
 } from '../types/agent';
+import { applyAgentSyncToState, parseAgentSyncResponse } from '../utils/agentSync';
+import { scheduleCycleAfterInterruptResolution } from '../utils/interruptAutoCycle';
 
 export type {
   AgentState,
@@ -44,6 +47,7 @@ export type {
   OperatorConfigInput,
   PendleSetupInput,
   GmxSetupInput,
+  FundWalletAcknowledgement,
   FundingTokenInput,
   Transaction,
   ClmmEvent,
@@ -54,6 +58,7 @@ const isAgentInterrupt = (value: unknown): value is AgentInterrupt =>
   value !== null &&
   ((value as { type?: string }).type === 'operator-config-request' ||
     (value as { type?: string }).type === 'pendle-setup-request' ||
+    (value as { type?: string }).type === 'pendle-fund-wallet-request' ||
     (value as { type?: string }).type === 'gmx-setup-request' ||
     (value as { type?: string }).type === 'clmm-funding-token-request' ||
     (value as { type?: string }).type === 'pendle-funding-token-request' ||
@@ -96,6 +101,7 @@ export interface UseAgentConnectionResult {
       | OperatorConfigInput
       | PendleSetupInput
       | GmxSetupInput
+      | FundWalletAcknowledgement
       | FundingTokenInput
       | DelegationSigningResponse,
   ) => void;
@@ -366,6 +372,58 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     logConnectEvent,
   ]);
 
+  // Poll `/api/agents/sync` to pick up backend-driven state changes (cron ticks, external runs).
+  // CopilotKit connect should stream state, but this provides a deterministic fallback for the detail page.
+  useEffect(() => {
+    if (!threadId) return undefined;
+    if (!agent) return undefined;
+
+    const rawInterval = Number(process.env.NEXT_PUBLIC_AGENT_DETAIL_SYNC_POLL_MS ?? 5000);
+    const intervalMs = Number.isFinite(rawInterval) && rawInterval > 0 ? rawInterval : 5000;
+
+    let cancelled = false;
+    let inFlight = false;
+
+    const tick = async () => {
+      if (cancelled) return;
+      if (inFlight) return;
+      if (runInFlightRef.current) return;
+
+      inFlight = true;
+      try {
+        const response = await fetch('/api/agents/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId, threadId }),
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const parsed = parseAgentSyncResponse(await response.json().catch(() => null));
+        const currentAgent = agentRef.current;
+        if (!currentAgent) {
+          return;
+        }
+        const currentState =
+          hasStateValues(currentAgent.state) ? (currentAgent.state as AgentState) : initialAgentState;
+        currentAgent.setState(applyAgentSyncToState(currentState, parsed));
+      } catch {
+        // Silence sync errors; connect stream still drives primary updates.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void tick();
+    const timer = window.setInterval(() => void tick(), intervalMs);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [agent, agentId, hasStateValues, threadId]);
+
   // Extract state with defaults
   const currentState =
     agent.state && Object.keys(agent.state).length > 0 ? (agent.state as AgentState) : initialAgentState;
@@ -408,12 +466,17 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       input:
         | OperatorConfigInput
         | PendleSetupInput
+        | FundWalletAcknowledgement
         | FundingTokenInput
         | DelegationSigningResponse,
     ) => {
       resolve(JSON.stringify(input));
+      scheduleCycleAfterInterruptResolution({
+        interruptType: activeInterrupt?.type,
+        runCommand,
+      });
     },
-    [resolve],
+    [activeInterrupt?.type, resolve, runCommand],
   );
 
   // Settings sync pattern: update local state only (no automatic sync to avoid 409)

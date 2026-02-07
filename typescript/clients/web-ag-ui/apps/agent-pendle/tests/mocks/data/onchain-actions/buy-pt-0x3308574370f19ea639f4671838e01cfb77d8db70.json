@@ -1,0 +1,38 @@
+{
+  "metadata": {
+    "service": "onchain-actions",
+    "endpoint": "/tokenizedYield/buyPt",
+    "method": "POST",
+    "recordedAt": "2026-02-05T18:04:17.408Z"
+  },
+  "request": {
+    "body": {
+      "walletAddress": "0x3fd83e40F96C3c81A807575F959e55C34a40e523",
+      "marketAddress": "0x3308574370f19ea639f4671838e01cfb77d8db70",
+      "inputTokenUid": {
+        "address": "0x0A1a1A107E45b7Ced86833863f482BC5f4ed82EF",
+        "chainId": "42161"
+      },
+      "amount": "1000000",
+      "slippage": "0.5"
+    }
+  },
+  "response": {
+    "status": 500,
+    "headers": {
+      "alt-svc": "h3=\":443\"; ma=86400",
+      "cf-cache-status": "DYNAMIC",
+      "cf-ray": "9c945450787d6947-ATL",
+      "connection": "keep-alive",
+      "content-length": "90",
+      "content-type": "application/json; charset=utf-8",
+      "date": "Thu, 05 Feb 2026 18:04:17 GMT",
+      "etag": "W/\"5a-kay0HwSOzmiE0D5skLFQszcedbE\"",
+      "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+      "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=yc9uy%2FFqnj3Fe6HZMGMdpBIdMH%2F3u%2FnWjjuDPv3Y83b13U%2FVIT2tB1pa0ftpjhUaKKRWV%2F0U8dZ1zOoAJqVDzVBBTFyqapuqn5UcjLKcXQ%3D%3D\"}]}",
+      "server": "cloudflare",
+      "x-powered-by": "Express"
+    },
+    "rawBody": "eyJlcnJvciI6IkVycm9yOiBNYXJrZXQgbm90IGZvdW5kIGZvciBhZGRyZXNzIDB4MzMwODU3NDM3MGYxOWVhNjM5ZjQ2NzE4MzhlMDFjZmI3N2Q4ZGI3MCJ9"
+  }
+}

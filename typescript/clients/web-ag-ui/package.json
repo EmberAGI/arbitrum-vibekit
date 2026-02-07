@@ -7,17 +7,18 @@
   ],
   "scripts": {
     "dev": "turbo run dev",
-    "dev:delegations-bypass": "DELEGATIONS_BYPASS=true turbo run dev",
+    "dev:delegations-bypass": "DELEGATIONS_BYPASS=true NEXT_PUBLIC_DELEGATIONS_BYPASS=true turbo run dev",
     "build": "turbo run build",
     "start": "turbo run start",
-    "start:delegations-bypass": "DELEGATIONS_BYPASS=true turbo run start",
+    "start:delegations-bypass": "DELEGATIONS_BYPASS=true NEXT_PUBLIC_DELEGATIONS_BYPASS=true turbo run start",
     "lint": "turbo run lint",
-    "reset:langgraph": "bash scripts/reset-langgraph.sh"
+    "reset:dev-stack": "bash scripts/reset-dev-stack.sh"
   },
   "devDependencies": {
     "@langchain/langgraph-cli": "^1.0.4",
     "eslint": "^9.39.1",
     "eslint-config-next": "^16.0.8",
+    "next": "16.0.8",
     "turbo": "^2.3.3"
   },
   "packageManager": "pnpm@9.15.0",
