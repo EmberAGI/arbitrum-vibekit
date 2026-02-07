@@ -151,11 +151,11 @@ describe('GMX Allora onboarding (integration)', () => {
     );
   });
 
-  it('uses the embedded execution wallet address when tx execution mode is execute', async () => {
-    const previousMode = process.env.GMX_ALLORA_TX_EXECUTION_MODE;
+  it('uses the embedded submission wallet address when tx submission mode is submit', async () => {
+    const previousMode = process.env.GMX_ALLORA_TX_SUBMISSION_MODE;
     const previousKey = process.env.GMX_ALLORA_EMBEDDED_PRIVATE_KEY;
 
-    process.env.GMX_ALLORA_TX_EXECUTION_MODE = 'execute';
+    process.env.GMX_ALLORA_TX_SUBMISSION_MODE = 'submit';
     process.env.GMX_ALLORA_EMBEDDED_PRIVATE_KEY = `0x${'1'.repeat(64)}`;
 
     const state = buildBaseState();
@@ -192,8 +192,8 @@ describe('GMX Allora onboarding (integration)', () => {
         embeddedAccount.address.toLowerCase(),
       );
     } finally {
-      if (previousMode === undefined) delete process.env.GMX_ALLORA_TX_EXECUTION_MODE;
-      else process.env.GMX_ALLORA_TX_EXECUTION_MODE = previousMode;
+      if (previousMode === undefined) delete process.env.GMX_ALLORA_TX_SUBMISSION_MODE;
+      else process.env.GMX_ALLORA_TX_SUBMISSION_MODE = previousMode;
       if (previousKey === undefined) delete process.env.GMX_ALLORA_EMBEDDED_PRIVATE_KEY;
       else process.env.GMX_ALLORA_EMBEDDED_PRIVATE_KEY = previousKey;
     }

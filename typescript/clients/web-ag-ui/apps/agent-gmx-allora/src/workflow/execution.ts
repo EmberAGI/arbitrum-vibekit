@@ -11,7 +11,7 @@ export type ExecutionResult = {
   error?: string;
 };
 
-type TxExecutionMode = 'plan' | 'execute';
+type TxSubmissionMode = 'plan' | 'submit';
 
 function normalizeHexAddress(value: string, label: string): `0x${string}` {
   if (!value.startsWith('0x')) {
@@ -67,11 +67,11 @@ export async function executePerpetualPlan(params: {
     'createPerpetualLong' | 'createPerpetualShort' | 'createPerpetualClose'
   >;
   plan: ExecutionPlan;
-  txExecutionMode?: TxExecutionMode;
+  txSubmissionMode?: TxSubmissionMode;
   clients?: OnchainClients;
 }): Promise<ExecutionResult> {
   const { plan } = params;
-  const txExecutionMode = params.txExecutionMode ?? 'plan';
+  const txSubmissionMode = params.txSubmissionMode ?? 'plan';
 
   if (plan.action === 'none' || !plan.request) {
     return { action: plan.action, ok: true };
@@ -83,11 +83,11 @@ export async function executePerpetualPlan(params: {
         plan.request as Parameters<OnchainActionsClient['createPerpetualLong']>[0],
       );
       const execution =
-        txExecutionMode === 'execute'
+        txSubmissionMode === 'submit'
           ? params.clients
             ? await submitTransactions({ clients: params.clients, transactions: response.transactions })
             : (() => {
-                throw new Error('Onchain clients are required to execute GMX transactions');
+                throw new Error('Onchain clients are required to submit GMX transactions');
               })()
           : undefined;
       return {
@@ -103,11 +103,11 @@ export async function executePerpetualPlan(params: {
         plan.request as Parameters<OnchainActionsClient['createPerpetualShort']>[0],
       );
       const execution =
-        txExecutionMode === 'execute'
+        txSubmissionMode === 'submit'
           ? params.clients
             ? await submitTransactions({ clients: params.clients, transactions: response.transactions })
             : (() => {
-                throw new Error('Onchain clients are required to execute GMX transactions');
+                throw new Error('Onchain clients are required to submit GMX transactions');
               })()
           : undefined;
       return {
@@ -118,9 +118,9 @@ export async function executePerpetualPlan(params: {
         lastTxHash: execution?.lastTxHash,
       };
     }
-    if (txExecutionMode === 'execute') {
+    if (txSubmissionMode === 'submit') {
       // onchain-actions currently maps /perpetuals/close to order cancellation for GMX;
-      // do not submit those transactions in execute mode until decrease-order support exists.
+      // do not submit those transactions in submit mode until decrease-order support exists.
       return {
         action: plan.action,
         ok: false,

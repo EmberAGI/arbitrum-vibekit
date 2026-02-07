@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  resolveGmxAlloraTxExecutionMode,
+  resolveGmxAlloraTxSubmissionMode,
   resolveMinNativeEthWei,
   resolveOnchainActionsBaseUrl,
 } from './constants.js';
@@ -51,22 +51,22 @@ describe('config/constants', () => {
     restoreEnv('GMX_MIN_NATIVE_ETH_WEI', previous);
   });
 
-  it('defaults GMX Allora tx execution mode to plan', () => {
-    const previous = process.env.GMX_ALLORA_TX_EXECUTION_MODE;
-    delete process.env.GMX_ALLORA_TX_EXECUTION_MODE;
+  it('defaults GMX Allora tx submission mode to plan', () => {
+    const previous = process.env.GMX_ALLORA_TX_SUBMISSION_MODE;
+    delete process.env.GMX_ALLORA_TX_SUBMISSION_MODE;
 
-    expect(resolveGmxAlloraTxExecutionMode()).toBe('plan');
+    expect(resolveGmxAlloraTxSubmissionMode()).toBe('plan');
 
-    restoreEnv('GMX_ALLORA_TX_EXECUTION_MODE', previous);
+    restoreEnv('GMX_ALLORA_TX_SUBMISSION_MODE', previous);
   });
 
-  it('supports overriding GMX Allora tx execution mode via env', () => {
-    const previous = process.env.GMX_ALLORA_TX_EXECUTION_MODE;
-    process.env.GMX_ALLORA_TX_EXECUTION_MODE = 'execute';
+  it('supports overriding GMX Allora tx submission mode via env', () => {
+    const previous = process.env.GMX_ALLORA_TX_SUBMISSION_MODE;
+    process.env.GMX_ALLORA_TX_SUBMISSION_MODE = 'submit';
 
-    expect(resolveGmxAlloraTxExecutionMode()).toBe('execute');
+    expect(resolveGmxAlloraTxSubmissionMode()).toBe('submit');
 
-    restoreEnv('GMX_ALLORA_TX_EXECUTION_MODE', previous);
+    restoreEnv('GMX_ALLORA_TX_SUBMISSION_MODE', previous);
   });
 
   it('normalizes the OpenAPI endpoint to a base URL and logs the change', () => {

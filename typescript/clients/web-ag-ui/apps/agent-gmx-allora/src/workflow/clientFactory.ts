@@ -19,7 +19,7 @@ export function getEmbeddedOnchainClients(): OnchainClients {
     const rawKey = process.env['GMX_ALLORA_EMBEDDED_PRIVATE_KEY']?.trim();
     if (!rawKey || !/^0x[0-9a-fA-F]{64}$/u.test(rawKey)) {
       throw new Error(
-        'GMX_ALLORA_EMBEDDED_PRIVATE_KEY is required (0x + 64 hex chars) to execute transactions.',
+        'GMX_ALLORA_EMBEDDED_PRIVATE_KEY is required (0x + 64 hex chars) to submit transactions.',
       );
     }
     const account = privateKeyToAccount(rawKey as `0x${string}`);

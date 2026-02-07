@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import {
   ARBITRUM_CHAIN_ID,
-  resolveGmxAlloraTxExecutionMode,
+  resolveGmxAlloraTxSubmissionMode,
   resolveMinNativeEthWei,
 } from '../../config/constants.js';
 import { type ResolvedGmxConfig } from '../../domain/types.js';
@@ -152,15 +152,15 @@ export const prepareOperatorNode = async (
 	    });
 	  }
 
-  const txExecutionMode = resolveGmxAlloraTxExecutionMode();
-  const embeddedExecutionWalletAddress = resolveEmbeddedExecutionWalletAddress();
+  const txSubmissionMode = resolveGmxAlloraTxSubmissionMode();
+  const embeddedSubmissionWalletAddress = resolveEmbeddedExecutionWalletAddress();
 
-  const operatorExecutionWallet =
-    delegationsBypassActive && txExecutionMode === 'execute'
-      ? embeddedExecutionWalletAddress ??
+  const operatorSubmissionWallet =
+    delegationsBypassActive && txSubmissionMode === 'submit'
+      ? embeddedSubmissionWalletAddress ??
         (() => {
           throw new Error(
-            'GMX_ALLORA_EMBEDDED_PRIVATE_KEY is required when GMX_ALLORA_TX_EXECUTION_MODE=execute and delegations bypass is active.',
+            'GMX_ALLORA_EMBEDDED_PRIVATE_KEY is required when GMX_ALLORA_TX_SUBMISSION_MODE=submit and delegations bypass is active.',
           );
         })()
       : delegationsBypassActive
@@ -169,7 +169,7 @@ export const prepareOperatorNode = async (
   const minNativeEthWei = resolveMinNativeEthWei();
   const onchainActionsClient = getOnchainActionsClient();
   const balances = await onchainActionsClient.listWalletBalances({
-    walletAddress: operatorExecutionWallet,
+    walletAddress: operatorSubmissionWallet,
   });
   const nativeEthWei = extractNativeEthWei({
     balances: balances as Array<{
@@ -182,7 +182,7 @@ export const prepareOperatorNode = async (
 
   if (nativeEthWei < minNativeEthWei) {
     const message = [
-      `WARNING: Wallet ${operatorExecutionWallet} needs native ETH on Arbitrum to cover gas and GMX execution fees.`,
+      `WARNING: Wallet ${operatorSubmissionWallet} needs native ETH on Arbitrum to cover gas and GMX execution fees.`,
       `Minimum required: ~${formatEth(minNativeEthWei)} ETH.`,
       'Fund the wallet, then click Continue.',
     ].join(' ');
@@ -191,7 +191,7 @@ export const prepareOperatorNode = async (
       type: 'gmx-fund-wallet-request',
       message,
       payloadSchema: z.toJSONSchema(FundWalletAckSchema),
-      walletAddress: operatorExecutionWallet,
+      walletAddress: operatorSubmissionWallet,
       minNativeEthWei: minNativeEthWei.toString(),
     };
 
@@ -243,7 +243,7 @@ export const prepareOperatorNode = async (
   }
 
   const operatorConfig: ResolvedGmxConfig = {
-    walletAddress: operatorExecutionWallet,
+    walletAddress: operatorSubmissionWallet,
     baseContributionUsd: operatorInput.usdcAllocation,
     fundingTokenAddress,
     targetMarket,

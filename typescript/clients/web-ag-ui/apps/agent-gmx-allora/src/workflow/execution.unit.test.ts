@@ -31,7 +31,7 @@ describe('executePerpetualPlan', () => {
     vi.clearAllMocks();
   });
 
-  it('submits planned transactions when tx execution mode is execute', async () => {
+  it('submits planned transactions when tx submission mode is submit', async () => {
     const sendTransaction = vi.fn(() => Promise.resolve('0xdeadbeef' as const));
     const waitForTransactionReceipt = vi.fn(() =>
       Promise.resolve({ transactionHash: '0xdeadbeef' as const }),
@@ -53,7 +53,7 @@ describe('executePerpetualPlan', () => {
     const result = await executePerpetualPlan({
       client,
       plan,
-      txExecutionMode: 'execute',
+      txSubmissionMode: 'submit',
       clients: {
         public: { waitForTransactionReceipt },
         wallet: {

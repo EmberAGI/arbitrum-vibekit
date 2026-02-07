@@ -10,7 +10,7 @@ import {
   resolveAlloraApiBaseUrl,
   resolveAlloraApiKey,
   resolveAlloraChainId,
-  resolveGmxAlloraTxExecutionMode,
+  resolveGmxAlloraTxSubmissionMode,
   resolvePollIntervalMs,
 } from '../../config/constants.js';
 import { buildAlloraPrediction } from '../../core/alloraPrediction.js';
@@ -328,12 +328,12 @@ export const pollCycleNode = async (
     payTokenDecimals,
     collateralTokenAddress: operatorConfig.fundingTokenAddress,
   });
-  const txExecutionMode = resolveGmxAlloraTxExecutionMode();
+  const txSubmissionMode = resolveGmxAlloraTxSubmissionMode();
   const executionResult = await executePerpetualPlan({
     client: getOnchainActionsClient(),
     plan: executionPlan,
-    txExecutionMode,
-    clients: txExecutionMode === 'execute' ? getEmbeddedOnchainClients() : undefined,
+    txSubmissionMode,
+    clients: txSubmissionMode === 'submit' ? getEmbeddedOnchainClients() : undefined,
   });
   const executionPlanEvent: ClmmEvent | undefined =
     executionPlan.action === 'none'

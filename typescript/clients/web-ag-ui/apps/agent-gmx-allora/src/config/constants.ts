@@ -66,8 +66,8 @@ export const ALLORA_TOPIC_LABELS = {
   ETH: 'ETH/USD - Price Prediction - 8h',
 } as const;
 
-export type GmxAlloraTxExecutionMode = 'plan' | 'execute';
-const DEFAULT_TX_EXECUTION_MODE: GmxAlloraTxExecutionMode = 'plan';
+export type GmxAlloraTxSubmissionMode = 'plan' | 'submit';
+const DEFAULT_TX_SUBMISSION_MODE: GmxAlloraTxSubmissionMode = 'plan';
 
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
 const DEFAULT_STREAM_LIMIT = -1;
@@ -101,13 +101,13 @@ export function resolveStateHistoryLimit(): number {
   return resolveNumber(process.env['GMX_ALLORA_STATE_HISTORY_LIMIT'], DEFAULT_STATE_HISTORY_LIMIT);
 }
 
-export function resolveGmxAlloraTxExecutionMode(): GmxAlloraTxExecutionMode {
-  const raw = process.env['GMX_ALLORA_TX_EXECUTION_MODE'];
+export function resolveGmxAlloraTxSubmissionMode(): GmxAlloraTxSubmissionMode {
+  const raw = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
   if (!raw) {
-    return DEFAULT_TX_EXECUTION_MODE;
+    return DEFAULT_TX_SUBMISSION_MODE;
   }
   const normalized = raw.trim().toLowerCase();
-  return normalized === 'execute' ? 'execute' : DEFAULT_TX_EXECUTION_MODE;
+  return normalized === 'submit' ? 'submit' : DEFAULT_TX_SUBMISSION_MODE;
 }
 
 export function resolveMinNativeEthWei(): bigint {

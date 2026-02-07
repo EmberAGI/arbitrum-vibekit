@@ -17,4 +17,8 @@ This agent uses Allora prediction feeds to make deterministic trading decisions 
 
 ## Environment
 
-- `GMX_MIN_NATIVE_ETH_WEI`: minimum native ETH (in wei) required in the execution wallet before the agent will proceed (defaults to `2000000000000000` = 0.002 ETH).
+- `GMX_MIN_NATIVE_ETH_WEI`: minimum native ETH (in wei) required in the operator wallet before the agent will proceed (defaults to `2000000000000000` = 0.002 ETH).
+- `GMX_ALLORA_TX_SUBMISSION_MODE`: transaction submission mode. Supported values:
+  - `plan` (default): build and emit `transactions[]` but do not broadcast.
+  - `submit`: broadcast planned transactions for `long` and `short` actions via an embedded wallet (no delegations). Close/reduce submission is blocked until onchain-actions supports GMX decrease orders.
+- `GMX_ALLORA_EMBEDDED_PRIVATE_KEY`: required when `GMX_ALLORA_TX_SUBMISSION_MODE=submit` (0x + 64 hex chars). Only for local/dev use.
