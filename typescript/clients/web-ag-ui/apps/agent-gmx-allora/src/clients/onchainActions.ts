@@ -3,13 +3,13 @@ import { z } from 'zod';
 const HTTP_TIMEOUT_MS = 60_000;
 
 const PaginationSchema = z.object({
-  cursor: z.string().nullable(),
+  cursor: z.string(),
   currentPage: z.number().int(),
   totalPages: z.number().int(),
   totalItems: z.number().int(),
 });
 
-type TokenIdentifier = {
+export type TokenIdentifier = {
   chainId: string;
   address: string;
 };
@@ -29,28 +29,6 @@ const TokenSchema = z.object({
   isVetted: z.boolean(),
 });
 
-const normalizeTokenInput = (value: unknown): unknown => {
-  if (!value || typeof value !== 'object') {
-    return value;
-  }
-  const record = value as Record<string, unknown>;
-  if (record['iconUri'] === null) {
-    return { ...record, iconUri: undefined };
-  }
-  return record;
-};
-
-const TokenSchemaBridge: z.ZodType<z.infer<typeof TokenSchema>> = z
-  .unknown()
-  .transform((value) => normalizeTokenInput(value))
-  .superRefine((value, ctx) => {
-    const result = TokenSchema.safeParse(value);
-    if (!result.success) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: result.error.message });
-    }
-  })
-  .transform((value) => TokenSchema.parse(value));
-
 const PerpetualMarketSchema = z.object({
   marketToken: TokenIdentifierSchema,
   longFundingFee: z.string(),
@@ -59,11 +37,11 @@ const PerpetualMarketSchema = z.object({
   shortBorrowingFee: z.string(),
   chainId: z.string(),
   name: z.string(),
-  // Some markets returned by onchain-actions omit indexToken. Keep the boundary
-  // validation, but allow skipping incomplete markets in our selection logic.
-  indexToken: TokenSchemaBridge.optional(),
-  longToken: TokenSchemaBridge.optional(),
-  shortToken: TokenSchemaBridge.optional(),
+  // onchain-actions hydrates these token identifiers into full token objects.
+  // Allow missing tokens so selection logic can safely skip incomplete rows.
+  indexToken: TokenSchema.optional(),
+  longToken: TokenSchema.optional(),
+  shortToken: TokenSchema.optional(),
 });
 export type PerpetualMarket = z.infer<typeof PerpetualMarketSchema>;
 
@@ -94,7 +72,7 @@ const PerpetualPositionSchema = z.object({
   traderDiscountAmount: z.string(),
   uiFeeAmount: z.string(),
   data: z.string().optional(),
-  collateralToken: TokenSchemaBridge,
+  collateralToken: TokenSchema,
 });
 export type PerpetualPosition = z.infer<typeof PerpetualPositionSchema>;
 
@@ -102,16 +80,36 @@ const PerpetualPositionsResponseSchema = PaginationSchema.extend({
   positions: z.array(PerpetualPositionSchema),
 });
 
-export const TransactionPlanSchema = z.object({
+const WalletBalanceSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  amount: z.string(),
+  symbol: z.string().optional(),
+  valueUsd: z.number().optional(),
+  decimals: z.number().int().optional(),
+});
+export type WalletBalance = z.infer<typeof WalletBalanceSchema>;
+
+const WalletBalancesResponseSchema = PaginationSchema.extend({
+  balances: z.array(WalletBalanceSchema),
+});
+
+export const TransactionPlanSchema = z.preprocess((value) => {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  const record = value as Record<string, unknown>;
+  if (record['value'] === undefined) {
+    return { ...record, value: '0x0' };
+  }
+  return value;
+},
+z.object({
   type: z.string(),
   to: z.string(),
   data: z.string(),
-  value: z
-    .string()
-    .optional()
-    .transform((value) => value ?? '0'),
+  value: z.string(),
   chainId: z.string(),
-});
+}));
 export type TransactionPlan = z.infer<typeof TransactionPlanSchema>;
 
 const PerpetualActionResponseSchema = z
@@ -262,6 +260,30 @@ export class OnchainActionsClient {
     return positions;
   }
 
+  async listWalletBalances(params: {
+    walletAddress: `0x${string}`;
+  }): Promise<WalletBalance[]> {
+    const endpoint = `/wallet/balances/${params.walletAddress}`;
+    const firstPage = await this.fetchEndpoint(endpoint, WalletBalancesResponseSchema);
+    const balances = [...firstPage.balances];
+    const cursor = firstPage.cursor ?? undefined;
+    if (!cursor || firstPage.totalPages <= 1) {
+      return balances;
+    }
+
+    for (let page = 2; page <= firstPage.totalPages; page += 1) {
+      const query = this.buildQuery({
+        cursor,
+        page: page.toString(),
+      });
+      const pageEndpoint = `/wallet/balances/${params.walletAddress}?${query.toString()}`;
+      const data = await this.fetchEndpoint(pageEndpoint, WalletBalancesResponseSchema);
+      balances.push(...data.balances);
+    }
+
+    return balances;
+  }
+
   private stringifyPayload(value: unknown): string {
     return JSON.stringify(value, (_key: string, item: unknown): unknown =>
       typeof item === 'bigint' ? item.toString() : item,
@@ -289,5 +311,3 @@ export class OnchainActionsClient {
     });
   }
 }
-
-export type { TokenIdentifier };

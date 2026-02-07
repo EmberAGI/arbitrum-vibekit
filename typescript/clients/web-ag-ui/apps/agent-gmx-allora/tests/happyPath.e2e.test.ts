@@ -40,15 +40,38 @@ describe('GMX Allora happy path (e2e)', () => {
       const client = new OnchainActionsClient(resolved);
       const markets = await client.listPerpetualMarkets({ chainIds: ['42161'] });
       expect(markets.length).toBeGreaterThan(0);
+      expect(markets.every((market) => market.chainId === '42161')).toBe(true);
 
       const walletAddress = resolveEnvAddress('SMOKE_WALLET');
       const payTokenAddress = resolveEnvAddress('SMOKE_USDC_ADDRESS');
+      const balances = await client.listWalletBalances({ walletAddress });
+      expect(Array.isArray(balances)).toBe(true);
+
+      const positions = await client.listPerpetualPositions({
+        walletAddress,
+        chainIds: ['42161'],
+      });
+      expect(Array.isArray(positions)).toBe(true);
+      expect(positions.every((position) => position.chainId === '42161')).toBe(true);
+
+      // Planning a perp open requires a balance provider (onchain-actions uses Dune in most setups)
+      // and a wallet with appropriate funds. If balances are empty, we still validated the onchain
+      // read-paths but skip the trade planning call to avoid false negatives.
+      if (balances.length === 0) {
+        return;
+      }
+
+      const marketWithTokens = markets.find(
+        (entry) => Boolean(entry.indexToken && entry.longToken && entry.shortToken),
+      );
       const market =
         markets.find(
           (entry) =>
-            entry.indexToken.symbol.toUpperCase() === 'BTC' &&
-            entry.longToken.symbol.toUpperCase() === 'USDC',
-        ) ?? markets[0];
+            entry.indexToken?.symbol.toUpperCase() === 'BTC' &&
+            entry.longToken?.symbol.toUpperCase() === 'USDC',
+        ) ??
+        marketWithTokens ??
+        markets[0];
 
       if (!market) {
         throw new Error('Expected at least one perpetual market from onchain-actions.');

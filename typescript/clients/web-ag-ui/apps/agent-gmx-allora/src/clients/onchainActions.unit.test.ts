@@ -126,10 +126,10 @@ describe('OnchainActionsClient', () => {
           JSON.stringify({
             transactions: [
               {
-                type: 'evm',
+                type: 'EVM_TX',
                 to: '0xrouter',
                 data: '0xdeadbeef',
-                // Intentionally omit `value` so the client normalizes to "0".
+                // Intentionally omit `value` so the client normalizes to "0x0".
                 chainId: '42161',
               },
             ],
@@ -157,7 +157,7 @@ describe('OnchainActionsClient', () => {
     expect(requestInit?.method).toBe('POST');
 
     const transactions = (response as { transactions?: Array<{ value?: string }> }).transactions;
-    expect(transactions?.[0]?.value).toBe('0');
+    expect(transactions?.[0]?.value).toBe('0x0');
   });
 
   it('posts perpetual close requests', async () => {
