@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getOnchainClients } from '../clientFactory.js';
+import { getAgentWalletAddress, getOnchainClients } from '../clientFactory.js';
 import type { ClmmState, ClmmUpdate } from '../context.js';
 
 import { prepareOperatorNode } from './prepareOperator.js';
@@ -18,6 +18,9 @@ vi.mock('../clientFactory.js', async (importOriginal) => {
   return {
     ...(actual as Record<string, unknown>),
     getOnchainClients: vi.fn().mockReturnValue({}),
+    getAgentWalletAddress: vi.fn().mockReturnValue(
+      '0x3fd83e40F96C3c81A807575F959e55C34a40e523',
+    ),
   };
 });
 
@@ -31,6 +34,11 @@ describe('prepareOperatorNode', () => {
     const getOnchainClientsMock = vi.mocked(getOnchainClients);
     getOnchainClientsMock.mockReset();
     getOnchainClientsMock.mockReturnValue({});
+    const getAgentWalletAddressMock = vi.mocked(getAgentWalletAddress);
+    getAgentWalletAddressMock.mockReset();
+    getAgentWalletAddressMock.mockReturnValue(
+      '0x3fd83e40F96C3c81A807575F959e55C34a40e523',
+    );
   });
 
   afterEach(() => {
@@ -184,7 +192,7 @@ describe('prepareOperatorNode', () => {
     expect(executeInitialDepositMock).toHaveBeenCalledTimes(1);
     expect(executeInitialDepositMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        walletAddress: '0x3fd83e40F96C3c81A807575F959e55C34a40e523',
         fundingAmount: '10000000',
       }),
     );
@@ -192,7 +200,7 @@ describe('prepareOperatorNode', () => {
       '0x0000000000000000000000000000000000000001',
     );
     expect(update.view?.operatorConfig?.executionWalletAddress).toBe(
-      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      '0x3fd83e40F96C3c81A807575F959e55C34a40e523',
     );
     expect(update.view?.selectedPool?.ytSymbol).toBe('YT-BEST');
     expect(update.view?.setupComplete).toBe(true);
