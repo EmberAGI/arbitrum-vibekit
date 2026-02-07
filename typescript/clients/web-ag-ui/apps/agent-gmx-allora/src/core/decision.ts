@@ -48,10 +48,10 @@ export function decideTradeAction(params: DecideTradeActionParams): TradeDecisio
   if (params.previousAction === 'open' && params.previousSide && params.previousSide !== side) {
     return {
       action: 'close',
-      side,
+      side: params.previousSide,
       leverage,
       sizeUsd,
-      reason: `Signal direction flipped to ${side}; closing open position.`,
+      reason: `Signal direction flipped to ${side}; closing ${params.previousSide} position.`,
     };
   }
 

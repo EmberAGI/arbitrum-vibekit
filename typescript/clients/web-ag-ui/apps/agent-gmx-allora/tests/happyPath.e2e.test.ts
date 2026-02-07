@@ -11,13 +11,13 @@ import {
   resolveOnchainActionsBaseUrl,
 } from '../src/config/constants.js';
 
-const requiredEnv = ['ONCHAIN_ACTIONS_BASE_URL', 'SMOKE_WALLET', 'SMOKE_USDC_ADDRESS'] as const;
+const requiredEnv = ['ONCHAIN_ACTIONS_BASE_URL', 'SMOKE_WALLET'] as const;
 const hasRequiredEnv = requiredEnv.every((key) => Boolean(process.env[key]));
 const itIf = hasRequiredEnv ? it : it.skip;
 
 const normalizeUrl = (value: string): string => value.replace(/\/$/u, '');
 
-const resolveEnvAddress = (key: 'SMOKE_WALLET' | 'SMOKE_USDC_ADDRESS'): `0x${string}` => {
+const resolveEnvAddress = (key: 'SMOKE_WALLET'): `0x${string}` => {
   const raw = process.env[key];
   if (!raw) {
     throw new Error(`${key} is required for happy path e2e.`);
@@ -43,7 +43,6 @@ describe('GMX Allora happy path (e2e)', () => {
       expect(markets.every((market) => market.chainId === '42161')).toBe(true);
 
       const walletAddress = resolveEnvAddress('SMOKE_WALLET');
-      const payTokenAddress = resolveEnvAddress('SMOKE_USDC_ADDRESS');
       const balances = await client.listWalletBalances({ walletAddress });
       expect(Array.isArray(balances)).toBe(true);
 
@@ -53,13 +52,6 @@ describe('GMX Allora happy path (e2e)', () => {
       });
       expect(Array.isArray(positions)).toBe(true);
       expect(positions.every((position) => position.chainId === '42161')).toBe(true);
-
-      // Planning a perp open requires a balance provider (onchain-actions uses Dune in most setups)
-      // and a wallet with appropriate funds. If balances are empty, we still validated the onchain
-      // read-paths but skip the trade planning call to avoid false negatives.
-      if (balances.length === 0) {
-        return;
-      }
 
       const marketWithTokens = markets.find(
         (entry) => Boolean(entry.indexToken && entry.longToken && entry.shortToken),
@@ -76,6 +68,17 @@ describe('GMX Allora happy path (e2e)', () => {
       if (!market) {
         throw new Error('Expected at least one perpetual market from onchain-actions.');
       }
+
+      const payToken =
+        [market.longToken, market.shortToken].find(
+          (token) => token?.symbol.toUpperCase() === 'USDC',
+        ) ?? market.longToken ?? market.shortToken;
+      if (!payToken) {
+        return;
+      }
+
+      const payTokenAddress = getAddress(payToken.tokenUid.address) as `0x${string}`;
+
       const inference = await fetchAlloraInference({
         baseUrl: resolveAlloraApiBaseUrl(),
         chainId: resolveAlloraChainId(),
@@ -85,17 +88,37 @@ describe('GMX Allora happy path (e2e)', () => {
       expect(inference.topicId).toBe(ALLORA_TOPIC_IDS.BTC);
       expect(Number.isFinite(inference.combinedValue)).toBe(true);
 
-      await expect(
-        client.createPerpetualLong({
-          amount: '100',
-          walletAddress,
-          chainId: '42161',
-          marketAddress: getAddress(market.marketToken.address),
-          payTokenAddress,
-          collateralTokenAddress: payTokenAddress,
-          leverage: '2',
-        }),
-      ).resolves.toBeDefined();
+      // Planning a perp open requires a balance provider and a wallet with funds. If the
+      // pay-token balance is unavailable/insufficient, we still validated the onchain read-paths
+      // but skip the trade planning call to avoid false negatives in CI/dev environments.
+      const payTokenBalance = balances.find(
+        (entry) => entry.tokenUid.address.toLowerCase() === payTokenAddress.toLowerCase(),
+      );
+      const decimals = payTokenBalance?.decimals ?? payToken.decimals;
+      const rawAmount = payTokenBalance?.amount;
+      const available = rawAmount && /^\d+$/u.test(rawAmount) ? BigInt(rawAmount) : 0n;
+      const minAmount = 2n * 10n ** BigInt(decimals); // 2 USDC (safe buffer above $1 minimum)
+
+      if (available < minAmount) {
+        return;
+      }
+
+      const amount = (available / 2n > 100n * 10n ** BigInt(decimals)
+        ? 100n * 10n ** BigInt(decimals)
+        : available / 2n
+      ).toString();
+
+      const response = await client.createPerpetualLong({
+        amount,
+        walletAddress,
+        chainId: '42161',
+        marketAddress: getAddress(market.marketToken.address),
+        payTokenAddress,
+        collateralTokenAddress: payTokenAddress,
+        leverage: '2',
+      });
+      expect(response.transactions.length).toBeGreaterThan(0);
+      expect(response.transactions[0]?.to).toMatch(/^0x/u);
     } finally {
       if (originalBaseUrl === undefined) {
         delete process.env['ONCHAIN_ACTIONS_BASE_URL'];
@@ -105,3 +128,4 @@ describe('GMX Allora happy path (e2e)', () => {
     }
   });
 });
+

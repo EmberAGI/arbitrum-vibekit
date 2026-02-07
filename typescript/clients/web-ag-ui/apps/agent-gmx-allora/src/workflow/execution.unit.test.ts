@@ -27,6 +27,43 @@ const client = {
 };
 
 describe('executePerpetualPlan', () => {
+  it('executes short plans', async () => {
+    const plan: ExecutionPlan = {
+      action: 'short',
+      request: {
+        amount: '100',
+        walletAddress: '0x0000000000000000000000000000000000000002',
+        chainId: '42161',
+        marketAddress: '0xmarket',
+        payTokenAddress: '0xusdc',
+        collateralTokenAddress: '0xusdc',
+        leverage: '2',
+      },
+    };
+
+    const result = await executePerpetualPlan({ client, plan });
+
+    expect(result.ok).toBe(true);
+    expect(createPerpetualShort).toHaveBeenCalledWith(plan.request);
+  });
+
+  it('executes close plans', async () => {
+    const plan: ExecutionPlan = {
+      action: 'close',
+      request: {
+        walletAddress: '0x0000000000000000000000000000000000000003',
+        marketAddress: '0xmarket',
+        positionSide: 'short',
+        isLimit: false,
+      },
+    };
+
+    const result = await executePerpetualPlan({ client, plan });
+
+    expect(result.ok).toBe(true);
+    expect(createPerpetualClose).toHaveBeenCalledWith(plan.request);
+  });
+
   it('skips execution when plan action is none', async () => {
     const plan: ExecutionPlan = { action: 'none' };
 

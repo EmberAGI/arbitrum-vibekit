@@ -159,6 +159,7 @@ describe('decideTradeAction', () => {
     });
 
     expect(decision.action).toBe('close');
+    expect(decision.side).toBe('long');
     expect(decision.reason).toContain('flipped');
   });
 

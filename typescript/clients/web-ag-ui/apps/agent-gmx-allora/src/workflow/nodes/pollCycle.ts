@@ -182,6 +182,7 @@ export const pollCycleNode = async (
 
   let gmxMarketAddress: string;
   let positions = [];
+  let payTokenDecimals = 6;
   try {
     const onchainActionsClient = getOnchainActionsClient();
     const chainIds = [ARBITRUM_CHAIN_ID.toString()];
@@ -224,6 +225,11 @@ export const pollCycleNode = async (
     }
 
     gmxMarketAddress = selectedMarket.marketToken.address;
+    payTokenDecimals =
+      [selectedMarket.longToken, selectedMarket.shortToken, selectedMarket.indexToken].find(
+        (token) =>
+          token?.tokenUid.address.toLowerCase() === operatorConfig.fundingTokenAddress.toLowerCase(),
+      )?.decimals ?? 6;
     positions = walletPositions;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -318,6 +324,7 @@ export const pollCycleNode = async (
     marketAddress: gmxMarketAddress as `0x${string}`,
     walletAddress: operatorConfig.walletAddress,
     payTokenAddress: operatorConfig.fundingTokenAddress,
+    payTokenDecimals,
     collateralTokenAddress: operatorConfig.fundingTokenAddress,
   });
   const executionResult = await executePerpetualPlan({
