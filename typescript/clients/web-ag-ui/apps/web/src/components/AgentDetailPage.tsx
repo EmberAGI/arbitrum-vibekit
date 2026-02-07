@@ -42,6 +42,7 @@ import { resolveMetricsTabLabel } from '../utils/agentUi';
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
 const MIN_BASE_CONTRIBUTION_USD = 10;
+const MIN_GMX_ALLOCATION_USD = 0.01;
 
 interface AgentDetailPageProps {
   agentId: string;
@@ -857,19 +858,19 @@ function AgentBlockersTab({
     }
 
     const trimmedContribution = baseContributionUsd.trim();
-    const parsedContribution =
-      trimmedContribution === '' ? MIN_BASE_CONTRIBUTION_USD : Number(trimmedContribution);
+    if (trimmedContribution === '') {
+      setError('USDC allocation is required.');
+      return;
+    }
+
+    const parsedContribution = Number(trimmedContribution);
     if (!Number.isFinite(parsedContribution)) {
       setError('USDC allocation must be a valid number.');
       return;
     }
-    if (parsedContribution < MIN_BASE_CONTRIBUTION_USD) {
-      setError(`USDC allocation must be at least $${MIN_BASE_CONTRIBUTION_USD}.`);
+    if (parsedContribution < MIN_GMX_ALLOCATION_USD) {
+      setError('USDC allocation must be greater than 0.');
       return;
-    }
-
-    if (trimmedContribution === '') {
-      setBaseContributionUsd(`${MIN_BASE_CONTRIBUTION_USD}`);
     }
 
     const baseContributionNumber = parsedContribution;
@@ -1233,17 +1234,18 @@ function AgentBlockersTab({
                     </select>
                   </div>
 
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-2">USDC Allocation</label>
-                    <input
-                      type="number"
-                      value={baseContributionUsd}
-                      onChange={(e) => setBaseContributionUsd(e.target.value)}
-                      placeholder={`$${MIN_BASE_CONTRIBUTION_USD}`}
-                      min={MIN_BASE_CONTRIBUTION_USD}
-                      className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
-                    />
-                  </div>
+	                  <div>
+	                    <label className="block text-sm text-gray-400 mb-2">USDC Allocation</label>
+	                    <input
+	                      type="number"
+	                      value={baseContributionUsd}
+	                      onChange={(e) => setBaseContributionUsd(e.target.value)}
+	                      placeholder="e.g. 25"
+	                      min={MIN_GMX_ALLOCATION_USD}
+	                      step="any"
+	                      className="w-full px-4 py-3 rounded-lg bg-[#121212] border border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#fd6731] focus:outline-none transition-colors"
+	                    />
+	                  </div>
 
                   <div className="rounded-xl bg-[#121212] border border-[#2a2a2a] p-4">
                     <div className="text-gray-300 text-sm font-medium mb-2">
