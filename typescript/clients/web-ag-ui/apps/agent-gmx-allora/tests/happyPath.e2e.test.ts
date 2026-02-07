@@ -15,6 +15,9 @@ const requiredEnv = ['ONCHAIN_ACTIONS_BASE_URL', 'SMOKE_WALLET'] as const;
 const hasRequiredEnv = requiredEnv.every((key) => Boolean(process.env[key]));
 const itIf = hasRequiredEnv ? it : it.skip;
 
+const shouldRequireOpenPosition =
+  process.env['SMOKE_REQUIRE_GMX_POSITION']?.trim().toLowerCase() === 'true';
+
 const normalizeUrl = (value: string): string => value.replace(/\/$/u, '');
 
 const resolveEnvAddress = (key: 'SMOKE_WALLET'): `0x${string}` => {
@@ -127,5 +130,46 @@ describe('GMX Allora happy path (e2e)', () => {
       }
     }
   });
-});
 
+  itIf('plans a perpetual close (full close) via local onchain-actions when a position exists', async () => {
+    const baseUrl = process.env['ONCHAIN_ACTIONS_BASE_URL'];
+    if (!baseUrl) {
+      throw new Error('ONCHAIN_ACTIONS_BASE_URL is required for this test.');
+    }
+
+    const client = new OnchainActionsClient(normalizeUrl(baseUrl));
+    const walletAddress = resolveEnvAddress('SMOKE_WALLET');
+
+    const positions = await client.listPerpetualPositions({
+      walletAddress,
+      chainIds: ['42161'],
+    });
+
+    const position = positions[0];
+    if (!position) {
+      if (shouldRequireOpenPosition) {
+        throw new Error(
+          'Expected at least one open GMX position for SMOKE_WALLET but none were found.\n' +
+            'Either fund/open a position on Arbitrum (42161) or set SMOKE_REQUIRE_GMX_POSITION=false to skip.',
+        );
+      }
+      return;
+    }
+
+    const response = await client.createPerpetualClose({
+      walletAddress,
+      marketAddress: getAddress(position.marketAddress),
+      positionSide: position.positionSide,
+      isLimit: false,
+    });
+
+    expect(response.transactions.length).toBeGreaterThan(0);
+    const value = response.transactions[0]?.value;
+    if (!value) {
+      throw new Error('Expected close transaction plan to include a value (GMX execution fee).');
+    }
+
+    const wei = BigInt(value);
+    expect(wei > 0n).toBe(true);
+  });
+});

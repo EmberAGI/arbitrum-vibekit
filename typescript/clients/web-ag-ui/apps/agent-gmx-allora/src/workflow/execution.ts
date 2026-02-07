@@ -118,19 +118,38 @@ export async function executePerpetualPlan(params: {
         lastTxHash: execution?.lastTxHash,
       };
     }
-    if (txSubmissionMode === 'submit') {
-      // onchain-actions currently maps /perpetuals/close to order cancellation for GMX;
-      // do not submit those transactions in submit mode until decrease-order support exists.
-      return {
-        action: plan.action,
-        ok: false,
-        error: 'GMX close/reduce submission is not supported yet (onchain-actions close currently cancels orders).',
-      };
-    }
     const response = await params.client.createPerpetualClose(
       plan.request as Parameters<OnchainActionsClient['createPerpetualClose']>[0],
     );
-    return { action: plan.action, ok: true, transactions: response.transactions };
+    if (
+      txSubmissionMode === 'submit' &&
+      response.transactions.every((tx) => parseTransactionValue(tx.value) === 0n)
+    ) {
+      // A real GMX position close (decrease order) requires a non-zero execution fee. If the
+      // plan has no execution fee, it's very likely not a position-close transaction.
+      return {
+        action: plan.action,
+        ok: false,
+        transactions: response.transactions,
+        error:
+          'Close submission is blocked because the planned transactions do not include a GMX execution fee. Ensure onchain-actions is planning a GMX decrease order for close.',
+      };
+    }
+    const execution =
+      txSubmissionMode === 'submit'
+        ? params.clients
+          ? await submitTransactions({ clients: params.clients, transactions: response.transactions })
+          : (() => {
+              throw new Error('Onchain clients are required to submit GMX transactions');
+            })()
+        : undefined;
+    return {
+      action: plan.action,
+      ok: true,
+      transactions: response.transactions,
+      txHashes: execution?.txHashes,
+      lastTxHash: execution?.lastTxHash,
+    };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return { action: plan.action, ok: false, error: message };
