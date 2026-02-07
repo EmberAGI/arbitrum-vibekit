@@ -98,6 +98,39 @@ export type PendleStrategyMetric = {
   position?: PendlePositionMetric;
 };
 
+export type PendleLatestSnapshot = {
+  poolAddress?: `0x${string}`;
+  totalUsd?: number;
+  feesUsd?: number;
+  feesApy?: number;
+  timestamp?: string;
+  positionOpenedAt?: string;
+  positionTokens: Array<{
+    address: `0x${string}`;
+    symbol: string;
+    decimals: number;
+    amount?: number;
+    amountBaseUnits?: string;
+    valueUsd?: number;
+  }>;
+  pendle?: {
+    marketAddress: `0x${string}`;
+    ptSymbol: string;
+    ytSymbol: string;
+    underlyingSymbol: string;
+    maturity: string;
+    impliedApyPct?: number;
+    underlyingApyPct?: number;
+    pendleApyPct?: number;
+    aggregatedApyPct?: number;
+    swapFeeApyPct?: number;
+    ytFloatingApyPct?: number;
+    maxBoostedApyPct?: number;
+    netPnlUsd?: number;
+    netPnlPct?: number;
+  };
+};
+
 export type ClmmMetrics = {
   lastSnapshot?: PendleYieldToken;
   previousApy?: number;
@@ -109,6 +142,7 @@ export type ClmmMetrics = {
   apy?: number;
   lifetimePnlUsd?: number;
   pendle?: PendleStrategyMetric;
+  latestSnapshot?: PendleLatestSnapshot;
 };
 
 export type TaskState =
@@ -292,6 +326,7 @@ const defaultViewState = (): ClmmViewState => ({
     apy: undefined,
     lifetimePnlUsd: undefined,
     pendle: undefined,
+    latestSnapshot: undefined,
   },
   transactionHistory: [],
 });
@@ -384,6 +419,7 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     apy: right.metrics?.apy ?? left.metrics.apy,
     lifetimePnlUsd: right.metrics?.lifetimePnlUsd ?? left.metrics.lifetimePnlUsd,
     pendle: right.metrics?.pendle ?? left.metrics.pendle,
+    latestSnapshot: right.metrics?.latestSnapshot ?? left.metrics.latestSnapshot,
   };
 
   return {
