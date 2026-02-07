@@ -102,4 +102,26 @@ describe('selectGmxPerpetualMarket', () => {
 
     expect(result?.marketToken.address).toBe('0x1');
   });
+
+  it('falls back to matching by market name when token metadata is missing', () => {
+    const markets: PerpetualMarket[] = [
+      {
+        marketToken: { chainId: '42161', address: '0x1' },
+        longFundingFee: '0.01',
+        shortFundingFee: '0.02',
+        longBorrowingFee: '0.03',
+        shortBorrowingFee: '0.04',
+        chainId: '42161',
+        name: 'BTC/USD',
+      },
+    ];
+
+    const result = selectGmxPerpetualMarket({
+      markets,
+      baseSymbol: 'BTC',
+      quoteSymbol: 'USDC',
+    });
+
+    expect(result?.marketToken.address).toBe('0x1');
+  });
 });
