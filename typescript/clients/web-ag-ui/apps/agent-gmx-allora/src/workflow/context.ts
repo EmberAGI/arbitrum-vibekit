@@ -174,6 +174,14 @@ export type DelegationSigningInterrupt = {
   warnings: string[];
 };
 
+export type GmxFundWalletInterrupt = {
+  type: 'gmx-fund-wallet-request';
+  message: string;
+  payloadSchema: Record<string, unknown>;
+  walletAddress: `0x${string}`;
+  minNativeEthWei: string;
+};
+
 export type OnboardingState = {
   step: number;
   totalSteps?: number;

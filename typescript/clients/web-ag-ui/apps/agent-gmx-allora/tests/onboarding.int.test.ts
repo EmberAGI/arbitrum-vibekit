@@ -7,9 +7,10 @@ import { collectSetupInputNode } from '../src/workflow/nodes/collectSetupInput.j
 import { prepareOperatorNode } from '../src/workflow/nodes/prepareOperator.js';
 import { FUNDING_TOKENS } from '../src/workflow/seedData.js';
 
-const { copilotkitEmitStateMock, interruptMock } = vi.hoisted(() => ({
+const { copilotkitEmitStateMock, interruptMock, listWalletBalancesMock } = vi.hoisted(() => ({
   copilotkitEmitStateMock: vi.fn(async () => undefined),
   interruptMock: vi.fn<[], Promise<unknown>>(),
+  listWalletBalancesMock: vi.fn<[], Promise<unknown>>(),
 }));
 
 vi.mock('@copilotkit/sdk-js/langgraph', () => ({
@@ -23,6 +24,12 @@ vi.mock('@langchain/langgraph', async () => {
     interrupt: interruptMock,
   };
 });
+
+vi.mock('../src/workflow/clientFactory.js', () => ({
+  getOnchainActionsClient: () => ({
+    listWalletBalances: listWalletBalancesMock,
+  }),
+}));
 
 function buildBaseState(): ClmmState {
   return {
@@ -104,11 +111,21 @@ function mergeState(state: ClmmState, update: Partial<ClmmState>): ClmmState {
 afterEach(() => {
   copilotkitEmitStateMock.mockReset();
   interruptMock.mockReset();
+  listWalletBalancesMock.mockReset();
 });
 
 describe('GMX Allora onboarding (integration)', () => {
   it('collects USDC allocation and prepares operator config', async () => {
     const state = buildBaseState();
+
+    listWalletBalancesMock.mockResolvedValueOnce([
+      {
+        tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+        amount: '2000000000000000',
+        symbol: 'ETH',
+        decimals: 18,
+      },
+    ]);
 
     interruptMock.mockResolvedValueOnce({
       walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
@@ -131,6 +148,43 @@ describe('GMX Allora onboarding (integration)', () => {
     expect(prepared.view?.operatorConfig?.fundingTokenAddress).toBe(
       FUNDING_TOKENS.find((token) => token.symbol === 'USDC')?.address,
     );
+  });
+
+  it('blocks onboarding when native ETH balance is below the minimum threshold', async () => {
+    const state = buildBaseState();
+
+    interruptMock.mockResolvedValueOnce({
+      walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      usdcAllocation: 250,
+      targetMarket: 'BTC',
+    });
+
+    const setupUpdate = await collectSetupInputNode(state, {});
+    const stateAfterSetup = mergeState(state, setupUpdate);
+
+    const fundingUpdate = await collectFundingTokenInputNode(stateAfterSetup, {});
+    const stateAfterFunding = mergeState(stateAfterSetup, fundingUpdate);
+
+    const delegationsUpdate = await collectDelegationsNode(stateAfterFunding, {});
+    const stateAfterDelegations = mergeState(stateAfterFunding, delegationsUpdate);
+
+    listWalletBalancesMock.mockResolvedValueOnce([
+      {
+        tokenUid: { chainId: '42161', address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+        amount: '0',
+        symbol: 'ETH',
+        decimals: 18,
+      },
+    ]);
+
+    interruptMock.mockResolvedValueOnce({ acknowledged: true });
+
+    await prepareOperatorNode(stateAfterDelegations, {});
+
+    const didRequestFundWallet = interruptMock.mock.calls.some(
+      (call) => (call[0] as { type?: string } | undefined)?.type === 'gmx-fund-wallet-request',
+    );
+    expect(didRequestFundWallet).toBe(true);
   });
 
   it('rejects setup input without USDC allocation', async () => {

@@ -1,4 +1,5 @@
 export const ARBITRUM_CHAIN_ID = 42161;
+const DEFAULT_MIN_NATIVE_ETH_WEI = 2_000_000_000_000_000n; // 0.002 ETH
 
 const DEFAULT_ONCHAIN_ACTIONS_BASE_URL = 'https://api.emberai.xyz';
 const DEFAULT_ALLORA_API_BASE_URL = 'https://api.allora.network';
@@ -95,4 +96,17 @@ export function resolveStreamLimit(): number {
 
 export function resolveStateHistoryLimit(): number {
   return resolveNumber(process.env['GMX_ALLORA_STATE_HISTORY_LIMIT'], DEFAULT_STATE_HISTORY_LIMIT);
+}
+
+export function resolveMinNativeEthWei(): bigint {
+  const raw = process.env['GMX_MIN_NATIVE_ETH_WEI'];
+  if (!raw) {
+    return DEFAULT_MIN_NATIVE_ETH_WEI;
+  }
+  try {
+    const parsed = BigInt(raw);
+    return parsed > 0n ? parsed : DEFAULT_MIN_NATIVE_ETH_WEI;
+  } catch {
+    return DEFAULT_MIN_NATIVE_ETH_WEI;
+  }
 }

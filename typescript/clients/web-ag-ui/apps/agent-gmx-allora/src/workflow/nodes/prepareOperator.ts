@@ -1,7 +1,10 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
-import { Command } from '@langchain/langgraph';
+import { Command, interrupt } from '@langchain/langgraph';
+import { z } from 'zod';
 
+import { ARBITRUM_CHAIN_ID, resolveMinNativeEthWei } from '../../config/constants.js';
 import { type ResolvedGmxConfig } from '../../domain/types.js';
+import { getOnchainActionsClient } from '../clientFactory.js';
 import {
   buildTaskStatus,
   logInfo,
@@ -9,10 +12,50 @@ import {
   type ClmmEvent,
   type ClmmState,
   type ClmmUpdate,
+  type GmxFundWalletInterrupt,
 } from '../context.js';
 import { AGENT_WALLET_ADDRESS, MARKETS } from '../seedData.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
+
+const FundWalletAckSchema = z.object({
+  acknowledged: z.literal(true),
+});
+
+function formatEth(wei: bigint): string {
+  const base = 10n ** 18n;
+  const whole = wei / base;
+  const fraction = wei % base;
+  if (fraction === 0n) {
+    return `${whole}`;
+  }
+  const fractionPadded = fraction.toString().padStart(18, '0');
+  const fractionTrimmed = fractionPadded.replace(/0+$/u, '').slice(0, 6);
+  return fractionTrimmed.length ? `${whole}.${fractionTrimmed}` : `${whole}`;
+}
+
+function extractNativeEthWei(params: {
+  balances: Array<{ tokenUid: { chainId: string }; amount: string; symbol?: string; decimals?: number }>;
+}): bigint {
+  const eth = params.balances.find(
+    (balance) =>
+      balance.tokenUid.chainId === ARBITRUM_CHAIN_ID.toString() &&
+      balance.symbol?.toUpperCase() === 'ETH',
+  );
+  if (!eth) {
+    return 0n;
+  }
+  const decimals = eth.decimals ?? 18;
+  if (decimals !== 18) {
+    // onchain-actions may omit decimals; treat unexpected values as unknown.
+    return 0n;
+  }
+  try {
+    return BigInt(eth.amount);
+  } catch {
+    return 0n;
+  }
+}
 
 export const prepareOperatorNode = async (
   state: ClmmState,
@@ -92,6 +135,60 @@ export const prepareOperatorNode = async (
     });
   }
 
+  const operatorExecutionWallet = delegationsBypassActive ? AGENT_WALLET_ADDRESS : operatorWalletAddress;
+  const minNativeEthWei = resolveMinNativeEthWei();
+  const onchainActionsClient = getOnchainActionsClient();
+  const balances = await onchainActionsClient.listWalletBalances({
+    walletAddress: operatorExecutionWallet,
+  });
+  const nativeEthWei = extractNativeEthWei({
+    balances: balances as Array<{
+      tokenUid: { chainId: string };
+      amount: string;
+      symbol?: string;
+      decimals?: number;
+    }>,
+  });
+
+  if (nativeEthWei < minNativeEthWei) {
+    const message = [
+      `WARNING: Wallet ${operatorExecutionWallet} needs native ETH on Arbitrum to cover gas and GMX execution fees.`,
+      `Minimum required: ~${formatEth(minNativeEthWei)} ETH.`,
+      'Fund the wallet, then click Continue.',
+    ].join(' ');
+
+    const request: GmxFundWalletInterrupt = {
+      type: 'gmx-fund-wallet-request',
+      message,
+      payloadSchema: z.toJSONSchema(FundWalletAckSchema),
+      walletAddress: operatorExecutionWallet,
+      minNativeEthWei: minNativeEthWei.toString(),
+    };
+
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
+    await copilotkitEmitState(config, {
+      view: { onboarding: state.view.onboarding, task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    });
+
+    const incoming: unknown = await interrupt(request);
+    let inputToParse: unknown = incoming;
+    if (typeof incoming === 'string') {
+      try {
+        inputToParse = JSON.parse(incoming);
+      } catch {
+        // ignore
+      }
+    }
+
+    const parsedAck = FundWalletAckSchema.safeParse(inputToParse);
+    if (!parsedAck.success) {
+      return new Command({ goto: '__end__' });
+    }
+
+    // "Ack + retry" flow. End this run and let the UI trigger a new cycle which re-checks balances.
+    return new Command({ goto: '__end__' });
+  }
+
   const targetMarket = MARKETS.find((market) => market.baseSymbol === operatorInput.targetMarket);
 
   if (!targetMarket) {
@@ -116,7 +213,7 @@ export const prepareOperatorNode = async (
   }
 
   const operatorConfig: ResolvedGmxConfig = {
-    walletAddress: delegationsBypassActive ? AGENT_WALLET_ADDRESS : operatorWalletAddress,
+    walletAddress: operatorExecutionWallet,
     baseContributionUsd: operatorInput.usdcAllocation,
     fundingTokenAddress,
     targetMarket,
