@@ -26,10 +26,10 @@ describe('executeRebalance', () => {
   beforeEach(() => {
     executeTransactionMock.mockReset();
   });
-  it('sells current PT, swaps to target underlying, and buys new PT in order', async () => {
+  it('sells current PT and buys new PT using the sell output token in order', async () => {
     const onchainActionsClient: Pick<
       OnchainActionsClient,
-      'createTokenizedYieldSellPt' | 'createSwap' | 'createTokenizedYieldBuyPt'
+      'createTokenizedYieldSellPt' | 'createTokenizedYieldBuyPt'
     > = {
       createTokenizedYieldSellPt: vi.fn().mockResolvedValue({
         exactAmountOut: '1000',
@@ -46,23 +46,15 @@ describe('executeRebalance', () => {
           { type: 'EVM_TX', to: '0xsell', data: '0x01', value: '0', chainId: '42161' },
         ],
       }),
-      createSwap: vi.fn().mockResolvedValue({
-        exactFromAmount: '1000',
-        exactToAmount: '995',
-        transactions: [
-          { type: 'EVM_TX', to: '0xswap', data: '0x02', value: '0', chainId: '42161' },
-        ],
-      }),
       createTokenizedYieldBuyPt: vi.fn().mockResolvedValue({
         transactions: [
-          { type: 'EVM_TX', to: '0xbuy', data: '0x03', value: '0', chainId: '42161' },
+          { type: 'EVM_TX', to: '0xbuy', data: '0x02', value: '0', chainId: '42161' },
         ],
       }),
     };
 
     executeTransactionMock
       .mockResolvedValueOnce({ transactionHash: '0xsellhash' })
-      .mockResolvedValueOnce({ transactionHash: '0xswaphash' })
       .mockResolvedValueOnce({ transactionHash: '0xbuyhash' });
 
     const clients = {} as OnchainClients;
@@ -165,6 +157,7 @@ describe('executeRebalance', () => {
     const result = await executeRebalance({
       onchainActionsClient,
       clients,
+      txExecutionMode: 'execute',
       walletAddress: '0x0000000000000000000000000000000000000001',
       position,
       currentMarket,
@@ -177,26 +170,17 @@ describe('executeRebalance', () => {
       amount: '1000',
       slippage: '0.01',
     });
-    expect(onchainActionsClient.createSwap).toHaveBeenCalledWith({
-      walletAddress: '0x0000000000000000000000000000000000000001',
-      amount: '1000',
-      amountType: 'exactIn',
-      fromTokenUid: currentMarket.underlyingToken.tokenUid,
-      toTokenUid: targetMarket.underlyingToken.tokenUid,
-      slippageTolerance: '0.01',
-    });
     expect(onchainActionsClient.createTokenizedYieldBuyPt).toHaveBeenCalledWith({
       walletAddress: '0x0000000000000000000000000000000000000001',
       marketAddress: targetMarket.marketIdentifier.address,
-      inputTokenUid: targetMarket.underlyingToken.tokenUid,
-      amount: '995',
+      inputTokenUid: currentMarket.underlyingToken.tokenUid,
+      amount: '1000',
       slippage: '0.01',
     });
 
-    expect(executeTransactionMock).toHaveBeenCalledTimes(3);
+    expect(executeTransactionMock).toHaveBeenCalledTimes(2);
     expect(executeTransactionMock.mock.calls[0]?.[1]).toMatchObject({ to: '0xsell' });
-    expect(executeTransactionMock.mock.calls[1]?.[1]).toMatchObject({ to: '0xswap' });
-    expect(executeTransactionMock.mock.calls[2]?.[1]).toMatchObject({ to: '0xbuy' });
+    expect(executeTransactionMock.mock.calls[1]?.[1]).toMatchObject({ to: '0xbuy' });
     expect(result.lastTxHash).toBe('0xbuyhash');
   });
 });
@@ -205,26 +189,15 @@ describe('executeInitialDeposit', () => {
   beforeEach(() => {
     executeTransactionMock.mockReset();
   });
-  it('swaps funding token into underlying and buys PT', async () => {
-    const onchainActionsClient: Pick<
-      OnchainActionsClient,
-      'createSwap' | 'createTokenizedYieldBuyPt'
-    > = {
-      createSwap: vi.fn().mockResolvedValue({
-        exactFromAmount: '10000000',
-        exactToAmount: '9900000',
-        transactions: [
-          { type: 'EVM_TX', to: '0xswap', data: '0x04', value: '0', chainId: '42161' },
-        ],
-      }),
+  it('buys PT using the selected funding token directly', async () => {
+    const onchainActionsClient: Pick<OnchainActionsClient, 'createTokenizedYieldBuyPt'> = {
       createTokenizedYieldBuyPt: vi.fn().mockResolvedValue({
         transactions: [
-          { type: 'EVM_TX', to: '0xbuy', data: '0x05', value: '0', chainId: '42161' },
+          { type: 'EVM_TX', to: '0xbuy', data: '0x04', value: '0', chainId: '42161' },
         ],
       }),
     };
 
-    executeTransactionMock.mockResolvedValueOnce({ transactionHash: '0xswaphash' });
     executeTransactionMock.mockResolvedValueOnce({ transactionHash: '0xbuyhash' });
 
     const clients = {} as OnchainClients;
@@ -282,39 +255,20 @@ describe('executeInitialDeposit', () => {
       fundingAmount: '10000000',
     });
 
-    expect(onchainActionsClient.createSwap).toHaveBeenCalledWith({
-      walletAddress: '0x0000000000000000000000000000000000000001',
-      amount: '10000000',
-      amountType: 'exactIn',
-      fromTokenUid: fundingToken.tokenUid,
-      toTokenUid: targetMarket.underlyingToken.tokenUid,
-      slippageTolerance: '0.01',
-    });
     expect(onchainActionsClient.createTokenizedYieldBuyPt).toHaveBeenCalledWith({
       walletAddress: '0x0000000000000000000000000000000000000001',
       marketAddress: targetMarket.marketIdentifier.address,
-      inputTokenUid: targetMarket.underlyingToken.tokenUid,
-      amount: '9900000',
+      inputTokenUid: fundingToken.tokenUid,
+      amount: '10000000',
       slippage: '0.01',
     });
-    expect(executeTransactionMock).toHaveBeenCalledTimes(2);
-    expect(executeTransactionMock.mock.calls[0]?.[1]).toMatchObject({ to: '0xswap' });
-    expect(executeTransactionMock.mock.calls[1]?.[1]).toMatchObject({ to: '0xbuy' });
+    expect(executeTransactionMock).toHaveBeenCalledTimes(1);
+    expect(executeTransactionMock.mock.calls[0]?.[1]).toMatchObject({ to: '0xbuy' });
     expect(result.lastTxHash).toBe('0xbuyhash');
   });
 
   it('builds a plan but does not submit when tx execution mode is plan', async () => {
-    const onchainActionsClient: Pick<
-      OnchainActionsClient,
-      'createSwap' | 'createTokenizedYieldBuyPt'
-    > = {
-      createSwap: vi.fn().mockResolvedValue({
-        exactFromAmount: '10000000',
-        exactToAmount: '9900000',
-        transactions: [
-          { type: 'EVM_TX', to: '0xswap', data: '0x04', value: '0', chainId: '42161' },
-        ],
-      }),
+    const onchainActionsClient: Pick<OnchainActionsClient, 'createTokenizedYieldBuyPt'> = {
       createTokenizedYieldBuyPt: vi.fn().mockResolvedValue({
         transactions: [
           { type: 'EVM_TX', to: '0xbuy', data: '0x05', value: '0', chainId: '42161' },
@@ -377,7 +331,6 @@ describe('executeInitialDeposit', () => {
       fundingAmount: '10000000',
     });
 
-    expect(onchainActionsClient.createSwap).toHaveBeenCalledTimes(1);
     expect(onchainActionsClient.createTokenizedYieldBuyPt).toHaveBeenCalledTimes(1);
     expect(executeTransactionMock).not.toHaveBeenCalled();
     expect(result.txHashes).toEqual([]);
@@ -389,10 +342,10 @@ describe('executeRollover', () => {
   beforeEach(() => {
     executeTransactionMock.mockReset();
   });
-  it('redeems PT at maturity, swaps underlying if needed, and buys new PT', async () => {
+  it('redeems PT at maturity and buys new PT using the redeemed output token', async () => {
     const onchainActionsClient: Pick<
       OnchainActionsClient,
-      'createTokenizedYieldRedeemPt' | 'createSwap' | 'createTokenizedYieldBuyPt'
+      'createTokenizedYieldRedeemPt' | 'createTokenizedYieldBuyPt'
     > = {
       createTokenizedYieldRedeemPt: vi.fn().mockResolvedValue({
         exactAmountOut: '1200',
@@ -409,23 +362,15 @@ describe('executeRollover', () => {
           { type: 'EVM_TX', to: '0xredeem', data: '0x10', value: '0', chainId: '42161' },
         ],
       }),
-      createSwap: vi.fn().mockResolvedValue({
-        exactFromAmount: '1200',
-        exactToAmount: '1188',
-        transactions: [
-          { type: 'EVM_TX', to: '0xswap', data: '0x11', value: '0', chainId: '42161' },
-        ],
-      }),
       createTokenizedYieldBuyPt: vi.fn().mockResolvedValue({
         transactions: [
-          { type: 'EVM_TX', to: '0xbuy', data: '0x12', value: '0', chainId: '42161' },
+          { type: 'EVM_TX', to: '0xbuy', data: '0x11', value: '0', chainId: '42161' },
         ],
       }),
     };
 
     executeTransactionMock
       .mockResolvedValueOnce({ transactionHash: '0xredeemhash' })
-      .mockResolvedValueOnce({ transactionHash: '0xswaphash' })
       .mockResolvedValueOnce({ transactionHash: '0xbuyhash' });
 
     const clients = {} as OnchainClients;
@@ -528,6 +473,7 @@ describe('executeRollover', () => {
     const result = await executeRollover({
       onchainActionsClient,
       clients,
+      txExecutionMode: 'execute',
       walletAddress: '0x0000000000000000000000000000000000000001',
       position,
       currentMarket,
@@ -539,26 +485,17 @@ describe('executeRollover', () => {
       ptTokenUid: position.pt.token.tokenUid,
       amount: '1200',
     });
-    expect(onchainActionsClient.createSwap).toHaveBeenCalledWith({
-      walletAddress: '0x0000000000000000000000000000000000000001',
-      amount: '1200',
-      amountType: 'exactIn',
-      fromTokenUid: currentMarket.underlyingToken.tokenUid,
-      toTokenUid: targetMarket.underlyingToken.tokenUid,
-      slippageTolerance: '0.01',
-    });
     expect(onchainActionsClient.createTokenizedYieldBuyPt).toHaveBeenCalledWith({
       walletAddress: '0x0000000000000000000000000000000000000001',
       marketAddress: targetMarket.marketIdentifier.address,
-      inputTokenUid: targetMarket.underlyingToken.tokenUid,
-      amount: '1188',
+      inputTokenUid: currentMarket.underlyingToken.tokenUid,
+      amount: '1200',
       slippage: '0.01',
     });
 
-    expect(executeTransactionMock).toHaveBeenCalledTimes(3);
+    expect(executeTransactionMock).toHaveBeenCalledTimes(2);
     expect(executeTransactionMock.mock.calls[0]?.[1]).toMatchObject({ to: '0xredeem' });
-    expect(executeTransactionMock.mock.calls[1]?.[1]).toMatchObject({ to: '0xswap' });
-    expect(executeTransactionMock.mock.calls[2]?.[1]).toMatchObject({ to: '0xbuy' });
+    expect(executeTransactionMock.mock.calls[1]?.[1]).toMatchObject({ to: '0xbuy' });
     expect(result.lastTxHash).toBe('0xbuyhash');
   });
 });
@@ -688,6 +625,7 @@ describe('executeCompound', () => {
     const result = await executeCompound({
       onchainActionsClient,
       clients,
+      txExecutionMode: 'execute',
       walletAddress: '0x0000000000000000000000000000000000000001',
       position,
       currentMarket,

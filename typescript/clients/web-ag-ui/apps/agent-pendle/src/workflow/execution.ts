@@ -116,7 +116,7 @@ async function planOrExecuteTransactions(params: {
 export async function executeRebalance(params: {
   onchainActionsClient: Pick<
     OnchainActionsClient,
-    'createTokenizedYieldSellPt' | 'createSwap' | 'createTokenizedYieldBuyPt'
+    'createTokenizedYieldSellPt' | 'createTokenizedYieldBuyPt'
   >;
   txExecutionMode: PendleTxExecutionMode;
   clients?: OnchainClients;
@@ -132,34 +132,16 @@ export async function executeRebalance(params: {
     slippage: '0.01',
   });
 
-  let amountForBuy = sellPlan.exactAmountOut;
   const transactions: TransactionPlan[] = [...sellPlan.transactions];
 
-  const currentUnderlying = params.currentMarket.underlyingToken.tokenUid;
-  const targetUnderlying = params.targetMarket.underlyingToken.tokenUid;
-
-  if (
-    currentUnderlying.chainId !== targetUnderlying.chainId ||
-    currentUnderlying.address.toLowerCase() !== targetUnderlying.address.toLowerCase()
-  ) {
-    const swapPlan = await params.onchainActionsClient.createSwap({
-      walletAddress: params.walletAddress,
-      amount: sellPlan.exactAmountOut,
-      amountType: 'exactIn',
-      fromTokenUid: currentUnderlying,
-      toTokenUid: targetUnderlying,
-      slippageTolerance: '0.01',
-    });
-
-    amountForBuy = swapPlan.exactToAmount;
-    transactions.push(...swapPlan.transactions);
-  }
-
+  // Use the token we actually receive from selling PT as the input token for the next PT buy.
+  // Pendle can route from many tokens into a target PT without requiring a separate generic swap step.
+  const buyInputTokenUid = sellPlan.tokenOut.tokenUid;
   const buyPlan = await params.onchainActionsClient.createTokenizedYieldBuyPt({
     walletAddress: params.walletAddress,
     marketAddress: params.targetMarket.marketIdentifier.address,
-    inputTokenUid: targetUnderlying,
-    amount: amountForBuy,
+    inputTokenUid: buyInputTokenUid,
+    amount: sellPlan.exactAmountOut,
     slippage: '0.01',
   });
 
@@ -181,7 +163,7 @@ export async function executeRebalance(params: {
 export async function executeRollover(params: {
   onchainActionsClient: Pick<
     OnchainActionsClient,
-    'createTokenizedYieldRedeemPt' | 'createSwap' | 'createTokenizedYieldBuyPt'
+    'createTokenizedYieldRedeemPt' | 'createTokenizedYieldBuyPt'
   >;
   txExecutionMode: PendleTxExecutionMode;
   clients?: OnchainClients;
@@ -196,40 +178,23 @@ export async function executeRollover(params: {
     amount: params.position.pt.exactAmount,
   });
 
-  let amountForBuy = redeemPlan.exactAmountOut ?? redeemPlan.exactUnderlyingAmount;
-  const redeemedUnderlying =
-    redeemPlan.tokenOut?.tokenUid ?? redeemPlan.underlyingTokenIdentifier;
+  const amountForBuy = redeemPlan.exactAmountOut ?? redeemPlan.exactUnderlyingAmount;
+  const redeemedTokenUid = redeemPlan.tokenOut?.tokenUid ?? redeemPlan.underlyingTokenIdentifier;
   if (!amountForBuy) {
     throw new Error('Redeem PT plan did not include output amount.');
   }
-  if (!redeemedUnderlying) {
+  if (!redeemedTokenUid) {
     throw new Error('Redeem PT plan did not include output token.');
   }
 
   const transactions: TransactionPlan[] = [...redeemPlan.transactions];
-  const targetUnderlying = params.targetMarket.underlyingToken.tokenUid;
 
-  if (
-    redeemedUnderlying.chainId !== targetUnderlying.chainId ||
-    redeemedUnderlying.address.toLowerCase() !== targetUnderlying.address.toLowerCase()
-  ) {
-    const swapPlan = await params.onchainActionsClient.createSwap({
-      walletAddress: params.walletAddress,
-      amount: amountForBuy,
-      amountType: 'exactIn',
-      fromTokenUid: redeemedUnderlying,
-      toTokenUid: targetUnderlying,
-      slippageTolerance: '0.01',
-    });
-
-    amountForBuy = swapPlan.exactToAmount;
-    transactions.push(...swapPlan.transactions);
-  }
-
+  // Use the token we actually receive from redeeming PT as the input token for the new PT buy.
+  // Pendle can route between underlying assets inside the PT buy itself when needed.
   const buyPlan = await params.onchainActionsClient.createTokenizedYieldBuyPt({
     walletAddress: params.walletAddress,
     marketAddress: params.targetMarket.marketIdentifier.address,
-    inputTokenUid: targetUnderlying,
+    inputTokenUid: redeemedTokenUid,
     amount: amountForBuy,
     slippage: '0.01',
   });
@@ -315,7 +280,7 @@ export async function executeCompound(params: {
 }
 
 export async function executeInitialDeposit(params: {
-  onchainActionsClient: Pick<OnchainActionsClient, 'createSwap' | 'createTokenizedYieldBuyPt'>;
+  onchainActionsClient: Pick<OnchainActionsClient, 'createTokenizedYieldBuyPt'>;
   txExecutionMode: PendleTxExecutionMode;
   clients?: OnchainClients;
   walletAddress: `0x${string}`;
@@ -323,34 +288,17 @@ export async function executeInitialDeposit(params: {
   targetMarket: TokenizedYieldMarket;
   fundingAmount: string;
 }): Promise<ExecutionResult> {
-  let amountForBuy = params.fundingAmount;
+  const fundingTokenUid = params.fundingToken.tokenUid;
   const transactions: TransactionPlan[] = [];
 
-  const fundingTokenUid = params.fundingToken.tokenUid;
-  const underlyingTokenUid = params.targetMarket.underlyingToken.tokenUid;
-
-  if (
-    fundingTokenUid.chainId !== underlyingTokenUid.chainId ||
-    fundingTokenUid.address.toLowerCase() !== underlyingTokenUid.address.toLowerCase()
-  ) {
-    const swapPlan = await params.onchainActionsClient.createSwap({
-      walletAddress: params.walletAddress,
-      amount: params.fundingAmount,
-      amountType: 'exactIn',
-      fromTokenUid: fundingTokenUid,
-      toTokenUid: underlyingTokenUid,
-      slippageTolerance: '0.01',
-    });
-
-    amountForBuy = swapPlan.exactToAmount;
-    transactions.push(...swapPlan.transactions);
-  }
-
+  // Buy PT using the selected funding token directly.
+  // Pendle can route from common stables (eg USDai) into PT markets even when the market underlying differs (eg sUSDai),
+  // so we avoid forcing a generic DEX swap to the underlying first.
   const buyPlan = await params.onchainActionsClient.createTokenizedYieldBuyPt({
     walletAddress: params.walletAddress,
     marketAddress: params.targetMarket.marketIdentifier.address,
-    inputTokenUid: underlyingTokenUid,
-    amount: amountForBuy,
+    inputTokenUid: fundingTokenUid,
+    amount: params.fundingAmount,
     slippage: '0.01',
   });
 
