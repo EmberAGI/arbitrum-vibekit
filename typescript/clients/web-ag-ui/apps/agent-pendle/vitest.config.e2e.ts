@@ -7,6 +7,7 @@ export default defineConfig({
     name: 'e2e',
     globals: true,
     environment: 'node',
+    globalSetup: ['./tests/setup/langgraph.globalSetup.ts'],
     setupFiles,
     include: ['tests/**/*.e2e.test.ts'],
     passWithNoTests: true,

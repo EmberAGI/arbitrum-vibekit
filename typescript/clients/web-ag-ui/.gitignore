@@ -50,3 +50,6 @@ package-lock.json
 pnpm-lock.yaml
 yarn.lock
 bun.lockb
+
+# LangGraph API
+.langgraph_api

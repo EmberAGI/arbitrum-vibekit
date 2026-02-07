@@ -12,6 +12,9 @@
     "start": "turbo run start",
     "start:delegations-bypass": "DELEGATIONS_BYPASS=true NEXT_PUBLIC_DELEGATIONS_BYPASS=true turbo run start",
     "lint": "turbo run lint",
+    "test:ci": "pnpm -r --filter agent --filter agent-clmm --filter agent-gmx-allora --filter agent-pendle --filter web test:ci",
+    "test:e2e": "pnpm -r --workspace-concurrency=1 --filter agent --filter agent-clmm --filter agent-gmx-allora --filter agent-pendle --filter web test:e2e",
+    "test": "pnpm test:ci && pnpm test:e2e",
     "reset:dev-stack": "bash scripts/reset-dev-stack.sh"
   },
   "devDependencies": {
