@@ -80,7 +80,7 @@ async function planOrExecuteTransactions(params: {
 export async function executePerpetualPlan(params: {
   client: Pick<
     OnchainActionsClient,
-    'createPerpetualLong' | 'createPerpetualShort' | 'createPerpetualReduce' | 'createPerpetualClose'
+    'createPerpetualLong' | 'createPerpetualShort' | 'createPerpetualClose'
   >;
   plan: ExecutionPlan;
   txExecutionMode: 'plan' | 'execute';
@@ -114,24 +114,6 @@ export async function executePerpetualPlan(params: {
     if (plan.action === 'short') {
       const response = await params.client.createPerpetualShort(
         plan.request as Parameters<OnchainActionsClient['createPerpetualShort']>[0],
-      );
-      const execution = await planOrExecuteTransactions({
-        txExecutionMode: params.txExecutionMode,
-        clients: params.clients,
-        transactions: response.transactions,
-      });
-      return {
-        action: plan.action,
-        ok: true,
-        transactions: response.transactions,
-        txHashes: execution.txHashes,
-        lastTxHash: execution.lastTxHash,
-      };
-    }
-
-    if (plan.action === 'reduce') {
-      const response = await params.client.createPerpetualReduce(
-        plan.request as Parameters<OnchainActionsClient['createPerpetualReduce']>[0],
       );
       const execution = await planOrExecuteTransactions({
         txExecutionMode: params.txExecutionMode,
@@ -183,4 +165,3 @@ export async function executePerpetualPlan(params: {
     return { action: plan.action, ok: false, error: message };
   }
 }
-

@@ -8,7 +8,6 @@ import { normalizeHexAddress } from './context.js';
 
 let cachedOnchainActionsClient: OnchainActionsClient | null = null;
 let cachedOnchainClients: OnchainClients | null = null;
-let cachedOnchainClients: OnchainClients | null = null;
 
 export function getOnchainActionsClient(): OnchainActionsClient {
   if (!cachedOnchainActionsClient) {
@@ -17,7 +16,6 @@ export function getOnchainActionsClient(): OnchainActionsClient {
   return cachedOnchainActionsClient;
 }
 
-<<<<<<< HEAD
 export function getOnchainClients(): OnchainClients {
   if (!cachedOnchainClients) {
     const rawPrivateKey = process.env['GMX_ALLORA_EMBEDDED_PRIVATE_KEY'];
@@ -33,6 +31,5 @@ export function getOnchainClients(): OnchainClients {
 
 export function clearClientCache(): void {
   cachedOnchainActionsClient = null;
-  cachedOnchainClients = null;
   cachedOnchainClients = null;
 }

@@ -39,19 +39,6 @@ const createPerpetualShort = vi.fn(() =>
     ],
   }),
 );
-const createPerpetualReduce = vi.fn(() =>
-  Promise.resolve({
-    transactions: [
-      {
-        type: 'evm',
-        to: '0xrouter',
-        data: '0xreduce',
-        chainId: '42161',
-        value: '0',
-      },
-    ],
-  }),
-);
 const createPerpetualClose = vi.fn(() =>
   Promise.resolve({
     transactions: [
@@ -69,7 +56,6 @@ const createPerpetualClose = vi.fn(() =>
 const client = {
   createPerpetualLong,
   createPerpetualShort,
-  createPerpetualReduce,
   createPerpetualClose,
 };
 
@@ -186,22 +172,5 @@ describe('executePerpetualPlan', () => {
     expect(executeTransactionMock).not.toHaveBeenCalled();
   });
 
-  it('executes reduce plans via onchain-actions reduce endpoint', async () => {
-    const plan: ExecutionPlan = {
-      action: 'reduce',
-      request: {
-        walletAddress: '0x0000000000000000000000000000000000000003',
-        chainId: '42161',
-        marketAddress: '0xmarket',
-        positionSide: 'long',
-        amountUsd: '1',
-      },
-    };
-
-    const result = await executePerpetualPlan({ client, plan, txExecutionMode: 'plan' });
-
-    expect(result.ok).toBe(true);
-    expect(createPerpetualReduce).toHaveBeenCalledWith(plan.request);
-  });
+  // Reduce is currently modeled as a close in the execution-plan adapter.
 });
-

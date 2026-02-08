@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import {
   ARBITRUM_CHAIN_ID,
-  resolveGmxAlloraTxSubmissionMode,
+  resolveGmxAlloraTxExecutionMode,
   resolveMinNativeEthWei,
 } from '../../config/constants.js';
 import { type ResolvedGmxConfig } from '../../domain/types.js';
@@ -152,11 +152,11 @@ export const prepareOperatorNode = async (
 	    });
 	  }
 
-  const txSubmissionMode = resolveGmxAlloraTxSubmissionMode();
+  const txExecutionMode = resolveGmxAlloraTxExecutionMode();
   const embeddedSubmissionWalletAddress = resolveEmbeddedExecutionWalletAddress();
 
   const operatorSubmissionWallet =
-    delegationsBypassActive && txSubmissionMode === 'submit'
+    delegationsBypassActive && txExecutionMode === 'execute'
       ? embeddedSubmissionWalletAddress ??
         (() => {
           throw new Error(

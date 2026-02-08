@@ -45,7 +45,11 @@ describe('buildExecutionPlanArtifact', () => {
     expect(artifact.name).toBe('gmx-allora-execution-plan.json');
     expect(artifact.description.toLowerCase()).toContain('bullish');
     expect(artifact.parts[0]?.kind).toBe('text');
-    expect(artifact.parts[1]?.data).toEqual(plan);
+    expect(artifact.description).toMatch(/plan planreq_[0-9a-f]{10}$/u);
+    expect(artifact.parts[1]?.data).toMatchObject(plan);
+    expect((artifact.parts[1] as { kind: 'data'; data: { planSlug?: unknown } }).data.planSlug).toMatch(
+      /^planreq_[0-9a-f]{10}$/u,
+    );
   });
 
   it('wraps execution result data into an artifact', () => {

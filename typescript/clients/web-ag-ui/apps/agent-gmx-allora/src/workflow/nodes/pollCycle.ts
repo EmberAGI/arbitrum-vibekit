@@ -331,15 +331,6 @@ export const pollCycleNode = async (
     append: true,
   };
 
-  const positionForReduce =
-    exposureAdjusted.action === 'reduce' && exposureAdjusted.side
-      ? positions.find(
-          (position) =>
-            position.marketAddress.toLowerCase() === normalizedTargetMarket &&
-            position.positionSide === exposureAdjusted.side,
-        )
-      : undefined;
-
   const executionPlan = buildPerpetualExecutionPlan({
     telemetry: exposureAdjusted,
     chainId: ARBITRUM_CHAIN_ID.toString(),
@@ -348,8 +339,6 @@ export const pollCycleNode = async (
     payTokenAddress: operatorConfig.fundingTokenAddress,
     payTokenDecimals,
     collateralTokenAddress: operatorConfig.fundingTokenAddress,
-    positionContractKey: positionForReduce?.contractKey,
-    positionSizeInUsd: positionForReduce?.sizeInUsd,
   });
 
   const txExecutionMode = resolveGmxAlloraTxExecutionMode();
