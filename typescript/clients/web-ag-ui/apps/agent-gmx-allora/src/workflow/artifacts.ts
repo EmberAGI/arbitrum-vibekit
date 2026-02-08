@@ -143,6 +143,7 @@ export function buildExecutionPlanArtifact(params: {
 
 export function buildExecutionResultArtifact(params: {
   action: ExecutionPlan['action'];
+  plan?: ExecutionPlan;
   ok: boolean;
   error?: string;
   telemetry?: GmxAlloraTelemetry;
@@ -151,7 +152,10 @@ export function buildExecutionResultArtifact(params: {
   lastTxHash?: `0x${string}`;
 }): Artifact {
   const txHash = params.lastTxHash;
-  const planSlug = txHash ? null : createTxPlanSlug(params.transactions);
+  const txPlanSlug = txHash ? null : createTxPlanSlug(params.transactions);
+  const placeholderSlug =
+    !txHash && !txPlanSlug && params.plan ? createExecutionPlanSlug(params.plan) : null;
+  const planSlug = txPlanSlug ?? placeholderSlug;
   const rebalance = params.telemetry ? formatRebalance(params.telemetry) : null;
   const signal = params.telemetry ? formatSignal(params.telemetry.prediction) : null;
 

@@ -481,6 +481,9 @@ async function startMockAlloraServer(): Promise<{
   baseUrl: string;
   cleanup: Cleanup;
 }> {
+  const counters: Record<string, number> = {};
+  const stableWindowRequests = 3;
+
   const server = http.createServer((req, res) => {
     if (!req.url) {
       res.statusCode = 400;
@@ -497,7 +500,18 @@ async function startMockAlloraServer(): Promise<{
     }
 
     const topicId = url.searchParams.get('allora_topic_id') ?? '0';
-    const combined = topicId === '14' ? '48000' : topicId === '2' ? '2600' : '100';
+    // Alternate between two extremes so UIs/tests can easily detect that they're
+    // talking to the mock server and can observe changes across polling cycles.
+    // BTC=14, ETH=2 (8h feed); any other topic returns a stable default.
+    const combined = (() => {
+      if (topicId !== '14' && topicId !== '2') {
+        return '100';
+      }
+      const next = (counters[topicId] ?? 0) + 1;
+      counters[topicId] = next;
+      const phase = Math.floor((next - 1) / stableWindowRequests) % 2;
+      return phase === 0 ? '1' : '100000';
+    })();
 
     res.setHeader('content-type', 'application/json');
     res.statusCode = 200;

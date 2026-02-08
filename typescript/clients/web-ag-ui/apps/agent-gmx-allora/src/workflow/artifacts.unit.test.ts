@@ -61,6 +61,30 @@ describe('buildExecutionPlanArtifact', () => {
     expect(artifact.parts[1]?.data).toMatchObject({ action: 'long', ok: true });
   });
 
+  it('includes a stable plan placeholder when transactions are unavailable', () => {
+    const plan: ExecutionPlan = {
+      action: 'long',
+      request: {
+        amount: '160',
+        walletAddress: '0xwallet',
+        chainId: '42161',
+        marketAddress: '0xmarket',
+        payTokenAddress: '0xusdc',
+        collateralTokenAddress: '0xusdc',
+        leverage: '2',
+      },
+    };
+
+    const artifact = buildExecutionResultArtifact({
+      action: 'long',
+      plan,
+      ok: true,
+      transactions: [],
+    });
+
+    expect(artifact.description).toMatch(/plan planreq_[0-9a-f]{10}$/u);
+  });
+
   it('wraps telemetry data into an artifact', () => {
     const telemetry: GmxAlloraTelemetry = {
       cycle: 3,

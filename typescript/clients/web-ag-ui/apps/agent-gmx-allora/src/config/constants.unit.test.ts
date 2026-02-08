@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { resolveOnchainActionsBaseUrl } from './constants.js';
+import { resolveGmxAlloraTxExecutionMode, resolveOnchainActionsBaseUrl } from './constants.js';
 
 describe('config/constants', () => {
   it('normalizes the OpenAPI endpoint to a base URL and logs the change', () => {
@@ -44,5 +44,23 @@ describe('config/constants', () => {
 
     expect(baseUrl).toBe('https://api.emberai.xyz');
     expect(logger).not.toHaveBeenCalled();
+  });
+
+  it('defaults to plan mode for transaction execution', () => {
+    delete process.env.GMX_ALLORA_TX_SUBMISSION_MODE;
+
+    expect(resolveGmxAlloraTxExecutionMode()).toBe('plan');
+  });
+
+  it('uses execute mode when submission mode is submit', () => {
+    process.env.GMX_ALLORA_TX_SUBMISSION_MODE = 'submit';
+
+    expect(resolveGmxAlloraTxExecutionMode()).toBe('execute');
+  });
+
+  it('uses plan mode when submission mode is plan', () => {
+    process.env.GMX_ALLORA_TX_SUBMISSION_MODE = 'plan';
+
+    expect(resolveGmxAlloraTxExecutionMode()).toBe('plan');
   });
 });

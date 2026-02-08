@@ -78,6 +78,10 @@ export type ClmmMetrics = {
   staleCycles: number;
   iteration: number;
   latestCycle?: GmxAlloraTelemetry;
+  // When running in plan-only mode (no submission), we may want to avoid re-planning
+  // the same open action every time the signal stays stable. This field tracks the
+  // last assumed position side for decisioning until a close/flip occurs.
+  assumedPositionSide?: 'long' | 'short';
 };
 
 export type TaskState =
@@ -246,6 +250,7 @@ const defaultViewState = (): ClmmViewState => ({
     staleCycles: 0,
     iteration: 0,
     latestCycle: undefined,
+    assumedPositionSide: undefined,
   },
   transactionHistory: [],
 });
@@ -334,6 +339,7 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     staleCycles: right.metrics?.staleCycles ?? left.metrics.staleCycles,
     iteration: right.metrics?.iteration ?? left.metrics.iteration,
     latestCycle: right.metrics?.latestCycle ?? left.metrics.latestCycle,
+    assumedPositionSide: right.metrics?.assumedPositionSide ?? left.metrics.assumedPositionSide,
   };
 
   return {

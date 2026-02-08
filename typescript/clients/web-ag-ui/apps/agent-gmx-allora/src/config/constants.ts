@@ -5,6 +5,9 @@ const DEFAULT_ALLORA_API_BASE_URL = 'https://api.allora.network';
 const DEFAULT_ALLORA_CHAIN_ID = 'allora-mainnet-1';
 const DEFAULT_ALLORA_INFERENCE_CACHE_TTL_MS = 30_000;
 const DEFAULT_ALLORA_8H_INFERENCE_CACHE_TTL_MS = 30_000;
+const DEFAULT_GMX_ALLORA_TX_EXECUTION_MODE: GmxAlloraTxExecutionMode = 'plan';
+
+export type GmxAlloraTxExecutionMode = 'plan' | 'execute';
 
 type OnchainActionsBaseUrlLogger = (message: string, metadata?: Record<string, unknown>) => void;
 
@@ -94,7 +97,26 @@ export const ALLORA_TOPIC_LABELS = {
   ETH: 'ETH/USD - Price Prediction - 8h',
 } as const;
 
-const DEFAULT_POLL_INTERVAL_MS = 5_000;
+export function resolveGmxAlloraTxExecutionMode(): GmxAlloraTxExecutionMode {
+  const raw = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+  if (!raw) {
+    return DEFAULT_GMX_ALLORA_TX_EXECUTION_MODE;
+  }
+
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === 'plan') {
+    return 'plan';
+  }
+
+  // Support both "submit" (documented) and "execute" (consistent with other agents).
+  if (normalized === 'submit' || normalized === 'execute') {
+    return 'execute';
+  }
+
+  return DEFAULT_GMX_ALLORA_TX_EXECUTION_MODE;
+}
+
+const DEFAULT_POLL_INTERVAL_MS = 10_000;
 const DEFAULT_STREAM_LIMIT = -1;
 const DEFAULT_STATE_HISTORY_LIMIT = 100;
 

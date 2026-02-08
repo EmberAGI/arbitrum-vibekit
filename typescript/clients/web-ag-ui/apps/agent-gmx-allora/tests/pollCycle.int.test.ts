@@ -48,6 +48,7 @@ vi.mock('../src/workflow/clientFactory.js', () => ({
     createPerpetualClose: createPerpetualCloseMock,
     createPerpetualReduce: createPerpetualReduceMock,
   }),
+  getOnchainClients: vi.fn(),
 }));
 
 vi.mock('../src/workflow/cronScheduler.js', () => ({
@@ -258,20 +259,23 @@ describe('pollCycleNode (integration)', () => {
 
     const state = buildBaseState();
     state.view.metrics.previousPrice = 46000;
-    state.view.metrics.latestCycle = {
-      cycle: 0,
-      action: 'open',
-      reason: 'previous open',
-      marketSymbol: 'BTC/USDC',
-      side: 'long',
-      leverage: 2,
-      sizeUsd: 160,
-      timestamp: '2026-02-05T12:00:00.000Z',
-    };
+    state.view.metrics.iteration = 10;
+    state.view.metrics.cyclesSinceRebalance = 2;
+    state.view.metrics.assumedPositionSide = 'long';
 
-    await pollCycleNode(state, {});
+    const result = await pollCycleNode(state, {});
+    const update = (result as { update: ClmmState }).update;
 
-    expect(createPerpetualReduceMock).toHaveBeenCalled();
+    // When we assume the position is already open and the signal stays bullish,
+    // we should not keep planning repeated opens.
+    expect(createPerpetualLongMock).not.toHaveBeenCalled();
+    expect(createPerpetualReduceMock).not.toHaveBeenCalled();
+
+    const artifactIds = (update.view?.activity.events ?? [])
+      .filter((event) => event.type === 'artifact')
+      .map((event) => event.artifact.artifactId);
+    expect(artifactIds).toContain('gmx-allora-telemetry');
+    expect(artifactIds).not.toContain('gmx-allora-execution-plan');
   });
 
   it('fails the cycle when no GMX market matches', async () => {
@@ -303,7 +307,8 @@ describe('pollCycleNode (integration)', () => {
         key: '0xpos',
         contractKey: '0xcontract',
         account: '0xwallet',
-        marketAddress: '0xmarket',
+        // Different market: still counts towards total exposure, but does not satisfy "already open".
+        marketAddress: '0xother',
         sizeInUsd: '1000',
         sizeInTokens: '0.02',
         collateralAmount: '500',
