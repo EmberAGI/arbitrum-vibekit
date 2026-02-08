@@ -1,10 +1,16 @@
 export const ARBITRUM_CHAIN_ID = 42161;
+
 const DEFAULT_MIN_NATIVE_ETH_WEI = 2_000_000_000_000_000n; // 0.002 ETH
 
 const DEFAULT_ONCHAIN_ACTIONS_BASE_URL = 'https://api.emberai.xyz';
 const DEFAULT_ALLORA_API_BASE_URL = 'https://api.allora.network';
 const DEFAULT_ALLORA_CHAIN_ID = 'allora-mainnet-1';
 const DEFAULT_ALLORA_INFERENCE_CACHE_TTL_MS = 30_000;
+const DEFAULT_ALLORA_8H_INFERENCE_CACHE_TTL_MS = 30_000;
+
+const DEFAULT_GMX_ALLORA_TX_EXECUTION_MODE: GmxAlloraTxExecutionMode = 'plan';
+
+export type GmxAlloraTxExecutionMode = 'plan' | 'execute';
 
 type OnchainActionsBaseUrlLogger = (message: string, metadata?: Record<string, unknown>) => void;
 
@@ -70,6 +76,19 @@ export function resolveAlloraInferenceCacheTtlMs(): number {
   return Math.trunc(parsed);
 }
 
+export function resolveAllora8hInferenceCacheTtlMs(): number {
+  const raw = process.env['ALLORA_8H_INFERENCE_CACHE_TTL_MS'];
+  if (!raw) {
+    return DEFAULT_ALLORA_8H_INFERENCE_CACHE_TTL_MS;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+  return Math.trunc(parsed);
+}
+
 export const ALLORA_HORIZON_HOURS = 8;
 export const ALLORA_TOPIC_IDS = {
   BTC: 14,
@@ -81,10 +100,26 @@ export const ALLORA_TOPIC_LABELS = {
   ETH: 'ETH/USD - Price Prediction - 8h',
 } as const;
 
-export type GmxAlloraTxSubmissionMode = 'plan' | 'submit';
-const DEFAULT_TX_SUBMISSION_MODE: GmxAlloraTxSubmissionMode = 'plan';
+export function resolveGmxAlloraTxExecutionMode(): GmxAlloraTxExecutionMode {
+  const raw = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
+  if (!raw) {
+    return DEFAULT_GMX_ALLORA_TX_EXECUTION_MODE;
+  }
 
-const DEFAULT_POLL_INTERVAL_MS = 5_000;
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === 'plan') {
+    return 'plan';
+  }
+
+  // Support both "submit" (documented) and "execute" (consistent with other agents).
+  if (normalized === 'submit' || normalized === 'execute') {
+    return 'execute';
+  }
+
+  return DEFAULT_GMX_ALLORA_TX_EXECUTION_MODE;
+}
+
+const DEFAULT_POLL_INTERVAL_MS = 10_000;
 const DEFAULT_STREAM_LIMIT = -1;
 const DEFAULT_STATE_HISTORY_LIMIT = 100;
 
@@ -116,15 +151,6 @@ export function resolveStateHistoryLimit(): number {
   return resolveNumber(process.env['GMX_ALLORA_STATE_HISTORY_LIMIT'], DEFAULT_STATE_HISTORY_LIMIT);
 }
 
-export function resolveGmxAlloraTxSubmissionMode(): GmxAlloraTxSubmissionMode {
-  const raw = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];
-  if (!raw) {
-    return DEFAULT_TX_SUBMISSION_MODE;
-  }
-  const normalized = raw.trim().toLowerCase();
-  return normalized === 'submit' ? 'submit' : DEFAULT_TX_SUBMISSION_MODE;
-}
-
 export function resolveMinNativeEthWei(): bigint {
   const raw = process.env['GMX_MIN_NATIVE_ETH_WEI'];
   if (!raw) {
@@ -137,3 +163,4 @@ export function resolveMinNativeEthWei(): bigint {
     return DEFAULT_MIN_NATIVE_ETH_WEI;
   }
 }
+

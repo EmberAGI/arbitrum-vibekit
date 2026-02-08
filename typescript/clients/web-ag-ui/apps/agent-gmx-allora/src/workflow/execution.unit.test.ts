@@ -1,8 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { OnchainClients } from '../clients/clients.js';
 import type { ExecutionPlan } from '../core/executionPlan.js';
 
 import { executePerpetualPlan } from './execution.js';
+
+const { executeTransactionMock } = vi.hoisted(() => ({
+  executeTransactionMock: vi.fn(),
+}));
+
+vi.mock('../core/transaction.js', () => ({
+  executeTransaction: executeTransactionMock,
+}));
 
 const createPerpetualLong = vi.fn(() =>
   Promise.resolve({
@@ -17,7 +26,32 @@ const createPerpetualLong = vi.fn(() =>
     ],
   }),
 );
-const createPerpetualShort = vi.fn(() => Promise.resolve({ transactions: [] }));
+const createPerpetualShort = vi.fn(() =>
+  Promise.resolve({
+    transactions: [
+      {
+        type: 'evm',
+        to: '0xrouter',
+        data: '0xshort',
+        chainId: '42161',
+        value: '0',
+      },
+    ],
+  }),
+);
+const createPerpetualReduce = vi.fn(() =>
+  Promise.resolve({
+    transactions: [
+      {
+        type: 'evm',
+        to: '0xrouter',
+        data: '0xreduce',
+        chainId: '42161',
+        value: '0',
+      },
+    ],
+  }),
+);
 const createPerpetualClose = vi.fn(() =>
   Promise.resolve({
     transactions: [
@@ -35,6 +69,7 @@ const createPerpetualClose = vi.fn(() =>
 const client = {
   createPerpetualLong,
   createPerpetualShort,
+  createPerpetualReduce,
   createPerpetualClose,
 };
 
@@ -43,16 +78,21 @@ describe('executePerpetualPlan', () => {
     vi.clearAllMocks();
   });
 
-  it('submits planned transactions when tx submission mode is submit', async () => {
-    const sendTransaction = vi.fn(() => Promise.resolve('0xdeadbeef' as const));
-    const waitForTransactionReceipt = vi.fn(() =>
-      Promise.resolve({ transactionHash: '0xdeadbeef' as const }),
-    );
+  it('skips execution when plan action is none', async () => {
+    const plan: ExecutionPlan = { action: 'none' };
 
+    const result = await executePerpetualPlan({ client, plan, txExecutionMode: 'plan' });
+
+    expect(result.ok).toBe(true);
+    expect(createPerpetualLong).not.toHaveBeenCalled();
+    expect(executeTransactionMock).not.toHaveBeenCalled();
+  });
+
+  it('returns planned transactions without executing in plan mode', async () => {
     const plan: ExecutionPlan = {
       action: 'long',
       request: {
-        amount: '1000000',
+        amount: '100',
         walletAddress: '0x0000000000000000000000000000000000000001',
         chainId: '42161',
         marketAddress: '0xmarket',
@@ -62,32 +102,20 @@ describe('executePerpetualPlan', () => {
       },
     };
 
-    const result = await executePerpetualPlan({
-      client,
-      plan,
-      txSubmissionMode: 'submit',
-      clients: {
-        public: { waitForTransactionReceipt },
-        wallet: {
-          sendTransaction,
-          account: {} as never,
-          chain: {} as never,
-        },
-      },
-    });
+    const result = await executePerpetualPlan({ client, plan, txExecutionMode: 'plan' });
 
     expect(result.ok).toBe(true);
-    expect(sendTransaction).toHaveBeenCalled();
-    expect(waitForTransactionReceipt).toHaveBeenCalled();
-    expect(result.txHashes?.[0]).toBe('0xdeadbeef');
+    expect(result.transactions?.length).toBe(1);
+    expect(executeTransactionMock).not.toHaveBeenCalled();
+    expect(result.txHashes).toEqual([]);
   });
 
-  it('executes short plans', async () => {
+  it('fails in execute mode when onchain clients are missing', async () => {
     const plan: ExecutionPlan = {
-      action: 'short',
+      action: 'long',
       request: {
         amount: '100',
-        walletAddress: '0x0000000000000000000000000000000000000002',
+        walletAddress: '0x0000000000000000000000000000000000000001',
         chainId: '42161',
         marketAddress: '0xmarket',
         payTokenAddress: '0xusdc',
@@ -96,71 +124,38 @@ describe('executePerpetualPlan', () => {
       },
     };
 
-    const result = await executePerpetualPlan({ client, plan });
+    const result = await executePerpetualPlan({ client, plan, txExecutionMode: 'execute' });
 
-    expect(result.ok).toBe(true);
-    expect(createPerpetualShort).toHaveBeenCalledWith(plan.request);
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/required to execute/i);
   });
 
-  it('executes close plans', async () => {
+  it('submits planned transactions in execute mode', async () => {
+    executeTransactionMock.mockResolvedValueOnce({ transactionHash: '0xhash' });
+
     const plan: ExecutionPlan = {
-      action: 'close',
+      action: 'long',
       request: {
-        walletAddress: '0x0000000000000000000000000000000000000003',
+        amount: '100',
+        walletAddress: '0x0000000000000000000000000000000000000001',
+        chainId: '42161',
         marketAddress: '0xmarket',
-        positionSide: 'short',
-        isLimit: false,
+        payTokenAddress: '0xusdc',
+        collateralTokenAddress: '0xusdc',
+        leverage: '2',
       },
     };
 
-    const result = await executePerpetualPlan({ client, plan });
+    const clients = {} as OnchainClients;
+    const result = await executePerpetualPlan({ client, plan, txExecutionMode: 'execute', clients });
 
     expect(result.ok).toBe(true);
-    expect(createPerpetualClose).toHaveBeenCalledWith(plan.request);
-  });
-
-  it('submits close plans when tx submission mode is submit', async () => {
-    const sendTransaction = vi.fn(() => Promise.resolve('0xdeadbeef' as const));
-    const waitForTransactionReceipt = vi.fn(() =>
-      Promise.resolve({ transactionHash: '0xdeadbeef' as const }),
-    );
-
-    const plan: ExecutionPlan = {
-      action: 'close',
-      request: {
-        walletAddress: '0x0000000000000000000000000000000000000003',
-        marketAddress: '0xmarket',
-        positionSide: 'short',
-        isLimit: false,
-      },
-    };
-
-    const result = await executePerpetualPlan({
-      client,
-      plan,
-      txSubmissionMode: 'submit',
-      clients: {
-        public: { waitForTransactionReceipt },
-        wallet: {
-          sendTransaction,
-          account: {} as never,
-          chain: {} as never,
-        },
-      },
-    });
-
-    expect(result.ok).toBe(true);
-    expect(sendTransaction).toHaveBeenCalled();
-    expect(waitForTransactionReceipt).toHaveBeenCalled();
-    expect(result.txHashes?.[0]).toBe('0xdeadbeef');
+    expect(executeTransactionMock).toHaveBeenCalledTimes(1);
+    expect(result.txHashes?.[0]).toBe('0xhash');
+    expect(result.lastTxHash).toBe('0xhash');
   });
 
   it('blocks close submission when the planned transactions do not include an execution fee', async () => {
-    const sendTransaction = vi.fn(() => Promise.resolve('0xdeadbeef' as const));
-    const waitForTransactionReceipt = vi.fn(() =>
-      Promise.resolve({ transactionHash: '0xdeadbeef' as const }),
-    );
-
     createPerpetualClose.mockResolvedValueOnce({
       transactions: [
         {
@@ -183,72 +178,30 @@ describe('executePerpetualPlan', () => {
       },
     };
 
-    const result = await executePerpetualPlan({
-      client,
-      plan,
-      txSubmissionMode: 'submit',
-      clients: {
-        public: { waitForTransactionReceipt },
-        wallet: {
-          sendTransaction,
-          account: {} as never,
-          chain: {} as never,
-        },
-      },
-    });
+    const clients = {} as OnchainClients;
+    const result = await executePerpetualPlan({ client, plan, txExecutionMode: 'execute', clients });
 
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/execution fee/i);
-    expect(sendTransaction).not.toHaveBeenCalled();
-    expect(waitForTransactionReceipt).not.toHaveBeenCalled();
+    expect(executeTransactionMock).not.toHaveBeenCalled();
   });
 
-  it('skips execution when plan action is none', async () => {
-    const plan: ExecutionPlan = { action: 'none' };
-
-    const result = await executePerpetualPlan({ client, plan });
-
-    expect(result.ok).toBe(true);
-    expect(createPerpetualLong).not.toHaveBeenCalled();
-  });
-
-  it('executes long plans', async () => {
+  it('executes reduce plans via onchain-actions reduce endpoint', async () => {
     const plan: ExecutionPlan = {
-      action: 'long',
+      action: 'reduce',
       request: {
-        amount: '100',
-        walletAddress: '0x0000000000000000000000000000000000000001',
+        walletAddress: '0x0000000000000000000000000000000000000003',
         chainId: '42161',
         marketAddress: '0xmarket',
-        payTokenAddress: '0xusdc',
-        collateralTokenAddress: '0xusdc',
-        leverage: '2',
+        positionSide: 'long',
+        amountUsd: '1',
       },
     };
 
-    const result = await executePerpetualPlan({ client, plan });
+    const result = await executePerpetualPlan({ client, plan, txExecutionMode: 'plan' });
 
     expect(result.ok).toBe(true);
-    expect(createPerpetualLong).toHaveBeenCalled();
-    expect(result.transactions).toHaveLength(1);
-    expect(result.transactions?.[0]?.to).toBe('0xrouter');
-  });
-
-  it('captures execution errors', async () => {
-    createPerpetualClose.mockRejectedValueOnce(new Error('boom'));
-    const plan: ExecutionPlan = {
-      action: 'close',
-      request: {
-        walletAddress: '0x0000000000000000000000000000000000000001',
-        marketAddress: '0xmarket',
-        positionSide: 'long',
-        isLimit: false,
-      },
-    };
-
-    const result = await executePerpetualPlan({ client, plan });
-
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain('boom');
+    expect(createPerpetualReduce).toHaveBeenCalledWith(plan.request);
   });
 });
+

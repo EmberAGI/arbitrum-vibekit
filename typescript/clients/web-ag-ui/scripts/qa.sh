@@ -79,6 +79,44 @@ wait_for_http_ok() {
   done
 }
 
+ensure_mock_allora() {
+  # By default QA uses a local deterministic Allora mock so the agent can be tested
+  # without hitting the live Allora API.
+  if [ "${QA_USE_REAL_ALLORA:-false}" = "true" ]; then
+    echo "[qa] using real Allora (QA_USE_REAL_ALLORA=true)"
+    return 0
+  fi
+
+  export ALLORA_API_BASE_URL="${ALLORA_API_BASE_URL:-http://127.0.0.1:5055}"
+  # Disable caching by default when using the mock so flips/stable windows are visible
+  # at the agent polling cadence. Override explicitly if you want caching.
+  export ALLORA_8H_INFERENCE_CACHE_TTL_MS="${ALLORA_8H_INFERENCE_CACHE_TTL_MS:-0}"
+  export ALLORA_INFERENCE_CACHE_TTL_MS="${ALLORA_INFERENCE_CACHE_TTL_MS:-0}"
+  # Keep signals stable for a few cycles, but flip quickly enough for manual QA.
+  export ALLORA_MOCK_STABLE_WINDOW_REQUESTS="${ALLORA_MOCK_STABLE_WINDOW_REQUESTS:-2}"
+
+  local health_url="${ALLORA_API_BASE_URL}/v2/allora/consumer/mock?allora_topic_id=14"
+  if curl -fs -o /dev/null "$health_url"; then
+    echo "[qa] mock Allora already reachable at ${ALLORA_API_BASE_URL}"
+    return 0
+  fi
+
+  local log_file="$ROOT_DIR/.qa-mock-allora.log"
+  echo "[qa] starting mock Allora on ${ALLORA_API_BASE_URL} (logs: $log_file) ..."
+  (
+    PORT=5055 node "$ROOT_DIR/scripts/mock-allora.mjs"
+  ) >"$log_file" 2>&1 &
+
+  if ! wait_for_http_ok "$health_url" 30; then
+    echo "[qa] mock Allora failed to become reachable at ${ALLORA_API_BASE_URL} within 30s" >&2
+    echo "[qa] tail of $log_file:" >&2
+    tail -n 40 "$log_file" >&2 || true
+    exit 1
+  fi
+
+  echo "[qa] mock Allora ready at ${ALLORA_API_BASE_URL}"
+}
+
 resolve_onchain_actions_pnpm_bin() {
   local onchain_dir="${1:?missing onchain-actions dir}"
   # This repo uses a pinned pnpm version (packageManager field). The onchain-actions
@@ -154,7 +192,9 @@ ensure_onchain_actions_50051() {
   local log_file="$ROOT_DIR/.qa-onchain-actions.log"
   echo "[qa] starting onchain-actions on http://localhost:50051 (logs: $log_file) ..."
   (
-    "$pnpm_bin" -C "$onchain_dir" dev
+    # GMX order simulation can revert in dev environments due to plugin/role checks.
+    # For QA in plan-building mode we want deterministic `transactions[]` output.
+    GMX_SKIP_SIMULATION=true "$pnpm_bin" -C "$onchain_dir" dev
   ) >"$log_file" 2>&1 &
 
   if ! wait_for_http_ok "$markets_url" 120; then
@@ -167,6 +207,7 @@ ensure_onchain_actions_50051() {
   echo "[qa] onchain-actions ready at ${ONCHAIN_ACTIONS_BASE_URL}"
 }
 
+ensure_mock_allora
 ensure_onchain_actions_50051
 
 echo "[qa] starting agent runtimes (LangGraph dev servers)..."

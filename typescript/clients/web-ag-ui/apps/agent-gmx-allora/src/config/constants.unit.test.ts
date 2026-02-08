@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  resolveGmxAlloraTxSubmissionMode,
+  resolveGmxAlloraTxExecutionMode,
   resolveMinNativeEthWei,
   resolveOnchainActionsBaseUrl,
 } from './constants.js';
@@ -51,24 +51,6 @@ describe('config/constants', () => {
     restoreEnv('GMX_MIN_NATIVE_ETH_WEI', previous);
   });
 
-  it('defaults GMX Allora tx submission mode to plan', () => {
-    const previous = process.env.GMX_ALLORA_TX_SUBMISSION_MODE;
-    delete process.env.GMX_ALLORA_TX_SUBMISSION_MODE;
-
-    expect(resolveGmxAlloraTxSubmissionMode()).toBe('plan');
-
-    restoreEnv('GMX_ALLORA_TX_SUBMISSION_MODE', previous);
-  });
-
-  it('supports overriding GMX Allora tx submission mode via env', () => {
-    const previous = process.env.GMX_ALLORA_TX_SUBMISSION_MODE;
-    process.env.GMX_ALLORA_TX_SUBMISSION_MODE = 'submit';
-
-    expect(resolveGmxAlloraTxSubmissionMode()).toBe('submit');
-
-    restoreEnv('GMX_ALLORA_TX_SUBMISSION_MODE', previous);
-  });
-
   it('normalizes the OpenAPI endpoint to a base URL and logs the change', () => {
     process.env.ONCHAIN_ACTIONS_BASE_URL = 'https://api.emberai.xyz/openapi.json';
 
@@ -111,4 +93,29 @@ describe('config/constants', () => {
     expect(baseUrl).toBe('https://api.emberai.xyz');
     expect(logger).not.toHaveBeenCalled();
   });
+
+  it('defaults to plan mode for transaction execution', () => {
+    delete process.env.GMX_ALLORA_TX_SUBMISSION_MODE;
+
+    expect(resolveGmxAlloraTxExecutionMode()).toBe('plan');
+  });
+
+  it('uses execute mode when submission mode is submit', () => {
+    const previous = process.env.GMX_ALLORA_TX_SUBMISSION_MODE;
+    process.env.GMX_ALLORA_TX_SUBMISSION_MODE = 'submit';
+
+    expect(resolveGmxAlloraTxExecutionMode()).toBe('execute');
+
+    restoreEnv('GMX_ALLORA_TX_SUBMISSION_MODE', previous);
+  });
+
+  it('uses plan mode when submission mode is plan', () => {
+    const previous = process.env.GMX_ALLORA_TX_SUBMISSION_MODE;
+    process.env.GMX_ALLORA_TX_SUBMISSION_MODE = 'plan';
+
+    expect(resolveGmxAlloraTxExecutionMode()).toBe('plan');
+
+    restoreEnv('GMX_ALLORA_TX_SUBMISSION_MODE', previous);
+  });
 });
+

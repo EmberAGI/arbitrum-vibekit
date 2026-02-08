@@ -29,9 +29,11 @@ The agent always uses onchain-actions to build a `transactions[]` plan for the c
 
 ## Environment
 
+- `GMX_ALLORA_POLL_INTERVAL_MS`: poll interval (ms) for each agent cycle. Defaults to `10000` (10s).
 - `GMX_MIN_NATIVE_ETH_WEI`: minimum native ETH (in wei) required in the operator wallet before the agent will proceed (defaults to `2000000000000000` = 0.002 ETH).
 - `ALLORA_INFERENCE_CACHE_TTL_MS`: cache TTL (ms) for Allora consumer inference requests. Defaults to `30000`; set to `0` to disable caching.
 - `GMX_ALLORA_TX_SUBMISSION_MODE`: transaction submission mode. Supported values:
   - `plan` (default): build and emit `transactions[]` but do not broadcast.
   - `submit`: broadcast planned transactions via an embedded wallet (no delegations). Requires an onchain-actions version that correctly plans the requested GMX action (especially close via decrease order).
 - `GMX_ALLORA_EMBEDDED_PRIVATE_KEY`: required when `GMX_ALLORA_TX_SUBMISSION_MODE=submit` (0x + 64 hex chars). Only for local/dev use.
+- `ARBITRUM_RPC_URL`: RPC URL for broadcasting transactions when submission is enabled.

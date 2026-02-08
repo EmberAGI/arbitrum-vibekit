@@ -10,8 +10,8 @@ import {
   resolveAlloraApiBaseUrl,
   resolveAlloraApiKey,
   resolveAlloraChainId,
-  resolveAlloraInferenceCacheTtlMs,
-  resolveGmxAlloraTxSubmissionMode,
+  resolveAllora8hInferenceCacheTtlMs,
+  resolveGmxAlloraTxExecutionMode,
   resolvePollIntervalMs,
 } from '../../config/constants.js';
 import { buildAlloraPrediction } from '../../core/alloraPrediction.js';
@@ -25,7 +25,7 @@ import {
   buildExecutionResultArtifact,
   buildTelemetryArtifact,
 } from '../artifacts.js';
-import { getEmbeddedOnchainClients, getOnchainActionsClient } from '../clientFactory.js';
+import { getOnchainActionsClient, getOnchainClients } from '../clientFactory.js';
 import {
   buildTaskStatus,
   logInfo,
@@ -97,7 +97,7 @@ export const pollCycleNode = async (
       chainId: resolveAlloraChainId(),
       topicId,
       apiKey: resolveAlloraApiKey(),
-      cacheTtlMs: resolveAlloraInferenceCacheTtlMs(),
+      cacheTtlMs: resolveAllora8hInferenceCacheTtlMs(),
     });
     staleCycles = 0;
     const currentPrice = state.view.metrics.previousPrice ?? inference.combinedValue;
@@ -257,14 +257,23 @@ export const pollCycleNode = async (
   }
 
   const previousCycle = state.view.metrics.latestCycle;
+  const assumedPositionSide = state.view.metrics.assumedPositionSide;
+  const normalizedTargetMarket = gmxMarketAddress.toLowerCase();
+  const currentMarketPosition = positions.find(
+    (position) => position.marketAddress.toLowerCase() === normalizedTargetMarket,
+  );
+  const currentPositionSide = currentMarketPosition?.positionSide;
+
+  const decisionPreviousSide = currentPositionSide ?? assumedPositionSide ?? previousCycle?.side;
+  const decisionPreviousAction = decisionPreviousSide ? 'open' : previousCycle?.action;
   const { telemetry, nextCyclesSinceTrade: initialCyclesSinceTrade } = buildCycleTelemetry({
     prediction,
     decisionThreshold: DECISION_THRESHOLD,
     cooldownCycles: COOLDOWN_CYCLES,
     maxLeverage: operatorConfig.maxLeverage,
     baseContributionUsd: operatorConfig.baseContributionUsd,
-    previousAction: previousCycle?.action,
-    previousSide: previousCycle?.side,
+    previousAction: decisionPreviousAction,
+    previousSide: decisionPreviousSide,
     cyclesSinceTrade: state.view.metrics.cyclesSinceRebalance ?? 0,
     isFirstCycle: iteration === 1,
     iteration,
@@ -321,6 +330,16 @@ export const pollCycleNode = async (
     artifact: buildTelemetryArtifact(exposureAdjusted),
     append: true,
   };
+
+  const positionForReduce =
+    exposureAdjusted.action === 'reduce' && exposureAdjusted.side
+      ? positions.find(
+          (position) =>
+            position.marketAddress.toLowerCase() === normalizedTargetMarket &&
+            position.positionSide === exposureAdjusted.side,
+        )
+      : undefined;
+
   const executionPlan = buildPerpetualExecutionPlan({
     telemetry: exposureAdjusted,
     chainId: ARBITRUM_CHAIN_ID.toString(),
@@ -329,14 +348,38 @@ export const pollCycleNode = async (
     payTokenAddress: operatorConfig.fundingTokenAddress,
     payTokenDecimals,
     collateralTokenAddress: operatorConfig.fundingTokenAddress,
+    positionContractKey: positionForReduce?.contractKey,
+    positionSizeInUsd: positionForReduce?.sizeInUsd,
   });
-  const txSubmissionMode = resolveGmxAlloraTxSubmissionMode();
+
+  const txExecutionMode = resolveGmxAlloraTxExecutionMode();
+  const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
   const executionResult = await executePerpetualPlan({
     client: getOnchainActionsClient(),
+    clients,
     plan: executionPlan,
-    txSubmissionMode,
-    clients: txSubmissionMode === 'submit' ? getEmbeddedOnchainClients() : undefined,
+    txExecutionMode,
   });
+
+  const nextAssumedPositionSide = (() => {
+    // Prefer actual onchain state when available.
+    if (currentPositionSide) {
+      return currentPositionSide;
+    }
+    if (!executionResult.ok) {
+      return assumedPositionSide;
+    }
+    if (executionPlan.action === 'long') {
+      return 'long';
+    }
+    if (executionPlan.action === 'short') {
+      return 'short';
+    }
+    if (executionPlan.action === 'close') {
+      return undefined;
+    }
+    return assumedPositionSide;
+  })();
   const executionPlanEvent: ClmmEvent | undefined =
     executionPlan.action === 'none'
       ? undefined
@@ -350,17 +393,18 @@ export const pollCycleNode = async (
       ? undefined
       : {
           type: 'artifact',
-          artifact: buildExecutionResultArtifact({
-            action: executionResult.action,
-            ok: executionResult.ok,
-            error: executionResult.error,
-            txHashes: executionResult.txHashes,
-            lastTxHash: executionResult.lastTxHash,
-            telemetry: exposureAdjusted,
-            transactions: executionResult.transactions,
-          }),
-          append: true,
-        };
+        artifact: buildExecutionResultArtifact({
+          action: executionResult.action,
+          plan: executionPlan,
+          ok: executionResult.ok,
+          error: executionResult.error,
+          telemetry: exposureAdjusted,
+          transactions: executionResult.transactions,
+          txHashes: executionResult.txHashes,
+          lastTxHash: executionResult.lastTxHash,
+        }),
+        append: true,
+      };
 
   let cronScheduled = state.private.cronScheduled;
   const threadId = (config as Configurable).configurable?.thread_id;
@@ -371,13 +415,13 @@ export const pollCycleNode = async (
     cronScheduled = true;
   }
 
-  const submittedTxHash = executionResult.lastTxHash;
-  const transactionEntry = submittedTxHash
+  const resolvedTxHash = executionResult.lastTxHash ?? txHash;
+  const transactionEntry = resolvedTxHash
     ? {
         cycle: iteration,
         action,
-        txHash: submittedTxHash,
-        status: executionResult.ok ? ('success' as const) : ('failed' as const),
+        txHash: resolvedTxHash,
+        status: 'success' as const,
         reason,
         timestamp: exposureAdjusted.timestamp,
       }
@@ -403,6 +447,7 @@ export const pollCycleNode = async (
           staleCycles: state.view.metrics.staleCycles ?? 0,
           iteration,
           latestCycle: exposureAdjusted,
+          assumedPositionSide: nextAssumedPositionSide,
         },
         task,
         activity: {

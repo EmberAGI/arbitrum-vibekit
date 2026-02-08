@@ -57,11 +57,11 @@ export function decideTradeAction(params: DecideTradeActionParams): TradeDecisio
 
   if (params.previousAction === 'open' && params.previousSide === side) {
     return {
-      action: 'reduce',
+      action: 'hold',
       side,
       leverage,
       sizeUsd,
-      reason: `Signal persists in ${side}; reducing exposure.`,
+      reason: `Signal persists in ${side}; holding open position.`,
     };
   }
 

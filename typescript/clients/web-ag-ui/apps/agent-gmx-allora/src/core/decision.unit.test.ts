@@ -63,55 +63,6 @@ describe('decideTradeAction', () => {
     });
   });
 
-  it('holds when the configured allocation yields too small of a trade size', () => {
-    const prediction: AlloraPrediction = {
-      topic: 'BTC/USD - Price Prediction - 8h',
-      horizonHours: 8,
-      confidence: 0.9,
-      direction: 'up',
-      predictedPrice: 110,
-      timestamp: '2026-02-05T12:00:00.000Z',
-    };
-
-    const decision = decideTradeAction({
-      prediction,
-      decisionThreshold: 0.62,
-      cooldownRemaining: 0,
-      maxLeverage: 2,
-      baseContributionUsd: 1,
-      previousAction: undefined,
-      previousSide: undefined,
-    });
-
-    expect(decision.action).toBe('hold');
-    expect(decision.reason).toContain('minimum');
-  });
-
-  it('opens when the computed trade size matches the minimum supported size', () => {
-    const prediction: AlloraPrediction = {
-      topic: 'BTC/USD - Price Prediction - 8h',
-      horizonHours: 8,
-      confidence: 0.9,
-      direction: 'up',
-      predictedPrice: 110,
-      timestamp: '2026-02-05T12:00:00.000Z',
-    };
-
-    const decision = decideTradeAction({
-      prediction,
-      decisionThreshold: 0.62,
-      cooldownRemaining: 0,
-      maxLeverage: 2,
-      // With the 20% safety buffer applied, this yields exactly $1.00.
-      baseContributionUsd: 1.25,
-      previousAction: undefined,
-      previousSide: undefined,
-    });
-
-    expect(decision.action).toBe('open');
-    expect(decision.sizeUsd).toBe(1);
-  });
-
   it('holds when confidence is below threshold', () => {
     const prediction: AlloraPrediction = {
       topic: 'BTC/USD - Price Prediction - 8h',
@@ -160,16 +111,16 @@ describe('decideTradeAction', () => {
 
     expect(decision.action).toBe('close');
     expect(decision.side).toBe('long');
-    expect(decision.reason).toContain('flipped');
+    expect(decision.reason.toLowerCase()).toContain('flipped');
   });
 
-  it('reduces when the same direction persists while a position is open', () => {
+  it('holds when a position is already open and the signal stays in the same direction', () => {
     const prediction: AlloraPrediction = {
       topic: 'BTC/USD - Price Prediction - 8h',
       horizonHours: 8,
       confidence: 0.9,
       direction: 'up',
-      predictedPrice: 120,
+      predictedPrice: 110,
       timestamp: '2026-02-05T12:00:00.000Z',
     };
 
@@ -183,7 +134,56 @@ describe('decideTradeAction', () => {
       previousSide: 'long',
     });
 
-    expect(decision.action).toBe('reduce');
-    expect(decision.reason).toContain('reducing');
+    expect(decision.action).toBe('hold');
+    expect(decision.reason.toLowerCase()).toContain('persists');
+  });
+
+  it('holds when the configured allocation yields too small of a trade size', () => {
+    const prediction: AlloraPrediction = {
+      topic: 'BTC/USD - Price Prediction - 8h',
+      horizonHours: 8,
+      confidence: 0.9,
+      direction: 'up',
+      predictedPrice: 110,
+      timestamp: '2026-02-05T12:00:00.000Z',
+    };
+
+    const decision = decideTradeAction({
+      prediction,
+      decisionThreshold: 0.62,
+      cooldownRemaining: 0,
+      maxLeverage: 2,
+      baseContributionUsd: 1,
+      previousAction: undefined,
+      previousSide: undefined,
+    });
+
+    expect(decision.action).toBe('hold');
+    expect(decision.reason.toLowerCase()).toContain('minimum');
+  });
+
+  it('opens when the computed trade size matches the minimum supported size', () => {
+    const prediction: AlloraPrediction = {
+      topic: 'BTC/USD - Price Prediction - 8h',
+      horizonHours: 8,
+      confidence: 0.9,
+      direction: 'up',
+      predictedPrice: 110,
+      timestamp: '2026-02-05T12:00:00.000Z',
+    };
+
+    const decision = decideTradeAction({
+      prediction,
+      decisionThreshold: 0.62,
+      cooldownRemaining: 0,
+      maxLeverage: 2,
+      // With the 20% safety buffer applied, this yields exactly $1.00.
+      baseContributionUsd: 1.25,
+      previousAction: undefined,
+      previousSide: undefined,
+    });
+
+    expect(decision.action).toBe('open');
+    expect(decision.sizeUsd).toBe(1);
   });
 });

@@ -1,16 +1,21 @@
 import http from 'node:http';
 
-function resolvePort(): number {
-  const raw = process.env['PORT'];
-  const parsed = raw ? Number(raw) : NaN;
-  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
-  return parsed;
+const portRaw = process.env.PORT;
+const port = portRaw ? Number(portRaw) : 0;
+if (!Number.isFinite(port) || port <= 0) {
+  throw new Error(`PORT must be a positive number (got: ${String(portRaw)})`);
 }
 
-const port = resolvePort();
-
-const counters: Record<string, number> = {};
-const STABLE_WINDOW_REQUESTS = 3;
+const counters = {};
+const stableWindowRequestsRaw = process.env.ALLORA_MOCK_STABLE_WINDOW_REQUESTS;
+const stableWindowRequests = stableWindowRequestsRaw ? Number(stableWindowRequestsRaw) : 3;
+if (!Number.isFinite(stableWindowRequests) || stableWindowRequests <= 0) {
+  throw new Error(
+    `ALLORA_MOCK_STABLE_WINDOW_REQUESTS must be a positive number (got: ${String(
+      stableWindowRequestsRaw,
+    )})`,
+  );
+}
 
 const server = http.createServer((req, res) => {
   if (!req.url) {
@@ -28,18 +33,20 @@ const server = http.createServer((req, res) => {
   }
 
   const topicId = url.searchParams.get('allora_topic_id') ?? '0';
-  // Alternate between two extremes so UIs/tests can easily detect when they're
-  // using the mock vs a static/stale value.
-  // BTC=14, ETH=2 (8h feed); any other topic returns a stable default.
+
+  // BTC=14, ETH=2 (8h feed); anything else is stable.
   const combined = (() => {
     if (topicId !== '14' && topicId !== '2') {
       return '100';
     }
     const next = (counters[topicId] ?? 0) + 1;
     counters[topicId] = next;
-    const phase = Math.floor((next - 1) / STABLE_WINDOW_REQUESTS) % 2;
+    const phase = Math.floor((next - 1) / stableWindowRequests) % 2;
     return phase === 0 ? '1' : '100000';
   })();
+
+  // eslint-disable-next-line no-console
+  console.log(`[mock-allora] topic=${topicId} -> ${combined}`);
 
   res.setHeader('content-type', 'application/json');
   res.statusCode = 200;
@@ -61,8 +68,7 @@ server.listen(port, '127.0.0.1', () => {
   if (!address || typeof address === 'string') {
     throw new Error('Failed to resolve mock Allora server address.');
   }
-  const baseUrl = `http://127.0.0.1:${address.port}`;
-  // Printed for humans; in persist mode we use a fixed port anyway.
-  console.log(`[mock-allora] listening ${baseUrl}`);
+  // Printed for humans.
+  // eslint-disable-next-line no-console
+  console.log(`[mock-allora] listening http://127.0.0.1:${address.port}`);
 });
-

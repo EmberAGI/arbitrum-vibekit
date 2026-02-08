@@ -12,6 +12,7 @@ const {
   listPerpetualPositionsMock,
   createPerpetualLongMock,
   createPerpetualShortMock,
+  createPerpetualReduceMock,
   createPerpetualCloseMock,
 } = vi.hoisted(() => ({
   copilotkitEmitStateMock: vi.fn(async () => undefined),
@@ -20,6 +21,7 @@ const {
   listPerpetualPositionsMock: vi.fn<[], Promise<PerpetualPosition[]>>(),
   createPerpetualLongMock: vi.fn<[], Promise<unknown>>(),
   createPerpetualShortMock: vi.fn<[], Promise<unknown>>(),
+  createPerpetualReduceMock: vi.fn<[], Promise<unknown>>(),
   createPerpetualCloseMock: vi.fn<[], Promise<unknown>>(),
 }));
 
@@ -43,8 +45,10 @@ vi.mock('../src/workflow/clientFactory.js', () => ({
     listPerpetualPositions: listPerpetualPositionsMock,
     createPerpetualLong: createPerpetualLongMock,
     createPerpetualShort: createPerpetualShortMock,
+    createPerpetualReduce: createPerpetualReduceMock,
     createPerpetualClose: createPerpetualCloseMock,
   }),
+  getOnchainClients: vi.fn(),
 }));
 
 vi.mock('../src/workflow/cronScheduler.js', () => ({
@@ -165,6 +169,7 @@ describe('pollCycleNode (integration)', () => {
     listPerpetualPositionsMock.mockReset();
     createPerpetualLongMock.mockReset();
     createPerpetualShortMock.mockReset();
+    createPerpetualReduceMock.mockReset();
     createPerpetualCloseMock.mockReset();
     copilotkitEmitStateMock.mockReset();
   });
@@ -201,8 +206,7 @@ describe('pollCycleNode (integration)', () => {
     const result = await pollCycleNode(state, {});
 
     const update = (result as { update: ClmmState }).update;
-    const events = update.view?.activity.events ?? [];
-    const artifactIds = events
+    const artifactIds = (update.view?.activity.events ?? [])
       .filter((event) => event.type === 'artifact')
       .map((event) => event.artifact.artifactId);
 
@@ -229,7 +233,58 @@ describe('pollCycleNode (integration)', () => {
     expect(createPerpetualLongMock).not.toHaveBeenCalled();
   });
 
-  it('plans a close when direction flips while an open position is recorded', async () => {
+  it('plans a close when the signal flips against an existing onchain position', async () => {
+    fetchAlloraInferenceMock.mockResolvedValueOnce({
+      topicId: 14,
+      combinedValue: 47000,
+      confidenceIntervalValues: [47000],
+    });
+    listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValueOnce([
+      {
+        chainId: '42161',
+        key: '0xpos',
+        contractKey: '0xposition',
+        account: '0xwallet',
+        marketAddress: '0xmarket',
+        sizeInUsd: '1000',
+        sizeInTokens: '0.01',
+        collateralAmount: '50',
+        pendingBorrowingFeesUsd: '0',
+        increasedAtTime: '0',
+        decreasedAtTime: '0',
+        positionSide: 'long',
+        isLong: true,
+        fundingFeeAmount: '0',
+        claimableLongTokenAmount: '0',
+        claimableShortTokenAmount: '0',
+        isOpening: false,
+        pnl: '0',
+        positionFeeAmount: '0',
+        traderDiscountAmount: '0',
+        uiFeeAmount: '0',
+        collateralToken: {
+          tokenUid: { chainId: '42161', address: '0xusdc' },
+          name: 'USD Coin',
+          symbol: 'USDC',
+          isNative: false,
+          decimals: 6,
+          iconUri: null,
+          isVetted: true,
+        },
+      },
+    ]);
+    createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
+
+    const state = buildBaseState();
+    state.view.metrics.previousPrice = 48000;
+
+    await pollCycleNode(state, {});
+
+    expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not keep planning repeated opens when plan-mode assumes the position is already open', async () => {
     fetchAlloraInferenceMock.mockResolvedValueOnce({
       topicId: 14,
       combinedValue: 47000,
@@ -237,29 +292,24 @@ describe('pollCycleNode (integration)', () => {
     });
     listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
     listPerpetualPositionsMock.mockResolvedValueOnce([]);
-    createPerpetualCloseMock.mockResolvedValueOnce({ transactions: [] });
 
     const state = buildBaseState();
-    state.view.metrics.previousPrice = 48000;
-    state.view.metrics.latestCycle = {
-      cycle: 1,
-      action: 'open',
-      reason: 'previous open',
-      marketSymbol: 'BTC/USDC',
-      side: 'long',
-      leverage: 2,
-      sizeUsd: 100,
-      timestamp: '2026-02-05T12:00:00.000Z',
-      metrics: {
-        confidence: 1,
-        decisionThreshold: 0.62,
-        cooldownRemaining: 0,
-      },
-    };
+    state.view.metrics.previousPrice = 46000;
+    state.view.metrics.iteration = 10;
+    state.view.metrics.cyclesSinceRebalance = 2;
+    state.view.metrics.assumedPositionSide = 'long';
 
-    await pollCycleNode(state, {});
+    const result = await pollCycleNode(state, {});
+    const update = (result as { update: ClmmState }).update;
 
-    expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
+    expect(createPerpetualLongMock).not.toHaveBeenCalled();
+    expect(createPerpetualCloseMock).not.toHaveBeenCalled();
+
+    const artifactIds = (update.view?.activity.events ?? [])
+      .filter((event) => event.type === 'artifact')
+      .map((event) => event.artifact.artifactId);
+    expect(artifactIds).toContain('gmx-allora-telemetry');
+    expect(artifactIds).not.toContain('gmx-allora-execution-plan');
   });
 
   it('does not attempt to open positions when the configured allocation is too small', async () => {
@@ -311,7 +361,8 @@ describe('pollCycleNode (integration)', () => {
         key: '0xpos',
         contractKey: '0xcontract',
         account: '0xwallet',
-        marketAddress: '0xmarket',
+        // Different market: still counts towards total exposure, but does not satisfy "already open".
+        marketAddress: '0xother',
         sizeInUsd: '1000',
         sizeInTokens: '0.02',
         collateralAmount: '500',
@@ -350,3 +401,4 @@ describe('pollCycleNode (integration)', () => {
     expect(latestCycle?.reason).toContain('Exposure limit');
   });
 });
+
