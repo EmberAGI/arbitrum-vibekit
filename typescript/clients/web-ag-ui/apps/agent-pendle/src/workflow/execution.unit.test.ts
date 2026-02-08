@@ -14,17 +14,23 @@ import {
   executeRollover,
 } from './execution.js';
 
-const { executeTransactionMock } = vi.hoisted(() => ({
+const { executeTransactionMock, redeemDelegationsAndExecuteTransactionsMock } = vi.hoisted(() => ({
   executeTransactionMock: vi.fn(),
+  redeemDelegationsAndExecuteTransactionsMock: vi.fn(),
 }));
 
 vi.mock('../core/transaction.js', () => ({
   executeTransaction: executeTransactionMock,
 }));
 
+vi.mock('../core/delegatedExecution.js', () => ({
+  redeemDelegationsAndExecuteTransactions: redeemDelegationsAndExecuteTransactionsMock,
+}));
+
 describe('executeRebalance', () => {
   beforeEach(() => {
     executeTransactionMock.mockReset();
+    redeemDelegationsAndExecuteTransactionsMock.mockReset();
   });
   it('sells current PT and buys new PT using the sell output token in order', async () => {
     const onchainActionsClient: Pick<
@@ -188,6 +194,7 @@ describe('executeRebalance', () => {
 describe('executeInitialDeposit', () => {
   beforeEach(() => {
     executeTransactionMock.mockReset();
+    redeemDelegationsAndExecuteTransactionsMock.mockReset();
   });
   it('buys PT using the selected funding token directly', async () => {
     const onchainActionsClient: Pick<OnchainActionsClient, 'createTokenizedYieldBuyPt'> = {
@@ -265,6 +272,107 @@ describe('executeInitialDeposit', () => {
     expect(executeTransactionMock).toHaveBeenCalledTimes(1);
     expect(executeTransactionMock.mock.calls[0]?.[1]).toMatchObject({ to: '0xbuy' });
     expect(result.lastTxHash).toBe('0xbuyhash');
+  });
+
+  it('executes via delegated execution when a delegation bundle is provided', async () => {
+    const onchainActionsClient: Pick<OnchainActionsClient, 'createTokenizedYieldBuyPt'> = {
+      createTokenizedYieldBuyPt: vi.fn().mockResolvedValue({
+        transactions: [{ type: 'EVM_TX', to: '0xbuy', data: '0x04', value: '0', chainId: '42161' }],
+      }),
+    };
+
+    executeTransactionMock.mockResolvedValueOnce({ transactionHash: '0xshould-not-submit' });
+
+    redeemDelegationsAndExecuteTransactionsMock.mockResolvedValueOnce({
+      txHashes: ['0xdelegated'],
+      receipts: [],
+    });
+
+    const clients = {} as OnchainClients;
+
+    const fundingToken = {
+      tokenUid: { chainId: '42161', address: '0xusdc' },
+      name: 'USDC',
+      symbol: 'USDC',
+      isNative: false,
+      decimals: 6,
+      iconUri: undefined,
+      isVetted: true,
+    };
+
+    const targetMarket: TokenizedYieldMarket = {
+      marketIdentifier: { chainId: '42161', address: '0xmarket-new' },
+      expiry: '2030-01-01',
+      details: {},
+      ptToken: {
+        tokenUid: { chainId: '42161', address: '0xpt-new' },
+        name: 'PT-NEW',
+        symbol: 'PT-NEW',
+        isNative: false,
+        decimals: 18,
+        iconUri: undefined,
+        isVetted: true,
+      },
+      ytToken: {
+        tokenUid: { chainId: '42161', address: '0xyt-new' },
+        name: 'YT-NEW',
+        symbol: 'YT-NEW',
+        isNative: false,
+        decimals: 18,
+        iconUri: undefined,
+        isVetted: true,
+      },
+      underlyingToken: {
+        tokenUid: { chainId: '42161', address: '0xusdai' },
+        name: 'USDai',
+        symbol: 'USDai',
+        isNative: false,
+        decimals: 18,
+        iconUri: undefined,
+        isVetted: true,
+      },
+    };
+
+    const delegationBundle = {
+      chainId: 42161,
+      delegationManager: '0x000000000000000000000000000000000000dead',
+      delegatorAddress: '0x0000000000000000000000000000000000000001',
+      delegateeAddress: '0x0000000000000000000000000000000000000002',
+      delegations: [
+        {
+          delegate: '0x0000000000000000000000000000000000000002',
+          delegator: '0x0000000000000000000000000000000000000001',
+          authority: `0x${'0'.repeat(64)}`,
+          caveats: [],
+          salt: `0x${'1'.repeat(64)}`,
+          signature: '0xsignature',
+        },
+      ],
+      intents: [
+        {
+          target: '0x000000000000000000000000000000000000beef',
+          selector: '0x095ea7b3',
+          allowedCalldata: [],
+        },
+      ],
+      descriptions: ['approve and execute'],
+      warnings: [],
+    };
+
+    const result = await executeInitialDeposit({
+      onchainActionsClient,
+      clients,
+      txExecutionMode: 'execute',
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      fundingToken,
+      targetMarket,
+      fundingAmount: '10000000',
+      delegationBundle,
+    });
+
+    expect(redeemDelegationsAndExecuteTransactionsMock).toHaveBeenCalledTimes(1);
+    expect(executeTransactionMock).not.toHaveBeenCalled();
+    expect(result.txHashes).toEqual(['0xdelegated']);
   });
 
   it('builds a plan but does not submit when tx execution mode is plan', async () => {

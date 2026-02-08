@@ -7,8 +7,10 @@ import type {
   TokenizedYieldPosition,
 } from '../clients/onchainActions.js';
 import { type PendleTxExecutionMode } from '../config/constants.js';
+import { redeemDelegationsAndExecuteTransactions } from '../core/delegatedExecution.js';
 import { executeTransaction } from '../core/transaction.js';
 
+import type { DelegationBundle } from './context.js';
 import { logInfo, normalizeHexAddress } from './context.js';
 
 type ExecutionResult = {
@@ -101,6 +103,7 @@ async function executePlanTransactions(params: {
 async function planOrExecuteTransactions(params: {
   txExecutionMode: PendleTxExecutionMode;
   clients?: OnchainClients;
+  delegationBundle?: DelegationBundle;
   transactions: TransactionPlan[];
 }): Promise<ExecutionResult> {
   if (params.txExecutionMode === 'plan') {
@@ -109,6 +112,17 @@ async function planOrExecuteTransactions(params: {
   }
   if (!params.clients) {
     throw new Error('Onchain clients are required to execute Pendle transactions');
+  }
+  if (params.delegationBundle) {
+    const outcome = await redeemDelegationsAndExecuteTransactions({
+      clients: params.clients,
+      delegationBundle: params.delegationBundle,
+      transactions: params.transactions,
+    });
+    return {
+      txHashes: outcome.txHashes,
+      lastTxHash: outcome.txHashes.at(-1),
+    };
   }
   return executePlanTransactions({ clients: params.clients, transactions: params.transactions });
 }
@@ -120,6 +134,7 @@ export async function executeRebalance(params: {
   >;
   txExecutionMode: PendleTxExecutionMode;
   clients?: OnchainClients;
+  delegationBundle?: DelegationBundle;
   walletAddress: `0x${string}`;
   position: TokenizedYieldPosition;
   currentMarket: TokenizedYieldMarket;
@@ -156,6 +171,7 @@ export async function executeRebalance(params: {
   return planOrExecuteTransactions({
     txExecutionMode: params.txExecutionMode,
     clients: params.clients,
+    delegationBundle: params.delegationBundle,
     transactions,
   });
 }
@@ -167,6 +183,7 @@ export async function executeRollover(params: {
   >;
   txExecutionMode: PendleTxExecutionMode;
   clients?: OnchainClients;
+  delegationBundle?: DelegationBundle;
   walletAddress: `0x${string}`;
   position: TokenizedYieldPosition;
   currentMarket: TokenizedYieldMarket;
@@ -210,6 +227,7 @@ export async function executeRollover(params: {
   return planOrExecuteTransactions({
     txExecutionMode: params.txExecutionMode,
     clients: params.clients,
+    delegationBundle: params.delegationBundle,
     transactions,
   });
 }
@@ -221,6 +239,7 @@ export async function executeCompound(params: {
   >;
   txExecutionMode: PendleTxExecutionMode;
   clients?: OnchainClients;
+  delegationBundle?: DelegationBundle;
   walletAddress: `0x${string}`;
   position: TokenizedYieldPosition;
   currentMarket: TokenizedYieldMarket;
@@ -275,6 +294,7 @@ export async function executeCompound(params: {
   return planOrExecuteTransactions({
     txExecutionMode: params.txExecutionMode,
     clients: params.clients,
+    delegationBundle: params.delegationBundle,
     transactions,
   });
 }
@@ -283,6 +303,7 @@ export async function executeInitialDeposit(params: {
   onchainActionsClient: Pick<OnchainActionsClient, 'createTokenizedYieldBuyPt'>;
   txExecutionMode: PendleTxExecutionMode;
   clients?: OnchainClients;
+  delegationBundle?: DelegationBundle;
   walletAddress: `0x${string}`;
   fundingToken: Token;
   targetMarket: TokenizedYieldMarket;
@@ -312,6 +333,7 @@ export async function executeInitialDeposit(params: {
   return planOrExecuteTransactions({
     txExecutionMode: params.txExecutionMode,
     clients: params.clients,
+    delegationBundle: params.delegationBundle,
     transactions,
   });
 }

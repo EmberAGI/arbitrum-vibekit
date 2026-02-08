@@ -286,11 +286,14 @@ export const pollCycleNode = async (
     try {
       if (!smokeMode) {
         const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
+        const delegationBundle =
+          state.view.delegationsBypassActive === true ? undefined : state.view.delegationBundle;
         if (action === 'compound') {
           const execution = await executeCompound({
             onchainActionsClient,
             txExecutionMode,
             clients,
+            delegationBundle,
             walletAddress: operatorConfig.executionWalletAddress,
             position: selectedPosition,
             currentMarket: currentTokenized,
@@ -301,6 +304,7 @@ export const pollCycleNode = async (
             onchainActionsClient,
             txExecutionMode,
             clients,
+            delegationBundle,
             walletAddress: operatorConfig.executionWalletAddress,
             position: selectedPosition,
             currentMarket: currentTokenized,
@@ -312,6 +316,7 @@ export const pollCycleNode = async (
             onchainActionsClient,
             txExecutionMode,
             clients,
+            delegationBundle,
             walletAddress: operatorConfig.executionWalletAddress,
             position: selectedPosition,
             currentMarket: currentTokenized,

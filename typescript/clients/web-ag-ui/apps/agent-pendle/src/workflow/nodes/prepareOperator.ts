@@ -385,6 +385,7 @@ export const prepareOperatorNode = async (
           onchainActionsClient,
           clients,
           txExecutionMode,
+          delegationBundle: delegationsBypassActive ? undefined : state.view.delegationBundle,
           walletAddress: operatorConfig.executionWalletAddress,
           fundingToken,
           targetMarket,
