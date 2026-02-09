@@ -71,6 +71,71 @@ export type ClmmTransaction = {
   timestamp: string;
 };
 
+export type PendleRewardMetric = {
+  symbol: string;
+  amount: string;
+};
+
+export type PendlePositionMetric = {
+  marketAddress: string;
+  ptSymbol?: string;
+  ptAmount?: string;
+  ytSymbol?: string;
+  ytAmount?: string;
+  claimableRewards?: PendleRewardMetric[];
+};
+
+export type PendleStrategyMetric = {
+  marketAddress: string;
+  ytSymbol: string;
+  underlyingSymbol?: string;
+  maturity?: string;
+  baseContributionUsd?: number;
+  fundingTokenAddress?: string;
+  currentApy?: number;
+  bestApy?: number;
+  apyDelta?: number;
+  position?: PendlePositionMetric;
+};
+
+export type PendleLatestSnapshot = {
+  poolAddress?: `0x${string}`;
+  totalUsd?: number;
+  feesUsd?: number;
+  feesApy?: number;
+  timestamp?: string;
+  positionOpenedAt?: string;
+  /**
+   * USD value of the position when we began tracking it in the UI.
+   * This is not guaranteed to represent the user's true entry cost basis.
+   */
+  positionOpenedTotalUsd?: number;
+  positionTokens: Array<{
+    address: `0x${string}`;
+    symbol: string;
+    decimals: number;
+    amount?: number;
+    amountBaseUnits?: string;
+    valueUsd?: number;
+  }>;
+  pendle?: {
+    marketAddress: `0x${string}`;
+    ptSymbol: string;
+    ytSymbol: string;
+    underlyingSymbol: string;
+    maturity: string;
+    impliedApyPct?: number;
+    underlyingApyPct?: number;
+    pendleApyPct?: number;
+    aggregatedApyPct?: number;
+    swapFeeApyPct?: number;
+    ytFloatingApyPct?: number;
+    maxBoostedApyPct?: number;
+    netPnlUsd?: number;
+    netPnlPct?: number;
+  };
+};
+
 export type ClmmMetrics = {
   lastSnapshot?: PendleYieldToken;
   previousApy?: number;
@@ -78,6 +143,11 @@ export type ClmmMetrics = {
   staleCycles: number;
   iteration: number;
   latestCycle?: PendleTelemetry;
+  aumUsd?: number;
+  apy?: number;
+  lifetimePnlUsd?: number;
+  pendle?: PendleStrategyMetric;
+  latestSnapshot?: PendleLatestSnapshot;
 };
 
 export type TaskState =
@@ -125,6 +195,15 @@ export type FundingTokenInterrupt = {
   message: string;
   payloadSchema: Record<string, unknown>;
   options: FundingTokenOption[];
+};
+
+export type PendleFundWalletInterrupt = {
+  type: 'pendle-fund-wallet-request';
+  message: string;
+  payloadSchema: Record<string, unknown>;
+  artifactId: string;
+  walletAddress: `0x${string}`;
+  whitelistSymbols: string[];
 };
 
 export type DelegationCaveat = {
@@ -189,6 +268,7 @@ type ClmmViewState = {
   fundingTokenInput?: FundingTokenInput;
   selectedPool?: PendleYieldToken;
   operatorConfig?: ResolvedPendleConfig;
+  setupComplete?: boolean;
   delegationBundle?: DelegationBundle;
   haltReason?: string;
   executionError?: string;
@@ -220,6 +300,7 @@ const defaultViewState = (): ClmmViewState => ({
   fundingTokenInput: undefined,
   selectedPool: undefined,
   operatorConfig: undefined,
+  setupComplete: false,
   delegationBundle: undefined,
   haltReason: undefined,
   executionError: undefined,
@@ -246,6 +327,11 @@ const defaultViewState = (): ClmmViewState => ({
     staleCycles: 0,
     iteration: 0,
     latestCycle: undefined,
+    aumUsd: undefined,
+    apy: undefined,
+    lifetimePnlUsd: undefined,
+    pendle: undefined,
+    latestSnapshot: undefined,
   },
   transactionHistory: [],
 });
@@ -334,6 +420,11 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     staleCycles: right.metrics?.staleCycles ?? left.metrics.staleCycles,
     iteration: right.metrics?.iteration ?? left.metrics.iteration,
     latestCycle: right.metrics?.latestCycle ?? left.metrics.latestCycle,
+    aumUsd: right.metrics?.aumUsd ?? left.metrics.aumUsd,
+    apy: right.metrics?.apy ?? left.metrics.apy,
+    lifetimePnlUsd: right.metrics?.lifetimePnlUsd ?? left.metrics.lifetimePnlUsd,
+    pendle: right.metrics?.pendle ?? left.metrics.pendle,
+    latestSnapshot: right.metrics?.latestSnapshot ?? left.metrics.latestSnapshot,
   };
 
   return {
@@ -347,6 +438,7 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     fundingTokenInput: right.fundingTokenInput ?? left.fundingTokenInput,
     selectedPool: right.selectedPool ?? left.selectedPool,
     operatorConfig: right.operatorConfig ?? left.operatorConfig,
+    setupComplete: right.setupComplete ?? left.setupComplete,
     delegationBundle: right.delegationBundle ?? left.delegationBundle,
     haltReason: right.haltReason ?? left.haltReason,
     executionError: right.executionError ?? left.executionError,

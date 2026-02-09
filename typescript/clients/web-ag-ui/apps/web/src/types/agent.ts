@@ -26,9 +26,23 @@ export interface Task {
 // Pool types
 export interface Pool {
   address: string;
-  token0: { symbol: string };
-  token1: { symbol: string };
+  // Some agents (e.g. Pendle) do not model pools as token0/token1 pairs.
+  // Keep the UI resilient so a missing snapshot doesn't crash the detail page.
+  token0?: { symbol?: string } | null;
+  token1?: { symbol?: string } | null;
   feeTierBps?: number;
+}
+
+// Pendle market snapshot type emitted by agent-pendle.
+export interface PendleMarket {
+  marketAddress: `0x${string}`;
+  ptAddress: `0x${string}`;
+  ytAddress: `0x${string}`;
+  ptSymbol: string;
+  ytSymbol: string;
+  underlyingSymbol: string;
+  apy: number; // percent, e.g. 17.88
+  maturity: string; // ISO-ish date string
 }
 
 // Transaction types
@@ -47,7 +61,42 @@ export interface TelemetryItem {
   action: string;
   reason?: string;
   midPrice?: number;
+  apy?: number;
+  ytSymbol?: string;
+  metrics?: {
+    bestApy?: number;
+    currentApy?: number;
+    apyDelta?: number;
+    rebalanceThresholdPct?: number;
+  };
   timestamp?: string;
+}
+
+export interface PendleRewardMetric {
+  symbol: string;
+  amount: string;
+}
+
+export interface PendlePositionMetric {
+  marketAddress: string;
+  ptSymbol?: string;
+  ptAmount?: string;
+  ytSymbol?: string;
+  ytAmount?: string;
+  claimableRewards?: PendleRewardMetric[];
+}
+
+export interface PendleStrategyMetric {
+  marketAddress: string;
+  ytSymbol: string;
+  underlyingSymbol?: string;
+  maturity?: string;
+  baseContributionUsd?: number;
+  fundingTokenAddress?: string;
+  currentApy?: number;
+  bestApy?: number;
+  apyDelta?: number;
+  position?: PendlePositionMetric;
 }
 
 // Event types for activity streaming
@@ -82,6 +131,15 @@ export type PendleSetupRequestInterrupt = {
   type: 'pendle-setup-request';
   message: string;
   payloadSchema?: Record<string, unknown>;
+};
+
+export type PendleFundWalletRequestInterrupt = {
+  type: 'pendle-fund-wallet-request';
+  message: string;
+  payloadSchema?: Record<string, unknown>;
+  artifactId?: string;
+  walletAddress?: `0x${string}`;
+  whitelistSymbols?: string[];
 };
 
 export type GmxSetupRequestInterrupt = {
@@ -134,6 +192,7 @@ export type DelegationSigningRequestInterrupt = {
 export type AgentInterrupt =
   | OperatorConfigRequestInterrupt
   | PendleSetupRequestInterrupt
+  | PendleFundWalletRequestInterrupt
   | GmxSetupRequestInterrupt
   | FundingTokenRequestInterrupt
   | DelegationSigningRequestInterrupt;
@@ -148,6 +207,10 @@ export interface OperatorConfigInput {
 export interface PendleSetupInput {
   walletAddress: `0x${string}`;
   baseContributionUsd: number;
+}
+
+export interface FundWalletAcknowledgement {
+  acknowledged: true;
 }
 
 export interface GmxSetupInput {
@@ -189,8 +252,8 @@ export interface AgentViewProfile {
   chains: string[];
   protocols: string[];
   tokens: string[];
-  pools: Pool[];
-  allowedPools: Pool[];
+  pools: Array<Pool | PendleMarket>;
+  allowedPools: Array<Pool | PendleMarket>;
 }
 
 // Activity types (ClmmActivity)
@@ -203,6 +266,7 @@ export interface AgentViewActivity {
 export interface AgentViewMetrics {
   lastSnapshot?: Pool;
   previousPrice?: number;
+  previousApy?: number;
   cyclesSinceRebalance: number;
   staleCycles: number;
   rebalanceCycles?: number;
@@ -211,6 +275,7 @@ export interface AgentViewMetrics {
   aumUsd?: number;
   apy?: number;
   lifetimePnlUsd?: number;
+  pendle?: PendleStrategyMetric;
   latestSnapshot?: {
     poolAddress?: `0x${string}`;
     totalUsd?: number;
@@ -218,6 +283,7 @@ export interface AgentViewMetrics {
     feesApy?: number;
     timestamp?: string;
     positionOpenedAt?: string;
+    positionOpenedTotalUsd?: number;
     positionTokens: Array<{
       address: `0x${string}`;
       symbol: string;
@@ -226,6 +292,22 @@ export interface AgentViewMetrics {
       amountBaseUnits?: string;
       valueUsd?: number;
     }>;
+    pendle?: {
+      marketAddress: `0x${string}`;
+      ptSymbol: string;
+      ytSymbol: string;
+      underlyingSymbol: string;
+      maturity: string;
+      impliedApyPct?: number;
+      underlyingApyPct?: number;
+      pendleApyPct?: number;
+      aggregatedApyPct?: number;
+      swapFeeApyPct?: number;
+      ytFloatingApyPct?: number;
+      maxBoostedApyPct?: number;
+      netPnlUsd?: number;
+      netPnlPct?: number;
+    };
   };
 }
 
@@ -312,6 +394,7 @@ export const defaultProfile: AgentViewProfile = {
 export const defaultMetrics: AgentViewMetrics = {
   lastSnapshot: undefined,
   previousPrice: undefined,
+  previousApy: undefined,
   cyclesSinceRebalance: 0,
   staleCycles: 0,
   rebalanceCycles: 0,
@@ -320,6 +403,7 @@ export const defaultMetrics: AgentViewMetrics = {
   aumUsd: undefined,
   apy: undefined,
   lifetimePnlUsd: undefined,
+  pendle: undefined,
   latestSnapshot: undefined,
 };
 

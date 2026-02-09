@@ -1,19 +1,6 @@
 import type { PendleYieldToken } from '../domain/types.js';
 
-import type {
-  DelegationIntentSummary,
-  FundingTokenOption,
-  UnsignedDelegation,
-} from './context.js';
-
-export const AGENT_WALLET_ADDRESS =
-  '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as const;
-export const DELEGATION_MANAGER =
-  '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as const;
-export const DELEGATION_ENFORCER =
-  '0xcccccccccccccccccccccccccccccccccccccccc' as const;
-const ZERO_WORD = `0x${'0'.repeat(64)}` as const;
-const SALT_WORD = `0x${'1'.repeat(64)}` as const;
+import type { FundingTokenOption } from './context.js';
 
 const USD_AI_ADDRESS = '0x1111111111111111111111111111111111111111' as const;
 const RE_USD_ADDRESS = '0x2222222222222222222222222222222222222222' as const;
@@ -32,6 +19,9 @@ const USDE_ADDRESS = '0x1414141414141414141414141414141414141414' as const;
 export const YIELD_TOKENS: PendleYieldToken[] = [
   {
     marketAddress: '0xaaaa000000000000000000000000000000000001',
+    ptAddress: '0xaaaa000000000000000000000000000000000101',
+    ytAddress: '0xaaaa000000000000000000000000000000000201',
+    ptSymbol: 'PT-USDe',
     ytSymbol: 'YT-USDe',
     underlyingSymbol: 'USDe',
     apy: 18.45,
@@ -39,6 +29,9 @@ export const YIELD_TOKENS: PendleYieldToken[] = [
   },
   {
     marketAddress: '0xaaaa000000000000000000000000000000000002',
+    ptAddress: '0xaaaa000000000000000000000000000000000102',
+    ytAddress: '0xaaaa000000000000000000000000000000000202',
+    ptSymbol: 'PT-syrupUSDC',
     ytSymbol: 'YT-syrupUSDC',
     underlyingSymbol: 'syrupUSDC',
     apy: 15.2,
@@ -46,6 +39,9 @@ export const YIELD_TOKENS: PendleYieldToken[] = [
   },
   {
     marketAddress: '0xaaaa000000000000000000000000000000000003',
+    ptAddress: '0xaaaa000000000000000000000000000000000103',
+    ytAddress: '0xaaaa000000000000000000000000000000000203',
+    ptSymbol: 'PT-USD3',
     ytSymbol: 'YT-USD3',
     underlyingSymbol: 'USD3',
     apy: 12.9,
@@ -53,6 +49,9 @@ export const YIELD_TOKENS: PendleYieldToken[] = [
   },
   {
     marketAddress: '0xaaaa000000000000000000000000000000000004',
+    ptAddress: '0xaaaa000000000000000000000000000000000104',
+    ytAddress: '0xaaaa000000000000000000000000000000000204',
+    ptSymbol: 'PT-reUSD',
     ytSymbol: 'YT-reUSD',
     underlyingSymbol: 'reUSD',
     apy: 10.4,
@@ -141,51 +140,9 @@ export const FUNDING_TOKENS: FundingTokenOption[] = [
   },
 ];
 
-export const DELEGATION_INTENTS: DelegationIntentSummary[] = [
-  {
-    target: '0xdddddddddddddddddddddddddddddddddddddddd',
-    selector: '0x0c49ccbe',
-    allowedCalldata: [],
-  },
-  {
-    target: '0xdddddddddddddddddddddddddddddddddddddddd',
-    selector: '0xfc6f7865',
-    allowedCalldata: [{ startIndex: 36, value: ZERO_WORD }],
-  },
-];
-
-export const DELEGATION_DESCRIPTIONS = [
-  'Swap into Pendle stablecoin markets on your behalf.',
-  'Rotate YT exposure to the highest-yielding market.',
-  'Claim and compound Pendle yield into your wallet.',
-];
-
-export const DELEGATION_WARNINGS = [
-  'This delegation flow is for testing only.',
-];
-
-export function buildDelegations(
-  delegatorAddress: `0x${string}`,
-): UnsignedDelegation[] {
-  return [
-    {
-      delegate: AGENT_WALLET_ADDRESS,
-      delegator: delegatorAddress,
-      authority: ZERO_WORD,
-      caveats: [
-        {
-          enforcer: DELEGATION_ENFORCER,
-          terms: ZERO_WORD,
-          args: ZERO_WORD,
-        },
-      ],
-      salt: SALT_WORD,
-    },
-  ];
-}
-
 export const STABLECOIN_WHITELIST = [
   'USDai',
+  'sUSDai',
   'reUSD',
   'NUSD',
   'rUSD',
