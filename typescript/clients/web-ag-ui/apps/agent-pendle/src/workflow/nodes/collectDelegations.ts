@@ -1,6 +1,7 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
 import { createDelegation, getDeleGatorEnvironment } from '@metamask/delegation-toolkit';
+import { parseUnits } from 'viem';
 import { z } from 'zod';
 
 import {
@@ -210,7 +211,11 @@ export const collectDelegationsNode = async (
 
     const sampleWallet = delegatorAddress;
     const chainId = selectedMarket.marketIdentifier.chainId;
-    const sampleAmount = '10000000';
+    // Use a realistic, non-dust amount; Pendle routing rejects tiny swaps/quotes.
+    const baseContributionUsd =
+      typeof operatorInput.baseContributionUsd === 'number' && Number.isFinite(operatorInput.baseContributionUsd)
+        ? operatorInput.baseContributionUsd
+        : 10;
 
     // Collect a representative set of transaction targets+selectors that the agent will use,
     // but generate *one* delegation signature that covers all of them.
@@ -222,6 +227,11 @@ export const collectDelegationsNode = async (
       fundingTokenInput.fundingTokenAddress,
       'funding token address',
     );
+    const fundingToken = tokens.find(
+      (token) => token.tokenUid.address.toLowerCase() === fundingTokenAddress.toLowerCase(),
+    );
+    const sampleAmount = parseUnits(baseContributionUsd.toString(), fundingToken?.decimals ?? 18).toString();
+    const onePtBaseUnits = parseUnits('1', selectedMarket.ptToken.decimals).toString();
 
     const plans = await Promise.all([
       onchainActionsClient.createTokenizedYieldBuyPt({
@@ -234,13 +244,13 @@ export const collectDelegationsNode = async (
       onchainActionsClient.createTokenizedYieldSellPt({
         walletAddress: sampleWallet,
         ptTokenUid: selectedMarket.ptToken.tokenUid,
-        amount: '1',
+        amount: onePtBaseUnits,
         slippage: '0.01',
       }),
       onchainActionsClient.createTokenizedYieldRedeemPt({
         walletAddress: sampleWallet,
         ptTokenUid: selectedMarket.ptToken.tokenUid,
-        amount: '1',
+        amount: onePtBaseUnits,
       }),
       onchainActionsClient.createTokenizedYieldClaimRewards({
         walletAddress: sampleWallet,
