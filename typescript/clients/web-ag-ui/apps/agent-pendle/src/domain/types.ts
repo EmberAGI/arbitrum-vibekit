@@ -10,9 +10,19 @@ export type Token = z.infer<typeof TokenSchema>;
 
 export const PendleYieldTokenSchema = z.object({
   marketAddress: z.templateLiteral(['0x', z.string()]),
+  ptAddress: z.templateLiteral(['0x', z.string()]),
+  ytAddress: z.templateLiteral(['0x', z.string()]),
+  ptSymbol: z.string(),
   ytSymbol: z.string(),
   underlyingSymbol: z.string(),
   apy: z.number().nonnegative(),
+  impliedApyPct: z.number().nonnegative().optional(),
+  underlyingApyPct: z.number().nonnegative().optional(),
+  pendleApyPct: z.number().nonnegative().optional(),
+  aggregatedApyPct: z.number().nonnegative().optional(),
+  swapFeeApyPct: z.number().nonnegative().optional(),
+  ytFloatingApyPct: z.number().nonnegative().optional(),
+  maxBoostedApyPct: z.number().nonnegative().optional(),
   maturity: z.string(),
 });
 export type PendleYieldToken = z.infer<typeof PendleYieldTokenSchema>;
@@ -37,7 +47,17 @@ export interface FundingTokenInput extends FundingTokenInputBase {
 }
 
 export type ResolvedPendleConfig = {
+  /**
+   * Wallet that owns the user's Pendle position and should be used for reading
+   * balances/positions (metrics, onboarding detection, etc).
+   */
   walletAddress: `0x${string}`;
+  /**
+   * Wallet used to execute onchain actions. In delegations-bypass mode this
+   * points at the seeded agent wallet so we can exercise tx planning without
+   * requiring the user's signer.
+   */
+  executionWalletAddress: `0x${string}`;
   baseContributionUsd: number;
   fundingTokenAddress: `0x${string}`;
   targetYieldToken: PendleYieldToken;

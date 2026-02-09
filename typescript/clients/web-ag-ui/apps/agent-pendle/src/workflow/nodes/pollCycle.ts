@@ -1,9 +1,19 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
-import { resolvePollIntervalMs } from '../../config/constants.js';
+import {
+  resolvePendleChainIds,
+  resolvePendleSmokeMode,
+  resolvePendleTxExecutionMode,
+  resolvePollIntervalMs,
+  resolveRebalanceThresholdPct,
+  resolveStablecoinWhitelist,
+} from '../../config/constants.js';
+import { evaluateRebalanceDecision } from '../../core/pendleDecision.js';
+import { buildEligibleYieldTokens } from '../../core/pendleMarkets.js';
 import { type PendleActionKind, type PendleTelemetry } from '../../domain/types.js';
 import { buildTelemetryArtifact } from '../artifacts.js';
+import { getOnchainActionsClient, getOnchainClients } from '../clientFactory.js';
 import {
   buildTaskStatus,
   logInfo,
@@ -12,20 +22,14 @@ import {
   type ClmmUpdate,
 } from '../context.js';
 import { ensureCronForThread } from '../cronScheduler.js';
-import { YIELD_TOKENS } from '../seedData.js';
+import { executeCompound, executeRebalance, executeRollover } from '../execution.js';
+import { buildPendleLatestSnapshot, buildPendleLatestSnapshotFromOnchain } from '../viewMapping.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = { configurable?: { thread_id?: string } };
 
-const ACTIONS: PendleActionKind[] = ['scan-yields', 'hold', 'compound', 'rebalance', 'hold', 'rollover'];
 const CONNECT_DELAY_MS = 3000;
 const CONNECT_DELAY_STEPS = 3;
-const REBALANCE_THRESHOLD_PCT = 0.5;
-
-function actionForIteration(iteration: number): PendleActionKind {
-  const index = (iteration - 1) % ACTIONS.length;
-  return ACTIONS[index] ?? 'hold';
-}
 
 function buildTxHash(iteration: number): string {
   return `0x${iteration.toString(16).padStart(64, '0')}`;
@@ -39,9 +43,35 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function adjustApy(baseApy: number, iteration: number, index: number): number {
-  const drift = ((iteration + index) % 4 - 1.5) * 0.35;
-  return Number(Math.max(1, baseApy + drift).toFixed(2));
+function formatDelta(value: number): number {
+  return Number(value.toFixed(2));
+}
+
+function isMaturedMarket(maturity: string): boolean {
+  const parsed = Date.parse(maturity);
+  if (Number.isNaN(parsed)) {
+    return false;
+  }
+  return parsed <= Date.now();
+}
+
+function hasClaimableRewards(position: { yt: { claimableRewards: { exactAmount: string }[] } }): boolean {
+  return position.yt.claimableRewards.some((reward) => {
+    try {
+      return BigInt(reward.exactAmount) > 0n;
+    } catch {
+      return false;
+    }
+  });
+}
+
+function toRewardMetrics(
+  rewards: Array<{ token: { symbol: string }; exactAmount: string }>,
+): Array<{ symbol: string; amount: string }> {
+  return rewards.map((reward) => ({
+    symbol: reward.token.symbol,
+    amount: reward.exactAmount,
+  }));
 }
 
 export const pollCycleNode = async (
@@ -51,7 +81,67 @@ export const pollCycleNode = async (
   const { operatorConfig, selectedPool } = state.view;
 
   if (!operatorConfig) {
-    const failureMessage = 'ERROR: Polling node missing Pendle strategy configuration';
+    const message =
+      'WARNING: Pendle strategy configuration missing. Complete onboarding (funding token + strategy setup) before running cycles.';
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
+    await copilotkitEmitState(config, {
+      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+    });
+
+    return new Command({
+      update: {
+        view: {
+          haltReason: '',
+          executionError: '',
+          task,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          metrics: state.view.metrics,
+          profile: state.view.profile,
+          transactionHistory: state.view.transactionHistory,
+        },
+      },
+      goto: '__end__',
+    });
+  }
+
+  const iteration = (state.view.metrics.iteration ?? 0) + 1;
+  const onchainActionsClient = getOnchainActionsClient();
+  let eligibleMarkets = [];
+  let currentMarket = selectedPool ?? operatorConfig.targetYieldToken;
+  let tokenizedMarkets = [];
+  let positions = [];
+
+  try {
+    const chainIds = resolvePendleChainIds();
+    const [markets, supportedTokens, walletPositions] = await Promise.all([
+      onchainActionsClient.listTokenizedYieldMarkets({ chainIds }),
+      onchainActionsClient.listTokens({ chainIds }),
+      onchainActionsClient.listTokenizedYieldPositions({
+        walletAddress: operatorConfig.walletAddress,
+        chainIds,
+      }),
+    ]);
+    tokenizedMarkets = markets;
+    positions = walletPositions;
+    eligibleMarkets = buildEligibleYieldTokens({
+      markets,
+      supportedTokens,
+      whitelistSymbols: resolveStablecoinWhitelist(),
+    });
+    if (walletPositions.length > 0) {
+      const positionAddresses = new Set(
+        walletPositions.map((position) => position.marketIdentifier.address.toLowerCase()),
+      );
+      const matched = eligibleMarkets.find((market) =>
+        positionAddresses.has(market.marketAddress.toLowerCase()),
+      );
+      if (matched) {
+        currentMarket = matched;
+      }
+    }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const failureMessage = `ERROR: Failed to refresh Pendle markets: ${message}`;
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
     await copilotkitEmitState(config, {
       view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
@@ -71,23 +161,7 @@ export const pollCycleNode = async (
     });
   }
 
-  const iteration = (state.view.metrics.iteration ?? 0) + 1;
-  const baseAction = actionForIteration(iteration);
-
-  const adjustedMarkets = YIELD_TOKENS.map((token, index) => ({
-    token,
-    apy: adjustApy(token.apy, iteration, index),
-  }));
-
-  const bestMarket = [...adjustedMarkets]
-    .sort((a, b) => {
-      if (b.apy !== a.apy) {
-        return b.apy - a.apy;
-      }
-      return a.token.ytSymbol.localeCompare(b.token.ytSymbol);
-    })
-    .at(0);
-
+  const bestMarket = eligibleMarkets[0];
   if (!bestMarket) {
     const failureMessage = 'ERROR: No Pendle markets available during cycle';
     const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
@@ -109,32 +183,55 @@ export const pollCycleNode = async (
     });
   }
 
-  const selectedMarket = selectedPool ?? bestMarket.token;
-  const selectedMarketAdjusted =
-    adjustedMarkets.find((market) => market.token.marketAddress === selectedMarket.marketAddress)?.apy ??
-    selectedMarket.apy;
+  let selectedMarket = currentMarket ?? bestMarket;
+  const selectedStillEligible = eligibleMarkets.some(
+    (market) => market.marketAddress.toLowerCase() === selectedMarket.marketAddress.toLowerCase(),
+  );
+  if (!selectedStillEligible) {
+    selectedMarket = bestMarket;
+  }
+  const thresholdPct = resolveRebalanceThresholdPct();
+  const decision = evaluateRebalanceDecision({
+    bestToken: bestMarket,
+    currentToken: selectedMarket,
+    thresholdPct,
+  });
 
-  const apyDelta = Number((bestMarket.apy - selectedMarketAdjusted).toFixed(2));
-  const shouldRebalance = apyDelta >= REBALANCE_THRESHOLD_PCT;
+  const selectedPosition = positions.find(
+    (entry) =>
+      entry.marketIdentifier.address.toLowerCase() === selectedMarket.marketAddress.toLowerCase(),
+  );
+  const rolloverNeeded = isMaturedMarket(selectedMarket.maturity);
+  const compoundEligible = selectedPosition ? hasClaimableRewards(selectedPosition) : false;
+  const smokeMode = resolvePendleSmokeMode();
+  const txExecutionMode = resolvePendleTxExecutionMode();
 
-  const action: PendleActionKind =
-    baseAction === 'rebalance' && shouldRebalance ? 'rebalance' : baseAction;
+  let action: PendleActionKind;
+  let nextMarket = decision.nextToken;
 
-  const nextMarket =
-    action === 'rebalance' && bestMarket.token.marketAddress !== selectedMarket.marketAddress
-      ? bestMarket.token
-      : selectedMarket;
+  if (rolloverNeeded) {
+    action = 'rollover';
+    nextMarket = bestMarket;
+  } else if (compoundEligible) {
+    action = 'compound';
+    nextMarket = selectedMarket;
+  } else {
+    action = decision.shouldRebalance ? 'rebalance' : 'hold';
+    nextMarket = decision.nextToken;
+  }
+  const nextApy = nextMarket.apy;
 
-  const nextApy = action === 'rebalance' ? bestMarket.apy : selectedMarketAdjusted;
+  if (smokeMode && !selectedPosition && (action === 'rebalance' || action === 'rollover' || action === 'compound')) {
+    // In smoke mode we prioritize validating UI + cron updates over requiring a real onchain position.
+    action = 'hold';
+    nextMarket = selectedMarket;
+  }
 
   let reason = 'Yield delta below rebalance threshold.';
   switch (action) {
-    case 'scan-yields':
-      reason = 'Scanning stablecoin YT markets for the best APY.';
-      break;
     case 'rebalance':
-      reason = shouldRebalance
-        ? `Rotating into ${bestMarket.token.ytSymbol} (+${apyDelta}%) for higher yield.`
+      reason = decision.shouldRebalance
+        ? `Rotating into ${bestMarket.ytSymbol} (+${formatDelta(decision.apyDelta)}%) for higher yield.`
         : 'Best yield unchanged; holding current position.';
       break;
     case 'compound':
@@ -149,8 +246,122 @@ export const pollCycleNode = async (
       break;
   }
 
-  const txHash = ['rebalance', 'compound', 'rollover'].includes(action) ? buildTxHash(iteration) : undefined;
+  let executionTxHash: `0x${string}` | undefined;
+  if (action === 'rebalance' || action === 'rollover' || action === 'compound') {
+    const currentTokenized = tokenizedMarkets.find(
+      (market) =>
+        market.marketIdentifier.address.toLowerCase() === selectedMarket.marketAddress.toLowerCase(),
+    );
+    const nextTokenized = tokenizedMarkets.find(
+      (market) => market.marketIdentifier.address.toLowerCase() === nextMarket.marketAddress.toLowerCase(),
+    );
+
+    if (!currentTokenized || !selectedPosition || (action !== 'compound' && !nextTokenized)) {
+      const failureMessage =
+        action === 'rollover'
+          ? 'ERROR: Missing tokenized yield data needed to rollover'
+          : action === 'compound'
+            ? 'ERROR: Missing tokenized yield data needed to compound'
+            : 'ERROR: Missing tokenized yield data needed to rebalance';
+      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      await copilotkitEmitState(config, {
+        view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      });
+      return new Command({
+        update: {
+          view: {
+            haltReason: failureMessage,
+            executionError: failureMessage,
+            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+            metrics: state.view.metrics,
+            task,
+            profile: state.view.profile,
+            transactionHistory: state.view.transactionHistory,
+          },
+        },
+        goto: 'summarize',
+      });
+    }
+
+    try {
+      if (!smokeMode) {
+        const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
+        const delegationBundle =
+          state.view.delegationsBypassActive === true ? undefined : state.view.delegationBundle;
+        if (action === 'compound') {
+          const execution = await executeCompound({
+            onchainActionsClient,
+            txExecutionMode,
+            clients,
+            delegationBundle,
+            walletAddress: operatorConfig.executionWalletAddress,
+            position: selectedPosition,
+            currentMarket: currentTokenized,
+          });
+          executionTxHash = execution.lastTxHash;
+        } else if (action === 'rollover') {
+          const execution = await executeRollover({
+            onchainActionsClient,
+            txExecutionMode,
+            clients,
+            delegationBundle,
+            walletAddress: operatorConfig.executionWalletAddress,
+            position: selectedPosition,
+            currentMarket: currentTokenized,
+            targetMarket: nextTokenized!,
+          });
+          executionTxHash = execution.lastTxHash;
+        } else {
+          const execution = await executeRebalance({
+            onchainActionsClient,
+            txExecutionMode,
+            clients,
+            delegationBundle,
+            walletAddress: operatorConfig.executionWalletAddress,
+            position: selectedPosition,
+            currentMarket: currentTokenized,
+            targetMarket: nextTokenized!,
+          });
+          executionTxHash = execution.lastTxHash;
+        }
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      const failureMessage =
+        action === 'rollover'
+          ? `ERROR: Pendle rollover execution failed: ${message}`
+          : action === 'compound'
+            ? `ERROR: Pendle compound execution failed: ${message}`
+            : `ERROR: Pendle rebalance execution failed: ${message}`;
+      const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+      await copilotkitEmitState(config, {
+        view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      });
+      return new Command({
+        update: {
+          view: {
+            haltReason: failureMessage,
+            executionError: failureMessage,
+            activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+            metrics: state.view.metrics,
+            task,
+            profile: state.view.profile,
+            transactionHistory: state.view.transactionHistory,
+          },
+        },
+        goto: 'summarize',
+      });
+    }
+  }
+
+  const txHash =
+    ['rebalance', 'compound', 'rollover'].includes(action) && executionTxHash
+      ? executionTxHash
+      : ['rebalance', 'compound', 'rollover'].includes(action)
+        ? buildTxHash(iteration)
+        : undefined;
   const timestamp = new Date().toISOString();
+  const strategyMarketAddress = nextMarket.marketAddress;
   const cycleTelemetry: PendleTelemetry = {
     cycle: iteration,
     action,
@@ -162,12 +373,15 @@ export const pollCycleNode = async (
     metrics: {
       bestApy: bestMarket.apy,
       currentApy: nextApy,
-      apyDelta,
-      rebalanceThresholdPct: REBALANCE_THRESHOLD_PCT,
+      apyDelta: decision.apyDelta,
+      rebalanceThresholdPct: thresholdPct,
     },
   };
 
-  const cyclesSinceRebalance = action === 'rebalance' ? 0 : (state.view.metrics.cyclesSinceRebalance ?? 0) + 1;
+  const cyclesSinceRebalance =
+    action === 'rebalance' || action === 'rollover'
+      ? 0
+      : (state.view.metrics.cyclesSinceRebalance ?? 0) + 1;
 
   const cycleStatusMessage = `[Cycle ${iteration}] ${action}: ${reason}${txHash ? ` (tx: ${txHash.slice(0, 10)}...)` : ''}`;
   let { task, statusEvent } = buildTaskStatus(state.view.task, 'working', cycleStatusMessage);
@@ -223,15 +437,66 @@ export const pollCycleNode = async (
       }
     : undefined;
 
-  const baseAum = state.view.profile.aum ?? 42_000;
-  const baseIncome = state.view.profile.agentIncome ?? 4_100;
-  const aumDelta = action === 'hold' ? 15 : 120;
-  const incomeDelta = action === 'hold' ? 1.5 : 6;
+  const configuredAumUsd = Number(
+    operatorConfig.baseContributionUsd ?? state.settings.amount ?? 0,
+  );
+  const aumUsd = Number.isFinite(configuredAumUsd) && configuredAumUsd > 0 ? configuredAumUsd : undefined;
+
+  const normalizedFundingTokenAddress = operatorConfig.fundingTokenAddress;
+  const normalizedMarketAddress = strategyMarketAddress;
+  const nextPosition = positions.find(
+    (entry) => entry.marketIdentifier.address.toLowerCase() === normalizedMarketAddress.toLowerCase(),
+  );
+
+  const positionMetric = nextPosition
+    ? {
+        marketAddress: normalizedMarketAddress,
+        ptSymbol: nextPosition.pt.token.symbol,
+        ptAmount: nextPosition.pt.exactAmount,
+        ytSymbol: nextPosition.yt.token.symbol,
+        ytAmount: nextPosition.yt.exactAmount,
+        claimableRewards: toRewardMetrics(nextPosition.yt.claimableRewards),
+      }
+    : undefined;
+
+  const snapshotConfig = {
+    ...operatorConfig,
+    targetYieldToken: nextMarket,
+  };
+  const positionOpenedAt = state.view.metrics.latestSnapshot?.positionOpenedAt ?? timestamp;
+  const positionOpenedTotalUsd = state.view.metrics.latestSnapshot?.positionOpenedTotalUsd;
+  let latestSnapshot = buildPendleLatestSnapshot({
+    operatorConfig: snapshotConfig,
+    totalUsd: aumUsd,
+    timestamp,
+    positionOpenedAt,
+    positionOpenedTotalUsd,
+  });
+
+  try {
+    const walletBalances = await onchainActionsClient.listWalletBalances(operatorConfig.walletAddress);
+    latestSnapshot = buildPendleLatestSnapshotFromOnchain({
+      operatorConfig: snapshotConfig,
+      position: nextPosition,
+      walletBalances,
+      timestamp,
+      positionOpenedAt,
+      positionOpenedTotalUsd,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    logInfo('Unable to hydrate Pendle snapshot from wallet balances; falling back to configured snapshot', {
+      error: message,
+    });
+  }
+
   const nextProfile = {
     ...state.view.profile,
-    aum: Number((baseAum + aumDelta).toFixed(2)),
-    agentIncome: Number((baseIncome + incomeDelta).toFixed(2)),
-    apy: Number(nextApy.toFixed(2)),
+    aum: aumUsd,
+    agentIncome: state.view.profile.agentIncome,
+    apy: Number.isFinite(nextApy) ? Number(nextApy.toFixed(2)) : state.view.profile.apy,
+    pools: eligibleMarkets,
+    allowedPools: eligibleMarkets,
   };
 
   return new Command({
@@ -244,6 +509,22 @@ export const pollCycleNode = async (
           staleCycles: state.view.metrics.staleCycles ?? 0,
           iteration,
           latestCycle: cycleTelemetry,
+          aumUsd,
+          apy: Number.isFinite(nextApy) ? Number(nextApy.toFixed(2)) : undefined,
+          lifetimePnlUsd: state.view.metrics.lifetimePnlUsd,
+          pendle: {
+            marketAddress: normalizedMarketAddress,
+            ytSymbol: nextMarket.ytSymbol,
+            underlyingSymbol: nextMarket.underlyingSymbol,
+            maturity: nextMarket.maturity,
+            baseContributionUsd: aumUsd,
+            fundingTokenAddress: normalizedFundingTokenAddress,
+            currentApy: Number.isFinite(nextApy) ? Number(nextApy.toFixed(4)) : undefined,
+            bestApy: Number.isFinite(bestMarket.apy) ? Number(bestMarket.apy.toFixed(4)) : undefined,
+            apyDelta: Number.isFinite(decision.apyDelta) ? formatDelta(decision.apyDelta) : undefined,
+            position: positionMetric,
+          },
+          latestSnapshot,
         },
         task,
         activity: {
