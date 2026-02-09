@@ -65,6 +65,8 @@ function sendTransactionWithRetry(
     value?: bigint;
   },
 ): Promise<`0x${string}`> {
+  type FailedAttempt = { attemptNumber: number; retriesLeft: number; error: unknown };
+
   return pRetry<`0x${string}`>(
     async () =>
       clients.wallet.sendTransaction({
@@ -80,9 +82,9 @@ function sendTransactionWithRetry(
       minTimeout: SEND_TRANSACTION_BASE_DELAY_MS,
       maxTimeout: SEND_TRANSACTION_MAX_DELAY_MS,
       randomize: true,
-      onFailedAttempt: ({ attemptNumber, retriesLeft, error }) => {
+      onFailedAttempt: ({ attemptNumber, retriesLeft, error }: FailedAttempt) => {
         if (!isRateLimitError(error)) {
-          throw new AbortError(error);
+          throw new AbortError(error instanceof Error ? error : new Error(formatRetryError(error)));
         }
         logInfo('RPC rate limit detected; retrying transaction', {
           attemptNumber,
