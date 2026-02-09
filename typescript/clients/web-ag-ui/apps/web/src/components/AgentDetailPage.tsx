@@ -23,8 +23,10 @@ import type {
   FundingTokenOption,
   OnboardingState,
   Pool,
+  PendleMarket,
   OperatorConfigInput,
   PendleSetupInput,
+  FundWalletAcknowledgement,
   GmxSetupInput,
   FundingTokenInput,
   DelegationSigningResponse,
@@ -34,6 +36,7 @@ import type {
   ClmmEvent,
 } from '../types/agent';
 import { usePrivyWalletClient } from '../hooks/usePrivyWalletClient';
+import { formatPoolPair } from '../utils/poolFormat';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
@@ -64,11 +67,12 @@ interface AgentDetailPageProps {
   onBack: () => void;
   // Interrupt handling
   activeInterrupt?: AgentInterrupt | null;
-  allowedPools: Pool[];
+  allowedPools: Array<Pool | PendleMarket>;
   onInterruptSubmit?: (
     input:
       | OperatorConfigInput
       | PendleSetupInput
+      | FundWalletAcknowledgement
       | GmxSetupInput
       | FundingTokenInput
       | DelegationSigningResponse,
@@ -354,6 +358,7 @@ export function AgentDetailPage({
 
           {resolvedTab === 'metrics' && (
             <MetricsTab
+              agentId={agentId}
               profile={profile}
               metrics={metrics}
               fullMetrics={fullMetrics}
@@ -506,8 +511,10 @@ export function AgentDetailPage({
 
             {activeTab === 'metrics' && (
               <MetricsTab
+                agentId={agentId}
                 profile={profile}
                 metrics={metrics}
+                fullMetrics={fullMetrics}
                 events={[]}
               />
             )}
@@ -622,11 +629,12 @@ function TransactionHistoryTab({ transactions }: TransactionHistoryTabProps) {
 interface AgentBlockersTabProps {
   agentId: string;
   activeInterrupt?: AgentInterrupt | null;
-  allowedPools: Pool[];
+  allowedPools: Array<Pool | PendleMarket>;
   onInterruptSubmit?: (
     input:
       | OperatorConfigInput
       | PendleSetupInput
+      | FundWalletAcknowledgement
       | GmxSetupInput
       | FundingTokenInput
       | DelegationSigningResponse,
@@ -682,9 +690,13 @@ function AgentBlockersTab({
     isLoading: isWalletLoading,
     error: walletError,
   } = usePrivyWalletClient();
-  const delegationsBypassEnabled = process.env.DELEGATIONS_BYPASS === 'true';
+  const delegationsBypassEnabled =
+    (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_DELEGATIONS_BYPASS : undefined) ===
+    'true';
+  // Treat empty-string env as unset so the UI does not render a blank address.
   const walletBypassAddress =
-    process.env.NEXT_PUBLIC_WALLET_BYPASS_ADDRESS ?? '0x0000000000000000000000000000000000000000';
+    (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_WALLET_BYPASS_ADDRESS : undefined)?.trim() ||
+    '0x0000000000000000000000000000000000000000';
   const isPendleAgent = agentId === 'agent-pendle';
   const isGmxAlloraAgent = agentId === 'agent-gmx-allora';
   const delegationsBypassEnv = 'DELEGATIONS_BYPASS';
@@ -712,7 +724,10 @@ function AgentBlockersTab({
   const isHexAddress = (value: string) => /^0x[0-9a-fA-F]+$/.test(value);
   const uniqueAllowedPools: Pool[] = [];
   const seenPoolAddresses = new Set<string>();
-  for (const pool of allowedPools) {
+  const isPool = (value: Pool | PendleMarket): value is Pool => 'address' in value;
+  for (const poolCandidate of allowedPools) {
+    if (!isPool(poolCandidate)) continue;
+    const pool = poolCandidate;
     if (seenPoolAddresses.has(pool.address)) continue;
     seenPoolAddresses.add(pool.address);
     uniqueAllowedPools.push(pool);
@@ -898,6 +913,7 @@ function AgentBlockersTab({
   // Derive which form to show from the interrupt type (the authoritative source)
   const showOperatorConfigForm = activeInterrupt?.type === 'operator-config-request';
   const showPendleSetupForm = activeInterrupt?.type === 'pendle-setup-request';
+  const showPendleFundWalletForm = activeInterrupt?.type === 'pendle-fund-wallet-request';
   const showGmxSetupForm = activeInterrupt?.type === 'gmx-setup-request';
   const showFundingTokenForm =
     activeInterrupt?.type === 'clmm-funding-token-request' ||
@@ -910,7 +926,7 @@ function AgentBlockersTab({
 
   // Sync currentStep with the interrupt type when it changes
   useEffect(() => {
-    if (showOperatorConfigForm || showPendleSetupForm || showGmxSetupForm) {
+    if (showOperatorConfigForm || showPendleSetupForm || showPendleFundWalletForm || showGmxSetupForm) {
       setCurrentStep(1);
     } else if (showFundingTokenForm) {
       setCurrentStep(2);
@@ -920,6 +936,7 @@ function AgentBlockersTab({
   }, [
     showOperatorConfigForm,
     showPendleSetupForm,
+    showPendleFundWalletForm,
     showGmxSetupForm,
     showFundingTokenForm,
     showDelegationSigningForm,
@@ -1167,6 +1184,38 @@ function AgentBlockersTab({
                   </button>
                 </div>
               </form>
+            ) : showPendleFundWalletForm ? (
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-4">Fund Wallet</h3>
+                {activeInterrupt?.message && (
+                  <p className="text-gray-400 text-sm mb-6">{activeInterrupt.message}</p>
+                )}
+
+                <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4 mb-6">
+                  <div className="text-yellow-300 text-sm font-medium mb-2">What to do</div>
+                  <ul className="space-y-1 text-yellow-200 text-xs">
+                    <li>
+                      Add a small balance of an eligible stablecoin on Arbitrum to your wallet, then click Continue.
+                    </li>
+                    <li>
+                      Eligible: {(activeInterrupt as unknown as { whitelistSymbols?: string[] }).whitelistSymbols?.join(', ') || 'USDai, USDC'}
+                    </li>
+                    <li>
+                      Wallet: {(activeInterrupt as unknown as { walletAddress?: string }).walletAddress || connectedWalletAddress || 'Unknown'}
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => onInterruptSubmit?.({ acknowledged: true })}
+                    className="px-6 py-2.5 rounded-lg bg-[#2a2a2a] hover:bg-[#333] text-white font-medium transition-colors"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
             ) : showGmxSetupForm ? (
               <form onSubmit={handleGmxSetupSubmit}>
                 <h3 className="text-lg font-semibold text-white mb-4">GMX Allora Setup</h3>
@@ -1240,7 +1289,7 @@ function AgentBlockersTab({
                       <option value="">Choose a pool...</option>
                       {uniqueAllowedPools.map((pool) => (
                         <option key={pool.address} value={pool.address}>
-                          {pool.token0.symbol}/{pool.token1.symbol} — {pool.address.slice(0, 10)}
+                          {formatPoolPair(pool)} — {pool.address.slice(0, 10)}
                           ...
                         </option>
                       ))}
@@ -1585,13 +1634,18 @@ function PointsColumn({ metrics }: PointsColumnProps) {
 
 // Metrics Tab Component
 interface MetricsTabProps {
+  agentId: string;
   profile: AgentProfile;
   metrics: AgentMetrics;
   fullMetrics?: AgentViewMetrics;
   events: ClmmEvent[];
 }
 
-function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) {
+function MetricsTab({ agentId, profile, metrics, fullMetrics, events }: MetricsTabProps) {
+  if (agentId === 'agent-pendle') {
+    return <PendleMetricsTab profile={profile} metrics={metrics} fullMetrics={fullMetrics} events={events} />;
+  }
+
   const formatDate = (timestamp?: string) => {
     if (!timestamp) return '—';
     const date = new Date(timestamp);
@@ -1636,9 +1690,7 @@ function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) 
 
   const latestSnapshot = fullMetrics?.latestSnapshot;
   const poolSnapshot = fullMetrics?.lastSnapshot;
-  const poolName = poolSnapshot
-    ? `${poolSnapshot.token0.symbol}/${poolSnapshot.token1.symbol}`
-    : '—';
+  const poolName = formatPoolPair(poolSnapshot);
   const positionTokens = latestSnapshot?.positionTokens ?? [];
 
   return (
@@ -1776,6 +1828,303 @@ function MetricsTab({ profile, metrics, fullMetrics, events }: MetricsTabProps) 
       )}
 
       {/* Activity Stream */}
+      {events.length > 0 && (
+        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {events.slice(-10).reverse().map((event, i) => (
+              <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#252525]">
+                <div
+                  className={`w-2 h-2 rounded-full mt-2 ${
+                    event.type === 'status'
+                      ? 'bg-blue-400'
+                      : event.type === 'artifact'
+                        ? 'bg-purple-400'
+                        : 'bg-gray-400'
+                  }`}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-gray-500 uppercase tracking-wide">{event.type}</div>
+                  <div className="text-sm text-white mt-1">
+                    {event.type === 'status' && event.message}
+                    {event.type === 'artifact' && `Artifact: ${event.artifact?.type ?? 'unknown'}`}
+                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PendleMetricsTab({ profile, metrics, fullMetrics, events }: Omit<MetricsTabProps, 'agentId'>) {
+  const formatDate = (timestamp?: string) => {
+    if (!timestamp) return '—';
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const formatUsd = (value?: number) => {
+    if (value === undefined) return '—';
+    return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
+  };
+
+  const formatTokenAmount = (params: {
+    amountBaseUnits?: string;
+    decimals: number;
+    fallbackRaw?: string;
+  }): string => {
+    const { amountBaseUnits, decimals, fallbackRaw } = params;
+    if (!amountBaseUnits) {
+      return fallbackRaw ?? '—';
+    }
+    try {
+      const formatted = formatUnits(BigInt(amountBaseUnits), decimals);
+      const [whole, fraction] = formatted.split('.');
+      if (!fraction) return whole;
+      return `${whole}.${fraction.slice(0, 6)}`; // keep UI compact
+    } catch {
+      return fallbackRaw ?? '—';
+    }
+  };
+
+  const strategy = fullMetrics?.pendle;
+  const latestCycle = fullMetrics?.latestCycle;
+  const latestSnapshot = fullMetrics?.latestSnapshot;
+  const snapshot = latestSnapshot?.pendle;
+  const snapshotTokens = latestSnapshot?.positionTokens ?? [];
+
+  const ptSymbol = snapshot?.ptSymbol ?? strategy?.position?.ptSymbol;
+  const ytSymbol = snapshot?.ytSymbol ?? strategy?.position?.ytSymbol;
+  const ptToken = ptSymbol ? snapshotTokens.find((token) => token.symbol === ptSymbol) : undefined;
+  const ytToken = ytSymbol ? snapshotTokens.find((token) => token.symbol === ytSymbol) : undefined;
+
+  const rewardLines = strategy?.position?.claimableRewards ?? [];
+  const impliedYieldPct = snapshot?.impliedApyPct ?? strategy?.currentApy ?? metrics.apy;
+  const apyDetails = [
+    { label: 'Implied', value: snapshot?.impliedApyPct },
+    { label: 'Aggregated', value: snapshot?.aggregatedApyPct },
+    { label: 'Underlying', value: snapshot?.underlyingApyPct },
+    { label: 'Swap Fee', value: snapshot?.swapFeeApyPct },
+    { label: 'Pendle', value: snapshot?.pendleApyPct },
+    { label: 'YT Float', value: snapshot?.ytFloatingApyPct },
+    { label: 'Max Boost', value: snapshot?.maxBoostedApyPct },
+  ].filter((entry) => entry.value !== undefined);
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Strategy</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Target YT</div>
+            <div className="text-white font-medium">{strategy?.ytSymbol ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Underlying</div>
+            <div className="text-white font-medium">{strategy?.underlyingSymbol ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Current APY</div>
+            <div className="text-white font-medium">
+              {strategy?.currentApy !== undefined ? `${strategy.currentApy.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Contribution</div>
+            <div className="text-white font-medium">
+              {strategy?.baseContributionUsd !== undefined ? `$${strategy.baseContributionUsd.toLocaleString()}` : '—'}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-[#2a2a2a] grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Maturity</div>
+            <div className="text-white font-medium">{strategy?.maturity ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Best APY</div>
+            <div className="text-white font-medium">
+              {strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Delta</div>
+            <div className="text-white font-medium">
+              {strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Funding Token</div>
+            <div className="text-white font-medium">
+              {strategy?.fundingTokenAddress ? strategy.fundingTokenAddress.slice(0, 10) + '…' : '—'}
+            </div>
+          </div>
+        </div>
+
+        {apyDetails.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">APY Details</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {apyDetails.map((entry) => (
+                <div key={entry.label}>
+                  <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">{entry.label}</div>
+                  <div className="text-white font-medium">
+                    {entry.value !== undefined ? `${entry.value.toFixed(2)}%` : '—'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Position</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">PT</div>
+            <div className="text-white font-medium">
+              {ptSymbol
+                ? `${ptSymbol} ${formatTokenAmount({
+                    amountBaseUnits: ptToken?.amountBaseUnits,
+                    decimals: ptToken?.decimals ?? 18,
+                    fallbackRaw: strategy?.position?.ptAmount,
+                  })}`.trim()
+                : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">YT</div>
+            <div className="text-white font-medium">
+              {ytSymbol
+                ? `${ytSymbol} ${formatTokenAmount({
+                    amountBaseUnits: ytToken?.amountBaseUnits,
+                    decimals: ytToken?.decimals ?? 18,
+                    fallbackRaw: strategy?.position?.ytAmount,
+                  })}`.trim()
+                : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Implied Yield</div>
+            <div className="text-white font-medium">
+              {impliedYieldPct !== undefined ? `${impliedYieldPct.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Position Value</div>
+            <div className="text-white font-medium">{formatUsd(latestSnapshot?.totalUsd)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Net PnL</div>
+            <div className="text-white font-medium">
+              {snapshot?.netPnlUsd !== undefined ? (
+                <>
+                  {formatUsd(snapshot.netPnlUsd)}
+                  {snapshot.netPnlPct !== undefined && (
+                    <span className="text-gray-400">{` (${snapshot.netPnlPct.toFixed(2)}%)`}</span>
+                  )}
+                </>
+              ) : (
+                '—'
+              )}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+            <div className="text-white font-medium">
+              {metrics.apy !== undefined ? `${metrics.apy.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">AUM</div>
+            <div className="text-white font-medium">
+              {metrics.aumUsd !== undefined ? `$${metrics.aumUsd.toLocaleString()}` : '—'}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+          <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Claimable Rewards</div>
+          {rewardLines.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {rewardLines.map((reward) => (
+                <div key={reward.symbol} className="flex items-center justify-between">
+                  <span className="text-gray-300">{reward.symbol}</span>
+                  <span className="text-white font-medium">{reward.amount}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-gray-400 text-sm">—</div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <MetricCard
+          label="Iteration"
+          value={metrics.iteration?.toString() ?? '—'}
+          icon={<TrendingUp className="w-4 h-4 text-teal-400" />}
+        />
+        <MetricCard
+          label="Cycles Since Rotation"
+          value={metrics.cyclesSinceRebalance?.toString() ?? '—'}
+          icon={<Minus className="w-4 h-4 text-yellow-400" />}
+        />
+        <MetricCard
+          label="Best APY"
+          value={strategy?.bestApy !== undefined ? `${strategy.bestApy.toFixed(2)}%` : '—'}
+          icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
+        />
+        <MetricCard
+          label="APY Delta"
+          value={strategy?.apyDelta !== undefined ? `${strategy.apyDelta.toFixed(2)}%` : '—'}
+          icon={<TrendingUp className="w-4 h-4 text-blue-400" />}
+        />
+      </div>
+
+      {latestCycle && (
+        <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Latest Cycle</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Cycle</div>
+              <div className="text-white font-medium">{latestCycle.cycle}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Action</div>
+              <div className="text-white font-medium">{latestCycle.action}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">APY</div>
+              <div className="text-white font-medium">
+                {latestCycle.apy !== undefined ? `${latestCycle.apy.toFixed(2)}%` : '—'}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Timestamp</div>
+              <div className="text-white font-medium">{formatDate(latestCycle.timestamp)}</div>
+            </div>
+          </div>
+          {latestCycle.reason && (
+            <div className="mt-4 pt-4 border-t border-[#2a2a2a]">
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Reason</div>
+              <div className="text-gray-300 text-sm">{latestCycle.reason}</div>
+            </div>
+          )}
+        </div>
+      )}
+
       {events.length > 0 && (
         <div className="rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Activity Stream</h3>

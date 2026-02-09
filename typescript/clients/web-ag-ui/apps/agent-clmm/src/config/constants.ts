@@ -21,8 +21,8 @@ export const DEFAULT_DEBUG_ALLOWED_TOKENS = new Set([
 
 export const EMBER_API_BASE_URL =
   process.env['EMBER_API_BASE_URL']?.replace(/\/$/, '') ?? 'https://api.emberai.xyz';
-export const ONCHAIN_ACTIONS_BASE_URL =
-  process.env['ONCHAIN_ACTIONS_BASE_URL']?.replace(/\/$/, '') ?? 'https://api.emberai.xyz';
+export const ONCHAIN_ACTIONS_API_URL =
+  process.env['ONCHAIN_ACTIONS_API_URL']?.replace(/\/$/, '') ?? 'https://api.emberai.xyz';
 
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const DEFAULT_STREAM_LIMIT = -1;

@@ -8,7 +8,7 @@
 import { type OnchainClients, createClients } from '../clients/clients.js';
 import { EmberCamelotClient } from '../clients/emberApi.js';
 import { OnchainActionsClient } from '../clients/onchainActions.js';
-import { EMBER_API_BASE_URL, ONCHAIN_ACTIONS_BASE_URL } from '../config/constants.js';
+import { EMBER_API_BASE_URL, ONCHAIN_ACTIONS_API_URL } from '../config/constants.js';
 
 import { loadBootstrapContext } from './store.js';
 
@@ -29,7 +29,7 @@ export function getCamelotClient(): EmberCamelotClient {
 
 export function getOnchainActionsClient(): OnchainActionsClient {
   if (!cachedOnchainActionsClient) {
-    cachedOnchainActionsClient = new OnchainActionsClient(ONCHAIN_ACTIONS_BASE_URL);
+    cachedOnchainActionsClient = new OnchainActionsClient(ONCHAIN_ACTIONS_API_URL);
   }
   return cachedOnchainActionsClient;
 }
