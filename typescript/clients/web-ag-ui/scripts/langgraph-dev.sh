@@ -4,6 +4,13 @@ set -euo pipefail
 PORT="${1:?missing port}"
 shift
 
+# langgraph-cli unconditionally tries to read a local `.env` file in the graph directory
+# and crashes with ENOENT if it doesn't exist. Create an empty one for dev so `pnpm dev`
+# doesn't fail when a developer hasn't copied `.env.example` yet.
+if [ ! -f ".env" ]; then
+  : > .env
+fi
+
 # Load .env for LangGraph CLI processes.
 # Precedence rule: do not override variables already set in the environment
 # (so `DELEGATIONS_BYPASS=true turbo run dev` continues to win over `.env`).

@@ -774,8 +774,8 @@ describe('prepareOperatorNode', () => {
 
     const result = await prepareOperatorNode(state, {});
     const update = (result as { update?: ClmmUpdate }).update;
-    const haltReason = update?.view?.haltReason ?? '';
+    const nextTaskState = update?.view?.task?.taskStatus?.state;
 
-    expect(haltReason).toContain('Delegation bundle missing');
+    expect(nextTaskState).toBe('input-required');
   });
 });

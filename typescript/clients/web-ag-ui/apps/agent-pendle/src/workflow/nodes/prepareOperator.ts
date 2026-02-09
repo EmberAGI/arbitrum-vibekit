@@ -102,24 +102,24 @@ export const prepareOperatorNode = async (
 
   const delegationsBypassActive = state.view.delegationsBypassActive === true;
   if (!delegationsBypassActive && !state.view.delegationBundle) {
-    const failureMessage =
-      'ERROR: Delegation bundle missing. Complete delegation signing before continuing.';
-    const { task, statusEvent } = buildTaskStatus(state.view.task, 'failed', failureMessage);
+    const message = 'Delegation signature required. Please approve the required permissions to continue.';
+    const { task, statusEvent } = buildTaskStatus(state.view.task, 'input-required', message);
     await copilotkitEmitState(config, {
-      view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },
+      view: {
+        task,
+        activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+        onboarding: state.view.onboarding,
+      },
     });
     return new Command({
       update: {
         view: {
-          haltReason: failureMessage,
-          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
           task,
-          profile: state.view.profile,
-          transactionHistory: state.view.transactionHistory,
-          metrics: state.view.metrics,
+          activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
+          onboarding: state.view.onboarding,
         },
       },
-      goto: 'summarize',
+      goto: 'collectDelegations',
     });
   }
 
