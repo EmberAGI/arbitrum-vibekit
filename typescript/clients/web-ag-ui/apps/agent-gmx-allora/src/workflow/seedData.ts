@@ -2,9 +2,6 @@ import type { AlloraPrediction, GmxMarket } from '../domain/types.js';
 
 import type { DelegationIntentSummary, FundingTokenOption, UnsignedDelegation } from './context.js';
 
-export const AGENT_WALLET_ADDRESS = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as const;
-export const DELEGATION_MANAGER = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as const;
-export const DELEGATION_ENFORCER = '0xcccccccccccccccccccccccccccccccccccccccc' as const;
 const ZERO_WORD = `0x${'0'.repeat(64)}` as const;
 const SALT_WORD = `0x${'1'.repeat(64)}` as const;
 
@@ -99,19 +96,17 @@ export const DELEGATION_DESCRIPTIONS = [
 
 export const DELEGATION_WARNINGS = ['This delegation flow is for testing only.'];
 
-export function buildDelegations(delegatorAddress: `0x${string}`): UnsignedDelegation[] {
+export function buildDelegations(params: {
+  delegatorAddress: `0x${string}`;
+  delegateeAddress: `0x${string}`;
+}): UnsignedDelegation[] {
   return [
     {
-      delegate: AGENT_WALLET_ADDRESS,
-      delegator: delegatorAddress,
+      delegate: params.delegateeAddress,
+      delegator: params.delegatorAddress,
       authority: ZERO_WORD,
-      caveats: [
-        {
-          enforcer: DELEGATION_ENFORCER,
-          terms: ZERO_WORD,
-          args: ZERO_WORD,
-        },
-      ],
+      // Keep this open for now; in production we'd want to constrain scope via caveats.
+      caveats: [],
       salt: SALT_WORD,
     },
   ];

@@ -192,7 +192,7 @@ export const pollCycleNode = async (
     const [markets, walletPositions] = await Promise.all([
       onchainActionsClient.listPerpetualMarkets({ chainIds }),
       onchainActionsClient.listPerpetualPositions({
-        walletAddress: operatorConfig.walletAddress,
+        walletAddress: operatorConfig.delegatorWalletAddress,
         chainIds,
       }),
     ]);
@@ -339,7 +339,7 @@ export const pollCycleNode = async (
     telemetry: exposureAdjusted,
     chainId: ARBITRUM_CHAIN_ID.toString(),
     marketAddress: gmxMarketAddress as `0x${string}`,
-    walletAddress: operatorConfig.walletAddress,
+    walletAddress: operatorConfig.delegatorWalletAddress,
     payTokenAddress: operatorConfig.fundingTokenAddress,
     collateralTokenAddress: operatorConfig.fundingTokenAddress,
     positionContractKey: positionForReduce?.contractKey,
@@ -353,6 +353,10 @@ export const pollCycleNode = async (
     clients,
     plan: executionPlan,
     txExecutionMode,
+    delegationsBypassActive: state.view.delegationsBypassActive === true,
+    delegationBundle: state.view.delegationBundle,
+    delegatorWalletAddress: operatorConfig.delegatorWalletAddress,
+    delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
   });
 
   const nextAssumedPositionSide = (() => {

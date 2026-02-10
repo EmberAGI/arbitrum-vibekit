@@ -1,11 +1,17 @@
+import { privateKeyToAccount } from 'viem/accounts';
+
 export const ARBITRUM_CHAIN_ID = 42161;
 
 const DEFAULT_ONCHAIN_ACTIONS_API_URL = 'https://api.emberai.xyz';
 const DEFAULT_ALLORA_API_BASE_URL = 'https://api.allora.network';
-const DEFAULT_ALLORA_CHAIN_ID = 'allora-mainnet-1';
+// Allora Consumer API expects a "signature format" / target chain slug.
+// Docs commonly use Sepolia: "ethereum-11155111".
+// Production deployments should override via ALLORA_CHAIN_ID.
+const DEFAULT_ALLORA_CHAIN_ID = 'ethereum-11155111';
 const DEFAULT_ALLORA_INFERENCE_CACHE_TTL_MS = 30_000;
 const DEFAULT_ALLORA_8H_INFERENCE_CACHE_TTL_MS = 30_000;
 const DEFAULT_GMX_ALLORA_TX_EXECUTION_MODE: GmxAlloraTxExecutionMode = 'plan';
+const DEFAULT_DELEGATIONS_BYPASS = false;
 
 export type GmxAlloraTxExecutionMode = 'plan' | 'execute';
 
@@ -96,6 +102,52 @@ export const ALLORA_TOPIC_LABELS = {
   BTC: 'BTC/USD - Price Prediction - 8h',
   ETH: 'ETH/USD - Price Prediction - 8h',
 } as const;
+
+export function resolveDelegationsBypass(): boolean {
+  const raw = process.env['DELEGATIONS_BYPASS'];
+  if (!raw) {
+    return DEFAULT_DELEGATIONS_BYPASS;
+  }
+  const normalized = raw.trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
+function normalizeHexAddress(value: string, label: string): `0x${string}` {
+  if (!value.startsWith('0x')) {
+    throw new Error(`Invalid ${label}: ${value}`);
+  }
+  return value.toLowerCase() as `0x${string}`;
+}
+
+export function resolveAgentWalletAddress(): `0x${string}` {
+  const explicitAddress = process.env['GMX_ALLORA_AGENT_WALLET_ADDRESS'];
+  if (explicitAddress) {
+    const normalized = normalizeHexAddress(explicitAddress.trim(), 'GMX_ALLORA_AGENT_WALLET_ADDRESS');
+
+    const rawPrivateKey = process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
+    if (rawPrivateKey) {
+      const privateKey = normalizeHexAddress(rawPrivateKey.trim(), 'A2A_TEST_AGENT_NODE_PRIVATE_KEY');
+      const derived = privateKeyToAccount(privateKey).address.toLowerCase() as `0x${string}`;
+      if (derived !== normalized) {
+        throw new Error(
+          `GMX_ALLORA_AGENT_WALLET_ADDRESS (${normalized}) does not match A2A_TEST_AGENT_NODE_PRIVATE_KEY address (${derived}).`,
+        );
+      }
+    }
+
+    return normalized;
+  }
+
+  const rawPrivateKey = process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
+  if (!rawPrivateKey) {
+    throw new Error(
+      'Missing agent wallet configuration. Set GMX_ALLORA_AGENT_WALLET_ADDRESS (address only) or A2A_TEST_AGENT_NODE_PRIVATE_KEY (0x + 64 hex chars).',
+    );
+  }
+  const privateKey = normalizeHexAddress(rawPrivateKey.trim(), 'A2A_TEST_AGENT_NODE_PRIVATE_KEY');
+  const account = privateKeyToAccount(privateKey);
+  return account.address.toLowerCase() as `0x${string}`;
+}
 
 export function resolveGmxAlloraTxExecutionMode(): GmxAlloraTxExecutionMode {
   const raw = process.env['GMX_ALLORA_TX_SUBMISSION_MODE'];

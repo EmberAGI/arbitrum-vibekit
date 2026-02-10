@@ -1,6 +1,7 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
+import { resolveAgentWalletAddress } from '../../config/constants.js';
 import { type ResolvedGmxConfig } from '../../domain/types.js';
 import {
   buildTaskStatus,
@@ -10,7 +11,7 @@ import {
   type ClmmState,
   type ClmmUpdate,
 } from '../context.js';
-import { AGENT_WALLET_ADDRESS, MARKETS } from '../seedData.js';
+import { MARKETS } from '../seedData.js';
 
 type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 
@@ -40,8 +41,6 @@ export const prepareOperatorNode = async (
     });
   }
 
-  const operatorWalletAddress = normalizeHexAddress(operatorInput.walletAddress, 'wallet address');
-
   const fundingTokenInput = state.view.fundingTokenInput;
   if (!fundingTokenInput) {
     const failureMessage = 'ERROR: Funding token input missing before strategy setup';
@@ -70,6 +69,11 @@ export const prepareOperatorNode = async (
   );
 
   const delegationsBypassActive = state.view.delegationsBypassActive === true;
+  const agentWalletAddress = resolveAgentWalletAddress();
+  const delegatorWalletAddress = delegationsBypassActive
+    ? agentWalletAddress
+    : normalizeHexAddress(operatorInput.walletAddress, 'delegator wallet address');
+  const delegatorInputWalletAddress = delegationsBypassActive ? undefined : delegatorWalletAddress;
   if (!delegationsBypassActive && !state.view.delegationBundle) {
     const failureMessage =
       'ERROR: Delegation bundle missing. Complete delegation signing before continuing.';
@@ -115,8 +119,11 @@ export const prepareOperatorNode = async (
     });
   }
 
+  const delegateeWalletAddress = agentWalletAddress;
+
   const operatorConfig: ResolvedGmxConfig = {
-    walletAddress: delegationsBypassActive ? AGENT_WALLET_ADDRESS : operatorWalletAddress,
+    delegatorWalletAddress,
+    delegateeWalletAddress,
     baseContributionUsd: operatorInput.usdcAllocation,
     fundingTokenAddress,
     targetMarket,
@@ -124,7 +131,9 @@ export const prepareOperatorNode = async (
   };
 
   logInfo('GMX Allora strategy configuration established', {
-    operatorWalletAddress,
+    delegatorInputWalletAddress,
+    delegatorWalletAddress,
+    delegateeWalletAddress: operatorConfig.delegateeWalletAddress,
     usdcAllocation: operatorConfig.baseContributionUsd,
     fundingToken: fundingTokenAddress,
     market: `${targetMarket.baseSymbol}/${targetMarket.quoteSymbol}`,
@@ -136,7 +145,7 @@ export const prepareOperatorNode = async (
     'working',
     delegationsBypassActive
       ? `Delegation bypass active. Preparing ${targetMarket.baseSymbol} GMX strategy from agent wallet.`
-      : `Delegations active. Preparing ${targetMarket.baseSymbol} GMX strategy from user wallet ${operatorWalletAddress}.`,
+      : `Delegations active. Preparing ${targetMarket.baseSymbol} GMX strategy from user wallet ${delegatorInputWalletAddress}.`,
   );
   await copilotkitEmitState(config, {
     view: { task, activity: { events: [statusEvent], telemetry: state.view.activity.telemetry } },

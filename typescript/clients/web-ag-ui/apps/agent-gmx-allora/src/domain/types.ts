@@ -67,7 +67,12 @@ export interface FundingTokenInput extends FundingTokenInputBase {
 }
 
 export type ResolvedGmxConfig = {
-  walletAddress: `0x${string}`;
+  // Delegator: wallet whose positions/balances this strategy manages.
+  // When delegations bypass is enabled, this is the agent wallet address.
+  delegatorWalletAddress: `0x${string}`;
+  // Delegatee: agent wallet address that would execute actions when delegations are enabled.
+  // When delegations bypass is enabled, this equals the delegator wallet.
+  delegateeWalletAddress: `0x${string}`;
   baseContributionUsd: number;
   fundingTokenAddress: `0x${string}`;
   targetMarket: GmxMarket;

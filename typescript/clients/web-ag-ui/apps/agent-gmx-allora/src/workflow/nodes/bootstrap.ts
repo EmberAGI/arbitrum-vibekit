@@ -3,6 +3,7 @@ import { Command } from '@langchain/langgraph';
 
 import {
   resolveAlloraApiBaseUrl,
+  resolveDelegationsBypass,
   resolveOnchainActionsApiUrl,
   resolvePollIntervalMs,
   resolveStreamLimit,
@@ -30,7 +31,7 @@ export const bootstrapNode = async (
   const mode = process.env['GMX_ALLORA_MODE'] === 'production' ? 'production' : 'debug';
   const pollIntervalMs = resolvePollIntervalMs();
   const streamLimit = resolveStreamLimit();
-  const delegationsBypassActive = process.env['DELEGATIONS_BYPASS'] === 'true';
+  const delegationsBypassActive = resolveDelegationsBypass();
   const onchainActionsBaseUrl = resolveOnchainActionsApiUrl({ logger: logInfo });
 
   logInfo('Initialized GMX Allora workflow context', {

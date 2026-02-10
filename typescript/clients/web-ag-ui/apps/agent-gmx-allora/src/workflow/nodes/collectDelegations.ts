@@ -1,8 +1,9 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command, interrupt } from '@langchain/langgraph';
+import { getDeleGatorEnvironment } from '@metamask/delegation-toolkit';
 import { z } from 'zod';
 
-import { ARBITRUM_CHAIN_ID } from '../../config/constants.js';
+import { ARBITRUM_CHAIN_ID, resolveAgentWalletAddress } from '../../config/constants.js';
 import {
   buildTaskStatus,
   logInfo,
@@ -15,10 +16,8 @@ import {
   type SignedDelegation,
 } from '../context.js';
 import {
-  AGENT_WALLET_ADDRESS,
   DELEGATION_DESCRIPTIONS,
   DELEGATION_INTENTS,
-  DELEGATION_MANAGER,
   DELEGATION_WARNINGS,
   buildDelegations,
 } from '../seedData.js';
@@ -139,17 +138,19 @@ export const collectDelegationsNode = async (
     operatorInput.walletAddress,
     'delegator wallet address',
   );
-  const delegateeAddress = AGENT_WALLET_ADDRESS;
+  const delegateeAddress = resolveAgentWalletAddress();
+  const { DelegationManager } = getDeleGatorEnvironment(ARBITRUM_CHAIN_ID);
+  const delegationManager = normalizeHexAddress(DelegationManager, 'delegation manager');
 
   const request: DelegationSigningInterrupt = {
     type: 'gmx-delegation-signing-request',
     message: 'Review and approve the permissions needed to manage your GMX perps.',
     payloadSchema: z.toJSONSchema(DelegationSigningResponseJsonSchema),
     chainId: ARBITRUM_CHAIN_ID,
-    delegationManager: DELEGATION_MANAGER,
+    delegationManager,
     delegatorAddress,
     delegateeAddress,
-    delegationsToSign: buildDelegations(delegatorAddress),
+    delegationsToSign: buildDelegations({ delegatorAddress, delegateeAddress }),
     descriptions: [...DELEGATION_DESCRIPTIONS],
     warnings: [...DELEGATION_WARNINGS],
   };
@@ -224,7 +225,7 @@ export const collectDelegationsNode = async (
 
   const delegationBundle: DelegationBundle = {
     chainId: ARBITRUM_CHAIN_ID,
-    delegationManager: DELEGATION_MANAGER,
+    delegationManager,
     delegatorAddress,
     delegateeAddress,
     delegations: signedDelegations,
