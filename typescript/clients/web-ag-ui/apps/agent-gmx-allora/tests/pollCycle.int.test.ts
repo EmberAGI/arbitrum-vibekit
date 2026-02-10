@@ -79,11 +79,12 @@ function buildBaseState(): ClmmState {
         baseSymbol: 'BTC',
         quoteSymbol: 'USDC',
         token0: { symbol: 'BTC' },
-        token1: { symbol: 'USDC' },
-        maxLeverage: 2,
-      },
+      token1: { symbol: 'USDC' },
+      maxLeverage: 2,
+    },
       operatorConfig: {
-        walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        delegatorWalletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        delegateeWalletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         baseContributionUsd: 200,
         fundingTokenAddress: '0x1111111111111111111111111111111111111111',
         targetMarket: {

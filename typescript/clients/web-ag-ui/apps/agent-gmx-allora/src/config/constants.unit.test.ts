@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { resolveGmxAlloraTxExecutionMode, resolveOnchainActionsApiUrl } from './constants.js';
+import {
+  resolveAgentWalletAddress,
+  resolveDelegationsBypass,
+  resolveGmxAlloraTxExecutionMode,
+  resolveOnchainActionsApiUrl,
+} from './constants.js';
 
 describe('config/constants', () => {
   it('normalizes the OpenAPI endpoint to a base URL and logs the change', () => {
@@ -62,5 +67,54 @@ describe('config/constants', () => {
     process.env.GMX_ALLORA_TX_SUBMISSION_MODE = 'plan';
 
     expect(resolveGmxAlloraTxExecutionMode()).toBe('plan');
+  });
+
+  it('parses delegations bypass flag', () => {
+    delete process.env.DELEGATIONS_BYPASS;
+    expect(resolveDelegationsBypass()).toBe(false);
+
+    process.env.DELEGATIONS_BYPASS = 'true';
+    expect(resolveDelegationsBypass()).toBe(true);
+
+    process.env.DELEGATIONS_BYPASS = 'TRUE';
+    expect(resolveDelegationsBypass()).toBe(true);
+
+    process.env.DELEGATIONS_BYPASS = '1';
+    expect(resolveDelegationsBypass()).toBe(true);
+
+    process.env.DELEGATIONS_BYPASS = 'yes';
+    expect(resolveDelegationsBypass()).toBe(true);
+
+    process.env.DELEGATIONS_BYPASS = 'false';
+    expect(resolveDelegationsBypass()).toBe(false);
+  });
+
+  it('resolves agent wallet address from explicit address env var', () => {
+    process.env.GMX_ALLORA_AGENT_WALLET_ADDRESS = '0xAbCd000000000000000000000000000000000000';
+    delete process.env.A2A_TEST_AGENT_NODE_PRIVATE_KEY;
+
+    expect(resolveAgentWalletAddress()).toBe('0xabcd000000000000000000000000000000000000');
+  });
+
+  it('throws when explicit agent wallet address does not match private key', () => {
+    process.env.GMX_ALLORA_AGENT_WALLET_ADDRESS = '0x0000000000000000000000000000000000000001';
+    process.env.A2A_TEST_AGENT_NODE_PRIVATE_KEY = `0x${'1'.repeat(64)}`;
+
+    expect(() => resolveAgentWalletAddress()).toThrow(/does not match A2A_TEST_AGENT_NODE_PRIVATE_KEY/u);
+  });
+
+  it('resolves agent wallet address from private key when address is not provided', () => {
+    delete process.env.GMX_ALLORA_AGENT_WALLET_ADDRESS;
+    process.env.A2A_TEST_AGENT_NODE_PRIVATE_KEY = `0x${'1'.repeat(64)}`;
+
+    const resolved = resolveAgentWalletAddress();
+    expect(resolved).toMatch(/^0x[0-9a-f]{40}$/u);
+  });
+
+  it('throws when no agent wallet configuration is available', () => {
+    delete process.env.GMX_ALLORA_AGENT_WALLET_ADDRESS;
+    delete process.env.A2A_TEST_AGENT_NODE_PRIVATE_KEY;
+
+    expect(() => resolveAgentWalletAddress()).toThrow(/Missing agent wallet configuration/u);
   });
 });

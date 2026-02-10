@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ClmmState } from '../src/workflow/context.js';
 import { collectDelegationsNode } from '../src/workflow/nodes/collectDelegations.js';
@@ -107,6 +107,14 @@ afterEach(() => {
 });
 
 describe('GMX Allora onboarding (integration)', () => {
+  beforeEach(() => {
+    process.env.GMX_ALLORA_AGENT_WALLET_ADDRESS = '0x0000000000000000000000000000000000000002';
+  });
+
+  afterEach(() => {
+    delete process.env.GMX_ALLORA_AGENT_WALLET_ADDRESS;
+  });
+
   it('collects USDC allocation and prepares operator config', async () => {
     const state = buildBaseState();
 

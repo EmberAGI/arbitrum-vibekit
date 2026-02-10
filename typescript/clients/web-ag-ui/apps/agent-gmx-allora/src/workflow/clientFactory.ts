@@ -18,9 +18,9 @@ export function getOnchainActionsClient(): OnchainActionsClient {
 
 export function getOnchainClients(): OnchainClients {
   if (!cachedOnchainClients) {
-    const rawPrivateKey = process.env['GMX_ALLORA_EMBEDDED_PRIVATE_KEY'];
+    const rawPrivateKey = process.env['A2A_TEST_AGENT_NODE_PRIVATE_KEY'];
     if (!rawPrivateKey) {
-      throw new Error('GMX_ALLORA_EMBEDDED_PRIVATE_KEY environment variable is required');
+      throw new Error('A2A_TEST_AGENT_NODE_PRIVATE_KEY environment variable is required');
     }
     const privateKey = normalizeHexAddress(rawPrivateKey, 'embedded private key');
     const account = privateKeyToAccount(privateKey);

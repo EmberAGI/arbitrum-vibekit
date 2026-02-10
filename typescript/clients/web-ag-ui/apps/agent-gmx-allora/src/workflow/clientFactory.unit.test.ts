@@ -26,7 +26,7 @@ describe('clientFactory', () => {
     onchainActionsCtorMock.mockReset();
     createClientsMock.mockReset();
     privateKeyToAccountMock.mockReset();
-    delete process.env.GMX_ALLORA_EMBEDDED_PRIVATE_KEY;
+    delete process.env.A2A_TEST_AGENT_NODE_PRIVATE_KEY;
   });
 
   it('creates and caches the onchain actions client', () => {
@@ -39,7 +39,7 @@ describe('clientFactory', () => {
   });
 
   it('creates and caches the onchain clients from the embedded private key', () => {
-    process.env.GMX_ALLORA_EMBEDDED_PRIVATE_KEY =
+    process.env.A2A_TEST_AGENT_NODE_PRIVATE_KEY =
       '0x0000000000000000000000000000000000000000000000000000000000000001';
 
     privateKeyToAccountMock.mockReturnValue({ address: '0xabc' });
@@ -54,8 +54,8 @@ describe('clientFactory', () => {
   });
 
   it('throws when embedded private key is missing', () => {
-    delete process.env.GMX_ALLORA_EMBEDDED_PRIVATE_KEY;
+    delete process.env.A2A_TEST_AGENT_NODE_PRIVATE_KEY;
 
-    expect(() => getOnchainClients()).toThrow(/GMX_ALLORA_EMBEDDED_PRIVATE_KEY/);
+    expect(() => getOnchainClients()).toThrow(/A2A_TEST_AGENT_NODE_PRIVATE_KEY/);
   });
 });
