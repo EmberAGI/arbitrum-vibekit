@@ -36,5 +36,6 @@ The agent always uses onchain-actions to build a `transactions[]` plan for the c
 - `GMX_ALLORA_TX_SUBMISSION_MODE`: transaction submission mode. Supported values:
   - `plan` (default): build and emit `transactions[]` but do not broadcast.
   - `submit`: broadcast planned transactions via an embedded wallet (no delegations). Requires an onchain-actions version that correctly plans the requested GMX action (especially close via decrease order).
-- `GMX_ALLORA_EMBEDDED_PRIVATE_KEY`: required when `GMX_ALLORA_TX_SUBMISSION_MODE=submit` (0x + 64 hex chars). Only for local/dev use.
+- `GMX_ALLORA_AGENT_WALLET_ADDRESS`: optional override for the agent wallet (delegatee) address. If omitted, it is derived from `A2A_TEST_AGENT_NODE_PRIVATE_KEY`.
+- `A2A_TEST_AGENT_NODE_PRIVATE_KEY`: required when `GMX_ALLORA_TX_SUBMISSION_MODE=submit` (0x + 64 hex chars). Only for local/dev use.
 - `ARBITRUM_RPC_URL`: RPC URL for broadcasting transactions when submission is enabled.
