@@ -10,6 +10,11 @@ import {
   resolveOnchainActionsApiUrl,
 } from '../../src/config/constants.js';
 
+const DEFAULT_SMOKE_USDC_ADDRESS = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as const;
+// 1 USDC in base units (6 decimals). Keep this small but non-trivial so onchain-actions
+// can plan a realistic position increase when simulation is enabled.
+const DEFAULT_LONG_AMOUNT_BASE_UNITS = 1_000_000n;
+
 const resolveBaseUrl = (): string =>
   resolveOnchainActionsApiUrl({
     endpoint: process.env['ONCHAIN_ACTIONS_API_URL'],
@@ -32,7 +37,10 @@ const resolveWalletAddress = (): `0x${string}` | undefined => {
 const resolveUsdcAddress = (): `0x${string}` | undefined => {
   const value = process.env['SMOKE_USDC_ADDRESS'];
   if (!value) {
-    return undefined;
+    console.info('[smoke] SMOKE_USDC_ADDRESS not set; using default Arbitrum USDC', {
+      address: DEFAULT_SMOKE_USDC_ADDRESS,
+    });
+    return DEFAULT_SMOKE_USDC_ADDRESS;
   }
   if (!value.startsWith('0x')) {
     throw new Error(`SMOKE_USDC_ADDRESS must be a hex address, got: ${value}`);
@@ -112,7 +120,7 @@ const run = async () => {
     'perpetual long planning',
     async () => {
       await client.createPerpetualLong({
-        amount: 100n,
+        amount: DEFAULT_LONG_AMOUNT_BASE_UNITS,
         walletAddress,
         chainId: '42161',
         marketAddress,
@@ -127,6 +135,12 @@ const run = async () => {
       }
       if (message.includes('No long actions found')) {
         return 'no long actions available (transactions-only env)';
+      }
+      if (
+        message.includes('Execute order simulation failed') ||
+        message.toLowerCase().includes('simulation failed')
+      ) {
+        return 'order simulation failed; rerun against an onchain-actions configured for planning (e.g. GMX_SKIP_SIMULATION=true) or a keeper-capable simulation environment';
       }
       return null;
     },
