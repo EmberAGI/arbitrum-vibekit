@@ -102,6 +102,19 @@ const PerpetualPositionsResponseSchema = PaginationSchema.extend({
   positions: z.array(PerpetualPositionSchema),
 });
 
+const WalletBalanceSchema = z.object({
+  tokenUid: TokenIdentifierSchema,
+  amount: z.string(),
+  symbol: z.string().optional(),
+  valueUsd: z.number().optional(),
+  decimals: z.number().int().optional(),
+});
+export type WalletBalance = z.infer<typeof WalletBalanceSchema>;
+
+const WalletBalancesResponseSchema = PaginationSchema.extend({
+  balances: z.array(WalletBalanceSchema),
+});
+
 export const TransactionPlanSchema = z.object({
   type: z.string(),
   to: z.string(),
@@ -268,6 +281,28 @@ export class OnchainActionsClient {
       positions.push(...data.positions);
     }
     return positions;
+  }
+
+  async listWalletBalances(params: { walletAddress: `0x${string}` }): Promise<WalletBalance[]> {
+    const endpoint = `/wallet/balances/${params.walletAddress}`;
+    const firstPage = await this.fetchEndpoint(endpoint, WalletBalancesResponseSchema);
+    const balances = [...firstPage.balances];
+    const cursor = firstPage.cursor ?? undefined;
+    if (!cursor || firstPage.totalPages <= 1) {
+      return balances;
+    }
+
+    for (let page = 2; page <= firstPage.totalPages; page += 1) {
+      const query = this.buildQuery({
+        cursor,
+        page: page.toString(),
+      });
+      const pageEndpoint = `/wallet/balances/${params.walletAddress}?${query.toString()}`;
+      const data = await this.fetchEndpoint(pageEndpoint, WalletBalancesResponseSchema);
+      balances.push(...data.balances);
+    }
+
+    return balances;
   }
 
   private stringifyPayload(value: unknown): string {
