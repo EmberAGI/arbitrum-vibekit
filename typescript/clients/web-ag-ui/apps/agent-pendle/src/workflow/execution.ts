@@ -18,6 +18,13 @@ type ExecutionResult = {
   lastTxHash?: `0x${string}`;
 };
 
+export type UnwindResult = {
+  txHashes: `0x${string}`[];
+  lastTxHash?: `0x${string}`;
+  positionCount: number;
+  transactionCount: number;
+};
+
 function normalizeHexData(value: string, label: string): `0x${string}` {
   if (!value.startsWith('0x')) {
     throw new Error(`Invalid ${label}: ${value}`);
@@ -297,6 +304,331 @@ export async function executeCompound(params: {
     delegationBundle: params.delegationBundle,
     transactions,
   });
+}
+
+function parsePositiveBigInt(value: string): bigint {
+  try {
+    const parsed = BigInt(value);
+    return parsed > 0n ? parsed : 0n;
+  } catch {
+    return 0n;
+  }
+}
+
+function isMarketMatured(params: { expiry: string; nowMs: number }): boolean {
+  const parsed = Date.parse(params.expiry);
+  if (Number.isNaN(parsed)) {
+    return false;
+  }
+  return parsed <= params.nowMs;
+}
+
+function formatErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return 'Unknown error';
+}
+
+async function retryOperation<T>(params: {
+  label: string;
+  maxAttempts: number;
+  onProgress?: (message: string) => void | Promise<void>;
+  operation: () => Promise<T>;
+}): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= params.maxAttempts; attempt += 1) {
+    try {
+      await params.onProgress?.(`${params.label} (attempt ${attempt}/${params.maxAttempts})`);
+      return await params.operation();
+    } catch (error: unknown) {
+      lastError = error;
+      const message = formatErrorMessage(error);
+      await params.onProgress?.(
+        `${params.label} failed (attempt ${attempt}/${params.maxAttempts}): ${message}`,
+      );
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(formatErrorMessage(lastError));
+}
+
+async function executeTransactionWithRetries(params: {
+  clients: OnchainClients;
+  tx: TransactionPlan;
+  maxAttempts: number;
+  onProgress?: (message: string) => void | Promise<void>;
+  label: string;
+}): Promise<`0x${string}`> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= params.maxAttempts; attempt += 1) {
+    try {
+      await params.onProgress?.(`${params.label} (attempt ${attempt}/${params.maxAttempts})`);
+      return await executePlannedTransaction({ clients: params.clients, tx: params.tx });
+    } catch (error: unknown) {
+      lastError = error;
+      const message = formatErrorMessage(error);
+      await params.onProgress?.(
+        `${params.label} failed (attempt ${attempt}/${params.maxAttempts}): ${message}`,
+      );
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(formatErrorMessage(lastError));
+}
+
+export async function executeUnwind(params: {
+  onchainActionsClient: Pick<
+    OnchainActionsClient,
+    | 'listTokenizedYieldMarkets'
+    | 'listTokenizedYieldPositions'
+    | 'createTokenizedYieldClaimRewards'
+    | 'createTokenizedYieldRedeemPt'
+    | 'createTokenizedYieldSellPt'
+  >;
+  txExecutionMode: PendleTxExecutionMode;
+  clients?: OnchainClients;
+  delegationBundle?: DelegationBundle;
+  walletAddress: `0x${string}`;
+  chainIds?: string[];
+  nowMs?: number;
+  onProgress?: (message: string) => void | Promise<void>;
+  maxRetries?: number;
+}): Promise<UnwindResult> {
+  const nowMs = params.nowMs ?? Date.now();
+  const maxAttempts = (params.maxRetries ?? 2) + 1;
+  await params.onProgress?.('Unwind: fetching markets and positions');
+
+  const [markets, positions] = await Promise.all([
+    params.onchainActionsClient.listTokenizedYieldMarkets({ chainIds: params.chainIds }),
+    params.onchainActionsClient.listTokenizedYieldPositions({
+      walletAddress: params.walletAddress,
+      chainIds: params.chainIds,
+    }),
+  ]);
+
+  if (positions.length === 0) {
+    await params.onProgress?.('Unwind: no positions found');
+    return { txHashes: [], positionCount: 0, transactionCount: 0 };
+  }
+
+  const expiryByMarketAddress = new Map<string, string>();
+  for (const market of markets) {
+    expiryByMarketAddress.set(market.marketIdentifier.address.toLowerCase(), market.expiry);
+  }
+
+  const txHashes: `0x${string}`[] = [];
+  let plannedTxCount = 0;
+
+  await params.onProgress?.(`Unwind: planning actions for ${positions.length} position(s)`);
+
+  for (const [positionIndex, position] of positions.entries()) {
+    const claimableRewards = position.yt.claimableRewards ?? [];
+    const hasClaimable = claimableRewards.some(
+      (reward) => parsePositiveBigInt(reward.exactAmount) > 0n,
+    );
+    if (hasClaimable) {
+      const claimPlan = await retryOperation({
+        label: `Unwind: planning claim rewards [${positionIndex + 1}/${positions.length}]`,
+        maxAttempts,
+        onProgress: params.onProgress,
+        operation: async () =>
+          params.onchainActionsClient.createTokenizedYieldClaimRewards({
+            walletAddress: params.walletAddress,
+            ytTokenUid: position.yt.token.tokenUid,
+          }),
+      });
+      plannedTxCount += claimPlan.transactions.length;
+      if (params.txExecutionMode === 'execute') {
+        if (!params.clients) {
+          throw new Error('Onchain clients are required to execute Pendle transactions');
+        }
+        for (const [txIndex, tx] of claimPlan.transactions.entries()) {
+          const label = `Unwind: execute claim tx [${positionIndex + 1}/${positions.length}] (${txIndex + 1}/${claimPlan.transactions.length})`;
+          if (params.delegationBundle) {
+            const clients = params.clients;
+            const delegationBundle = params.delegationBundle;
+            if (!clients) {
+              throw new Error('Onchain clients are required to execute Pendle transactions');
+            }
+            if (!delegationBundle) {
+              throw new Error('Delegation bundle is required for delegated execution');
+            }
+            const outcome = await retryOperation({
+              label,
+              maxAttempts,
+              onProgress: params.onProgress,
+              operation: async () =>
+                redeemDelegationsAndExecuteTransactions({
+                  clients,
+                  delegationBundle,
+                  transactions: [tx],
+                }),
+            });
+            const hash = outcome.txHashes[0];
+            if (!hash) {
+              throw new Error('Delegated execution did not return a transaction hash');
+            }
+            txHashes.push(hash);
+          } else {
+            const hash = await executeTransactionWithRetries({
+              clients: params.clients,
+              tx,
+              maxAttempts,
+              onProgress: params.onProgress,
+              label,
+            });
+            txHashes.push(hash);
+          }
+        }
+      }
+    }
+
+    const ptAmount = parsePositiveBigInt(position.pt.exactAmount);
+    if (ptAmount <= 0n) {
+      continue;
+    }
+
+    const expiry =
+      expiryByMarketAddress.get(position.marketIdentifier.address.toLowerCase()) ?? '';
+    if (expiry && isMarketMatured({ expiry, nowMs })) {
+      const redeemPlan = await retryOperation({
+        label: `Unwind: planning redeem PT [${positionIndex + 1}/${positions.length}]`,
+        maxAttempts,
+        onProgress: params.onProgress,
+        operation: async () =>
+          params.onchainActionsClient.createTokenizedYieldRedeemPt({
+            walletAddress: params.walletAddress,
+            ptTokenUid: position.pt.token.tokenUid,
+            amount: position.pt.exactAmount,
+          }),
+      });
+      plannedTxCount += redeemPlan.transactions.length;
+      if (params.txExecutionMode === 'execute') {
+        if (!params.clients) {
+          throw new Error('Onchain clients are required to execute Pendle transactions');
+        }
+        for (const [txIndex, tx] of redeemPlan.transactions.entries()) {
+          const label = `Unwind: execute redeem tx [${positionIndex + 1}/${positions.length}] (${txIndex + 1}/${redeemPlan.transactions.length})`;
+          if (params.delegationBundle) {
+            const clients = params.clients;
+            const delegationBundle = params.delegationBundle;
+            if (!clients) {
+              throw new Error('Onchain clients are required to execute Pendle transactions');
+            }
+            if (!delegationBundle) {
+              throw new Error('Delegation bundle is required for delegated execution');
+            }
+            const outcome = await retryOperation({
+              label,
+              maxAttempts,
+              onProgress: params.onProgress,
+              operation: async () =>
+                redeemDelegationsAndExecuteTransactions({
+                  clients,
+                  delegationBundle,
+                  transactions: [tx],
+                }),
+            });
+            const hash = outcome.txHashes[0];
+            if (!hash) {
+              throw new Error('Delegated execution did not return a transaction hash');
+            }
+            txHashes.push(hash);
+          } else {
+            const hash = await executeTransactionWithRetries({
+              clients: params.clients,
+              tx,
+              maxAttempts,
+              onProgress: params.onProgress,
+              label,
+            });
+            txHashes.push(hash);
+          }
+        }
+      }
+    } else {
+      const sellPlan = await retryOperation({
+        label: `Unwind: planning sell PT [${positionIndex + 1}/${positions.length}]`,
+        maxAttempts,
+        onProgress: params.onProgress,
+        operation: async () =>
+          params.onchainActionsClient.createTokenizedYieldSellPt({
+            walletAddress: params.walletAddress,
+            ptTokenUid: position.pt.token.tokenUid,
+            amount: position.pt.exactAmount,
+          }),
+      });
+      plannedTxCount += sellPlan.transactions.length;
+      if (params.txExecutionMode === 'execute') {
+        if (!params.clients) {
+          throw new Error('Onchain clients are required to execute Pendle transactions');
+        }
+        for (const [txIndex, tx] of sellPlan.transactions.entries()) {
+          const label = `Unwind: execute sell tx [${positionIndex + 1}/${positions.length}] (${txIndex + 1}/${sellPlan.transactions.length})`;
+          if (params.delegationBundle) {
+            const clients = params.clients;
+            const delegationBundle = params.delegationBundle;
+            if (!clients) {
+              throw new Error('Onchain clients are required to execute Pendle transactions');
+            }
+            if (!delegationBundle) {
+              throw new Error('Delegation bundle is required for delegated execution');
+            }
+            const outcome = await retryOperation({
+              label,
+              maxAttempts,
+              onProgress: params.onProgress,
+              operation: async () =>
+                redeemDelegationsAndExecuteTransactions({
+                  clients,
+                  delegationBundle,
+                  transactions: [tx],
+                }),
+            });
+            const hash = outcome.txHashes[0];
+            if (!hash) {
+              throw new Error('Delegated execution did not return a transaction hash');
+            }
+            txHashes.push(hash);
+          } else {
+            const hash = await executeTransactionWithRetries({
+              clients: params.clients,
+              tx,
+              maxAttempts,
+              onProgress: params.onProgress,
+              label,
+            });
+            txHashes.push(hash);
+          }
+        }
+      }
+    }
+  }
+
+  if (plannedTxCount === 0) {
+    await params.onProgress?.('Unwind: nothing to do (no claimable rewards or PT balances)');
+    return { txHashes: [], positionCount: positions.length, transactionCount: 0 };
+  }
+
+  logInfo('Pendle unwind plan assembled', {
+    transactionCount: plannedTxCount,
+    positionCount: positions.length,
+  });
+
+  if (params.txExecutionMode === 'plan') {
+    await params.onProgress?.(`Unwind: planned ${plannedTxCount} transaction(s)`);
+    return { txHashes: [], positionCount: positions.length, transactionCount: plannedTxCount };
+  }
+
+  await params.onProgress?.(`Unwind: executed ${txHashes.length}/${plannedTxCount} transaction(s)`);
+  return {
+    txHashes,
+    lastTxHash: txHashes.at(-1),
+    positionCount: positions.length,
+    transactionCount: plannedTxCount,
+  };
 }
 
 export async function executeInitialDeposit(params: {

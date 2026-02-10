@@ -23,7 +23,8 @@
     "format": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --write",
     "format:check": "prettier \"src/**/*.{ts,tsx,js,jsx}\" --check",
     "test:smoke": "bash -lc 'ENV_FILE=.env; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.example; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test.example; exec tsx --env-file=\"$ENV_FILE\" scripts/smoke/pendle-smoke.ts'",
-    "smoke:delegations": "bash -lc 'ENV_FILE=.env; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.example; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test.example; exec tsx --env-file=\"$ENV_FILE\" scripts/smoke/pendle-delegations-smoke.ts'"
+    "smoke:delegations": "bash -lc 'ENV_FILE=.env; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.example; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test.example; exec tsx --env-file=\"$ENV_FILE\" scripts/smoke/pendle-delegations-smoke.ts'",
+    "smoke:fire": "bash -lc 'ENV_FILE=.env; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.example; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.test.example; exec tsx --env-file=\"$ENV_FILE\" scripts/smoke/pendle-fire-smoke.ts'"
   },
   "keywords": [],
   "author": "",

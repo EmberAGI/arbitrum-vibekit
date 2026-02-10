@@ -99,9 +99,27 @@ catalogs:
       version: 4.1.12
 
 patchedDependencies:
+  '@ag-ui/client@0.0.42':
+    hash: 1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66
+    path: clients/web-ag-ui/patches/@ag-ui__client@0.0.42.patch
+  '@ag-ui/langgraph@0.0.20':
+    hash: f6c68213595b88a273b49d98d68eab92ab1d04412c8e3459153397cfc1a750a7
+    path: clients/web-ag-ui/patches/@ag-ui__langgraph@0.0.20.patch
   '@anolilab/multi-semantic-release':
     hash: 37fb738e9aae114d5abda608fb1e11ab03b55303eff8c81490efb4dc99ef338b
     path: patches/@anolilab__multi-semantic-release.patch
+  '@copilotkit/react-core@1.50.1':
+    hash: 21fafba8d262e8dd4420b11032a7cfc0b5bc8c9a0d572e65f1e6afc4aa074ba4
+    path: clients/web-ag-ui/patches/@copilotkit__react-core@1.50.1.patch
+  '@copilotkit/runtime@1.50.1':
+    hash: ca033b53ad6b46deacd60a5cd04f1f8f6f774cb29f859bfe60943af732e4cef2
+    path: clients/web-ag-ui/patches/@copilotkit__runtime@1.50.1.patch
+  '@copilotkitnext/core@0.0.33':
+    hash: 1f7b7011acf6132819500f78aff8c9c2a50b86dc106e379d96936cb9539068f3
+    path: clients/web-ag-ui/patches/@copilotkitnext__core@0.0.33.patch
+  '@copilotkitnext/runtime@0.0.33':
+    hash: 66fa98230fc02ceca3e4e99a7a7d7f28b1bc9461b2d31cb3987081352704e257
+    path: clients/web-ag-ui/patches/@copilotkitnext__runtime@0.0.33.patch
 
 importers:
 
@@ -772,13 +790,13 @@ importers:
     dependencies:
       '@copilotkit/react-core':
         specifier: 1.50.1
-        version: 1.50.1(@types/mdast@4.0.4)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(graphql@16.12.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@3.25.76)
+        version: 1.50.1(patch_hash=21fafba8d262e8dd4420b11032a7cfc0b5bc8c9a0d572e65f1e6afc4aa074ba4)(@types/mdast@4.0.4)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(graphql@16.12.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@3.25.76)
       '@copilotkit/react-ui':
         specifier: 1.50.1
         version: 1.50.1(@types/mdast@4.0.4)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(graphql@16.12.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@3.25.76)
       '@copilotkit/runtime':
         specifier: 1.50.1
-        version: 1.50.1(8f925ff58ea32effabd25c7127690cc5)
+        version: 1.50.1(patch_hash=ca033b53ad6b46deacd60a5cd04f1f8f6f774cb29f859bfe60943af732e4cef2)(8f925ff58ea32effabd25c7127690cc5)
       '@copilotkit/shared':
         specifier: 1.50.1
         version: 1.50.1
@@ -17698,7 +17716,7 @@ snapshots:
 
   '@adraffy/ens-normalize@1.11.1': {}
 
-  '@ag-ui/client@0.0.42':
+  '@ag-ui/client@0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66)':
     dependencies:
       '@ag-ui/core': 0.0.42
       '@ag-ui/encoder': 0.0.42
@@ -17721,9 +17739,9 @@ snapshots:
       '@ag-ui/core': 0.0.42
       '@ag-ui/proto': 0.0.42
 
-  '@ag-ui/langgraph@0.0.20(@ag-ui/client@0.0.42)(@ag-ui/core@0.0.42)(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
+  '@ag-ui/langgraph@0.0.20(patch_hash=f6c68213595b88a273b49d98d68eab92ab1d04412c8e3459153397cfc1a750a7)(@ag-ui/client@0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66))(@ag-ui/core@0.0.42)(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
     dependencies:
-      '@ag-ui/client': 0.0.42
+      '@ag-ui/client': 0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66)
       '@ag-ui/core': 0.0.42
       '@langchain/core': 0.3.78(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))
       '@langchain/langgraph-sdk': 0.1.10(@langchain/core@0.3.78(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -19435,12 +19453,12 @@ snapshots:
       '@types/conventional-commits-parser': 5.0.1
       chalk: 5.6.2
 
-  '@copilotkit/react-core@1.50.1(@types/mdast@4.0.4)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(graphql@16.12.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@3.25.76)':
+  '@copilotkit/react-core@1.50.1(patch_hash=21fafba8d262e8dd4420b11032a7cfc0b5bc8c9a0d572e65f1e6afc4aa074ba4)(@types/mdast@4.0.4)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(graphql@16.12.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@3.25.76)':
     dependencies:
-      '@ag-ui/client': 0.0.42
+      '@ag-ui/client': 0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66)
       '@copilotkit/runtime-client-gql': 1.50.1(graphql@16.12.0)(react@19.2.3)
       '@copilotkit/shared': 1.50.1
-      '@copilotkitnext/core': 0.0.33
+      '@copilotkitnext/core': 0.0.33(patch_hash=1f7b7011acf6132819500f78aff8c9c2a50b86dc106e379d96936cb9539068f3)
       '@copilotkitnext/react': 0.0.33(@types/mdast@4.0.4)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@scarf/scarf': 1.4.0
       react: 19.2.3
@@ -19460,7 +19478,7 @@ snapshots:
 
   '@copilotkit/react-ui@1.50.1(@types/mdast@4.0.4)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(graphql@16.12.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@3.25.76)':
     dependencies:
-      '@copilotkit/react-core': 1.50.1(@types/mdast@4.0.4)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(graphql@16.12.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@3.25.76)
+      '@copilotkit/react-core': 1.50.1(patch_hash=21fafba8d262e8dd4420b11032a7cfc0b5bc8c9a0d572e65f1e6afc4aa074ba4)(@types/mdast@4.0.4)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(graphql@16.12.0)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@3.25.76)
       '@copilotkit/runtime-client-gql': 1.50.1(graphql@16.12.0)(react@19.2.3)
       '@copilotkit/shared': 1.50.1
       '@headlessui/react': 2.2.9(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -19493,14 +19511,14 @@ snapshots:
       - encoding
       - graphql
 
-  '@copilotkit/runtime@1.50.1(8f925ff58ea32effabd25c7127690cc5)':
+  '@copilotkit/runtime@1.50.1(patch_hash=ca033b53ad6b46deacd60a5cd04f1f8f6f774cb29f859bfe60943af732e4cef2)(8f925ff58ea32effabd25c7127690cc5)':
     dependencies:
-      '@ag-ui/client': 0.0.42
+      '@ag-ui/client': 0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66)
       '@ag-ui/core': 0.0.42
-      '@ag-ui/langgraph': 0.0.20(@ag-ui/client@0.0.42)(@ag-ui/core@0.0.42)(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@ag-ui/langgraph': 0.0.20(patch_hash=f6c68213595b88a273b49d98d68eab92ab1d04412c8e3459153397cfc1a750a7)(@ag-ui/client@0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66))(@ag-ui/core@0.0.42)(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@copilotkit/shared': 1.50.1
       '@copilotkitnext/agent': 0.0.33(@cfworker/json-schema@4.1.1)(hono@4.10.4)
-      '@copilotkitnext/runtime': 0.0.33(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))
+      '@copilotkitnext/runtime': 0.0.33(patch_hash=66fa98230fc02ceca3e4e99a7a7d7f28b1bc9461b2d31cb3987081352704e257)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))
       '@graphql-yoga/plugin-defer-stream': 3.17.1(graphql-yoga@5.17.1(graphql@16.12.0))(graphql@16.12.0)
       '@hono/node-server': 1.19.6(hono@4.10.4)
       '@langchain/core': 0.3.78(@opentelemetry/api@1.9.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))
@@ -19563,7 +19581,7 @@ snapshots:
 
   '@copilotkitnext/agent@0.0.33(@cfworker/json-schema@4.1.1)(hono@4.10.4)':
     dependencies:
-      '@ag-ui/client': 0.0.42
+      '@ag-ui/client': 0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66)
       '@ai-sdk/anthropic': 2.0.57(zod@3.25.76)
       '@ai-sdk/google': 2.0.52(zod@3.25.76)
       '@ai-sdk/mcp': 0.0.8(zod@3.25.76)
@@ -19577,9 +19595,9 @@ snapshots:
       - hono
       - supports-color
 
-  '@copilotkitnext/core@0.0.33':
+  '@copilotkitnext/core@0.0.33(patch_hash=1f7b7011acf6132819500f78aff8c9c2a50b86dc106e379d96936cb9539068f3)':
     dependencies:
-      '@ag-ui/client': 0.0.42
+      '@ag-ui/client': 0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66)
       '@copilotkitnext/shared': 0.0.33
       rxjs: 7.8.1
       zod: 3.25.76
@@ -19587,9 +19605,9 @@ snapshots:
 
   '@copilotkitnext/react@0.0.33(@types/mdast@4.0.4)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
     dependencies:
-      '@ag-ui/client': 0.0.42
+      '@ag-ui/client': 0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66)
       '@ag-ui/core': 0.0.42
-      '@copilotkitnext/core': 0.0.33
+      '@copilotkitnext/core': 0.0.33(patch_hash=1f7b7011acf6132819500f78aff8c9c2a50b86dc106e379d96936cb9539068f3)
       '@copilotkitnext/shared': 0.0.33
       '@copilotkitnext/web-inspector': 0.0.33
       '@lit-labs/react': 2.1.3(@types/react@19.2.2)
@@ -19616,9 +19634,9 @@ snapshots:
       - micromark-util-types
       - supports-color
 
-  '@copilotkitnext/runtime@0.0.33(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))':
+  '@copilotkitnext/runtime@0.0.33(patch_hash=66fa98230fc02ceca3e4e99a7a7d7f28b1bc9461b2d31cb3987081352704e257)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76))':
     dependencies:
-      '@ag-ui/client': 0.0.42
+      '@ag-ui/client': 0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66)
       '@ag-ui/core': 0.0.42
       '@ag-ui/encoder': 0.0.42
       '@copilotkitnext/shared': 0.0.33
@@ -19632,14 +19650,14 @@ snapshots:
 
   '@copilotkitnext/shared@0.0.33':
     dependencies:
-      '@ag-ui/client': 0.0.42
+      '@ag-ui/client': 0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66)
       partial-json: 0.1.7
       uuid: 11.1.0
 
   '@copilotkitnext/web-inspector@0.0.33':
     dependencies:
-      '@ag-ui/client': 0.0.42
-      '@copilotkitnext/core': 0.0.33
+      '@ag-ui/client': 0.0.42(patch_hash=1c14e992ffe67844d7cfd27df80aa0349ad8308ed90133a7b51c2c8d70580c66)
+      '@copilotkitnext/core': 0.0.33(patch_hash=1f7b7011acf6132819500f78aff8c9c2a50b86dc106e379d96936cb9539068f3)
       lit: 3.3.0
       lucide: 0.525.0
       marked: 12.0.2
