@@ -1,16 +1,30 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { OnchainClients } from '../clients/clients.js';
 import type { ExecutionPlan } from '../core/executionPlan.js';
 
+import type { DelegationBundle } from './context.js';
 import { executePerpetualPlan } from './execution.js';
 
-const { executeTransactionMock } = vi.hoisted(() => ({
-  executeTransactionMock: vi.fn(),
-}));
+const { executeTransactionMock, encodePermissionContextsMock, sendTransactionWithDelegationMock } =
+  vi.hoisted(() => ({
+    executeTransactionMock: vi.fn(),
+    encodePermissionContextsMock: vi.fn(),
+    sendTransactionWithDelegationMock: vi.fn(),
+  }));
 
 vi.mock('../core/transaction.js', () => ({
   executeTransaction: executeTransactionMock,
+}));
+
+vi.mock('@metamask/delegation-toolkit/utils', () => ({
+  encodePermissionContexts: encodePermissionContextsMock,
+}));
+
+vi.mock('@metamask/delegation-toolkit/experimental', () => ({
+  erc7710WalletActions: () => () => ({
+    sendTransactionWithDelegation: sendTransactionWithDelegationMock,
+  }),
 }));
 
 const createPerpetualLong = vi.fn(() =>
@@ -38,10 +52,21 @@ const client = {
 };
 
 describe('executePerpetualPlan', () => {
+  beforeEach(() => {
+    executeTransactionMock.mockReset();
+    encodePermissionContextsMock.mockReset();
+    sendTransactionWithDelegationMock.mockReset();
+  });
+
   it('skips execution when plan action is none', async () => {
     const plan: ExecutionPlan = { action: 'none' };
 
-    const result = await executePerpetualPlan({ client, plan, txExecutionMode: 'plan' });
+    const result = await executePerpetualPlan({
+      client,
+      plan,
+      txExecutionMode: 'plan',
+      delegationsBypassActive: true,
+    });
 
     expect(result.ok).toBe(true);
     expect(createPerpetualLong).not.toHaveBeenCalled();
@@ -62,7 +87,12 @@ describe('executePerpetualPlan', () => {
       },
     };
 
-    const result = await executePerpetualPlan({ client, plan, txExecutionMode: 'plan' });
+    const result = await executePerpetualPlan({
+      client,
+      plan,
+      txExecutionMode: 'plan',
+      delegationsBypassActive: true,
+    });
 
     expect(result.ok).toBe(true);
     expect(createPerpetualLong).toHaveBeenCalled();
@@ -81,7 +111,12 @@ describe('executePerpetualPlan', () => {
       },
     };
 
-    const result = await executePerpetualPlan({ client, plan, txExecutionMode: 'plan' });
+    const result = await executePerpetualPlan({
+      client,
+      plan,
+      txExecutionMode: 'plan',
+      delegationsBypassActive: true,
+    });
 
     expect(result.ok).toBe(true);
     expect(createPerpetualReduce).toHaveBeenCalled();
@@ -100,7 +135,12 @@ describe('executePerpetualPlan', () => {
       },
     };
 
-    const result = await executePerpetualPlan({ client, plan, txExecutionMode: 'plan' });
+    const result = await executePerpetualPlan({
+      client,
+      plan,
+      txExecutionMode: 'plan',
+      delegationsBypassActive: true,
+    });
 
     expect(result.ok).toBe(false);
     expect(result.error).toContain('boom');
@@ -128,6 +168,7 @@ describe('executePerpetualPlan', () => {
       clients,
       plan,
       txExecutionMode: 'execute',
+      delegationsBypassActive: true,
     });
 
     expect(result.ok).toBe(true);
@@ -135,5 +176,73 @@ describe('executePerpetualPlan', () => {
     expect(executeTransactionMock).toHaveBeenCalledTimes(1);
     expect(result.txHashes).toEqual(['0xhash']);
     expect(result.lastTxHash).toBe('0xhash');
+  });
+
+  it('submits transactions via delegation redemption when delegations are active', async () => {
+    encodePermissionContextsMock.mockReturnValue(['0xperm']);
+    sendTransactionWithDelegationMock.mockResolvedValueOnce('0xhash2');
+    const clients = {
+      wallet: {
+        account: { address: '0x00000000000000000000000000000000000000cc' },
+        chain: null,
+      },
+    } as unknown as OnchainClients;
+
+    const delegationBundle: DelegationBundle = {
+      chainId: 42161,
+      delegationManager: '0x00000000000000000000000000000000000000aa',
+      delegatorAddress: '0x00000000000000000000000000000000000000bb',
+      delegateeAddress: '0x00000000000000000000000000000000000000cc',
+      delegations: [
+        {
+          delegate: '0x00000000000000000000000000000000000000cc',
+          delegator: '0x00000000000000000000000000000000000000bb',
+          authority: `0x${'0'.repeat(64)}`,
+          caveats: [],
+          salt: `0x${'1'.repeat(64)}`,
+          signature: `0x${'2'.repeat(130)}`,
+        },
+      ],
+      intents: [],
+      descriptions: [],
+      warnings: [],
+    };
+
+    const plan: ExecutionPlan = {
+      action: 'long',
+      request: {
+        amount: '100',
+        walletAddress: delegationBundle.delegatorAddress,
+        chainId: '42161',
+        marketAddress: '0xmarket',
+        payTokenAddress: '0xusdc',
+        collateralTokenAddress: '0xusdc',
+        leverage: '2',
+      },
+    };
+
+    const result = await executePerpetualPlan({
+      client,
+      clients,
+      plan,
+      txExecutionMode: 'execute',
+      delegationsBypassActive: false,
+      delegationBundle,
+      delegatorWalletAddress: delegationBundle.delegatorAddress,
+      delegateeWalletAddress: delegationBundle.delegateeAddress,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(executeTransactionMock).not.toHaveBeenCalled();
+    expect(sendTransactionWithDelegationMock).toHaveBeenCalledTimes(1);
+    expect(sendTransactionWithDelegationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: '0xrouter',
+        permissionsContext: '0xperm',
+        delegationManager: delegationBundle.delegationManager,
+      }),
+    );
+    expect(result.txHashes).toEqual(['0xhash2']);
+    expect(result.lastTxHash).toBe('0xhash2');
   });
 });

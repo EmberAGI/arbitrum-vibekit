@@ -1,9 +1,13 @@
+import type { Delegation } from '@metamask/delegation-toolkit';
+import { erc7710WalletActions } from '@metamask/delegation-toolkit/experimental';
+import { encodePermissionContexts } from '@metamask/delegation-toolkit/utils';
+
 import type { OnchainClients } from '../clients/clients.js';
 import type { OnchainActionsClient, TransactionPlan } from '../clients/onchainActions.js';
 import type { ExecutionPlan } from '../core/executionPlan.js';
 import { executeTransaction } from '../core/transaction.js';
 
-import { logInfo, normalizeHexAddress } from './context.js';
+import { logInfo, normalizeHexAddress, type DelegationBundle } from './context.js';
 
 export type ExecutionResult = {
   action: ExecutionPlan['action'];
@@ -54,10 +58,78 @@ async function executePlannedTransaction(params: {
   return receipt.transactionHash;
 }
 
+function resolveDelegationExecutionConfig(params: {
+  delegationBundle?: DelegationBundle;
+  delegatorWalletAddress?: `0x${string}`;
+  delegateeWalletAddress?: `0x${string}`;
+}): { delegationManager: `0x${string}`; permissionsContext: `0x${string}` } {
+  const bundle = params.delegationBundle;
+  if (!bundle) {
+    throw new Error(
+      'Delegations are required for embedded execution. Complete delegation signing or set DELEGATIONS_BYPASS=true.',
+    );
+  }
+
+  if (params.delegatorWalletAddress && bundle.delegatorAddress !== params.delegatorWalletAddress) {
+    throw new Error(
+      `Delegation bundle delegatorAddress (${bundle.delegatorAddress}) does not match operator delegator wallet (${params.delegatorWalletAddress}).`,
+    );
+  }
+  if (params.delegateeWalletAddress && bundle.delegateeAddress !== params.delegateeWalletAddress) {
+    throw new Error(
+      `Delegation bundle delegateeAddress (${bundle.delegateeAddress}) does not match operator delegatee wallet (${params.delegateeWalletAddress}).`,
+    );
+  }
+
+  const contexts = encodePermissionContexts([bundle.delegations as unknown as Delegation[]]);
+  const permissionsContext = contexts[0];
+  if (!permissionsContext) {
+    throw new Error('Delegation bundle did not produce a permissions context.');
+  }
+
+  return {
+    delegationManager: normalizeHexAddress(bundle.delegationManager, 'delegation manager'),
+    permissionsContext,
+  };
+}
+
+async function executePlannedTransactionWithDelegation(params: {
+  clients: OnchainClients;
+  tx: TransactionPlan;
+  delegationManager: `0x${string}`;
+  permissionsContext: `0x${string}`;
+}): Promise<`0x${string}`> {
+  const to = normalizeHexAddress(params.tx.to, 'transaction target');
+  const data = normalizeHexData(params.tx.data, 'transaction data');
+  const value = parseTransactionValue(params.tx.value);
+
+  logInfo('Submitting GMX planned transaction via delegations', {
+    to,
+    chainId: params.tx.chainId,
+    delegationManager: params.delegationManager,
+    value: params.tx.value,
+  });
+
+  const hash = await erc7710WalletActions()(params.clients.wallet).sendTransactionWithDelegation({
+    account: params.clients.wallet.account,
+    chain: params.clients.wallet.chain,
+    to,
+    data,
+    value,
+    permissionsContext: params.permissionsContext,
+    delegationManager: params.delegationManager,
+  });
+
+  logInfo('GMX delegated transaction submitted', { transactionHash: hash });
+
+  return hash;
+}
+
 async function planOrExecuteTransactions(params: {
   txExecutionMode: 'plan' | 'execute';
   clients?: OnchainClients;
   transactions: TransactionPlan[];
+  delegation?: { delegationManager: `0x${string}`; permissionsContext: `0x${string}` };
 }): Promise<{ txHashes: `0x${string}`[]; lastTxHash?: `0x${string}` }> {
   if (params.txExecutionMode === 'plan') {
     return { txHashes: [] };
@@ -71,7 +143,13 @@ async function planOrExecuteTransactions(params: {
 
   const txHashes: `0x${string}`[] = [];
   for (const tx of params.transactions) {
-    const hash = await executePlannedTransaction({ clients: params.clients, tx });
+    const hash = params.delegation
+      ? await executePlannedTransactionWithDelegation({
+          clients: params.clients,
+          tx,
+          ...params.delegation,
+        })
+      : await executePlannedTransaction({ clients: params.clients, tx });
     txHashes.push(hash);
   }
   return { txHashes, lastTxHash: txHashes.at(-1) };
@@ -85,12 +163,25 @@ export async function executePerpetualPlan(params: {
   plan: ExecutionPlan;
   txExecutionMode: 'plan' | 'execute';
   clients?: OnchainClients;
+  delegationsBypassActive: boolean;
+  delegationBundle?: DelegationBundle;
+  delegatorWalletAddress?: `0x${string}`;
+  delegateeWalletAddress?: `0x${string}`;
 }): Promise<ExecutionResult> {
   const { plan } = params;
 
   if (plan.action === 'none' || !plan.request) {
     return { action: plan.action, ok: true, txHashes: [] };
   }
+
+  const delegation =
+    params.txExecutionMode === 'execute' && params.delegationsBypassActive === false
+      ? resolveDelegationExecutionConfig({
+          delegationBundle: params.delegationBundle,
+          delegatorWalletAddress: params.delegatorWalletAddress,
+          delegateeWalletAddress: params.delegateeWalletAddress,
+        })
+      : undefined;
 
   try {
     if (plan.action === 'long') {
@@ -101,6 +192,7 @@ export async function executePerpetualPlan(params: {
         txExecutionMode: params.txExecutionMode,
         clients: params.clients,
         transactions: response.transactions,
+        delegation,
       });
       return {
         action: plan.action,
@@ -118,6 +210,7 @@ export async function executePerpetualPlan(params: {
         txExecutionMode: params.txExecutionMode,
         clients: params.clients,
         transactions: response.transactions,
+        delegation,
       });
       return {
         action: plan.action,
@@ -135,6 +228,7 @@ export async function executePerpetualPlan(params: {
         txExecutionMode: params.txExecutionMode,
         clients: params.clients,
         transactions: response.transactions,
+        delegation,
       });
       return {
         action: plan.action,
@@ -151,6 +245,7 @@ export async function executePerpetualPlan(params: {
       txExecutionMode: params.txExecutionMode,
       clients: params.clients,
       transactions: response.transactions,
+      delegation,
     });
     return {
       action: plan.action,
