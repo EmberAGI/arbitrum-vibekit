@@ -10,6 +10,14 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function requireHexAddressEnv(name: string): `0x${string}` {
+  const value = requireEnv(name);
+  if (!value.startsWith('0x')) {
+    throw new Error(`Env var ${name} must be a hex address, got: ${value}`);
+  }
+  return value as `0x${string}`;
+}
+
 async function postJson<T>(url: string, body: unknown): Promise<{ status: number; json: T }> {
   const res = await fetch(url, {
     method: 'POST',
@@ -185,8 +193,10 @@ describe('GMX Allora full system (web + agent runtime + onchain-actions)', () =>
       maxLeverage: 2,
     };
 
+    const agentWalletAddress = requireHexAddressEnv('SMOKE_WALLET');
     const operatorConfig = {
-      walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      delegatorWalletAddress: agentWalletAddress,
+      delegateeWalletAddress: agentWalletAddress,
       baseContributionUsd: 250,
       fundingTokenAddress: '0x1111111111111111111111111111111111111111',
       targetMarket: selectedPool,
