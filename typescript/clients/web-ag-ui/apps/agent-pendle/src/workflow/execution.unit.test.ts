@@ -12,6 +12,7 @@ import {
   executeInitialDeposit,
   executeRebalance,
   executeRollover,
+  executeUnwind,
 } from './execution.js';
 
 const { executeTransactionMock, redeemDelegationsAndExecuteTransactionsMock } = vi.hoisted(() => ({
@@ -188,6 +189,432 @@ describe('executeRebalance', () => {
     expect(executeTransactionMock.mock.calls[0]?.[1]).toMatchObject({ to: '0xsell' });
     expect(executeTransactionMock.mock.calls[1]?.[1]).toMatchObject({ to: '0xbuy' });
     expect(result.lastTxHash).toBe('0xbuyhash');
+  });
+});
+
+describe('executeUnwind', () => {
+  beforeEach(() => {
+    executeTransactionMock.mockReset();
+    redeemDelegationsAndExecuteTransactionsMock.mockReset();
+  });
+
+  it('returns empty metadata when there are no positions to unwind', async () => {
+    const onchainActionsClient = {
+      listTokenizedYieldMarkets: vi.fn().mockResolvedValue([]),
+      listTokenizedYieldPositions: vi.fn().mockResolvedValue([]),
+      createTokenizedYieldClaimRewards: vi.fn(),
+      createTokenizedYieldRedeemPt: vi.fn(),
+      createTokenizedYieldSellPt: vi.fn(),
+    };
+
+    const result = await executeUnwind({
+      onchainActionsClient,
+      txExecutionMode: 'plan',
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      chainIds: ['42161'],
+    });
+
+    expect(result).toEqual({
+      txHashes: [],
+      positionCount: 0,
+      transactionCount: 0,
+    });
+    expect(onchainActionsClient.createTokenizedYieldClaimRewards).not.toHaveBeenCalled();
+    expect(onchainActionsClient.createTokenizedYieldRedeemPt).not.toHaveBeenCalled();
+    expect(onchainActionsClient.createTokenizedYieldSellPt).not.toHaveBeenCalled();
+  });
+
+  it('retries planning a claim step up to 2 times before succeeding', async () => {
+    const onchainActionsClient = {
+      listTokenizedYieldMarkets: vi.fn().mockResolvedValue([]),
+      listTokenizedYieldPositions: vi.fn().mockResolvedValue([
+        {
+          marketIdentifier: { chainId: '42161', address: '0xmarket' },
+          pt: {
+            token: {
+              tokenUid: { chainId: '42161', address: '0xpt' },
+              name: 'PT',
+              symbol: 'PT',
+              isNative: false,
+              decimals: 18,
+              iconUri: undefined,
+              isVetted: true,
+            },
+            exactAmount: '0',
+          },
+          yt: {
+            token: {
+              tokenUid: { chainId: '42161', address: '0xyt' },
+              name: 'YT',
+              symbol: 'YT',
+              isNative: false,
+              decimals: 18,
+              iconUri: undefined,
+              isVetted: true,
+            },
+            exactAmount: '0',
+            claimableRewards: [
+              {
+                token: {
+                  tokenUid: { chainId: '42161', address: '0xreward' },
+                  name: 'REWARD',
+                  symbol: 'REWARD',
+                  isNative: false,
+                  decimals: 18,
+                  iconUri: undefined,
+                  isVetted: true,
+                },
+                exactAmount: '1',
+              },
+            ],
+          },
+        },
+      ]),
+      createTokenizedYieldClaimRewards: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('claim-1'))
+        .mockRejectedValueOnce(new Error('claim-2'))
+        .mockResolvedValue({
+          transactions: [
+            { type: 'EVM_TX', to: '0xclaim', data: '0x01', value: '0', chainId: '42161' },
+          ],
+        }),
+      createTokenizedYieldRedeemPt: vi.fn(),
+      createTokenizedYieldSellPt: vi.fn(),
+    };
+
+    const result = await executeUnwind({
+      onchainActionsClient,
+      txExecutionMode: 'plan',
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      maxRetries: 2,
+    });
+
+    expect(onchainActionsClient.createTokenizedYieldClaimRewards).toHaveBeenCalledTimes(3);
+    expect(result.positionCount).toBe(1);
+    expect(result.transactionCount).toBe(1);
+    expect(result.txHashes).toEqual([]);
+  });
+
+  it('retries a failing transaction up to 2 times before succeeding', async () => {
+    executeTransactionMock
+      .mockRejectedValueOnce(new Error('tx-1'))
+      .mockRejectedValueOnce(new Error('tx-2'))
+      .mockResolvedValueOnce({ transactionHash: '0xhash' });
+
+    const onchainActionsClient = {
+      listTokenizedYieldMarkets: vi.fn().mockResolvedValue([
+        {
+          marketIdentifier: { chainId: '42161', address: '0xmarket' },
+          expiry: '2999-01-01',
+          details: {},
+          ptToken: {
+            tokenUid: { chainId: '42161', address: '0xpt' },
+            name: 'PT',
+            symbol: 'PT',
+            isNative: false,
+            decimals: 18,
+            iconUri: undefined,
+            isVetted: true,
+          },
+          ytToken: {
+            tokenUid: { chainId: '42161', address: '0xyt' },
+            name: 'YT',
+            symbol: 'YT',
+            isNative: false,
+            decimals: 18,
+            iconUri: undefined,
+            isVetted: true,
+          },
+          underlyingToken: {
+            tokenUid: { chainId: '42161', address: '0xunderlying' },
+            name: 'USDai',
+            symbol: 'USDai',
+            isNative: false,
+            decimals: 18,
+            iconUri: undefined,
+            isVetted: true,
+          },
+        },
+      ]),
+      listTokenizedYieldPositions: vi.fn().mockResolvedValue([
+        {
+          marketIdentifier: { chainId: '42161', address: '0xmarket' },
+          pt: {
+            token: {
+              tokenUid: { chainId: '42161', address: '0xpt' },
+              name: 'PT',
+              symbol: 'PT',
+              isNative: false,
+              decimals: 18,
+              iconUri: undefined,
+              isVetted: true,
+            },
+            exactAmount: '10',
+          },
+          yt: {
+            token: {
+              tokenUid: { chainId: '42161', address: '0xyt' },
+              name: 'YT',
+              symbol: 'YT',
+              isNative: false,
+              decimals: 18,
+              iconUri: undefined,
+              isVetted: true,
+            },
+            exactAmount: '0',
+            claimableRewards: [],
+          },
+        },
+      ]),
+      createTokenizedYieldClaimRewards: vi.fn(),
+      createTokenizedYieldRedeemPt: vi.fn(),
+      createTokenizedYieldSellPt: vi.fn().mockResolvedValue({
+        exactAmountOut: '10',
+        tokenOut: {
+          tokenUid: { chainId: '42161', address: '0xunderlying' },
+          name: 'USDai',
+          symbol: 'USDai',
+          isNative: false,
+          decimals: 18,
+          iconUri: undefined,
+          isVetted: true,
+        },
+        transactions: [
+          { type: 'EVM_TX', to: '0xsell', data: '0x01', value: '0', chainId: '42161' },
+        ],
+      }),
+    };
+
+    const clients = {} as OnchainClients;
+
+    const result = await executeUnwind({
+      onchainActionsClient,
+      txExecutionMode: 'execute',
+      clients,
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      maxRetries: 2,
+    });
+
+    expect(executeTransactionMock).toHaveBeenCalledTimes(3);
+    expect(result.txHashes).toEqual(['0xhash']);
+    expect(result.transactionCount).toBe(1);
+  });
+
+  it('claims rewards then exits each position, redeeming matured PT and selling non-matured PT', async () => {
+    const nowMs = Date.parse('2026-02-09T00:00:00.000Z');
+
+    const createTokenizedYieldClaimRewardsMock = vi.fn().mockResolvedValue({
+      transactions: [{ type: 'EVM_TX', to: '0xclaim', data: '0x01', value: '0', chainId: '42161' }],
+    });
+    const createTokenizedYieldRedeemPtMock = vi.fn().mockResolvedValue({
+      exactUnderlyingAmount: '10',
+      underlyingTokenIdentifier: { chainId: '42161', address: '0xunderlying' },
+      transactions: [{ type: 'EVM_TX', to: '0xredeem', data: '0x02', value: '0', chainId: '42161' }],
+    });
+    const createTokenizedYieldSellPtMock = vi.fn().mockResolvedValue({
+      exactAmountOut: '10',
+      tokenOut: {
+        tokenUid: { chainId: '42161', address: '0xunderlying' },
+        name: 'USDai',
+        symbol: 'USDai',
+        isNative: false,
+        decimals: 18,
+        iconUri: undefined,
+        isVetted: true,
+      },
+      transactions: [{ type: 'EVM_TX', to: '0xsell', data: '0x03', value: '0', chainId: '42161' }],
+    });
+
+    const onchainActionsClient: Pick<
+      OnchainActionsClient,
+      | 'listTokenizedYieldMarkets'
+      | 'listTokenizedYieldPositions'
+      | 'createTokenizedYieldClaimRewards'
+      | 'createTokenizedYieldRedeemPt'
+      | 'createTokenizedYieldSellPt'
+    > = {
+      listTokenizedYieldMarkets: vi.fn().mockResolvedValue([
+        {
+          marketIdentifier: { chainId: '42161', address: '0xmarket-matured' },
+          expiry: '2000-01-01',
+          details: {},
+          ptToken: {
+            tokenUid: { chainId: '42161', address: '0xpt-matured' },
+            name: 'PT-MATURED',
+            symbol: 'PT-MATURED',
+            isNative: false,
+            decimals: 18,
+            iconUri: undefined,
+            isVetted: true,
+          },
+          ytToken: {
+            tokenUid: { chainId: '42161', address: '0xyt-matured' },
+            name: 'YT-MATURED',
+            symbol: 'YT-MATURED',
+            isNative: false,
+            decimals: 18,
+            iconUri: undefined,
+            isVetted: true,
+          },
+          underlyingToken: {
+            tokenUid: { chainId: '42161', address: '0xunderlying' },
+            name: 'USDai',
+            symbol: 'USDai',
+            isNative: false,
+            decimals: 18,
+            iconUri: undefined,
+            isVetted: true,
+          },
+        },
+        {
+          marketIdentifier: { chainId: '42161', address: '0xmarket-live' },
+          expiry: '2999-01-01',
+          details: {},
+          ptToken: {
+            tokenUid: { chainId: '42161', address: '0xpt-live' },
+            name: 'PT-LIVE',
+            symbol: 'PT-LIVE',
+            isNative: false,
+            decimals: 18,
+            iconUri: undefined,
+            isVetted: true,
+          },
+          ytToken: {
+            tokenUid: { chainId: '42161', address: '0xyt-live' },
+            name: 'YT-LIVE',
+            symbol: 'YT-LIVE',
+            isNative: false,
+            decimals: 18,
+            iconUri: undefined,
+            isVetted: true,
+          },
+          underlyingToken: {
+            tokenUid: { chainId: '42161', address: '0xunderlying' },
+            name: 'USDai',
+            symbol: 'USDai',
+            isNative: false,
+            decimals: 18,
+            iconUri: undefined,
+            isVetted: true,
+          },
+        },
+      ]),
+      listTokenizedYieldPositions: vi.fn().mockResolvedValue([
+        {
+          marketIdentifier: { chainId: '42161', address: '0xmarket-matured' },
+          pt: {
+            token: {
+              tokenUid: { chainId: '42161', address: '0xpt-matured' },
+              name: 'PT-MATURED',
+              symbol: 'PT-MATURED',
+              isNative: false,
+              decimals: 18,
+              iconUri: undefined,
+              isVetted: true,
+            },
+            exactAmount: '100',
+          },
+          yt: {
+            token: {
+              tokenUid: { chainId: '42161', address: '0xyt-matured' },
+              name: 'YT-MATURED',
+              symbol: 'YT-MATURED',
+              isNative: false,
+              decimals: 18,
+              iconUri: undefined,
+              isVetted: true,
+            },
+            exactAmount: '0',
+            claimableRewards: [
+              {
+                token: {
+                  tokenUid: { chainId: '42161', address: '0xreward' },
+                  name: 'PENDLE',
+                  symbol: 'PENDLE',
+                  isNative: false,
+                  decimals: 18,
+                  iconUri: undefined,
+                  isVetted: true,
+                },
+                exactAmount: '1',
+              },
+            ],
+          },
+        },
+        {
+          marketIdentifier: { chainId: '42161', address: '0xmarket-live' },
+          pt: {
+            token: {
+              tokenUid: { chainId: '42161', address: '0xpt-live' },
+              name: 'PT-LIVE',
+              symbol: 'PT-LIVE',
+              isNative: false,
+              decimals: 18,
+              iconUri: undefined,
+              isVetted: true,
+            },
+            exactAmount: '200',
+          },
+          yt: {
+            token: {
+              tokenUid: { chainId: '42161', address: '0xyt-live' },
+              name: 'YT-LIVE',
+              symbol: 'YT-LIVE',
+              isNative: false,
+              decimals: 18,
+              iconUri: undefined,
+              isVetted: true,
+            },
+            exactAmount: '0',
+            claimableRewards: [
+              {
+                token: {
+                  tokenUid: { chainId: '42161', address: '0xreward' },
+                  name: 'PENDLE',
+                  symbol: 'PENDLE',
+                  isNative: false,
+                  decimals: 18,
+                  iconUri: undefined,
+                  isVetted: true,
+                },
+                exactAmount: '2',
+              },
+            ],
+          },
+        },
+      ]),
+      createTokenizedYieldClaimRewards: createTokenizedYieldClaimRewardsMock,
+      createTokenizedYieldRedeemPt: createTokenizedYieldRedeemPtMock,
+      createTokenizedYieldSellPt: createTokenizedYieldSellPtMock,
+    };
+
+    const result = await executeUnwind({
+      onchainActionsClient,
+      txExecutionMode: 'plan',
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      nowMs,
+    });
+
+    expect(result.txHashes).toEqual([]);
+    expect(result.positionCount).toBe(2);
+    expect(result.transactionCount).toBe(4);
+
+    expect(createTokenizedYieldClaimRewardsMock).toHaveBeenCalledTimes(2);
+    expect(createTokenizedYieldRedeemPtMock).toHaveBeenCalledTimes(1);
+    expect(createTokenizedYieldSellPtMock).toHaveBeenCalledTimes(1);
+
+    const claimOrder = createTokenizedYieldClaimRewardsMock.mock.invocationCallOrder;
+    const redeemOrder = createTokenizedYieldRedeemPtMock.mock.invocationCallOrder;
+    const sellOrder = createTokenizedYieldSellPtMock.mock.invocationCallOrder;
+
+    const firstRedeem = redeemOrder[0];
+    const firstSell = sellOrder[0];
+    if (typeof firstRedeem !== 'number' || typeof firstSell !== 'number') {
+      throw new Error('Expected unwind to redeem/sell at least once');
+    }
+    expect(claimOrder[0]).toBeLessThan(firstRedeem);
+    expect(claimOrder[1]).toBeLessThan(firstSell);
   });
 });
 
