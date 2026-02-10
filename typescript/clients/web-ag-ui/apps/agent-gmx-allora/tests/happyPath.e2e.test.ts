@@ -8,10 +8,10 @@ import {
   resolveAlloraApiBaseUrl,
   resolveAlloraApiKey,
   resolveAlloraChainId,
-  resolveOnchainActionsBaseUrl,
+  resolveOnchainActionsApiUrl,
 } from '../src/config/constants.js';
 
-const requiredEnv = ['ONCHAIN_ACTIONS_BASE_URL', 'SMOKE_WALLET', 'SMOKE_USDC_ADDRESS'] as const;
+const requiredEnv = ['ONCHAIN_ACTIONS_API_URL', 'SMOKE_WALLET', 'SMOKE_USDC_ADDRESS'] as const;
 const hasRequiredEnv = requiredEnv.every((key) => Boolean(process.env[key]));
 const itIf = hasRequiredEnv ? it : it.skip;
 
@@ -27,14 +27,14 @@ const resolveEnvAddress = (key: 'SMOKE_WALLET' | 'SMOKE_USDC_ADDRESS'): `0x${str
 
 describe('GMX Allora happy path (e2e)', () => {
   itIf('plans a perpetual long via local onchain-actions', async () => {
-    const originalBaseUrl = process.env['ONCHAIN_ACTIONS_BASE_URL'];
-    const baseUrl = process.env['ONCHAIN_ACTIONS_BASE_URL'];
+    const originalBaseUrl = process.env['ONCHAIN_ACTIONS_API_URL'];
+    const baseUrl = process.env['ONCHAIN_ACTIONS_API_URL'];
     if (!baseUrl) {
-      throw new Error('ONCHAIN_ACTIONS_BASE_URL is required for this test.');
+      throw new Error('ONCHAIN_ACTIONS_API_URL is required for this test.');
     }
 
     try {
-      const resolved = resolveOnchainActionsBaseUrl();
+      const resolved = resolveOnchainActionsApiUrl();
       expect(resolved).toBe(normalizeUrl(baseUrl));
 
       const client = new OnchainActionsClient(resolved);
@@ -75,9 +75,9 @@ describe('GMX Allora happy path (e2e)', () => {
       ).resolves.toBeDefined();
     } finally {
       if (originalBaseUrl === undefined) {
-        delete process.env['ONCHAIN_ACTIONS_BASE_URL'];
+        delete process.env['ONCHAIN_ACTIONS_API_URL'];
       } else {
-        process.env['ONCHAIN_ACTIONS_BASE_URL'] = originalBaseUrl;
+        process.env['ONCHAIN_ACTIONS_API_URL'] = originalBaseUrl;
       }
     }
   });

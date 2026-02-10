@@ -1,6 +1,6 @@
 export const ARBITRUM_CHAIN_ID = 42161;
 
-const DEFAULT_ONCHAIN_ACTIONS_BASE_URL = 'https://api.emberai.xyz';
+const DEFAULT_ONCHAIN_ACTIONS_API_URL = 'https://api.emberai.xyz';
 const DEFAULT_ALLORA_API_BASE_URL = 'https://api.allora.network';
 const DEFAULT_ALLORA_CHAIN_ID = 'allora-mainnet-1';
 const DEFAULT_ALLORA_INFERENCE_CACHE_TTL_MS = 30_000;
@@ -16,14 +16,14 @@ type OnchainActionsBaseUrlOptions = {
   logger?: OnchainActionsBaseUrlLogger;
 };
 
-export function resolveOnchainActionsBaseUrl(options?: OnchainActionsBaseUrlOptions): string {
-  const envBaseUrl = process.env['ONCHAIN_ACTIONS_BASE_URL'];
-  const rawEndpoint = options?.endpoint ?? envBaseUrl ?? DEFAULT_ONCHAIN_ACTIONS_BASE_URL;
+export function resolveOnchainActionsApiUrl(options?: OnchainActionsBaseUrlOptions): string {
+  const envUrl = process.env['ONCHAIN_ACTIONS_API_URL'];
+  const rawEndpoint = options?.endpoint ?? envUrl ?? DEFAULT_ONCHAIN_ACTIONS_API_URL;
 
   const source = options?.endpoint
     ? 'override'
-    : envBaseUrl
-      ? 'ONCHAIN_ACTIONS_BASE_URL'
+    : envUrl
+      ? 'ONCHAIN_ACTIONS_API_URL'
       : 'default';
 
   const endpoint = rawEndpoint.replace(/\/$/u, '');
@@ -37,7 +37,7 @@ export function resolveOnchainActionsBaseUrl(options?: OnchainActionsBaseUrlOpti
         baseUrl,
         source,
       });
-    } else if (baseUrl !== DEFAULT_ONCHAIN_ACTIONS_BASE_URL) {
+    } else if (baseUrl !== DEFAULT_ONCHAIN_ACTIONS_API_URL) {
       options.logger('Using custom onchain-actions base URL', { baseUrl, source });
     }
   }
@@ -45,7 +45,7 @@ export function resolveOnchainActionsBaseUrl(options?: OnchainActionsBaseUrlOpti
   return baseUrl;
 }
 
-export const ONCHAIN_ACTIONS_BASE_URL = resolveOnchainActionsBaseUrl();
+export const ONCHAIN_ACTIONS_API_URL = resolveOnchainActionsApiUrl();
 
 export function resolveAlloraApiBaseUrl(): string {
   return process.env['ALLORA_API_BASE_URL']?.replace(/\/$/u, '') ?? DEFAULT_ALLORA_API_BASE_URL;

@@ -220,8 +220,28 @@ async function dockerCompose(args: string[]): Promise<void> {
 }
 
 export default async function onchainActionsGlobalSetup(): Promise<Cleanup> {
+  const configured = process.env['ONCHAIN_ACTIONS_API_URL'];
+  if (configured) {
+    // When ONCHAIN_ACTIONS_API_URL is explicitly provided, tests should use that URL
+    // and skip booting a local onchain-actions worktree.
+    const trimmed = configured.trim();
+    const normalized = trimmed.endsWith('/')
+      ? trimmed.slice(0, -1)
+      : trimmed.endsWith('/openapi.json')
+        ? trimmed.slice(0, -'/openapi.json'.length)
+        : trimmed;
+    process.env['ONCHAIN_ACTIONS_API_URL'] = normalized;
+    await waitForNonEmptyMarkets(
+      `${normalized}/perpetuals/markets?chainIds=42161`,
+      30_000,
+    );
+    return async () => {
+      // no-op
+    };
+  }
+
   // Ensure tests target the local server started by this global setup.
-  process.env['ONCHAIN_ACTIONS_BASE_URL'] = `http://localhost:${ONCHAIN_ACTIONS_PORT}`;
+  process.env['ONCHAIN_ACTIONS_API_URL'] = `http://localhost:${ONCHAIN_ACTIONS_PORT}`;
 
   // Start Memgraph (required by onchain-actions container initialization).
   await dockerCompose(['-f', MEMGRAPH_COMPOSE_FILE, 'up', '-d', 'memgraph']);

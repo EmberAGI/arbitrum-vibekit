@@ -380,6 +380,15 @@ async function dockerCompose(dir: string, args: string[]): Promise<void> {
   await runCommandAndWait('docker', ['compose', ...args], dir);
 }
 
+function normalizeOnchainActionsApiUrl(value: string): string {
+  const trimmed = value.trim();
+  const noTrailingSlash = trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
+  if (noTrailingSlash.endsWith('/openapi.json')) {
+    return noTrailingSlash.slice(0, -'/openapi.json'.length);
+  }
+  return noTrailingSlash;
+}
+
 async function startOnchainActions(): Promise<{ baseUrl: string; cleanup: Cleanup }> {
   const ONCHAIN_ACTIONS_DIR = resolveOnchainActionsDir();
   const MEMGRAPH_COMPOSE_FILE =
@@ -392,7 +401,7 @@ async function startOnchainActions(): Promise<{ baseUrl: string; cleanup: Cleanu
   const MARKETS_URL = `${baseUrl}/perpetuals/markets?chainIds=42161`;
 
   // Ensure tests target the local server started by this setup.
-  process.env['ONCHAIN_ACTIONS_BASE_URL'] = baseUrl;
+  process.env['ONCHAIN_ACTIONS_API_URL'] = baseUrl;
 
   await dockerCompose(ONCHAIN_ACTIONS_DIR, ['-f', MEMGRAPH_COMPOSE_FILE, 'up', '-d', 'memgraph']);
   await waitForTcpPort({ host: '127.0.0.1', port: 7687, timeoutMs: 30_000 });
@@ -550,10 +559,25 @@ async function startMockAlloraServer(): Promise<{
 }
 
 export default async function systemGlobalSetup(): Promise<Cleanup> {
-  // 1) Start onchain-actions + memgraph.
-  const onchain = await startOnchainActions();
+  // 1) Resolve onchain-actions API URL.
+  //
+  // - If ONCHAIN_ACTIONS_API_URL is set, use it as-is and do not boot the onchain-actions worktree.
+  // - If it's unset, boot a local onchain-actions worktree + memgraph and set ONCHAIN_ACTIONS_API_URL.
+  const configuredOnchainActionsUrl = process.env['ONCHAIN_ACTIONS_API_URL'];
+  const shouldBootOnchainActions = !configuredOnchainActionsUrl;
+
+  const onchain = shouldBootOnchainActions
+    ? await startOnchainActions()
+    : { baseUrl: normalizeOnchainActionsApiUrl(configuredOnchainActionsUrl!), cleanup: async () => {} };
+
   const onchainCleanup = onchain.cleanup;
-  const onchainBaseUrl = onchain.baseUrl;
+  const onchainApiUrl = onchain.baseUrl;
+
+  if (!shouldBootOnchainActions) {
+    // Fail early with a clearer error than "markets empty" later on.
+    process.env['ONCHAIN_ACTIONS_API_URL'] = onchainApiUrl;
+    await waitForNonEmptyMarkets(`${onchainApiUrl}/perpetuals/markets?chainIds=42161`, 30_000);
+  }
 
   // Load agent test env to pick up Allora configuration (e.g. ALLORA_API_BASE_URL).
   loadAgentTestEnv();
@@ -592,7 +616,7 @@ export default async function systemGlobalSetup(): Promise<Cleanup> {
       ...process.env,
       DELEGATIONS_BYPASS: 'true',
       GMX_ALLORA_MODE: 'debug',
-      ONCHAIN_ACTIONS_BASE_URL: onchainBaseUrl,
+      ONCHAIN_ACTIONS_API_URL: onchainApiUrl,
       ALLORA_API_BASE_URL: alloraBaseUrl,
     },
   });
@@ -644,7 +668,7 @@ export default async function systemGlobalSetup(): Promise<Cleanup> {
   console.log('[web-e2e] services ready', {
     webBaseUrl,
     langgraphBaseUrl,
-    onchainActionsBaseUrl: onchainBaseUrl,
+    onchainActionsApiUrl: onchainApiUrl,
     alloraMockBaseUrl: shouldUseRealAllora ? undefined : alloraBaseUrl,
   });
 

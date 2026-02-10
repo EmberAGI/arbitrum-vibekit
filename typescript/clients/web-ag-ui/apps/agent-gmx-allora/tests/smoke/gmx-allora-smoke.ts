@@ -7,12 +7,12 @@ import {
   resolveAlloraApiBaseUrl,
   resolveAlloraApiKey,
   resolveAlloraChainId,
-  resolveOnchainActionsBaseUrl,
+  resolveOnchainActionsApiUrl,
 } from '../../src/config/constants.js';
 
 const resolveBaseUrl = (): string =>
-  resolveOnchainActionsBaseUrl({
-    endpoint: process.env['ONCHAIN_ACTIONS_BASE_URL'],
+  resolveOnchainActionsApiUrl({
+    endpoint: process.env['ONCHAIN_ACTIONS_API_URL'],
     logger: (message, metadata) => {
       console.info(`[smoke] ${message}`, metadata);
     },

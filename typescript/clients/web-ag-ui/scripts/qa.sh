@@ -161,14 +161,20 @@ resolve_onchain_actions_pnpm_bin() {
 }
 
 ensure_onchain_actions_50051() {
-  export ONCHAIN_ACTIONS_BASE_URL="${ONCHAIN_ACTIONS_BASE_URL:-http://localhost:50051}"
-
-  local markets_url="${ONCHAIN_ACTIONS_BASE_URL}/perpetuals/markets?chainIds=42161"
-
-  if curl -fs -o /dev/null "$markets_url"; then
-    echo "[qa] onchain-actions already reachable at ${ONCHAIN_ACTIONS_BASE_URL}"
-    return 0
+  if [ -n "${ONCHAIN_ACTIONS_API_URL:-}" ]; then
+    local markets_url="${ONCHAIN_ACTIONS_API_URL}/perpetuals/markets?chainIds=42161"
+    if curl -fs -o /dev/null "$markets_url"; then
+      echo "[qa] using ONCHAIN_ACTIONS_API_URL=${ONCHAIN_ACTIONS_API_URL}"
+      return 0
+    fi
+    echo "[qa] ONCHAIN_ACTIONS_API_URL is set but not reachable: ${ONCHAIN_ACTIONS_API_URL}" >&2
+    echo "[qa] Either start onchain-actions at that URL, or unset ONCHAIN_ACTIONS_API_URL to auto-boot a local worktree." >&2
+    return 1
   fi
+
+  export ONCHAIN_ACTIONS_API_URL="http://localhost:50051"
+
+  local markets_url="${ONCHAIN_ACTIONS_API_URL}/perpetuals/markets?chainIds=42161"
 
   local onchain_dir
   onchain_dir="$(resolve_onchain_actions_worktree_dir)"
@@ -198,13 +204,13 @@ ensure_onchain_actions_50051() {
   ) >"$log_file" 2>&1 &
 
   if ! wait_for_http_ok "$markets_url" 120; then
-    echo "[qa] onchain-actions failed to become reachable at ${ONCHAIN_ACTIONS_BASE_URL} within 120s" >&2
+    echo "[qa] onchain-actions failed to become reachable at ${ONCHAIN_ACTIONS_API_URL} within 120s" >&2
     echo "[qa] tail of $log_file:" >&2
     tail -n 40 "$log_file" >&2 || true
     exit 1
   fi
 
-  echo "[qa] onchain-actions ready at ${ONCHAIN_ACTIONS_BASE_URL}"
+  echo "[qa] onchain-actions ready at ${ONCHAIN_ACTIONS_API_URL}"
 }
 
 ensure_mock_allora
