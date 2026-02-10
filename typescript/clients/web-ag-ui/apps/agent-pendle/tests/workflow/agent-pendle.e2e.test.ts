@@ -29,6 +29,7 @@ const createRun = async (params: {
   baseUrl: string;
   threadId: string;
   graphId: string;
+  command: 'cycle' | 'fire';
 }) => {
   const response = await fetch(`${params.baseUrl}/threads/${params.threadId}/runs`, {
     method: 'POST',
@@ -40,7 +41,7 @@ const createRun = async (params: {
           {
             id: uuidv7(),
             role: 'user',
-            content: JSON.stringify({ command: 'cycle' }),
+            content: JSON.stringify({ command: params.command }),
           },
         ],
       },
@@ -98,7 +99,20 @@ describe('pendle agent e2e', () => {
   testFn('runs a cycle through the LangGraph API endpoint', async () => {
     const threadId = uuidv7();
     await createThread(baseUrl, threadId);
-    const runId = await createRun({ baseUrl, threadId, graphId });
+    const runId = await createRun({ baseUrl, threadId, graphId, command: 'cycle' });
+    const status = await waitForTerminalStatus({
+      baseUrl,
+      threadId,
+      runId,
+    });
+
+    expect(['completed', 'success']).toContain(status);
+  });
+
+  testFn('runs a fire command through the LangGraph API endpoint', async () => {
+    const threadId = uuidv7();
+    await createThread(baseUrl, threadId);
+    const runId = await createRun({ baseUrl, threadId, graphId, command: 'fire' });
     const status = await waitForTerminalStatus({
       baseUrl,
       threadId,
