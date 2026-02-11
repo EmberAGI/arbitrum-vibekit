@@ -24,9 +24,9 @@ import { getOnchainClients } from '../../src/workflow/clientFactory.js';
 import type { ExecutionPlan } from '../../src/core/executionPlan.js';
 
 const DEFAULT_SMOKE_USDC_ADDRESS = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as const;
-// 1 USDC in base units (6 decimals). Keep this small but non-trivial so onchain-actions
-// can plan a realistic position increase when simulation is enabled.
-const DEFAULT_LONG_AMOUNT_BASE_UNITS = 1_000_000n;
+// 1.1 USDC in base units (6 decimals). 1.0 USDC can fail GMX simulation as "LiquidatablePosition"
+// due to fees pushing remaining collateral below the min collateral threshold.
+const DEFAULT_LONG_AMOUNT_BASE_UNITS = 1_100_000n;
 const USDC_DECIMALS = 6;
 
 const resolveArbitrumRpcUrl = (): string =>
