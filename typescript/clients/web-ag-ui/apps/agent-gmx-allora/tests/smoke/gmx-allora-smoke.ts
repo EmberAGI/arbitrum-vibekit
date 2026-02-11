@@ -28,6 +28,9 @@ const DEFAULT_SMOKE_USDC_ADDRESS = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' 
 // due to fees pushing remaining collateral below the min collateral threshold.
 const DEFAULT_LONG_AMOUNT_BASE_UNITS = 1_100_000n;
 const USDC_DECIMALS = 6;
+const DEFAULT_STEP_TIMEOUT_MS = 15_000;
+const CLOSE_RETRY_INTERVAL_MS = 5_000;
+const CLOSE_RETRY_TIMEOUT_MS = 90_000;
 
 const resolveArbitrumRpcUrl = (): string =>
   process.env['ARBITRUM_RPC_URL'] ?? process.env['ARBITRUM_ONE_RPC_URL'] ?? 'https://arbitrum.gateway.tenderly.co';
@@ -247,19 +250,6 @@ const run = async () => {
     },
   });
 
-  if (delegatorUsdcAmountBaseUnits < DEFAULT_LONG_AMOUNT_BASE_UNITS) {
-    throw new Error(
-      [
-        'GMX long planning failed preflight: wallet has insufficient Arbitrum USDC for simulation.',
-        `walletAddress=${walletAddress}`,
-        `usdcAddress=${usdcAddress}`,
-        `required>=${formatUnits(DEFAULT_LONG_AMOUNT_BASE_UNITS, USDC_DECIMALS)} USDC`,
-        `found=${formatUnits(delegatorUsdcAmountBaseUnits, USDC_DECIMALS)} USDC`,
-        'Fund this wallet with USDC on Arbitrum (chainId=42161) or lower the smoke amount.',
-      ].join(' '),
-    );
-  }
-
   if (txExecutionMode === 'execute' && delegationsBypassActive === false) {
     if (!agentWalletAddress) {
       throw new Error('Agent wallet address is required when executing with DELEGATIONS_BYPASS=false.');
@@ -287,7 +277,37 @@ const run = async () => {
   }
 
   const marketAddress = getAddress(btcMarket.marketToken.address);
+  const normalizedMarketAddress = marketAddress.toLowerCase();
   const payTokenAddress = getAddress(usdcAddress);
+  const matchingMarketPositions = positions.filter(
+    (position) => position.marketAddress.toLowerCase() === normalizedMarketAddress,
+  );
+  const preexistingPosition = matchingMarketPositions.find((position) => position.positionSide === 'long');
+  const preexistingMarketPosition = preexistingPosition ?? matchingMarketPositions[0];
+  const shouldOpenLongPosition = !preexistingMarketPosition;
+  let closePositionSide: 'long' | 'short' = preexistingMarketPosition?.positionSide ?? 'long';
+  let openedPositionThisRun = false;
+
+  if (preexistingMarketPosition) {
+    console.log('[smoke] Preexisting market position found; skipping long open and moving to close.', {
+      marketAddress,
+      positionSide: preexistingMarketPosition.positionSide,
+      key: preexistingMarketPosition.key,
+    });
+  }
+
+  if (shouldOpenLongPosition && delegatorUsdcAmountBaseUnits < DEFAULT_LONG_AMOUNT_BASE_UNITS) {
+    throw new Error(
+      [
+        'GMX long planning failed preflight: wallet has insufficient Arbitrum USDC for simulation.',
+        `walletAddress=${walletAddress}`,
+        `usdcAddress=${usdcAddress}`,
+        `required>=${formatUnits(DEFAULT_LONG_AMOUNT_BASE_UNITS, USDC_DECIMALS)} USDC`,
+        `found=${formatUnits(delegatorUsdcAmountBaseUnits, USDC_DECIMALS)} USDC`,
+        'Fund this wallet with USDC on Arbitrum (chainId=42161) or lower the smoke amount.',
+      ].join(' '),
+    );
+  }
 
   const inference = await fetchAlloraInference({
     baseUrl: resolveAlloraApiBaseUrl(),
@@ -303,17 +323,23 @@ const run = async () => {
   const runStep = async (
     label: string,
     fn: () => Promise<void>,
-    skipWhen?: (message: string) => string | null,
+    options?: {
+      skipWhen?: (message: string) => string | null;
+      timeoutMs?: number;
+    },
   ) => {
     try {
+      const timeoutMs = options?.timeoutMs ?? DEFAULT_STEP_TIMEOUT_MS;
       await Promise.race([
         fn(),
-        new Promise<void>((_, reject) => setTimeout(() => reject(new Error('timeout')), 15_000)),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error(`timeout after ${timeoutMs}ms`)), timeoutMs),
+        ),
       ]);
       console.log(`[smoke] ${label}: ok`);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      const skipReason = skipWhen ? skipWhen(message) : null;
+      const skipReason = options?.skipWhen ? options.skipWhen(message) : null;
       if (skipReason) {
         skips.push(`${label}: ${skipReason}`);
         console.warn(`[smoke] ${label}: skipped -> ${skipReason}`);
@@ -394,9 +420,64 @@ const run = async () => {
     }
   }
 
+  const runClosePlan = async (): Promise<void> => {
+    const plan: ExecutionPlan = {
+      action: 'close',
+      request: {
+        walletAddress,
+        marketAddress,
+        positionSide: closePositionSide,
+        isLimit: false,
+      },
+    };
+
+    const result = await executePerpetualPlan({
+      client,
+      clients,
+      plan,
+      txExecutionMode,
+      delegationsBypassActive,
+      delegationBundle,
+      delegatorWalletAddress: walletAddress,
+      delegateeWalletAddress: agentWalletAddress,
+    });
+
+    if (!result.ok) {
+      throw new Error(result.error ?? 'unknown execution error');
+    }
+  };
+
+  const closeWithRetry = async (): Promise<void> => {
+    const closeMissingReason = 'No position or order found matching criteria';
+    const deadline = Date.now() + CLOSE_RETRY_TIMEOUT_MS;
+    let attempt = 0;
+
+    while (true) {
+      attempt += 1;
+      try {
+        await runClosePlan();
+        return;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        const canRetry = message.includes(closeMissingReason) && Date.now() < deadline;
+        if (!canRetry) {
+          throw error;
+        }
+        console.warn(`[smoke] close attempt ${attempt} not ready yet; retrying in ${CLOSE_RETRY_INTERVAL_MS}ms`, {
+          reason: message,
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, CLOSE_RETRY_INTERVAL_MS));
+      }
+    }
+  };
+
   await runStep(
     txExecutionMode === 'execute' ? 'perpetual long execute' : 'perpetual long planning',
     async () => {
+      if (!shouldOpenLongPosition) {
+        return;
+      }
+
       const plan: ExecutionPlan = {
         action: 'long',
         request: {
@@ -424,44 +505,42 @@ const run = async () => {
       if (!result.ok) {
         throw new Error(result.error ?? 'unknown execution error');
       }
+
+      openedPositionThisRun = true;
+      closePositionSide = 'long';
     },
   );
 
-  await runStep(
-    txExecutionMode === 'execute' ? 'perpetual close execute' : 'perpetual close planning',
-    async () => {
-      const plan: ExecutionPlan = {
-        action: 'close',
-        request: {
-          walletAddress,
-          marketAddress,
-          positionSide: 'long',
-          isLimit: false,
-        },
-      };
+  const closeStepLabel = txExecutionMode === 'execute' ? 'perpetual close execute' : 'perpetual close planning';
+  const shouldAttemptExecuteClose = txExecutionMode !== 'execute' || preexistingMarketPosition !== undefined || openedPositionThisRun;
 
-      const result = await executePerpetualPlan({
-        client,
-        clients,
-        plan,
-        txExecutionMode,
-        delegationsBypassActive,
-        delegationBundle,
-        delegatorWalletAddress: walletAddress,
-        delegateeWalletAddress: agentWalletAddress,
-      });
-
-      if (!result.ok) {
-        throw new Error(result.error ?? 'unknown execution error');
-      }
-    },
-    (message) => {
-      if (message.includes('No position or order found')) {
-        return 'no closeable positions for wallet';
-      }
-      return null;
-    },
-  );
+  if (!shouldAttemptExecuteClose) {
+    skips.push(`${closeStepLabel}: no opened/preexisting position to close`);
+    console.warn(`[smoke] ${closeStepLabel}: skipped -> no opened/preexisting position to close`);
+  } else {
+    await runStep(
+      closeStepLabel,
+      async () => {
+        if (txExecutionMode === 'execute') {
+          await closeWithRetry();
+          return;
+        }
+        await runClosePlan();
+      },
+      {
+        timeoutMs: txExecutionMode === 'execute' ? CLOSE_RETRY_TIMEOUT_MS + DEFAULT_STEP_TIMEOUT_MS : DEFAULT_STEP_TIMEOUT_MS,
+        skipWhen:
+          txExecutionMode === 'execute'
+            ? undefined
+            : (message) => {
+                if (message.includes('No position or order found')) {
+                  return 'no closeable positions for wallet';
+                }
+                return null;
+              },
+      },
+    );
+  }
 
   if (failures.length > 0) {
     throw new Error(`Smoke checks failed:\n- ${failures.join('\n- ')}`);
