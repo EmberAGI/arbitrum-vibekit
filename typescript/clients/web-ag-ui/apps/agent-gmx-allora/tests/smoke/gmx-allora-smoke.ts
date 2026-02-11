@@ -1,6 +1,14 @@
 import crypto from 'node:crypto';
 
-import { createPublicClient, erc20Abi, formatUnits, getAddress, http, type Address } from 'viem';
+import {
+  createPublicClient,
+  erc20Abi,
+  formatUnits,
+  getAddress,
+  http,
+  type Address,
+  type Hash,
+} from 'viem';
 import { getDeleGatorEnvironment, ROOT_AUTHORITY, signDelegation } from '@metamask/delegation-toolkit';
 import { privateKeyToAccount } from 'viem/accounts';
 import { arbitrum } from 'viem/chains';
@@ -22,6 +30,8 @@ import type { DelegationBundle, SignedDelegation } from '../../src/workflow/cont
 import { executePerpetualPlan } from '../../src/workflow/execution.js';
 import { getOnchainClients } from '../../src/workflow/clientFactory.js';
 import type { ExecutionPlan } from '../../src/core/executionPlan.js';
+import type { ExecutionResult } from '../../src/workflow/execution.js';
+import type { PerpetualPosition } from '../../src/clients/onchainActions.js';
 
 const DEFAULT_SMOKE_USDC_ADDRESS = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as const;
 // 1.1 USDC in base units (6 decimals). 1.0 USDC can fail GMX simulation as "LiquidatablePosition"
@@ -32,6 +42,9 @@ const DEFAULT_STEP_TIMEOUT_MS = 15_000;
 const CLOSE_RETRY_INTERVAL_MS = 5_000;
 const CLOSE_RETRY_TIMEOUT_MS = 90_000;
 const OPEN_POSITION_READY_TIMEOUT_MS = 180_000;
+const TX_RECEIPT_TIMEOUT_MS = 180_000;
+const CLOSE_POSITION_SETTLE_TIMEOUT_MS = 180_000;
+const MAX_FULL_CYCLE_USDC_LOSS_BASE_UNITS = 1_000_000n;
 
 const resolveArbitrumRpcUrl = (): string =>
   process.env['ARBITRUM_RPC_URL'] ?? process.env['ARBITRUM_ONE_RPC_URL'] ?? 'https://arbitrum.gateway.tenderly.co';
@@ -79,6 +92,22 @@ const resolveUsdcAddress = (): `0x${string}` | undefined => {
   }
   return value as `0x${string}`;
 };
+
+function parseBigIntOrZero(value: string): bigint {
+  try {
+    return BigInt(value);
+  } catch {
+    return 0n;
+  }
+}
+
+function isNonZeroPosition(position: PerpetualPosition): boolean {
+  if (parseBigIntOrZero(position.sizeInUsd) > 0n) {
+    return true;
+  }
+  const sizeInTokens = Number(position.sizeInTokens);
+  return Number.isFinite(sizeInTokens) && sizeInTokens > 0;
+}
 
 const baseUrl = resolveBaseUrl();
 const delegationsBypassActive = resolveDelegationsBypass();
@@ -391,6 +420,69 @@ const run = async () => {
     }
   };
 
+  let attemptedOpenLongPlan = false;
+  let longResult: ExecutionResult | undefined;
+  let closeResult: ExecutionResult | undefined;
+
+  const assertTransactionsPlanned = (label: string, result: ExecutionResult): void => {
+    const transactions = result.transactions ?? [];
+    if (transactions.length === 0) {
+      throw new Error(`${label} returned no transaction plan entries.`);
+    }
+  };
+
+  const assertSuccessfulReceipts = async (label: string, txHashes: `0x${string}`[]): Promise<void> => {
+    if (txHashes.length === 0) {
+      throw new Error(`${label} returned no tx hashes in execute mode.`);
+    }
+    for (const txHash of txHashes) {
+      const receipt = await arbitrumClient.waitForTransactionReceipt({
+        hash: txHash as Hash,
+        timeout: TX_RECEIPT_TIMEOUT_MS,
+      });
+      if (receipt.status !== 'success') {
+        throw new Error(`${label} transaction reverted: ${txHash}`);
+      }
+      console.log(`[smoke] tx confirmed`, {
+        label,
+        txHash,
+        blockNumber: receipt.blockNumber.toString(),
+      });
+    }
+  };
+
+  const waitForNoOpenMarketPosition = async (): Promise<void> => {
+    const deadline = Date.now() + CLOSE_POSITION_SETTLE_TIMEOUT_MS;
+    let attempt = 0;
+    while (true) {
+      attempt += 1;
+      const latestPositions = await client.listPerpetualPositions({ walletAddress, chainIds: ['42161'] });
+      const latestOpenPositions = latestPositions.filter(
+        (position) =>
+          position.marketAddress.toLowerCase() === normalizedMarketAddress && isNonZeroPosition(position),
+      );
+      if (latestOpenPositions.length === 0) {
+        return;
+      }
+      if (Date.now() >= deadline) {
+        const summary = latestOpenPositions.map((position) => ({
+          key: position.key,
+          contractKey: position.contractKey,
+          side: position.positionSide,
+          sizeInUsd: position.sizeInUsd,
+          sizeInTokens: position.sizeInTokens,
+        }));
+        throw new Error(
+          `Position still open after close timeout (${CLOSE_POSITION_SETTLE_TIMEOUT_MS}ms): ${JSON.stringify(summary)}`,
+        );
+      }
+      console.warn(
+        `[smoke] waiting for close settlement (attempt ${attempt}); retrying in ${CLOSE_RETRY_INTERVAL_MS}ms`,
+      );
+      await new Promise<void>((resolve) => setTimeout(resolve, CLOSE_RETRY_INTERVAL_MS));
+    }
+  };
+
   const buildDelegationBundle = async (): Promise<DelegationBundle> => {
     if (delegationsBypassActive) {
       throw new Error('Delegation bundle requested while DELEGATIONS_BYPASS=true.');
@@ -461,7 +553,7 @@ const run = async () => {
     }
   }
 
-  const runClosePlan = async (): Promise<void> => {
+  const runClosePlan = async (): Promise<ExecutionResult> => {
     const plan: ExecutionPlan = {
       action: 'close',
       request: {
@@ -486,9 +578,11 @@ const run = async () => {
     if (!result.ok) {
       throw new Error(result.error ?? 'unknown execution error');
     }
+    assertTransactionsPlanned('perpetual close', result);
+    return result;
   };
 
-  const closeWithRetry = async (): Promise<void> => {
+  const closeWithRetry = async (): Promise<ExecutionResult> => {
     const closeMissingReason = 'No position or order found matching criteria';
     const deadline = Date.now() + CLOSE_RETRY_TIMEOUT_MS;
     let attempt = 0;
@@ -496,8 +590,7 @@ const run = async () => {
     while (true) {
       attempt += 1;
       try {
-        await runClosePlan();
-        return;
+        return await runClosePlan();
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         const canRetry = message.includes(closeMissingReason) && Date.now() < deadline;
@@ -518,6 +611,7 @@ const run = async () => {
       if (!shouldOpenLongPosition) {
         return;
       }
+      attemptedOpenLongPlan = true;
 
       const plan: ExecutionPlan = {
         action: 'long',
@@ -547,6 +641,8 @@ const run = async () => {
         throw new Error(result.error ?? 'unknown execution error');
       }
 
+      assertTransactionsPlanned('perpetual long', result);
+      longResult = result;
       openedPositionThisRun = true;
       closePositionSide = 'long';
     },
@@ -569,10 +665,10 @@ const run = async () => {
       closeStepLabel,
       async () => {
         if (txExecutionMode === 'execute') {
-          await closeWithRetry();
+          closeResult = await closeWithRetry();
           return;
         }
-        await runClosePlan();
+        closeResult = await runClosePlan();
       },
       {
         timeoutMs: txExecutionMode === 'execute' ? CLOSE_RETRY_TIMEOUT_MS + DEFAULT_STEP_TIMEOUT_MS : DEFAULT_STEP_TIMEOUT_MS,
@@ -587,6 +683,64 @@ const run = async () => {
               },
       },
     );
+  }
+
+  await runStep('preexisting-position branch behavior', async () => {
+    if (preexistingMarketPosition && attemptedOpenLongPlan) {
+      throw new Error('Expected open step to be skipped for preexisting market position.');
+    }
+    if (!preexistingMarketPosition && !attemptedOpenLongPlan) {
+      throw new Error('Expected open step to run when no preexisting market position exists.');
+    }
+  });
+
+  if (txExecutionMode === 'execute' && longResult?.txHashes) {
+    await runStep(
+      'perpetual long tx lifecycle',
+      async () => {
+        await assertSuccessfulReceipts('perpetual long', longResult?.txHashes ?? []);
+      },
+      { timeoutMs: TX_RECEIPT_TIMEOUT_MS + DEFAULT_STEP_TIMEOUT_MS },
+    );
+  }
+
+  if (txExecutionMode === 'execute' && closeResult?.txHashes) {
+    await runStep(
+      'perpetual close tx lifecycle',
+      async () => {
+        await assertSuccessfulReceipts('perpetual close', closeResult?.txHashes ?? []);
+      },
+      { timeoutMs: TX_RECEIPT_TIMEOUT_MS + DEFAULT_STEP_TIMEOUT_MS },
+    );
+  }
+
+  if (txExecutionMode === 'execute' && closeResult?.ok) {
+    await runStep('post-close position state', waitForNoOpenMarketPosition, {
+      timeoutMs: CLOSE_POSITION_SETTLE_TIMEOUT_MS + DEFAULT_STEP_TIMEOUT_MS,
+    });
+  }
+
+  if (txExecutionMode === 'execute' && openedPositionThisRun && closeResult?.ok) {
+    await runStep('full-cycle USDC balance delta sanity', async () => {
+      const endingBalances = await fetchBalancesViaRpc(walletAddress);
+      const delta = endingBalances.usdc - delegatorUsdcAmountBaseUnits;
+      console.log('[smoke] USDC balance delta', {
+        walletAddress,
+        startBaseUnits: delegatorUsdcAmountBaseUnits.toString(),
+        endBaseUnits: endingBalances.usdc.toString(),
+        deltaBaseUnits: delta.toString(),
+        deltaFormattedUsdc: formatUnits(delta, USDC_DECIMALS),
+      });
+      if (delta < -MAX_FULL_CYCLE_USDC_LOSS_BASE_UNITS) {
+        throw new Error(
+          [
+            'USDC loss exceeded configured full-cycle tolerance.',
+            `maxLossBaseUnits=${MAX_FULL_CYCLE_USDC_LOSS_BASE_UNITS.toString()}`,
+            `actualLossBaseUnits=${(-delta).toString()}`,
+          ].join(' '),
+        );
+      }
+    });
   }
 
   if (failures.length > 0) {
