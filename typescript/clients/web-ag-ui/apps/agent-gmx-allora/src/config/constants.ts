@@ -4,6 +4,7 @@ export const ARBITRUM_CHAIN_ID = 42161;
 
 const DEFAULT_ONCHAIN_ACTIONS_API_URL = 'https://api.emberai.xyz';
 const DEFAULT_ALLORA_API_BASE_URL = 'https://api.allora.network';
+const DEFAULT_E2E_PROFILE: E2EProfile = 'live';
 // Allora Consumer API expects a "signature format" / target chain slug.
 // Docs commonly use Sepolia: "ethereum-11155111".
 // Production deployments should override via ALLORA_CHAIN_ID.
@@ -14,6 +15,7 @@ const DEFAULT_GMX_ALLORA_TX_EXECUTION_MODE: GmxAlloraTxExecutionMode = 'plan';
 const DEFAULT_DELEGATIONS_BYPASS = false;
 
 export type GmxAlloraTxExecutionMode = 'plan' | 'execute';
+export type E2EProfile = 'mocked' | 'live';
 
 type OnchainActionsBaseUrlLogger = (message: string, metadata?: Record<string, unknown>) => void;
 
@@ -63,6 +65,22 @@ export function resolveAlloraApiKey(): string | undefined {
 
 export function resolveAlloraChainId(): string {
   return process.env['ALLORA_CHAIN_ID']?.trim() || DEFAULT_ALLORA_CHAIN_ID;
+}
+
+export function resolveE2EProfile(): E2EProfile {
+  const raw = process.env['E2E_PROFILE'];
+  if (!raw) {
+    return DEFAULT_E2E_PROFILE;
+  }
+
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === 'mocked') {
+    return 'mocked';
+  }
+  if (normalized === 'live') {
+    return 'live';
+  }
+  return DEFAULT_E2E_PROFILE;
 }
 
 export function resolveAlloraInferenceCacheTtlMs(): number {

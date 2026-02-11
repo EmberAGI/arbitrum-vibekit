@@ -339,18 +339,24 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     pools: right.profile?.pools ?? left.profile.pools,
     allowedPools: right.profile?.allowedPools ?? left.profile.allowedPools,
   };
+  const rightMetrics = right.metrics;
+  const hasAssumedPositionSideUpdate =
+    rightMetrics !== undefined &&
+    Object.prototype.hasOwnProperty.call(rightMetrics, 'assumedPositionSide');
   const nextMetrics: ClmmMetrics = {
-    lastSnapshot: right.metrics?.lastSnapshot ?? left.metrics.lastSnapshot,
-    previousPrice: right.metrics?.previousPrice ?? left.metrics.previousPrice,
-    cyclesSinceRebalance: right.metrics?.cyclesSinceRebalance ?? left.metrics.cyclesSinceRebalance,
-    staleCycles: right.metrics?.staleCycles ?? left.metrics.staleCycles,
-    iteration: right.metrics?.iteration ?? left.metrics.iteration,
-    latestCycle: right.metrics?.latestCycle ?? left.metrics.latestCycle,
-    assumedPositionSide: right.metrics?.assumedPositionSide ?? left.metrics.assumedPositionSide,
+    lastSnapshot: rightMetrics?.lastSnapshot ?? left.metrics.lastSnapshot,
+    previousPrice: rightMetrics?.previousPrice ?? left.metrics.previousPrice,
+    cyclesSinceRebalance: rightMetrics?.cyclesSinceRebalance ?? left.metrics.cyclesSinceRebalance,
+    staleCycles: rightMetrics?.staleCycles ?? left.metrics.staleCycles,
+    iteration: rightMetrics?.iteration ?? left.metrics.iteration,
+    latestCycle: rightMetrics?.latestCycle ?? left.metrics.latestCycle,
+    assumedPositionSide: hasAssumedPositionSideUpdate
+      ? rightMetrics?.assumedPositionSide
+      : left.metrics.assumedPositionSide,
     lastInferenceSnapshotKey:
-      right.metrics?.lastInferenceSnapshotKey ?? left.metrics.lastInferenceSnapshotKey,
+      rightMetrics?.lastInferenceSnapshotKey ?? left.metrics.lastInferenceSnapshotKey,
     lastTradedInferenceSnapshotKey:
-      right.metrics?.lastTradedInferenceSnapshotKey ?? left.metrics.lastTradedInferenceSnapshotKey,
+      rightMetrics?.lastTradedInferenceSnapshotKey ?? left.metrics.lastTradedInferenceSnapshotKey,
   };
 
   return {

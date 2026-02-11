@@ -37,6 +37,20 @@ type AgentSyncResponse = {
   activity: null | { telemetry?: unknown; events?: unknown };
 };
 
+type CycleSnapshot = {
+  iteration: number;
+  action: string;
+  reason: string;
+  assumedPositionSide?: string;
+  hasExecutionPlan: boolean;
+  executionPlanAction?: string;
+  executionOk?: boolean;
+  executionError?: string;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
 async function ensureThread(baseUrl: string, threadId: string, graphId: string): Promise<void> {
   const res = await fetch(`${baseUrl}/threads`, {
     method: 'POST',
@@ -149,6 +163,113 @@ async function waitForRunCompletion(params: {
   throw new Error(`Run did not complete within ${params.timeoutMs}ms`);
 }
 
+function parseCycleSnapshot(sync: AgentSyncResponse): CycleSnapshot {
+  if (!isRecord(sync.metrics)) {
+    throw new Error(`Sync response metrics missing: ${JSON.stringify(sync)}`);
+  }
+
+  const iteration = sync.metrics['iteration'];
+  const latestCycle = sync.metrics['latestCycle'];
+  if (typeof iteration !== 'number' || !isRecord(latestCycle)) {
+    throw new Error(`Sync response latestCycle missing: ${JSON.stringify(sync.metrics)}`);
+  }
+
+  const action = latestCycle['action'];
+  const reason = latestCycle['reason'];
+  if (typeof action !== 'string' || typeof reason !== 'string') {
+    throw new Error(`latestCycle missing action/reason: ${JSON.stringify(latestCycle)}`);
+  }
+  const assumedPositionSide =
+    typeof sync.metrics['assumedPositionSide'] === 'string'
+      ? sync.metrics['assumedPositionSide']
+      : undefined;
+
+  let hasExecutionPlan = false;
+  let executionPlanAction: string | undefined;
+  let executionOk: boolean | undefined;
+  let executionError: string | undefined;
+  const events = sync.activity?.events;
+  if (Array.isArray(events)) {
+    for (const rawEvent of events) {
+      if (!isRecord(rawEvent) || rawEvent['type'] !== 'artifact' || !isRecord(rawEvent['artifact'])) {
+        continue;
+      }
+      const artifact = rawEvent['artifact'];
+      const artifactId = artifact['artifactId'];
+      if (artifactId !== 'gmx-allora-execution-plan' && artifactId !== 'gmx-allora-execution-result') {
+        continue;
+      }
+      const parts = artifact['parts'];
+      if (!Array.isArray(parts)) {
+        continue;
+      }
+      for (const rawPart of parts) {
+        if (!isRecord(rawPart) || rawPart['kind'] !== 'data' || !isRecord(rawPart['data'])) {
+          continue;
+        }
+        const data = rawPart['data'];
+        if (artifactId === 'gmx-allora-execution-plan') {
+          hasExecutionPlan = true;
+          const planAction = data['action'];
+          if (typeof planAction === 'string') {
+            executionPlanAction = planAction;
+          }
+          continue;
+        }
+        const ok = data['ok'];
+        if (typeof ok === 'boolean') {
+          executionOk = ok;
+        }
+        const error = data['error'];
+        if (typeof error === 'string' && error.length > 0) {
+          executionError = error;
+        }
+      }
+    }
+  }
+
+  return {
+    iteration,
+    action,
+    reason,
+    assumedPositionSide,
+    hasExecutionPlan,
+    executionPlanAction,
+    executionOk,
+    executionError,
+  };
+}
+
+async function runCycleAndSync(params: {
+  webBaseUrl: string;
+  langgraphBaseUrl: string;
+  graphId: string;
+  threadId: string;
+}): Promise<CycleSnapshot> {
+  await sendCommand({ baseUrl: params.langgraphBaseUrl, threadId: params.threadId, command: 'cycle' });
+  const runId = await createRun({
+    baseUrl: params.langgraphBaseUrl,
+    threadId: params.threadId,
+    graphId: params.graphId,
+  });
+  await waitForRunCompletion({
+    baseUrl: params.langgraphBaseUrl,
+    threadId: params.threadId,
+    runId,
+    timeoutMs: 120_000,
+  });
+
+  const synced = await postJson<AgentSyncResponse>(`${params.webBaseUrl}/api/agents/sync`, {
+    agentId: params.graphId,
+    threadId: params.threadId,
+  });
+  if (synced.status !== 200 || synced.json.error) {
+    throw new Error(`Web sync failed after cycle: ${JSON.stringify(synced)}`);
+  }
+
+  return parseCycleSnapshot(synced.json);
+}
+
 describe('GMX Allora full system (web + agent runtime + onchain-actions)', () => {
   it('web /api/agents/sync succeeds when agent runtime is up', async () => {
     const webBaseUrl = requireEnv('WEB_E2E_BASE_URL');
@@ -167,12 +288,17 @@ describe('GMX Allora full system (web + agent runtime + onchain-actions)', () =>
     expect(json.metrics).not.toBeNull();
   });
 
-  it('cycle run produces telemetry/artifacts and the web sync can read them', async () => {
+  it('runs deterministic open/hold/close/reopen assertions in mocked profile', async () => {
     const webBaseUrl = requireEnv('WEB_E2E_BASE_URL');
     const langgraphBaseUrl = requireEnv('WEB_E2E_LANGGRAPH_BASE_URL');
+    const e2eProfile = requireEnv('E2E_PROFILE');
 
     const graphId = 'agent-gmx-allora';
     const threadId = crypto.randomUUID();
+    if (e2eProfile !== 'mocked') {
+      expect(e2eProfile).toBe('live');
+      return;
+    }
 
     // Bootstrap via web sync (ensures the thread exists and the graph can respond).
     const initial = await postJson<AgentSyncResponse>(`${webBaseUrl}/api/agents/sync`, {
@@ -211,7 +337,7 @@ describe('GMX Allora full system (web + agent runtime + onchain-actions)', () =>
           bootstrapped: true,
           pollIntervalMs: 1000,
           streamLimit: 10,
-          cronScheduled: false,
+          cronScheduled: true,
         },
         view: {
           delegationsBypassActive: true,
@@ -220,55 +346,36 @@ describe('GMX Allora full system (web + agent runtime + onchain-actions)', () =>
           // Preserve shape expected by reducers.
           activity: { telemetry: [], events: [] },
           profile: { chains: [], protocols: [], tokens: [], pools: [], allowedPools: [] },
-          metrics: { iteration: 0, previousPrice: 47000, cyclesSinceRebalance: 0, staleCycles: 0 },
+          metrics: { iteration: 0, previousPrice: 46000, cyclesSinceRebalance: 0, staleCycles: 0 },
           transactionHistory: [],
         },
       },
     });
 
-    // Now send the command using the same `as_node` pattern the web route uses.
-    await sendCommand({ baseUrl: langgraphBaseUrl, threadId, command: 'cycle' });
+    const cycleOne = await runCycleAndSync({ webBaseUrl, langgraphBaseUrl, graphId, threadId });
+    expect(cycleOne.iteration).toBe(1);
+    expect(cycleOne.action).toBe('open');
+    expect(cycleOne.hasExecutionPlan).toBe(true);
+    expect(cycleOne.executionPlanAction).toBe('long');
 
-    const runId = await createRun({ baseUrl: langgraphBaseUrl, threadId, graphId });
-    await waitForRunCompletion({ baseUrl: langgraphBaseUrl, threadId, runId, timeoutMs: 120_000 });
+    const cycleTwo = await runCycleAndSync({ webBaseUrl, langgraphBaseUrl, graphId, threadId });
+    expect(cycleTwo.iteration).toBe(2);
+    expect(cycleTwo.action).toBe('hold');
+    expect(cycleTwo.reason.toLowerCase()).toContain('holding');
 
-    const after = await postJson<AgentSyncResponse>(`${webBaseUrl}/api/agents/sync`, {
-      agentId: graphId,
-      threadId,
-    });
-    expect(after.status).toBe(200);
-    expect(after.json.error).toBeUndefined();
+    const cycleThree = await runCycleAndSync({ webBaseUrl, langgraphBaseUrl, graphId, threadId });
+    expect(cycleThree.iteration).toBe(3);
+    expect(cycleThree.action).toBe('close');
+    expect(cycleThree.hasExecutionPlan).toBe(true);
+    expect(cycleThree.executionPlanAction).toBe('close');
+    expect(cycleThree.executionOk).toBe(true);
+    expect(cycleThree.executionError).toBeUndefined();
+    expect(cycleThree.assumedPositionSide).toBeUndefined();
 
-    const activity = after.json.activity as { telemetry?: unknown; events?: unknown } | null;
-    expect(activity).not.toBeNull();
-    expect(Array.isArray(activity?.telemetry)).toBe(true);
-    const telemetry = activity?.telemetry as unknown[];
-    if (telemetry.length === 0) {
-      const threadState = await fetch(`${langgraphBaseUrl}/threads/${threadId}/state`).then(
-        async (res) => ({
-          status: res.status,
-          body: await res.text(),
-        }),
-      );
-      throw new Error(
-        [
-          'Expected cycle run telemetry, but got empty telemetry array.',
-          `web sync: ${JSON.stringify(after.json)}`,
-          `langgraph state (status=${threadState.status}): ${threadState.body}`,
-        ].join('\n'),
-      );
-    }
-    expect(telemetry.length).toBeGreaterThan(0);
-    expect(Array.isArray(activity?.events)).toBe(true);
-
-    const events = activity?.events as Array<Record<string, unknown>>;
-    const hasPlanArtifact = events.some(
-      (event) =>
-        event?.type === 'artifact' &&
-        typeof event.artifact === 'object' &&
-        event.artifact !== null &&
-        (event.artifact as Record<string, unknown>).artifactId === 'gmx-allora-execution-plan',
-    );
-    expect(hasPlanArtifact).toBe(true);
+    const cycleFour = await runCycleAndSync({ webBaseUrl, langgraphBaseUrl, graphId, threadId });
+    expect(cycleFour.iteration).toBe(4);
+    expect(cycleFour.action).toBe('open');
+    expect(cycleFour.hasExecutionPlan).toBe(true);
+    expect(cycleFour.executionPlanAction).toBe('short');
   }, 180_000);
 });

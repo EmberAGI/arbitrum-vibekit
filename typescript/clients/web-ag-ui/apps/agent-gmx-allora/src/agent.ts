@@ -9,6 +9,7 @@ import {
   resolveLangGraphDurability,
   type LangGraphDurability,
 } from './config/serviceConfig.js';
+import { setupAgentLocalE2EMocksIfNeeded } from './e2e/agentLocalMocks.js';
 import { ClmmStateAnnotation, memory, type ClmmState } from './workflow/context.js';
 import { configureCronExecutor } from './workflow/cronScheduler.js';
 import { bootstrapNode } from './workflow/nodes/bootstrap.js';
@@ -27,6 +28,8 @@ import {
 import { runCycleCommandNode } from './workflow/nodes/runCycleCommand.js';
 import { summarizeNode } from './workflow/nodes/summarize.js';
 import { syncStateNode } from './workflow/nodes/syncState.js';
+
+await setupAgentLocalE2EMocksIfNeeded();
 
 function resolvePostBootstrap(state: ClmmState): 'collectSetupInput' | 'syncState' {
   const command = extractCommand(state.messages) ?? state.view.command;

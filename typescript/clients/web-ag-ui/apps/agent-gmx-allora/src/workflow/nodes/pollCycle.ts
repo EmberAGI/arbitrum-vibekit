@@ -271,8 +271,9 @@ export const pollCycleNode = async (
     (position) => position.marketAddress.toLowerCase() === normalizedTargetMarket,
   );
   const currentPositionSide = currentMarketPosition?.positionSide;
+  const previousOpenSide = previousCycle?.action === 'open' ? previousCycle.side : undefined;
 
-  const decisionPreviousSide = currentPositionSide ?? assumedPositionSide ?? previousCycle?.side;
+  const decisionPreviousSide = currentPositionSide ?? assumedPositionSide ?? previousOpenSide;
   const decisionPreviousAction = decisionPreviousSide ? 'open' : previousCycle?.action;
   const { telemetry, nextCyclesSinceTrade: initialCyclesSinceTrade } = buildCycleTelemetry({
     prediction,
@@ -394,12 +395,13 @@ export const pollCycleNode = async (
   });
 
   const nextAssumedPositionSide = (() => {
-    // Prefer actual onchain state when available.
-    if (currentPositionSide) {
-      return currentPositionSide;
-    }
     if (!executionResult.ok) {
       return assumedPositionSide;
+    }
+    // Planned actions should advance local assumptions immediately so we don't
+    // repeat stale intent on the next cycle.
+    if (executionPlan.action === 'close') {
+      return undefined;
     }
     if (executionPlan.action === 'long') {
       return 'long';
@@ -407,8 +409,9 @@ export const pollCycleNode = async (
     if (executionPlan.action === 'short') {
       return 'short';
     }
-    if (executionPlan.action === 'close') {
-      return undefined;
+    // Otherwise, prefer actual onchain state when available.
+    if (currentPositionSide) {
+      return currentPositionSide;
     }
     return assumedPositionSide;
   })();

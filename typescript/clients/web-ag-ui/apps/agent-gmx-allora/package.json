@@ -37,6 +37,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-import": "2.32.0",
+    "msw": "^2.12.8",
     "prettier": "catalog:",
     "tsx": "catalog:",
     "typescript": "^5.9.3",

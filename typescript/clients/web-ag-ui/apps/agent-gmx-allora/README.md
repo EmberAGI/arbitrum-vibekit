@@ -22,6 +22,10 @@ This agent uses Allora prediction feeds to make deterministic trading decisions 
 - `test:e2e`: intentionally reserved for full graph + service lifecycle tests; currently no e2e specs are checked in yet.
 - `test:smoke`: live end-to-end transaction smoke script against a configured onchain-actions API URL.
 
+For web-driven E2E (`apps/web/tests/gmxAllora.system.e2e.test.ts`), the agent supports:
+- `E2E_PROFILE=mocked`: enable agent-local MSW interception for Allora + onchain-actions.
+- `E2E_PROFILE=live`: disable interception and use real HTTP providers.
+
 ## Transaction Submission Behavior
 
 The agent always uses onchain-actions to build a `transactions[]` plan for the chosen action (`long`, `short`, `close`).
@@ -53,6 +57,9 @@ The agent always uses onchain-actions to build a `transactions[]` plan for the c
 - `GMX_ALLORA_TX_SUBMISSION_MODE`: transaction submission mode. Supported values:
   - `plan` (default): build and emit `transactions[]` but do not broadcast.
   - `submit`: broadcast planned transactions via an embedded wallet (no delegations). Requires an onchain-actions version that correctly plans the requested GMX action (especially close via decrease order).
+- `E2E_PROFILE`: optional system-test profile.
+  - `mocked`: deterministic agent-local MSW handlers intercept Allora + onchain-actions.
+  - `live` (default): normal runtime behavior with real providers.
 - `GMX_ALLORA_AGENT_WALLET_ADDRESS`: optional override for the agent wallet (delegatee) address. If omitted, it is derived from `A2A_TEST_AGENT_NODE_PRIVATE_KEY`.
 - `A2A_TEST_AGENT_NODE_PRIVATE_KEY`: required when `GMX_ALLORA_TX_SUBMISSION_MODE=submit` (0x + 64 hex chars). Only for local/dev use.
 - `ARBITRUM_RPC_URL`: RPC URL for broadcasting transactions when submission is enabled.

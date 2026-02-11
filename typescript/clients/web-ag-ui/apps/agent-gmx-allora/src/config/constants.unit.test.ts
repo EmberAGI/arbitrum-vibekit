@@ -5,6 +5,7 @@ import {
   ALLORA_TOPIC_WHITELIST,
   resolveAgentWalletAddress,
   resolveDelegationsBypass,
+  resolveE2EProfile,
   resolveGmxAlloraTxExecutionMode,
   resolveOnchainActionsApiUrl,
   resolvePollIntervalMs,
@@ -75,6 +76,21 @@ describe('config/constants', () => {
     process.env.GMX_ALLORA_TX_SUBMISSION_MODE = 'plan';
 
     expect(resolveGmxAlloraTxExecutionMode()).toBe('plan');
+  });
+
+  it('defaults E2E profile to live', () => {
+    delete process.env.E2E_PROFILE;
+    expect(resolveE2EProfile()).toBe('live');
+  });
+
+  it('accepts mocked E2E profile', () => {
+    process.env.E2E_PROFILE = 'mocked';
+    expect(resolveE2EProfile()).toBe('mocked');
+  });
+
+  it('falls back to live for unknown E2E profile values', () => {
+    process.env.E2E_PROFILE = 'something-else';
+    expect(resolveE2EProfile()).toBe('live');
   });
 
   it('parses delegations bypass flag', () => {

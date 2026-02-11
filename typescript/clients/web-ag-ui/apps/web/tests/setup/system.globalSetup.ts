@@ -1,13 +1,12 @@
 import { execFileSync, spawn } from 'node:child_process';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import http from 'node:http';
 import net from 'node:net';
 import fs from 'node:fs';
 
 type Cleanup = () => Promise<void> | void;
 type Child = ReturnType<typeof spawn>;
+type E2EProfile = 'mocked' | 'live';
 
 function killProcessTree(child: Child, signal: NodeJS.Signals): void {
   // `pnpm dev` frequently spawns a child node process. Use a new process group and kill
@@ -26,12 +25,13 @@ function killProcessTree(child: Child, signal: NodeJS.Signals): void {
   child.kill(signal);
 }
 
-function resolveBooleanEnv(name: string, fallback: boolean): boolean {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  if (raw === 'true') return true;
-  if (raw === 'false') return false;
-  return fallback;
+function resolveE2EProfile(): E2EProfile {
+  const raw = process.env['E2E_PROFILE'];
+  if (!raw) {
+    return 'mocked';
+  }
+  const normalized = raw.trim().toLowerCase();
+  return normalized === 'live' ? 'live' : 'mocked';
 }
 
 function resolvePnpmInvocation(): { command: string; prefixArgs: string[] } {
@@ -486,94 +486,35 @@ async function startOnchainActions(): Promise<{ baseUrl: string; cleanup: Cleanu
   };
 }
 
-async function startMockAlloraServer(): Promise<{
-  baseUrl: string;
-  cleanup: Cleanup;
-}> {
-  const counters: Record<string, number> = {};
-  const stableWindowRequests = 3;
-
-  const server = http.createServer((req, res) => {
-    if (!req.url) {
-      res.statusCode = 400;
-      res.end('Missing URL');
-      return;
-    }
-
-    const url = new URL(req.url, 'http://127.0.0.1');
-    const match = url.pathname.match(/^\/v2\/allora\/consumer\/(.+)$/u);
-    if (!match) {
-      res.statusCode = 404;
-      res.end('not found');
-      return;
-    }
-
-    const topicId = url.searchParams.get('allora_topic_id') ?? '0';
-    // Alternate between two extremes so UIs/tests can easily detect that they're
-    // talking to the mock server and can observe changes across polling cycles.
-    // BTC=14, ETH=2 (8h feed); any other topic returns a stable default.
-    const combined = (() => {
-      if (topicId !== '14' && topicId !== '2') {
-        return '100';
-      }
-      const next = (counters[topicId] ?? 0) + 1;
-      counters[topicId] = next;
-      const phase = Math.floor((next - 1) / stableWindowRequests) % 2;
-      return phase === 0 ? '1' : '100000';
-    })();
-
-    res.setHeader('content-type', 'application/json');
-    res.statusCode = 200;
-    res.end(
-      JSON.stringify({
-        status: true,
-        data: {
-          inference_data: {
-            topic_id: topicId,
-            network_inference_normalized: combined,
-          },
-        },
-      }),
-    );
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => resolve());
-  });
-
-  const address = server.address();
-  if (!address || typeof address === 'string') {
-    server.close();
-    throw new Error('Failed to resolve mock Allora server address.');
-  }
-
-  const baseUrl = `http://127.0.0.1:${address.port}`;
-
-  return {
-    baseUrl,
-    cleanup: async () => {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    },
-  };
-}
-
 export default async function systemGlobalSetup(): Promise<Cleanup> {
+  const profile = resolveE2EProfile();
+  process.env['E2E_PROFILE'] = profile;
+
   // 1) Resolve onchain-actions API URL.
   //
-  // - If ONCHAIN_ACTIONS_API_URL is set, use it as-is and do not boot the onchain-actions worktree.
-  // - If it's unset, boot a local onchain-actions worktree + memgraph and set ONCHAIN_ACTIONS_API_URL.
+  // - `mocked` profile: use an inert URL and rely on agent-local MSW handlers.
+  // - `live` profile:
+  //   - If ONCHAIN_ACTIONS_API_URL is set, use it as-is and do not boot local onchain-actions.
+  //   - If it's unset, boot a local onchain-actions worktree + memgraph and set ONCHAIN_ACTIONS_API_URL.
   const configuredOnchainActionsUrl = process.env['ONCHAIN_ACTIONS_API_URL'];
-  const shouldBootOnchainActions = !configuredOnchainActionsUrl;
+  const shouldBootOnchainActions = profile === 'live' && !configuredOnchainActionsUrl;
 
-  const onchain = shouldBootOnchainActions
-    ? await startOnchainActions()
-    : { baseUrl: normalizeOnchainActionsApiUrl(configuredOnchainActionsUrl!), cleanup: async () => {} };
+  const onchain =
+    profile === 'mocked'
+      ? {
+          baseUrl: configuredOnchainActionsUrl
+            ? normalizeOnchainActionsApiUrl(configuredOnchainActionsUrl)
+            : 'http://127.0.0.1:50051',
+          cleanup: async () => {},
+        }
+      : shouldBootOnchainActions
+        ? await startOnchainActions()
+        : { baseUrl: normalizeOnchainActionsApiUrl(configuredOnchainActionsUrl!), cleanup: async () => {} };
 
   const onchainCleanup = onchain.cleanup;
   const onchainApiUrl = onchain.baseUrl;
 
-  if (!shouldBootOnchainActions) {
+  if (profile === 'live' && !shouldBootOnchainActions) {
     // Fail early with a clearer error than "markets empty" later on.
     process.env['ONCHAIN_ACTIONS_API_URL'] = onchainApiUrl;
     await waitForNonEmptyMarkets(`${onchainApiUrl}/perpetuals/markets?chainIds=42161`, 30_000);
@@ -582,13 +523,8 @@ export default async function systemGlobalSetup(): Promise<Cleanup> {
   // Load agent test env to pick up Allora configuration (e.g. ALLORA_API_BASE_URL).
   loadAgentTestEnv();
 
-  // 2) Start mock Allora API and point the agent runtime at it.
-  const shouldUseRealAllora = resolveBooleanEnv('WEB_E2E_USE_REAL_ALLORA', false);
-  const mockAllora = shouldUseRealAllora ? undefined : await startMockAlloraServer();
-
-  const alloraBaseUrl = shouldUseRealAllora
-    ? process.env['ALLORA_API_BASE_URL'] ?? 'https://api.allora.network'
-    : mockAllora!.baseUrl;
+  // 2) Resolve Allora base URL.
+  const alloraBaseUrl = process.env['ALLORA_API_BASE_URL'] ?? 'https://api.allora.network';
 
   process.env.ALLORA_API_BASE_URL = alloraBaseUrl;
 
@@ -614,10 +550,17 @@ export default async function systemGlobalSetup(): Promise<Cleanup> {
     ],
     env: {
       ...process.env,
+      E2E_PROFILE: profile,
       DELEGATIONS_BYPASS: 'true',
       GMX_ALLORA_MODE: 'debug',
       ONCHAIN_ACTIONS_API_URL: onchainApiUrl,
       ALLORA_API_BASE_URL: alloraBaseUrl,
+      ...(profile === 'mocked'
+        ? {
+            ALLORA_INFERENCE_CACHE_TTL_MS: '0',
+            ALLORA_8H_INFERENCE_CACHE_TTL_MS: '0',
+          }
+        : {}),
     },
   });
 
@@ -666,16 +609,16 @@ export default async function systemGlobalSetup(): Promise<Cleanup> {
   });
 
   console.log('[web-e2e] services ready', {
+    e2eProfile: profile,
     webBaseUrl,
     langgraphBaseUrl,
     onchainActionsApiUrl: onchainApiUrl,
-    alloraMockBaseUrl: shouldUseRealAllora ? undefined : alloraBaseUrl,
+    alloraApiBaseUrl: alloraBaseUrl,
   });
 
   return async () => {
     await web.cleanup();
     await langgraph.cleanup();
-    await mockAllora?.cleanup();
     await onchainCleanup();
   };
 }
