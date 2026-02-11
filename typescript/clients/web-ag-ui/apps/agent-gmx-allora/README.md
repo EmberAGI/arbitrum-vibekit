@@ -15,6 +15,13 @@ This agent uses Allora prediction feeds to make deterministic trading decisions 
 - Plan-building mode (no submission) is implemented.
 - Next: validate onchain-actions read-path correctness (markets/positions/balances) before enabling transaction submission.
 
+## Test Taxonomy
+
+- `test:unit`: deterministic unit coverage for core decisioning, plan building, and client adapters.
+- `test:int`: workflow-level integration tests (node-level orchestration and action wiring).
+- `test:e2e`: intentionally reserved for full graph + service lifecycle tests; currently no e2e specs are checked in yet.
+- `test:smoke`: live end-to-end transaction smoke script against a configured onchain-actions API URL.
+
 ## Transaction Submission Behavior
 
 The agent always uses onchain-actions to build a `transactions[]` plan for the chosen action (`long`, `short`, `close`).

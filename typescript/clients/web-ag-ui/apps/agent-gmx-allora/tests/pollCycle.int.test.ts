@@ -216,6 +216,64 @@ describe('pollCycleNode (integration)', () => {
     expect(artifactIds).toContain('gmx-allora-execution-plan');
   });
 
+  it('routes open long decisions to createPerpetualLong', async () => {
+    fetchAlloraInferenceMock.mockResolvedValueOnce({
+      topicId: 14,
+      combinedValue: 47000,
+      confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+    });
+    listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValueOnce([]);
+
+    const state = buildBaseState();
+    state.view.metrics.previousPrice = 46000;
+    await pollCycleNode(state, {});
+
+    expect(createPerpetualLongMock).toHaveBeenCalledTimes(1);
+    expect(createPerpetualShortMock).not.toHaveBeenCalled();
+    expect(createPerpetualCloseMock).not.toHaveBeenCalled();
+    expect(createPerpetualReduceMock).not.toHaveBeenCalled();
+  });
+
+  it('routes open short decisions to createPerpetualShort', async () => {
+    fetchAlloraInferenceMock.mockResolvedValueOnce({
+      topicId: 14,
+      combinedValue: 47000,
+      confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+    });
+    listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValueOnce([]);
+
+    const state = buildBaseState();
+    state.view.metrics.previousPrice = 48000;
+    await pollCycleNode(state, {});
+
+    expect(createPerpetualShortMock).toHaveBeenCalledTimes(1);
+    expect(createPerpetualLongMock).not.toHaveBeenCalled();
+    expect(createPerpetualCloseMock).not.toHaveBeenCalled();
+    expect(createPerpetualReduceMock).not.toHaveBeenCalled();
+  });
+
+  it('routes direction-flip decisions to createPerpetualClose', async () => {
+    fetchAlloraInferenceMock.mockResolvedValueOnce({
+      topicId: 14,
+      combinedValue: 47000,
+      confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+    });
+    listPerpetualMarketsMock.mockResolvedValueOnce([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValueOnce([]);
+
+    const state = buildBaseState();
+    state.view.metrics.previousPrice = 48000;
+    state.view.metrics.assumedPositionSide = 'long';
+    await pollCycleNode(state, {});
+
+    expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
+    expect(createPerpetualLongMock).not.toHaveBeenCalled();
+    expect(createPerpetualShortMock).not.toHaveBeenCalled();
+    expect(createPerpetualReduceMock).not.toHaveBeenCalled();
+  });
+
   it('executes reduce plans via onchain-actions reduce endpoint when position exists', async () => {
     fetchAlloraInferenceMock.mockResolvedValueOnce({
       topicId: 14,
