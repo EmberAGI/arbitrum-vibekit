@@ -1,8 +1,12 @@
 import { createPublicClient, createWalletClient, http, type Account } from 'viem';
 import { arbitrum } from 'viem/chains';
 
+const DEFAULT_ARBITRUM_RPC_URL = 'https://arb1.arbitrum.io/rpc';
+
 const ARBITRUM_RPC_URL =
-  process.env['ARBITRUM_RPC_URL'] ?? 'https://arb-mainnet.g.alchemy.com/v2/demo-key';
+  process.env['ARBITRUM_RPC_URL'] ??
+  process.env['ARBITRUM_ONE_RPC_URL'] ??
+  DEFAULT_ARBITRUM_RPC_URL;
 
 const RPC_RETRY_COUNT = 2;
 const RPC_TIMEOUT_MS = 8000;
@@ -45,4 +49,3 @@ export function createClients(account: Account): OnchainClients {
     wallet: walletClient,
   };
 }
-

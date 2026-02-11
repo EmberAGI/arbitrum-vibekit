@@ -149,10 +149,13 @@ export async function redeemDelegationsAndExecuteTransactions(params: {
   }
 
   const rpcUrl = (params.clients.public as unknown as { transport?: { url?: unknown } }).transport?.url;
+  const defaultArbitrumRpcUrl = 'https://arb1.arbitrum.io/rpc';
   const resolvedRpcUrl =
     typeof rpcUrl === 'string'
       ? rpcUrl
-      : process.env['ARBITRUM_RPC_URL'] ?? 'https://arb-mainnet.g.alchemy.com/v2/demo-key';
+      : process.env['ARBITRUM_RPC_URL'] ??
+        process.env['ARBITRUM_ONE_RPC_URL'] ??
+        defaultArbitrumRpcUrl;
 
   const simulationClient = createClient({
     account: params.clients.wallet.account,
