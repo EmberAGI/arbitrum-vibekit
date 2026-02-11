@@ -31,6 +31,7 @@ const USDC_DECIMALS = 6;
 const DEFAULT_STEP_TIMEOUT_MS = 15_000;
 const CLOSE_RETRY_INTERVAL_MS = 5_000;
 const CLOSE_RETRY_TIMEOUT_MS = 90_000;
+const OPEN_POSITION_READY_TIMEOUT_MS = 180_000;
 
 const resolveArbitrumRpcUrl = (): string =>
   process.env['ARBITRUM_RPC_URL'] ?? process.env['ARBITRUM_ONE_RPC_URL'] ?? 'https://arbitrum.gateway.tenderly.co';
@@ -296,6 +297,46 @@ const run = async () => {
     });
   }
 
+  const waitForOpenedPosition = async (): Promise<void> => {
+    const deadline = Date.now() + OPEN_POSITION_READY_TIMEOUT_MS;
+    let attempt = 0;
+
+    while (true) {
+      attempt += 1;
+      const latestPositions = await client.listPerpetualPositions({ walletAddress, chainIds: ['42161'] });
+      const latestMatchingPositions = latestPositions.filter(
+        (position) => position.marketAddress.toLowerCase() === normalizedMarketAddress,
+      );
+
+      if (latestMatchingPositions.length > 0) {
+        const closeCandidate =
+          latestMatchingPositions.find((position) => position.positionSide === 'long') ??
+          latestMatchingPositions[0];
+        closePositionSide = closeCandidate.positionSide;
+        console.log('[smoke] Opened position is indexed and ready for close.', {
+          marketAddress,
+          positionSide: closeCandidate.positionSide,
+          key: closeCandidate.key,
+        });
+        return;
+      }
+
+      if (Date.now() >= deadline) {
+        throw new Error(
+          [
+            `Opened position was not indexed within ${OPEN_POSITION_READY_TIMEOUT_MS}ms.`,
+            'GMX order execution may still be pending keeper fulfillment.',
+          ].join(' '),
+        );
+      }
+
+      console.warn(
+        `[smoke] waiting for opened position to index before close (attempt ${attempt}); retrying in ${CLOSE_RETRY_INTERVAL_MS}ms`,
+      );
+      await new Promise<void>((resolve) => setTimeout(resolve, CLOSE_RETRY_INTERVAL_MS));
+    }
+  };
+
   if (shouldOpenLongPosition && delegatorUsdcAmountBaseUnits < DEFAULT_LONG_AMOUNT_BASE_UNITS) {
     throw new Error(
       [
@@ -510,6 +551,12 @@ const run = async () => {
       closePositionSide = 'long';
     },
   );
+
+  if (txExecutionMode === 'execute' && openedPositionThisRun) {
+    await runStep('wait for opened position indexing', waitForOpenedPosition, {
+      timeoutMs: OPEN_POSITION_READY_TIMEOUT_MS + DEFAULT_STEP_TIMEOUT_MS,
+    });
+  }
 
   const closeStepLabel = txExecutionMode === 'execute' ? 'perpetual close execute' : 'perpetual close planning';
   const shouldAttemptExecuteClose = txExecutionMode !== 'execute' || preexistingMarketPosition !== undefined || openedPositionThisRun;
