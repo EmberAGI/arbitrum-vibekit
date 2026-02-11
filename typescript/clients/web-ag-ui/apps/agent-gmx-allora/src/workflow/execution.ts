@@ -122,6 +122,12 @@ async function executePlannedTransactionWithDelegation(params: {
 
   logInfo('GMX delegated transaction submitted', { transactionHash: hash });
 
+  const receipt = await params.clients.public.waitForTransactionReceipt({ hash });
+  if (receipt.status !== 'success') {
+    throw new Error(`Delegated GMX transaction reverted: ${hash}`);
+  }
+  logInfo('GMX delegated transaction confirmed', { transactionHash: hash });
+
   return hash;
 }
 

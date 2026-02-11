@@ -6,11 +6,17 @@ import type { ExecutionPlan } from '../core/executionPlan.js';
 import type { DelegationBundle } from './context.js';
 import { executePerpetualPlan } from './execution.js';
 
-const { executeTransactionMock, encodePermissionContextsMock, sendTransactionWithDelegationMock } =
+const {
+  executeTransactionMock,
+  encodePermissionContextsMock,
+  sendTransactionWithDelegationMock,
+  waitForTransactionReceiptMock,
+} =
   vi.hoisted(() => ({
     executeTransactionMock: vi.fn(),
     encodePermissionContextsMock: vi.fn(),
     sendTransactionWithDelegationMock: vi.fn(),
+    waitForTransactionReceiptMock: vi.fn(),
   }));
 
 vi.mock('../core/transaction.js', () => ({
@@ -56,6 +62,7 @@ describe('executePerpetualPlan', () => {
     executeTransactionMock.mockReset();
     encodePermissionContextsMock.mockReset();
     sendTransactionWithDelegationMock.mockReset();
+    waitForTransactionReceiptMock.mockReset();
   });
 
   it('skips execution when plan action is none', async () => {
@@ -181,7 +188,11 @@ describe('executePerpetualPlan', () => {
   it('submits transactions via delegation redemption when delegations are active', async () => {
     encodePermissionContextsMock.mockReturnValue(['0xperm']);
     sendTransactionWithDelegationMock.mockResolvedValueOnce('0xhash2');
+    waitForTransactionReceiptMock.mockResolvedValueOnce({ status: 'success' });
     const clients = {
+      public: {
+        waitForTransactionReceipt: waitForTransactionReceiptMock,
+      },
       wallet: {
         account: { address: '0x00000000000000000000000000000000000000cc' },
         chain: null,
@@ -242,6 +253,7 @@ describe('executePerpetualPlan', () => {
         delegationManager: delegationBundle.delegationManager,
       }),
     );
+    expect(waitForTransactionReceiptMock).toHaveBeenCalledWith({ hash: '0xhash2' });
     expect(result.txHashes).toEqual(['0xhash2']);
     expect(result.lastTxHash).toBe('0xhash2');
   });
