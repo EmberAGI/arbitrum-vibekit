@@ -82,6 +82,11 @@ export type ClmmMetrics = {
   // the same open action every time the signal stays stable. This field tracks the
   // last assumed position side for decisioning until a close/flip occurs.
   assumedPositionSide?: 'long' | 'short';
+  // Last observed Allora inference metrics fingerprint for the selected topic.
+  lastInferenceSnapshotKey?: string;
+  // Fingerprint of the last successful trade action. Used to prevent duplicate actions
+  // when inference metrics have not changed.
+  lastTradedInferenceSnapshotKey?: string;
 };
 
 export type TaskState =
@@ -251,6 +256,8 @@ const defaultViewState = (): ClmmViewState => ({
     iteration: 0,
     latestCycle: undefined,
     assumedPositionSide: undefined,
+    lastInferenceSnapshotKey: undefined,
+    lastTradedInferenceSnapshotKey: undefined,
   },
   transactionHistory: [],
 });
@@ -340,6 +347,10 @@ const mergeViewState = (left: ClmmViewState, right?: Partial<ClmmViewState>): Cl
     iteration: right.metrics?.iteration ?? left.metrics.iteration,
     latestCycle: right.metrics?.latestCycle ?? left.metrics.latestCycle,
     assumedPositionSide: right.metrics?.assumedPositionSide ?? left.metrics.assumedPositionSide,
+    lastInferenceSnapshotKey:
+      right.metrics?.lastInferenceSnapshotKey ?? left.metrics.lastInferenceSnapshotKey,
+    lastTradedInferenceSnapshotKey:
+      right.metrics?.lastTradedInferenceSnapshotKey ?? left.metrics.lastTradedInferenceSnapshotKey,
   };
 
   return {

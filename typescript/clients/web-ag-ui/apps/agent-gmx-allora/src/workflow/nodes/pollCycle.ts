@@ -1,7 +1,7 @@
 import { copilotkitEmitState } from '@copilotkit/sdk-js/langgraph';
 import { Command } from '@langchain/langgraph';
 
-import { fetchAlloraInference } from '../../clients/allora.js';
+import { fetchAlloraInference, type AlloraInference } from '../../clients/allora.js';
 import type { PerpetualPosition } from '../../clients/onchainActions.js';
 import {
   ALLORA_HORIZON_HOURS,
@@ -41,7 +41,6 @@ type CopilotKitConfig = Parameters<typeof copilotkitEmitState>[0];
 type Configurable = { configurable?: { thread_id?: string } };
 
 const DECISION_THRESHOLD = 0.62;
-const COOLDOWN_CYCLES = 2;
 const CONNECT_DELAY_MS = 2500;
 const CONNECT_DELAY_STEPS = 3;
 const ALLORA_STALE_CYCLE_LIMIT = 3;
@@ -56,6 +55,18 @@ function delay(ms: number): Promise<void> {
 
 function resolveTopicKey(symbol: string): 'BTC' | 'ETH' {
   return symbol === 'BTC' ? 'BTC' : 'ETH';
+}
+
+function buildInferenceSnapshotKey(inference: AlloraInference): string {
+  return JSON.stringify({
+    topicId: inference.topicId,
+    combinedValue: inference.combinedValue,
+    confidenceIntervalValues: inference.confidenceIntervalValues,
+  });
+}
+
+function isTradePlanAction(action: 'none' | 'long' | 'short' | 'close' | 'reduce'): boolean {
+  return action !== 'none';
 }
 
 export const pollCycleNode = async (
@@ -91,6 +102,7 @@ export const pollCycleNode = async (
   const topicLabel = ALLORA_TOPIC_LABELS[topicKey];
 
   let prediction: AlloraPrediction;
+  let inferenceSnapshotKey = state.view.metrics.lastInferenceSnapshotKey;
   let staleCycles = state.view.metrics.staleCycles ?? 0;
   try {
     const inference = await fetchAlloraInference({
@@ -100,6 +112,7 @@ export const pollCycleNode = async (
       apiKey: resolveAlloraApiKey(),
       cacheTtlMs: resolveAllora8hInferenceCacheTtlMs(),
     });
+    inferenceSnapshotKey = buildInferenceSnapshotKey(inference);
     staleCycles = 0;
     const currentPrice = state.view.metrics.previousPrice ?? inference.combinedValue;
     prediction = buildAlloraPrediction({
@@ -264,7 +277,7 @@ export const pollCycleNode = async (
   const { telemetry, nextCyclesSinceTrade: initialCyclesSinceTrade } = buildCycleTelemetry({
     prediction,
     decisionThreshold: DECISION_THRESHOLD,
-    cooldownCycles: COOLDOWN_CYCLES,
+    cooldownCycles: 0,
     maxLeverage: operatorConfig.maxLeverage,
     baseContributionUsd: operatorConfig.baseContributionUsd,
     previousAction: decisionPreviousAction,
@@ -283,14 +296,55 @@ export const pollCycleNode = async (
     maxTotalExposureUsd: operatorConfig.baseContributionUsd * operatorConfig.maxLeverage,
   });
 
+  const positionForReduce =
+    exposureAdjusted.action === 'reduce' && exposureAdjusted.side
+      ? positions.find(
+          (position) =>
+            position.marketAddress.toLowerCase() === normalizedTargetMarket &&
+            position.positionSide === exposureAdjusted.side,
+        )
+      : undefined;
+
+  const plannedExecutionPlan = buildPerpetualExecutionPlan({
+    telemetry: exposureAdjusted,
+    chainId: ARBITRUM_CHAIN_ID.toString(),
+    marketAddress: gmxMarketAddress as `0x${string}`,
+    walletAddress: operatorConfig.delegatorWalletAddress,
+    payTokenAddress: operatorConfig.fundingTokenAddress,
+    collateralTokenAddress: operatorConfig.fundingTokenAddress,
+    positionContractKey: positionForReduce?.contractKey,
+    positionSizeInUsd: positionForReduce?.sizeInUsd,
+  });
+
+  const skipTradeForUnchangedInference =
+    isTradePlanAction(plannedExecutionPlan.action) &&
+    Boolean(inferenceSnapshotKey) &&
+    state.view.metrics.lastTradedInferenceSnapshotKey === inferenceSnapshotKey;
+
+  const adjustedTelemetry = skipTradeForUnchangedInference
+    ? {
+        ...exposureAdjusted,
+        action: 'hold' as const,
+        reason: 'Inference metrics unchanged since last trade; skipping additional action.',
+        side: undefined,
+        leverage: undefined,
+        sizeUsd: undefined,
+        txHash: undefined,
+      }
+    : exposureAdjusted;
+
+  const executionPlan = skipTradeForUnchangedInference
+    ? ({ action: 'none' } as const)
+    : plannedExecutionPlan;
+
   const nextCyclesSinceTrade =
-    exposureAdjusted.action === 'hold' && telemetry.action === 'open'
+    adjustedTelemetry.action === 'hold' && telemetry.action === 'open'
       ? (state.view.metrics.cyclesSinceRebalance ?? 0) + 1
       : initialCyclesSinceTrade;
 
-  const action = exposureAdjusted.action;
-  const reason = exposureAdjusted.reason;
-  const txHash = exposureAdjusted.txHash;
+  const action = adjustedTelemetry.action;
+  const reason = adjustedTelemetry.reason;
+  const txHash = adjustedTelemetry.txHash;
 
   const cycleStatusMessage = `[Cycle ${iteration}] ${action}: ${reason}${txHash ? ` (tx: ${txHash.slice(0, 10)}...)` : ''}`;
   let { task, statusEvent } = buildTaskStatus(state.view.task, 'working', cycleStatusMessage);
@@ -298,7 +352,7 @@ export const pollCycleNode = async (
     view: {
       task,
       activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-      metrics: { latestCycle: exposureAdjusted },
+      metrics: { latestCycle: adjustedTelemetry },
     },
   });
 
@@ -313,7 +367,7 @@ export const pollCycleNode = async (
         view: {
           task,
           activity: { events: [statusEvent], telemetry: state.view.activity.telemetry },
-          metrics: { latestCycle: exposureAdjusted },
+          metrics: { latestCycle: adjustedTelemetry },
         },
       });
       await delay(stepDelayMs);
@@ -322,29 +376,9 @@ export const pollCycleNode = async (
 
   const telemetryEvent: ClmmEvent = {
     type: 'artifact',
-    artifact: buildTelemetryArtifact(exposureAdjusted),
+    artifact: buildTelemetryArtifact(adjustedTelemetry),
     append: true,
   };
-
-  const positionForReduce =
-    exposureAdjusted.action === 'reduce' && exposureAdjusted.side
-      ? positions.find(
-          (position) =>
-            position.marketAddress.toLowerCase() === normalizedTargetMarket &&
-            position.positionSide === exposureAdjusted.side,
-        )
-      : undefined;
-
-  const executionPlan = buildPerpetualExecutionPlan({
-    telemetry: exposureAdjusted,
-    chainId: ARBITRUM_CHAIN_ID.toString(),
-    marketAddress: gmxMarketAddress as `0x${string}`,
-    walletAddress: operatorConfig.delegatorWalletAddress,
-    payTokenAddress: operatorConfig.fundingTokenAddress,
-    collateralTokenAddress: operatorConfig.fundingTokenAddress,
-    positionContractKey: positionForReduce?.contractKey,
-    positionSizeInUsd: positionForReduce?.sizeInUsd,
-  });
 
   const txExecutionMode = resolveGmxAlloraTxExecutionMode();
   const clients = txExecutionMode === 'execute' ? getOnchainClients() : undefined;
@@ -383,7 +417,7 @@ export const pollCycleNode = async (
       ? undefined
       : {
           type: 'artifact',
-          artifact: buildExecutionPlanArtifact({ plan: executionPlan, telemetry: exposureAdjusted }),
+          artifact: buildExecutionPlanArtifact({ plan: executionPlan, telemetry: adjustedTelemetry }),
           append: true,
         };
   const executionResultEvent: ClmmEvent | undefined =
@@ -396,7 +430,7 @@ export const pollCycleNode = async (
           plan: executionPlan,
           ok: executionResult.ok,
           error: executionResult.error,
-          telemetry: exposureAdjusted,
+          telemetry: adjustedTelemetry,
           transactions: executionResult.transactions,
           txHashes: executionResult.txHashes,
           lastTxHash: executionResult.lastTxHash,
@@ -421,7 +455,7 @@ export const pollCycleNode = async (
         txHash: resolvedTxHash,
         status: 'success' as const,
         reason,
-        timestamp: exposureAdjusted.timestamp,
+        timestamp: adjustedTelemetry.timestamp,
       }
     : undefined;
 
@@ -444,12 +478,17 @@ export const pollCycleNode = async (
           cyclesSinceRebalance: nextCyclesSinceTrade,
           staleCycles: state.view.metrics.staleCycles ?? 0,
           iteration,
-          latestCycle: exposureAdjusted,
+          latestCycle: adjustedTelemetry,
           assumedPositionSide: nextAssumedPositionSide,
+          lastInferenceSnapshotKey: inferenceSnapshotKey,
+          lastTradedInferenceSnapshotKey:
+            executionPlan.action !== 'none' && executionResult.ok && inferenceSnapshotKey
+              ? inferenceSnapshotKey
+              : state.view.metrics.lastTradedInferenceSnapshotKey,
         },
         task,
         activity: {
-          telemetry: [exposureAdjusted],
+          telemetry: [adjustedTelemetry],
           events: executionPlanEvent
             ? executionResultEvent
               ? [telemetryEvent, executionPlanEvent, executionResultEvent, statusEvent]

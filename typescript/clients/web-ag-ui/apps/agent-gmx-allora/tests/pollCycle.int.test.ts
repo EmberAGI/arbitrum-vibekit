@@ -274,6 +274,82 @@ describe('pollCycleNode (integration)', () => {
     expect(createPerpetualReduceMock).not.toHaveBeenCalled();
   });
 
+  it('skips a second trade when inference metrics are unchanged', async () => {
+    fetchAlloraInferenceMock
+      .mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      })
+      .mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      });
+    listPerpetualMarketsMock.mockResolvedValue([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValue([]);
+
+    const firstState = buildBaseState();
+    firstState.view.metrics.previousPrice = 48000;
+    firstState.view.metrics.assumedPositionSide = 'long';
+    const firstResult = await pollCycleNode(firstState, {});
+
+    const firstUpdate = (firstResult as { update: { view?: { metrics?: ClmmState['view']['metrics'] } } })
+      .update;
+
+    const secondState = buildBaseState();
+    secondState.view.metrics = {
+      ...secondState.view.metrics,
+      ...(firstUpdate.view?.metrics ?? {}),
+    };
+    secondState.view.metrics.assumedPositionSide = firstUpdate.view?.metrics?.assumedPositionSide;
+    secondState.view.metrics.latestCycle = firstUpdate.view?.metrics?.latestCycle;
+    secondState.view.metrics.previousPrice = firstUpdate.view?.metrics?.previousPrice;
+    secondState.view.metrics.cyclesSinceRebalance = 3;
+
+    await pollCycleNode(secondState, {});
+
+    expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows a second trade when inference metrics change', async () => {
+    fetchAlloraInferenceMock
+      .mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 47000,
+        confidenceIntervalValues: [46000, 46500, 47000, 47500, 48000],
+      })
+      .mockResolvedValueOnce({
+        topicId: 14,
+        combinedValue: 45000,
+        confidenceIntervalValues: [44000, 44500, 45000, 45500, 46000],
+      });
+    listPerpetualMarketsMock.mockResolvedValue([baseMarket]);
+    listPerpetualPositionsMock.mockResolvedValue([]);
+
+    const firstState = buildBaseState();
+    firstState.view.metrics.previousPrice = 46000;
+    const firstResult = await pollCycleNode(firstState, {});
+
+    const firstUpdate = (firstResult as { update: { view?: { metrics?: ClmmState['view']['metrics'] } } })
+      .update;
+
+    const secondState = buildBaseState();
+    secondState.view.metrics = {
+      ...secondState.view.metrics,
+      ...(firstUpdate.view?.metrics ?? {}),
+    };
+    secondState.view.metrics.assumedPositionSide = firstUpdate.view?.metrics?.assumedPositionSide;
+    secondState.view.metrics.latestCycle = firstUpdate.view?.metrics?.latestCycle;
+    secondState.view.metrics.previousPrice = firstUpdate.view?.metrics?.previousPrice;
+    secondState.view.metrics.cyclesSinceRebalance = 3;
+
+    await pollCycleNode(secondState, {});
+
+    expect(createPerpetualLongMock).toHaveBeenCalledTimes(1);
+    expect(createPerpetualCloseMock).toHaveBeenCalledTimes(1);
+  });
+
   it('executes reduce plans via onchain-actions reduce endpoint when position exists', async () => {
     fetchAlloraInferenceMock.mockResolvedValueOnce({
       topicId: 14,

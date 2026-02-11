@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  ALLORA_TOPIC_LABELS,
+  ALLORA_TOPIC_WHITELIST,
   resolveAgentWalletAddress,
   resolveDelegationsBypass,
   resolveGmxAlloraTxExecutionMode,
   resolveOnchainActionsApiUrl,
+  resolvePollIntervalMs,
 } from './constants.js';
 
 describe('config/constants', () => {
@@ -49,6 +52,11 @@ describe('config/constants', () => {
 
     expect(baseUrl).toBe('https://api.emberai.xyz');
     expect(logger).not.toHaveBeenCalled();
+  });
+
+  it('defaults poll interval to 30 minutes', () => {
+    delete process.env.GMX_ALLORA_POLL_INTERVAL_MS;
+    expect(resolvePollIntervalMs()).toBe(1_800_000);
   });
 
   it('defaults to plan mode for transaction execution', () => {
@@ -116,5 +124,26 @@ describe('config/constants', () => {
     delete process.env.A2A_TEST_AGENT_NODE_PRIVATE_KEY;
 
     expect(() => resolveAgentWalletAddress()).toThrow(/Missing agent wallet configuration/u);
+  });
+
+  it('contains the curated Allora topic whitelist entries', () => {
+    expect(ALLORA_TOPIC_WHITELIST).toEqual(
+      expect.arrayContaining([
+        { topicId: 1, pair: 'BTC/USD', horizonHours: 8, inferenceType: 'Log-Return' },
+        { topicId: 3, pair: 'SOL/USD', horizonHours: 8, inferenceType: 'Log-Return' },
+        { topicId: 14, pair: 'BTC/USD', horizonHours: 8, inferenceType: 'Price' },
+        { topicId: 19, pair: 'NEAR/USD', horizonHours: 8, inferenceType: 'Log-Return' },
+        { topicId: 2, pair: 'ETH/USD', horizonHours: 24, inferenceType: 'Log-Return' },
+        { topicId: 16, pair: 'ETH/USD', horizonHours: 24, inferenceType: 'Log-Return' },
+        { topicId: 2, pair: 'ETH/USD', horizonHours: 8, inferenceType: 'Log-Return' },
+        { topicId: 17, pair: 'SOL/USD', horizonHours: 24, inferenceType: 'Log-Return' },
+        { topicId: 10, pair: 'SOL/USD', horizonHours: 8, inferenceType: 'Price' },
+      ]),
+    );
+  });
+
+  it('uses whitelist metadata for active topic labels', () => {
+    expect(ALLORA_TOPIC_LABELS.BTC).toBe('BTC/USD - Price - 8h');
+    expect(ALLORA_TOPIC_LABELS.ETH).toBe('ETH/USD - Log-Return - 8h');
   });
 });

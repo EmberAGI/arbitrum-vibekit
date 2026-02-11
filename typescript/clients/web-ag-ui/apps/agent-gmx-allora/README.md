@@ -36,8 +36,18 @@ The agent always uses onchain-actions to build a `transactions[]` plan for the c
 
 ## Environment
 
-- `GMX_ALLORA_POLL_INTERVAL_MS`: poll interval (ms) for each agent cycle. Defaults to `10000` (10s).
+- `GMX_ALLORA_POLL_INTERVAL_MS`: poll interval (ms) for each agent cycle. Defaults to `1800000` (30m).
 - `GMX_MIN_NATIVE_ETH_WEI`: minimum native ETH (in wei) required in the operator wallet before the agent will proceed (defaults to `2000000000000000` = 0.002 ETH).
+- `Allora topic whitelist` (enforced in `src/config/constants.ts`):
+  - `TOPIC 1`: `BTC/USD - Log-Return - 8h`
+  - `TOPIC 3`: `SOL/USD - Log-Return - 8h`
+  - `TOPIC 14`: `BTC/USD - Price - 8h`
+  - `TOPIC 19`: `NEAR/USD - Log-Return - 8h`
+  - `TOPIC 2`: `ETH/USD - Log-Return - 24h`
+  - `TOPIC 16`: `ETH/USD - Log-Return - 24h`
+  - `TOPIC 2`: `ETH/USD - Log-Return - 8h`
+  - `TOPIC 17`: `SOL/USD - Log-Return - 24h`
+  - `TOPIC 10`: `SOL/USD - Price - 8h`
 - `ALLORA_INFERENCE_CACHE_TTL_MS`: cache TTL (ms) for Allora consumer inference requests. Defaults to `30000`; set to `0` to disable caching.
 - `ALLORA_8H_INFERENCE_CACHE_TTL_MS`: cache TTL (ms) specifically for the GMX agent's 8-hour inference fetch. Defaults to `30000`; set to `3600000` (1 hour) to avoid re-fetching on every 5s poll tick.
 - `GMX_ALLORA_TX_SUBMISSION_MODE`: transaction submission mode. Supported values:

@@ -93,14 +93,59 @@ export function resolveAllora8hInferenceCacheTtlMs(): number {
 }
 
 export const ALLORA_HORIZON_HOURS = 8;
+export type AlloraTopicInferenceType = 'Log-Return' | 'Price';
+
+export type AlloraTopicWhitelistEntry = {
+  topicId: number;
+  pair: `${string}/USD`;
+  horizonHours: 8 | 24;
+  inferenceType: AlloraTopicInferenceType;
+};
+
+export const ALLORA_TOPIC_WHITELIST: readonly AlloraTopicWhitelistEntry[] = [
+  { topicId: 1, pair: 'BTC/USD', horizonHours: 8, inferenceType: 'Log-Return' },
+  { topicId: 3, pair: 'SOL/USD', horizonHours: 8, inferenceType: 'Log-Return' },
+  { topicId: 14, pair: 'BTC/USD', horizonHours: 8, inferenceType: 'Price' },
+  { topicId: 19, pair: 'NEAR/USD', horizonHours: 8, inferenceType: 'Log-Return' },
+  { topicId: 2, pair: 'ETH/USD', horizonHours: 24, inferenceType: 'Log-Return' },
+  { topicId: 16, pair: 'ETH/USD', horizonHours: 24, inferenceType: 'Log-Return' },
+  { topicId: 2, pair: 'ETH/USD', horizonHours: 8, inferenceType: 'Log-Return' },
+  { topicId: 17, pair: 'SOL/USD', horizonHours: 24, inferenceType: 'Log-Return' },
+  { topicId: 10, pair: 'SOL/USD', horizonHours: 8, inferenceType: 'Price' },
+] as const;
+
+function buildTopicLabel(entry: AlloraTopicWhitelistEntry): string {
+  return `${entry.pair} - ${entry.inferenceType} - ${entry.horizonHours}h`;
+}
+
+function getWhitelistedTopicOrThrow(
+  topicId: number,
+  horizonHours?: AlloraTopicWhitelistEntry['horizonHours'],
+): AlloraTopicWhitelistEntry {
+  const whitelisted = ALLORA_TOPIC_WHITELIST.find((entry) => {
+    if (entry.topicId !== topicId) {
+      return false;
+    }
+    if (horizonHours === undefined) {
+      return true;
+    }
+    return entry.horizonHours === horizonHours;
+  });
+  if (!whitelisted) {
+    const horizonSuffix = horizonHours ? ` (${horizonHours}h)` : '';
+    throw new Error(`Allora topic ${topicId}${horizonSuffix} is not in whitelist.`);
+  }
+  return whitelisted;
+}
+
 export const ALLORA_TOPIC_IDS = {
   BTC: 14,
   ETH: 2,
 } as const;
 
 export const ALLORA_TOPIC_LABELS = {
-  BTC: 'BTC/USD - Price Prediction - 8h',
-  ETH: 'ETH/USD - Price Prediction - 8h',
+  BTC: buildTopicLabel(getWhitelistedTopicOrThrow(ALLORA_TOPIC_IDS.BTC, ALLORA_HORIZON_HOURS)),
+  ETH: buildTopicLabel(getWhitelistedTopicOrThrow(ALLORA_TOPIC_IDS.ETH, ALLORA_HORIZON_HOURS)),
 } as const;
 
 export function resolveDelegationsBypass(): boolean {
@@ -168,7 +213,7 @@ export function resolveGmxAlloraTxExecutionMode(): GmxAlloraTxExecutionMode {
   return DEFAULT_GMX_ALLORA_TX_EXECUTION_MODE;
 }
 
-const DEFAULT_POLL_INTERVAL_MS = 10_000;
+const DEFAULT_POLL_INTERVAL_MS = 1_800_000;
 const DEFAULT_STREAM_LIMIT = -1;
 const DEFAULT_STATE_HISTORY_LIMIT = 100;
 

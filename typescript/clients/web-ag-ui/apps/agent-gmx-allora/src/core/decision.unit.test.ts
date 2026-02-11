@@ -57,4 +57,33 @@ describe('decideTradeAction', () => {
     expect(decision.action).toBe('hold');
     expect(decision.reason.toLowerCase()).toContain('persists');
   });
+
+  it('ignores cooldown counters and still returns a trade decision', () => {
+    const prediction: AlloraPrediction = {
+      topic: 'BTC/USD - Price - 8h',
+      horizonHours: 8,
+      confidence: 0.9,
+      direction: 'up',
+      predictedPrice: 110,
+      timestamp: '2026-02-05T12:00:00.000Z',
+    };
+
+    const decision = decideTradeAction({
+      prediction,
+      decisionThreshold: 0.62,
+      cooldownRemaining: 2,
+      maxLeverage: 2,
+      baseContributionUsd: 100,
+      previousAction: undefined,
+      previousSide: undefined,
+    });
+
+    expect(decision).toEqual({
+      action: 'open',
+      side: 'long',
+      leverage: 2,
+      sizeUsd: 80,
+      reason: 'Signal confidence 0.9 >= 0.62; opening long position.',
+    });
+  });
 });

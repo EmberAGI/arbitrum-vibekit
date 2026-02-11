@@ -24,13 +24,6 @@ const SAFETY_BUFFER = 0.2;
 const formatNumber = (value: number) => String(value);
 
 export function decideTradeAction(params: DecideTradeActionParams): TradeDecision {
-  if (params.cooldownRemaining > 0) {
-    return {
-      action: 'cooldown',
-      reason: `Cooldown active for ${params.cooldownRemaining} more cycle(s).`,
-    };
-  }
-
   if (params.prediction.confidence < params.decisionThreshold) {
     return {
       action: 'hold',

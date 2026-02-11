@@ -17,17 +17,6 @@ type BuildCycleTelemetryParams = {
   now?: Date;
 };
 
-function resolveCooldownRemaining(params: {
-  cooldownCycles: number;
-  cyclesSinceTrade: number;
-  isFirstCycle: boolean;
-}): number {
-  if (params.isFirstCycle) {
-    return 0;
-  }
-  return Math.max(0, params.cooldownCycles - params.cyclesSinceTrade);
-}
-
 function isTradeAction(action: GmxAlloraActionKind): action is 'open' | 'reduce' | 'close' {
   return action === 'open' || action === 'reduce' || action === 'close';
 }
@@ -36,11 +25,7 @@ export function buildCycleTelemetry(params: BuildCycleTelemetryParams): {
   telemetry: GmxAlloraTelemetry;
   nextCyclesSinceTrade: number;
 } {
-  const cooldownRemaining = resolveCooldownRemaining({
-    cooldownCycles: params.cooldownCycles,
-    cyclesSinceTrade: params.cyclesSinceTrade,
-    isFirstCycle: params.isFirstCycle,
-  });
+  const cooldownRemaining = 0;
 
   const decision = decideTradeAction({
     prediction: params.prediction,

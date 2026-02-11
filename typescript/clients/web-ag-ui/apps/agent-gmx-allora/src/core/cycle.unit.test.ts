@@ -5,9 +5,9 @@ import type { AlloraPrediction } from '../domain/types.js';
 import { buildCycleTelemetry } from './cycle.js';
 
 describe('buildCycleTelemetry', () => {
-  it('returns cooldown telemetry and increments cycles since trade', () => {
+  it('returns trade telemetry even when cooldown counters are non-zero', () => {
     const prediction: AlloraPrediction = {
-      topic: 'ETH/USD - Price Prediction - 8h',
+      topic: 'ETH/USD - Log-Return - 8h',
       horizonHours: 8,
       confidence: 0.75,
       direction: 'down',
@@ -32,18 +32,21 @@ describe('buildCycleTelemetry', () => {
 
     expect(result.telemetry).toEqual({
       cycle: 4,
-      action: 'cooldown',
-      reason: 'Cooldown active for 1 more cycle(s).',
+      action: 'close',
+      reason: 'Signal direction flipped to short; closing open position.',
       marketSymbol: 'ETH/USDC',
+      side: 'short',
+      leverage: 2,
+      sizeUsd: 80,
       prediction,
       timestamp: '2026-02-05T12:01:00.000Z',
       metrics: {
         confidence: 0.75,
         decisionThreshold: 0.62,
-        cooldownRemaining: 1,
+        cooldownRemaining: 0,
       },
     });
-    expect(result.nextCyclesSinceTrade).toBe(2);
+    expect(result.nextCyclesSinceTrade).toBe(0);
   });
 
   it('opens with capped leverage and safety buffer sizing when signal is strong', () => {
