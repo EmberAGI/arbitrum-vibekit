@@ -29,6 +29,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   prepare:
@@ -197,7 +198,7 @@ jobs:
           fetch-depth: 0
       - name: Fast-forward next to main
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           git fetch origin next
@@ -210,8 +211,25 @@ jobs:
           fi
 
           if git merge-base --is-ancestor "$current_next" "$head_sha"; then
-            echo "Fast-forwarding next to $head_sha"
-            git push origin "$head_sha":next
+            echo "Opening PR to sync next to $head_sha"
+
+            existing_pr_url="$(gh pr list --base next --head main --state open --json url --jq '.[0].url')"
+            if [ -n "$existing_pr_url" ]; then
+              echo "Sync PR already exists: $existing_pr_url"
+              exit 0
+            fi
+
+            pr_url="$(gh pr create \
+              --base next \
+              --head main \
+              --title "fix(release): sync next to main" \
+              --body "Automated sync PR opened by the release workflow.\n\nThis replaces direct pushes to \`next\`, which are blocked by repository rules (PR-only changes).")"
+
+            echo "Created sync PR: $pr_url"
+
+            # Prefer a linear, fast-forward style merge; fall back to a merge commit if rebase isn't allowed.
+            gh pr merge --auto --rebase "$pr_url" || gh pr merge --auto --merge "$pr_url" || \
+              echo "::warning::Unable to auto-merge $pr_url; please merge manually."
           else
             echo "::warning::origin/next has diverged from main; skipping auto-sync. Please merge main into next manually."
           fi
